@@ -35,3 +35,15 @@ Requirements: `docs/VivariumSpec.txt` (196 tasks) used as the acceptance bar, no
   `~RF*.TMP` exe backup while the game was running; water refraction offset 4x too strong (blocky artefacts);
   shoreline banding from interpolating a categorical substrate code.
 
+## Round 3 (living terrarium, 2026-09-23)
+- Plan mode; the user chose a biological clock and a creeping slime mold. One mid-task correction from the user:
+  the slime mold "scooting as a single unit" became a budding network.
+- Defects found and fixed along the way:
+  - Water `NORMAL_MAP` used on a mesh without tangents (brick artefacts).
+  - Per-cell flow on vertices (seams).
+  - Springtail litter intake cut below basal metabolism by my own rebalancing step (slow starvation; found by
+    probing survivors).
+  - Spore draws keyed on a tick that tests don't advance.
+  - Growth-speed slider snapping (0.1 steps) in the smoke restore.
+- Ecology tuning was done by probing populations over 14–56 biological days (throwaway probe tests, deleted).
+

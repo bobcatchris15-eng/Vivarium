@@ -93,3 +93,33 @@ On a fresh checkout `verify.ps1` performs the one-time Godot import itself.
   A 90 s fly-through holds 60 fps.
 - Checks: fast suite 139, slow soaks 5/5, headless UI smoke 26 checks, reload 4/4, exported-build release smoke passes.
 
+## Round 3: a living terrarium (2026-09-23)
+- **Biological clock.** Growth, feeding, breeding, ageing and decay run 60/7 times faster than locomotion
+  (1 real minute ≈ 1 biological day at 1×), so plants visibly grow and spread within minutes while critters walk
+  at a natural pace. It is saved with the world and adjustable in Settings (Growth speed ×1–×30). The soak tests
+  now run in biological days at the shipped rate.
+- **Moisture.** Soil wicks water by distance to open water (chamfer distance field, 0.8 m capillary range). The
+  terrain shader samples the fields with C1 smoothing and uses a dry → damp → saturated ramp, so there are no
+  hard edges.
+- **New organisms.**
+  - Fern.
+  - Creeping fig: a climber that needs a log.
+  - Bonnet mushrooms and turkey-tail bracket: decomposers that eat detritus and release nutrients.
+  - Physarum slime mold: a network that buds growth fronts toward sensed food (or explores), is joined by veins,
+    retracts where it has eaten and fruits when starved.
+  - Decomposers persist through a spore bank.
+- **Springtail** remodelled as an entomobryid collembolan.
+- **Water.** 12.5 cm sub-quads with a flat-extrapolated ring, so the terrain cuts the shoreline along its
+  contours. Flow is interpolated between cell corners, and ripple normals are computed in world space. The old
+  `NORMAL_MAP` on a tangent-less mesh produced a brick pattern, which likely contributed to the "cuboid" look.
+- **Critters.** Snapshot interpolation one behaviour interval behind, heading from motion, a speed-driven walk
+  cycle, and correlated wander.
+- **Food web rebalanced.** Fungus-first springtails, pill bug cap 90, 3.5 %/day litter, slower abstract decay.
+  The default world now cycles (springtail boom, crash, recovery; slime mold resurges) instead of starving out.
+  Plants keep filling in to roughly 10/m² by day 56. That is within the tested bounds and plausible for a
+  planted terrarium.
+- **Checks:** fast suite 153, slow soaks 5/5, headless UI smoke 30 checks, reload 4/4, fly-through 58–60 fps
+  (worst frame 34 ms).
+- **Known cost:** the fast suite now takes about 3.3 min instead of about 1 min. Per-tick sim speed is unchanged
+  (profiled against the previous commit); the ecology tests simply simulate a richer ecosystem.
+

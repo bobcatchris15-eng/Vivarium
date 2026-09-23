@@ -67,7 +67,15 @@ public partial class FloraRenderer : Node3D
                 // veins joining each patch of the network to the patch it grew from (unit tube along +X)
                 var vein = new MeshData();
                 var col = Primitives.Mix(sp.Color, sp.Color2, 0.3);
-                Primitives.Tube(vein, new[] { new Vec3(-0.05, 0, 0), new Vec3(0.5, 0.15, 0), new Vec3(1.05, 0, 0) }, new[] { 1.0, 0.8, 1.0 }, 6, (i, v) => (col, 1, i, v, 0, 0));
+                // a slightly arched, pinched tube: thinner at mid-length like a real plasmodial vein
+                var vpath = new List<Vec3>(); var vrad = new List<double>();
+                for (int i = 0; i <= 8; i++)
+                {
+                    double t = i / 8.0;
+                    vpath.Add(new Vec3(-0.05 + 1.1 * t, 0.1 * Math.Sin(Math.PI * t), 0));
+                    vrad.Add(0.75 + 0.25 * Math.Cos(t * 2 * Math.PI));
+                }
+                Primitives.Tube(vein, vpath, vrad, 6, (i, v) => (col, 1, i, v, 0, 0));
                 layer.Veins = MakeMmi($"Flora_{sp.Id}_veins", Bridge.ToArrayMesh(vein, mat));
                 layer.VeinTris = vein.TriangleCount;
                 AddChild(layer.Veins);
@@ -193,8 +201,8 @@ public partial class FloraRenderer : Node3D
                 var b = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position) + 0.004f, (float)f.Z);
                 var d = b - a;
                 if (d.Length() < 1e-4f || d.Length() > 0.6f) continue;
-                float thick = 0.007f + 0.016f * (float)Math.Sqrt(Math.Min(f.BiomassFraction(vsp), parent.BiomassFraction(vsp)));
-                var xAxis = d; var zAxis = xAxis.Cross(Vector3.Up).Normalized() * thick; var yAxis = zAxis.Cross(xAxis).Normalized() * thick * 0.6f;
+                float thick = 0.004f + 0.009f * (float)Math.Sqrt(Math.Min(f.BiomassFraction(vsp), parent.BiomassFraction(vsp)));
+                var xAxis = d; var zAxis = xAxis.Cross(Vector3.Up).Normalized() * thick; var yAxis = zAxis.Cross(xAxis).Normalized() * thick * 0.45f;
                 list.T.Add(new Transform3D(new Basis(xAxis, yAxis, zAxis), a));
                 ulong hash = Rng.Mix(f.Id.Value, 0xF10);
                 list.C.Add(new Color((hash % 1000) / 1000f, (float)Math.Min(f.Health, parent.Health), 0, ((hash >> 12) % 1000) / 1000f));
