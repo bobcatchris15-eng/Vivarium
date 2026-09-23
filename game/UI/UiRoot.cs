@@ -137,7 +137,7 @@ public partial class UiRoot : Control
             ToolKind.PlaceLog => $"length {t.LogLength:0.0} m  ·  [ ] resize, R rotate",
             ToolKind.PlaceGravel => $"radius {t.GravelRadius:0.00} m  ·  [ ] resize",
             ToolKind.MoveProp => "click the prop's new spot",
-            ToolKind.Grab => "click a critter, then where to release it",
+            ToolKind.Grab => "click with a critter in the circle, then where to release it",
             _ => "",
         } + (k == ToolKind.Select ? "" : "\n") + "right-click for the tool wheel").Trim();
     }

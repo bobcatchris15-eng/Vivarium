@@ -1,4 +1,5 @@
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Fauna;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Tools;
@@ -68,6 +69,24 @@ public static class Selection
             if (!double.IsInfinity(t)) hits.Add(new WorldHit(HitKind.Fauna, a.Id, origin + dir * t, t));
         }
         return Resolve(hits);
+    }
+
+    /// <summary>
+    /// The critter closest to <paramref name="center"/> (horizontal distance) within <paramref name="radius"/>,
+    /// counting its body size so a large animal whose edge is inside the circle qualifies. Held critters are skipped.
+    /// </summary>
+    public static FaunaIndividual? NearestFauna(VivariumWorld w, Vec2 center, double radius)
+    {
+        FaunaIndividual? best = null;
+        double bestD = double.PositiveInfinity;
+        foreach (var a in w.Fauna.Items)
+        {
+            if (a.Grabbed) continue;
+            double body = w.FaunaSystem.PhenotypeOf(a).BodySize * w.Content.FaunaOrThrow(a.SpeciesId).VisualScale * 0.5;
+            double d = (a.PositionXZ - center).Length;
+            if (d <= radius + body && d < bestD) { best = a; bestD = d; }
+        }
+        return best;
     }
 
     public static WorldHit Resolve(List<WorldHit> hits)

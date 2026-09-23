@@ -397,7 +397,7 @@ public partial class Windows : Control
             "[b]Time[/b]   [b]P[/b] pause · [b], .[/b] slower / faster.  One real hour ≈ one vivarium week.\n\n" +
             "[b]Tools[/b] — [b]right-click[/b] (a quick tap) opens the tool wheel; number keys also work\n" +
             "  [b]1[/b] Inspect — click anything; genome & lineage tabs for critters\n" +
-            "  [b]2[/b] Grab critter — click to pick up, click to release (X puts it back)\n" +
+            "  [b]2[/b] Grab critter — click with a critter inside the circle, click again to release (X puts it back)\n" +
             "  [b]3[/b] Pick plant · [b]4[/b] Nutrients (hold) · [b]5[/b] Pokin' stick\n" +
             "  [b]6[/b] Rock · [b]7[/b] Log (R rotates) · [b]8[/b] Gravel — [b][ ][/b] or Ctrl+wheel resize\n" +
             "  [b]9[/b] Add flora · [b]0[/b] Add fauna — pick the species in the wheel's outer ring or the catalog\n" +

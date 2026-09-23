@@ -39,6 +39,10 @@ public partial class ToolController : Node
     private ulong _placeCounter = 1;
     private double _nutrientRepeat;
     private Mesh? _rockGhost, _logGhost, _gravelGhost;
+    /// <summary>Where the pointer ray actually lands; the cursor ring is drawn here even when Hover snaps to a critter.</summary>
+    private Vec3 _cursorPoint;
+    /// <summary>Critter the grab circle has snapped to (none when nothing is inside it).</summary>
+    public EntityId GrabTarget { get; private set; } = EntityId.None;
 
     public void Bind(VivariumWorld w)
     {
@@ -74,6 +78,8 @@ public partial class ToolController : Node
         if (Input.MouseMode == Input.MouseModeEnum.Captured) overUi = true;
         var (o, d) = Session.CameraRig.ScreenRay(mouse);
         Hover = overUi ? WorldHit.None : Selection.Raycast(_w, Bridge.S(o), Bridge.S(d), includeWater: Current is ToolKind.Grab or ToolKind.IntroduceFauna || !Held.IsNone);
+        _cursorPoint = Hover.Point;
+        Hover = SnapToCritter(Hover);
         UpdatePreview();
         if (!Held.IsNone && Hover.IsHit)
         {
@@ -86,8 +92,31 @@ public partial class ToolController : Node
             if (_nutrientRepeat > 0.25) { _nutrientRepeat = 0; ApplyAt(Hover); }
         }
         // selection marker follows the selected entity (display position)
-        Session.Overlay.ShowSelection(SelectedMarker(), SelectedRadius());
+        if (!GrabTarget.IsNone && _w.Fauna.Get(GrabTarget) is { } target)
+            Session.Overlay.ShowSelection(Session.Fauna.DisplayPosition(GrabTarget), FaunaMarkerRadius(target));
+        else Session.Overlay.ShowSelection(SelectedMarker(), SelectedRadius());
     }
+
+    /// <summary>Grab circle radius in metres: grows with viewing distance so it stays about the same size on screen.</summary>
+    public static double GrabRadius(double viewDistance) => Math.Clamp(viewDistance * 0.035, 0.08, 1.5);
+
+    /// <summary>With the grab tool (nothing held), any critter inside the cursor circle becomes the hover target.</summary>
+    private WorldHit SnapToCritter(WorldHit hit)
+    {
+        GrabTarget = EntityId.None;
+        if (Current != ToolKind.Grab || !Held.IsNone || !hit.IsHit || _w == null) return hit;
+        if (hit.Kind != HitKind.Fauna)
+        {
+            var f = Selection.NearestFauna(_w, hit.Point.XZ, GrabRadius(hit.Distance));
+            if (f == null) return hit;
+            hit = new WorldHit(HitKind.Fauna, f.Id, f.Position, hit.Distance);
+        }
+        GrabTarget = hit.Id;
+        return hit;
+    }
+
+    private float FaunaMarkerRadius(FaunaIndividual f) =>
+        (float)Math.Max(0.02, _w!.FaunaSystem.PhenotypeOf(f).BodySize * _w.Content.FaunaOrThrow(f.SpeciesId).VisualScale * 0.8);
 
     private Vector3? SelectedMarker()
     {
@@ -110,7 +139,7 @@ public partial class ToolController : Node
         if (_w == null) return 0.1f;
         return Selected.Kind switch
         {
-            HitKind.Fauna when _w.Fauna.Get(Selected.Id) is { } f => (float)Math.Max(0.02, _w.FaunaSystem.PhenotypeOf(f).BodySize * _w.Content.FaunaOrThrow(f.SpeciesId).VisualScale * 0.8),
+            HitKind.Fauna when _w.Fauna.Get(Selected.Id) is { } f => FaunaMarkerRadius(f),
             HitKind.Flora when _w.Flora.Get(Selected.Id) is { } fl => (float)fl.Radius(_w.Content.FloraOrThrow(fl.SpeciesId)) * 1.1f,
             HitKind.Rock when _w.Props.Find(Selected.Id) is Rock r => (float)r.FootprintRadius * 1.1f,
             HitKind.Log when _w.Props.Find(Selected.Id) is LogProp l => (float)l.FootprintRadius,
@@ -123,7 +152,7 @@ public partial class ToolController : Node
     {
         var ov = Session.Overlay;
         if (!Hover.IsHit || _w == null) { ov.HideCursor(); Preview = null; return; }
-        var at = Bridge.V(Hover.Point);
+        var at = Bridge.V(_cursorPoint);
         var p = Hover.Point.XZ;
         var t = Actions!;
         float r = 0.08f;
@@ -133,7 +162,7 @@ public partial class ToolController : Node
             case ToolKind.Select: r = 0.06f; break;
             case ToolKind.Grab:
                 if (!Held.IsNone) { Preview = t.ReleaseProblem(Held, p); r = 0.1f; }
-                else { Preview = Hover.Kind == HitKind.Fauna ? null : "point at a critter to pick it up"; r = 0.08f; }
+                else { Preview = Hover.Kind == HitKind.Fauna ? null : "bring a critter inside the circle"; r = (float)GrabRadius(Hover.Distance); }
                 break;
             case ToolKind.RemovePlant: Preview = Hover.Kind == HitKind.Flora ? null : "point at a plant, moss or lichen"; break;
             case ToolKind.Poke: r = (float)_w.Content.Tools.PokeRadius; break;

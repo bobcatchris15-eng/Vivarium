@@ -178,6 +178,19 @@ public class ToolTests
         Assert.NotEqual(hidden.Id, hit.Id);
     }
 
+    [Fact]
+    public void GrabCircleFindsNearestCritterInside()
+    {
+        var (w, t) = Setup();
+        var a = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(3, -2));
+        var b = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(3.2, -2));
+        Assert.Equal(a.Id, Selection.NearestFauna(w, new Vec2(3.05, -2), 0.1)?.Id);
+        Assert.Equal(b.Id, Selection.NearestFauna(w, new Vec2(3.14, -2), 0.1)?.Id);
+        Assert.Null(Selection.NearestFauna(w, new Vec2(3.6, -2), 0.1));
+        Assert.True(t.Grab(a.Id).Ok);
+        Assert.Equal(b.Id, Selection.NearestFauna(w, new Vec2(3.05, -2), 0.2)?.Id); // held critters are skipped
+    }
+
     [Fact] // t-126, t-127
     public void GrabAndReleaseKeepIdentityAndValidateHabitat()
     {
