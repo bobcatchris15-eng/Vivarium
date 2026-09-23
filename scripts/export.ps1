@@ -22,7 +22,9 @@ $presets = Join-Path $game 'export_presets.cfg'
 (Get-Content $presets -Raw) -replace 'application/file_version="[^"]*"', "application/file_version=`"$four`"" -replace 'application/product_version="[^"]*"', "application/product_version=`"$four`"" | Set-Content $presets -NoNewline
 
 $dest = Join-Path $RepoRoot 'build\release\Vivarium'
-Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+$running = Get-Process -Name Vivarium -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$dest\*" }
+if ($running) { throw "Close the running Vivarium (pid $($running.Id -join ', ')) first: it locks files in $dest" }
+if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }   # fail loudly if a locked file would leak into the bundle
 New-Item -ItemType Directory -Force $dest | Out-Null
 
 Write-Host "Building C# (Release)..." -ForegroundColor Cyan
@@ -50,6 +52,12 @@ Run Vivarium.exe. No installation or network connection is needed.
 Your vivarium, settings and logs are stored in %APPDATA%\Vivarium\.
 Press F1 in the application for controls.
 "@ | Set-Content (Join-Path $dest 'README.txt')
+
+# Windows can leave ReplaceFile backups (Vivarium.exe~RF*.TMP) when a scanner holds the exe; never ship them
+Get-ChildItem $dest -Filter '*~RF*.TMP' -Force | Remove-Item -Force
+$allowed = @('Vivarium.exe','Vivarium.pck','ENGINE_LICENSES.txt','THIRD_PARTY_NOTICES.md','README.txt')
+$stray = Get-ChildItem $dest -File | Where-Object { $allowed -notcontains $_.Name }
+if ($stray) { throw "Unexpected files in the bundle: $($stray.Name -join ', ')" }
 
 $zip = Join-Path $RepoRoot "build\Vivarium-$version-win64.zip"
 Remove-Item $zip -ErrorAction SilentlyContinue
