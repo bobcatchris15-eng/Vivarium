@@ -104,6 +104,7 @@ public partial class SmokeRunner : Node
 
     private async Task Screenshot(string name)
     {
+        if (DisplayServer.GetName() == "headless") { _facts["screenshot_" + name] = "skipped (headless)"; return; }
         await Frames(4);
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         var img = GetViewport().GetTexture().GetImage();
