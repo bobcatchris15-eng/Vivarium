@@ -162,6 +162,18 @@ public sealed class PropPlacement
         return PlacementResult.Success(id, "removed");
     }
 
+    /// <summary>Re-seats rocks and logs whose footprint touches a sculpted disc. Returns true if any moved.</summary>
+    public bool Reseat(Vec2 centre, double radius)
+    {
+        bool any = false;
+        foreach (var r in Props.Rocks)
+            if (Vec2.Distance(r.Position, centre) <= radius + r.FootprintRadius) { r.Y = _w.Terrain.Height(r.Position) - r.SizeY * 0.25; any = true; }
+        foreach (var l in Props.Logs)
+            if (Vec2.Distance(l.Position, centre) <= radius + l.FootprintRadius) { l.Y = SeatLog(l.Position, l.RotationY, l.Length, l.Radius); any = true; }
+        if (any) Props.Touch();
+        return any;
+    }
+
     private double SeatLog(Vec2 p, double heading, double length, double radius)
     {
         var axis = Vec2.FromAngle(heading);

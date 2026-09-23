@@ -163,6 +163,7 @@ public class FaunaTests
         var a = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Land, ageFraction: 0.5);
         var juvenile = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Land + new Vec2(0.05, 0), ageFraction: 0.01);
         a.Energy = 0.9; juvenile.Energy = 0.9;
+        a.ReproCooldownUntil = 0;   // founders get a staggered first cooldown; this fixture tests eligibility itself
         Assert.True(w.FaunaSystem.CanReproduce(a, sp, 0, out var why), why);
         Assert.False(w.FaunaSystem.CanReproduce(juvenile, sp, 0, out why)); Assert.Equal("not mature", why);
         a.Energy = 0.2;
@@ -184,7 +185,7 @@ public class FaunaTests
         string Run()
         {
             var w = FaunaFixtures.PondWorld(77);
-            for (int i = 0; i < 6; i++) { var f = w.FaunaSystem.CreateFounder(Sp("springtail"), FaunaFixtures.Land + new Vec2(0.04 * i, 0), 0.5); f.Energy = 0.95; }
+            for (int i = 0; i < 6; i++) { var f = w.FaunaSystem.CreateFounder(Sp("springtail"), FaunaFixtures.Land + new Vec2(0.04 * i, 0), 0.5); f.Energy = 0.95; f.ReproCooldownUntil = 0; }
             for (int i = 0; i < 10; i++) { w.FaunaSystem.StepLifecycle(300); w.Clock.Tick += 30; }
             Assert.True(w.Fauna.Count > 6, "eligible fixture must reproduce");
             return Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["fauna"]);
@@ -444,7 +445,7 @@ public class GeneticsTests
         string Run()
         {
             var w = FaunaFixtures.PondWorld(88);
-            for (int i = 0; i < 8; i++) { var f = w.FaunaSystem.CreateFounder(Sp("triops"), FaunaFixtures.Pond + new Vec2(0.05 * i, 0), 0.4); f.Energy = 0.95; }
+            for (int i = 0; i < 8; i++) { var f = w.FaunaSystem.CreateFounder(Sp("triops"), FaunaFixtures.Pond + new Vec2(0.05 * i, 0), 0.4); f.Energy = 0.95; f.ReproCooldownUntil = 0; }
             for (int i = 0; i < 60; i++) { w.FaunaSystem.StepLifecycle(300); w.Clock.Tick += 30; foreach (var f in w.Fauna.Items) f.Energy = 0.95; }
             return Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["genetics"]);
         }

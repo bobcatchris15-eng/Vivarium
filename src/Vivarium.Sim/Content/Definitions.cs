@@ -323,4 +323,16 @@ public sealed class ToolConfig
     public double GravelMinRadius { get; init; }
     public double GravelMaxRadius { get; init; }
     public int IntroduceFaunaCount { get; init; }
+    /// <summary>Sculpt speed at the brush centre (m per real second of brushing) and brush radius limits.</summary>
+    public double SculptRate { get; init; }
+    public double SculptMinRadius { get; init; }
+    public double SculptMaxRadius { get; init; }
+    /// <summary>Water tools: pour/soak rate (m³ per real second of brushing), radius limits, springs.</summary>
+    public double PourRate { get; init; }
+    public double DrainRate { get; init; }
+    public double WaterMinRadius { get; init; }
+    public double WaterMaxRadius { get; init; }
+    /// <summary>New spring discharge in m³ per sim-second.</summary>
+    public double SpringDischarge { get; init; }
+    public int MaxSprings { get; init; }
 }

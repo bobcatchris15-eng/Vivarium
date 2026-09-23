@@ -22,6 +22,8 @@ public sealed class WorldPayload
     public PropSet Props { get; set; } = new();
     public List<Spring> Springs { get; set; } = new();
     public EcologyTally Tally { get; set; } = new();
+    /// <summary>Sculpted terrain as per-vertex offsets from the generated heights (null = never sculpted).</summary>
+    public string? TerrainDelta { get; set; }
 }
 
 public sealed class FieldsPayload
@@ -72,6 +74,7 @@ public static class WorldSerializer
         {
             Descriptor = w.Descriptor, LastSerial = w.Ids.LastSerial, Tick = w.Clock.Tick,
             Props = w.Props, Springs = w.Water.Springs, Tally = w.Tally,
+            TerrainDelta = w.Terrain.ExportDelta() is { } delta ? Pack(delta) : null,
         });
         var f = w.Fields;
         p["fields"] = Bytes(new FieldsPayload
@@ -122,6 +125,11 @@ public static class WorldSerializer
         w.Props.Touch();
         w.Water.Springs.AddRange(wp.Springs ?? new());
         w.Tally = wp.Tally ?? new EcologyTally();
+        if (wp.TerrainDelta != null)
+        {
+            w.Terrain.ApplyDelta(Unpack(wp.TerrainDelta, "terrain edits"));
+            w.Water.RefreshBed(w.Terrain);
+        }
 
         var fp = Read<FieldsPayload>(payloads, "fields");
         if (fp.CellCount != w.Grid.DomainCells.Length) throw new InvalidDataException($"field grid mismatch: save has {fp.CellCount} cells, world has {w.Grid.DomainCells.Length}");

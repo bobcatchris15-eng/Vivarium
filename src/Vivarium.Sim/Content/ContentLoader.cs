@@ -218,7 +218,7 @@ public static class ContentLoader
 
     private static ToolConfig ParseTools(JNode n)
     {
-        var nu = n.Req("nutrients"); var po = n.Req("poke"); var gr = n.Req("grab"); var ro = n.Req("rock"); var lo = n.Req("log"); var gv = n.Req("gravel"); var intro = n.Req("introduce");
+        var nu = n.Req("nutrients"); var po = n.Req("poke"); var gr = n.Req("grab"); var ro = n.Req("rock"); var lo = n.Req("log"); var gv = n.Req("gravel"); var intro = n.Req("introduce"); var te = n.Req("terrain"); var wa = n.Req("water");
         var t = new ToolConfig
         {
             NutrientAmount = nu.Num("amount", min: 0.001, max: 10), NutrientRadius = nu.Num("radius", min: 0.05, max: 5),
@@ -229,10 +229,16 @@ public static class ContentLoader
             LogMinLength = lo.Num("minLength", min: 0.2, max: 6), LogMaxLength = lo.Num("maxLength", min: 0.2, max: 6), LogMinRadius = lo.Num("minRadius", min: 0.03, max: 1), LogMaxRadius = lo.Num("maxRadius", min: 0.03, max: 1),
             GravelMinRadius = gv.Num("minRadius", min: 0.1, max: 4), GravelMaxRadius = gv.Num("maxRadius", min: 0.1, max: 4),
             IntroduceFaunaCount = intro.Int("faunaCount", min: 1, max: 20),
+            SculptRate = te.Num("ratePerSecond", min: 0.001, max: 2), SculptMinRadius = te.Num("minRadius", min: 0.05, max: 5), SculptMaxRadius = te.Num("maxRadius", min: 0.05, max: 5),
+            PourRate = wa.Num("pourPerSecond", min: 0, max: 1), DrainRate = wa.Num("drainPerSecond", min: 0, max: 1),
+            WaterMinRadius = wa.Num("minRadius", min: 0.05, max: 5), WaterMaxRadius = wa.Num("maxRadius", min: 0.05, max: 5),
+            SpringDischarge = wa.Num("springLitresPerHour", min: 0, max: 1000) / 1000 / 3600, MaxSprings = wa.Int("maxSprings", min: 0, max: 32),
         };
         if (t.NutrientMinRadius > t.NutrientMaxRadius) nu["minRadius"].Error("minRadius exceeds maxRadius");
         if (t.RockMinScale > t.RockMaxScale) ro["minScale"].Error("minScale exceeds maxScale");
         if (t.LogMinLength > t.LogMaxLength) lo["minLength"].Error("minLength exceeds maxLength");
+        if (t.SculptMinRadius > t.SculptMaxRadius) te["minRadius"].Error("minRadius exceeds maxRadius");
+        if (t.WaterMinRadius > t.WaterMaxRadius) wa["minRadius"].Error("minRadius exceeds maxRadius");
         return t;
     }
 

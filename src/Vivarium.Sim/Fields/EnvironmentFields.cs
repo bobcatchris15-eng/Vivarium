@@ -58,6 +58,8 @@ public sealed class EnvironmentFields
     }
 
     public bool LightStale(PropSet props) => _lightPropsVersion != props.Version;
+    /// <summary>Forces a light recompute on the next environment tick (terrain was sculpted).</summary>
+    public void MarkLightStale() => _lightPropsVersion = int.MinValue;
 
     /// <summary>
     /// Computes exposure = sky openness from terrain horizon (8 azimuths, 3 m reach) × prop shading.

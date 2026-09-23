@@ -5,5 +5,7 @@
   "rock": { "minScale": 0.12, "maxScale": 0.8, "minSpacing": 0.1 },
   "log": { "minLength": 0.6, "maxLength": 2.8, "minRadius": 0.07, "maxRadius": 0.3 },
   "gravel": { "minRadius": 0.25, "maxRadius": 1.5 },
-  "introduce": { "faunaCount": 4 }
+  "introduce": { "faunaCount": 4 },
+  "terrain": { "ratePerSecond": 0.12, "minRadius": 0.2, "maxRadius": 2.5 },
+  "water": { "pourPerSecond": 0.004, "drainPerSecond": 0.006, "minRadius": 0.15, "maxRadius": 2.0, "springLitresPerHour": 36, "maxSprings": 8 }
 }

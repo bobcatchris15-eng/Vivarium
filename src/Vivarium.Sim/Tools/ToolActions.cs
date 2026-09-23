@@ -12,7 +12,8 @@ public readonly record struct ToolResult(bool Ok, string Message, IReadOnlyList<
     public static ToolResult Fail(string msg) => new(false, msg, Array.Empty<EntityId>());
 }
 
-public enum ToolKind { Select, Grab, RemovePlant, Nutrients, Poke, PlaceRock, PlaceLog, PlaceGravel, IntroduceFlora, IntroduceFauna, MoveProp, RemoveProp }
+public enum ToolKind { Select, Grab, RemovePlant, Nutrients, Poke, PlaceRock, PlaceLog, PlaceGravel, IntroduceFlora, IntroduceFauna, MoveProp, RemoveProp,
+    TerrainRaise, TerrainLower, TerrainSmooth, PourWater, DrainWater, Spring }
 
 /// <summary>
 /// Generic poke carrying point, direction, strength and the selected target/context. Species-agnostic:
@@ -177,6 +178,70 @@ public sealed class ToolActions
     {
         if (r.Ok) _w.RefreshDerived();
         return r.Ok ? ToolResult.Success($"{r.Message} {what}", r.Id) : ToolResult.Fail($"Can't place {what}: {r.Message}");
+    }
+
+    // ------------------------------------------------------------------ terrain
+
+    public double ClampSculptRadius(double r) => MathD.Clamp(r, Cfg.SculptMinRadius, Cfg.SculptMaxRadius);
+
+    /// <summary>One sculpt dab lasting <paramref name="seconds"/> of brushing (the client calls this repeatedly while held).</summary>
+    public ToolResult Sculpt(Vec2 centre, double radius, SculptMode mode, double seconds)
+    {
+        if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
+        radius = ClampSculptRadius(radius);
+        seconds = MathD.Clamp(seconds, 0, 0.5);
+        double amount = mode == SculptMode.Smooth ? 4 * seconds : Cfg.SculptRate * seconds;
+        int n = TerrainEditing.Sculpt(_w, centre, radius, amount, mode);
+        if (n == 0) return ToolResult.Fail(mode switch { SculptMode.Raise => "already at the height limit", SculptMode.Lower => "already at the depth limit", _ => "already smooth" });
+        return ToolResult.Success(mode switch { SculptMode.Raise => "raised the ground", SculptMode.Lower => "lowered the ground", _ => "smoothed the ground" });
+    }
+
+    /// <summary>Call when a sculpt stroke ends so derived fields (light) are fresh before anything reads them.</summary>
+    public void EndSculptStroke() => _w.Fields.RecomputeLight(_w.Terrain, _w.Props);
+
+    // ------------------------------------------------------------------ water
+
+    public double ClampWaterRadius(double r) => MathD.Clamp(r, Cfg.WaterMinRadius, Cfg.WaterMaxRadius);
+
+    public ToolResult PourWater(Vec2 centre, double radius, double seconds)
+    {
+        if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
+        double v = _w.Water.AddWater(centre, ClampWaterRadius(radius), Cfg.PourRate * MathD.Clamp(seconds, 0, 0.5));
+        return v > 0 ? ToolResult.Success($"poured {v * 1000:0.0} L") : ToolResult.Fail("nothing poured");
+    }
+
+    public ToolResult DrainWater(Vec2 centre, double radius, double seconds)
+    {
+        if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
+        double v = _w.Water.RemoveWater(centre, ClampWaterRadius(radius), Cfg.DrainRate * MathD.Clamp(seconds, 0, 0.5));
+        return v > 0 ? ToolResult.Success($"soaked up {v * 1000:0.0} L") : ToolResult.Fail("no surface water here");
+    }
+
+    /// <summary>The spring within <paramref name="reach"/> of p, if any.</summary>
+    public Water.Spring? SpringNear(Vec2 p, double reach = 0.35) =>
+        _w.Water.Springs.Where(s => Vec2.Distance(s.Position, p) <= reach).OrderBy(s => Vec2.Distance(s.Position, p)).ThenBy(s => s.Id.Value).FirstOrDefault();
+
+    public string? PreviewSpring(Vec2 p)
+    {
+        if (SpringNear(p) != null) return null;   // clicking removes it
+        if (!_w.Domain.ContainsDisc(p, 0.1)) return "too close to the edge";
+        if (_w.Water.Springs.Count >= Cfg.MaxSprings) return $"at most {Cfg.MaxSprings} springs";
+        return null;
+    }
+
+    /// <summary>Adds a spring at p, or removes the one already there.</summary>
+    public ToolResult ToggleSpring(Vec2 p)
+    {
+        if (SpringNear(p) is { } existing)
+        {
+            _w.Water.Springs.Remove(existing);
+            return ToolResult.Success("removed the spring", existing.Id);
+        }
+        var problem = PreviewSpring(p);
+        if (problem != null) return ToolResult.Fail($"Can't add a spring: {problem}");
+        var sp = new Water.Spring { Id = _w.Ids.Next(EntityKind.Spring), X = p.X, Z = p.Z, Discharge = Cfg.SpringDischarge };
+        _w.Water.Springs.Add(sp);
+        return ToolResult.Success("a new spring bubbles up", sp.Id);
     }
 
     // ------------------------------------------------------------------ species introduction

@@ -23,6 +23,9 @@ public sealed class WaterBudget
     public double Evaporation { get; set; }
     public double Infiltration { get; set; }
     public double BoundaryOutflow { get; set; }
+    /// <summary>Water poured in / soaked up with the player's water tools.</summary>
+    public double ToolInflow { get; set; }
+    public double ToolRemoval { get; set; }
 }
 
 /// <summary>
@@ -69,6 +72,13 @@ public sealed class Hydrology
             _nN[idx] = grid.InDomain(ci, cj + 1) ? idx + grid.Nx : -1;
             _nS[idx] = grid.InDomain(ci, cj - 1) ? idx - grid.Nx : -1;
         }
+        RefreshBed(hf);
+    }
+
+    /// <summary>Re-derives bed heights and the exterior boundary level after the terrain changes.</summary>
+    public void RefreshBed(Heightfield hf)
+    {
+        var grid = Grid; var config = Config;
         foreach (int idx in grid.DomainCells)
         {
             var c = grid.CellCenter(idx);
@@ -84,6 +94,46 @@ public sealed class Hydrology
     }
 
     public double WaterTable => Config.WaterTable;
+
+    /// <summary>Pours <paramref name="volume"/> m³ over a disc (smooth falloff). Returns the volume added.</summary>
+    public double AddWater(Vec2 centre, double radius, double volume)
+    {
+        var cells = WeightsInDisc(centre, radius, out double total);
+        if (total <= 0 || volume <= 0) return 0;
+        foreach (var (c, wgt) in cells) Depth[c] += volume * wgt / total / CellArea;
+        Budget.ToolInflow += volume;
+        return volume;
+    }
+
+    /// <summary>Soaks up to <paramref name="volume"/> m³ of surface water from a disc. Returns the volume removed.</summary>
+    public double RemoveWater(Vec2 centre, double radius, double volume)
+    {
+        var cells = WeightsInDisc(centre, radius, out double total);
+        if (total <= 0 || volume <= 0) return 0;
+        double removed = 0;
+        foreach (var (c, wgt) in cells)
+        {
+            double take = Math.Min(Depth[c], volume * wgt / total / CellArea);
+            Depth[c] -= take;
+            removed += take * CellArea;
+        }
+        Budget.ToolRemoval += removed;
+        return removed;
+    }
+
+    private List<(int Cell, double Weight)> WeightsInDisc(Vec2 centre, double radius, out double total)
+    {
+        var list = new List<(int, double)>();
+        total = 0;
+        foreach (int c in Grid.CellsInRadius(centre, radius))
+        {
+            double d = Vec2.Distance(Grid.CellCenter(c), centre) / radius;
+            double wgt = (1 - d * d) + 1e-3;
+            list.Add((c, wgt));
+            total += wgt;
+        }
+        return list;
+    }
 
     public double DepthAt(Vec2 p) { int c = Grid.CellAt(p); return c >= 0 && Grid.InDomain(c) ? Depth[c] : 0; }
     /// <summary>Water surface elevation at p, or NaN where the ground is dry.</summary>
@@ -233,7 +283,7 @@ public sealed class Hydrology
         using var d = new DigestBuilder();
         foreach (int idx in Grid.DomainCells) d.Add(Depth[idx]);
         foreach (var s in Springs) d.Add(s.Id.Value).Add(s.X).Add(s.Z).Add(s.Discharge);
-        d.Add(Budget.SpringInflow).Add(Budget.GroundwaterInflow).Add(Budget.Evaporation).Add(Budget.Infiltration).Add(Budget.BoundaryOutflow);
+        d.Add(Budget.SpringInflow).Add(Budget.GroundwaterInflow).Add(Budget.Evaporation).Add(Budget.Infiltration).Add(Budget.BoundaryOutflow).Add(Budget.ToolInflow).Add(Budget.ToolRemoval);
         return d.Hex();
     }
 }

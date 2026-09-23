@@ -20,6 +20,10 @@ public sealed class Heightfield
     public double MinHeight { get; }
     public double MaxHeight { get; }
     public double Bottom { get; }
+    /// <summary>Bumped on every sculpt so renderers and derived caches know to rebuild.</summary>
+    public int Version { get; private set; }
+    /// <summary>The procedurally generated heights, captured on the first edit (saves store only the difference).</summary>
+    private double[]? _baseline;
 
     private Heightfield(double step, double ox, double oz, int nx, int nz, double min, double max, double bottom)
     {
@@ -80,6 +84,35 @@ public sealed class Heightfield
         if (h > hi - band) h = hi - band + band * Math.Tanh((h - (hi - band)) / band);
         if (h < lo + band) h = lo + band - band * Math.Tanh(((lo + band) - h) / band);
         return MathD.Clamp(h, lo, hi);
+    }
+
+    /// <summary>Call before changing <see cref="H"/>; remembers the generated baseline for delta saves.</summary>
+    public void BeginEdit() => _baseline ??= (double[])H.Clone();
+    public void Touch() => Version++;
+    public int VertexIndex(int i, int j) => j * Nx + i;
+
+    /// <summary>Per-vertex difference from the generated terrain, or null when the terrain was never edited.</summary>
+    public double[]? ExportDelta()
+    {
+        if (_baseline == null) return null;
+        var d = new double[H.Length];
+        bool any = false;
+        for (int k = 0; k < H.Length; k++) { d[k] = H[k] - _baseline[k]; any |= d[k] != 0; }
+        return any ? d : null;
+    }
+
+    /// <summary>Re-applies a saved <see cref="ExportDelta"/> onto freshly generated terrain.</summary>
+    public void ApplyDelta(double[] delta)
+    {
+        if (delta.Length != H.Length) throw new InvalidDataException($"terrain edit grid mismatch: save has {delta.Length} vertices, world has {H.Length}");
+        BeginEdit();
+        for (int k = 0; k < H.Length; k++)
+        {
+            double h = _baseline![k] + delta[k];
+            if (!double.IsFinite(h) || h < MinHeight - 1e-9 || h > MaxHeight + 1e-9) throw new InvalidDataException($"terrain edit {k} is out of range ({h})");
+            H[k] = h;
+        }
+        Touch();
     }
 
     public double Vertex(int i, int j) => H[Math.Clamp(j, 0, Nz - 1) * Nx + Math.Clamp(i, 0, Nx - 1)];
