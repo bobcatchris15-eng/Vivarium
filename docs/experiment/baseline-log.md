@@ -1,21 +1,27 @@
 # Vibecode baseline — experiment log
 
-Arm: **single strong agent, no Clanker orchestration** (Claude Opus 5.5 in Claude Code desktop).
-Requirements: `docs/VivariumSpec.txt` (196 tasks), treated as the acceptance bar and not as a work breakdown.
+Arm: **single strong agent, no Clanker orchestration** (Claude Opus 5.5 in Claude Code desktop, one session).
+Requirements: `docs/VivariumSpec.txt` (196 tasks) used as the acceptance bar, not as a work breakdown.
 
 ## Cost
-| Phase | Start (local) | End | Notes |
-|---|---|---|---|
-| 0 Setup, stack, docs | 2026-09-23 08:51 | 09:00 | Downloads: Godot 4.7.1 mono editor + templates |
-| 1–8 Simulation core (content, world, time, fields, water, flora, fauna, genetics, ecology, tools, persistence, diagnostics, geometry) + tests | 09:00 | 11:00 (approx.) | 123 fast tests green after 2 fix rounds |
+| Phase | Local time (2026-09-23) |
+|---|---|
+| Setup, stack, contract/ADR/architecture | 08:51 – 09:00 |
+| Simulation core + 123 xUnit tests | 09:00 – ~11:00 |
+| Godot client, render tour review, visual fixes | ~11:00 – ~(crash) |
+| Post-crash recovery, UI smoke, export, release smoke, integration, report | after reboots – 12:55 |
 
-Human interventions: 2 (plan-mode clarifying questions before the build started: executor/arm, scope, engine, download approval, metrics). None during the build so far.
+- Session usage at the end: 5-hour plan window ~74 % used, weekly 13 %; context ~860k tokens (single 1M-context session, no compaction).
+- Commits: 11. Code: sim ~7k lines C#, client ~3k lines C#, tests ~2.5k lines, 6 shaders, JSON content generated from 2 Python sources.
+- Human interventions: plan-mode clarifications (1); PC crash + reboot (2 reboots); "git is throwing problems" (1); several "continue / try again / do it" after interrupted tool calls (~5). No design decisions were needed from the human after the plan.
 
-Tokens / turns: recorded at the end via session usage.
-
-## Quality (running)
-- First full test run: 112/123 passing. Failures: 4 real defects (lichen growth too slow to spread; pond not reaching the cut edge; animals in poor habitat not escaping; test-global log interference), 7 test-design mistakes.
-- Second run: 121/123. Third: 123/123 (fast suites).
+## Quality
+- Tests: 130 fast (xUnit) + 5 slow soaks, all green; Godot headless boot, UI smoke (20 checks), reload (4 checks); exported-build release smoke.
+- Determinism digests match across frame cadence, camera/observation load, quality tiers, save/load, and scripted replay.
+- Defects found by my own verification (not by reviewers): 4 sim defects on first test run; sRGB/linear colour bug and mis-scaled cursor (screenshots);
+  toast infinite loop (UI smoke hang); missing `.sln` silently dropping .NET assemblies from the export; unbuffered log flushing; 3 script bugs.
+- Independent review not performed here (left to the scoring step).
 
 ## Release
-(pending)
+- `build/Vivarium-0.1.0-win64.zip` (181 MB bundle). Exported exe: boot OK, UI smoke OK, reload digest exact, 0 TCP connections, no networking APIs referenced.
+- Not done: true network-unplugged run; windowed smoke of the *exported* build (headless only, after a GPU-driver crash during a windowed run); custom exe icon.

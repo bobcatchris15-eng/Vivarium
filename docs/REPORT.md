@@ -62,7 +62,7 @@ On a fresh checkout `verify.ps1` performs the one-time Godot import itself.
 
 ## Validation results
 - Fast xUnit suites: **130 tests** (123 + 7 integration), all passing.
-- Slow suites: SLOW_RESULTS_PLACEHOLDER
+- Slow suites: all 5 pass — 4-week soak run twice with identical digest (9 m 32 s), 8-week accelerated stress with bounded entities/memory and no budget warnings (11 m 50 s), 3-week default ecology with clean invariants and active nutrient cycle (3 m 30 s), 60-day genetic drift ≥4 generations explained by lineage (1 m 15 s), save during active ecology + 3 further days deterministic (1 m 4 s).
 - Godot: headless boot OK; headless UI smoke 20/20 and reload 4/4 (editor build); **exported build**: boot, smoke, and reload all pass with 0 TCP connections.
 - Render tour (windowed): 16 screenshots, 0 shader errors; LOD cuts fauna triangles 87,632 → 7,420 with an unchanged digest.
 - Clean clone: fresh `git clone` → `verify.ps1 -Suite Bootstrap,World,Boot,Smoke` passes (Godot import, build, headless UI smoke + reload); no untracked files produced outside ignored `build/`.

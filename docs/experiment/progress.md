@@ -7,9 +7,9 @@
 - [x] 12 Package: export preset, scripts/export.ps1 (181 MB bundle + zip), THIRD_PARTY_NOTICES + generated ENGINE_LICENSES,
       smoke-release.ps1 → exported exe passes boot + UI smoke (20 checks) + reload (digest exact), 0 TCP connections
 - [x] Integration tests t-179..t-189 written; 7 fast ones pass
-- [ ] Slow suite result (build/slow_tests.txt) — soak 4w x2, 8-week stress, 3-week default, drift, active save
-- [ ] Clean-clone verify result (scratchpad\clone; verify -Suite Bootstrap,World,Boot,Smoke)
-- [ ] docs/REPORT.md with requirement coverage table (t-191/t-195), baseline-log cost numbers, final commit, RC zip = build/Vivarium-0.1.0-win64.zip
+- [x] Slow suite result (build/slow_tests.txt) — soak 4w x2, 8-week stress, 3-week default, drift, active save
+- [x] Clean-clone verify result (scratchpad\clone; verify -Suite Bootstrap,World,Boot,Smoke)
+- [x] docs/REPORT.md with requirement coverage table (t-191/t-195), baseline-log cost numbers, final commit, RC zip = build/Vivarium-0.1.0-win64.zip
 
 Key facts / gotchas:
 - Run Godot via PowerShell `scripts/common.ps1` Invoke-Timed (Git Bash `timeout` + pipes hung after a PC crash).
