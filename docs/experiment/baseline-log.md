@@ -25,3 +25,13 @@ Requirements: `docs/VivariumSpec.txt` (196 tasks) used as the acceptance bar, no
 ## Release
 - `build/Vivarium-0.1.0-win64.zip` (181 MB bundle). Exported exe: boot OK, UI smoke OK, reload digest exact, 0 TCP connections, no networking APIs referenced.
 - Not done: true network-unplugged run; windowed smoke of the *exported* build (headless only, after a GPU-driver crash during a windowed run); custom exe icon.
+
+## Post-release iteration (user feedback rounds, 2026-09-23)
+- Requests: UI overlap and glass, radial menu, camera speed and controls, grab precision, pill bugs, photo-real
+  surfaces, clear aquarium water, terrain and water tools.
+- Human decisions requested: texture source (CC0 download vs procedural), then the exact download list (7 files, 66 MB).
+- Defects found in this round: 3 tests silently failing since 8d2a121, which contradicted the report's "all green";
+  settings migration never firing (a property default masked the missing field); export shipping a locked
+  `~RF*.TMP` exe backup while the game was running; water refraction offset 4x too strong (blocky artefacts);
+  shoreline banding from interpolating a categorical substrate code.
+

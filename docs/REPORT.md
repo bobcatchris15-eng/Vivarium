@@ -61,7 +61,9 @@ On a fresh checkout `verify.ps1` performs the one-time Godot import itself.
 | C9 quality tiers don't touch sim; logging; notices | EnvironmentRig, Log, notices | UI smoke quality-digest check; Bootstrap logging tests; bundle contents |
 
 ## Validation results
-- Fast xUnit suites: **130 tests** (123 + 7 integration), all passing.
+- Fast xUnit suites: **139 tests**, all passing after the post-release iteration below. *Correction:* the earlier
+  claim of "130 tests, all passing" was wrong. Three fauna/genetics tests had failed since commit 8d2a121 staggered
+  founder breeding cooldowns; they were found and fixed on 2026-09-23 (the fixtures now clear the stagger).
 - Slow suites: all 5 pass — 4-week soak run twice with identical digest (9 m 32 s), 8-week accelerated stress with bounded entities/memory and no budget warnings (11 m 50 s), 3-week default ecology with clean invariants and active nutrient cycle (3 m 30 s), 60-day genetic drift ≥4 generations explained by lineage (1 m 15 s), save during active ecology + 3 further days deterministic (1 m 4 s).
 - Godot: headless boot OK; headless UI smoke 20/20 and reload 4/4 (editor build); **exported build**: boot, smoke, and reload all pass with 0 TCP connections.
 - Render tour (windowed): 16 screenshots, 0 shader errors; LOD cuts fauna triangles 87,632 → 7,420 with an unchanged digest.
@@ -77,3 +79,17 @@ On a fresh checkout `verify.ps1` performs the one-time Godot import itself.
 - The exe has no custom icon; the window title and README carry the name and version.
 - A true network-unplugged run was not done: changing adapters or firewall rules is a system setting. The offline claim rests on the static audit plus zero observed connections.
 - Performance was measured only on this iGPU.
+
+## Post-release iteration (user feedback, 2026-09-23)
+- Camera: the wheel zooms toward the cursor; W/A/S/D fly level; Space/Ctrl vertical; Q/E turn; flying speed on +/-.
+  A settings migration repairs a flying speed that was saved at a crawl. v3 re-runs it, because the first attempt
+  misread v1 files as v2.
+- Grab: snaps to the nearest critter inside the cursor circle.
+- New species: pill bug (roly-poly isopod). It is a terrestrial detritivore that rolls into a ball when poked.
+- Terrain tools (raise, lower, smooth) and water tools (pour, soak up, add/remove springs), all through validated
+  sim actions. Sculpted terrain is saved as a per-vertex delta, and digging below the water table makes a pond.
+- Visuals: CC0 photo-scanned textures (ambientCG) on the ground, strata, rocks, logs and moss. The water uses
+  screen-space refraction with depth-based absorption, and its cut face reads as clear aquarium glass.
+  A 90 s fly-through holds 60 fps.
+- Checks: fast suite 139, slow soaks 5/5, headless UI smoke 26 checks, reload 4/4, exported-build release smoke passes.
+
