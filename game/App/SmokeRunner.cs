@@ -195,6 +195,16 @@ public partial class SmokeRunner : Node
         Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(mossSpot));
         Check("introduce flora", r?.Ok == true && W.Flora.Count == flora + 1, r?.Message ?? "");
+        // one of each new kind of organism: fern, fungus, slime mold (where their habitat allows)
+        foreach (var newId in new[] { "fern", "bonnet_mushroom", "slime_mold" })
+        {
+            tools.FloraSpecies = newId;
+            var nsp = W.Content.FloraOrThrow(newId);
+            var spot = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).Cast<Vec2?>().FirstOrDefault(p => W.FloraSystem.CanEstablish(nsp, p!.Value, out _));
+            int count0 = W.Flora.Count;
+            r = spot.HasValue ? tools.ApplyAt(HitAt(spot.Value)) : null;
+            Check($"introduce {newId}", r?.Ok == true && W.Flora.Count == count0 + 1, r?.Message ?? "no valid habitat found");
+        }
 
         await Press("Tool_IntroduceFauna");
         tools.FaunaSpecies = "shrimp";
@@ -282,6 +292,13 @@ public partial class SmokeRunner : Node
         foreach (int tier in new[] { 2, 0, 1 }) { q.Select(tier); q.EmitSignal(OptionButton.SignalName.ItemSelected, tier); await Frames(3); }
         Check("quality changes leave simulation untouched", WorldSerializer.Digest(W) == before);
         W.Clock.Paused = false;
+        var growth = Find<HSlider>("GrowthSpeedSlider");
+        double bio0 = W.Clock.BioAcceleration;
+        growth.Value = 15;   // emits value_changed like a drag would
+        await Frames(2);
+        bool grew = Math.Abs(W.Clock.BioAcceleration - 15) < 1e-9 && Math.Abs(W.Descriptor.BioAcceleration - 15) < 1e-9;
+        Session.Host!.Tools.SetBioAcceleration(bio0);   // the slider snaps to 0.1 steps; restore the exact default
+        Check("growth speed setting drives the biological clock", grew && Math.Abs(W.Clock.BioAcceleration - bio0) < 1e-9, $"default ×{bio0:0.00}");
         await Press("HelpButton", 5);
         await Press("Win_Help_Close", 3);
 

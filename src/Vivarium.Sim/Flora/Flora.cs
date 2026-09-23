@@ -26,6 +26,10 @@ public sealed class FloraIndividual
     public double LifespanFactor { get; set; } = 1;
     /// <summary>Last evaluated habitat suitability (0..1), for inspection.</summary>
     public double LastSuitability { get; set; }
+    /// <summary>Creeping organisms: biological seconds spent without enough food.</summary>
+    public double StarvedFor { get; set; }
+    /// <summary>Creeping organisms: stopped to fruit (release spores, then die back).</summary>
+    public bool Fruiting { get; set; }
 
     public Vec2 Position => new(X, Z);
 
@@ -122,6 +126,14 @@ public sealed class FloraPopulation
     }
 
     public void Clear() { Items.Clear(); _byId.Clear(); Index.Clear(); Version++; }
+
+    /// <summary>Relocates an individual (creeping organisms) keeping the spatial index consistent.</summary>
+    public void Move(FloraIndividual f, Vec2 to)
+    {
+        Index.Remove(f, f.Position);
+        f.X = to.X; f.Z = to.Z;
+        Index.Add(f);
+    }
 
     public void Neighbours(Vec2 p, double radius, List<FloraIndividual> into) { into.Clear(); Index.Query(p, radius, into); }
 }

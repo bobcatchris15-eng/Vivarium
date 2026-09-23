@@ -45,7 +45,12 @@
     { "species": "foliose_lichen", "count": 6 },
     { "species": "creeping_groundcover", "count": 10 },
     { "species": "marginal_waterside", "count": 12 },
-    { "species": "ornamental_herb", "count": 10 }
+    { "species": "ornamental_herb", "count": 10 },
+    { "species": "fern", "count": 8 },
+    { "species": "climbing_vine", "count": 6 },
+    { "species": "bonnet_mushroom", "count": 10 },
+    { "species": "turkey_tail", "count": 6 },
+    { "species": "slime_mold", "count": 6 }
   ],
   "starterFauna": [
     { "species": "springtail", "count": 60 },

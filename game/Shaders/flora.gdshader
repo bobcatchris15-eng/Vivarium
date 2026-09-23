@@ -1,6 +1,7 @@
 // Flora instances: baked vertex colours per species, INSTANCE_CUSTOM = (tint variation, health, wobble, seed).
 // surface_mode picks the micro-detail: 0 moss (photo-scanned moss, CC0 ambientCG, tinted to the species),
-// 1 lichen (lobed, crusty procedural relief), 2 vascular plants (veined, waxy leaves with translucency).
+// 1 lichen (lobed, crusty procedural relief), 2 vascular plants (veined, waxy leaves with translucency),
+// 3 fungi (matte flesh, gills, growth zones), 4 slime mold (glossy streaming protoplasm).
 // Sway and poke wobble are purely cosmetic.
 shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
@@ -59,6 +60,18 @@ void fragment() {
         float dx = fbm(p + vec2(e, 0.0)) - lobes, dz = fbm(p + vec2(0.0, e)) - lobes;
         n = normalize(wn - vec3(dx, 0.0, dz) / e * 0.08);
         rough = 0.95;
+    } else if (surface_mode == 3) {
+        // fungi: matte, faintly translucent flesh; radial gill lines on undersides (UV2.x = 1) and fine
+        // concentric growth zones on caps and shelves (UV.x runs from centre to rim)
+        float gills = UV2.x > 0.5 ? 0.82 + 0.18 * step(0.5, fract(UV.x * 48.0)) : 1.0;
+        float zones = 0.92 + 0.08 * sin(UV2.y * 60.0 + UV.x * 40.0);
+        c *= gills * zones * (0.94 + 0.12 * vnoise(obj_pos.xz * 70.0));
+        rough = 0.85;
+    } else if (surface_mode == 4) {
+        // slime mold: glossy, translucent yellow protoplasm with a slow streaming pulse along the veins
+        float pulse = 0.5 + 0.5 * sin(TIME * 1.6 - length(obj_pos.xz) * 9.0 + inst.w * 20.0);
+        c *= 0.85 + 0.3 * pulse;
+        rough = 0.3;
     } else {
         // vascular plants: midrib + lateral veins from the leaf uv, slight waxy sheen
         float along = UV.x, across = UV.y;
@@ -71,7 +84,7 @@ void fragment() {
     vec3 faded = mix(vec3(dot(c, vec3(0.33))), vec3(0.62, 0.55, 0.32), 0.5);
     ALBEDO = mix(faded, c, 0.35 + 0.65 * health);
     ROUGHNESS = rough;
-    SPECULAR = surface_mode == 2 ? 0.45 : 0.25;
-    BACKLIGHT = c * (surface_mode == 2 ? 0.45 : 0.2);
+    SPECULAR = surface_mode == 2 ? 0.45 : surface_mode == 4 ? 0.6 : 0.25;
+    BACKLIGHT = c * (surface_mode == 2 ? 0.45 : surface_mode >= 3 ? 0.35 : 0.2);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

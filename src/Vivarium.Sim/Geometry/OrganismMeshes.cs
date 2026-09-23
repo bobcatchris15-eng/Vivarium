@@ -169,11 +169,214 @@ public static class OrganismMeshes
                 }
                 break;
             }
+            case "fern": Fern(m, rng, c1, c2); break;
+            case "vine": Vine(m, rng, c1, c2); break;
+            case "mushroom_cluster": Mushrooms(m, rng, c1, c2); break;
+            case "bracket": Bracket(m, rng, c1, c2); break;
+            case "plasmodium": Plasmodium(m, rng, c1, c2); break;
             default:
                 Primitives.Ellipsoid(m, Vec3.Zero, new Vec3(1, 1, 1), 6, 8, (a, b) => (c1, 1, a, b, 0, 0));
                 break;
         }
         return m;
+    }
+
+    /// <summary>Alternate pose for organisms with a visible reproductive stage (slime mold sporangia); null otherwise.</summary>
+    public static MeshData? FloraFruiting(FloraSpeciesDef sp, ulong seed = 1)
+    {
+        if (sp.Shape != "plasmodium") return null;
+        var rng = Rng.Keyed(seed, "flora.fruit." + sp.Id, 0);
+        var m = new MeshData();
+        var stalk = new[] { 0.35, 0.28, 0.16 };
+        var head = new[] { 0.18, 0.14, 0.1 };
+        // a faded network left behind, crowded with tiny stalked spore cases (height axis is stretched ×8 below)
+        Plasmodium(m, rng, Primitives.Scale(sp.Color, 0.55), Primitives.Scale(sp.Color2, 0.5));
+        for (int k = 0; k < 40; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.8;
+            var b = new Vec3(Math.Cos(ang) * r, 0.2, Math.Sin(ang) * r);
+            double h = rng.Range(4, 7);
+            Primitives.Tube(m, new[] { b, b + new Vec3(0, h, 0) }, new[] { 0.012, 0.008 }, 3, (i, v) => (stalk, 1, i, v, 0, 0));
+            Primitives.Ellipsoid(m, b + new Vec3(0, h + 0.5, 0), new Vec3(0.04, 0.6, 0.04), 4, 6, (u, v) => (head, 1, u, v, 0, 0));
+        }
+        return m;
+    }
+
+    /// <summary>Arching pinnate fronds with fan leaflets, plus one unrolling fiddlehead.</summary>
+    private static void Fern(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        var stalk = new[] { 0.16, 0.1, 0.06 };
+        int fronds = 7 + rng.NextInt(3);
+        for (int k = 0; k < fronds; k++)
+        {
+            double ang = 2 * Math.PI * k / fronds + rng.Range(-0.2, 0.2), reach = rng.Range(0.75, 1.0), rise = rng.Range(0.75, 1.0);
+            var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang)); var side = new Vec3(-dir.Z, 0, dir.X);
+            Vec3 At(double t) => dir * (reach * t) + new Vec3(0, rise * Math.Sin(Math.PI * t * 0.85) * (1 - 0.35 * t), 0);
+            var path = new List<Vec3>(); var rad = new List<double>();
+            for (int i = 0; i <= 8; i++) { path.Add(At(i / 8.0)); rad.Add(0.018 * (1 - i / 10.0)); }
+            Primitives.Tube(m, path, rad, 3, (i, v) => (stalk, 1, i, v, 0, 0));
+            for (int i = 2; i <= 14; i++)
+            {
+                double t = i / 15.0;
+                var c = At(t);
+                double len = 0.2 * Math.Sin(Math.PI * Math.Min(1, t * 1.15)) + 0.02;
+                foreach (double sgn in new[] { -1.0, 1.0 })
+                {
+                    var tip = c + side * (sgn * len) + dir * (len * 0.25) + new Vec3(0, -len * 0.25, 0);
+                    var mid = (c + tip) * 0.5;
+                    var w = dir * (len * 0.22) + new Vec3(0, len * 0.08, 0);
+                    var col = Primitives.Mix(c1, c2, t);
+                    Primitives.Fan(m, c, new List<Vec3> { c, mid + w, tip, mid - w, c }, (side * sgn).Cross(dir).Normalized(), Primitives.Scale(col, 0.85), col);
+                }
+            }
+        }
+        // fiddlehead: a coiled young frond
+        var coil = new List<Vec3>(); var cr = new List<double>();
+        for (int i = 0; i <= 14; i++)
+        {
+            double t = i / 14.0, th = t * Math.PI * 3.2, rr = 0.12 * (1 - t * 0.8);
+            coil.Add(new Vec3(0.1 + Math.Sin(th) * rr, 0.45 + 0.35 * t + Math.Cos(th) * rr * 0.6, 0.05));
+            cr.Add(0.03 * (1 - t * 0.6));
+        }
+        Primitives.Tube(m, coil, cr, 4, (i, v) => (Primitives.Mix(c1, c2, 0.8), 1, i, v, 0, 0));
+    }
+
+    /// <summary>Stems that rise from the root (origin) toward +X, arch over and drape down, with small heart leaves.
+    /// The renderer turns +X toward the log/rock being climbed and scales the height to its top.</summary>
+    private static void Vine(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        var stem = new[] { 0.28, 0.24, 0.14 };
+        for (int k = 0; k < 5; k++)
+        {
+            double spread = rng.Range(-0.5, 0.5), over = rng.Range(1.0, 1.6), top = rng.Range(0.95, 1.15);
+            Vec3 At(double t)
+            {
+                double x = t * over, y = top * Math.Sin(Math.PI * Math.Min(1, t * 1.2) * 0.5) - (t > 0.8 ? (t - 0.8) * 1.5 : 0);
+                return new Vec3(x, Math.Max(0, y), spread * (0.3 + t) + 0.08 * Math.Sin(t * 9 + k));
+            }
+            var path = new List<Vec3>(); var rad = new List<double>();
+            for (int i = 0; i <= 12; i++) { path.Add(At(i / 12.0)); rad.Add(0.02 * (1 - i / 16.0)); }
+            Primitives.Tube(m, path, rad, 3, (i, v) => (stem, 1, i, v, 0, 0));
+            for (int i = 1; i <= 12; i++)
+            {
+                var c = At(i / 12.0 - 0.02);
+                double ang = rng.Range(0, 2 * Math.PI), sz = rng.Range(0.07, 0.11);
+                var d = new Vec3(Math.Cos(ang), rng.Range(-0.2, 0.4), Math.Sin(ang)).Normalized();
+                var side = d.Cross(Vec3.Up).Normalized();
+                if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
+                var col = Primitives.Mix(c1, c2, rng.Range(0, 1));
+                // heart-shaped leaf: two lobes at the base, point at the tip
+                var rim = new List<Vec3> { c, c + side * sz * 0.6 + d * sz * 0.3, c + side * sz * 0.5 + d * sz * 0.9, c + d * sz * 1.5, c - side * sz * 0.5 + d * sz * 0.9, c - side * sz * 0.6 + d * sz * 0.3, c };
+                Primitives.Fan(m, c + d * sz * 0.6, rim, d.Cross(side).Normalized(), Primitives.Scale(col, 0.9), col);
+            }
+        }
+    }
+
+    /// <summary>A troop of bonnet mushrooms: thin pale stems and conical, slightly translucent caps.</summary>
+    private static void Mushrooms(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        var stemCol = new[] { 0.78, 0.74, 0.68 };
+        int n = 5 + rng.NextInt(5);
+        for (int k = 0; k < n; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.7, h = rng.Range(0.45, 1.0), capR = rng.Range(0.12, 0.2) * (0.6 + 0.4 * h);
+            var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+            var lean = new Vec3(rng.Range(-0.12, 0.12), 0, rng.Range(-0.12, 0.12));
+            var top = b + lean + new Vec3(0, h, 0);
+            Primitives.Tube(m, new[] { b, b + lean * 0.5 + new Vec3(0, h * 0.5, 0), top }, new[] { 0.035, 0.03, 0.026 }, 5, (i, v) => (stemCol, 1, i, v, 0, 0));
+            // conical bonnet: rings from the tip down to a flared, striated rim (UV.y = 1 on the underside gills)
+            int start = m.VertexCount;
+            const int around = 12, rings = 5;
+            for (int ri = 0; ri <= rings; ri++)
+            {
+                double t = (double)ri / rings;
+                double rr = capR * Math.Pow(t, 0.7), yy = capR * 1.2 * (1 - t);
+                var col = Primitives.Mix(c2, c1, Math.Min(1, t * 1.4));
+                for (int s = 0; s <= around; s++)
+                {
+                    double th = 2 * Math.PI * s / around;
+                    var dir = new Vec3(Math.Cos(th), 0, Math.Sin(th));
+                    var pos = top + dir * rr + new Vec3(0, yy - capR * 0.15, 0);
+                    m.AddVertex(pos, (dir * 0.6 + Vec3.Up).Normalized(), col, 1, (double)s / around, 0, t, 0);
+                }
+            }
+            for (int ri = 0; ri < rings; ri++)
+                for (int s = 0; s < around; s++)
+                {
+                    int a = start + ri * (around + 1) + s, c = a + around + 1;
+                    Primitives.TriangleFacing(m, a, c, a + 1, Vec3.Up);
+                    Primitives.TriangleFacing(m, a + 1, c, c + 1, Vec3.Up);
+                }
+            // underside with gills
+            var rim = new List<Vec3>();
+            for (int s = 0; s <= around; s++) { double th = 2 * Math.PI * s / around; rim.Add(top + new Vec3(Math.Cos(th) * capR, -capR * 0.15, Math.Sin(th) * capR)); }
+            Primitives.Fan(m, top + new Vec3(0, capR * 0.1, 0), rim, -Vec3.Up, Primitives.Scale(c1, 1.15), Primitives.Scale(c1, 0.95), 1, 1);
+        }
+    }
+
+    /// <summary>Tiers of thin semicircular shelves with concentric colour bands (turkey tail), sticking out along +X.</summary>
+    private static void Bracket(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        var bands = new[] { Primitives.Scale(c1, 0.6), c1, Primitives.Mix(c1, c2, 0.5), Primitives.Scale(c1, 0.8), c2 };
+        int tiers = 3 + rng.NextInt(3);
+        for (int k = 0; k < tiers; k++)
+        {
+            double y = 0.15 + k * 0.75 / tiers + rng.Range(-0.04, 0.04), reach = rng.Range(0.6, 1.0), off = rng.Range(-0.35, 0.35);
+            const int around = 14, rings = 5;
+            int start = m.VertexCount;
+            for (int ri = 0; ri <= rings; ri++)
+            {
+                double f = (double)ri / rings;
+                for (int s = 0; s <= around; s++)
+                {
+                    double th = -Math.PI / 2 + Math.PI * s / around;
+                    double wav = 1 + 0.08 * Math.Sin(th * 7 + k);
+                    var pos = new Vec3(Math.Cos(th) * reach * f * wav, y + 0.06 * f * f - 0.1 * f * Math.Abs(Math.Sin(th)), off + Math.Sin(th) * reach * f * wav * 0.9);
+                    m.AddVertex(pos, Vec3.Up, bands[Math.Min(ri, rings - 1)], 1, f, (double)s / around, 0, 0);
+                }
+            }
+            for (int ri = 0; ri < rings; ri++)
+                for (int s = 0; s < around; s++)
+                {
+                    int a = start + ri * (around + 1) + s, c = a + around + 1;
+                    Primitives.TriangleFacing(m, a, c, a + 1, Vec3.Up);
+                    Primitives.TriangleFacing(m, a + 1, c, c + 1, Vec3.Up);
+                }
+            // cream pore surface underneath
+            var rim = new List<Vec3>();
+            for (int s = 0; s <= around; s++) { double th = -Math.PI / 2 + Math.PI * s / around; rim.Add(new Vec3(Math.Cos(th) * reach, y + 0.06 - 0.1 * Math.Abs(Math.Sin(th)), off + Math.Sin(th) * reach * 0.9)); }
+            Primitives.Fan(m, new Vec3(0, y - 0.01, off), rim, -Vec3.Up, new[] { 0.86, 0.82, 0.72 }, new[] { 0.8, 0.76, 0.66 }, 1, 1);
+        }
+    }
+
+    /// <summary>Slime-mold plasmodium: a branching fan of flattened yellow veins with a thin advancing front.</summary>
+    private static void Plasmodium(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        void Branch(Vec3 from, double ang, double len, double rad, int depth)
+        {
+            var path = new List<Vec3> { from }; var rs = new List<double> { rad };
+            var p = from;
+            for (int i = 1; i <= 5; i++)
+            {
+                ang += rng.Range(-0.35, 0.35);
+                p += new Vec3(Math.Cos(ang), 0, Math.Sin(ang)) * (len / 5);
+                path.Add(new Vec3(p.X, 0.3 + 0.2 * rng.NextDouble(), p.Z)); rs.Add(rad * (1 - i / 7.0));
+            }
+            Primitives.Tube(m, path, rs, 4, (i, v) => (Primitives.Mix(c1, c2, i / 5.0), 1, i, v, 0, 0));
+            if (depth <= 0) return;
+            for (int b = 0; b < 2; b++) Branch(path[3 + b], ang + (b == 0 ? -0.6 : 0.6) + rng.Range(-0.2, 0.2), len * 0.6, rad * 0.6, depth - 1);
+        }
+        double baseAng = rng.Range(0, 2 * Math.PI);
+        for (int k = 0; k < 5; k++) Branch(new Vec3(0, 0.3, 0), baseAng + k * 0.5 - 1.0, rng.Range(0.6, 0.85), 0.06, 2);
+        // advancing front: a thin fan sheet on the leading side
+        var rim = new List<Vec3>();
+        for (int s = 0; s <= 14; s++)
+        {
+            double th = baseAng - 1.3 + 2.6 * s / 14;
+            double rr = 0.9 + 0.1 * Math.Sin(s * 1.7);
+            rim.Add(new Vec3(Math.Cos(th) * rr, 0.2, Math.Sin(th) * rr));
+        }
+        Primitives.Fan(m, new Vec3(Math.Cos(baseAng) * 0.55, 0.2, Math.Sin(baseAng) * 0.55), rim, Vec3.Up, Primitives.Scale(c2, 0.95), c1, 1, 2);
     }
 
     // ------------------------------------------------------------------ fauna

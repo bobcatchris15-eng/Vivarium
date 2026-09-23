@@ -274,12 +274,27 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags");
+        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
-        if (arch is not ("moss" or "lichen" or "plant")) n["archetype"].Error("expected moss | lichen | plant");
+        if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
         var h = n.Req("habitat");
-        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "hardMinMoisture", "minSuitability");
+        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "hardMinMoisture", "minSuitability", "feeds", "requiresFeature");
+        string feeds = h.Str("feeds", "nutrients");
+        if (feeds is not ("nutrients" or "detritus")) h["feeds"].Error("expected nutrients | detritus");
+        string reqFeature = ""; double reqRadius = 0;
+        if (h.Has("requiresFeature"))
+        {
+            var rf = h["requiresFeature"]; rf.RejectUnknown("feature", "radius");
+            reqFeature = rf.Str("feature"); reqRadius = rf.Num("radius", min: 0.01, max: 3);
+            if (reqFeature is not ("log" or "rock" or "gravel")) rf["feature"].Error("expected log | rock | gravel");
+        }
+        double creepSpeed = 0, starved = 0, foodThreshold = 0;
+        if (n.Has("creep"))
+        {
+            var cr = n["creep"]; cr.RejectUnknown("speedPerDay", "starvedDays", "foodThreshold");
+            creepSpeed = cr.Num("speedPerDay", min: 0, max: 20) / D; starved = cr.Num("starvedDays", min: 0.05, max: 100) * D; foodThreshold = cr.Num("foodThreshold", min: 0, max: 100);
+        }
         var g = n.Req("growth");
         g.RejectUnknown("ratePerDay", "maxBiomass", "initialBiomass", "declinePerDay", "maturityDays", "lifespanDays", "nutrientPerBiomass", "radiusAtMax", "minRadius");
         var s = n.Req("spread");
@@ -311,6 +326,8 @@ public static class ContentLoader
             Proximity = prox, LitterFraction = n.Num("litterFraction", 0.8, 0, 1), SheddingRate = n.Num("sheddingPerDay", 0.02, 0, 0.5) / D, GrazingValue = n.Num("grazingValue", 0, 0, 1),
             Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 2),
             Tags = n.StrList("tags"),
+            Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,
+            CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,
         };
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");
         if (def.MaturityAge >= def.Lifespan) g["maturityDays"].Error("maturityDays must be shorter than lifespanDays");

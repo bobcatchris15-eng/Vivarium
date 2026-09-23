@@ -1,0 +1,37 @@
+{
+  "id": "fern",
+  "name": "Maidenhair fern",
+  "archetype": "plant",
+  "role": "Shade-loving fern of damp soil; its fronds shelter springtails and drop steady leaf litter.",
+  "description": "Delicate arching fronds of fan-shaped leaflets on dark wiry stalks. New fronds unroll as fiddleheads.",
+  "habitat": {
+    "substrates": { "soil": 1.0, "wood": 0.6, "rock": 0.25 },
+    "refuseSubstrates": [ "water" ],
+    "refuseTags": [],
+    "moisture": { "optimum": 0.72, "tolerance": 0.2 },
+    "light": { "optimum": 0.35, "tolerance": 0.25 },
+    "nutrients": { "optimum": 0.4, "tolerance": 0.3 },
+    "maxWaterDepth": 0.0,
+    "hardMinMoisture": 0.3,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 240,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.28,
+    "minRadius": 0.05
+  },
+  "spread": { "intervalDays": 8, "radius": 0.9, "propagules": 2, "minBiomassFraction": 0.6 },
+  "competition": { "radius": 0.3, "crowdingLimit": 1.8, "sensitivity": 0.9 },
+  "proximity": [ { "target": "feature:log", "radius": 0.8, "bonus": 0.15 }, { "target": "feature:water", "radius": 1.0, "bonus": 0.1 } ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.025,
+  "grazingValue": 0.0,
+  "visual": { "shape": "fern", "color": [ 0.25, 0.52, 0.2 ], "color2": [ 0.45, 0.68, 0.28 ], "colorVariance": 0.07, "height": 0.3 },
+  "tags": [ "plant", "fern" ]
+}

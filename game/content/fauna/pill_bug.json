@@ -5,8 +5,16 @@
   "role": "Detritivore of leaf litter and rotting wood; shreds dead matter for smaller decomposers.",
   "description": "A land crustacean (roly-poly) with seven overlapping armour plates. It shelters under logs and rocks, and when poked it rolls into a tight ball until the danger passes.",
   "habitat": {
-    "moisture": { "optimum": 0.62, "tolerance": 0.28 },
-    "substrates": { "soil": 1.0, "wood": 1.0, "rock": 0.7, "gravel": 0.55 },
+    "moisture": {
+      "optimum": 0.62,
+      "tolerance": 0.28
+    },
+    "substrates": {
+      "soil": 1.0,
+      "wood": 1.0,
+      "rock": 0.7,
+      "gravel": 0.55
+    },
     "minWaterDepth": 0,
     "maxWaterDepth": 0.004,
     "minSuitability": 0.12
@@ -19,7 +27,16 @@
     "senseRadius": 0.4
   },
   "diet": [
-    { "resource": "detritus", "ratePerHour": 0.004, "efficiency": 9 }
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.004,
+      "efficiency": 9
+    },
+    {
+      "resource": "flora:fungus",
+      "ratePerHour": 0.002,
+      "efficiency": 8
+    }
   ],
   "metabolism": {
     "basalPerHour": 0.007,
@@ -54,14 +71,31 @@
     "detritusOnDeath": 2.0
   },
   "genetics": {
-    "traits": [ "size", "hue_shift", "pattern_strength", "ornament_density", "appendage_length", "metabolic_efficiency" ],
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
     "mutationMagnitude": 0.12,
     "initialVariance": 0.07
   },
   "visual": {
     "model": "isopod",
-    "baseColor": [ 0.36, 0.37, 0.40 ],
-    "ornamentColor": [ 0.78, 0.74, 0.62 ]
+    "baseColor": [
+      0.36,
+      0.37,
+      0.4
+    ],
+    "ornamentColor": [
+      0.78,
+      0.74,
+      0.62
+    ]
   },
-  "behaviors": [ "conglobate" ]
+  "behaviors": [
+    "conglobate"
+  ]
 }

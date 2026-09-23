@@ -61,7 +61,7 @@ public sealed class FloraSpeciesDef
 {
     public string Id { get; init; } = "";
     public string Name { get; init; } = "";
-    public string Archetype { get; init; } = "";   // moss | lichen | plant
+    public string Archetype { get; init; } = "";   // moss | lichen | plant | fungus | slime_mold
     public string Role { get; init; } = "";
     public string Description { get; init; } = "";
     public string SourceFile { get; init; } = "";
@@ -76,6 +76,19 @@ public sealed class FloraSpeciesDef
     public double MaxWaterDepth { get; init; }
     public double HardMinMoisture { get; init; }
     public double MinSuitability { get; init; }
+    /// <summary>"nutrients" (plants, mosses, lichens) or "detritus" (decomposers: fungi, slime molds). Decomposers
+    /// build biomass from dead organic matter and mineralize part of it back into soil nutrients.</summary>
+    public string Feeds { get; init; } = "nutrients";
+    public bool Decomposer => Feeds == "detritus";
+    /// <summary>Climbers: must root within RequiresFeatureRadius of this prop feature ("log", "rock"); "" = none.</summary>
+    public string RequiresFeature { get; init; } = "";
+    public double RequiresFeatureRadius { get; init; }
+    /// <summary>Creeping organisms (slime mold): speed in m per biological second; 0 = sessile.</summary>
+    public double CreepSpeed { get; init; }
+    /// <summary>Biological seconds of poor food before a creeping organism stops, fruits and releases spores.</summary>
+    public double StarvedToFruit { get; init; }
+    /// <summary>Detritus per cell (field units) that counts as food for a creeping organism.</summary>
+    public double FoodThreshold { get; init; }
 
     // growth (rates converted to per-second at load)
     public double GrowthRate { get; init; }          // logistic r, 1/s

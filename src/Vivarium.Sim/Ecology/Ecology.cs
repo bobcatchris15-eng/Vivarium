@@ -19,6 +19,9 @@ public sealed class EcologyTally
     public double DetritusFromFlora { get; set; }
     public double DetritusFromFauna { get; set; }
     public double NutrientsFromDecay { get; set; }
+    /// <summary>Dead matter consumed by decomposers (fungi, slime molds) and the nutrients they released.</summary>
+    public double DetritusDecomposed { get; set; }
+    public double NutrientsFromDecomposers { get; set; }
     public double NutrientsFromWaste { get; set; }
     public double NutrientsDirectReturn { get; set; }
     public double NutrientsUptake { get; set; }

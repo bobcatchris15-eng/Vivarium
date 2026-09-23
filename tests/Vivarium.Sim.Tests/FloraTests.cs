@@ -210,6 +210,7 @@ public class FloraTests
     {
         new object[] { "carpet_moss" }, new object[] { "cushion_moss" }, new object[] { "wetbank_moss" }, new object[] { "crust_lichen" },
         new object[] { "foliose_lichen" }, new object[] { "creeping_groundcover" }, new object[] { "marginal_waterside" }, new object[] { "ornamental_herb" },
+        new object[] { "fern" }, new object[] { "climbing_vine" }, new object[] { "bonnet_mushroom" }, new object[] { "turkey_tail" },
     };
 
     /// <summary>Builds the habitat each archetype is designed for.</summary>
@@ -218,6 +219,7 @@ public class FloraTests
         var w = TestUtil.FlatWorld(31);
         Vec2 p = new(0.5, 0.5);
         (double m, double n, double? l) cond = (0.6, 0.8, null);
+        double? detritus = null;   // decomposers eat dead matter, held at this level
         switch (id)
         {
             case "carpet_moss": cond = (0.68, 0.5, 0.5); break;
@@ -228,6 +230,10 @@ public class FloraTests
             case "creeping_groundcover": cond = (0.6, 1.0, 0.6); break;
             case "marginal_waterside": TestUtil.Flood(w, new Vec2(-1, 0.5), 1.0, 0.04); p = new Vec2(0.15, 0.5); cond = (1.0, 0.9, 0.7); break;
             case "ornamental_herb": cond = (0.5, 1.1, 0.8); break;
+            case "fern": cond = (0.72, 0.8, 0.35); break;
+            case "climbing_vine": w.Placement.PlaceLog(p + new Vec2(0.4, 0.35), 0, 2.4, 0.12, 1, 6); cond = (0.6, 0.9, 0.6); break;
+            case "bonnet_mushroom": cond = (0.78, 0.3, 0.3); detritus = 1.2; break;
+            case "turkey_tail": w.Placement.PlaceLog(p + new Vec2(0.6, 0), 0, 2.6, 0.25, 2, 7); cond = (0.6, 0.3, 0.3); detritus = 1.0; break;
         }
         void Hold()
         {
@@ -237,6 +243,7 @@ public class FloraTests
                 else w.Fields.Moisture[c] = 1;
                 w.Fields.Nutrients[c] = cond.n;
                 if (cond.l.HasValue) w.Fields.Light[c] = cond.l.Value;
+                if (detritus.HasValue) w.Fields.Detritus[c] = detritus.Value;
             }
         }
         Hold();
@@ -323,5 +330,65 @@ public class FloraTests
             return Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["flora"]);
         }
         Assert.Equal(Run(), Run());
+    }
+
+    [Fact]
+    public void DecomposersTurnDeadMatterIntoSoilNutrients()
+    {
+        var w = TestUtil.FlatWorld(33);
+        TestUtil.Condition(w, 0.78, 0.0, 0.3);
+        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 1.5;
+        var sp = Sp("bonnet_mushroom");
+        var f = w.FloraSystem.Establish(sp, new Vec2(0.5, 0.5), "t");
+        double det0 = w.Fields.Detritus.Total(), nut0 = w.Fields.Nutrients.Total();
+        for (int i = 0; i < 48; i++) w.FloraSystem.Step(3600);
+        Assert.True(f.Biomass > sp.InitialBiomass * 2, $"the troop should grow on litter alone ({f.Biomass:0.000})");
+        Assert.True(w.Tally.DetritusDecomposed > 0 && w.Tally.NutrientsFromDecomposers > 0);
+        Assert.True(w.Fields.Detritus.Total() < det0);
+        Assert.True(w.Fields.Nutrients.Total() > nut0, "decomposition releases nutrients");
+        Assert.Equal(0, w.Tally.NutrientsUptake, 12);   // fungi never draw on soil nutrients
+    }
+
+    [Fact]
+    public void ClimbersNeedSomethingToClimb()
+    {
+        var w = TestUtil.FlatWorld(34);
+        TestUtil.Condition(w, 0.6, 0.9, 0.6);
+        var vine = Sp("climbing_vine");
+        var open = new Vec2(-2, -2);
+        var s = w.FloraSystem.Suitability(vine, open);
+        Assert.True(s.HardRefused && s.RefusalReason.Contains("log"), s.ToString());
+        w.Placement.PlaceLog(open + new Vec2(0.4, 0.25), 0, 2.0, 0.12, 1, 8);
+        Assert.False(w.FloraSystem.Suitability(vine, open).HardRefused);
+        Assert.True(w.FloraSystem.Suitability(Sp("turkey_tail"), new Vec2(2.5, 2.5)).HardRefused, "bracket fungi only grow on logs");
+    }
+
+    [Fact]
+    public void SlimeMoldCreepsTowardFoodThenFruitsWhenItRunsOut()
+    {
+        var w = TestUtil.FlatWorld(35);
+        TestUtil.Condition(w, 0.8, 0.2, 0.2);
+        var sp = Sp("slime_mold");
+        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0.5;
+        var food = new Vec2(1.5, 0.5);
+        foreach (int c in w.Grid.CellsInRadius(food, 0.6)) w.Fields.Detritus[c] = 3.0;
+        var f = w.FloraSystem.Establish(sp, new Vec2(0, 0.5), "t", 0.3);
+        double d0 = Vec2.Distance(f.Position, food);
+        for (int i = 0; i < 12; i++) w.FloraSystem.Step(3600);
+        Assert.True(Vec2.Distance(f.Position, food) < d0 - 0.2, $"should creep toward the food: {d0:0.00} → {Vec2.Distance(f.Position, food):0.00}");
+        var found = new List<FloraIndividual>();
+        w.Flora.Neighbours(f.Position, 0.01, found);
+        Assert.Contains(f, found);   // the spatial index follows the move
+        // starve it: fruit, release spores near what food remains, then die back
+        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0.05;
+        foreach (int c in w.Grid.CellsInRadius(new Vec2(-1.5, -1.0), 0.8)) w.Fields.Detritus[c] = 2.0;
+        int before = w.Flora.Count;
+        bool fruited = false;
+        for (int i = 0; i < 24 * 5 && w.Flora.Get(f.Id) != null; i++) { w.FloraSystem.Step(3600); fruited |= f.Fruiting; }
+        Assert.True(fruited, "a starving plasmodium fruits");
+        Assert.Null(w.Flora.Get(f.Id));
+        Assert.Empty(w.CheckInvariants());
+        Assert.NotNull(OrganismMeshes.FloraFruiting(sp));
+        Assert.Null(OrganismMeshes.FloraFruiting(Sp("carpet_moss")));
     }
 }

@@ -1,0 +1,39 @@
+{
+  "id": "slime_mold",
+  "name": "Many-headed slime mold",
+  "archetype": "slime_mold",
+  "role": "Creeping decomposer: the yellow plasmodium hunts bacteria and dead matter across the litter, then fruits when food runs out.",
+  "description": "A single giant cell (Physarum) spreading as a pulsing network of yellow veins. It creeps toward food, and when starved it stops and raises tiny stalked spore cases.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": { "soil": 1.0, "wood": 1.0, "gravel": 0.3 },
+    "refuseSubstrates": [ "water", "rock" ],
+    "refuseTags": [],
+    "moisture": { "optimum": 0.75, "tolerance": 0.2 },
+    "light": { "optimum": 0.2, "tolerance": 0.6 },
+    "nutrients": { "optimum": 0.1, "tolerance": 0.2 },
+    "maxWaterDepth": 0.0,
+    "hardMinMoisture": 0.4,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 1.0,
+    "maxBiomass": 0.6,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.5,
+    "maturityDays": 1.5,
+    "lifespanDays": 30,
+    "nutrientPerBiomass": 0.8,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": { "intervalDays": 3, "radius": 1.0, "propagules": 4, "minBiomassFraction": 0.3 },
+  "competition": { "radius": 0.25, "crowdingLimit": 1.5, "sensitivity": 0.5 },
+  "creep": { "speedPerDay": 0.6, "starvedDays": 2.0, "foodThreshold": 0.25 },
+  "proximity": [],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.0,
+  "grazingValue": 0.4,
+  "visual": { "shape": "plasmodium", "color": [ 0.95, 0.8, 0.12 ], "color2": [ 0.98, 0.9, 0.35 ], "colorVariance": 0.05, "height": 0.02 },
+  "tags": [ "slime_mold", "protist" ]
+}

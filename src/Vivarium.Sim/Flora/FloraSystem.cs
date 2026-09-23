@@ -48,6 +48,8 @@ public sealed class FloraSystem
         if (!onProp && depth > sp.MaxWaterDepth + 1e-9) return FloraSuitability.Refused($"submerged ({depth * 100:0.#} cm, tolerates {sp.MaxWaterDepth * 100:0.#} cm)", sub);
         double moisture = _w.Fields.Moisture.Sample(p);
         if (moisture < sp.HardMinMoisture) return FloraSuitability.Refused($"too dry (moisture {moisture:0.00} < {sp.HardMinMoisture:0.00})", sub);
+        if (sp.RequiresFeature.Length > 0 && _w.Props.DistanceToFeature(p, sp.RequiresFeature) > sp.RequiresFeatureRadius)
+            return FloraSuitability.Refused($"{sp.Name} needs a {sp.RequiresFeature} within {sp.RequiresFeatureRadius * 100:0} cm to climb", sub);
 
         // species-relation refusals (e.g. crust lichen cannot establish under moss)
         foreach (var rel in C.FloraInteractions.Relations)
@@ -59,7 +61,8 @@ public sealed class FloraSystem
         }
 
         double light = _w.Fields.Light.Sample(p);
-        double nutrients = _w.Fields.Nutrients.Sample(p) / C.Ecology.NutrientMax;
+        // decomposers judge their food (dead matter) where plants judge soil nutrients
+        double nutrients = sp.Decomposer ? MathD.Clamp01(_w.Fields.Detritus.Sample(p) / C.Ecology.DetritusMax) : _w.Fields.Nutrients.Sample(p) / C.Ecology.NutrientMax;
         double fs = sp.SubstrateAffinity.GetValueOrDefault(sub);
         double fm = sp.Moisture.Eval(moisture), fl = sp.Light.Eval(light), fn = sp.Nutrients.Eval(nutrients);
         double env = Math.Cbrt(fm * fl * fn);
@@ -143,15 +146,28 @@ public sealed class FloraSystem
                 double b1 = k * b0 / (b0 + (k - b0) * Math.Exp(-r * dt));   // exact logistic over dt
                 double grow = Math.Max(0, b1 - b0);
                 double need = grow * sp.NutrientPerBiomass;
+                if (f.Fruiting) grow = need = 0;   // fruiting bodies no longer feed
                 if (need > 0)
                 {
                     int cell = _w.Grid.NearestDomainCell(p);
-                    double got = _w.Fields.Nutrients.Take(cell, need);
-                    grow *= need > 1e-15 ? got / need : 1;
-                    _w.Tally.NutrientsUptake += got;
+                    if (sp.Decomposer)
+                    {
+                        // digest dead matter; about half is respired/mineralized straight back into the soil
+                        double got = _w.Fields.Detritus.Take(cell, need);
+                        grow *= need > 1e-15 ? got / need : 1;
+                        double released = _w.Fields.Nutrients.Add(cell, got * 0.5);
+                        _w.Tally.DetritusDecomposed += got;
+                        _w.Tally.NutrientsFromDecomposers += released;
+                    }
+                    else
+                    {
+                        double got = _w.Fields.Nutrients.Take(cell, need);
+                        grow *= need > 1e-15 ? got / need : 1;
+                        _w.Tally.NutrientsUptake += got;
+                    }
                 }
                 f.Biomass = Math.Min(sp.MaxBiomass, b0 + grow);
-                f.Health = Math.Min(1, f.Health + dt / SimUnits.Day * 0.5);
+                if (!f.Fruiting) f.Health = Math.Min(1, f.Health + dt / SimUnits.Day * 0.5);   // spent sporangia don't recover
             }
             else
             {
@@ -175,6 +191,8 @@ public sealed class FloraSystem
                 continue;
             }
 
+            if (sp.CreepSpeed > 0 && Creep(f, sp, dt, births)) continue;
+
             // propagation
             if (f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
                 && f.Age - f.LastSpreadAge >= sp.SpreadInterval && sp.Propagules > 0)
@@ -197,6 +215,53 @@ public sealed class FloraSystem
             if (!CanEstablish(sp, q, out _)) continue; // re-check against same-step recruits
             Establish(sp, q, "propagation");
         }
+    }
+
+    /// <summary>
+    /// Slime-mold behaviour: the plasmodium creeps toward richer dead matter; after starving long enough it stops,
+    /// releases spores onto the best nearby food and dies back. Returns true when normal propagation should be
+    /// skipped this step (creepers only reproduce by fruiting).
+    /// </summary>
+    private bool Creep(FloraIndividual f, FloraSpeciesDef sp, double dt, List<(FloraSpeciesDef Sp, Vec2 P)> births)
+    {
+        var p = f.Position;
+        double food = _w.Fields.Detritus.Sample(p);
+        if (f.Fruiting)
+        {
+            f.Health = Math.Max(0, f.Health - dt / SimUnits.Day);   // sporangia last about a day
+            return true;
+        }
+        f.StarvedFor = food < sp.FoodThreshold ? f.StarvedFor + dt : Math.Max(0, f.StarvedFor - dt * 2);
+        if (f.StarvedFor >= sp.StarvedToFruit && f.Stage(sp) != FloraStage.Juvenile)
+        {
+            f.Fruiting = true;
+            var rng = Rng.Keyed(_w.Seed, PropagationStream, f.Id.Value, (ulong)f.SpreadCount++);
+            for (int k = 0; k < Math.Max(1, sp.Propagules); k++)
+            {
+                var q = p + Vec2.FromAngle(rng.Range(0, 2 * Math.PI)) * sp.SpreadRadius * rng.Range(0.4, 1.0);
+                if (_w.Fields.Detritus.Sample(q) >= sp.FoodThreshold && CanEstablish(sp, q, out _)) births.Add((sp, q));
+            }
+            return true;
+        }
+        // creep: sense food along eight directions out to ~1 m (nearer counts more, like a chemical gradient)
+        // and take one step toward the most promising one, over habitable ground only
+        double step = Math.Min(sp.CreepSpeed * dt, _w.Grid.CellSize);
+        if (step <= 1e-6) return true;
+        const double Sense = 1.0;
+        double Weight(double r) => 1 - r / (Sense * 1.25);
+        double stay = 0;
+        for (double r = 0.25; r <= Sense + 1e-9; r += 0.25) stay += food * Weight(r);
+        var best = p; double bestScore = stay * 1.02;
+        for (int k = 0; k < 8; k++)
+        {
+            var dir = Vec2.FromAngle(k * Math.PI / 4);
+            double score = 0;
+            for (double r = 0.25; r <= Sense + 1e-9; r += 0.25) score += _w.Fields.Detritus.Sample(p + dir * r) * Weight(r);
+            var q = p + dir * step;
+            if (score > bestScore && !Suitability(sp, q, f.Id).HardRefused) { best = q; bestScore = score; }
+        }
+        if (best != p) _w.Flora.Move(f, best);
+        return true;
     }
 
     /// <summary>True when a new individual of sp may establish at q (no hard refusal, adequate suitability, not overcrowded).</summary>

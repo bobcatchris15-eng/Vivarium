@@ -23,7 +23,7 @@ public static class Lod
 public partial class FloraRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private sealed class Layer { public MultiMeshInstance3D Near = null!, Far = null!; public int NearTris, FarTris; }
+    private sealed class Layer { public MultiMeshInstance3D Near = null!, Far = null!; public MultiMeshInstance3D? Fruit; public int NearTris, FarTris, FruitTris; }
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
     private double _accum = 999;
@@ -42,7 +42,8 @@ public partial class FloraRenderer : Node3D
         {
             var mat = Bridge.Shader("res://Shaders/flora.gdshader");
             mat.SetShaderParameter("stiffness", sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
-            mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, _ => 2 });
+            mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
+            if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
             var hi = OrganismMeshes.Flora(sp);
             var lo = LowDetail(sp);
@@ -53,6 +54,14 @@ public partial class FloraRenderer : Node3D
                 NearTris = hi.TriangleCount, FarTris = lo.TriangleCount,
             };
             AddChild(layer.Near); AddChild(layer.Far);
+            if (OrganismMeshes.FloraFruiting(sp) is { } fruit)
+            {
+                var fruitMat = (ShaderMaterial)mat.Duplicate();
+                fruitMat.SetShaderParameter("surface_mode", 3);   // spent, matte spore cases
+                layer.Fruit = MakeMmi($"Flora_{sp.Id}_fruit", Bridge.ToArrayMesh(fruit, fruitMat));
+                layer.FruitTris = fruit.TriangleCount;
+                AddChild(layer.Fruit);
+            }
             _layers[sp.Id] = layer;
         }
         _accum = 999;
@@ -86,11 +95,47 @@ public partial class FloraRenderer : Node3D
         Rebuild();
     }
 
-    private readonly Dictionary<string, (List<Transform3D> T, List<Color> C)> _near = new(), _far = new();
+    private readonly Dictionary<string, (List<Transform3D> T, List<Color> C)> _near = new(), _far = new(), _fruit = new();
+
+    /// <summary>
+    /// Where a climber or bracket attaches: the nearest log or rock (sim angle toward it from p, its top height,
+    /// and for logs the point on the trunk surface closest to p). Null when nothing is within reach.
+    /// </summary>
+    private (double Angle, double Top, double Dist, Vector3 Surface, double Outward)? Anchor(Vector2 p, double reach)
+    {
+        (double, double, double, Vector3, double)? best = null;
+        double bestD = reach;
+        var sp = new Vivarium.Sim.Core.Vec2(p.X, p.Y);
+        foreach (var l in _w.Props.Logs)
+        {
+            var axis = Vivarium.Sim.Core.Vec2.FromAngle(l.RotationY);
+            var rel = sp - l.Position;
+            double along = Math.Clamp(rel.Dot(axis), -l.Length / 2, l.Length / 2);
+            var onAxis = l.Position + axis * along;
+            var outV = sp - onAxis;
+            double d = Math.Max(0, outV.Length - l.Radius);
+            if (d > bestD) continue;
+            bestD = d;
+            double outward = outV.LengthSq > 1e-10 ? outV.Angle : l.RotationY + Math.PI / 2;
+            var surf = onAxis + Vivarium.Sim.Core.Vec2.FromAngle(outward) * (l.Radius * 0.92);
+            best = ((onAxis - sp).LengthSq > 1e-10 ? (onAxis - sp).Angle : outward + Math.PI, l.Y + l.Radius, d,
+                    new Vector3((float)surf.X, (float)l.Y, (float)surf.Z), outward);
+        }
+        foreach (var r in _w.Props.Rocks)
+        {
+            double d = Math.Max(0, Vivarium.Sim.Core.Vec2.Distance(sp, r.Position) - r.FootprintRadius * 0.8);
+            if (d > bestD) continue;
+            bestD = d;
+            var to = r.Position - sp;
+            double ang = to.LengthSq > 1e-10 ? to.Angle : 0;
+            best = (ang, r.Y + r.SizeY, d, new Vector3((float)r.X, (float)(r.Y + r.SizeY * 0.5), (float)r.Z), ang + Math.PI);
+        }
+        return best;
+    }
 
     public void Rebuild()
     {
-        foreach (var k in _layers.Keys) { Get(_near, k).T.Clear(); Get(_near, k).C.Clear(); Get(_far, k).T.Clear(); Get(_far, k).C.Clear(); }
+        foreach (var k in _layers.Keys) { Get(_near, k).T.Clear(); Get(_near, k).C.Clear(); Get(_far, k).T.Clear(); Get(_far, k).C.Clear(); Get(_fruit, k).T.Clear(); Get(_fruit, k).C.Clear(); }
         var camPos = Camera?.GlobalPosition ?? Vector3.Zero;
         float near = Lod.Near(Quality) * 1.6f;
         Visible_ = 0; TrianglesDrawn = 0;
@@ -104,10 +149,23 @@ public partial class FloraRenderer : Node3D
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
             var t = new Transform3D(new Basis(Vector3.Up, yaw).Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+            if (sp.Shape == "vine" && Anchor(new Vector2(pos.X, pos.Z), 0.6) is { } va)
+            {
+                // climb: turn the stems toward the log/rock and stretch them up and over its top
+                float up = Mathf.Clamp((float)(va.Top - pos.Y) + 0.04f, 0.06f, 1.2f) * (float)(0.55 + 0.45 * Math.Sqrt(f.BiomassFraction(sp)));
+                float across = Mathf.Max((float)r, (float)(va.Dist + 0.12));
+                t = new Transform3D(Bridge.Yaw(va.Angle).Scaled(new Vector3(across, up, (float)r)), pos);
+            }
+            else if (sp.Shape == "bracket" && Anchor(new Vector2(pos.X, pos.Z), 0.35) is { } ba)
+            {
+                // shelves grow out of the trunk's side
+                var at = ba.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.08f, 0);
+                t = new Transform3D(Bridge.Yaw(ba.Outward).Scaled(new Vector3((float)r, (float)(h * 2.5), (float)r)), at - new Vector3(0, (float)h, 0));
+            }
             float wobble = 0;
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) { wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2); if (wobble <= 0) done.Add(f.Id); }
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
-            var bucket = pos.DistanceTo(camPos) < near ? _near : _far;
+            var bucket = f.Fruiting && _layers[sp.Id].Fruit != null ? _fruit : pos.DistanceTo(camPos) < near ? _near : _far;
             Get(bucket, sp.Id).T.Add(t); Get(bucket, sp.Id).C.Add(custom);
             Visible_++;
         }
@@ -115,7 +173,9 @@ public partial class FloraRenderer : Node3D
         foreach (var (id, layer) in _layers)
         {
             Fill(layer.Near.Multimesh, Get(_near, id)); Fill(layer.Far.Multimesh, Get(_far, id));
-            TrianglesDrawn += (long)layer.Near.Multimesh.InstanceCount * layer.NearTris + (long)layer.Far.Multimesh.InstanceCount * layer.FarTris;
+            if (layer.Fruit != null) Fill(layer.Fruit.Multimesh, Get(_fruit, id));
+            TrianglesDrawn += (long)layer.Near.Multimesh.InstanceCount * layer.NearTris + (long)layer.Far.Multimesh.InstanceCount * layer.FarTris
+                + (layer.Fruit != null ? (long)layer.Fruit.Multimesh.InstanceCount * layer.FruitTris : 0);
         }
     }
 
