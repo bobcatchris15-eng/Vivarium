@@ -50,7 +50,7 @@ public static class EcosystemStatistics
         }).ToList();
 
         int wet = w.Grid.DomainCells.Count(c => w.Water.IsWet(c));
-        return new EcosystemStats(w.Clock.SimDays, flora, fauna,
+        return new EcosystemStats(w.Clock.BioDays, flora, fauna,
             w.Fields.Moisture.Mean(), w.Fields.Nutrients.Mean(), w.Fields.Detritus.Total() , w.Water.Volume(),
             (double)wet / Math.Max(1, w.Grid.DomainCells.Length), w.Fields.Light.Mean(), w.Lineage.Count, w.Genomes.Count);
     }

@@ -42,14 +42,24 @@ vec3 ramp(float t) {
 // Height-aware blend: the brighter (higher) texels of the incoming layer win first, giving crisp natural edges.
 float hblend(float w, float height) { return clamp((w * 1.6 - 0.3) + (height - 0.5) * 0.9 * (1.0 - abs(w * 2.0 - 1.0)), 0.0, 1.0); }
 
+// C1-smooth lookup of a coarse, linearly filtered grid (hides the 25 cm field cells)
+vec4 smooth_field(sampler2D tex, vec2 uv) {
+    vec2 res = vec2(textureSize(tex, 0));
+    vec2 p = uv * res + 0.5;
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    return texture(tex, (i + f - 0.5) / res);
+}
+
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
     vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
-    vec4 f = texture(field_tex, fuv);
-    vec2 sub = texture(sub_tex, fuv).rg;          // smooth gravel / rock weights (water ignored)
+    vec4 f = smooth_field(field_tex, fuv);
+    vec2 sub = smooth_field(sub_tex, fuv).rg;     // smooth gravel / rock weights (water ignored)
+    f.g = texture(field_tex, fuv).g;              // the substrate code (overlay only) must not be smoothed
     float moisture = f.r, light = f.a;
     float code = floor(f.g * 4.0 + 0.5);         // overlay only: 0 soil, 1 gravel, 2 rock, 3 wood, 4 water
     vec2 uv = world_pos.xz / tile_metres;
@@ -57,7 +67,7 @@ void fragment() {
     vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 
     // weights first, then sample only the layers that actually show here (big saving on an iGPU)
-    float wDamp = smoothstep(0.45, 0.8, moisture) * (0.7 + 0.3 * macro);
+    float wDamp = smoothstep(0.5, 0.92, moisture + (macro - 0.5) * 0.12);
     float wLeaf = smoothstep(0.55, 0.25, light) * smoothstep(0.3, 0.55, moisture) * smoothstep(0.35, 0.7, macro);
     float wMoss = smoothstep(0.55, 0.9, moisture) * smoothstep(0.25, 0.6, light) * smoothstep(0.3, 0.6, fbm(world_pos.xz * 1.7));
     float wGrav = smoothstep(0.2, 0.7, sub.r);
@@ -71,7 +81,7 @@ void fragment() {
     if (wDamp > 0.01) {
         vec3 n2 = unpack_normal(texture(damp_nrm, uv * 1.15 + 3.1).rgb);
         vec4 d = vec4(texture(damp_col, uv * 1.15 + 3.1).rgb, texture(damp_rgh, uv * 1.15 + 3.1).r);
-        float w = hblend(wDamp, dot(d.rgb, vec3(0.33)) * 2.0);
+        float w = mix(wDamp, hblend(wDamp, dot(d.rgb, vec3(0.33)) * 2.0), 0.35);   // soft: moisture creeps, it has no edge
         col = mix(col, d.rgb, w); rough = mix(rough, d.a, w); tn = normalize(mix(tn, n2, w));
     }
     if (wLeaf > 0.01) {
@@ -102,9 +112,12 @@ void fragment() {
         col = mix(col, rock.rgb, w); rough = mix(rough, rock.a, w); detail = normalize(mix(detail, n_rock, w));
     }
 
-    // wetness darkens, glosses and flattens the surface
-    float wet = smoothstep(0.55, 1.0, moisture);
-    col *= mix(1.0, 0.6, wet * (1.0 - wMoss * 0.6));
+    // moisture ramp: dry ground is paler and dustier, damp ground darkens gradually, saturated ground glosses
+    float dryness = smoothstep(0.42, 0.18, moisture);
+    col = mix(col, mix(vec3(dot(col, vec3(0.3, 0.59, 0.11))), col, 0.7) * 1.18, dryness);
+    col *= mix(1.0, 0.72, smoothstep(0.3, 0.75, moisture) * (1.0 - wMoss * 0.5));
+    float wet = smoothstep(0.7, 1.0, moisture);
+    col *= mix(1.0, 0.8, wet * (1.0 - wMoss * 0.6));
     rough = mix(rough, 0.28, wet * 0.8);
     detail = normalize(mix(detail, wn, wet * 0.35));
 

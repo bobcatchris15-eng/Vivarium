@@ -19,6 +19,8 @@ public sealed class WorldPayload
     public WorldDescriptor Descriptor { get; set; } = new();
     public ulong LastSerial { get; set; }
     public long Tick { get; set; }
+    /// <summary>Biological clock (null in saves made before it existed: those ran biology at 1×, so it equals sim time).</summary>
+    public double? BioSeconds { get; set; }
     public PropSet Props { get; set; } = new();
     public List<Spring> Springs { get; set; } = new();
     public EcologyTally Tally { get; set; } = new();
@@ -72,7 +74,7 @@ public static class WorldSerializer
         var p = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         p["world"] = Bytes(new WorldPayload
         {
-            Descriptor = w.Descriptor, LastSerial = w.Ids.LastSerial, Tick = w.Clock.Tick,
+            Descriptor = w.Descriptor, LastSerial = w.Ids.LastSerial, Tick = w.Clock.Tick, BioSeconds = w.Clock.BioSeconds,
             Props = w.Props, Springs = w.Water.Springs, Tally = w.Tally,
             TerrainDelta = w.Terrain.ExportDelta() is { } delta ? Pack(delta) : null,
         });
@@ -121,6 +123,8 @@ public static class WorldSerializer
         var w = VivariumWorld.CreateBaseline(content, wp.Descriptor);
         w.Ids.LastSerial = wp.LastSerial;
         w.Clock.Tick = wp.Tick;
+        w.Clock.BioSeconds = wp.BioSeconds ?? wp.Tick * Time.SimClock.FixedStepSeconds;
+        if (!double.IsFinite(w.Clock.BioSeconds) || w.Clock.BioSeconds < 0) throw new InvalidDataException($"biological clock is invalid ({w.Clock.BioSeconds})");
         w.Props = wp.Props ?? new PropSet();
         w.Props.Touch();
         w.Water.Springs.AddRange(wp.Springs ?? new());

@@ -63,6 +63,7 @@ public sealed class VivariumWorld
         Flora = new FloraPopulation(Domain.Radius + 1);
         Fauna = new FaunaPopulation(Domain.Radius + 1);
         Scheduler = new Scheduler(Clock);
+        Clock.BioAcceleration = Descriptor.BioAcceleration;
         Placement = new PropPlacement(this);
         FloraSystem = new FloraSystem(this);
         FaunaSystem = new FaunaSystem(this);
@@ -112,18 +113,20 @@ public sealed class VivariumWorld
     private void RegisterSystems()
     {
         var eco = Content.Ecology;
+        // physical systems get simulated seconds; biological ones get the (faster) biological seconds
+        Action<double> Bio(Action<double> step) => dt => step(dt * Clock.BioAcceleration);
         Scheduler.Register("fauna.behaviour", Cadence.FaunaBehaviour, 10, FaunaSystem.StepBehaviour);
-        Scheduler.Register("fauna.metabolism", Cadence.FaunaMetabolism, 20, FaunaSystem.StepMetabolism, phase: 1);
-        Scheduler.Register("fauna.lifecycle", Cadence.FaunaLifecycle, 30, FaunaSystem.StepLifecycle, phase: 7);
+        Scheduler.Register("fauna.metabolism", Cadence.FaunaMetabolism, 20, Bio(FaunaSystem.StepMetabolism), phase: 1);
+        Scheduler.Register("fauna.lifecycle", Cadence.FaunaLifecycle, 30, Bio(FaunaSystem.StepLifecycle), phase: 7);
         Scheduler.Register("hydrology", Cadence.Hydrology, 40, Water.Step, phase: 2);
         Scheduler.Register("environment", Cadence.Environment, 50, dt =>
         {
             Water.CoupleMoisture(Fields.Moisture, eco, dt, Fields.Scratch);
-            Fields.StepNutrients(eco, dt);
+            Fields.StepNutrients(eco, dt * Clock.BioAcceleration);
             if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props);
         }, phase: 13);
-        Scheduler.Register("ecology.resources", Cadence.Resources, 60, Ecology.StepResources, phase: 19);
-        Scheduler.Register("flora", Cadence.Flora, 70, FloraSystem.Step, phase: 29);
+        Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
+        Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);
     }
 

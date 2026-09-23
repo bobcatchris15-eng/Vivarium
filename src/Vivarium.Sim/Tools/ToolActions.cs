@@ -245,6 +245,18 @@ public sealed class ToolActions
         return ToolResult.Success("a new spring bubbles up", sp.Id);
     }
 
+    // ------------------------------------------------------------------ growth speed (biological clock)
+
+    /// <summary>Sets how much faster biology runs than locomotion (saved with the world).</summary>
+    public ToolResult SetBioAcceleration(double factor)
+    {
+        if (!double.IsFinite(factor)) return ToolResult.Fail("invalid growth speed");
+        factor = MathD.Clamp(factor, WorldDescriptor.MinBioAcceleration, WorldDescriptor.MaxBioAcceleration);
+        _w.Descriptor.BioAcceleration = factor;
+        _w.Clock.BioAcceleration = factor;
+        return ToolResult.Success($"growth speed ×{factor:0.#}");
+    }
+
     // ------------------------------------------------------------------ species introduction
 
     public ToolResult IntroduceFlora(string speciesId, Vec2 p)

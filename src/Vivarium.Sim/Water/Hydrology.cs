@@ -247,13 +247,51 @@ public sealed class Hydrology
         return k * Math.Min(depth, diff);
     }
 
-    /// <summary>Soil moisture coupling: wet cells saturate, banks next to water wet up, dry ground dries toward
-    /// the capillary level implied by height above the water table.</summary>
+    private double[]? _waterDistance;
+
+    /// <summary>
+    /// Distance (m) from each domain cell to the nearest wet cell: a two-pass chamfer transform (3-4 weights),
+    /// deterministic and O(cells). Cells with no water anywhere get +∞.
+    /// </summary>
+    public double[] DistanceToWater()
+    {
+        int nx = Grid.Nx, nz = Grid.Nz, n = Grid.Count;
+        var d = _waterDistance ??= new double[n];
+        const double Inf = double.PositiveInfinity;
+        for (int k = 0; k < n; k++) d[k] = Grid.InDomain(k) && IsWet(k) ? 0 : Inf;
+        double a = Grid.CellSize, b = Grid.CellSize * Math.Sqrt(2);
+        void Relax(int k, int i, int j, int di, int dj, double w)
+        {
+            int ii = i + di, jj = j + dj;
+            if (ii < 0 || jj < 0 || ii >= nx || jj >= nz) return;
+            double c = d[jj * nx + ii] + w;
+            if (c < d[k]) d[k] = c;
+        }
+        for (int j = 0; j < nz; j++)
+            for (int i = 0; i < nx; i++)
+            {
+                int k = j * nx + i;
+                Relax(k, i, j, -1, 0, a); Relax(k, i, j, 0, -1, a); Relax(k, i, j, -1, -1, b); Relax(k, i, j, 1, -1, b);
+            }
+        for (int j = nz - 1; j >= 0; j--)
+            for (int i = nx - 1; i >= 0; i--)
+            {
+                int k = j * nx + i;
+                Relax(k, i, j, 1, 0, a); Relax(k, i, j, 0, 1, a); Relax(k, i, j, 1, 1, b); Relax(k, i, j, -1, 1, b);
+            }
+        return d;
+    }
+
+    /// <summary>
+    /// Soil moisture coupling: wet cells saturate; nearby soil wicks water sideways with a smooth fall-off by
+    /// distance to open water (capillary fringe); elsewhere ground dries toward the level implied by its
+    /// height above the water table.
+    /// </summary>
     public void CoupleMoisture(ScalarField moisture, EcologyConfig eco, double dt, double[] scratch)
     {
         double wet = 1 - Math.Exp(-eco.MoistureWetting * dt);
         double dry = 1 - Math.Exp(-eco.MoistureDrying * dt);
-        int nx = Grid.Nx;
+        var dist = DistanceToWater();
         foreach (int idx in Grid.DomainCells)
         {
             double m = moisture.Values[idx];
@@ -261,14 +299,10 @@ public sealed class Hydrology
             if (IsWet(idx)) target = 1;
             else
             {
-                int i = idx % nx, j = idx / nx;
-                int wetNeighbours = 0;
-                for (int dj = -1; dj <= 1; dj++)
-                    for (int di = -1; di <= 1; di++)
-                        if ((di != 0 || dj != 0) && Grid.InDomain(i + di, j + dj) && IsWet(Grid.Index(i + di, j + dj))) wetNeighbours++;
                 double capillary = MathD.Clamp01(1 - (Bed[idx] - WaterTable) / eco.MoistureWaterTableRange);
                 double baseline = Math.Max(eco.MoistureDryBaseline, 0.85 * capillary * capillary);
-                target = wetNeighbours > 0 ? Math.Max(baseline, 0.75 + 0.03 * wetNeighbours) : baseline;
+                double wick = double.IsInfinity(dist[idx]) ? 0 : 0.95 * Math.Exp(-(dist[idx] - Grid.CellSize) / eco.MoistureCapillaryRange);
+                target = Math.Max(baseline, Math.Min(0.95, wick));
             }
             double rate = target > m ? wet : dry;
             moisture[idx] = m + (target - m) * rate;

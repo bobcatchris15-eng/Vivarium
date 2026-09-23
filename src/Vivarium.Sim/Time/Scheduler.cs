@@ -90,6 +90,7 @@ public sealed class Scheduler
             SystemTimed?.Invoke(s, ms);
         }
         Clock.Tick = next;
+        Clock.BioSeconds += SimClock.FixedStepSeconds * Clock.BioAcceleration;
         AfterTick?.Invoke(next);
     }
 

@@ -61,7 +61,7 @@ public partial class Main : Node3D
         if (File.Exists(Session.AutosavePath))
         {
             var r = Session.LoadFrom(Session.AutosavePath);
-            if (r.Ok) { Session.Ui.Toast($"Welcome back — day {r.World!.Clock.SimDays:0.0} of your vivarium", false); return; }
+            if (r.Ok) { Session.Ui.Toast($"Welcome back — day {r.World!.Clock.BioDays:0.0} of your vivarium", false); return; }
             Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + r.Message);
             Session.Ui.Toast("Your last autosave could not be loaded (" + r.Message + "); growing a fresh vivarium.", true);
         }

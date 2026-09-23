@@ -277,13 +277,13 @@ public class PerfTests
     [Trait("Speed", "Slow")]
     public void SustainedAcceleratedRunStaysBounded()
     {
-        var w = TestUtil.DefaultWorld();
+        var w = TestUtil.DefaultWorld(bio: TestUtil.ShippedBio);   // as shipped: 8 biological weeks
         long mem0 = GC.GetTotalMemory(true);
         var counts = new List<int>();
         var budget = new WorkloadBudget(w) { SystemBudgetMs = 250 };
         for (int week = 0; week < 8; week++)
         {
-            w.Step(8640 * 7);
+            w.Step(TestUtil.TicksPerBioDay() * 7);
             Assert.Empty(w.CheckInvariants());
             counts.Add(w.Fauna.Count + w.Flora.Count);
         }

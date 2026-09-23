@@ -83,7 +83,7 @@ public static class SaveSystem
         {
             CreatedUtc = createdUtc ?? DateTime.UtcNow, SavedUtc = DateTime.UtcNow,
             WorldName = w.Descriptor.Name, PresetId = w.Descriptor.PresetId, Seed = w.Seed,
-            SimTick = w.Clock.Tick, SimDays = w.Clock.SimDays, ContentDigest = w.Content.ContentDigest,
+            SimTick = w.Clock.Tick, SimDays = w.Clock.BioDays, ContentDigest = w.Content.ContentDigest,
             StateDigest = WorldSerializer.DigestOf(payloads), SpeedIndex = w.Clock.SpeedIndex, Paused = w.Clock.Paused,
             FloraCount = w.Flora.Count, FaunaCount = w.Fauna.Count,
             Payloads = payloads.Select(kv => new SavePayloadInfo { Name = kv.Key, Sha256 = Digest.Sha256Hex(kv.Value), Bytes = kv.Value.Length }).ToList(),

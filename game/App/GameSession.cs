@@ -107,7 +107,7 @@ public partial class GameSession : Node3D
         Autosave.Completed -= OnAutosaved;
         Autosave.Completed += OnAutosaved;
         History.Clear(); _lastHistoryDay = -1;
-        Log.Info(LogCategory.App, $"World started: '{world.Descriptor.Name}' seed {world.Seed}, day {world.Clock.SimDays:0.0}.");
+        Log.Info(LogCategory.App, $"World started: '{world.Descriptor.Name}' seed {world.Seed}, day {world.Clock.BioDays:0.0}.");
         WorldChanged?.Invoke();
     }
 
@@ -161,9 +161,9 @@ public partial class GameSession : Node3D
         Host.Advance(delta);
         Autosave?.Tick(Host.World, delta);
         var w = Host.World;
-        if (w.Clock.SimDays - _lastHistoryDay >= 1.0 / 24 || _lastHistoryDay < 0)
+        if (w.Clock.BioDays - _lastHistoryDay >= 1.0 / 24 || _lastHistoryDay < 0)
         {
-            _lastHistoryDay = w.Clock.SimDays;
+            _lastHistoryDay = w.Clock.BioDays;
             History.Add(EcosystemStatistics.Compute(w));
             if (History.Count > 400) History.RemoveAt(0);
         }

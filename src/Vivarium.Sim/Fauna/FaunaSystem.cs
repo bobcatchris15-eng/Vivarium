@@ -325,7 +325,7 @@ public sealed class FaunaSystem
 
     public void StepLifecycle(double dt)
     {
-        double now = _w.Clock.SimSeconds;
+        double now = _w.Clock.BioSeconds;
         long tick = _w.Clock.Tick;
         _w.Fauna.RebuildIndex();
         var dead = new List<(FaunaIndividual, string)>();
@@ -447,7 +447,7 @@ public sealed class FaunaSystem
             Age = age, Energy = sp.InitialEnergy, Stage = age >= sp.MaturityAge ? FaunaLifeStage.Adult : FaunaLifeStage.Juvenile,
             LifespanFactor = 1 + (rng.NextDouble() * 2 - 1) * sp.LifespanVariance, GenomeId = gid,
             // stagger breeding so a founding group does not all reproduce on the same tick
-            ReproCooldownUntil = _w.Clock.SimSeconds + rng.Range(0.3, 1.0) * sp.ReproCooldown,
+            ReproCooldownUntil = _w.Clock.BioSeconds + rng.Range(0.3, 1.0) * sp.ReproCooldown,
         };
         f.Y = RestingY(sp, pos, f.Pitch);
         _w.Fauna.Add(f);
@@ -464,7 +464,7 @@ public sealed class FaunaSystem
         var ph = PhenotypeOf(f);
         double mass = sp.MassAtMid * ph.MassScale * sp.DetritusOnDeath;
         _w.Ecology.ReturnOrganicMatter(f.PositionXZ, mass, 0, fromFlora: false);
-        _w.Lineage.MarkDead(f.Id, _w.Clock.Tick, cause);
+        _w.Lineage.MarkDead(f.Id, _w.Clock.Tick, cause, _w.Clock.BioDays);
         _w.Tally.Death(sp.Id, cause);
         return true;
     }

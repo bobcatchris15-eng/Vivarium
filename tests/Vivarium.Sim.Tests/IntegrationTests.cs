@@ -59,11 +59,11 @@ public class IntegrationTests
     [Trait("Speed", "Slow")]
     public void DefaultEcologyRunsThreeWeeksCleanly()
     {
-        var w = TestUtil.DefaultWorld();
+        var w = TestUtil.DefaultWorld(bio: TestUtil.ShippedBio);   // as shipped: 21 biological days
         var budget = new Diagnostics.WorkloadBudget(w) { SystemBudgetMs = 500 };
         for (int day = 0; day < 21; day++)
         {
-            w.Step(8640);
+            w.Step(TestUtil.TicksPerBioDay());
             var inv = w.CheckInvariants();
             Assert.True(inv.Count == 0, $"day {day}: {string.Join("; ", inv.Take(5))}");
             WorldSerializer.Validate(w);   // content references and habitat integrity

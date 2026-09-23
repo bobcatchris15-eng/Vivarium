@@ -290,6 +290,8 @@ public sealed class EcologyConfig
     public double MoistureDiffusion { get; init; }
     public double MoistureWaterTableRange { get; init; } // m above water table where capillary moisture fades
     public double MoistureDryBaseline { get; init; }
+    /// <summary>Distance (m) over which soil wicks water sideways from open water (e-folding length).</summary>
+    public double MoistureCapillaryRange { get; init; }
 
     public double DetritusDecay { get; init; }      // 1/s
     public double DetritusNutrientYield { get; init; }

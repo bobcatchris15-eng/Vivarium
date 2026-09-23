@@ -21,8 +21,14 @@ public sealed class WorldDescriptor
     public PlacementProfile Placement { get; set; } = new();
     public List<StarterEntry> StarterFlora { get; set; } = new();
     public List<StarterEntry> StarterFauna { get; set; } = new();
+    /// <summary>
+    /// Biological seconds per physical simulated second. The default makes one real minute one biological day at
+    /// 1× speed (1440 / 168). Worlds saved before this setting existed also load with the default.
+    /// </summary>
+    public double BioAcceleration { get; set; } = DefaultBioAcceleration;
 
     public const double MinDiameter = 10, MaxDiameter = 20;
+    public const double DefaultBioAcceleration = 60.0 / 7, MinBioAcceleration = 1, MaxBioAcceleration = 30;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
 
@@ -41,6 +47,7 @@ public sealed class WorldDescriptor
         if (!(Terrain.MaxHeight > Terrain.MinHeight)) e.Add("terrain.maxHeight must exceed terrain.minHeight");
         if (!(Terrain.Bottom < Terrain.MinHeight - 0.5)) e.Add("terrain.bottom must be at least 0.5 m below terrain.minHeight");
         if (Terrain.Octaves is < 1 or > 8) e.Add("terrain.octaves must be within [1, 8]");
+        if (!(BioAcceleration >= MinBioAcceleration && BioAcceleration <= MaxBioAcceleration)) e.Add($"bioAcceleration {BioAcceleration} must be within [{MinBioAcceleration}, {MaxBioAcceleration}]");
         double r = Diameter / 2;
         foreach (var s in Water.Springs)
             if (s.X * s.X + s.Z * s.Z > r * r) e.Add($"spring at ({s.X},{s.Z}) lies outside the island");

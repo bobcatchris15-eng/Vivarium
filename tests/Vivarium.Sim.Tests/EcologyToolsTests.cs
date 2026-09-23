@@ -128,17 +128,17 @@ public class EcologyTests
     {
         string Run(out VivariumWorld w)
         {
-            w = TestUtil.DefaultWorld();
+            w = TestUtil.DefaultWorld(bio: TestUtil.ShippedBio);   // as shipped: 28 biological days
             for (int day = 0; day < 28; day++)
             {
-                w.Step(8640);
+                w.Step(TestUtil.TicksPerBioDay());
                 var inv = w.CheckInvariants();
                 Assert.True(inv.Count == 0, $"day {day}: {string.Join("; ", inv.Take(5))}");
             }
             return TestUtil.Digest(w);
         }
         var d1 = Run(out var world);
-        Assert.Equal(28.0, world.Clock.SimDays, 6);
+        Assert.Equal(28.0, world.Clock.BioDays, 1);
         Assert.True(world.Fauna.Count > 0 && world.Flora.Count > 0);
         Assert.Equal(d1, Run(out _));
     }

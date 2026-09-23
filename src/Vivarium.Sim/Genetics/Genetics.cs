@@ -148,6 +148,8 @@ public sealed class LineageRecord
     /// <summary>-1 while alive.</summary>
     public long DeathTick { get; set; } = -1;
     public string DeathCause { get; set; } = "";
+    /// <summary>Biological day of death (-1 while alive or for records saved before the biological clock).</summary>
+    public double DeathDay { get; set; } = -1;
     public int Generation { get; set; }
     public bool Alive => DeathTick < 0;
 }
@@ -167,9 +169,9 @@ public sealed class LineageBook
     public IEnumerable<LineageRecord> Ordered() => _records.Values.OrderBy(r => r.Id.Value);
     public void Clear() => _records.Clear();
 
-    public void MarkDead(EntityId id, long tick, string cause)
+    public void MarkDead(EntityId id, long tick, string cause, double bioDay = -1)
     {
-        if (_records.TryGetValue(id, out var r) && r.Alive) { r.DeathTick = tick; r.DeathCause = cause; }
+        if (_records.TryGetValue(id, out var r) && r.Alive) { r.DeathTick = tick; r.DeathCause = cause; r.DeathDay = bioDay; }
     }
 
     public IEnumerable<LineageRecord> Parents(EntityId id)

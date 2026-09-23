@@ -111,7 +111,7 @@ public partial class Inspector : GlassPanel
             sb.AppendLine($"Diet: {string.Join(", ", sp.Diet.Select(d => d.Resource))}");
             if (w.Clock.SimSeconds < f.DisturbedUntil) sb.AppendLine("[color=#fd8]Startled![/color]");
             if (f.Grabbed) sb.AppendLine("[color=#fd8]Being held[/color]");
-            if (w.FaunaSystem.CanReproduce(f, sp, w.Clock.SimSeconds, out var why)) sb.AppendLine("Ready to breed"); else sb.AppendLine($"Breeding: {why}");
+            if (w.FaunaSystem.CanReproduce(f, sp, w.Clock.BioSeconds, out var why)) sb.AppendLine("Ready to breed"); else sb.AppendLine($"Breeding: {why}");
         }
         else if (_tab == "Genome")
         {
@@ -157,7 +157,7 @@ public partial class Inspector : GlassPanel
     private static string Describe(VivariumWorld w, LineageRecord r)
     {
         // dead ancestors are shown from their lineage record only (no entity is resurrected)
-        string status = r.Alive ? "[color=#8e8]alive[/color]" : $"[color=#aaa]died day {r.DeathTick * 10 / SimUnits.Day:0.0} ({r.DeathCause})[/color]";
+        string status = r.Alive ? "[color=#8e8]alive[/color]" : $"[color=#aaa]died day {(r.DeathDay >= 0 ? r.DeathDay : r.DeathTick * 10 / SimUnits.Day):0.0} ({r.DeathCause})[/color]";
         var g = w.Genomes.Get(r.GenomeId);
         string size = "";
         if (g != null && w.Content.FaunaById(r.SpeciesId) is { } sp) size = $" · {Phenotype.From(sp, g).BodySize * 1000:0.0} mm";

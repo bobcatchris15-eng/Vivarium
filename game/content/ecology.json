@@ -5,7 +5,7 @@
     { "id": "plankton", "name": "Plankton", "medium": "aquatic" }
   ],
   "nutrients": { "baseline": 0.4, "max": 2.0, "relaxPerDay": 0.06, "diffusionPerDay": 0.4 },
-  "moisture": { "dryingPerDay": 0.5, "wettingPerDay": 6.0, "diffusionPerDay": 0.6, "waterTableRange": 0.9, "dryBaseline": 0.22 },
+  "moisture": { "dryingPerDay": 0.5, "wettingPerDay": 6.0, "diffusionPerDay": 0.6, "waterTableRange": 0.9, "dryBaseline": 0.22, "capillaryRange": 0.8 },
   "detritus": { "decayPerDay": 0.04, "nutrientYield": 0.6, "max": 6.0 },
   "biofilm": { "growthPerDay": 0.7, "capacity": 0.5, "nutrientUse": 0.25 },
   "plankton": { "growthPerDay": 1.0, "capacity": 0.3, "nutrientUse": 0.25 }

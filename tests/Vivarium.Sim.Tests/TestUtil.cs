@@ -23,10 +23,15 @@ public static class TestUtil
     public static WorldDescriptor Default => Content.PresetOrThrow("default");
 
     /// <summary>Full default world (props, water settled, starters).</summary>
-    public static VivariumWorld DefaultWorld(ulong? seed = null, bool populate = true)
+    /// <summary>
+    /// The default preset. Biology runs at 1× unless <paramref name="bio"/> is given, so rate-based expectations
+    /// stay in plain simulated time; soak tests pass the shipped default acceleration.
+    /// </summary>
+    public static VivariumWorld DefaultWorld(ulong? seed = null, bool populate = true, double bio = 1.0)
     {
         var d = Default;
         if (seed.HasValue) d.Seed = seed.Value;
+        d.BioAcceleration = bio;
         return VivariumWorld.Create(Content, d, populate);
     }
 
@@ -42,6 +47,7 @@ public static class TestUtil
             Terrain = new TerrainProfile { BaseHeight = 0.5, Relief = 0.0, NoiseScale = 0.2, Octaves = 1, MinHeight = -1, MaxHeight = 2, Bottom = -2, RockExposure = 0 },
             Water = new WaterConfig { WaterTable = -0.8, FlowRate = 0.2, Evaporation = 0, Infiltration = 0, WetDepth = 0.008, BoundaryDrop = 0.3, SubSteps = 2 },
             Placement = new PlacementProfile { Rocks = 0, Logs = 0, GravelPatches = 0 },
+            BioAcceleration = 1,
         };
     }
 
@@ -53,6 +59,10 @@ public static class TestUtil
     }
 
     public static string Digest(VivariumWorld w) => Persistence.WorldSerializer.Digest(w);
+
+    /// <summary>The shipped biological acceleration and the number of ticks in one biological day at it.</summary>
+    public const double ShippedBio = WorldDescriptor.DefaultBioAcceleration;
+    public static long TicksPerBioDay(double bio = ShippedBio) => (long)Math.Round(8640 / bio);
 
     public static string TempDir()
     {

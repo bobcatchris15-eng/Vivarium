@@ -203,4 +203,26 @@ public class HydrologyTests
         }
         Assert.Equal(Run(), Run());
     }
+
+    [Fact]
+    public void SoilMoistureFallsOffSmoothlyWithDistanceFromWater()
+    {
+        var w = TestUtil.FlatWorld(9);
+        var pond = new Vec2(-2, 0);
+        for (int k = 0; k < 400; k++)
+        {
+            TestUtil.Flood(w, pond, 1.0, 0.2);
+            w.Water.CoupleMoisture(w.Fields.Moisture, w.Content.Ecology, 1800, w.Fields.Scratch);
+        }
+        var samples = Enumerable.Range(0, 12).Select(i => w.Fields.Moisture.Sample(pond + new Vec2(1.1 + i * 0.25, 0))).ToList();
+        for (int i = 1; i < samples.Count; i++)
+        {
+            Assert.True(samples[i] <= samples[i - 1] + 1e-9, $"moisture should not rise away from water: {string.Join(" ", samples.Select(x => x.ToString("0.00")))}");
+            Assert.True(samples[i - 1] - samples[i] < 0.3, $"no hard edge between neighbouring cells: {string.Join(" ", samples.Select(x => x.ToString("0.00")))}");
+        }
+        Assert.True(samples[0] > 0.8 && samples[^1] < 0.4, $"bank wet, far ground dry: {samples[0]:0.00} … {samples[^1]:0.00}");
+        var d = w.Water.DistanceToWater();
+        Assert.Equal(0, d[w.Grid.CellAt(pond)]);
+        Assert.InRange(d[w.Grid.CellAt(pond + new Vec2(2.0, 0))], 0.7, 1.3);
+    }
 }

@@ -209,7 +209,7 @@ public static class ContentLoader
             NutrientRelax = nu.Num("relaxPerDay", min: 0, max: 5) / D, NutrientDiffusion = nu.Num("diffusionPerDay", min: 0, max: 20) / D,
             MoistureDrying = mo.Num("dryingPerDay", min: 0, max: 20) / D, MoistureWetting = mo.Num("wettingPerDay", min: 0, max: 200) / D,
             MoistureDiffusion = mo.Num("diffusionPerDay", min: 0, max: 20) / D, MoistureWaterTableRange = mo.Num("waterTableRange", min: 0.01, max: 5),
-            MoistureDryBaseline = mo.Num("dryBaseline", min: 0, max: 1),
+            MoistureDryBaseline = mo.Num("dryBaseline", min: 0, max: 1), MoistureCapillaryRange = mo.Num("capillaryRange", min: 0.05, max: 5),
             DetritusDecay = de.Num("decayPerDay", min: 0, max: 5) / D, DetritusNutrientYield = de.Num("nutrientYield", min: 0, max: 1), DetritusMax = de.Num("max", min: 0.01, max: 1000),
             BiofilmGrowth = bi.Num("growthPerDay", min: 0, max: 20) / D, BiofilmCapacity = bi.Num("capacity", min: 0, max: 100), BiofilmNutrientUse = bi.Num("nutrientUse", min: 0, max: 10),
             PlanktonGrowth = pl.Num("growthPerDay", min: 0, max: 20) / D, PlanktonCapacity = pl.Num("capacity", min: 0, max: 100), PlanktonNutrientUse = pl.Num("nutrientUse", min: 0, max: 10),

@@ -19,8 +19,19 @@ public sealed class SimClock
     public const int DefaultSpeedIndex = 3;
 
     public long Tick { get; set; }
+    /// <summary>Physical simulated time: locomotion, water flow and disturbances run on this.</summary>
     public double SimSeconds => Tick * FixedStepSeconds;
     public double SimDays => SimSeconds / SimUnits.Day;
+
+    /// <summary>
+    /// Biological time: growth, feeding, breeding, ageing and decay run on this faster clock so the terrarium
+    /// visibly lives within minutes while animals still walk at a natural pace. Accumulated tick by tick
+    /// (BioAcceleration may change during a run) and saved with the world.
+    /// </summary>
+    public double BioSeconds { get; set; }
+    public double BioDays => BioSeconds / SimUnits.Day;
+    /// <summary>Biological seconds per physical simulated second (world setting, see WorldDescriptor).</summary>
+    public double BioAcceleration { get; set; } = 1;
 
     public bool Paused { get; set; }
     public int SpeedIndex { get; private set; } = DefaultSpeedIndex;
@@ -36,7 +47,7 @@ public sealed class SimClock
     /// <summary>Calendar view: week number (1-based), day of week (1..7), hour and minute.</summary>
     public (int Week, int Day, int Hour, int Minute) Calendar()
     {
-        long totalMinutes = (long)Math.Floor(SimSeconds / 60);
+        long totalMinutes = (long)Math.Floor(BioSeconds / 60);
         int minute = (int)(totalMinutes % 60);
         long totalHours = totalMinutes / 60;
         int hour = (int)(totalHours % 24);

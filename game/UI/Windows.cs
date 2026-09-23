@@ -89,6 +89,21 @@ public partial class Windows : Control
         if (name == "Catalog") RebuildCatalog();
         if (name == "SaveLoad") RebuildSaves();
         if (name == "Stats") RebuildStats();
+        if (name == "Settings") SyncGrowthSpeed();
+    }
+
+    private HSlider? _growth;
+    private Label? _growthL;
+
+    /// <summary>Real minutes → biological days at 1× speed, for the growth-speed label.</summary>
+    private static string GrowthText(double factor) =>
+        $"×{factor:0.0} · 1 real min ≈ {factor * Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * 60 / SimUnits.Day:0.0#} days";
+
+    private void SyncGrowthSpeed()
+    {
+        if (_growth == null || Session.World == null) return;
+        _growth.SetValueNoSignal(Session.World.Clock.BioAcceleration);
+        _growthL!.Text = GrowthText(Session.World.Clock.BioAcceleration);
     }
 
     public void OnWorldChanged() { RebuildCatalog(); RebuildStats(); }
@@ -329,6 +344,14 @@ public partial class Windows : Control
         var s = Session.Settings;
         var grid = new GridContainer { Columns = 2 };
         var speedL = UiKit.Label($"{s.CameraSpeed:0.00} m/s");
+        // world setting (saved with the vivarium): how much faster growth, feeding and breeding run than walking
+        _growthL = UiKit.Label(GrowthText(WorldDescriptor.DefaultBioAcceleration));
+        _growth = UiKit.Slider("GrowthSpeedSlider", WorldDescriptor.MinBioAcceleration, WorldDescriptor.MaxBioAcceleration, 0.1, WorldDescriptor.DefaultBioAcceleration, v =>
+        {
+            var r = Session.Host?.Tools.SetBioAcceleration(v);
+            if (r is { Ok: true } && Session.World != null) _growthL!.Text = GrowthText(Session.World.Clock.BioAcceleration);
+        });
+        grid.AddChild(UiKit.Label("Growth speed")); grid.AddChild(UiKit.Row(_growth, _growthL));
         grid.AddChild(UiKit.Label("Flying speed (+ / -)")); grid.AddChild(UiKit.Row(UiKit.Slider("CamSpeedSlider", Math.Log(UserSettings.MinCameraSpeed), Math.Log(UserSettings.MaxCameraSpeed), 0.01, Math.Log(s.CameraSpeed), v => { s.CameraSpeed = Math.Exp(v); speedL.Text = $"{s.CameraSpeed:0.00} m/s"; Apply(); }), speedL));
         var sensL = UiKit.Label($"{s.MouseSensitivity:0.00}");
         grid.AddChild(UiKit.Label("Mouse sensitivity")); grid.AddChild(UiKit.Row(UiKit.Slider("SensSlider", 0.05, 1.0, 0.01, s.MouseSensitivity, v => { s.MouseSensitivity = v; sensL.Text = $"{v:0.00}"; Apply(); }), sensL));
