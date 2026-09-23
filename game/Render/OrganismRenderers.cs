@@ -138,7 +138,13 @@ public partial class FloraRenderer : Node3D
 public partial class FaunaRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private sealed class Layer { public MultiMeshInstance3D High = null!, Low = null!; public int HighTris, LowTris; public float[] HighBuf = System.Array.Empty<float>(), LowBuf = System.Array.Empty<float>(); }
+    private sealed class Layer
+    {
+        public MultiMeshInstance3D High = null!, Low = null!;
+        public MultiMeshInstance3D? Curled;   // rolled-up pose (pill bugs)
+        public int HighTris, LowTris, CurledTris;
+        public float[] HighBuf = System.Array.Empty<float>(), LowBuf = System.Array.Empty<float>(), CurledBuf = System.Array.Empty<float>();
+    }
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, (Vector3 Pos, float Yaw)> _display = new();
     public Camera3D? Camera { get; set; }
@@ -160,14 +166,15 @@ public partial class FaunaRenderer : Node3D
             var hiMat = Bridge.Shader("res://Shaders/fauna.gdshader");
             hiMat.SetShaderParameter("base_color", Bridge.C(sp.BaseColor));
             hiMat.SetShaderParameter("ornament_color", Bridge.C(sp.OrnamentColor));
-            hiMat.SetShaderParameter("wiggle", sp.Medium == Medium.Aquatic ? 1.0f : 0.35f);
+            hiMat.SetShaderParameter("wiggle", sp.Medium == Medium.Aquatic ? 1.0f : sp.Model == "isopod" ? 0.1f : 0.35f);
             hiMat.SetShaderParameter("wiggle_speed", sp.Model == "minnow" ? 11.0f : 7.0f);
             hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
             var loMat = (ShaderMaterial)hiMat.Duplicate();
             loMat.SetShaderParameter("wiggle", 0.0f);
             var hi = OrganismMeshes.Fauna(sp);
             var lo = new MeshData();
-            Primitives.Ellipsoid(lo, new Vec3(0, 0.15, 0), new Vec3(0.45, sp.Model == "triops" ? 0.1 : 0.14, sp.Model == "triops" ? 0.28 : 0.14), 5, 7, (a, b) => (new[] { 0.0, 0, 0 }, 0, 1 - a, b, 1, 0));
+            bool wide = sp.Model is "triops" or "isopod";
+            Primitives.Ellipsoid(lo, new Vec3(0, wide ? 0.1 : 0.15, 0), new Vec3(0.45, wide ? 0.12 : 0.14, sp.Model == "triops" ? 0.28 : sp.Model == "isopod" ? 0.26 : 0.14), 5, 7, (a, b) => (new[] { 0.0, 0, 0 }, 0, 1 - a, b, 1, 0));
             var layer = new Layer
             {
                 High = MakeMmi($"Fauna_{sp.Id}_high", Bridge.ToArrayMesh(hi, hiMat)),
@@ -175,6 +182,12 @@ public partial class FaunaRenderer : Node3D
                 HighTris = hi.TriangleCount, LowTris = lo.TriangleCount,
             };
             AddChild(layer.High); AddChild(layer.Low);
+            if (OrganismMeshes.FaunaCurled(sp) is { } curled)
+            {
+                layer.Curled = MakeMmi($"Fauna_{sp.Id}_curled", Bridge.ToArrayMesh(curled, loMat));
+                layer.CurledTris = curled.TriangleCount;
+                AddChild(layer.Curled);
+            }
             _layers[sp.Id] = layer;
         }
     }
@@ -202,8 +215,8 @@ public partial class FaunaRenderer : Node3D
         var camPos = cam?.GlobalPosition ?? Vector3.Zero;
         float near = Lod.Near(Quality), far = Lod.Far(Quality);
         LodHigh = LodLow = Culled = 0; TrianglesDrawn = 0;
-        var counts = new Dictionary<string, (int Hi, int Lo)>(StringComparer.Ordinal);
-        foreach (var id in _layers.Keys) counts[id] = (0, 0);
+        var counts = new Dictionary<string, (int Hi, int Lo, int Curled)>(StringComparer.Ordinal);
+        foreach (var id in _layers.Keys) counts[id] = (0, 0, 0);
         // capacity = population (+headroom); buffers are kept exactly InstanceCount * 16 floats
         // (12 transform + 4 custom per instance) so they can be uploaded without per-frame allocation
         foreach (var (id, layer) in _layers)
@@ -211,6 +224,7 @@ public partial class FaunaRenderer : Node3D
             int n = _w.Fauna.CountOf(id);
             layer.HighBuf = Ensure(layer.High.Multimesh, layer.HighBuf, n);
             layer.LowBuf = Ensure(layer.Low.Multimesh, layer.LowBuf, n);
+            if (layer.Curled != null) layer.CurledBuf = Ensure(layer.Curled.Multimesh, layer.CurledBuf, n);
         }
         var seen = new HashSet<EntityId>();
         foreach (var f in _w.Fauna.Items)
@@ -231,22 +245,24 @@ public partial class FaunaRenderer : Node3D
             var basis = new Basis(Vector3.Up, d.Yaw).Scaled(new Vector3(scale, scale, scale));
             var layer = _layers[sp.Id];
             var c = counts[sp.Id];
-            int i = high ? c.Hi : c.Lo;
-            var buf = high ? layer.HighBuf : layer.LowBuf;
+            bool curled = layer.Curled != null && _w.FaunaSystem.IsCurled(f);
+            int i = curled ? c.Curled : high ? c.Hi : c.Lo;
+            var buf = curled ? layer.CurledBuf : high ? layer.HighBuf : layer.LowBuf;
             int o = i * 16;
             buf[o + 0] = basis.X.X; buf[o + 1] = basis.Y.X; buf[o + 2] = basis.Z.X; buf[o + 3] = d.Pos.X;
             buf[o + 4] = basis.X.Y; buf[o + 5] = basis.Y.Y; buf[o + 6] = basis.Z.Y; buf[o + 7] = d.Pos.Y;
             buf[o + 8] = basis.X.Z; buf[o + 9] = basis.Y.Z; buf[o + 10] = basis.Z.Z; buf[o + 11] = d.Pos.Z;
             buf[o + 12] = (float)ph.HueShift; buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength; buf[o + 15] = (float)ph.AppendageScale;
-            counts[sp.Id] = high ? (c.Hi + 1, c.Lo) : (c.Hi, c.Lo + 1);
+            counts[sp.Id] = curled ? (c.Hi, c.Lo, c.Curled + 1) : high ? (c.Hi + 1, c.Lo, c.Curled) : (c.Hi, c.Lo + 1, c.Curled);
             if (high) LodHigh++; else LodLow++;
         }
         foreach (var (id, layer) in _layers)
         {
-            var (hi, lo) = counts[id];
+            var (hi, lo, cu) = counts[id];
             Upload(layer.High.Multimesh, layer.HighBuf, hi);
             Upload(layer.Low.Multimesh, layer.LowBuf, lo);
-            TrianglesDrawn += (long)hi * layer.HighTris + (long)lo * layer.LowTris;
+            if (layer.Curled != null) Upload(layer.Curled.Multimesh, layer.CurledBuf, cu);
+            TrianglesDrawn += (long)hi * layer.HighTris + (long)lo * layer.LowTris + (long)cu * layer.CurledTris;
         }
         if (_display.Count > seen.Count + 64)
         {

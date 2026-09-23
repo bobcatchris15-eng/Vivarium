@@ -11,7 +11,8 @@ namespace Vivarium.Game.Render;
 public partial class PropRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private int _version = int.MinValue;
+    private int _version = int.MinValue, _terrainVersion;
+    private double _sinceRefresh;
     private readonly Dictionary<ulong, ArrayMesh> _rockMeshes = new();
     private readonly Dictionary<EntityId, ArrayMesh> _logMeshes = new();
     private ArrayMesh[] _pebbles = System.Array.Empty<ArrayMesh>();
@@ -33,11 +34,19 @@ public partial class PropRenderer : Node3D
         Refresh();
     }
 
-    public override void _Process(double delta) { if (_w != null && _w.Props.Version != _version) Refresh(); }
+    public override void _Process(double delta)
+    {
+        if (_w == null) return;
+        _sinceRefresh += delta;
+        // gravel pebbles sit on the terrain, so follow sculpting too (throttled)
+        if (_w.Props.Version != _version || (_w.Terrain.Version != _terrainVersion && _sinceRefresh > 0.25)) Refresh();
+    }
 
     private void Refresh()
     {
         _version = _w.Props.Version;
+        _terrainVersion = _w.Terrain.Version;
+        _sinceRefresh = 0;
         _root?.QueueFree();
         _root = new Node3D { Name = "Props" };
         AddChild(_root);

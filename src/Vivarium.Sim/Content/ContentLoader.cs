@@ -346,7 +346,7 @@ public static class ContentLoader
         SchoolingParams? school = null;
         var behaviors = n.StrList("behaviors");
         foreach (var bh in behaviors)
-            if (bh is not "schooling") n["behaviors"].Error($"unknown behavior component '{bh}'");
+            if (bh is not ("schooling" or "conglobate")) n["behaviors"].Error($"unknown behavior component '{bh}'");
         if (n.Has("schooling"))
         {
             var sc = n["schooling"]; sc.RejectUnknown("radius", "cohesion", "alignment", "separation", "separationDistance");
@@ -523,8 +523,8 @@ public static class ContentLoader
             if (!f.Traits.Contains("size")) errors.Add(f.SourceFile, "$.genetics.traits", "every fauna species must enable the 'size' trait");
             if (!f.Traits.Any(t => t is "ornament_density" or "hue_shift" or "pattern_strength" or "appendage_length"))
                 errors.Add(f.SourceFile, "$.genetics.traits", "at least one ornamentation trait is required");
-            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow"))
-                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}' (springtail | shrimp | triops | minnow)");
+            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow" or "isopod"))
+                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}' (springtail | shrimp | triops | minnow | isopod)");
         }
 
         for (int i = 0; i < inter.Relations.Count; i++)

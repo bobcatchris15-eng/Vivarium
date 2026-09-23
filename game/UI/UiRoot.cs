@@ -138,6 +138,10 @@ public partial class UiRoot : Control
             ToolKind.PlaceGravel => $"radius {t.GravelRadius:0.00} m  ·  [ ] resize",
             ToolKind.MoveProp => "click the prop's new spot",
             ToolKind.Grab => "click with a critter in the circle, then where to release it",
+            ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth => $"hold to sculpt · radius {t.SculptRadius:0.00} m  ·  [ ] resize, G next",
+            ToolKind.PourWater => $"hold to pour · radius {t.WaterRadius:0.00} m  ·  [ ] resize, H next",
+            ToolKind.DrainWater => $"hold to soak up · radius {t.WaterRadius:0.00} m  ·  H next",
+            ToolKind.Spring => "click to add a spring, click one to remove it  ·  H next",
             _ => "",
         } + (k == ToolKind.Select ? "" : "\n") + "right-click for the tool wheel").Trim();
     }

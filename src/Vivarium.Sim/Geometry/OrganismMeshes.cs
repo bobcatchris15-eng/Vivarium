@@ -175,7 +175,26 @@ public static class OrganismMeshes
             case "shrimp": Shrimp(m); break;
             case "triops": Triops(m); break;
             case "minnow": Minnow(m); break;
+            case "isopod": Isopod(m); break;
             default: Primitives.Ellipsoid(m, new Vec3(0, 0.2, 0), new Vec3(0.5, 0.2, 0.2), 8, 10, (a, b) => (Body, 0, a, b, 1, 0)); break;
+        }
+        return m;
+    }
+
+    /// <summary>Rolled-up pose for conglobating species (pill bug ball); null for species that never curl.</summary>
+    public static MeshData? FaunaCurled(FaunaSpeciesDef sp)
+    {
+        if (sp.Model != "isopod") return null;
+        var m = new MeshData();
+        const int plates = 11;
+        const double cy = 0.22, ring = 0.17;
+        Primitives.Ellipsoid(m, new Vec3(0, cy, 0), new Vec3(0.19, 0.19, 0.2), 8, 12, (a, b) => Region(0.5, b, 3));
+        for (int k = 0; k < plates; k++)
+        {
+            double ang = Math.PI / 2 - k * 2 * Math.PI / plates;   // plates run over the top and around the ball
+            var c = new Vec3(Math.Cos(ang) * ring, cy + Math.Sin(ang) * ring, 0);
+            double t = (double)k / plates;
+            Primitives.Ellipsoid(m, c, new Vec3(0.075, 0.05, 0.25 - 0.02 * Math.Abs(Math.Sin(ang))), 5, 12, (a, b) => Region(0.95 - t * 0.9, b, 1), pitch: ang + Math.PI / 2);
         }
         return m;
     }
@@ -275,6 +294,41 @@ public static class OrganismMeshes
                 double x = 0.2 - leg * 0.06;
                 Appendage(m, new[] { new Vec3(x, 0.03, 0.12 * z), new Vec3(x - 0.02, 0.0, 0.24 * z) }, new[] { 0.01, 0.005 }, 3);
             }
+        }
+    }
+
+    private static void Isopod(MeshData m)
+    {
+        // domed oval of seven overlapping armour plates (pereon), small head, tapering tail plates; length 1 along +X
+        Primitives.Ellipsoid(m, new Vec3(0.02, 0.05, 0), new Vec3(0.44, 0.045, 0.24), 6, 12, (a, b) => Region(0.5, b, 3)); // pale underside
+        for (int s = 0; s < 7; s++)
+        {
+            double t = s / 6.0;
+            double x = 0.27 - t * 0.5;
+            double dome = Math.Sin(Math.PI * (0.18 + t * 0.64));
+            double w = 0.25 + 0.03 * dome, h = 0.1 + 0.08 * dome;
+            Primitives.Ellipsoid(m, new Vec3(x, 0.07, 0), new Vec3(0.062, h, w), 6, 14, (a, b) => Region(0.85 - t * 0.6, b, b > 0.3 && b < 0.7 ? 1 : 1), pitch: -0.18);
+        }
+        for (int s = 0; s < 4; s++)
+        {
+            double t = s / 3.0;
+            double w = 0.19 - t * 0.09;
+            Primitives.Ellipsoid(m, new Vec3(-0.29 - t * 0.07, 0.07, 0), new Vec3(0.045, 0.085 - t * 0.03, w), 5, 12, (a, b) => Region(0.22 - t * 0.15, b, 1), pitch: -0.25);
+        }
+        Primitives.Ellipsoid(m, new Vec3(-0.43, 0.05, 0), new Vec3(0.05, 0.035, 0.07), 4, 8, (a, b) => Region(0.03, b, 1)); // telson
+        Primitives.Ellipsoid(m, new Vec3(0.37, 0.08, 0), new Vec3(0.07, 0.07, 0.15), 6, 10, (a, b) => Region(0.95, b, 1));  // head
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            Primitives.Ellipsoid(m, new Vec3(0.4, 0.1, 0.11 * z), new Vec3(0.022, 0.022, 0.018), 4, 6, (a, b) => Region(0.97, b, 2)); // eyes
+            // elbowed antennae
+            Appendage(m, new[] { new Vec3(0.43, 0.08, 0.06 * z), new Vec3(0.52, 0.12, 0.13 * z), new Vec3(0.6, 0.08, 0.2 * z), new Vec3(0.68, 0.03, 0.22 * z) }, new[] { 0.016, 0.013, 0.01, 0.006 }, 4);
+            for (int leg = 0; leg < 7; leg++)
+            {
+                double x = 0.26 - leg * 0.075;
+                Appendage(m, new[] { new Vec3(x, 0.04, 0.16 * z), new Vec3(x + 0.01, 0.03, 0.25 * z), new Vec3(x - 0.01, 0.0, 0.28 * z) }, new[] { 0.013, 0.01, 0.006 }, 3);
+            }
+            // uropods (little tail prongs)
+            Appendage(m, new[] { new Vec3(-0.42, 0.04, 0.05 * z), new Vec3(-0.49, 0.03, 0.09 * z) }, new[] { 0.014, 0.008 }, 3);
         }
     }
 

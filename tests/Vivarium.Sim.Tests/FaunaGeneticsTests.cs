@@ -4,6 +4,7 @@ using Vivarium.Sim.Ecology;
 using Vivarium.Sim.Fauna;
 using Vivarium.Sim.Genetics;
 using Vivarium.Sim.Geometry;
+using Vivarium.Sim.Tools;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Tests;
@@ -273,6 +274,27 @@ public class FaunaTests
         if (sp.Behaviors.Contains("schooling")) Assert.True(w.FaunaSystem.MeanNearestNeighbourDistance(id) < 0.3);
     }
 
+    [Fact]
+    public void PillBugsRollUpInPlaceWhenPokedWhileSpringtailsFlee()
+    {
+        var w = FaunaFixtures.PondWorld();
+        var bug = w.FaunaSystem.CreateFounder(Sp("pill_bug"), FaunaFixtures.Land);
+        var st = w.FaunaSystem.CreateFounder(Sp("springtail"), FaunaFixtures.Land + new Vec2(0.1, 0));
+        var bugAt = bug.PositionXZ; var stAt = st.PositionXZ;
+        Assert.False(w.FaunaSystem.IsCurled(bug));
+        var res = new ToolActions(w).Poke(new PokeAction(new Vec3(FaunaFixtures.Land.X + 0.05, 0.6, FaunaFixtures.Land.Z), new Vec3(0, -1, 0), 1, WorldHit.None));
+        Assert.Contains(bug.Id, res.FaunaDisturbed);
+        Assert.True(w.FaunaSystem.IsCurled(bug));
+        Assert.False(w.FaunaSystem.IsCurled(st));
+        for (int i = 0; i < 20; i++) { w.FaunaSystem.StepBehaviour(20); w.Clock.Tick += 2; }
+        Assert.Equal(bugAt.X, bug.X, 12); Assert.Equal(bugAt.Z, bug.Z, 12);
+        Assert.True(Vec2.Distance(stAt, st.PositionXZ) > 0.05, "springtail should flee");
+        w.Clock.Tick += (long)(w.Content.Tools.PokeDisturbSeconds / 10) + 10;
+        Assert.False(w.FaunaSystem.IsCurled(bug), "unrolls once the disturbance passes");
+        Assert.NotNull(OrganismMeshes.FaunaCurled(Sp("pill_bug")));
+        Assert.Null(OrganismMeshes.FaunaCurled(Sp("springtail")));
+    }
+
     [Fact] // t-114
     public void TriopsIsDistinctFromShrimp()
     {
@@ -288,7 +310,7 @@ public class FaunaTests
     public void FaunaLibraryLoadsCleanAndBrokenFixtureIsActionable()
     {
         Assert.Empty(TestUtil.Content.Warnings);
-        Assert.Equal(new[] { "microminnow", "shrimp", "springtail", "triops" }, TestUtil.Content.Fauna.Select(f => f.Id));
+        Assert.Equal(new[] { "microminnow", "pill_bug", "shrimp", "springtail", "triops" }, TestUtil.Content.Fauna.Select(f => f.Id));
         var src = new OverlayContentSource(TestUtil.ContentSource);
         var broken = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "microminnow.json"))
             .Replace("\"model\": \"minnow\"", "\"model\": \"whale\"")

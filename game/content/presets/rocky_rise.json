@@ -43,6 +43,7 @@
   ],
   "starterFauna": [
     { "species": "springtail", "count": 40 },
+    { "species": "pill_bug", "count": 18 },
     { "species": "triops", "count": 8 },
     { "species": "shrimp", "count": 10 }
   ]

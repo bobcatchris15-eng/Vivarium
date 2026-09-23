@@ -24,6 +24,11 @@ public partial class ToolController : Node
     public int LogDecay { get; set; } = 1;
     public double LogHeading { get; set; }
     public double GravelRadius { get; set; } = 0.6;
+    public double SculptRadius { get; set; } = 0.6;
+    public double WaterRadius { get; set; } = 0.4;
+    // a brush stroke (sculpt/pour/drain) runs from the click until the button is released
+    private bool _stroke, _strokeSculpted;
+    private string? _strokeError;
     public WorldHit Hover { get; private set; } = WorldHit.None;
     public WorldHit Selected { get; private set; } = WorldHit.None;
     public EntityId Held { get; private set; } = EntityId.None;
@@ -55,7 +60,9 @@ public partial class ToolController : Node
     {
         if (Held.IsNone == false && k != ToolKind.Grab) CancelHold();
         MovingProp = EntityId.None;
+        if (_stroke) EndStroke();
         Current = k;
+        Session.Overlay.ShowSprings = k is ToolKind.PourWater or ToolKind.DrainWater or ToolKind.Spring;
         ToolChanged?.Invoke(k);
     }
 
@@ -77,7 +84,7 @@ public partial class ToolController : Node
         bool overUi = vp.GuiGetHoveredControl() != null || !PointerEnabled;
         if (Input.MouseMode == Input.MouseModeEnum.Captured) overUi = true;
         var (o, d) = Session.CameraRig.ScreenRay(mouse);
-        Hover = overUi ? WorldHit.None : Selection.Raycast(_w, Bridge.S(o), Bridge.S(d), includeWater: Current is ToolKind.Grab or ToolKind.IntroduceFauna || !Held.IsNone);
+        Hover = overUi ? WorldHit.None : Selection.Raycast(_w, Bridge.S(o), Bridge.S(d), includeWater: Current is ToolKind.Grab or ToolKind.IntroduceFauna or ToolKind.PourWater or ToolKind.DrainWater || !Held.IsNone);
         _cursorPoint = Hover.Point;
         Hover = SnapToCritter(Hover);
         UpdatePreview();
@@ -85,6 +92,11 @@ public partial class ToolController : Node
         {
             var hold = Hover.Point + new Vec3(0, _w.Content.Tools.GrabHoldHeight, 0);
             Actions!.MoveHeld(Held, hold);
+        }
+        if (_stroke)
+        {
+            if (!Input.IsMouseButtonPressed(MouseButton.Left) || !IsBrush(Current)) EndStroke();
+            else if (!overUi && Dab(Hover, delta) is { Ok: false } fail && fail.Message != _strokeError) { _strokeError = fail.Message; Feedback(fail); }
         }
         if (Current == ToolKind.Nutrients && Input.IsMouseButtonPressed(MouseButton.Left) && !overUi)
         {
@@ -192,6 +204,17 @@ public partial class ToolController : Node
                 break;
             case ToolKind.IntroduceFlora: Preview = FloraSpecies == null ? "pick a species in the catalog" : t.PreviewFlora(FloraSpecies, p); r = 0.12f; break;
             case ToolKind.IntroduceFauna: Preview = FaunaSpecies == null ? "pick a species in the catalog" : t.PreviewFauna(FaunaSpecies, p); r = 0.15f; break;
+            case ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth:
+                r = (float)t.ClampSculptRadius(SculptRadius);
+                Preview = _w.Domain.Contains(p) ? null : "outside the island";
+                break;
+            case ToolKind.PourWater or ToolKind.DrainWater:
+                r = (float)t.ClampWaterRadius(WaterRadius);
+                Preview = !_w.Domain.Contains(p) ? "outside the island" : Current == ToolKind.DrainWater && !_w.Water.IsWet(p) ? "no surface water here" : null;
+                break;
+            case ToolKind.Spring:
+                Preview = t.PreviewSpring(p); r = t.SpringNear(p) != null ? 0.25f : 0.12f;
+                break;
             case ToolKind.MoveProp:
                 if (!MovingProp.IsNone && _w.Props.Find(MovingProp) is { } prop)
                     Preview = prop switch { Rock rk => _w.Placement.ValidateRock(p, rk.SizeX, rk.SizeZ, rk.Id), LogProp lg => _w.Placement.ValidateLog(p, lg.RotationY, lg.Length, lg.Radius, lg.Id), GravelPatch g => _w.Placement.ValidateGravel(p, g.Radius), _ => null };
@@ -231,6 +254,8 @@ public partial class ToolController : Node
                 case Key.Key8: SetTool(ToolKind.PlaceGravel); break;
                 case Key.Key9: SetTool(ToolKind.IntroduceFlora); break;
                 case Key.Key0: SetTool(ToolKind.IntroduceFauna); break;
+                case Key.G: SetTool(Current switch { ToolKind.TerrainRaise => ToolKind.TerrainLower, ToolKind.TerrainLower => ToolKind.TerrainSmooth, _ => ToolKind.TerrainRaise }); break;
+                case Key.H: SetTool(Current switch { ToolKind.PourWater => ToolKind.DrainWater, ToolKind.DrainWater => ToolKind.Spring, _ => ToolKind.PourWater }); break;
                 case Key.Bracketleft: ResizeTool(-1); break;
                 case Key.Bracketright: ResizeTool(1); break;
                 case Key.R: LogHeading = (LogHeading + Math.PI / 8) % Math.PI; break;
@@ -251,6 +276,8 @@ public partial class ToolController : Node
             case ToolKind.PlaceRock: RockScale = Actions!.ClampRockScale(RockScale * f); break;
             case ToolKind.PlaceLog: LogLength = Actions!.ClampLogLength(LogLength * f); break;
             case ToolKind.PlaceGravel: GravelRadius = Actions!.ClampGravelRadius(GravelRadius * f); break;
+            case ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth: SculptRadius = Actions!.ClampSculptRadius(SculptRadius * f); break;
+            case ToolKind.PourWater or ToolKind.DrainWater: WaterRadius = Actions!.ClampWaterRadius(WaterRadius * f); break;
         }
         ToolChanged?.Invoke(Current);
     }
@@ -311,6 +338,19 @@ public partial class ToolController : Node
                 if (!hit.IsHit) return null;
                 r = FaunaSpecies == null ? ToolResult.Fail("pick a species first") : t.IntroduceFauna(FaunaSpecies, p);
                 break;
+            case ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth or ToolKind.PourWater or ToolKind.DrainWater:
+            {
+                // first dab of a stroke; _Process keeps brushing while the button stays down
+                if (!hit.IsHit) return null;
+                _stroke = true; _strokeError = null;
+                var dab = Dab(hit, 0.1);
+                if (dab is { Ok: false } bad) { _strokeError = bad.Message; return Feedback(bad); }
+                return dab;
+            }
+            case ToolKind.Spring:
+                if (!hit.IsHit) return null;
+                r = t.ToggleSpring(p);
+                break;
             case ToolKind.MoveProp:
                 if (MovingProp.IsNone)
                 {
@@ -325,6 +365,31 @@ public partial class ToolController : Node
                 break;
         }
         return r.HasValue ? Feedback(r.Value) : null;
+    }
+
+    public static bool IsBrush(ToolKind k) => k is ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth or ToolKind.PourWater or ToolKind.DrainWater;
+
+    /// <summary>One brush application lasting <paramref name="seconds"/>.</summary>
+    private ToolResult? Dab(WorldHit hit, double seconds)
+    {
+        if (!hit.IsHit || Actions == null) return null;
+        var t = Actions; var p = hit.Point.XZ;
+        switch (Current)
+        {
+            case ToolKind.TerrainRaise: _strokeSculpted = true; return t.Sculpt(p, SculptRadius, SculptMode.Raise, seconds);
+            case ToolKind.TerrainLower: _strokeSculpted = true; return t.Sculpt(p, SculptRadius, SculptMode.Lower, seconds);
+            case ToolKind.TerrainSmooth: _strokeSculpted = true; return t.Sculpt(p, SculptRadius, SculptMode.Smooth, seconds);
+            case ToolKind.PourWater: return t.PourWater(p, WaterRadius, seconds);
+            case ToolKind.DrainWater: return t.DrainWater(p, WaterRadius, seconds);
+            default: return null;
+        }
+    }
+
+    private void EndStroke()
+    {
+        _stroke = false;
+        if (_strokeSculpted) Actions?.EndSculptStroke();
+        _strokeSculpted = false;
     }
 
     private ToolResult Feedback(ToolResult r)

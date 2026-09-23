@@ -401,6 +401,8 @@ public partial class Windows : Control
             "  [b]3[/b] Pick plant · [b]4[/b] Nutrients (hold) · [b]5[/b] Pokin' stick\n" +
             "  [b]6[/b] Rock · [b]7[/b] Log (R rotates) · [b]8[/b] Gravel — [b][ ][/b] or Ctrl+wheel resize\n" +
             "  [b]9[/b] Add flora · [b]0[/b] Add fauna — pick the species in the wheel's outer ring or the catalog\n" +
+            "  [b]G[/b] Terrain — raise, lower, smooth (hold and drag). Dig below the water line and a pond fills in.\n" +
+            "  [b]H[/b] Water — pour, soak up (hold), or click to add / remove a spring. Groundwater ponds refill themselves.\n" +
             "  The cursor ring turns [color=#4f7]green[/color] where an action is valid and [color=#f66]red[/color] where it isn't.\n" +
             "  Selected rocks, logs and gravel can be moved or removed from the inspector (Delete key).\n\n" +
             "[b]Panels[/b]   [b]C[/b] species catalog · [b]T[/b] statistics · [b]Ctrl+S[/b] quick save · [b]F3[/b] debug overlays · [b]F1[/b] help · [b]Tab[/b] hide UI\n\n" +

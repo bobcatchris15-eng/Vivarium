@@ -226,6 +226,41 @@ public partial class SmokeRunner : Node
         r = tools.ApplyAt(new WorldHit(HitKind.Flora, plant.Id, new Vec3(plant.X, W.GroundHeight(plant.Position), plant.Z), 1));
         Check("pick plant", r?.Ok == true && W.Flora.Get(plant.Id) == null, r?.Message ?? "");
 
+        await Press("Tool_Poke");
+        var bug = W.Fauna.Items.First(f => f.SpeciesId == "pill_bug" && !W.FaunaSystem.IsCurled(f));
+        r = tools.ApplyAt(new WorldHit(HitKind.Fauna, bug.Id, bug.Position, 1));
+        Check("pill bug rolls up when poked", r?.Ok == true && W.FaunaSystem.IsCurled(bug), r?.Message ?? "");
+
+        // terrain and water tools (brush tools: each click is one dab; the stroke ends on the next frame)
+        var ground = DryLand(p => W.Props.DistanceToFeature(p, "rock") > 1.5 && W.Props.DistanceToFeature(p, "log") > 1.5 && Vec2.Distance(p, gravelSpot) > 2 && Vec2.Distance(p, land) > 1);
+        await Press("Tool_TerrainRaise");
+        double h0 = W.SurfaceHeight(ground);
+        int tv = W.Terrain.Version;
+        r = tools.ApplyAt(HitAt(ground));
+        await Frames(6);
+        Check("raise terrain", r?.Ok == true && W.SurfaceHeight(ground) > h0 && W.Terrain.Version > tv, $"{r?.Message} Δ{W.SurfaceHeight(ground) - h0:0.0000} m");
+        await Press("Tool_TerrainLower");
+        tools.ApplyAt(HitAt(ground)); await Frames(3);
+        tools.ApplyAt(HitAt(ground)); await Frames(3);
+        await Press("Tool_TerrainSmooth");
+        var smooth = tools.ApplyAt(HitAt(ground)); await Frames(3);
+        Check("lower and smooth terrain", W.SurfaceHeight(ground) < h0 && smooth?.Ok == true, $"{smooth?.Message} Δ{W.SurfaceHeight(ground) - h0:0.0000} m");
+
+        await Press("Tool_PourWater");
+        double inflow = W.Water.Budget.ToolInflow;
+        r = tools.ApplyAt(HitAt(ground)); await Frames(3);
+        Check("pour water", r?.Ok == true && W.Water.Budget.ToolInflow > inflow, r?.Message ?? "");
+        await Press("Tool_DrainWater");
+        double removal = W.Water.Budget.ToolRemoval;
+        r = tools.ApplyAt(HitAt(DeepestWater(), true)); await Frames(3);
+        Check("soak up water", r?.Ok == true && W.Water.Budget.ToolRemoval > removal, r?.Message ?? "");
+        await Press("Tool_Spring");
+        int springs = W.Water.Springs.Count;
+        var add = tools.ApplyAt(HitAt(ground));
+        int withNew = W.Water.Springs.Count;
+        var remove = tools.ApplyAt(HitAt(ground));
+        Check("add and remove a spring", add?.Ok == true && remove?.Ok == true && withNew == springs + 1 && W.Water.Springs.Count == springs, $"{add?.Message} / {remove?.Message}");
+
         await Press("Tool_Select");
         var sel = W.Fauna.Items.First();
         tools.ApplyAt(new WorldHit(HitKind.Fauna, sel.Id, sel.Position, 1));

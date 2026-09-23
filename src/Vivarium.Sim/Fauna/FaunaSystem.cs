@@ -99,6 +99,12 @@ public sealed class FaunaSystem
 
             bool disturbed = now < f.DisturbedUntil;
             bool stranded = !IsPassable(sp, p);
+            if (disturbed && !stranded && sp.Conglobates)
+            {
+                // rolls into a ball and stays put until the disturbance passes (see IsCurled)
+                f.Y = _w.GroundHeight(p);
+                continue;
+            }
             double desired = double.NaN;
             if (stranded)
             {
@@ -185,6 +191,10 @@ public sealed class FaunaSystem
             else f.Y = _w.GroundHeight(f.PositionXZ);
         }
     }
+
+    /// <summary>True while a conglobating animal (pill bug) is rolled up after being disturbed.</summary>
+    public bool IsCurled(FaunaIndividual f) =>
+        !f.Grabbed && _w.Clock.SimSeconds < f.DisturbedUntil && C.FaunaOrThrow(f.SpeciesId).Conglobates;
 
     public bool IsPassable(FaunaSpeciesDef sp, Vec2 q)
     {

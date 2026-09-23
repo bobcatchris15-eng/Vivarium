@@ -86,10 +86,17 @@ public partial class OverlayRenderer : Node3D
         if (at.HasValue) { _selection.GlobalPosition = at.Value + new Vector3(0, 0.005f, 0); _selection.Scale = new Vector3(radius, radius, radius); }
     }
 
+    /// <summary>Spring markers outside hydrology debug (while a water tool is active).</summary>
+    public bool ShowSprings { get; set; }
+    private int _springCount = -1;
+
     public override void _Process(double delta)
     {
-        _arrows.Visible = _depthDots.Visible = _springs.Visible = HydrologyDebug && _w != null;
-        if (!HydrologyDebug || _w == null) return;
+        _arrows.Visible = _depthDots.Visible = HydrologyDebug && _w != null;
+        _springs.Visible = (HydrologyDebug || ShowSprings) && _w != null;
+        if (_w == null) return;
+        if (ShowSprings && !HydrologyDebug && _w.Water.Springs.Count != _springCount) UpdateSprings();
+        if (!HydrologyDebug) return;
         _debugAccum += delta;
         if (_debugAccum < 0.5) return;
         _debugAccum = 0;
@@ -115,6 +122,13 @@ public partial class OverlayRenderer : Node3D
         }
         Fill(_arrows.Multimesh, arrows, arrowCols);
         Fill(_depthDots.Multimesh, dots, dotCols);
+        UpdateSprings();
+    }
+
+    private void UpdateSprings()
+    {
+        var w = _w!;
+        _springCount = w.Water.Springs.Count;
         var springs = new List<Transform3D>(); var springCols = new List<Color>();
         foreach (var s in w.Water.Springs)
         {

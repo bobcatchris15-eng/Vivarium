@@ -7,14 +7,17 @@ using Vivarium.Sim.Tools;
 namespace Vivarium.Game.UI;
 
 /// <summary>
-/// Tool wheel that pops up at the cursor on a right-click tap. Inner ring: the ten tools. Choosing
-/// "Add flora" / "Add fauna" opens an outer ring of species. Esc, right-click or clicking outside closes it.
-/// Tool buttons persist (hidden) so keyboard shortcuts and scripted runs can press them too.
+/// Tool wheel that pops up at the cursor on a right-click tap. Inner ring: the tools plus two groups
+/// (Terrain, Water). Choosing a group, "Add flora" or "Add fauna" opens an outer ring (the group's tools or
+/// the species). Esc, right-click or clicking outside closes it. Tool buttons persist (hidden) so keyboard
+/// shortcuts and scripted runs can press them too.
 /// </summary>
 public partial class RadialMenu : Control
 {
     public GameSession Session { get; set; } = null!;
     private readonly List<(ToolKind Kind, Button Button)> _tools = new();
+    private readonly List<(string Id, Button Button)> _groups = new();
+    private readonly List<(ToolKind Kind, Button Button)> _subTools = new();
     private readonly List<Button> _species = new();
     private GlassPanel _hub = null!;
     private Label _hubLabel = null!;
@@ -22,7 +25,7 @@ public partial class RadialMenu : Control
     private Vector2 _center;
     private Tween? _tween;
     public bool IsOpen { get; private set; }
-    public const float InnerRadius = 118, OuterRadius = 222, ButtonSize = 78;
+    public const float InnerRadius = 140, OuterRadius = 240, ButtonSize = 70;
 
     private static readonly (ToolKind Kind, string Glyph, string Name)[] Items =
     {
@@ -32,8 +35,35 @@ public partial class RadialMenu : Control
         (ToolKind.IntroduceFauna, "✺", "Add fauna"),
     };
 
-    public static string NameOf(ToolKind k) => k == ToolKind.MoveProp ? "Move prop" : Array.Find(Items, i => i.Kind == k).Name ?? k.ToString();
-    public static string GlyphOf(ToolKind k) => k == ToolKind.MoveProp ? "⇄" : Array.Find(Items, i => i.Kind == k).Glyph ?? "•";
+    private static readonly (string Id, string Glyph, string Name, ToolKind[] Members)[] Groups =
+    {
+        ("Terrain", "▲", "Terrain", new[] { ToolKind.TerrainRaise, ToolKind.TerrainLower, ToolKind.TerrainSmooth }),
+        ("Water", "≋", "Water", new[] { ToolKind.PourWater, ToolKind.DrainWater, ToolKind.Spring }),
+    };
+
+    private static readonly (ToolKind Kind, string Glyph, string Name)[] SubItems =
+    {
+        (ToolKind.TerrainRaise, "▲", "Raise"), (ToolKind.TerrainLower, "▼", "Lower"), (ToolKind.TerrainSmooth, "∿", "Smooth"),
+        (ToolKind.PourWater, "⇣", "Pour"), (ToolKind.DrainWater, "⇡", "Soak up"), (ToolKind.Spring, "⊚", "Spring"),
+    };
+
+    private static int InnerCount => Items.Length + Groups.Length;
+
+    public static string NameOf(ToolKind k)
+    {
+        if (k == ToolKind.MoveProp) return "Move prop";
+        foreach (var i in Items) if (i.Kind == k) return i.Name;
+        foreach (var i in SubItems) if (i.Kind == k) return i.Name;
+        return k.ToString();
+    }
+
+    public static string GlyphOf(ToolKind k)
+    {
+        if (k == ToolKind.MoveProp) return "⇄";
+        foreach (var i in Items) if (i.Kind == k) return i.Glyph;
+        foreach (var i in SubItems) if (i.Kind == k) return i.Glyph;
+        return "•";
+    }
 
     public override void _Ready()
     {
@@ -53,12 +83,24 @@ public partial class RadialMenu : Control
             b.MouseEntered += () => _hubLabel.Text = name;
             _tools.Add((kind, b));
         }
+        foreach (var (id, glyph, name, _) in Groups)
+        {
+            var b = MakeButton("Group_" + id, $"{glyph}\n{name}", () => OpenGroup(id));
+            b.MouseEntered += () => _hubLabel.Text = name;
+            _groups.Add((id, b));
+        }
+        foreach (var (kind, glyph, name) in SubItems)
+        {
+            var b = MakeButton("Tool_" + kind, $"{glyph}\n{name}", () => { Session.Tools.SetTool(kind); Close(); });
+            b.MouseEntered += () => _hubLabel.Text = name;
+            _subTools.Add((kind, b));
+        }
     }
 
     private Button MakeButton(string name, string text, Action pressed)
     {
         var b = new Button { Name = name, Text = text, FocusMode = FocusModeEnum.None, CustomMinimumSize = new Vector2(ButtonSize, ButtonSize), Visible = false, ToggleMode = true };
-        b.AddThemeFontSizeOverride("font_size", 13);
+        b.AddThemeFontSizeOverride("font_size", 12);
         StyleBoxFlat Disc(Color c, Color border)
         {
             var s = new StyleBoxFlat { BgColor = c, BorderColor = border };
@@ -76,24 +118,27 @@ public partial class RadialMenu : Control
         return b;
     }
 
+    private static float InnerAngle(int index) => -Mathf.Pi / 2 + index * Mathf.Tau / InnerCount;
+
     public void Open(Vector2 at)
     {
         var vp = GetViewportRect().Size;
-        // keep the whole wheel (incl. the species ring) on screen
+        // keep the whole wheel (incl. the outer ring) on screen
         float margin = OuterRadius + ButtonSize / 2 + 8;
         _center = new Vector2(Mathf.Clamp(at.X, margin, Math.Max(margin, vp.X - margin)), Mathf.Clamp(at.Y, margin, Math.Max(margin, vp.Y - margin)));
-        ClearSpecies();
-        for (int i = 0; i < _tools.Count; i++)
+        ClearOuter();
+        var current = Session.Tools.Current;
+        for (int i = 0; i < InnerCount; i++)
         {
-            float ang = -Mathf.Pi / 2 + i * Mathf.Tau / _tools.Count;
-            var b = _tools[i].Button;
-            b.Position = _center + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * InnerRadius - b.CustomMinimumSize / 2;
+            var b = i < _tools.Count ? _tools[i].Button : _groups[i - _tools.Count].Button;
+            b.Position = _center + Vector2.FromAngle(InnerAngle(i)) * InnerRadius - b.CustomMinimumSize / 2;
             b.Visible = true;
-            b.SetPressedNoSignal(_tools[i].Kind == Session.Tools.Current);
+            bool on = i < _tools.Count ? _tools[i].Kind == current : Array.IndexOf(Groups[i - _tools.Count].Members, current) >= 0;
+            b.SetPressedNoSignal(on);
         }
         _hub.Position = _center - _hub.CustomMinimumSize / 2;
         _hub.Size = _hub.CustomMinimumSize;
-        _hubLabel.Text = NameOf(Session.Tools.Current);
+        _hubLabel.Text = NameOf(current);
         Visible = true; IsOpen = true;
         _ring.PivotOffset = _center;
         _ring.Scale = new Vector2(0.7f, 0.7f); _ring.Modulate = new Color(1, 1, 1, 0);
@@ -110,7 +155,8 @@ public partial class RadialMenu : Control
         _tween?.Kill();
         Visible = false;
         foreach (var (_, b) in _tools) b.Visible = false;
-        ClearSpecies();
+        foreach (var (_, b) in _groups) b.Visible = false;
+        ClearOuter();
     }
 
     private void Choose(ToolKind kind)
@@ -120,31 +166,57 @@ public partial class RadialMenu : Control
         Close();
     }
 
+    /// <summary>Opens a group's tools on the outer ring (or, when the wheel is closed, just selects its first tool).</summary>
+    private void OpenGroup(string id)
+    {
+        int gi = Array.FindIndex(Groups, g => g.Id == id);
+        var members = Groups[gi].Members;
+        if (!IsOpen) { Session.Tools.SetTool(members[0]); return; }
+        ClearOuter();
+        foreach (var (gid, b) in _groups) b.SetPressedNoSignal(gid == id);
+        var buttons = _subTools.FindAll(t => Array.IndexOf(members, t.Kind) >= 0);
+        FanOut(InnerAngle(_tools.Count + gi), buttons.ConvertAll(t => t.Button));
+        foreach (var (kind, b) in buttons) b.SetPressedNoSignal(kind == Session.Tools.Current);
+        _hubLabel.Text = Groups[gi].Name;
+    }
+
     private void ShowSpecies(bool fauna)
     {
-        ClearSpecies();
+        ClearOuter();
         var list = new List<(string Id, string Name)>();
         if (fauna) foreach (var sp in Session.Content.Fauna) list.Add((sp.Id, sp.Name));
         else foreach (var sp in Session.Content.Flora) list.Add((sp.Id, sp.Name));
-        // fan the species around the chosen tool's direction
         int toolIndex = _tools.FindIndex(t => t.Kind == (fauna ? ToolKind.IntroduceFauna : ToolKind.IntroduceFlora));
-        float baseAng = -Mathf.Pi / 2 + toolIndex * Mathf.Tau / _tools.Count;
-        float step = (ButtonSize + 12) / OuterRadius;   // keep neighbouring species buttons apart
-        for (int i = 0; i < list.Count; i++)
+        var made = new List<Button>();
+        foreach (var (id, name) in list)
         {
-            var (id, name) = list[i];
-            float ang = baseAng + (i - (list.Count - 1) / 2f) * step;
             var b = MakeButton("Species_" + id, name.Replace(' ', '\n'), () => { if (fauna) Session.Tools.FaunaSpecies = id; else Session.Tools.FloraSpecies = id; Session.Ui.RefreshToolChip(); Close(); });
-            b.Position = _center + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * OuterRadius - b.CustomMinimumSize / 2;
-            b.Visible = true;
             b.SetPressedNoSignal(id == (fauna ? Session.Tools.FaunaSpecies : Session.Tools.FloraSpecies));
             b.MouseEntered += () => _hubLabel.Text = name;
-            _species.Add(b);
+            _species.Add(b); made.Add(b);
         }
+        FanOut(InnerAngle(toolIndex), made);
         _hubLabel.Text = fauna ? "Choose an animal" : "Choose a plant";
     }
 
-    private void ClearSpecies() { foreach (var b in _species) b.QueueFree(); _species.Clear(); }
+    /// <summary>Spreads buttons along the outer ring, centred on the direction of the item that opened them.</summary>
+    private void FanOut(float baseAng, List<Button> buttons)
+    {
+        float step = (ButtonSize + 12) / OuterRadius;   // keep neighbouring buttons apart
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            float ang = baseAng + (i - (buttons.Count - 1) / 2f) * step;
+            buttons[i].Position = _center + Vector2.FromAngle(ang) * OuterRadius - buttons[i].CustomMinimumSize / 2;
+            buttons[i].Visible = true;
+        }
+    }
+
+    private void ClearOuter()
+    {
+        foreach (var b in _species) b.QueueFree();
+        _species.Clear();
+        foreach (var (_, b) in _subTools) b.Visible = false;
+    }
 
     public override void _GuiInput(InputEvent e)
     {

@@ -11,6 +11,6 @@
     "flora/crust_lichen.json", "flora/foliose_lichen.json",
     "flora/creeping_groundcover.json", "flora/marginal_waterside.json", "flora/ornamental_herb.json"
   ],
-  "fauna": ["fauna/springtail.json", "fauna/shrimp.json", "fauna/triops.json", "fauna/microminnow.json"],
+  "fauna": ["fauna/springtail.json", "fauna/shrimp.json", "fauna/triops.json", "fauna/microminnow.json", "fauna/pill_bug.json"],
   "presets": ["presets/default.json", "presets/rocky_rise.json"]
 }

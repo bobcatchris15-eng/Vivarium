@@ -138,14 +138,15 @@ public sealed class ToolActions
             if (!targeted && (f.Position - a.Point).Length > radius) continue;
             f.DisturbedUntil = Math.Max(f.DisturbedUntil, until);
             f.DisturbX = a.Point.X; f.DisturbZ = a.Point.Z;
-            // short startle hop away from the stick, only onto valid habitat
             var sp = _w.Content.FaunaOrThrow(f.SpeciesId);
+            res.FaunaDisturbed.Add(f.Id);
+            if (sp.Conglobates) continue;   // pill bugs roll up where they are
+            // short startle hop away from the stick, only onto valid habitat
             var away = (f.PositionXZ - a.Point.XZ);
             away = away.LengthSq > 1e-10 ? away.Normalized() : Vec2.FromAngle(f.Heading);
             var q = f.PositionXZ + away * (0.04 * strength);
             if (_w.FaunaSystem.IsPassable(sp, q)) { f.X = q.X; f.Z = q.Z; f.Y = sp.Medium == Medium.Aquatic ? _w.FaunaSystem.RestingY(sp, q, f.Pitch) : _w.GroundHeight(q); }
             f.Heading = away.Angle;
-            res.FaunaDisturbed.Add(f.Id);
         }
         foreach (var f in _w.Flora.Items)
         {

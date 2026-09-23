@@ -21,6 +21,10 @@ public partial class IslandRenderer : Node3D
     private double _accum = 999;
     private byte[] _bytes = System.Array.Empty<byte>();
     public int OverlayMode { get; set; }
+    private ShaderMaterial _strataMat = null!;
+    private MeshInstance3D _top = null!, _walls = null!;
+    private int _terrainVersion;
+    private double _sinceMeshBuild;
     public int TriangleCount { get; private set; }
 
     public void Build(VivariumWorld w)
@@ -43,21 +47,33 @@ public partial class IslandRenderer : Node3D
         _nearestDomain = new int[g.Count];
         for (int c = 0; c < g.Count; c++) _nearestDomain[c] = g.InDomain(c) ? c : g.NearestDomainCell(g.CellCenter(c));
 
-        var top = TerrainMesh.BuildTop(w);
-        TriangleCount = top.Mesh.TriangleCount;
-        AddChild(new MeshInstance3D { Name = "TerrainTop", Mesh = Bridge.ToArrayMesh(top.Mesh, _terrainMat) });
-
-        var strataMat = Bridge.Shader("res://Shaders/strata.gdshader");
-        var walls = TerrainMesh.BuildWalls(w);
-        TriangleCount += walls.TriangleCount;
-        AddChild(new MeshInstance3D { Name = "StrataWalls", Mesh = Bridge.ToArrayMesh(walls, strataMat) });
+        _strataMat = Bridge.Shader("res://Shaders/strata.gdshader");
+        _top = new MeshInstance3D { Name = "TerrainTop" };
+        _walls = new MeshInstance3D { Name = "StrataWalls" };
+        AddChild(_top); AddChild(_walls);
+        BuildMeshes();
         UpdateFieldTexture();
+    }
+
+    /// <summary>(Re)builds the top surface and cut faces from the current authoritative heightfield.</summary>
+    private void BuildMeshes()
+    {
+        _terrainVersion = _w.Terrain.Version;
+        _sinceMeshBuild = 0;
+        var top = TerrainMesh.BuildTop(_w);
+        var walls = TerrainMesh.BuildWalls(_w);
+        TriangleCount = top.Mesh.TriangleCount + walls.TriangleCount;
+        _top.Mesh = Bridge.ToArrayMesh(top.Mesh, _terrainMat);
+        _walls.Mesh = Bridge.ToArrayMesh(walls, _strataMat);
     }
 
     public override void _Process(double delta)
     {
         if (_w == null) return;
         _accum += delta;
+        _sinceMeshBuild += delta;
+        // sculpting: follow the heightfield at up to ~12 rebuilds per second
+        if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08) BuildMeshes();
         _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
         if (_accum < 0.5) return;
         _accum = 0;
