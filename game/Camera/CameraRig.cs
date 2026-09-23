@@ -19,6 +19,12 @@ public partial class CameraRig : Node3D
     public bool InvertY { get; set; }
     public event Action<double>? SpeedChanged;
     public event Action<bool>? MediumChanged;
+    /// <summary>Right button pressed and released without dragging (opens the tool wheel).</summary>
+    public event Action<Vector2>? RightClicked;
+    private bool _rmbDown;
+    private Vector2 _rmbPressPos;
+    private float _rmbDrag;
+    private ulong _rmbPressMs;
 
     private float _yaw = 0, _pitch = -0.6f;
     private bool _looking;
@@ -78,8 +84,20 @@ public partial class CameraRig : Node3D
         switch (e)
         {
             case InputEventMouseButton mb when mb.ButtonIndex == MouseButton.Right:
-                _looking = mb.Pressed;
-                Input.MouseMode = _looking ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+                if (mb.Pressed) { _rmbDown = true; _rmbDrag = 0; _rmbPressPos = mb.Position; _rmbPressMs = Time.GetTicksMsec(); }
+                else
+                {
+                    bool tap = _rmbDown && !_looking && Time.GetTicksMsec() - _rmbPressMs < 450;
+                    _rmbDown = false;
+                    if (_looking) { _looking = false; Input.MouseMode = Input.MouseModeEnum.Visible; Input.WarpMouse(_rmbPressPos); }
+                    if (tap) RightClicked?.Invoke(_rmbPressPos);
+                }
+                GetViewport().SetInputAsHandled();
+                break;
+            case InputEventMouseMotion mm0 when _rmbDown && !_looking:
+                // only a real drag starts mouse-look; a quick tap opens the tool wheel instead
+                _rmbDrag += mm0.Relative.Length();
+                if (_rmbDrag > 6) { _looking = true; Input.MouseMode = Input.MouseModeEnum.Captured; }
                 GetViewport().SetInputAsHandled();
                 break;
             case InputEventMouseButton mb when mb.Pressed && (mb.ButtonIndex == MouseButton.WheelUp || mb.ButtonIndex == MouseButton.WheelDown):

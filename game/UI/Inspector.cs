@@ -17,7 +17,7 @@ namespace Vivarium.Game.UI;
 /// Selection inspector. Stores only the selection's kind + id and re-reads authoritative state on every
 /// refresh, so it can never show stale data or keep a dead entity alive.
 /// </summary>
-public partial class Inspector : PanelContainer
+public partial class Inspector : GlassPanel
 {
     public GameSession Session { get; set; } = null!;
     private WorldHit _sel = WorldHit.None;
@@ -29,6 +29,7 @@ public partial class Inspector : PanelContainer
 
     public override void _Ready()
     {
+        base._Ready();
         MouseFilter = MouseFilterEnum.Stop;
         CustomMinimumSize = new Vector2(330, 0);
         _title = UiKit.Label("Nothing selected", 17, UiKit.Accent);

@@ -17,24 +17,23 @@ namespace Vivarium.Game.UI;
 public partial class UiRoot : Control
 {
     public GameSession Session { get; set; } = null!;
-    private Label _clock = null!, _speed = null!, _status = null!, _toolInfo = null!;
+    private Label _clock = null!, _speed = null!, _status = null!, _toolInfo = null!, _toolChip = null!;
+    public const float TopBarHeight = 52;
+    public RadialMenu Radial { get; private set; } = null!;
     private Button _pause = null!;
-    private readonly Dictionary<ToolKind, Button> _toolButtons = new();
-    private OptionButton _speciesPicker = null!;
     private VBoxContainer _toasts = null!;
     public Inspector Inspector { get; private set; } = null!;
     private RichTextLabel _probe = null!;
     public Windows Windows { get; private set; } = null!;
     private double _refresh;
-    private readonly List<string> _pickerIds = new();
 
     public override void _Ready()
     {
-        SetAnchorsPreset(LayoutPreset.FullRect);
+        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
         Theme = UiKit.BuildTheme((float)Session.Settings.UiScale);
 
-        // ---- top bar: clock + speed + menus
+        // ---- top bar (frosted glass): clock + speed + status | menus
         _clock = UiKit.Label("Week 1, Day 1  00:00", 18);
         _clock.Name = "ClockLabel";
         _pause = UiKit.Button("PauseButton", "⏸ Pause", () => { Session.Host?.TogglePause(); RefreshClock(); }, "Pause / resume the simulation (P)");
@@ -42,7 +41,9 @@ public partial class UiRoot : Control
         _speed = UiKit.Label("1×", 16); _speed.Name = "SpeedLabel"; _speed.CustomMinimumSize = new Vector2(64, 0); _speed.HorizontalAlignment = HorizontalAlignment.Center;
         var faster = UiKit.Button("FasterButton", "▶▶", () => { Session.Host?.Clock.Faster(); RefreshClock(); }, "Faster (.)");
         _status = UiKit.Label("", 13, UiKit.Muted); _status.Name = "StatusLabel";
-        var top = UiKit.Row(_clock, _pause, slower, _speed, faster, _status, UiKit.Spacer(),
+        _status.ClipText = true; _status.SizeFlagsHorizontal = SizeFlags.ExpandFill; _status.CustomMinimumSize = new Vector2(80, 0);
+        _status.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        var menus = UiKit.Row(
             UiKit.Button("CatalogButton", "Species", () => Windows.Toggle("Catalog"), "Species catalog (C)"),
             UiKit.Button("StatsButton", "Stats", () => Windows.Toggle("Stats"), "Ecosystem statistics (T)"),
             UiKit.Button("SaveButton", "Save", () => Windows.Toggle("SaveLoad"), "Save / load (Ctrl+S)"),
@@ -50,52 +51,39 @@ public partial class UiRoot : Control
             UiKit.Button("SettingsButton", "Settings", () => Windows.Toggle("Settings")),
             UiKit.Button("DebugButton", "Debug", () => Windows.Toggle("Debug"), "Developer overlays (F3)"),
             UiKit.Button("HelpButton", "Help", () => Windows.Toggle("Help"), "Controls (F1)"));
-        var topPanel = UiKit.Panel("TopBar", top);
+        foreach (var c in menus.GetChildren()) if (c is Button mb) GlassButton(mb);
+        foreach (var bt in new[] { _pause, slower, faster }) GlassButton(bt);
+        var top = UiKit.Row(_clock, _pause, slower, _speed, faster, _status, menus);
+        top.AddThemeConstantOverride("separation", 8);
+        var topPanel = new GlassPanel(14, 7) { Name = "TopBar", Corner = 14 };
+        topPanel.AddChild(top);
         topPanel.SetAnchorsPreset(LayoutPreset.TopWide);
-        topPanel.OffsetLeft = 8; topPanel.OffsetRight = -8; topPanel.OffsetTop = 8;
+        topPanel.OffsetLeft = 10; topPanel.OffsetRight = -10; topPanel.OffsetTop = 8;
         AddChild(topPanel);
 
-        // ---- tool palette
-        var palette = UiKit.Column(UiKit.Label("Tools", 16, UiKit.Accent));
-        void Tool(ToolKind k, string label, string key, string tip)
-        {
-            var b = UiKit.Button("Tool_" + k, $"{key}  {label}", () => Session.Tools.SetTool(k), tip, toggle: true);
-            b.Alignment = HorizontalAlignment.Left;
-            _toolButtons[k] = b;
-            palette.AddChild(b);
-        }
-        Tool(ToolKind.Select, "Inspect", "1", "Click anything to inspect it. F focuses the camera on the selection.");
-        Tool(ToolKind.Grab, "Grab critter", "2", "Click a critter to pick it up, click again to release it (X returns it).");
-        Tool(ToolKind.RemovePlant, "Pick plant", "3", "Remove a plant, moss or lichen (it becomes litter).");
-        Tool(ToolKind.Nutrients, "Nutrients", "4", "Sprinkle nutrients; hold to keep spreading. [ ] resizes.");
-        Tool(ToolKind.Poke, "Pokin' stick", "5", "Poke critters and plants.");
-        Tool(ToolKind.PlaceRock, "Place rock", "6", "Place a rock. [ ] resizes.");
-        Tool(ToolKind.PlaceLog, "Place log", "7", "Place a fallen log. [ ] length, R rotates.");
-        Tool(ToolKind.PlaceGravel, "Place gravel", "8", "Spread a gravel patch. [ ] resizes.");
-        Tool(ToolKind.IntroduceFlora, "Add flora", "9", "Introduce the chosen plant species.");
-        Tool(ToolKind.IntroduceFauna, "Add fauna", "0", "Introduce a small group of the chosen animal species.");
-        _speciesPicker = new OptionButton { Name = "SpeciesPicker", FocusMode = FocusModeEnum.None, Visible = false };
-        _speciesPicker.ItemSelected += i => PickSpecies((int)i);
-        palette.AddChild(_speciesPicker);
-        _toolInfo = UiKit.Label("", 13, UiKit.Muted, wrap: true); _toolInfo.Name = "ToolInfo"; _toolInfo.CustomMinimumSize = new Vector2(170, 0);
-        palette.AddChild(_toolInfo);
-        var palPanel = UiKit.Panel("ToolPalette", palette);
-        palPanel.SetAnchorsPreset(LayoutPreset.TopLeft);
-        palPanel.OffsetLeft = 8; palPanel.OffsetTop = 64;
-        AddChild(palPanel);
+        // ---- current tool chip (tools live in the right-click wheel)
+        _toolChip = UiKit.Label("", 14);
+        _toolChip.Name = "ToolChip";
+        _toolInfo = UiKit.Label("", 12, UiKit.Muted); _toolInfo.Name = "ToolInfo";
+        var chip = new GlassPanel(12, 6) { Name = "ToolChipPanel", Corner = 12 };
+        chip.AddChild(UiKit.Column(_toolChip, _toolInfo));
+        chip.SetAnchorsPreset(LayoutPreset.TopLeft);
+        chip.OffsetLeft = 10; chip.OffsetTop = TopBarHeight + 8;
+        AddChild(chip);
 
         // ---- inspector (right)
         Inspector = new Inspector { Name = "Inspector", Session = Session };
         Inspector.SetAnchorsPreset(LayoutPreset.TopRight);
-        Inspector.OffsetRight = -8; Inspector.OffsetTop = 64; Inspector.OffsetLeft = -340;
+        Inspector.OffsetRight = -10; Inspector.OffsetTop = TopBarHeight + 8; Inspector.OffsetLeft = -350;
         AddChild(Inspector);
 
         // ---- environment probe (bottom-left)
         _probe = UiKit.Rich("ProbeText");
-        _probe.CustomMinimumSize = new Vector2(250, 0);
-        var probePanel = UiKit.Panel("ProbePanel", UiKit.Column(UiKit.Label("Environment probe", 15, UiKit.Accent), _probe));
+        _probe.CustomMinimumSize = new Vector2(300, 0);
+        var probePanel = new GlassPanel(12, 8) { Name = "ProbePanel", Corner = 12 };
+        probePanel.AddChild(UiKit.Column(UiKit.Label("Environment probe", 15, UiKit.Accent), _probe));
         probePanel.SetAnchorsPreset(LayoutPreset.BottomLeft);
-        probePanel.OffsetLeft = 8; probePanel.OffsetBottom = -8; probePanel.GrowVertical = GrowDirection.Begin;
+        probePanel.OffsetLeft = 10; probePanel.OffsetBottom = -10; probePanel.GrowVertical = GrowDirection.Begin;
         AddChild(probePanel);
 
         // ---- toasts (bottom centre)
@@ -107,49 +95,51 @@ public partial class UiRoot : Control
         Windows = new Windows { Name = "Windows", Session = Session };
         AddChild(Windows);
 
+        Radial = new RadialMenu { Name = "Radial", Session = Session };
+        AddChild(Radial);
+        Session.CameraRig.RightClicked += pos => { if (!Windows.AnyOpen) Radial.Open(pos); };
+
         Session.Tools.ToolChanged += OnToolChanged;
         Session.Tools.SelectionChanged += hit => Inspector.Show(hit);
-        Session.WorldChanged += () => { Inspector.Show(WorldHit.None); RebuildPicker(); Windows.OnWorldChanged(); };
+        Session.WorldChanged += () => { Inspector.Show(WorldHit.None); RefreshToolChip(); Windows.OnWorldChanged(); };
         OnToolChanged(ToolKind.Select);
     }
 
     public void ApplyScale(float s) { if (IsInsideTree()) Theme = UiKit.BuildTheme(s); }
 
-    private void OnToolChanged(ToolKind k)
+    private void OnToolChanged(ToolKind k) => RefreshToolChip();
+
+    /// <summary>Frosted-glass look for top-bar buttons.</summary>
+    private static void GlassButton(Button b)
     {
-        foreach (var (kind, b) in _toolButtons) b.SetPressedNoSignal(kind == k);
-        _speciesPicker.Visible = k is ToolKind.IntroduceFlora or ToolKind.IntroduceFauna;
-        RebuildPicker();
+        StyleBoxFlat S(Color c) { var s = new StyleBoxFlat { BgColor = c }; s.SetCornerRadiusAll(8); s.ContentMarginLeft = s.ContentMarginRight = 9; s.ContentMarginTop = s.ContentMarginBottom = 4; return s; }
+        b.AddThemeStyleboxOverride("normal", S(new Color(1, 1, 1, 0.05f)));
+        b.AddThemeStyleboxOverride("hover", S(new Color(1, 1, 1, 0.13f)));
+        b.AddThemeStyleboxOverride("pressed", S(new Color(0.36f, 0.8f, 0.62f, 0.35f)));
+    }
+
+    public void RefreshToolChip()
+    {
+        if (_toolChip == null) return;
         var t = Session.Tools;
-        _toolInfo.Text = k switch
+        var k = t.Current;
+        string species = k switch
         {
-            ToolKind.Nutrients => $"Radius {t.NutrientRadius:0.00} m",
-            ToolKind.PlaceRock => $"Size {t.RockScale:0.00} m",
-            ToolKind.PlaceLog => $"Length {t.LogLength:0.0} m  (R rotates)",
-            ToolKind.PlaceGravel => $"Radius {t.GravelRadius:0.00} m",
-            ToolKind.MoveProp => "Moving a prop: click its new spot",
-            ToolKind.Grab => "Click a critter, then click where to release it",
+            ToolKind.IntroduceFlora => " · " + (Session.Content.FloraById(t.FloraSpecies ?? "")?.Name ?? "pick a plant"),
+            ToolKind.IntroduceFauna => " · " + (Session.Content.FaunaById(t.FaunaSpecies ?? "")?.Name ?? "pick an animal"),
             _ => "",
         };
-    }
-
-    private void RebuildPicker()
-    {
-        if (Session.World == null || _speciesPicker == null) return;
-        _speciesPicker.Clear(); _pickerIds.Clear();
-        var k = Session.Tools.Current;
-        if (k == ToolKind.IntroduceFlora) foreach (var sp in Session.Content.Flora) { _speciesPicker.AddItem(sp.Name); _pickerIds.Add(sp.Id); }
-        else if (k == ToolKind.IntroduceFauna) foreach (var sp in Session.Content.Fauna) { _speciesPicker.AddItem(sp.Name); _pickerIds.Add(sp.Id); }
-        string? cur = k == ToolKind.IntroduceFlora ? Session.Tools.FloraSpecies : Session.Tools.FaunaSpecies;
-        int idx = _pickerIds.IndexOf(cur ?? "");
-        if (idx >= 0) _speciesPicker.Select(idx);
-    }
-
-    private void PickSpecies(int i)
-    {
-        if (i < 0 || i >= _pickerIds.Count) return;
-        if (Session.Tools.Current == ToolKind.IntroduceFlora) Session.Tools.FloraSpecies = _pickerIds[i];
-        else Session.Tools.FaunaSpecies = _pickerIds[i];
+        _toolChip.Text = $"{RadialMenu.GlyphOf(k)}  {RadialMenu.NameOf(k)}{species}";
+        _toolInfo.Text = (k switch
+        {
+            ToolKind.Nutrients => $"radius {t.NutrientRadius:0.00} m  ·  [ ] resize",
+            ToolKind.PlaceRock => $"size {t.RockScale:0.00} m  ·  [ ] resize",
+            ToolKind.PlaceLog => $"length {t.LogLength:0.0} m  ·  [ ] resize, R rotate",
+            ToolKind.PlaceGravel => $"radius {t.GravelRadius:0.00} m  ·  [ ] resize",
+            ToolKind.MoveProp => "click the prop's new spot",
+            ToolKind.Grab => "click a critter, then where to release it",
+            _ => "",
+        } + (k == ToolKind.Select ? "" : "\n") + "right-click for the tool wheel").Trim();
     }
 
     public void ChooseSpecies(string id, bool fauna)

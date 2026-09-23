@@ -28,7 +28,7 @@ public partial class Windows : Control
 
     public override void _Ready()
     {
-        SetAnchorsPreset(LayoutPreset.FullRect);
+        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
         BuildCatalog(); BuildStats(); BuildSaveLoad(); BuildNewWorld(); BuildSettings(); BuildDebug(); BuildHelp();
         if (Session.Settings.ShowHelpOnStart) Toggle("Help");
@@ -43,6 +43,28 @@ public partial class Windows : Control
     }
 
     public bool IsOpen(string name) => _w.TryGetValue(name, out var p) && p.Visible;
+    public bool AnyOpen => _w.Values.Any(p => p.Visible);
+
+    /// <summary>Fits an open window into the viewport below the top bar; its body scrolls if it is taller.</summary>
+    private void Layout(PanelContainer p)
+    {
+        var vp = GetViewportRect().Size;
+        var req = p.GetMeta("requested_size").AsVector2();
+        float top = UiRoot.TopBarHeight + 16, bottom = 16;
+        float w = Mathf.Min(req.X, vp.X - 32);
+        float maxH = Mathf.Max(160, vp.Y - top - bottom);
+        var scroll = p.FindChild(p.Name + "_Scroll", true, false) as ScrollContainer;
+        if (scroll != null)
+        {
+            float contentH = scroll.GetChild<Control>(0).GetCombinedMinimumSize().Y;
+            scroll.CustomMinimumSize = new Vector2(w - 28, Mathf.Clamp(contentH, 60, Mathf.Min(req.Y - 60, maxH - 70)));
+        }
+        p.Size = new Vector2(w, 0);   // shrink to content
+        p.ResetSize();
+        var size = p.GetCombinedMinimumSize();
+        p.Size = new Vector2(w, Mathf.Min(size.Y, maxH));
+        p.Position = new Vector2((vp.X - w) / 2, top + Mathf.Max(0, (maxH - p.Size.Y) / 2));
+    }
 
     public void Toggle(string name)
     {
@@ -71,6 +93,11 @@ public partial class Windows : Control
 
     public void OnWorldChanged() { RebuildCatalog(); RebuildStats(); }
 
+    public override void _Process(double delta)
+    {
+        foreach (var p in _w.Values) if (p.Visible) Layout(p);
+    }
+
     public void Refresh()
     {
         if (IsOpen("Stats")) UpdateStats();
@@ -87,10 +114,8 @@ public partial class Windows : Control
         var (_, body) = Add("Catalog", "Species catalog", new Vector2(640, 560));
         body.AddChild(UiKit.Label("Every species can be (re)introduced at any time — nothing is ever lost for good.", 13, UiKit.Muted, wrap: true));
         _catalogList = UiKit.Column();
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(600, 470), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
-        scroll.AddChild(_catalogList);
         _catalogList.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        body.AddChild(scroll);
+        body.AddChild(_catalogList);   // the window body scrolls
     }
 
     private void RebuildCatalog()
@@ -189,9 +214,7 @@ public partial class Windows : Control
         body.AddChild(UiKit.Row(_saveName, UiKit.Button("SaveNowButton", "Save", () => DoSave(_saveName.Text))));
         body.AddChild(UiKit.Label("Saves (newest first):", 14, UiKit.Muted));
         _saveList = UiKit.Column();
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(520, 360) };
-        scroll.AddChild(_saveList);
-        body.AddChild(scroll);
+        body.AddChild(_saveList);
     }
 
     public void QuickSave() => DoSave(Session.CurrentSaveName ?? Session.World?.Descriptor.Name ?? "vivarium");
@@ -366,18 +389,18 @@ public partial class Windows : Control
         var t = UiKit.Rich("HelpText");
         t.Text =
             "[b]Camera[/b]\n" +
-            "  Hold [b]right mouse[/b] and move the mouse to look around\n" +
+            "  Hold [b]right mouse[/b] and drag to look around\n" +
             "  [b]W A S D[/b] fly · [b]E / Space[/b] up · [b]Q / Ctrl[/b] down · [b]Shift[/b] fast · [b]Alt[/b] slow\n" +
             "  [b]Mouse wheel[/b] changes flying speed (tiny for critter close-ups, large for crossing the island)\n" +
             "  [b]F[/b] focus & orbit the selection (wheel zooms) · [b]Esc[/b] leave focus · [b]Home[/b] reset view\n" +
             "  Fly below the water surface to watch aquatic life.\n\n" +
             "[b]Time[/b]   [b]P[/b] pause · [b], .[/b] slower / faster.  One real hour ≈ one vivarium week.\n\n" +
-            "[b]Tools[/b] (left palette or number keys)\n" +
+            "[b]Tools[/b] — [b]right-click[/b] (a quick tap) opens the tool wheel; number keys also work\n" +
             "  [b]1[/b] Inspect — click anything; genome & lineage tabs for critters\n" +
             "  [b]2[/b] Grab critter — click to pick up, click to release (X puts it back)\n" +
             "  [b]3[/b] Pick plant · [b]4[/b] Nutrients (hold) · [b]5[/b] Pokin' stick\n" +
             "  [b]6[/b] Rock · [b]7[/b] Log (R rotates) · [b]8[/b] Gravel — [b][ ][/b] or Ctrl+wheel resize\n" +
-            "  [b]9[/b] Add flora · [b]0[/b] Add fauna — choose species in the palette or the catalog\n" +
+            "  [b]9[/b] Add flora · [b]0[/b] Add fauna — pick the species in the wheel's outer ring or the catalog\n" +
             "  The cursor ring turns [color=#4f7]green[/color] where an action is valid and [color=#f66]red[/color] where it isn't.\n" +
             "  Selected rocks, logs and gravel can be moved or removed from the inspector (Delete key).\n\n" +
             "[b]Panels[/b]   [b]C[/b] species catalog · [b]T[/b] statistics · [b]Ctrl+S[/b] quick save · [b]F3[/b] debug overlays · [b]F1[/b] help · [b]Tab[/b] hide UI\n\n" +

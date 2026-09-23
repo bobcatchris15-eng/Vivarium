@@ -114,7 +114,7 @@ public partial class Main : Node3D
         var layer = new CanvasLayer();
         AddChild(layer);
         var label = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        label.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         label.OffsetLeft = 40; label.OffsetTop = 40; label.OffsetRight = -40;
         layer.AddChild(label);
     }

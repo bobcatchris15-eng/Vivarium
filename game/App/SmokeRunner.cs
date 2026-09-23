@@ -359,5 +359,23 @@ public partial class SmokeRunner : Node
             cam.LookAtPoint(new Vector3(0, 8.5f, 14.5f), new Vector3(0, -0.5f, 0));
             await Screenshot($"quality_{tier}");
         }
+        // UI layout on a wide, short window (the reported overlap case)
+        Session.Settings.Quality = 1; Session.ApplySettings();
+        GetWindow().Size = new Vector2I(2000, 810);
+        await Frames(10);
+        cam.LookAtPoint(new Vector3(0, 8.5f, 14.5f), new Vector3(0, -0.5f, 0));
+        Session.Ui.Windows.Open("Help");
+        await Screenshot("ui_help_wide");
+        Session.Ui.Windows.Close("Help");
+        Session.Tools.Select(new WorldHit(HitKind.Terrain, EntityId.None, new Vec3(0, W.SurfaceHeight(Vec2.Zero), 0), 1));
+        Session.Ui.Radial.Open(GetViewport().GetVisibleRect().Size / 2);
+        await Frames(20);
+        await Screenshot("ui_radial");
+        await Press("Tool_IntroduceFlora", 20);
+        await Screenshot("ui_radial_species");
+        Session.Ui.Radial.Close();
+        Session.Ui.Windows.Open("Catalog");
+        await Screenshot("ui_catalog_wide");
+        Session.Ui.Windows.Close("Catalog");
     }
 }

@@ -84,16 +84,21 @@ public static class UiKit
 
     public static Control Spacer(bool expand = true) => new Control { SizeFlagsHorizontal = expand ? Control.SizeFlags.ExpandFill : Control.SizeFlags.Fill, MouseFilter = Control.MouseFilterEnum.Ignore };
 
-    /// <summary>A centred modal-style window with a title bar and close button.</summary>
+    /// <summary>
+    /// A frosted-glass window with a title bar and close button. The body scrolls, and Windows.Layout keeps the
+    /// window inside the viewport and below the top bar.
+    /// </summary>
     public static (PanelContainer Root, VBoxContainer Body) Window(string name, string title, Vector2 size, Action onClose)
     {
         var body = Column();
+        body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        var scroll = new ScrollContainer { Name = name + "_Scroll", HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, CustomMinimumSize = new Vector2(size.X - 28, size.Y - 60) };
+        scroll.AddChild(body);
         var header = Row(Label(title, 19, Accent), Spacer(), Button(name + "_Close", "✕", onClose, "Close"));
-        var col = Column(header, new HSeparator(), body);
-        var panel = Panel(name, col);
-        panel.CustomMinimumSize = size;
-        panel.SetAnchorsPreset(Control.LayoutPreset.Center);
-        panel.OffsetLeft = -size.X / 2; panel.OffsetRight = size.X / 2; panel.OffsetTop = -size.Y / 2; panel.OffsetBottom = size.Y / 2;
+        var col = Column(header, new HSeparator(), scroll);
+        var panel = new GlassPanel(14, 10) { Name = name, Corner = 14 };
+        panel.AddChild(col);
+        panel.SetMeta("requested_size", size);
         panel.Visible = false;
         return (panel, body);
     }

@@ -71,7 +71,7 @@ public partial class EnvironmentRig : Node3D
         AddChild(layer);
         _underwaterMat = Bridge.Shader("res://Shaders/underwater.gdshader");
         _underwaterRect = new ColorRect { MouseFilter = Control.MouseFilterEnum.Ignore, Material = _underwaterMat, Visible = false };
-        _underwaterRect.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _underwaterRect.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_underwaterRect);
     }
 
