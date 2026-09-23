@@ -25,7 +25,21 @@ public static class OrganismMeshes
             {
                 // low mat plus many small tapered fronds: reads as moss up close, as a soft patch from afar
                 var matCol = Primitives.Scale(c1, 0.7);
-                Primitives.Ellipsoid(m, new Vec3(0, 0.05, 0), new Vec3(1.0, 0.25, 1.0), 4, 12, (a, b) => (matCol, 1, a, b, 0, 0));
+                int matStart = m.VertexCount;
+                Primitives.Ellipsoid(m, new Vec3(0, 0.05, 0), new Vec3(1.0, 0.25, 1.0), 6, 28, (a, b) => (matCol, 1, a, b, 0, 0));
+                // ragged outline: moss mats creep unevenly, so wobble the rim and tuck its edge into the ground
+                ulong rim = Rng.Mix(seed, 0xC4A9);
+                for (int i = matStart; i < m.VertexCount; i++)
+                {
+                    var p = m.Position(i);
+                    double ang = Math.Atan2(p.Z, p.X);
+                    double wob = 1 + 0.22 * (Noise.Value3(rim, Math.Cos(ang) * 2.2, Math.Sin(ang) * 2.2, 0.5) - 0.3);
+                    double edge = Math.Sqrt(p.X * p.X + p.Z * p.Z);
+                    m.Positions[i * 3] = (float)(p.X * wob);
+                    m.Positions[i * 3 + 2] = (float)(p.Z * wob);
+                    m.Positions[i * 3 + 1] = (float)(p.Y - 0.08 * edge * edge);
+                }
+                m.RecomputeNormals();
                 for (int k = 0; k < 70; k++)
                 {
                     double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.92;

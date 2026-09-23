@@ -109,7 +109,7 @@ public static class PropMeshes
                     double patch = MathD.SmoothStep(0.1, 0.5, Noise.Gradient(Rng.Mix(ns, 3), t * length * 2.5, th * 2));
                     col = Primitives.Mix(col, moss, patch * (decay >= 3 ? 0.8 : 0.5));
                 }
-                m.AddVertex(p, dir, col, 1, t * length, th / (2 * Math.PI), decay, 0);
+                m.AddVertex(p, dir, col, 1, t * length, th * RadiusAt(t), decay, 0);   // uv in metres (along, around)
             }
         }
         for (int i = 0; i < along; i++)

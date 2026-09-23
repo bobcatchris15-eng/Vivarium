@@ -18,7 +18,7 @@ void fragment() {
     vec2 wob = vec2(vnoise(uv * 8.0 + TIME * 0.4), vnoise(uv * 8.0 - TIME * 0.35)) - 0.5;
     vec3 scene = texture(screen_tex, uv + wob * 0.004 * strength).rgb;
     float caustic = pow(vnoise(uv * vec2(22.0, 14.0) + TIME * 0.6) * vnoise(uv * vec2(17.0, 26.0) - TIME * 0.5), 2.0);
-    vec3 graded = mix(scene, scene * tint * 1.25 + caustic * 0.12, 0.45);
+    vec3 graded = mix(scene, scene * tint * 1.2 + caustic * 0.1, 0.22);   // light touch: the water is clear
     float vig = smoothstep(0.95, 0.35, distance(uv, vec2(0.5)));
     graded *= mix(0.82, 1.0, vig);
     COLOR = vec4(mix(scene, graded, strength), 1.0);

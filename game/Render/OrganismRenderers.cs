@@ -42,6 +42,8 @@ public partial class FloraRenderer : Node3D
         {
             var mat = Bridge.Shader("res://Shaders/flora.gdshader");
             mat.SetShaderParameter("stiffness", sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
+            mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, _ => 2 });
+            Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
             var hi = OrganismMeshes.Flora(sp);
             var lo = LowDetail(sp);
             var layer = new Layer
@@ -169,6 +171,8 @@ public partial class FaunaRenderer : Node3D
             hiMat.SetShaderParameter("wiggle", sp.Medium == Medium.Aquatic ? 1.0f : sp.Model == "isopod" ? 0.1f : 0.35f);
             hiMat.SetShaderParameter("wiggle_speed", sp.Model == "minnow" ? 11.0f : 7.0f);
             hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
+            hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.35f, "triops" => 0.6f, "shrimp" => 0.5f, "springtail" => 0.2f, _ => 0.0f });
+            hiMat.SetShaderParameter("scales", sp.Model == "minnow" ? 1.0f : 0.0f);
             var loMat = (ShaderMaterial)hiMat.Duplicate();
             loMat.SetShaderParameter("wiggle", 0.0f);
             var hi = OrganismMeshes.Fauna(sp);

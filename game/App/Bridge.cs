@@ -70,6 +70,33 @@ public static class Bridge
         return new ShaderMaterial { Shader = sh };
     }
 
+    /// <summary>
+    /// Binds a photo-scanned surface set (res://Textures/&lt;asset&gt;_1K-JPG_{Color,NormalGL,Roughness}.jpg, CC0 from
+    /// ambientCG) to the shader uniforms &lt;prefix&gt;_col, &lt;prefix&gt;_nrm and &lt;prefix&gt;_rgh.
+    /// </summary>
+    public static void BindSurface(ShaderMaterial mat, string prefix, string asset)
+    {
+        mat.SetShaderParameter(prefix + "_col", SurfaceMap(asset, "Color"));
+        mat.SetShaderParameter(prefix + "_nrm", SurfaceMap(asset, "NormalGL"));
+        mat.SetShaderParameter(prefix + "_rgh", SurfaceMap(asset, "Roughness"));
+    }
+
+    private static readonly System.Collections.Generic.Dictionary<string, Texture2D> _maps = new();
+
+    private static Texture2D SurfaceMap(string asset, string map)
+    {
+        string path = $"res://Textures/{asset}_1K-JPG_{map}.jpg";
+        if (!_maps.TryGetValue(path, out var tex)) _maps[path] = tex = GD.Load<Texture2D>(path) ?? throw new InvalidOperationException($"missing texture {path}");
+        return tex;
+    }
+
+    /// <summary>The surface sets in use (one place, so notices and exports stay in sync).</summary>
+    public static class Surfaces
+    {
+        public const string Soil = "Ground048", Damp = "Ground037", Moss = "Moss002", Leaves = "ScatteredLeaves007",
+                            Rock = "Rock058", Gravel = "Gravel022", Bark = "Bark014";
+    }
+
     public static StandardMaterial3D VertexColorMaterial(float roughness = 0.85f, bool doubleSided = false)
     {
         var m = new StandardMaterial3D
@@ -97,8 +124,9 @@ public sealed class UserSettings
     public bool AutosaveEnabled { get; set; } = true;
     public double UiScale { get; set; } = 1.0;
     public bool ShowHelpOnStart { get; set; } = true;
-    /// <summary>Settings format; v2 moved flying speed off the mouse wheel.</summary>
-    public int Version { get; set; } = 2;
+    /// <summary>Settings format; v2 moved flying speed off the mouse wheel, v3 re-runs that repair (see Load).</summary>
+    public int Version { get; set; } = CurrentVersion;
+    public const int CurrentVersion = 3;
     /// <summary>Scripted test runs set this so they never overwrite the player's settings file.</summary>
     [System.Text.Json.Serialization.JsonIgnore] public bool Transient { get; set; }
 
@@ -121,10 +149,15 @@ public sealed class UserSettings
         {
             if (System.IO.File.Exists(PathOf))
             {
-                var s = System.Text.Json.JsonSerializer.Deserialize<UserSettings>(System.IO.File.ReadAllText(PathOf)) ?? new UserSettings();
+                string json = System.IO.File.ReadAllText(PathOf);
+                var s = System.Text.Json.JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+                // v1 files have no "Version" field (the property default must not stand in for it)
+                using (var doc = System.Text.Json.JsonDocument.Parse(json))
+                    s.Version = doc.RootElement.TryGetProperty(nameof(Version), out var v) && v.TryGetInt32(out int ver) ? ver : 1;
                 // v1 used the wheel for flying speed, so scrolling to "zoom" could leave it saved at a crawl
-                // (and early test runs could save autosave=off into the player's file)
-                if (s.Version < 2) { if (s.CameraSpeed < 0.5) s.CameraSpeed = 1.5; s.AutosaveEnabled = true; s.Version = 2; }
+                // (and early test runs could save autosave=off into the player's file). The first build with this
+                // repair misread v1 files as v2 and re-saved them unrepaired, so v3 applies it once more.
+                if (s.Version < 3) { if (s.CameraSpeed < 0.5) s.CameraSpeed = 1.5; s.AutosaveEnabled = true; s.Version = CurrentVersion; }
                 s.Clamp();
                 return s;
             }
