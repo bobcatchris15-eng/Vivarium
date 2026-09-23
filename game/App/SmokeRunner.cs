@@ -23,7 +23,7 @@ namespace Vivarium.Game.App;
 /// </summary>
 public partial class SmokeRunner : Node
 {
-    public enum Mode { Smoke, Reload, Render }
+    public enum Mode { Smoke, Reload, Render, Perf }
     public GameSession Session { get; set; } = null!;
     public string OutDir { get; set; } = "";
     public Mode RunMode { get; set; }
@@ -52,6 +52,7 @@ public partial class SmokeRunner : Node
                 case Mode.Smoke: await SmokeAsync(); break;
                 case Mode.Reload: await ReloadAsync(); break;
                 case Mode.Render: await RenderAsync(); break;
+                case Mode.Perf: await PerfAsync(); break;
             }
             Check("no errors logged", _log.Count(LogLevel.Error) == _errorsAtStart, string.Join(" | ", _log.Snapshot().Where(e => e.Level >= LogLevel.Error).Select(e => e.Message).Take(5)));
         }
@@ -67,7 +68,7 @@ public partial class SmokeRunner : Node
             ["mode"] = RunMode.ToString(), ["version"] = AppVersion.Application, ["ok"] = ok && code == 0,
             ["checks"] = _checks, ["facts"] = _facts, ["exported"] = OS.HasFeature("template"),
         };
-        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", _ => "render_report.json" };
+        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", _ => "render_report.json" };
         File.WriteAllText(Path.Combine(OutDir, name), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print($"VIVARIUM_{RunMode.ToString().ToUpperInvariant()}_{(code == 0 ? "OK" : "FAILED")} checks={_checks.Count} failed={_checks.Count(c => !(bool)c["ok"])}");
         foreach (var c in _checks.Where(c => !(bool)c["ok"])) GD.PrintErr($"  FAILED: {c["name"]}: {c["detail"]}");
@@ -289,6 +290,40 @@ public partial class SmokeRunner : Node
         var inv = W.CheckInvariants();
         Check("simulation continues after reload", W.Clock.Tick > t0 + 50 && inv.Count == 0, $"{W.Clock.Tick - t0} ticks, {inv.Count} invariant problems");
         await Screenshot("reload_continued");
+    }
+
+    // ------------------------------------------------------------------ perf: normal play, flying camera
+
+    private async Task PerfAsync()
+    {
+        var cam = Session.CameraRig;
+        W.Clock.Paused = false;
+        var samples = new List<string>();
+        ulong start = Time.GetTicksMsec();
+        int second = 0;
+        long lastTick = W.Clock.Tick;
+        double worstFrame = 0; int frames = 0; ulong lastSample = start;
+        while (Time.GetTicksMsec() - start < 90_000)
+        {
+            float t = (Time.GetTicksMsec() - start) / 1000f;
+            cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.3f) * 9, 3.5f, Mathf.Cos(t * 0.3f) * 9), new Vector3(0, 0, 0));
+            ulong f0 = Time.GetTicksUsec();
+            await Frames(1);
+            worstFrame = Math.Max(worstFrame, (Time.GetTicksUsec() - f0) / 1000.0);
+            frames++;
+            if (Time.GetTicksMsec() - lastSample >= 1000)
+            {
+                lastSample = Time.GetTicksMsec();
+                var line = $"t={++second,3}s fps={Engine.GetFramesPerSecond(),3} frames={frames,3} worstFrame={worstFrame,6:0.0}ms " +
+                    $"process={Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000,6:0.0}ms simLast={W.Scheduler.LastAdvanceMs,5:0.0}ms " +
+                    $"ticks/s={W.Clock.Tick - lastTick,4} backlog={W.Scheduler.Backlog,7:0}s flora={W.Flora.Count} fauna={W.Fauna.Count} " +
+                    $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)}";
+                Log.Info(LogCategory.Perf, line);
+                samples.Add(line);
+                lastTick = W.Clock.Tick; worstFrame = 0; frames = 0;
+            }
+        }
+        _facts["samples"] = samples;
     }
 
     // ------------------------------------------------------------------ render tour

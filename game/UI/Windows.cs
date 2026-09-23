@@ -329,7 +329,7 @@ public partial class Windows : Control
         var s = Session.Settings;
         var grid = new GridContainer { Columns = 2 };
         var speedL = UiKit.Label($"{s.CameraSpeed:0.00} m/s");
-        grid.AddChild(UiKit.Label("Camera speed (wheel)")); grid.AddChild(UiKit.Row(UiKit.Slider("CamSpeedSlider", Math.Log(UserSettings.MinCameraSpeed), Math.Log(UserSettings.MaxCameraSpeed), 0.01, Math.Log(s.CameraSpeed), v => { s.CameraSpeed = Math.Exp(v); speedL.Text = $"{s.CameraSpeed:0.00} m/s"; Apply(); }), speedL));
+        grid.AddChild(UiKit.Label("Flying speed (+ / -)")); grid.AddChild(UiKit.Row(UiKit.Slider("CamSpeedSlider", Math.Log(UserSettings.MinCameraSpeed), Math.Log(UserSettings.MaxCameraSpeed), 0.01, Math.Log(s.CameraSpeed), v => { s.CameraSpeed = Math.Exp(v); speedL.Text = $"{s.CameraSpeed:0.00} m/s"; Apply(); }), speedL));
         var sensL = UiKit.Label($"{s.MouseSensitivity:0.00}");
         grid.AddChild(UiKit.Label("Mouse sensitivity")); grid.AddChild(UiKit.Row(UiKit.Slider("SensSlider", 0.05, 1.0, 0.01, s.MouseSensitivity, v => { s.MouseSensitivity = v; sensL.Text = $"{v:0.00}"; Apply(); }), sensL));
         var invert = new CheckBox { Name = "InvertYCheck", ButtonPressed = s.InvertY, Text = "Invert Y" };
@@ -390,8 +390,8 @@ public partial class Windows : Control
         t.Text =
             "[b]Camera[/b]\n" +
             "  Hold [b]right mouse[/b] and drag to look around\n" +
-            "  [b]W A S D[/b] fly · [b]E / Space[/b] up · [b]Q / Ctrl[/b] down · [b]Shift[/b] fast · [b]Alt[/b] slow\n" +
-            "  [b]Mouse wheel[/b] changes flying speed (tiny for critter close-ups, large for crossing the island)\n" +
+            "  [b]W A S D[/b] fly level · [b]Space[/b] up · [b]Ctrl[/b] down · [b]Q / E[/b] turn · [b]Shift[/b] fast · [b]Alt[/b] slow\n" +
+            "  [b]Mouse wheel[/b] zooms toward what's under the cursor · [b]+ / -[/b] flying speed (shown in the top bar)\n" +
             "  [b]F[/b] focus & orbit the selection (wheel zooms) · [b]Esc[/b] leave focus · [b]Home[/b] reset view\n" +
             "  Fly below the water surface to watch aquatic life.\n\n" +
             "[b]Time[/b]   [b]P[/b] pause · [b], .[/b] slower / faster.  One real hour ≈ one vivarium week.\n\n" +

@@ -97,6 +97,10 @@ public sealed class UserSettings
     public bool AutosaveEnabled { get; set; } = true;
     public double UiScale { get; set; } = 1.0;
     public bool ShowHelpOnStart { get; set; } = true;
+    /// <summary>Settings format; v2 moved flying speed off the mouse wheel.</summary>
+    public int Version { get; set; } = 2;
+    /// <summary>Scripted test runs set this so they never overwrite the player's settings file.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public bool Transient { get; set; }
 
     public const double MinCameraSpeed = 0.02, MaxCameraSpeed = 25;
 
@@ -118,6 +122,9 @@ public sealed class UserSettings
             if (System.IO.File.Exists(PathOf))
             {
                 var s = System.Text.Json.JsonSerializer.Deserialize<UserSettings>(System.IO.File.ReadAllText(PathOf)) ?? new UserSettings();
+                // v1 used the wheel for flying speed, so scrolling to "zoom" could leave it saved at a crawl
+                // (and early test runs could save autosave=off into the player's file)
+                if (s.Version < 2) { if (s.CameraSpeed < 0.5) s.CameraSpeed = 1.5; s.AutosaveEnabled = true; s.Version = 2; }
                 s.Clamp();
                 return s;
             }
@@ -129,6 +136,7 @@ public sealed class UserSettings
     public void Save()
     {
         Clamp();
+        if (Transient) return;
         try
         {
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(PathOf)!);

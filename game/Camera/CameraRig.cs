@@ -7,7 +7,7 @@ using Vivarium.Sim.World;
 namespace Vivarium.Game.Camera;
 
 /// <summary>
-/// Avatar-free free-fly camera: RMB look, WASD/QE move, Shift fast, wheel adjusts speed (stepped, persisted),
+/// Avatar-free free-fly camera: RMB-drag look, WASD level flight, Space/Ctrl up/down, Q/E turn, Shift fast, wheel adjusts speed (stepped, persisted),
 /// F focus/orbit a target, Esc leaves focus. Tracks the above/under-water medium via the sim's tracker.
 /// Camera state is client-only and never reaches the simulation.
 /// </summary>
@@ -73,6 +73,26 @@ public partial class CameraRig : Node3D
 
     public void Unfocus() { Focused = false; _focusTarget = null; }
 
+    /// <summary>
+    /// Dolly toward (+) or away from (−) whatever is under the cursor. Each notch covers 15 % of the
+    /// distance to that point, so zooming is fine near the ground and fast from afar; it never passes
+    /// through the surface.
+    /// </summary>
+    public void Zoom(float notches, Vector2 screenPos)
+    {
+        var origin = Cam.ProjectRayOrigin(screenPos);
+        var dir = Cam.ProjectRayNormal(screenPos);
+        float dist = 8f;
+        if (World != null)
+        {
+            double hit = Vivarium.Sim.Tools.Selection.RayTerrain(World, Bridge.S(origin), Bridge.S(dir));
+            if (!double.IsInfinity(hit)) dist = (float)hit;
+        }
+        float step = Mathf.Clamp(dist * 0.15f, 0.004f, 4f) * notches;
+        if (notches > 0) step = Mathf.Min(step, Mathf.Max(0f, dist - 0.03f));   // stop short of the surface
+        Position += dir * step;
+    }
+
     public void AdjustSpeed(int steps)
     {
         Speed = Math.Clamp(Speed * Math.Pow(1.3, steps), UserSettings.MinCameraSpeed, UserSettings.MaxCameraSpeed);
@@ -102,10 +122,16 @@ public partial class CameraRig : Node3D
                 break;
             case InputEventMouseButton mb when mb.Pressed && (mb.ButtonIndex == MouseButton.WheelUp || mb.ButtonIndex == MouseButton.WheelDown):
                 if (mb.CtrlPressed || mb.ShiftPressed) break; // tool sizing uses modified wheel
-                if (Focused) _orbitDistance = Mathf.Clamp(_orbitDistance * (mb.ButtonIndex == MouseButton.WheelUp ? 0.88f : 1.14f), 0.05f, 30f);
-                else AdjustSpeed(mb.ButtonIndex == MouseButton.WheelUp ? 1 : -1);
+                bool zoomIn = mb.ButtonIndex == MouseButton.WheelUp;
+                float notch = mb.Factor > 0 ? mb.Factor : 1f;   // smooth-scrolling touchpads send fractional notches
+                if (Focused) _orbitDistance = Mathf.Clamp(_orbitDistance * Mathf.Pow(zoomIn ? 0.88f : 1.14f, notch), 0.05f, 30f);
+                else Zoom(zoomIn ? notch : -notch, mb.Position);
                 GetViewport().SetInputAsHandled();
                 break;
+            case InputEventKey kk when kk.Pressed && !KeyboardBlocked && (kk.Keycode is Key.Equal or Key.Plus or Key.KpAdd):
+                AdjustSpeed(1); GetViewport().SetInputAsHandled(); break;
+            case InputEventKey kk when kk.Pressed && !KeyboardBlocked && (kk.Keycode is Key.Minus or Key.KpSubtract):
+                AdjustSpeed(-1); GetViewport().SetInputAsHandled(); break;
             case InputEventMouseMotion mm when _looking:
                 float s = Mathf.DegToRad((float)Sensitivity);
                 _yaw -= mm.Relative.X * s;
@@ -123,16 +149,25 @@ public partial class CameraRig : Node3D
         }
     }
 
+    /// <summary>Q/E turn rate in radians per second.</summary>
+    public float TurnRate { get; set; } = 1.8f;
+
     public override void _Process(double delta)
     {
         float dt = (float)Math.Min(delta, 0.1);
+        // Q / E turn the camera (in focus mode they orbit the target)
+        if (!KeyboardBlocked)
+        {
+            float turn = (Input.IsKeyPressed(Key.Q) ? 1f : 0f) - (Input.IsKeyPressed(Key.E) ? 1f : 0f);
+            _yaw += turn * TurnRate * dt;
+        }
         if (Focused && _focusTarget != null)
         {
             var t = _focusTarget();
             var back = new Basis(Vector3.Up, _yaw) * new Basis(Vector3.Right, _pitch) * new Vector3(0, 0, 1);
             Position = Position.Lerp(t + back * _orbitDistance, 1 - Mathf.Exp(-dt * 10));
             ApplyRotation();
-            if (!KeyboardBlocked && MoveInput() != Vector3.Zero) Unfocus();   // any flight input returns to free-fly
+            if (!KeyboardBlocked && MoveInput() != Vector3.Zero) Unfocus();   // flight input returns to free-fly
         }
         else
         {
@@ -143,10 +178,11 @@ public partial class CameraRig : Node3D
                 if (move != Vector3.Zero)
                 {
                     float spd = (float)Speed * (Input.IsKeyPressed(Key.Shift) ? 4f : 1f) * (Input.IsKeyPressed(Key.Alt) ? 0.2f : 1f);
-                    var basis = GlobalTransform.Basis;
-                    var world = basis * new Vector3(move.X, 0, move.Z);
-                    world.Y += move.Y;
-                    Position += world.Normalized() * spd * dt;
+                    // level flight: W/A/S/D move in the horizontal plane whatever the pitch, Space/Ctrl move vertically,
+                    // so looking down while moving no longer dives the camera into the ground
+                    var yawOnly = new Basis(Vector3.Up, _yaw);
+                    var dir = yawOnly * new Vector3(move.X, 0, move.Z) + new Vector3(0, move.Y, 0);
+                    Position += dir.Normalized() * spd * dt;
                 }
             }
         }
@@ -160,8 +196,8 @@ public partial class CameraRig : Node3D
         if (Input.IsKeyPressed(Key.S)) v.Z += 1;
         if (Input.IsKeyPressed(Key.A)) v.X -= 1;
         if (Input.IsKeyPressed(Key.D)) v.X += 1;
-        if (Input.IsKeyPressed(Key.E) || Input.IsKeyPressed(Key.Space)) v.Y += 1;
-        if (Input.IsKeyPressed(Key.Q) || Input.IsKeyPressed(Key.Ctrl)) v.Y -= 1;
+        if (Input.IsKeyPressed(Key.Space)) v.Y += 1;
+        if (Input.IsKeyPressed(Key.Ctrl)) v.Y -= 1;
         return v;
     }
 

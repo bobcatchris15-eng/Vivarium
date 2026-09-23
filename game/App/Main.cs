@@ -41,8 +41,8 @@ public partial class Main : Node3D
         if (ArgAfter("--licenses") is { } licFile) { WriteLicenses(licFile); GetTree().Quit(0); return; }
 
         var settings = UserSettings.Load();
-        string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test");
-        if (testDir != null) { settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
+        string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test");
+        if (testDir != null) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
 
         Session = new GameSession { Name = "Session" };
         AddChild(Session);
@@ -50,7 +50,7 @@ public partial class Main : Node3D
 
         if (testDir != null)
         {
-            var mode = UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : SmokeRunner.Mode.Render;
+            var mode = UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : SmokeRunner.Mode.Render;
             var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode };
             AddChild(runner);
             if (mode != SmokeRunner.Mode.Reload) Session.StartWorld(Session.CreateWorld(content.PresetOrThrow("default")));

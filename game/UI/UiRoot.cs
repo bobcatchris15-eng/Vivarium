@@ -205,7 +205,7 @@ public partial class UiRoot : Control
         if (Session.Autosave?.Busy == true) autosave = " · autosaving…";
         double backlog = w.Scheduler.Backlog;
         string lag = backlog > 600 ? $" · catching up {backlog / 60:0} min" : "";
-        _status.Text = $"{w.Flora.Count} flora · {w.Fauna.Count} fauna · {Engine.GetFramesPerSecond()} fps{autosave}{lag}";
+        _status.Text = $"{w.Flora.Count} flora · {w.Fauna.Count} fauna · fly {Session.CameraRig.Speed:0.0#} m/s · {Engine.GetFramesPerSecond()} fps{autosave}{lag}";
     }
 
     private void RefreshProbe()
