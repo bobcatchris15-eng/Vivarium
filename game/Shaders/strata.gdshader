@@ -6,8 +6,9 @@ render_mode diffuse_burley;
 
 uniform float grain_strength = 0.35;
 uniform float banding_strength = 0.3;
-uniform vec3 rim_color : source_color = vec3(0.22, 0.30, 0.12);
+uniform vec3 rim_color = vec3(0.22, 0.30, 0.12);
 
+vec3 srgb_to_linear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -17,7 +18,7 @@ float vnoise(vec2 p) {
 
 void fragment() {
     float along = UV.x, depth = UV.y, layer = UV2.x, inLayer = UV2.y;
-    vec3 col = COLOR.rgb;
+    vec3 col = srgb_to_linear(COLOR.rgb);   // content colours are sRGB
     // speckle / pebbles scale with layer index (coarser deeper down)
     float g = hash(floor(vec2(along, depth) * (90.0 - layer * 15.0)));
     float pebble = step(0.93 - layer * 0.03, vnoise(vec2(along, depth) * (14.0 + layer * 6.0)));
@@ -29,9 +30,10 @@ void fragment() {
     // darker line at each layer's top edge
     col *= mix(0.72, 1.0, smoothstep(0.0, 0.025, depth - 0.0) * smoothstep(0.0, 0.03, inLayer + step(0.5, layer) * 0.0 + (layer < 0.5 ? 1.0 : 0.0) * 1.0) );
     // living root mat right under the surface
-    col = mix(rim_color, col, smoothstep(0.0, 0.05, depth));
+    col = mix(srgb_to_linear(rim_color), col, smoothstep(0.0, 0.05, depth));
     // bottom face (normal pointing down) shades darker
     ALBEDO = col;
+    EMISSION = col * 0.12;   // keeps shaded cut faces legible as a deliberate specimen section
     ROUGHNESS = 0.95;
     SPECULAR = 0.2;
 }

@@ -6,6 +6,8 @@ render_mode diffuse_burley, cull_disabled;
 uniform float sway = 1.0;
 uniform float stiffness = 1.0;
 varying vec4 inst;
+vec3 srgb_to_linear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
+
 
 void vertex() {
     inst = INSTANCE_CUSTOM;
@@ -17,7 +19,7 @@ void vertex() {
 }
 
 void fragment() {
-    vec3 c = COLOR.rgb * (1.0 + (inst.x - 0.5) * 0.3);
+    vec3 c = srgb_to_linear(COLOR.rgb) * (1.0 + (inst.x - 0.5) * 0.3);
     float health = clamp(inst.y, 0.0, 1.0);
     vec3 faded = mix(vec3(dot(c, vec3(0.33))), vec3(0.62, 0.55, 0.32), 0.5);
     ALBEDO = mix(faded, c, 0.35 + 0.65 * health);

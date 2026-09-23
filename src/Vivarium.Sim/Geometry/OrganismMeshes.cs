@@ -22,15 +22,22 @@ public static class OrganismMeshes
         switch (sp.Shape)
         {
             case "carpet":
-                for (int k = 0; k < 46; k++)
+            {
+                // low mat plus many small tapered fronds: reads as moss up close, as a soft patch from afar
+                var matCol = Primitives.Scale(c1, 0.7);
+                Primitives.Ellipsoid(m, new Vec3(0, 0.05, 0), new Vec3(1.0, 0.25, 1.0), 4, 12, (a, b) => (matCol, 1, a, b, 0, 0));
+                for (int k = 0; k < 70; k++)
                 {
-                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.95;
-                    double s = rng.Range(0.14, 0.26) * (1.1 - r * 0.4);
-                    var col = Primitives.Mix(c1, c2, rng.NextDouble());
-                    Primitives.Ellipsoid(m, new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r), new Vec3(s, rng.Range(0.5, 1.0), s), 4, 6,
-                        (a, b) => (Primitives.Scale(col, 0.8 + 0.3 * (1 - a)), 1, a, b, 0, 0));
+                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.92;
+                    var baseP = new Vec3(Math.Cos(ang) * r, 0.1, Math.Sin(ang) * r);
+                    double h = rng.Range(0.5, 1.0) * (1.05 - r * 0.35);
+                    var lean = new Vec3(rng.Range(-0.12, 0.12), 0, rng.Range(-0.12, 0.12));
+                    var tipCol = Primitives.Mix(c1, c2, rng.Range(0.4, 1.0));
+                    Primitives.Tube(m, new[] { baseP, baseP + lean * 0.5 + new Vec3(0, h * 0.55, 0), baseP + lean + new Vec3(0, h, 0) },
+                        new[] { 0.05, 0.035, 0.008 }, 4, (i, v) => (Primitives.Mix(Primitives.Scale(c1, 0.75), tipCol, i / 2.0), 1, i, v, 0, 0));
                 }
                 break;
+            }
             case "cushion":
             {
                 var (v, t) = Primitives.Icosphere(2);

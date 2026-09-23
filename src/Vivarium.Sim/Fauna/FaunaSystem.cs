@@ -436,6 +436,8 @@ public sealed class FaunaSystem
             Id = id, SpeciesId = sp.Id, X = pos.X, Z = pos.Z, Heading = rng.Range(-Math.PI, Math.PI), Pitch = rng.Range(0.2, 0.8),
             Age = age, Energy = sp.InitialEnergy, Stage = age >= sp.MaturityAge ? FaunaLifeStage.Adult : FaunaLifeStage.Juvenile,
             LifespanFactor = 1 + (rng.NextDouble() * 2 - 1) * sp.LifespanVariance, GenomeId = gid,
+            // stagger breeding so a founding group does not all reproduce on the same tick
+            ReproCooldownUntil = _w.Clock.SimSeconds + rng.Range(0.3, 1.0) * sp.ReproCooldown,
         };
         f.Y = RestingY(sp, pos, f.Pitch);
         _w.Fauna.Add(f);

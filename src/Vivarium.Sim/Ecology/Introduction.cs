@@ -82,6 +82,7 @@ public static class Populate
                 if (!w.FloraSystem.CanEstablish(sp, q, out _)) continue;
                 var f = w.FloraSystem.Establish(sp, q, "starter", sp.MaxBiomass * rng.Range(0.3, 0.8));
                 f.Age = rng.Range(0.3, 0.9) * sp.Lifespan * 0.6;
+                f.LastSpreadAge = f.Age - rng.Range(0, 1) * sp.SpreadInterval;   // staggered first spread
                 placed++;
             }
             if (placed < entry.Count) Log.Warn(LogCategory.Ecology, $"Placed {placed}/{entry.Count} starter {sp.Name} (limited suitable habitat).");
