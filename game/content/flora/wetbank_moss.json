@@ -1,0 +1,82 @@
+{
+  "id": "wetbank_moss",
+  "name": "Bank Moss",
+  "archetype": "moss",
+  "role": "Saturation specialist of stream banks and pond margins.",
+  "description": "A glossy emerald moss that needs near-saturated ground; tolerates splash but not submersion.",
+  "habitat": {
+    "substrates": {
+      "soil": 1.0,
+      "rock": 0.8,
+      "wood": 0.6,
+      "gravel": 0.5
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.95,
+      "tolerance": 0.12
+    },
+    "light": {
+      "optimum": 0.5,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.35,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.012,
+    "hardMinMoisture": 0.55,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.4,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.35,
+    "maturityDays": 5,
+    "lifespanDays": 120,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.28,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 3,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.5,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0.0,
+  "visual": {
+    "shape": "carpet",
+    "color": [
+      0.12,
+      0.6,
+      0.34
+    ],
+    "color2": [
+      0.2,
+      0.8,
+      0.45
+    ],
+    "colorVariance": 0.05,
+    "height": 0.03
+  },
+  "tags": [
+    "moss",
+    "riparian"
+  ]
+}

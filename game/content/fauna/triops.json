@@ -1,0 +1,99 @@
+{
+  "id": "triops",
+  "name": "Triops",
+  "medium": "aquatic",
+  "role": "Fast-living shallow-water forager; boom-and-bust detritivore.",
+  "description": "Shield-backed 'tadpole shrimp' of shallow pools: short lives, rapid asexual breeding, voracious foraging.",
+  "habitat": {
+    "moisture": {
+      "optimum": 1.0,
+      "tolerance": 0.5
+    },
+    "substrates": {
+      "soil": 1.0,
+      "gravel": 1.0,
+      "rock": 0.6,
+      "wood": 0.5,
+      "water": 1.0
+    },
+    "minWaterDepth": 0.015,
+    "maxWaterDepth": 0.6,
+    "minSuitability": 0.1
+  },
+  "movement": {
+    "speedPerHour": 1.8,
+    "turnRatePerMinute": 1.6,
+    "wander": 0.6,
+    "habitatSeek": 0.7,
+    "senseRadius": 0.35
+  },
+  "diet": [
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.006,
+      "efficiency": 6
+    },
+    {
+      "resource": "biofilm",
+      "ratePerHour": 0.004,
+      "efficiency": 6
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.02,
+    "maxEnergy": 1.0,
+    "initialEnergy": 0.7,
+    "hungerThreshold": 0.85,
+    "wasteFraction": 0.35
+  },
+  "lifecycle": {
+    "maturityDays": 5,
+    "lifespanDays": 28,
+    "lifespanVariance": 0.2,
+    "dailyMortality": 0.01
+  },
+  "reproduction": {
+    "mode": "asexual",
+    "minEnergy": 0.6,
+    "cost": 0.3,
+    "clutchMin": 2,
+    "clutchMax": 4,
+    "cooldownDays": 3,
+    "mateRadius": 0,
+    "offspringEnergy": 0.5,
+    "maxLocalDensity": 8,
+    "populationCap": 60
+  },
+  "body": {
+    "sizeMin": 0.012,
+    "sizeMax": 0.03,
+    "visualScale": 1.2,
+    "massAtMid": 0.03,
+    "detritusOnDeath": 1.0
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "pattern_strength",
+      "hue_shift",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.14,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "triops",
+    "baseColor": [
+      0.58,
+      0.64,
+      0.36
+    ],
+    "ornamentColor": [
+      0.22,
+      0.26,
+      0.16
+    ]
+  },
+  "behaviors": []
+}

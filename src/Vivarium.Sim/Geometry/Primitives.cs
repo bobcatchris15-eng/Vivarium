@@ -1,0 +1,129 @@
+using Vivarium.Sim.Core;
+
+namespace Vivarium.Sim.Geometry;
+
+/// <summary>Procedural building blocks. Winding follows Godot (right-hand normal points into the surface).</summary>
+public static class Primitives
+{
+    /// <summary>Subdivided icosahedron (unit radius). Returns positions and triangle indices.</summary>
+    public static (List<Vec3> Verts, List<int> Tris) Icosphere(int subdivisions)
+    {
+        double t = (1 + Math.Sqrt(5)) / 2;
+        var v = new List<Vec3>
+        {
+            new(-1, t, 0), new(1, t, 0), new(-1, -t, 0), new(1, -t, 0),
+            new(0, -1, t), new(0, 1, t), new(0, -1, -t), new(0, 1, -t),
+            new(t, 0, -1), new(t, 0, 1), new(-t, 0, -1), new(-t, 0, 1),
+        };
+        for (int i = 0; i < v.Count; i++) v[i] = v[i].Normalized();
+        var f = new List<int>
+        {
+            0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8,
+            3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1,
+        };
+        for (int s = 0; s < subdivisions; s++)
+        {
+            var cache = new Dictionary<long, int>();
+            int Mid(int a, int b)
+            {
+                long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+                if (cache.TryGetValue(key, out int m)) return m;
+                v.Add(((v[a] + v[b]) / 2).Normalized());
+                return cache[key] = v.Count - 1;
+            }
+            var nf = new List<int>(f.Count * 4);
+            for (int i = 0; i < f.Count; i += 3)
+            {
+                int a = f[i], b = f[i + 1], c = f[i + 2];
+                int ab = Mid(a, b), bc = Mid(b, c), ca = Mid(c, a);
+                nf.AddRange(new[] { a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca });
+            }
+            f = nf;
+        }
+        // the base icosahedron list above is CCW-outward (OpenGL); flip for Godot
+        for (int i = 0; i < f.Count; i += 3) (f[i + 1], f[i + 2]) = (f[i + 2], f[i + 1]);
+        return (v, f);
+    }
+
+    /// <summary>Adds an ellipsoid (optionally rotated about Z by pitch) with per-vertex colour/uv callback.</summary>
+    public static void Ellipsoid(MeshData m, Vec3 centre, Vec3 radii, int rings, int segments,
+        Func<double, double, (double[] Col, double A, double U, double V, double U2, double V2)> attr, double pitch = 0)
+    {
+        int start = m.VertexCount;
+        double cp = Math.Cos(pitch), sp = Math.Sin(pitch);
+        for (int r = 0; r <= rings; r++)
+        {
+            double phi = Math.PI * r / rings;             // 0 = +X tip (front), π = -X tip
+            for (int s = 0; s <= segments; s++)
+            {
+                double th = 2 * Math.PI * s / segments;
+                var local = new Vec3(Math.Cos(phi) * radii.X, Math.Sin(phi) * Math.Cos(th) * radii.Y, Math.Sin(phi) * Math.Sin(th) * radii.Z);
+                var n = new Vec3(Math.Cos(phi) / radii.X, Math.Sin(phi) * Math.Cos(th) / radii.Y, Math.Sin(phi) * Math.Sin(th) / radii.Z).Normalized();
+                var rp = new Vec3(local.X * cp - local.Y * sp, local.X * sp + local.Y * cp, local.Z);
+                var rn = new Vec3(n.X * cp - n.Y * sp, n.X * sp + n.Y * cp, n.Z);
+                var a = attr((double)r / rings, (double)s / segments);
+                m.AddVertex(centre + rp, rn, a.Col, a.A, a.U, a.V, a.U2, a.V2);
+            }
+        }
+        for (int r = 0; r < rings; r++)
+            for (int s = 0; s < segments; s++)
+            {
+                int a = start + r * (segments + 1) + s, b = a + segments + 1;
+                m.AddTriangle(a, a + 1, b);
+                m.AddTriangle(a + 1, b + 1, b);
+            }
+    }
+
+    /// <summary>Tapered tube through a polyline (closed ring of radius r[i] at each point).</summary>
+    public static void Tube(MeshData m, IReadOnlyList<Vec3> path, IReadOnlyList<double> radius, int segments,
+        Func<int, double, (double[] Col, double A, double U, double V, double U2, double V2)> attr, Vec3? upHint = null)
+    {
+        int start = m.VertexCount;
+        var up = upHint ?? Vec3.Up;
+        for (int i = 0; i < path.Count; i++)
+        {
+            var dir = (i < path.Count - 1 ? path[i + 1] - path[i] : path[i] - path[i - 1]).Normalized();
+            var side = dir.Cross(up); if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
+            side = side.Normalized();
+            var up2 = side.Cross(dir).Normalized();
+            for (int s = 0; s <= segments; s++)
+            {
+                double th = 2 * Math.PI * s / segments;
+                var n = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
+                var a = attr(i, (double)s / segments);
+                m.AddVertex(path[i] + n * radius[i], n, a.Col, a.A, a.U, a.V, a.U2, a.V2);
+            }
+        }
+        for (int i = 0; i < path.Count - 1; i++)
+            for (int s = 0; s < segments; s++)
+            {
+                int a = start + i * (segments + 1) + s, b = a + segments + 1;
+                m.AddTriangle(a, a + 1, b);
+                m.AddTriangle(a + 1, b + 1, b);
+            }
+    }
+
+    /// <summary>Double-sided flat polygon (fan) — for leaves, fins, lichen lobes.</summary>
+    public static void Fan(MeshData m, Vec3 centre, IReadOnlyList<Vec3> rim, Vec3 normal, double[] colCentre, double[] colRim,
+        double a = 1, double u2 = 0, Func<Vec3, Vec3>? appendageOffset = null)
+    {
+        for (int side = 0; side < 2; side++)
+        {
+            var n = side == 0 ? normal : -normal;
+            int c = m.AddVertex(centre, n, colCentre, a, 0.5, 0.5, u2, 0);
+            var ids = new int[rim.Count];
+            for (int i = 0; i < rim.Count; i++) ids[i] = m.AddVertex(rim[i], n, colRim, a, (double)i / rim.Count, 1, u2, 0);
+            for (int i = 0; i < rim.Count - 1; i++) TriangleFacing(m, c, ids[i], ids[i + 1], n);
+        }
+    }
+
+    /// <summary>Adds a triangle wound so it is front-facing for a viewer on the side of <paramref name="visibleNormal"/>.</summary>
+    public static void TriangleFacing(MeshData m, int a, int b, int c, Vec3 visibleNormal)
+    {
+        var rh = (m.Position(b) - m.Position(a)).Cross(m.Position(c) - m.Position(a));
+        if (rh.Dot(visibleNormal) < 0) m.AddTriangle(a, b, c); else m.AddTriangle(a, c, b);
+    }
+
+    public static double[] Mix(double[] a, double[] b, double t) => new[] { a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t };
+    public static double[] Scale(double[] a, double s) => new[] { MathD.Clamp01(a[0] * s), MathD.Clamp01(a[1] * s), MathD.Clamp01(a[2] * s) };
+}

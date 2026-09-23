@@ -1,0 +1,39 @@
+; Engine configuration file.
+; Version fields are stamped from src/Vivarium.Sim/Core/AppVersion.cs by scripts/export.ps1 (and checked by the Bootstrap tests).
+
+config_version=5
+
+[application]
+
+config/name="Vivarium"
+config/description="Digital Desktop Vivarium"
+config/version="0.1.0"
+run/main_scene="res://Main.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="Vivarium"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.06, 0.09, 0.12, 1)
+boot_splash/show_image=false
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/aspect="expand"
+window/energy_saving/keep_screen_on=false
+
+[dotnet]
+
+project/assembly_name="Vivarium"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=1
+environment/defaults/default_clear_color=Color(0.55, 0.72, 0.86, 1)
+lights_and_shadows/directional_shadow/size=4096
+textures/canvas_textures/default_texture_filter=1

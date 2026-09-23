@@ -1,0 +1,9 @@
+{
+  "nutrients": { "amount": 0.6, "radius": 0.5, "minRadius": 0.15, "maxRadius": 1.5 },
+  "poke": { "radius": 0.3, "strength": 1.0, "disturbMinutes": 40 },
+  "grab": { "holdHeight": 0.25 },
+  "rock": { "minScale": 0.12, "maxScale": 0.8, "minSpacing": 0.1 },
+  "log": { "minLength": 0.6, "maxLength": 2.8, "minRadius": 0.07, "maxRadius": 0.3 },
+  "gravel": { "minRadius": 0.25, "maxRadius": 1.5 },
+  "introduce": { "faunaCount": 4 }
+}

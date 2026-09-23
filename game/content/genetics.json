@@ -1,0 +1,12 @@
+{
+  "_comment": "mutationProbability is the chance that an offspring undergoes ONE mutation event (see Genetics.Inheritance).",
+  "mutationProbability": 0.10,
+  "traits": [
+    { "id": "size", "name": "Body size", "default": 0.5, "min": 0, "max": 1, "simulationRelevant": true, "description": "Maps linearly to the species' body size range; larger bodies move faster but burn more energy." },
+    { "id": "ornament_density", "name": "Marking density", "default": 0.4, "min": 0, "max": 1, "description": "How many spots or bands the body carries." },
+    { "id": "hue_shift", "name": "Hue shift", "default": 0.5, "min": 0, "max": 1, "description": "Shifts the body colour around the colour wheel (0.5 = species typical)." },
+    { "id": "pattern_strength", "name": "Pattern contrast", "default": 0.5, "min": 0, "max": 1, "description": "Contrast between base colour and markings." },
+    { "id": "appendage_length", "name": "Appendage length", "default": 0.5, "min": 0, "max": 1, "description": "Relative length of antennae, tail or fins." },
+    { "id": "metabolic_efficiency", "name": "Metabolic efficiency", "default": 0.5, "min": 0, "max": 1, "simulationRelevant": true, "description": "Higher values lower basal energy use (±15 %)." }
+  ]
+}

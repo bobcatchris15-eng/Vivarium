@@ -1,0 +1,1792 @@
+# Digital Desktop Vivarium
+
+## StatefulClanker execution / stress-test plan
+
+SCPLAN 1
+
+plan vivarium-first-draft
+summary Build a complete first-draft Digital Desktop Vivarium as a native standalone offline-capable Windows application. This is not a prototype. Implement the complete agreed feature families, initial content libraries, persistence, packaging, deterministic simulation, diagnostics, and acceptance coverage.
+intent VIVARIUM-FIRST-DRAFT
+
+task t-001
+size small
+title [FOUNDATION] Materialize authoritative product contract
+instruction Create docs/product/vivarium-contract.md containing the complete immutable product requirements used by downstream workers.
+accept Contract explicitly states standalone Windows desktop application, offline operation, persistent world, versioned saves, 10–20m regular-hexagonal floating island, geological cross-section sides, free-fly above/underwater camera, roughly one wall-clock hour per in-game week, non-loseable design, terrain dressing, hydrology, flora, microfauna, genetics, tools, and vibrant sanitized realism.
+accept Contract explicitly states first draft rather than prototype and forbids silently removing feature families for expedience.
+end
+
+task t-002
+size small
+title [FOUNDATION] Select engine and language
+depends t-001
+retrieve docs/product/vivarium-contract.md
+instruction Produce a technical ADR selecting the engine, language, renderer/backend, and automated test mechanism. Evaluate suitability for Windows packaging, procedural 3D, shaders, simulation, headless verification, offline operation, and cold-worker editability.
+accept ADR records chosen stack, exact supported version, rationale, rejected alternatives, build command, test command, and export command.
+end
+
+task t-003
+size small
+title [FOUNDATION] Define subsystem architecture
+depends t-002
+retrieve docs/product/vivarium-contract.md
+retrieve docs/architecture/**
+instruction Define module boundaries for application shell, generation, clock/scheduler, environment fields, hydrology, flora, fauna, genetics, ecology, interaction tools, UI, rendering, persistence, diagnostics, and packaging.
+accept Architecture document identifies ownership and data-flow between every subsystem without making rendering state authoritative simulation state.
+end
+
+task t-004
+size tiny
+title [FOUNDATION] Create repository skeleton
+depends t-002
+retrieve docs/architecture/**
+instruction Create stack-appropriate project structure for source, tests, content/data, generated assets, scripts, documentation, and saves/test fixtures.
+accept Fresh checkout contains all required directories and engine/project metadata and can be opened without missing-path errors.
+end
+
+task t-005
+size small
+title [FOUNDATION] Create deterministic verification runner
+depends t-004
+retrieve docs/architecture/**
+instruction Add scripts/verify.ps1 or equivalent PowerShell entrypoint wrapping the chosen engine/test runner and allowing named suite selection.
+accept Verification runner exits zero on passing tests, nonzero on failure, works from repository root, and supports targeted and all-suite execution.
+end
+
+task t-006
+size tiny
+title [FOUNDATION] Add application version service
+depends t-004
+instruction Create one canonical application/save-schema version source usable by runtime, saves, diagnostics, and packaging.
+accept Runtime can report application version and save schema version without duplicated hard-coded values.
+end
+
+task t-007
+size small
+title [FOUNDATION] Implement structured logging
+depends t-004
+instruction Implement categorized runtime logging with severity, timestamps, subsystem category, and Windows-writable log location.
+accept Startup, shutdown, save/load failure, content validation failure, and simulation fatal errors can be recorded without crashing the logger.
+end
+
+task t-008
+size small
+title [FOUNDATION] Implement deterministic seeded random service
+depends t-004
+instruction Implement project-wide deterministic PRNG streams derived from world seed plus named subsystem stream.
+accept Identical seed and stream name reproduce identical sequences; unrelated subsystem consumption cannot perturb another named stream.
+end
+
+task t-009
+size small
+title [FOUNDATION] Implement stable entity identifiers
+depends t-004
+instruction Implement persistent IDs for terrain props, organisms, genomes/lineages where needed, and save-referenced entities.
+accept IDs remain stable across save/load and cannot collide during a deterministic test creating at least 10000 entities.
+end
+
+task t-010
+size small
+title [FOUNDATION] Implement validated data-definition loader
+depends t-004
+instruction Implement loading and schema validation for data-driven species, materials, habitat rules, world presets, and tool configuration.
+accept Invalid definitions fail with actionable diagnostics naming file and invalid field; valid definitions load deterministically.
+end
+
+task t-011
+size tiny
+title [FOUNDATION] Add automated application boot test
+depends t-005
+depends t-006
+depends t-007
+depends t-008
+depends t-010
+instruction Add test that initializes application services in noninteractive/headless mode and shuts them down cleanly.
+accept Verification runner can execute bootstrap suite from a fresh checkout with zero unexpected errors.
+end
+
+task t-012
+size tiny
+title [FOUNDATION] Diagnose bootstrap completeness
+depends t-011
+output-kind diagnosis
+retrieve docs/product/**
+retrieve docs/architecture/**
+retrieve scripts/**
+instruction Inspect and execute the bootstrap path without changing repository state. Report missing requirements, warnings, nondeterministic initialization, or hidden machine dependencies.
+accept Diagnosis identifies no blocking defect or explicitly identifies the blocking evidence for downstream replanning.
+end
+
+task t-013
+size small
+title [WORLD] Define regular hexagonal world-domain math
+depends t-003
+depends t-008
+instruction Implement canonical coordinate/domain queries for a configurable 10–20m regular hexagon.
+accept Tests correctly classify interior, edge, corner, and exterior points and expose nearest boundary position and boundary normal.
+end
+
+task t-014
+size small
+title [WORLD] Define seeded world-generation descriptor
+depends t-013
+depends t-010
+instruction Define serializable world generation parameters including seed, island diameter, terrain profile, water configuration, and placement profiles.
+accept Same descriptor round-trips without loss and is sufficient to reconstruct procedural baseline state.
+end
+
+task t-015
+size small
+title [WORLD] Generate deterministic terrain heightfield
+depends t-014
+instruction Generate organic terrain elevation from seed while respecting regular-hex world bounds.
+accept Same seed produces identical sampled heights; terrain contains useful relief without leaving configured vertical limits.
+end
+
+task t-016
+size small
+title [WORLD] Generate clipped top-surface mesh
+depends t-015
+instruction Convert generated terrain into renderable top geometry clipped exactly to the regular hexagonal boundary.
+accept No top-surface triangles extend outside the canonical domain beyond numeric tolerance.
+end
+
+task t-017
+size small
+title [WORLD] Generate vertical geological side walls
+depends t-016
+instruction Generate clean vertical boundary faces from terrain edge to island bottom so the floating island visibly presents a soil-sample cross section.
+accept Complete six-sided wall has no visible gaps or inverted faces and follows terrain edge continuously.
+end
+
+task t-018
+size small
+title [WORLD] Define geological layer model
+depends t-017
+depends t-010
+instruction Add configurable simplified soil strata with deliberately readable thickness and contrast.
+accept Side wall can query and render at least topsoil, subsoil, and base material layers from data rather than hard-coded shader coordinates.
+end
+
+task t-019
+size small
+title [WORLD] Implement terrain collision/query surface
+depends t-016
+instruction Provide simulation/tool queries for surface elevation, normal, substrate location, and interaction ray hits.
+accept Tests compare collision/query heights against generated terrain at representative samples.
+end
+
+task t-020
+size small
+title [WORLD] Define terrain substrate map
+depends t-015
+depends t-010
+instruction Implement substrate classification independent from visible material, supporting soil, gravel, rock, wood-associated surface, and water-covered ground.
+accept Arbitrary world positions return deterministic substrate identifiers used by habitat rules.
+end
+
+task t-021
+size tiny
+title [WORLD] Define rock prop data model
+depends t-010
+depends t-019
+instruction Define persistent rock instance data including transform, seed/variant, footprint, and substrate effect.
+accept Rock definitions serialize and can be reconstructed independently of render objects.
+end
+
+task t-022
+size small
+title [WORLD] Implement procedural rock visual variants
+depends t-021
+instruction Produce multiple seed-driven naturalistic rock forms suitable for the sanitized-realistic art direction.
+accept At least eight deterministic visual variants are obtainable without eight hand-authored simulation definitions.
+end
+
+task t-023
+size tiny
+title [WORLD] Define fallen-log prop data model
+depends t-010
+depends t-019
+instruction Define persistent log instance data including transform, size, decay class, and habitat tags.
+accept Logs expose habitat/substrate tags independently from visual mesh.
+end
+
+task t-024
+size small
+title [WORLD] Implement fallen-log visual variants
+depends t-023
+instruction Produce seed-driven log visuals including bark/decay variation.
+accept At least six visually distinct deterministic variants are available and remain recognizable as logs at normal camera distance.
+end
+
+task t-025
+size tiny
+title [WORLD] Define gravel patch model
+depends t-020
+instruction Define persistent gravel patches modifying substrate classification inside their footprint.
+accept Gravel footprint updates substrate queries while retaining underlying terrain elevation.
+end
+
+task t-026
+size small
+title [WORLD] Implement gravel patch visuals
+depends t-025
+instruction Render gravel patches with sufficient small-scale variation to read clearly without requiring simulation entities per pebble.
+accept Gravel remains visibly distinct from soil across normal viewing heights and does not require thousands of simulation objects.
+end
+
+task t-027
+size small
+title [WORLD] Implement seeded environmental prop placement
+depends t-021
+depends t-023
+depends t-025
+depends t-014
+instruction Generate rocks, logs, and gravel patches from world seed and placement profile.
+accept Same seed/profile produces identical prop transforms and counts.
+end
+
+task t-028
+size small
+title [WORLD] Implement runtime prop placement/removal API
+depends t-021
+depends t-023
+depends t-025
+instruction Provide authoritative API used later by player tools to place, move, and remove terrain props.
+accept API validates bounds and placement and updates spatial/substrate queries immediately.
+end
+
+task t-029
+size small
+title [WORLD] Add world-generation deterministic tests
+depends t-018
+depends t-020
+depends t-027
+instruction Test seeded terrain, boundaries, strata, substrates, and props using fixed fixtures.
+accept Repeated generation of fixture seeds produces identical deterministic digests of authoritative world state.
+end
+
+task t-030
+size small
+title [CAMERA] Implement free-fly camera
+depends t-004
+depends t-019
+instruction Implement mouse/keyboard free-flight suitable for inspecting the island from any angle.
+accept Camera can translate vertically/horizontally and rotate freely without requiring a player avatar.
+end
+
+task t-031
+size tiny
+title [CAMERA] Add adjustable camera movement speed
+depends t-030
+instruction Add smooth user-adjustable movement speed covering close microfauna inspection and rapid island traversal.
+accept Speed adjustment is continuous or stepped, persistent in settings, and never reaches unusable zero/negative values.
+end
+
+task t-032
+size small
+title [CAMERA] Implement focus/orbit selected target
+depends t-030
+instruction Allow camera to focus and optionally orbit a selected organism or world point without replacing free-fly mode.
+accept User can enter and exit focus without losing a valid camera orientation.
+end
+
+task t-033
+size tiny
+title [CAMERA] Detect camera water-medium transition
+depends t-030
+instruction Expose authoritative above-water/underwater state based on camera position against water surface.
+accept Transition triggers once per crossing and remains stable near surface within configured hysteresis.
+end
+
+task t-034
+size small
+title [RENDER] Establish vibrant sanitized baseline lighting
+depends t-002
+depends t-016
+instruction Configure renderer, exposure, environment, shadows, and tone mapping for realistic geometry with intentionally clean vibrant presentation.
+accept Baseline scene preserves readable soil, vegetation, water, and organism color without crushed shadows or uncontrolled clipping.
+end
+
+task t-035
+size small
+title [RENDER] Implement underwater visual treatment
+depends t-033
+instruction Add subtle underwater visual differences while keeping water intentionally clear and useful for inspection.
+accept Camera crossing water surface visibly changes medium treatment without obscuring close fauna.
+end
+
+task t-036
+size small
+title [RENDER] Implement island-edge cutaway presentation
+depends t-017
+instruction Ensure regular geometric boundary and cross-section remain visually deliberate rather than looking like missing geometry.
+accept All six faces read as clean specimen cut surfaces from typical exterior views.
+end
+
+task t-037
+size tiny
+title [RENDER] Add selectable quality tier settings
+depends t-034
+instruction Add at least low, medium, high rendering presets without affecting authoritative simulation.
+accept Changing quality modifies render cost/features but not deterministic simulation digest.
+end
+
+task t-038
+size tiny
+title [CAMERA] Add camera/render automated smoke scene
+depends t-031
+depends t-034
+depends t-035
+depends t-036
+instruction Add noninteractive test scene or scripted run validating camera initialization and render resources.
+accept Camera/render suite initializes and tears down with no missing resources or fatal shader/material errors.
+end
+
+task t-039
+size small
+title [TIME] Implement authoritative simulation clock
+depends t-003
+instruction Implement wall-time to simulation-time conversion with default rate approximately one real hour to one in-game week.
+accept Default configured scale equals approximately 168 simulated hours per real hour and is represented explicitly rather than scattered constants.
+end
+
+task t-040
+size tiny
+title [TIME] Implement pause control
+depends t-039
+instruction Add simulation pause independent from rendering/UI responsiveness.
+accept Paused simulation advances zero authoritative simulation time while camera and UI remain responsive.
+end
+
+task t-041
+size tiny
+title [TIME] Implement simulation speed controls
+depends t-039
+instruction Add bounded user-selectable speed multipliers around the default rate.
+accept Speed changes preserve monotonic time and do not require restarting world.
+end
+
+task t-042
+size small
+title [TIME] Implement fixed-step subsystem scheduler
+depends t-039
+instruction Schedule simulation systems using deterministic fixed or explicitly quantized timesteps rather than render-frame deltas.
+accept Running same duration with different render frame sequences produces identical authoritative test state.
+end
+
+task t-043
+size small
+title [TIME] Implement subsystem tick-rate registration
+depends t-042
+instruction Allow expensive ecology systems to register differing update cadences while sharing authoritative clock.
+accept Tick order and cadence are deterministic and inspectable.
+end
+
+task t-044
+size small
+title [TIME] Implement bounded catch-up stepping
+depends t-042
+instruction Prevent long frames or restored saves from creating unbounded single-frame simulation work.
+accept Catch-up has explicit work budget and eventually converges without silently skipping authoritative time.
+end
+
+task t-045
+size small
+title [FIELD] Implement reusable scalar environment field
+depends t-013
+instruction Implement spatial field storage/interpolation over hex world domain for ecology quantities.
+accept Field supports deterministic read/write, interpolation, iteration, and serialization hooks.
+end
+
+task t-046
+size small
+title [FIELD] Implement categorical environment field
+depends t-013
+instruction Implement efficient spatial storage for categorical substrate/habitat data where interpolation is inappropriate.
+accept Query returns exact category and interoperates with world boundary rules.
+end
+
+task t-047
+size tiny
+title [FIELD] Implement light/exposure field
+depends t-045
+depends t-027
+instruction Compute a usable habitat light/exposure value including basic obstruction effects from terrain/major props.
+accept Flora can query normalized light/exposure at arbitrary valid positions.
+end
+
+task t-048
+size small
+title [FIELD] Implement soil nutrient field
+depends t-045
+instruction Add persistent nutrient quantity with bounded addition, removal, diffusion/relaxation as specified by configuration.
+accept Nutrient mass behavior is deterministic and does not produce NaN/negative invalid values.
+end
+
+task t-049
+size small
+title [FIELD] Implement soil moisture field
+depends t-045
+instruction Add persistent soil moisture quantity with bounded values and later hydrology coupling point.
+accept Moisture updates deterministically and exposes normalized habitat queries.
+end
+
+task t-050
+size tiny
+title [CORE] Diagnose deterministic scheduler and fields
+depends t-043
+depends t-048
+depends t-049
+output-kind diagnosis
+instruction Run determinism tests with multiple simulated frame patterns and report any authoritative state divergence without modifying repository.
+accept Diagnostic either confirms identical state digests or provides reproducible divergence evidence.
+end
+
+task t-051
+size small
+title [WATER] Define hydrology configuration schema
+depends t-010
+depends t-013
+instruction Define fixed water-table elevation, spring sources, flow parameters, pooling parameters, and render coupling.
+accept Configuration validates bounds and supports zero, one, or multiple spring sources.
+end
+
+task t-052
+size small
+title [WATER] Implement fixed water-table model
+depends t-049
+depends t-051
+instruction Implement canonical groundwater/water-level reference used by hydrology and habitat queries.
+accept Water-table state is deterministic, queryable, serializable, and independent from render mesh.
+end
+
+task t-053
+size tiny
+title [WATER] Implement spring source objects
+depends t-051
+instruction Implement persistent spring source positions and configurable discharge.
+accept Sources outside world bounds are rejected and valid sources contribute deterministic flow.
+end
+
+task t-054
+size small
+title [WATER] Implement shallow surface-water depth field
+depends t-045
+depends t-052
+depends t-053
+instruction Represent above-ground water depth suitable for streams and ponds without full volumetric CFD.
+accept Water depth remains nonnegative and deterministic under fixed fixture input.
+end
+
+task t-055
+size small
+title [WATER] Implement terrain-driven surface flow
+depends t-015
+depends t-054
+instruction Move surface water downhill using a stable visually useful approximation.
+accept Fixture terrain produces downhill transport and conserves/bounds water according to documented numerical policy.
+end
+
+task t-056
+size small
+title [WATER] Implement ponding/local accumulation
+depends t-055
+instruction Allow water to pool in terrain depressions instead of always draining immediately.
+accept Test basin accumulates water to a stable configured level and overflows predictably when filled.
+end
+
+task t-057
+size small
+title [WATER] Implement regular-hex boundary outflow
+depends t-055
+depends t-013
+instruction Allow surface flow to exit cleanly at geometric island boundary.
+accept No water simulation samples exist beyond domain; exiting volume is tracked rather than reflected by accident.
+end
+
+task t-058
+size small
+title [WATER] Couple hydrology to soil moisture
+depends t-049
+depends t-054
+instruction Increase local soil moisture based on adjacent/surface water and allow configurable drying away from water.
+accept Wet banks become measurably wetter than isolated dry terrain in deterministic fixture.
+end
+
+task t-059
+size small
+title [WATER] Generate water surface render geometry
+depends t-054
+depends t-056
+instruction Render connected streams/ponds from authoritative water-depth field.
+accept Render geometry follows authoritative wet cells/regions without becoming simulation authority.
+end
+
+task t-060
+size small
+title [WATER] Implement clean water cut at island boundary
+depends t-057
+depends t-059
+instruction Terminate stream/pond water at exact regular-hex specimen plane so exterior viewer can see underwater cross section.
+accept Water reaching boundary ends on geometrically clean plane with no dangling geometry outside island.
+end
+
+task t-061
+size small
+title [WATER] Implement clear-water material
+depends t-059
+depends t-034
+instruction Provide attractive clear water with surface cues while preserving visibility into aquatic habitat.
+accept Water is visibly distinct from air and wet ground yet small organisms remain inspectable through it.
+end
+
+task t-062
+size small
+title [WATER] Add water-flow visual motion
+depends t-055
+depends t-061
+instruction Drive cosmetic flow direction/speed from authoritative hydrology data.
+accept Stream visual direction agrees with sampled simulation flow and cannot feed state back into simulation.
+end
+
+task t-063
+size small
+title [WATER] Add hydrology debug overlay
+depends t-054
+depends t-055
+instruction Add optional visualization for depth, direction, spring discharge, and moisture coupling.
+accept Developer can inspect values in-world without changing them.
+end
+
+task t-064
+size small
+title [WATER] Add hydrology deterministic tests
+depends t-057
+depends t-058
+depends t-060
+instruction Add fixtures for spring, stream, pond, boundary outflow, and soil-wetting behavior.
+accept Repeated hydrology suite produces identical authoritative state digest.
+end
+
+task t-065
+size small
+title [FLORA] Define flora species schema
+depends t-010
+depends t-047
+depends t-048
+depends t-049
+instruction Define data-driven flora species requirements, growth rates, spread, substrates, moisture/light/nutrient preferences, visual phenotype references, and interaction tags.
+accept New flora species can be added without adding a new simulation class.
+end
+
+task t-066
+size small
+title [FLORA] Implement flora individual state
+depends t-009
+depends t-065
+instruction Implement persistent plant/moss/lichen individual or colony state as appropriate to common simulation API.
+accept State includes species, age/stage, position/area, health/biomass, and persistent ID.
+end
+
+task t-067
+size small
+title [FLORA] Implement flora habitat suitability query
+depends t-020
+depends t-047
+depends t-048
+depends t-049
+depends t-065
+instruction Evaluate species suitability from substrate, light, nutrients, moisture, and species-specific rules.
+accept Query returns deterministic suitability and explains hard refusal separately from low suitability.
+end
+
+task t-068
+size small
+title [FLORA] Implement growth/biomass update
+depends t-066
+depends t-067
+depends t-043
+instruction Grow or decline flora according to habitat and resources.
+accept Growth is timestep-stable within documented tolerance and remains bounded by species configuration.
+end
+
+task t-069
+size small
+title [FLORA] Implement nutrient uptake
+depends t-048
+depends t-068
+instruction Couple flora growth to nutrient-field consumption without allowing negative nutrient values.
+accept Growing fixture reduces local nutrients deterministically.
+end
+
+task t-070
+size small
+title [FLORA] Implement flora propagation
+depends t-066
+depends t-067
+depends t-008
+instruction Implement deterministic seeded local propagation/recruitment appropriate across moss, lichen, and small plant archetypes.
+accept Propagules cannot establish in hard-refusal habitat and reproduce identically from same world seed/state.
+end
+
+task t-071
+size small
+title [FLORA] Implement substrate refusal rules
+depends t-067
+instruction Support explicit species rules such as moss refusing particular log/substrate classes.
+accept Hard-refusal rule prevents establishment even when generic moisture/light suitability is high.
+end
+
+task t-072
+size small
+title [FLORA] Implement beneficial proximity rules
+depends t-067
+instruction Allow species configuration to improve suitability/growth near specified other flora or habitat features.
+accept Fixture demonstrates measurable configured synergy only within configured distance.
+end
+
+task t-073
+size small
+title [FLORA] Implement flora competition
+depends t-068
+instruction Add local crowding/resource competition without requiring bespoke pairwise code for every species.
+accept Overcrowded fixture reduces growth or recruitment according to configured competition rule.
+end
+
+task t-074
+size small
+title [FLORA] Implement flora death and litter
+depends t-068
+depends t-048
+instruction Convert dead/failed flora into configurable litter/nutrient return rather than simply deleting ecological effect.
+accept Death removes active flora state and yields deterministic configured return to environment.
+end
+
+task t-075
+size small
+title [FLORA] Implement flora render-instance abstraction
+depends t-066
+instruction Render flora separately from authoritative state with batching/instancing where appropriate.
+accept Visible representation can be destroyed/rebuilt without changing simulation state.
+end
+
+task t-076
+size small
+title [FLORA] Implement flora age/growth visual scaling
+depends t-068
+depends t-075
+instruction Visually reflect growth stage/biomass while retaining species identity.
+accept Juvenile/small and mature/high-biomass examples differ visibly without changing species definition.
+end
+
+task t-077
+size tiny
+title [FLORA CONTENT] Add carpet moss archetype
+depends t-065
+instruction Add complete species definition favoring suitable moist ground and lateral spread.
+accept Species passes content schema and can establish, grow, spread, and render in fixture habitat.
+end
+
+task t-078
+size tiny
+title [FLORA CONTENT] Add cushion moss archetype
+depends t-065
+instruction Add complete slower clumping moss archetype with distinct habitat/growth profile.
+accept Species behavior and visual parameters are observably distinct from carpet moss.
+end
+
+task t-079
+size tiny
+title [FLORA CONTENT] Add wet-bank moss archetype
+depends t-065
+depends t-058
+instruction Add moss strongly favoring high moisture near surface water.
+accept Suitability fixture ranks wet bank substantially above dry interior.
+end
+
+task t-080
+size tiny
+title [FLORA CONTENT] Add crust lichen archetype
+depends t-065
+instruction Add slow-growing lichen favoring exposed hard substrate.
+accept Species refuses inappropriate configured substrates and establishes on exposed rock fixture.
+end
+
+task t-081
+size tiny
+title [FLORA CONTENT] Add foliose lichen archetype
+depends t-065
+instruction Add second lichen with visibly and ecologically distinct configuration.
+accept Definition is not merely a renamed copy; at least habitat, growth, and visual profile differ.
+end
+
+task t-082
+size tiny
+title [FLORA CONTENT] Add creeping groundcover archetype
+depends t-065
+instruction Add small vascular groundcover capable of local spread.
+accept Species completes growth/propagation cycle under suitable fixture conditions.
+end
+
+task t-083
+size tiny
+title [FLORA CONTENT] Add marginal waterside plant archetype
+depends t-065
+depends t-058
+instruction Add small plant strongly associated with wet bank/shallows.
+accept Habitat fixture favors water margins and rejects persistently dry interior.
+end
+
+task t-084
+size tiny
+title [FLORA CONTENT] Add small ornamental herb archetype
+depends t-065
+instruction Add visually distinct small terrestrial plant suitable for vibrant vivarium presentation.
+accept Definition passes schema and participates in ordinary resource competition and propagation.
+end
+
+task t-085
+size small
+title [FLORA CONTENT] Define cross-species flora interaction matrix
+depends t-077
+depends t-078
+depends t-079
+depends t-080
+depends t-081
+depends t-082
+depends t-083
+depends t-084
+instruction Define initial hard refusals, neutral relations, competition strengths, and a small number of beneficial proximity interactions.
+accept Matrix contains no missing species identifiers and every non-neutral relation is explainable from data.
+end
+
+task t-086
+size small
+title [FLORA] Add flora subsystem tests
+depends t-071
+depends t-072
+depends t-073
+depends t-074
+depends t-085
+instruction Test establishment, refusal, synergy, competition, propagation, death, and deterministic state.
+accept Flora suite passes repeatedly with identical seeded results.
+end
+
+task t-087
+size small
+title [FAUNA] Define fauna species schema
+depends t-010
+instruction Define data-driven fauna habitat, movement, diet, metabolism, lifespan, reproduction, body-size bounds, visual phenotype, and genetics references.
+accept New fauna species can be configured without adding species-specific simulation class unless unique behavior genuinely requires component.
+end
+
+task t-088
+size small
+title [FAUNA] Implement persistent fauna individual state
+depends t-009
+depends t-087
+instruction Implement common individual state including species, position, age, energy, lifecycle/reproduction state, genome reference, and stable ID.
+accept State survives serialization round-trip without dependence on active render node/object.
+end
+
+task t-089
+size small
+title [FAUNA] Implement fauna spatial index
+depends t-088
+depends t-013
+instruction Add bounded neighbor/spatial queries suitable for local behavior and interactions.
+accept Radius query returns correct deterministic entity set and updates after movement/removal.
+end
+
+task t-090
+size small
+title [FAUNA] Implement habitat suitability
+depends t-087
+depends t-020
+depends t-054
+depends t-047
+depends t-049
+instruction Evaluate terrestrial/aquatic habitat suitability from species configuration and environment.
+accept Aquatic species reject dry habitat and terrestrial species can express configured wetness/substrate preferences.
+end
+
+task t-091
+size small
+title [FAUNA] Implement metabolism and energy
+depends t-088
+depends t-043
+instruction Apply configurable baseline energy consumption and starvation consequences.
+accept Energy update is deterministic, bounded, and linked to simulation time rather than render frames.
+end
+
+task t-092
+size small
+title [FAUNA] Implement generic food-resource consumption
+depends t-091
+depends t-087
+instruction Allow data-configured diet resources to replenish energy while consuming or affecting target resource.
+accept Invalid diet target is rejected by content validation and valid feeding transfers bounded resources.
+end
+
+task t-093
+size small
+title [FAUNA] Implement aquatic locomotion
+depends t-054
+depends t-088
+depends t-090
+instruction Implement visually plausible bounded movement for small aquatic fauna using authoritative world/water constraints.
+accept Aquatic test animals remain in valid water and move independently from render framerate.
+end
+
+task t-094
+size small
+title [FAUNA] Implement terrestrial microfauna locomotion
+depends t-088
+depends t-090
+instruction Implement small-scale surface movement for springtail-like terrestrial fauna.
+accept Test animals remain on valid terrain/world domain and react to unsuitable habitat gradients according to configuration.
+end
+
+task t-095
+size small
+title [FAUNA] Implement reproduction eligibility
+depends t-088
+depends t-091
+instruction Determine reproduction from age, energy, habitat, and species configuration.
+accept Ineligible animals cannot reproduce and fixed eligible fixture reproduces deterministically.
+end
+
+task t-096
+size small
+title [FAUNA] Implement offspring creation pipeline
+depends t-095
+instruction Create offspring through a single API that receives parents/species and delegates genome creation separately.
+accept Offspring receives stable entity ID, parent references where available, valid initial energy/age, and genome reference.
+end
+
+task t-097
+size small
+title [FAUNA] Implement aging and natural death
+depends t-088
+depends t-043
+instruction Advance age and apply configured lifespan/death probability or lifespan rule.
+accept Aging depends only on authoritative simulation time and death removes active animal deterministically.
+end
+
+task t-098
+size small
+title [FAUNA] Return dead fauna nutrients to ecosystem
+depends t-097
+depends t-048
+instruction Convert fauna death into detrital/nutrient effect rather than pure deletion.
+accept Death fixture produces configured environmental nutrient effect exactly once.
+end
+
+task t-099
+size small
+title [FAUNA] Implement schooling/cohesion behavior component
+depends t-089
+depends t-093
+instruction Add optional local cohesion/alignment behavior suitable for microminnows without forcing it on other fauna.
+accept Enabling component measurably increases local group cohesion while disabling it returns baseline movement.
+end
+
+task t-100
+size small
+title [FAUNA] Implement small-fauna render abstraction
+depends t-088
+instruction Render animals from authoritative state with interpolation and LOD hooks.
+accept Render instances can be regenerated without affecting entity position, energy, genome, or age.
+end
+
+task t-101
+size small
+title [FAUNA] Implement fauna activity LOD
+depends t-089
+depends t-100
+instruction Reduce expensive visual/behavior detail for distant or off-camera individuals while preserving authoritative aggregate evolution.
+accept Moving camera away does not freeze age, metabolism, or reproduction and does reduce configured high-cost work.
+end
+
+task t-102
+size small
+title [GENETICS] Define genome schema
+depends t-087
+instruction Define per-species inheritable normalized traits for size, ornamentation, and selected simulation-relevant variation.
+accept Schema supports trait bounds/defaults and species-specific enabled trait sets.
+end
+
+task t-103
+size small
+title [GENETICS] Implement parental averaging
+depends t-102
+instruction Create base offspring traits by averaging parental genetic values according to explicit deterministic rule.
+accept Known parent fixture produces exact expected midpoint values before mutation.
+end
+
+task t-104
+size small
+title [GENETICS] Implement approximately ten-percent mutation event
+depends t-008
+depends t-103
+instruction Apply configurable mutation probability defaulting to approximately 10% according to documented mutation-event semantics.
+accept Default configuration explicitly records 0.10 probability and seeded statistical test falls within declared tolerance over large sample.
+end
+
+task t-105
+size tiny
+title [GENETICS] Diagnose mutation semantics and distribution
+depends t-104
+output-kind diagnosis
+instruction Execute mutation tests and inspect whether probability applies per offspring, per trait, or other documented unit; report observed distribution and any discrepancy without changing repository.
+accept Diagnosis reports configured semantics and observed seeded sample statistics with no unexplained mismatch.
+end
+
+task t-106
+size small
+title [GENETICS] Implement mutation magnitude and trait clamping
+depends t-104
+instruction Perturb mutated traits within species-configurable magnitude and clamp/transform into valid bounds.
+accept Extreme seeded mutation cannot produce invalid size, NaN, or out-of-range genetic values.
+end
+
+task t-107
+size small
+title [GENETICS] Map genes to body size phenotype
+depends t-102
+depends t-100
+instruction Make inheritable size trait visibly affect rendered organism scale and any explicitly size-dependent simulation value.
+accept Two otherwise identical fixture genomes at trait extremes display reliably different body size.
+end
+
+task t-108
+size small
+title [GENETICS] Map genes to ornamentation phenotype
+depends t-102
+depends t-100
+instruction Make inheritable ornamentation traits affect species-appropriate visible variation such as marking density, hue shift, appendage/display parameter, or pattern strength.
+accept Same species with controlled genotype variants is visibly distinguishable without requiring separate species assets.
+end
+
+task t-109
+size small
+title [GENETICS] Implement lineage records
+depends t-096
+depends t-009
+instruction Persist parent-child lineage links sufficient to inspect ancestry without retaining dead render entities.
+accept Offspring record identifies available parents and remains valid after parent death.
+end
+
+task t-110
+size small
+title [GENETICS] Implement genome persistence
+depends t-102
+instruction Define exact serialized genome representation and restore path.
+accept Genome round-trip preserves every trait exactly within serialization format guarantee.
+end
+
+task t-111
+size small
+title [GENETICS] Add inheritance deterministic tests
+depends t-103
+depends t-106
+depends t-107
+depends t-108
+depends t-109
+depends t-110
+instruction Test averaging, mutation, clamping, phenotype mapping, and lineage creation using fixed seeds.
+accept Repeated genetics suite produces identical offspring genome and lineage fixtures.
+end
+
+task t-112
+size tiny
+title [FAUNA CONTENT] Add springtail species
+depends t-087
+depends t-094
+depends t-102
+instruction Add complete terrestrial springtail-like microfauna definition with appropriate habitat, movement, diet, genetics, and visual profile.
+accept Species can survive, feed, reproduce, inherit variation, and render in suitable fixture.
+end
+
+task t-113
+size tiny
+title [FAUNA CONTENT] Add freshwater shrimp species
+depends t-087
+depends t-093
+depends t-102
+instruction Add complete small aquatic shrimp definition with habitat, movement, diet, genetics, and visual profile.
+accept Species remains aquatic, completes feeding/reproduction path, and expresses genetic phenotype variation.
+end
+
+task t-114
+size tiny
+title [FAUNA CONTENT] Add triops species
+depends t-087
+depends t-093
+depends t-102
+instruction Add complete triops-like aquatic species with ecologically and visually distinct parameters.
+accept Definition is observably distinct from shrimp in body profile, lifespan/metabolism or behavior configuration, and phenotype variation.
+end
+
+task t-115
+size tiny
+title [FAUNA CONTENT] Add microminnow species
+depends t-087
+depends t-093
+depends t-099
+depends t-102
+instruction Add tiny schooling fish species using cohesion behavior and genetics.
+accept Fixture population remains aquatic, displays group behavior, feeds/reproduces, and expresses genetic phenotype variation.
+end
+
+task t-116
+size small
+title [FAUNA CONTENT] Validate fauna content library
+depends t-112
+depends t-113
+depends t-114
+depends t-115
+instruction Add cross-species content validation for diets, habitats, visual references, genetics configuration, and required behavior components.
+accept All four agreed fauna species load without warnings and intentionally broken fixture reports actionable validation errors.
+end
+
+task t-117
+size small
+title [ECOLOGY] Implement reusable detritus pathway
+depends t-074
+depends t-098
+depends t-048
+instruction Unify dead flora/fauna organic return into a configurable ecological detritus/nutrient pathway.
+accept Flora and fauna death both feed same authoritative resource pathway without double-counting.
+end
+
+task t-118
+size small
+title [ECOLOGY] Connect springtail diet to detrital resources
+depends t-112
+depends t-117
+instruction Configure springtail feeding to consume appropriate detrital resource/effect.
+accept Springtail feeding fixture gains energy while reducing or processing configured detrital resource.
+end
+
+task t-119
+size small
+title [ECOLOGY] Configure aquatic diets
+depends t-113
+depends t-114
+depends t-115
+depends t-092
+instruction Define initial resource/diet relations for aquatic species using data rather than hard-coded species names.
+accept Every aquatic species has at least one valid food pathway and no unresolved content references.
+end
+
+task t-120
+size small
+title [ECOLOGY] Implement fauna waste nutrient return
+depends t-091
+depends t-048
+instruction Return configurable fraction of consumed/metabolic resources to local nutrient system.
+accept Fed population produces bounded nutrient return over time without creating negative or NaN resource values.
+end
+
+task t-121
+size small
+title [ECOLOGY] Implement resource-driven population pressure
+depends t-091
+depends t-095
+depends t-092
+instruction Ensure reproduction/survival naturally respond to energy/resources rather than only fixed arbitrary population limits.
+accept Scarce-resource fixture yields lower sustainable growth than abundant-resource fixture from otherwise identical seed.
+end
+
+task t-122
+size small
+title [ECOLOGY] Implement species reintroduction model
+depends t-116
+instruction Support deliberate reintroduction from species catalog so extinction or player experimentation cannot make world irrecoverably unwinnable.
+accept User-facing API can introduce valid flora/fauna into suitable habitat without world reset or save editing.
+end
+
+task t-123
+size small
+title [ECOLOGY] Add ecosystem statistics service
+depends t-086
+depends t-116
+instruction Track population counts, births, deaths, average traits, biomass where meaningful, and selected environmental aggregates.
+accept Statistics derive from authoritative state and can be regenerated/recomputed without influencing simulation.
+end
+
+task t-124
+size small
+title [ECOLOGY] Add accelerated multi-week headless soak test
+depends t-117
+depends t-118
+depends t-119
+depends t-120
+depends t-121
+instruction Simulate a seeded mixed ecosystem for at least four in-game weeks as fast as test environment permits.
+accept Test completes without invalid numeric state, escaped entities, broken IDs, fatal errors, or nondeterministic digest.
+end
+
+task t-125
+size small
+title [TOOLS] Implement common world selection raycast
+depends t-019
+depends t-075
+depends t-100
+instruction Provide unified selection of terrain, props, flora, and fauna from camera pointer.
+accept Overlapping hit types resolve by documented priority and selected object maps to authoritative entity/state.
+end
+
+task t-126
+size small
+title [TOOLS] Implement grab-critter tool
+depends t-125
+depends t-088
+instruction Allow user to pick up a fauna individual and hold/reposition it interactively.
+accept Grabbed animal remains valid authoritative entity and can be released without ID/genome loss.
+end
+
+task t-127
+size small
+title [TOOLS] Implement release-critter habitat validation
+depends t-126
+depends t-090
+instruction Validate release location and handle invalid terrestrial/aquatic placement gracefully.
+accept Aquatic creature cannot silently be released into impossible dry location and invalid release provides feedback.
+end
+
+task t-128
+size small
+title [TOOLS] Implement pick/remove-plant tool
+depends t-125
+depends t-066
+instruction Allow user to remove selected flora through ordinary ecological removal pathway.
+accept Removed plant no longer participates in growth/competition and ecological return behavior executes exactly once.
+end
+
+task t-129
+size small
+title [TOOLS] Implement nutrient application tool
+depends t-048
+depends t-125
+instruction Allow user to sprinkle/add bounded nutrients spatially.
+accept Applying tool increases nutrient field only within configured footprint and gives visible feedback.
+end
+
+task t-130
+size small
+title [TOOLS] Implement pokin-stick base interaction
+depends t-125
+instruction Implement generic poke action carrying point, direction, strength, and selected target/context.
+accept Tool works against terrain/world entities without requiring species-specific input code.
+end
+
+task t-131
+size tiny
+title [TOOLS] Add fauna poke response
+depends t-130
+depends t-088
+instruction Apply short-lived non-destructive disturbance/impulse/flee response to poked fauna.
+accept Poked fauna visibly responds while retaining valid simulation state.
+end
+
+task t-132
+size tiny
+title [TOOLS] Add flora poke response
+depends t-130
+depends t-066
+instruction Add cosmetic/limited physical response for flora where applicable without altering ecological health unless explicitly configured.
+accept Poke visibly acknowledges applicable flora and does not accidentally damage/delete it.
+end
+
+task t-133
+size small
+title [TOOLS] Implement place-rock tool
+depends t-028
+depends t-021
+instruction Let user position and place rocks within valid island bounds.
+accept Placed rock immediately participates in selection, save state, substrate/habitat queries where configured, and rendering.
+end
+
+task t-134
+size small
+title [TOOLS] Implement place-log tool
+depends t-028
+depends t-023
+instruction Let user position and place logs within valid island bounds.
+accept Placed log immediately exposes log habitat/substrate tags and persists.
+end
+
+task t-135
+size small
+title [TOOLS] Implement place-gravel tool
+depends t-028
+depends t-025
+instruction Let user paint/place bounded gravel patches.
+accept New gravel immediately changes relevant substrate query and persists.
+end
+
+task t-136
+size small
+title [TOOLS] Implement flora introduction tool
+depends t-122
+depends t-067
+instruction Allow player to select flora species and introduce it at a candidate location.
+accept Hard-refusal habitat is rejected with feedback and valid habitat creates correct species state.
+end
+
+task t-137
+size small
+title [TOOLS] Implement fauna introduction tool
+depends t-122
+depends t-090
+instruction Allow player to select fauna species and introduce an individual into suitable habitat.
+accept Invalid aquatic/terrestrial placement is rejected and valid introduction creates complete entity/genome state.
+end
+
+task t-138
+size tiny
+title [TOOLS] Add tool cursor and action feedback
+depends t-125
+instruction Display current tool, target validity, footprint where applicable, and success/rejection feedback.
+accept User can distinguish valid and invalid placement before committing applicable action.
+end
+
+task t-139
+size small
+title [UI] Implement simulation clock HUD
+depends t-039
+depends t-040
+depends t-041
+instruction Display in-game date/time plus pause and speed controls.
+accept HUD updates from authoritative clock and controls operate without coupling to render framerate.
+end
+
+task t-140
+size small
+title [UI] Implement primary tool palette
+depends t-129
+depends t-130
+depends t-133
+depends t-134
+depends t-135
+depends t-136
+depends t-137
+instruction Provide discoverable access to nutrients, pick/remove, grab/release, poke, prop placement, and species introduction.
+accept Every implemented interaction tool is selectable from normal UI without developer console.
+end
+
+task t-141
+size small
+title [UI] Implement selection inspector
+depends t-125
+instruction Display common authoritative information for selected terrain, prop, flora, or fauna.
+accept Inspector clears safely when entity disappears and never retains stale object reference.
+end
+
+task t-142
+size small
+title [UI] Implement flora detail panel
+depends t-141
+depends t-066
+instruction Display species, age/stage, health/biomass, and habitat suitability factors for selected flora.
+accept Values match queried authoritative simulation state.
+end
+
+task t-143
+size small
+title [UI] Implement fauna detail panel
+depends t-141
+depends t-088
+instruction Display species, age, energy, habitat suitability, and other common fauna state.
+accept Values update while simulation runs and survive target render LOD changes.
+end
+
+task t-144
+size small
+title [UI] Implement genome phenotype panel
+depends t-143
+depends t-102
+instruction Display selected fauna genetic trait values and resulting phenotype values in understandable form.
+accept Display distinguishes genotype value from derived visible phenotype where applicable.
+end
+
+task t-145
+size small
+title [UI] Implement lineage panel
+depends t-109
+depends t-143
+instruction Display parents and available ancestry/descendants for selected fauna.
+accept Dead ancestors referenced in lineage remain representable without resurrecting entity objects.
+end
+
+task t-146
+size small
+title [UI] Implement environment probe panel
+depends t-045
+depends t-047
+depends t-048
+depends t-049
+depends t-054
+instruction Show substrate, light, nutrients, moisture, water depth, and useful hydrology values at selected point.
+accept Probe values agree with subsystem direct-query fixtures.
+end
+
+task t-147
+size small
+title [UI] Implement species catalog
+depends t-085
+depends t-116
+instruction Display available flora and fauna with basic habitat/role information and feed introduction tools.
+accept Every valid species definition appears exactly once and invalid definitions never appear as usable catalog entries.
+end
+
+task t-148
+size small
+title [UI] Implement ecosystem statistics panel
+depends t-123
+instruction Display population counts and selected aggregate trends without becoming authoritative storage.
+accept Panel can be closed/destroyed with zero simulation effect.
+end
+
+task t-149
+size small
+title [UI] Implement world creation panel
+depends t-014
+instruction Allow seed selection/randomization and supported world-generation parameters before creating a new vivarium.
+accept Entering same seed/configuration through UI yields same procedural baseline digest.
+end
+
+task t-150
+size small
+title [UI] Implement application settings panel
+depends t-031
+depends t-037
+instruction Expose camera sensitivity/speed and rendering quality plus other necessary non-simulation user settings.
+accept Settings are bounded, persist between sessions, and do not alter authoritative ecology except explicitly simulation-related controls.
+end
+
+task t-151
+size tiny
+title [UI] Implement controls/help overlay
+depends t-140
+depends t-030
+instruction Provide concise in-application reference for camera and all player tools.
+accept Every default input required for ordinary play/observation is documented in UI.
+end
+
+task t-152
+size tiny
+title [UI] Add optional simulation debug overlay controls
+depends t-063
+instruction Provide developer/debug toggles for environment/hydrology diagnostics without presenting them as core play requirements.
+accept Toggling debug visualization changes no authoritative state.
+end
+
+task t-153
+size small
+title [SAVE] Define versioned save manifest
+depends t-006
+depends t-014
+instruction Define root save metadata including format version, app version, timestamps, world seed/config, and subsystem payload references.
+accept Loader can identify supported, older-migratable, and unsupported-newer save versions before mutating live state.
+end
+
+task t-154
+size small
+title [SAVE] Serialize procedural world overrides and props
+depends t-027
+depends t-028
+depends t-153
+instruction Persist required world generation descriptor plus user/runtime prop modifications.
+accept World geometry and prop layout round-trip exactly from save.
+end
+
+task t-155
+size small
+title [SAVE] Serialize environmental fields
+depends t-048
+depends t-049
+depends t-054
+depends t-153
+instruction Persist authoritative nutrient, moisture, water, and other mutable environment field state.
+accept Field digest before save equals field digest after load.
+end
+
+task t-156
+size small
+title [SAVE] Serialize flora state
+depends t-066
+depends t-153
+instruction Persist complete authoritative flora population state.
+accept Flora IDs, species, position, age/stage, and biomass/health round-trip exactly as defined.
+end
+
+task t-157
+size small
+title [SAVE] Serialize fauna state
+depends t-088
+depends t-153
+instruction Persist complete fauna population state.
+accept Fauna IDs, species, position, age, energy, and lifecycle state round-trip.
+end
+
+task t-158
+size small
+title [SAVE] Serialize genomes and lineages
+depends t-109
+depends t-110
+depends t-153
+instruction Persist genome and lineage data independently of active render/runtime object references.
+accept Genetics and ancestry digest survives save/load exactly.
+end
+
+task t-159
+size small
+title [SAVE] Implement atomic save transaction
+depends t-154
+depends t-155
+depends t-156
+depends t-157
+depends t-158
+instruction Write saves via temporary/staged representation and replace final save only after successful completion.
+accept Simulated write failure cannot destroy previously valid save.
+end
+
+task t-160
+size small
+title [SAVE] Implement validated load transaction
+depends t-159
+instruction Load into staged state, validate all subsystem references, then replace current world only after success.
+accept Invalid/corrupt fixture fails cleanly without partially overwriting currently running world.
+end
+
+task t-161
+size small
+title [SAVE] Implement save migration framework
+depends t-153
+instruction Provide ordered explicit migration mechanism for future older save schema versions.
+accept Synthetic previous-version fixture can migrate to current schema and migration records resulting version.
+end
+
+task t-162
+size tiny
+title [SAVE] Implement autosave
+depends t-159
+instruction Add configurable periodic autosave that respects transactional save behavior.
+accept Autosave cannot overlap itself and does not stall authoritative simulation indefinitely.
+end
+
+task t-163
+size small
+title [SAVE] Implement save/load UI
+depends t-160
+depends t-162
+instruction Add normal create-save, load-save, autosave indication, and failure feedback.
+accept User can save, exit/reinitialize, load, and resume through ordinary UI.
+end
+
+task t-164
+size small
+title [SAVE] Add complete world round-trip test
+depends t-160
+depends t-124
+instruction Save a nontrivial running ecology, reload it, and compare authoritative state digests.
+accept Pre-save and immediate post-load authoritative digests match.
+end
+
+task t-165
+size small
+title [PERF] Add subsystem timing instrumentation
+depends t-043
+depends t-007
+instruction Measure scheduler cost by subsystem without changing simulation behavior.
+accept Diagnostics can report hydrology, flora, fauna, ecology, rendering-support, and persistence timing separately.
+end
+
+task t-166
+size small
+title [PERF] Add entity/population counters
+depends t-123
+instruction Report current flora/fauna counts, visible rendered counts, spatial-index counts, and relevant LOD counts.
+accept Counter mismatch against authoritative entity collections is detectable.
+end
+
+task t-167
+size small
+title [PERF] Optimize flora spatial lookup
+depends t-086
+depends t-165
+instruction Ensure neighborhood/competition/proximity queries avoid naive whole-population scans where population size makes them expensive.
+accept Test with scaled flora population demonstrates bounded local-query behavior and identical ecological results.
+end
+
+task t-168
+size small
+title [PERF] Optimize fauna neighbor lookup
+depends t-089
+depends t-165
+instruction Verify/optimize neighbor queries used for schooling, feeding, and local behavior.
+accept Scaled fixture does not require all-to-all pair traversal and preserves deterministic result.
+end
+
+task t-169
+size small
+title [PERF] Implement render-distance LOD thresholds
+depends t-075
+depends t-100
+depends t-037
+instruction Reduce distant flora/fauna render complexity independently of simulation fidelity.
+accept Camera-distance LOD transition produces measurable render-work reduction without changing authoritative digest.
+end
+
+task t-170
+size small
+title [PERF] Implement simulation workload budget diagnostics
+depends t-165
+depends t-166
+instruction Detect simulation ticks exceeding configured wall-time budget and identify responsible subsystem/population counts.
+accept Artificially expensive fixture produces actionable budget warning rather than silent slowdown.
+end
+
+task t-171
+size small
+title [PERF] Run sustained accelerated simulation stress test
+depends t-167
+depends t-168
+depends t-169
+depends t-170
+instruction Run representative populated vivarium for extended accelerated simulation while recording failures, invalid state, and timing.
+accept Run completes without unbounded memory/entity growth, invalid numeric state, or simulation deadlock.
+end
+
+task t-172
+size tiny
+title [PERF] Diagnose first-draft performance envelope
+depends t-171
+output-kind diagnosis
+instruction Inspect stress-test evidence and report measured bottlenecks, population sizes, simulation cost, and render cost without modifying repository.
+accept Report distinguishes measured limitation from speculation and identifies no blocking unexplained regression.
+end
+
+task t-173
+size small
+title [PACKAGE] Configure Windows application metadata
+depends t-006
+depends t-002
+instruction Configure executable/product name, version information, default window behavior, icon placeholder/final asset policy, and user-data location.
+accept Exported application reports expected name/version and writes mutable data only to suitable user-writable location.
+end
+
+task t-174
+size small
+title [PACKAGE] Create reproducible Windows export script
+depends t-173
+depends t-005
+instruction Add PowerShell release/export command using pinned project configuration.
+accept Clean checkout with documented prerequisites can produce Windows release without manual editor clicking.
+end
+
+task t-175
+size small
+title [PACKAGE] Verify offline operation
+depends t-174
+instruction Audit runtime startup and ordinary use for accidental network dependency.
+accept Packaged app boots, creates/loads world, simulates, and saves with network unavailable.
+end
+
+task t-176
+size small
+title [PACKAGE] Create portable release bundle
+depends t-174
+instruction Produce complete standalone Windows distribution containing all required runtime assets/libraries.
+accept Release bundle runs without repository source tree or development project present.
+end
+
+task t-177
+size small
+title [PACKAGE] Add third-party attribution inventory
+depends t-174
+instruction Collect licenses/attributions required by selected engine and bundled dependencies/assets.
+accept Release bundle contains required notices and inventory matches bundled third-party components.
+end
+
+task t-178
+size small
+title [PACKAGE] Add clean-release smoke verification
+depends t-175
+depends t-176
+instruction Script or document a deterministic smoke run against release artifact rather than editor/dev runtime.
+accept Smoke verifies boot, new world, camera, simulation advance, interaction, save, quit, reload, and continued simulation.
+end
+
+task t-179
+size small
+title [INTEGRATION] Build canonical default vivarium preset
+depends t-029
+depends t-064
+depends t-085
+depends t-116
+instruction Create default world seed/profile with terrain, spring/stream/pond opportunity, habitat diversity, props, and suitable starting distributions.
+accept Default preset visibly exposes dry, moist, aquatic, rock, log, and gravel habitat opportunities.
+end
+
+task t-180
+size small
+title [INTEGRATION] Populate balanced starter flora
+depends t-179
+depends t-086
+instruction Configure initial flora placement using full initial eight-species library.
+accept Every flora species appears in at least one suitable reachable habitat and starts without hard-refusal violations.
+end
+
+task t-181
+size small
+title [INTEGRATION] Populate starter fauna
+depends t-179
+depends t-116
+instruction Configure initial springtail, shrimp, triops, and microminnow populations in valid habitats.
+accept All four fauna species begin with valid environment, genome, entity ID, and food-path opportunity.
+end
+
+task t-182
+size small
+title [INTEGRATION] Validate full ecology from default preset
+depends t-180
+depends t-181
+depends t-124
+instruction Run default vivarium for multiple in-game weeks and inspect interaction among hydrology, flora, fauna, nutrients, genetics, and population pressure.
+accept Simulation completes without content-reference failures, invalid habitat placement, numeric corruption, or deterministic divergence.
+end
+
+task t-183
+size small
+title [INTEGRATION] Validate visible genetic drift
+depends t-182
+depends t-111
+instruction Run a reproduction-heavy seeded scenario over enough generations to demonstrate inherited size/ornamentation variation.
+accept Descendants visibly vary, remain within trait bounds, and lineage/genome data explains phenotype.
+end
+
+task t-184
+size small
+title [INTEGRATION] Validate underwater observation path
+depends t-035
+depends t-060
+depends t-181
+instruction Exercise exterior cutaway view, camera crossing into water, and close inspection of aquatic fauna.
+accept Water edge remains clean, medium transition works, and fauna stays visible/selectable from underwater camera.
+end
+
+task t-185
+size small
+title [INTEGRATION] Validate player ecological intervention loop
+depends t-140
+depends t-147
+depends t-182
+instruction Exercise nutrient addition, plant removal/introduction, critter grab/release, species reintroduction, prop placement, and pokin-stick interactions.
+accept Every agreed player tool changes only intended authoritative state and ecosystem continues simulating afterward.
+end
+
+task t-186
+size small
+title [INTEGRATION] Validate non-loseable behavior
+depends t-122
+depends t-147
+depends t-185
+instruction Deliberately remove/extinguish a species from test world and restore it through ordinary catalog/tool workflow.
+accept World remains usable and species can be reintroduced without restarting, editing files, or invoking developer console.
+end
+
+task t-187
+size small
+title [INTEGRATION] Validate save during active ecology
+depends t-164
+depends t-182
+instruction Save while full ecology is running, terminate world, reload, and continue for additional simulated time.
+accept Immediate state round-trip matches and post-load evolution remains deterministic from restored state.
+end
+
+task t-188
+size small
+title [INTEGRATION] Validate render/simulation separation
+depends t-169
+depends t-182
+instruction Run identical seeded simulation under substantially different camera movement, quality settings, visibility, and render cadence.
+accept Authoritative simulation digest is identical at equal simulation time.
+end
+
+task t-189
+size small
+title [INTEGRATION] Validate deterministic fresh-world replay
+depends t-188
+instruction Create same default seed/config twice and execute same scripted interventions and simulation duration.
+accept Final authoritative digests match exactly.
+end
+
+task t-190
+size small
+title [INTEGRATION] Run full automated verification matrix
+depends t-178
+depends t-183
+depends t-184
+depends t-186
+depends t-187
+depends t-189
+instruction Execute bootstrap, world, camera, time, fields, hydrology, flora, fauna, genetics, ecology, tools, persistence, performance-smoke, and package suites from clean state.
+accept All required suites pass with no ignored fatal errors and results identify exact failing suite on regression.
+end
+
+task t-191
+size tiny
+title [INTEGRATION] Diagnose requirement coverage
+depends t-190
+output-kind diagnosis
+retrieve docs/product/vivarium-contract.md
+instruction Compare implemented/validated system against every clause of authoritative product contract without modifying files.
+accept Report maps every requirement to concrete implementation and verification evidence or identifies a genuine uncovered requirement.
+end
+
+task t-192
+size small
+title [INTEGRATION] Close requirement-coverage gaps
+depends t-191
+instruction Resolve only concrete uncovered requirements identified by the requirement-coverage diagnosis; do not broaden product scope.
+accept Every gap identified by t-191 is either implemented and verified or represented by an explicit blocking human decision rather than silently omitted.
+end
+
+task t-193
+size small
+title [INTEGRATION] Execute final first-draft acceptance run
+depends t-192
+instruction From clean checkout/build, create default world, inspect above and underwater, run accelerated ecology, interact with every tool family, observe genetics, save, quit, reload, continue simulation, and execute release verification.
+accept Complete scenario succeeds using packaged Windows build and ordinary application UI.
+end
+
+task t-194
+size tiny
+title [INTEGRATION] Diagnose repository cleanliness and reproducibility
+depends t-193
+output-kind diagnosis
+instruction Inspect repository and rebuild/retest from clean state. Report generated junk, machine-local assumptions, untracked required assets, nondeterministic artifacts, or undocumented prerequisites without modifying repository.
+accept No required runtime/build asset exists only as untracked or machine-local state and clean verification is reproducible.
+end
+
+task t-195
+size small
+title [RELEASE] Produce first-draft implementation report
+depends t-194
+instruction Create concise implementation report describing architecture, implemented feature families, species/content library, verification commands, Windows build procedure, known non-blocking limitations, and save compatibility version.
+accept Report describes the actual validated implementation rather than planned features and provides exact reproduction commands.
+end
+
+task t-196
+size small
+title [RELEASE] Produce first-draft Windows release candidate
+depends t-195
+depends t-176
+instruction Generate release candidate from clean repository using documented release pipeline.
+accept Release candidate is a standalone offline-capable Windows application containing complete first-draft feature set and passes release smoke verification.
+end

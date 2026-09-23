@@ -1,0 +1,14 @@
+# toolchain (prerequisite, see docs/architecture/adr-001-stack.md)
+tools/godot/
+# build output
+bin/
+obj/
+build/
+out/
+*.user
+.vs/
+# godot
+.godot/
+*.translation
+# test output
+TestResults/

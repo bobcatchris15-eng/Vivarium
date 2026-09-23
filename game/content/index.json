@@ -1,0 +1,16 @@
+{
+  "_comment": "Every content file must be listed here: exported builds read content from the pck through this index.",
+  "substrates": "substrates.json",
+  "strata": "strata.json",
+  "genetics": "genetics.json",
+  "ecology": "ecology.json",
+  "tools": "tools.json",
+  "floraInteractions": "flora_interactions.json",
+  "flora": [
+    "flora/carpet_moss.json", "flora/cushion_moss.json", "flora/wetbank_moss.json",
+    "flora/crust_lichen.json", "flora/foliose_lichen.json",
+    "flora/creeping_groundcover.json", "flora/marginal_waterside.json", "flora/ornamental_herb.json"
+  ],
+  "fauna": ["fauna/springtail.json", "fauna/shrimp.json", "fauna/triops.json", "fauna/microminnow.json"],
+  "presets": ["presets/default.json", "presets/rocky_rise.json"]
+}

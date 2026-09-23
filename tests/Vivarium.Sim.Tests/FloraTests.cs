@@ -1,0 +1,327 @@
+using Vivarium.Sim.Content;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Flora;
+using Vivarium.Sim.Geometry;
+using Vivarium.Sim.World;
+
+namespace Vivarium.Sim.Tests;
+
+[Trait("Suite", "Flora")]
+public class FloraTests
+{
+    private static FloraSpeciesDef Sp(string id) => TestUtil.Content.FloraOrThrow(id);
+
+    private static void RunFlora(VivariumWorld w, double days, Action? everyDay = null)
+    {
+        int steps = (int)(days * 86400 / 600);
+        for (int i = 0; i < steps; i++)
+        {
+            if (i % 144 == 0) everyDay?.Invoke();
+            w.FloraSystem.Step(600);
+        }
+    }
+
+    [Fact] // t-065
+    public void NewSpeciesNeedsOnlyData()
+    {
+        var src = new OverlayContentSource(TestUtil.ContentSource);
+        var index = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "index.json")).Replace("\"flora/carpet_moss.json\",", "\"flora/carpet_moss.json\", \"flora/test_fern.json\",");
+        var fern = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "flora", "creeping_groundcover.json"))
+            .Replace("creeping_groundcover", "test_fern").Replace("Creeping Pennywort", "Test Fern").Replace("\"shape\": \"creeper\"", "\"shape\": \"herb\"");
+        src.Set("index.json", index).Set("flora/test_fern.json", fern);
+        var content = ContentLoader.Load(src);
+        Assert.NotNull(content.FloraById("test_fern"));
+        var w = VivariumWorld.Create(content, TestUtil.FlatDescriptor(), false);
+        TestUtil.Condition(w, 0.6, 1.0);
+        var f = w.FloraSystem.Establish(content.FloraOrThrow("test_fern"), new Vec2(0, 0), "test");
+        double b0 = f.Biomass;
+        RunFlora(w, 5, () => TestUtil.Condition(w, 0.6, 1.0));
+        Assert.True(f.Biomass > b0);
+    }
+
+    [Fact] // t-066
+    public void IndividualStateHasCommonFields()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.7, 0.5);
+        var f = w.FloraSystem.Establish(Sp("carpet_moss"), new Vec2(0.5, 0.5), "test");
+        Assert.Equal(EntityKind.Flora, f.Id.Kind);
+        Assert.Equal("carpet_moss", f.SpeciesId);
+        Assert.Equal(FloraStage.Juvenile, f.Stage(Sp("carpet_moss")));
+        RunFlora(w, 8);
+        Assert.Equal(FloraStage.Mature, f.Stage(Sp("carpet_moss")));
+        Assert.True(f.Age > 0 && f.Biomass > 0 && f.Health > 0);
+        Assert.True(f.Radius(Sp("carpet_moss")) > Sp("carpet_moss").MinRadius);
+    }
+
+    [Fact] // t-067
+    public void SuitabilityIsDeterministicAndSeparatesRefusalFromLowScore()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.7, 0.5);
+        var p = new Vec2(1, 1);
+        var a = w.FloraSystem.Suitability(Sp("carpet_moss"), p);
+        var b = w.FloraSystem.Suitability(Sp("carpet_moss"), p);
+        Assert.Equal(a.Score, b.Score);
+        Assert.False(a.HardRefused);
+        var refused = w.FloraSystem.Suitability(Sp("crust_lichen"), p);   // crust lichen refuses soil
+        Assert.True(refused.HardRefused);
+        Assert.Contains("refuses soil", refused.RefusalReason);
+        TestUtil.Condition(w, 0.05, 0.5);
+        var dry = w.FloraSystem.Suitability(Sp("carpet_moss"), p);
+        Assert.False(dry.HardRefused);
+        Assert.True(dry.Score < a.Score * 0.3, "dry ground is low suitability, not refusal");
+    }
+
+    [Fact] // t-068
+    public void GrowthIsTimestepStableAndBounded()
+    {
+        double Grow(double dt)
+        {
+            var w = TestUtil.FlatWorld();
+            TestUtil.Condition(w, 0.7, 1.5);
+            var f = w.FloraSystem.Establish(Sp("carpet_moss"), Vec2.Zero, "t");
+            f.LastSpreadAge = double.MaxValue / 4; // no propagation, isolate growth
+            int steps = (int)(4 * 86400 / dt);
+            for (int i = 0; i < steps; i++) { w.FloraSystem.Step(dt); f.LastSpreadAge = f.Age; }
+            return f.Biomass;
+        }
+        double fine = Grow(600), coarse = Grow(3600), veryCoarse = Grow(4 * 3600);
+        Assert.InRange(coarse / fine, 0.97, 1.03);
+        Assert.InRange(veryCoarse / fine, 0.95, 1.05);
+        Assert.True(fine <= Sp("carpet_moss").MaxBiomass);
+    }
+
+    [Fact] // t-069
+    public void GrowthConsumesLocalNutrientsDeterministically()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.7, 0.8);
+        var p = new Vec2(-1, 1);
+        int cell = w.Grid.CellAt(p);
+        w.FloraSystem.Establish(Sp("creeping_groundcover"), p, "t");
+        double before = w.Fields.Nutrients[cell];
+        RunFlora(w, 2);
+        Assert.True(w.Fields.Nutrients[cell] < before);
+        Assert.True(w.Fields.Nutrients[cell] >= 0);
+        var w2 = TestUtil.FlatWorld();
+        TestUtil.Condition(w2, 0.7, 0.8);
+        w2.FloraSystem.Establish(Sp("creeping_groundcover"), p, "t");
+        RunFlora(w2, 2);
+        Assert.Equal(w.Fields.Nutrients.DigestHex(), w2.Fields.Nutrients.DigestHex());
+    }
+
+    [Fact] // t-070, t-080
+    public void PropagationNeverEntersRefusedHabitatAndIsReproducible()
+    {
+        string Run(out VivariumWorld w)
+        {
+            w = TestUtil.FlatWorld(21);
+            TestUtil.Condition(w, 0.35, 0.2, 0.95);
+            Assert.True(w.Placement.PlaceRock(new Vec2(0, 0), 0.7, 0, 5).Ok);
+            var lichen = Sp("crust_lichen");
+            Assert.True(w.FloraSystem.CanEstablish(lichen, new Vec2(0, 0), out var why), why);
+            Assert.False(w.FloraSystem.CanEstablish(lichen, new Vec2(2, 2), out _));
+            w.FloraSystem.Establish(lichen, new Vec2(0, 0), "t", lichen.MaxBiomass * 0.8).Age = lichen.MaturityAge;
+            var ww = w;
+            RunFlora(w, 120, () => TestUtil.Condition(ww, 0.35, 0.2, 0.95));
+            return Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["flora"]);
+        }
+        var s1 = Run(out var w1);
+        var s2 = Run(out _);
+        Assert.Equal(s1, s2);
+        Assert.True(w1.Flora.Count > 1, "lichen should have spread across the rock");
+        foreach (var f in w1.Flora.Items) Assert.NotEqual(Substrate.Soil, w1.SubstrateAt(f.Position));
+    }
+
+    [Fact] // t-071
+    public void MossRefusesFreshBarkEvenWhenConditionsAreIdeal()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.68, 0.5, 0.45);
+        var fresh = w.Placement.PlaceLog(new Vec2(-1.5, 0), 0, 2.0, 0.25, 0, 1);
+        var rotten = w.Placement.PlaceLog(new Vec2(1.5, 1.5), 0, 2.0, 0.25, 3, 2);
+        Assert.True(fresh.Ok && rotten.Ok);
+        TestUtil.Condition(w, 0.68, 0.5, 0.45);
+        var onFresh = w.FloraSystem.Suitability(Sp("carpet_moss"), new Vec2(-1.5, 0));
+        Assert.True(onFresh.HardRefused);
+        Assert.Contains("bark_fresh", onFresh.RefusalReason);
+        Assert.False(w.FloraSystem.CanEstablish(Sp("carpet_moss"), new Vec2(-1.5, 0), out _));
+        Assert.False(w.FloraSystem.Suitability(Sp("carpet_moss"), new Vec2(1.5, 1.5)).HardRefused);
+        Assert.True(w.FloraSystem.Suitability(Sp("foliose_lichen"), new Vec2(1.5, 1.5)).HardRefused, "leafy lichen refuses rotting wood");
+    }
+
+    [Fact] // t-072
+    public void BeneficialProximityOnlyWithinConfiguredDistance()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.68, 0.5, 0.45);
+        Assert.True(w.Placement.PlaceLog(new Vec2(0, 0), 0, 2.0, 0.15, 2, 1).Ok);
+        TestUtil.Condition(w, 0.68, 0.5, 0.45);
+        var moss = Sp("carpet_moss");
+        double near = w.FloraSystem.ProximityBonus(moss, new Vec2(0, 0.45));
+        double far = w.FloraSystem.ProximityBonus(moss, new Vec2(0, 2.0));
+        Assert.Equal(0.15, near, 6);
+        Assert.Equal(0, far);
+        // species-to-species benefit from the interaction matrix
+        var rush = w.FloraSystem.Establish(Sp("marginal_waterside"), new Vec2(3, 0), "t");
+        Assert.True(w.FloraSystem.ProximityBonus(Sp("wetbank_moss"), new Vec2(3.3, 0)) >= 0.15 - 1e-9);
+        Assert.Equal(0, w.FloraSystem.ProximityBonus(Sp("wetbank_moss"), new Vec2(3.9, 0)));
+    }
+
+    [Fact] // t-073
+    public void OvercrowdingReducesGrowthAndRecruitment()
+    {
+        double Growth(bool crowded)
+        {
+            var w = TestUtil.FlatWorld();
+            TestUtil.Condition(w, 0.68, 1.0);
+            var sp = Sp("carpet_moss");
+            var f = w.FloraSystem.Establish(sp, Vec2.Zero, "t");
+            if (crowded)
+                for (int k = 0; k < 6; k++) w.FloraSystem.Establish(sp, Vec2.FromAngle(k * Math.PI / 3) * 0.2, "t", sp.MaxBiomass);
+            double b0 = f.Biomass;
+            for (int i = 0; i < 144; i++) w.FloraSystem.Step(600);
+            if (crowded) Assert.False(w.FloraSystem.CanEstablish(sp, new Vec2(0.05, 0.05), out var why) && why == "ok");
+            return f.Biomass - b0;
+        }
+        double alone = Growth(false), crowdedGrowth = Growth(true);
+        Assert.True(crowdedGrowth < alone * 0.6, $"crowded {crowdedGrowth:0.000} vs alone {alone:0.000}");
+    }
+
+    [Fact] // t-074
+    public void DeathReturnsLitterExactlyOnce()
+    {
+        var w = TestUtil.FlatWorld();
+        var sp = Sp("creeping_groundcover");
+        var f = w.FloraSystem.Establish(sp, new Vec2(1, -1), "t", 1.0);
+        double det0 = w.Fields.Detritus.Total(), nut0 = w.Fields.Nutrients.Total();
+        Assert.True(w.FloraSystem.Kill(f, "test"));
+        double det1 = w.Fields.Detritus.Total();
+        Assert.Equal(1.0 * sp.LitterFraction, det1 - det0, 9);
+        Assert.Equal(1.0 * (1 - sp.LitterFraction) * sp.NutrientPerBiomass, w.Fields.Nutrients.Total() - nut0, 9);
+        Assert.Null(w.Flora.Get(f.Id));
+        Assert.False(w.FloraSystem.Kill(f, "again"));
+        Assert.Equal(det1, w.Fields.Detritus.Total());
+        Assert.Equal(1, w.Tally.Of(sp.Id).Deaths);
+    }
+
+    public static IEnumerable<object[]> SpeciesFixtures() => new[]
+    {
+        new object[] { "carpet_moss" }, new object[] { "cushion_moss" }, new object[] { "wetbank_moss" }, new object[] { "crust_lichen" },
+        new object[] { "foliose_lichen" }, new object[] { "creeping_groundcover" }, new object[] { "marginal_waterside" }, new object[] { "ornamental_herb" },
+    };
+
+    /// <summary>Builds the habitat each archetype is designed for.</summary>
+    public static (VivariumWorld W, Vec2 P, Action Hold) Habitat(string id)
+    {
+        var w = TestUtil.FlatWorld(31);
+        Vec2 p = new(0.5, 0.5);
+        (double m, double n, double? l) cond = (0.6, 0.8, null);
+        switch (id)
+        {
+            case "carpet_moss": cond = (0.68, 0.5, 0.5); break;
+            case "cushion_moss": w.Placement.PlaceRock(p, 0.7, 0, 3); cond = (0.55, 0.3, 0.6); break;
+            case "wetbank_moss": TestUtil.Flood(w, new Vec2(-1, 0.5), 1.0, 0.05); p = new Vec2(0.25, 0.5); cond = (0.95, 0.7, 0.5); break;
+            case "crust_lichen": w.Placement.PlaceRock(p, 0.8, 0, 4); cond = (0.35, 0.2, 0.9); break;
+            case "foliose_lichen": w.Placement.PlaceLog(p, 0.3, 2.4, 0.3, 1, 5); cond = (0.5, 0.3, 0.65); break;
+            case "creeping_groundcover": cond = (0.6, 1.0, 0.6); break;
+            case "marginal_waterside": TestUtil.Flood(w, new Vec2(-1, 0.5), 1.0, 0.04); p = new Vec2(0.15, 0.5); cond = (1.0, 0.9, 0.7); break;
+            case "ornamental_herb": cond = (0.5, 1.1, 0.8); break;
+        }
+        void Hold()
+        {
+            foreach (int c in w.Grid.DomainCells)
+            {
+                if (!w.Water.IsWet(c)) w.Fields.Moisture[c] = cond.m;
+                else w.Fields.Moisture[c] = 1;
+                w.Fields.Nutrients[c] = cond.n;
+                if (cond.l.HasValue) w.Fields.Light[c] = cond.l.Value;
+            }
+        }
+        Hold();
+        return (w, p, Hold);
+    }
+
+    [Theory] // t-077 … t-084
+    [MemberData(nameof(SpeciesFixtures))]
+    public void EachArchetypeEstablishesGrowsSpreadsAndRenders(string id)
+    {
+        var sp = Sp(id);
+        var (w, p, hold) = Habitat(id);
+        Assert.True(w.FloraSystem.CanEstablish(sp, p, out var why), $"{id}: {why}");
+        var f = w.FloraSystem.Establish(sp, p, "fixture");
+        double b0 = f.Biomass;
+        double days = Math.Max(45, (sp.MaturityAge + sp.SpreadInterval * 3) / 86400);
+        RunFlora(w, days, hold);
+        Assert.True(w.Flora.Count > 1, $"{id} should propagate (count {w.Flora.Count})");
+        Assert.True(w.Flora.Items.Max(x => x.Biomass) > b0 * 2, $"{id} should grow");
+        Assert.All(w.Flora.Items, x => Assert.False(w.FloraSystem.Suitability(sp, x.Position, x.Id).HardRefused));
+        var mesh = OrganismMeshes.Flora(sp);
+        Assert.True(mesh.TriangleCount > 20);
+    }
+
+    [Fact] // t-078, t-081
+    public void ArchetypesAreGenuinelyDistinct()
+    {
+        var carpet = Sp("carpet_moss"); var cushion = Sp("cushion_moss");
+        Assert.NotEqual(carpet.Shape, cushion.Shape);
+        Assert.NotEqual(carpet.GrowthRate, cushion.GrowthRate);
+        Assert.NotEqual(carpet.RadiusAtMax, cushion.RadiusAtMax);
+        Assert.True(cushion.SubstrateAffinity[Substrate.Rock] > carpet.SubstrateAffinity[Substrate.Rock]);
+        var crust = Sp("crust_lichen"); var foliose = Sp("foliose_lichen");
+        Assert.NotEqual(crust.Shape, foliose.Shape);
+        Assert.NotEqual(crust.GrowthRate, foliose.GrowthRate);
+        Assert.True(foliose.SubstrateAffinity[Substrate.Wood] > crust.SubstrateAffinity.GetValueOrDefault(Substrate.Wood));
+        Assert.NotEqual(OrganismMeshes.Flora(crust).DigestHex(), OrganismMeshes.Flora(foliose).DigestHex());
+    }
+
+    [Fact] // t-079, t-083
+    public void WaterMarginSpecialistsPreferBanks()
+    {
+        var (w, bank, _) = Habitat("marginal_waterside");
+        var dry = new Vec2(3.5, -2);
+        foreach (int c in w.Grid.CellsInRadius(dry, 1)) w.Fields.Moisture[c] = 0.3;
+        foreach (var id in new[] { "wetbank_moss", "marginal_waterside" })
+        {
+            var sBank = w.FloraSystem.Suitability(Sp(id), bank);
+            var sDry = w.FloraSystem.Suitability(Sp(id), dry);
+            Assert.False(sBank.HardRefused, sBank.ToString());
+            Assert.True(sDry.HardRefused || sDry.Score < sBank.Score * 0.3, $"{id}: bank {sBank} vs dry {sDry}");
+        }
+        Assert.True(w.FloraSystem.Suitability(Sp("marginal_waterside"), dry).HardRefused, "persistently dry interior is rejected");
+    }
+
+    [Fact] // t-085
+    public void InteractionMatrixIsCompleteAndExplained()
+    {
+        var m = TestUtil.Content.FloraInteractions;
+        var ids = TestUtil.Content.Flora.Select(f => f.Id).ToHashSet();
+        Assert.NotEmpty(m.Relations);
+        foreach (var r in m.Relations)
+        {
+            Assert.Contains(r.A, ids); Assert.Contains(r.B, ids);
+            if (r.Type != FloraRelationType.Neutral) Assert.False(string.IsNullOrWhiteSpace(r.Reason));
+        }
+        Assert.Contains(m.Relations, r => r.Type == FloraRelationType.Refuse);
+        Assert.Contains(m.Relations, r => r.Type == FloraRelationType.Benefit);
+        Assert.Contains(m.Relations, r => r.Type == FloraRelationType.Compete);
+        Assert.Contains(m.Relations, r => r.Type == FloraRelationType.Neutral);
+        var broken = new OverlayContentSource(TestUtil.ContentSource);
+        broken.Set("flora_interactions.json", "{ \"relations\": [ { \"a\": \"carpet_moss\", \"b\": \"ghost_moss\", \"type\": \"compete\", \"strength\": 1, \"reason\": \"x\" } ] }");
+        var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(broken));
+        Assert.Contains(ex.Errors, e => e.Message.Contains("ghost_moss"));
+    }
+
+    [Fact] // t-086
+    public void FloraSuiteIsDeterministic()
+    {
+        string Run()
+        {
+            var w = TestUtil.DefaultWorld();
+            for (int i = 0; i < 20 * 144; i++) w.FloraSystem.Step(600);
+            return Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["flora"]);
+        }
+        Assert.Equal(Run(), Run());
+    }
+}

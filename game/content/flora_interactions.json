@@ -1,0 +1,81 @@
+{
+  "neutralCompetition": 0.5,
+  "intraspecificCompetition": 1.0,
+  "relations": [
+    {
+      "a": "carpet_moss",
+      "b": "cushion_moss",
+      "type": "compete",
+      "strength": 1.1,
+      "reason": "Both mosses hold the same moist ground and trap the same water film."
+    },
+    {
+      "a": "cushion_moss",
+      "b": "carpet_moss",
+      "type": "compete",
+      "strength": 1.2,
+      "reason": "Carpet moss mats smother slow cushions."
+    },
+    {
+      "a": "carpet_moss",
+      "b": "creeping_groundcover",
+      "type": "compete",
+      "strength": 1.3,
+      "reason": "Pennywort leaves shade the moss mat."
+    },
+    {
+      "a": "creeping_groundcover",
+      "b": "carpet_moss",
+      "type": "compete",
+      "strength": 0.8,
+      "reason": "Moss mats hold moisture but compete weakly for nutrients."
+    },
+    {
+      "a": "ornamental_herb",
+      "b": "creeping_groundcover",
+      "type": "compete",
+      "strength": 1.5,
+      "reason": "Runners overtop the low starflower rosettes."
+    },
+    {
+      "a": "crust_lichen",
+      "b": "carpet_moss",
+      "type": "refuse",
+      "radius": 0.25,
+      "reason": "Crust lichens cannot establish beneath a closed moss carpet."
+    },
+    {
+      "a": "crust_lichen",
+      "b": "cushion_moss",
+      "type": "refuse",
+      "radius": 0.15,
+      "reason": "Moss cushions cover the bare rock crust lichen needs."
+    },
+    {
+      "a": "foliose_lichen",
+      "b": "crust_lichen",
+      "type": "benefit",
+      "radius": 0.4,
+      "bonus": 0.1,
+      "reason": "Crust lichen weathers the surface into footholds for leafy lobes."
+    },
+    {
+      "a": "wetbank_moss",
+      "b": "marginal_waterside",
+      "type": "benefit",
+      "radius": 0.5,
+      "bonus": 0.15,
+      "reason": "Rush clumps shade and humidify the bank."
+    },
+    {
+      "a": "marginal_waterside",
+      "b": "wetbank_moss",
+      "type": "neutral"
+    },
+    {
+      "a": "ornamental_herb",
+      "b": "cushion_moss",
+      "type": "neutral"
+    }
+  ]
+}

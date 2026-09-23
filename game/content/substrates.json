@@ -1,0 +1,9 @@
+{
+  "substrates": [
+    { "id": "soil",   "name": "Soil",   "color": [0.36, 0.24, 0.14], "description": "Loamy topsoil." },
+    { "id": "gravel", "name": "Gravel", "color": [0.62, 0.60, 0.56], "description": "Loose pebbles over soil." },
+    { "id": "rock",   "name": "Rock",   "color": [0.55, 0.55, 0.57], "description": "Exposed hard stone." },
+    { "id": "wood",   "name": "Wood",   "color": [0.45, 0.30, 0.18], "description": "Fallen log surface." },
+    { "id": "water",  "name": "Water-covered ground", "color": [0.20, 0.45, 0.60], "description": "Ground under standing or flowing water." }
+  ]
+}

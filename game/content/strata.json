@@ -1,0 +1,8 @@
+{
+  "layers": [
+    { "id": "topsoil", "name": "Topsoil (A horizon)", "thickness": 0.32, "color": [0.24, 0.15, 0.09], "color2": [0.33, 0.21, 0.12], "grain": 0.35, "banding": 0.15 },
+    { "id": "subsoil", "name": "Subsoil (B horizon)", "thickness": 0.75, "color": [0.63, 0.43, 0.22], "color2": [0.72, 0.52, 0.28], "grain": 0.45, "banding": 0.35 },
+    { "id": "gravel_clay", "name": "Gravelly clay (C horizon)", "thickness": 0.7, "color": [0.60, 0.38, 0.30], "color2": [0.72, 0.66, 0.58], "grain": 0.85, "banding": 0.25 },
+    { "id": "bedrock", "name": "Bedrock", "thickness": 1.0, "color": [0.46, 0.47, 0.50], "color2": [0.58, 0.58, 0.60], "grain": 0.25, "banding": 0.55 }
+  ]
+}

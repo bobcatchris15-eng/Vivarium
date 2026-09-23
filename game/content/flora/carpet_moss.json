@@ -1,0 +1,85 @@
+{
+  "id": "carpet_moss",
+  "name": "Carpet Moss",
+  "archetype": "moss",
+  "role": "Groundcover colonist of moist, shaded soil; spreads laterally in mats.",
+  "description": "A bright feather-moss forming continuous carpets. Avoids fresh bark, which sheds before it can anchor.",
+  "habitat": {
+    "substrates": {
+      "soil": 1.0,
+      "wood": 0.8,
+      "rock": 0.35,
+      "gravel": 0.2
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [
+      "bark_fresh"
+    ],
+    "moisture": {
+      "optimum": 0.68,
+      "tolerance": 0.2
+    },
+    "light": {
+      "optimum": 0.45,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.25,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0.0,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.35,
+    "maxBiomass": 1.0,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 6,
+    "lifespanDays": 150,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.34,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.45,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.35,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.6,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.8,
+  "grazingValue": 0.0,
+  "visual": {
+    "shape": "carpet",
+    "color": [
+      0.3,
+      0.66,
+      0.2
+    ],
+    "color2": [
+      0.52,
+      0.78,
+      0.24
+    ],
+    "colorVariance": 0.06,
+    "height": 0.025
+  },
+  "tags": [
+    "moss",
+    "groundcover"
+  ]
+}
