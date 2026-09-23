@@ -84,6 +84,9 @@ public partial class SmokeRunner : Node
         Log.Info(LogCategory.Test, $"{(ok ? "PASS" : "FAIL")} {name} {detail}");
     }
 
+    /// <summary>Waits real time (headless frames can be microseconds long).</summary>
+    private async Task Seconds(double s) { ulong end = Time.GetTicksMsec() + (ulong)(s * 1000); while (Time.GetTicksMsec() < end) await Frames(1); }
+
     private async Task Frames(int n) { for (int i = 0; i < n; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
 
     private T Find<T>(string name) where T : Node =>
@@ -91,6 +94,7 @@ public partial class SmokeRunner : Node
 
     private async Task Press(string buttonName, int frames = 3)
     {
+        Log.Info(LogCategory.Test, "press " + buttonName);
         var b = Find<BaseButton>(buttonName);
         if (b.ToggleMode) b.ButtonPressed = !b.ButtonPressed;
         b.EmitSignal(BaseButton.SignalName.Pressed);
@@ -138,10 +142,10 @@ public partial class SmokeRunner : Node
         await Frames(5);
         bool above = !cam.Medium.Underwater;
         cam.Position = new Vector3((float)deep.X, (float)surf - 0.08f, (float)deep.Z);
-        await Frames(12);
+        await Seconds(0.6);
         bool under = cam.Medium.Underwater && Session.EnvRig.UnderwaterVisual;
         cam.Position = new Vector3((float)deep.X, (float)surf + 0.4f, (float)deep.Z);
-        await Frames(12);
+        await Seconds(0.6);
         Check("camera crosses water surface", above && under && !cam.Medium.Underwater, $"transitions {cam.Medium.Transitions}");
 
         // accelerated simulation through the clock controls
@@ -167,16 +171,19 @@ public partial class SmokeRunner : Node
         await Press("Tool_PlaceRock");
         int rocks = W.Props.Rocks.Count;
         var rockSpot = DryLand(p => Vec2.Distance(p, land) > 1.2);
+        Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(rockSpot));
         Check("place rock", r?.Ok == true && W.Props.Rocks.Count == rocks + 1, r?.Message ?? "");
 
         await Press("Tool_PlaceGravel");
         var gravelSpot = DryLand(p => Vec2.Distance(p, land) > 1.5 && Vec2.Distance(p, rockSpot) > 1.5);
+        Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(gravelSpot));
         Check("place gravel", r?.Ok == true && W.SubstrateAt(gravelSpot) == Vivarium.Sim.Content.Substrate.Gravel, r?.Message ?? "");
 
         await Press("Tool_PlaceLog");
         var logSpot = DryLand(p => Vec2.Distance(p, land) > 2 && Vec2.Distance(p, rockSpot) > 2 && Vec2.Distance(p, gravelSpot) > 2 && W.Domain.ContainsDisc(p, 2));
+        Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(logSpot));
         Check("place log", r?.Ok == true, r?.Message ?? "");
 
@@ -184,17 +191,20 @@ public partial class SmokeRunner : Node
         tools.FloraSpecies = "carpet_moss";
         var mossSpot = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).First(p => W.FloraSystem.CanEstablish(W.Content.FloraOrThrow("carpet_moss"), p, out _));
         int flora = W.Flora.Count;
+        Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(mossSpot));
         Check("introduce flora", r?.Ok == true && W.Flora.Count == flora + 1, r?.Message ?? "");
 
         await Press("Tool_IntroduceFauna");
         tools.FaunaSpecies = "shrimp";
         int shrimp = W.Fauna.CountOf("shrimp");
+        Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(DeepestWater(), true));
         Check("introduce fauna", r?.Ok == true && W.Fauna.CountOf("shrimp") > shrimp, r?.Message ?? "");
 
         await Press("Tool_Poke");
         var critter = W.Fauna.Items.First(f => f.SpeciesId == "springtail");
+        Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(new WorldHit(HitKind.Fauna, critter.Id, critter.Position, 1));
         Check("pokin' stick", r?.Ok == true && critter.DisturbedUntil > W.Clock.SimSeconds, r?.Message ?? "");
 
@@ -211,6 +221,7 @@ public partial class SmokeRunner : Node
 
         await Press("Tool_RemovePlant");
         var plant = W.Flora.Items.Last();
+        Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(new WorldHit(HitKind.Flora, plant.Id, new Vec3(plant.X, W.GroundHeight(plant.Position), plant.Z), 1));
         Check("pick plant", r?.Ok == true && W.Flora.Get(plant.Id) == null, r?.Message ?? "");
 
@@ -230,9 +241,11 @@ public partial class SmokeRunner : Node
         await Press("DebugButton", 10);
         await Press("SettingsButton", 5);
         var q = Find<OptionButton>("QualityPicker");
+        W.Clock.Paused = true;   // compare state at an identical tick
         string before = WorldSerializer.Digest(W);
         foreach (int tier in new[] { 2, 0, 1 }) { q.Select(tier); q.EmitSignal(OptionButton.SignalName.ItemSelected, tier); await Frames(3); }
         Check("quality changes leave simulation untouched", WorldSerializer.Digest(W) == before);
+        W.Clock.Paused = false;
         await Press("HelpButton", 5);
         await Press("Win_Help_Close", 3);
 

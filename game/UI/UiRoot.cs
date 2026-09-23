@@ -165,7 +165,8 @@ public partial class UiRoot : Control
         var p = UiKit.Panel("Toast", l);
         p.MouseFilter = MouseFilterEnum.Ignore;
         _toasts.AddChild(p);
-        while (_toasts.GetChildCount() > 4) _toasts.GetChild(0).QueueFree();
+        // RemoveChild now (QueueFree alone would not change the count until the frame ends → infinite loop)
+        while (_toasts.GetChildCount() > 4) { var old = _toasts.GetChild(0); _toasts.RemoveChild(old); old.QueueFree(); }
         GetTree().CreateTimer(isError ? 4.0 : 2.5).Timeout += () => { if (IsInstanceValid(p)) p.QueueFree(); };
         (isError ? (Action<LogCategory, string>)Log.Info : Log.Debug)(LogCategory.UI, "toast: " + message);
     }
