@@ -38,6 +38,7 @@ public partial class Main : Node3D
         }
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (ArgAfter("--licenses") is { } licFile) { WriteLicenses(licFile); GetTree().Quit(0); return; }
 
         var settings = UserSettings.Load();
         string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test");
@@ -72,6 +73,28 @@ public partial class Main : Node3D
         int i = Array.IndexOf(UserArgs, flag);
         if (i < 0) return null;
         return i + 1 < UserArgs.Length && !UserArgs[i + 1].StartsWith("--", StringComparison.Ordinal) ? UserArgs[i + 1] : Bridge.UserPath("test-output");
+    }
+
+    /// <summary>Writes the engine's own license + third-party component inventory (exactly what is bundled).</summary>
+    private static void WriteLicenses(string path)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("# Godot Engine license\n");
+        sb.AppendLine(Engine.GetLicenseText());
+        sb.AppendLine("\n# Third-party components bundled with the Godot Engine\n");
+        foreach (var info in Engine.GetCopyrightInfo())
+        {
+            sb.AppendLine($"## {info["name"]}");
+            foreach (var part in (Godot.Collections.Array)info["parts"])
+            {
+                var d = (Godot.Collections.Dictionary)part;
+                foreach (var c in (Godot.Collections.Array)d["copyright"]) sb.AppendLine($"Copyright {c}");
+                sb.AppendLine($"License: {d["license"]}\n");
+            }
+        }
+        sb.AppendLine("\n# License texts\n");
+        foreach (var (name, text) in Engine.GetLicenseInfo()) sb.AppendLine($"## {name}\n\n{text}\n");
+        File.WriteAllText(path, sb.ToString());
     }
 
     private void SetupLogging()

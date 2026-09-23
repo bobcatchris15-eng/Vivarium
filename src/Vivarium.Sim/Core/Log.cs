@@ -100,7 +100,8 @@ public sealed class FileLogSink : ILogSink, IDisposable
             File.Copy(path, path + ".1", overwrite: true);
             File.Delete(path);
         }
-        _writer = new StreamWriter(new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), new UTF8Encoding(false));
+        // AutoFlush: log volume is low and a crash must not lose the last lines
+        _writer = new StreamWriter(new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), new UTF8Encoding(false)) { AutoFlush = true };
     }
 
     public string Path_ => _path;
