@@ -15,6 +15,8 @@ param(
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
 Set-Location $RepoRoot
+# pwsh -File passes '-Suite A,B' as one string
+$Suite = @($Suite | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 $simSuites = 'Bootstrap','World','Camera','Time','Fields','Hydrology','Flora','Fauna','Genetics','Ecology','Tools','Persistence','Perf','Integration'
 $godotSuites = 'Boot','Smoke','Render','Package'
@@ -55,6 +57,11 @@ foreach ($s in $selectedSim) {
 # ---------------------------------------------------------------- godot suites
 if ($selectedGodot.Count -gt 0) { $godot = Get-GodotExe }
 $game = Join-Path $RepoRoot 'game'
+if ($selectedGodot.Count -gt 0 -and -not (Test-Path (Join-Path $game '.godot'))) {
+    Write-Host "Fresh checkout: importing Godot project..." -ForegroundColor Cyan
+    $imp = Invoke-Timed $godot @('--headless','--path',$game,'--import') $GodotTimeoutSec "$out\import"
+    if ($imp.ExitCode -ne 0) { Record 'Import' $false "godot --import exit $($imp.ExitCode)"; exit 1 }
+}
 foreach ($s in $selectedGodot) {
     switch ($s) {
         'Boot' {
