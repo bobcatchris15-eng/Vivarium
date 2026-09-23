@@ -126,6 +126,7 @@ public sealed class FloraSystem
     public void Step(double dt)
     {
         var births = new List<(FloraSpeciesDef Sp, Vec2 P)>();
+        _buds.Clear();
         var deaths = new List<(FloraIndividual F, string Cause)>();
         var eco = C.Ecology;
         foreach (var f in _w.Flora.Items)
@@ -215,6 +216,12 @@ public sealed class FloraSystem
             if (!CanEstablish(sp, q, out _)) continue; // re-check against same-step recruits
             Establish(sp, q, "propagation");
         }
+        SporeRain(dt);
+        foreach (var (sp, q, parent, biomass) in _buds)
+        {
+            if (!CanEstablish(sp, q, out _)) { if (_w.Flora.Get(parent) is { } back) back.Biomass += biomass; continue; }
+            Establish(sp, q, "growth front", biomass).ParentId = parent;
+        }
     }
 
     /// <summary>
@@ -222,6 +229,42 @@ public sealed class FloraSystem
     /// releases spores onto the best nearby food and dies back. Returns true when normal propagation should be
     /// skipped this step (creepers only reproduce by fruiting).
     /// </summary>
+    private readonly List<(FloraSpeciesDef Sp, Vec2 P, EntityId Parent, double Biomass)> _buds = new();
+
+    /// <summary>A decomposer species this scarce keeps receiving airborne spores.</summary>
+    public const int SporeBankThreshold = 3;
+    private readonly Dictionary<string, int> _sporeCounts = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Fungi and slime molds persist as a spore bank: while a species is scarce, roughly once per biological day a
+    /// spore lands on the richest suitable litter among a few random spots and sprouts. Deterministic (keyed on
+    /// species and tick), so decomposers return whenever conditions turn favourable instead of going extinct.
+    /// </summary>
+    private void SporeRain(double dt)
+    {
+        _sporeCounts.Clear();
+        foreach (var f in _w.Flora.Items) _sporeCounts[f.SpeciesId] = _sporeCounts.GetValueOrDefault(f.SpeciesId) + 1;
+        foreach (var sp in C.Flora)
+        {
+            if (sp.Archetype is not ("fungus" or "slime_mold")) continue;
+            if (_sporeCounts.GetValueOrDefault(sp.Id) >= SporeBankThreshold) continue;
+            var rng = Rng.Keyed(_w.Seed, "flora.spores." + sp.Id, (ulong)_w.Clock.Tick * 1_000_003UL + _w.Ids.LastSerial);
+            if (rng.NextDouble() >= Math.Min(1, dt / SimUnits.Day)) continue;
+            Vec2? best = null; double bestFood = double.NegativeInfinity;
+            var cells = _w.Grid.DomainCells;
+            for (int k = 0; k < 12; k++)
+            {
+                var q = _w.Grid.CellCenter(cells[rng.NextInt(cells.Length)]);
+                double food = _w.Fields.Detritus.Sample(q);
+                if (food > bestFood && CanEstablish(sp, q, out _)) { best = q; bestFood = food; }
+            }
+            if (best.HasValue) Establish(sp, best.Value, "spores");
+        }
+    }
+
+    /// <summary>Distance between a patch of plasmodium and the growth-front patch it buds (m).</summary>
+    public const double BudStep = 0.15;
+
     private bool Creep(FloraIndividual f, FloraSpeciesDef sp, double dt, List<(FloraSpeciesDef Sp, Vec2 P)> births)
     {
         var p = f.Position;
@@ -231,6 +274,8 @@ public sealed class FloraSystem
             f.Health = Math.Max(0, f.Health - dt / SimUnits.Day);   // sporangia last about a day
             return true;
         }
+        // retraction: patches left on exhausted ground thin out and vanish (their matter flows to the fronts)
+        if (food < sp.FoodThreshold) f.Biomass *= Math.Exp(-2.0 * dt / SimUnits.Day);
         f.StarvedFor = food < sp.FoodThreshold ? f.StarvedFor + dt : Math.Max(0, f.StarvedFor - dt * 2);
         if (f.StarvedFor >= sp.StarvedToFruit && f.Stage(sp) != FloraStage.Juvenile)
         {
@@ -243,10 +288,11 @@ public sealed class FloraSystem
             }
             return true;
         }
-        // creep: sense food along eight directions out to ~1 m (nearer counts more, like a chemical gradient)
-        // and take one step toward the most promising one, over habitable ground only
-        double step = Math.Min(sp.CreepSpeed * dt, _w.Grid.CellSize);
-        if (step <= 1e-6) return true;
+        // growth front: the network does not slide as one body. A well-fed patch accumulates advance and buds a new
+        // connected patch toward the richest food it senses (~1 m, nearer counts more, like a chemical gradient),
+        // handing it part of its biomass; starved patches behind retract. The whole thing appears to flow.
+        f.CreepCredit = Math.Min(f.CreepCredit + sp.CreepSpeed * dt, BudStep * 2);
+        if (f.CreepCredit < BudStep || f.BiomassFraction(sp) < 0.25) return true;
         const double Sense = 1.0;
         double Weight(double r) => 1 - r / (Sense * 1.25);
         double stay = 0;
@@ -257,10 +303,24 @@ public sealed class FloraSystem
             var dir = Vec2.FromAngle(k * Math.PI / 4);
             double score = 0;
             for (double r = 0.25; r <= Sense + 1e-9; r += 0.25) score += _w.Fields.Detritus.Sample(p + dir * r) * Weight(r);
-            var q = p + dir * step;
-            if (score > bestScore && !Suitability(sp, q, f.Id).HardRefused) { best = q; bestScore = score; }
+            var q = p + dir * BudStep;
+            if (score > bestScore && CanEstablish(sp, q, out _)) { best = q; bestScore = score; }
         }
-        if (best != p) _w.Flora.Move(f, best);
+        if (best == p)
+        {
+            // no richer direction: on adequate food it keeps exploring, fanning outward away from where it came from
+            if (food < sp.FoodThreshold * 1.5) return true;
+            var from = _w.Flora.Get(f.ParentId) is { } par ? p - par.Position : Vec2.Zero;
+            var rng = Rng.Keyed(_w.Seed, PropagationStream, f.Id.Value, (ulong)(1000 + f.SpreadCount++));
+            double ang = (from.LengthSq > 1e-10 ? from.Angle : rng.Range(0, 2 * Math.PI)) + rng.Range(-0.9, 0.9);
+            var q = p + Vec2.FromAngle(ang) * BudStep;
+            if (!CanEstablish(sp, q, out _)) return true;
+            best = q;
+        }
+        double share = f.Biomass * 0.4;
+        f.Biomass -= share;
+        f.CreepCredit -= BudStep;
+        _buds.Add((sp, best, f.Id, share));
         return true;
     }
 

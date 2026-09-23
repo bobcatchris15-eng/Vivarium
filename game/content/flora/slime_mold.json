@@ -24,12 +24,12 @@
     "maturityDays": 1.5,
     "lifespanDays": 30,
     "nutrientPerBiomass": 0.8,
-    "radiusAtMax": 0.2,
-    "minRadius": 0.04
+    "radiusAtMax": 0.1,
+    "minRadius": 0.03
   },
   "spread": { "intervalDays": 3, "radius": 1.0, "propagules": 4, "minBiomassFraction": 0.3 },
-  "competition": { "radius": 0.25, "crowdingLimit": 1.5, "sensitivity": 0.5 },
-  "creep": { "speedPerDay": 0.6, "starvedDays": 2.0, "foodThreshold": 0.25 },
+  "competition": { "radius": 0.12, "crowdingLimit": 1.2, "sensitivity": 0.4 },
+  "creep": { "speedPerDay": 1.2, "starvedDays": 2.0, "foodThreshold": 0.12 },
   "proximity": [],
   "litterFraction": 0.9,
   "sheddingPerDay": 0.0,

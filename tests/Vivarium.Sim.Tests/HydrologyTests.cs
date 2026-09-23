@@ -167,28 +167,29 @@ public class HydrologyTests
             else if (Math.Abs(w.Domain.SignedDistance(centroid)) < 1e-5) onCut++;
         }
         Assert.True(onCut > 0, "the default pond reaches the edge, so the cut face must show the water section");
-        // visual flow direction equals simulated flow direction
-        int compared = 0;
-        for (int t = 0; t < mesh.Indices.Count; t += 3)
+        // visual flow follows the simulated current (interpolated smoothly between cells, so compare on average
+        // over clearly flowing water rather than vertex by vertex)
+        int compared = 0; double agree = 0;
+        for (int i = 0; i < mesh.VertexCount; i++)
         {
-            int i = mesh.Indices[t];
             if (mesh.NormalAt(i).Y < 0.5) continue;
-            var centroid = ((mesh.Position(i) + mesh.Position(mesh.Indices[t + 1]) + mesh.Position(mesh.Indices[t + 2])) / 3).XZ;
-            int cell = w.Grid.CellAt(centroid);   // the cell that emitted this triangle
+            int cell = w.Grid.CellAt(mesh.Position(i).XZ);
             if (!w.Grid.InDomain(cell) || !w.Water.IsWet(cell)) continue;
             var sim = new Vec2(w.Water.FlowX[cell], w.Water.FlowZ[cell]);
             var vis = new Vec2(mesh.UV2[i * 2], mesh.UV2[i * 2 + 1]);
-            if (sim.Length < 1e-9) continue;
-            Assert.True(sim.Normalized().Dot(vis.Normalized()) > 0.999);
+            if (sim.Length < 1e-7 || vis.Length < 1e-12) continue;
+            agree += sim.Normalized().Dot(vis.Normalized());
             compared++;
         }
         Assert.True(compared > 20);
+        Assert.True(agree / compared > 0.8, $"mean alignment {agree / compared:0.00} over {compared} vertices");
     }
 
     private static IEnumerable<int> Neighbours(VivariumWorld w, int c)
     {
         int i = c % w.Grid.Nx, j = c / w.Grid.Nx;
-        for (int dj = -1; dj <= 1; dj++) for (int di = -1; di <= 1; di++) if (w.Grid.InDomain(i + di, j + dj)) yield return w.Grid.Index(i + di, j + dj);
+        int r = WaterMesh.RingCells;   // the mesh covers a ring of dry cells around the water (hidden where ground is higher)
+        for (int dj = -r; dj <= r; dj++) for (int di = -r; di <= r; di++) if (w.Grid.InDomain(i + di, j + dj)) yield return w.Grid.Index(i + di, j + dj);
     }
 
     [Fact] // t-064
@@ -224,5 +225,39 @@ public class HydrologyTests
         var d = w.Water.DistanceToWater();
         Assert.Equal(0, d[w.Grid.CellAt(pond)]);
         Assert.InRange(d[w.Grid.CellAt(pond + new Vec2(2.0, 0))], 0.7, 1.3);
+    }
+
+    [Fact]
+    public void WaterSurfaceIsDrawnFinerThanTheHydrologyGrid()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        var mesh = WaterMesh.Build(w);
+        double sub = w.Grid.CellSize / WaterMesh.Subdivisions;
+        int offGrid = 0;
+        for (int i = 0; i < mesh.VertexCount; i++)
+        {
+            var p = mesh.Position(i);
+            Assert.True(double.IsFinite(p.X) && double.IsFinite(p.Y) && double.IsFinite(p.Z));
+            double fx = (p.X - w.Grid.OriginX) / w.Grid.CellSize;
+            if (mesh.NormalAt(i).Y > 0.5 && Math.Abs(fx - Math.Round(fx)) > 0.25 && Math.Abs((p.X - w.Grid.OriginX) / sub - Math.Round((p.X - w.Grid.OriginX) / sub)) < 1e-6) offGrid++;
+        }
+        Assert.True(offGrid > 100, $"sub-cell vertices: {offGrid}");
+        // the surface is never lifted over the bank: no vertex rises above the water level of the wet cells around it
+        for (int i = 0; i < mesh.VertexCount; i++)
+        {
+            if (mesh.NormalAt(i).Y < 0.5) continue;
+            var p = mesh.Position(i);
+            int c = w.Grid.CellAt(p.XZ);
+            int ci = c % w.Grid.Nx, cj = c / w.Grid.Nx;
+            double top = double.NegativeInfinity;
+            int reach = WaterMesh.RingCells + 1;
+            for (int dj = -reach; dj <= reach; dj++) for (int di = -reach; di <= reach; di++)
+            {
+                if (!w.Grid.InDomain(ci + di, cj + dj)) continue;
+                int k = w.Grid.Index(ci + di, cj + dj);
+                if (w.Water.IsWet(k)) top = Math.Max(top, w.Water.Bed[k] + w.Water.Depth[k]);
+            }
+            Assert.True(p.Y <= top + 1e-6, $"surface at {p} is above the nearby water level {top:0.000}");
+        }
     }
 }

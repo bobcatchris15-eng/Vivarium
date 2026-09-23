@@ -26,6 +26,8 @@ public sealed class FaunaSystem
     private readonly List<FaunaIndividual> _nb = new();
     private readonly List<Flora.FloraIndividual> _fnb = new();
     private readonly ulong _wanderHash = Hash.Fnv1a64("fauna.wander");
+    /// <summary>Ticks between wander control values (60 ticks = 10 simulated minutes).</summary>
+    private const int WanderPeriod = 60;
     private readonly ulong _mortalityHash = Hash.Fnv1a64("fauna.mortality");
     public const string ReproStream = "fauna.reproduction";
 
@@ -94,8 +96,13 @@ public sealed class FaunaSystem
             var ph = PhenotypeOf(f);
             var p = f.PositionXZ;
             double turn = 0;
-            double wander = Rng.HashUnit(_w.Seed, _wanderHash, f.Id.Value, (ulong)tick) * 2 - 1;
-            turn += wander * sp.Wander * 1.2;
+            // correlated wander: smooth value noise over time (a new control value every WanderPeriod ticks), so
+            // animals trace gentle curves instead of zig-zagging on every behaviour step
+            double wt = (double)tick / WanderPeriod + (f.Id.Serial % 97) / 97.0;
+            long w0 = (long)Math.Floor(wt);
+            double wf = wt - w0; wf = wf * wf * (3 - 2 * wf);
+            double wander = MathD.Lerp(Rng.HashUnit(_w.Seed, _wanderHash, f.Id.Value, (ulong)w0), Rng.HashUnit(_w.Seed, _wanderHash, f.Id.Value, (ulong)(w0 + 1)), wf) * 2 - 1;
+            turn += wander * sp.Wander * 0.45;
 
             bool disturbed = now < f.DisturbedUntil;
             bool stranded = !IsPassable(sp, p);
@@ -306,11 +313,14 @@ public sealed class FaunaSystem
     private double GrazeFlora(Vec2 p, string archetype, double want)
     {
         _w.Flora.Neighbours(p, 0.12, _fnb);
+        // keep only grazeable organisms of this kind (usually none), then visit them in id order for determinism
+        _fnb.RemoveAll(fl => C.FloraOrThrow(fl.SpeciesId) is var s && (s.Archetype != archetype || s.GrazingValue <= 0));
+        if (_fnb.Count == 0) return 0;
+        if (_fnb.Count > 1) _fnb.Sort((a, b) => a.Id.Value.CompareTo(b.Id.Value));
         double got = 0;
-        foreach (var fl in _fnb.OrderBy(x => x.Id.Value))
+        foreach (var fl in _fnb)
         {
             var fsp = C.FloraOrThrow(fl.SpeciesId);
-            if (fsp.Archetype != archetype || fsp.GrazingValue <= 0) continue;
             double avail = Math.Max(0, fl.Biomass - fsp.InitialBiomass * 0.5) * fsp.GrazingValue;
             double take = Math.Min(avail, want - got);
             if (take <= 0) continue;

@@ -2,7 +2,7 @@
   "id": "springtail",
   "name": "Springtail",
   "medium": "terrestrial",
-  "role": "Detritivore of moist litter; recycles dead plant matter.",
+  "role": "Grazer of fungal threads and microbial films on moist litter; also nibbles dead plant matter.",
   "description": "Tiny six-legged hexapods that graze fungal films on decaying matter and flick away with a spring-loaded tail.",
   "habitat": {
     "moisture": {
@@ -28,19 +28,19 @@
   },
   "diet": [
     {
-      "resource": "detritus",
-      "ratePerHour": 0.0025,
-      "efficiency": 12
-    },
-    {
       "resource": "flora:fungus",
-      "ratePerHour": 0.0015,
+      "ratePerHour": 0.003,
       "efficiency": 10
     },
     {
       "resource": "flora:slime_mold",
-      "ratePerHour": 0.001,
+      "ratePerHour": 0.0015,
       "efficiency": 10
+    },
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.0022,
+      "efficiency": 12
     }
   ],
   "metabolism": {
@@ -61,12 +61,12 @@
     "minEnergy": 0.6,
     "cost": 0.25,
     "clutchMin": 1,
-    "clutchMax": 3,
-    "cooldownDays": 3,
+    "clutchMax": 2,
+    "cooldownDays": 4,
     "mateRadius": 0.4,
     "offspringEnergy": 0.45,
     "maxLocalDensity": 14,
-    "populationCap": 450
+    "populationCap": 260
   },
   "body": {
     "sizeMin": 0.0015,

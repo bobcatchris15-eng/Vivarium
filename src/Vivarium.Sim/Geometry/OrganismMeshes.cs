@@ -205,7 +205,7 @@ public static class OrganismMeshes
     /// <summary>Arching pinnate fronds with fan leaflets, plus one unrolling fiddlehead.</summary>
     private static void Fern(MeshData m, Rng rng, double[] c1, double[] c2)
     {
-        var stalk = new[] { 0.16, 0.1, 0.06 };
+        var stalk = new[] { 0.24, 0.2, 0.1 };
         int fronds = 7 + rng.NextInt(3);
         for (int k = 0; k < fronds; k++)
         {
@@ -213,13 +213,13 @@ public static class OrganismMeshes
             var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang)); var side = new Vec3(-dir.Z, 0, dir.X);
             Vec3 At(double t) => dir * (reach * t) + new Vec3(0, rise * Math.Sin(Math.PI * t * 0.85) * (1 - 0.35 * t), 0);
             var path = new List<Vec3>(); var rad = new List<double>();
-            for (int i = 0; i <= 8; i++) { path.Add(At(i / 8.0)); rad.Add(0.018 * (1 - i / 10.0)); }
+            for (int i = 0; i <= 8; i++) { path.Add(At(i / 8.0)); rad.Add(0.011 * (1 - i / 10.0)); }
             Primitives.Tube(m, path, rad, 3, (i, v) => (stalk, 1, i, v, 0, 0));
             for (int i = 2; i <= 14; i++)
             {
                 double t = i / 15.0;
                 var c = At(t);
-                double len = 0.2 * Math.Sin(Math.PI * Math.Min(1, t * 1.15)) + 0.02;
+                double len = 0.26 * Math.Sin(Math.PI * Math.Min(1, t * 1.15)) + 0.03;
                 foreach (double sgn in new[] { -1.0, 1.0 })
                 {
                     var tip = c + side * (sgn * len) + dir * (len * 0.25) + new Vec3(0, -len * 0.25, 0);
@@ -245,8 +245,8 @@ public static class OrganismMeshes
     /// The renderer turns +X toward the log/rock being climbed and scales the height to its top.</summary>
     private static void Vine(MeshData m, Rng rng, double[] c1, double[] c2)
     {
-        var stem = new[] { 0.28, 0.24, 0.14 };
-        for (int k = 0; k < 5; k++)
+        var stem = new[] { 0.3, 0.36, 0.17 };
+        for (int k = 0; k < 6; k++)
         {
             double spread = rng.Range(-0.5, 0.5), over = rng.Range(1.0, 1.6), top = rng.Range(0.95, 1.15);
             Vec3 At(double t)
@@ -255,12 +255,12 @@ public static class OrganismMeshes
                 return new Vec3(x, Math.Max(0, y), spread * (0.3 + t) + 0.08 * Math.Sin(t * 9 + k));
             }
             var path = new List<Vec3>(); var rad = new List<double>();
-            for (int i = 0; i <= 12; i++) { path.Add(At(i / 12.0)); rad.Add(0.02 * (1 - i / 16.0)); }
+            for (int i = 0; i <= 12; i++) { path.Add(At(i / 12.0)); rad.Add(0.011 * (1 - i / 16.0)); }
             Primitives.Tube(m, path, rad, 3, (i, v) => (stem, 1, i, v, 0, 0));
-            for (int i = 1; i <= 12; i++)
+            for (int i = 1; i <= 22; i++)
             {
-                var c = At(i / 12.0 - 0.02);
-                double ang = rng.Range(0, 2 * Math.PI), sz = rng.Range(0.07, 0.11);
+                var c = At(i / 22.0 - 0.01);
+                double ang = rng.Range(0, 2 * Math.PI), sz = rng.Range(0.1, 0.17);
                 var d = new Vec3(Math.Cos(ang), rng.Range(-0.2, 0.4), Math.Sin(ang)).Normalized();
                 var side = d.Cross(Vec3.Up).Normalized();
                 if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
@@ -317,7 +317,7 @@ public static class OrganismMeshes
     /// <summary>Tiers of thin semicircular shelves with concentric colour bands (turkey tail), sticking out along +X.</summary>
     private static void Bracket(MeshData m, Rng rng, double[] c1, double[] c2)
     {
-        var bands = new[] { Primitives.Scale(c1, 0.6), c1, Primitives.Mix(c1, c2, 0.5), Primitives.Scale(c1, 0.8), c2 };
+        var bands = new[] { Primitives.Scale(c1, 0.5), Primitives.Scale(c1, 1.1), Primitives.Mix(c1, new[] { 0.3, 0.32, 0.4 }, 0.6), Primitives.Scale(c1, 0.75), c2 };
         int tiers = 3 + rng.NextInt(3);
         for (int k = 0; k < tiers; k++)
         {
@@ -345,7 +345,7 @@ public static class OrganismMeshes
             // cream pore surface underneath
             var rim = new List<Vec3>();
             for (int s = 0; s <= around; s++) { double th = -Math.PI / 2 + Math.PI * s / around; rim.Add(new Vec3(Math.Cos(th) * reach, y + 0.06 - 0.1 * Math.Abs(Math.Sin(th)), off + Math.Sin(th) * reach * 0.9)); }
-            Primitives.Fan(m, new Vec3(0, y - 0.01, off), rim, -Vec3.Up, new[] { 0.86, 0.82, 0.72 }, new[] { 0.8, 0.76, 0.66 }, 1, 1);
+            Primitives.Fan(m, new Vec3(0, y - 0.01, off), rim, -Vec3.Up, new[] { 0.62, 0.56, 0.44 }, new[] { 0.56, 0.5, 0.4 }, 1, 1);
         }
     }
 
@@ -446,22 +446,51 @@ public static class OrganismMeshes
 
     private static void Springtail(MeshData m)
     {
-        // head, thorax, abdomen (elongated, slightly humped); length 1 along +X
-        Primitives.Ellipsoid(m, new Vec3(0.36, 0.13, 0), new Vec3(0.13, 0.09, 0.1), 8, 10, (a, b) => Region(0.9 - a * 0.1, b, 1));
-        Primitives.Ellipsoid(m, new Vec3(0.12, 0.14, 0), new Vec3(0.17, 0.11, 0.12), 8, 10, (a, b) => Region(0.65 - a * 0.2, b, 1));
-        Primitives.Ellipsoid(m, new Vec3(-0.2, 0.15, 0), new Vec3(0.26, 0.13, 0.14), 8, 10, (a, b) => Region(0.45 - a * 0.4, b, 1));
+        // Entomobryid collembolan, length 1 along +X: one plump, slightly humped capsule (no waist), a large
+        // rounded head, long four-segmented antennae, three short leg pairs, the spring (furcula) folded forward
+        // under the rear and a small ventral tube. Segment rings come from the body UV in the shader.
+        var path = new List<Vec3>(); var radius = new List<double>();
+        for (int i = 0; i <= 16; i++)
+        {
+            double t = i / 16.0;                                        // 0 = neck, 1 = tail tip
+            double x = 0.2 - t * 0.66;
+            double r = 0.125 * Math.Pow(Math.Sin(Math.PI * (0.12 + 0.86 * t)), 0.55) + 0.012;
+            path.Add(new Vec3(x, 0.14 + 0.03 * Math.Sin(Math.PI * t), 0)); radius.Add(r);
+        }
+        int start = m.VertexCount;
+        Primitives.Tube(m, path, radius, 14, (i, v) => (Body, 0, 0.72 - i / 16.0 * 0.7, v, v > 0.62 && v < 0.88 ? 3 : 1, 0), new Vec3(0, 0, 1));
+        for (int i = start; i < m.VertexCount; i++)   // slightly flattened belly, rounder back
+        {
+            var q = m.Position(i);
+            if (q.Y < 0.14) m.Positions[i * 3 + 1] = (float)(0.14 + (q.Y - 0.14) * 0.75);
+        }
+        // head: big and round, tilted a little downward
+        Primitives.Ellipsoid(m, new Vec3(0.31, 0.13, 0), new Vec3(0.13, 0.105, 0.115), 8, 12, (a, b) => Region(0.86 + a * 0.1, b, 1), pitch: -0.25);
         foreach (double z in new[] { -1.0, 1.0 })
         {
-            Primitives.Ellipsoid(m, new Vec3(0.44, 0.17, 0.05 * z), new Vec3(0.025, 0.025, 0.025), 4, 6, (a, b) => Region(0.95, b, 2)); // eyes
-            Appendage(m, new[] { new Vec3(0.45, 0.17, 0.04 * z), new Vec3(0.58, 0.26, 0.12 * z), new Vec3(0.72, 0.3, 0.2 * z) }, new[] { 0.018, 0.013, 0.008 }, 4); // antennae
+            // eye patches (clusters of ocelli) on the sides of the head
+            Primitives.Ellipsoid(m, new Vec3(0.35, 0.17, 0.085 * z), new Vec3(0.03, 0.022, 0.02), 4, 6, (a, b) => Region(0.97, b, 2));
+            // antennae: four segments, gently elbowed, about 70 % of body length
+            var ant = new List<Vec3> { new Vec3(0.41, 0.17, 0.05 * z) };
+            var dir = new Vec3(0.85, 0.35, 0.4 * z).Normalized();
+            double[] seg = { 0.12, 0.14, 0.16, 0.2 };
+            for (int k = 0; k < 4; k++)
+            {
+                dir = (dir + new Vec3(0.05, -0.12 * k, 0.05 * z)).Normalized();
+                ant.Add(ant[^1] + dir * seg[k]);
+            }
+            Appendage(m, ant, new[] { 0.02, 0.017, 0.014, 0.011, 0.007 }, 4);
+            // three short leg pairs under the thorax
             for (int leg = 0; leg < 3; leg++)
             {
-                double x = 0.22 - leg * 0.1;
-                Appendage(m, new[] { new Vec3(x, 0.08, 0.08 * z), new Vec3(x + 0.02, 0.07, 0.18 * z), new Vec3(x - 0.01, 0.0, 0.22 * z) }, new[] { 0.014, 0.011, 0.008 }, 4);
+                double x = 0.17 - leg * 0.085;
+                Appendage(m, new[] { new Vec3(x, 0.07, 0.06 * z), new Vec3(x + 0.015, 0.05, 0.13 * z), new Vec3(x - 0.01, 0.0, 0.15 * z) }, new[] { 0.016, 0.012, 0.008 }, 4);
             }
         }
-        // furcula (spring tail) folded under the abdomen
-        Appendage(m, new[] { new Vec3(-0.4, 0.07, 0), new Vec3(-0.3, 0.03, 0), new Vec3(-0.05, 0.02, 0) }, new[] { 0.02, 0.015, 0.01 }, 4);
+        // ventral tube (collophore) and the folded spring
+        Primitives.Ellipsoid(m, new Vec3(0.04, 0.03, 0), new Vec3(0.03, 0.025, 0.025), 4, 6, (a, b) => Region(0.5, b, 3));
+        Appendage(m, new[] { new Vec3(-0.38, 0.06, 0), new Vec3(-0.3, 0.025, 0), new Vec3(-0.12, 0.02, 0.03), new Vec3(-0.02, 0.025, 0.035) }, new[] { 0.022, 0.018, 0.012, 0.008 }, 4);
+        Appendage(m, new[] { new Vec3(-0.3, 0.025, 0), new Vec3(-0.12, 0.02, -0.03), new Vec3(-0.02, 0.025, -0.035) }, new[] { 0.016, 0.012, 0.008 }, 4);
     }
 
     private static void Shrimp(MeshData m)

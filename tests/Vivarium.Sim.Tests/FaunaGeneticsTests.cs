@@ -116,7 +116,7 @@ public class FaunaTests
         var src = new OverlayContentSource(TestUtil.ContentSource);
         src.Set("fauna/springtail.json", File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "springtail.json")).Replace("\"resource\": \"detritus\"", "\"resource\": \"cheese\""));
         var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(src));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/springtail.json" && e.Path == "$.diet[0].resource");
+        Assert.Contains(ex.Errors, e => e.File == "fauna/springtail.json" && e.Path.StartsWith("$.diet[") && e.Path.EndsWith("].resource") && e.Message.Contains("cheese"));
     }
 
     [Fact] // t-093

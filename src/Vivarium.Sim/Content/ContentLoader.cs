@@ -323,7 +323,7 @@ public static class ContentLoader
             SpreadInterval = s.Num("intervalDays", min: 0.05, max: 365) * D, SpreadRadius = s.Num("radius", min: 0.01, max: 5), Propagules = s.Int("propagules", min: 0, max: 20),
             SpreadMinBiomassFraction = s.Num("minBiomassFraction", 0.5, 0, 1),
             CompetitionRadius = c.Num("radius", min: 0.01, max: 3), CrowdingLimit = c.Num("crowdingLimit", min: 0.01, max: 100), CompetitionSensitivity = c.Num("sensitivity", 1, 0, 10),
-            Proximity = prox, LitterFraction = n.Num("litterFraction", 0.8, 0, 1), SheddingRate = n.Num("sheddingPerDay", 0.02, 0, 0.5) / D, GrazingValue = n.Num("grazingValue", 0, 0, 1),
+            Proximity = prox, LitterFraction = n.Num("litterFraction", 0.8, 0, 1), SheddingRate = n.Num("sheddingPerDay", 0.035, 0, 0.5) / D, GrazingValue = n.Num("grazingValue", 0, 0, 1),
             Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 2),
             Tags = n.StrList("tags"),
             Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,

@@ -52,9 +52,13 @@ void fragment() {
         h = mix(waves(p - f * ph0 + vec2(t * 0.2, 0.0)), waves(p - f * ph1 + vec2(0.0, t * 0.2) + 3.7), w);
         hx = mix(waves(p + vec2(e, 0) - f * ph0 + vec2(t * 0.2, 0.0)), waves(p + vec2(e, 0) - f * ph1 + vec2(0.0, t * 0.2) + 3.7), w);
         hz = mix(waves(p + vec2(0, e) - f * ph0 + vec2(t * 0.2, 0.0)), waves(p + vec2(0, e) - f * ph1 + vec2(0.0, t * 0.2) + 3.7), w);
+        // ripple normal built in world space (the water mesh has no tangents, so NORMAL_MAP would be undefined
+        // per triangle and show up as a brick pattern of mismatched reflections)
         float amp = 0.25 + 0.6 * clamp(length(f), 0.0, 1.0);
-        NORMAL_MAP = normalize(vec3((h - hx) / 0.02 * amp * 0.08 + 0.5, (h - hz) / 0.02 * amp * 0.08 + 0.5, 1.0));
-        NORMAL_MAP_DEPTH = 0.5;
+        vec2 slope = vec2(h - hx, h - hz) / e * amp * 0.035;
+        vec3 wn = normalize(vec3(slope.x, 1.0, slope.y));
+        if (!FRONT_FACING) wn = -wn;   // seen from below the surface
+        NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
     }
 
     // refract: offset the screen lookup by the ripple slope, but never pick up things in front of the water
@@ -79,7 +83,8 @@ void fragment() {
 
     ALBEDO = vec3(0.0);           // the refracted scene is already lit; the surface only adds reflections
     EMISSION = scene;
-    ALPHA = 1.0;
+    // soft waterline: the surface fades out where almost no water lies over the ground
+    ALPHA = cutface > 0.5 ? 1.0 : smoothstep(0.0, 0.012, max(linear_depth(SCREEN_UV, INV_PROJECTION_MATRIX) - surf_depth, 0.0));
     ROUGHNESS = cutface > 0.5 ? 0.0 : 0.03;
     METALLIC = 0.0;
     SPECULAR = cutface > 0.5 ? 0.15 : 0.5;

@@ -30,6 +30,10 @@ public sealed class FloraIndividual
     public double StarvedFor { get; set; }
     /// <summary>Creeping organisms: stopped to fruit (release spores, then die back).</summary>
     public bool Fruiting { get; set; }
+    /// <summary>Creeping organisms: the patch this one budded from (a vein joins them); None for founders.</summary>
+    public EntityId ParentId { get; set; }
+    /// <summary>Creeping organisms: advance accumulated toward the next bud (m).</summary>
+    public double CreepCredit { get; set; }
 
     public Vec2 Position => new(X, Z);
 

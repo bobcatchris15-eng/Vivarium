@@ -1,5 +1,6 @@
 // Fauna instances. Species colours are material uniforms; per-individual genetics arrive in
-// INSTANCE_CUSTOM = (hue shift, marking density, pattern contrast, appendage scale).
+// INSTANCE_CUSTOM = (hue shift, marking density, pattern contrast, appendage scale ×1000 + walk-cycle phase).
+// The phase is accumulated on the CPU from each animal's real speed, so legs and tails move with the body.
 // Vertex COLOR.rgb = offset from the appendage attachment, COLOR.a = appendage flag (see OrganismMeshes).
 // UV = body coordinates for markings, UV2.x = region (1 body, 2 eye, 3 belly, 4 fin/limb).
 shader_type spatial;
@@ -12,6 +13,7 @@ uniform float wiggle_speed = 9.0;
 uniform float translucency = 0.0;
 uniform float carapace = 0.0;   // clearcoat for hard, glossy exoskeletons
 uniform float scales = 0.0;     // 1 = fish scales + silvery sheen
+uniform float segment_rings = 0.0;   // body segments to mark as faint grooves along UV.x (0 = none)
 
 varying vec4 genes;
 varying float region;
@@ -37,16 +39,18 @@ float vnoise(vec2 p) {
 
 void vertex() {
     genes = INSTANCE_CUSTOM;
+    float cycle = fract(genes.w);
+    genes.w = floor(genes.w) / 1000.0;
     region = UV2.x;
     body_uv = UV;
     seed = float(INSTANCE_ID);
     // genetic appendage length: slide appendage vertices along their attachment offset
     VERTEX += COLOR.rgb * (genes.w - 1.0) * COLOR.a;
     // cosmetic locomotion: tail-to-head travelling wave (render-only)
-    float phase = TIME * wiggle_speed + seed * 1.37;
+    float phase = cycle * 6.2831853 + seed * 1.37;
     float along = clamp(0.5 - VERTEX.x, 0.0, 1.5);
     VERTEX.z += sin(phase - VERTEX.x * 7.0) * 0.035 * wiggle * along;
-    VERTEX.y += COLOR.a * sin(phase * 1.7 + VERTEX.x * 11.0) * 0.01 * wiggle;
+    VERTEX.y += COLOR.a * sin(phase * 2.0 + VERTEX.x * 11.0) * 0.012 * max(wiggle, 0.3);
 }
 
 void fragment() {
@@ -64,6 +68,7 @@ void fragment() {
     // fine surface grain (chitin pits / skin) so bodies don't read as smooth plastic
     float micro = vnoise(body_uv * vec2(90.0, 60.0) + seed * 0.37);
     col *= 0.92 + 0.16 * micro;
+    if (segment_rings > 0.5 && region < 1.5) col *= 1.0 - 0.22 * smoothstep(0.42, 0.5, abs(fract(body_uv.x * segment_rings) - 0.5));
     float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
     if (scales > 0.5 && region < 3.5 && !(region > 1.5 && region < 2.5)) {
         vec2 sc = body_uv * vec2(34.0, 22.0);

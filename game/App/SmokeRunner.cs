@@ -400,7 +400,7 @@ public partial class SmokeRunner : Node
         var aquatic = W.Fauna.Items.Where(f => W.Content.FaunaOrThrow(f.SpeciesId).Medium == Vivarium.Sim.Content.Medium.Aquatic).OrderBy(f => Vec2.Distance(f.PositionXZ, deep)).FirstOrDefault();
         var target = aquatic != null ? Bridge.V(aquatic.Position) : new Vector3((float)deep.X, (float)surf - 0.1f, (float)deep.Z);
         views.Add(("underwater", target + new Vector3(0.5f, 0.05f, 0.5f), target));
-        foreach (var species in new[] { "shrimp", "microminnow", "triops", "springtail" })
+        foreach (var species in new[] { "shrimp", "microminnow", "triops", "springtail", "pill_bug" })
         {
             var f = W.Fauna.Items.FirstOrDefault(x => x.SpeciesId == species);
             if (f == null) continue;
@@ -408,12 +408,21 @@ public partial class SmokeRunner : Node
             float scale = (float)(W.FaunaSystem.PhenotypeOf(f).BodySize * W.Content.FaunaOrThrow(species).VisualScale);
             views.Add(("closeup_" + species, p + new Vector3(scale * 2.2f, scale * 1.6f, scale * 2.2f), p));
         }
-        foreach (var species in new[] { "carpet_moss", "crust_lichen", "marginal_waterside", "ornamental_herb" })
+        foreach (var species in new[] { "carpet_moss", "crust_lichen", "marginal_waterside", "ornamental_herb", "fern", "climbing_vine", "bonnet_mushroom", "turkey_tail", "slime_mold" })
         {
             var f = W.Flora.Items.FirstOrDefault(x => x.SpeciesId == species);
             if (f == null) continue;
             var p = new Vector3((float)f.X, (float)W.GroundHeight(f.Position), (float)f.Z);
             views.Add(("closeup_" + species, p + new Vector3(0.45f, 0.35f, 0.45f), p));
+        }
+        // a shoreline close-up: a wet cell next to dry ground, seen at a low angle
+        var shoreCell = W.Grid.DomainCells.Where(c => W.Water.IsWet(c) && !W.Grid.IsBoundaryCell[c]).OrderBy(c => c)
+            .FirstOrDefault(c => { var q = W.Grid.CellCenter(c); return !W.Water.IsWet(q + new Vec2(0.5, 0)) && W.Domain.ContainsDisc(q, 2); }, -1);
+        if (shoreCell >= 0)
+        {
+            var q = W.Grid.CellCenter(shoreCell);
+            var sp3 = new Vector3((float)q.X, (float)W.Water.SurfaceAt(q), (float)q.Z);
+            views.Add(("shoreline", sp3 + new Vector3(-0.9f, 0.55f, 0.6f), sp3 + new Vector3(0.25f, 0, 0)));
         }
         W.Clock.Paused = true;
         foreach (var (name, eye, tgt) in views)
@@ -421,6 +430,46 @@ public partial class SmokeRunner : Node
             cam.LookAtPoint(eye, tgt);
             await Frames(8);
             await Screenshot(name);
+        }
+        // the pond view once more without the water surface (tells water artefacts from terrain artefacts)
+        var tt = views.FirstOrDefault(v => v.Item1 == "closeup_turkey_tail");
+        if (tt.Item1 != null)
+        {
+            cam.LookAtPoint(tt.Item2, tt.Item3);
+            Session.Water.Visible = false;
+            await Frames(8);
+            await Screenshot("closeup_turkey_tail_nowater");
+            Session.Water.Visible = true;
+        }
+        // growth you can watch: the same view before and after ~15 real seconds at the fastest speed
+        var mossPatch = W.Flora.Items.Where(x => x.SpeciesId == "carpet_moss").OrderBy(x => x.Id.Value).FirstOrDefault();
+        if (mossPatch != null)
+        {
+            var mp = new Vector3((float)mossPatch.X, (float)W.GroundHeight(mossPatch.Position), (float)mossPatch.Z);
+            cam.LookAtPoint(mp + new Vector3(1.4f, 1.3f, 1.4f), mp);
+            await Frames(8);
+            int flora0 = W.Flora.Count; double day0 = W.Clock.BioDays;
+            await Screenshot("growth_t0");
+            int speed0 = W.Clock.SpeedIndex;
+            W.Clock.SetSpeedIndex(Vivarium.Sim.Time.SimClock.SpeedSteps.Length - 1);
+            W.Clock.Paused = false;
+            await Seconds(15);
+            W.Clock.Paused = true;
+            W.Clock.SetSpeedIndex(speed0);
+            await Frames(8);
+            await Screenshot("growth_t1");
+            _facts["growth_timelapse"] = $"{W.Clock.BioDays - day0:0.0} biological days, flora {flora0} -> {W.Flora.Count}";
+            // the slime-mold network after those days: centre on its largest cluster of patches
+            var slime = W.Flora.Items.Where(x => x.SpeciesId == "slime_mold").ToList();
+            if (slime.Count > 0)
+            {
+                var hub = slime.OrderByDescending(x => slime.Count(o => Vec2.Distance(o.Position, x.Position) < 0.5)).ThenBy(x => x.Id.Value).First();
+                var hp = new Vector3((float)hub.X, (float)W.GroundHeight(hub.Position), (float)hub.Z);
+                cam.LookAtPoint(hp + new Vector3(0.55f, 0.6f, 0.55f), hp);
+                await Frames(8);
+                await Screenshot("slime_network");
+                _facts["slime_patches"] = slime.Count;
+            }
         }
         // LOD: identical view with and without LOD
         cam.LookAtPoint(new Vector3(0, 8.5f, 14.5f), new Vector3(0, -0.5f, 0));

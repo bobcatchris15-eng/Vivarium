@@ -11,10 +11,10 @@
     "refuseTags": [],
     "moisture": { "optimum": 0.75, "tolerance": 0.2 },
     "light": { "optimum": 0.25, "tolerance": 2.0 },
-    "nutrients": { "optimum": 0.12, "tolerance": 0.2 },
+    "nutrients": { "optimum": 0.12, "tolerance": 0.09 },
     "maxWaterDepth": 0.0,
     "hardMinMoisture": 0.35,
-    "minSuitability": 0.18
+    "minSuitability": 0.25
   },
   "growth": {
     "ratePerDay": 0.8,
@@ -27,7 +27,7 @@
     "radiusAtMax": 0.1,
     "minRadius": 0.03
   },
-  "spread": { "intervalDays": 2, "radius": 0.7, "propagules": 3, "minBiomassFraction": 0.5 },
+  "spread": { "intervalDays": 3, "radius": 0.7, "propagules": 2, "minBiomassFraction": 0.6 },
   "competition": { "radius": 0.2, "crowdingLimit": 2.0, "sensitivity": 0.6 },
   "proximity": [ { "target": "feature:log", "radius": 0.6, "bonus": 0.25 } ],
   "litterFraction": 0.9,

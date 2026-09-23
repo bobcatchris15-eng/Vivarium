@@ -61,7 +61,7 @@
     "mateRadius": 0.5,
     "offspringEnergy": 0.5,
     "maxLocalDensity": 8,
-    "populationCap": 160
+    "populationCap": 90
   },
   "body": {
     "sizeMin": 0.008,
