@@ -29,9 +29,9 @@ foreach ($dll in 'Vivarium.dll', 'Vivarium.Sim.dll') {
 }
 
 function Run-Watched([string[]]$UserArgs, [string]$Name) {
-    $args = $mode + @('--') + $UserArgs
+    $argv = @($mode) + @('--') + @($UserArgs)
     $stdout = "$out\$Name.out.txt"; $stderr = "$out\$Name.err.txt"
-    $p = Start-Process -FilePath $exe -ArgumentList $args -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $p = Start-Process -FilePath $exe -ArgumentList $argv -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     $connections = 0
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while (-not $p.HasExited -and (Get-Date) -lt $deadline) {

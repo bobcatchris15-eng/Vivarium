@@ -32,7 +32,10 @@ if ($LASTEXITCODE -ne 0) { dotnet build (Join-Path $game 'Vivarium.csproj') -c R
 Write-Host "Exporting Windows Desktop $version..." -ForegroundColor Cyan
 $log = Join-Path $RepoRoot 'build\export'
 $r = Invoke-Timed $godot @('--headless','--path',$game,'--export-release','Windows Desktop',(Join-Path $dest 'Vivarium.exe')) $TimeoutSec $log
-if ($r.ExitCode -ne 0 -or -not (Test-Path (Join-Path $dest 'Vivarium.exe'))) {
+$dataDir = Get-ChildItem $dest -Directory -ErrorAction SilentlyContinue | Where-Object Name -like 'data_*'
+$exportErrors = ($r.Out + "`n" + $r.Err) -split "`n" | Where-Object { $_ -match '^ERROR:' }
+if ($r.ExitCode -ne 0 -or -not (Test-Path (Join-Path $dest 'Vivarium.exe')) -or -not $dataDir -or $exportErrors) {
+    $exportErrors | Select-Object -First 5 | ForEach-Object { Write-Host $_ -ForegroundColor Red }
     Write-Host ($r.Out + "`n" + $r.Err)
     throw "Godot export failed (exit $($r.ExitCode))"
 }
