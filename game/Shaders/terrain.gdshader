@@ -37,6 +37,7 @@ uniform float soil_relief_freq = 2.6;
 varying vec3 world_pos;
 varying vec3 relief_wn;      // world-space normal including the fine relief bump
 varying float relief_mix;    // how much of the mesh normal to replace with relief_wn (0 off soil)
+varying float relief_h;      // relief height (-0.5..0.5) for cavity shading
 
 vec3 ramp(float t) {
     t = clamp(t, 0.0, 1.0);
@@ -76,6 +77,7 @@ void vertex() {
     vec3 n2 = normalize(cross(grad2, grad));
     relief_wn = normalize((MODEL_MATRIX * vec4(mix(NORMAL, n2, soilMask), 0.0)).xyz);
     relief_mix = soilMask;
+    relief_h = h0;
 }
 
 void fragment() {
@@ -98,9 +100,24 @@ void fragment() {
 
     vec3 tn;
     vec4 soil = sample_untiled(soil_col, soil_nrm, soil_rgh, uv, tn);
-    // the scan is a warm red-brown: pull it toward a darker, cooler forest soil
-    vec3 col = mix(vec3(dot(soil.rgb, vec3(0.3, 0.59, 0.11))), soil.rgb, 0.75) * vec3(0.8, 0.8, 0.86);
+    // the scan is a warm red-brown: pull it toward a darker umber forest soil (a cool multiplier here reads mauve)
+    vec3 col = mix(vec3(dot(soil.rgb, vec3(0.3, 0.59, 0.11))), soil.rgb, 0.7) * vec3(0.84, 0.79, 0.72);
     float rough = soil.a;
+    // topsoil structure that survives distance: crumb clumps and darker hollows between them, as albedo and
+    // a mid-scale normal (the texture detail mips away, the mesh relief is too coarse to catch light alone)
+    {
+        float s0 = fbm(world_pos.xz * 11.0);
+        float sx = fbm((world_pos.xz + vec2(0.012, 0.0)) * 11.0);
+        float sz = fbm((world_pos.xz + vec2(0.0, 0.012)) * 11.0);
+        float clump = smoothstep(0.35, 0.7, s0);
+        float cav = clamp(0.5 - relief_h * 1.6, 0.0, 1.0);          // hollows of the displaced relief
+        col *= mix(0.78, 1.12, clump) * mix(1.0, 0.8, cav * relief_mix);
+        col = mix(col, col * vec3(1.06, 0.98, 0.9), smoothstep(0.55, 0.8, fbm(world_pos.xz * 3.1 + 5.0)) * 0.6);   // drier crusted patches
+        vec3 cn = normalize(vec3(-(sx - s0) * 0.9, 0.012, -(sz - s0) * 0.9));   // world normal of the clump field
+        float far = smoothstep(1.5, 6.0, length(world_pos - CAMERA_POSITION_WORLD));
+        tn = normalize(mix(tn, vec3(cn.x, -cn.z, cn.y), mix(0.35, 0.7, far) * relief_mix));   // stronger far away, where the texture normal has faded
+        rough = mix(rough, 0.95, clump * 0.3);
+    }
     if (wDamp > 0.01) {
         vec3 n2 = unpack_normal(texture(damp_nrm, uv * 1.15 + 3.1).rgb);
         vec4 d = vec4(texture(damp_col, uv * 1.15 + 3.1).rgb, texture(damp_rgh, uv * 1.15 + 3.1).r);
@@ -122,6 +139,7 @@ void fragment() {
     if (wGrav > 0.01) {
         vec2 gu = uv * 2.4;
         vec4 g = vec4(texture(gravel_col, gu).rgb, texture(gravel_rgh, gu).r);
+        g.rgb = mix(vec3(dot(g.rgb, vec3(0.3, 0.59, 0.11))), g.rgb, 0.45) * vec3(1.03, 1.0, 0.95);   // desaturate, warm slightly
         float w = hblend(wGrav, dot(g.rgb, vec3(0.33)) * 2.0);
         col = mix(col, g.rgb, w); rough = mix(rough, g.a, w); tn = normalize(mix(tn, unpack_normal(texture(gravel_nrm, gu).rgb), w));
     }

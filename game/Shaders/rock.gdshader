@@ -14,10 +14,12 @@ uniform float dust = 0.4;   // pale dust settling in low spots / interstices bet
 
 varying vec3 world_pos;
 varying vec3 obj_pos;
+varying vec3 inst_origin;   // per-instance origin (MultiMesh transform), for per-stone variation
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     obj_pos = VERTEX;
+    inst_origin = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 }
 
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
@@ -28,7 +30,13 @@ void fragment() {
     vec4 t = triplanar(rock_col, rock_nrm, rock_rgh, world_pos / tile_metres, wn, 4.0, n);
     float avg = max(lum(textureLod(rock_col, vec2(0.5), 10.0).rgb), 0.02);
     vec3 tint = srgb_to_linear(COLOR.rgb);
-    vec3 col = tint * (t.rgb / avg) * 0.9;
+    // the scan carries a cool blue cast: keep its luminance detail, drop most of its hue so the variant tint rules
+    vec3 scan = mix(vec3(lum(t.rgb)), t.rgb, 0.3) / avg;
+    // per-stone hue/value jitter (pebbles share 6 meshes; world position breaks the repetition)
+    vec2 cell = inst_origin.xz * 97.0;
+    float j = vnoise(cell + 2.1), k = vnoise(cell * 1.7 + 8.7);
+    tint *= mix(vec3(1.04, 1.0, 0.94), vec3(0.95, 0.97, 1.0), j) * (0.85 + 0.3 * k);
+    vec3 col = tint * scan * 0.9;
     // lichen: pale grey-green and ochre crusts on the tops, a few rust-orange spots
     float up = smoothstep(0.25, 0.85, wn.y);
     float patchN = fbm(obj_pos.xz * 7.0 + obj_pos.y * 3.0);
@@ -42,6 +50,6 @@ void fragment() {
     col = mix(col, dustCol * (0.75 + 0.3 * vnoise(obj_pos.xz * 30.0 + 11.0)), low * dust * 0.5);
     ALBEDO = col;
     ROUGHNESS = mix(clamp(t.a, 0.45, 1.0), 0.95, crust);
-    SPECULAR = 0.4;
+    SPECULAR = 0.3;   // lower sky reflection: the glossy blue sheen read as cartoony on gravel
     NORMAL = normalize((VIEW_MATRIX * vec4(normalize(mix(n, wn, crust * 0.6)), 0.0)).xyz);
 }
