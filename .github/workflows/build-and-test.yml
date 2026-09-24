@@ -33,3 +33,14 @@ jobs:
         run: dotnet restore game/Vivarium.csproj
       - name: Compile Godot C# project
         run: dotnet build game/Vivarium.csproj --configuration Release --no-restore
+      - name: Fetch Godot 4.7.1 Mono
+        run: |
+          curl -L --fail --retry 3 -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_mono_linux_x86_64.zip
+          mkdir godot-bin
+          unzip -q godot.zip -d godot-bin
+          find godot-bin -type f -name 'Godot*' -maxdepth 3 -print
+      - name: Headless project load
+        run: |
+          GODOT="$(find godot-bin -type f -name 'Godot*' ! -name '*.dll' ! -name '*.pdb' | head -n 1)"
+          chmod +x "$GODOT"
+          "$GODOT" --headless --path game --editor --quit
