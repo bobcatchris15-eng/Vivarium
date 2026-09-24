@@ -12,7 +12,7 @@ Colonial edge-growth for moss/lichen (per-cell tint palettes, lichen banding), s
 | id | targets | status | attempts | last |
 |----|---------|--------|----------|------|
 | t5 stacking | PropPlacement, WorldTests | DONE | 1 | PASS; full dotnet test stalls in FloraTests.DecomposersTurnDeadMatter (pre-existing?) |
-| t1 colony | Flora, Content, Render, shader, moss/lichen json | TODO | 0 | |
+| t1 colony | 9 files | DONE | 2 | PASS 16 suites; only carpet_moss+foliose_lichen got colony blocks |
 | t2 slime tint | FloraSystem, renderers | TODO | 0 | |
 | t3 wet | moss json, cress/bacopa, sphagnum (user req: saturated/boggy margins, colonial, green→ochre→red palette, upright capitula) | TODO | 0 | |
 | t4 dry | 3 species + meshes | TODO | 0 | |
