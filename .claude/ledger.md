@@ -16,7 +16,7 @@ Colonial edge-growth for moss/lichen (per-cell tint palettes, lichen banding), s
 | t2 slime tint | +3 colony json | DONE | 1 | PASS |
 | t3 wet | moss json, cress/bacopa, sphagnum (user req: saturated/boggy margins, colonial, green→ochre→red palette, upright capitula) | DONE | 1 | PASS |
 | t4 dry | 3 species + meshes | DONE | 1 | PASS; 5 new meshes, diets |
-| t6 soil | terrain shader + new soil-detail renderer, gravel shader | TODO | 0 | user req: topsoil as real layer (displaced relief, instanced crumbs/clods/twigs/leaf litter density by moisture/detritus, visible soil profile at island edge); desaturate gravel |
+| t6 soil | terrain shader + new soil-detail renderer, gravel shader | DONE | 1 | user req: topsoil as real layer (displaced relief, instanced crumbs/clods/twigs/leaf litter density by moisture/detritus, visible soil profile at island edge); desaturate gravel |
 
 ## Unverified assumptions
 - verify.ps1 default suite runs headless in reasonable time.
