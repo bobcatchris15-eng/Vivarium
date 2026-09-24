@@ -74,24 +74,73 @@ public static class Primitives
             }
     }
 
-    /// <summary>Tapered tube through a polyline (closed ring of radius r[i] at each point).</summary>
+    /// <summary>
+    /// Tapered tube through a polyline. Frames are parallel-transported from ring to ring instead of being
+    /// rebuilt from world-up, avoiding the little twists/kinks that make curved procedural stems look assembled.
+    /// Very low requested side counts are promoted to six so close silhouettes do not become triangles/squares.
+    /// </summary>
     public static void Tube(MeshData m, IReadOnlyList<Vec3> path, IReadOnlyList<double> radius, int segments,
         Func<int, double, (double[] Col, double A, double U, double V, double U2, double V2)> attr, Vec3? upHint = null)
     {
+        if (path.Count < 2 || radius.Count != path.Count) return;
+        segments = Math.Max(6, segments);
         int start = m.VertexCount;
-        var up = upHint ?? Vec3.Up;
+        var tangents = new Vec3[path.Count];
         for (int i = 0; i < path.Count; i++)
         {
-            var dir = (i < path.Count - 1 ? path[i + 1] - path[i] : path[i] - path[i - 1]).Normalized();
-            var side = dir.Cross(up); if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
-            side = side.Normalized();
+            Vec3 d;
+            if (i == 0) d = path[1] - path[0];
+            else if (i == path.Count - 1) d = path[^1] - path[^2];
+            else d = path[i + 1] - path[i - 1];
+            tangents[i] = d.Normalized();
+        }
+
+        var hint = (upHint ?? Vec3.Up).Normalized();
+        var side = tangents[0].Cross(hint);
+        if (side.LengthSq < 1e-8) side = tangents[0].Cross(new Vec3(1, 0, 0));
+        side = side.Normalized();
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            var dir = tangents[i];
+            if (i > 0)
+            {
+                // Project the previous frame onto the new tangent plane: a cheap parallel transport that keeps
+                // the ring orientation continuous through bends without accumulating an artificial corkscrew.
+                side = side - dir * side.Dot(dir);
+                if (side.LengthSq < 1e-8)
+                {
+                    side = dir.Cross(hint);
+                    if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
+                }
+                side = side.Normalized();
+            }
             var up2 = side.Cross(dir).Normalized();
+
+            double drds = 0;
+            if (i == 0)
+            {
+                double ds = (path[1] - path[0]).Length;
+                if (ds > 1e-9) drds = (radius[1] - radius[0]) / ds;
+            }
+            else if (i == path.Count - 1)
+            {
+                double ds = (path[^1] - path[^2]).Length;
+                if (ds > 1e-9) drds = (radius[^1] - radius[^2]) / ds;
+            }
+            else
+            {
+                double ds = (path[i + 1] - path[i - 1]).Length;
+                if (ds > 1e-9) drds = (radius[i + 1] - radius[i - 1]) / ds;
+            }
+
             for (int s = 0; s <= segments; s++)
             {
                 double th = 2 * Math.PI * s / segments;
-                var n = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
+                var radial = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
+                var normal = (radial - dir * drds).Normalized();
                 var a = attr(i, (double)s / segments);
-                m.AddVertex(path[i] + n * radius[i], n, a.Col, a.A, a.U, a.V, a.U2, a.V2);
+                m.AddVertex(path[i] + radial * radius[i], normal, a.Col, a.A, a.U, a.V, a.U2, a.V2);
             }
         }
         for (int i = 0; i < path.Count - 1; i++)
