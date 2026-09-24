@@ -28,3 +28,4 @@ Colonial edge-growth for moss/lichen (per-cell tint palettes, lichen banding), s
 - Open: "before" per-species count not captured; SustainedAcceleratedRunStaysBounded now passes
 - Critter gloss DONE. Watch: closeup fps 12-15 on soil scenes (was 24-29 pre soil-detail) — suspect SoilDetailRenderer density
 - Soil fps DONE: hitch was engine RNG per instance (122ms→27ms worst). Repo pushed to github.com/bobcatchris15-eng/Vivarium (public); authors rewritten to GitHub no-reply; local backup/pre-author-rewrite branch holds old SHAs
+- Crash 15:35: AccessViolation in AddSurfaceFromArrays (IslandRenderer.BuildMeshes). User ran stale 13:32 release export (pre colony cap) for ~1h at 16x, backlog 60->42k sim-min. Hardening committed; 2-min sculpt soak showed NO leak even in old code -> root cause unproven. Release re-exported 15:47.
