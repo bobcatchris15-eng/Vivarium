@@ -155,7 +155,12 @@ public partial class FloraRenderer : Node3D
             var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
-            var t = new Transform3D(new Basis(Vector3.Up, yaw).Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+            // mats (moss, lichen, slime mold, colonial groundcovers) lie on the surface they grow on; upright plants
+            // keep growing toward the light
+            var yawBasis = new Basis(Vector3.Up, yaw);
+            if (sp.Colony != null || sp.Archetype is "moss" or "lichen" or "slime_mold")
+                yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
+            var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
             if (sp.Shape == "vine" && Anchor(new Vector2(pos.X, pos.Z), 0.6) is { } va)
             {
                 // climb: turn the stems toward the log/rock and stretch them up and over its top
@@ -268,7 +273,9 @@ public partial class FaunaRenderer : Node3D
         public double PrevT, CurT;
         public float Yaw, Speed;
         public double Phase;
+        public Vector3 Up = Vector3.Up;
     }
+
     private readonly Dictionary<EntityId, Track> _tracks = new();
 
     public Camera3D? Camera { get; set; }
@@ -392,7 +399,10 @@ public partial class FaunaRenderer : Node3D
             // full detail at any distance; only animals outside the view are skipped (invisible either way)
             float scale = (float)(ph.BodySize * sp.VisualScale);
             if (cam != null && !f.Grabbed && !cam.IsPositionInFrustum(d.Pos) && !cam.IsPositionInFrustum(d.Pos + Vector3.Up * scale)) { OffScreen++; continue; }
-            var basis = new Basis(Vector3.Up, d.Yaw).Scaled(new Vector3(scale, scale, scale));
+            // walkers follow the slope under them (damped so they don't jitter over bumps); swimmers stay level
+            var upTarget = sp.Medium == Medium.Aquatic ? Vector3.Up : SurfaceFrame.SurfaceNormal(_w, d.Pos.X, d.Pos.Z, Math.Max(scale * 0.5, 0.01));
+            tr.Up = (tr.Up + (upTarget - tr.Up) * k).Normalized();
+            var basis = (SurfaceFrame.TiltTo(tr.Up) * new Basis(Vector3.Up, d.Yaw)).Scaled(new Vector3(scale, scale, scale));
             var layer = _layers[sp.Id];
             var c = counts[sp.Id];
             bool curled = layer.Curled != null && _w.FaunaSystem.IsCurled(f);
@@ -434,5 +444,28 @@ public partial class FaunaRenderer : Node3D
     {
         mm.VisibleInstanceCount = count;
         if (count > 0) mm.Buffer = buf;
+    }
+}
+
+/// <summary>Orients ground-hugging organisms to the surface under them.</summary>
+internal static class SurfaceFrame
+{
+    /// <summary>Normal of whatever the organism stands on (terrain or a log/rock top), by central differences
+    /// over <paramref name="e"/> metres so it follows the local slope rather than single-cell noise.</summary>
+    public static Vector3 SurfaceNormal(VivariumWorld w, float x, float z, double e)
+    {
+        double hx0 = w.GroundHeight(new Vec2(x - e, z)), hx1 = w.GroundHeight(new Vec2(x + e, z));
+        double hz0 = w.GroundHeight(new Vec2(x, z - e)), hz1 = w.GroundHeight(new Vec2(x, z + e));
+        var n = new Vector3((float)(hx0 - hx1), (float)(2 * e), (float)(hz0 - hz1)).Normalized();
+        // a sample that falls off a log or rock edge reads as a cliff: cap the tilt at ~60 degrees
+        return n.Y < 0.5f ? new Vector3(n.X, 0, n.Z).Normalized() * 0.866f + Vector3.Up * 0.5f : n;
+    }
+
+    /// <summary>Shortest rotation taking +Y onto <paramref name="n"/>.</summary>
+    public static Basis TiltTo(Vector3 n)
+    {
+        var axis = Vector3.Up.Cross(n);
+        float s = axis.Length();
+        return s < 1e-5f ? Basis.Identity : new Basis(axis / s, Mathf.Atan2(s, Vector3.Up.Dot(n)));
     }
 }
