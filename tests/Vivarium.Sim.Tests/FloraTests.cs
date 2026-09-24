@@ -404,6 +404,31 @@ public class FloraTests
     }
 
     [Fact]
+    public void SlimeMoldNetworkTintsDarkAtRootBrightAtFront()
+    {
+        var w = TestUtil.FlatWorld(37);
+        TestUtil.Condition(w, 0.8, 0.2, 0.2);
+        var sp = Sp("slime_mold");
+        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0.5;
+        var food = new Vec2(1.5, 0.5);
+        foreach (int c in w.Grid.CellsInRadius(food, 0.6)) w.Fields.Detritus[c] = 3.0;
+        var root = w.FloraSystem.Establish(sp, new Vec2(0, 0.5), "t", 0.5);
+        Assert.Equal(0, root.Generation);
+        for (int i = 0; i < 48; i++) w.FloraSystem.Step(3600);
+        var patches = w.Flora.Items.Where(x => x.SpeciesId == sp.Id).ToList();
+        Assert.True(patches.Count >= 3);
+        foreach (var child in patches.Where(x => !x.ParentId.IsNone))
+        {
+            var parent = w.Flora.Get(child.ParentId);
+            Assert.NotNull(parent);
+            Assert.Equal(parent!.Generation + 1, child.Generation);
+        }
+        var front = patches.Where(x => x.Id != root.Id).OrderByDescending(x => x.Generation).First();
+        Assert.True(front.Generation > root.Generation, "growth front should be deeper in the network than the root");
+        Assert.NotEqual(root.Tint[2], front.Tint[2], 2);   // ochre root vs. yellow front differ in blue channel
+    }
+
+    [Fact]
     public void DecomposersReturnFromTheSporeBankWhenLitterIsRich()
     {
         var w = TestUtil.FlatWorld(36);

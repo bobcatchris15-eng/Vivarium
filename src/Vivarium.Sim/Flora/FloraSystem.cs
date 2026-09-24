@@ -251,12 +251,16 @@ public sealed class FloraSystem
             if (!CanEstablish(sp, q, out _)) continue; // re-check against same-step recruits
             var nf = Establish(sp, q, "propagation");
             if (sp.Colony != null) FoundColony(nf, sp);
+            else if (sp.Archetype == "slime_mold") AssignSlimeTint(nf, 0);
         }
         SporeRain(dt);
         foreach (var (sp, q, parent, biomass) in _buds)
         {
             if (!CanEstablish(sp, q, out _)) { if (_w.Flora.Get(parent) is { } back) back.Biomass += biomass; continue; }
-            Establish(sp, q, "growth front", biomass).ParentId = parent;
+            var nf = Establish(sp, q, "growth front", biomass);
+            nf.ParentId = parent;
+            int gen = (_w.Flora.Get(parent)?.Generation ?? -1) + 1;
+            AssignSlimeTint(nf, gen);
         }
         foreach (var (sp, q, root, ringDist) in _colonyBuds)
         {
@@ -303,7 +307,11 @@ public sealed class FloraSystem
                 double food = _w.Fields.Detritus.Sample(q);
                 if (food > bestFood && CanEstablish(sp, q, out _)) { best = q; bestFood = food; }
             }
-            if (best.HasValue) Establish(sp, best.Value, "spores");
+            if (best.HasValue)
+            {
+                var nf = Establish(sp, best.Value, "spores");
+                if (sp.Archetype == "slime_mold") AssignSlimeTint(nf, 0);
+            }
         }
     }
 
@@ -432,6 +440,27 @@ public sealed class FloraSystem
             MathD.Clamp01(baseC[0] + rng.Range(-jitter, jitter)),
             MathD.Clamp01(baseC[1] + rng.Range(-jitter, jitter)),
             MathD.Clamp01(baseC[2] + rng.Range(-jitter, jitter)),
+        };
+    }
+
+    /// <summary>Slime mold network-depth tint: root/founder cells (generation 0) are dark ochre, the growth front
+    /// brightens toward saturated yellow as generation rises, plus a small per-cell jitter. Set once at bud
+    /// creation from the parent's stored generation, not re-walked from ParentId each frame.</summary>
+    private static readonly double[] SlimeOldTint = { 0.55, 0.42, 0.12 };
+    private static readonly double[] SlimeFrontTint = { 1.0, 0.95, 0.2 };
+    private const int SlimeGenerationSpan = 10;
+
+    private void AssignSlimeTint(FloraIndividual f, int generation)
+    {
+        f.Generation = generation;
+        double t = Math.Clamp(generation / (double)SlimeGenerationSpan, 0, 1);
+        var rng = Rng.Keyed(_w.Seed, "flora.slime.tint", f.Id.Value);
+        const double jitter = 0.05;
+        f.Tint = new[]
+        {
+            MathD.Clamp01(SlimeOldTint[0] + (SlimeFrontTint[0] - SlimeOldTint[0]) * t + rng.Range(-jitter, jitter)),
+            MathD.Clamp01(SlimeOldTint[1] + (SlimeFrontTint[1] - SlimeOldTint[1]) * t + rng.Range(-jitter, jitter)),
+            MathD.Clamp01(SlimeOldTint[2] + (SlimeFrontTint[2] - SlimeOldTint[2]) * t + rng.Range(-jitter, jitter)),
         };
     }
 

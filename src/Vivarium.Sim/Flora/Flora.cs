@@ -42,6 +42,9 @@ public sealed class FloraIndividual
     public double[] Tint { get; set; } = { 1, 1, 1 };
     /// <summary>Colonial species: 0..1 fill toward the species' colony maxHeight, rises only while interior.</summary>
     public double HeightFactor { get; set; } = 1;
+    /// <summary>Slime mold: network depth from the founding plasmodium (0 = founder), set once at bud creation.
+    /// Drives the old-dark-ochre to front-bright-yellow tint gradient; not walked from ParentId per frame.</summary>
+    public int Generation { get; set; }
 
     public Vec2 Position => new(X, Z);
 

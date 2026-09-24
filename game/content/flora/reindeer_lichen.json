@@ -55,6 +55,20 @@
   "litterFraction": 0.8,
   "sheddingPerDay": 0.004,
   "grazingValue": 0.3,
+  "colony": {
+    "cellRadius": 0.04,
+    "frontRate": 0.09,
+    "fillRate": 0.04,
+    "maxHeight": 0.07,
+    "patternMode": "banded",
+    "bandWidth": 0.09,
+    "palette": [
+      [0.64, 0.7, 0.6],
+      [0.72, 0.76, 0.66],
+      [0.82, 0.85, 0.76],
+      [0.76, 0.8, 0.7]
+    ]
+  },
   "visual": {
     "shape": "fruticose",
     "color": [

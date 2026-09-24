@@ -194,7 +194,7 @@ public partial class FloraRenderer : Node3D
                 float thick = 0.004f + 0.009f * (float)Math.Sqrt(Math.Min(f.BiomassFraction(vsp), parent.BiomassFraction(vsp)));
                 var xAxis = d; var zAxis = xAxis.Cross(Vector3.Up).Normalized() * thick; var yAxis = zAxis.Cross(xAxis).Normalized() * thick * 0.45f;
                 list.T.Add(new Transform3D(new Basis(xAxis, yAxis, zAxis), a));
-                list.Tint.Add(new Color(1, 1, 1, 1));
+                list.Tint.Add(new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f));
                 ulong hash = Rng.Mix(f.Id.Value, 0xF10);
                 list.C.Add(new Color((hash % 1000) / 1000f, (float)Math.Min(f.Health, parent.Health), 0, ((hash >> 12) % 1000) / 1000f));
             }
