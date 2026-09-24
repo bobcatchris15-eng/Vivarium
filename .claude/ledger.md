@@ -24,3 +24,5 @@ Colonial edge-growth for moss/lichen (per-cell tint palettes, lichen banding), s
 ## Open after round 5 (visual review of render tour)
 - Moss colonies still render as large polygonal patches at day 5 — cell radius/rendering not reading as small bits; verify cellRadius & per-cell mesh scale
 - Gravel still bluish-slate; dark-soil hill still reads flat at distance
+- t7 moss cell radius DONE; t6c gravel/soil shaders DONE (inline); t8 colony bound DONE: cap 90/colony, global 2200, merge; perf run 4771 entities
+- Open: "before" per-species count not captured; SustainedAcceleratedRunStaysBounded now passes
