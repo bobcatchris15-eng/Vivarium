@@ -268,6 +268,45 @@ public class WorldTests
         Assert.False(w.Placement.Remove(log.Id).Ok);
     }
 
+    [Fact] // t-028b
+    public void PropsCanBeStackedOnEachOther()
+    {
+        var w = TestUtil.FlatWorld();
+        var log = w.Placement.PlaceLog(new Vec2(0, 0), 0, 1.5, 0.2, 0, 5);
+        Assert.True(log.Ok);
+        var baseLog = (LogProp)w.Props.Find(log.Id)!;
+        double logTop = baseLog.Y + baseLog.Radius;
+
+        // rock stacked on the log: seated at the log's top, not the terrain
+        var rock = w.Placement.PlaceRock(new Vec2(0, 0), 0.3, 0, 11);
+        Assert.True(rock.Ok, rock.Message);
+        var r = (Rock)w.Props.Find(rock.Id)!;
+        Assert.Equal(logTop - r.SizeY * 0.25, r.Y, 6);
+        Assert.True(r.Y > baseLog.Y + 0.05, "rock should be seated above the log, not at terrain level");
+
+        // stack a second rock on the first rock (level 3): allowed
+        var rockTop = r.Y + r.SizeY * 0.75;
+        var rock2 = w.Placement.PlaceRock(new Vec2(0, 0), 0.25, 0, 12);
+        Assert.True(rock2.Ok, rock2.Message);
+        var r2 = (Rock)w.Props.Find(rock2.Id)!;
+        Assert.Equal(rockTop - r2.SizeY * 0.25, r2.Y, 6);
+
+        // a 4th level is rejected
+        var rock3 = w.Placement.PlaceRock(new Vec2(0, 0), 0.2, 0, 13);
+        Assert.False(rock3.Ok, "stack of 4 must be rejected");
+
+        // sculpting (which reseats internally) after lowering the base log's terrain drops the whole stack
+        double before = r2.Y;
+        int changed = TerrainEditing.Sculpt(w, new Vec2(0, 0), 1.0, 0.3, SculptMode.Lower);
+        Assert.True(changed > 0);
+        Assert.True(r2.Y < before, "top of stack should follow the base down");
+
+        // removing the base log reseats the props that were stacked on it
+        double rBeforeRemoval = r.Y;
+        Assert.True(w.Placement.Remove(log.Id).Ok);
+        Assert.True(r.Y < rBeforeRemoval, "removing the base should lower props stacked on it");
+    }
+
     [Fact] // t-029
     public void WorldGenerationDigestsAreStableForFixtureSeeds()
     {

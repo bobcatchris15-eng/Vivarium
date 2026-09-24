@@ -28,7 +28,10 @@ public sealed class PropPlacement
         double r = Math.Max(sizeX, sizeZ);
         if (!p.IsFinite) return "invalid position";
         if (!Domain.ContainsDisc(p, r * 0.9)) return "rock would extend past the island edge";
-        return OverlapCheck(p, r, ignore, gravelBlocks: false);
+        var err = OverlapCheck(p, r, ignore, gravelBlocks: false);
+        if (err != null) return err;
+        if (StackDepth(p, ignore) + 1 > MaxStackLevels) return "stack too high";
+        return null;
     }
 
     public string? ValidateLog(Vec2 p, double heading, double length, double radius, EntityId ignore = default)
@@ -37,19 +40,29 @@ public sealed class PropPlacement
         var axis = Vec2.FromAngle(heading);
         var a = p - axis * (length / 2); var b = p + axis * (length / 2);
         if (!Domain.ContainsDisc(a, radius) || !Domain.ContainsDisc(b, radius)) return "log would extend past the island edge";
+        double seat = SupportHeight(p, ignore);
         foreach (var rk in Props.Rocks)
         {
             if (rk.Id == ignore) continue;
             double d = SegmentDistance(rk.Position, a, b);
-            if (d < rk.FootprintRadius + radius + _w.Content.Tools.PropMinSpacing * 0.5) return "too close to a rock";
+            if (d < rk.FootprintRadius + radius + _w.Content.Tools.PropMinSpacing * 0.5)
+            {
+                if (seat >= RockTop(rk) - StackEps) continue; // resting on top, not interpenetrating
+                return "too close to a rock";
+            }
         }
         foreach (var lg in Props.Logs)
         {
             if (lg.Id == ignore) continue;
             var (c, e) = lg.Ends;
             double d = Math.Min(Math.Min(SegmentDistance(c, a, b), SegmentDistance(e, a, b)), Math.Min(SegmentDistance(a, c, e), SegmentDistance(b, c, e)));
-            if (d < lg.Radius + radius + _w.Content.Tools.PropMinSpacing * 0.5) return "too close to another log";
+            if (d < lg.Radius + radius + _w.Content.Tools.PropMinSpacing * 0.5)
+            {
+                if (seat >= LogTop(lg) - StackEps) continue;
+                return "too close to another log";
+            }
         }
+        if (StackDepth(p, ignore) + 1 > MaxStackLevels) return "stack too high";
         return null;
     }
 
@@ -63,14 +76,77 @@ public sealed class PropPlacement
     private string? OverlapCheck(Vec2 p, double r, EntityId ignore, bool gravelBlocks)
     {
         double spacing = _w.Content.Tools.PropMinSpacing * 0.5;
+        double seat = SupportHeight(p, ignore);
         foreach (var rk in Props.Rocks)
-            if (rk.Id != ignore && Vec2.Distance(p, rk.Position) < r + rk.FootprintRadius * 0.8 + spacing * 0.2) return "overlaps another rock";
+        {
+            if (rk.Id == ignore) continue;
+            if (Vec2.Distance(p, rk.Position) < r + rk.FootprintRadius * 0.8 + spacing * 0.2)
+            {
+                // rock-on-rock only counts as stacked, not colliding, when the new footprint fits inside the
+                // supporting rock's footprint (two same-height rocks merely brushing sideways stay rejected)
+                bool contained = Vec2.Distance(p, rk.Position) + r <= rk.FootprintRadius + StackEps;
+                if (contained && seat >= RockTop(rk) - StackEps) continue;
+                return "overlaps another rock";
+            }
+        }
         foreach (var lg in Props.Logs)
-            if (lg.Id != ignore && lg.AxisDistance(p) < r + lg.Radius + spacing * 0.2) return "overlaps a log";
+        {
+            if (lg.Id == ignore) continue;
+            if (lg.AxisDistance(p) < r + lg.Radius + spacing * 0.2)
+            {
+                if (seat >= LogTop(lg) - StackEps) continue;
+                return "overlaps a log";
+            }
+        }
         if (gravelBlocks)
             foreach (var g in Props.Gravel)
                 if (Vec2.Distance(p, g.Position) < r + g.Radius) return "overlaps gravel";
         return null;
+    }
+
+    // ------------------------------------------------------------------ stacking
+
+    private const int MaxStackLevels = 3;
+    private const double StackEps = 1e-6;
+
+    private static double RockTop(Rock rk) => rk.Y + rk.SizeY * 0.75;
+    private static double LogTop(LogProp lg) => lg.Y + lg.Radius;
+
+    /// <summary>Highest surface (terrain or a prop) directly under p; the seat height for a new prop centred there.</summary>
+    private double SupportHeight(Vec2 p, EntityId ignore = default) => SupportHeight(p, id => id == ignore);
+
+    private double SupportHeight(Vec2 p, Func<EntityId, bool> excluded)
+    {
+        double best = _w.Terrain.Height(p);
+        foreach (var rk in Props.Rocks)
+            if (!excluded(rk.Id) && rk.Covers(p)) best = Math.Max(best, RockTop(rk));
+        foreach (var lg in Props.Logs)
+            if (!excluded(lg.Id) && lg.AxisDistance(p) <= lg.Radius) best = Math.Max(best, LogTop(lg));
+        return best;
+    }
+
+    /// <summary>Number of props stacked directly beneath p (0 if resting on bare terrain).</summary>
+    private int StackDepth(Vec2 p, EntityId ignore = default) => StackDepth(p, new HashSet<EntityId> { ignore });
+
+    // ancestor-set guarded: mutual "covers" between closely-packed props must not be walked as an infinite cycle
+    private int StackDepth(Vec2 p, HashSet<EntityId> visited)
+    {
+        int best = 0;
+        foreach (var rk in Props.Rocks)
+        {
+            if (visited.Contains(rk.Id) || !rk.Covers(p)) continue;
+            visited.Add(rk.Id);
+            best = Math.Max(best, StackDepth(rk.Position, visited) + 1);
+            visited.Remove(rk.Id);
+        }
+        foreach (var lg in Props.Logs)
+        {
+            if (visited.Contains(lg.Id) || lg.AxisDistance(p) > lg.Radius) continue;
+            visited.Add(lg.Id);
+            best = Math.Max(best, StackDepth(lg.Position, visited) + 1);
+            visited.Remove(lg.Id);
+        }
+        return best;
     }
 
     private static double SegmentDistance(Vec2 p, Vec2 a, Vec2 b)
@@ -92,7 +168,7 @@ public sealed class PropPlacement
             Id = _w.Ids.Next(EntityKind.Rock), X = p.X, Z = p.Z, RotationY = rotationY,
             SizeX = sx, SizeY = sy, SizeZ = sz, VariantSeed = variantSeed,
         };
-        rock.Y = _w.Terrain.Height(p) - sy * 0.25;
+        rock.Y = SupportHeight(p) - sy * 0.25;
         Props.Rocks.Add(rock);
         Changed($"rock {rock.Id} at {p}");
         return PlacementResult.Success(rock.Id);
@@ -131,14 +207,14 @@ public sealed class PropPlacement
             {
                 var err = ValidateRock(p, r.SizeX, r.SizeZ, id);
                 if (err != null) return PlacementResult.Fail(err);
-                r.X = p.X; r.Z = p.Z; r.Y = _w.Terrain.Height(p) - r.SizeY * 0.25;
+                r.X = p.X; r.Z = p.Z; r.Y = SupportHeight(p, id) - r.SizeY * 0.25;
                 break;
             }
             case LogProp l:
             {
                 var err = ValidateLog(p, l.RotationY, l.Length, l.Radius, id);
                 if (err != null) return PlacementResult.Fail(err);
-                l.X = p.X; l.Z = p.Z; l.Y = SeatLog(p, l.RotationY, l.Length, l.Radius);
+                l.X = p.X; l.Z = p.Z; l.Y = SeatLog(p, l.RotationY, l.Length, l.Radius, id);
                 break;
             }
             case GravelPatch g:
@@ -158,6 +234,7 @@ public sealed class PropPlacement
     {
         bool removed = Props.Rocks.RemoveAll(r => r.Id == id) + Props.Logs.RemoveAll(l => l.Id == id) + Props.Gravel.RemoveAll(g => g.Id == id) > 0;
         if (!removed) return PlacementResult.Fail($"no prop with id {id}");
+        ReseatStack();
         Changed($"removed {id}");
         return PlacementResult.Success(id, "removed");
     }
@@ -165,20 +242,52 @@ public sealed class PropPlacement
     /// <summary>Re-seats rocks and logs whose footprint touches a sculpted disc. Returns true if any moved.</summary>
     public bool Reseat(Vec2 centre, double radius)
     {
-        bool any = false;
-        foreach (var r in Props.Rocks)
-            if (Vec2.Distance(r.Position, centre) <= radius + r.FootprintRadius) { r.Y = _w.Terrain.Height(r.Position) - r.SizeY * 0.25; any = true; }
-        foreach (var l in Props.Logs)
-            if (Vec2.Distance(l.Position, centre) <= radius + l.FootprintRadius) { l.Y = SeatLog(l.Position, l.RotationY, l.Length, l.Radius); any = true; }
+        var rocks = Props.Rocks.Where(r => Vec2.Distance(r.Position, centre) <= radius + r.FootprintRadius).ToList();
+        var logs = Props.Logs.Where(l => Vec2.Distance(l.Position, centre) <= radius + l.FootprintRadius).ToList();
+        bool any = ReseatOrdered(rocks, logs);
         if (any) Props.Touch();
         return any;
     }
 
-    private double SeatLog(Vec2 p, double heading, double length, double radius)
+    /// <summary>Re-seats every rock and log in ascending height order, so a stack follows its base after an edit.</summary>
+    private void ReseatStack() => ReseatOrdered(Props.Rocks, Props.Logs);
+
+    private bool ReseatOrdered(List<Rock> rocks, List<LogProp> logs)
+    {
+        bool any = false;
+        // ascending by current Y so a lower prop in a stack reseats before whatever rests on it. Anything still
+        // "pending" (not yet reseated) is excluded from support height too — it started out above this prop, so
+        // it can never be legitimate ground for it, even mid-cascade before its own new height is settled.
+        var pending = new HashSet<EntityId>(rocks.Select(r => r.Id).Concat(logs.Select(l => l.Id)));
+        var order = rocks.Select(r => ((object)r, r.Y)).Concat(logs.Select(l => ((object)l, l.Y))).OrderBy(t => t.Y).ToList();
+        foreach (var (obj, _) in order)
+        {
+            if (obj is Rock r)
+            {
+                pending.Remove(r.Id);
+                double ny = SupportHeight(r.Position, id => id == r.Id || pending.Contains(id)) - r.SizeY * 0.25;
+                if (Math.Abs(ny - r.Y) > 1e-9) any = true;
+                r.Y = ny;
+            }
+            else if (obj is LogProp l)
+            {
+                pending.Remove(l.Id);
+                double ny = SeatLog(l.Position, l.RotationY, l.Length, l.Radius, id => id == l.Id || pending.Contains(id));
+                if (Math.Abs(ny - l.Y) > 1e-9) any = true;
+                l.Y = ny;
+            }
+        }
+        return any;
+    }
+
+    private double SeatLog(Vec2 p, double heading, double length, double radius, EntityId ignore = default) =>
+        SeatLog(p, heading, length, radius, id => id == ignore);
+
+    private double SeatLog(Vec2 p, double heading, double length, double radius, Func<EntityId, bool> excluded)
     {
         var axis = Vec2.FromAngle(heading);
         double h = double.NegativeInfinity;
-        for (int k = -2; k <= 2; k++) h = Math.Max(h, _w.Terrain.Height(p + axis * (length * k / 4.5)));
+        for (int k = -2; k <= 2; k++) h = Math.Max(h, SupportHeight(p + axis * (length * k / 4.5), excluded));
         return h + radius * 0.55;
     }
 
