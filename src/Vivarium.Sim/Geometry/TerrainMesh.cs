@@ -148,6 +148,17 @@ public static class TerrainMesh
         double bottom = hf.Bottom;
         var mesh = new MeshData();
         double perimeter = 0;
+
+        double HorizonDepth(int boundary, Vec2 p)
+        {
+            if (boundary <= 0) return 0;
+            double baseDepth = strata.LayerTop(boundary);
+            ulong seed = Rng.Mix(w.Seed, Hash.Fnv1a64("strata.horizon." + boundary));
+            double amp = Math.Min(0.055, 0.012 + baseDepth * 0.035);
+            double broad = Noise.Fbm(seed, p.X * 0.42, p.Z * 0.42, 2);
+            double fine = Noise.Gradient(Rng.Mix(seed, 29), p.X * 1.15, p.Z * 1.15);
+            return Math.Max(0, baseDepth + amp * (broad * 0.78 + fine * 0.22));
+        }
         for (int k = 0; k < 6; k++)
         {
             Vec2 a = dom.Vertices[k], b = dom.Vertices[(k + 1) % 6];
@@ -159,8 +170,6 @@ public static class TerrainMesh
             int layers = strata.Layers.Count;
             for (int layer = 0; layer < layers; layer++)
             {
-                double top = strata.LayerTop(layer);
-                double bot = layer == layers - 1 ? double.PositiveInfinity : strata.LayerTop(layer + 1);
                 var col = strata.Layers[layer].Color;
                 int prevTop = -1, prevBot = -1;
                 for (int s = 0; s <= segs; s++)
@@ -168,6 +177,8 @@ public static class TerrainMesh
                     double t = (double)s / segs;
                     var p = Vec2.Lerp(a, b, t);
                     double surf = RenderHeight(hf, p);
+                    double top = HorizonDepth(layer, p);
+                    double bot = layer == layers - 1 ? surf - bottom : HorizonDepth(layer + 1, p);
                     double yTop = Math.Max(surf - top, bottom);
                     double yBot = Math.Max(surf - Math.Min(bot, surf - bottom), bottom);
                     double u = perimeter + t * len;

@@ -16,7 +16,7 @@ uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropi
 uniform sampler2D rock_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform float banding_strength = 0.3;
+uniform float banding_strength = 0.22;
 uniform vec3 rim_color : source_color = vec3(0.16, 0.20, 0.08);
 uniform float tile_metres = 1.1;
 
@@ -49,15 +49,22 @@ void fragment() {
     vec3 col = layerCol * mix(vec3(lum(detail)), detail, 0.45);
     col = mix(col, t.rgb * 0.85, wRock * 0.6);                        // bedrock mostly shows the real stone
 
-    // horizontal sedimentary banding, gently wavy
-    float band = sin(depth * 38.0 + vnoise(vec2(along * 0.8, depth * 3.0)) * 3.0);
-    col *= 1.0 + banding_strength * 0.12 * band * min(layer + 0.5, 2.0);
-    // darker line at each layer's top edge
-    col *= mix(0.7, 1.0, smoothstep(0.0, 0.03, inLayer + (layer < 0.5 ? 1.0 : 0.0)));
-    // living root mat right under the surface
-    col = mix(srgb_to_linear(rim_color) * (0.7 + 0.6 * vnoise(vec2(along, depth) * 60.0)), col, smoothstep(0.0, 0.05, depth));
+    // Subtle anisotropic laminae: coherent, irregular deposition rather than a periodic sine ruler.
+    float warp = (vnoise(vec2(along * 0.43, depth * 0.9) + layer * 2.7) - 0.5) * 0.16;
+    float laminaA = vnoise(vec2(along * 0.32, (depth + warp) * 8.2) + layer * 5.1);
+    float laminaB = vnoise(vec2(along * 0.17 + 4.2, (depth - warp * 0.4) * 17.3));
+    float lamina = (laminaA - 0.5) * 1.35 + (laminaB - 0.5) * 0.35;
+    col *= 1.0 + banding_strength * 0.10 * lamina * min(layer + 0.5, 2.0);
+
+    // Horizon contacts stay readable but are no longer inked as perfect dark diagram lines. The wall geometry
+    // itself now meanders these boundaries coherently through the specimen.
+    col *= mix(0.90, 1.0, smoothstep(0.0, 0.018, inLayer + (layer < 0.5 ? 1.0 : 0.0)));
+
+    // A restrained organic-rich skin just below the living surface; low-frequency variation avoids a noisy trim.
+    float rootOrganic = 0.88 + 0.12 * vnoise(vec2(along * 0.8, depth * 4.0) + 9.0);
+    col = mix(srgb_to_linear(rim_color) * rootOrganic, col, smoothstep(0.0, 0.038, depth));
     ALBEDO = col;
-    EMISSION = col * 0.1;   // keeps shaded cut faces legible as a deliberate specimen section
+    EMISSION = vec3(0.0);
     ROUGHNESS = clamp(t.a, 0.6, 1.0);
     SPECULAR = 0.25;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
