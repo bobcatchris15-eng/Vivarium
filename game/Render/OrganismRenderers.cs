@@ -164,6 +164,7 @@ public partial class FloraRenderer : Node3D
                 ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
                 : sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
             var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
+            if (Camera is { } camera && !FloraVisible(camera, pos, (float)r, (float)h)) continue;
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
             // mats (moss, lichen, slime mold, colonial groundcovers) lie on the surface they grow on; upright plants
@@ -229,6 +230,35 @@ public partial class FloraRenderer : Node3D
                 TrianglesDrawn += (long)vl.Full.Multimesh.InstanceCount * vl.FullTris
                     + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.InstanceCount * vl.FruitTris : 0);
             }
+    }
+
+    private bool FloraVisible(Camera3D camera, Vector3 basePos, float radius, float height)
+    {
+        // Six conservative probes keep edge-of-frame leaves from popping while still rejecting whole plants that
+        // are genuinely outside the frustum. Distance itself never reduces the mesh.
+        float mid = Math.Max(height * 0.5f, 0.01f);
+        var probes = new[]
+        {
+            basePos,
+            basePos + Vector3.Up * Math.Max(height, 0.02f),
+            basePos + new Vector3(radius, mid, 0),
+            basePos + new Vector3(-radius, mid, 0),
+            basePos + new Vector3(0, mid, radius),
+            basePos + new Vector3(0, mid, -radius),
+        };
+        bool inFrustum = false;
+        foreach (var p in probes) if (camera.IsPositionInFrustum(p)) { inFrustum = true; break; }
+        if (!inFrustum) return false;
+
+        // Cull only when a substantial opaque surface is clearly in front of the whole plant. The generous
+        // silhouette allowance deliberately biases toward drawing when there is any doubt.
+        var target = basePos + Vector3.Up * mid;
+        var delta = target - camera.GlobalPosition;
+        float distance = delta.Length();
+        if (distance < 0.25f) return true;
+        double hit = Vivarium.Sim.Tools.Selection.RayOpaque(_w, Bridge.S(camera.GlobalPosition), Bridge.S(delta / distance), distance);
+        double allowance = Math.Max(0.05, Math.Max(radius, height) * 0.75);
+        return double.IsInfinity(hit) || hit >= distance - allowance;
     }
 
     private static (List<Transform3D> T, List<Color> Tint, List<Color> C) Get(Dictionary<string, (List<Transform3D>, List<Color>, List<Color>)> d, string k)
