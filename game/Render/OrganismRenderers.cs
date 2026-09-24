@@ -78,7 +78,9 @@ public partial class FloraRenderer : Node3D
     {
         Name = name,
         CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = mesh, InstanceCount = 0 },
+        // UseColor carries per-instance tint (colonial moss/lichen; white = no change), multiplied into the
+        // mesh's baked vertex colour by the multimesh pipeline before the shader sees COLOR.
+        Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = mesh, InstanceCount = 0 },
     };
 
     public void Wobble(IEnumerable<EntityId> ids) { foreach (var id in ids) _wobbleStart[id] = _clock; }
@@ -95,7 +97,7 @@ public partial class FloraRenderer : Node3D
         Rebuild();
     }
 
-    private readonly Dictionary<string, (List<Transform3D> T, List<Color> C)> _full = new(), _fruit = new(), _veins = new();
+    private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _veins = new();
 
     /// <summary>
     /// Where a climber or bracket attaches: the nearest log or rock (sim angle toward it from p, its top height,
@@ -135,7 +137,11 @@ public partial class FloraRenderer : Node3D
 
     public void Rebuild()
     {
-        foreach (var k in _layers.Keys) { Get(_full, k).T.Clear(); Get(_full, k).C.Clear(); Get(_fruit, k).T.Clear(); Get(_fruit, k).C.Clear(); }
+        foreach (var k in _layers.Keys)
+        {
+            var fl = Get(_full, k); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
+            var fr = Get(_fruit, k); fr.T.Clear(); fr.Tint.Clear(); fr.C.Clear();
+        }
         var camPos = Camera?.GlobalPosition ?? Vector3.Zero;
         Visible_ = 0; TrianglesDrawn = 0;
         var done = new List<EntityId>();
@@ -143,7 +149,9 @@ public partial class FloraRenderer : Node3D
         {
             var sp = _w.Content.FloraOrThrow(f.SpeciesId);
             double r = f.Radius(sp);
-            double h = sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
+            double h = sp.Colony != null
+                ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
+                : sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
             var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
@@ -164,8 +172,9 @@ public partial class FloraRenderer : Node3D
             float wobble = 0;
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) { wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2); if (wobble <= 0) done.Add(f.Id); }
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
+            var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
             var bucket = f.Fruiting && _layers[sp.Id].Fruit != null ? _fruit : _full;
-            Get(bucket, sp.Id).T.Add(t); Get(bucket, sp.Id).C.Add(custom);
+            var bd = Get(bucket, sp.Id); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
             Visible_++;
         }
         foreach (var id in done) _wobbleStart.Remove(id);
@@ -173,7 +182,7 @@ public partial class FloraRenderer : Node3D
         foreach (var (id, layer) in _layers)
         {
             if (layer.Veins == null) continue;
-            var list = Get(_veins, id); list.T.Clear(); list.C.Clear();
+            var list = Get(_veins, id); list.T.Clear(); list.Tint.Clear(); list.C.Clear();
             foreach (var f in _w.Flora.Items)
             {
                 if (f.SpeciesId != id || f.ParentId.IsNone || _w.Flora.Get(f.ParentId) is not { } parent) continue;
@@ -185,6 +194,7 @@ public partial class FloraRenderer : Node3D
                 float thick = 0.004f + 0.009f * (float)Math.Sqrt(Math.Min(f.BiomassFraction(vsp), parent.BiomassFraction(vsp)));
                 var xAxis = d; var zAxis = xAxis.Cross(Vector3.Up).Normalized() * thick; var yAxis = zAxis.Cross(xAxis).Normalized() * thick * 0.45f;
                 list.T.Add(new Transform3D(new Basis(xAxis, yAxis, zAxis), a));
+                list.Tint.Add(new Color(1, 1, 1, 1));
                 ulong hash = Rng.Mix(f.Id.Value, 0xF10);
                 list.C.Add(new Color((hash % 1000) / 1000f, (float)Math.Min(f.Health, parent.Health), 0, ((hash >> 12) % 1000) / 1000f));
             }
@@ -200,30 +210,31 @@ public partial class FloraRenderer : Node3D
         }
     }
 
-    private static (List<Transform3D> T, List<Color> C) Get(Dictionary<string, (List<Transform3D>, List<Color>)> d, string k)
+    private static (List<Transform3D> T, List<Color> Tint, List<Color> C) Get(Dictionary<string, (List<Transform3D>, List<Color>, List<Color>)> d, string k)
     {
-        if (!d.TryGetValue(k, out var v)) d[k] = v = (new List<Transform3D>(), new List<Color>());
+        if (!d.TryGetValue(k, out var v)) d[k] = v = (new List<Transform3D>(), new List<Color>(), new List<Color>());
         return v;
     }
 
-    /// <summary>Uploads all instances in one packed buffer (12 transform + 4 custom floats each) instead of two engine
-    /// calls per instance, which caused frame hitches once the island filled with plants.</summary>
+    /// <summary>Uploads all instances in one packed buffer (12 transform + 4 instance-colour tint + 4 custom floats
+    /// each) instead of two engine calls per instance, which caused frame hitches once the island filled with plants.</summary>
     private static readonly Dictionary<MultiMesh, float[]> _buffers = new();
 
-    private static void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> C) data)
+    private static void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> Tint, List<Color> C) data)
     {
         int n = data.T.Count;
         if (mm.InstanceCount != n) mm.InstanceCount = n;
         if (n == 0) return;
         // reuse the buffer while the count is unchanged (the usual case): large per-rebuild arrays triggered full GCs
-        if (!_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 16) _buffers[mm] = buf = new float[n * 16];
+        if (!_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 20) _buffers[mm] = buf = new float[n * 20];
         for (int i = 0; i < n; i++)
         {
-            var t = data.T[i]; var c = data.C[i]; int o = i * 16;
+            var t = data.T[i]; var tint = data.Tint[i]; var c = data.C[i]; int o = i * 20;
             buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
             buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
             buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
-            buf[o + 12] = c.R; buf[o + 13] = c.G; buf[o + 14] = c.B; buf[o + 15] = c.A;
+            buf[o + 12] = tint.R; buf[o + 13] = tint.G; buf[o + 14] = tint.B; buf[o + 15] = tint.A;
+            buf[o + 16] = c.R; buf[o + 17] = c.G; buf[o + 18] = c.B; buf[o + 19] = c.A;
         }
         mm.Buffer = buf;
     }

@@ -63,6 +63,20 @@
   ],
   "litterFraction": 0.6,
   "grazingValue": 0.0,
+  "colony": {
+    "cellRadius": 0.03,
+    "frontRate": 0.25,
+    "fillRate": 0.08,
+    "maxHeight": 0.016,
+    "patternMode": "banded",
+    "bandWidth": 0.08,
+    "palette": [
+      [0.5, 0.68, 0.68],
+      [0.62, 0.78, 0.76],
+      [0.78, 0.88, 0.8],
+      [0.68, 0.82, 0.78]
+    ]
+  },
   "visual": {
     "shape": "foliose",
     "color": [

@@ -34,6 +34,14 @@ public sealed class FloraIndividual
     public EntityId ParentId { get; set; }
     /// <summary>Creeping organisms: advance accumulated toward the next bud (m).</summary>
     public double CreepCredit { get; set; }
+    /// <summary>Colonial species (moss/lichen): the founding cell's id; None for the founder itself.</summary>
+    public EntityId ColonyRoot { get; set; }
+    /// <summary>Colonial species: distance from the colony root at birth (m); used for banded lichen tint.</summary>
+    public double RingDist { get; set; }
+    /// <summary>Per-instance render tint (linear 0..1 RGB), multiplied into the species colour. Default white = no change.</summary>
+    public double[] Tint { get; set; } = { 1, 1, 1 };
+    /// <summary>Colonial species: 0..1 fill toward the species' colony maxHeight, rises only while interior.</summary>
+    public double HeightFactor { get; set; } = 1;
 
     public Vec2 Position => new(X, Z);
 

@@ -416,4 +416,62 @@ public class FloraTests
         Assert.True(w.Flora.Items.Count(f => f.SpeciesId == "slime_mold") > 0, "slime mold spores sprout too");
         Assert.Empty(w.CheckInvariants());
     }
+
+    [Fact] // colony-edge growth: rim buds, interior thickens
+    public void ColonyGrowsAtRimOnlyAndInteriorHeightRises()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.7, 0.5);
+        var sp = Sp("carpet_moss");
+        Assert.NotNull(sp.Colony);
+        var founder = w.FloraSystem.Establish(sp, Vec2.Zero, "test");
+        founder.Biomass = sp.MaxBiomass;
+        RunFlora(w, 25);
+        var cells = w.Flora.Items.Where(f => f.SpeciesId == "carpet_moss").ToList();
+        Assert.True(cells.Count > 5, "a mature colony should have budded several rim cells");
+        // rim cells (few same-species neighbours within 2*cellRadius) should have advanced least in height;
+        // the interior founder, long surrounded, should have thickened noticeably.
+        double cellR = sp.Colony!.CellRadius;
+        bool IsEdge(FloraIndividual f)
+        {
+            int n = 0;
+            foreach (var o in cells) if (o.Id != f.Id && Vec2.Distance(o.Position, f.Position) <= cellR * 2) n++;
+            return n < 3;
+        }
+        var interior = cells.Where(f => !IsEdge(f)).ToList();
+        var rim = cells.Where(IsEdge).ToList();
+        Assert.NotEmpty(interior);
+        Assert.NotEmpty(rim);
+        Assert.True(interior.Average(f => f.HeightFactor) > rim.Average(f => f.HeightFactor),
+            "interior cells should have thickened more than the actively-budding rim");
+        Assert.Empty(w.CheckInvariants());
+    }
+
+    [Fact] // colony-edge growth: lichen tint bands with distance from the colony root
+    public void LichenTintCorrelatesWithRingDist()
+    {
+        var w = TestUtil.FlatWorld();
+        w.Placement.PlaceLog(new Vec2(0, 0), 0, 3.0, 0.35, 1, 5);   // foliose_lichen refuses soil; needs wood/rock
+        TestUtil.Condition(w, 0.55, 0.65);
+        var sp = Sp("foliose_lichen");
+        Assert.NotNull(sp.Colony);
+        Assert.Equal(ColonyPattern.Banded, sp.Colony!.PatternMode);
+        var founder = w.FloraSystem.Establish(sp, Vec2.Zero, "test");
+        founder.Biomass = sp.MaxBiomass;
+        RunFlora(w, 60);
+        var cells = w.Flora.Items.Where(f => f.SpeciesId == "foliose_lichen" && f.RingDist > 0).ToList();
+        Assert.True(cells.Count > 4, "the lichen colony should have budded outward");
+        // banded tint is a function of RingDist / bandWidth: cells at similar ring distance should land in the
+        // same or an adjacent palette band far more often than by chance across the whole palette.
+        int SameOrAdjacentBand(FloraIndividual a, FloraIndividual b)
+        {
+            double bw = sp.Colony!.BandWidth, n = sp.Colony!.Palette.Length;
+            int ia = (int)Math.Floor(a.RingDist / bw) % (int)n, ib = (int)Math.Floor(b.RingDist / bw) % (int)n;
+            return Math.Abs(ia - ib) <= 1 ? 1 : 0;
+        }
+        var ordered = cells.OrderBy(f => f.RingDist).ToList();
+        int hits = 0;
+        for (int i = 1; i < ordered.Count; i++) hits += SameOrAdjacentBand(ordered[i - 1], ordered[i]);
+        Assert.True(hits >= (ordered.Count - 1) / 2, "neighbouring ring distances should usually land in nearby tint bands");
+    }
 }

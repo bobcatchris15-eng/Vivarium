@@ -123,12 +123,27 @@ public sealed class FloraSystem
         return crowd;
     }
 
+    /// <summary>Per-colony cell cap (bounds instance count; roots beyond this stop budding).</summary>
+    public const int ColonyCellCap = 260;
+    private readonly List<(FloraSpeciesDef Sp, Vec2 P, EntityId Root, double RingDist)> _colonyBuds = new();
+    private readonly Dictionary<EntityId, int> _colonySize = new();
+    private readonly List<FloraIndividual> _nbColony = new();
+
     public void Step(double dt)
     {
         var births = new List<(FloraSpeciesDef Sp, Vec2 P)>();
         _buds.Clear();
+        _colonyBuds.Clear();
+        _colonySize.Clear();
         var deaths = new List<(FloraIndividual F, string Cause)>();
         var eco = C.Ecology;
+        foreach (var f in _w.Flora.Items)
+        {
+            var sp0 = C.FloraOrThrow(f.SpeciesId);
+            if (sp0.Colony == null) continue;
+            var root0 = f.ColonyRoot.IsNone ? f.Id : f.ColonyRoot;
+            _colonySize[root0] = _colonySize.GetValueOrDefault(root0) + 1;
+        }
         foreach (var f in _w.Flora.Items)
         {
             var sp = C.FloraOrThrow(f.SpeciesId);
@@ -194,6 +209,26 @@ public sealed class FloraSystem
 
             if (sp.CreepSpeed > 0 && Creep(f, sp, dt, births)) continue;
 
+            if (sp.Colony is { } cd)
+            {
+                ColonyStep(f, sp, cd, p, dt);
+                // rare long-range spore: colonial species still occasionally found a new colony far away
+                if (f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
+                    && f.Age - f.LastSpreadAge >= sp.SpreadInterval * 5 && sp.Propagules > 0)
+                {
+                    var rng = Rng.Keyed(_w.Seed, PropagationStream, f.Id.Value, (ulong)f.SpreadCount);
+                    f.SpreadCount++;
+                    f.LastSpreadAge = f.Age;
+                    if (rng.NextDouble() < 0.1)
+                    {
+                        double ang = rng.Range(0, 2 * Math.PI), dist = sp.SpreadRadius * rng.Range(2.0, 4.0);
+                        var q = p + Vec2.FromAngle(ang) * dist;
+                        if (CanEstablish(sp, q, out _)) births.Add((sp, q));
+                    }
+                }
+                continue;
+            }
+
             // propagation
             if (f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
                 && f.Age - f.LastSpreadAge >= sp.SpreadInterval && sp.Propagules > 0)
@@ -214,13 +249,23 @@ public sealed class FloraSystem
         foreach (var (sp, q) in births)
         {
             if (!CanEstablish(sp, q, out _)) continue; // re-check against same-step recruits
-            Establish(sp, q, "propagation");
+            var nf = Establish(sp, q, "propagation");
+            if (sp.Colony != null) FoundColony(nf, sp);
         }
         SporeRain(dt);
         foreach (var (sp, q, parent, biomass) in _buds)
         {
             if (!CanEstablish(sp, q, out _)) { if (_w.Flora.Get(parent) is { } back) back.Biomass += biomass; continue; }
             Establish(sp, q, "growth front", biomass).ParentId = parent;
+        }
+        foreach (var (sp, q, root, ringDist) in _colonyBuds)
+        {
+            if (_colonySize.GetValueOrDefault(root) >= ColonyCellCap) continue;
+            if (!CanEstablish(sp, q, out _)) continue;
+            var nf = Establish(sp, q, "colony growth");
+            nf.ColonyRoot = root; nf.RingDist = ringDist; nf.HeightFactor = 0.15;
+            AssignColonyTint(nf, sp);
+            _colonySize[root] = _colonySize.GetValueOrDefault(root) + 1;
         }
     }
 
@@ -322,6 +367,72 @@ public sealed class FloraSystem
         f.CreepCredit -= BudStep;
         _buds.Add((sp, best, f.Id, share));
         return true;
+    }
+
+    /// <summary>
+    /// Colonial growth (moss/lichen): a cell with fewer than 3 same-species neighbours within 2·cellRadius is on
+    /// the rim and buds outward, away from the neighbour centroid plus jitter. Interior cells stop spreading and
+    /// thicken toward the species' colony max height instead.
+    /// </summary>
+    private void ColonyStep(FloraIndividual f, FloraSpeciesDef sp, FloraColonyDef cd, Vec2 p, double dt)
+    {
+        _w.Flora.Neighbours(p, cd.CellRadius * 2, _nbColony);
+        int neighbourCount = 0; var centroidSum = Vec2.Zero;
+        foreach (var n in _nbColony)
+        {
+            if (n.Id == f.Id || n.SpeciesId != sp.Id) continue;
+            neighbourCount++; centroidSum += n.Position;
+        }
+        bool edge = neighbourCount < 3;
+        var root = f.ColonyRoot.IsNone ? f.Id : f.ColonyRoot;
+        if (edge)
+        {
+            if (_colonySize.GetValueOrDefault(root) >= ColonyCellCap) return;
+            var rng = Rng.Keyed(_w.Seed, "flora.colony.bud", f.Id.Value, (ulong)f.SpreadCount++);
+            if (rng.NextDouble() >= Math.Min(1, cd.FrontRate * dt)) return;
+            var away = neighbourCount > 0 ? p - centroidSum / neighbourCount : Vec2.Zero;
+            double baseAngle = away.LengthSq > 1e-10 ? away.Angle : rng.Range(0, 2 * Math.PI);
+            double ang = baseAngle + rng.Range(-0.6, 0.6);
+            double dist = cd.CellRadius * rng.Range(1.5, 2.0);
+            var q = p + Vec2.FromAngle(ang) * dist;
+            if (CanEstablish(sp, q, out _)) _colonyBuds.Add((sp, q, root, f.RingDist + dist));
+        }
+        else
+        {
+            f.HeightFactor = Math.Min(1, f.HeightFactor + cd.FillRate * dt);
+        }
+    }
+
+    /// <summary>Marks a newly established individual as the founder (root) of a new colony and assigns its tint.</summary>
+    private void FoundColony(FloraIndividual f, FloraSpeciesDef sp)
+    {
+        f.ColonyRoot = f.Id; f.RingDist = 0; f.HeightFactor = 0.15;
+        AssignColonyTint(f, sp);
+    }
+
+    /// <summary>Chooses a per-instance tint from the species' colony palette: random pick for moss, banded by
+    /// distance from the colony root for lichen (both with a small jitter).</summary>
+    private void AssignColonyTint(FloraIndividual f, FloraSpeciesDef sp)
+    {
+        var cd = sp.Colony;
+        if (cd == null || cd.Palette.Length == 0) { f.Tint = new double[] { 1, 1, 1 }; return; }
+        var rng = Rng.Keyed(_w.Seed, "flora.colony.tint", f.Id.Value);
+        int idx;
+        if (cd.PatternMode == ColonyPattern.Banded)
+        {
+            double noise = rng.Range(-0.4, 0.4);
+            int raw = (int)Math.Floor(f.RingDist / Math.Max(cd.BandWidth, 1e-6) + noise);
+            idx = ((raw % cd.Palette.Length) + cd.Palette.Length) % cd.Palette.Length;
+        }
+        else idx = rng.NextInt(cd.Palette.Length);
+        var baseC = cd.Palette[idx];
+        const double jitter = 0.05;
+        f.Tint = new[]
+        {
+            MathD.Clamp01(baseC[0] + rng.Range(-jitter, jitter)),
+            MathD.Clamp01(baseC[1] + rng.Range(-jitter, jitter)),
+            MathD.Clamp01(baseC[2] + rng.Range(-jitter, jitter)),
+        };
     }
 
     /// <summary>True when a new individual of sp may establish at q (no hard refusal, adequate suitability, not overcrowded).</summary>

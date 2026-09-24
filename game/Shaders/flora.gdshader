@@ -1,4 +1,6 @@
-// Flora instances: baked vertex colours per species, INSTANCE_CUSTOM = (tint variation, health, wobble, seed).
+// Flora instances: baked vertex colours per species, multiplied by the per-instance MultiMesh colour (colonial
+// moss/lichen cell tint; white = unchanged for ordinary species) before reaching COLOR here.
+// INSTANCE_CUSTOM = (tint variation, health, wobble, seed).
 // surface_mode picks the micro-detail: 0 moss (photo-scanned moss, CC0 ambientCG, tinted to the species),
 // 1 lichen (lobed, crusty procedural relief), 2 vascular plants (veined, waxy leaves with translucency),
 // 3 fungi (matte flesh, gills, growth zones), 4 slime mold (glossy streaming protoplasm).

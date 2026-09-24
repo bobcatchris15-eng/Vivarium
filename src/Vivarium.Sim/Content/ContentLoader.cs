@@ -274,7 +274,7 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep");
+        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
@@ -309,6 +309,36 @@ public static class ContentLoader
             p.RejectUnknown("target", "radius", "bonus");
             prox.Add(new ProximityRule { Target = p.Str("target"), Radius = p.Num("radius", min: 0.01, max: 5), Bonus = p.Num("bonus", min: 0, max: 1) });
         }
+        FloraColonyDef? colony = null;
+        if (n.Has("colony"))
+        {
+            var co = n["colony"];
+            co.RejectUnknown("cellRadius", "frontRate", "fillRate", "maxHeight", "palette", "patternMode", "bandWidth");
+            string pm = co.Str("patternMode", "random");
+            if (pm is not ("random" or "banded")) co["patternMode"].Error("expected random | banded");
+            var palette = new List<double[]>();
+            foreach (var pc in co.Items("palette"))
+            {
+                if (pc.El.ValueKind != JsonValueKind.Array || pc.El.GetArrayLength() != 3) { pc.Error("expected color [r,g,b]"); continue; }
+                var arr = new double[3]; int ii = 0;
+                foreach (var e in pc.El.EnumerateArray())
+                {
+                    if (e.ValueKind != JsonValueKind.Number) { pc.Error("expected number"); break; }
+                    arr[ii++] = e.GetDouble();
+                }
+                palette.Add(arr);
+            }
+            colony = new FloraColonyDef
+            {
+                CellRadius = co.Num("cellRadius", min: 0.005, max: 1),
+                FrontRate = co.Num("frontRate", min: 0, max: 50) / D,
+                FillRate = co.Num("fillRate", min: 0, max: 50) / D,
+                MaxHeight = co.Num("maxHeight", min: 0.001, max: 2),
+                Palette = palette.ToArray(),
+                PatternMode = pm == "banded" ? ColonyPattern.Banded : ColonyPattern.Random,
+                BandWidth = co.Num("bandWidth", 0.1, 0.001, 5),
+            };
+        }
         var col = v.Color("color");
         var def = new FloraSpeciesDef
         {
@@ -328,6 +358,7 @@ public static class ContentLoader
             Tags = n.StrList("tags"),
             Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,
             CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,
+            Colony = colony,
         };
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");
         if (def.MaturityAge >= def.Lifespan) g["maturityDays"].Error("maturityDays must be shorter than lifespanDays");

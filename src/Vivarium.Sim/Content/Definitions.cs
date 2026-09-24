@@ -125,6 +125,27 @@ public sealed class FloraSpeciesDef
     public double ColorVariance { get; init; }
     public double Height { get; init; }
     public List<string> Tags { get; init; } = new();
+
+    /// <summary>Optional colonial growth mode (moss/lichen); null = ordinary radial spread.</summary>
+    public FloraColonyDef? Colony { get; init; }
+}
+
+public enum ColonyPattern { Random, Banded }
+
+/// <summary>Optional colonial growth mode for moss/lichen: a cluster of small capped-size cells that bud only
+/// at the rim and thicken toward the centre.</summary>
+public sealed class FloraColonyDef
+{
+    /// <summary>Nominal cell footprint radius (m).</summary>
+    public double CellRadius { get; init; }
+    /// <summary>Edge budding rate, 1/s.</summary>
+    public double FrontRate { get; init; }
+    /// <summary>Interior height-fill rate, 1/s.</summary>
+    public double FillRate { get; init; }
+    public double MaxHeight { get; init; }
+    public double[][] Palette { get; init; } = Array.Empty<double[]>();
+    public ColonyPattern PatternMode { get; init; }
+    public double BandWidth { get; init; } = 0.1;
 }
 
 public enum FloraRelationType { Neutral, Compete, Benefit, Refuse }
