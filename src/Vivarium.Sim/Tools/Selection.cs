@@ -72,6 +72,22 @@ public static class Selection
     }
 
     /// <summary>
+    /// Distance to the first substantial opaque world surface (terrain, rock or log). Renderers use this for
+    /// conservative visibility rejection; flora/fauna/water/gravel intentionally do not occlude.
+    /// </summary>
+    public static double RayOpaque(VivariumWorld w, Vec3 origin, Vec3 direction, double maxDistance = MaxDistance)
+    {
+        var dir = direction.Normalized();
+        if (dir.LengthSq < 0.5) return double.PositiveInfinity;
+        double best = RayTerrain(w, origin, dir);
+        foreach (var r in w.Props.Rocks)
+            best = Math.Min(best, RayEllipsoid(origin, dir, new Vec3(r.X, r.Y, r.Z), r.SizeX, r.SizeY, r.SizeZ, r.RotationY));
+        foreach (var l in w.Props.Logs)
+            best = Math.Min(best, RayCapsule(origin, dir, l));
+        return best <= maxDistance ? best : double.PositiveInfinity;
+    }
+
+    /// <summary>
     /// The critter closest to <paramref name="center"/> (horizontal distance) within <paramref name="radius"/>,
     /// counting its body size so a large animal whose edge is inside the circle qualifies. Held critters are skipped.
     /// </summary>
