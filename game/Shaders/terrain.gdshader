@@ -31,8 +31,12 @@ uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, r
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float tile_metres = 0.9;    // real-world size of one texture repeat
+uniform float soil_relief_amp = 0.045;   // metres of fine geometric relief on soil (lumps, furrows)
+uniform float soil_relief_freq = 2.6;
 
 varying vec3 world_pos;
+varying vec3 relief_wn;      // world-space normal including the fine relief bump
+varying float relief_mix;    // how much of the mesh normal to replace with relief_wn (0 off soil)
 
 vec3 ramp(float t) {
     t = clamp(t, 0.0, 1.0);
@@ -53,6 +57,25 @@ vec4 smooth_field(sampler2D tex, vec2 uv) {
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+
+    // fine geometric relief: real displacement (not just a normal map) so the soil reads as lumpy ground
+    // rather than a flat painted plane. Gated off gravel/rock/wood/water by the substrate code.
+    vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
+    float code = floor(texture(field_tex, fuv).g * 4.0 + 0.5);
+    float soilMask = 1.0 - step(0.5, code);   // 1 on soil (code 0), 0 elsewhere
+    float eps = 0.3;
+    float h0 = fbm(world_pos.xz * soil_relief_freq) - 0.5;
+    float h1 = fbm((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq) - 0.5;
+    float h2 = fbm((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq) - 0.5;
+    float amp = soil_relief_amp * soilMask;
+    VERTEX += NORMAL * (h0 * amp);
+    world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+
+    vec3 grad = vec3(eps, (h1 - h0) * amp, 0.0);
+    vec3 grad2 = vec3(0.0, (h2 - h0) * amp, eps);
+    vec3 n2 = normalize(cross(grad2, grad));
+    relief_wn = normalize((MODEL_MATRIX * vec4(mix(NORMAL, n2, soilMask), 0.0)).xyz);
+    relief_mix = soilMask;
 }
 
 void fragment() {
@@ -64,7 +87,7 @@ void fragment() {
     float code = floor(f.g * 4.0 + 0.5);         // overlay only: 0 soil, 1 gravel, 2 rock, 3 wood, 4 water
     vec2 uv = world_pos.xz / tile_metres;
     float macro = fbm(world_pos.xz * 0.35);
-    vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    vec3 wn = normalize(mix(normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz), relief_wn, relief_mix));
 
     // weights first, then sample only the layers that actually show here (big saving on an iGPU)
     float wDamp = smoothstep(0.5, 0.92, moisture + (macro - 0.5) * 0.12);

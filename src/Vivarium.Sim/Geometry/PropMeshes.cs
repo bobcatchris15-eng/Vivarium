@@ -6,14 +6,15 @@ namespace Vivarium.Sim.Geometry;
 /// <summary>Seed-driven procedural prop meshes. Any seed yields a distinct, deterministic variant.</summary>
 public static class PropMeshes
 {
+    // Toned toward natural, weathered stone: low saturation greys, tans and slate, no saturated hues.
     private static readonly double[][] RockPalette =
     {
-        new[] { 0.58, 0.56, 0.54 }, // warm grey granite
-        new[] { 0.46, 0.50, 0.56 }, // blue slate
-        new[] { 0.66, 0.50, 0.38 }, // sandstone
-        new[] { 0.52, 0.52, 0.47 }, // lichen-grey basalt
-        new[] { 0.70, 0.66, 0.60 }, // pale limestone
-        new[] { 0.55, 0.42, 0.40 }, // red jasper-ish
+        new[] { 0.56, 0.54, 0.52 }, // warm grey granite
+        new[] { 0.49, 0.51, 0.53 }, // slate grey
+        new[] { 0.60, 0.53, 0.44 }, // tan sandstone
+        new[] { 0.51, 0.50, 0.47 }, // umber basalt
+        new[] { 0.66, 0.63, 0.58 }, // pale limestone
+        new[] { 0.53, 0.46, 0.42 }, // muted umber-red
     };
 
     /// <summary>Unit rock (bounding radius ≈ 1, flattened base). Scale by the rock's half-extents when drawing.</summary>

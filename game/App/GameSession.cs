@@ -31,6 +31,7 @@ public partial class GameSession : Node3D
     public IslandRenderer Island { get; private set; } = null!;
     public WaterRenderer Water { get; private set; } = null!;
     public PropRenderer Props { get; private set; } = null!;
+    public SoilDetailRenderer SoilDetail { get; private set; } = null!;
     public FloraRenderer Flora { get; private set; } = null!;
     public FaunaRenderer Fauna { get; private set; } = null!;
     public OverlayRenderer Overlay { get; private set; } = null!;
@@ -60,6 +61,7 @@ public partial class GameSession : Node3D
         Island = new IslandRenderer { Name = "Island" }; AddChild(Island);
         Water = new WaterRenderer { Name = "WaterRenderer" }; AddChild(Water);
         Props = new PropRenderer { Name = "PropRenderer" }; AddChild(Props);
+        SoilDetail = new SoilDetailRenderer { Name = "SoilDetail" }; AddChild(SoilDetail);
         Flora = new FloraRenderer { Name = "FloraRenderer" }; AddChild(Flora);
         Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         Overlay = new OverlayRenderer { Name = "Overlay" }; AddChild(Overlay);
@@ -78,6 +80,7 @@ public partial class GameSession : Node3D
         Settings.Clamp();
         EnvRig.ApplyQuality(Settings.Quality);
         Flora.Quality = Fauna.Quality = Settings.Quality;
+        SoilDetail.Quality = Settings.Quality;
         CameraRig.Speed = Settings.CameraSpeed;
         CameraRig.Sensitivity = Settings.MouseSensitivity;
         CameraRig.InvertY = Settings.InvertY;
@@ -94,6 +97,8 @@ public partial class GameSession : Node3D
         Island.Build(world);
         Water.Build(world);
         Props.Build(world);
+        SoilDetail.Camera = CameraRig.Cam;
+        SoilDetail.Build(world);
         Flora.Camera = Fauna.Camera = CameraRig.Cam;
         Flora.Build(world);
         Fauna.Build(world);

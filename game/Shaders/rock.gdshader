@@ -10,6 +10,7 @@ uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap_anisotropic, repe
 uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float tile_metres = 0.9;
 uniform float lichen = 1.0;
+uniform float dust = 0.4;   // pale dust settling in low spots / interstices between gravel pebbles
 
 varying vec3 world_pos;
 varying vec3 obj_pos;
@@ -35,6 +36,10 @@ void fragment() {
     vec3 lichenCol = mix(vec3(0.42, 0.47, 0.33), vec3(0.62, 0.55, 0.30), vnoise(obj_pos.xz * 18.0));
     col = mix(col, lichenCol * (0.8 + 0.4 * vnoise(world_pos.xz * 90.0)), crust * 0.85);
     col = mix(col, vec3(0.55, 0.22, 0.05), smoothstep(0.8, 0.84, vnoise(obj_pos.xz * 25.0 + 4.0)) * up * lichen * 0.8);
+    // fine pale dust gathers in low spots and the interstices between neighbouring pebbles
+    float low = 1.0 - smoothstep(-0.2, 0.35, wn.y);
+    vec3 dustCol = vec3(0.62, 0.58, 0.50);
+    col = mix(col, dustCol * (0.75 + 0.3 * vnoise(obj_pos.xz * 30.0 + 11.0)), low * dust * 0.5);
     ALBEDO = col;
     ROUGHNESS = mix(clamp(t.a, 0.45, 1.0), 0.95, crust);
     SPECULAR = 0.4;
