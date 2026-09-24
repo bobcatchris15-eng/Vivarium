@@ -123,3 +123,15 @@ On a fresh checkout `verify.ps1` performs the one-time Godot import itself.
 - **Known cost:** the fast suite now takes about 3.3 min instead of about 1 min. Per-tick sim speed is unchanged
   (profiled against the previous commit); the ecology tests simply simulate a richer ecosystem.
 
+## Round 4: full detail and dry uplands (2026-09-24)
+- **No distance LOD.** Plants always use their full mesh and animals their full animated model at any range;
+  only animals outside the view are skipped. The render tour now checks "distant organisms keep full detail"
+  instead of LOD savings.
+- **Dry-land species.** Stonecrop (succulent), blue fescue (tussock grass) and reindeer lichen (fruticose) grow
+  on dry soil and gravel, alongside darkling beetles and silverfish. Over 42 biological days in the default world
+  they spread across the uplands and gravel patches, and the animals settle on ground averaging 0.26 moisture.
+- **Frame hitches.** A full GC was running about once a second, caused by large per-rebuild arrays. Now flora
+  uploads reuse packed buffers, water rebuilds only on real change, and the GC runs in sustained-low-latency mode.
+  A frame profiler is part of the perf run. Median 60 fps. Some frames still take about 35 ms, and a first-seen
+  material can hitch once while its shader compiles; both are left open.
+
