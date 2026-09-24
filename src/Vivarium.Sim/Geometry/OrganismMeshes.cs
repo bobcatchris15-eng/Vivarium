@@ -635,7 +635,7 @@ public static class OrganismMeshes
 
     private static readonly double[] White = { 1, 1, 1 };
 
-    public static MeshData Fauna(FaunaSpeciesDef sp)
+    public static MeshData Fauna(FaunaSpeciesDef sp, ulong visualSeed = 0)
     {
         var m = new MeshData();
         switch (sp.Model)
@@ -649,11 +649,12 @@ public static class OrganismMeshes
             case "silverfish": Silverfish(m); break;
             default: Primitives.Ellipsoid(m, new Vec3(0, 0.2, 0), new Vec3(0.5, 0.2, 0.2), 8, 10, (a, b) => (Body, 0, a, b, 1, 0)); break;
         }
+        if (visualSeed != 0) ApplyFaunaMorph(m, sp.Model, visualSeed);
         return m;
     }
 
     /// <summary>Rolled-up pose for conglobating species (pill bug ball); null for species that never curl.</summary>
-    public static MeshData? FaunaCurled(FaunaSpeciesDef sp)
+    public static MeshData? FaunaCurled(FaunaSpeciesDef sp, ulong visualSeed = 0)
     {
         if (sp.Model != "isopod") return null;
         var m = new MeshData();
@@ -667,7 +668,75 @@ public static class OrganismMeshes
             double t = (double)k / plates;
             Primitives.Ellipsoid(m, c, new Vec3(0.075, 0.05, 0.25 - 0.02 * Math.Abs(Math.Sin(ang))), 5, 12, (a, b) => Region(0.95 - t * 0.9, b, 1), pitch: ang + Math.PI / 2);
         }
+        if (visualSeed != 0) ApplyFaunaMorph(m, sp.Model, visualSeed);
         return m;
+    }
+
+    private static void ApplyFaunaMorph(MeshData m, string model, ulong seed)
+    {
+        var rng = Rng.Keyed(seed, "fauna.visual.morph", 0);
+        double length = rng.Range(0.94, 1.07);
+        double height = rng.Range(0.92, 1.08);
+        double width = rng.Range(0.92, 1.09);
+        double appendageLong = rng.Range(0.91, 1.10);
+        double appendageVert = rng.Range(0.94, 1.07);
+        double appendageWide = rng.Range(0.91, 1.11);
+        double asym = rng.Range(-0.055, 0.055);
+        double arch = rng.Range(-0.018, 0.022);
+
+        // Aquatic bodies benefit from slightly more shape diversity; plated terrestrial animals stay tighter so
+        // their joints continue to overlap plausibly.
+        if (model is "minnow" or "shrimp" or "triops")
+        {
+            length *= rng.Range(0.96, 1.05);
+            height *= rng.Range(0.96, 1.05);
+            width *= rng.Range(0.95, 1.06);
+        }
+        else if (model is "isopod" or "beetle")
+        {
+            length = MathD.Lerp(1, length, 0.7);
+            height = MathD.Lerp(1, height, 0.7);
+            width = MathD.Lerp(1, width, 0.75);
+        }
+
+        Vec3 MorphBody(Vec3 p)
+        {
+            double envelope = Math.Max(0, 1.0 - Math.Abs(p.X) / 0.65);
+            return new Vec3(
+                p.X * length,
+                p.Y * height + arch * envelope,
+                p.Z * width + asym * envelope * 0.035);
+        }
+
+        for (int i = 0; i < m.VertexCount; i++)
+        {
+            var p = m.Position(i);
+            bool appendage = m.Colors[i * 4 + 3] > 0.5f;
+            Vec3 outP;
+            if (appendage)
+            {
+                var off = new Vec3(m.Colors[i * 4], m.Colors[i * 4 + 1], m.Colors[i * 4 + 2]);
+                var attach = p - off;
+                var a2 = MorphBody(attach);
+                double side = off.Z < 0 ? -1 : off.Z > 0 ? 1 : 0;
+                var off2 = new Vec3(
+                    off.X * appendageLong,
+                    off.Y * appendageVert,
+                    off.Z * appendageWide * (1.0 + asym * side));
+                // Tiny inherited sweep differences keep antennae/legs/fins from sharing one exact outline.
+                off2 = new Vec3(off2.X + asym * off2.Z * 0.32, off2.Y, off2.Z - asym * off2.X * 0.22);
+                outP = a2 + off2;
+                m.Colors[i * 4] = (float)off2.X;
+                m.Colors[i * 4 + 1] = (float)off2.Y;
+                m.Colors[i * 4 + 2] = (float)off2.Z;
+            }
+            else outP = MorphBody(p);
+
+            m.Positions[i * 3] = (float)outP.X;
+            m.Positions[i * 3 + 1] = (float)outP.Y;
+            m.Positions[i * 3 + 2] = (float)outP.Z;
+        }
+        m.RecomputeNormals();
     }
 
     private static readonly double[] Body = { 0, 0, 0 };

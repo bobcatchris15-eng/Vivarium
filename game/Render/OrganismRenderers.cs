@@ -293,20 +293,25 @@ public partial class FloraRenderer : Node3D
 }
 
 /// <summary>
-/// Fauna drawn from authoritative positions with render-only smoothing. Activity LOD is purely visual:
-/// near animals get the full animated mesh, distant ones a static low-poly body, and off-screen or very far
-/// ones are skipped. Simulation behaviour is identical for every individual regardless of the camera.
+/// Fauna drawn from authoritative positions with render-only smoothing. Visible animals retain their full model
+/// at any distance; performance comes from visibility rejection and batching, not replacement proxies.
 /// </summary>
 public partial class FaunaRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private sealed class Layer
+    private const int MorphVariants = 4;
+    private sealed class VariantLayer
     {
         public MultiMeshInstance3D High = null!;
-        public MultiMeshInstance3D? Curled;   // rolled-up pose (pill bugs)
-        public double CycleHz;                // walk/swim cycles per second at full stride
+        public MultiMeshInstance3D? Curled;
         public int HighTris, CurledTris;
         public float[] HighBuf = System.Array.Empty<float>(), CurledBuf = System.Array.Empty<float>();
+        public int HighCount, CurledCount;
+    }
+    private sealed class Layer
+    {
+        public VariantLayer[] Variants = new VariantLayer[MorphVariants];
+        public double CycleHz;
     }
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     /// <summary>
@@ -350,20 +355,27 @@ public partial class FaunaRenderer : Node3D
             hiMat.SetShaderParameter("bloom", sp.Model switch { "springtail" => 1.0f, "isopod" => 0.85f, "silverfish" => 0.7f, "beetle" => 0.7f, "triops" or "shrimp" or "minnow" => 0.1f, _ => 0.6f });
             hiMat.SetShaderParameter("wet", sp.Model is "shrimp" or "minnow" or "triops" ? 1.0f : 0.0f);
             hiMat.SetShaderParameter("scales", sp.Model is "minnow" or "silverfish" ? 1.0f : 0.0f);
-            var still = (ShaderMaterial)hiMat.Duplicate();   // rolled-up pill bugs don't wiggle
+            var still = (ShaderMaterial)hiMat.Duplicate();
             still.SetShaderParameter("wiggle", 0.0f);
-            var hi = OrganismMeshes.Fauna(sp);
-            var layer = new Layer
+            var layer = new Layer();
+            ulong speciesSeed = Hash.Fnv1a64("fauna.visual." + sp.Id);
+            for (int v = 0; v < MorphVariants; v++)
             {
-                High = MakeMmi($"Fauna_{sp.Id}_high", Bridge.ToArrayMesh(hi, hiMat)),
-                HighTris = hi.TriangleCount,
-            };
-            AddChild(layer.High);
-            if (OrganismMeshes.FaunaCurled(sp) is { } curled)
-            {
-                layer.Curled = MakeMmi($"Fauna_{sp.Id}_curled", Bridge.ToArrayMesh(curled, still));
-                layer.CurledTris = curled.TriangleCount;
-                AddChild(layer.Curled);
+                ulong seed = Rng.Mix(speciesSeed, (ulong)(v + 1) * 0x9E3779B97F4A7C15UL);
+                var hi = OrganismMeshes.Fauna(sp, seed);
+                var vl = new VariantLayer
+                {
+                    High = MakeMmi($"Fauna_{sp.Id}_{v}_high", Bridge.ToArrayMesh(hi, hiMat)),
+                    HighTris = hi.TriangleCount,
+                };
+                AddChild(vl.High);
+                if (OrganismMeshes.FaunaCurled(sp, seed) is { } curled)
+                {
+                    vl.Curled = MakeMmi($"Fauna_{sp.Id}_{v}_curled", Bridge.ToArrayMesh(curled, still));
+                    vl.CurledTris = curled.TriangleCount;
+                    AddChild(vl.Curled);
+                }
+                layer.Variants[v] = vl;
             }
             layer.CycleHz = (sp.Model == "minnow" ? 11.0 : 7.0) / (2 * Math.PI) * 6;
             _layers[sp.Id] = layer;
@@ -397,15 +409,17 @@ public partial class FaunaRenderer : Node3D
         var cam = Camera;
         var camPos = cam?.GlobalPosition ?? Vector3.Zero;
         Drawn = OffScreen = 0; TrianglesDrawn = 0;
-        var counts = new Dictionary<string, (int Hi, int Curled)>(StringComparer.Ordinal);
-        foreach (var id in _layers.Keys) counts[id] = (0, 0);
-        // capacity = population (+headroom); buffers are kept exactly InstanceCount * 16 floats
-        // (12 transform + 4 custom per instance) so they can be uploaded without per-frame allocation
+        // Each species has a small bank of full-detail morphs. Capacity is deliberately conservative so hash
+        // imbalance cannot overflow a variant buffer; populations are small enough that this is cheap memory.
         foreach (var (id, layer) in _layers)
         {
             int n = _w.Fauna.CountOf(id);
-            layer.HighBuf = Ensure(layer.High.Multimesh, layer.HighBuf, n);
-            if (layer.Curled != null) layer.CurledBuf = Ensure(layer.Curled.Multimesh, layer.CurledBuf, n);
+            foreach (var vl in layer.Variants)
+            {
+                vl.HighCount = vl.CurledCount = 0;
+                vl.HighBuf = Ensure(vl.High.Multimesh, vl.HighBuf, n);
+                if (vl.Curled != null) vl.CurledBuf = Ensure(vl.Curled.Multimesh, vl.CurledBuf, n);
+            }
         }
         var seen = new HashSet<EntityId>();
         foreach (var f in _w.Fauna.Items)
@@ -451,10 +465,11 @@ public partial class FaunaRenderer : Node3D
             tr.Up = (tr.Up + (upTarget - tr.Up) * k).Normalized();
             var basis = (SurfaceFrame.TiltTo(tr.Up) * new Basis(Vector3.Up, d.Yaw)).Scaled(new Vector3(scale, scale, scale));
             var layer = _layers[sp.Id];
-            var c = counts[sp.Id];
-            bool curled = layer.Curled != null && _w.FaunaSystem.IsCurled(f);
-            int i = curled ? c.Curled : c.Hi;
-            var buf = curled ? layer.CurledBuf : layer.HighBuf;
+            int variant = (int)(Rng.Mix(f.Id.Value, 0xFA0AUL) % MorphVariants);
+            var vl = layer.Variants[variant];
+            bool curled = vl.Curled != null && _w.FaunaSystem.IsCurled(f);
+            int i = curled ? vl.CurledCount++ : vl.HighCount++;
+            var buf = curled ? vl.CurledBuf : vl.HighBuf;
             int o = i * 16;
             buf[o + 0] = basis.X.X; buf[o + 1] = basis.Y.X; buf[o + 2] = basis.Z.X; buf[o + 3] = d.Pos.X;
             buf[o + 4] = basis.X.Y; buf[o + 5] = basis.Y.Y; buf[o + 6] = basis.Z.Y; buf[o + 7] = d.Pos.Y;
@@ -462,16 +477,15 @@ public partial class FaunaRenderer : Node3D
             // custom.w packs the appendage scale (integer thousandths) with the walk-cycle phase (fraction)
             buf[o + 12] = (float)ph.HueShift; buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength;
             buf[o + 15] = (float)(Math.Round(ph.AppendageScale * 1000) + Math.Min(tr.Phase, 0.999));
-            counts[sp.Id] = curled ? (c.Hi, c.Curled + 1) : (c.Hi + 1, c.Curled);
             Drawn++;
         }
-        foreach (var (id, layer) in _layers)
-        {
-            var (hi, cu) = counts[id];
-            Upload(layer.High.Multimesh, layer.HighBuf, hi);
-            if (layer.Curled != null) Upload(layer.Curled.Multimesh, layer.CurledBuf, cu);
-            TrianglesDrawn += (long)hi * layer.HighTris + (long)cu * layer.CurledTris;
-        }
+        foreach (var layer in _layers.Values)
+            foreach (var vl in layer.Variants)
+            {
+                Upload(vl.High.Multimesh, vl.HighBuf, vl.HighCount);
+                if (vl.Curled != null) Upload(vl.Curled.Multimesh, vl.CurledBuf, vl.CurledCount);
+                TrianglesDrawn += (long)vl.HighCount * vl.HighTris + (long)vl.CurledCount * vl.CurledTris;
+            }
         if (_tracks.Count > seen.Count + 64)
         {
             var stale = new List<EntityId>();
