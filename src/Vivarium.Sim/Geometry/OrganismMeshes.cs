@@ -746,9 +746,18 @@ public static class OrganismMeshes
     /// <summary>Appendage vertex attributes: colour carries the offset from the attachment point.</summary>
     private static void Appendage(MeshData m, IReadOnlyList<Vec3> path, IReadOnlyList<double> radius, int segs, int region = 4)
     {
+        if (path.Count < 2 || radius.Count != path.Count) return;
         var attach = path[0];
+
+        // Build a short flared root into the first segment instead of starting a constant-radius tube abruptly at
+        // the body surface. It reads as a joint/socket at macro distance and removes the "tube glued to ellipsoid"
+        // construction tell without needing a separate overlapping primitive.
+        var p = new List<Vec3>(path.Count + 1) { attach, Vec3.Lerp(path[0], path[1], 0.18) };
+        var r = new List<double>(radius.Count + 1) { radius[0] * 1.28, radius[0] * 1.08 };
+        for (int k = 1; k < path.Count; k++) { p.Add(path[k]); r.Add(radius[k]); }
+
         int start = m.VertexCount;
-        Primitives.Tube(m, path, radius, segs, (i, v) => (Body, 1, 0.5, v, region, 0));
+        Primitives.Tube(m, p, r, segs, (i, v) => (Body, 1, 0.5, v, region, 0));
         for (int i = start; i < m.VertexCount; i++)
         {
             var off = m.Position(i) - attach;

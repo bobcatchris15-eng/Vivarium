@@ -32,24 +32,26 @@ void fragment() {
     vec3 tint = srgb_to_linear(COLOR.rgb);
     // the scan carries a cool blue cast: keep its luminance detail, drop most of its hue so the variant tint rules
     vec3 scan = mix(vec3(lum(t.rgb)), t.rgb, 0.3) / avg;
-    // per-stone hue/value jitter (pebbles share 6 meshes; world position breaks the repetition)
+    // per-stone hue/value jitter (pebbles share a variant bank; world position breaks residual repetition)
     vec2 cell = inst_origin.xz * 97.0;
     float j = vnoise(cell + 2.1), k = vnoise(cell * 1.7 + 8.7);
     tint *= mix(vec3(1.04, 1.0, 0.94), vec3(0.95, 0.97, 1.0), j) * (0.85 + 0.3 * k);
     vec3 col = tint * scan * 0.9;
-    // lichen: pale grey-green and ochre crusts on the tops, a few rust-orange spots
-    float up = smoothstep(0.25, 0.85, wn.y);
-    float patchN = fbm(obj_pos.xz * 7.0 + obj_pos.y * 3.0);
-    float crust = smoothstep(0.52, 0.62, patchN) * up * lichen;
-    vec3 lichenCol = mix(vec3(0.42, 0.47, 0.33), vec3(0.62, 0.55, 0.30), vnoise(obj_pos.xz * 18.0));
-    col = mix(col, lichenCol * (0.8 + 0.4 * vnoise(world_pos.xz * 90.0)), crust * 0.85);
-    col = mix(col, vec3(0.55, 0.22, 0.05), smoothstep(0.8, 0.84, vnoise(obj_pos.xz * 25.0 + 4.0)) * up * lichen * 0.8);
-    // fine pale dust gathers in low spots and the interstices between neighbouring pebbles
-    float low = 1.0 - smoothstep(-0.2, 0.35, wn.y);
-    vec3 dustCol = vec3(0.62, 0.58, 0.50);
-    col = mix(col, dustCol * (0.75 + 0.3 * vnoise(obj_pos.xz * 30.0 + 11.0)), low * dust * 0.5);
+    // Weathering lives in broad, broken patches rather than an FBM threshold that traces the same scale all
+    // over the stone. Upward faces carry restrained pale biological crust; the buried foot picks up soil staining.
+    float up = smoothstep(0.30, 0.88, wn.y);
+    float broad = vnoise(obj_pos.xz * 2.35 + obj_pos.y * 0.8 + 3.2);
+    float broken = vnoise(obj_pos.zx * 4.91 + obj_pos.y * 1.7 + 11.6);
+    float crust = smoothstep(0.58, 0.76, broad * 0.72 + broken * 0.28) * up * lichen;
+    vec3 lichenCol = mix(vec3(0.43, 0.46, 0.34), vec3(0.56, 0.52, 0.32), vnoise(obj_pos.xz * 6.7 + 5.0));
+    col = mix(col, lichenCol * (0.92 + 0.14 * vnoise(world_pos.xz * 24.0)), crust * 0.58);
+
+    float foot = 1.0 - smoothstep(-0.30, 0.08, obj_pos.y);
+    float stainNoise = 0.78 + 0.22 * vnoise(obj_pos.xz * 5.2 + 17.0);
+    vec3 soilStain = vec3(0.24, 0.19, 0.14) * stainNoise;
+    col = mix(col, soilStain, foot * dust * 0.34);
     ALBEDO = col;
-    ROUGHNESS = mix(clamp(t.a, 0.45, 1.0), 0.95, crust);
+    ROUGHNESS = mix(clamp(t.a, 0.48, 1.0), 0.92, crust);
     SPECULAR = 0.3;   // lower sky reflection: the glossy blue sheen read as cartoony on gravel
     NORMAL = normalize((VIEW_MATRIX * vec4(normalize(mix(n, wn, crust * 0.6)), 0.0)).xyz);
 }
