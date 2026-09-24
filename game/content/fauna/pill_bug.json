@@ -36,6 +36,11 @@
       "resource": "flora:fungus",
       "ratePerHour": 0.002,
       "efficiency": 8
+    },
+    {
+      "resource": "flora:plant",
+      "ratePerHour": 0.0015,
+      "efficiency": 8
     }
   ],
   "metabolism": {

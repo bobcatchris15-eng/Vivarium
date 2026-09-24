@@ -1,0 +1,91 @@
+{
+  "id": "clover",
+  "name": "Clover",
+  "archetype": "plant",
+  "role": "Sun-loving mid-dry groundcover of open soil; occasional globe flowers draw grazers.",
+  "description": "A low mat of three-lobed leaves on short stalks, rooting as it spreads, with occasional white globe flower heads. Prefers open sun and ordinary soil, not too wet.",
+  "habitat": {
+    "substrates": {
+      "soil": 1.0,
+      "gravel": 0.35
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.5,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.7,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.0,
+    "hardMaxMoisture": 0.8,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.32,
+    "maxBiomass": 0.95,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.25,
+    "maturityDays": 6,
+    "lifespanDays": 140,
+    "nutrientPerBiomass": 0.18,
+    "radiusAtMax": 0.26,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 3,
+    "radius": 0.42,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.28,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.7
+  },
+  "proximity": [],
+  "litterFraction": 0.7,
+  "grazingValue": 0.4,
+  "colony": {
+    "cellRadius": 0.045,
+    "frontRate": 0.65,
+    "fillRate": 0.18,
+    "maxHeight": 0.04,
+    "patternMode": "random",
+    "palette": [
+      [0.28, 0.6, 0.22],
+      [0.36, 0.68, 0.26],
+      [0.46, 0.76, 0.3],
+      [0.32, 0.64, 0.24]
+    ]
+  },
+  "visual": {
+    "shape": "trifoliate",
+    "color": [
+      0.3,
+      0.62,
+      0.24
+    ],
+    "color2": [
+      0.5,
+      0.76,
+      0.3
+    ],
+    "colorVariance": 0.06,
+    "height": 0.05
+  },
+  "tags": [
+    "plant",
+    "groundcover"
+  ]
+}

@@ -169,6 +169,144 @@ public static class OrganismMeshes
                 }
                 break;
             }
+            case "roundleaf":
+            {
+                // small round/kidney leaflets on short stalks, scattered across the mat
+                int n = 40 + rng.NextInt(15);
+                for (int k = 0; k < n; k++)
+                {
+                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.9;
+                    var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+                    double stalkH = rng.Range(0.08, 0.18);
+                    var top = b + new Vec3(0, stalkH, 0);
+                    Primitives.Tube(m, new[] { b, top }, new[] { 0.008, 0.006 }, 4, (i, v) => (Primitives.Scale(c1, 0.7), 1, i, v, 0, 0));
+                    double leafR = rng.Range(0.07, 0.13), notchAng = rng.Range(0, 2 * Math.PI);
+                    var rim = new List<Vec3>();
+                    for (int s = 0; s <= 10; s++)
+                    {
+                        double th = 2 * Math.PI * s / 10;
+                        double rr = leafR * (1 - 0.35 * Math.Max(0, Math.Cos(th - notchAng)));
+                        rim.Add(top + new Vec3(Math.Cos(th) * rr, 0.005, Math.Sin(th) * rr));
+                    }
+                    Primitives.Fan(m, top, rim, Vec3.Up, Primitives.Mix(c1, c2, rng.Range(0, 0.5)), c2);
+                }
+                break;
+            }
+            case "pairedleaf":
+            {
+                // opposite pairs of small leaves along thin stems, with occasional tiny white flowers
+                int stems = 10 + rng.NextInt(6);
+                for (int k = 0; k < stems; k++)
+                {
+                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.75;
+                    var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+                    var lean = new Vec3(rng.Range(-0.15, 0.15), 0, rng.Range(-0.15, 0.15));
+                    double h = rng.Range(0.25, 0.5);
+                    var top = b + lean + new Vec3(0, h, 0);
+                    Primitives.Tube(m, new[] { b, b + lean * 0.5 + new Vec3(0, h * 0.5, 0), top }, new[] { 0.01, 0.008, 0.005 }, 4, (i, v) => (Primitives.Scale(c1, 0.75), 1, i, v, 0, 0));
+                    int pairs = 3 + rng.NextInt(2);
+                    var side = new Vec3(-lean.Z, 0, lean.X);
+                    if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
+                    side = side.Normalized();
+                    for (int p = 1; p <= pairs; p++)
+                    {
+                        double t = (double)p / (pairs + 1);
+                        var c = b + lean * t + new Vec3(0, h * t, 0);
+                        double sz = rng.Range(0.05, 0.08);
+                        foreach (double sgn in new[] { -1.0, 1.0 })
+                        {
+                            var tip = c + side * (sgn * sz);
+                            var rim = new List<Vec3> { c, c + side * (sgn * sz * 0.4) + new Vec3(0, sz * 0.3, 0), tip, c + side * (sgn * sz * 0.4) + new Vec3(0, -sz * 0.3, 0), c };
+                            Primitives.Fan(m, c, rim, Vec3.Up, Primitives.Scale(c1, 0.85), c1);
+                        }
+                    }
+                    if (rng.NextDouble() < 0.3)
+                    {
+                        var star = new List<Vec3>();
+                        for (int s = 0; s <= 8; s++) { double th = 2 * Math.PI * s / 8, rr = s % 2 == 0 ? 0.045 : 0.018; star.Add(top + new Vec3(Math.Cos(th) * rr, 0.01, Math.Sin(th) * rr)); }
+                        Primitives.Fan(m, top + new Vec3(0, 0.015, 0), star, Vec3.Up, new[] { 1.0, 1.0, 1.0 }, c2);
+                    }
+                }
+                break;
+            }
+            case "capitula":
+            {
+                // upright stems ending in small star-shaped heads (peat moss capitula)
+                int n = 60 + rng.NextInt(20);
+                for (int k = 0; k < n; k++)
+                {
+                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.85;
+                    var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+                    double h = rng.Range(0.4, 1.0);
+                    var top = b + new Vec3(0, h, 0);
+                    var tipCol = Primitives.Mix(c1, c2, rng.Range(0, 1));
+                    Primitives.Tube(m, new[] { b, top }, new[] { 0.012, 0.009 }, 5, (i, v) => (Primitives.Mix(Primitives.Scale(c1, 0.8), tipCol, i), 1, i, v, 0, 0));
+                    var star = new List<Vec3>();
+                    for (int s = 0; s <= 8; s++) { double th = 2 * Math.PI * s / 8 + ang, rr = s % 2 == 0 ? 0.05 : 0.022; star.Add(top + new Vec3(Math.Cos(th) * rr, 0.01, Math.Sin(th) * rr)); }
+                    Primitives.Fan(m, top + new Vec3(0, 0.015, 0), star, Vec3.Up, tipCol, Primitives.Scale(tipCol, 0.85));
+                }
+                break;
+            }
+            case "trifoliate":
+            {
+                // three-lobed clover leaves on stalks, with an occasional white globe flower head
+                int n = 18 + rng.NextInt(8);
+                for (int k = 0; k < n; k++)
+                {
+                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.8;
+                    var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+                    double h = rng.Range(0.25, 0.5);
+                    var top = b + new Vec3(0, h, 0);
+                    Primitives.Tube(m, new[] { b, top }, new[] { 0.01, 0.006 }, 4, (i, v) => (Primitives.Scale(c1, 0.75), 1, i, v, 0, 0));
+                    double lobeR = rng.Range(0.06, 0.11);
+                    for (int l = 0; l < 3; l++)
+                    {
+                        double la = 2 * Math.PI * l / 3 + rng.Range(-0.1, 0.1);
+                        var dir = new Vec3(Math.Cos(la), 0, Math.Sin(la));
+                        var side = new Vec3(-dir.Z, 0, dir.X);
+                        var tip = top + dir * lobeR;
+                        var rim = new List<Vec3> { top, top + side * (lobeR * 0.5) + dir * (lobeR * 0.4), tip, top - side * (lobeR * 0.5) + dir * (lobeR * 0.4), top };
+                        Primitives.Fan(m, top, rim, Vec3.Up, Primitives.Mix(c1, c2, 0.3), Primitives.Mix(c1, c2, 0.6));
+                    }
+                    if (rng.NextDouble() < 0.15)
+                    {
+                        var fh = top + new Vec3(0, 0.05, 0);
+                        var star = new List<Vec3>();
+                        for (int s = 0; s <= 10; s++) { double th = 2 * Math.PI * s / 10, rr = 0.035; star.Add(fh + new Vec3(Math.Cos(th) * rr, Math.Sin(th) * rr * 0.4, Math.Sin(th) * rr)); }
+                        Primitives.Fan(m, fh, star, Vec3.Up, new[] { 1.0, 1.0, 0.96 }, new[] { 0.96, 0.9, 0.7 });
+                    }
+                }
+                break;
+            }
+            case "iceplant":
+            {
+                // thick triangular-section succulent leaves in clusters, reddish tips, occasional magenta flower
+                int n = 20 + rng.NextInt(8);
+                for (int k = 0; k < n; k++)
+                {
+                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.85;
+                    var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+                    int leaves = rng.NextInt(2) + 2;
+                    for (int lf = 0; lf < leaves; lf++)
+                    {
+                        double la = ang + rng.Range(-0.5, 0.5);
+                        var ldir = new Vec3(Math.Cos(la), 0, Math.Sin(la));
+                        double len = rng.Range(0.35, 0.6), h = rng.Range(0.12, 0.2);
+                        var tip = b + ldir * len + new Vec3(0, h * 0.5, 0);
+                        var tipCol = Primitives.Mix(c1, new[] { 0.55, 0.12, 0.14 }, rng.Range(0.2, 0.6));
+                        Primitives.Ellipsoid(m, (b + tip) * 0.5 + new Vec3(0, h * 0.3, 0), new Vec3(len * 0.5, h * 0.5, 0.05), 4, 6,
+                            (u, v) => (Primitives.Mix(c1, tipCol, u), 1, u, v, 0, 0));
+                    }
+                    if (rng.NextDouble() < 0.12)
+                    {
+                        var fc = b + new Vec3(0, 0.18, 0);
+                        var star = new List<Vec3>();
+                        for (int s = 0; s <= 12; s++) { double th = 2 * Math.PI * s / 12, rr = s % 2 == 0 ? 0.09 : 0.03; star.Add(fc + new Vec3(Math.Cos(th) * rr, 0.01, Math.Sin(th) * rr)); }
+                        Primitives.Fan(m, fc + new Vec3(0, 0.01, 0), star, Vec3.Up, new[] { 0.85, 0.15, 0.55 }, new[] { 0.95, 0.5, 0.75 });
+                    }
+                }
+                break;
+            }
             case "fern": Fern(m, rng, c1, c2); break;
             case "vine": Vine(m, rng, c1, c2); break;
             case "mushroom_cluster": Mushrooms(m, rng, c1, c2); break;

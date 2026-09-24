@@ -465,6 +465,21 @@ public class FloraTests
         Assert.Empty(w.CheckInvariants());
     }
 
+    [Fact]
+    public void DryGroundGroundcoversPreferAridSunnyGround()
+    {
+        var w = TestUtil.FlatWorld();
+        var p = new Vec2(0.5, 0.5);
+        TestUtil.Condition(w, 0.15, 0.15, 0.9); // very dry, low nutrients, full sun: carpobrotus's niche
+        var iceplant = w.FloraSystem.Suitability(Sp("carpobrotus"), p);
+        var moss = w.FloraSystem.Suitability(Sp("carpet_moss"), p);
+        Assert.False(iceplant.HardRefused);
+        Assert.True(iceplant.Score > moss.Score, $"carpobrotus {iceplant.Score} should beat carpet moss {moss.Score} on dry, sunny, poor ground");
+
+        TestUtil.Condition(w, 0.5, 0.4, 0.7); // mid-dry sunny soil: clover's niche
+        Assert.True(w.FloraSystem.CanEstablish(Sp("clover"), p, out var why), why);
+    }
+
     [Fact] // colony-edge growth: rim buds, interior thickens
     public void ColonyGrowsAtRimOnlyAndInteriorHeightRises()
     {

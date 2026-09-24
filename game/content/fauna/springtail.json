@@ -41,6 +41,11 @@
       "resource": "detritus",
       "ratePerHour": 0.0022,
       "efficiency": 12
+    },
+    {
+      "resource": "flora:plant",
+      "ratePerHour": 0.0012,
+      "efficiency": 9
     }
   ],
   "metabolism": {

@@ -63,7 +63,7 @@
   "litterFraction": 0.75,
   "grazingValue": 0.3,
   "visual": {
-    "shape": "creeper",
+    "shape": "pairedleaf",
     "color": [
       0.3,
       0.58,

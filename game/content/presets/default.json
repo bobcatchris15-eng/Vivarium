@@ -56,7 +56,10 @@
     { "species": "reindeer_lichen", "count": 8 },
     { "species": "watercress", "count": 10 },
     { "species": "bacopa", "count": 8 },
-    { "species": "sphagnum", "count": 8 }
+    { "species": "sphagnum", "count": 8 },
+    { "species": "dichondra", "count": 10 },
+    { "species": "clover", "count": 10 },
+    { "species": "carpobrotus", "count": 8 }
   ],
   "starterFauna": [
     { "species": "springtail", "count": 60 },
