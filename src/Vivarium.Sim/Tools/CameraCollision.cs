@@ -16,7 +16,7 @@ public static class CameraCollision
     {
         radius = Math.Clamp(radius, 0.005, 0.25);
         var pos = Depenetrate(w, start, radius);
-        var remaining = desired - start;
+        var remaining = desired - pos;
         if (remaining.LengthSq < 1e-14) return pos;
 
         for (int pass = 0; pass < 3 && remaining.LengthSq > 1e-12; pass++)
@@ -74,15 +74,15 @@ public static class CameraCollision
 
     private static bool TryPenetration(VivariumWorld w, Vec3 p, double radius, out Vec3 normal, out double depth)
     {
-        normal = Vec3.Up;
-        depth = 0;
+        var bestNormal = Vec3.Up;
+        double bestDepth = 0;
         bool hit = false;
 
         void Consider(double d, Vec3 n)
         {
-            if (!(d > depth) || !double.IsFinite(d)) return;
-            depth = d;
-            normal = n.LengthSq > 1e-12 ? n.Normalized() : Vec3.Up;
+            if (!(d > bestDepth) || !double.IsFinite(d)) return;
+            bestDepth = d;
+            bestNormal = n.LengthSq > 1e-12 ? n.Normalized() : Vec3.Up;
             hit = true;
         }
 
@@ -133,6 +133,8 @@ public static class CameraCollision
             if (dist < rr) Consider(rr - dist, dist > 1e-9 ? dvec / dist : Vec3.Up);
         }
 
+        normal = bestNormal;
+        depth = bestDepth;
         return hit;
     }
 }
