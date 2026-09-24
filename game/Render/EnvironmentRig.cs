@@ -56,8 +56,12 @@ public partial class EnvironmentRig : Node3D
             LightColor = new Color(1.0f, 0.96f, 0.9f),
             LightEnergy = 1.22f,
             ShadowEnabled = true,
-            ShadowBlur = 1.5f,
-            DirectionalShadowMaxDistance = 40,
+            // The entire specimen is only 10–20 m across. Spend the directional map on that scale instead of
+            // the engine's generic scene scale, and keep bias small enough that leaf/stem contact shadows stay attached.
+            ShadowBias = 0.035f,
+            ShadowNormalBias = 0.85f,
+            ShadowBlur = 1.15f,
+            DirectionalShadowMaxDistance = 28,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits,
         };
         Sun.RotationDegrees = new Vector3(-52, -35, 0);
