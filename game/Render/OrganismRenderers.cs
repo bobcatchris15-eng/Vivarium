@@ -168,11 +168,33 @@ public partial class FloraRenderer : Node3D
             if (Camera is { } camera && !FloraVisible(camera, pos, (float)r, (float)h)) continue;
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
-            // mats (moss, lichen, slime mold, colonial groundcovers) lie on the surface they grow on; upright plants
-            // keep growing toward the light
+            // Mats conform to their substrate. Upright vascular plants respond to the actual local sky-openness
+            // field: they lean slightly toward the more open side, while dry/unhealthy specimens lose some turgor
+            // in a stable individual direction. This makes variation read as growth history rather than seed noise.
             var yawBasis = new Basis(Vector3.Up, yaw);
             if (sp.Colony != null || sp.Archetype is "moss" or "lichen" or "slime_mold")
+            {
                 yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
+            }
+            else if (sp.Archetype == "plant" && sp.Shape != "vine")
+            {
+                var fp = f.Position;
+                double e = Math.Max(_w.Grid.CellSize * 0.55, Math.Min(0.35, Math.Max(r, 0.05)));
+                double gx = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(e, 0))
+                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(e, 0));
+                double gz = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(0, e))
+                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(0, e));
+                double moisture = _w.Fields.Moisture.Sample(fp);
+                double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
+                double stressAngle = ((hash >> 24) % 6283) / 1000.0;
+                var growUp = new Vector3(
+                    (float)(gx * 0.62 + Math.Cos(stressAngle) * stress * 0.15),
+                    1f,
+                    (float)(gz * 0.62 + Math.Sin(stressAngle) * stress * 0.15)).Normalized();
+                yawBasis = SurfaceFrame.TiltTo(growUp) * yawBasis;
+                h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
+                r *= 1.0 + stress * 0.035;
+            }
             var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
             if (sp.Shape == "vine" && Anchor(new Vector2(pos.X, pos.Z), 0.6) is { } va)
             {
