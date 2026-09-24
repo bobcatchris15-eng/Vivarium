@@ -76,8 +76,10 @@ public partial class IslandRenderer : Node3D
         var top = TerrainMesh.BuildTop(_w);
         var walls = TerrainMesh.BuildWalls(_w);
         TriangleCount = top.Mesh.TriangleCount + walls.TriangleCount;
-        _top.Mesh = Bridge.ToArrayMesh(top.Mesh, _terrainMat);
-        _walls.Mesh = Bridge.ToArrayMesh(walls, _strataMat);
+        // reuse the same meshes: a fresh ArrayMesh per sculpt step (up to 12/s) left the old GPU buffers to the
+        // GC finalizer, and over a long session the churn exhausted memory and crashed inside AddSurfaceFromArrays
+        _top.Mesh = Bridge.ToArrayMesh(top.Mesh, _terrainMat, _top.Mesh as ArrayMesh);
+        _walls.Mesh = Bridge.ToArrayMesh(walls, _strataMat, _walls.Mesh as ArrayMesh);
     }
 
     public override void _Process(double delta)

@@ -51,7 +51,7 @@ public static class Bridge
             uv[i] = new Vector2(m.UV[i * 2], m.UV[i * 2 + 1]);
             uv2[i] = new Vector2(m.UV2[i * 2], m.UV2[i * 2 + 1]);
         }
-        var arrays = new Godot.Collections.Array();
+        using var arrays = new Godot.Collections.Array();   // release the native array now, not at GC finalization
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = verts;
         arrays[(int)Mesh.ArrayType.Normal] = norms;

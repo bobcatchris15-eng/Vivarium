@@ -357,12 +357,15 @@ public partial class SmokeRunner : Node
         double worstFrame = 0; int frames = 0; ulong lastSample = start;
         // VIVARIUM_PERF_LOW=1: a slow orbit at critter height over the ground, where close-up detail layers cost most
         bool low = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_LOW") == "1";
+        bool sculpt = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SCULPT") == "1";
         int durationMs = int.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SECONDS"), out var secs) ? secs * 1000 : 90_000;
         while (Time.GetTicksMsec() - start < (ulong)durationMs)
         {
             float t = (Time.GetTicksMsec() - start) / 1000f;
             if (low) cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.15f) * 3.5f, 0.5f, Mathf.Cos(t * 0.15f) * 3.5f), new Vector3(Mathf.Sin(t * 0.15f + 0.6f) * 2.5f, 0, Mathf.Cos(t * 0.15f + 0.6f) * 2.5f));
             else cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.3f) * 9, 3.5f, Mathf.Cos(t * 0.3f) * 9), new Vector3(0, 0, 0));
+            // VIVARIUM_PERF_SCULPT=1: sculpt every frame, to soak the terrain mesh rebuild path
+            if (sculpt) Vivarium.Sim.World.TerrainEditing.Sculpt(W, new Vivarium.Sim.Core.Vec2(Mathf.Sin(t) * 2, Mathf.Cos(t * 0.7f) * 2), 0.6, (frames & 1) == 0 ? 0.01 : -0.01, Vivarium.Sim.World.SculptMode.Raise);
             ulong f0 = Time.GetTicksUsec();
             await Frames(1);
             worstFrame = Math.Max(worstFrame, (Time.GetTicksUsec() - f0) / 1000.0);
@@ -372,7 +375,7 @@ public partial class SmokeRunner : Node
                 lastSample = Time.GetTicksMsec();
                 var line = $"t={++second,3}s fps={Engine.GetFramesPerSecond(),3} frames={frames,3} worstFrame={worstFrame,6:0.0}ms " +
                     $"process={Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000,6:0.0}ms simLast={W.Scheduler.LastAdvanceMs,5:0.0}ms " +
-                    $"ticks/s={W.Clock.Tick - lastTick,4} backlog={W.Scheduler.Backlog,7:0}s flora={W.Flora.Count} fauna={W.Fauna.Count} " +
+                    $"ticks/s={W.Clock.Tick - lastTick,4} backlog={W.Scheduler.Backlog,7:0}s flora={W.Flora.Count} fauna={W.Fauna.Count} mem={OS.GetStaticMemoryUsage() / 1048576}MB vram={Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576:0}MB ws={System.Environment.WorkingSet / 1048576}MB " +
                     $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} gc0={System.GC.CollectionCount(0)} gc1={System.GC.CollectionCount(1)} gc2={System.GC.CollectionCount(2)} slowest: " + FrameProfiler.TakeReport();
                 Log.Info(LogCategory.Perf, line);
                 samples.Add(line);

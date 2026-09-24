@@ -122,10 +122,16 @@ public sealed class Scheduler
         }
         TicksLastAdvance = ticks;
         LastAdvanceMs = Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
-        if (Backlog > BacklogWarnSeconds)
+        // warn at most every 30 s of wall time: warning every frame wrote tens of thousands of identical lines
+        if (Backlog > BacklogWarnSeconds && Stopwatch.GetElapsedTime(_lastBacklogWarn).TotalSeconds >= 30)
+        {
+            _lastBacklogWarn = Stopwatch.GetTimestamp();
             Log.Warn(LogCategory.Perf, $"Simulation backlog {Backlog / 60:0} sim-min exceeds budget; speed {Clock.SpeedMultiplier}x is more than this machine sustains.");
+        }
         return ticks;
     }
+
+    private long _lastBacklogWarn;   // 0 = process start, so the first warning is not suppressed
 
     /// <summary>Explicitly discard backlog (e.g. after pausing). Never called implicitly.</summary>
     public void ClearBacklog() => Backlog = 0;
