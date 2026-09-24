@@ -42,6 +42,10 @@ public sealed class FloraIndividual
     public double[] Tint { get; set; } = { 1, 1, 1 };
     /// <summary>Colonial species: 0..1 fill toward the species' colony maxHeight, rises only while interior.</summary>
     public double HeightFactor { get; set; } = 1;
+    /// <summary>Colonial species: how many fully-surrounded interior cells have been merged into this one
+    /// (1 = unmerged). Lets a mature mat's dense interior collapse into fewer, larger cells while the rim
+    /// stays fine-grained; scales <see cref="Radius"/> so the merged cell reads as bigger, not just thicker.</summary>
+    public double MergeFactor { get; set; } = 1;
     /// <summary>Slime mold: network depth from the founding plasmodium (0 = founder), set once at bud creation.
     /// Drives the old-dark-ochre to front-bright-yellow tint gradient; not walked from ParentId per frame.</summary>
     public int Generation { get; set; }
@@ -57,7 +61,7 @@ public sealed class FloraIndividual
     /// as the cell fills toward the colony's max height so rim cells stay small and interior cells overlap enough
     /// for a continuous but visibly lumpy mat.</summary>
     public double Radius(FloraSpeciesDef sp) => sp.Colony != null
-        ? sp.Colony.CellRadius * (0.9 + 0.3 * HeightFactor)
+        ? sp.Colony.CellRadius * (0.9 + 0.3 * HeightFactor) * Math.Sqrt(MergeFactor)
         : sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(BiomassFraction(sp));
 }
 

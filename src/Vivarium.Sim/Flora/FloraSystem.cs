@@ -125,11 +125,23 @@ public sealed class FloraSystem
         return crowd;
     }
 
-    /// <summary>Per-colony cell cap (bounds instance count; roots beyond this stop budding).</summary>
-    public const int ColonyCellCap = 260;
+    /// <summary>Per-colony cell cap (bounds instance count; roots beyond this stop budding). Kept low because
+    /// interior merging (see <see cref="ColonyStep"/>) keeps a mature mat's cost near its rim size rather than
+    /// growing without bound, so this only needs to bound the rim-growth phase before merging catches up.</summary>
+    public const int ColonyCellCap = 90;
+    /// <summary>Global cap on colonial-cell entities across every colony of every species. Once hit, no colony
+    /// buds further (existing cells still thicken/merge) until deaths free room; prevents many small colonies
+    /// from collectively overrunning the entity budget even though each respects <see cref="ColonyCellCap"/>.</summary>
+    public const int GlobalColonialCellBudget = 2200;
+    /// <summary>Interior cells with at least this many same-species neighbours within cellRadius·2 are fully
+    /// surrounded (no exposed edge) and, once fully thickened, are folded into a neighbour instead of persisting
+    /// as their own entity — the mat keeps its area and lumpy look with far fewer instances.</summary>
+    private const int MergeNeighbourThreshold = 7;
+    private const double MergeFactorCap = 6.0;
     private readonly List<(FloraSpeciesDef Sp, Vec2 P, EntityId Root, double RingDist)> _colonyBuds = new();
     private readonly Dictionary<EntityId, int> _colonySize = new();
     private readonly List<FloraIndividual> _nbColony = new();
+    private int _colonialTotal;
 
     public void Step(double dt)
     {
@@ -139,12 +151,14 @@ public sealed class FloraSystem
         _colonySize.Clear();
         var deaths = new List<(FloraIndividual F, string Cause)>();
         var eco = C.Ecology;
+        _colonialTotal = 0;
         foreach (var f in _w.Flora.Items)
         {
             var sp0 = C.FloraOrThrow(f.SpeciesId);
             if (sp0.Colony == null) continue;
             var root0 = f.ColonyRoot.IsNone ? f.Id : f.ColonyRoot;
             _colonySize[root0] = _colonySize.GetValueOrDefault(root0) + 1;
+            _colonialTotal++;
         }
         foreach (var f in _w.Flora.Items)
         {
@@ -213,7 +227,7 @@ public sealed class FloraSystem
 
             if (sp.Colony is { } cd)
             {
-                ColonyStep(f, sp, cd, p, dt);
+                if (ColonyStep(f, sp, cd, p, dt, deaths)) continue;   // merged into a neighbour this step
                 // rare long-range spore: colonial species still occasionally found a new colony far away
                 if (f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
                     && f.Age - f.LastSpreadAge >= sp.SpreadInterval * 5 && sp.Propagules > 0)
@@ -266,12 +280,14 @@ public sealed class FloraSystem
         }
         foreach (var (sp, q, root, ringDist) in _colonyBuds)
         {
+            if (_colonialTotal >= GlobalColonialCellBudget) break;
             if (_colonySize.GetValueOrDefault(root) >= ColonyCellCap) continue;
             if (!CanEstablish(sp, q, out _)) continue;
             var nf = Establish(sp, q, "colony growth");
             nf.ColonyRoot = root; nf.RingDist = ringDist; nf.HeightFactor = 0.15;
             AssignColonyTint(nf, sp);
             _colonySize[root] = _colonySize.GetValueOrDefault(root) + 1;
+            _colonialTotal++;
         }
     }
 
@@ -384,33 +400,47 @@ public sealed class FloraSystem
     /// the rim and buds outward, away from the neighbour centroid plus jitter. Interior cells stop spreading and
     /// thicken toward the species' colony max height instead.
     /// </summary>
-    private void ColonyStep(FloraIndividual f, FloraSpeciesDef sp, FloraColonyDef cd, Vec2 p, double dt)
+    private bool ColonyStep(FloraIndividual f, FloraSpeciesDef sp, FloraColonyDef cd, Vec2 p, double dt, List<(FloraIndividual F, string Cause)> deaths)
     {
         _w.Flora.Neighbours(p, cd.CellRadius * 2, _nbColony);
         int neighbourCount = 0; var centroidSum = Vec2.Zero;
+        FloraIndividual? mergeTarget = null;
         foreach (var n in _nbColony)
         {
             if (n.Id == f.Id || n.SpeciesId != sp.Id) continue;
             neighbourCount++; centroidSum += n.Position;
+            if (n.ColonyRoot == f.ColonyRoot && n.MergeFactor < MergeFactorCap && (mergeTarget == null || n.Id.Value < mergeTarget.Id.Value))
+                mergeTarget = n;
         }
         bool edge = neighbourCount < 3;
         var root = f.ColonyRoot.IsNone ? f.Id : f.ColonyRoot;
         if (edge)
         {
-            if (_colonySize.GetValueOrDefault(root) >= ColonyCellCap) return;
+            if (_colonialTotal >= GlobalColonialCellBudget || _colonySize.GetValueOrDefault(root) >= ColonyCellCap) return false;
             var rng = Rng.Keyed(_w.Seed, "flora.colony.bud", f.Id.Value, (ulong)f.SpreadCount++);
-            if (rng.NextDouble() >= Math.Min(1, cd.FrontRate * dt)) return;
+            if (rng.NextDouble() >= Math.Min(1, cd.FrontRate * dt)) return false;
             var away = neighbourCount > 0 ? p - centroidSum / neighbourCount : Vec2.Zero;
             double baseAngle = away.LengthSq > 1e-10 ? away.Angle : rng.Range(0, 2 * Math.PI);
             double ang = baseAngle + rng.Range(-0.6, 0.6);
             double dist = cd.CellRadius * rng.Range(1.5, 2.0);
             var q = p + Vec2.FromAngle(ang) * dist;
             if (CanEstablish(sp, q, out _)) _colonyBuds.Add((sp, q, root, f.RingDist + dist));
+            return false;
         }
-        else
+
+        f.HeightFactor = Math.Min(1, f.HeightFactor + cd.FillRate * dt);
+        // fully surrounded and fully thickened: fold this cell into a same-colony neighbour instead of keeping
+        // it as its own entity. The mat's footprint and lumpiness are preserved (the survivor's radius grows
+        // with the absorbed area) while the interior's entity cost stops climbing as the mat matures.
+        if (neighbourCount >= MergeNeighbourThreshold && f.HeightFactor >= 1 && mergeTarget != null)
         {
-            f.HeightFactor = Math.Min(1, f.HeightFactor + cd.FillRate * dt);
+            mergeTarget.MergeFactor = Math.Min(MergeFactorCap, mergeTarget.MergeFactor + f.MergeFactor);
+            deaths.Add((f, "colony-merge"));
+            _colonySize[root] = Math.Max(0, _colonySize.GetValueOrDefault(root) - 1);
+            _colonialTotal--;
+            return true;
         }
+        return false;
     }
 
     /// <summary>Marks a newly established individual as the founder (root) of a new colony and assigns its tint.</summary>
