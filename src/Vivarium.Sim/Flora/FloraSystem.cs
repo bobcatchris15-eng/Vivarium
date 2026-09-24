@@ -322,6 +322,9 @@ public sealed class FloraSystem
             for (int k = 0; k < 12; k++)
             {
                 var q = _w.Grid.CellCenter(cells[rng.NextInt(cells.Length)]);
+                double jitter = _w.Grid.CellSize * 0.42;
+                q += new Vec2(rng.Range(-jitter, jitter), rng.Range(-jitter, jitter));
+                if (!_w.Domain.ContainsDisc(q, 0.02)) continue;
                 double food = _w.Fields.Detritus.Sample(q);
                 if (food > bestFood && CanEstablish(sp, q, out _)) { best = q; bestFood = food; }
             }
@@ -369,11 +372,17 @@ public sealed class FloraSystem
         double stay = 0;
         for (double r = 0.25; r <= Sense + 1e-9; r += 0.25) stay += food * Weight(r);
         var best = p; double bestScore = stay * 1.02;
-        for (int k = 0; k < 8; k++)
+        // Sense a stable but individually rotated 12-direction fan. The old fixed eight compass rays made
+        // mature networks betray the algorithm as 45-degree/octagonal growth.
+        var senseRng = Rng.Keyed(_w.Seed, "flora.slime.sense", f.Id.Value);
+        double phase = senseRng.Range(0, 2 * Math.PI / 12);
+        for (int k = 0; k < 12; k++)
         {
-            var dir = Vec2.FromAngle(k * Math.PI / 4);
+            double ang = phase + k * 2 * Math.PI / 12;
+            var dir = Vec2.FromAngle(ang);
             double score = 0;
-            for (double r = 0.25; r <= Sense + 1e-9; r += 0.25) score += _w.Fields.Detritus.Sample(p + dir * r) * Weight(r);
+            for (double r = 0.25; r <= Sense + 1e-9; r += 0.25)
+                score += _w.Fields.Detritus.Sample(p + dir * r) * Weight(r);
             var q = p + dir * BudStep;
             if (score > bestScore && CanEstablish(sp, q, out _)) { best = q; bestScore = score; }
         }
