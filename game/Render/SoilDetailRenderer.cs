@@ -27,6 +27,11 @@ public partial class SoilDetailRenderer : Node3D
     // per-frame instance count (which scales with area) stays cheap.
     private const float CullRadius = 9f;
     private const float FadeStart = 6f;
+    // Crumbs and clods are millimetre-scale: past a few metres they cover under a pixel, and sub-pixel triangles
+    // are the most expensive thing an iGPU can draw (every one still pays a full 2x2 quad). Only litter and twigs,
+    // which are big enough to read, go out to the full radius.
+    private const float CrumbRadius = 2.5f, ClodRadius = 4.5f;
+    private Vector3 _lastCam = new(float.MaxValue, 0, 0);
 
     public void Build(VivariumWorld w)
     {
@@ -58,9 +63,14 @@ public partial class SoilDetailRenderer : Node3D
         using var prof = FrameProfiler.Measure("SoilDetail");
         if (_w == null || Quality <= 0) return;
         _accum += delta;
-        if (_accum < 0.75) return;
-        if (_terrainVersion == _w.Terrain.Version && _accum < 1.5) return; // still refresh occasionally even if idle
+        if (_accum < 0.5) return;
+        // rebuild only when the view has moved enough to matter, the ground changed, or occasionally for moisture drift
+        // (a blind rebuild every 0.75 s was a periodic multi-millisecond hitch)
+        Vector3 cam = Camera?.GlobalPosition ?? Vector3.Zero;
+        bool moved = cam.DistanceSquaredTo(_lastCam) > 0.8f * 0.8f;
+        if (!moved && _terrainVersion == _w.Terrain.Version && _accum < 6.0) return;
         _accum = 0;
+        _lastCam = cam;
         _terrainVersion = _w.Terrain.Version;
         Refresh();
     }
@@ -79,29 +89,37 @@ public partial class SoilDetailRenderer : Node3D
         // step over a fine lattice near the camera: this layer only needs to exist within CullRadius, so the
         // scan cost stays bounded regardless of world size.
         int stride = Quality >= 2 ? 1 : 2;
-        var rng = new RandomNumberGenerator();
-        foreach (int idx in g.DomainCells)
+        var rng = new CellRng();
+        // scan only the cells inside the cull square around the camera, not the whole island
+        int i0 = 0, i1 = g.Nx - 1, j0 = 0, j1 = g.Nz - 1;
+        if (haveCam)
         {
-            int i = idx % g.Nx, j = idx / g.Nx;
-            if ((i % stride) != 0 || (j % stride) != 0) continue;
+            i0 = Mathf.Max(0, (int)((camPos.X - CullRadius - g.OriginX) / g.CellSize)); i1 = Mathf.Min(g.Nx - 1, (int)((camPos.X + CullRadius - g.OriginX) / g.CellSize));
+            j0 = Mathf.Max(0, (int)((camPos.Z - CullRadius - g.OriginZ) / g.CellSize)); j1 = Mathf.Min(g.Nz - 1, (int)((camPos.Z + CullRadius - g.OriginZ) / g.CellSize));
+        }
+        for (int j = j0 - j0 % stride; j <= j1; j += stride)
+        for (int i = i0 - i0 % stride; i <= i1; i += stride)
+        {
+            if (!g.InDomain(i, j)) continue;
+            int idx = g.Index(i, j);
             if ((Substrate)f.BaseSubstrate[idx] != Substrate.Soil) continue;
             var p = g.CellCenter(idx);
             var wp = Bridge.V(p, _w.Terrain.Height(p));
-            float distFade = 1f;
+            float distFade = 1f, d = 0f;
             if (haveCam)
             {
                 float dx = wp.X - camPos.X, dz = wp.Z - camPos.Z;
                 float d2 = dx * dx + dz * dz;
                 if (d2 > r2) continue;
-                float d = Mathf.Sqrt(d2);
+                d = Mathf.Sqrt(d2);
                 distFade = d <= FadeStart ? 1f : 1f - (d - FadeStart) / (CullRadius - FadeStart);
                 if (distFade <= 0.05f) continue;
             }
             double moisture = f.Moisture.Values[idx];
             rng.Seed = (ulong)(idx * 2654435761u + 17);
             // wetter soil clumps into fewer, bigger, darker clods; dry soil scatters more loose crumbs and litter
-            int crumbCount = Mathf.RoundToInt((moisture > 0.55 ? 0 : rng.RandiRange(2, 5) * Quality) * distFade);
-            int clodCount = Mathf.RoundToInt((moisture > 0.3 ? rng.RandiRange(1, 3) : (rng.Randf() < 0.4 ? 1 : 0)) * distFade);
+            int crumbCount = Mathf.RoundToInt((moisture > 0.55 ? 0 : rng.RandiRange(2, 5) * Quality) * Mathf.Clamp(1f - (d - CrumbRadius * 0.6f) / (CrumbRadius * 0.4f), 0f, 1f));
+            int clodCount = Mathf.RoundToInt((moisture > 0.3 ? rng.RandiRange(1, 3) : (rng.Randf() < 0.4 ? 1 : 0)) * Mathf.Clamp(1f - (d - ClodRadius * 0.6f) / (ClodRadius * 0.4f), 0f, 1f));
             int twigCount = Mathf.RoundToInt(rng.RandiRange(0, 1) * Quality * distFade);
             int flakeCount = Mathf.RoundToInt(rng.RandiRange(0, 2) * Quality * distFade);
             float darken = (float)Mathf.Clamp(1.0 - moisture * 0.55, 0.45, 1.0);
@@ -109,10 +127,10 @@ public partial class SoilDetailRenderer : Node3D
             Color twigTint = new Color(0.33f, 0.26f, 0.19f) * darken;
             Color litterTint = new Color(0.55f, 0.42f, 0.18f) * darken;
 
-            for (int k = 0; k < crumbCount; k++) Place(crumbXf, crumbCol, g, p, rng, soilTint, 0.7f, 1.3f);
-            for (int k = 0; k < clodCount; k++) Place(clodXf, clodCol, g, p, rng, soilTint * 1.05f, 0.7f, 1.4f);
-            for (int k = 0; k < twigCount; k++) Place(twigXf, twigCol, g, p, rng, twigTint, 0.6f, 1.3f);
-            for (int k = 0; k < flakeCount; k++) Place(flakeXf, flakeCol, g, p, rng, litterTint, 0.7f, 1.3f);
+            for (int k = 0; k < crumbCount; k++) Place(crumbXf, crumbCol, g, p, ref rng, soilTint, 0.7f, 1.3f);
+            for (int k = 0; k < clodCount; k++) Place(clodXf, clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f);
+            for (int k = 0; k < twigCount; k++) Place(twigXf, twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f);
+            for (int k = 0; k < flakeCount; k++) Place(flakeXf, flakeCol, g, p, ref rng, litterTint, 0.7f, 1.3f);
         }
 
         SetInstances(_crumbs, crumbXf, crumbCol);
@@ -121,7 +139,7 @@ public partial class SoilDetailRenderer : Node3D
         SetInstances(_flakes, flakeXf, flakeCol);
     }
 
-    private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, RandomNumberGenerator rng, Color tint, float minScale, float maxScale)
+    private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale)
     {
         var jitter = new Vector2(rng.RandfRange(-1, 1), rng.RandfRange(-1, 1)) * (float)(g.CellSize * 0.45);
         var wp = center + new Vivarium.Sim.Core.Vec2(jitter.X, jitter.Y);
@@ -133,15 +151,37 @@ public partial class SoilDetailRenderer : Node3D
         col.Add(new Color(tint.R * v, tint.G * v, tint.B * v));
     }
 
-    private static void SetInstances(MultiMesh mm, List<Transform3D> xf, List<Color> col)
+    /// <summary>Managed per-cell RNG. Godot's RandomNumberGenerator is an engine object, so each call crosses into
+    /// native code; thousands per rebuild made every refresh a 100 ms hitch.</summary>
+    private struct CellRng
     {
-        mm.InstanceCount = xf.Count;
-        mm.VisibleInstanceCount = xf.Count;
-        for (int i = 0; i < xf.Count; i++)
+        private ulong _s;
+        public ulong Seed { set => _s = value * 0x9E3779B97F4A7C15UL + 0x632BE59BD9B4E019UL; }
+        private uint Next() { _s ^= _s << 13; _s ^= _s >> 7; _s ^= _s << 17; return (uint)(_s >> 32); }
+        public float Randf() => Next() * (1f / 4294967296f);
+        public float RandfRange(float a, float b) => a + (b - a) * Randf();
+        public int RandiRange(int a, int b) => a + (int)(Next() % (uint)(b - a + 1));
+    }
+
+    private readonly Dictionary<MultiMesh, float[]> _buffers = new();
+
+    /// <summary>One packed upload (12 transform + 4 colour floats per instance) instead of two engine calls each.</summary>
+    private void SetInstances(MultiMesh mm, List<Transform3D> xf, List<Color> col)
+    {
+        int n = xf.Count;
+        if (mm.InstanceCount != n) mm.InstanceCount = n;
+        mm.VisibleInstanceCount = n;
+        if (n == 0) return;
+        if (!_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 16) _buffers[mm] = buf = new float[n * 16];
+        for (int i = 0; i < n; i++)
         {
-            mm.SetInstanceTransform(i, xf[i]);
-            mm.SetInstanceColor(i, col[i]);
+            var t = xf[i]; var c = col[i]; int o = i * 16;
+            buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
+            buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
+            buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
+            buf[o + 12] = c.R; buf[o + 13] = c.G; buf[o + 14] = c.B; buf[o + 15] = 1f;
         }
+        mm.Buffer = buf;
     }
 
     /// <summary>

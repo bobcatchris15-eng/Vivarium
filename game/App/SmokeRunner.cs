@@ -355,10 +355,14 @@ public partial class SmokeRunner : Node
         int second = 0;
         long lastTick = W.Clock.Tick;
         double worstFrame = 0; int frames = 0; ulong lastSample = start;
-        while (Time.GetTicksMsec() - start < 90_000)
+        // VIVARIUM_PERF_LOW=1: a slow orbit at critter height over the ground, where close-up detail layers cost most
+        bool low = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_LOW") == "1";
+        int durationMs = int.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SECONDS"), out var secs) ? secs * 1000 : 90_000;
+        while (Time.GetTicksMsec() - start < (ulong)durationMs)
         {
             float t = (Time.GetTicksMsec() - start) / 1000f;
-            cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.3f) * 9, 3.5f, Mathf.Cos(t * 0.3f) * 9), new Vector3(0, 0, 0));
+            if (low) cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.15f) * 3.5f, 0.5f, Mathf.Cos(t * 0.15f) * 3.5f), new Vector3(Mathf.Sin(t * 0.15f + 0.6f) * 2.5f, 0, Mathf.Cos(t * 0.15f + 0.6f) * 2.5f));
+            else cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.3f) * 9, 3.5f, Mathf.Cos(t * 0.3f) * 9), new Vector3(0, 0, 0));
             ulong f0 = Time.GetTicksUsec();
             await Frames(1);
             worstFrame = Math.Max(worstFrame, (Time.GetTicksUsec() - f0) / 1000.0);

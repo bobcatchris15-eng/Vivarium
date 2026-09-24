@@ -33,6 +33,7 @@ uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropi
 uniform float tile_metres = 0.9;    // real-world size of one texture repeat
 uniform float soil_relief_amp = 0.045;   // metres of fine geometric relief on soil (lumps, furrows)
 uniform float soil_relief_freq = 2.6;
+uniform float soil_clumps = 1.0;        // 0 skips the clump/cavity detail (low quality tiers)
 
 varying vec3 world_pos;
 varying vec3 relief_wn;      // world-space normal including the fine relief bump
@@ -103,16 +104,21 @@ void fragment() {
     // the scan is a warm red-brown: pull it toward a darker umber forest soil (a cool multiplier here reads mauve)
     vec3 col = mix(vec3(dot(soil.rgb, vec3(0.3, 0.59, 0.11))), soil.rgb, 0.7) * vec3(0.84, 0.79, 0.72);
     float rough = soil.a;
+    if (soil_clumps > 0.5)
     // topsoil structure that survives distance: crumb clumps and darker hollows between them, as albedo and
     // a mid-scale normal (the texture detail mips away, the mesh relief is too coarse to catch light alone)
     {
-        float s0 = fbm(world_pos.xz * 11.0);
-        float sx = fbm((world_pos.xz + vec2(0.012, 0.0)) * 11.0);
-        float sz = fbm((world_pos.xz + vec2(0.0, 0.012)) * 11.0);
+        // 2-octave noise, and the slope from single-octave samples: three full 4-octave fbm per pixel of ground
+        // was a real cost on the iGPU for detail the eye only reads as broad clumping
+        vec2 q = world_pos.xz * 11.0;
+        float s1 = vnoise(q), s2 = vnoise(q * 2.03 + 3.7);
+        float s0 = s1 * 0.67 + s2 * 0.33;
+        float sx = vnoise(q + vec2(0.132, 0.0)) * 0.67 + s2 * 0.33;
+        float sz = vnoise(q + vec2(0.0, 0.132)) * 0.67 + s2 * 0.33;
         float clump = smoothstep(0.35, 0.7, s0);
         float cav = clamp(0.5 - relief_h * 1.6, 0.0, 1.0);          // hollows of the displaced relief
         col *= mix(0.78, 1.12, clump) * mix(1.0, 0.8, cav * relief_mix);
-        col = mix(col, col * vec3(1.06, 0.98, 0.9), smoothstep(0.55, 0.8, fbm(world_pos.xz * 3.1 + 5.0)) * 0.6);   // drier crusted patches
+        col = mix(col, col * vec3(1.06, 0.98, 0.9), smoothstep(0.55, 0.8, vnoise(world_pos.xz * 3.1 + 5.0)) * 0.6);   // drier crusted patches
         vec3 cn = normalize(vec3(-(sx - s0) * 0.9, 0.012, -(sz - s0) * 0.9));   // world normal of the clump field
         float far = smoothstep(1.5, 6.0, length(world_pos - CAMERA_POSITION_WORLD));
         tn = normalize(mix(tn, vec3(cn.x, -cn.z, cn.y), mix(0.35, 0.7, far) * relief_mix));   // stronger far away, where the texture normal has faded
