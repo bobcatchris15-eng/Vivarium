@@ -22,7 +22,23 @@ float vnoise(vec2 p) {
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
 }
-float waves(vec2 p) { return vnoise(p) * 0.6 + vnoise(p * 2.3 + 7.1) * 0.3 + vnoise(p * 5.1 - 3.3) * 0.1; }
+float waves(vec2 p) { return vnoise(p) * 0.58 + vnoise(p * 1.93 + 7.1) * 0.29 + vnoise(p * 4.37 - 3.3) * 0.13; }
+
+float water_height(vec2 uv, vec2 f, float t) {
+    float speed = clamp(length(f), 0.0, 1.0);
+    vec2 fd = speed > 0.01 ? normalize(f) : normalize(vec2(0.83, 0.56));
+    vec2 side = vec2(-fd.y, fd.x);
+    vec2 q = vec2(dot(uv, fd), dot(uv, side));
+
+    // Broad capillary texture drifts continuously rather than cycling between two noise fields. Flow introduces
+    // elongated detail along the current, but still leaves quiet water with subtle non-directional structure.
+    float broad = waves(uv * ripple_scale * 0.62 - f * t * 0.08 + vec2(t * 0.021, -t * 0.016));
+    float streak = vnoise(q * vec2(ripple_scale * 0.72, ripple_scale * 1.55)
+                          - vec2(t * (0.08 + speed * 0.20), t * 0.019));
+    float cross = vnoise(q.yx * vec2(ripple_scale * 0.41, ripple_scale * 0.88)
+                         + vec2(-t * 0.013, t * 0.031));
+    return mix(broad, streak * 0.72 + cross * 0.28, speed * 0.42);
+}
 
 varying float depthf;
 varying vec2 flow;
@@ -44,18 +60,15 @@ void fragment() {
     float h = 0.0, hx = 0.0, hz = 0.0;
     vec2 f = clamp(flow * flow_visual_scale, vec2(-3.0), vec2(3.0));
     if (cutface < 0.5) {
-        float t = TIME * 0.35;
-        float ph0 = fract(t), ph1 = fract(t + 0.5);
-        float w = abs(ph0 - 0.5) * 2.0;
-        vec2 p = UV * ripple_scale;
-        float e = 0.02;
-        h = mix(waves(p - f * ph0 + vec2(t * 0.2, 0.0)), waves(p - f * ph1 + vec2(0.0, t * 0.2) + 3.7), w);
-        hx = mix(waves(p + vec2(e, 0) - f * ph0 + vec2(t * 0.2, 0.0)), waves(p + vec2(e, 0) - f * ph1 + vec2(0.0, t * 0.2) + 3.7), w);
-        hz = mix(waves(p + vec2(0, e) - f * ph0 + vec2(t * 0.2, 0.0)), waves(p + vec2(0, e) - f * ph1 + vec2(0.0, t * 0.2) + 3.7), w);
+        float t = TIME;
+        float e = 0.018;
+        h = water_height(UV, f, t);
+        hx = water_height(UV + vec2(e, 0.0), f, t);
+        hz = water_height(UV + vec2(0.0, e), f, t);
         // ripple normal built in world space (the water mesh has no tangents, so NORMAL_MAP would be undefined
         // per triangle and show up as a brick pattern of mismatched reflections)
-        float amp = 0.25 + 0.6 * clamp(length(f), 0.0, 1.0);
-        vec2 slope = vec2(h - hx, h - hz) / e * amp * 0.035;
+        float amp = 0.18 + 0.48 * clamp(length(f), 0.0, 1.0);
+        vec2 slope = vec2(h - hx, h - hz) / e * amp * 0.030;
         vec3 wn = normalize(vec3(slope.x, 1.0, slope.y));
         if (!FRONT_FACING) wn = -wn;   // seen from below the surface
         NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
@@ -72,8 +85,7 @@ void fragment() {
     vec3 behind = textureLod(screen_tex, ruv, 0.0).rgb;
     vec3 transmit = exp(-absorption * thickness);
     vec3 scene = behind * transmit + deep_tint * (1.0 - transmit) * 0.35;
-    // faint current streaks on streams
-    scene += vec3(0.05) * smoothstep(0.78, 1.0, h) * clamp(length(f), 0.0, 1.0) * (1.0 - cutface);
+    // Fast current reads through the moving normal/refraction instead of a bright procedural streak overlay.
 
     if (cutface > 0.5) {
         // aquarium glass: meniscus line where the water meets the air, otherwise perfectly clear
@@ -85,7 +97,8 @@ void fragment() {
     EMISSION = scene;
     // soft waterline: the surface fades out where almost no water lies over the ground
     ALPHA = cutface > 0.5 ? 1.0 : smoothstep(0.0, 0.012, max(linear_depth(SCREEN_UV, INV_PROJECTION_MATRIX) - surf_depth, 0.0));
-    ROUGHNESS = cutface > 0.5 ? 0.0 : 0.03;
+    float flow_rough = smoothstep(0.15, 1.0, clamp(length(f), 0.0, 1.0));
+    ROUGHNESS = cutface > 0.5 ? 0.0 : mix(0.025, 0.06, flow_rough);
     METALLIC = 0.0;
     SPECULAR = cutface > 0.5 ? 0.15 : 0.5;
 }
