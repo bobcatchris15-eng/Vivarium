@@ -27,6 +27,7 @@ public partial class CameraRig : Node3D
     private ulong _rmbPressMs;
 
     private float _yaw = 0, _pitch = -0.6f;
+    private const float CameraRadius = 0.035f;
     private bool _looking;
     public bool Focused { get; private set; }
     private Func<Vector3>? _focusTarget;
@@ -64,6 +65,14 @@ public partial class CameraRig : Node3D
 
     private void ApplyRotation() => Rotation = new Vector3(_pitch, _yaw, 0);
 
+    private Vector3 ResolveCameraPosition(Vector3 desired)
+    {
+        if (World == null) return desired;
+        return Bridge.V(Vivarium.Sim.Tools.CameraCollision.Resolve(World, Bridge.S(Position), Bridge.S(desired), CameraRadius));
+    }
+
+    private void MoveCamera(Vector3 delta) => Position = ResolveCameraPosition(Position + delta);
+
     public void Focus(Func<Vector3> target, float distance = 0.6f)
     {
         _focusTarget = target;
@@ -85,12 +94,12 @@ public partial class CameraRig : Node3D
         float dist = 8f;
         if (World != null)
         {
-            double hit = Vivarium.Sim.Tools.Selection.RayTerrain(World, Bridge.S(origin), Bridge.S(dir));
-            if (!double.IsInfinity(hit)) dist = (float)hit;
+            var hit = Vivarium.Sim.Tools.Selection.Raycast(World, Bridge.S(origin), Bridge.S(dir));
+            if (hit.IsHit) dist = (float)hit.Distance;
         }
         float step = Mathf.Clamp(dist * 0.15f, 0.004f, 4f) * notches;
         if (notches > 0) step = Mathf.Min(step, Mathf.Max(0f, dist - 0.03f));   // stop short of the surface
-        Position += dir * step;
+        MoveCamera(dir * step);
     }
 
     public void AdjustSpeed(int steps)
@@ -156,6 +165,7 @@ public partial class CameraRig : Node3D
     {
         using var prof = FrameProfiler.Measure("Camera");
         float dt = (float)Math.Min(delta, 0.1);
+        if (World != null) Position = ResolveCameraPosition(Position);
         // Q / E turn the camera (in focus mode they orbit the target)
         if (!KeyboardBlocked)
         {
@@ -166,7 +176,13 @@ public partial class CameraRig : Node3D
         {
             var t = _focusTarget();
             var back = new Basis(Vector3.Up, _yaw) * new Basis(Vector3.Right, _pitch) * new Vector3(0, 0, 1);
-            Position = Position.Lerp(t + back * _orbitDistance, 1 - Mathf.Exp(-dt * 10));
+            var ideal = t + back * _orbitDistance;
+            if (World != null)
+            {
+                var anchor = t + Vector3.Up * CameraRadius * 1.25f;
+                ideal = Bridge.V(Vivarium.Sim.Tools.CameraCollision.Resolve(World, Bridge.S(anchor), Bridge.S(ideal), CameraRadius));
+            }
+            Position = ResolveCameraPosition(Position.Lerp(ideal, 1 - Mathf.Exp(-dt * 10)));
             ApplyRotation();
             if (!KeyboardBlocked && MoveInput() != Vector3.Zero) Unfocus();   // flight input returns to free-fly
         }
@@ -183,7 +199,7 @@ public partial class CameraRig : Node3D
                     // so looking down while moving no longer dives the camera into the ground
                     var yawOnly = new Basis(Vector3.Up, _yaw);
                     var dir = yawOnly * new Vector3(move.X, 0, move.Z) + new Vector3(0, move.Y, 0);
-                    Position += dir.Normalized() * spd * dt;
+                    MoveCamera(dir.Normalized() * spd * dt);
                 }
             }
         }
