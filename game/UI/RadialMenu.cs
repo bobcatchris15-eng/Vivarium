@@ -122,22 +122,19 @@ public partial class RadialMenu : Control
 
     public void Open(Vector2 at)
     {
-        var vp = GetViewportRect().Size;
-        // keep the whole wheel (incl. the outer ring) on screen
-        float margin = OuterRadius + ButtonSize / 2 + 8;
-        _center = new Vector2(Mathf.Clamp(at.X, margin, Math.Max(margin, vp.X - margin)), Mathf.Clamp(at.Y, margin, Math.Max(margin, vp.Y - margin)));
+        _openedAt = at;
+        PlaceCenter(OuterRadius);
         ClearOuter();
         var current = Session.Tools.Current;
         for (int i = 0; i < InnerCount; i++)
         {
             var b = i < _tools.Count ? _tools[i].Button : _groups[i - _tools.Count].Button;
-            b.Position = _center + Vector2.FromAngle(InnerAngle(i)) * InnerRadius - b.CustomMinimumSize / 2;
             b.Visible = true;
             bool on = i < _tools.Count ? _tools[i].Kind == current : Array.IndexOf(Groups[i - _tools.Count].Members, current) >= 0;
             b.SetPressedNoSignal(on);
         }
-        _hub.Position = _center - _hub.CustomMinimumSize / 2;
         _hub.Size = _hub.CustomMinimumSize;
+        LayoutInner();
         _hubLabel.Text = NameOf(current);
         Visible = true; IsOpen = true;
         _ring.PivotOffset = _center;
@@ -146,6 +143,27 @@ public partial class RadialMenu : Control
         _tween = CreateTween().SetParallel().SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
         _tween.TweenProperty(_ring, "scale", Vector2.One, 0.16);
         _tween.TweenProperty(_ring, "modulate:a", 1.0f, 0.12);
+    }
+
+    private Vector2 _openedAt;
+
+    /// <summary>Centres the wheel at the click, pushed inward so a ring of <paramref name="radius"/> stays on screen.</summary>
+    private void PlaceCenter(float radius)
+    {
+        var vp = GetViewportRect().Size;
+        float margin = radius + ButtonSize / 2 + 8;
+        _center = new Vector2(Mathf.Clamp(_openedAt.X, margin, Math.Max(margin, vp.X - margin)), Mathf.Clamp(_openedAt.Y, margin, Math.Max(margin, vp.Y - margin)));
+        _ring.PivotOffset = _center;
+    }
+
+    private void LayoutInner()
+    {
+        for (int i = 0; i < InnerCount; i++)
+        {
+            var b = i < _tools.Count ? _tools[i].Button : _groups[i - _tools.Count].Button;
+            b.Position = _center + Vector2.FromAngle(InnerAngle(i)) * InnerRadius - b.CustomMinimumSize / 2;
+        }
+        _hub.Position = _center - _hub.CustomMinimumSize / 2;
     }
 
     public void Close()
@@ -199,15 +217,34 @@ public partial class RadialMenu : Control
         _hubLabel.Text = fauna ? "Choose an animal" : "Choose a plant";
     }
 
-    /// <summary>Spreads buttons along the outer ring, centred on the direction of the item that opened them.</summary>
+    /// <summary>
+    /// Spreads buttons along the outer ring, centred on the direction of the item that opened them. When there are
+    /// more than one ring holds (the plant list outgrew it), the rest spill onto further rings outward, so buttons
+    /// never wrap round onto each other; the wheel is re-centred if the extra rings would leave the screen.
+    /// </summary>
     private void FanOut(float baseAng, List<Button> buttons)
     {
-        float step = (ButtonSize + 12) / OuterRadius;   // keep neighbouring buttons apart
-        for (int i = 0; i < buttons.Count; i++)
+        const float Gap = 10;
+        var rings = new List<(float Radius, int Count)>();
+        int left = buttons.Count;
+        for (float r = OuterRadius; left > 0; r += ButtonSize + Gap)
         {
-            float ang = baseAng + (i - (buttons.Count - 1) / 2f) * step;
-            buttons[i].Position = _center + Vector2.FromAngle(ang) * OuterRadius - buttons[i].CustomMinimumSize / 2;
-            buttons[i].Visible = true;
+            int cap = Math.Max(1, (int)(Mathf.Tau * r / (ButtonSize + Gap)));
+            int n = Math.Min(cap, left);
+            rings.Add((r, n)); left -= n;
+        }
+        float outer = rings[^1].Radius;
+        if (outer > OuterRadius) { PlaceCenter(outer); LayoutInner(); }
+        int k = 0;
+        foreach (var (r, n) in rings)
+        {
+            float step = Math.Min((ButtonSize + Gap) / r, Mathf.Tau / n);
+            for (int i = 0; i < n; i++, k++)
+            {
+                float ang = baseAng + (i - (n - 1) / 2f) * step;
+                buttons[k].Position = _center + Vector2.FromAngle(ang) * r - buttons[k].CustomMinimumSize / 2;
+                buttons[k].Visible = true;
+            }
         }
     }
 
