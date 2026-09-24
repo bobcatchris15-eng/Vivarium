@@ -291,8 +291,10 @@ public partial class FaunaRenderer : Node3D
             hiMat.SetShaderParameter("wiggle", sp.Medium == Medium.Aquatic ? 1.0f : sp.Model is "isopod" or "beetle" ? 0.08f : 0.35f);
             hiMat.SetShaderParameter("wiggle_speed", sp.Model == "minnow" ? 11.0f : 7.0f);
             hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
-            hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.35f, "triops" => 0.6f, "shrimp" => 0.5f, "springtail" => 0.05f, "beetle" => 0.85f, "silverfish" => 0.3f, _ => 0.0f });
+            hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.15f, "triops" => 0.45f, "shrimp" => 0.35f, "springtail" => 0.0f, "beetle" => 0.3f, "silverfish" => 0.2f, _ => 0.0f });
             hiMat.SetShaderParameter("segment_rings", sp.Model switch { "springtail" => 12.0f, "silverfish" => 11.0f, _ => 0.0f });
+            hiMat.SetShaderParameter("bloom", sp.Model switch { "springtail" => 1.0f, "isopod" => 0.85f, "silverfish" => 0.7f, "beetle" => 0.7f, "triops" or "shrimp" or "minnow" => 0.1f, _ => 0.6f });
+            hiMat.SetShaderParameter("wet", sp.Model is "shrimp" or "minnow" or "triops" ? 1.0f : 0.0f);
             hiMat.SetShaderParameter("scales", sp.Model is "minnow" or "silverfish" ? 1.0f : 0.0f);
             var still = (ShaderMaterial)hiMat.Duplicate();   // rolled-up pill bugs don't wiggle
             still.SetShaderParameter("wiggle", 0.0f);

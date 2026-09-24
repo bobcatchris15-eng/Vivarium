@@ -14,6 +14,8 @@ uniform float translucency = 0.0;
 uniform float carapace = 0.0;   // clearcoat for hard, glossy exoskeletons
 uniform float scales = 0.0;     // 1 = fish scales + silvery sheen
 uniform float segment_rings = 0.0;   // body segments to mark as faint grooves along UV.x (0 = none)
+uniform float bloom = 0.5;      // waxy/dusty surface bloom: 1 = matte chalky cuticle, 0 = clean
+uniform float wet = 0.0;        // aquatic animals: a thin wet film keeps a soft sheen
 
 varying vec4 genes;
 varying float region;
@@ -63,8 +65,8 @@ void fragment() {
     float mark = clamp(max(spots, bands * density), 0.0, 1.0) * contrast;
     vec3 col = mix(base, hue_rotate(ornament_color, genes.x * 0.5), mark * step(region, 1.5));
     if (region > 1.5 && region < 2.5) col = vec3(0.03);                    // eyes
-    else if (region > 2.5 && region < 3.5) col = mix(col, vec3(1.0), 0.35); // lighter belly
-    else if (region > 3.5) col = mix(base * 1.1, vec3(1.0), 0.15);        // limbs & fins
+    else if (region > 2.5 && region < 3.5) col = mix(col, col * 1.4 + vec3(0.04), 0.35); // slightly lighter belly, same hue (pure white read as a toy)
+    else if (region > 3.5) col = base * 1.15 + vec3(0.02);                // limbs & fins
     // fine surface grain (chitin pits / skin) so bodies don't read as smooth plastic
     float micro = vnoise(body_uv * vec2(90.0, 60.0) + seed * 0.37);
     col *= 0.92 + 0.16 * micro;
@@ -77,12 +79,23 @@ void fragment() {
         col *= 1.0 - 0.14 * edge;
         col = mix(col, vec3(0.85, 0.9, 0.95), fres * 0.35 + (region > 2.5 ? 0.35 : 0.0));   // silvery flank and belly
     }
+    // Real cuticle is mostly matte: waxy bloom, dust and soil grime break up whatever gloss there is, and it
+    // varies over the body (worn shiny on the back, dull in the joints and underside). A uniform low roughness
+    // everywhere is what made every critter read as moulded plastic.
+    bool eye = region > 1.5 && region < 2.5;
+    float grime = vnoise(body_uv * vec2(9.0, 6.0) + seed * 0.71);
+    float dullPatch = smoothstep(0.35, 0.75, grime) * bloom;
+    float wear = smoothstep(0.55, 0.9, vnoise(body_uv * vec2(4.0, 3.0) + seed * 1.9)) * step(region, 1.5);   // polished high spots
+    col = mix(col, col * 0.85 + vec3(0.05, 0.045, 0.035), dullPatch * 0.5);   // dusty, slightly desaturated
+    float rough = mix(0.62, 0.42, carapace) + 0.18 * micro + 0.25 * dullPatch - 0.15 * wear * carapace;
+    rough = mix(rough, 0.3, wet * 0.6);
+    if (region > 2.5) rough += 0.1;          // bellies, legs and joints are duller
     ALBEDO = col;
-    ROUGHNESS = region > 1.5 && region < 2.5 ? 0.1 : mix(0.5, 0.3, carapace) + 0.1 * micro;
-    SPECULAR = 0.5;
-    CLEARCOAT = carapace;
-    CLEARCOAT_ROUGHNESS = 0.25;
-    RIM = 0.25;
+    ROUGHNESS = eye ? 0.08 : clamp(rough, 0.25, 0.95);
+    SPECULAR = eye ? 0.5 : mix(0.3, 0.45, max(carapace, wet));
+    CLEARCOAT = eye ? 0.0 : carapace * (1.0 - dullPatch) * 0.6;
+    CLEARCOAT_ROUGHNESS = mix(0.35, 0.7, micro);
+    RIM = mix(0.08, 0.2, wet);
     RIM_TINT = 0.6;
     BACKLIGHT = vec3(translucency) * col;
 }
