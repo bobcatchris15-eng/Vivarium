@@ -397,11 +397,12 @@ public static class OrganismMeshes
         {
             double spread = rng.Range(-0.5, 0.5), over = rng.Range(1.0, 1.6), top = rng.Range(0.95, 1.15);
             double bendA = rng.Range(-0.16, 0.16), bendB = rng.Range(-0.11, 0.11), shoulder = rng.Range(0.32, 0.55);
+            double drapeStrength = rng.Range(1.25, 1.65);
             Vec3 At(double t)
             {
                 double x = t * over;
                 double climb = top * Math.Sin(Math.PI * Math.Min(1, t * 1.2) * 0.5);
-                double drape = t > 0.8 ? (t - 0.8) * rng.Range(1.25, 1.65) : 0;
+                double drape = t > 0.8 ? (t - 0.8) * drapeStrength : 0;
                 double lateral = spread * (0.3 + t) + bendA * t * (1 - t) * 4
                     + bendB * t * (t - shoulder);
                 return new Vec3(x, Math.Max(0, climb - drape), lateral);
