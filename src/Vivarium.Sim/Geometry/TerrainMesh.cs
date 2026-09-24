@@ -10,10 +10,10 @@ namespace Vivarium.Sim.Geometry;
 public static class TerrainMesh
 {
     /// <summary>
-    /// Top surface. Each heightfield square is split along the same diagonal <see cref="Heightfield.Height"/>
-    /// uses; triangles crossing the boundary are clipped against the hexagon (Sutherland–Hodgman), so no
-    /// triangle extends outside the domain. Interior grid vertices are shared; vertex i of the result maps
-    /// to <see cref="TopMesh.VertexXZ"/> for recolouring.
+    /// Render-only top surface at twice the authoritative grid resolution. Heights use a bounded Catmull-Rom
+    /// reconstruction blended toward the authoritative triangle surface, so grazing silhouettes are smooth while
+    /// picking/camera collision remain within a few centimetres. Fine-cell diagonals alternate deterministically
+    /// instead of exposing one island-wide triangulation pattern. Boundary triangles are clipped exactly to the hex.
     /// </summary>
     public static TopMesh BuildTop(VivariumWorld w)
     {
@@ -22,47 +22,87 @@ public static class TerrainMesh
         var mesh = new MeshData();
         var xz = new List<Vec2>();
         var shared = new Dictionary<int, int>();
+
+        const int sub = 2;
+        double step = hf.Step / sub;
+        int nx = (hf.Nx - 1) * sub + 1;
+        int nz = (hf.Nz - 1) * sub + 1;
+
+        Vec2 Pos(int i, int j) => new(hf.OriginX + i * step, hf.OriginZ + j * step);
         int Vertex(Vec2 p, int key = -1)
         {
             if (key >= 0 && shared.TryGetValue(key, out int existing)) return existing;
-            double h = hf.Height(p);
-            var n = SmoothNormal(hf, p);
+            double h = RenderHeight(hf, p);
+            var n = RenderNormal(hf, p);
             int idx = mesh.AddVertex(new Vec3(p.X, h, p.Z), n, 0.4, 0.3, 0.2, 1, p.X, p.Z);
             xz.Add(p);
             if (key >= 0) shared[key] = idx;
             return idx;
         }
-        for (int j = 0; j < hf.Nz - 1; j++)
-            for (int i = 0; i < hf.Nx - 1; i++)
+
+        for (int j = 0; j < nz - 1; j++)
+            for (int i = 0; i < nx - 1; i++)
             {
-                var p00 = hf.VertexPos(i, j); var p10 = hf.VertexPos(i + 1, j); var p01 = hf.VertexPos(i, j + 1); var p11 = hf.VertexPos(i + 1, j + 1);
-                int k00 = j * hf.Nx + i, k10 = k00 + 1, k01 = k00 + hf.Nx, k11 = k01 + 1;
-                // Interior cells use a slightly off-centre render vertex and four triangles rather than exposing
-                // the same long diagonal across the whole island. Grid vertices remain authoritative; only the
-                // render surface between them is smoothed, so the simulation heightfield stays untouched.
-                if (dom.Contains(p00) && dom.Contains(p10) && dom.Contains(p01) && dom.Contains(p11))
-                {
-                    ulong h0 = Rng.Mix(w.Seed, (ulong)(1 + j * hf.Nx + i));
-                    ulong h1 = Rng.Mix(h0, 0x9E3779B97F4A7C15UL);
-                    double ju = (((h0 >> 16) & 0xffff) / 65535.0 - 0.5) * 0.18;
-                    double jv = (((h1 >> 16) & 0xffff) / 65535.0 - 0.5) * 0.18;
-                    double u = 0.5 + ju, v = 0.5 + jv;
-                    var pc = p00 * ((1 - u) * (1 - v)) + p10 * (u * (1 - v)) + p01 * ((1 - u) * v) + p11 * (u * v);
-                    double hc = hf.Height(p00) * ((1 - u) * (1 - v)) + hf.Height(p10) * (u * (1 - v))
-                              + hf.Height(p01) * ((1 - u) * v) + hf.Height(p11) * (u * v);
-                    int kc = mesh.AddVertex(new Vec3(pc.X, hc, pc.Z), SmoothNormal(hf, pc), 0.4, 0.3, 0.2, 1, pc.X, pc.Z);
-                    xz.Add(pc);
-                    int a = Vertex(p00, k00), b = Vertex(p10, k10), c = Vertex(p11, k11), d = Vertex(p01, k01);
-                    mesh.AddTriangle(a, b, kc); mesh.AddTriangle(b, c, kc);
-                    mesh.AddTriangle(c, d, kc); mesh.AddTriangle(d, a, kc);
-                }
-                else
+                var p00 = Pos(i, j); var p10 = Pos(i + 1, j);
+                var p01 = Pos(i, j + 1); var p11 = Pos(i + 1, j + 1);
+                int k00 = j * nx + i, k10 = k00 + 1, k01 = k00 + nx, k11 = k01 + 1;
+
+                // Break up the diagonal field without moving shared vertices. This leaves no coherent diagonal
+                // for the eye to follow across a low-angle view.
+                bool flip = (Rng.Mix(w.Seed, (ulong)(1 + k00)) & 1UL) != 0;
+                if (!flip)
                 {
                     AddClipped(dom, mesh, Vertex, new[] { p00, p10, p11 }, new[] { k00, k10, k11 });
                     AddClipped(dom, mesh, Vertex, new[] { p00, p11, p01 }, new[] { k00, k11, k01 });
                 }
+                else
+                {
+                    AddClipped(dom, mesh, Vertex, new[] { p00, p10, p01 }, new[] { k00, k10, k01 });
+                    AddClipped(dom, mesh, Vertex, new[] { p10, p11, p01 }, new[] { k10, k11, k01 });
+                }
             }
         return new TopMesh(mesh, xz);
+    }
+
+    private static double Catmull(double a, double b, double c, double d, double t)
+    {
+        double t2 = t * t, t3 = t2 * t;
+        return 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2
+            + (-a + 3 * b - 3 * c + d) * t3);
+    }
+
+    /// <summary>
+    /// Smooth visual height reconstructed from the authoritative vertex samples. The result is clamped to stay
+    /// within 3.5 cm of the collision surface, preventing the prettier render mesh from lying about interactions.
+    /// </summary>
+    public static double RenderHeight(Heightfield hf, Vec2 p)
+    {
+        double fx = (p.X - hf.OriginX) / hf.Step, fz = (p.Z - hf.OriginZ) / hf.Step;
+        int i = Math.Clamp((int)Math.Floor(fx), 0, hf.Nx - 2);
+        int j = Math.Clamp((int)Math.Floor(fz), 0, hf.Nz - 2);
+        double u = MathD.Clamp01(fx - i), v = MathD.Clamp01(fz - j);
+
+        double Row(int jj)
+        {
+            double a = hf.Vertex(i - 1, jj), b = hf.Vertex(i, jj);
+            double c = hf.Vertex(i + 1, jj), d = hf.Vertex(i + 2, jj);
+            return Catmull(a, b, c, d, u);
+        }
+
+        double cubic = Catmull(Row(j - 1), Row(j), Row(j + 1), Row(j + 2), v);
+        double authoritative = hf.Height(p);
+        double smooth = MathD.Lerp(authoritative, cubic, 0.72);
+        return MathD.Clamp(smooth,
+            Math.Max(hf.MinHeight, authoritative - 0.035),
+            Math.Min(hf.MaxHeight, authoritative + 0.035));
+    }
+
+    public static Vec3 RenderNormal(Heightfield hf, Vec2 p)
+    {
+        double e = hf.Step * 0.5;
+        double dx = (RenderHeight(hf, p + new Vec2(e, 0)) - RenderHeight(hf, p - new Vec2(e, 0))) / (2 * e);
+        double dz = (RenderHeight(hf, p + new Vec2(0, e)) - RenderHeight(hf, p - new Vec2(0, e))) / (2 * e);
+        return new Vec3(-dx, 1, -dz).Normalized();
     }
 
     private static void AddClipped(HexDomain dom, MeshData mesh, Func<Vec2, int, int> vertex, Vec2[] tri, int[] keys)
@@ -94,13 +134,7 @@ public static class TerrainMesh
         }
     }
 
-    public static Vec3 SmoothNormal(Heightfield hf, Vec2 p)
-    {
-        double e = hf.Step;
-        double dx = (hf.Height(p + new Vec2(e, 0)) - hf.Height(p - new Vec2(e, 0))) / (2 * e);
-        double dz = (hf.Height(p + new Vec2(0, e)) - hf.Height(p - new Vec2(0, e))) / (2 * e);
-        return new Vec3(-dx, 1, -dz).Normalized();
-    }
+    public static Vec3 SmoothNormal(Heightfield hf, Vec2 p) => RenderNormal(hf, p);
 
     /// <summary>
     /// Six vertical cut faces from the terrain edge down to the island bottom, banded by strata. Each band
@@ -110,7 +144,7 @@ public static class TerrainMesh
     public static MeshData BuildWalls(VivariumWorld w, double sampleStep = 0)
     {
         var hf = w.Terrain; var dom = w.Domain; var strata = w.Strata;
-        double step = sampleStep > 0 ? sampleStep : hf.Step;
+        double step = sampleStep > 0 ? sampleStep : hf.Step * 0.5;
         double bottom = hf.Bottom;
         var mesh = new MeshData();
         double perimeter = 0;
@@ -133,7 +167,7 @@ public static class TerrainMesh
                 {
                     double t = (double)s / segs;
                     var p = Vec2.Lerp(a, b, t);
-                    double surf = hf.Height(p);
+                    double surf = RenderHeight(hf, p);
                     double yTop = Math.Max(surf - top, bottom);
                     double yBot = Math.Max(surf - Math.Min(bot, surf - bottom), bottom);
                     double u = perimeter + t * len;
