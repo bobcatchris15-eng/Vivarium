@@ -20,3 +20,7 @@ Colonial edge-growth for moss/lichen (per-cell tint palettes, lichen banding), s
 
 ## Unverified assumptions
 - verify.ps1 default suite runs headless in reasonable time.
+
+## Open after round 5 (visual review of render tour)
+- Moss colonies still render as large polygonal patches at day 5 — cell radius/rendering not reading as small bits; verify cellRadius & per-cell mesh scale
+- Gravel still bluish-slate; dark-soil hill still reads flat at distance
