@@ -170,6 +170,29 @@ public class FloraTests
         Assert.Equal(0, w.FloraSystem.ProximityBonus(Sp("wetbank_moss"), new Vec2(3.9, 0)));
     }
 
+    [Fact]
+    public void MossRefusesWetCellsAndCressNeedsShallowWater()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.68, 0.5, 0.45);
+        var wetSpot = new Vec2(2, 2);
+        TestUtil.Flood(w, wetSpot, 0.5, 0.03);
+        TestUtil.Condition(w, 0.95, 0.5, 0.45); // saturated soil, above hardMaxMoisture
+        var mossOnWet = w.FloraSystem.Suitability(Sp("carpet_moss"), wetSpot);
+        Assert.True(mossOnWet.HardRefused);
+
+        // watercress: dry ground refused (no standing water), shallow water accepted
+        var dryMoisture = new Vec2(-2, -2);
+        TestUtil.Condition(w, 0.5, 0.5, 0.45);
+        var cressDry = w.FloraSystem.Suitability(Sp("watercress"), dryMoisture);
+        Assert.True(cressDry.HardRefused);
+
+        TestUtil.Flood(w, wetSpot, 0.5, 0.02);
+        TestUtil.Condition(w, 0.95, 0.5, 0.45);
+        var cressWet = w.FloraSystem.Suitability(Sp("watercress"), wetSpot);
+        Assert.False(cressWet.HardRefused);
+    }
+
     [Fact] // t-073
     public void OvercrowdingReducesGrowthAndRecruitment()
     {

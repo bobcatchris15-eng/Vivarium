@@ -75,6 +75,10 @@ public sealed class FloraSpeciesDef
     public Pref Nutrients { get; init; }
     public double MaxWaterDepth { get; init; }
     public double HardMinMoisture { get; init; }
+    /// <summary>Hard upper moisture ceiling (off-prop): refused above this even at high score elsewhere. Default 1 = no ceiling.</summary>
+    public double HardMaxMoisture { get; init; } = 1.0;
+    /// <summary>Hard minimum standing water depth required to establish/persist. Default 0 = no requirement.</summary>
+    public double MinWaterDepth { get; init; }
     public double MinSuitability { get; init; }
     /// <summary>"nutrients" (plants, mosses, lichens) or "detritus" (decomposers: fungi, slime molds). Decomposers
     /// build biomass from dead organic matter and mineralize part of it back into soil nutrients.</summary>

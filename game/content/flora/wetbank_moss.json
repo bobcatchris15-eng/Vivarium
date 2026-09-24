@@ -25,7 +25,7 @@
       "optimum": 0.35,
       "tolerance": 0.35
     },
-    "maxWaterDepth": 0.012,
+    "maxWaterDepth": 0.004,
     "hardMinMoisture": 0.55,
     "minSuitability": 0.18
   },

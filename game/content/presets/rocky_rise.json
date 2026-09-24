@@ -47,7 +47,10 @@
     { "species": "slime_mold", "count": 4 },
     { "species": "stonecrop", "count": 14 },
     { "species": "blue_fescue", "count": 10 },
-    { "species": "reindeer_lichen", "count": 10 }
+    { "species": "reindeer_lichen", "count": 10 },
+    { "species": "watercress", "count": 6 },
+    { "species": "bacopa", "count": 5 },
+    { "species": "sphagnum", "count": 5 }
   ],
   "starterFauna": [
     { "species": "springtail", "count": 40 },

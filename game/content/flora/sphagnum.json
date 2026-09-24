@@ -1,0 +1,94 @@
+{
+  "id": "sphagnum",
+  "name": "Sphagnum",
+  "archetype": "moss",
+  "role": "Saturated boggy-margin colonist; upright tufted capitula in mottled bog colours.",
+  "description": "Peat moss forming dense tufted colonies on saturated ground, mottled pale green through ochre to blood red.",
+  "habitat": {
+    "substrates": {
+      "soil": 1.0,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.97,
+      "tolerance": 0.1
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.2,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.01,
+    "hardMinMoisture": 0.6,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 0.8,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.3,
+    "maturityDays": 8,
+    "lifespanDays": 200,
+    "nutrientPerBiomass": 0.15,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.35,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.28,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.45,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0.0,
+  "colony": {
+    "cellRadius": 0.05,
+    "frontRate": 0.35,
+    "fillRate": 0.12,
+    "maxHeight": 0.05,
+    "patternMode": "random",
+    "palette": [
+      [0.55, 0.72, 0.4],
+      [0.7, 0.62, 0.3],
+      [0.62, 0.4, 0.22],
+      [0.55, 0.18, 0.16]
+    ]
+  },
+  "visual": {
+    "shape": "tussock",
+    "color": [
+      0.5,
+      0.68,
+      0.36
+    ],
+    "color2": [
+      0.6,
+      0.3,
+      0.2
+    ],
+    "colorVariance": 0.07,
+    "height": 0.04
+  },
+  "tags": [
+    "moss",
+    "riparian",
+    "bog"
+  ]
+}

@@ -279,7 +279,7 @@ public static class ContentLoader
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
         var h = n.Req("habitat");
-        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "hardMinMoisture", "minSuitability", "feeds", "requiresFeature");
+        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "minWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
         string feeds = h.Str("feeds", "nutrients");
         if (feeds is not ("nutrients" or "detritus")) h["feeds"].Error("expected nutrients | detritus");
         string reqFeature = ""; double reqRadius = 0;
@@ -346,7 +346,8 @@ public static class ContentLoader
             SubstrateAffinity = ParseAffinity(h, "substrates"), RefuseSubstrates = ParseSubstrateSet(h, "refuseSubstrates"),
             RefuseTags = new HashSet<string>(h.StrList("refuseTags"), StringComparer.Ordinal),
             Moisture = ParsePref(h, "moisture"), Light = ParsePref(h, "light"), Nutrients = ParsePref(h, "nutrients"),
-            MaxWaterDepth = h.Num("maxWaterDepth", 0, 0, 1), HardMinMoisture = h.Num("hardMinMoisture", 0, 0, 1), MinSuitability = h.Num("minSuitability", 0.15, 0, 1),
+            MaxWaterDepth = h.Num("maxWaterDepth", 0, 0, 1), MinWaterDepth = h.Num("minWaterDepth", 0, 0, 1),
+            HardMinMoisture = h.Num("hardMinMoisture", 0, 0, 1), HardMaxMoisture = h.Num("hardMaxMoisture", 1.0, 0, 1), MinSuitability = h.Num("minSuitability", 0.15, 0, 1),
             GrowthRate = g.Num("ratePerDay", min: 0.001, max: 20) / D, MaxBiomass = g.Num("maxBiomass", min: 0.001, max: 100), InitialBiomass = g.Num("initialBiomass", min: 0.0001, max: 100),
             DeclineRate = g.Num("declinePerDay", min: 0, max: 20) / D, MaturityAge = g.Num("maturityDays", min: 0.1, max: 3650) * D, Lifespan = g.Num("lifespanDays", min: 1, max: 36500) * D,
             NutrientPerBiomass = g.Num("nutrientPerBiomass", min: 0, max: 10), RadiusAtMax = g.Num("radiusAtMax", min: 0.01, max: 3), MinRadius = g.Num("minRadius", 0.02, 0.005, 3),
@@ -360,6 +361,7 @@ public static class ContentLoader
             CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,
             Colony = colony,
         };
+        if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");
         if (def.MaturityAge >= def.Lifespan) g["maturityDays"].Error("maturityDays must be shorter than lifespanDays");
         if (def.SubstrateAffinity.Count == 0) h["substrates"].Error("at least one substrate affinity is required");

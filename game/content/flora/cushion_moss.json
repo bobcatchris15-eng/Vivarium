@@ -28,6 +28,7 @@
       "tolerance": 0.35
     },
     "maxWaterDepth": 0.0,
+    "hardMaxMoisture": 0.9,
     "minSuitability": 0.15
   },
   "growth": {

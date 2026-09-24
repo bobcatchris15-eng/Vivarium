@@ -1,0 +1,84 @@
+{
+  "id": "bacopa",
+  "name": "Bacopa",
+  "archetype": "plant",
+  "role": "Emergent creeper of shallow water and wet margins; small paired leaves, tiny white flowers.",
+  "description": "A succulent creeping herb with small round paired leaves along soft stems, rooting as it spreads; tips carry tiny white flowers.",
+  "habitat": {
+    "substrates": {
+      "soil": 1.0,
+      "gravel": 0.4,
+      "water": 0.5
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.88,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.06,
+    "hardMinMoisture": 0.4,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.3,
+    "maturityDays": 7,
+    "lifespanDays": 110,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.18,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.24,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.7
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.4,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.75,
+  "grazingValue": 0.3,
+  "visual": {
+    "shape": "creeper",
+    "color": [
+      0.3,
+      0.58,
+      0.24
+    ],
+    "color2": [
+      0.9,
+      0.92,
+      0.85
+    ],
+    "colorVariance": 0.06,
+    "height": 0.1
+  },
+  "tags": [
+    "plant",
+    "riparian"
+  ]
+}
