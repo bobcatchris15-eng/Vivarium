@@ -144,11 +144,11 @@ public static class OrganismMeshes
                     var baseP = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
                     var lean = new Vec3(rng.Range(-0.35, 0.35), 0, rng.Range(-0.35, 0.35));
                     double h = rng.Range(0.6, 1.0), w = rng.Range(0.03, 0.06);
-                    var side = new Vec3(Math.Cos(ang + Math.PI / 2), 0, Math.Sin(ang + Math.PI / 2)) * w;
+                    var side = new Vec3(Math.Cos(ang + Math.PI / 2), 0, Math.Sin(ang + Math.PI / 2));
                     var tip = baseP + lean * h + new Vec3(0, h, 0);
-                    var mid = baseP + lean * (h * 0.4) + new Vec3(0, h * 0.55, 0);
-                    Primitives.Fan(m, baseP, new List<Vec3> { baseP - side, mid - side * 0.8, tip, mid + side * 0.8, baseP + side }, new Vec3(side.Z, 0, -side.X).Normalized(),
-                        Primitives.Scale(c1, 0.8), c2);
+                    Primitives.CurvedLeaf(m, baseP + new Vec3(0, 0.015, 0), tip, side, w,
+                        Primitives.Scale(c1, 0.78), c2, camber: rng.Range(0.01, 0.035),
+                        longitudinal: 7, asymmetry: rng.Range(-0.10, 0.10));
                 }
                 break;
             case "herb":
@@ -226,9 +226,13 @@ public static class OrganismMeshes
                         double sz = rng.Range(0.05, 0.08);
                         foreach (double sgn in new[] { -1.0, 1.0 })
                         {
-                            var tip = c + side * (sgn * sz);
-                            var rim = new List<Vec3> { c, c + side * (sgn * sz * 0.4) + new Vec3(0, sz * 0.3, 0), tip, c + side * (sgn * sz * 0.4) + new Vec3(0, -sz * 0.3, 0), c };
-                            Primitives.Fan(m, c, rim, Vec3.Up, Primitives.Scale(c1, 0.85), c1);
+                            var leafDir = (side * sgn + new Vec3(0, rng.Range(-0.08, 0.16), 0)).Normalized();
+                            var tip = c + leafDir * sz;
+                            var widthAxis = Vec3.Up.Cross(leafDir).Normalized();
+                            if (widthAxis.LengthSq < 1e-8) widthAxis = side;
+                            Primitives.CurvedLeaf(m, c, tip, widthAxis, sz * rng.Range(0.28, 0.40),
+                                Primitives.Scale(c1, 0.82), Primitives.Mix(c1, c2, rng.Range(0.15, 0.38)),
+                                camber: sz * rng.Range(0.05, 0.12), longitudinal: 4, asymmetry: rng.Range(-0.12, 0.12));
                         }
                     }
                     if (rng.NextDouble() < 0.3)
@@ -272,12 +276,13 @@ public static class OrganismMeshes
                     double lobeR = rng.Range(0.06, 0.11);
                     for (int l = 0; l < 3; l++)
                     {
-                        double la = 2 * Math.PI * l / 3 + rng.Range(-0.1, 0.1);
-                        var dir = new Vec3(Math.Cos(la), 0, Math.Sin(la));
-                        var side = new Vec3(-dir.Z, 0, dir.X);
+                        double la = 2 * Math.PI * l / 3 + rng.Range(-0.14, 0.14);
+                        var dir = new Vec3(Math.Cos(la), rng.Range(-0.04, 0.10), Math.Sin(la)).Normalized();
+                        var side = new Vec3(-dir.Z, 0, dir.X).Normalized();
                         var tip = top + dir * lobeR;
-                        var rim = new List<Vec3> { top, top + side * (lobeR * 0.5) + dir * (lobeR * 0.4), tip, top - side * (lobeR * 0.5) + dir * (lobeR * 0.4), top };
-                        Primitives.Fan(m, top, rim, Vec3.Up, Primitives.Mix(c1, c2, 0.3), Primitives.Mix(c1, c2, 0.6));
+                        Primitives.CurvedLeaf(m, top, tip, side, lobeR * rng.Range(0.42, 0.56),
+                            Primitives.Mix(c1, c2, 0.24), Primitives.Mix(c1, c2, 0.62),
+                            camber: lobeR * rng.Range(0.08, 0.16), longitudinal: 4, asymmetry: rng.Range(-0.14, 0.14));
                     }
                     if (rng.NextDouble() < 0.15)
                     {
@@ -448,7 +453,7 @@ public static class OrganismMeshes
             Primitives.Tube(m, new[] { b, b + lean * 0.5 + new Vec3(0, h * 0.5, 0), top }, new[] { 0.035, 0.03, 0.026 }, 5, (i, v) => (stemCol, 1, i, v, 0, 0));
             // conical bonnet: rings from the tip down to a flared, striated rim (UV.y = 1 on the underside gills)
             int start = m.VertexCount;
-            const int around = 12, rings = 5;
+            const int around = 18, rings = 6;
             for (int ri = 0; ri <= rings; ri++)
             {
                 double t = (double)ri / rings;
@@ -484,7 +489,7 @@ public static class OrganismMeshes
         for (int k = 0; k < tiers; k++)
         {
             double y = 0.15 + k * 0.75 / tiers + rng.Range(-0.04, 0.04), reach = rng.Range(0.6, 1.0), off = rng.Range(-0.35, 0.35);
-            const int around = 14, rings = 5;
+            const int around = 20, rings = 6;
             int start = m.VertexCount;
             ulong edgeSeed = Rng.Mix((ulong)(k + 1) * 0x9E3779B97F4A7C15UL, (ulong)Math.Round(reach * 10000));
             double tilt = rng.Range(-0.055, 0.055), cup = rng.Range(0.025, 0.075);
