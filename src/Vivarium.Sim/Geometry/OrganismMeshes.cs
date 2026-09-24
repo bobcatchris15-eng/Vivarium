@@ -99,18 +99,24 @@ public static class OrganismMeshes
             case "foliose":
                 for (int k = 0; k < 11; k++)
                 {
-                    double ang = 2 * Math.PI * k / 11 + rng.Range(-0.2, 0.2), len = rng.Range(0.55, 1.0);
+                    double ang = 2 * Math.PI * k / 11 + rng.Range(-0.28, 0.28), len = rng.Range(0.52, 1.0);
                     var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
                     var side = new Vec3(-dir.Z, 0, dir.X);
+                    double curl = rng.Range(-0.12, 0.16), skew = rng.Range(-0.18, 0.18), shoulder = rng.Range(0.22, 0.38);
                     var rim = new List<Vec3>();
-                    for (int s = 0; s <= 8; s++)
+                    for (int q = 0; q <= 10; q++)
                     {
-                        double u = (double)s / 8 * Math.PI;
-                        double wave = 0.12 * Math.Sin(u * 5);
-                        var p = dir * (Math.Sin(u) * len + 0.1) + side * (Math.Cos(u) * 0.28 * len) + new Vec3(0, 0.4 + 0.6 * Math.Sin(u) + wave, 0);
-                        rim.Add(p);
+                        double u = (double)q / 10;
+                        double th = u * Math.PI;
+                        double envelope = Math.Sin(th);
+                        double edgeNoise = Noise.Gradient(Rng.Mix(seed, (ulong)(k * 97 + 31)), u * 2.4, 0.37);
+                        double reach = envelope * len * (1 + 0.08 * edgeNoise + skew * (u - 0.5));
+                        double width = Math.Cos(th) * shoulder * len * (1 + 0.12 * edgeNoise);
+                        double lift = 0.34 + 0.55 * envelope + curl * envelope * (u - 0.5) * 2 + edgeNoise * 0.045;
+                        rim.Add(dir * (reach + 0.08) + side * width + new Vec3(0, lift, 0));
                     }
-                    Primitives.Fan(m, dir * 0.08 + new Vec3(0, 0.2, 0), rim, new Vec3(0, 1, 0), Primitives.Scale(c1, 0.85), c2);
+                    Primitives.Fan(m, dir * 0.08 + new Vec3(0, 0.18, 0), rim, Vec3.Up,
+                        Primitives.Scale(c1, 0.85 + rng.Range(-0.04, 0.04)), Primitives.Mix(c1, c2, rng.Range(0.55, 0.9)));
                 }
                 break;
             case "creeper":
@@ -390,10 +396,15 @@ public static class OrganismMeshes
         for (int k = 0; k < 6; k++)
         {
             double spread = rng.Range(-0.5, 0.5), over = rng.Range(1.0, 1.6), top = rng.Range(0.95, 1.15);
+            double bendA = rng.Range(-0.16, 0.16), bendB = rng.Range(-0.11, 0.11), shoulder = rng.Range(0.32, 0.55);
             Vec3 At(double t)
             {
-                double x = t * over, y = top * Math.Sin(Math.PI * Math.Min(1, t * 1.2) * 0.5) - (t > 0.8 ? (t - 0.8) * 1.5 : 0);
-                return new Vec3(x, Math.Max(0, y), spread * (0.3 + t) + 0.08 * Math.Sin(t * 9 + k));
+                double x = t * over;
+                double climb = top * Math.Sin(Math.PI * Math.Min(1, t * 1.2) * 0.5);
+                double drape = t > 0.8 ? (t - 0.8) * rng.Range(1.25, 1.65) : 0;
+                double lateral = spread * (0.3 + t) + bendA * t * (1 - t) * 4
+                    + bendB * t * (t - shoulder);
+                return new Vec3(x, Math.Max(0, climb - drape), lateral);
             }
             var path = new List<Vec3>(); var rad = new List<double>();
             for (int i = 0; i <= 12; i++) { path.Add(At(i / 12.0)); rad.Add(0.011 * (1 - i / 16.0)); }
@@ -465,15 +476,22 @@ public static class OrganismMeshes
             double y = 0.15 + k * 0.75 / tiers + rng.Range(-0.04, 0.04), reach = rng.Range(0.6, 1.0), off = rng.Range(-0.35, 0.35);
             const int around = 14, rings = 5;
             int start = m.VertexCount;
+            ulong edgeSeed = Rng.Mix((ulong)(k + 1) * 0x9E3779B97F4A7C15UL, (ulong)Math.Round(reach * 10000));
+            double tilt = rng.Range(-0.055, 0.055), cup = rng.Range(0.025, 0.075);
             for (int ri = 0; ri <= rings; ri++)
             {
                 double f = (double)ri / rings;
-                for (int s = 0; s <= around; s++)
+                for (int q = 0; q <= around; q++)
                 {
-                    double th = -Math.PI / 2 + Math.PI * s / around;
-                    double wav = 1 + 0.08 * Math.Sin(th * 7 + k);
-                    var pos = new Vec3(Math.Cos(th) * reach * f * wav, y + 0.06 * f * f - 0.1 * f * Math.Abs(Math.Sin(th)), off + Math.Sin(th) * reach * f * wav * 0.9);
-                    m.AddVertex(pos, Vec3.Up, bands[Math.Min(ri, rings - 1)], 1, f, (double)s / around, 0, 0);
+                    double th = -Math.PI / 2 + Math.PI * q / around;
+                    double n = Noise.Gradient(edgeSeed, Math.Cos(th) * 1.35, Math.Sin(th) * 1.35);
+                    double n2 = Noise.Gradient(Rng.Mix(edgeSeed, 19), Math.Cos(th) * 2.7, Math.Sin(th) * 2.7);
+                    double wav = 1 + 0.065 * n + 0.025 * n2;
+                    double z = off + Math.Sin(th) * reach * f * wav * 0.9;
+                    double yy = y + cup * f * f - 0.08 * f * Math.Abs(Math.Sin(th)) + tilt * Math.Sin(th) * f;
+                    var pos = new Vec3(Math.Cos(th) * reach * f * wav, yy, z);
+                    var col = Primitives.Mix(bands[Math.Min(ri, rings - 1)], bands[Math.Min(rings - 1, Math.Max(0, ri - 1))], MathD.Clamp01(0.25 + n * 0.15));
+                    m.AddVertex(pos, Vec3.Up, col, 1, f, (double)q / around, 0, 0);
                 }
             }
             for (int ri = 0; ri < rings; ri++)
@@ -485,8 +503,18 @@ public static class OrganismMeshes
                 }
             // cream pore surface underneath
             var rim = new List<Vec3>();
-            for (int s = 0; s <= around; s++) { double th = -Math.PI / 2 + Math.PI * s / around; rim.Add(new Vec3(Math.Cos(th) * reach, y + 0.06 - 0.1 * Math.Abs(Math.Sin(th)), off + Math.Sin(th) * reach * 0.9)); }
-            Primitives.Fan(m, new Vec3(0, y - 0.01, off), rim, -Vec3.Up, new[] { 0.62, 0.56, 0.44 }, new[] { 0.56, 0.5, 0.4 }, 1, 1);
+            for (int q = 0; q <= around; q++)
+            {
+                double th = -Math.PI / 2 + Math.PI * q / around;
+                double n = Noise.Gradient(edgeSeed, Math.Cos(th) * 1.35, Math.Sin(th) * 1.35);
+                double n2 = Noise.Gradient(Rng.Mix(edgeSeed, 19), Math.Cos(th) * 2.7, Math.Sin(th) * 2.7);
+                double wav = 1 + 0.065 * n + 0.025 * n2;
+                rim.Add(new Vec3(Math.Cos(th) * reach * wav,
+                    y + cup - 0.08 * Math.Abs(Math.Sin(th)) + tilt * Math.Sin(th),
+                    off + Math.Sin(th) * reach * wav * 0.9));
+            }
+            Primitives.Fan(m, new Vec3(0, y - 0.005, off), rim, -Vec3.Up,
+                new[] { 0.62, 0.56, 0.44 }, new[] { 0.56, 0.5, 0.4 }, 1, 1);
         }
     }
 
