@@ -27,3 +27,4 @@ Colonial edge-growth for moss/lichen (per-cell tint palettes, lichen banding), s
 - t7 moss cell radius DONE; t6c gravel/soil shaders DONE (inline); t8 colony bound DONE: cap 90/colony, global 2200, merge; perf run 4771 entities
 - Open: "before" per-species count not captured; SustainedAcceleratedRunStaysBounded now passes
 - Critter gloss DONE. Watch: closeup fps 12-15 on soil scenes (was 24-29 pre soil-detail) — suspect SoilDetailRenderer density
+- Soil fps DONE: hitch was engine RNG per instance (122ms→27ms worst). Repo pushed to github.com/bobcatchris15-eng/Vivarium (public); authors rewritten to GitHub no-reply; local backup/pre-author-rewrite branch holds old SHAs
