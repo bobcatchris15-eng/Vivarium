@@ -46,6 +46,7 @@ public partial class PropRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Props");
         if (_w == null) return;
         _sinceRefresh += delta;
         // gravel pebbles sit on the terrain, so follow sculpting too (throttled)

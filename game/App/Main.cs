@@ -22,6 +22,8 @@ public partial class Main : Node3D
     public override void _Ready()
     {
         UserArgs = OS.GetCmdlineUserArgs();
+        // a display piece must not stutter: avoid blocking full garbage collections during steady running
+        System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
         SetupLogging();
         Log.Info(LogCategory.App, $"Startup {AppVersion.Describe()} on {OS.GetName()} {OS.GetVersion()}, Godot {Engine.GetVersionInfo()["string"]}, renderer {RenderingServer.GetVideoAdapterName()}.");
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Fatal(LogCategory.App, "Unhandled exception: " + e.ExceptionObject);

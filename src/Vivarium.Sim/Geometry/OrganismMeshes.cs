@@ -174,6 +174,9 @@ public static class OrganismMeshes
             case "mushroom_cluster": Mushrooms(m, rng, c1, c2); break;
             case "bracket": Bracket(m, rng, c1, c2); break;
             case "plasmodium": Plasmodium(m, rng, c1, c2); break;
+            case "succulent": Succulent(m, rng, c1, c2); break;
+            case "tussock": Tussock(m, rng, c1, c2); break;
+            case "fruticose": Fruticose(m, rng, c1, c2); break;
             default:
                 Primitives.Ellipsoid(m, Vec3.Zero, new Vec3(1, 1, 1), 6, 8, (a, b) => (c1, 1, a, b, 0, 0));
                 break;
@@ -349,6 +352,117 @@ public static class OrganismMeshes
         }
     }
 
+    /// <summary>A mat of fleshy rosettes (stonecrop): plump spiralled leaves, blue-green with red-blushed tips.</summary>
+    private static void Succulent(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        int rosettes = 5 + rng.NextInt(4);
+        for (int r = 0; r < rosettes; r++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), rad = r == 0 ? 0 : Math.Sqrt(rng.NextDouble()) * 0.7, size = rng.Range(0.22, 0.34) * (r == 0 ? 1.2 : 1);
+            var centre = new Vec3(Math.Cos(ang) * rad, 0, Math.Sin(ang) * rad);
+            int leaves = 14;
+            for (int k = 0; k < leaves; k++)
+            {
+                double t = (double)k / leaves;
+                double a = k * 2.39996;                                   // golden-angle spiral
+                double out1 = size * (0.35 + 0.65 * (1 - t));             // outer leaves are longer
+                double lift = 0.2 + 0.8 * t;                              // inner leaves stand up
+                var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                var c = centre + dir * (out1 * 0.5) + new Vec3(0, 0.15 + lift * 0.5, 0);
+                var tip = Primitives.Mix(c1, c2, 0.25 + 0.5 * (1 - t));
+                Primitives.Ellipsoid(m, c, new Vec3(out1 * 0.55, 0.22 + 0.1 * t, out1 * 0.3), 4, 6,
+                    (u, v) => (Primitives.Mix(c1, tip, u < 0.35 ? 1 - u / 0.35 : 0), 1, u, v, 0, 0), pitch: 0);
+                // orient each leaf along its spiral direction
+                int start = m.VertexCount - 5 * 7;
+                double cs = Math.Cos(-a), sn = Math.Sin(-a);
+                for (int i = start; i < m.VertexCount; i++)
+                {
+                    var q = m.Position(i) - c;
+                    var rq = new Vec3(q.X * cs - q.Z * sn, q.Y + (q.X * cs - q.Z * sn) * lift * 0.9, q.X * sn + q.Z * cs);
+                    var fin = c + rq;
+                    m.Positions[i * 3] = (float)fin.X; m.Positions[i * 3 + 1] = (float)fin.Y; m.Positions[i * 3 + 2] = (float)fin.Z;
+                }
+            }
+        }
+        m.RecomputeNormals();
+    }
+
+    /// <summary>A tussock grass: a dense dome of needle-fine blades fountaining from the crown, straw-tipped.</summary>
+    private static void Tussock(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        for (int k = 0; k < 110; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), r0 = Math.Sqrt(rng.NextDouble()) * 0.25;
+            double spread = rng.Range(0.25, 1.0), h = rng.Range(0.6, 1.0) * (1.1 - spread * 0.3);
+            var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang)); var side = new Vec3(-dir.Z, 0, dir.X);
+            var b = dir * r0;
+            var mid = b + dir * (spread * 0.45) + new Vec3(0, h * 0.75, 0);
+            var tip = b + dir * (spread * 1.0) + new Vec3(0, h * (0.55 + 0.3 * rng.NextDouble()), 0);
+            double w = rng.Range(0.012, 0.02);                      // needle-fine blades (half-width, radius units)
+            var tipCol = Primitives.Mix(c1, c2, rng.Range(0.05, 0.45));   // mostly blue-green, a few straw tips
+            Blade(m, b, mid, tip, side, w, Primitives.Scale(c1, 0.8), tipCol);
+        }
+    }
+
+    /// <summary>
+    /// A tapered, double-sided ribbon along the quadratic curve base → (control) → tip. A fan from the base would
+    /// fill the whole area under an arching blade; a ribbon keeps it needle-thin along its length.
+    /// </summary>
+    private static void Blade(MeshData m, Vec3 b, Vec3 control, Vec3 tip, Vec3 side, double halfWidth, double[] colBase, double[] colTip)
+    {
+        const int n = 6;
+        var pts = new Vec3[n + 1];
+        for (int i = 0; i <= n; i++)
+        {
+            double t = (double)i / n, u = 1 - t;
+            pts[i] = b * (u * u) + control * (2 * u * t) + tip * (t * t);
+        }
+        for (int face = 0; face < 2; face++)
+        {
+            int start = m.VertexCount;
+            for (int i = 0; i <= n; i++)
+            {
+                double t = (double)i / n, wHere = halfWidth * (1 - t * 0.9);
+                var along = (i < n ? pts[i + 1] - pts[i] : pts[i] - pts[i - 1]).Normalized();
+                var nrm = along.Cross(side).Normalized() * (face == 0 ? 1 : -1);
+                var col = Primitives.Mix(colBase, colTip, t);
+                m.AddVertex(pts[i] - side * wHere, nrm, col, 1, t, 0, 0, 0);
+                m.AddVertex(pts[i] + side * wHere, nrm, col, 1, t, 1, 0, 0);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a0 = start + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+                var nrm = m.NormalAt(a0);
+                Primitives.TriangleFacing(m, a0, b0, a1, nrm);
+                Primitives.TriangleFacing(m, a1, b0, b1, nrm);
+            }
+        }
+    }
+
+    /// <summary>Fruticose lichen: a spongy mound of finely forking hollow stalks with pale, nodding tips.</summary>
+    private static void Fruticose(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        void Branch(Vec3 from, Vec3 dir, double len, double rad, int depth)
+        {
+            var to = from + dir * len;
+            Primitives.Tube(m, new[] { from, (from + to) * 0.5 + new Vec3(rng.Range(-0.02, 0.02), 0, rng.Range(-0.02, 0.02)), to }, new[] { rad, rad * 0.85, rad * 0.7 }, 4,
+                (i, v) => (Primitives.Mix(c1, c2, (3 - depth) / 3.0 + i * 0.1), 1, i, v, 0, 0));
+            if (depth <= 0) { Primitives.Ellipsoid(m, to, new Vec3(rad, rad, rad), 3, 5, (a, b) => (c2, 1, a, b, 0, 0)); return; }
+            for (int k = 0; k < 2; k++)
+            {
+                var nd = (dir + new Vec3(rng.Range(-0.6, 0.6), rng.Range(-0.1, 0.3), rng.Range(-0.6, 0.6))).Normalized();
+                Branch(to, nd, len * 0.72, rad * 0.72, depth - 1);
+            }
+        }
+        for (int k = 0; k < 9; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.65;
+            var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+            var dir = (new Vec3(Math.Cos(ang) * 0.35, 1, Math.Sin(ang) * 0.35)).Normalized();
+            Branch(b, dir, rng.Range(0.3, 0.42), 0.06, 3);
+        }
+    }
+
     /// <summary>Slime-mold plasmodium: a branching fan of flattened yellow veins with a thin advancing front.</summary>
     private static void Plasmodium(MeshData m, Rng rng, double[] c1, double[] c2)
     {
@@ -393,6 +507,8 @@ public static class OrganismMeshes
             case "triops": Triops(m); break;
             case "minnow": Minnow(m); break;
             case "isopod": Isopod(m); break;
+            case "beetle": Beetle(m); break;
+            case "silverfish": Silverfish(m); break;
             default: Primitives.Ellipsoid(m, new Vec3(0, 0.2, 0), new Vec3(0.5, 0.2, 0.2), 8, 10, (a, b) => (Body, 0, a, b, 1, 0)); break;
         }
         return m;
@@ -576,6 +692,59 @@ public static class OrganismMeshes
             // uropods (little tail prongs)
             Appendage(m, new[] { new Vec3(-0.42, 0.04, 0.05 * z), new Vec3(-0.49, 0.03, 0.09 * z) }, new[] { 0.014, 0.008 }, 3);
         }
+    }
+
+    private static void Beetle(MeshData m)
+    {
+        // darkling beetle, length 1 along +X: domed fused wing cases with a centre seam, a wide pronotum, a small
+        // head with beaded antennae, and six long legs
+        Primitives.Ellipsoid(m, new Vec3(-0.1, 0.17, 0), new Vec3(0.34, 0.17, 0.2), 10, 16, (a, b) => Region(0.55 - a * 0.5, b, b > 0.3 && b < 0.7 ? 3 : 1));  // elytra
+        Primitives.Ellipsoid(m, new Vec3(-0.1, 0.335, 0), new Vec3(0.3, 0.008, 0.006), 3, 4, (a, b) => Region(0.5, b, 2));                                      // seam
+        Primitives.Ellipsoid(m, new Vec3(0.25, 0.15, 0), new Vec3(0.11, 0.1, 0.17), 8, 12, (a, b) => Region(0.8, b, 1));                                        // pronotum
+        Primitives.Ellipsoid(m, new Vec3(0.39, 0.12, 0), new Vec3(0.07, 0.06, 0.09), 6, 10, (a, b) => Region(0.95, b, 1));                                      // head
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            Primitives.Ellipsoid(m, new Vec3(0.43, 0.14, 0.06 * z), new Vec3(0.018, 0.016, 0.015), 4, 6, (a, b) => Region(0.97, b, 2));
+            var ant = new List<Vec3> { new Vec3(0.45, 0.13, 0.05 * z) };
+            for (int k = 1; k <= 5; k++) ant.Add(ant[^1] + new Vec3(0.045, 0.012, 0.03 * z));
+            Appendage(m, ant, new[] { 0.013, 0.012, 0.013, 0.014, 0.015, 0.017 }, 4);
+            for (int leg = 0; leg < 3; leg++)
+            {
+                double x = 0.24 - leg * 0.16, sweep = (leg - 1) * 0.12;
+                Appendage(m, new[] { new Vec3(x, 0.07, 0.1 * z), new Vec3(x + sweep, 0.12, 0.26 * z), new Vec3(x + sweep * 1.8, 0.0, 0.34 * z) }, new[] { 0.02, 0.016, 0.01 }, 4);
+            }
+        }
+    }
+
+    private static void Silverfish(MeshData m)
+    {
+        // silverfish, length 1 along +X: a flattened, tapering carrot of a body, long antennae forward and three long
+        // tail bristles behind, short legs tucked under the thorax
+        var path = new List<Vec3>(); var radius = new List<double>();
+        for (int i = 0; i <= 14; i++)
+        {
+            double t = i / 14.0;
+            path.Add(new Vec3(0.36 - t * 0.74, 0.07, 0)); radius.Add(0.09 * Math.Pow(1 - t * 0.85, 0.9) * Math.Min(1, (t + 0.08) * 6) + 0.006);
+        }
+        int start = m.VertexCount;
+        Primitives.Tube(m, path, radius, 12, (i, v) => (Body, 0, 0.75 - i / 14.0 * 0.7, v, v > 0.62 && v < 0.88 ? 3 : 1, 0), new Vec3(0, 0, 1));
+        for (int i = start; i < m.VertexCount; i++)   // flatten top to bottom
+        {
+            var q = m.Position(i);
+            m.Positions[i * 3 + 1] = (float)(0.07 + (q.Y - 0.07) * 0.45);
+        }
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            Primitives.Ellipsoid(m, new Vec3(0.37, 0.085, 0.04 * z), new Vec3(0.015, 0.012, 0.012), 4, 6, (a, b) => Region(0.97, b, 2));
+            Appendage(m, new[] { new Vec3(0.4, 0.08, 0.02 * z), new Vec3(0.6, 0.1, 0.12 * z), new Vec3(0.85, 0.08, 0.2 * z) }, new[] { 0.009, 0.006, 0.003 }, 3);
+            for (int leg = 0; leg < 3; leg++)
+            {
+                double x = 0.26 - leg * 0.08;
+                Appendage(m, new[] { new Vec3(x, 0.04, 0.06 * z), new Vec3(x - 0.03, 0.02, 0.12 * z), new Vec3(x - 0.06, 0.0, 0.14 * z) }, new[] { 0.012, 0.009, 0.006 }, 3);
+            }
+            Appendage(m, new[] { new Vec3(-0.37, 0.07, 0.01 * z), new Vec3(-0.6, 0.075, 0.1 * z), new Vec3(-0.8, 0.07, 0.16 * z) }, new[] { 0.008, 0.005, 0.003 }, 3);
+        }
+        Appendage(m, new[] { new Vec3(-0.37, 0.07, 0), new Vec3(-0.62, 0.08, 0), new Vec3(-0.85, 0.075, 0) }, new[] { 0.008, 0.005, 0.003 }, 3);
     }
 
     private static void Minnow(MeshData m)

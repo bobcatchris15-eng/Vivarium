@@ -540,8 +540,8 @@ public static class ContentLoader
             if (!f.Traits.Contains("size")) errors.Add(f.SourceFile, "$.genetics.traits", "every fauna species must enable the 'size' trait");
             if (!f.Traits.Any(t => t is "ornament_density" or "hue_shift" or "pattern_strength" or "appendage_length"))
                 errors.Add(f.SourceFile, "$.genetics.traits", "at least one ornamentation trait is required");
-            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow" or "isopod"))
-                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}' (springtail | shrimp | triops | minnow | isopod)");
+            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow" or "isopod" or "beetle" or "silverfish"))
+                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}' (springtail | shrimp | triops | minnow | isopod | beetle | silverfish)");
         }
 
         for (int i = 0; i < inter.Relations.Count; i++)

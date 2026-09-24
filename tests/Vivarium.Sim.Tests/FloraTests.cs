@@ -212,6 +212,7 @@ public class FloraTests
         new object[] { "carpet_moss" }, new object[] { "cushion_moss" }, new object[] { "wetbank_moss" }, new object[] { "crust_lichen" },
         new object[] { "foliose_lichen" }, new object[] { "creeping_groundcover" }, new object[] { "marginal_waterside" }, new object[] { "ornamental_herb" },
         new object[] { "fern" }, new object[] { "climbing_vine" }, new object[] { "bonnet_mushroom" }, new object[] { "turkey_tail" },
+        new object[] { "stonecrop" }, new object[] { "blue_fescue" }, new object[] { "reindeer_lichen" },
     };
 
     /// <summary>Builds the habitat each archetype is designed for.</summary>
@@ -232,6 +233,9 @@ public class FloraTests
             case "marginal_waterside": TestUtil.Flood(w, new Vec2(-1, 0.5), 1.0, 0.04); p = new Vec2(0.15, 0.5); cond = (1.0, 0.9, 0.7); break;
             case "ornamental_herb": cond = (0.5, 1.1, 0.8); break;
             case "fern": cond = (0.72, 0.8, 0.35); break;
+            case "stonecrop": cond = (0.22, 0.3, 0.85); break;
+            case "blue_fescue": cond = (0.28, 0.6, 0.8); break;
+            case "reindeer_lichen": cond = (0.25, 0.1, 0.8); break;
             case "climbing_vine": w.Placement.PlaceLog(p + new Vec2(0.4, 0.35), 0, 2.4, 0.12, 1, 6); cond = (0.6, 0.9, 0.6); break;
             case "bonnet_mushroom": cond = (0.78, 0.3, 0.3); detritus = 1.2; break;
             case "turkey_tail": w.Placement.PlaceLog(p + new Vec2(0.6, 0), 0, 2.6, 0.25, 2, 7); cond = (0.6, 0.3, 0.3); detritus = 1.0; break;

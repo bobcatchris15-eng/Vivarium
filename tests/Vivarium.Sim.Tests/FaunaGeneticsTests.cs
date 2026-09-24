@@ -261,6 +261,9 @@ public class FaunaTests
                 FaunaFixtures.HoldWater(w);
                 foreach (int c in w.Grid.DomainCells) { if (w.Water.IsWet(c)) { w.Fields.Biofilm[c] = Math.Max(w.Fields.Biofilm[c], 0.3); w.Fields.Plankton[c] = Math.Max(w.Fields.Plankton[c], 0.2); } w.Fields.Detritus[c] = Math.Max(w.Fields.Detritus[c], 1.0); }
             }
+            // dry-land species get the parched ground they are built for (the fixture's land is moist by default)
+            if (sp.Medium == Medium.Terrestrial && sp.Moisture.Optimum < 0.45 && t % 30 == 0)
+                foreach (int c in w.Grid.DomainCells) if (!w.Water.IsWet(c)) w.Fields.Moisture[c] = sp.Moisture.Optimum;
             w.Step();
         }
         var alive = w.Fauna.Items.Where(f => f.SpeciesId == id).ToList();
@@ -310,7 +313,7 @@ public class FaunaTests
     public void FaunaLibraryLoadsCleanAndBrokenFixtureIsActionable()
     {
         Assert.Empty(TestUtil.Content.Warnings);
-        Assert.Equal(new[] { "microminnow", "pill_bug", "shrimp", "springtail", "triops" }, TestUtil.Content.Fauna.Select(f => f.Id));
+        Assert.Equal(new[] { "darkling_beetle", "microminnow", "pill_bug", "shrimp", "silverfish", "springtail", "triops" }, TestUtil.Content.Fauna.Select(f => f.Id));
         var src = new OverlayContentSource(TestUtil.ContentSource);
         var broken = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "microminnow.json"))
             .Replace("\"model\": \"minnow\"", "\"model\": \"whale\"")

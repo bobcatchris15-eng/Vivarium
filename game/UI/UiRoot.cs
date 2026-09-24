@@ -187,6 +187,7 @@ public partial class UiRoot : Control
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Ui");
         _refresh += delta;
         if (_refresh < 0.2) return;
         _refresh = 0;

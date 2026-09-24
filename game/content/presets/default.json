@@ -50,11 +50,16 @@
     { "species": "climbing_vine", "count": 6 },
     { "species": "bonnet_mushroom", "count": 10 },
     { "species": "turkey_tail", "count": 6 },
-    { "species": "slime_mold", "count": 6 }
+    { "species": "slime_mold", "count": 6 },
+    { "species": "stonecrop", "count": 12 },
+    { "species": "blue_fescue", "count": 12 },
+    { "species": "reindeer_lichen", "count": 8 }
   ],
   "starterFauna": [
     { "species": "springtail", "count": 60 },
     { "species": "pill_bug", "count": 24 },
+    { "species": "darkling_beetle", "count": 14 },
+    { "species": "silverfish", "count": 18 },
     { "species": "shrimp", "count": 20 },
     { "species": "triops", "count": 10 },
     { "species": "microminnow", "count": 16 }

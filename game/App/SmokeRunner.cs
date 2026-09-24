@@ -369,7 +369,7 @@ public partial class SmokeRunner : Node
                 var line = $"t={++second,3}s fps={Engine.GetFramesPerSecond(),3} frames={frames,3} worstFrame={worstFrame,6:0.0}ms " +
                     $"process={Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000,6:0.0}ms simLast={W.Scheduler.LastAdvanceMs,5:0.0}ms " +
                     $"ticks/s={W.Clock.Tick - lastTick,4} backlog={W.Scheduler.Backlog,7:0}s flora={W.Flora.Count} fauna={W.Fauna.Count} " +
-                    $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)}";
+                    $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} gc0={System.GC.CollectionCount(0)} gc1={System.GC.CollectionCount(1)} gc2={System.GC.CollectionCount(2)} slowest: " + FrameProfiler.TakeReport();
                 Log.Info(LogCategory.Perf, line);
                 samples.Add(line);
                 lastTick = W.Clock.Tick; worstFrame = 0; frames = 0;
@@ -400,7 +400,7 @@ public partial class SmokeRunner : Node
         var aquatic = W.Fauna.Items.Where(f => W.Content.FaunaOrThrow(f.SpeciesId).Medium == Vivarium.Sim.Content.Medium.Aquatic).OrderBy(f => Vec2.Distance(f.PositionXZ, deep)).FirstOrDefault();
         var target = aquatic != null ? Bridge.V(aquatic.Position) : new Vector3((float)deep.X, (float)surf - 0.1f, (float)deep.Z);
         views.Add(("underwater", target + new Vector3(0.5f, 0.05f, 0.5f), target));
-        foreach (var species in new[] { "shrimp", "microminnow", "triops", "springtail", "pill_bug" })
+        foreach (var species in new[] { "shrimp", "microminnow", "triops", "springtail", "pill_bug", "darkling_beetle", "silverfish" })
         {
             var f = W.Fauna.Items.FirstOrDefault(x => x.SpeciesId == species);
             if (f == null) continue;
@@ -408,7 +408,7 @@ public partial class SmokeRunner : Node
             float scale = (float)(W.FaunaSystem.PhenotypeOf(f).BodySize * W.Content.FaunaOrThrow(species).VisualScale);
             views.Add(("closeup_" + species, p + new Vector3(scale * 2.2f, scale * 1.6f, scale * 2.2f), p));
         }
-        foreach (var species in new[] { "carpet_moss", "crust_lichen", "marginal_waterside", "ornamental_herb", "fern", "climbing_vine", "bonnet_mushroom", "turkey_tail", "slime_mold" })
+        foreach (var species in new[] { "carpet_moss", "crust_lichen", "marginal_waterside", "ornamental_herb", "fern", "climbing_vine", "bonnet_mushroom", "turkey_tail", "slime_mold", "stonecrop", "blue_fescue", "reindeer_lichen" })
         {
             var f = W.Flora.Items.FirstOrDefault(x => x.SpeciesId == species);
             if (f == null) continue;
@@ -471,21 +471,15 @@ public partial class SmokeRunner : Node
                 _facts["slime_patches"] = slime.Count;
             }
         }
-        // LOD: identical view with and without LOD
+        // full detail at distance: from the far overview every animal is either drawn with its full model or is
+        // genuinely outside the view, and every plant instance uses its full mesh
         cam.LookAtPoint(new Vector3(0, 8.5f, 14.5f), new Vector3(0, -0.5f, 0));
         await Frames(6);
-        long lod = Session.Fauna.TrianglesDrawn + Session.Flora.TrianglesDrawn;
         string digestA = WorldSerializer.Digest(W);
-        Session.Fauna.ForceHighDetail = true;
-        await Frames(6);
-        long full = Session.Fauna.TrianglesDrawn;
-        Session.Fauna.ForceHighDetail = false;
-        await Frames(6);
-        _facts["fauna_triangles_lod"] = Session.Fauna.TrianglesDrawn;
-        _facts["fauna_triangles_full"] = full;
-        _facts["lod_counts"] = $"high {Session.Fauna.LodHigh}, low {Session.Fauna.LodLow}, culled {Session.Fauna.Culled}";
-        Check("LOD reduces fauna render work", Session.Fauna.TrianglesDrawn < full, $"{Session.Fauna.TrianglesDrawn} vs {full} triangles");
-        Check("LOD leaves the simulation digest unchanged", WorldSerializer.Digest(W) == digestA);
+        _facts["fauna_drawn"] = $"drawn {Session.Fauna.Drawn}, off-screen {Session.Fauna.OffScreen}, triangles {Session.Fauna.TrianglesDrawn}";
+        Check("distant organisms keep full detail", Session.Fauna.Drawn + Session.Fauna.OffScreen == W.Fauna.Count && Session.Fauna.Drawn > W.Fauna.Count / 2 && Session.Flora.Visible_ == W.Flora.Count,
+            $"fauna drawn {Session.Fauna.Drawn} + off-screen {Session.Fauna.OffScreen} of {W.Fauna.Count}; flora {Session.Flora.Visible_} of {W.Flora.Count}");
+        Check("rendering leaves the simulation digest unchanged", WorldSerializer.Digest(W) == digestA);
         _facts["island_triangles"] = Session.Island.TriangleCount;
         _facts["water_triangles"] = Session.Water.TriangleCount;
         _facts["pebbles"] = Session.Props.PebbleCount;

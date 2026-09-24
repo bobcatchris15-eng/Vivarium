@@ -111,6 +111,7 @@ public partial class EnvironmentRig : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Environment");
         // quick crossfade so the medium change is visible but not jarring
         _underwater = Mathf.MoveToward(_underwater, _underwaterTarget, (float)delta * 5f);
         _underwaterRect.Visible = _underwater > 0.01f;

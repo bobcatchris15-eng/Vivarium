@@ -10,8 +10,9 @@
     "flora/carpet_moss.json", "flora/cushion_moss.json", "flora/wetbank_moss.json",
     "flora/crust_lichen.json", "flora/foliose_lichen.json",
     "flora/creeping_groundcover.json", "flora/marginal_waterside.json", "flora/ornamental_herb.json",
-    "flora/fern.json", "flora/climbing_vine.json", "flora/bonnet_mushroom.json", "flora/turkey_tail.json", "flora/slime_mold.json"
+    "flora/fern.json", "flora/climbing_vine.json", "flora/bonnet_mushroom.json", "flora/turkey_tail.json", "flora/slime_mold.json",
+    "flora/stonecrop.json", "flora/blue_fescue.json", "flora/reindeer_lichen.json"
   ],
-  "fauna": ["fauna/springtail.json", "fauna/shrimp.json", "fauna/triops.json", "fauna/microminnow.json", "fauna/pill_bug.json"],
+  "fauna": ["fauna/springtail.json", "fauna/shrimp.json", "fauna/triops.json", "fauna/microminnow.json", "fauna/pill_bug.json", "fauna/darkling_beetle.json", "fauna/silverfish.json"],
   "presets": ["presets/default.json", "presets/rocky_rise.json"]
 }

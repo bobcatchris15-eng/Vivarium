@@ -154,6 +154,7 @@ public partial class CameraRig : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Camera");
         float dt = (float)Math.Min(delta, 0.1);
         // Q / E turn the camera (in focus mode they orbit the target)
         if (!KeyboardBlocked)

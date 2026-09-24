@@ -107,8 +107,8 @@ public class BootstrapTests
         var b = ContentLoader.Load(TestUtil.ContentSource);
         Assert.Equal(a.ContentDigest, b.ContentDigest);
         Assert.Equal(a.Flora.Select(f => f.Id), b.Flora.Select(f => f.Id));
-        Assert.Equal(13, a.Flora.Count);
-        Assert.Equal(5, a.Fauna.Count);
+        Assert.Equal(16, a.Flora.Count);
+        Assert.Equal(7, a.Fauna.Count);
         Assert.Empty(a.Warnings);
     }
 

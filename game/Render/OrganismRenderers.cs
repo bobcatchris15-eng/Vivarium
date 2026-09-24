@@ -9,13 +9,6 @@ using Vivarium.Sim.World;
 
 namespace Vivarium.Game.Render;
 
-/// <summary>Render-side LOD distances per quality tier (never affects the simulation).</summary>
-public static class Lod
-{
-    public static float Near(int q) => q switch { 0 => 2.5f, 1 => 4.5f, _ => 7f };
-    public static float Far(int q) => q switch { 0 => 12f, 1 => 22f, _ => 40f };
-}
-
 /// <summary>
 /// Flora drawn as one MultiMesh per species and detail level, rebuilt from authoritative state on a short
 /// cadence. The render instances can be discarded and rebuilt at any time without touching the simulation.
@@ -23,7 +16,7 @@ public static class Lod
 public partial class FloraRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private sealed class Layer { public MultiMeshInstance3D Near = null!, Far = null!; public MultiMeshInstance3D? Fruit, Veins; public int NearTris, FarTris, FruitTris, VeinTris; }
+    private sealed class Layer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Veins; public int FullTris, FruitTris, VeinTris; }
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
     private double _accum = 999;
@@ -45,15 +38,10 @@ public partial class FloraRenderer : Node3D
             mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
             if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            var hi = OrganismMeshes.Flora(sp);
-            var lo = LowDetail(sp);
-            var layer = new Layer
-            {
-                Near = MakeMmi($"Flora_{sp.Id}_near", Bridge.ToArrayMesh(hi, mat)),
-                Far = MakeMmi($"Flora_{sp.Id}_far", Bridge.ToArrayMesh(lo, mat)),
-                NearTris = hi.TriangleCount, FarTris = lo.TriangleCount,
-            };
-            AddChild(layer.Near); AddChild(layer.Far);
+            // always the full mesh: this is a display piece first, so nothing is simplified with distance
+            var full = OrganismMeshes.Flora(sp);
+            var layer = new Layer { Full = MakeMmi($"Flora_{sp.Id}", Bridge.ToArrayMesh(full, mat)), FullTris = full.TriangleCount };
+            AddChild(layer.Full);
             if (OrganismMeshes.FloraFruiting(sp) is { } fruit)
             {
                 var fruitMat = (ShaderMaterial)mat.Duplicate();
@@ -85,13 +73,6 @@ public partial class FloraRenderer : Node3D
         _accum = 999;
     }
 
-    private static MeshData LowDetail(FloraSpeciesDef sp)
-    {
-        var m = new MeshData();
-        var col = Primitives.Mix(sp.Color, sp.Color2, 0.4);
-        Primitives.Ellipsoid(m, Vec3.Zero, new Vec3(0.9, sp.Shape is "reed" or "herb" ? 0.6 : 0.9, 0.9), 3, 6, (a, b) => (col, 1, a, b, 0, 0));
-        return m;
-    }
 
     private static MultiMeshInstance3D MakeMmi(string name, ArrayMesh mesh) => new()
     {
@@ -104,6 +85,7 @@ public partial class FloraRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Flora");
         _clock += delta;
         if (_w == null) return;
         _accum += delta;
@@ -113,7 +95,7 @@ public partial class FloraRenderer : Node3D
         Rebuild();
     }
 
-    private readonly Dictionary<string, (List<Transform3D> T, List<Color> C)> _near = new(), _far = new(), _fruit = new(), _veins = new();
+    private readonly Dictionary<string, (List<Transform3D> T, List<Color> C)> _full = new(), _fruit = new(), _veins = new();
 
     /// <summary>
     /// Where a climber or bracket attaches: the nearest log or rock (sim angle toward it from p, its top height,
@@ -153,9 +135,8 @@ public partial class FloraRenderer : Node3D
 
     public void Rebuild()
     {
-        foreach (var k in _layers.Keys) { Get(_near, k).T.Clear(); Get(_near, k).C.Clear(); Get(_far, k).T.Clear(); Get(_far, k).C.Clear(); Get(_fruit, k).T.Clear(); Get(_fruit, k).C.Clear(); }
+        foreach (var k in _layers.Keys) { Get(_full, k).T.Clear(); Get(_full, k).C.Clear(); Get(_fruit, k).T.Clear(); Get(_fruit, k).C.Clear(); }
         var camPos = Camera?.GlobalPosition ?? Vector3.Zero;
-        float near = Lod.Near(Quality) * 1.6f;
         Visible_ = 0; TrianglesDrawn = 0;
         var done = new List<EntityId>();
         foreach (var f in _w.Flora.Items)
@@ -183,7 +164,7 @@ public partial class FloraRenderer : Node3D
             float wobble = 0;
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) { wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2); if (wobble <= 0) done.Add(f.Id); }
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
-            var bucket = f.Fruiting && _layers[sp.Id].Fruit != null ? _fruit : pos.DistanceTo(camPos) < near ? _near : _far;
+            var bucket = f.Fruiting && _layers[sp.Id].Fruit != null ? _fruit : _full;
             Get(bucket, sp.Id).T.Add(t); Get(bucket, sp.Id).C.Add(custom);
             Visible_++;
         }
@@ -212,9 +193,9 @@ public partial class FloraRenderer : Node3D
         }
         foreach (var (id, layer) in _layers)
         {
-            Fill(layer.Near.Multimesh, Get(_near, id)); Fill(layer.Far.Multimesh, Get(_far, id));
+            Fill(layer.Full.Multimesh, Get(_full, id));
             if (layer.Fruit != null) Fill(layer.Fruit.Multimesh, Get(_fruit, id));
-            TrianglesDrawn += (long)layer.Near.Multimesh.InstanceCount * layer.NearTris + (long)layer.Far.Multimesh.InstanceCount * layer.FarTris
+            TrianglesDrawn += (long)layer.Full.Multimesh.InstanceCount * layer.FullTris
                 + (layer.Fruit != null ? (long)layer.Fruit.Multimesh.InstanceCount * layer.FruitTris : 0);
         }
     }
@@ -225,10 +206,26 @@ public partial class FloraRenderer : Node3D
         return v;
     }
 
+    /// <summary>Uploads all instances in one packed buffer (12 transform + 4 custom floats each) instead of two engine
+    /// calls per instance, which caused frame hitches once the island filled with plants.</summary>
+    private static readonly Dictionary<MultiMesh, float[]> _buffers = new();
+
     private static void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> C) data)
     {
-        if (mm.InstanceCount != data.T.Count) mm.InstanceCount = data.T.Count;
-        for (int i = 0; i < data.T.Count; i++) { mm.SetInstanceTransform(i, data.T[i]); mm.SetInstanceCustomData(i, data.C[i]); }
+        int n = data.T.Count;
+        if (mm.InstanceCount != n) mm.InstanceCount = n;
+        if (n == 0) return;
+        // reuse the buffer while the count is unchanged (the usual case): large per-rebuild arrays triggered full GCs
+        if (!_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 16) _buffers[mm] = buf = new float[n * 16];
+        for (int i = 0; i < n; i++)
+        {
+            var t = data.T[i]; var c = data.C[i]; int o = i * 16;
+            buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
+            buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
+            buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
+            buf[o + 12] = c.R; buf[o + 13] = c.G; buf[o + 14] = c.B; buf[o + 15] = c.A;
+        }
+        mm.Buffer = buf;
     }
 }
 
@@ -242,11 +239,11 @@ public partial class FaunaRenderer : Node3D
     private VivariumWorld _w = null!;
     private sealed class Layer
     {
-        public MultiMeshInstance3D High = null!, Low = null!;
+        public MultiMeshInstance3D High = null!;
         public MultiMeshInstance3D? Curled;   // rolled-up pose (pill bugs)
         public double CycleHz;                // walk/swim cycles per second at full stride
-        public int HighTris, LowTris, CurledTris;
-        public float[] HighBuf = System.Array.Empty<float>(), LowBuf = System.Array.Empty<float>(), CurledBuf = System.Array.Empty<float>();
+        public int HighTris, CurledTris;
+        public float[] HighBuf = System.Array.Empty<float>(), CurledBuf = System.Array.Empty<float>();
     }
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     /// <summary>
@@ -265,12 +262,10 @@ public partial class FaunaRenderer : Node3D
 
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
-    public int LodHigh { get; private set; }
-    public int LodLow { get; private set; }
-    public int Culled { get; private set; }
+    /// <summary>Animals drawn this frame (always the full model) and those skipped because they are off-screen.</summary>
+    public int Drawn { get; private set; }
+    public int OffScreen { get; private set; }
     public long TrianglesDrawn { get; private set; }
-    /// <summary>When true, every individual is drawn at high detail (used to measure LOD savings).</summary>
-    public bool ForceHighDetail { get; set; }
 
     public void Build(VivariumWorld w)
     {
@@ -282,28 +277,24 @@ public partial class FaunaRenderer : Node3D
             var hiMat = Bridge.Shader("res://Shaders/fauna.gdshader");
             hiMat.SetShaderParameter("base_color", Bridge.C(sp.BaseColor));
             hiMat.SetShaderParameter("ornament_color", Bridge.C(sp.OrnamentColor));
-            hiMat.SetShaderParameter("wiggle", sp.Medium == Medium.Aquatic ? 1.0f : sp.Model == "isopod" ? 0.1f : 0.35f);
+            hiMat.SetShaderParameter("wiggle", sp.Medium == Medium.Aquatic ? 1.0f : sp.Model is "isopod" or "beetle" ? 0.08f : 0.35f);
             hiMat.SetShaderParameter("wiggle_speed", sp.Model == "minnow" ? 11.0f : 7.0f);
             hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
-            hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.35f, "triops" => 0.6f, "shrimp" => 0.5f, "springtail" => 0.05f, _ => 0.0f });
-            hiMat.SetShaderParameter("segment_rings", sp.Model == "springtail" ? 12.0f : 0.0f);
-            hiMat.SetShaderParameter("scales", sp.Model == "minnow" ? 1.0f : 0.0f);
-            var loMat = (ShaderMaterial)hiMat.Duplicate();
-            loMat.SetShaderParameter("wiggle", 0.0f);
+            hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.35f, "triops" => 0.6f, "shrimp" => 0.5f, "springtail" => 0.05f, "beetle" => 0.85f, "silverfish" => 0.3f, _ => 0.0f });
+            hiMat.SetShaderParameter("segment_rings", sp.Model switch { "springtail" => 12.0f, "silverfish" => 11.0f, _ => 0.0f });
+            hiMat.SetShaderParameter("scales", sp.Model is "minnow" or "silverfish" ? 1.0f : 0.0f);
+            var still = (ShaderMaterial)hiMat.Duplicate();   // rolled-up pill bugs don't wiggle
+            still.SetShaderParameter("wiggle", 0.0f);
             var hi = OrganismMeshes.Fauna(sp);
-            var lo = new MeshData();
-            bool wide = sp.Model is "triops" or "isopod";
-            Primitives.Ellipsoid(lo, new Vec3(0, wide ? 0.1 : 0.15, 0), new Vec3(0.45, wide ? 0.12 : 0.14, sp.Model == "triops" ? 0.28 : sp.Model == "isopod" ? 0.26 : 0.14), 5, 7, (a, b) => (new[] { 0.0, 0, 0 }, 0, 1 - a, b, 1, 0));
             var layer = new Layer
             {
                 High = MakeMmi($"Fauna_{sp.Id}_high", Bridge.ToArrayMesh(hi, hiMat)),
-                Low = MakeMmi($"Fauna_{sp.Id}_low", Bridge.ToArrayMesh(lo, loMat)),
-                HighTris = hi.TriangleCount, LowTris = lo.TriangleCount,
+                HighTris = hi.TriangleCount,
             };
-            AddChild(layer.High); AddChild(layer.Low);
+            AddChild(layer.High);
             if (OrganismMeshes.FaunaCurled(sp) is { } curled)
             {
-                layer.Curled = MakeMmi($"Fauna_{sp.Id}_curled", Bridge.ToArrayMesh(curled, loMat));
+                layer.Curled = MakeMmi($"Fauna_{sp.Id}_curled", Bridge.ToArrayMesh(curled, still));
                 layer.CurledTris = curled.TriangleCount;
                 AddChild(layer.Curled);
             }
@@ -329,6 +320,7 @@ public partial class FaunaRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Fauna");
         if (_w == null) return;
         float k = 1 - Mathf.Exp(-(float)delta * 8f);
         // draw one behaviour interval in the past, at sub-tick precision
@@ -337,17 +329,15 @@ public partial class FaunaRenderer : Node3D
 
         var cam = Camera;
         var camPos = cam?.GlobalPosition ?? Vector3.Zero;
-        float near = Lod.Near(Quality), far = Lod.Far(Quality);
-        LodHigh = LodLow = Culled = 0; TrianglesDrawn = 0;
-        var counts = new Dictionary<string, (int Hi, int Lo, int Curled)>(StringComparer.Ordinal);
-        foreach (var id in _layers.Keys) counts[id] = (0, 0, 0);
+        Drawn = OffScreen = 0; TrianglesDrawn = 0;
+        var counts = new Dictionary<string, (int Hi, int Curled)>(StringComparer.Ordinal);
+        foreach (var id in _layers.Keys) counts[id] = (0, 0);
         // capacity = population (+headroom); buffers are kept exactly InstanceCount * 16 floats
         // (12 transform + 4 custom per instance) so they can be uploaded without per-frame allocation
         foreach (var (id, layer) in _layers)
         {
             int n = _w.Fauna.CountOf(id);
             layer.HighBuf = Ensure(layer.High.Multimesh, layer.HighBuf, n);
-            layer.LowBuf = Ensure(layer.Low.Multimesh, layer.LowBuf, n);
             if (layer.Curled != null) layer.CurledBuf = Ensure(layer.Curled.Multimesh, layer.CurledBuf, n);
         }
         var seen = new HashSet<EntityId>();
@@ -386,17 +376,15 @@ public partial class FaunaRenderer : Node3D
             double idle = sp.Medium == Medium.Aquatic ? 0.15 : 0.0;
             tr.Phase = (tr.Phase + (idle + Math.Min(tr.Speed * 0.08, 1.5)) * delta * _layers[sp.Id].CycleHz) % 1.0;
             var d = (Pos: shown, Yaw: tr.Yaw);
-            float dist = d.Pos.DistanceTo(camPos);
-            bool onScreen = cam == null || cam.IsPositionInFrustum(d.Pos);
-            if (!ForceHighDetail && (dist > far || !onScreen)) { Culled++; continue; }
-            bool high = ForceHighDetail || dist < near || f.Grabbed;
+            // full detail at any distance; only animals outside the view are skipped (invisible either way)
             float scale = (float)(ph.BodySize * sp.VisualScale);
+            if (cam != null && !f.Grabbed && !cam.IsPositionInFrustum(d.Pos) && !cam.IsPositionInFrustum(d.Pos + Vector3.Up * scale)) { OffScreen++; continue; }
             var basis = new Basis(Vector3.Up, d.Yaw).Scaled(new Vector3(scale, scale, scale));
             var layer = _layers[sp.Id];
             var c = counts[sp.Id];
             bool curled = layer.Curled != null && _w.FaunaSystem.IsCurled(f);
-            int i = curled ? c.Curled : high ? c.Hi : c.Lo;
-            var buf = curled ? layer.CurledBuf : high ? layer.HighBuf : layer.LowBuf;
+            int i = curled ? c.Curled : c.Hi;
+            var buf = curled ? layer.CurledBuf : layer.HighBuf;
             int o = i * 16;
             buf[o + 0] = basis.X.X; buf[o + 1] = basis.Y.X; buf[o + 2] = basis.Z.X; buf[o + 3] = d.Pos.X;
             buf[o + 4] = basis.X.Y; buf[o + 5] = basis.Y.Y; buf[o + 6] = basis.Z.Y; buf[o + 7] = d.Pos.Y;
@@ -404,16 +392,15 @@ public partial class FaunaRenderer : Node3D
             // custom.w packs the appendage scale (integer thousandths) with the walk-cycle phase (fraction)
             buf[o + 12] = (float)ph.HueShift; buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength;
             buf[o + 15] = (float)(Math.Round(ph.AppendageScale * 1000) + Math.Min(tr.Phase, 0.999));
-            counts[sp.Id] = curled ? (c.Hi, c.Lo, c.Curled + 1) : high ? (c.Hi + 1, c.Lo, c.Curled) : (c.Hi, c.Lo + 1, c.Curled);
-            if (high) LodHigh++; else LodLow++;
+            counts[sp.Id] = curled ? (c.Hi, c.Curled + 1) : (c.Hi + 1, c.Curled);
+            Drawn++;
         }
         foreach (var (id, layer) in _layers)
         {
-            var (hi, lo, cu) = counts[id];
+            var (hi, cu) = counts[id];
             Upload(layer.High.Multimesh, layer.HighBuf, hi);
-            Upload(layer.Low.Multimesh, layer.LowBuf, lo);
             if (layer.Curled != null) Upload(layer.Curled.Multimesh, layer.CurledBuf, cu);
-            TrianglesDrawn += (long)hi * layer.HighTris + (long)lo * layer.LowTris + (long)cu * layer.CurledTris;
+            TrianglesDrawn += (long)hi * layer.HighTris + (long)cu * layer.CurledTris;
         }
         if (_tracks.Count > seen.Count + 64)
         {

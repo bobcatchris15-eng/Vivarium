@@ -82,6 +82,7 @@ public partial class IslandRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Island");
         if (_w == null) return;
         _accum += delta;
         _sinceMeshBuild += delta;

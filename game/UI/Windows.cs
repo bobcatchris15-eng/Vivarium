@@ -110,6 +110,7 @@ public partial class Windows : Control
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Windows");
         foreach (var p in _w.Values) if (p.Visible) Layout(p);
     }
 
@@ -395,12 +396,12 @@ public partial class Windows : Control
     {
         var w = Session.World;
         if (w == null) return;
-        var c = Counters.Collect(w, Session.Flora.Visible_, Session.Fauna.LodHigh + Session.Fauna.LodLow, Session.Fauna.LodHigh, Session.Fauna.LodLow, Session.Fauna.Culled);
+        var c = Counters.Collect(w, Session.Flora.Visible_, Session.Fauna.Drawn, Session.Fauna.Drawn, 0, Session.Fauna.OffScreen);
         var mism = c.Mismatches();
         var sys = string.Join("\n", w.Scheduler.Systems.Select(s => $"  {s.Name,-18} {s.LastMs,6:0.00} ms (max {s.MaxMs:0.0})"));
         _debugInfo.Text = $"Tick {w.Clock.Tick} · backlog {w.Scheduler.Backlog:0} s · {w.Scheduler.TicksLastAdvance} ticks last frame ({w.Scheduler.LastAdvanceMs:0.0} ms)\n" +
             $"Flora {c.Flora} (index {c.FloraIndexed}) · fauna {c.Fauna} (index {c.FaunaIndexed}) · genomes {c.Genomes} · lineage {c.Lineage}\n" +
-            $"Fauna LOD: high {c.FaunaLodHigh} · low {c.FaunaLodLow} · culled {c.FaunaCulled} · triangles {Session.Fauna.TrianglesDrawn + Session.Flora.TrianglesDrawn:N0}\n" +
+            $"Fauna drawn (full detail) {Session.Fauna.Drawn} · off-screen {Session.Fauna.OffScreen} · triangles {Session.Fauna.TrianglesDrawn + Session.Flora.TrianglesDrawn:N0}\n" +
             (mism.Count > 0 ? "[color=#f88]" + string.Join("\n", mism) + "[/color]\n" : "Counters consistent\n") + sys;
     }
 

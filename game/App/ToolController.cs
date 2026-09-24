@@ -78,6 +78,7 @@ public partial class ToolController : Node
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Tools");
         if (_w == null || Session.Host == null) return;
         var vp = GetViewport();
         var mouse = vp.GetMousePosition();

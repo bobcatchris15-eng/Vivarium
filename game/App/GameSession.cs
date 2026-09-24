@@ -157,6 +157,7 @@ public partial class GameSession : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Session");
         if (Host == null) return;
         Host.Advance(delta);
         Autosave?.Tick(Host.World, delta);

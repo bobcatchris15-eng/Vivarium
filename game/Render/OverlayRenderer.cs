@@ -92,6 +92,7 @@ public partial class OverlayRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var prof = FrameProfiler.Measure("Overlay");
         _arrows.Visible = _depthDots.Visible = HydrologyDebug && _w != null;
         _springs.Visible = (HydrologyDebug || ShowSprings) && _w != null;
         if (_w == null) return;
