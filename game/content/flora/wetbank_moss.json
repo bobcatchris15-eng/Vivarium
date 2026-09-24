@@ -60,6 +60,19 @@
   ],
   "litterFraction": 0.85,
   "grazingValue": 0.0,
+  "colony": {
+    "cellRadius": 0.045,
+    "frontRate": 0.65,
+    "fillRate": 0.16,
+    "maxHeight": 0.03,
+    "patternMode": "random",
+    "palette": [
+      [0.1, 0.55, 0.3],
+      [0.14, 0.65, 0.37],
+      [0.2, 0.8, 0.45],
+      [0.16, 0.7, 0.4]
+    ]
+  },
   "visual": {
     "shape": "carpet",
     "color": [

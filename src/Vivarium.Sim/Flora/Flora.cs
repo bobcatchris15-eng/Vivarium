@@ -52,7 +52,13 @@ public sealed class FloraIndividual
         Age < sp.MaturityAge ? FloraStage.Juvenile : Age > sp.Lifespan * LifespanFactor * 0.85 ? FloraStage.Senescent : FloraStage.Mature;
 
     public double BiomassFraction(FloraSpeciesDef sp) => MathD.Clamp01(Biomass / sp.MaxBiomass);
-    public double Radius(FloraSpeciesDef sp) => sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(BiomassFraction(sp));
+    /// <summary>Render/footprint radius. Colonial cells ignore the biomass-scaled formula (that radius describes
+    /// a whole plant, not a single mat cell) and instead use the colony's fixed cell size, growing only slightly
+    /// as the cell fills toward the colony's max height so rim cells stay small and interior cells overlap enough
+    /// for a continuous but visibly lumpy mat.</summary>
+    public double Radius(FloraSpeciesDef sp) => sp.Colony != null
+        ? sp.Colony.CellRadius * (0.9 + 0.3 * HeightFactor)
+        : sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(BiomassFraction(sp));
 }
 
 /// <summary>Uniform-grid bucket index for local flora queries (avoids whole-population scans).</summary>
