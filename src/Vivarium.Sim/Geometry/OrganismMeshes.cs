@@ -508,10 +508,10 @@ public static class OrganismMeshes
                 var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
                 var c = centre + dir * (out1 * 0.5) + new Vec3(0, 0.15 + lift * 0.5, 0);
                 var tip = Primitives.Mix(c1, c2, 0.25 + 0.5 * (1 - t));
+                int start = m.VertexCount;
                 Primitives.Ellipsoid(m, c, new Vec3(out1 * 0.55, 0.22 + 0.1 * t, out1 * 0.3), 4, 6,
                     (u, v) => (Primitives.Mix(c1, tip, u < 0.35 ? 1 - u / 0.35 : 0), 1, u, v, 0, 0), pitch: 0);
-                // orient each leaf along its spiral direction
-                int start = m.VertexCount - 5 * 7;
+                // orient every vertex added for this leaf; tessellation is adaptive in Primitives.Ellipsoid.
                 double cs = Math.Cos(-a), sn = Math.Sin(-a);
                 for (int i = start; i < m.VertexCount; i++)
                 {
