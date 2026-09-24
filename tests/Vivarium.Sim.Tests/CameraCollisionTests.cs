@@ -13,7 +13,9 @@ public class CameraCollisionTests
         var p = new Vec2(0.4, -0.3);
         double h = w.Terrain.Height(p);
         var got = CameraCollision.Resolve(w, new Vec3(p.X, h + 1, p.Z), new Vec3(p.X, h - 1, p.Z));
-        Assert.True(got.Y >= h + CameraCollision.DefaultRadius - 0.005);
+        double finalSurface = w.Terrain.Height(got.XZ);
+        Assert.True(got.Y >= finalSurface + CameraCollision.DefaultRadius - 0.005,
+            $"camera ended at {got}, surface there is {finalSurface:0.000}");
     }
 
     [Fact]
