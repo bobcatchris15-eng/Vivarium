@@ -16,7 +16,10 @@ namespace Vivarium.Game.Render;
 public partial class FloraRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private sealed class Layer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Veins; public int FullTris, FruitTris, VeinTris; }
+    private const int MorphVariants = 5;
+    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit; public int FullTris, FruitTris; }
+    private sealed class Layer { public VariantLayer[] Variants = new VariantLayer[MorphVariants]; public MultiMeshInstance3D? Veins; public int VeinTris; }
+    private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
     private double _accum = 999;
@@ -38,17 +41,23 @@ public partial class FloraRenderer : Node3D
             mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
             if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            // always the full mesh: this is a display piece first, so nothing is simplified with distance
-            var full = OrganismMeshes.Flora(sp);
-            var layer = new Layer { Full = MakeMmi($"Flora_{sp.Id}", Bridge.ToArrayMesh(full, mat)), FullTris = full.TriangleCount };
-            AddChild(layer.Full);
-            if (OrganismMeshes.FloraFruiting(sp) is { } fruit)
+            var layer = new Layer();
+            ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
+            for (int v = 0; v < MorphVariants; v++)
             {
-                var fruitMat = (ShaderMaterial)mat.Duplicate();
-                fruitMat.SetShaderParameter("surface_mode", 3);   // spent, matte spore cases
-                layer.Fruit = MakeMmi($"Flora_{sp.Id}_fruit", Bridge.ToArrayMesh(fruit, fruitMat));
-                layer.FruitTris = fruit.TriangleCount;
-                AddChild(layer.Fruit);
+                ulong seed = Rng.Mix(speciesSeed, (ulong)(v + 1) * 0x9E3779B97F4A7C15UL);
+                var full = OrganismMeshes.Flora(sp, seed);
+                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", Bridge.ToArrayMesh(full, mat)), FullTris = full.TriangleCount };
+                AddChild(vl.Full);
+                if (OrganismMeshes.FloraFruiting(sp, seed) is { } fruit)
+                {
+                    var fruitMat = (ShaderMaterial)mat.Duplicate();
+                    fruitMat.SetShaderParameter("surface_mode", 3);
+                    vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", Bridge.ToArrayMesh(fruit, fruitMat));
+                    vl.FruitTris = fruit.TriangleCount;
+                    AddChild(vl.Fruit);
+                }
+                layer.Variants[v] = vl;
             }
             if (sp.CreepSpeed > 0)
             {
@@ -138,10 +147,12 @@ public partial class FloraRenderer : Node3D
     public void Rebuild()
     {
         foreach (var k in _layers.Keys)
-        {
-            var fl = Get(_full, k); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
-            var fr = Get(_fruit, k); fr.T.Clear(); fr.Tint.Clear(); fr.C.Clear();
-        }
+            for (int v = 0; v < MorphVariants; v++)
+            {
+                var mk = MorphKey(k, v);
+                var fl = Get(_full, mk); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
+                var fr = Get(_fruit, mk); fr.T.Clear(); fr.Tint.Clear(); fr.C.Clear();
+            }
         var camPos = Camera?.GlobalPosition ?? Vector3.Zero;
         Visible_ = 0; TrianglesDrawn = 0;
         var done = new List<EntityId>();
@@ -178,8 +189,10 @@ public partial class FloraRenderer : Node3D
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) { wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2); if (wobble <= 0) done.Add(f.Id); }
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
             var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
-            var bucket = f.Fruiting && _layers[sp.Id].Fruit != null ? _fruit : _full;
-            var bd = Get(bucket, sp.Id); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
+            int variant = (int)((hash >> 8) % MorphVariants);
+            var vl = _layers[sp.Id].Variants[variant];
+            var bucket = f.Fruiting && vl.Fruit != null ? _fruit : _full;
+            var bd = Get(bucket, MorphKey(sp.Id, variant)); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
             Visible_++;
         }
         foreach (var id in done) _wobbleStart.Remove(id);
@@ -207,12 +220,15 @@ public partial class FloraRenderer : Node3D
             TrianglesDrawn += (long)list.T.Count * layer.VeinTris;
         }
         foreach (var (id, layer) in _layers)
-        {
-            Fill(layer.Full.Multimesh, Get(_full, id));
-            if (layer.Fruit != null) Fill(layer.Fruit.Multimesh, Get(_fruit, id));
-            TrianglesDrawn += (long)layer.Full.Multimesh.InstanceCount * layer.FullTris
-                + (layer.Fruit != null ? (long)layer.Fruit.Multimesh.InstanceCount * layer.FruitTris : 0);
-        }
+            for (int v = 0; v < MorphVariants; v++)
+            {
+                var vl = layer.Variants[v];
+                string mk = MorphKey(id, v);
+                Fill(vl.Full.Multimesh, Get(_full, mk));
+                if (vl.Fruit != null) Fill(vl.Fruit.Multimesh, Get(_fruit, mk));
+                TrianglesDrawn += (long)vl.Full.Multimesh.InstanceCount * vl.FullTris
+                    + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.InstanceCount * vl.FruitTris : 0);
+            }
     }
 
     private static (List<Transform3D> T, List<Color> Tint, List<Color> C) Get(Dictionary<string, (List<Transform3D>, List<Color>, List<Color>)> d, string k)
@@ -299,7 +315,7 @@ public partial class FaunaRenderer : Node3D
             hiMat.SetShaderParameter("wiggle_speed", sp.Model == "minnow" ? 11.0f : 7.0f);
             hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
             hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.15f, "triops" => 0.45f, "shrimp" => 0.35f, "springtail" => 0.0f, "beetle" => 0.3f, "silverfish" => 0.2f, _ => 0.0f });
-            hiMat.SetShaderParameter("segment_rings", sp.Model switch { "springtail" => 12.0f, "silverfish" => 11.0f, _ => 0.0f });
+            hiMat.SetShaderParameter("segment_rings", sp.Model switch { "springtail" => 5.5f, "silverfish" => 4.5f, _ => 0.0f });
             hiMat.SetShaderParameter("bloom", sp.Model switch { "springtail" => 1.0f, "isopod" => 0.85f, "silverfish" => 0.7f, "beetle" => 0.7f, "triops" or "shrimp" or "minnow" => 0.1f, _ => 0.6f });
             hiMat.SetShaderParameter("wet", sp.Model is "shrimp" or "minnow" or "triops" ? 1.0f : 0.0f);
             hiMat.SetShaderParameter("scales", sp.Model is "minnow" or "silverfish" ? 1.0f : 0.0f);

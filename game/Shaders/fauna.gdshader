@@ -46,7 +46,9 @@ void vertex() {
     region = UV2.x;
     body_uv = UV;
     seed = float(INSTANCE_ID);
-    // genetic appendage length: slide appendage vertices along their attachment offset
+    float bodyMask = 1.0 - COLOR.a;
+    VERTEX.y *= 1.0 + (genes.y - 0.5) * 0.08 * bodyMask;
+    VERTEX.z *= 1.0 + (genes.z - 0.5) * 0.07 * bodyMask;
     VERTEX += COLOR.rgb * (genes.w - 1.0) * COLOR.a;
     // cosmetic locomotion: tail-to-head travelling wave (render-only)
     float phase = cycle * 6.2831853 + seed * 1.37;
@@ -60,9 +62,11 @@ void fragment() {
     float density = genes.y, contrast = genes.z;
     // markings: spots whose count follows density; contrast follows pattern strength
     float scale = mix(3.0, 14.0, density);
-    float spots = smoothstep(0.62, 0.72, vnoise(body_uv * vec2(scale, scale * 0.6) + seed * 0.13));
-    float bands = smoothstep(0.35, 0.5, abs(fract(body_uv.x * mix(2.0, 7.0, density)) - 0.5)) * 0.4;
-    float mark = clamp(max(spots, bands * density), 0.0, 1.0) * contrast;
+    vec2 warped = body_uv * vec2(scale, scale * 0.62);
+    warped += vec2(vnoise(body_uv * 4.1 + seed * 0.17), vnoise(body_uv.yx * 3.7 + seed * 0.31)) * 0.85;
+    float spots = smoothstep(0.64, 0.78, vnoise(warped + seed * 0.13));
+    float streaks = smoothstep(0.68, 0.82, vnoise(body_uv * vec2(mix(2.2, 5.2, density), 1.7) + seed * 0.47));
+    float mark = clamp(max(spots, streaks * density * 0.65), 0.0, 1.0) * contrast;
     vec3 col = mix(base, hue_rotate(ornament_color, genes.x * 0.5), mark * step(region, 1.5));
     if (region > 1.5 && region < 2.5) col = vec3(0.03);                    // eyes
     else if (region > 2.5 && region < 3.5) col = mix(col, col * 1.4 + vec3(0.04), 0.35); // slightly lighter belly, same hue (pure white read as a toy)
@@ -70,13 +74,17 @@ void fragment() {
     // fine surface grain (chitin pits / skin) so bodies don't read as smooth plastic
     float micro = vnoise(body_uv * vec2(90.0, 60.0) + seed * 0.37);
     col *= 0.92 + 0.16 * micro;
-    if (segment_rings > 0.5 && region < 1.5) col *= 1.0 - 0.22 * smoothstep(0.42, 0.5, abs(fract(body_uv.x * segment_rings) - 0.5));
+    if (segment_rings > 0.5 && region < 1.5) {
+        float sw = (vnoise(body_uv * vec2(3.0, 1.4) + seed * 0.21) - 0.5) * 0.18;
+        col *= 1.0 - 0.10 * smoothstep(0.43, 0.5, abs(fract((body_uv.x + sw) * segment_rings) - 0.5));
+    }
     float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
     if (scales > 0.5 && region < 3.5 && !(region > 1.5 && region < 2.5)) {
-        vec2 sc = body_uv * vec2(34.0, 22.0);
+        vec2 sc = body_uv * vec2(27.0, 18.0);
+        sc += vec2(vnoise(body_uv * 5.0 + seed * 0.23), vnoise(body_uv.yx * 4.0 + seed * 0.41)) * 0.42;
         sc.x += floor(sc.y) * 0.5;
-        float edge = smoothstep(0.32, 0.5, length(fract(sc) - 0.5));
-        col *= 1.0 - 0.14 * edge;
+        float edge = smoothstep(0.34, 0.5, length(fract(sc) - 0.5));
+        col *= 1.0 - 0.09 * edge;
         col = mix(col, vec3(0.85, 0.9, 0.95), fres * 0.35 + (region > 2.5 ? 0.35 : 0.0));   // silvery flank and belly
     }
     // Real cuticle is mostly matte: waxy bloom, dust and soil grime break up whatever gloss there is, and it

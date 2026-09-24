@@ -37,7 +37,7 @@ public partial class PropRenderer : Node3D
             var pebbleMat = (ShaderMaterial)_rockMat.Duplicate();
             pebbleMat.SetShaderParameter("lichen", 0.0f);
             pebbleMat.SetShaderParameter("tile_metres", 0.35f);
-            _pebbles = new ArrayMesh[6];
+            _pebbles = new ArrayMesh[16];
             for (int i = 0; i < _pebbles.Length; i++) _pebbles[i] = Bridge.ToArrayMesh(PropMeshes.Pebble(1000 + (ulong)i * 7), pebbleMat);
         }
         _logMeshes.Clear();
@@ -80,8 +80,11 @@ public partial class PropRenderer : Node3D
         foreach (var g in _w.Props.Gravel)
             foreach (var p in PropMeshes.GravelScatter(_w, g))
             {
-                var s = (float)p.Scale;
-                byVariant[p.Variant].Add(new Transform3D(Bridge.Yaw(p.RotationY).Scaled(new Vector3(s, s * 0.7f, s)), Bridge.V(p.Position)));
+                var basis = Bridge.Yaw(p.RotationY)
+                    * new Basis(Vector3.Right, (float)p.TiltX)
+                    * new Basis(Vector3.Back, (float)p.TiltZ);
+                basis = basis.Scaled(Bridge.V(p.Scale));
+                byVariant[p.Variant].Add(new Transform3D(basis, Bridge.V(p.Position)));
                 PebbleCount++;
             }
         for (int v = 0; v < _pebbles.Length; v++)

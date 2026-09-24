@@ -106,7 +106,11 @@ public sealed class GravelPatch
     {
         var d = p - Position;
         if (d.LengthSq > Radius * Radius) return false;
-        double r = Radius * (0.85 + 0.15 * Math.Sin(3 * d.Angle + (VariantSeed % 628) / 100.0));
+        double a = d.Angle;
+        ulong ns = Rng.Mix(VariantSeed, 0x47524156454CUL);
+        double n = Noise.Value3(ns, Math.Cos(a) * 1.7, Math.Sin(a) * 1.7, 0.37);
+        double n2 = Noise.Value3(Rng.Mix(ns, 17), Math.Cos(a) * 3.1, Math.Sin(a) * 3.1, 0.11);
+        double r = Radius * (0.86 + 0.11 * (n * 0.5 + 0.5) + 0.04 * n2);
         return d.LengthSq <= r * r;
     }
 }

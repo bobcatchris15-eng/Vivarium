@@ -31,7 +31,7 @@ uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, r
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float tile_metres = 0.9;    // real-world size of one texture repeat
-uniform float soil_relief_amp = 0.045;   // metres of fine geometric relief on soil (lumps, furrows)
+uniform float soil_relief_amp = 0.012;   // metres of fine geometric relief on soil (lumps, furrows)
 uniform float soil_relief_freq = 2.6;
 uniform float soil_clumps = 1.0;        // 0 skips the clump/cavity detail (low quality tiers)
 
@@ -66,9 +66,9 @@ void vertex() {
     float code = floor(texture(field_tex, fuv).g * 4.0 + 0.5);
     float soilMask = 1.0 - step(0.5, code);   // 1 on soil (code 0), 0 elsewhere
     float eps = 0.3;
-    float h0 = fbm(world_pos.xz * soil_relief_freq) - 0.5;
-    float h1 = fbm((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq) - 0.5;
-    float h2 = fbm((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq) - 0.5;
+    float h0 = mix(vnoise(world_pos.xz * soil_relief_freq), vnoise(world_pos.xz * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
+    float h1 = mix(vnoise((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq), vnoise((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
+    float h2 = mix(vnoise((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq), vnoise((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
     float amp = soil_relief_amp * soilMask;
     VERTEX += NORMAL * (h0 * amp);
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -117,11 +117,10 @@ void fragment() {
         float sz = vnoise(q + vec2(0.0, 0.132)) * 0.67 + s2 * 0.33;
         float clump = smoothstep(0.35, 0.7, s0);
         float cav = clamp(0.5 - relief_h * 1.6, 0.0, 1.0);          // hollows of the displaced relief
-        col *= mix(0.78, 1.12, clump) * mix(1.0, 0.8, cav * relief_mix);
+        col *= mix(0.90, 1.06, clump) * mix(1.0, 0.92, cav * relief_mix);
         col = mix(col, col * vec3(1.06, 0.98, 0.9), smoothstep(0.55, 0.8, vnoise(world_pos.xz * 3.1 + 5.0)) * 0.6);   // drier crusted patches
         vec3 cn = normalize(vec3(-(sx - s0) * 0.9, 0.012, -(sz - s0) * 0.9));   // world normal of the clump field
-        float far = smoothstep(1.5, 6.0, length(world_pos - CAMERA_POSITION_WORLD));
-        tn = normalize(mix(tn, vec3(cn.x, -cn.z, cn.y), mix(0.35, 0.7, far) * relief_mix));   // stronger far away, where the texture normal has faded
+        tn = normalize(mix(tn, vec3(cn.x, -cn.z, cn.y), 0.28 * relief_mix));
         rough = mix(rough, 0.95, clump * 0.3);
     }
     if (wDamp > 0.01) {

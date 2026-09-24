@@ -27,8 +27,9 @@ void fragment() {
     if (cap > 0.5) {
         // end grain: concentric rings with a little wobble, radial checks, darker bark rim
         float r = UV.x;
-        float rings = sin((r * 26.0 + vnoise(vec2(UV.y * 3.0, r * 8.0)) * 1.5) * 3.14159);
-        vec3 col = vcol * (0.82 + 0.16 * rings);
+        float warp = (vnoise(vec2(UV.y * 4.7, r * 7.3)) - 0.5) * (1.2 + r * 1.8);
+        float rings = sin((r * 21.0 + warp + vnoise(vec2(r * 13.0, UV.y * 2.1)) * 0.9) * 3.14159);
+        vec3 col = vcol * (0.88 + 0.10 * rings);
         col *= 1.0 - 0.35 * smoothstep(0.55, 0.9, vnoise(vec2(UV.y * 20.0, r * 3.0))) * step(0.2, r);
         ALBEDO = col;
         ROUGHNESS = 0.8;

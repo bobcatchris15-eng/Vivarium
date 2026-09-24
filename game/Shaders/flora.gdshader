@@ -25,8 +25,13 @@ void vertex() {
     inst = INSTANCE_CUSTOM;
     obj_pos = VERTEX;
     float h = max(VERTEX.y, 0.0);
+    float ma = inst.x - 0.5, mb = inst.w - 0.5;
+    VERTEX.xz *= vec2(1.0 + ma * 0.10, 1.0 - ma * 0.07);
+    float grow = smoothstep(0.0, 1.0, h);
+    VERTEX.x += grow * grow * mb * 0.055;
+    VERTEX.z += grow * grow * ma * 0.045;
     float phase = TIME * 1.3 + inst.w * 6.2831;
-    float amount = (0.015 * sway + inst.z * 0.15) / stiffness;
+    float amount = (0.012 * sway + inst.z * 0.15) / stiffness;
     VERTEX.x += sin(phase) * h * h * amount * 3.0 + sin(TIME * 18.0 + inst.w * 40.0) * inst.z * h * 0.2;
     VERTEX.z += cos(phase * 0.8) * h * h * amount * 2.0;
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -54,10 +59,10 @@ void fragment() {
     } else if (surface_mode == 1) {
         // lichen: lobed rosettes with raised rims and powdery centres
         vec2 p = obj_pos.xz * 9.0 + inst.w * 17.0;
-        float lobes = fbm(p);
-        float rim = smoothstep(0.45, 0.5, lobes) - smoothstep(0.5, 0.56, lobes);
-        c *= 0.8 + 0.35 * lobes + 0.25 * rim;
-        c = mix(c, vec3(lum(c)) * 1.15, smoothstep(0.6, 0.8, vnoise(p * 3.0)) * 0.35);   // powdery soredia
+        float lobes = mix(vnoise(p), vnoise(p * 1.87 + 4.3), 0.35);
+        float rim = smoothstep(0.42, 0.55, lobes) - smoothstep(0.55, 0.7, lobes);
+        c *= 0.88 + 0.22 * lobes + 0.10 * rim;
+        c = mix(c, vec3(lum(c)) * 1.1, smoothstep(0.66, 0.84, vnoise(p * 2.6 + 7.1)) * 0.22);
         float e = 0.02;
         float dx = fbm(p + vec2(e, 0.0)) - lobes, dz = fbm(p + vec2(0.0, e)) - lobes;
         n = normalize(wn - vec3(dx, 0.0, dz) / e * 0.08);
@@ -65,8 +70,9 @@ void fragment() {
     } else if (surface_mode == 3) {
         // fungi: matte, faintly translucent flesh; radial gill lines on undersides (UV2.x = 1) and fine
         // concentric growth zones on caps and shelves (UV.x runs from centre to rim)
-        float gills = UV2.x > 0.5 ? 0.82 + 0.18 * step(0.5, fract(UV.x * 48.0)) : 1.0;
-        float zones = 0.92 + 0.08 * sin(UV2.y * 60.0 + UV.x * 40.0);
+        float warp = (vnoise(obj_pos.xz * 17.0 + inst.w * 9.0) - 0.5) * 0.12;
+        float gills = UV2.x > 0.5 ? 0.90 + 0.10 * smoothstep(0.35, 0.65, fract((UV.x + warp) * 31.0)) : 1.0;
+        float zones = 0.96 + 0.04 * sin(UV2.y * 37.0 + UV.x * 23.0 + warp * 12.0);
         c *= gills * zones * (0.94 + 0.12 * vnoise(obj_pos.xz * 70.0));
         rough = 0.85;
     } else if (surface_mode == 4) {
@@ -77,9 +83,10 @@ void fragment() {
     } else {
         // vascular plants: midrib + lateral veins from the leaf uv, slight waxy sheen
         float along = UV.x, across = UV.y;
-        float mid = 1.0 - smoothstep(0.0, 0.04, abs(fract(across) - 0.5));
-        float lat = 1.0 - smoothstep(0.0, 0.08, abs(fract(along * 7.0 + abs(fract(across) - 0.5) * 3.0) - 0.5));
-        c *= 1.0 + 0.18 * mid + 0.08 * lat - 0.06 * vnoise(world_pos.xz * 140.0);
+        float veinWarp = (vnoise(vec2(along * 5.0, across * 3.0) + inst.w * 5.0) - 0.5) * 0.06;
+        float mid = 1.0 - smoothstep(0.0, 0.035, abs(fract(across + veinWarp) - 0.5));
+        float lat = 1.0 - smoothstep(0.0, 0.07, abs(fract(along * 5.3 + abs(fract(across) - 0.5) * 2.1 + veinWarp) - 0.5));
+        c *= 1.0 + 0.12 * mid + 0.045 * lat - 0.035 * vnoise(world_pos.xz * 110.0);
         rough = 0.55;
     }
     float health = clamp(inst.y, 0.0, 1.0);

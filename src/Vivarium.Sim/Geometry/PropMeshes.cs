@@ -21,33 +21,48 @@ public static class PropMeshes
     public static MeshData Rock(ulong variantSeed, int detail = 3)
     {
         var (verts, tris) = Primitives.Icosphere(detail);
-        ulong ns = Rng.Mix(variantSeed, 0x70C4);
         var rng = Rng.Keyed(variantSeed, "rock.mesh", 0);
+        ulong ns = Rng.Mix(variantSeed, 0x70C4);
         var basePal = RockPalette[rng.NextInt(RockPalette.Length)];
-        double roughness = rng.Range(0.18, 0.34);
-        double faceting = rng.Range(0.0, 0.6);   // blend toward sharper planar facets
-        double squash = rng.Range(-0.1, 0.25);
-        var facetNormals = Enumerable.Range(0, 7).Select(_ => new Vec3(rng.Range(-1, 1), rng.Range(-0.4, 1), rng.Range(-1, 1)).Normalized()).ToArray();
+        int family = rng.NextInt(5);
+        double shearX = rng.Range(-0.16, 0.16), shearZ = rng.Range(-0.16, 0.16);
+        double p1 = rng.Range(0, Math.PI * 2), p2 = rng.Range(0, Math.PI * 2);
+        var cuts = Enumerable.Range(0, family == 2 ? 8 : 3)
+            .Select(_ => (N: new Vec3(rng.Range(-1, 1), rng.Range(-0.35, 1), rng.Range(-1, 1)).Normalized(), D: rng.Range(0.62, 0.9)))
+            .ToArray();
+
         var m = new MeshData();
-        var disp = new double[verts.Count];
         for (int i = 0; i < verts.Count; i++)
         {
             var v = verts[i];
-            double n = Noise.Fbm3(ns, v.X * 1.6, v.Y * 1.6, v.Z * 1.6, 4);
-            double r = 1 + roughness * n;
-            // facets: pull toward the nearest cutting plane
-            double facet = 1;
-            foreach (var fn in facetNormals) facet = Math.Min(facet, 0.82 / Math.Max(0.3, v.Dot(fn)));
-            r = MathD.Lerp(r, Math.Min(r, facet), faceting);
-            var p = v * r;
-            p = new Vec3(p.X, p.Y * (1 - squash), p.Z);
-            if (p.Y < -0.35) p = new Vec3(p.X * 0.97, -0.35 - (p.Y + 0.35) * 0.25, p.Z * 0.97); // flattened base
-            disp[i] = n;
-            double tint = 0.85 + 0.25 * n + 0.08 * Noise.Value3(Rng.Mix(ns, 9), v.X * 6, v.Y * 6, v.Z * 6);
-            var col = Primitives.Scale(basePal, tint);
-            // cleaner, brighter tops (sanitized realism)
-            if (v.Y > 0.3) col = Primitives.Mix(col, Primitives.Scale(basePal, 1.12), 0.35);
-            m.AddVertex(p, v, col, 1, v.X, v.Z, disp[i], 0);
+            double ang = Math.Atan2(v.Z, v.X);
+            double macro = 0.055 * Math.Sin(2 * ang + p1) + 0.035 * Math.Sin(3 * ang + p2);
+            double weather = Noise.Value3(ns, v.X * 2.2, v.Y * 2.0, v.Z * 2.2);
+            double rr = 1 + macro + (family == 4 ? 0.025 : 0.065) * weather;
+            var p = v * rr;
+            switch (family)
+            {
+                case 0: p = new Vec3(p.X * 1.04, p.Y * 0.84, p.Z * 0.96); break;
+                case 1: p = new Vec3(p.X * 1.12, p.Y * 0.58, p.Z * 0.94); break;
+                case 2: p = new Vec3(p.X * 1.02, p.Y * 0.9, p.Z); break;
+                case 3: p = new Vec3(p.X * 0.82, p.Y * 1.16, p.Z * 0.95); break;
+                default: p = new Vec3(p.X * 1.06, p.Y * 0.78, p.Z * 1.02); break;
+            }
+            p = new Vec3(p.X + p.Y * shearX, p.Y, p.Z + p.Y * shearZ);
+            foreach (var cut in cuts)
+            {
+                double over = p.Dot(cut.N) - cut.D;
+                if (over > 0) p -= cut.N * over * (family == 2 ? 0.88 : 0.35);
+            }
+            if (p.Y < -0.32)
+            {
+                double t = MathD.Clamp01((-0.32 - p.Y) / 0.45);
+                p = new Vec3(p.X * (1.0 + 0.08 * t), MathD.Lerp(p.Y, -0.38, t * 0.85), p.Z * (1.0 + 0.08 * t));
+            }
+            double fine = Noise.Value3(Rng.Mix(ns, 9), v.X * 6, v.Y * 6, v.Z * 6);
+            var col = Primitives.Scale(basePal, 0.88 + 0.15 * weather + 0.06 * fine);
+            if (v.Y > 0.35) col = Primitives.Mix(col, Primitives.Scale(basePal, 1.08), 0.22);
+            m.AddVertex(p, v, col, 1, v.X, v.Z, weather, family / 4.0);
         }
         foreach (var t in tris) m.Indices.Add(t);
         m.RecomputeNormals();
@@ -68,10 +83,12 @@ public static class PropMeshes
         var rng = Rng.Keyed(seed, "log.mesh", 0);
         ulong ns = Rng.Mix(seed, 0x106);
         var m = new MeshData();
-        int around = 16;
+        int around = 20;
         int along = Math.Max(10, (int)(length / 0.06));
-        double ridgeFreq = rng.Range(7, 13), ridgeDepth = rng.Range(0.04, 0.09) * (decay >= 3 ? 0.5 : 1);
+        double barkDepth = rng.Range(0.035, 0.075) * (decay >= 3 ? 0.55 : 1);
         double taper = rng.Range(0.05, 0.18), sag = decay * 0.012 * length, flatten = decay >= 2 ? 0.88 : 1;
+        double bendY = rng.Range(-0.035, 0.035) * length, bendZ = rng.Range(-0.05, 0.05) * length;
+        double phaseY = rng.Range(0, Math.PI * 2), phaseZ = rng.Range(0, Math.PI * 2);
         double[] bark = decay switch
         {
             0 => new[] { 0.40, 0.29, 0.20 },
@@ -84,8 +101,10 @@ public static class PropMeshes
         var moss = new[] { 0.32, 0.62, 0.20 };
         double brokenA = rng.Range(0, 1), brokenB = rng.Range(0, 1);
 
-        Vec3 AxisPoint(double t) => new((t - 0.5) * length, -sag * Math.Sin(Math.PI * t), 0);
-        double RadiusAt(double t) => radius * (1 - taper * t) * (1 + 0.05 * Math.Sin(t * 9 + seed % 7));
+        Vec3 AxisPoint(double t) => new((t - 0.5) * length,
+            -sag * Math.Sin(Math.PI * t) + bendY * Math.Sin(Math.PI * t) * Math.Sin(t * Math.PI * 1.7 + phaseY),
+            bendZ * Math.Sin(Math.PI * t) * Math.Sin(t * Math.PI * 1.35 + phaseZ));
+        double RadiusAt(double t) => radius * (1 - taper * t) * (0.97 + 0.06 * Noise.Value3(Rng.Mix(ns, 91), t * 3.2, 0.4, 0.2));
 
         int ringStart = m.VertexCount;
         for (int i = 0; i <= along; i++)
@@ -95,8 +114,11 @@ public static class PropMeshes
             for (int s = 0; s <= around; s++)
             {
                 double th = 2 * Math.PI * s / around;
-                double ridge = Math.Sin(th * ridgeFreq + Noise.Gradient(ns, t * length * 3, th) * 2.2);
-                double rr = RadiusAt(t) * (1 + ridgeDepth * ridge + 0.03 * Noise.Gradient(ns, t * 20, th * 3));
+                double barkN = Noise.Gradient(ns, t * length * 4.2, th * 1.7);
+                double bark2 = Noise.Gradient(Rng.Mix(ns, 29), t * length * 10.0, th * 3.1);
+                double oval = 1.0 + 0.055 * Math.Cos(2 * th + phaseZ + t * 1.4);
+                double ridge = barkN * 0.72 + bark2 * 0.28;
+                double rr = RadiusAt(t) * oval * (1 + barkDepth * ridge);
                 // broken, jagged end rims
                 double endNoise = 0;
                 if (i == 0) endNoise = -0.03 * length * (1 + Noise.Gradient(ns, th * 3, 7)) * brokenA;
@@ -162,29 +184,54 @@ public static class PropMeshes
             var baseP = AxisPoint(t);
             var dir = new Vec3(rng.Range(-0.3, 0.3), Math.Cos(th) * flatten, Math.Sin(th)).Normalized();
             double sl = radius * rng.Range(0.6, 1.3), sr = radius * rng.Range(0.15, 0.25);
-            var path = new List<Vec3> { baseP + dir * (RadiusAt(t) * 0.6), baseP + dir * (RadiusAt(t) + sl * 0.6), baseP + dir * (RadiusAt(t) + sl) };
-            Primitives.Tube(m, path, new[] { sr, sr * 0.8, sr * 0.4 }, 8, (i, v) => (Primitives.Scale(bark, 0.95), 1, i, v, decay, 0));
+            var path = new List<Vec3> { baseP + dir * (RadiusAt(t) * 0.35), baseP + dir * (RadiusAt(t) * 0.72), baseP + dir * (RadiusAt(t) + sl * 0.6), baseP + dir * (RadiusAt(t) + sl) };
+            Primitives.Tube(m, path, new[] { sr * 1.65, sr * 1.25, sr * 0.78, sr * 0.35 }, 10, (i, v) => (Primitives.Scale(bark, 0.95), 1, i, v, decay, 0));
         }
         return m;
     }
 
-    public readonly record struct PebbleInstance(Vec3 Position, double Scale, double RotationY, int Variant);
+    public readonly record struct PebbleInstance(Vec3 Position, Vec3 Scale, double RotationY, double TiltX, double TiltZ, int Variant);
 
-    /// <summary>
-    /// Render-only pebble scatter for a gravel patch (no simulation entities). Deterministic from the patch seed.
-    /// </summary>
-    public static List<PebbleInstance> GravelScatter(VivariumWorld w, GravelPatch g, double density = 140, int variants = 6)
+    /// <summary>Render-only clustered gravel with voids, burial and full 3-D orientation.</summary>
+    public static List<PebbleInstance> GravelScatter(VivariumWorld w, GravelPatch g, double density = 140, int variants = 16)
     {
         var rng = Rng.Keyed(g.VariantSeed, "gravel.scatter", 0);
         int count = (int)(Math.PI * g.Radius * g.Radius * density);
         var list = new List<PebbleInstance>(count);
-        for (int i = 0; i < count * 2 && list.Count < count; i++)
+        var clusters = new List<Vec2>();
+        for (int c = 0; c < 5; c++)
+            for (int tries = 0; tries < 12; tries++)
+            {
+                double a = rng.Range(0, Math.PI * 2), r = Math.Sqrt(rng.NextDouble()) * g.Radius * 0.82;
+                var p = g.Position + Vec2.FromAngle(a) * r;
+                if (g.Covers(p)) { clusters.Add(p); break; }
+            }
+        if (clusters.Count == 0) clusters.Add(g.Position);
+
+        for (int i = 0; i < count * 5 && list.Count < count; i++)
         {
-            var p = g.Position + new Vec2(rng.Range(-g.Radius, g.Radius), rng.Range(-g.Radius, g.Radius));
+            Vec2 p;
+            if (rng.Chance(0.76))
+            {
+                var c = clusters[rng.NextInt(clusters.Count)];
+                double a = rng.Range(0, Math.PI * 2);
+                double spread = g.Radius * (0.08 + 0.28 * Math.Pow(rng.NextDouble(), 1.8));
+                p = c + Vec2.FromAngle(a) * spread;
+            }
+            else
+            {
+                double a = rng.Range(0, Math.PI * 2), r = Math.Sqrt(rng.NextDouble()) * g.Radius;
+                p = g.Position + Vec2.FromAngle(a) * r;
+            }
             if (!g.Covers(p) || !w.Domain.ContainsDisc(p, 0.02)) continue;
-            double s = rng.Range(0.012, 0.035) * (rng.Chance(0.1) ? 1.8 : 1);
-            list.Add(new PebbleInstance(new Vec3(p.X, w.Terrain.Height(p) + s * 0.25, p.Z), s, rng.Range(0, 2 * Math.PI), rng.NextInt(variants)));
+            double s = rng.Range(0.011, 0.033) * (rng.Chance(0.08) ? rng.Range(1.5, 2.2) : 1);
+            double sx = s * rng.Range(0.78, 1.25), sy = s * rng.Range(0.55, 0.92), sz = s * rng.Range(0.8, 1.3);
+            double burial = rng.Range(0.12, 0.42);
+            var pos = new Vec3(p.X, w.Terrain.Height(p) + sy * (0.38 - burial), p.Z);
+            list.Add(new PebbleInstance(pos, new Vec3(sx, sy, sz), rng.Range(0, 2 * Math.PI),
+                rng.Range(-0.45, 0.45), rng.Range(-0.45, 0.45), rng.NextInt(variants)));
         }
         return list;
     }
+
 }

@@ -22,10 +22,10 @@ public partial class EnvironmentRig : Node3D
     {
         var sky = new ProceduralSkyMaterial
         {
-            SkyTopColor = new Color(0.30f, 0.56f, 0.88f),
-            SkyHorizonColor = new Color(0.72f, 0.85f, 0.95f),
-            GroundBottomColor = new Color(0.55f, 0.72f, 0.86f),
-            GroundHorizonColor = new Color(0.72f, 0.85f, 0.95f),
+            SkyTopColor = new Color(0.34f, 0.52f, 0.72f),
+            SkyHorizonColor = new Color(0.72f, 0.80f, 0.86f),
+            GroundBottomColor = new Color(0.48f, 0.58f, 0.64f),
+            GroundHorizonColor = new Color(0.70f, 0.78f, 0.83f),
             SunAngleMax = 30, SunCurve = 0.12f,
         };
         Env = new Environment
@@ -35,15 +35,15 @@ public partial class EnvironmentRig : Node3D
             AmbientLightSource = Environment.AmbientSource.Sky,
             AmbientLightColor = new Color(0.86f, 0.84f, 0.8f),
             AmbientLightSkyContribution = 0.45f,
-            AmbientLightEnergy = 0.9f,
+            AmbientLightEnergy = 0.78f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Agx,
-            TonemapExposure = 1.05f,
+            TonemapExposure = 1.0f,
             TonemapWhite = 6f,
             AdjustmentEnabled = true,
-            AdjustmentSaturation = 1.14f,
-            AdjustmentContrast = 1.04f,
-            AdjustmentBrightness = 1.02f,
+            AdjustmentSaturation = 1.07f,
+            AdjustmentContrast = 1.02f,
+            AdjustmentBrightness = 1.0f,
             GlowEnabled = false,
             FogEnabled = false,
             SsaoRadius = 0.6f, SsaoIntensity = 1.2f,
@@ -54,7 +54,7 @@ public partial class EnvironmentRig : Node3D
         Sun = new DirectionalLight3D
         {
             LightColor = new Color(1.0f, 0.96f, 0.9f),
-            LightEnergy = 1.35f,
+            LightEnergy = 1.22f,
             ShadowEnabled = true,
             ShadowBlur = 1.5f,
             DirectionalShadowMaxDistance = 40,
@@ -62,7 +62,7 @@ public partial class EnvironmentRig : Node3D
         };
         Sun.RotationDegrees = new Vector3(-52, -35, 0);
         AddChild(Sun);
-        var fill = new DirectionalLight3D { LightColor = new Color(0.75f, 0.85f, 1.0f), LightEnergy = 0.25f, ShadowEnabled = false };
+        var fill = new DirectionalLight3D { LightColor = new Color(0.75f, 0.85f, 1.0f), LightEnergy = 0.14f, ShadowEnabled = false };
         fill.RotationDegrees = new Vector3(-20, 150, 0);
         AddChild(fill);
 
@@ -98,7 +98,7 @@ public partial class EnvironmentRig : Node3D
             default:
                 Sun.ShadowEnabled = true;
                 RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
-                Env.SsaoEnabled = true; Env.GlowEnabled = true; Env.GlowIntensity = 0.3f; Env.GlowBloom = 0.02f;
+                Env.SsaoEnabled = true; Env.GlowEnabled = false;
                 vp.Msaa3D = Viewport.Msaa.Msaa4X; vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
                 Sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
                 vp.Scaling3DScale = 1.0f;
@@ -123,6 +123,6 @@ public partial class EnvironmentRig : Node3D
             Env.FogDensity = 0.18f * _underwater;
             Env.FogSkyAffect = 1.0f;
         }
-        Env.AdjustmentSaturation = Mathf.Lerp(1.14f, 1.05f, _underwater);
+        Env.AdjustmentSaturation = Mathf.Lerp(1.07f, 1.02f, _underwater);
     }
 }

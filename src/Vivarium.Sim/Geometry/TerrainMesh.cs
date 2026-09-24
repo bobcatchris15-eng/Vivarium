@@ -37,10 +37,30 @@ public static class TerrainMesh
             {
                 var p00 = hf.VertexPos(i, j); var p10 = hf.VertexPos(i + 1, j); var p01 = hf.VertexPos(i, j + 1); var p11 = hf.VertexPos(i + 1, j + 1);
                 int k00 = j * hf.Nx + i, k10 = k00 + 1, k01 = k00 + hf.Nx, k11 = k01 + 1;
-                // triangle A (00,10,11) and B (00,11,01). Godot treats clockwise-from-the-viewer as front,
-                // i.e. the right-hand normal of (a,b,c) points away from the viewer; these point down (−Y).
-                AddClipped(dom, mesh, Vertex, new[] { p00, p10, p11 }, new[] { k00, k10, k11 });
-                AddClipped(dom, mesh, Vertex, new[] { p00, p11, p01 }, new[] { k00, k11, k01 });
+                // Interior cells use a slightly off-centre render vertex and four triangles rather than exposing
+                // the same long diagonal across the whole island. Grid vertices remain authoritative; only the
+                // render surface between them is smoothed, so the simulation heightfield stays untouched.
+                if (dom.Contains(p00) && dom.Contains(p10) && dom.Contains(p01) && dom.Contains(p11))
+                {
+                    ulong h0 = Rng.Mix(w.Seed, (ulong)(1 + j * hf.Nx + i));
+                    ulong h1 = Rng.Mix(h0, 0x9E3779B97F4A7C15UL);
+                    double ju = (((h0 >> 16) & 0xffff) / 65535.0 - 0.5) * 0.18;
+                    double jv = (((h1 >> 16) & 0xffff) / 65535.0 - 0.5) * 0.18;
+                    double u = 0.5 + ju, v = 0.5 + jv;
+                    var pc = p00 * ((1 - u) * (1 - v)) + p10 * (u * (1 - v)) + p01 * ((1 - u) * v) + p11 * (u * v);
+                    double hc = hf.Height(p00) * ((1 - u) * (1 - v)) + hf.Height(p10) * (u * (1 - v))
+                              + hf.Height(p01) * ((1 - u) * v) + hf.Height(p11) * (u * v);
+                    int kc = mesh.AddVertex(new Vec3(pc.X, hc, pc.Z), SmoothNormal(hf, pc), 0.4, 0.3, 0.2, 1, pc.X, pc.Z);
+                    xz.Add(pc);
+                    int a = Vertex(p00, k00), b = Vertex(p10, k10), c = Vertex(p11, k11), d = Vertex(p01, k01);
+                    mesh.AddTriangle(a, b, kc); mesh.AddTriangle(b, c, kc);
+                    mesh.AddTriangle(c, d, kc); mesh.AddTriangle(d, a, kc);
+                }
+                else
+                {
+                    AddClipped(dom, mesh, Vertex, new[] { p00, p10, p11 }, new[] { k00, k10, k11 });
+                    AddClipped(dom, mesh, Vertex, new[] { p00, p11, p01 }, new[] { k00, k11, k01 });
+                }
             }
         return new TopMesh(mesh, xz);
     }
