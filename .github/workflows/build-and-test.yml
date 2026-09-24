@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  dotnet:
+  simulation:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -16,8 +16,19 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Restore simulation and tests
         run: dotnet restore Vivarium.sln
-      - name: Test simulation
+      - name: Camera collision fast check
+        run: dotnet test tests/Vivarium.Sim.Tests/Vivarium.Sim.Tests.csproj --configuration Release --no-restore --filter FullyQualifiedName~CameraCollisionTests
+      - name: Full simulation tests
         run: dotnet test Vivarium.sln --configuration Release --no-restore
+
+  game-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Restore Godot C# project
         run: dotnet restore game/Vivarium.csproj
       - name: Compile Godot C# project
