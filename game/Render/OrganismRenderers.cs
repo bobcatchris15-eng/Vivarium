@@ -47,13 +47,14 @@ public partial class FloraRenderer : Node3D
             {
                 ulong seed = Rng.Mix(speciesSeed, (ulong)(v + 1) * 0x9E3779B97F4A7C15UL);
                 var full = OrganismMeshes.Flora(sp, seed);
-                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", Bridge.ToArrayMesh(full, mat)), FullTris = full.TriangleCount };
+                bool castShadow = Quality >= 1 && sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
+                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", Bridge.ToArrayMesh(full, mat), castShadow), FullTris = full.TriangleCount };
                 AddChild(vl.Full);
                 if (OrganismMeshes.FloraFruiting(sp, seed) is { } fruit)
                 {
                     var fruitMat = (ShaderMaterial)mat.Duplicate();
                     fruitMat.SetShaderParameter("surface_mode", 3);
-                    vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", Bridge.ToArrayMesh(fruit, fruitMat));
+                    vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", Bridge.ToArrayMesh(fruit, fruitMat), castShadow);
                     vl.FruitTris = fruit.TriangleCount;
                     AddChild(vl.Fruit);
                 }
@@ -83,10 +84,10 @@ public partial class FloraRenderer : Node3D
     }
 
 
-    private static MultiMeshInstance3D MakeMmi(string name, ArrayMesh mesh) => new()
+    private static MultiMeshInstance3D MakeMmi(string name, ArrayMesh mesh, bool castShadow = false) => new()
     {
         Name = name,
-        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        CastShadow = castShadow ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off,
         // UseColor carries per-instance tint (colonial moss/lichen; white = no change), multiplied into the
         // mesh's baked vertex colour by the multimesh pipeline before the shader sees COLOR.
         Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = mesh, InstanceCount = 0 },
