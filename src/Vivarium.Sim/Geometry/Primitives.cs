@@ -157,6 +157,66 @@ public static class Primitives
             }
     }
 
+    /// <summary>
+    /// Double-sided cambered leaf surface. A small longitudinal grid gives macro-visible leaves an actual curved
+    /// silhouette and changing normal instead of a perfectly planar card; UV.x runs root→tip and UV.y across.
+    /// </summary>
+    public static void CurvedLeaf(MeshData m, Vec3 root, Vec3 tip, Vec3 sideHint, double halfWidth,
+        double[] rootCol, double[] tipCol, double camber = 0.03, int longitudinal = 6, double asymmetry = 0)
+    {
+        var axis = tip - root;
+        double length = axis.Length;
+        if (length < 1e-8 || halfWidth <= 0) return;
+        var dir = axis / length;
+        var side = sideHint - dir * sideHint.Dot(dir);
+        if (side.LengthSq < 1e-8) side = dir.Cross(Vec3.Up);
+        if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
+        side = side.Normalized();
+        var normal = dir.Cross(side).Normalized();
+        longitudinal = Math.Max(3, longitudinal);
+        const int across = 2; // left / midrib / right
+
+        Vec3 At(double t, double x)
+        {
+            double envelope = Math.Pow(Math.Max(0, Math.Sin(Math.PI * t)), 0.62);
+            double width = halfWidth * envelope * (1.0 + asymmetry * x * (0.25 + 0.75 * t));
+            double crown = camber * Math.Sin(Math.PI * t) * (1.0 - 0.42 * x * x);
+            double sweep = asymmetry * halfWidth * 0.18 * Math.Sin(Math.PI * t) * t;
+            return root + axis * t + side * (width * x + sweep) + normal * crown;
+        }
+
+        for (int face = 0; face < 2; face++)
+        {
+            var faceN = face == 0 ? normal : -normal;
+            int start = m.VertexCount;
+            for (int i = 0; i <= longitudinal; i++)
+            {
+                double t = (double)i / longitudinal;
+                double dt = 1.0 / longitudinal;
+                for (int j = 0; j <= across; j++)
+                {
+                    double x = j - 1.0;
+                    var p = At(t, x);
+                    var ahead = At(Math.Min(1, t + dt), x) - At(Math.Max(0, t - dt), x);
+                    var cross = At(t, Math.Min(1, x + 0.5)) - At(t, Math.Max(-1, x - 0.5));
+                    var n = ahead.Cross(cross).Normalized();
+                    if (n.LengthSq < 1e-8) n = faceN;
+                    if (n.Dot(faceN) < 0) n = -n;
+                    var col = Mix(rootCol, tipCol, t);
+                    m.AddVertex(p, n, col, 1, t, (x + 1) * 0.5, 0, 0);
+                }
+            }
+            int row = across + 1;
+            for (int i = 0; i < longitudinal; i++)
+                for (int j = 0; j < across; j++)
+                {
+                    int a = start + i * row + j, b = a + row;
+                    TriangleFacing(m, a, b, a + 1, faceN);
+                    TriangleFacing(m, a + 1, b, b + 1, faceN);
+                }
+        }
+    }
+
     /// <summary>Double-sided flat polygon (fan) — for leaves, fins, lichen lobes.</summary>
     public static void Fan(MeshData m, Vec3 centre, IReadOnlyList<Vec3> rim, Vec3 normal, double[] colCentre, double[] colRim,
         double a = 1, double u2 = 0, Func<Vec3, Vec3>? appendageOffset = null)

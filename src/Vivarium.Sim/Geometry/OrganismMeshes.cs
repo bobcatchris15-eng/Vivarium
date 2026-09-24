@@ -155,10 +155,15 @@ public static class OrganismMeshes
             {
                 for (int k = 0; k < 7; k++)
                 {
-                    double ang = 2 * Math.PI * k / 7 + rng.Range(-0.15, 0.15);
-                    var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang)); var side = new Vec3(-dir.Z, 0, dir.X);
-                    var rim = new List<Vec3> { side * 0.08, dir * 0.45 + side * 0.18 + new Vec3(0, 0.2, 0), dir * 0.9 + new Vec3(0, 0.12, 0), dir * 0.45 - side * 0.18 + new Vec3(0, 0.2, 0), -side * 0.08 };
-                    Primitives.Fan(m, new Vec3(0, 0.05, 0), rim, Vec3.Up, Primitives.Scale(c1, 0.8), Primitives.Scale(c1, 1.1));
+                    double ang = 2 * Math.PI * k / 7 + rng.Range(-0.22, 0.22);
+                    var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
+                    var side = new Vec3(-dir.Z, 0, dir.X);
+                    double len = rng.Range(0.78, 0.98), width = rng.Range(0.15, 0.21);
+                    var root = dir * rng.Range(0.00, 0.05) + new Vec3(0, 0.045, 0);
+                    var tip = dir * len + new Vec3(0, rng.Range(0.08, 0.16), 0);
+                    Primitives.CurvedLeaf(m, root, tip, side, width,
+                        Primitives.Scale(c1, 0.78), Primitives.Scale(c2, 1.03),
+                        camber: rng.Range(0.025, 0.065), longitudinal: 7, asymmetry: rng.Range(-0.18, 0.18));
                 }
                 for (int f = 0; f < 3; f++)
                 {
@@ -370,10 +375,12 @@ public static class OrganismMeshes
                 foreach (double sgn in new[] { -1.0, 1.0 })
                 {
                     var tip = c + side * (sgn * len) + dir * (len * 0.25) + new Vec3(0, -len * 0.25, 0);
-                    var mid = (c + tip) * 0.5;
-                    var w = dir * (len * 0.22) + new Vec3(0, len * 0.08, 0);
+                    var planeNormal = (side * sgn).Cross(dir).Normalized();
+                    var leafSide = planeNormal.Cross((tip - c).Normalized()).Normalized();
                     var col = Primitives.Mix(c1, c2, t);
-                    Primitives.Fan(m, c, new List<Vec3> { c, mid + w, tip, mid - w, c }, (side * sgn).Cross(dir).Normalized(), Primitives.Scale(col, 0.85), col);
+                    Primitives.CurvedLeaf(m, c, tip, leafSide, len * rng.Range(0.15, 0.22),
+                        Primitives.Scale(col, 0.82), col, camber: len * rng.Range(0.025, 0.06),
+                        longitudinal: 5, asymmetry: rng.Range(-0.12, 0.12));
                 }
             }
         }
@@ -418,9 +425,11 @@ public static class OrganismMeshes
                 var side = d.Cross(Vec3.Up).Normalized();
                 if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
                 var col = Primitives.Mix(c1, c2, rng.Range(0, 1));
-                // heart-shaped leaf: two lobes at the base, point at the tip
-                var rim = new List<Vec3> { c, c + side * sz * 0.6 + d * sz * 0.3, c + side * sz * 0.5 + d * sz * 0.9, c + d * sz * 1.5, c - side * sz * 0.5 + d * sz * 0.9, c - side * sz * 0.6 + d * sz * 0.3, c };
-                Primitives.Fan(m, c + d * sz * 0.6, rim, d.Cross(side).Normalized(), Primitives.Scale(col, 0.9), col);
+                var root = c + d * (sz * 0.08);
+                var tip = c + d * (sz * rng.Range(1.35, 1.65));
+                Primitives.CurvedLeaf(m, root, tip, side, sz * rng.Range(0.48, 0.66),
+                    Primitives.Scale(col, 0.88), col, camber: sz * rng.Range(0.12, 0.22),
+                    longitudinal: 6, asymmetry: rng.Range(-0.22, 0.22));
             }
         }
     }
