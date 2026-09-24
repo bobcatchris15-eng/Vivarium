@@ -49,6 +49,11 @@ public static class Primitives
     public static void Ellipsoid(MeshData m, Vec3 centre, Vec3 radii, int rings, int segments,
         Func<double, double, (double[] Col, double A, double U, double V, double U2, double V2)> attr, double pitch = 0)
     {
+        // Large procedural organs deserve a smooth macro silhouette; tiny beads/eyes keep their requested economy.
+        // This spends geometry according to visible structural importance rather than applying one global detail tier.
+        double maxR = Math.Max(radii.X, Math.Max(radii.Y, radii.Z));
+        if (maxR >= 0.08) { rings = Math.Max(rings, 6); segments = Math.Max(segments, 12); }
+        else if (maxR >= 0.035) { rings = Math.Max(rings, 5); segments = Math.Max(segments, 8); }
         int start = m.VertexCount;
         double cp = Math.Cos(pitch), sp = Math.Sin(pitch);
         for (int r = 0; r <= rings; r++)
