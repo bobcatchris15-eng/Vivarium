@@ -12,3 +12,5 @@ out/
 *.translation
 # test output
 TestResults/
+# agent worktrees
+.claude/worktrees/
