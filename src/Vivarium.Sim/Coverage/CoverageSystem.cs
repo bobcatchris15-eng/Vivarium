@@ -21,6 +21,15 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     private readonly Dictionary<byte, string> _lichenSpeciesId = new();
     private long _step;
 
+    /// <summary>Number of coverage growth steps completed; part of authoritative state because rules hash it.</summary>
+    public long StepIndex => _step;
+
+    internal void RestoreStep(long step)
+    {
+        if (step < 0) throw new InvalidDataException($"coverage step is invalid ({step})");
+        _step = step;
+    }
+
     /// <summary>Per-phase cost of the last Mat step (docs/overhaul/growth_models.md §10), for the perf print.</summary>
     public MatStepStats LastMatStats { get; private set; }
 

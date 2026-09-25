@@ -56,6 +56,9 @@ public sealed class CoverageTilePayload
     public string Dorm { get; set; } = "";
     public string Flags { get; set; } = "";
     public string D2E { get; set; } = "";
+    public bool? Steady { get; set; }
+    public int? SteadySteps { get; set; }
+    public double? EnvCache { get; set; }
 }
 
 public sealed class CoverageLayerPayload
@@ -67,6 +70,8 @@ public sealed class CoverageLayerPayload
 public sealed class CoveragePayload
 {
     public List<CoverageLayerPayload> Layers { get; set; } = new();
+    /// <summary>Coverage rule RNG step. Null in older saves; reconstructed from the scheduler cadence.</summary>
+    public long? Step { get; set; }
     /// <summary>Per environment-grid-cell "last disturbed" time (<see cref="SubstrateStability"/>), packed doubles
     /// in <c>DomainCells</c> order. Null in saves made before G3: freshly loaded worlds default to "never disturbed".</summary>
     public string? Stability { get; set; }
@@ -120,6 +125,7 @@ public static class WorldSerializer
         p["water"] = Bytes(new WaterPayload { Depth = Pack(depth), Budget = w.Water.Budget });
         p["coverage"] = Bytes(new CoveragePayload
         {
+            Step = w.CoverageSystem.StepIndex,
             Layers = w.Coverage.All.Select(layer => new CoverageLayerPayload
             {
                 Id = (int)layer.Id,
@@ -128,6 +134,8 @@ public static class WorldSerializer
                     Ti = t.Ti, Tj = t.Tj,
                     Occ = PackBytes(t.Occ), B = PackFloats(t.B), W = PackBytes(t.W),
                     Age = PackUShorts(t.Age), Dorm = PackBytes(t.Dorm), Flags = PackBytes(t.Flags), D2E = PackBytes(t.D2E),
+                    Steady = t.Steady, SteadySteps = t.SkippedPhysiologySteps,
+                    EnvCache = double.IsNaN(t.EnvMoistureCache) ? null : t.EnvMoistureCache,
                 }).ToList(),
             }).ToList(),
             Stability = Pack(CoverageEnvironment.StabilityOf(w).ExportDomainValues()),
@@ -199,6 +207,10 @@ public static class WorldSerializer
         w.Water.Budget = wa.Budget ?? new WaterBudget();
 
         var cp = Read<CoveragePayload>(payloads, "coverage");
+        var coverageSchedule = w.Scheduler.Systems.Single(s => s.Name == "coverage");
+        long inferredCoverageSteps = w.Clock.Tick < coverageSchedule.Phase
+            ? 0 : (w.Clock.Tick - coverageSchedule.Phase) / coverageSchedule.Cadence + 1;
+        w.CoverageSystem.RestoreStep(cp.Step ?? inferredCoverageSteps);
         foreach (var lp in cp.Layers ?? new())
         {
             var layer = w.Coverage.ById((CoverageLayerId)lp.Id);
@@ -208,7 +220,8 @@ public static class WorldSerializer
                 layer.ImportTile(tp.Ti, tp.Tj,
                     UnpackBytes(tp.Occ, "coverage occ"), UnpackFloats(tp.B, "coverage biomass"), UnpackBytes(tp.W, "coverage water"),
                     UnpackUShorts(tp.Age, "coverage age"), UnpackBytes(tp.Dorm, "coverage dormancy"),
-                    UnpackBytes(tp.Flags, "coverage flags"), UnpackBytes(tp.D2E, "coverage d2e"));
+                    UnpackBytes(tp.Flags, "coverage flags"), UnpackBytes(tp.D2E, "coverage d2e"),
+                    tp.Steady ?? false, tp.SteadySteps ?? 0, tp.EnvCache ?? double.NaN);
             }
         }
         if (cp.Stability != null) CoverageEnvironment.StabilityOf(w).ImportDomainValues(Unpack(cp.Stability, "substrate stability"));

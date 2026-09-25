@@ -21,13 +21,13 @@ public class BioClockTests
         double Grown(double bio)
         {
             var w = Pond(bio);
-            var f = w.FloraSystem.Establish(w.Content.FloraOrThrow("carpet_moss"), FaunaFixtures.Land + new Vec2(-0.4, 1), "t", 0.05);
+            var f = w.FloraSystem.Establish(w.Content.FloraOrThrow("creeping_groundcover"), FaunaFixtures.Land + new Vec2(-0.4, 1), "t", 0.05);
             TestUtil.Condition(w, 0.68, 0.3, 0.45);
             w.Step(360);
             return f.Biomass - 0.05;
         }
         double slow = Grown(1), fast = Grown(8);
-        Assert.True(slow > 0 && fast > slow * 6, $"moss growth ×1 {slow:0.00000} vs ×8 {fast:0.00000}");
+        Assert.True(slow > 0 && fast > slow * 6, $"flora growth ×1 {slow:0.00000} vs ×8 {fast:0.00000}");
 
         double Walked(double bio)
         {

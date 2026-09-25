@@ -14,7 +14,7 @@ public class EcologyTests
     public void FloraAndFaunaDeathShareOneDetritusPathwayWithoutDoubleCounting()
     {
         var w = TestUtil.FlatWorld(17);
-        var fl = w.FloraSystem.Establish(TestUtil.Content.FloraOrThrow("carpet_moss"), new Vec2(2, 1), "t", 0.8);
+        var fl = w.FloraSystem.Establish(TestUtil.Content.FloraOrThrow("creeping_groundcover"), new Vec2(2, 1), "t", 0.8);
         var fa = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(2, -1));
         double d0 = w.Fields.Detritus.Total();
         w.FloraSystem.Kill(fl, "t"); w.FaunaSystem.Kill(fa, "t");
@@ -255,7 +255,7 @@ public class ToolTests
     {
         var (w, t) = Setup();
         var st = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(2, 0));
-        var fl = w.FloraSystem.Establish(w.Content.FloraOrThrow("carpet_moss"), new Vec2(2.1, 0.1), "t", 0.5);
+        var fl = w.FloraSystem.Establish(w.Content.FloraOrThrow("creeping_groundcover"), new Vec2(2.1, 0.1), "t", 0.5);
         double biomass = fl.Biomass;
         var hit = Selection.Raycast(w, new Vec3(2, 2, 0), new Vec3(0, -1, 0));
         var res = t.Poke(new PokeAction(hit.Point, new Vec3(0, -1, 0), 1.0, hit));

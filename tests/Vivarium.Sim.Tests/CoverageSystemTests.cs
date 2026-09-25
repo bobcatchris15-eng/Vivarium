@@ -1,5 +1,6 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Coverage;
+using Vivarium.Sim.Persistence;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Tests;
@@ -17,6 +18,20 @@ public class CoverageSystemTests
         var w = TestUtil.DefaultWorld(seed, bio: TestUtil.ShippedBio);
         for (int day = 0; day < bioDays; day++) w.Step(TestUtil.TicksPerBioDay());
         return w;
+    }
+
+    [Fact]
+    public void CoverageContinuesIdenticallyAfterSaveLoad()
+    {
+        var original = TestUtil.DefaultWorld();
+        original.Step(95); // crosses the phase-30 coverage tick, then saves between growth steps
+        var loaded = WorldSerializer.Deserialize(original.Content, WorldSerializer.Serialize(original));
+        foreach (var (name, digest) in WorldSerializer.SubsystemDigests(original))
+            Assert.True(digest == WorldSerializer.SubsystemDigests(loaded)[name], $"{name} differs immediately after load");
+        original.Step(60);
+        loaded.Step(60);
+        foreach (var (name, digest) in WorldSerializer.SubsystemDigests(original))
+            Assert.True(digest == WorldSerializer.SubsystemDigests(loaded)[name], $"{name} differs after continuation");
     }
 
     [Fact]
