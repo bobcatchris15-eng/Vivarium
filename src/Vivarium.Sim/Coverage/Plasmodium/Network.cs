@@ -41,11 +41,11 @@ public sealed class Network : IPlasmodiumNetwork
     private readonly Dictionary<(int, int), double> _nodeMaxD = new();
 
     /// <summary>Real flow reported by <see cref="RecordFlow"/> since the last <see cref="Step"/> call, accumulated
-    /// per coarse edge as Σ|Q|·dt (weighted sum) and Σdt (weight), so <see cref="Step"/> can recover the
-    /// dt-weighted mean flow over whatever fraction of the cycle actually reported anything. Cleared at the end
-    /// of every <see cref="Step"/> — each cycle's average is consumed exactly once.</summary>
+    /// per coarse edge as Σ|Σq_fine|·dt over transport substeps, so <see cref="Step"/> can recover the
+    /// cycle-averaged net edge flux. Simultaneous fine crossings add before the absolute value, while
+    /// shuttle reversals in different substeps both reinforce the vein. Consumed once per network step.</summary>
     private readonly Dictionary<((int, int) a, (int, int) b), double> _pendingFlowWeighted = new();
-    private readonly Dictionary<((int, int) a, (int, int) b), double> _pendingFlowDt = new();
+    private readonly Dictionary<((int, int) a, (int, int) b), double> _sampleNetFlow = new();
 
     // Reused across steps to avoid per-step allocation churn (this runs every foraging step, not just in tests).
     private readonly HashSet<(int, int)> _coarseOccupied = new();
@@ -65,9 +65,9 @@ public sealed class Network : IPlasmodiumNetwork
 
     /// <summary>§6R item 7: records the real flow <see cref="Foraging.Transport"/> just pushed along one fine-cell
     /// edge, attributed to whichever coarse-node edge it crosses (a no-op if the pair shares a coarse node — there
-    /// is nothing for the vein network to attribute a purely-intra-node flow to). Accumulated as a dt-weighted sum
-    /// so several small sub-steps within one cycle average correctly; consumed and cleared by the next
-    /// <see cref="Step"/> call.</summary>
+    /// is nothing for the vein network to attribute a purely-intra-node flow to). A simultaneous transport
+    /// pass ends with <see cref="EndFlowSample"/>, which sums signed fine crossings before recording their
+    /// absolute net coarse-edge flux for that substep.</summary>
     public void RecordFlow(int gx, int gz, int nx, int nz, double flow, double dt)
     {
         if (dt <= 0) return;
@@ -75,8 +75,15 @@ public sealed class Network : IPlasmodiumNetwork
         var b = Attractant.CoarseOf(nx, nz);
         if (a == b) return;
         var key = Key(a, b);
-        _pendingFlowWeighted[key] = _pendingFlowWeighted.GetValueOrDefault(key) + Math.Abs(flow) * dt;
-        _pendingFlowDt[key] = _pendingFlowDt.GetValueOrDefault(key) + dt;
+        _sampleNetFlow[key] = _sampleNetFlow.GetValueOrDefault(key) + (a == key.a ? flow : -flow);
+    }
+
+    public void EndFlowSample(double dt)
+    {
+        if (dt > 0)
+            foreach (var (key, netFlow) in _sampleNetFlow)
+                _pendingFlowWeighted[key] = _pendingFlowWeighted.GetValueOrDefault(key) + Math.Abs(netFlow) * dt;
+        _sampleNetFlow.Clear();
     }
 
     /// <summary>Surviving edge conductance between the coarse nodes containing two fine cells (§6R item 1's
@@ -175,9 +182,7 @@ public sealed class Network : IPlasmodiumNetwork
 
             // dt-weighted mean of whatever real flow RecordFlow reported for this edge this cycle (0 if none
             // reported — e.g. a brand-new coarse-adjacency with no transport across it yet).
-            double meanFlow = _pendingFlowDt.TryGetValue(edgeKey, out var wDt) && wDt > 0
-                ? _pendingFlowWeighted[edgeKey] / wDt
-                : 0;
+            double meanFlow = dt > 0 ? _pendingFlowWeighted.GetValueOrDefault(edgeKey) / dt : 0;
 
             // Cycle-averaged |Q| (exponential running average, time constant FlowAvgTau) drives growth, not the
             // instantaneous flow, so a vein does not thin every time shuttle streaming reverses sign.
@@ -185,9 +190,7 @@ public sealed class Network : IPlasmodiumNetwork
             double avgNew = avgOld + (dt / FlowAvgTau) * (meanFlow - avgOld);
             _edgeAvgQ[edgeKey] = avgNew;
 
-            // Superlinear reinforcement separates sustained trunk flow from low-flow sheet edges. The
-            // prior 1.8 response removed even the direct occupied route between the food patches; a
-            // gentler response keeps that route while low-flow branches still decay below D_min.
+            // Superlinear reinforcement separates sustained trunk flow from low-flow sheet edges.
             double qPow = Math.Pow(avgNew, 1.5);
             double fQ = qPow / (1.0 + qPow);
             double dNew = (dOld + dt * QGain * fQ) / (1 + dt * Gamma);
@@ -213,7 +216,6 @@ public sealed class Network : IPlasmodiumNetwork
         }
 
         _pendingFlowWeighted.Clear();
-        _pendingFlowDt.Clear();
 
         // Tube width splat + retraction: every occupied coarse node with no edge above the prune threshold is
         // sheet, not vein — flagged for Foraging to vacate once veins have formed.

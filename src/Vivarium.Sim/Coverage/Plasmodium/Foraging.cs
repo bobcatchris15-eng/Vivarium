@@ -43,6 +43,10 @@ public interface IPlasmodiumNetwork
     /// when the two cells share a coarse node (nothing for the vein network to attribute the flow to).</summary>
     void RecordFlow(int gx, int gz, int nx, int nz, double flow, double dt);
 
+    /// <summary>Completes one simultaneous fine-cell transport pass so the coarse edge records the
+    /// absolute net flux of its fine crossings before the next shuttle-streaming substep.</summary>
+    void EndFlowSample(double dt);
+
     /// <summary>Returns true if a connected path of surviving vein edges connects coarse node a to b.</summary>
     bool AreNodesConnected((int cx, int cz) a, (int cx, int cz) b);
 }
@@ -381,9 +385,7 @@ public sealed class PlasmodiumColony
 
         // Retraction (§6.5): cells the transport network has flagged as off-network sheet vacate outright,
         // before front detection runs, so a retracting cell never gets re-flagged as a front the same step.
-        // Retraction is only active once the colony has connected two distant food sources with surviving veins (§6.5, §12).
-        bool allowRetraction = HasBridgedDistantFoodSources(env, network);
-        if (network != null && allowRetraction)
+        if (network != null)
         {
             _retractBuf.Clear();
             foreach (var (gx, gz) in _cellId.Keys)
@@ -400,7 +402,7 @@ public sealed class PlasmodiumColony
         foreach (var (gx, gz) in _cellId.Keys)
         {
             ClearFrontFlag(layer, gx, gz); // recomputed fresh every step, so a cell that's no longer a front stops glowing
-            if (network != null && allowRetraction && network.ShouldRetract(gx, gz)) continue;
+            if (network != null && network.ShouldRetract(gx, gz)) continue;
             bool isFront = false;
             foreach (var (dx, dz, _) in Dirs8)
                 if (!_cellId.ContainsKey((gx + dx, gz + dz))) { isFront = true; break; }
@@ -586,6 +588,7 @@ public sealed class PlasmodiumColony
             double veinFrac = (0.08 * Params.SheetConductance + dVein) / (Params.SheetConductance + dVein);
             network?.RecordFlow(from.gx, from.gz, to.Item1, to.Item2, (actual / dt) * veinFrac, dt);
         }
+        network?.EndFlowSample(dt);
     }
 
     /// <summary>Retention score in [0,1] for a cell (§6R item 4): how far its ω currently sits above the neutral
@@ -830,32 +833,4 @@ public sealed class PlasmodiumColony
         return sum / 4.0;
     }
 
-    private readonly List<(int cx, int cz)> _foodCoarseNodesBuf = new();
-
-    private bool HasBridgedDistantFoodSources(IPlasmodiumEnvironment env, IPlasmodiumNetwork? network)
-    {
-        if (network == null) return false;
-        _foodCoarseNodesBuf.Clear();
-        foreach (var (gx, gz) in _cellId.Keys)
-        {
-            if (env.Detritus(gx, gz) > 0)
-            {
-                var coarse = Attractant.CoarseOf(gx, gz);
-                if (!_foodCoarseNodesBuf.Contains(coarse)) _foodCoarseNodesBuf.Add(coarse);
-            }
-        }
-        if (_foodCoarseNodesBuf.Count < 2) return false;
-        for (int i = 0; i < _foodCoarseNodesBuf.Count; i++)
-            for (int j = i + 1; j < _foodCoarseNodesBuf.Count; j++)
-            {
-                int dx = _foodCoarseNodesBuf[i].cx - _foodCoarseNodesBuf[j].cx;
-                int dz = _foodCoarseNodesBuf[i].cz - _foodCoarseNodesBuf[j].cz;
-                if (dx * dx + dz * dz >= 16)
-                {
-                    if (network.AreNodesConnected(_foodCoarseNodesBuf[i], _foodCoarseNodesBuf[j]))
-                        return true;
-                }
-            }
-        return false;
-    }
 }

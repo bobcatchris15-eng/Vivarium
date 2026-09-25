@@ -122,6 +122,50 @@ public class NetworkScenarios
         return Math.Sqrt(dx * dx + dz * dz) * CoarseSize;
     }
 
+    [Fact]
+    public void ParallelFineTransfersDoubleCoarseEdgeFlux()
+    {
+        static double MeanFlux(int crossings)
+        {
+            var layer = new CoverageLayer(CoverageLayerId.Plasmodium, 7);
+            var network = new Network { D0 = 0, Gamma = 0, QGain = 1, PruneThreshold = 0, FlowAvgTau = 1 };
+            var occupied = new[] { (1, 0), (1, 1), (2, 0), (2, 1) };
+            foreach (var (gx, gz) in occupied) layer.SetOcc(gx, gz, 1);
+            network.Step(layer, occupied, 1);
+            network.RecordFlow(1, 0, 2, 0, 0.2, 1);
+            if (crossings == 2) network.RecordFlow(1, 1, 2, 1, 0.2, 1);
+            network.EndFlowSample(1);
+            network.Step(layer, occupied, 1);
+            double d = network.VeinConductance(1, 0, 2, 0);
+            // Invert f(Q)=Q^1.5/(1+Q^1.5) to inspect the flux used by the adaptation step.
+            return Math.Pow(d / (1 - d), 1.0 / 1.5);
+        }
+
+        Assert.Equal(2 * MeanFlux(1), MeanFlux(2), 10);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PrunedNetworkRetractsWithoutTwoFoodBridge(bool oneFoodCell)
+    {
+        var prm = new PlasmodiumParams { InitialMass = 20, Beta = 0, LambdaF = 0, FeedRate = 0 };
+        var env = new TestEnv();
+        if (oneFoodCell) env.DetritusMap[(0, 0)] = 100;
+        var layer = new CoverageLayer(CoverageLayerId.Plasmodium, 8);
+        var colony = new PlasmodiumColony(0, prm);
+        var network = new Network();
+        var occupied = new[] { (0, 0), (2, 0) };
+        colony.Seed(occupied);
+        foreach (var (gx, gz) in occupied) layer.SetOcc(gx, gz, 1);
+        for (int step = 0; step < 25; step++) network.Step(layer, occupied, 1);
+        Assert.True(network.ShouldRetract(2, 0));
+
+        colony.Step(layer, new Attractant(prm), env, 25, 1, network);
+        Assert.DoesNotContain((2, 0), colony.CellId.Keys);
+        Assert.Equal(oneFoodCell, colony.CellId.ContainsKey((0, 0)));
+    }
+
     /// <summary>Slow: renders the two_food convergence as a timelapse (sheet thickness + tube width).</summary>
     [Fact]
     [Trait("Speed", "Slow")]
