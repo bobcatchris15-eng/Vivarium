@@ -46,7 +46,7 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | introcov | introduce/remove moss & lichen clumps via tools | DONE | 52/52 + smoke OK; default back to carpet_moss |
 | edgefld | ScalarField.Sample bilinear near domain edge diluted by out-of-domain cells (moisture 0.7 reads ~0.35) | QUEUED | — |
 | matr | coverage mat renderer | DONE | organic outlines, no grid, ~7% fps; TUNE: reads flat felt/paint, no fibre texture/relief; lichen flat mustard -> mat2 |
-| mat2 | mat texture + relief + shoots | DISPATCHED wt mat2 | — |
+| mat2 | mat texture + relief + shoots | FAIL (honest) | shader-only, still paint; WIP on branch task/mat2 unmerged; split -> mat2a geometry relief, mat2b instanced shoots |
 | creep | creeping_groundcover rebuild | DONE | discs gone; TUNE: stolons too thick/straight, too few/tiny leaves (reads as sticks) |
 | vine | climbing_vine giant flat faceted leaves = next icon | QUEUED | — |
 | harn | (folded into mossvis) | — | — |

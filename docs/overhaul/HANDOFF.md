@@ -38,9 +38,13 @@ If the work is broken or half-done, discard it: `git worktree remove --force` + 
 |---|---|---|---|
 | `pl3` | Veins grow ONLY from cycle-averaged shuttle flow (remove Network's separate CG source/sink solve); delete the `Migrating` state, with light/dryness as local ω/maintenance costs. §6R.7–8 | two_food ≤1.2× Euclidean with one dominant path; maze within 15% of BFS; fusion; new `stress_avoidance` drifts into the dark/moist half; coherence (1 component, ≥80% fill); exact mass conservation; **no solver reintroduced** — if emergence fails, report the missing mechanism | `dotnet build src/Vivarium.Sim -c Debug` + `dotnet test Vivarium.sln -c Debug --filter "(Suite=Coverage\|Suite=GrowthLab)&Speed!=Slow"` |
 | `aq1` | Duckweed (`SurfaceFloat`) + algae (`AlgaeBed`, `AlgaeFloat`) coverage rules with upwind mass-conserving flow advection, `IAquaticEnv` interface. §15.1–15.2 | lab: duckweed fills a still bay (≥3× channel density), piles upstream of an obstacle; algae scoured by flow; duckweed shading suppresses bed algae; floating mats bloom in still, nutrient-rich water and drift to the margin; determinism | same as pl3 |
-| `mat2` | Coverage mats: real relief (cushion/sphagnum domes via D2E), moss micro-structure shader + sparse instanced micro-shoots, palettes, lichen areolate/lobed/fruticose looks | fps ≥ 85% of before (paired run); VALID capture `build/reference/mat2`; moss/lichen scenes read as moss/lichen, not paint | build + seeded `--reference C:/Misc/Vivarium/build/reference/mat2` |
+
+**mat2 finished as FAIL (honest):** shader-only micro-detail, still reads as paint. Its shader work is committed on branch `task/mat2` (worktree removed, NOT merged). Split into mat2a + mat2b below; mat2a may start from `task/mat2`.
 
 ## 3. QUEUE (next packets, in recommended order)
+
+0a. **mat2a — mat geometry relief.** `game/Render/CoverageRenderer.cs` only: visible thickness and domes (cushion/sphagnum via D2E, carpet 2–4 mm, lichen ~0.5 mm, rounded edge falloff), normals recomputed from the displaced surface. Validate by capture inspection (species_cushion_moss must show a dome, dense_colony visible thickness at the edge). Paired perf ≥ 85%.
+0b. **mat2b — instanced micro-shoots.** New `game/Render/CoverageShoots.cs`: MultiMesh of tiny tapered moss shoots / star tips (and pale branch tips for reindeer lichen), count from B, concentrated at rim/young cells and the cushion surface, hashed deterministic placement, frustum-culled per tile, skip only sub-pixel. This is the highest-leverage item for "moss, not paint". Paired perf ≥ 85%.
 
 Dispatch at most 3 at once, each in its own seeded worktree. Packets must stay one subsystem and ≤6 files.
 
