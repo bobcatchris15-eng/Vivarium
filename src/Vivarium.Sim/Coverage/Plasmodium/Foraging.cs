@@ -121,6 +121,57 @@ public sealed class PlasmodiumColony
     private readonly Dictionary<(int, int), double> _mass = new();
     private int _nextId = 1;
 
+    // ------------------------------------------------------------------ contraction phase field (§6R items 2-4)
+    private readonly Dictionary<(int, int), double> _theta = new();
+    private readonly Dictionary<(int, int), double> _omega = new();
+    private readonly Dictionary<(int, int), double> _retention = new();
+    private readonly Dictionary<(int, int), double> _uptakeEma = new();
+    private readonly Dictionary<((int, int) a, (int, int) b), double> _lastFlow = new();
+
+    /// <summary>Running mean of each cell's mass (§6R "Fix direction" note: withdrawal reads this, not the
+    /// instantaneous value, so a mid-cycle shuttle-streaming dip never vacates a cell that recovers next
+    /// half-cycle).</summary>
+    private readonly Dictionary<(int, int), double> _massEma = new();
+    private readonly Dictionary<(int, int), double> _thetaStartBuf = new();
+    private readonly Dictionary<(int, int), double> _thetaEndBuf = new();
+
+    /// <summary>Current phase θ (radians, wrapped to [-π, π]) for a cell, or 0 if untracked.</summary>
+    public double ThetaAt(int gx, int gz) => _theta.TryGetValue((gx, gz), out var t) ? t : 0;
+
+    /// <summary>Current ω (rad/s) for a cell, or the neutral Ω0 if untracked.</summary>
+    public double OmegaAt(int gx, int gz) => _omega.TryGetValue((gx, gz), out var o) ? o : Params.PhaseOmega0;
+
+    /// <summary>Last raw (pre-rectification) signed flow along a cell pair: positive means a-&gt;b. 0 if the pair
+    /// has no tracked flow this step (not adjacent, unoccupied, or no transport has run yet).</summary>
+    public double LastFlowBetween((int gx, int gz) a, (int gx, int gz) b)
+    {
+        bool swap = a.CompareTo(b) > 0;
+        var key = swap ? (b, a) : (a, b);
+        double v = _lastFlow.TryGetValue(key, out var q) ? q : 0;
+        return swap ? -v : v;
+    }
+
+    /// <summary>Deterministic pseudo-random initial phase in [0, 2π) from cell coordinates alone (no RNG
+    /// service needed): breaks symmetry between cells so weakly-coupled identical oscillators do not all start
+    /// perfectly in phase, which is what lets travelling phase waves exist at all under a uniform environment.</summary>
+    private static double InitialTheta(int gx, int gz)
+    {
+        unchecked
+        {
+            uint h = (uint)(gx * 73856093 ^ gz * 19349663);
+            h ^= h >> 13; h *= 0x5bd1e995; h ^= h >> 15;
+            return (h / (double)uint.MaxValue) * 2 * Math.PI;
+        }
+    }
+
+    private static double WrapAngle(double theta)
+    {
+        double t = theta % (2 * Math.PI);
+        if (t > Math.PI) t -= 2 * Math.PI;
+        else if (t < -Math.PI) t += 2 * Math.PI;
+        return t;
+    }
+
     public PlasmodiumColony(int speciesId, PlasmodiumParams prm)
     {
         SpeciesId = speciesId;
@@ -139,6 +190,7 @@ public sealed class PlasmodiumColony
         {
             _cellId[c] = id;
             _mass[c] = (_mass.TryGetValue(c, out var m) ? m : 0) + perCell;
+            if (!_theta.ContainsKey(c)) _theta[c] = InitialTheta(c.Item1, c.Item2);
         }
         return id;
     }
@@ -293,6 +345,19 @@ public sealed class PlasmodiumColony
     {
         layer.BeginStep();
 
+        // Running mass EMA (§6R "Fix direction"), sampled from *last* step's ending mass before anything this
+        // step touches it: this step's withdrawal check reads a trend, not a same-step transient.
+        if (dt > 0)
+            foreach (var cell in _cellId.Keys)
+            {
+                double m = MassAt(cell.Item1, cell.Item2);
+                double prev = _massEma.TryGetValue(cell, out var e) ? e : m;
+                // Exponential (not linear) blend: bounded in (0,1] for any dt, so a large outer dt (e.g. the
+                // 30 sim-s cadence) cannot overshoot into an unstable, amplifying "average".
+                double alpha = 1 - Math.Exp(-dt / Params.MassEmaTau);
+                _massEma[cell] = prev + alpha * (m - prev);
+            }
+
         attractant.Step(_cellId.Keys, (cx, cz) => SampleDetritusCoarse(env, cx, cz));
 
         // Retraction (§6.5): cells the transport network has flagged as off-network sheet vacate outright,
@@ -363,6 +428,7 @@ public sealed class PlasmodiumColony
             _mass[parent] = parentMass - Params.MCell;
             _mass[(gx, gz)] = Params.MCell;
             _cellId[(gx, gz)] = ownerId;
+            _theta[(gx, gz)] = InitialTheta(gx, gz);
             layer.SetOcc(gx, gz, 1);
         }
 
@@ -379,11 +445,16 @@ public sealed class PlasmodiumColony
                     _mass[(gx, gz)] = MassAt(gx, gz) + taken;
                     FedMass += taken;
                 }
+                // Recent-uptake EMA (§6R item 2), normalised to [0,1]: feeds ω, which is what item 4's
+                // rectification reads back as a retention score. No other channel exists for food to act.
+                double u = taken / want;
+                _uptakeEma[(gx, gz)] = _uptakeEma.TryGetValue((gx, gz), out var eu) ? eu + 0.3 * (u - eu) : u;
             }
         }
 
-        // Conservative transport (§6R items 1, 3): moves mass between occupied cells only, sum unchanged.
-        Transport(network, dt);
+        // Contraction phase field + conservative transport, interleaved (§6R items 1-4): see
+        // StepPhaseAndTransport for why a single big-dt Transport call after the phase update is unsafe.
+        StepPhaseAndTransport(env, network, dt);
 
         // Maintenance cost (local, tallied removed) and m_min withdrawal (§6R item 6).
         ApplyMaintenanceAndWithdrawal(layer, network, dt);
@@ -400,6 +471,11 @@ public sealed class PlasmodiumColony
         if (leftover > 0) RemovedMass += leftover;
         _mass.Remove(cell);
         _cellId.Remove(cell);
+        _theta.Remove(cell);
+        _omega.Remove(cell);
+        _retention.Remove(cell);
+        _uptakeEma.Remove(cell);
+        _massEma.Remove(cell);
         SetResidueFlag(layer, cell.gx, cell.gz);
         layer.SetOcc(cell.gx, cell.gz, 0);
         ClearFrontFlag(layer, cell.gx, cell.gz);
@@ -429,7 +505,7 @@ public sealed class PlasmodiumColony
         foreach (var i in _cellsSortedBuf)
         {
             double mi = MassAt(i.gx, i.gz);
-            double pi = Params.P0 * mi / Params.MRef;
+            double pi = (Params.P0 + Params.PhaseAmplitude * Math.Sin(ThetaAt(i.gx, i.gz))) * mi / Params.MRef;
             foreach (var (dx, dz, dist) in Dirs8)
             {
                 var j = (i.gx + dx, i.gz + dz);
@@ -437,23 +513,31 @@ public sealed class PlasmodiumColony
                 if (!_cellId.ContainsKey(j)) continue;
 
                 double mj = MassAt(j.Item1, j.Item2);
-                double pj = Params.P0 * mj / Params.MRef;
+                double pj = (Params.P0 + Params.PhaseAmplitude * Math.Sin(ThetaAt(j.Item1, j.Item2))) * mj / Params.MRef;
                 double dVein = network?.VeinConductance(i.gx, i.gz, j.Item1, j.Item2) ?? 0;
                 double dTotal = Params.SheetConductance + dVein;
                 if (dTotal <= 0) continue;
 
                 double q = dTotal * (pi - pj) / dist;
+                _lastFlow[(i, j)] = q; // raw, pre-rectification: diagnostic/test view of the oscillating flow
+
                 double amt = q * dt;
                 if (amt > 0)
                 {
+                    // Rectification (§6R item 4): the source cell releases less by ε·retention — a gel-stiffening
+                    // outflow throttle, not an inflow boost, so this never creates or destroys mass.
+                    amt *= 1 - Params.RetentionEpsilon * RetentionAt(i);
+                    if (amt <= 0) continue;
                     _outFlowBuf[i] = _outFlowBuf.GetValueOrDefault(i) + amt;
                     _edgeFlowBuf.Add((i, j, amt));
                 }
                 else if (amt < 0)
                 {
                     var from = j;
-                    _outFlowBuf[from] = _outFlowBuf.GetValueOrDefault(from) + (-amt);
-                    _edgeFlowBuf.Add((from, i, -amt));
+                    double outAmt = -amt * (1 - Params.RetentionEpsilon * RetentionAt(from));
+                    if (outAmt <= 0) continue;
+                    _outFlowBuf[from] = _outFlowBuf.GetValueOrDefault(from) + outAmt;
+                    _edgeFlowBuf.Add((from, i, outAmt));
                 }
             }
         }
@@ -474,6 +558,138 @@ public sealed class PlasmodiumColony
             if (actual <= 0) continue;
             _mass[from] = MassAt(from.gx, from.gz) - actual;
             _mass[to] = MassAt(to.Item1, to.Item2) + actual;
+        }
+    }
+
+    /// <summary>Retention score in [0,1] for a cell (§6R item 4): how far its ω currently sits above the neutral
+    /// Ω0, normalised by the uptake gain. Better local conditions (more uptake, less stress) raise ω, and this
+    /// reads that back directly — the only path from food to the outflow throttle, no separate steering signal.</summary>
+    private double RetentionAt((int gx, int gz) cell) => _retention.TryGetValue(cell, out var r) ? r : 0;
+
+    /// <summary>
+    /// Advances the phase field for the whole outer dt, then replays conservative transport in several smaller
+    /// sub-steps (§6R "Fix direction": a single Transport call over a big outer dt, driven by an oscillating
+    /// pressure term, can round-trip a cell's mass down and back up within one call in a way the per-call outflow
+    /// limiter cannot see — it only guards against going negative *within that call*, not a same-step empty that
+    /// leaves neighbours with nothing to refill from). Each sub-step interpolates θ linearly (shortest angular
+    /// path) between its value at the start and end of the outer step, so the pressure term driving transport
+    /// changes gradually across sub-steps instead of jumping straight from start-phase to end-phase.
+    /// </summary>
+    private void StepPhaseAndTransport(IPlasmodiumEnvironment env, IPlasmodiumNetwork? network, double dt)
+    {
+        if (dt <= 0 || _cellId.Count == 0) return;
+
+        _thetaStartBuf.Clear();
+        foreach (var cell in _cellId.Keys) _thetaStartBuf[cell] = ThetaAt(cell.Item1, cell.Item2);
+
+        StepPhase(env, dt);
+
+        _thetaEndBuf.Clear();
+        foreach (var cell in _cellId.Keys) _thetaEndBuf[cell] = ThetaAt(cell.Item1, cell.Item2);
+
+        double period = 2 * Math.PI / Math.Max(1e-9, Params.PhaseOmega0);
+        double subDtTarget = Math.Max(1e-6, period * Params.TransportSubStepFraction);
+        int subSteps = Math.Max(1, (int)Math.Ceiling(dt / subDtTarget));
+        double subDt = dt / subSteps;
+
+        for (int s = 1; s <= subSteps; s++)
+        {
+            double frac = (double)s / subSteps;
+            foreach (var (cell, a) in _thetaStartBuf)
+            {
+                if (!_cellId.ContainsKey(cell)) continue;
+                double b = _thetaEndBuf.TryGetValue(cell, out var bv) ? bv : a;
+                double delta = WrapAngle(b - a);
+                _theta[cell] = WrapAngle(a + frac * delta);
+            }
+            Transport(network, subDt);
+        }
+
+        // Sub-step interpolation lands exactly on the end value at frac = 1 modulo float error; pin it exactly.
+        foreach (var (cell, th) in _thetaEndBuf)
+            if (_cellId.ContainsKey(cell)) _theta[cell] = th;
+    }
+
+    // Reused across StepPhase calls to avoid per-call allocation.
+    private double[] _thetaArr = Array.Empty<double>();
+    private double[] _thetaNextArr = Array.Empty<double>();
+    private double[] _omegaArr = Array.Empty<double>();
+    private int[] _neighborFlat = Array.Empty<int>();
+    private int[] _neighborCount = Array.Empty<int>();
+    private readonly Dictionary<(int, int), int> _phaseIndexBuf = new();
+
+    /// <summary>
+    /// Advances the contraction phase field (§6R item 2) by dt sim-seconds: dθ_i/dt = ω_i + K·Σ_j sin(θ_j − θ_i),
+    /// with ω_i = Ω0 + gain·uptake − gain·stress (uptake/stress both local, both already computed this step).
+    /// Integrated with fixed-size forward-Euler sub-steps (≤ <see cref="PlasmodiumParams.PhaseMaxSubDt"/> each) so
+    /// a caller invoking this every 30 sim-s (§6R Cadence) at a ~100 sim-s period stays numerically stable and,
+    /// because the sub-step size and update order are both fixed, exactly deterministic.
+    /// </summary>
+    private void StepPhase(IPlasmodiumEnvironment env, double dt)
+    {
+        if (dt <= 0 || _cellId.Count == 0) return;
+
+        _cellsSortedBuf.Clear();
+        _cellsSortedBuf.AddRange(_cellId.Keys);
+        _cellsSortedBuf.Sort();
+        var cells = _cellsSortedBuf;
+        int n = cells.Count;
+
+        if (_thetaArr.Length < n)
+        {
+            _thetaArr = new double[n];
+            _thetaNextArr = new double[n];
+            _omegaArr = new double[n];
+            _neighborFlat = new int[n * 8];
+            _neighborCount = new int[n];
+        }
+
+        _phaseIndexBuf.Clear();
+        for (int i = 0; i < n; i++) _phaseIndexBuf[cells[i]] = i;
+
+        for (int i = 0; i < n; i++)
+        {
+            var cell = cells[i];
+            _thetaArr[i] = _theta.TryGetValue(cell, out var th) ? th : InitialTheta(cell.gx, cell.gz);
+
+            double stress = Math.Clamp(1.0 - env.Moisture(cell.gx, cell.gz), 0, 1);
+            double uptake = _uptakeEma.TryGetValue(cell, out var u) ? u : 0;
+            double omega = Params.PhaseOmega0 + Params.PhaseOmegaUptakeGain * uptake - Params.PhaseOmegaStressGain * stress;
+            _omegaArr[i] = Math.Max(0.1 * Params.PhaseOmega0, omega);
+
+            int count = 0;
+            int baseIdx = i * 8;
+            foreach (var (dx, dz, _) in Dirs8)
+            {
+                if (_phaseIndexBuf.TryGetValue((cell.gx + dx, cell.gz + dz), out int j))
+                    _neighborFlat[baseIdx + count++] = j;
+            }
+            _neighborCount[i] = count;
+        }
+
+        int subSteps = Math.Max(1, (int)Math.Ceiling(dt / Params.PhaseMaxSubDt));
+        double subDt = dt / subSteps;
+        double k = Params.PhaseCouplingK;
+        for (int s = 0; s < subSteps; s++)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                double coupling = 0;
+                int baseIdx = i * 8, count = _neighborCount[i];
+                double thetaI = _thetaArr[i];
+                for (int c = 0; c < count; c++) coupling += Math.Sin(_thetaArr[_neighborFlat[baseIdx + c]] - thetaI);
+                _thetaNextArr[i] = thetaI + subDt * (_omegaArr[i] + k * coupling);
+            }
+            (_thetaArr, _thetaNextArr) = (_thetaNextArr, _thetaArr);
+        }
+
+        double uptakeGain = Params.PhaseOmegaUptakeGain > 0 ? Params.PhaseOmegaUptakeGain : 1;
+        for (int i = 0; i < n; i++)
+        {
+            var cell = cells[i];
+            _theta[cell] = WrapAngle(_thetaArr[i]);
+            _omega[cell] = _omegaArr[i];
+            _retention[cell] = Math.Clamp((_omegaArr[i] - Params.PhaseOmega0) / uptakeGain, 0, 1);
         }
     }
 
@@ -499,10 +715,13 @@ public sealed class PlasmodiumColony
             }
         }
 
+        // §6R "Fix direction": withdrawal reads the running mass EMA, not the instantaneous value, so a
+        // mid-cycle shuttle-streaming dip never vacates a cell that is about to recover next half-cycle.
         _retractBuf.Clear();
         foreach (var cell in _cellId.Keys)
         {
-            if (MassAt(cell.Item1, cell.Item2) >= Params.MMin) continue;
+            double emaMass = _massEma.TryGetValue(cell, out var em) ? em : MassAt(cell.Item1, cell.Item2);
+            if (emaMass >= Params.MMin) continue;
             if (network != null && IsOnLiveVein(network, cell)) continue;
             _retractBuf.Add(cell);
         }

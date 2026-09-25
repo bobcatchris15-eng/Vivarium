@@ -87,6 +87,51 @@ public sealed class PlasmodiumParams
     /// <summary>Initial total mass for a newly seeded plasmodium, split evenly across the seeded cells.</summary>
     public double InitialMass { get; init; } = 20.0;
 
+    // ------------------------------------------------------------------ contraction phase field (§6R item 2-4)
+
+    /// <summary>Natural angular frequency ω0 at neutral uptake/stress, rad/s. Period ≈ 100 sim-s at ω0.</summary>
+    public double PhaseOmega0 { get; init; } = 2 * Math.PI / 100.0;
+
+    /// <summary>Coupling gain K in dθ/dt = ω_i + K·Σ sin(θ_j − θ_i). Kept weak relative to Ω0 so travelling
+    /// phase waves over a body of a few hundred cells do not fully synchronise within tens of cycles.</summary>
+    public double PhaseCouplingK { get; init; } = 0.001;
+
+    /// <summary>ω rise per unit of normalised local uptake (0..1, recent feeding rate over want).</summary>
+    public double PhaseOmegaUptakeGain { get; init; } = 0.02;
+
+    /// <summary>ω fall per unit of normalised local stress (0..1, dryness = 1 − moisture).</summary>
+    public double PhaseOmegaStressGain { get; init; } = 0.02;
+
+    /// <summary>Phase pressure amplitude, as a fraction of P0: P_i = (P0 + PhaseAmplitude·sin θ_i)·m_i/MRef. Kept
+    /// mass-proportional (multiplying the same m_i/MRef term rather than adding a flat, mass-independent swing)
+    /// so a low-mass cell's pressure swing shrinks with it and the oscillation can never demand more outflow than
+    /// a bounded fraction of the cell's own mass — a bare cell cannot be pumped empty by the cycle alone.</summary>
+    public double PhaseAmplitude { get; init; } = 0.5;
+
+    /// <summary>Rectification ε (§6R item 4): a cell retains (releases less by) this fraction times its own
+    /// retention score when it is the source of an outflow. Retention score is derived from how far the cell's
+    /// ω currently sits above Ω0 (better local conditions raise ω the same way they raise retention), so no
+    /// separate steering signal exists — food only ever acts through uptake -> ω -> retention.</summary>
+    public double RetentionEpsilon { get; init; } = 0.15;
+
+    /// <summary>Cap on the internal phase-integration sub-step, sim-seconds. The public Step API is designed to
+    /// be called every 30 sim-s (§6R Cadence); this subdivides that call for a stable, deterministic Euler
+    /// integration regardless of the caller's dt.</summary>
+    public double PhaseMaxSubDt { get; init; } = 0.5;
+
+    /// <summary>Mass transport is interleaved with the phase update in sub-steps of this fraction of one
+    /// oscillation period (2π/Ω0), rather than applied once over the whole outer dt. A big single-shot transport
+    /// call driven by an oscillating pressure term can overshoot within a step (the per-cell outflow limiter
+    /// only prevents going negative *that call*, not a same-step round trip that empties then can't refill), which
+    /// is what let a still, uniform sheet disintegrate into isolated dust under the phase field. Sub-stepping at a
+    /// fraction of the period keeps each transport call's implied pressure change small.</summary>
+    public double TransportSubStepFraction { get; init; } = 1.0 / 8.0;
+
+    /// <summary>Time constant, seconds, for the exponential running average of a cell's mass that the m_min
+    /// withdrawal check (§6R item 6) reads instead of the instantaneous value — a mid-cycle dip from shuttle
+    /// streaming must not vacate a cell that recovers next half-cycle. About one oscillation period by default.</summary>
+    public double MassEmaTau { get; init; } = 8.0;
+
     // ------------------------------------------------------------------ life cycle (§6.1, §6.6)
 
     /// <summary>Wetness threshold w_s: mean moisture below this for T_s drives Foraging -> Sclerotium.</summary>
