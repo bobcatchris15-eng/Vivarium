@@ -39,8 +39,8 @@
     "maturityDays": 7,
     "lifespanDays": 180,
     "nutrientPerBiomass": 0.16,
-    "radiusAtMax": 0.28,
-    "minRadius": 0.04
+    "radiusAtMax": 0.11,
+    "minRadius": 0.03
   },
   "spread": {
     "intervalDays": 4,
@@ -56,19 +56,6 @@
   "proximity": [],
   "litterFraction": 0.75,
   "grazingValue": 0.25,
-  "colony": {
-    "cellRadius": 0.045,
-    "frontRate": 0.55,
-    "fillRate": 0.16,
-    "maxHeight": 0.03,
-    "patternMode": "random",
-    "palette": [
-      [0.5, 0.58, 0.42],
-      [0.62, 0.68, 0.5],
-      [0.7, 0.74, 0.56],
-      [0.56, 0.62, 0.46]
-    ]
-  },
   "visual": {
     "shape": "roundleaf",
     "color": [
@@ -82,7 +69,7 @@
       0.54
     ],
     "colorVariance": 0.06,
-    "height": 0.04
+    "height": 0.06
   },
   "tags": [
     "plant",
