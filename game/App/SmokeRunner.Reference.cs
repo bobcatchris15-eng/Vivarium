@@ -87,6 +87,8 @@ public partial class SmokeRunner
                 ["draw_calls"] = draws, ["primitives"] = prims, ["objects"] = objs,
                 ["flora_visible"] = Session.Flora.Visible_, ["flora_triangles"] = Session.Flora.TrianglesDrawn,
                 ["fauna_drawn"] = Session.Fauna.Drawn, ["fauna_triangles"] = Session.Fauna.TrianglesDrawn,
+                ["coverage_tiles"] = Session.Coverage.TileCount, ["coverage_instances"] = Session.Coverage.InstanceCount,
+                ["coverage_triangles_built"] = Session.Coverage.TrianglesBuilt,
                 ["slowest_scopes"] = scopes,
             });
             Log.Info(LogCategory.Perf, $"ref {s.Name}: fps {1000.0 / mean:0.0} p95 {times[(int)(times.Count * 0.95)]:0.0}ms draws {draws} prims {prims}");

@@ -18,11 +18,20 @@ namespace Vivarium.Game.Render;
 /// </summary>
 public partial class CoverageRenderer : Node3D
 {
+    private static readonly bool DebugMode = System.Environment.GetEnvironmentVariable("VIVARIUM_COVERAGE_DEBUG") == "1";
+
     private VivariumWorld _w = null!;
     private StandardMaterial3D _material = null!;
+    private StandardMaterial3D _debugMatMaterial = null!;
+    private StandardMaterial3D _debugCrustMaterial = null!;
 
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
+
+    /// <summary>Diagnostics for reference/perf capture (updated every SyncTiles).</summary>
+    public int TileCount => _tiles.Count;
+    public int TrianglesBuilt { get; private set; } // cumulative triangles built this session (diagnostic only)
+    public int InstanceCount => GetChildCount();
 
     private sealed class TileRecord
     {
@@ -69,6 +78,21 @@ public partial class CoverageRenderer : Node3D
         _tiles.Clear();
 
         _material = Bridge.VertexColorMaterial(roughness: 0.85f, doubleSided: false);
+        if (DebugMode)
+        {
+            _debugMatMaterial = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoColor = Colors.Magenta,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            };
+            _debugCrustMaterial = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoColor = Colors.Cyan,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            };
+        }
 
         InitSpecies();
         SyncTiles();
@@ -190,12 +214,13 @@ public partial class CoverageRenderer : Node3D
         var md = BuildTileMesh(layer, t);
         if (md.VertexCount == 0 || md.TriangleCount == 0) return;
 
-        var mesh = Bridge.ToArrayMesh(md, _material);
+        var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial) : _material;
+        var mesh = Bridge.ToArrayMesh(md, mat);
         var mi = new MeshInstance3D
         {
             Name = $"Coverage_{layer.Id}_{t.Ti}_{t.Tj}",
             Mesh = mesh,
-            MaterialOverride = _material,
+            MaterialOverride = mat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         AddChild(mi);
@@ -205,6 +230,7 @@ public partial class CoverageRenderer : Node3D
             Mesh = mesh,
             MeshInstance = mi,
         };
+        TrianglesBuilt += md.TriangleCount;
     }
 
     private void RebuildTile(CoverageLayer layer, CoverageTile t, TileRecord record)
@@ -218,9 +244,12 @@ public partial class CoverageRenderer : Node3D
             return;
         }
 
-        record.Mesh = Bridge.ToArrayMesh(md, _material, record.Mesh);
+        var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial) : _material;
+        record.Mesh = Bridge.ToArrayMesh(md, mat, record.Mesh);
         record.MeshInstance.Mesh = record.Mesh;
+        record.MeshInstance.MaterialOverride = mat;
         record.Version = t.Version;
+        TrianglesBuilt += md.TriangleCount;
     }
 
     private MeshData BuildTileMesh(CoverageLayer layer, CoverageTile t)
@@ -406,10 +435,12 @@ public partial class CoverageRenderer : Node3D
             int v11 = GetOrAddCorner(lx + 1, lz + 1);
             int v01 = GetOrAddCorner(lx, lz + 1);
 
-            md.AddTriangle(v00, centerIdx, v10);
-            md.AddTriangle(v10, centerIdx, v11);
-            md.AddTriangle(v11, centerIdx, v01);
-            md.AddTriangle(v01, centerIdx, v00);
+            // Winding reversed relative to the original fan order so triangles face up under
+            // Godot's front-face convention (was relying on doubleSided to be seen at all).
+            md.AddTriangle(v10, centerIdx, v00);
+            md.AddTriangle(v11, centerIdx, v10);
+            md.AddTriangle(v01, centerIdx, v11);
+            md.AddTriangle(v00, centerIdx, v01);
         }
 
         if (md.TriangleCount > 0)
