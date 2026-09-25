@@ -120,24 +120,7 @@ public static class OrganismMeshes
                         Primitives.Scale(c1, 0.85 + rng.Range(-0.04, 0.04)), Primitives.Mix(c1, c2, rng.Range(0.55, 0.9)));
                 }
                 break;
-            case "creeper":
-                for (int k = 0; k < 14; k++)
-                {
-                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.85;
-                    var baseP = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
-                    double h = rng.Range(0.4, 1.0), lr = rng.Range(0.14, 0.22);
-                    var top = baseP + new Vec3(0, h, 0);
-                    Primitives.Tube(m, new[] { baseP, top }, new[] { 0.015, 0.012 }, 4, (i, v) => (Primitives.Scale(c1, 0.7), 1, i, v, 0, 0));
-                    var rim = new List<Vec3>();
-                    double tilt = rng.Range(0.1, 0.4);
-                    for (int s = 0; s <= 10; s++)
-                    {
-                        double th = 2 * Math.PI * s / 10;
-                        rim.Add(top + new Vec3(Math.Cos(th) * lr, Math.Cos(th) * lr * tilt, Math.Sin(th) * lr));
-                    }
-                    Primitives.Fan(m, top + new Vec3(0, 0.02, 0), rim, Vec3.Up, c2, Primitives.Mix(c1, c2, 0.4));
-                }
-                break;
+            case "creeper": Creeper(m, rng, seed, c1, c2); break;
             case "reed":
                 for (int k = 0; k < 11; k++)
                 {
@@ -526,12 +509,11 @@ public static class OrganismMeshes
     /// pairedleaf counterpart to <see cref="CuppedLeaflet"/>, elongated along <paramref name="fwd"/> and cambered
     /// toward <paramref name="up"/> to read as a thick fleshy leaf rather than a flat card.</summary>
     private static void ThickOvateLeaflet(MeshData m, Vec3 center, Vec3 fwd, Vec3 side, Vec3 up,
-        double length, double halfWidth, double cupAmt, ulong seed, double[] baseCol, double[] tipCol)
+        double length, double halfWidth, double cupAmt, ulong seed, double[] baseCol, double[] tipCol, int segs = 8)
     {
         var rng = Rng.Keyed(seed, "flora.mesh.ovateleaflet", 0);
         double asym = rng.Range(-0.15, 0.15);
         var rim = new List<Vec3>();
-        const int segs = 8;
         for (int s = 0; s <= segs; s++)
         {
             double th = 2 * Math.PI * s / segs;
@@ -600,6 +582,92 @@ public static class OrganismMeshes
             }
             double leafYawWhole = rng.Range(0, 2 * Math.PI);
             AppendRotatedY(m, tmp, basePos, leafYawWhole);
+        }
+    }
+
+    /// <summary>Prostrate branching stolons radiating irregularly from a low central crown, hugging the ground,
+    /// with small rooting-node thickenings and many small cambered, thick, varied-tilt leaves at nodes along
+    /// them (alternate/opposite, tapering toward the runner tips, youngest folded). Replaces the old flat,
+    /// pale octagonal-disc silhouette with a believable low creeping groundcover.</summary>
+    private static void Creeper(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
+    {
+        int stolons = 3 + rng.NextInt(4); // 3..6 runners radiating from the crown
+        int totalLeaves = 12 + rng.NextInt(29); // 12..40 leaves across the whole plant
+
+        // Crown: a small low rosette bump the runners root from.
+        {
+            var crownRim = new List<Vec3>();
+            double crownR = 0.05;
+            for (int s = 0; s <= 6; s++)
+            {
+                double th = 2 * Math.PI * s / 6;
+                crownRim.Add(new Vec3(Math.Cos(th) * crownR, 0, Math.Sin(th) * crownR));
+            }
+            Primitives.Fan(m, new Vec3(0, 0.02, 0), crownRim, Vec3.Up, Primitives.Scale(c1, 0.6), Primitives.Scale(c1, 0.75));
+        }
+
+        int leavesLeft = totalLeaves;
+        for (int k = 0; k < stolons; k++)
+        {
+            int stolonsRemaining = stolons - k;
+            int leavesHere = Math.Max(2, leavesLeft / stolonsRemaining);
+            leavesLeft -= leavesHere;
+            int pairs = Math.Max(1, leavesHere / 2);
+
+            // Irregular radiating azimuth (not an evenly spaced star) and a long, mostly-horizontal curved path
+            // spanning the same footprint radius as the old disc stems, so the plant doesn't shrink on screen.
+            double baseAz = 2 * Math.PI * k / stolons + rng.Range(-0.4, 0.4);
+            double runnerLen = rng.Range(0.55, 0.95);
+            var stolonAxis = new AxisParams(Length: runnerLen, BaseAngle: rng.Range(1.25, 1.48), BaseAzimuth: baseAz,
+                Droop: rng.Range(0.05, 0.35), WobbleAmplitude: rng.Range(0.01, 0.03), WobbleFrequency: rng.Range(0.8, 1.6),
+                Segments: 4);
+            ulong stSeed = Rng.Mix(seed, (ulong)(k * 251 + 17));
+            var frames = Axis.Build(stolonAxis, stSeed);
+
+            var tmp = new MeshData();
+            SoftTube.Build(tmp, new SoftTubeParams(stolonAxis, BaseRadius: 0.014, TipRadius: 0.006, Segments: 6), stSeed,
+                (i, v) => (Primitives.Scale(c1, 0.68), 1, i, v, 0, 0));
+
+            for (int p = 1; p <= pairs; p++)
+            {
+                double t = (double)p / (pairs + 1);
+                var f = Axis.Sample(frames, t);
+                bool folded = t > 0.8 || rng.NextDouble() < 0.1; // youngest (tip-most) leaves fold
+                double taper = MathD.Lerp(1.0, 0.4, t); // leaf size tapers toward the runner tip
+                double leafSize = rng.Range(0.05, 0.09) * taper;
+                double pairYaw = (p % 2 == 0) ? Math.PI / 2 : 0.0; // decussate: alternating/opposite pair spacing
+                var rotSide = Axis.RotateAround(f.Side, f.Tangent, pairYaw);
+
+                // Rooting node: a small thickening every other pair.
+                if (p % 2 == 0)
+                {
+                    var nodeRim = new List<Vec3>();
+                    double nodeR = 0.022 * taper;
+                    for (int s = 0; s <= 4; s++)
+                    {
+                        double th = 2 * Math.PI * s / 4;
+                        nodeRim.Add(f.Point + f.Side * Math.Cos(th) * nodeR + f.Tangent * Math.Sin(th) * nodeR - f.Up * nodeR * 0.2);
+                    }
+                    Primitives.Fan(tmp, f.Point + f.Up * (nodeR * 0.65), nodeRim, f.Up, Primitives.Scale(c1, 0.5), Primitives.Scale(c1, 0.38));
+                }
+
+                foreach (double sgn in new[] { -1.0, 1.0 })
+                {
+                    double lift = rng.Range(0.35, 0.85); // varied tilt off the runner so it reads as textured, not flat
+                    var fwd = (rotSide * sgn + Vec3.Up * lift).Normalized();
+                    var up = fwd.Cross(f.Tangent).Normalized();
+                    if (up.LengthSq < 1e-8) up = Vec3.Up;
+                    var center = f.Point + fwd * (leafSize * 0.6);
+                    ulong lSeed = Rng.Mix(seed, (ulong)(k * 4703 + p * 19 + (sgn > 0 ? 1u : 2u)));
+                    int bladeStart = tmp.VertexCount;
+                    double bladeLength = leafSize * (folded ? 0.8 : 1.3);
+                    ThickOvateLeaflet(tmp, center, fwd, f.Tangent, up, bladeLength, leafSize * 0.55,
+                        leafSize * rng.Range(0.12, 0.24), lSeed,
+                        Primitives.Scale(c1, 0.8), Primitives.Mix(c1, c2, rng.Range(0.15, 0.5)), segs: 6);
+                    MarkOvateBladeVertices(tmp, bladeStart, center, fwd, bladeLength);
+                }
+            }
+            AppendTranslated(m, tmp, Vec3.Zero);
         }
     }
 
