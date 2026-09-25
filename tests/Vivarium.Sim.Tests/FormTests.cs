@@ -255,6 +255,45 @@ public class FormTests
         }
     }
 
+    // Old (pre-kernel) creeper shape, worst case: 14 stems x (Tube 12 tris + Fan 20 tris) = 448 tris
+    // -> 2x budget 896. New kernel-built shape (stolons + rooting nodes + leaves) must stay within that.
+    [Fact]
+    public void CreeperIsFiniteNonDegenerateAndWithinTriangleBudget()
+    {
+        var sp = new FloraSpeciesDef { Id = "creeping_groundcover", Shape = "creeper", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            AssertNoZeroAreaTriangles(m);
+            Assert.InRange(m.TriangleCount, 1, 896);
+        }
+    }
+
+    [Fact]
+    public void CreeperIsDeterministic()
+    {
+        var sp = new FloraSpeciesDef { Id = "creeping_groundcover", Shape = "creeper", Color = Green, Color2 = LightGreen };
+        var m1 = OrganismMeshes.Flora(sp, 42);
+        var m2 = OrganismMeshes.Flora(sp, 42);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+    }
+
+    [Fact]
+    public void CreeperHasNoLargeFlatDiscsAndSpansExpectedFootprint()
+    {
+        // Regression: the old shape was a handful of near-vertical, wide flat fans (a "disc" reads as many
+        // co-planar rim vertices at one height/normal). The new shape must be prostrate (low profile) and
+        // spread leaves/runners across a footprint comparable to the old radius (~0.85), not shrunk down.
+        var sp = new FloraSpeciesDef { Id = "creeping_groundcover", Shape = "creeper", Color = Green, Color2 = LightGreen };
+        var m = OrganismMeshes.Flora(sp, 7);
+        var bounds = m.Bounds();
+        Assert.True(bounds.Max.Y < 0.35, $"creeper must stay low/prostrate, got max Y {bounds.Max.Y}");
+        double footprint = Math.Max(Math.Max(Math.Abs(bounds.Min.X), Math.Abs(bounds.Max.X)),
+            Math.Max(Math.Abs(bounds.Min.Z), Math.Abs(bounds.Max.Z)));
+        Assert.True(footprint > 0.4, $"creeper footprint should span a comparable radius to the old shape, got {footprint}");
+    }
+
     [Fact]
     public void RoundLeafIsDeterministic()
     {
