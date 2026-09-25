@@ -84,7 +84,15 @@ void vertex() {
 void fragment() {
     vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
     vec4 f = smooth_field(field_tex, fuv);
-    vec2 sub = smooth_field(sub_tex, fuv).rg;     // smooth gravel / rock weights (water ignored)
+    // Warp the visual sampling of the authoritative cell mask in metres. A straight
+    // lookup exposes the square cell lattice around gravel; continuous world-space
+    // noise bends its edge without changing any substrate or tool behavior.
+    vec2 gravel_warp = vec2(
+        vnoise(world_pos.xz * 2.1 + vec2(17.1, 3.4)),
+        vnoise(world_pos.xz * 2.1 + vec2(4.3, 29.7))
+    ) * 2.0 - 1.0;
+    vec2 gravel_uv = (world_pos.xz + gravel_warp * 0.13 - field_rect.xy) / field_rect.zw;
+    vec2 sub = vec2(texture(sub_tex, gravel_uv).r, smooth_field(sub_tex, fuv).g);
     f.g = texture(field_tex, fuv).g;              // the substrate code (overlay only) must not be smoothed
     float moisture = f.r, light = f.a;
     float code = floor(f.g * 4.0 + 0.5);         // overlay only: 0 soil, 1 gravel, 2 rock, 3 wood, 4 water
@@ -96,7 +104,8 @@ void fragment() {
     float wDamp = smoothstep(0.5, 0.92, moisture + (macro - 0.5) * 0.12);
     float wLeaf = smoothstep(0.55, 0.25, light) * smoothstep(0.3, 0.55, moisture) * smoothstep(0.35, 0.7, macro);
     float wMoss = smoothstep(0.55, 0.9, moisture) * smoothstep(0.25, 0.6, light) * smoothstep(0.3, 0.6, fbm(world_pos.xz * 1.7));
-    float wGrav = smoothstep(0.2, 0.7, sub.r);
+    float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
+    float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
     float wRock = max(smoothstep(0.3, 0.8, sub.g), smoothstep(0.55, 0.8, 1.0 - wn.y));  // steep banks show bare rock
 
     vec3 tn;
