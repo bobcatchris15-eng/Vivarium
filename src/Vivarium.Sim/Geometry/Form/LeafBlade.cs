@@ -126,7 +126,8 @@ public static class LeafBlade
                     var pos = Pos(t, x, faceSign, out var n);
                     var faceN = face == 0 ? n : -n;
                     var col = Primitives.Mix(baseCol, tipCol, t);
-                    m.AddVertex(pos, faceN, col, 1, t, (x + 1) * 0.5, u2, 0);
+                    // UV2.y marks blade surface; petiole and stem vertices keep zero.
+                    m.AddVertex(pos, faceN, col, 1, t, (x + 1) * 0.5, u2, 1);
                 }
             }
             int row = acrossCols + 1;

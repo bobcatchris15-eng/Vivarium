@@ -13,6 +13,7 @@ render_mode diffuse_burley, cull_disabled;
 uniform float sway = 1.0;
 uniform float stiffness = 1.0;
 uniform int surface_mode = 2;
+uniform bool deform_leaf_tips = false;
 uniform sampler2D moss_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -27,7 +28,7 @@ void vertex() {
     float h = max(VERTEX.y, 0.0);
     // Migrated blades encode base-to-tip position in UV.x. Keep attachments fixed and
     // bend the distal blade with smooth, seed-stable variation rather than vertex noise.
-    if (surface_mode == 2) {
+    if (deform_leaf_tips && UV2.y > 0.5) {
         float tip = smoothstep(0.08, 0.92, UV.x);
         float above_base = smoothstep(0.0, 0.12, h);
         float weight = tip * tip * above_base;

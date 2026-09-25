@@ -230,9 +230,11 @@ public static class OrganismMeshes
                         var dir = new Vec3(Math.Cos(la), rng.Range(-0.04, 0.10), Math.Sin(la)).Normalized();
                         var side = new Vec3(-dir.Z, 0, dir.X).Normalized();
                         var tip = top + dir * lobeR;
+                        int bladeStart = m.VertexCount;
                         Primitives.CurvedLeaf(m, top, tip, side, lobeR * rng.Range(0.42, 0.56),
                             Primitives.Mix(c1, c2, 0.24), Primitives.Mix(c1, c2, 0.62),
                             camber: lobeR * rng.Range(0.08, 0.16), longitudinal: 4, asymmetry: rng.Range(-0.14, 0.14));
+                        MarkBladeVertices(m, bladeStart);
                     }
                     if (rng.NextDouble() < 0.15)
                     {
@@ -354,6 +356,20 @@ public static class OrganismMeshes
         }
         dst.Normals.AddRange(src.Normals); dst.Colors.AddRange(src.Colors); dst.UV.AddRange(src.UV); dst.UV2.AddRange(src.UV2);
         foreach (var i in src.Indices) dst.Indices.Add(baseIndex + i);
+    }
+
+    private static void MarkBladeVertices(MeshData mesh, int start)
+    {
+        for (int i = start; i < mesh.VertexCount; i++) mesh.UV2[i * 2 + 1] = 1;
+    }
+
+    private static void MarkOvateBladeVertices(MeshData mesh, int start, Vec3 centre, Vec3 axis, double length)
+    {
+        for (int i = start; i < mesh.VertexCount; i++)
+        {
+            mesh.UV[i * 2] = (float)MathD.Clamp01(0.5 + (mesh.Position(i) - centre).Dot(axis) / length);
+            mesh.UV2[i * 2 + 1] = 1;
+        }
     }
 
     /// <summary>Shallow cup of cambered, thick petals (cheap ThickOvateLeaflet blades) around a small centre disc, staged by
@@ -567,9 +583,12 @@ public static class OrganismMeshes
                     if (up.LengthSq < 1e-8) up = Vec3.Up;
                     var center = f.Point + fwd * (leafSize * 0.65);
                     ulong lSeed = Rng.Mix(seed, (ulong)(k * 4111 + p * 17 + (sgn > 0 ? 1u : 2u)));
-                    ThickOvateLeaflet(tmp, center, fwd, f.Tangent, up, leafSize * 1.3, leafSize * 0.55,
+                    int bladeStart = tmp.VertexCount;
+                    double bladeLength = leafSize * 1.3;
+                    ThickOvateLeaflet(tmp, center, fwd, f.Tangent, up, bladeLength, leafSize * 0.55,
                         leafSize * rng.Range(0.12, 0.22), lSeed,
                         Primitives.Scale(c1, 0.82), Primitives.Mix(c1, c2, rng.Range(0.15, 0.4)));
+                    MarkOvateBladeVertices(tmp, bladeStart, center, fwd, bladeLength);
                 }
             }
             if (rng.NextDouble() < 0.3)

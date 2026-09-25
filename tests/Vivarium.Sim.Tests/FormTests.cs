@@ -91,6 +91,19 @@ public class FormTests
     }
 
     [Fact]
+    public void LeafBladeMarksOnlyBladeVerticesForTipDeformation()
+    {
+        var m = new MeshData();
+        LeafBlade.Build(m, DefaultLeaf() with { PetioleLength = 0.01 }, 42, Green, LightGreen);
+        Assert.Contains(1f, m.UV2.Where((_, i) => i % 2 == 1));
+        Assert.Contains(0f, m.UV2.Where((_, i) => i % 2 == 1));
+        // Blade rows precede the petiole. Every petiole vertex must retain the zero role flag.
+        int bladeVertices = 2 * (8 + 1) * (4 + 1);
+        for (int i = 0; i < bladeVertices; i++) Assert.Equal(1f, m.UV2[i * 2 + 1]);
+        for (int i = bladeVertices; i < m.VertexCount; i++) Assert.Equal(0f, m.UV2[i * 2 + 1]);
+    }
+
+    [Fact]
     public void LeafBladeDefaultDetailIsWithinTriangleBudget()
     {
         var m = new MeshData();
