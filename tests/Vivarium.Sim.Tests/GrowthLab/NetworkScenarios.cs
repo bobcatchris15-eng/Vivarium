@@ -370,7 +370,7 @@ public class NetworkScenarios
 
     // ------------------------------------------------------------------ perf
 
-    [Fact]
+    [Fact, Trait("Speed", "Slow"), Trait("Suite", "Perf")]
     public void NetworkStepIsFastOn600Nodes()
     {
         var prm = new PlasmodiumParams { Beta = 0, LambdaF = 0 };

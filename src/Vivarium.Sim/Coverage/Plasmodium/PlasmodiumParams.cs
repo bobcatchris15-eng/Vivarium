@@ -59,6 +59,38 @@ public sealed class PlasmodiumParams
     /// <summary>Initial mass pool for a newly seeded plasmodium.</summary>
     public double InitialMass { get; init; } = 20.0;
 
+    // ------------------------------------------------------------------ life cycle (§6.1, §6.6)
+
+    /// <summary>Wetness threshold w_s: mean moisture below this for T_s drives Foraging -> Sclerotium.</summary>
+    public double WS { get; init; } = 0.15;
+
+    /// <summary>T_s, seconds of sustained dryness (mean moisture below <see cref="WS"/>) before Sclerotium.</summary>
+    public double TS { get; init; } = 20.0;
+
+    /// <summary>Mean per-cell detritus below this counts as "no food inflow" for the starvation timer.</summary>
+    public double StarveDetritusThreshold { get; init; } = 0.05;
+
+    /// <summary>T_starve, seconds of sustained food shortage before Foraging -> Migrating.</summary>
+    public double TStarve { get; init; } = 15.0;
+
+    /// <summary>T_mig, maximum seconds spent Migrating before committing to Fruiting.</summary>
+    public double TMig { get; init; } = 10.0;
+
+    /// <summary>Mass converted per fruiting body; K = round(mass / MassPerFruitingBody), clamped to available hubs.</summary>
+    public double MassPerFruitingBody { get; init; } = 20.0;
+
+    /// <summary>Minimum spacing between fruiting-body hub sites, metres (§6.6: >= 5 cm).</summary>
+    public double FruitingMinSpacingMeters { get; init; } = 0.05;
+
+    /// <summary>Seconds for a fruiting body to ripen from placement to spore release.</summary>
+    public double FruitingRipenSeconds { get; init; } = 8.0;
+
+    /// <summary>Seconds after fruiting-body placement before the remaining sheet/network collapses to residue.</summary>
+    public double FruitingDecaySeconds { get; init; } = 12.0;
+
+    /// <summary>Seconds for a residue sheet's tube width to fully fade to zero once decay starts.</summary>
+    public double ResidueFadeSeconds { get; init; } = 15.0;
+
     public static double Smoothstep(double lo, double hi, double x)
     {
         if (hi <= lo) return x >= hi ? 1 : 0;
