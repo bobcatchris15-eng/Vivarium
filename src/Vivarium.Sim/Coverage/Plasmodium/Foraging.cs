@@ -236,6 +236,7 @@ public sealed class PlasmodiumColony
     // Reused across steps to avoid per-step list allocations; cleared, not reallocated.
     private readonly List<(int gx, int gz)> _frontBuf = new();
     private readonly List<((int gx, int gz) cell, int ownerId)> _toColoniseBuf = new();
+    private readonly List<(int gx, int gz)> _retractBuf = new();
 
     /// <summary>
     /// One foraging step (§6.4): flags fronts, tries extension into empty 8-neighbours with
@@ -252,6 +253,21 @@ public sealed class PlasmodiumColony
         layer.BeginStep();
 
         attractant.Step(_cellId.Keys, (cx, cz) => SampleDetritusCoarse(env, cx, cz));
+
+        // Retraction (§6.5): cells the transport network has flagged as off-network sheet vacate outright,
+        // before front detection runs, so a retracting cell never gets re-flagged as a front the same step.
+        if (network != null)
+        {
+            _retractBuf.Clear();
+            foreach (var (gx, gz) in _cellId.Keys)
+                if (network.ShouldRetract(gx, gz)) _retractBuf.Add((gx, gz));
+            foreach (var cell in _retractBuf)
+            {
+                _cellId.Remove(cell);
+                layer.SetOcc(cell.gx, cell.gz, 0);
+                ClearFrontFlag(layer, cell.gx, cell.gz);
+            }
+        }
 
         // Front detection first, over the unsorted dictionary (cheap membership tests only); the sort below is
         // over just the front cells, not the whole colony, which is the expensive part on a large sheet.
