@@ -505,7 +505,9 @@ public static class OrganismMeshes
                     double z = off + Math.Sin(th) * reach * f * wav * 0.9;
                     double yy = y + cup * f * f - 0.08 * f * Math.Abs(Math.Sin(th)) + tilt * Math.Sin(th) * f;
                     var pos = new Vec3(Math.Cos(th) * reach * f * wav, yy, z);
-                    var col = Primitives.Mix(bands[Math.Min(ri, rings - 1)], bands[Math.Min(rings - 1, Math.Max(0, ri - 1))], MathD.Clamp01(0.25 + n * 0.15));
+                    int band = Math.Min(ri, bands.Length - 1);
+                    int innerBand = Math.Min(bands.Length - 1, Math.Max(0, ri - 1));
+                    var col = Primitives.Mix(bands[band], bands[innerBand], MathD.Clamp01(0.25 + n * 0.15));
                     m.AddVertex(pos, Vec3.Up, col, 1, f, (double)q / around, 0, 0);
                 }
             }
