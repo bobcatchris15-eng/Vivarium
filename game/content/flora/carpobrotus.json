@@ -39,8 +39,8 @@
     "maturityDays": 9,
     "lifespanDays": 300,
     "nutrientPerBiomass": 0.08,
-    "radiusAtMax": 0.24,
-    "minRadius": 0.04
+    "radiusAtMax": 0.125,
+    "minRadius": 0.03
   },
   "spread": {
     "intervalDays": 6,
@@ -57,19 +57,6 @@
   "litterFraction": 0.65,
   "sheddingPerDay": 0.01,
   "grazingValue": 0.2,
-  "colony": {
-    "cellRadius": 0.05,
-    "frontRate": 0.4,
-    "fillRate": 0.14,
-    "maxHeight": 0.05,
-    "patternMode": "random",
-    "palette": [
-      [0.36, 0.56, 0.4],
-      [0.46, 0.64, 0.42],
-      [0.6, 0.3, 0.32],
-      [0.42, 0.58, 0.38]
-    ]
-  },
   "visual": {
     "shape": "iceplant",
     "color": [
@@ -81,7 +68,7 @@
       0.6, 0.16, 0.2
     ],
     "colorVariance": 0.07,
-    "height": 0.06
+    "height": 0.1
   },
   "tags": [
     "plant",
