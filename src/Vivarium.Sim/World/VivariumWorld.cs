@@ -1,4 +1,5 @@
 using Vivarium.Sim.Content;
+using Vivarium.Sim.Coverage;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
 using Vivarium.Sim.Fauna;
@@ -28,6 +29,8 @@ public sealed class VivariumWorld
     public PropSet Props { get; set; } = new();
     public FloraPopulation Flora { get; }
     public FaunaPopulation Fauna { get; }
+    /// <summary>Fine coverage rasters (moss/lichen/slime), empty by default. See docs/overhaul/growth_models.md.</summary>
+    public CoverageWorld Coverage { get; }
     public GenomeBank Genomes { get; } = new();
     public LineageBook Lineage { get; } = new();
     public EcologyTally Tally { get; set; } = new();
@@ -62,6 +65,7 @@ public sealed class VivariumWorld
         Water = new Hydrology(Grid, Descriptor.Water, Terrain);
         Flora = new FloraPopulation(Domain.Radius + 1);
         Fauna = new FaunaPopulation(Domain.Radius + 1);
+        Coverage = new CoverageWorld(Descriptor.Seed);
         Scheduler = new Scheduler(Clock);
         Clock.BioAcceleration = Descriptor.BioAcceleration;
         Placement = new PropPlacement(this);

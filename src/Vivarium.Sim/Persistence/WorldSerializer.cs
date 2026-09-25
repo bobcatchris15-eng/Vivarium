@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Vivarium.Sim.Content;
+using Vivarium.Sim.Coverage;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
 using Vivarium.Sim.Fauna;
@@ -44,6 +45,27 @@ public sealed class WaterPayload
     public WaterBudget Budget { get; set; } = new();
 }
 
+public sealed class CoverageTilePayload
+{
+    public int Ti { get; set; }
+    public int Tj { get; set; }
+    public string Occ { get; set; } = "";
+    public string B { get; set; } = "";
+    public string W { get; set; } = "";
+    public string Age { get; set; } = "";
+    public string Dorm { get; set; } = "";
+    public string Flags { get; set; } = "";
+    public string D2E { get; set; } = "";
+}
+
+public sealed class CoverageLayerPayload
+{
+    public int Id { get; set; }
+    public List<CoverageTilePayload> Tiles { get; set; } = new();
+}
+
+public sealed class CoveragePayload { public List<CoverageLayerPayload> Layers { get; set; } = new(); }
+
 public sealed class FloraPayload { public List<FloraIndividual> Items { get; set; } = new(); }
 public sealed class FaunaPayload { public List<FaunaIndividual> Items { get; set; } = new(); }
 public sealed class GeneticsPayload
@@ -58,7 +80,7 @@ public sealed class GeneticsPayload
 /// </summary>
 public static class WorldSerializer
 {
-    public static readonly string[] PayloadOrder = { "world", "fields", "water", "flora", "fauna", "genetics" };
+    public static readonly string[] PayloadOrder = { "world", "fields", "water", "coverage", "flora", "fauna", "genetics" };
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -88,6 +110,19 @@ public static class WorldSerializer
         var depth = new double[w.Grid.DomainCells.Length];
         for (int k = 0; k < depth.Length; k++) depth[k] = w.Water.Depth[w.Grid.DomainCells[k]];
         p["water"] = Bytes(new WaterPayload { Depth = Pack(depth), Budget = w.Water.Budget });
+        p["coverage"] = Bytes(new CoveragePayload
+        {
+            Layers = w.Coverage.All.Select(layer => new CoverageLayerPayload
+            {
+                Id = (int)layer.Id,
+                Tiles = layer.ExportTiles().Select(t => new CoverageTilePayload
+                {
+                    Ti = t.Ti, Tj = t.Tj,
+                    Occ = PackBytes(t.Occ), B = PackFloats(t.B), W = PackBytes(t.W),
+                    Age = PackUShorts(t.Age), Dorm = PackBytes(t.Dorm), Flags = PackBytes(t.Flags), D2E = PackBytes(t.D2E),
+                }).ToList(),
+            }).ToList(),
+        });
         p["flora"] = Bytes(new FloraPayload { Items = w.Flora.Items });
         p["fauna"] = Bytes(new FaunaPayload { Items = w.Fauna.Items });
         p["genetics"] = Bytes(new GeneticsPayload { Genomes = w.Genomes.Ordered().ToList(), Lineage = w.Lineage.Ordered().ToList() });
@@ -152,6 +187,20 @@ public static class WorldSerializer
             w.Water.Depth[w.Grid.DomainCells[k]] = depth[k];
         }
         w.Water.Budget = wa.Budget ?? new WaterBudget();
+
+        var cp = Read<CoveragePayload>(payloads, "coverage");
+        foreach (var lp in cp.Layers ?? new())
+        {
+            var layer = w.Coverage.ById((CoverageLayerId)lp.Id);
+            layer.Clear();
+            foreach (var tp in lp.Tiles)
+            {
+                layer.ImportTile(tp.Ti, tp.Tj,
+                    UnpackBytes(tp.Occ, "coverage occ"), UnpackFloats(tp.B, "coverage biomass"), UnpackBytes(tp.W, "coverage water"),
+                    UnpackUShorts(tp.Age, "coverage age"), UnpackBytes(tp.Dorm, "coverage dormancy"),
+                    UnpackBytes(tp.Flags, "coverage flags"), UnpackBytes(tp.D2E, "coverage d2e"));
+            }
+        }
 
         foreach (var f in Read<FloraPayload>(payloads, "flora").Items.OrderBy(f => f.Id.Value)) w.Flora.Add(f);
         foreach (var f in Read<FaunaPayload>(payloads, "fauna").Items.OrderBy(f => f.Id.Value)) w.Fauna.Add(f);
@@ -234,6 +283,46 @@ public static class WorldSerializer
         catch (FormatException) { throw new InvalidDataException($"{what} data is not valid base64"); }
         if (bytes.Length % 8 != 0) throw new InvalidDataException($"{what} data has a truncated length");
         var values = new double[bytes.Length / 8];
+        Buffer.BlockCopy(bytes, 0, values, 0, bytes.Length);
+        return values;
+    }
+
+    public static string PackBytes(byte[] values) => Convert.ToBase64String(values);
+
+    public static byte[] UnpackBytes(string s, string what)
+    {
+        try { return Convert.FromBase64String(s); }
+        catch (FormatException) { throw new InvalidDataException($"{what} data is not valid base64"); }
+    }
+
+    public static string PackFloats(float[] values)
+    {
+        var bytes = new byte[values.Length * 4];
+        Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+        return Convert.ToBase64String(bytes);
+    }
+
+    public static float[] UnpackFloats(string s, string what)
+    {
+        var bytes = UnpackBytes(s, what);
+        if (bytes.Length % 4 != 0) throw new InvalidDataException($"{what} data has a truncated length");
+        var values = new float[bytes.Length / 4];
+        Buffer.BlockCopy(bytes, 0, values, 0, bytes.Length);
+        return values;
+    }
+
+    public static string PackUShorts(ushort[] values)
+    {
+        var bytes = new byte[values.Length * 2];
+        Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+        return Convert.ToBase64String(bytes);
+    }
+
+    public static ushort[] UnpackUShorts(string s, string what)
+    {
+        var bytes = UnpackBytes(s, what);
+        if (bytes.Length % 2 != 0) throw new InvalidDataException($"{what} data has a truncated length");
+        var values = new ushort[bytes.Length / 2];
         Buffer.BlockCopy(bytes, 0, values, 0, bytes.Length);
         return values;
     }
