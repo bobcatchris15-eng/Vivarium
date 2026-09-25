@@ -333,4 +333,64 @@ public class WorldTests
             Assert.Equal(d1, d2);
         }
     }
+    [Fact]
+    public void LogMeshHasOrganicBarkSplinteredEndsAndProgression()
+    {
+        // 1. Splintered ends rather than flat end caps (non-flat X distribution at log ends)
+        var m0 = PropMeshes.Log(42, 2.0, 0.2, 0);
+        var end0Vertices = new List<double>();
+        var end1Vertices = new List<double>();
+        for (int i = 0; i < m0.VertexCount; i++)
+        {
+            var p = m0.Position(i);
+            if (p.X < -0.90) end0Vertices.Add(p.X);
+            if (p.X > 0.90) end1Vertices.Add(p.X);
+        }
+        Assert.NotEmpty(end0Vertices);
+        Assert.NotEmpty(end1Vertices);
+        double end0Range = end0Vertices.Max() - end0Vertices.Min();
+        double end1Range = end1Vertices.Max() - end1Vertices.Min();
+        Assert.True(end0Range > 0.04, $"End 0 should have splintered 3D fracture relief, got {end0Range:0.000} m");
+        Assert.True(end1Range > 0.04, $"End 1 should have splintered 3D fracture relief, got {end1Range:0.000} m");
+
+        // 2. Decay progression:
+        // Decay 2: peeling fissures exist
+        var m2 = PropMeshes.Log(42, 2.0, 0.2, 2);
+        bool hasPeelingFissures = false;
+        for (int i = 0; i < m2.VertexCount; i++)
+        {
+            if (m2.UV2[i * 2] == 2 && m2.UV2[i * 2 + 1] == 1 && Math.Abs(m2.Position(i).X) < 0.85)
+            {
+                hasPeelingFissures = true;
+                break;
+            }
+        }
+        Assert.True(hasPeelingFissures, "Decay 2 log should exhibit peeling fissures");
+
+        // Decay 3: hollowed rotted heartwood cavity
+        var m3 = PropMeshes.Log(42, 2.0, 0.2, 3);
+        bool hasHollowCavity = false;
+        for (int i = 0; i < m3.VertexCount; i++)
+        {
+            if (m3.UV2[i * 2] == 3 && m3.UV2[i * 2 + 1] == 2)
+            {
+                hasHollowCavity = true;
+                break;
+            }
+        }
+        Assert.True(hasHollowCavity, "Decay 3 log should have hollowed rotted heartwood cavity");
+
+        // 3. Knot swelling: trunk has radial expansion at knots
+        double maxRadius = 0;
+        for (int i = 0; i < m0.VertexCount; i++)
+        {
+            var p = m0.Position(i);
+            if (Math.Abs(p.X) < 0.6)
+            {
+                double r = Math.Sqrt(p.Y * p.Y + p.Z * p.Z);
+                if (r > maxRadius) maxRadius = r;
+            }
+        }
+        Assert.True(maxRadius > 0.22, $"Knot swelling should elevate radius above nominal 0.20, got {maxRadius:0.000}");
+    }
 }
