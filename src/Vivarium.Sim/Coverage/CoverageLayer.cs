@@ -42,6 +42,21 @@ public sealed class CoverageTile
     public bool Active;
     public int EmptySteps;
 
+    // ---- MatRules perf state (docs/overhaul/growth_models.md §1.5, §10): persistent rim set and steady-tile
+    // throttle, maintained incrementally by the growth rules on colonise/death rather than rescanned every step.
+    /// <summary>Local indices of occupied cells that touch an empty or differently-occupied neighbour — the
+    /// only cells growth rules need to consider for spread/competition. Maintained incrementally.</summary>
+    public HashSet<int> Rim = new();
+    /// <summary>False until this tile's <see cref="Rim"/> has had its one-time full scan.</summary>
+    public bool RimReady;
+    /// <summary>True once this tile's biomass/water/dormancy has reached equilibrium: physiology then runs
+    /// only every 4th step (with a scaled dt) instead of every step.</summary>
+    public bool Steady;
+    public int SkippedPhysiologySteps;
+    /// <summary>Representative (tile-centre) moisture last seen, used to detect drift past a small tolerance
+    /// while <see cref="Steady"/>, so a steady tile still wakes up promptly if its environment moves.</summary>
+    public double EnvMoistureCache = double.NaN;
+
     public CoverageTile(int ti, int tj) { Ti = ti; Tj = tj; }
 
     public bool IsEmpty()
