@@ -64,7 +64,15 @@ public sealed class CoverageLayerPayload
     public List<CoverageTilePayload> Tiles { get; set; } = new();
 }
 
-public sealed class CoveragePayload { public List<CoverageLayerPayload> Layers { get; set; } = new(); }
+public sealed class CoveragePayload
+{
+    public List<CoverageLayerPayload> Layers { get; set; } = new();
+    /// <summary>Per environment-grid-cell "last disturbed" time (<see cref="SubstrateStability"/>), packed doubles
+    /// in <c>DomainCells</c> order. Null in saves made before G3: freshly loaded worlds default to "never disturbed".</summary>
+    public string? Stability { get; set; }
+    /// <summary>Per environment-grid-cell moisture addend (<see cref="MoistureBonusField"/>), same layout. Null = all zero.</summary>
+    public string? MoistureBonus { get; set; }
+}
 
 public sealed class FloraPayload { public List<FloraIndividual> Items { get; set; } = new(); }
 public sealed class FaunaPayload { public List<FaunaIndividual> Items { get; set; } = new(); }
@@ -122,6 +130,8 @@ public static class WorldSerializer
                     Age = PackUShorts(t.Age), Dorm = PackBytes(t.Dorm), Flags = PackBytes(t.Flags), D2E = PackBytes(t.D2E),
                 }).ToList(),
             }).ToList(),
+            Stability = Pack(CoverageEnvironment.StabilityOf(w).ExportDomainValues()),
+            MoistureBonus = Pack(CoverageEnvironment.MoistureBonusOf(w).ExportDomainValues()),
         });
         p["flora"] = Bytes(new FloraPayload { Items = w.Flora.Items });
         p["fauna"] = Bytes(new FaunaPayload { Items = w.Fauna.Items });
@@ -201,6 +211,8 @@ public static class WorldSerializer
                     UnpackBytes(tp.Flags, "coverage flags"), UnpackBytes(tp.D2E, "coverage d2e"));
             }
         }
+        if (cp.Stability != null) CoverageEnvironment.StabilityOf(w).ImportDomainValues(Unpack(cp.Stability, "substrate stability"));
+        if (cp.MoistureBonus != null) CoverageEnvironment.MoistureBonusOf(w).ImportDomainValues(Unpack(cp.MoistureBonus, "moisture bonus"));
 
         foreach (var f in Read<FloraPayload>(payloads, "flora").Items.OrderBy(f => f.Id.Value)) w.Flora.Add(f);
         foreach (var f in Read<FaunaPayload>(payloads, "fauna").Items.OrderBy(f => f.Id.Value)) w.Fauna.Add(f);

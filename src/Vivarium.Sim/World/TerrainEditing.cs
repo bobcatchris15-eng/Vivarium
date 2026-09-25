@@ -1,5 +1,6 @@
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Content;
+using Vivarium.Sim.Coverage;
 
 namespace Vivarium.Sim.World;
 
@@ -54,6 +55,8 @@ public static class TerrainEditing
         w.Water.RefreshBed(hf);
         w.Placement.Reseat(centre, radius);
         w.Fields.MarkLightStale();
+        // sculpting disturbs the ground: crusts and stable-soil classification reset under the brush (§2)
+        CoverageEnvironment.StabilityOf(w).Reset(centre, radius, w.Clock.SimSeconds);
         foreach (var f in w.Fauna.Items)
         {
             if (f.Grabbed || Vec2.Distance(f.PositionXZ, centre) > radius) continue;
