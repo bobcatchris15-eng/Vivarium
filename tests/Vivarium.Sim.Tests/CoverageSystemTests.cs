@@ -20,6 +20,48 @@ public class CoverageSystemTests
     }
 
     [Fact]
+    public void CoverageSpeciesSeedWithoutFloraIndividuals()
+    {
+        var w = TestUtil.DefaultWorld();
+        foreach (var id in MossSpecies.Concat(LichenSpecies))
+            Assert.True(w.CoverageSystem.CoveredArea(id) > 0, $"{id} has no initial coverage");
+        Assert.DoesNotContain(w.Flora.Items, f => w.Content.FloraById(f.SpeciesId)?.IsCoverageSpecies == true);
+    }
+
+    [Fact]
+    public void OccupantLookupResolvesLayerSpecificSpecies()
+    {
+        var w = TestUtil.DefaultWorld();
+        foreach (var layer in new[] { w.Coverage.Mat, w.Coverage.Crust })
+        foreach (var tile in layer.Tiles)
+        for (int i = 0; i < CoverageTile.N; i++)
+        {
+            if (tile.Occ[i] == 0) continue;
+            var id = w.CoverageSystem.SpeciesId(layer.Id, tile.Occ[i]);
+            Assert.NotNull(id);
+            Assert.True(w.Content.FloraById(id)?.IsCoverageSpecies);
+        }
+        Assert.Null(w.CoverageSystem.SpeciesId(CoverageLayerId.Mat, 0));
+        Assert.Null(w.CoverageSystem.SpeciesId(CoverageLayerId.Plasmodium, 1));
+    }
+
+    [Fact]
+    public void InitialLichenCellsRespectTheirSubstrate()
+    {
+        var w = TestUtil.DefaultWorld();
+        foreach (var t in w.Coverage.Crust.Tiles)
+        for (int li = 0; li < CoverageTile.N; li++)
+        {
+            if (t.Occ[li] == 0) continue;
+            int gx = t.Ti * CoverageSpec.TileEdge + li % CoverageSpec.TileEdge;
+            int gz = t.Tj * CoverageSpec.TileEdge + li / CoverageSpec.TileEdge;
+            var e = w.CoverageSystem.Sample(gx, gz);
+            Assert.True(e.Substrate is CoverageSubstrate.Rock or CoverageSubstrate.Log or CoverageSubstrate.Bark or CoverageSubstrate.StableSoil or CoverageSubstrate.Gravel,
+                $"initial lichen cell ({gx},{gz}) on {e.Substrate}");
+        }
+    }
+
+    [Fact]
     public void AllSevenCoverageSpeciesHaveCoveredAreaAfterSixDays()
     {
         var w = RunDefault(6);

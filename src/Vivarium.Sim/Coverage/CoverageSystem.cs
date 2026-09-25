@@ -175,12 +175,23 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
             for (int dx = -radiusCells; dx <= radiusCells; dx++)
             {
                 if (dx * dx + dz * dz > radiusCells * radiusCells) continue;
-                layer.SetCell(gx0 + dx, gz0 + dz, occ, (float)seedB, seedW, 0, 0, 0, 0);
+                int gx = gx0 + dx, gz = gz0 + dz;
+                if (!suitable(CellCentre(gx, gz)) || layer.GetOcc(gx, gz) != 0) continue;
+                layer.SetCell(gx, gz, occ, (float)seedB, seedW, 0, 0, 0, 0);
             }
         }
     }
 
     // ------------------------------------------------------------------ queries (stats/catalog, §7, §9)
+
+    /// <summary>Resolves an occupied coverage cell to its content species. Occupant slots are local to each
+    /// layer; zero and unsupported layers have no species.</summary>
+    public string? SpeciesId(CoverageLayerId layer, byte occupant) => layer switch
+    {
+        CoverageLayerId.Mat => _matSpeciesId.GetValueOrDefault(occupant),
+        CoverageLayerId.Crust => _lichenSpeciesId.GetValueOrDefault(occupant),
+        _ => null,
+    };
 
     /// <summary>Total covered area (m²) for a species id, across whichever coverage layer it occupies. 0 for a
     /// non-coverage species or one with nothing grown yet.</summary>

@@ -181,7 +181,7 @@ public static class LichenRules
         // a lobed outer boundary instead of a porous interior, which the contiguity gate alone does not guarantee
         // once a lobe closes back on itself. ----
         foreach (var sp in species)
-            if (sp.Form == LichenForm.Foliose) FillInteriorHoles(layer, sp);
+            if (sp.Form == LichenForm.Foliose) FillInteriorHoles(layer, env, sp);
 
         layer.Advance();
     }
@@ -191,7 +191,7 @@ public static class LichenRules
     /// cell not reached is enclosed by this species and gets colonised. Cheap for a single growth-lab colony;
     /// capped to avoid runaway cost if a species ever spans a huge area.
     /// </summary>
-    private static void FillInteriorHoles(CoverageLayer layer, LichenParams sp)
+    private static void FillInteriorHoles(CoverageLayer layer, ILichenEnvSource env, LichenParams sp)
     {
         int minX = int.MaxValue, maxX = int.MinValue, minZ = int.MaxValue, maxZ = int.MinValue;
         bool any = false;
@@ -236,6 +236,7 @@ public static class LichenRules
             int idx = (z - minZ) * w + (x - minX);
             if (visited[idx]) continue;         // reached from outside: not a hole
             if (layer.GetOcc(x, z) != 0) continue; // occupied (by this or another species): nothing to fill
+            if (!sp.AllowsSubstrate(env.Sample(x, z).Substrate)) continue;
             layer.SetCell(x, z, sp.OccSlot, (float)sp.SeedBiomass, 0, 0, 0, 0, 0);
         }
     }
