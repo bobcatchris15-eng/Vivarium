@@ -211,6 +211,8 @@ public partial class SmokeRunner
             double area = count * CoverageSpec.CellSize * CoverageSpec.CellSize;
             double dist = Math.Max(0.1, CoverageSpec.TileWorldSize * 0.9);
             list.Add(Orbit("species_" + sp.Id, "species", Ground(center), (float)dist, 35));
+            if (sp.Lichen != null)
+                list.Add(Orbit("detail_" + sp.Id, "species_detail", Ground(center), 0.22f, 25));
             coverageHubs.Add((center, area, sp.Id));
         }
         if (coverageHubs.Count > 0)
