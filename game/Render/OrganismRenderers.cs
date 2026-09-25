@@ -259,33 +259,23 @@ public partial class FloraRenderer : Node3D
             }
     }
 
+    // World-space slack added around the bounding sphere before the frustum test. The instance list is only
+    // rebuilt every 0.4s (see _Process), so a plant that is off-frustum now but would rotate into view before
+    // the next rebuild must still test as visible; this margin absorbs a normal camera turn across that window.
+    private const float FrustumSafetyMargin = 2.0f;
+
     private bool FloraVisible(Camera3D camera, Vector3 basePos, float radius, float height)
     {
-        // Six conservative probes keep edge-of-frame leaves from popping while still rejecting whole plants that
-        // are genuinely outside the frustum. Distance itself never reduces the mesh.
+        // Occlusion is intentionally never tested here: a plant that is only partly behind a log/rock must never
+        // be culled, since any ray-based "opaque in front" test flips on/off with sub-pixel camera motion and
+        // reads as pop-in/out. Frustum membership is the only rejection criterion, tested against an inflated
+        // bounding sphere so genuinely off-screen plants are still dropped.
         float mid = Math.Max(height * 0.5f, 0.01f);
-        var probes = new[]
-        {
-            basePos,
-            basePos + Vector3.Up * Math.Max(height, 0.02f),
-            basePos + new Vector3(radius, mid, 0),
-            basePos + new Vector3(-radius, mid, 0),
-            basePos + new Vector3(0, mid, radius),
-            basePos + new Vector3(0, mid, -radius),
-        };
-        bool inFrustum = false;
-        foreach (var p in probes) if (camera.IsPositionInFrustum(p)) { inFrustum = true; break; }
-        if (!inFrustum) return false;
-
-        // Cull only when a substantial opaque surface is clearly in front of the whole plant. The generous
-        // silhouette allowance deliberately biases toward drawing when there is any doubt.
-        var target = basePos + Vector3.Up * mid;
-        var delta = target - camera.GlobalPosition;
-        float distance = delta.Length();
-        if (distance < 0.25f) return true;
-        double hit = Vivarium.Sim.Tools.Selection.RayOpaque(_w, Bridge.S(camera.GlobalPosition), Bridge.S(delta / distance), distance);
-        double allowance = Math.Max(0.05, Math.Max(radius, height) * 0.75);
-        return double.IsInfinity(hit) || hit >= distance - allowance;
+        var center = basePos + Vector3.Up * mid;
+        float sphereRadius = Math.Max(radius, mid) + FrustumSafetyMargin;
+        foreach (var plane in camera.GetFrustum())
+            if (plane.DistanceTo(center) < -sphereRadius) return false;
+        return true;
     }
 
     private static (List<Transform3D> T, List<Color> Tint, List<Color> C) Get(Dictionary<string, (List<Transform3D>, List<Color>, List<Color>)> d, string k)
