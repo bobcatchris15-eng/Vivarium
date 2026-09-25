@@ -21,7 +21,7 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | p1a | Form kernel + FormTests | DONE | PASS 15 tests, re-verified |
 | p1b | roundleaf/pairedleaf migration | DONE a2 | watercress/bacopa improved; giant flat pads = colony instance scale (XZ=r, Y=colony MaxHeight) squashing leaves -> fix in gm |
 | p1c | herb/trifoliate + flower cup | PARTIAL | 2026-09-25 resume: 72-tri two-sided herb leaves + smaller flower cups; FormTests 24/24, reference 40/40. Herb is green again but flowers still need an art pass at interaction distance. Capture: build/reference/p1c-resume-final. |
-| p1d | 12 variants + shader seed deform + reference/fps | QUEUED | — |
+| p1d | 12 variants + shader seed deform + reference/fps | MERGED 9d416ae + 7455b73 | Five migrated species, blade-only seed deformation; Geometry 25/25; 40-scene reference and independent review pass. Combined visual art and isolated FPS impact still to judge. |
 | p2 | growth sim — spec docs/overhaul/growth_models.md §13 (G1..G10, P3) | IN PROGRESS | — |
 | g12 | G1+G2 | DONE | PASS 26 tests re-verified, merged b791069 |
 | g3 | G3 | DONE | PASS 58 re-verified, merged 9a37c31 |
@@ -29,7 +29,7 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | g5a | lichen rules + lab | DONE a2 | merged; 3.4ms dense. TUNE LATER: foliose reads coral/DLA not radial rosette |
 | g6 | plasmodium front + lab | DONE a3 (partial) | merged; fan+gradient OK, 0.97ms. Fusion scenario NOT demonstrated (seeds never meet) -> carried into G7 acceptance. Hit 60-turn limit. |
 | g7 | Tero network + fusion | DONE | merged; two_food 1-trunk, maze=BFS, fusion 2->1; 2.4ms/600 nodes (budget relaxed to 3ms Debug). TUNE: retraction leaves lattice chevron shapes |
-| gm-a | vascular groundcovers -> plain plants | COMMITTED on task/gma, merge after p1c | suites PASS; counts unmeasured -> check in next reference |
+| gm-a | vascular groundcovers -> plain plants | MERGED f9d7d95 | Bootstrap 10/10; reference 40 scenes. Flora count 899→602 at 6 bio-days; `species_dichondra` still has oversized pale foreground pads, so S2b form/scale work remains. |
 | gm-b | monolith | SPLIT | refused SCOPE_TOO_LARGE, no edits |
 | gm-b1 | content mat/lichen blocks + CoverageSystem + seeding + scheduler; flora skips moss/lichen | WIP COMMITTED task/gmb f56a578 | builds; two-day determinism and seven-species six-day establishment tests pass; remaining integration tests and visual check pending |
 | g8a | slime lifecycle rules + lab | DONE | merged 5d84b4f; starve->migrate->fruit OK; dry sclerotium OK but seed never grows; residue rectangle odd (tune in P3) |
@@ -80,3 +80,10 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 - Main: reduced herb leaf detail from 128 to 72 triangles, retained both faces and nondegenerate geometry, and reduced flower-head size from 0.32 to 0.12 so petals no longer cover the crown. `FormTests` 24/24; `dotnet build game/Vivarium.csproj` clean; reference returned `VIVARIUM_REFERENCE_OK` for 40 scenes. `species_ornamental_herb` now shows a green crown, though its flowers remain visually small. Sim digest matches the earlier p1c capture.
 - `task/gma` is committed in its worktree and awaits integration after the remaining p1c art review.
 - `task/gmb` coverage integration is preserved at `f56a578`. It compiles; its two-day determinism and seven-species six-day establishment tests pass. Remaining integration tests and visual check are pending; do not merge yet.
+
+## Full-overhaul continuation (2026-09-25)
+- User clarified that the requested outcome is the *entire* visual overhaul, S1–S7. Durable instructions: `.clanker/HUMAN_HANDOFF.md` and `.clanker/CURRENT_WORK.md`.
+- `gm-a` was independently reviewed, cherry-picked, and captured at `build/reference/gma-merged`. The scene shows smaller but still pale oversized dichondra pads; do not treat the broadleaf art as complete.
+- Main populated perf at `build/perf/overhaul-current/perf_report.json`: mean 43.1 FPS, min second 31, p95 frame 51.1 ms, p99 140.5 ms, worst 196.24 ms, 523/3747 frames over 33 ms. Profiler evidence points to synchronous Flora rebuild hitches. RayOpaque's terrain march currently ignores the caller's near max-distance until after marching (Selection.cs); bounded fix and re-probe underway. Paired runs remain necessary for FPS comparisons.
+- `8f8bede` bounds terrain visibility marching by the caller's ray distance; regression and game build pass. The later absolute probe at `build/perf/bounded-ray` recorded mean 51.7 FPS, min second 40, p95 41.51 ms, p99 81.55 ms, 358/3747 frames over 33 ms. Groundcover migration changed the population between probes, so these are not an isolated before/after attribution.
+- S1 variation commits `9d416ae` and `7455b73` merged after independent review fixed stem/petiole deformation. Combined capture: `build/reference/s1-combined` (40 scenes). Flat silhouettes and oversized groundcover pads remain; S1 geometry foundations have landed, but photoreal visual acceptance remains open.
