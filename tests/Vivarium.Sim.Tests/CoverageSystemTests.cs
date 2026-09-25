@@ -20,6 +20,20 @@ public class CoverageSystemTests
     }
 
     [Fact]
+    public void DirectEstablishRejectsCoverageSpeciesWithoutCreatingIndividuals()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        int before = w.Flora.Count;
+        foreach (var id in new[] { "carpet_moss", "crust_lichen" })
+        {
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                w.FloraSystem.Establish(w.Content.FloraOrThrow(id), Core.Vec2.Zero, "test"));
+            Assert.Contains("coverage", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(before, w.Flora.Count);
+        }
+    }
+
+    [Fact]
     public void CoverageSpeciesSeedWithoutFloraIndividuals()
     {
         var w = TestUtil.DefaultWorld();

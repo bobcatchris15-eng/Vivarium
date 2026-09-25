@@ -44,14 +44,15 @@ public class FloraTests
     {
         var w = TestUtil.FlatWorld();
         TestUtil.Condition(w, 0.7, 0.5);
-        var f = w.FloraSystem.Establish(Sp("carpet_moss"), new Vec2(0.5, 0.5), "test");
+        var sp = Sp("creeping_groundcover");
+        var f = w.FloraSystem.Establish(sp, new Vec2(0.5, 0.5), "test");
         Assert.Equal(EntityKind.Flora, f.Id.Kind);
-        Assert.Equal("carpet_moss", f.SpeciesId);
-        Assert.Equal(FloraStage.Juvenile, f.Stage(Sp("carpet_moss")));
+        Assert.Equal(sp.Id, f.SpeciesId);
+        Assert.Equal(FloraStage.Juvenile, f.Stage(sp));
         RunFlora(w, 8);
-        Assert.Equal(FloraStage.Mature, f.Stage(Sp("carpet_moss")));
+        Assert.Equal(FloraStage.Mature, f.Stage(sp));
         Assert.True(f.Age > 0 && f.Biomass > 0 && f.Health > 0);
-        Assert.True(f.Radius(Sp("carpet_moss")) > Sp("carpet_moss").MinRadius);
+        Assert.True(f.Radius(sp) > sp.MinRadius);
     }
 
     [Fact] // t-067
@@ -80,7 +81,7 @@ public class FloraTests
         {
             var w = TestUtil.FlatWorld();
             TestUtil.Condition(w, 0.7, 1.5);
-            var f = w.FloraSystem.Establish(Sp("carpet_moss"), Vec2.Zero, "t");
+            var f = w.FloraSystem.Establish(Sp("creeping_groundcover"), Vec2.Zero, "t");
             f.LastSpreadAge = double.MaxValue / 4; // no propagation, isolate growth
             int steps = (int)(4 * 86400 / dt);
             for (int i = 0; i < steps; i++) { w.FloraSystem.Step(dt); f.LastSpreadAge = f.Age; }
@@ -89,7 +90,7 @@ public class FloraTests
         double fine = Grow(600), coarse = Grow(3600), veryCoarse = Grow(4 * 3600);
         Assert.InRange(coarse / fine, 0.97, 1.03);
         Assert.InRange(veryCoarse / fine, 0.95, 1.05);
-        Assert.True(fine <= Sp("carpet_moss").MaxBiomass);
+        Assert.True(fine <= Sp("creeping_groundcover").MaxBiomass);
     }
 
     [Fact] // t-069
@@ -200,7 +201,7 @@ public class FloraTests
         {
             var w = TestUtil.FlatWorld();
             TestUtil.Condition(w, 0.68, 1.0);
-            var sp = Sp("carpet_moss");
+            var sp = Sp("creeping_groundcover");
             var f = w.FloraSystem.Establish(sp, Vec2.Zero, "t");
             if (crowded)
                 for (int k = 0; k < 6; k++) w.FloraSystem.Establish(sp, Vec2.FromAngle(k * Math.PI / 3) * 0.2, "t", sp.MaxBiomass);

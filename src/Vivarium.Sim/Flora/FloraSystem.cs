@@ -524,6 +524,8 @@ public sealed class FloraSystem
 
     public FloraIndividual Establish(FloraSpeciesDef sp, Vec2 q, string cause, double? biomass = null)
     {
+        if (sp.IsCoverageSpecies)
+            throw new InvalidOperationException($"{sp.Id} grows on the coverage layers and cannot be established as a FloraIndividual.");
         var id = _w.Ids.Next(EntityKind.Flora);
         var rng = Rng.Keyed(_w.Seed, "flora.establish", id.Value);
         var f = new FloraIndividual
