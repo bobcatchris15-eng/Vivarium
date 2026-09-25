@@ -190,8 +190,8 @@ public partial class SmokeRunner : Node
         Check("place log", r?.Ok == true, r?.Message ?? "");
 
         await Press("Tool_IntroduceFlora");
-        tools.FloraSpecies = "carpet_moss";
-        var mossSpot = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).First(p => W.FloraSystem.CanEstablish(W.Content.FloraOrThrow("carpet_moss"), p, out _));
+        tools.FloraSpecies = "creeping_groundcover";
+        var mossSpot = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).First(p => W.FloraSystem.CanEstablish(W.Content.FloraOrThrow("creeping_groundcover"), p, out _));
         int flora = W.Flora.Count;
         Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(mossSpot));
