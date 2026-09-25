@@ -6,7 +6,7 @@
   ./scripts/verify.ps1 -Suite World,Hydrology  # targeted
   ./scripts/verify.ps1 -Suite All -IncludeSlow # everything incl. multi-week soaks and render tour
 Sim suites: Bootstrap World Camera Time Fields Hydrology Flora Fauna Genetics Ecology Tools Persistence Perf Integration
-Godot suites: Boot (headless) Smoke (headless UI smoke + reload) Render (windowed screenshot tour) Package (export + release smoke)
+Godot suites: Boot (headless) Smoke (headless UI smoke + reload) Render (windowed screenshot tour) Reference (windowed fixed-seed reference scenes -> build\reference\latest, compared against build\reference\baseline-v0.1.2 when present) Package (export + release smoke)
 #>
 param(
     [string[]]$Suite = @('All'),
@@ -19,7 +19,7 @@ Set-Location $RepoRoot
 $Suite = @($Suite | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 $simSuites = 'Bootstrap','World','Camera','Time','Fields','Hydrology','Flora','Fauna','Genetics','Ecology','Tools','Persistence','Perf','Integration'
-$godotSuites = 'Boot','Smoke','Render','Package'
+$godotSuites = 'Boot','Smoke','Render','Reference','Package'
 $all = $Suite -contains 'All'
 $selectedSim = if ($all) { $simSuites } else { $Suite | Where-Object { $simSuites -contains $_ } }
 $selectedGodot = if ($all) { @('Boot','Smoke') + $(if ($IncludeSlow) { 'Render','Package' } else { @() }) } else { $Suite | Where-Object { $godotSuites -contains $_ } }
@@ -79,6 +79,15 @@ foreach ($s in $selectedGodot) {
             $r = Invoke-Timed $godot @('--path',$game,'--','--render-test',$d) $GodotTimeoutSec "$d\render"
             $shaderErrors = ($r.Err + $r.Out) -split "`n" | Where-Object { $_ -match 'SHADER ERROR|SCRIPT ERROR|Failed to load' }
             Record 'Render' ($r.ExitCode -eq 0 -and -not $shaderErrors) "exit $($r.ExitCode), $(@($shaderErrors).Count) shader/script errors, screenshots in build\verify\render"
+        }
+        'Reference' {
+            $root = Join-Path (Split-Path $out -Parent) 'reference'
+            $d = Join-Path $root 'latest'; Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force $d | Out-Null
+            $r = Invoke-Timed $godot @('--path',$game,'--','--reference',$d) $GodotTimeoutSec "$deference"
+            $shaderErrors = ($r.Err + $r.Out) -split "`n" | Where-Object { $_ -match 'SHADER ERROR|SCRIPT ERROR|Failed to load' }
+            $base = Join-Path $root 'baseline-v0.1.2'
+            if ($r.ExitCode -eq 0 -and (Test-Path $base)) { & (Join-Path $PSScriptRoot 'compare-reference.ps1') -Before $base -After $d -Out (Join-Path $root 'compare') | Out-Host }
+            Record 'Reference' ($r.ExitCode -eq 0 -and -not $shaderErrors) "exit $($r.ExitCode), $(@($shaderErrors).Count) shader/script errors, scenes in $d, compare in $root\compare"
         }
         'Package' {
             & (Join-Path $PSScriptRoot 'export.ps1') | Out-Host

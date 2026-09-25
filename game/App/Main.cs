@@ -11,7 +11,7 @@ namespace Vivarium.Game.App;
 
 /// <summary>
 /// Entry point. Normal launch continues the autosaved vivarium (or grows the default one). Command-line modes
-/// (after "--"): --boot-test, --render-test DIR, --smoke DIR, --smoke-reload DIR.
+/// (after "--"): --boot-test, --render-test DIR, --smoke DIR, --smoke-reload DIR, --perf-test DIR, --reference DIR; optional --preset NAME.
 /// </summary>
 public partial class Main : Node3D
 {
@@ -43,7 +43,7 @@ public partial class Main : Node3D
         if (ArgAfter("--licenses") is { } licFile) { WriteLicenses(licFile); GetTree().Quit(0); return; }
 
         var settings = UserSettings.Load();
-        string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test");
+        string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference");
         if (testDir != null) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
 
         Session = new GameSession { Name = "Session" };
@@ -52,10 +52,10 @@ public partial class Main : Node3D
 
         if (testDir != null)
         {
-            var mode = UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : SmokeRunner.Mode.Render;
+            var mode = UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
             var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode };
             AddChild(runner);
-            if (mode != SmokeRunner.Mode.Reload) Session.StartWorld(Session.CreateWorld(content.PresetOrThrow("default")));
+            if (mode != SmokeRunner.Mode.Reload) Session.StartWorld(Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default")));
             return;
         }
 
@@ -67,7 +67,7 @@ public partial class Main : Node3D
             Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + r.Message);
             Session.Ui.Toast("Your last autosave could not be loaded (" + r.Message + "); growing a fresh vivarium.", true);
         }
-        Session.StartWorld(Session.CreateWorld(content.PresetOrThrow("default")));
+        Session.StartWorld(Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default")));
     }
 
     public static string? ArgAfter(string flag)

@@ -23,7 +23,7 @@ namespace Vivarium.Game.App;
 /// </summary>
 public partial class SmokeRunner : Node
 {
-    public enum Mode { Smoke, Reload, Render, Perf }
+    public enum Mode { Smoke, Reload, Render, Perf, Reference }
     public GameSession Session { get; set; } = null!;
     public string OutDir { get; set; } = "";
     public Mode RunMode { get; set; }
@@ -53,6 +53,7 @@ public partial class SmokeRunner : Node
                 case Mode.Reload: await ReloadAsync(); break;
                 case Mode.Render: await RenderAsync(); break;
                 case Mode.Perf: await PerfAsync(); break;
+                case Mode.Reference: await ReferenceAsync(); break;
             }
             Check("no errors logged", _log.Count(LogLevel.Error) == _errorsAtStart, string.Join(" | ", _log.Snapshot().Where(e => e.Level >= LogLevel.Error).Select(e => e.Message).Take(5)));
         }
@@ -68,7 +69,7 @@ public partial class SmokeRunner : Node
             ["mode"] = RunMode.ToString(), ["version"] = AppVersion.Application, ["ok"] = ok && code == 0,
             ["checks"] = _checks, ["facts"] = _facts, ["exported"] = OS.HasFeature("template"),
         };
-        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", _ => "render_report.json" };
+        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", Mode.Reference => "reference_report.json", _ => "render_report.json" };
         File.WriteAllText(Path.Combine(OutDir, name), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print($"VIVARIUM_{RunMode.ToString().ToUpperInvariant()}_{(code == 0 ? "OK" : "FAILED")} checks={_checks.Count} failed={_checks.Count(c => !(bool)c["ok"])}");
         foreach (var c in _checks.Where(c => !(bool)c["ok"])) GD.PrintErr($"  FAILED: {c["name"]}: {c["detail"]}");
@@ -355,6 +356,7 @@ public partial class SmokeRunner : Node
         int second = 0;
         long lastTick = W.Clock.Tick;
         double worstFrame = 0; int frames = 0; ulong lastSample = start;
+        var allFrames = new List<double>(8192); var fpsSamples = new List<double>();
         // VIVARIUM_PERF_LOW=1: a slow orbit at critter height over the ground, where close-up detail layers cost most
         bool low = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_LOW") == "1";
         bool sculpt = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SCULPT") == "1";
@@ -368,7 +370,9 @@ public partial class SmokeRunner : Node
             if (sculpt) Vivarium.Sim.World.TerrainEditing.Sculpt(W, new Vivarium.Sim.Core.Vec2(Mathf.Sin(t) * 2, Mathf.Cos(t * 0.7f) * 2), 0.6, (frames & 1) == 0 ? 0.01 : -0.01, Vivarium.Sim.World.SculptMode.Raise);
             ulong f0 = Time.GetTicksUsec();
             await Frames(1);
-            worstFrame = Math.Max(worstFrame, (Time.GetTicksUsec() - f0) / 1000.0);
+            double ms = (Time.GetTicksUsec() - f0) / 1000.0;
+            worstFrame = Math.Max(worstFrame, ms);
+            if (t > 3) allFrames.Add(ms); // skip start-up hitches
             frames++;
             if (Time.GetTicksMsec() - lastSample >= 1000)
             {
@@ -376,13 +380,27 @@ public partial class SmokeRunner : Node
                 var line = $"t={++second,3}s fps={Engine.GetFramesPerSecond(),3} frames={frames,3} worstFrame={worstFrame,6:0.0}ms " +
                     $"process={Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000,6:0.0}ms simLast={W.Scheduler.LastAdvanceMs,5:0.0}ms " +
                     $"ticks/s={W.Clock.Tick - lastTick,4} backlog={W.Scheduler.Backlog,7:0}s flora={W.Flora.Count} fauna={W.Fauna.Count} mem={OS.GetStaticMemoryUsage() / 1048576}MB vram={Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576:0}MB ws={System.Environment.WorkingSet / 1048576}MB " +
-                    $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} gc0={System.GC.CollectionCount(0)} gc1={System.GC.CollectionCount(1)} gc2={System.GC.CollectionCount(2)} slowest: " + FrameProfiler.TakeReport();
+                    $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} floraVis={Session.Flora.Visible_} faunaDrawn={Session.Fauna.Drawn} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} gc0={System.GC.CollectionCount(0)} gc1={System.GC.CollectionCount(1)} gc2={System.GC.CollectionCount(2)} slowest: " + FrameProfiler.TakeReport();
                 Log.Info(LogCategory.Perf, line);
                 samples.Add(line);
+                if (second > 3) fpsSamples.Add(Engine.GetFramesPerSecond());
                 lastTick = W.Clock.Tick; worstFrame = 0; frames = 0;
             }
         }
         _facts["samples"] = samples;
+        if (allFrames.Count > 0)
+        {
+            allFrames.Sort();
+            double P(double q) => Math.Round(allFrames[Math.Min(allFrames.Count - 1, (int)(allFrames.Count * q))], 2);
+            _facts["summary"] = new Dictionary<string, object>
+            {
+                ["frames"] = allFrames.Count, ["fps_mean"] = Math.Round(1000.0 / allFrames.Average(), 1),
+                ["fps_min_second"] = fpsSamples.Count > 0 ? fpsSamples.Min() : 0,
+                ["frame_ms_p50"] = P(0.5), ["frame_ms_p95"] = P(0.95), ["frame_ms_p99"] = P(0.99), ["frame_ms_worst"] = Math.Round(allFrames[^1], 2),
+                ["frames_over_33ms"] = allFrames.Count(x => x > 33.4), ["flora"] = W.Flora.Count, ["fauna"] = W.Fauna.Count,
+                ["renderer"] = RenderingServer.GetVideoAdapterName(),
+            };
+        }
     }
 
     // ------------------------------------------------------------------ render tour

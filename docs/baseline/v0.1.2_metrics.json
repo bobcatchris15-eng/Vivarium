@@ -1,0 +1,1075 @@
+{
+ "preset_bio_days": 6.157,
+ "ticks": 6206,
+ "flora_total": 899,
+ "fauna_total": 300,
+ "species_present": {
+  "bacopa": 32,
+  "blue_fescue": 31,
+  "bonnet_mushroom": 29,
+  "carpet_moss": 60,
+  "carpobrotus": 66,
+  "climbing_vine": 8,
+  "clover": 86,
+  "creeping_groundcover": 13,
+  "crust_lichen": 16,
+  "cushion_moss": 17,
+  "dichondra": 129,
+  "fern": 8,
+  "foliose_lichen": 15,
+  "marginal_waterside": 39,
+  "ornamental_herb": 19,
+  "reindeer_lichen": 11,
+  "slime_mold": 33,
+  "sphagnum": 52,
+  "stonecrop": 34,
+  "turkey_tail": 7,
+  "watercress": 97,
+  "wetbank_moss": 97
+ },
+ "digest": "2a8eb645f7383c5c688f51ec944b1d23e6cd4adc17f277cdd6b71033152864c8",
+ "scenes": [
+  {
+   "name": "overview",
+   "category": "overview",
+   "eye": [
+    0,
+    8.5,
+    14.5
+   ],
+   "target": [
+    0,
+    -0.5,
+    0
+   ],
+   "fps_mean": 15.1,
+   "frame_ms_p50": 58.6,
+   "frame_ms_p95": 194.59,
+   "frame_ms_worst": 213.2,
+   "draw_calls": 226,
+   "primitives": 3900624,
+   "objects": 226,
+   "flora_visible": 825,
+   "flora_triangles": 2375040,
+   "fauna_drawn": 300,
+   "fauna_triangles": 423804,
+   "slowest_scopes": "Flora=209.1 Island=2.9 Fauna=2.5 Tools=1.5 Environment=0.2"
+  },
+  {
+   "name": "interaction",
+   "category": "interaction",
+   "eye": [
+    2.3410168,
+    2.5757747,
+    -1.7605927
+   ],
+   "target": [
+    0.55795187,
+    0.6056579,
+    -3.5436575
+   ],
+   "fps_mean": 23.2,
+   "frame_ms_p50": 41.03,
+   "frame_ms_p95": 64.67,
+   "frame_ms_worst": 99.94,
+   "draw_calls": 220,
+   "primitives": 1719571,
+   "objects": 220,
+   "flora_visible": 319,
+   "flora_triangles": 758712,
+   "fauna_drawn": 43,
+   "fauna_triangles": 62928,
+   "slowest_scopes": "Flora=96.3 Water=10.7 Island=3.3 Fauna=2.5 Tools=1.1"
+  },
+  {
+   "name": "ground_vegetation",
+   "category": "ground",
+   "eye": [
+    0.95293844,
+    0.53837454,
+    -3.4533124
+   ],
+   "target": [
+    0.64811605,
+    0.41311872,
+    -4.2908053
+   ],
+   "fps_mean": 28.9,
+   "frame_ms_p50": 33.73,
+   "frame_ms_p95": 58.43,
+   "frame_ms_worst": 68.04,
+   "draw_calls": 113,
+   "primitives": 656559,
+   "objects": 113,
+   "flora_visible": 107,
+   "flora_triangles": 218128,
+   "fauna_drawn": 11,
+   "fauna_triangles": 15488,
+   "slowest_scopes": "Flora=29.5 Fauna=19.5 Island=2.6 Tools=1.3 Camera=0.3"
+  },
+  {
+   "name": "macro_flora",
+   "category": "macro",
+   "eye": [
+    1.8938283,
+    0.8582838,
+    -0.13429832
+   ],
+   "target": [
+    1.4611204,
+    0.61104345,
+    -0.56700623
+   ],
+   "fps_mean": 21.2,
+   "frame_ms_p50": 56.28,
+   "frame_ms_p95": 76.23,
+   "frame_ms_worst": 109.59,
+   "draw_calls": 213,
+   "primitives": 1352499,
+   "objects": 213,
+   "flora_visible": 301,
+   "flora_triangles": 559584,
+   "fauna_drawn": 73,
+   "fauna_triangles": 107484,
+   "slowest_scopes": "Flora=105.4 Water=10.5 Island=2.7 Fauna=1.8 Tools=0.8"
+  },
+  {
+   "name": "slime_network",
+   "category": "slime",
+   "eye": [
+    2.0005708,
+    1.3375262,
+    -0.06704974
+   ],
+   "target": [
+    1.5915031,
+    0.64808625,
+    -0.47611725
+   ],
+   "fps_mean": 27.3,
+   "frame_ms_p50": 36.35,
+   "frame_ms_p95": 61.07,
+   "frame_ms_worst": 76.81,
+   "draw_calls": 192,
+   "primitives": 796599,
+   "objects": 192,
+   "flora_visible": 85,
+   "flora_triangles": 172564,
+   "fauna_drawn": 26,
+   "fauna_triangles": 38728,
+   "slowest_scopes": "Flora=29.2 Island=3.2 Fauna=1.6 Tools=1.0 Ui=0.1"
+  },
+  {
+   "name": "slime_macro",
+   "category": "slime",
+   "eye": [
+    1.6710999,
+    0.7800293,
+    -0.60086477
+   ],
+   "target": [
+    1.6289924,
+    0.6400293,
+    -0.36206156
+   ],
+   "fps_mean": 24.3,
+   "frame_ms_p50": 40.6,
+   "frame_ms_p95": 63.52,
+   "frame_ms_worst": 80.92,
+   "draw_calls": 165,
+   "primitives": 1305475,
+   "objects": 165,
+   "flora_visible": 216,
+   "flora_triangles": 683884,
+   "fauna_drawn": 86,
+   "fauna_triangles": 105988,
+   "slowest_scopes": "Flora=59.1 Water=12.2 Island=2.8 Fauna=1.8 Tools=0.8"
+  },
+  {
+   "name": "fungi_patch",
+   "category": "fungi",
+   "eye": [
+    0.995716,
+    0.63191843,
+    -3.2558727
+   ],
+   "target": [
+    0.643245,
+    0.39947838,
+    -3.6083436
+   ],
+   "fps_mean": 28,
+   "frame_ms_p50": 35.25,
+   "frame_ms_p95": 59.57,
+   "frame_ms_worst": 83.92,
+   "draw_calls": 97,
+   "primitives": 671279,
+   "objects": 97,
+   "flora_visible": 103,
+   "flora_triangles": 209668,
+   "fauna_drawn": 20,
+   "fauna_triangles": 29268,
+   "slowest_scopes": "Flora=36.2 Island=2.9 Fauna=1.9 Tools=0.8 Ui=0.2"
+  },
+  {
+   "name": "bracket_macro",
+   "category": "fungi",
+   "eye": [
+    -0.48337272,
+    0.7522179,
+    -4.6155534
+   ],
+   "target": [
+    -0.3842629,
+    0.67457217,
+    -4.343251
+   ],
+   "fps_mean": 18.4,
+   "frame_ms_p50": 53.52,
+   "frame_ms_p95": 139.26,
+   "frame_ms_worst": 180.23,
+   "draw_calls": 227,
+   "primitives": 1911383,
+   "objects": 227,
+   "flora_visible": 314,
+   "flora_triangles": 796000,
+   "fauna_drawn": 228,
+   "fauna_triangles": 319936,
+   "slowest_scopes": "Flora=177.0 Water=12.0 Island=3.8 SoilDetail=3.1 Fauna=2.3"
+  },
+  {
+   "name": "fauna_terrestrial",
+   "category": "fauna",
+   "eye": [
+    3.6796894,
+    0.26318806,
+    0.59747076
+   ],
+   "target": [
+    3.6408348,
+    0.23146342,
+    0.55861616
+   ],
+   "fps_mean": 28,
+   "frame_ms_p50": 34.18,
+   "frame_ms_p95": 64.79,
+   "frame_ms_worst": 75.86,
+   "draw_calls": 161,
+   "primitives": 428207,
+   "objects": 161,
+   "flora_visible": 3,
+   "flora_triangles": 6016,
+   "fauna_drawn": 7,
+   "fauna_triangles": 9208,
+   "slowest_scopes": "Flora=7.5 Island=2.4 Tools=2.2 Fauna=1.7 Ui=0.2"
+  },
+  {
+   "name": "fauna_aquatic",
+   "category": "fauna",
+   "eye": [
+    4.4254365,
+    -0.23400304,
+    2.9711485
+   ],
+   "target": [
+    4.3652053,
+    -0.24597432,
+    2.910917
+   ],
+   "fps_mean": 23,
+   "frame_ms_p50": 35.73,
+   "frame_ms_p95": 126.26,
+   "frame_ms_worst": 139.62,
+   "draw_calls": 215,
+   "primitives": 897237,
+   "objects": 215,
+   "flora_visible": 90,
+   "flora_triangles": 133336,
+   "fauna_drawn": 236,
+   "fauna_triangles": 335320,
+   "slowest_scopes": "Flora=136.4 Water=11.1 Island=2.4 Fauna=2.3 Tools=0.6"
+  },
+  {
+   "name": "water_margin",
+   "category": "water",
+   "eye": [
+    0.22500002,
+    0.8235396,
+    -3.025
+   ],
+   "target": [
+    1.375,
+    0.3735396,
+    -3.625
+   ],
+   "fps_mean": 26.7,
+   "frame_ms_p50": 35.3,
+   "frame_ms_p95": 72.25,
+   "frame_ms_worst": 74.62,
+   "draw_calls": 187,
+   "primitives": 908891,
+   "objects": 187,
+   "flora_visible": 117,
+   "flora_triangles": 277324,
+   "fauna_drawn": 22,
+   "fauna_triangles": 28708,
+   "slowest_scopes": "Flora=70.8 Island=3.0 Tools=2.4 Fauna=1.7 Camera=0.2"
+  },
+  {
+   "name": "rock_contact",
+   "category": "rock",
+   "eye": [
+    -4.440504,
+    1.7228825,
+    -1.6054527
+   ],
+   "target": [
+    -5.1608644,
+    1.3636706,
+    -2.8531532
+   ],
+   "fps_mean": 30.6,
+   "frame_ms_p50": 30.74,
+   "frame_ms_p95": 57.48,
+   "frame_ms_worst": 65.43,
+   "draw_calls": 62,
+   "primitives": 462283,
+   "objects": 62,
+   "flora_visible": 20,
+   "flora_triangles": 28108,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Flora=21.7 Water=14.6 Island=2.6 Fauna=1.3 Tools=0.7"
+  },
+  {
+   "name": "log_contact",
+   "category": "log",
+   "eye": [
+    2.158742,
+    0.9901073,
+    -0.8702767
+   ],
+   "target": [
+    1.3435234,
+    0.6842496,
+    -1.3409433
+   ],
+   "fps_mean": 22.5,
+   "frame_ms_p50": 53.41,
+   "frame_ms_p95": 94.06,
+   "frame_ms_worst": 106.72,
+   "draw_calls": 207,
+   "primitives": 1415755,
+   "objects": 207,
+   "flora_visible": 304,
+   "flora_triangles": 601708,
+   "fauna_drawn": 74,
+   "fauna_triangles": 109960,
+   "slowest_scopes": "Flora=102.6 Island=2.9 Fauna=1.8 Tools=0.9 Session=0.1"
+  },
+  {
+   "name": "dense_colony",
+   "category": "colony",
+   "eye": [
+    0.77737236,
+    0.9373183,
+    -3.9518337
+   ],
+   "target": [
+    0.34403217,
+    0.42308828,
+    -4.385174
+   ],
+   "fps_mean": 27.8,
+   "frame_ms_p50": 35.56,
+   "frame_ms_p95": 57.31,
+   "frame_ms_worst": 58.49,
+   "draw_calls": 126,
+   "primitives": 604203,
+   "objects": 126,
+   "flora_visible": 91,
+   "flora_triangles": 175164,
+   "fauna_drawn": 14,
+   "fauna_triangles": 20760,
+   "slowest_scopes": "Flora=13.3 Island=2.9 Fauna=1.2 Tools=0.7 Camera=0.1"
+  },
+  {
+   "name": "colony_edge",
+   "category": "colony",
+   "eye": [
+    0.45788035,
+    0.5312442,
+    -4.697969
+   ],
+   "target": [
+    0.34403217,
+    0.42308828,
+    -4.385174
+   ],
+   "fps_mean": 20.8,
+   "frame_ms_p50": 51.15,
+   "frame_ms_p95": 154.85,
+   "frame_ms_worst": 211.07,
+   "draw_calls": 214,
+   "primitives": 992827,
+   "objects": 214,
+   "flora_visible": 110,
+   "flora_triangles": 215440,
+   "fauna_drawn": 193,
+   "fauna_triangles": 279764,
+   "slowest_scopes": "Flora=205.7 Island=2.6 Fauna=2.3 Tools=1.6 Environment=0.2"
+  },
+  {
+   "name": "sparse_dry",
+   "category": "dry",
+   "eye": [
+    -1.2750001,
+    1.4294442,
+    4.894615
+   ],
+   "target": [
+    -0.375,
+    0.82944417,
+    4.375
+   ],
+   "fps_mean": 19.1,
+   "frame_ms_p50": 46.56,
+   "frame_ms_p95": 144.99,
+   "frame_ms_worst": 161.82,
+   "draw_calls": 220,
+   "primitives": 2243935,
+   "objects": 220,
+   "flora_visible": 354,
+   "flora_triangles": 1187752,
+   "fauna_drawn": 167,
+   "fauna_triangles": 224476,
+   "slowest_scopes": "Flora=156.3 Water=18.8 Fauna=13.9 Island=3.9 SoilDetail=2.8"
+  },
+  {
+   "name": "mixed_depth",
+   "category": "depth",
+   "eye": [
+    -4.5,
+    0.6,
+    4.5
+   ],
+   "target": [
+    1.5,
+    0.1,
+    -1.5
+   ],
+   "fps_mean": 16,
+   "frame_ms_p50": 52.21,
+   "frame_ms_p95": 195.62,
+   "frame_ms_worst": 258.03,
+   "draw_calls": 227,
+   "primitives": 1392811,
+   "objects": 227,
+   "flora_visible": 129,
+   "flora_triangles": 399280,
+   "fauna_drawn": 283,
+   "fauna_triangles": 396280,
+   "slowest_scopes": "Flora=254.5 Fauna=3.7 SoilDetail=2.7 Island=2.6 Tools=1.0"
+  },
+  {
+   "name": "cutaway_pond",
+   "category": "water",
+   "eye": [
+    8.603373,
+    0.4,
+    5.3549275
+   ],
+   "target": [
+    5.832092,
+    -0.6,
+    3.7549274
+   ],
+   "fps_mean": 14,
+   "frame_ms_p50": 54.32,
+   "frame_ms_p95": 286.57,
+   "frame_ms_worst": 361.88,
+   "draw_calls": 233,
+   "primitives": 2463131,
+   "objects": 233,
+   "flora_visible": 508,
+   "flora_triangles": 1318612,
+   "fauna_drawn": 300,
+   "fauna_triangles": 423804,
+   "slowest_scopes": "Flora=357.2 Water=11.9 Island=2.8 Fauna=2.3 SoilDetail=1.5"
+  },
+  {
+   "name": "species_bacopa",
+   "category": "species",
+   "eye": [
+    1.3232621,
+    0.6420446,
+    -2.5661433
+   ],
+   "target": [
+    1.1869062,
+    0.41223127,
+    -2.7024992
+   ],
+   "fps_mean": 26.8,
+   "frame_ms_p50": 35.18,
+   "frame_ms_p95": 61.95,
+   "frame_ms_worst": 100.77,
+   "draw_calls": 151,
+   "primitives": 470987,
+   "objects": 151,
+   "flora_visible": 19,
+   "flora_triangles": 39776,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Flora=9.8 Island=3.8 Fauna=1.3 Tools=0.7 Camera=0.1"
+  },
+  {
+   "name": "species_blue_fescue",
+   "category": "species",
+   "eye": [
+    -3.675457,
+    1.3008714,
+    0.1030027
+   ],
+   "target": [
+    -3.9481688,
+    0.84124464,
+    -0.169709
+   ],
+   "fps_mean": 28.2,
+   "frame_ms_p50": 34.55,
+   "frame_ms_p95": 59.07,
+   "frame_ms_worst": 81.11,
+   "draw_calls": 91,
+   "primitives": 442991,
+   "objects": 91,
+   "flora_visible": 6,
+   "flora_triangles": 15128,
+   "fauna_drawn": 2,
+   "fauna_triangles": 3692,
+   "slowest_scopes": "Flora=7.4 Island=3.5 Fauna=1.8 Tools=0.8 Camera=0.1"
+  },
+  {
+   "name": "species_bonnet_mushroom",
+   "category": "species",
+   "eye": [
+    2.9772644,
+    0.7690847,
+    -3.0678363
+   ],
+   "target": [
+    2.8818154,
+    0.6082154,
+    -3.1632853
+   ],
+   "fps_mean": 28.7,
+   "frame_ms_p50": 34.79,
+   "frame_ms_p95": 57.75,
+   "frame_ms_worst": 68.58,
+   "draw_calls": 160,
+   "primitives": 553951,
+   "objects": 160,
+   "flora_visible": 23,
+   "flora_triangles": 69320,
+   "fauna_drawn": 3,
+   "fauna_triangles": 4584,
+   "slowest_scopes": "Flora=8.9 Island=3.3 Tools=2.6 Fauna=2.2 Camera=0.2"
+  },
+  {
+   "name": "species_carpet_moss",
+   "category": "species",
+   "eye": [
+    2.977299,
+    0.6979324,
+    -3.126919
+   ],
+   "target": [
+    2.9227567,
+    0.6060071,
+    -3.1814613
+   ],
+   "fps_mean": 28.6,
+   "frame_ms_p50": 34.2,
+   "frame_ms_p95": 56.56,
+   "frame_ms_worst": 68.31,
+   "draw_calls": 152,
+   "primitives": 462551,
+   "objects": 152,
+   "flora_visible": 10,
+   "flora_triangles": 25352,
+   "fauna_drawn": 2,
+   "fauna_triangles": 3184,
+   "slowest_scopes": "Water=18.1 Flora=6.6 SoilDetail=4.0 Island=2.8 Fauna=1.1"
+  },
+  {
+   "name": "species_carpobrotus",
+   "category": "species",
+   "eye": [
+    -0.47616237,
+    0.9286253,
+    5.05619
+   ],
+   "target": [
+    -0.5579759,
+    0.7907373,
+    4.9743767
+   ],
+   "fps_mean": 28.4,
+   "frame_ms_p50": 33.9,
+   "frame_ms_p95": 59.84,
+   "frame_ms_worst": 67.28,
+   "draw_calls": 132,
+   "primitives": 596847,
+   "objects": 132,
+   "flora_visible": 12,
+   "flora_triangles": 114312,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Fauna=16.1 Flora=7.2 Tools=3.9 Island=2.6 Camera=0.5"
+  },
+  {
+   "name": "species_climbing_vine",
+   "category": "species",
+   "eye": [
+    0.83066356,
+    1.1252846,
+    -3.2709458
+   ],
+   "target": [
+    0.55795187,
+    0.6656579,
+    -3.5436575
+   ],
+   "fps_mean": 28.3,
+   "frame_ms_p50": 33.12,
+   "frame_ms_p95": 60.16,
+   "frame_ms_worst": 65.1,
+   "draw_calls": 160,
+   "primitives": 927843,
+   "objects": 160,
+   "flora_visible": 146,
+   "flora_triangles": 315764,
+   "fauna_drawn": 14,
+   "fauna_triangles": 25156,
+   "slowest_scopes": "Flora=23.1 Water=11.9 Island=2.6 Fauna=1.7 Tools=0.5"
+  },
+  {
+   "name": "species_clover",
+   "category": "species",
+   "eye": [
+    3.436648,
+    0.4222594,
+    5.611007
+   ],
+   "target": [
+    3.36847,
+    0.30735272,
+    5.5428295
+   ],
+   "fps_mean": 28.8,
+   "frame_ms_p50": 35.09,
+   "frame_ms_p95": 63.15,
+   "frame_ms_worst": 70.57,
+   "draw_calls": 131,
+   "primitives": 478039,
+   "objects": 131,
+   "flora_visible": 28,
+   "flora_triangles": 59548,
+   "fauna_drawn": 2,
+   "fauna_triangles": 3184,
+   "slowest_scopes": "Flora=14.0 Island=2.7 Fauna=1.6 Tools=0.6 Camera=0.1"
+  },
+  {
+   "name": "species_creeping_groundcover",
+   "category": "species",
+   "eye": [
+    2.99754,
+    0.73438376,
+    -3.1339533
+   ],
+   "target": [
+    2.929362,
+    0.6194771,
+    -3.2021313
+   ],
+   "fps_mean": 29.7,
+   "frame_ms_p50": 34.12,
+   "frame_ms_p95": 59.09,
+   "frame_ms_worst": 74.22,
+   "draw_calls": 144,
+   "primitives": 547819,
+   "objects": 144,
+   "flora_visible": 20,
+   "flora_triangles": 63272,
+   "fauna_drawn": 3,
+   "fauna_triangles": 4584,
+   "slowest_scopes": "Flora=9.1 Island=3.5 Fauna=1.5 Tools=0.8 Ui=0.2"
+  },
+  {
+   "name": "species_crust_lichen",
+   "category": "species",
+   "eye": [
+    -4.228836,
+    1.1237547,
+    -4.029379
+   ],
+   "target": [
+    -4.2833786,
+    1.0318294,
+    -4.0839214
+   ],
+   "fps_mean": 29.8,
+   "frame_ms_p50": 31.97,
+   "frame_ms_p95": 62.77,
+   "frame_ms_worst": 81.88,
+   "draw_calls": 41,
+   "primitives": 389779,
+   "objects": 41,
+   "flora_visible": 1,
+   "flora_triangles": 1692,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Flora=6.1 Island=2.8 Fauna=1.6 Tools=1.1 Camera=0.1"
+  },
+  {
+   "name": "species_cushion_moss",
+   "category": "species",
+   "eye": [
+    5.997678,
+    0.41773516,
+    1.109291
+   ],
+   "target": [
+    5.9158645,
+    0.27984715,
+    1.0274775
+   ],
+   "fps_mean": 26.1,
+   "frame_ms_p50": 36.72,
+   "frame_ms_p95": 70.96,
+   "frame_ms_worst": 92.04,
+   "draw_calls": 123,
+   "primitives": 422719,
+   "objects": 123,
+   "flora_visible": 10,
+   "flora_triangles": 13720,
+   "fauna_drawn": 2,
+   "fauna_triangles": 2408,
+   "slowest_scopes": "Flora=6.3 Island=3.0 Fauna=1.5 Tools=1.0 Environment=0.2"
+  },
+  {
+   "name": "species_dichondra",
+   "category": "species",
+   "eye": [
+    3.9617395,
+    0.332635,
+    5.6652584
+   ],
+   "target": [
+    3.9071972,
+    0.24070966,
+    5.610716
+   ],
+   "fps_mean": 28,
+   "frame_ms_p50": 35.4,
+   "frame_ms_p95": 61.35,
+   "frame_ms_worst": 79,
+   "draw_calls": 120,
+   "primitives": 428759,
+   "objects": 120,
+   "flora_visible": 12,
+   "flora_triangles": 16816,
+   "fauna_drawn": 2,
+   "fauna_triangles": 3184,
+   "slowest_scopes": "Water=14.1 Flora=8.7 Island=3.0 Fauna=1.6 Tools=1.3"
+  },
+  {
+   "name": "species_fern",
+   "category": "species",
+   "eye": [
+    1.7338321,
+    1.0406702,
+    -0.29429454
+   ],
+   "target": [
+    1.4611204,
+    0.5810434,
+    -0.56700623
+   ],
+   "fps_mean": 26.7,
+   "frame_ms_p50": 36.91,
+   "frame_ms_p95": 62.59,
+   "frame_ms_worst": 66.76,
+   "draw_calls": 175,
+   "primitives": 686131,
+   "objects": 175,
+   "flora_visible": 61,
+   "flora_triangles": 133652,
+   "fauna_drawn": 8,
+   "fauna_triangles": 13344,
+   "slowest_scopes": "Flora=12.9 Island=2.8 Fauna=1.5 Tools=1.2 Environment=0.3"
+  },
+  {
+   "name": "species_foliose_lichen",
+   "category": "species",
+   "eye": [
+    3.258232,
+    0.88381577,
+    -3.4046903
+   ],
+   "target": [
+    3.2036898,
+    0.79189044,
+    -3.4592326
+   ],
+   "fps_mean": 26.1,
+   "frame_ms_p50": 37.06,
+   "frame_ms_p95": 59.62,
+   "frame_ms_worst": 61.33,
+   "draw_calls": 129,
+   "primitives": 723427,
+   "objects": 129,
+   "flora_visible": 22,
+   "flora_triangles": 121736,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Water=18.4 Flora=13.8 Island=3.0 Fauna=1.5 Tools=1.0"
+  },
+  {
+   "name": "species_marginal_waterside",
+   "category": "species",
+   "eye": [
+    -3.2631378,
+    0.93474203,
+    1.3050108
+   ],
+   "target": [
+    -3.5358496,
+    0.47511536,
+    1.032299
+   ],
+   "fps_mean": 27.5,
+   "frame_ms_p50": 34.9,
+   "frame_ms_p95": 67.34,
+   "frame_ms_worst": 104.85,
+   "draw_calls": 89,
+   "primitives": 442747,
+   "objects": 89,
+   "flora_visible": 21,
+   "flora_triangles": 33848,
+   "fauna_drawn": 4,
+   "fauna_triangles": 4816,
+   "slowest_scopes": "Flora=9.5 Island=3.7 Tools=2.0 Fauna=1.4 Ui=0.1"
+  },
+  {
+   "name": "species_ornamental_herb",
+   "category": "species",
+   "eye": [
+    -3.383843,
+    1.2301049,
+    -0.44735914
+   ],
+   "target": [
+    -3.5474699,
+    0.95432895,
+    -0.6109862
+   ],
+   "fps_mean": 29.5,
+   "frame_ms_p50": 33.77,
+   "frame_ms_p95": 59.31,
+   "frame_ms_worst": 85.07,
+   "draw_calls": 74,
+   "primitives": 405651,
+   "objects": 74,
+   "flora_visible": 1,
+   "flora_triangles": 1928,
+   "fauna_drawn": 3,
+   "fauna_triangles": 5272,
+   "slowest_scopes": "Flora=7.0 Island=3.9 Fauna=1.4 Tools=0.7 Ui=0.2"
+  },
+  {
+   "name": "species_reindeer_lichen",
+   "category": "species",
+   "eye": [
+    2.508514,
+    0.6365724,
+    -4.455573
+   ],
+   "target": [
+    2.413065,
+    0.4757031,
+    -4.551022
+   ],
+   "fps_mean": 26.6,
+   "frame_ms_p50": 36.02,
+   "frame_ms_p95": 71.71,
+   "frame_ms_worst": 91.19,
+   "draw_calls": 88,
+   "primitives": 523895,
+   "objects": 88,
+   "flora_visible": 7,
+   "flora_triangles": 53808,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Flora=6.7 Island=2.7 Tools=2.5 Fauna=1.6 Ui=0.2"
+  },
+  {
+   "name": "species_slime_mold",
+   "category": "species",
+   "eye": [
+    6.7343097,
+    0.24769989,
+    1.8740026
+   ],
+   "target": [
+    6.679767,
+    0.15577456,
+    1.8194603
+   ],
+   "fps_mean": 29,
+   "frame_ms_p50": 33.3,
+   "frame_ms_p95": 59.63,
+   "frame_ms_worst": 66.8,
+   "draw_calls": 112,
+   "primitives": 412723,
+   "objects": 112,
+   "flora_visible": 1,
+   "flora_triangles": 3568,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Flora=6.3 Island=2.6 Tools=2.1 Fauna=1.9 Overlay=0.2"
+  },
+  {
+   "name": "species_sphagnum",
+   "category": "species",
+   "eye": [
+    3.4439466,
+    0.56326365,
+    -2.3990045
+   ],
+   "target": [
+    3.3894043,
+    0.4713383,
+    -2.4535468
+   ],
+   "fps_mean": 30.6,
+   "frame_ms_p50": 30.86,
+   "frame_ms_p95": 61.5,
+   "frame_ms_worst": 69.84,
+   "draw_calls": 135,
+   "primitives": 427983,
+   "objects": 135,
+   "flora_visible": 6,
+   "flora_triangles": 13224,
+   "fauna_drawn": 1,
+   "fauna_triangles": 1400,
+   "slowest_scopes": "Water=16.8 Fauna=13.8 Flora=6.0 Island=2.8 Tools=1.2"
+  },
+  {
+   "name": "species_stonecrop",
+   "category": "species",
+   "eye": [
+    2.4238644,
+    0.63797903,
+    -4.5175776
+   ],
+   "target": [
+    2.3284154,
+    0.47710973,
+    -4.6130266
+   ],
+   "fps_mean": 26.6,
+   "frame_ms_p50": 36.81,
+   "frame_ms_p95": 61.48,
+   "frame_ms_worst": 67.27,
+   "draw_calls": 86,
+   "primitives": 496971,
+   "objects": 86,
+   "flora_visible": 5,
+   "flora_triangles": 38328,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Flora=4.4 Island=2.1 Fauna=2.0 Tools=0.9 Environment=0.3"
+  },
+  {
+   "name": "species_turkey_tail",
+   "category": "species",
+   "eye": [
+    -0.27517822,
+    0.8324228,
+    -4.2341666
+   ],
+   "target": [
+    -0.3842629,
+    0.64857215,
+    -4.343251
+   ],
+   "fps_mean": 28.1,
+   "frame_ms_p50": 35.8,
+   "frame_ms_p95": 62.51,
+   "frame_ms_worst": 81.49,
+   "draw_calls": 74,
+   "primitives": 452471,
+   "objects": 74,
+   "flora_visible": 5,
+   "flora_triangles": 20064,
+   "fauna_drawn": 3,
+   "fauna_triangles": 3236,
+   "slowest_scopes": "Water=13.4 Flora=6.6 Island=2.5 Fauna=1.5 Tools=1.4"
+  },
+  {
+   "name": "species_watercress",
+   "category": "species",
+   "eye": [
+    3.4130988,
+    0.43669263,
+    -2.032763
+   ],
+   "target": [
+    3.3585565,
+    0.3447673,
+    -2.0873053
+   ],
+   "fps_mean": 27.2,
+   "frame_ms_p50": 34.39,
+   "frame_ms_p95": 63.41,
+   "frame_ms_worst": 93.84,
+   "draw_calls": 135,
+   "primitives": 416727,
+   "objects": 135,
+   "flora_visible": 4,
+   "flora_triangles": 7168,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Flora=6.7 Island=2.7 Fauna=1.7 Tools=1.7 Ui=0.1"
+  },
+  {
+   "name": "species_wetbank_moss",
+   "category": "species",
+   "eye": [
+    2.4808478,
+    0.14048454,
+    2.2740405
+   ],
+   "target": [
+    2.4263055,
+    0.048559215,
+    2.2194982
+   ],
+   "fps_mean": 26.2,
+   "frame_ms_p50": 36.24,
+   "frame_ms_p95": 60.94,
+   "frame_ms_worst": 63.93,
+   "draw_calls": 127,
+   "primitives": 421487,
+   "objects": 127,
+   "flora_visible": 6,
+   "flora_triangles": 12992,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "slowest_scopes": "Water=8.5 Flora=6.0 Island=2.8 Fauna=1.6 Tools=1.4"
+  }
+ ],
+ "scene_count": 40,
+ "renderer": "AMD Radeon(TM) 860M Graphics"
+}
