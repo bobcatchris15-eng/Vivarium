@@ -300,9 +300,9 @@ public class ToolTests
         var (w, t) = Setup();
         Assert.False(t.IntroduceFlora("crust_lichen", new Vec2(2, 1)).Ok);        // soil: hard refusal
         Assert.NotNull(t.PreviewFlora("crust_lichen", new Vec2(2, 1)));
-        var ok = t.IntroduceFlora("carpet_moss", new Vec2(2, 1));
+        var ok = t.IntroduceFlora("creeping_groundcover", new Vec2(2, 1));
         Assert.True(ok.Ok, ok.Message);
-        Assert.Equal("carpet_moss", w.Flora.Get(ok.Affected[0])!.SpeciesId);
+        Assert.Equal("creeping_groundcover", w.Flora.Get(ok.Affected[0])!.SpeciesId);
         Assert.False(t.IntroduceFauna("microminnow", FaunaFixtures.Land).Ok);
         var fish = t.IntroduceFauna("microminnow", FaunaFixtures.Pond);
         Assert.True(fish.Ok, fish.Message);
