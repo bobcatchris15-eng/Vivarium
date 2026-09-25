@@ -233,47 +233,10 @@ public class PlasmodiumScenarios
         Assert.Contains(fusedId, idsAfterSplit);
     }
 
-    /// <summary>Slow: renders the fuse-then-split sequence above as a two-frame (or more) timelapse, one
-    /// plasmodium per hue, so a fusion/split defect is visible at a glance.</summary>
-    [Fact]
-    [Trait("Speed", "Slow")]
-    public void FusionScenarioWritesTimelapseFrames()
-    {
-        var prm = new PlasmodiumParams();
-        var env = new TestEnv();
-        var attractant = new Attractant(prm);
-        var layer = new CoverageLayer(CoverageLayerId.Plasmodium, worldSeed: 3);
-        var colony = new PlasmodiumColony(speciesId: 0, prm);
-
-        const string scenario = "plasmodium_fusion";
-        string dir = GrowthLabRunner.FramesDir(scenario);
-        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
-
-        colony.Seed(new[] { (-6, 0), (-5, 0) });
-        colony.Seed(new[] { (5, 0), (6, 0) });
-        foreach (var (gx, gz) in colony.CellId.Keys) layer.SetOcc(gx, gz, 1);
-        WriteColorFrame(scenario, 0, layer, colony, attractant, half: 16);
-
-        // Grow the gap closed with a simple bridging step per frame (front extension alone would take many
-        // steps at this LambdaF; this scenario is about relabelling, so drive occupancy directly).
-        var bridge = new List<(int, int)>();
-        for (int x = -4; x <= 4; x++) bridge.Add((x, 0));
-        for (int i = 0; i < bridge.Count; i++)
-        {
-            layer.SetOcc(bridge[i].Item1, bridge[i].Item2, 1);
-            colony.Relabel(colony.CellId.Keys.Concat(bridge.Take(i + 1)).ToList());
-            WriteColorFrame(scenario, i + 1, layer, colony, attractant, half: 16);
-        }
-
-        // Cut it back into two pieces.
-        var stillOccupied = colony.CellId.Keys.Where(c => c.gx < 2 || c.gx > 3).ToList();
-        foreach (var (gx, gz) in colony.CellId.Keys.Except(stillOccupied)) layer.SetOcc(gx, gz, 0);
-        colony.Relabel(stillOccupied);
-        WriteColorFrame(scenario, bridge.Count + 1, layer, colony, attractant, half: 16);
-
-        int expectedFrames = bridge.Count + 2;
-        Assert.Equal(expectedFrames, Directory.GetFiles(dir, "frame_*.png").Length);
-    }
+    // Growth-driven fusion (real foraging, not a manually forced bridge) moved to
+    // NetworkScenarios.FusionScenarioWritesTimelapseFrames (G7, physarum_fusion) — the manual-bridge version
+    // here only ever proved Relabel's bookkeeping, which TouchingComponentsFuseAndACutComponentSplits above
+    // already covers without image I/O.
 
     // ------------------------------------------------------------------ determinism + dense-step perf
 
