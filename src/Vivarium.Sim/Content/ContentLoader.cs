@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Coverage;
+using Vivarium.Sim.Coverage.Rules;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Content;
@@ -274,7 +276,7 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony");
+        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
@@ -297,6 +299,7 @@ public static class ContentLoader
         }
         var g = n.Req("growth");
         g.RejectUnknown("ratePerDay", "maxBiomass", "initialBiomass", "declinePerDay", "maturityDays", "lifespanDays", "nutrientPerBiomass", "radiusAtMax", "minRadius");
+        double ratePerDayRaw = g.Num("ratePerDay", min: 0.001, max: 20);
         var s = n.Req("spread");
         s.RejectUnknown("intervalDays", "radius", "propagules", "minBiomassFraction");
         var c = n.Req("competition");
@@ -339,6 +342,84 @@ public static class ContentLoader
                 BandWidth = co.Num("bandWidth", 0.1, 0.001, 5),
             };
         }
+        FloraMatDef? mat = null;
+        if (n.Has("mat"))
+        {
+            var m = n["mat"];
+            m.RejectUnknown("layer", "lateral", "maxHeight", "heightRule", "water", "light", "dormBrownDays", "dormDeathDays", "sporeRate", "moistureFeedback", "domeLength", "seedBiomass");
+            string hr = m.Str("heightRule", "flat");
+            if (hr is not ("flat" or "dome" or "wet")) m["heightRule"].Error("expected flat | dome | wet");
+            var hform = hr switch { "dome" => MatHeightForm.Dome, "wet" => MatHeightForm.Wet, _ => MatHeightForm.Flat };
+            var mw = m.Req("water"); mw.RejectUnknown("kWet", "kDry", "wMin", "wOpt");
+            JNode? mlOpt = m.Has("light") ? m["light"] : null;
+            mlOpt?.RejectUnknown("k", "max");
+            mat = new FloraMatDef
+            {
+                HeightForm = hform,
+                Lateral = m.Num("lateral", min: 0, max: 50),
+                GrowthRatePerDay = ratePerDayRaw,
+                MaxHeightM = m.Num("maxHeight", min: 0.0001, max: 2),
+                KWet = mw.Num("kWet", min: 0, max: 50),
+                KDry = mw.Num("kDry", min: 0, max: 50),
+                WMin = mw.Num("wMin", min: 0, max: 1),
+                WOpt = mw.Num("wOpt", min: 0, max: 1),
+                KLight = mlOpt?.Num("k", 0.3, 0, 5) ?? 0.3,
+                LightMax = mlOpt?.Num("max", 1.0, 0, 1) ?? 1.0,
+                DormBrownDays = m.Num("dormBrownDays", 2, 0, 3650),
+                DormDeathDays = m.Num("dormDeathDays", 8, 0, 3650),
+                SporeRate = m.Num("sporeRate", 0.001, 0, 10),
+                MoistureFeedback = m.Num("moistureFeedback", 0.0, 0, 10),
+                SeedBiomass = m.Num("seedBiomass", 0.05, 0.001, 1),
+                DomeLength = m.Num("domeLength", 6.0, 0.1, 100),
+            };
+        }
+        FloraLichenDef? lichen = null;
+        if (n.Has("lichen"))
+        {
+            var lc = n["lichen"];
+            lc.RejectUnknown("layer", "form", "lateral", "tipBias", "openness", "minNeighbours", "centreDeathDays", "centreDeathMinD2E", "substrates", "gravelRateMultiplier", "deadDecayPerDay", "water", "light", "seedBiomass", "maxBiomass", "edenNoise");
+            string formStr = lc.Str("form", "crustose");
+            if (formStr is not ("crustose" or "foliose" or "fruticose")) lc["form"].Error("expected crustose | foliose | fruticose");
+            var form = formStr switch { "foliose" => LichenForm.Foliose, "fruticose" => LichenForm.Fruticose, _ => LichenForm.Crustose };
+            var substrates = new HashSet<CoverageSubstrate>();
+            foreach (var id in lc.StrList("substrates", required: false))
+            {
+                var cs = id switch
+                {
+                    "rock" => CoverageSubstrate.Rock, "log" => CoverageSubstrate.Log, "bark" => CoverageSubstrate.Bark,
+                    "stable_soil" => CoverageSubstrate.StableSoil, "gravel" => CoverageSubstrate.Gravel,
+                    _ => (CoverageSubstrate?)null,
+                };
+                if (cs == null) { lc["substrates"].Error($"unknown coverage substrate '{id}'"); continue; }
+                substrates.Add(cs.Value);
+            }
+            if (substrates.Count == 0) substrates = new HashSet<CoverageSubstrate> { CoverageSubstrate.Rock, CoverageSubstrate.Log, CoverageSubstrate.Bark, CoverageSubstrate.StableSoil };
+            JNode? lw = lc.Has("water") ? lc["water"] : null;
+            lw?.RejectUnknown("kWet", "kDry", "wMin", "wOpt");
+            JNode? ll = lc.Has("light") ? lc["light"] : null;
+            ll?.RejectUnknown("k");
+            lichen = new FloraLichenDef
+            {
+                Form = form,
+                Substrates = substrates,
+                GravelRateMultiplier = lc.Num("gravelRateMultiplier", 0.3, 0, 5),
+                Lateral = lc.Num("lateral", min: 0, max: 50),
+                TipBiasGamma = lc.Num("tipBias", 4.0, 0, 20),
+                OpennessRadius = lc.Int("openness", 3, 1, 12),
+                MinNeighboursToColonise = lc.Int("minNeighbours", 3, 0, 8),
+                CentreDeathDays = lc.Num("centreDeathDays", 30, 0, 36500),
+                CentreDeathMinD2E = lc.Int("centreDeathMinD2E", 3, 0, 32),
+                DeadDecayPerDay = lc.Num("deadDecayPerDay", 0.5, 0, 10),
+                KWet = lw?.Num("kWet", 3.0, 0, 50) ?? 3.0,
+                KDry = lw?.Num("kDry", 0.4, 0, 50) ?? 0.4,
+                WMin = lw?.Num("wMin", 0.15, 0, 1) ?? 0.15,
+                WOpt = lw?.Num("wOpt", 0.55, 0, 1) ?? 0.55,
+                KLight = ll?.Num("k", 0.25, 0, 5) ?? 0.25,
+                SeedBiomass = lc.Num("seedBiomass", 0.12, 0.001, 1),
+                MaxBiomass = lc.Num("maxBiomass", 1.0, 0.01, 1),
+                EdenNoiseExponent = lc.Num("edenNoise", 1.0, 0.1, 10),
+            };
+        }
         var col = v.Color("color");
         var def = new FloraSpeciesDef
         {
@@ -348,7 +429,7 @@ public static class ContentLoader
             Moisture = ParsePref(h, "moisture"), Light = ParsePref(h, "light"), Nutrients = ParsePref(h, "nutrients"),
             MaxWaterDepth = h.Num("maxWaterDepth", 0, 0, 1), MinWaterDepth = h.Num("minWaterDepth", 0, 0, 1),
             HardMinMoisture = h.Num("hardMinMoisture", 0, 0, 1), HardMaxMoisture = h.Num("hardMaxMoisture", 1.0, 0, 1), MinSuitability = h.Num("minSuitability", 0.15, 0, 1),
-            GrowthRate = g.Num("ratePerDay", min: 0.001, max: 20) / D, MaxBiomass = g.Num("maxBiomass", min: 0.001, max: 100), InitialBiomass = g.Num("initialBiomass", min: 0.0001, max: 100),
+            GrowthRate = ratePerDayRaw / D, MaxBiomass = g.Num("maxBiomass", min: 0.001, max: 100), InitialBiomass = g.Num("initialBiomass", min: 0.0001, max: 100),
             DeclineRate = g.Num("declinePerDay", min: 0, max: 20) / D, MaturityAge = g.Num("maturityDays", min: 0.1, max: 3650) * D, Lifespan = g.Num("lifespanDays", min: 1, max: 36500) * D,
             NutrientPerBiomass = g.Num("nutrientPerBiomass", min: 0, max: 10), RadiusAtMax = g.Num("radiusAtMax", min: 0.01, max: 3), MinRadius = g.Num("minRadius", 0.02, 0.005, 3),
             SpreadInterval = s.Num("intervalDays", min: 0.05, max: 365) * D, SpreadRadius = s.Num("radius", min: 0.01, max: 5), Propagules = s.Int("propagules", min: 0, max: 20),
@@ -360,6 +441,8 @@ public static class ContentLoader
             Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,
             CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,
             Colony = colony,
+            Mat = mat,
+            Lichen = lichen,
         };
         if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");

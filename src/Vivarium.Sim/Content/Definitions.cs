@@ -1,3 +1,6 @@
+using Vivarium.Sim.Coverage;
+using Vivarium.Sim.Coverage.Rules;
+
 namespace Vivarium.Sim.Content;
 
 /// <summary>Substrate classes used by habitat rules. Independent from visible material.</summary>
@@ -130,8 +133,75 @@ public sealed class FloraSpeciesDef
     public double Height { get; init; }
     public List<string> Tags { get; init; } = new();
 
-    /// <summary>Optional colonial growth mode (moss/lichen); null = ordinary radial spread.</summary>
+    /// <summary>Optional colonial growth mode (moss/lichen); null = ordinary radial spread. Retained alongside
+    /// <see cref="Mat"/>/<see cref="Lichen"/> for now (docs/overhaul/growth_models.md §8); species with a
+    /// <see cref="Mat"/> or <see cref="Lichen"/> block run on the coverage layers instead and never create
+    /// <see cref="Vivarium.Sim.Flora.FloraIndividual"/>s.</summary>
     public FloraColonyDef? Colony { get; init; }
+
+    /// <summary>Moss growth on the coverage <c>Mat</c> layer (docs/overhaul/growth_models.md §4, §8 "mat" block).
+    /// Null = this species does not run on the coverage layers.</summary>
+    public FloraMatDef? Mat { get; init; }
+
+    /// <summary>Lichen growth on the coverage <c>Crust</c> layer (docs/overhaul/growth_models.md §5, §8 "lichen"
+    /// block). Null = this species does not run on the coverage layers.</summary>
+    public FloraLichenDef? Lichen { get; init; }
+
+    /// <summary>True for species that run on the coverage layers (Mat or Lichen) rather than as
+    /// <see cref="Vivarium.Sim.Flora.FloraIndividual"/>s.</summary>
+    public bool IsCoverageSpecies => Mat != null || Lichen != null;
+}
+
+/// <summary>Moss ("mat") species content, parsed from the "mat" JSON block (docs/overhaul/growth_models.md §8).
+/// A plain data holder; <see cref="Vivarium.Sim.Coverage.CoverageSystem"/> assigns the occupant id and copies
+/// these into a <see cref="MatParams"/> record.</summary>
+public sealed class FloraMatDef
+{
+    public MatHeightForm HeightForm { get; init; }
+    public double Lateral { get; init; }          // lambda_s, per bio-day (matches dtDays units in MatRules)
+    public double MaxHeightM { get; init; }
+    /// <summary>Logistic growth-rate constant r, per bio-day (reuses the species' "growth.ratePerDay" value,
+    /// kept separate from <see cref="FloraSpeciesDef.GrowthRate"/> which is converted to per-second for the
+    /// individual-based growth path).</summary>
+    public double GrowthRatePerDay { get; init; }
+    public double KWet { get; init; } = 6;
+    public double KDry { get; init; } = 1.2;
+    public double WMin { get; init; } = 0.25;
+    public double WOpt { get; init; } = 0.6;
+    public double KLight { get; init; } = 0.3;
+    public double LightMax { get; init; } = 1.0;
+    public double DormBrownDays { get; init; } = 2;
+    public double DormDeathDays { get; init; } = 8;
+    public double SporeRate { get; init; } = 0.001;
+    public double MoistureFeedback { get; init; } = 0.0;
+    public double SeedBiomass { get; init; } = 0.05;
+    public double DomeLength { get; init; } = 6.0;
+}
+
+/// <summary>Lichen species content, parsed from the "lichen" JSON block (docs/overhaul/growth_models.md §8).</summary>
+public sealed class FloraLichenDef
+{
+    public LichenForm Form { get; init; } = LichenForm.Crustose;
+    public HashSet<CoverageSubstrate> Substrates { get; init; } = new()
+    {
+        CoverageSubstrate.Rock, CoverageSubstrate.Log, CoverageSubstrate.Bark, CoverageSubstrate.StableSoil,
+    };
+    public double GravelRateMultiplier { get; init; } = 0.3;
+    public double Lateral { get; init; } = 0.02;
+    public double TipBiasGamma { get; init; } = 4.0;
+    public int OpennessRadius { get; init; } = 3;
+    public int MinNeighboursToColonise { get; init; } = 3;
+    public double CentreDeathDays { get; init; } = 30;
+    public int CentreDeathMinD2E { get; init; } = 3;
+    public double DeadDecayPerDay { get; init; } = 0.5;
+    public double KWet { get; init; } = 3.0;
+    public double KDry { get; init; } = 0.4;
+    public double WMin { get; init; } = 0.15;
+    public double WOpt { get; init; } = 0.55;
+    public double KLight { get; init; } = 0.25;
+    public double SeedBiomass { get; init; } = 0.12;
+    public double MaxBiomass { get; init; } = 1.0;
+    public double EdenNoiseExponent { get; init; } = 1.0;
 }
 
 public enum ColonyPattern { Random, Banded }

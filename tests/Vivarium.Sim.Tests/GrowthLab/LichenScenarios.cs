@@ -19,10 +19,30 @@ internal sealed class UniformRockEnv : ILichenEnvSource
     };
 }
 
+internal sealed class LooseCentreEnv : ILichenEnvSource
+{
+    public MicroEnv Sample(int gx, int gz) => new()
+    {
+        Moisture = 0.8, Humidity = 0.7, Light = 0.8,
+        Substrate = gx == 0 && gz == 0 ? CoverageSubstrate.LooseSoil : CoverageSubstrate.Rock,
+    };
+}
+
 [Trait("Suite", "GrowthLab")]
 public class LichenScenarios
 {
     private const int Half = 30;
+
+    [Fact]
+    public void FolioseHoleFillRespectsSubstrate()
+    {
+        var layer = new CoverageLayer(CoverageLayerId.Crust, 7);
+        for (int z = -1; z <= 1; z++)
+        for (int x = -1; x <= 1; x++)
+            if (x != 0 || z != 0) layer.SetCell(x, z, 1, 0.5f, 0, 0, 0, 0, 0);
+        LichenRules.Step(layer, new LooseCentreEnv(), new[] { FolioseSpecies() }, 1, 0, 7);
+        Assert.Equal(0, layer.GetOcc(0, 0));
+    }
 
     private static LichenParams CrustSpecies(byte slot = 1) => new()
     {

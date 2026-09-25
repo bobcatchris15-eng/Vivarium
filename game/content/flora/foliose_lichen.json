@@ -63,19 +63,21 @@
   ],
   "litterFraction": 0.6,
   "grazingValue": 0.0,
-  "colony": {
-    "cellRadius": 0.03,
-    "frontRate": 0.25,
-    "fillRate": 0.08,
-    "maxHeight": 0.016,
-    "patternMode": "banded",
-    "bandWidth": 0.08,
-    "palette": [
-      [0.5, 0.68, 0.68],
-      [0.62, 0.78, 0.76],
-      [0.78, 0.88, 0.8],
-      [0.68, 0.82, 0.78]
-    ]
+  "lichen": {
+    "layer": "Crust",
+    "form": "foliose",
+    "substrates": ["log", "rock"],
+    "gravelRateMultiplier": 0,
+    "lateral": 0.006,
+    "tipBias": 4.0,
+    "openness": 3,
+    "minNeighbours": 3,
+    "centreDeathDays": 30,
+    "centreDeathMinD2E": 3,
+    "water": { "kWet": 3, "kDry": 0.4, "wMin": 0.15, "wOpt": 0.5 },
+    "light": { "k": 0.22 },
+    "seedBiomass": 0.1,
+    "maxBiomass": 0.4
   },
   "visual": {
     "shape": "foliose",

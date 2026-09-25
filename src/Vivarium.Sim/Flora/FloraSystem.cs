@@ -508,6 +508,11 @@ public sealed class FloraSystem
     /// <summary>True when a new individual of sp may establish at q (no hard refusal, adequate suitability, not overcrowded).</summary>
     public bool CanEstablish(FloraSpeciesDef sp, Vec2 q, out string reason)
     {
+        if (sp.IsCoverageSpecies)
+        {
+            reason = $"{sp.Name} grows on the coverage layers, not as individuals";
+            return false;
+        }
         var s = Suitability(sp, q);
         if (s.HardRefused) { reason = s.RefusalReason; return false; }
         if (s.Score < sp.MinSuitability) { reason = $"habitat too poor ({s})"; return false; }
@@ -519,6 +524,8 @@ public sealed class FloraSystem
 
     public FloraIndividual Establish(FloraSpeciesDef sp, Vec2 q, string cause, double? biomass = null)
     {
+        if (sp.IsCoverageSpecies)
+            throw new InvalidOperationException($"{sp.Id} grows on the coverage layers and cannot be established as a FloraIndividual.");
         var id = _w.Ids.Next(EntityKind.Flora);
         var rng = Rng.Keyed(_w.Seed, "flora.establish", id.Value);
         var f = new FloraIndividual
