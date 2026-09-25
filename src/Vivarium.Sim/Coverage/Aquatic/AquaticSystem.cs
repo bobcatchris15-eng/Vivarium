@@ -27,14 +27,15 @@ public sealed class AquaticSystem : IAquaticEnv
         ProjectBiofilm();
     }
 
-    public void Step(double dtSeconds)
+    public void Step(double physicalSeconds, double bioSeconds)
     {
         var bounds = WetBounds();
         if (bounds is not { } area) { ProjectBiofilm(); return; }
-        double dtDays = dtSeconds / AquaticConst.SecondsPerDay;
+        double dtDays = bioSeconds / AquaticConst.SecondsPerDay;
+        double flowDays = physicalSeconds / AquaticConst.SecondsPerDay;
         AlgaeRules.Step(_w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat, this,
-            new AlgaeBedParams(), new AlgaeFloatParams(), area, dtDays, _step, _w.Seed);
-        SurfaceFloatRules.Step(_w.Coverage.SurfaceFloat, this, new DuckweedParams(), area, dtDays, _step, _w.Seed);
+            new AlgaeBedParams(), new AlgaeFloatParams(), area, dtDays, _step, _w.Seed, flowDays);
+        SurfaceFloatRules.Step(_w.Coverage.SurfaceFloat, this, new DuckweedParams(), area, dtDays, _step, _w.Seed, flowDays);
         _step++;
         ProjectBiofilm();
     }

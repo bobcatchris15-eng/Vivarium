@@ -36,6 +36,23 @@ public static class FaunaFixtures
 [Trait("Suite", "Fauna")]
 public class FaunaTests
 {
+    [Fact]
+    public void ShrimpBiofilmMealRemovesBedAlgae()
+    {
+        var w = FaunaFixtures.PondWorld();
+        var p = FaunaFixtures.Pond;
+        var (gx, gz) = Coverage.CoverageSpec.CellOf(p);
+        for (int z = gz - 5; z <= gz + 5; z++)
+        for (int x = gx - 5; x <= gx + 5; x++)
+            w.Coverage.AlgaeBed.SetCell(x, z, Coverage.Aquatic.AlgaeRules.OccupantId, 0.9f, 0, 0, 0, 0, 0);
+        w.AquaticSystem.ProjectBiofilm();
+        var shrimp = w.FaunaSystem.CreateFounder(Sp("shrimp"), p);
+        shrimp.Energy = 0.01;
+        float before = w.Coverage.AlgaeBed.GetB(gx, gz);
+        w.FaunaSystem.StepMetabolism(30);
+        Assert.True(w.Coverage.AlgaeBed.GetB(gx, gz) < before);
+    }
+
     private static FaunaSpeciesDef Sp(string id) => FaunaFixtures.Sp(id);
 
     [Fact] // t-087

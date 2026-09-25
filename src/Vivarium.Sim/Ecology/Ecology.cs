@@ -35,7 +35,7 @@ public sealed class EcologyTally
 
 /// <summary>
 /// Unified organic-matter pathway: dead flora and fauna feed ONE detritus field; detritus decays into soil
-/// nutrients. Aquatic primary resources (biofilm, plankton) grow from light and nutrients in wet cells.
+/// nutrients. Plankton grows in wet cells; biofilm is a projection of bed algae coverage.
 /// </summary>
 public sealed class EcologySystem
 {
@@ -96,19 +96,19 @@ public sealed class EcologySystem
             bool wet = _w.Water.IsWet(idx);
             if (wet)
             {
-                double light = f.Light.Values[idx];
                 double nutr = f.Nutrients.Values[idx] / eco.NutrientMax;
-                Grow(f.Biofilm, f.Nutrients, idx, eco.BiofilmGrowth * light * (0.3 + 0.7 * nutr), eco.BiofilmCapacity, eco.BiofilmNutrientUse, dt);
                 double depthFactor = MathD.Clamp01(_w.Water.Depth[idx] / 0.15);
                 Grow(f.Plankton, f.Nutrients, idx, eco.PlanktonGrowth * depthFactor * (0.2 + 0.8 * nutr), eco.PlanktonCapacity * depthFactor, eco.PlanktonNutrientUse, dt);
             }
             else
             {
-                // aquatic resources die back on dry ground and become detritus
-                double bf = f.Biofilm.Values[idx] + f.Plankton.Values[idx];
+                // Biofilm is a view of algae; only plankton owns mass here.
+                f.Biofilm[idx] = 0;
+                // plankton dies back on dry ground and becomes detritus
+                double bf = f.Plankton.Values[idx];
                 if (bf > 0)
                 {
-                    f.Biofilm[idx] = 0; f.Plankton[idx] = 0;
+                    f.Plankton[idx] = 0;
                     _w.Tally.DetritusFromFlora += f.Detritus.Add(idx, bf);
                 }
             }

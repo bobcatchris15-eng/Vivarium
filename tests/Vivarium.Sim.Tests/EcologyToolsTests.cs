@@ -59,6 +59,16 @@ public class EcologyTests
         Assert.True(w.Fields.Biofilm.Total() > 0 && w.Fields.Plankton.Total() > 0, "aquatic primary food grows in wet cells");
     }
 
+    [Fact]
+    public void BiofilmDoesNotGrowWithoutBedAlgae()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        w.Coverage.AlgaeBed.Clear();
+        w.Fields.Biofilm.Fill(0);
+        w.Ecology.StepResources(86400);
+        Assert.Equal(0, w.Fields.Biofilm.Total());
+    }
+
     [Fact] // t-120
     public void FedPopulationReturnsBoundedWasteNutrients()
     {

@@ -138,7 +138,7 @@ public sealed class VivariumWorld
             if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props);
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
-        Scheduler.Register("aquatic", Cadence.Flora, 65, Bio(AquaticSystem.Step), phase: 20);
+        Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 20);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
         Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.Step), phase: 30);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);

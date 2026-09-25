@@ -16,13 +16,13 @@ public static class SurfaceFloatRules
     /// <summary>The layer's sole occupant id — duckweed cover has no species variation yet (Aq-2).</summary>
     public const byte OccupantId = 1;
 
-    public static SurfaceFloatStats Step(CoverageLayer layer, IAquaticEnv env, DuckweedParams p, GridBounds domain, double dtDays, long step, ulong seed)
+    public static SurfaceFloatStats Step(CoverageLayer layer, IAquaticEnv env, DuckweedParams p, GridBounds domain, double dtDays, long step, ulong seed, double? advectionDays = null)
     {
         var sw = Stopwatch.StartNew();
         Grow(layer, env, p, domain, dtDays);
         double growthMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
 
-        int substeps = Advect(layer, env, domain, dtDays, p.WindX, p.WindZ);
+        int substeps = Advect(layer, env, domain, advectionDays ?? dtDays, p.WindX, p.WindZ);
         double advectMs = sw.Elapsed.TotalMilliseconds;
 
         return new SurfaceFloatStats(growthMs, advectMs, substeps);

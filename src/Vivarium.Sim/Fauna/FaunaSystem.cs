@@ -295,7 +295,9 @@ public sealed class FaunaSystem
             if (room <= 1e-12) break;
             double want = Math.Min(d.RatePerSecond * ph.MassScale * dt, room / Math.Max(d.Efficiency, 1e-9));
             double got;
-            if (d.Resource.StartsWith("flora:", StringComparison.Ordinal)) got = GrazeFlora(p, d.Resource[6..], want);
+            if (d.Resource == "biofilm")
+                got = Coverage.Aquatic.AquaticBiofilm.GrazeCell(_w.Coverage.AlgaeBed, _w.Fields.Biofilm, cell, want);
+            else if (d.Resource.StartsWith("flora:", StringComparison.Ordinal)) got = GrazeFlora(p, d.Resource[6..], want);
             else
             {
                 var field = _w.Fields.Resource(d.Resource);
