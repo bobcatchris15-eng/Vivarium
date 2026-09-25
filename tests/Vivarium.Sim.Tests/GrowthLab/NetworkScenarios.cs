@@ -82,13 +82,16 @@ public class NetworkScenarios
         var layer = new CoverageLayer(CoverageLayerId.Plasmodium, worldSeed: 21);
         var colony = new PlasmodiumColony(speciesId: 0, prm);
         var attractant = new Attractant(prm);
-        var network = new Network();
+        // §6R item 1: local mass makes the sheet grow larger before the network's own flux adaptation has had
+        // time to prune it (mass no longer bottlenecks growth the way a shared, feed-limited pool used to), so
+        // a faster decay/growth-gain ratio is needed to reach the same peak->final retraction ratio in budget.
+        var network = new Network { Gamma = 0.4, QGain = 6.0 };
         colony.Seed(new[] { (0, 0) });
         layer.SetOcc(0, 0, 1);
         network.SetSources(new[] { source, sink });
 
         int peakCount = 0;
-        for (long s = 0; s < 400; s++)
+        for (long s = 0; s < 500; s++)
         {
             network.Step(layer, colony.CellId.Keys.ToList(), dt: 1.0);
             colony.Step(layer, attractant, env, s, dt: 1.0, network);

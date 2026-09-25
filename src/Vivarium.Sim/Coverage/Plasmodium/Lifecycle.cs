@@ -100,7 +100,7 @@ public sealed class LifecycleController
                     if (org.TimeInState >= _prm.TMig)
                     {
                         org.EnterState(PlasmodiumState.Fruiting);
-                        PlaceFruitingBodies(org, network, cells);
+                        PlaceFruitingBodies(org, colony, network, cells);
                         SetFlag(layer, cells, CoverageFlags.Fruiting, true);
                     }
                     break;
@@ -173,10 +173,12 @@ public sealed class LifecycleController
     /// records. Falls back to the organism's own occupied cells (coarsened to the same lattice, evenly spaced)
     /// when no network was supplied, so fruiting still produces something without G7 wired in.
     /// </summary>
-    private void PlaceFruitingBodies(Plasmodium org, Network? network, List<(int gx, int gz)> cells)
+    private void PlaceFruitingBodies(Plasmodium org, PlasmodiumColony colony, Network? network, List<(int gx, int gz)> cells)
     {
         if (_bodiesPlacedForOrg.Contains(org.Id)) return;
         _bodiesPlacedForOrg.Add(org.Id);
+
+        double orgMass = cells.Sum(c => colony.MassAt(c.gx, c.gz));
 
         var candidates = network != null
             ? LocalMaximaOf(network)
@@ -189,7 +191,7 @@ public sealed class LifecycleController
         double coarseCellSize = CoverageSpec.CellSize * 2;
         double minSpacingCells = _prm.FruitingMinSpacingMeters / coarseCellSize;
 
-        int k = Math.Max(1, (int)Math.Round(org.MassPool / Math.Max(1e-6, _prm.MassPerFruitingBody)));
+        int k = Math.Max(1, (int)Math.Round(orgMass / Math.Max(1e-6, _prm.MassPerFruitingBody)));
 
         var chosen = new List<(int cx, int cz)>();
         foreach (var (node, _) in candidates)
@@ -204,8 +206,8 @@ public sealed class LifecycleController
             if (farEnough) chosen.Add(node);
         }
 
-        double massPerBody = chosen.Count > 0 ? org.MassPool / chosen.Count : 0;
-        org.MassPool = 0; // consumed into fruiting bodies
+        double consumed = colony.ConsumeMassForFruiting(cells); // whole sheet's remaining mass converts (§6.6)
+        double massPerBody = chosen.Count > 0 ? consumed / chosen.Count : 0;
 
         for (int i = 0; i < chosen.Count; i++)
         {

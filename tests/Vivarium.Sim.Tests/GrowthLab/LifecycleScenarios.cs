@@ -49,13 +49,22 @@ public class LifecycleScenarios
         var prm = new PlasmodiumParams
         {
             InitialMass = 200, Beta = 0.05, LambdaF = 6.0, Sigma = 2.0, FeedRate = 4.0,
-            TStarve = 5.0, TMig = 5.0, StarveDetritusThreshold = 0.05,
+            // §6R item 1: seeded far from the sparse food rows, mean-detritus-over-all-cells starves from step
+            // 0 regardless of mass model, exactly as before — but local mass now colonises this aggressively
+            // (no shared pool throttling it), so TStarve/TMig are raised to give the transport network enough
+            // steps to build real hub structure before Migrating -> Fruiting fires (needed for the hub-placement
+            // assertions below to have anything to place bodies at).
+            TStarve = 20.0, TMig = 20.0, StarveDetritusThreshold = 0.05,
             MassPerFruitingBody = 30.0, FruitingRipenSeconds = 3.0, FruitingDecaySeconds = 4.0, ResidueFadeSeconds = 4.0,
         };
         var env = new TestEnv();
         var source = (0, -4);
         var sink = (0, 4);
-        for (int fx = -1; fx <= 1; fx++)
+        // §6R item 1: local mass grows the sheet at a different pace than the retired shared pool did, so a
+        // food patch just wide enough for the old model's growth rate let the mean-detritus-over-all-cells
+        // starvation gate fire before phase 1 even finished growing the hub structure. Widened so mean detritus
+        // stays above StarveDetritusThreshold for the whole of phase 1, exactly as the scenario intends.
+        for (int fx = -3; fx <= 3; fx++)
         {
             env.DetritusMap[(fx, source.Item2 * 2)] = 1e6;
             env.DetritusMap[(fx, sink.Item2 * 2)] = 1e6;
@@ -71,25 +80,37 @@ public class LifecycleScenarios
         network.SetSources(new[] { source, sink });
 
         long s = 0;
+        bool sawMigrating = false, sawFruiting = false;
+        Dictionary<(int, int), double> hubSnapshot = new();
+        List<FruitingBody> bodies = new();
 
-        // Phase 1: grow with food present, building transport-network hub structure.
-        for (; s < 150; s++)
+        // Phase 1: grow with food present, building transport-network hub structure. §6R item 1's local mass
+        // model grows/starves at a different pace than the retired shared pool did — a sparse, distant food
+        // patch means the mean-detritus-over-all-cells starvation gate can fire well before phase 2's explicit
+        // food removal, so the Migrating/Fruiting watch below spans both phases now, not just phase 2.
+        for (; s < 150 && !sawFruiting; s++)
         {
             network.Step(layer, colony.CellId.Keys.ToList(), dt: 1.0);
             colony.Step(layer, attractant, env, s, dt: 1.0, network);
             colony.Relabel(colony.CellId.Keys.ToList());
             lifecycle.Step(layer, colony, network, env, s, dt: 1.0);
+
+            var p1Org = SoleOrg(colony);
+            if (p1Org == null) break;
+            if (p1Org.State == PlasmodiumState.Migrating) sawMigrating = true;
+            if (p1Org.State == PlasmodiumState.Fruiting && !sawFruiting)
+            {
+                sawFruiting = true;
+                foreach (var kv in network.NodeMaxD) hubSnapshot[kv.Key] = kv.Value;
+                bodies = lifecycle.FruitingBodies.ToList();
+            }
         }
 
         // Phase 2: food gone. Keep stepping growth/network (Migrating is not frozen — only Sclerotium is) so
-        // starvation and the eventual Fruiting transition can be observed.
+        // starvation and the eventual Fruiting transition can be observed if phase 1 hasn't already reached it.
         env.DetritusMap.Clear();
 
-        bool sawMigrating = false, sawFruiting = false;
-        Dictionary<(int, int), double> hubSnapshot = new();
-        List<FruitingBody> bodies = new();
-
-        for (; s < 300; s++)
+        for (; s < 300 && !sawFruiting; s++)
         {
             var org = SoleOrg(colony);
             if (org == null) break;
@@ -151,13 +172,22 @@ public class LifecycleScenarios
         var prm = new PlasmodiumParams
         {
             InitialMass = 200, Beta = 0.05, LambdaF = 6.0, Sigma = 2.0, FeedRate = 4.0,
-            TStarve = 5.0, TMig = 5.0, StarveDetritusThreshold = 0.05,
+            // §6R item 1: seeded far from the sparse food rows, mean-detritus-over-all-cells starves from step
+            // 0 regardless of mass model, exactly as before — but local mass now colonises this aggressively
+            // (no shared pool throttling it), so TStarve/TMig are raised to give the transport network enough
+            // steps to build real hub structure before Migrating -> Fruiting fires (needed for the hub-placement
+            // assertions below to have anything to place bodies at).
+            TStarve = 20.0, TMig = 20.0, StarveDetritusThreshold = 0.05,
             MassPerFruitingBody = 30.0, FruitingRipenSeconds = 3.0, FruitingDecaySeconds = 4.0, ResidueFadeSeconds = 4.0,
         };
         var env = new TestEnv();
         var source = (0, -4);
         var sink = (0, 4);
-        for (int fx = -1; fx <= 1; fx++)
+        // §6R item 1: local mass grows the sheet at a different pace than the retired shared pool did, so a
+        // food patch just wide enough for the old model's growth rate let the mean-detritus-over-all-cells
+        // starvation gate fire before phase 1 even finished growing the hub structure. Widened so mean detritus
+        // stays above StarveDetritusThreshold for the whole of phase 1, exactly as the scenario intends.
+        for (int fx = -3; fx <= 3; fx++)
         {
             env.DetritusMap[(fx, source.Item2 * 2)] = 1e6;
             env.DetritusMap[(fx, sink.Item2 * 2)] = 1e6;

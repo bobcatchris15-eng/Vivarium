@@ -64,6 +64,18 @@ public sealed class Network : IPlasmodiumNetwork
 
     public bool ShouldRetract(int gx, int gz) => _retractCoarse.Contains(Attractant.CoarseOf(gx, gz));
 
+    /// <summary>Surviving edge conductance between the coarse nodes containing two fine cells (§6R item 1's
+    /// "existing network conductance D for vein edges"); 0 if they share a coarse node or no surviving edge
+    /// connects their (necessarily 8-adjacent) coarse nodes.</summary>
+    public double VeinConductance(int gx, int gz, int nx, int nz)
+    {
+        var a = Attractant.CoarseOf(gx, gz);
+        var b = Attractant.CoarseOf(nx, nz);
+        if (a == b) return 0;
+        var key = Key(a, b);
+        return _edgeD.TryGetValue(key, out var d) && d >= PruneThreshold ? d : 0;
+    }
+
     /// <summary>Read-only view of the last solve's per-node max adjacent conductance, for frame rendering.</summary>
     public IReadOnlyDictionary<(int, int), double> NodeMaxD => _nodeMaxD;
 
