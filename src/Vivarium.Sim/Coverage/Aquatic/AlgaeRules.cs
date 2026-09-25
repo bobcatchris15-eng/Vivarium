@@ -45,6 +45,7 @@ public static class AlgaeRules
             }
 
             double b = bed.GetB(gx, gz);
+            if (b <= 0) continue; // no spontaneous bloom; keep unseeded water out of the sparse tile map
             double shade = env.SurfaceShadeAt(gx, gz);
             double lightAtDepth = env.LightAt(gx, gz) * (1 - shade) * Math.Exp(-p.LightAtten * depth); // Beer-Lambert
             double gL = lightAtDepth / (lightAtDepth + p.LightHalfSat);

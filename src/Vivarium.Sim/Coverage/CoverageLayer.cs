@@ -3,7 +3,7 @@ using Vivarium.Sim.Core;
 namespace Vivarium.Sim.Coverage;
 
 /// <summary>Which coverage layer a cell belongs to (docs/overhaul/growth_models.md §1.3).</summary>
-public enum CoverageLayerId : int { Mat = 0, Crust = 1, Plasmodium = 2 }
+public enum CoverageLayerId : int { Mat = 0, Crust = 1, Plasmodium = 2, SurfaceFloat = 10, AlgaeBed = 11, AlgaeFloat = 12 }
 
 [Flags]
 public enum CoverageFlags : byte
