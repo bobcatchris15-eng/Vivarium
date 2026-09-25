@@ -1,5 +1,6 @@
 # Photoreal overhaul — orchestrator ledger
-Updated: 2026-09-25 | HEAD: a6d5b71 (+C0 uncommitted) | Plan: ~/.claude/plans/do-2-it-s-fine-fuzzy-journal.md
+Updated: 2026-09-25 | HEAD: 956d37b | Plan: ~/.claude/plans/do-2-it-s-fine-fuzzy-journal.md
+HANDOFF: read docs/overhaul/HANDOFF.md first (rules, in-flight worktrees, queue).
 
 ## Objective
 Move Vivarium from procedural-game look to photographed-miniature-terrarium realism (user's 18-campaign brief, 2026-09-25). Photorealism outranks ecology accuracy, species count, compatibility. ≥30 FPS populated play on Radeon 860M; no billboard/blob LOD; sim authoritative, renderer non-authoritative; breaking changes free ("pull the system apart"). Claude critiques each stage; user does final review.
@@ -45,15 +46,15 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | introcov | introduce/remove moss & lichen clumps via tools | DONE | 52/52 + smoke OK; default back to carpet_moss |
 | edgefld | ScalarField.Sample bilinear near domain edge diluted by out-of-domain cells (moisture 0.7 reads ~0.35) | QUEUED | — |
 | matr | coverage mat renderer | DONE | organic outlines, no grid, ~7% fps; TUNE: reads flat felt/paint, no fibre texture/relief; lichen flat mustard -> mat2 |
-| mat2 | mats: visible fibre/shoot texture, thickness+relief, rim shoots instancing, lichen areolate/lobed look | QUEUED | — |
+| mat2 | mat texture + relief + shoots | FAIL (honest) | shader-only, still paint; WIP on branch task/mat2 unmerged; split -> mat2a geometry relief, mat2b instanced shoots |
 | creep | creeping_groundcover rebuild | DONE | discs gone; TUNE: stolons too thick/straight, too few/tiny leaves (reads as sticks) |
 | vine | climbing_vine giant flat faceted leaves = next icon | QUEUED | — |
 | harn | (folded into mossvis) | — | — |
 | g8b | superseded by Pl-4 | — | — |
 | pl1 | local mass + conservative transport | DONE | far end drains toward food w/o steering; exact conservation; setups retuned (two_food gamma/qgain, starve thresholds) |
 | pl2 | phase field + rectification | DONE a2 | coherent sheet, waves, rectified drift; 8.4ms/600 nodes Debug (runs every 30 sim-s) ; K=0.001 |
-| pl3 | stress replaces Migrating; veins from shuttle Q (remove Network's separate source/sink CG solve, §6R.7); re-prove two_food/maze/fusion | QUEUED | — |
-| aq1 | algae/duckweed surface+bed layers, advection, lab (§15) | QUEUED | — |
+| pl3 | veins from shuttle Q, stress replaces Migrating | DISPATCHED wt pl3 | — |
+| aq1 | algae/duckweed layers + advection + lab | DISPATCHED wt aq1 | — |
 | aq2 | biofilm from algae, grazing, content, seeding | QUEUED | — |
 | aq3 | lily pad species + mesh | DONE a3 | round notched flat pads confirmed visually; a2: pads visible but lanceolate blades tilted on tall stalks, not round flat floating pads; | a1: tests pass, 14 plants; visual FAIL: only petioles visible, no pads on surface (suspect non-uniform depth scale/culling/below surface) |
 | aq4 | aquatic renderers | QUEUED | — |
