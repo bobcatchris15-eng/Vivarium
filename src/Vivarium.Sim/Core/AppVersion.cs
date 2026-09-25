@@ -8,7 +8,7 @@ namespace Vivarium.Sim.Core;
 public static class AppVersion
 {
     public const string ProductName = "Vivarium";
-    public const string Application = "0.1.1";
+    public const string Application = "0.1.2";
 
     /// <summary>Save format version. Bump together with a migration in Persistence.SaveMigrations.</summary>
     public const int SaveSchema = 1;
