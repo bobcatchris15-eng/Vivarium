@@ -42,6 +42,8 @@ public sealed class VivariumWorld
     public FloraSystem FloraSystem { get; }
     public FaunaSystem FaunaSystem { get; }
     public EcologySystem Ecology { get; }
+    /// <summary>Moss/lichen growth on the coverage layers (docs/overhaul/growth_models.md §4, §5, §9).</summary>
+    public CoverageSystem CoverageSystem { get; }
 
     /// <summary>Tick cadences (10 s ticks). Documented in docs/architecture/architecture.md.</summary>
     public static class Cadence
@@ -72,6 +74,7 @@ public sealed class VivariumWorld
         FloraSystem = new FloraSystem(this);
         FaunaSystem = new FaunaSystem(this);
         Ecology = new EcologySystem(this);
+        CoverageSystem = new CoverageSystem(this);
         RegisterSystems();
     }
 
@@ -109,6 +112,7 @@ public sealed class VivariumWorld
         }
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
+        w.CoverageSystem.SeedInitial();
         if (populate) Populate.Starters(w);
         Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna.");
         return w;
@@ -131,6 +135,7 @@ public sealed class VivariumWorld
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
+        Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.Step), phase: 30);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);
     }
 

@@ -111,7 +111,7 @@ public class FloraTests
         Assert.Equal(w.Fields.Nutrients.DigestHex(), w2.Fields.Nutrients.DigestHex());
     }
 
-    [Fact] // t-070, t-080
+    [Fact(Skip = "crust_lichen now grows on the Crust coverage layer, not as FloraIndividuals (docs/overhaul/growth_models.md §5); see CoverageSystemTests.")] // t-070, t-080
     public void PropagationNeverEntersRefusedHabitatAndIsReproducible()
     {
         string Run(out VivariumWorld w)
@@ -230,12 +230,15 @@ public class FloraTests
         Assert.Equal(1, w.Tally.Of(sp.Id).Deaths);
     }
 
+    // Moss/lichen species (carpet_moss, cushion_moss, wetbank_moss, sphagnum, crust_lichen, foliose_lichen,
+    // reindeer_lichen) now run on the coverage layers (docs/overhaul/growth_models.md §4/§5/§8) and never create
+    // FloraIndividuals, so this individual-establish-grow-spread fixture no longer applies to them; see
+    // CoverageSystemTests for their equivalent coverage.
     public static IEnumerable<object[]> SpeciesFixtures() => new[]
     {
-        new object[] { "carpet_moss" }, new object[] { "cushion_moss" }, new object[] { "wetbank_moss" }, new object[] { "crust_lichen" },
-        new object[] { "foliose_lichen" }, new object[] { "creeping_groundcover" }, new object[] { "marginal_waterside" }, new object[] { "ornamental_herb" },
+        new object[] { "creeping_groundcover" }, new object[] { "marginal_waterside" }, new object[] { "ornamental_herb" },
         new object[] { "fern" }, new object[] { "climbing_vine" }, new object[] { "bonnet_mushroom" }, new object[] { "turkey_tail" },
-        new object[] { "stonecrop" }, new object[] { "blue_fescue" }, new object[] { "reindeer_lichen" },
+        new object[] { "stonecrop" }, new object[] { "blue_fescue" },
     };
 
     /// <summary>Builds the habitat each archetype is designed for.</summary>
@@ -480,7 +483,7 @@ public class FloraTests
         Assert.True(w.FloraSystem.CanEstablish(Sp("clover"), p, out var why), why);
     }
 
-    [Fact] // colony-edge growth: rim buds, interior thickens
+    [Fact(Skip = "carpet_moss now grows on the Mat coverage layer, not as FloraIndividuals/colony (docs/overhaul/growth_models.md §4); see CoverageSystemTests.")] // colony-edge growth: rim buds, interior thickens
     public void ColonyGrowsAtRimOnlyAndInteriorHeightRises()
     {
         var w = TestUtil.FlatWorld();
@@ -510,7 +513,7 @@ public class FloraTests
         Assert.Empty(w.CheckInvariants());
     }
 
-    [Fact] // colony-edge growth: lichen tint bands with distance from the colony root
+    [Fact(Skip = "foliose_lichen now grows on the Crust coverage layer, not as FloraIndividuals/colony (docs/overhaul/growth_models.md §5); see CoverageSystemTests.")] // colony-edge growth: lichen tint bands with distance from the colony root
     public void LichenTintCorrelatesWithRingDist()
     {
         var w = TestUtil.FlatWorld();

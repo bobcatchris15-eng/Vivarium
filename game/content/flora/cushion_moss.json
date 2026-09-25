@@ -62,18 +62,19 @@
   ],
   "litterFraction": 0.8,
   "grazingValue": 0.0,
-  "colony": {
-    "cellRadius": 0.04,
-    "frontRate": 0.12,
-    "fillRate": 0.05,
-    "maxHeight": 0.06,
-    "patternMode": "random",
-    "palette": [
-      [0.18, 0.46, 0.15],
-      [0.26, 0.56, 0.2],
-      [0.36, 0.64, 0.22],
-      [0.22, 0.5, 0.17]
-    ]
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.012,
+    "maxHeight": 0.025,
+    "heightRule": "dome",
+    "domeLength": 6.0,
+    "water": { "kWet": 4, "kDry": 0.6, "wMin": 0.15, "wOpt": 0.5 },
+    "light": { "k": 0.3, "max": 0.9 },
+    "dormBrownDays": 4,
+    "dormDeathDays": 20,
+    "sporeRate": 0.0008,
+    "moistureFeedback": 0.0,
+    "seedBiomass": 0.06
   },
   "visual": {
     "shape": "cushion",
