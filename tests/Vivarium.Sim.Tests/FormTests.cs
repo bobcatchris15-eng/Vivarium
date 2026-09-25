@@ -312,6 +312,59 @@ public class FormTests
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
     }
 
+    // FloatLeaf (lily pad): up to 12 leaves x LeafBlade 72 tris + petiole/coil/flower overhead; budget generous
+    // (3000 requested by the plant) but the kernel stays well under it -> assert under 3000.
+    [Fact]
+    public void FloatLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
+    {
+        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            AssertNoZeroAreaTriangles(m);
+            Assert.InRange(m.TriangleCount, 1, 3000);
+        }
+    }
+
+    [Fact]
+    public void FloatLeafIsDeterministic()
+    {
+        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        var m1 = OrganismMeshes.Flora(sp, 42);
+        var m2 = OrganismMeshes.Flora(sp, 42);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+    }
+
+    [Fact]
+    public void FloatLeafPetiolesReachUnitSurfaceHeight()
+    {
+        // The renderer scales this mesh's Y axis directly by local water depth, so every leaf pad's petiole
+        // must rise close to unit Y = 1 regardless of its horizontal lean, or pads would float above/below
+        // the water surface once scaled.
+        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        var m = OrganismMeshes.Flora(sp, 5);
+        var bounds = m.Bounds();
+        Assert.True(bounds.Max.Y > 0.85 && bounds.Max.Y < 1.3, $"floatleaf pads should sit near unit Y=1, got max Y {bounds.Max.Y}");
+    }
+
+    [Fact]
+    public void FloatLeafFootprintIsAuthoredInMetresNotUnitRadius()
+    {
+        // Unlike every other flora shape, floatleaf is NOT built at unit XZ radius 1 (the renderer fixes its
+        // horizontal scale to 1 so pad size stays constant regardless of growth radius/water depth). Regression
+        // guard: if this ever reverts to unit-radius authoring, the plant's XZ footprint would balloon back up
+        // toward ~1 m instead of staying within a small multi-pad clump a few tens of centimetres across.
+        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var bounds = OrganismMeshes.Flora(sp, seed).Bounds();
+            double footprint = Math.Max(Math.Max(Math.Abs(bounds.Min.X), Math.Abs(bounds.Max.X)),
+                Math.Max(Math.Abs(bounds.Min.Z), Math.Abs(bounds.Max.Z)));
+            Assert.True(footprint < 0.4, $"floatleaf footprint should be metre-scale, got {footprint}");
+        }
+    }
+
     // Old (pre-kernel) herb/clover shapes:
     //   herb: 7 leaves x CurvedLeaf(56 tris) + 3 flowers x (Tube 12 + Fan 20) tris = ~488 tris.
     //   New herb uses 72-triangle kernel leaves and 2-3 flower heads with small cupped petals.

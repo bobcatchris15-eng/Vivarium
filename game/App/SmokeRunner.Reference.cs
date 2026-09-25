@@ -235,6 +235,17 @@ public partial class SmokeRunner
         foreach (var g in flora.GroupBy(f => f.SpeciesId).OrderBy(g => g.Key))
         {
             var f = g.OrderByDescending(x => H(x)).ThenBy(x => x.Id.Value).First();
+            if (g.Key == "lily_pad")
+            {
+                // Floats on the surface, not at a height derived from the species' sim-side height factor:
+                // frame it from above the water, close and steep, or the generic per-species framing (anchored
+                // near the pond floor via H(f)) looks up at the petioles from underwater instead of down at pads.
+                double surfaceY = W.Water.SurfaceAt(f.Position);
+                if (double.IsNaN(surfaceY)) surfaceY = W.GroundHeight(f.Position);
+                var padTarget = new Vector3((float)f.X, (float)surfaceY, (float)f.Z);
+                list.Add(Orbit("species_lily_pad", "species", padTarget, 0.35f, 55));
+                continue;
+            }
             float d = (float)Math.Clamp(H(f) * 3.0, 0.12, 0.6);
             list.Add(Orbit("species_" + g.Key, "species", Ground(f.Position) + new Vector3(0, (float)H(f) * 0.3f, 0), d, 50));
         }

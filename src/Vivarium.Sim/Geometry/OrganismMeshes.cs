@@ -175,6 +175,7 @@ public static class OrganismMeshes
             }
             case "roundleaf": RoundLeaf(m, rng, seed, c1, c2); break;
             case "pairedleaf": PairedLeaf(m, rng, seed, c1, c2); break;
+            case "floatleaf": FloatLeaf(m, rng, seed, c1, c2); break;
             case "capitula":
             {
                 // upright stems ending in small star-shaped heads (peat moss capitula)
@@ -582,6 +583,139 @@ public static class OrganismMeshes
             }
             double leafYawWhole = rng.Range(0, 2 * Math.PI);
             AppendRotatedY(m, tmp, basePos, leafYawWhole);
+        }
+    }
+
+    /// <summary>Rooted lily-pad plant: flat, notched, orbicular leaf pads lying at the water surface, each fed by
+    /// a petiole that bends up from a small central rhizome and stays UNDER the pad (submerged, never visible
+    /// above water). Unlike every other flora shape, this one is NOT built at unit XZ radius 1: the renderer
+    /// fixes this species' horizontal scale to 1 (see FloraRenderer.Rebuild) so pad size is authored here
+    /// directly in metres and stays constant regardless of plant growth radius or local water depth. Only
+    /// vertical position is unit-normalised (surface at Y = 1) so the renderer's depth-driven Y scale lands
+    /// everything at the true water height. Includes 1-2 young rolled scroll leaves that DO stand a little
+    /// above the water, older pads with torn/yellowed margins, and 0-2 staged cup flowers held above the surface.</summary>
+    private static void FloatLeaf(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
+    {
+        var yellow = new[] { 0.62, 0.56, 0.22 };
+        var youngCol = new[] { 0.62, 0.58, 0.2 };
+        var underCol = Primitives.Scale(c1, 0.55); // paler, matte underside
+
+        // Small rhizome crown the petioles emerge from (metres, on the pond floor).
+        {
+            var rim = new List<Vec3>();
+            for (int s = 0; s <= 6; s++) { double th = 2 * Math.PI * s / 6; rim.Add(new Vec3(Math.Cos(th) * 0.02, 0, Math.Sin(th) * 0.02)); }
+            Primitives.Fan(m, new Vec3(0, 0.006, 0), rim, Vec3.Up, Primitives.Scale(c1, 0.55), Primitives.Scale(c1, 0.4));
+        }
+
+        int nLeaves = 4 + rng.NextInt(9); // 4..12
+        int nYoung = 1 + rng.NextInt(2);  // 1..2 rolled scroll leaves
+        int nOld = rng.NextInt(3);        // 0..2 older torn/yellowed pads
+
+        for (int k = 0; k < nLeaves; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI);
+            double reach = rng.Range(0.03, 0.11); // pad/scroll centre offset from the rhizome (metres)
+            bool isYoung = k < nYoung;
+            bool isOld = !isYoung && k >= nLeaves - nOld;
+            ulong lSeed = Rng.Mix(seed, (ulong)(k * 401 + 7));
+
+            if (isYoung)
+            {
+                // Young rolled scroll: the one leaf stage allowed above water. Its petiole rises past unit
+                // Y = 1 (the surface) carrying a tight, not-yet-unfurled coil.
+                double riseY = 1.0 + rng.Range(0.05, 0.14);
+                var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
+                var path = new List<Vec3> { Vec3.Zero, dir * (reach * 0.4) + new Vec3(0, 0.55, 0),
+                    dir * (reach * 0.85) + new Vec3(0, 0.92, 0), dir * reach + new Vec3(0, riseY, 0) };
+                var rad = new List<double> { 0.003, 0.0026, 0.002, 0.0016 };
+                Primitives.Tube(m, path, rad, 5, (i, v) => (Primitives.Scale(c1, 0.65), 1, i, v, 0, 0));
+                var tipP = path[^1];
+                var side = new Vec3(-Math.Sin(ang), 0, Math.Cos(ang));
+                var coil = new List<Vec3>(); var crad = new List<double>();
+                for (int i = 0; i <= 10; i++)
+                {
+                    double t = i / 10.0, th = t * Math.PI * 2.6, rr = 0.018 * (1 - t * 0.6);
+                    var p = tipP + new Vec3(0, 0.008 + 0.05 * t, 0) + side * (Math.Cos(th) * rr) + new Vec3(0, Math.Sin(th) * rr * 0.4, 0);
+                    coil.Add(p); crad.Add(0.0022 * (1 - t * 0.5));
+                }
+                int coilCount = coil.Count;
+                Primitives.Tube(m, coil, crad, 4, (i, v) => (Primitives.Mix(c1, youngCol, i / (double)(coilCount - 1)), 1, i, v, 0, 0));
+                continue;
+            }
+
+            // Mature/old pads lie flat at the surface (unit Y = 1); the petiole bends up from the rhizome to
+            // meet the underside of the pad from below and stops a hair short of it, so no stalk shows above
+            // the water for these leaves — only the pad itself does.
+            double padY = 1.0;
+            var padCentre = new Vec3(Math.Cos(ang) * reach, padY, Math.Sin(ang) * reach);
+            const double gap = 0.012;
+            var petPath = new List<Vec3> { Vec3.Zero,
+                (padCentre * 0.35) with { Y = padY * 0.45 },
+                (padCentre * 0.75) with { Y = padY - gap * 3 },
+                padCentre with { Y = padY - gap } };
+            var petRad = new List<double> { 0.0035, 0.003, 0.0024, 0.0016 };
+            Primitives.Tube(m, petPath, petRad, 5, (i, v) => (Primitives.Scale(c1, 0.6), 1, i, v, 0, 0));
+
+            double radius = rng.Range(0.015, 0.04) * (isOld ? rng.Range(0.85, 1.05) : 1.0); // 3-8 cm diameter
+            var topCentreCol = isOld ? Primitives.Mix(c1, yellow, rng.Range(0.4, 0.75)) : Primitives.Scale(c1, 0.95);
+            var topRimCol = isOld ? Primitives.Mix(c2, yellow, rng.Range(0.5, 0.85)) : Primitives.Mix(c1, c2, rng.Range(0.1, 0.3));
+            var bottomCol = isOld ? Primitives.Mix(underCol, yellow, 0.3) : underCol;
+            var tmp = new MeshData();
+            OrbicularPad(tmp, lSeed, radius, thickness: 0.02, topCentreCol, topRimCol, bottomCol,
+                torn: isOld, tearAmp: isOld ? rng.Range(0.06, 0.12) : 0);
+            AppendRotatedY(m, tmp, padCentre, ang);
+        }
+
+        int nFlowers = rng.NextInt(3); // 0..2
+        for (int f = 0; f < nFlowers; f++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), petAngle = rng.Range(0.04, 0.14);
+            double petLen = 1.02 / Math.Cos(petAngle);
+            var stalkAxis = new AxisParams(Length: petLen, BaseAngle: petAngle, BaseAzimuth: ang,
+                Droop: rng.Range(-0.02, 0.03), WobbleAmplitude: 0.006, Segments: 5);
+            ulong sSeed = Rng.Mix(seed, (ulong)(f * 613 + 71));
+            SoftTube.Build(m, new SoftTubeParams(stalkAxis, BaseRadius: 0.004, TipRadius: 0.002, Segments: 5), sSeed,
+                (i, v) => (Primitives.Scale(c1, 0.6), 1, i, v, 0, 0));
+            var top = Axis.Build(stalkAxis, sSeed)[^1].Point;
+            double stageT = (double)((seed + (ulong)f * 3) % 5) / 4.0; // guarantees bud/open/spent variety
+            FlowerHead(m, rng, Rng.Mix(seed, (ulong)(f * 97 + 5)), top, 0.05, stageT,
+                c1, c2, new[] { 0.95, 0.9, 0.55 }, petalCountMax: 6);
+        }
+    }
+
+    /// <summary>Flat, roughly circular double-sided pad in the local XZ plane (Y ~ 0, width ~= length) with a
+    /// V-shaped basal sinus notch cut from the rim all the way to the centre — the peltate attachment point
+    /// where a petiole meets it from below — and a gently upturned rim. Top and bottom faces carry distinct
+    /// colour and UV2.x (0 top / 1 bottom, matching the LeafBlade convention) so a shader can tell the leaf's
+    /// topside from its pale underside; both faces' normals are exactly (0, ±1, 0). The notch/attachment point
+    /// faces local -X; callers rotate the whole pad about Y to aim the notch back toward the plant's rhizome and
+    /// translate it into place.</summary>
+    private static void OrbicularPad(MeshData m, ulong seed, double radius, double thickness,
+        double[] topCentreCol, double[] topRimCol, double[] bottomCol, bool torn, double tearAmp)
+    {
+        var rng = Rng.Keyed(seed, "flora.mesh.orbicularpad", 0);
+        const int seg = 20;
+        const double notchHalf = 0.24; // ~14 deg either side of the -X notch centre
+        double phase = rng.Range(0, 2 * Math.PI);
+        double upturn = radius * 0.22;
+        for (int face = 0; face < 2; face++)
+        {
+            double sign = face == 0 ? 1.0 : -1.0;
+            var n = new Vec3(0, sign, 0);
+            double faceY = sign * thickness * 0.5;
+            var centreCol = face == 0 ? topCentreCol : bottomCol;
+            var rimCol = face == 0 ? topRimCol : bottomCol;
+            int c = m.AddVertex(new Vec3(0, faceY, 0), n, centreCol, 1, 0.5, 0.5, face, 1);
+            var ids = new List<int>();
+            for (int s = 0; s <= seg; s++)
+            {
+                double th = Math.PI + notchHalf + (2 * Math.PI - 2 * notchHalf) * s / seg;
+                double tear = torn ? tearAmp * Math.Sin(th * 5 + phase) : 0;
+                double rr = radius * (1 + tear);
+                var p = new Vec3(Math.Cos(th) * rr, faceY + upturn, Math.Sin(th) * rr);
+                ids.Add(m.AddVertex(p, n, rimCol, 1, (double)s / seg, 1, face, 1));
+            }
+            for (int i = 0; i < ids.Count - 1; i++) Primitives.TriangleFacing(m, c, ids[i], ids[i + 1], n);
         }
     }
 
