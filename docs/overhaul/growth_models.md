@@ -390,3 +390,25 @@ Parallelism:
 ### Open questions for the user
 1. Should slime molds visibly *move* in real time at normal speed (front advance of cm per minute of play), or only across accelerated time? This affects `front` rates and whether the renderer interpolates the front between steps.
 2. Should the island's vascular plants and mosses compete for ground (thick mats blocking seedlings, §7)? This makes wet areas moss-dominated.
+
+---
+
+## 6R. Plasmodium revision (2026-09-25, supersedes §6.4 mass pool, §6.5 source/sink framing, §6.6 Migrating)
+
+A plasmodium is a **spatial organism**: territory plus fields. It never has a commanded transform, and its centroid is measured only.
+Causal loop: **contraction → pressure → flow → mass redistribution → morphology → conductance → flow**.
+
+1. **Local biomass.** Each occupied cell holds cytoplasm mass `m_i`. The global mass pool is removed. Mass moves only along sheet adjacencies and vein edges, conservatively: `Δm_i = Σ_j Q_ij·dt` with an outflow limiter so no cell goes negative. Feeding adds mass locally at food cells. Maintenance cost removes mass everywhere (to detritus/CO2 tally).
+2. **Contraction phase field.** Each node has a phase θ_i and weakly coupled oscillators: `dθ_i/dt = ω_i + K·Σ_j sin(θ_j − θ_i)`, where ω rises with local nutrient uptake and falls with local stress (dryness, light). Local pressure is `P_i = P0·m_i/m_ref + A·sin θ_i`. Travelling waves emerge from gradients in ω.
+3. **Flow.** `Q_ij = D_ij (P_i − P_j)`. Pressure comes directly from the phase and mass, so no global solve is needed each step; this is an explicit graph step. A few warm-started Jacobi relaxations smooth P over veins if needed.
+4. **Rectified net transport.** Forward and back flow over a cycle cancel, except where local conditions differ: cells with higher attractant/food and lower stress retain a small fraction ε more of the inflow (gel/sol stiffening). Migration is the accumulation of that ε over many cycles. No steering vector exists.
+5. **Frontier.** An empty neighbour of a boundary cell is occupied when that cell has m > m_occ; the probability rises with mass, pressure phase, attractant gradient and moisture. The new cell takes mass from its parent.
+6. **Withdrawal.** A cell below m_min vacates (residue flag + timer). Low-flow, food-less regions drain naturally through (1)+(4).
+7. **Veins.** `dD_ij/dt = r·|Q_ij| − γ·D_ij` (time-averaged |Q| over the cycle), with pruning below D_min. Sources and sinks are never designated; hierarchy must emerge. The two-food, maze and fusion lab tests remain the acceptance checks for emergence.
+8. **Stress instead of a Migrating state.** Light and dryness lower ω and raise the maintenance cost locally, so the body drifts away through (4). Fruiting (starvation) and sclerotium (drought) stay as developmental switches.
+
+**Cadence.** A dedicated `plasmodium` scheduler system every 3 ticks (30 sim-s). The period is ~100 sim-s at ω0, so ≥3 samples per cycle; ω is in **sim-seconds, not bio-accelerated time**, which equals real time at 1× speed. Budget: ≤1 ms per plasmodium per step (Debug) at ≤600 nodes.
+**Rendering.** The renderer reads m, D, θ, front and residue. It shows the vein swelling wave with a **wall-clock** phase offset seeded from sim θ, so at high game speed the visual pulse stays at a natural real-time rate. The display is non-authoritative.
+**Abstraction.** `SpatialOrganism` base (territory + per-cell fields + step), with `Plasmodium` first and `ColonialMat` (moss/lichen coverage) second. `Mycelium` is reserved for later.
+
+Packets: **Pl-1** local mass + conservative transport · **Pl-2** phase field + cadence + rectification · **Pl-3** stress replaces Migrating; re-prove two_food/maze/fusion · **Pl-4** SpatialOrganism refactor + in-game slime off FloraIndividual (old G8b) · **P3-slime** renderer.
