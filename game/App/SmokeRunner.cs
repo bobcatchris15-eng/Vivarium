@@ -37,6 +37,8 @@ public partial class SmokeRunner : Node
         Directory.CreateDirectory(OutDir);
         Log.AddSink(_log);
         Session.Tools.PointerEnabled = false;
+        // measurements must not be capped by the display refresh rate
+        if (RunMode is Mode.Perf or Mode.Reference) DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
         _ = RunAsync();
     }
 
