@@ -44,18 +44,20 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | mossvis | coverage-aware reference scenes | MERGED (harness only) | sim areas healthy (carpet 0.45 m², lichens ~0.09); claimed mats visible but images show only log-shader moss tint + terrain green; lichen absent -> covvis |
 | covvis | PROVE coverage renderer draws, fix | DONE (winding flipped, single-sided; 95.9 fps) | root: fan winding reversed -> backface culled (debug magenta proved 266k tris draped correctly incl rock tops). doubleSided fix cost 9% -> asked to flip winding instead |
 | introcov | introduce/remove moss & lichen clumps via tools | DONE | 52/52 + smoke OK; default back to carpet_moss |
-| edgefld | ScalarField.Sample bilinear near domain edge diluted by out-of-domain cells (moisture 0.7 reads ~0.35) | QUEUED | — |
+| edgefld | ScalarField.Sample bilinear near domain edge diluted by out-of-domain cells (moisture 0.7 reads ~0.35) | IN PROGRESS wt edgefld | test added, implementing weight renormalisation |
 | matr | coverage mat renderer | DONE | organic outlines, no grid, ~7% fps; TUNE: reads flat felt/paint, no fibre texture/relief; lichen flat mustard -> mat2 |
-| mat2 | mat texture + relief + shoots | FAIL (honest) | shader-only, still paint; WIP on branch task/mat2 unmerged; split -> mat2a geometry relief, mat2b instanced shoots |
+| mat2 | mat texture + relief + shoots | FAIL (honest) | shader-only, still paint; split -> mat2a geometry relief, mat2b instanced shoots |
+| mat2a | mat geometry relief (cushion domes, thickness, displaced normals) | IN PROGRESS wt mat2a | seeded, building, implementing displacement in CoverageRenderer.cs |
+| mat2b | instanced micro-shoots via CoverageShoots.cs | QUEUED | depends on mat2a |
 | creep | creeping_groundcover rebuild | DONE | discs gone; TUNE: stolons too thick/straight, too few/tiny leaves (reads as sticks) |
 | vine | climbing_vine giant flat faceted leaves = next icon | QUEUED | — |
 | harn | (folded into mossvis) | — | — |
 | g8b | superseded by Pl-4 | — | — |
 | pl1 | local mass + conservative transport | DONE | far end drains toward food w/o steering; exact conservation; setups retuned (two_food gamma/qgain, starve thresholds) |
 | pl2 | phase field + rectification | DONE a2 | coherent sheet, waves, rectified drift; 8.4ms/600 nodes Debug (runs every 30 sim-s) ; K=0.001 |
-| pl3 | veins from shuttle Q, stress replaces Migrating | DISPATCHED wt pl3 | — |
-| aq1 | algae/duckweed layers + advection + lab | DISPATCHED wt aq1 | — |
-| aq2 | biofilm from algae, grazing, content, seeding | QUEUED | — |
+| pl3 | veins from shuttle Q, stress replaces Migrating | IN PROGRESS wt pl3 | 57/60 pass; 3 fail; Foraging.cs boundary retraction fix underway |
+| aq1 | algae/duckweed layers + advection + lab | MERGED e2a2b0d | 66/66 tests pass, 41/41 mainline GrowthLab pass, worktree removed |
+| aq2 | biofilm from algae, grazing, content, seeding | UNBLOCKED | ready for dispatch (depends on aq1) |
 | aq3 | lily pad species + mesh | DONE a3 | round notched flat pads confirmed visually; a2: pads visible but lanceolate blades tilted on tall stalks, not round flat floating pads; | a1: tests pass, 14 plants; visual FAIL: only petioles visible, no pads on surface (suspect non-uniform depth scale/culling/below surface) |
 | aq4 | aquatic renderers | QUEUED | — |
 | pl4 | SpatialOrganism refactor + in-game slime migration | QUEUED | — |
