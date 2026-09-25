@@ -15,7 +15,7 @@ public partial class ToolController : Node
 {
     public GameSession Session { get; set; } = null!;
     public ToolKind Current { get; private set; } = ToolKind.Select;
-    public string? FloraSpecies { get; set; } = "creeping_groundcover";
+    public string? FloraSpecies { get; set; } = "carpet_moss";
     public string? FaunaSpecies { get; set; } = "springtail";
     public double NutrientRadius { get; set; } = 0.5;
     public double RockScale { get; set; } = 0.3;
@@ -313,7 +313,9 @@ public partial class ToolController : Node
                 else r = ToolResult.Fail("point at a critter to pick it up");
                 break;
             case ToolKind.RemovePlant:
-                r = hit.Kind == HitKind.Flora ? t.RemovePlant(hit.Id) : ToolResult.Fail("point at a plant, moss or lichen");
+                if (hit.Kind == HitKind.Flora) r = t.RemovePlant(hit.Id);
+                else if (hit.IsHit) r = t.RemoveCoverage(p);
+                else r = ToolResult.Fail("point at a plant, moss or lichen");
                 break;
             case ToolKind.Nutrients:
                 if (!hit.IsHit) return null;

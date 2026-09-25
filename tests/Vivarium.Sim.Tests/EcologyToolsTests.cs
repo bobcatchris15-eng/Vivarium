@@ -309,4 +309,74 @@ public class ToolTests
         Assert.All(fish.Affected, id => Assert.True(w.Genomes.Contains(w.Fauna.Get(id)!.GenomeId)));
         Assert.False(t.IntroduceFauna("springtail", FaunaFixtures.Pond).Ok);
     }
+
+    [Fact] // introduce/remove moss and lichen through the ordinary tools
+    public void IntroduceFloraHandlesCoverageSpeciesMossAndLichen()
+    {
+        var (w, t) = Setup();
+        var mossPt = new Vec2(0, 2);   // interior point: away from the domain edge so field sampling isn't half-diluted
+        // moss shuns full sun (photoinhibition); shade the land patch like it would be under a canopy
+        foreach (int c in w.Grid.CellsInRadius(mossPt, 0.6)) w.Fields.Light[c] = 0.4;
+
+        // moss establishes on moist ground and shows up as coverage, not a FloraIndividual (world may already
+        // carry unrelated starter moss elsewhere from SeedInitial, so compare deltas, not absolute area)
+        double baselineMoss = w.CoverageSystem.CoveredArea("carpet_moss");
+        var moss = t.IntroduceFlora("carpet_moss", mossPt);
+        Assert.True(moss.Ok, moss.Message);
+        Assert.Empty(moss.Affected);
+        double afterIntroduce = w.CoverageSystem.CoveredArea("carpet_moss");
+        Assert.True(afterIntroduce > baselineMoss);
+        Assert.Null(t.PreviewFlora("carpet_moss", mossPt));
+
+        // fails underwater
+        var wet = t.IntroduceFlora("carpet_moss", FaunaFixtures.Pond);
+        Assert.False(wet.Ok);
+        Assert.NotNull(t.PreviewFlora("carpet_moss", FaunaFixtures.Pond));
+
+        // fails on dry ground
+        var dryPt = new Vec2(0, -2);
+        foreach (int c in w.Grid.CellsInRadius(dryPt, 0.6)) { w.Fields.Light[c] = 0.4; w.Fields.Moisture[c] = 0.02; }
+        Assert.False(t.IntroduceFlora("carpet_moss", dryPt).Ok);
+        Assert.NotNull(t.PreviewFlora("carpet_moss", dryPt));
+
+        // lichen refuses soil but succeeds on rock
+        Assert.False(t.IntroduceFlora("crust_lichen", mossPt).Ok);
+        var rockPos = new Vec2(2.5, -1.5);
+        Assert.True(t.PlaceRock(rockPos, 0.35, 0.2, 77).Ok);
+        var lichen = t.IntroduceFlora("crust_lichen", rockPos);
+        Assert.True(lichen.Ok, lichen.Message);
+        Assert.True(w.CoverageSystem.CoveredArea("crust_lichen") > 0);
+
+        // remove tool clears the coverage disc
+        var cleared = t.RemoveCoverage(mossPt);
+        Assert.True(cleared.Ok, cleared.Message);
+        Assert.True(w.CoverageSystem.CoveredArea("carpet_moss") < afterIntroduce);
+        Assert.False(t.RemoveCoverage(mossPt).Ok);
+    }
+
+    [Fact] // determinism + save/load round-trip for a hand-introduced coverage clump
+    public void CoverageIntroductionIsDeterministicAndSurvivesSaveLoad()
+    {
+        var mossPt = new Vec2(0, 2);
+        var (w1, t1) = Setup();
+        foreach (int c in w1.Grid.CellsInRadius(mossPt, 0.6)) w1.Fields.Light[c] = 0.4;
+        Assert.True(t1.IntroduceFlora("carpet_moss", mossPt).Ok);
+        for (int i = 0; i < 20; i++) w1.Step(60);
+        var digest1 = TestUtil.Digest(w1);
+
+        var (w2, t2) = Setup();
+        foreach (int c in w2.Grid.CellsInRadius(mossPt, 0.6)) w2.Fields.Light[c] = 0.4;
+        Assert.True(t2.IntroduceFlora("carpet_moss", mossPt).Ok);
+        for (int i = 0; i < 20; i++) w2.Step(60);
+        var digest2 = TestUtil.Digest(w2);
+        Assert.Equal(digest1, digest2);
+
+        var dir = TestUtil.TempDir();
+        var path = Path.Combine(dir, "coverage.vivsave");
+        Assert.True(Persistence.SaveSystem.Save(w1, path).Ok);
+        var loaded = Persistence.SaveSystem.Load(w1.Content, path);
+        Assert.True(loaded.Ok, loaded.Message);
+        Assert.True(loaded.World!.CoverageSystem.CoveredArea("carpet_moss") > 0);
+        Assert.Equal(digest1, TestUtil.Digest(loaded.World));
+    }
 }

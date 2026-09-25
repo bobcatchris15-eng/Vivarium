@@ -102,6 +102,17 @@ public sealed class ToolActions
         return _w.FloraSystem.Kill(f, "removed") ? ToolResult.Success($"removed {name}", floraId) : ToolResult.Fail("nothing to remove");
     }
 
+    /// <summary>Removal radius (m) for clearing a moss/lichen coverage patch under the cursor.</summary>
+    public const double RemoveCoverageRadius = 0.09;
+
+    /// <summary>Clears coverage cells (moss/lichen) in a small disc at p, for the remove tool when it isn't
+    /// pointed at a flora individual.</summary>
+    public ToolResult RemoveCoverage(Vec2 p)
+    {
+        int cleared = _w.CoverageSystem.ClearDisc(p, RemoveCoverageRadius);
+        return cleared > 0 ? ToolResult.Success("cleared moss/lichen") : ToolResult.Fail("nothing to remove");
+    }
+
     // ------------------------------------------------------------------ nutrients
 
     public double ClampNutrientRadius(double r) => MathD.Clamp(r, Cfg.NutrientMinRadius, Cfg.NutrientMaxRadius);
@@ -269,6 +280,8 @@ public sealed class ToolActions
     {
         var sp = _w.Content.FloraById(speciesId);
         if (sp == null) return "unknown species";
+        if (sp.IsCoverageSpecies)
+            return _w.CoverageSystem.CanSeed(sp.Id, p, out var covReason) ? null : covReason;
         return _w.FloraSystem.CanEstablish(sp, p, out var reason) ? null : reason;
     }
 
