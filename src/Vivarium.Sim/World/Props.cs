@@ -34,14 +34,21 @@ public sealed class Rock
         return ex * ex + ez * ez <= 1;
     }
 
-    /// <summary>Approximate top surface height of the rock at p (ellipsoid), or NaN outside the footprint.</summary>
+    /// <summary>Approximate faceted rock crown at p, or NaN outside its visual footprint.</summary>
     public double TopAt(Vec2 p)
     {
         double r = FootprintRadius;
         if (Math.Abs(p.X - X) > r || Math.Abs(p.Z - Z) > r) return double.NaN;
         var d = (p - Position).Rotated(-RotationY);
-        double ex = d.X / SizeX, ez = d.Z / SizeZ, q = 1 - ex * ex - ez * ez;
-        return q > 0 ? Y + SizeY * Math.Sqrt(q) : double.NaN;
+        double ex = d.X / SizeX, ez = d.Z / SizeZ;
+        double radius = Math.Sqrt(ex * ex + ez * ez);
+        if (radius >= 1) return double.NaN;
+        double height = radius < 0.45
+            ? MathD.Lerp(0.75, 0.56, radius / 0.45)
+            : radius < 0.8
+                ? MathD.Lerp(0.56, 0.25, (radius - 0.45) / 0.35)
+                : MathD.Lerp(0.25, -0.2, (radius - 0.8) / 0.2);
+        return Y + SizeY * height;
     }
 }
 

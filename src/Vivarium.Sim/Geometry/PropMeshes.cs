@@ -28,15 +28,15 @@ public static class PropMeshes
         double shearX = rng.Range(-0.12, 0.12), shearZ = rng.Range(-0.12, 0.12);
         double[] heights = family switch
         {
-            0 => new[] { -0.38, -0.20, 0.46, 0.76 },
-            1 => new[] { -0.38, -0.14, 0.12, 0.37 },
-            _ => new[] { -0.38, -0.18, 0.42, 1.05 },
+            0 => new[] { -0.38, -0.16, 0.22, 0.56 },
+            1 => new[] { -0.38, -0.12, 0.29, 0.60 },
+            _ => new[] { -0.38, -0.20, 0.34, 0.65 },
         };
         double[] radii = family switch
         {
-            0 => new[] { 0.78, 1.0, 0.91, 0.46 },
-            1 => new[] { 0.86, 1.0, 0.84, 0.72 },
-            _ => new[] { 0.79, 0.96, 0.67, 0.24 },
+            0 => new[] { 0.78, 1.0, 0.76, 0.38 },
+            1 => new[] { 0.84, 1.0, 0.79, 0.44 },
+            _ => new[] { 0.78, 0.97, 0.66, 0.23 },
         };
         var sector = new double[sides];
         var angular = new double[sides];
@@ -49,7 +49,7 @@ public static class PropMeshes
         for (int r = 0; r < heights.Length; r++)
             for (int s = 0; s < sides; s++)
             {
-                double y = heights[r] + rng.Range(-0.025, 0.025);
+                double y = heights[r] + rng.Range(-0.06, 0.06);
                 // Whole-sector offsets make long fracture edges; slab bands step outward at each layer.
                 double radius = radii[r] * sector[s] * rng.Range(0.96, 1.04);
                 double a = angular[s];
@@ -79,7 +79,8 @@ public static class PropMeshes
                 Face(a, c, d, outwards, shade * rng.Range(0.96, 1.04));
             }
         var bottom = new Vec3(0, heights[0], 0);
-        var top = new Vec3(heights[^1] * shearX, heights[^1], heights[^1] * shearZ);
+        // Shared crest height is the placement and surface-query contract for every family.
+        var top = new Vec3(0.75 * shearX, 0.75, 0.75 * shearZ);
         for (int s = 0; s < sides; s++)
         {
             int next = (s + 1) % sides;

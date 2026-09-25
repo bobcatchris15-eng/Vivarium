@@ -109,7 +109,7 @@ public sealed class PropPlacement
     private const int MaxStackLevels = 3;
     private const double StackEps = 1e-6;
 
-    private static double RockTop(Rock rk) => rk.Y + rk.SizeY * 0.75;
+    private static double RockTop(Rock rk) => rk.TopAt(rk.Position);
     private static double LogTop(LogProp lg) => lg.Y + lg.Radius;
 
     /// <summary>Highest surface (terrain or a prop) directly under p; the seat height for a new prop centred there.</summary>
@@ -119,7 +119,11 @@ public sealed class PropPlacement
     {
         double best = _w.Terrain.Height(p);
         foreach (var rk in Props.Rocks)
-            if (!excluded(rk.Id) && rk.Covers(p)) best = Math.Max(best, RockTop(rk));
+            if (!excluded(rk.Id) && rk.Covers(p))
+            {
+                double top = rk.TopAt(p);
+                if (!double.IsNaN(top)) best = Math.Max(best, top);
+            }
         foreach (var lg in Props.Logs)
             if (!excluded(lg.Id) && lg.AxisDistance(p) <= lg.Radius) best = Math.Max(best, LogTop(lg));
         return best;

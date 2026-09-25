@@ -188,7 +188,7 @@ public partial class SmokeRunner
         }
         // 10 rock/soil contact, 11 log/decomposer contact
         var rock = W.Props.Rocks.OrderBy(r => r.Id.Value).FirstOrDefault();
-        if (rock != null) list.Add(Orbit("rock_contact", "rock", Ground(rock.Position), (float)(rock.FootprintRadius * 3.2), 14, 30));
+        if (rock != null) list.Add(Orbit("rock_contact", "rock", Ground(rock.Position) + new Vector3(0, (float)(rock.SizeY * 0.35), 0), (float)(rock.FootprintRadius * 2.8), 25, 30));
         var log = W.Props.Logs.OrderBy(l => l.Id.Value).FirstOrDefault();
         if (log != null) list.Add(Orbit("log_contact", "log", Ground(log.Position), (float)(log.Radius * 5), 18, 60));
         // 12 dense colony
