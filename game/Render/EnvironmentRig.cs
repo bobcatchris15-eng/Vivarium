@@ -18,6 +18,12 @@ public partial class EnvironmentRig : Node3D
     private float _underwaterTarget;
     public int Quality { get; private set; } = -1;
 
+    // Pale warm-grey/green humid haze — reads as damp terrarium air, not smoke or mist.
+    private static readonly Color HazeFogColor = new(0.78f, 0.80f, 0.74f);
+    private const float HazeFogDensity = 0.02f;
+    private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
+    private const float UnderwaterFogDensity = 0.18f;
+
     public override void _Ready()
     {
         var sky = new ProceduralSkyMaterial
@@ -45,8 +51,17 @@ public partial class EnvironmentRig : Node3D
             AdjustmentContrast = 1.02f,
             AdjustmentBrightness = 1.0f,
             GlowEnabled = false,
-            FogEnabled = false,
-            SsaoRadius = 0.6f, SsaoIntensity = 1.2f,
+            // Humid-air haze: gentle aerial perspective, not a fog wall. Kept very low density so
+            // organisms at normal interaction distance (0.3-3 m) stay crisp; only the far ~15 m
+            // island edge softens. Underwater blends on top of this in _Process, never replaces it.
+            FogEnabled = true,
+            FogLightColor = HazeFogColor,
+            FogLightEnergy = 1.0f,
+            FogDensity = HazeFogDensity,
+            FogSunScatter = 0.35f,
+            FogSkyAffect = 0.1f,
+            FogAerialPerspective = 0.35f,
+            SsaoRadius = 0.5f, SsaoIntensity = 0.8f, SsaoPower = 1.2f,
         };
         WorldEnv = new WorldEnvironment { Environment = Env };
         AddChild(WorldEnv);
@@ -94,7 +109,8 @@ public partial class EnvironmentRig : Node3D
             case 1:
                 Sun.ShadowEnabled = true;
                 RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
-                Env.SsaoEnabled = false; Env.GlowEnabled = false;
+                // Contact AO at the default tier too; radius/intensity above already tuned cheap.
+                Env.SsaoEnabled = true; Env.GlowEnabled = false;
                 vp.Msaa3D = Viewport.Msaa.Disabled; vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Fxaa;
                 vp.Scaling3DScale = 1.0f;
                 Sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits;
@@ -120,13 +136,11 @@ public partial class EnvironmentRig : Node3D
         _underwater = Mathf.MoveToward(_underwater, _underwaterTarget, (float)delta * 5f);
         _underwaterRect.Visible = _underwater > 0.01f;
         _underwaterMat.SetShaderParameter("strength", _underwater * 0.85f);
-        Env.FogEnabled = _underwater > 0.01f;
-        if (Env.FogEnabled)
-        {
-            Env.FogLightColor = new Color(0.32f, 0.62f, 0.66f);
-            Env.FogDensity = 0.18f * _underwater;
-            Env.FogSkyAffect = 1.0f;
-        }
+        // Blend, never overwrite: humid-air haze stays the floor, underwater fog rides on top.
+        Env.FogEnabled = true;
+        Env.FogLightColor = HazeFogColor.Lerp(UnderwaterFogColor, _underwater);
+        Env.FogDensity = Mathf.Lerp(HazeFogDensity, UnderwaterFogDensity, _underwater);
+        Env.FogSkyAffect = Mathf.Lerp(0.1f, 1.0f, _underwater);
         Env.AdjustmentSaturation = Mathf.Lerp(1.07f, 1.02f, _underwater);
     }
 }
