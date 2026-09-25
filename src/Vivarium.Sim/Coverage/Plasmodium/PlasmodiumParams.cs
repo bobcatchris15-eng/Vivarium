@@ -50,13 +50,41 @@ public sealed class PlasmodiumParams
     public double WMin { get; init; } = 0.1;
     public double WOpt { get; init; } = 0.5;
 
-    /// <summary>Mass cost of colonising one new cell.</summary>
+    /// <summary>Mass transferred from a parent cell to a newly colonised cell (§6R item 1).</summary>
     public double MCell { get; init; } = 1.0;
+
+    /// <summary>Minimum own mass a boundary cell needs before it may spend <see cref="MCell"/> on a new
+    /// neighbour (§6R item 5: "boundary cells with m &gt; m_occ"). Must exceed <see cref="MCell"/> or every
+    /// colonisation would drain its parent to exactly zero.</summary>
+    public double MOcc { get; init; } = 1.1;
+
+    /// <summary>Mass below which an occupied cell vacates outright (§6R item 6, "m_min").</summary>
+    public double MMin { get; init; } = 0.005;
+
+    /// <summary>Reference mass m_ref for the local pressure term P_i = P0 * m_i / MRef (§6R item 1; the phase
+    /// term A*sin(theta) is added in Pl-2).</summary>
+    public double MRef { get; init; } = 3.0;
+
+    /// <summary>Pressure gain P0 in P_i = P0 * m_i / MRef.</summary>
+    public double P0 { get; init; } = 1.0;
+
+    /// <summary>Base conductance between two 8-adjacent occupied sheet cells, used for mass transport
+    /// (§6R item 1) even where no vein edge exists. Vein conductance (from <see cref="Network"/>, when supplied)
+    /// adds to this in parallel rather than replacing it. High enough that mass reaches a growing front within a
+    /// handful of steps — with a fixed initial mass and no shared pool, transport is now the only way mass gets
+    /// from a fed interior cell out to the boundary that spends it — but not so high that it equalises an entire
+    /// large sheet in one step and starves the thin bridging path a vein hierarchy needs to stay connected.</summary>
+    public double SheetConductance { get; init; } = 1.5;
+
+    /// <summary>Maintenance cost, mass/second, removed from every occupied cell every step (§6R item 1;
+    /// tallied into <see cref="PlasmodiumColony.RemovedMass"/>). Zero by default until §6R item 8 (stress) wires
+    /// a nonzero rate; existing lab scenarios that never configured a global mass pool upkeep stay unaffected.</summary>
+    public double MaintenanceRate { get; init; } = 0.0;
 
     /// <summary>Feeding rate, mass/second, taken from detritus under an occupied cell.</summary>
     public double FeedRate { get; init; } = 4.0;
 
-    /// <summary>Initial mass pool for a newly seeded plasmodium.</summary>
+    /// <summary>Initial total mass for a newly seeded plasmodium, split evenly across the seeded cells.</summary>
     public double InitialMass { get; init; } = 20.0;
 
     // ------------------------------------------------------------------ life cycle (§6.1, §6.6)

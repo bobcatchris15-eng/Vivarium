@@ -26,6 +26,11 @@ public interface IPlasmodiumNetwork
 {
     /// <summary>True if the network considers this cell thinned out enough to vacate (§6.5 retraction).</summary>
     bool ShouldRetract(int gx, int gz);
+
+    /// <summary>Conductance to use for mass transport (§6R item 1) between two fine cells, when a surviving vein
+    /// edge connects the coarse nodes they fall in. Zero when the two cells share a coarse node (sheet-only, no
+    /// separate vein contribution) or no surviving edge exists between their coarse nodes.</summary>
+    double VeinConductance(int gx, int gz, int nx, int nz);
 }
 
 /// <summary>Deterministic 8-connected component labelling over a set of occupied cells (union-find).
@@ -98,8 +103,22 @@ public sealed class PlasmodiumColony
     public IReadOnlyDictionary<(int gx, int gz), int> CellId => _cellId;
     public IReadOnlyDictionary<int, Plasmodium> Organisms => _organisms;
 
+    /// <summary>Per-cell cytoplasm mass (§6R item 1). No global pool: every mass change is either a local
+    /// feeding gain, a local maintenance/withdrawal loss (both tallied into <see cref="RemovedMass"/>/
+    /// <see cref="FedMass"/>), or a conservative transfer between two cells that leaves the sum unchanged.</summary>
+    public IReadOnlyDictionary<(int gx, int gz), double> Mass => _mass;
+
+    /// <summary>Running tally of mass permanently removed (maintenance cost, network retraction, m_min
+    /// withdrawal) since this colony was created. Kept so callers can assert exact conservation:
+    /// <c>TotalMass() == initialTotal + FedMass - RemovedMass</c>.</summary>
+    public double RemovedMass { get; private set; }
+
+    /// <summary>Running tally of mass added by feeding since this colony was created.</summary>
+    public double FedMass { get; private set; }
+
     private readonly Dictionary<(int, int), int> _cellId = new();
     private readonly Dictionary<int, Plasmodium> _organisms = new();
+    private readonly Dictionary<(int, int), double> _mass = new();
     private int _nextId = 1;
 
     public PlasmodiumColony(int speciesId, PlasmodiumParams prm)
@@ -108,20 +127,48 @@ public sealed class PlasmodiumColony
         Params = prm;
     }
 
-    /// <summary>Seeds a brand-new plasmodium at the given cells with a fresh id and the configured initial mass.</summary>
+    /// <summary>Seeds a brand-new plasmodium at the given cells with a fresh id, splitting the configured
+    /// initial mass evenly across the seeded cells (§6R item 1: mass lives on cells, not a per-organism pool).</summary>
     public int Seed(IEnumerable<(int gx, int gz)> cells)
     {
         int id = _nextId++;
-        _organisms[id] = new Plasmodium(id, SpeciesId, Params.InitialMass);
-        foreach (var c in cells) _cellId[c] = id;
+        _organisms[id] = new Plasmodium(id, SpeciesId);
+        var list = cells.ToList();
+        double perCell = list.Count > 0 ? Params.InitialMass / list.Count : 0;
+        foreach (var c in list)
+        {
+            _cellId[c] = id;
+            _mass[c] = (_mass.TryGetValue(c, out var m) ? m : 0) + perCell;
+        }
         return id;
     }
 
+    /// <summary>Sum of every occupied cell's mass — a diagnostic total, not an authoritative pool (§6R item 1).</summary>
     public double TotalMass()
     {
         double m = 0;
-        foreach (var o in _organisms.Values) m += o.MassPool;
+        foreach (var v in _mass.Values) m += v;
         return m;
+    }
+
+    /// <summary>Mass at a cell, or 0 if unoccupied/untracked.</summary>
+    public double MassAt(int gx, int gz) => _mass.TryGetValue((gx, gz), out var m) ? m : 0;
+
+    /// <summary>Zeroes the mass of every given cell and returns the total taken (tallied into
+    /// <see cref="RemovedMass"/>): used by <see cref="LifecycleController"/> to convert a Fruiting organism's
+    /// remaining sheet mass into fruiting bodies (§6.6) without a per-organism pool to draw from directly.</summary>
+    public double ConsumeMassForFruiting(IEnumerable<(int gx, int gz)> cells)
+    {
+        double total = 0;
+        foreach (var c in cells)
+        {
+            double m = MassAt(c.gx, c.gz);
+            if (m <= 0) continue;
+            total += m;
+            _mass[c] = 0;
+        }
+        RemovedMass += total;
+        return total;
     }
 
     /// <summary>Recomputes components over the current occupied set and reconciles ids (fusion/split).
@@ -144,21 +191,16 @@ public sealed class PlasmodiumColony
         var assignedId = new int?[components.Count]; // resolved id per component index, filled below
 
         // Pass 2: fusion — any component whose own cells carry more than one distinct old id merges those
-        // organisms into the smallest id right away; this consumes those old ids entirely (§6.1).
+        // organisms into the smallest id right away; this consumes those old ids entirely (§6.1). Mass itself
+        // needs no bookkeeping here (§6R item 1): it is keyed by cell coordinate, not by id, so it rides along
+        // with each cell across the relabel automatically.
         var consumedOldIds = new HashSet<int>();
-        var fusedMass = new Dictionary<int, double>();
         for (int i = 0; i < components.Count; i++)
         {
             if (overlaps[i].Count <= 1) continue;
             int keepId = overlaps[i].Keys.Min();
-            double mass = 0;
-            foreach (var oldId in overlaps[i].Keys)
-            {
-                if (_organisms.TryGetValue(oldId, out var org)) mass += org.MassPool;
-                consumedOldIds.Add(oldId);
-            }
+            foreach (var oldId in overlaps[i].Keys) consumedOldIds.Add(oldId);
             assignedId[i] = keepId;
-            fusedMass[i] = mass;
         }
 
         // Pass 3: split — group the remaining (single-old-id, unconsumed) components by that old id. One old
@@ -177,9 +219,6 @@ public sealed class PlasmodiumColony
 
         foreach (var (oldId, compIndices) in bySingleOldId)
         {
-            double oldMass = _organisms.TryGetValue(oldId, out var org) ? org.MassPool : 0;
-            int totalCells = compIndices.Sum(i => components[i].Count);
-
             // Deterministic winner: most cells, ties broken by the smallest first cell.
             int winner = compIndices
                 .OrderByDescending(i => components[i].Count)
@@ -187,11 +226,7 @@ public sealed class PlasmodiumColony
                 .First();
 
             foreach (int i in compIndices)
-            {
-                int id = i == winner ? oldId : _nextId++;
-                assignedId[i] = id;
-                fusedMass[i] = totalCells > 0 ? oldMass * components[i].Count / totalCells : 0;
-            }
+                assignedId[i] = i == winner ? oldId : _nextId++;
         }
 
         // Pass 4: anything left is a brand-new component with no old-id overlap at all.
@@ -199,7 +234,6 @@ public sealed class PlasmodiumColony
         {
             if (assignedId[i].HasValue) continue;
             assignedId[i] = _nextId++;
-            fusedMass[i] = 0;
         }
 
         var newCellId = new Dictionary<(int, int), int>();
@@ -208,7 +242,7 @@ public sealed class PlasmodiumColony
         {
             int id = assignedId[i]!.Value;
             var existing = _organisms.TryGetValue(id, out var e) ? e : null;
-            var plasmodium = new Plasmodium(id, SpeciesId, fusedMass[i], existing?.State ?? PlasmodiumState.Foraging)
+            var plasmodium = new Plasmodium(id, SpeciesId, existing?.State ?? PlasmodiumState.Foraging)
             {
                 TimeInState = existing?.TimeInState ?? 0,
                 TimeDry = existing?.TimeDry ?? 0,
@@ -235,17 +269,24 @@ public sealed class PlasmodiumColony
 
     // Reused across steps to avoid per-step list allocations; cleared, not reallocated.
     private readonly List<(int gx, int gz)> _frontBuf = new();
-    private readonly List<((int gx, int gz) cell, int ownerId)> _toColoniseBuf = new();
+    private readonly List<((int gx, int gz) cell, int ownerId, (int gx, int gz) parent)> _toColoniseBuf = new();
     private readonly List<(int gx, int gz)> _retractBuf = new();
+    private readonly List<(int gx, int gz)> _cellsSortedBuf = new();
+    private readonly Dictionary<(int, int), double> _outFlowBuf = new();
+    private readonly List<((int gx, int gz) from, (int gx, int gz) to, double amount)> _edgeFlowBuf = new();
 
     /// <summary>
-    /// One foraging step (§6.4): flags fronts, tries extension into empty 8-neighbours with
-    /// p = 1 - exp(-(lambda_f/dist) * (beta + max(0, gradC . dir)) * g_W * dt) — the 1/dist term makes a
+    /// One foraging step (§6.4, revised by §6R item 1): flags fronts, tries extension into empty 8-neighbours
+    /// with p = 1 - exp(-(lambda_f/dist) * (beta + max(0, gradC . dir)) * g_W * dt) — the 1/dist term makes a
     /// diagonal colonisation attempt (dist = sqrt2) exactly as likely per unit distance covered as an axial one
     /// (dist = 1), which is what keeps the front an irregular blob instead of the Moore-neighbourhood square you
-    /// get from an undamped per-neighbour probability — paid for out of the owning plasmodium's mass pool, then
-    /// feeds every occupied cell over detritus back into that pool. Colonised cells are folded into whichever id
-    /// currently owns their component's neighbours; call <see cref="Relabel"/> afterwards for up-to-date identity.
+    /// get from an undamped per-neighbour probability. A boundary cell may only spend mass this way once its own
+    /// mass exceeds <see cref="PlasmodiumParams.MOcc"/>, and the new cell's <see cref="PlasmodiumParams.MCell"/>
+    /// starting mass is a direct transfer from its parent (no pool, no creation). Feeding then adds mass locally
+    /// at cells over detritus, and a conservative transport pass (§6R items 1, 5, 6) redistributes mass along
+    /// sheet/vein conductance before maintenance and m_min withdrawal remove whatever they remove — tallied, not
+    /// discarded. Colonised cells are folded into whichever id currently owns their component's neighbours; call
+    /// <see cref="Relabel"/> afterwards for up-to-date identity.
     /// </summary>
     public void Step(CoverageLayer layer, Attractant attractant, IPlasmodiumEnvironment env, long step, double dt,
         IPlasmodiumNetwork? network = null)
@@ -255,18 +296,14 @@ public sealed class PlasmodiumColony
         attractant.Step(_cellId.Keys, (cx, cz) => SampleDetritusCoarse(env, cx, cz));
 
         // Retraction (§6.5): cells the transport network has flagged as off-network sheet vacate outright,
-        // before front detection runs, so a retracting cell never gets re-flagged as a front the same step.
+        // before front detection runs, so a retracting cell never gets re-flagged as a front the same step. Any
+        // mass still sitting on the cell at that instant is tallied removed (§6R item 1), not discarded silently.
         if (network != null)
         {
             _retractBuf.Clear();
             foreach (var (gx, gz) in _cellId.Keys)
                 if (network.ShouldRetract(gx, gz)) _retractBuf.Add((gx, gz));
-            foreach (var cell in _retractBuf)
-            {
-                _cellId.Remove(cell);
-                layer.SetOcc(cell.gx, cell.gz, 0);
-                ClearFrontFlag(layer, cell.gx, cell.gz);
-            }
+            foreach (var cell in _retractBuf) VacateCell(layer, cell);
         }
 
         // Front detection first, over the unsorted dictionary (cheap membership tests only); the sort below is
@@ -289,8 +326,8 @@ public sealed class PlasmodiumColony
             SetFrontFlag(layer, gx, gz);
 
             int ownerId = _cellId[(gx, gz)];
-            var organism = _organisms[ownerId];
-            if (organism.MassPool < Params.MCell) continue;
+            double ownMass = MassAt(gx, gz);
+            if (ownMass < Params.MOcc) continue; // §6R item 5: only a boundary cell with m > m_occ may extend
 
             var (cx, cz) = Attractant.CoarseOf(gx, gz);
             var grad = attractant.GradientAt(cx, cz);
@@ -314,33 +351,188 @@ public sealed class PlasmodiumColony
                 if (p <= 0) continue;
 
                 double u = layer.Hash01(gx, gz, step, purpose: 100 + dirIdx);
-                if (u < p) _toColoniseBuf.Add((n, ownerId));
+                if (u < p) _toColoniseBuf.Add((n, ownerId, (gx, gz)));
             }
         }
 
-        foreach (var ((gx, gz), ownerId) in _toColoniseBuf)
+        foreach (var ((gx, gz), ownerId, parent) in _toColoniseBuf)
         {
             if (_cellId.ContainsKey((gx, gz))) continue; // already claimed by an earlier front cell this step
-            var organism = _organisms[ownerId];
-            if (organism.MassPool < Params.MCell) continue;
-            organism.MassPool -= Params.MCell;
+            double parentMass = MassAt(parent.gx, parent.gz);
+            if (parentMass < Params.MCell) continue; // parent already spent below this on an earlier direction
+            _mass[parent] = parentMass - Params.MCell;
+            _mass[(gx, gz)] = Params.MCell;
             _cellId[(gx, gz)] = ownerId;
             layer.SetOcc(gx, gz, 1);
         }
 
-        // Feeding: every occupied cell over detritus takes into its owner's mass pool (§6.4). Order doesn't
+        // Feeding: every occupied cell over detritus takes mass directly, locally (§6R item 1). Order doesn't
         // matter here (each cell's take is independent and mass addition is commutative), so no sort needed.
         double want = Params.FeedRate * dt;
         if (want > 0)
         {
-            foreach (var ((gx, gz), ownerId) in _cellId)
+            foreach (var (gx, gz) in _cellId.Keys)
             {
                 double taken = env.TakeDetritus(gx, gz, want);
-                if (taken > 0) _organisms[ownerId].MassPool += taken;
+                if (taken > 0)
+                {
+                    _mass[(gx, gz)] = MassAt(gx, gz) + taken;
+                    FedMass += taken;
+                }
             }
         }
 
+        // Conservative transport (§6R items 1, 3): moves mass between occupied cells only, sum unchanged.
+        Transport(network, dt);
+
+        // Maintenance cost (local, tallied removed) and m_min withdrawal (§6R item 6).
+        ApplyMaintenanceAndWithdrawal(layer, network, dt);
+
         layer.Advance();
+    }
+
+    /// <summary>Vacates one cell outright: whatever mass remains on it is tallied into <see cref="RemovedMass"/>
+    /// (not discarded silently), a residue flag (the Dead bit — no dedicated Residue bit exists) is left on the
+    /// now-unoccupied ground for rendering, and it is dropped from both the mass and cell-id maps.</summary>
+    private void VacateCell(CoverageLayer layer, (int gx, int gz) cell)
+    {
+        double leftover = MassAt(cell.gx, cell.gz);
+        if (leftover > 0) RemovedMass += leftover;
+        _mass.Remove(cell);
+        _cellId.Remove(cell);
+        SetResidueFlag(layer, cell.gx, cell.gz);
+        layer.SetOcc(cell.gx, cell.gz, 0);
+        ClearFrontFlag(layer, cell.gx, cell.gz);
+    }
+
+    /// <summary>
+    /// Conservative mass flow along sheet adjacencies and vein edges (§6R items 1, 3): Q_ij = D_ij * (P_i - P_j)
+    /// / dist, with P_i = P0 * m_i / MRef (the phase term A*sin(theta) arrives in Pl-2), D_ij = base sheet
+    /// conductance plus whatever vein conductance the network reports for that pair (parallel paths, so they
+    /// add). Two passes over a fixed cell order (ascending tuple) keep this deterministic: pass one computes
+    /// every cell's total desired outflow this step; pass two derives a per-cell limiter (1 if outflow &lt;=
+    /// current mass, otherwise mass/outflow) so no cell can be driven negative, then applies every edge's actual
+    /// transfer scaled by its source cell's limiter. Every transfer subtracts from one cell and adds the same
+    /// amount to another, so the sum over the colony is exactly unchanged by this method.
+    /// </summary>
+    private void Transport(IPlasmodiumNetwork? network, double dt)
+    {
+        if (dt <= 0 || _cellId.Count == 0) return;
+
+        _cellsSortedBuf.Clear();
+        _cellsSortedBuf.AddRange(_cellId.Keys);
+        _cellsSortedBuf.Sort();
+
+        _outFlowBuf.Clear();
+        _edgeFlowBuf.Clear();
+
+        foreach (var i in _cellsSortedBuf)
+        {
+            double mi = MassAt(i.gx, i.gz);
+            double pi = Params.P0 * mi / Params.MRef;
+            foreach (var (dx, dz, dist) in Dirs8)
+            {
+                var j = (i.gx + dx, i.gz + dz);
+                if (i.CompareTo(j) >= 0) continue; // each unordered pair once
+                if (!_cellId.ContainsKey(j)) continue;
+
+                double mj = MassAt(j.Item1, j.Item2);
+                double pj = Params.P0 * mj / Params.MRef;
+                double dVein = network?.VeinConductance(i.gx, i.gz, j.Item1, j.Item2) ?? 0;
+                double dTotal = Params.SheetConductance + dVein;
+                if (dTotal <= 0) continue;
+
+                double q = dTotal * (pi - pj) / dist;
+                double amt = q * dt;
+                if (amt > 0)
+                {
+                    _outFlowBuf[i] = _outFlowBuf.GetValueOrDefault(i) + amt;
+                    _edgeFlowBuf.Add((i, j, amt));
+                }
+                else if (amt < 0)
+                {
+                    var from = j;
+                    _outFlowBuf[from] = _outFlowBuf.GetValueOrDefault(from) + (-amt);
+                    _edgeFlowBuf.Add((from, i, -amt));
+                }
+            }
+        }
+
+        // Convert accumulated outflow totals into per-cell limiters in place (safe: fully populated above,
+        // consumed only in the loop below).
+        foreach (var cell in _cellsSortedBuf)
+        {
+            if (!_outFlowBuf.TryGetValue(cell, out var totalOut) || totalOut <= 0) continue;
+            double mass = MassAt(cell.gx, cell.gz);
+            _outFlowBuf[cell] = totalOut > mass ? mass / totalOut : 1.0;
+        }
+
+        foreach (var (from, to, amount) in _edgeFlowBuf)
+        {
+            double limiter = _outFlowBuf.TryGetValue(from, out var lim) ? lim : 1.0;
+            double actual = amount * limiter;
+            if (actual <= 0) continue;
+            _mass[from] = MassAt(from.gx, from.gz) - actual;
+            _mass[to] = MassAt(to.Item1, to.Item2) + actual;
+        }
+    }
+
+    /// <summary>Maintenance cost (local, tallied into <see cref="RemovedMass"/>) followed by m_min withdrawal
+    /// (§6R item 6): any cell whose mass has fallen below <see cref="PlasmodiumParams.MMin"/> vacates outright.
+    /// A cell that still sits on a surviving vein edge is exempt from mass-driven withdrawal even if its own
+    /// local mass has dipped low: it legitimately runs thin under conservative diffusion toward a richer
+    /// neighbour (exactly the mechanism §6R item 4's rectified transport will exploit) without being a candidate
+    /// for removal — the network's own <see cref="IPlasmodiumNetwork.ShouldRetract"/> (conductance decay,
+    /// already applied earlier this step) is the retraction authority for anything still carrying flow. Plain
+    /// sheet cells off the vein network drain and vacate through this path exactly as spec'd.</summary>
+    private void ApplyMaintenanceAndWithdrawal(CoverageLayer layer, IPlasmodiumNetwork? network, double dt)
+    {
+        if (Params.MaintenanceRate > 0)
+        {
+            foreach (var cell in _cellId.Keys.ToList())
+            {
+                double m = MassAt(cell.Item1, cell.Item2);
+                double cost = Math.Min(m, Params.MaintenanceRate * dt);
+                if (cost <= 0) continue;
+                _mass[cell] = m - cost;
+                RemovedMass += cost;
+            }
+        }
+
+        _retractBuf.Clear();
+        foreach (var cell in _cellId.Keys)
+        {
+            if (MassAt(cell.Item1, cell.Item2) >= Params.MMin) continue;
+            if (network != null && IsOnLiveVein(network, cell)) continue;
+            _retractBuf.Add(cell);
+        }
+        foreach (var cell in _retractBuf) VacateCell(layer, cell);
+    }
+
+    private bool IsOnLiveVein(IPlasmodiumNetwork network, (int gx, int gz) cell)
+    {
+        foreach (var (dx, dz, _) in Dirs8)
+        {
+            var n = (cell.Item1 + dx, cell.Item2 + dz);
+            if (_cellId.ContainsKey(n) && network.VeinConductance(cell.Item1, cell.Item2, n.Item1, n.Item2) > 0)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Marks a cell as m_min residue (§6R item 6): the Dead bit, left set on the now-unoccupied ground
+    /// so the renderer can still show it fading, matching the convention <see cref="LifecycleController"/>
+    /// already uses for Fruiting decay (no dedicated Residue bit exists in <see cref="CoverageFlags"/>).</summary>
+    private static void SetResidueFlag(CoverageLayer layer, int gx, int gz)
+    {
+        var (ti, tj) = CoverageSpec.TileOf(gx, gz);
+        var tile = layer.GetOrCreateTile(ti, tj);
+        int li = CoverageSpec.LocalIndex(gx, gz);
+        byte before = tile.Flags[li];
+        byte after = (byte)(before | (byte)CoverageFlags.Dead);
+        if (after == before) return;
+        tile.Flags[li] = after;
+        tile.Touch();
     }
 
     /// <summary>Sets the Front flag bit directly on the tile's array, without touching Occ/B/W/Age/Dorm/D2E

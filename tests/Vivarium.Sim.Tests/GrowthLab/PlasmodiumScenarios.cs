@@ -121,6 +121,11 @@ public class PlasmodiumScenarios
     [Fact]
     public void MassConservedWithNoFood()
     {
+        // §6R item 1 revision: mass is no longer a shared pool that a new cell's MCell is permanently spent
+        // from — it's a direct transfer from parent to child, so it never leaves the colony. With no feeding and
+        // no maintenance (default MaintenanceRate = 0), total mass is exactly unchanged by growth, transport or
+        // relabelling alike; the old "pool == poolAfter + cellsGained*MCell" formula encoded the retired
+        // per-organism pool's debit accounting and is no longer meaningful.
         var prm = new PlasmodiumParams { InitialMass = 200, Beta = 0.3, LambdaF = 6.0 };
         var env = new TestEnv(); // no detritus anywhere: feeding contributes nothing
 
@@ -141,10 +146,10 @@ public class PlasmodiumScenarios
 
         double poolAfter = colony.TotalMass();
         int cellsAfter = colony.CellId.Count;
-        int cellsGained = cellsAfter - cellsBefore;
+        Assert.True(cellsAfter > cellsBefore, "colony never grew: nothing to conserve mass across");
 
-        // Every new cell cost exactly MCell out of the pool; nothing came in (no food) so pool + spend is conserved.
-        Assert.Equal(poolBefore, poolAfter + cellsGained * prm.MCell, precision: 9);
+        // Exact conservation: no feeding, no maintenance, no withdrawal expected to fire at this InitialMass.
+        Assert.Equal(poolBefore, poolAfter + colony.RemovedMass - colony.FedMass, precision: 9);
     }
 
     // ------------------------------------------------------------------ fan shape with no gradient
