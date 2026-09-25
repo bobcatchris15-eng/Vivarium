@@ -127,6 +127,49 @@ public class FieldTests
         Assert.Throws<InvalidDataException>(() => copy.ImportDomainValues(new double[3]));
     }
 
+    [Fact]
+    public void UniformFieldSamplingAtOrNearBoundaryReturnsUniformValue()
+    {
+        var dom = new HexDomain(10);
+        var g = new GridSpec(dom, 0.25);
+        var f = new ScalarField("uniform", g, 0.7, 0, 1);
+
+        foreach (int idx in g.DomainCells)
+        {
+            if (!g.IsBoundaryCell[idx]) continue;
+            var center = g.CellCenter(idx);
+            // Sample at cell center
+            Assert.Equal(0.7, f.Sample(center), 6);
+
+            // Sample offsets towards cell edges in 8 directions
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    var p = center + new Vec2(dx * g.CellSize * 0.49, dz * g.CellSize * 0.49);
+                    double sampled = f.Sample(p);
+                    Assert.True(Math.Abs(sampled - 0.7) < 1e-6,
+                        $"Sample at boundary cell {idx} offset ({dx},{dz}) returned {sampled} instead of 0.7");
+                }
+            }
+        }
+
+        // Test along the domain boundary and slightly outside
+        for (double angle = 0; angle < Math.PI * 2; angle += 0.02)
+        {
+            var dir = new Vec2(Math.Cos(angle), Math.Sin(angle));
+            for (double dist = 9.0; dist <= 15.0; dist += 0.05)
+            {
+                var p = dir * dist;
+                int c = g.NearestDomainCell(p);
+                Assert.True(g.InDomain(c), $"NearestDomainCell for {p} returned non-domain cell {c}");
+                double s = f.Sample(p);
+                Assert.True(Math.Abs(s - 0.7) < 1e-6,
+                    $"Sample at angle {angle}, dist {dist} returned {s} instead of 0.7");
+            }
+        }
+    }
+
     [Fact] // t-046
     public void CategoricalFieldReturnsExactCategories()
     {
