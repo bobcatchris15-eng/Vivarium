@@ -273,8 +273,9 @@ public partial class FloraRenderer : Node3D
         float mid = Math.Max(height * 0.5f, 0.01f);
         var center = basePos + Vector3.Up * mid;
         float sphereRadius = Math.Max(radius, mid) + FrustumSafetyMargin;
+        // Godot frustum planes face outward: inside points have negative distance, outside positive.
         foreach (var plane in camera.GetFrustum())
-            if (plane.DistanceTo(center) < -sphereRadius) return false;
+            if (plane.DistanceTo(center) > sphereRadius) return false;
         return true;
     }
 
