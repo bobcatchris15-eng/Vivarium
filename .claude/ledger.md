@@ -17,8 +17,25 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | id | outcome | status | last |
 |----|---------|--------|------|
 | c0 | reference mode, perf summary, compare tool, baseline, VALIDATE | DONE | VIVARIUM_REFERENCE_OK 40 scenes; digest repeatable |
-| p1 | S1 kernel + broadleaf migration (docs/overhaul/S1_S2_plan.md) | DISPATCHED sonnet, Mode S on main | — |
-| p2 | S2 CoverageLayer sim: moss/lichen CA + Physarum front + Tero network | PLANNED (after p1) | — |
+| p1 | S1 monolith | SPLIT | Clanker refused: SCOPE_TOO_LARGE, no edits |
+| p1a | Form kernel + FormTests | DONE | PASS 15 tests, re-verified |
+| p1b | roundleaf/pairedleaf migration | DONE a2 | watercress/bacopa improved; giant flat pads = colony instance scale (XZ=r, Y=colony MaxHeight) squashing leaves -> fix in gm |
+| p1c | herb/trifoliate + flower cup | PARTIAL | 2026-09-25 resume: 72-tri two-sided herb leaves + smaller flower cups; FormTests 24/24, reference 40/40. Herb is green again but flowers still need an art pass at interaction distance. Capture: build/reference/p1c-resume-final. |
+| p1d | 12 variants + shader seed deform + reference/fps | QUEUED | — |
+| p2 | growth sim — spec docs/overhaul/growth_models.md §13 (G1..G10, P3) | IN PROGRESS | — |
+| g12 | G1+G2 | DONE | PASS 26 tests re-verified, merged b791069 |
+| g3 | G3 | DONE | PASS 58 re-verified, merged 9a37c31 |
+| g4 | moss rules + lab | DONE a3 | merged; seam+drought recovery OK; dense 19.7ms (phys 3.2, spread 3.0, D2E 10.6 on pathological unbounded case) -> re-measure on real island in gm |
+| g5a | lichen rules + lab | DONE a2 | merged; 3.4ms dense. TUNE LATER: foliose reads coral/DLA not radial rosette |
+| g6 | plasmodium front + lab | DONE a3 (partial) | merged; fan+gradient OK, 0.97ms. Fusion scenario NOT demonstrated (seeds never meet) -> carried into G7 acceptance. Hit 60-turn limit. |
+| g7 | Tero network + fusion | DONE | merged; two_food 1-trunk, maze=BFS, fusion 2->1; 2.4ms/600 nodes (budget relaxed to 3ms Debug). TUNE: retraction leaves lattice chevron shapes |
+| gm-a | vascular groundcovers -> plain plants | COMMITTED on task/gma, merge after p1c | suites PASS; counts unmeasured -> check in next reference |
+| gm-b | monolith | SPLIT | refused SCOPE_TOO_LARGE, no edits |
+| gm-b1 | content mat/lichen blocks + CoverageSystem + seeding + scheduler; flora skips moss/lichen | DISPATCHED wt gmb | — |
+| g8a | slime lifecycle rules + lab | DONE | merged 5d84b4f; starve->migrate->fruit OK; dry sclerotium OK but seed never grows; residue rectangle odd (tune in P3) |
+| g8b | slime_mold off FloraIndividual onto Plasmodium layer (after gm-b chain) | QUEUED | — |
+| gm-b2 | delete colony code + tests + grazing/tools/stats hooks | QUEUED | — |
+| gm-b3 | interim draped raster renderer + reference | QUEUED | — |
 
 ## Baseline v0.1.2 (860M, 1600×900, paused sim, 899 flora/300 fauna)
 - fps range 16 (overview, cutaway) – 36; most close scenes 25–30. p95 frame ≈50 ms even at ~30 fps mean (pacing hitch — investigate in S6).
@@ -43,5 +60,23 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 
 - D5 09-25: ~~D1 colony = many FloraIndividual cells~~ superseded — cell instances are intrinsically a field of chips. OBS: colonies/slime read as scattered chips/sticks → DECISION: sim-authoritative sparse 1.5cm CoverageLayer raster (moss/lichen CA, Physarum front + Tero flow-adaptation network) → EFFECT: continuous mats, hierarchical veins emerging from dynamics → TEST: dense_colony, colony_edge, slime_* scenes. Revisit if sim cost > Perf suite budget.
 
+- D6 09-25: open Qs defaulted (user said proceed): slime advances over accelerated time, renderer interpolates front; thick mats (cushion/sphagnum) block seedlings. Revisit on user feedback.
+- D7 09-25: token plan — packets cite doc sections, orchestrator never reads source, one-command re-verify, sim-only packets in worktrees parallel to render packets on main.
+
+- D8 09-25: Agent isolation:worktree bases on origin/main (a6d5b71), not local HEAD -> use manual `git worktree add -b task/<slug> .claude/worktrees/<slug> HEAD` and pass abs path in packet. Revisit if we push main regularly.
+
+- D9 09-25: FPS only comparable in back-to-back paired runs — p1b run showed every scene capped at 60 with unchanged primitives (session vsync/power state differs from baseline). Gate fps on paired runs (baseline commit + candidate same session).
+
+- D10 09-25: numeric lab asserts are gameable (foliose passed via holes, fan passed as square) -> orchestrator always eyeballs lab frames before merge; packets must write legible frames (species hue, flags, B brightness).
+
+- D13 09-25: timing asserts flake under parallel Clanker load -> all ms asserts tagged Speed=Slow + Suite=Perf; per-task validate uses Speed!=Slow.
+- D12 09-25: Tero network budget 1.5->3 ms Debug/600 nodes — runs once per flora step (600 sim-s) per plasmodium; Release faster. Revisit if many plasmodia coexist.
+- D11 09-25: Clankers refuse packets spanning >~8 files / >2 subsystems (p1, gm-b both). Default packet size: one subsystem, ≤6 files, one validate.
+
 ## Unverified assumptions
 - Worktree seed/cost for Mode P with windowed Probe unmeasured.
+
+## Resume checkpoint (2026-09-25)
+- Main: reduced herb leaf detail from 128 to 72 triangles, retained both faces and nondegenerate geometry, and reduced flower-head size from 0.32 to 0.12 so petals no longer cover the crown. `FormTests` 24/24; `dotnet build game/Vivarium.csproj` clean; reference returned `VIVARIUM_REFERENCE_OK` for 40 scenes. `species_ornamental_herb` now shows a green crown, though its flowers remain visually small. Sim digest matches the earlier p1c capture.
+- `task/gma` is committed in its worktree and awaits integration after the remaining p1c art review.
+- `task/gmb` is still uncommitted coverage integration. It compiles; its 6-bio-day world tests are slow and were stopped before a verdict. Do not merge without a focused test and visual check.

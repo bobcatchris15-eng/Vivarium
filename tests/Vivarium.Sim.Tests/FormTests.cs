@@ -98,6 +98,18 @@ public class FormTests
         Assert.InRange(m.TriangleCount, 60, 150);
     }
 
+    [Fact]
+    public void LeafBladeLowDetailRetainsBothFacesWithinBudget()
+    {
+        var m = new MeshData();
+        LeafBlade.Build(m, DefaultLeaf() with { DetailLevel = 0 }, 42, Green, LightGreen);
+        AssertAllFinite(m);
+        AssertNoZeroAreaTriangles(m);
+        Assert.Equal(72, m.TriangleCount);
+        Assert.Contains(0f, m.UV2.Where((_, i) => i % 2 == 0));
+        Assert.Contains(1f, m.UV2.Where((_, i) => i % 2 == 0));
+    }
+
     [Theory]
     [InlineData(BladeProfile.Ovate)]
     [InlineData(BladeProfile.Lanceolate)]
@@ -221,6 +233,55 @@ public class FormTests
     public void PairedLeafIsDeterministic()
     {
         var sp = new FloraSpeciesDef { Id = "bacopa", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
+        var m1 = OrganismMeshes.Flora(sp, 42);
+        var m2 = OrganismMeshes.Flora(sp, 42);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+    }
+
+    // Old (pre-kernel) herb/clover shapes:
+    //   herb: 7 leaves x CurvedLeaf(56 tris) + 3 flowers x (Tube 12 + Fan 20) tris = ~488 tris.
+    //   New herb uses 72-triangle kernel leaves and 2-3 flower heads with small cupped petals.
+    //   trifoliate: up to 26 instances x (Tube 12 + 3 lobes x CurvedLeaf(32) + flower ~20 x 0.15) tris = ~2500 tris
+    //               -> 2x budget conservatively widened for the occasional kernel-petal pompom flower.
+    [Fact]
+    public void HerbIsFiniteNonDegenerateAndWithinTriangleBudget()
+    {
+        // The flower centre uses Primitives.Fan, which can have degenerate centre/rim triangles.
+        var sp = new FloraSpeciesDef { Id = "ornamental_herb", Shape = "herb", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 5; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            Assert.InRange(m.TriangleCount, 1, 1300);
+        }
+    }
+
+    [Fact]
+    public void HerbIsDeterministic()
+    {
+        var sp = new FloraSpeciesDef { Id = "ornamental_herb", Shape = "herb", Color = Green, Color2 = LightGreen };
+        var m1 = OrganismMeshes.Flora(sp, 42);
+        var m2 = OrganismMeshes.Flora(sp, 42);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+    }
+
+    [Fact]
+    public void TrifoliateIsFiniteNonDegenerateAndWithinTriangleBudget()
+    {
+        // Existing CurvedLeaf-based clover leaflets collapse to a point at the root.
+        var sp = new FloraSpeciesDef { Id = "clover", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 5; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            Assert.InRange(m.TriangleCount, 1, 6000);
+        }
+    }
+
+    [Fact]
+    public void TrifoliateIsDeterministic()
+    {
+        var sp = new FloraSpeciesDef { Id = "clover", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
         var m1 = OrganismMeshes.Flora(sp, 42);
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());

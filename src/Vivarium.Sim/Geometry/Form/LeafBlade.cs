@@ -57,9 +57,9 @@ public static class LeafBlade
         int startTris = m.TriangleCount;
         var frames = Axis.Build(p.Midrib, seed);
 
-        int detail = Math.Max(1, p.DetailLevel);
-        int longitudinal = 4 + 4 * detail;
-        int acrossCols = 2 + 2 * detail; // number of quads across half-width*2
+        int detail = Math.Max(0, p.DetailLevel);
+        int longitudinal = detail == 0 ? 6 : 4 + 4 * detail;
+        int acrossCols = detail == 0 ? 3 : 2 + 2 * detail; // quads across the full width
 
         Vec3 Pos(double t, double x, double faceSign, out Vec3 normalOut)
         {

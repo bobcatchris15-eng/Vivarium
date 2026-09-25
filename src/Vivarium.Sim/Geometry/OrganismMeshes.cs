@@ -154,30 +154,39 @@ public static class OrganismMeshes
                 break;
             case "herb":
             {
-                for (int k = 0; k < 7; k++)
+                // irregular basal crown of kernel-built lanceolate leaves (cambered, midrib-folded, drooping tips,
+                // random overlapping angles/lengths, always GREEN regardless of species tint) around several
+                // leaning flower stalks, each carrying a kernel-staged cambered cup coloured with the species
+                // tint (lilac/violet) so the plant no longer reads as a flat lilac star.
+                var leafBase = new[] { 0.14, 0.42, 0.10 };
+                var leafTip = new[] { 0.32, 0.62, 0.22 };
+                int nLeaves = 5 + rng.NextInt(3); // 5..7 irregular leaves; low detail retains 72 triangles per blade
+                for (int k = 0; k < nLeaves; k++)
                 {
-                    double ang = 2 * Math.PI * k / 7 + rng.Range(-0.22, 0.22);
-                    var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
-                    var side = new Vec3(-dir.Z, 0, dir.X);
-                    double len = rng.Range(0.78, 0.98), width = rng.Range(0.15, 0.21);
-                    var root = dir * rng.Range(0.00, 0.05) + new Vec3(0, 0.045, 0);
-                    var tip = dir * len + new Vec3(0, rng.Range(0.08, 0.16), 0);
-                    Primitives.CurvedLeaf(m, root, tip, side, width,
-                        Primitives.Scale(c1, 0.78), Primitives.Scale(c2, 1.03),
-                        camber: rng.Range(0.025, 0.065), longitudinal: 7, asymmetry: rng.Range(-0.18, 0.18));
+                    double ang = rng.Range(0, 2 * Math.PI); // fully irregular, not evenly spaced -> leaves overlap
+                    double len = rng.Range(0.55, 1.0);       // unequal lengths
+                    var leafAxis = new AxisParams(Length: len, BaseAngle: rng.Range(0.5, 0.95), BaseAzimuth: ang,
+                        Droop: rng.Range(0.7, 1.4), WobbleAmplitude: 0.015, WobbleFrequency: 1.1, Segments: 5);
+                    ulong lSeed = Rng.Mix(seed, (ulong)(k * 401 + 3));
+                    var bp = new LeafBladeParams(
+                        Midrib: leafAxis, Profile: BladeProfile.Lanceolate, HalfWidth: rng.Range(0.08, 0.13),
+                        Camber: rng.Range(0.05, 0.1), MidribFold: rng.Range(0.04, 0.09),
+                        Asymmetry: rng.Range(-0.12, 0.12), MidribThickness: 0.003, DetailLevel: 0);
+                    LeafBlade.Build(m, bp, lSeed, leafBase, leafTip);
                 }
-                for (int f = 0; f < 3; f++)
+                int nFlowers = 2 + rng.NextInt(2); // 2..3 (kept off the requested 2..5 ceiling for the same reason)
+                for (int f = 0; f < nFlowers; f++)
                 {
-                    double ang = rng.Range(0, 2 * Math.PI), r = rng.Range(0.05, 0.3), h = rng.Range(0.7, 1.0);
-                    var top = new Vec3(Math.Cos(ang) * r, h, Math.Sin(ang) * r);
-                    Primitives.Tube(m, new[] { new Vec3(0, 0, 0), top }, new[] { 0.02, 0.015 }, 4, (i, v) => (c1, 1, i, v, 0, 0));
-                    var star = new List<Vec3>();
-                    for (int s = 0; s <= 10; s++)
-                    {
-                        double th = 2 * Math.PI * s / 10, rr = s % 2 == 0 ? 0.22 : 0.09;
-                        star.Add(top + new Vec3(Math.Cos(th) * rr, 0.01, Math.Sin(th) * rr));
-                    }
-                    Primitives.Fan(m, top + new Vec3(0, 0.03, 0), star, Vec3.Up, new[] { 1.0, 0.92, 0.45 }, c2);
+                    double fang = rng.Range(0, 2 * Math.PI), fh = rng.Range(0.55, 1.05); // different heights
+                    var stalkAxis = new AxisParams(Length: fh, BaseAngle: rng.Range(0.2, 0.55), BaseAzimuth: fang,
+                        Droop: rng.Range(-0.05, 0.25), WobbleAmplitude: 0.012, Segments: 4);
+                    ulong sSeed = Rng.Mix(seed, (ulong)(f * 613 + 71));
+                    SoftTube.Build(m, new SoftTubeParams(stalkAxis, BaseRadius: 0.016, TipRadius: 0.01, Segments: 4), sSeed,
+                        (i, v) => (leafBase, 1, i, v, 0, 0));
+                    var top = Axis.Build(stalkAxis, sSeed)[^1].Point;
+                    double stageT = (double)((seed + (ulong)f * 2) % 5) / 4.0; // guarantees a bud and a spent variant
+                    FlowerHead(m, rng, Rng.Mix(seed, (ulong)(f * 97 + 5)), top, 0.12, stageT,
+                        c1, c2, new[] { 0.95, 0.85, 0.35 });
                 }
                 break;
             }
@@ -203,7 +212,9 @@ public static class OrganismMeshes
             }
             case "trifoliate":
             {
-                // three-lobed clover leaves on stalks, with an occasional white globe flower head
+                // three-lobed clover leaves on stalks (cheap curved blades keep the plant in its tri budget),
+                // with an occasional pompom flower head: a small cluster of individually cambered, thick
+                // LeafBlade petals (kernel-built) rather than a flat star fan
                 int n = 18 + rng.NextInt(8);
                 for (int k = 0; k < n; k++)
                 {
@@ -225,10 +236,25 @@ public static class OrganismMeshes
                     }
                     if (rng.NextDouble() < 0.15)
                     {
+                        // clover pompom: a handful of tiny cambered obcordate petals, splayed into a globe
                         var fh = top + new Vec3(0, 0.05, 0);
-                        var star = new List<Vec3>();
-                        for (int s = 0; s <= 10; s++) { double th = 2 * Math.PI * s / 10, rr = 0.035; star.Add(fh + new Vec3(Math.Cos(th) * rr, Math.Sin(th) * rr * 0.4, Math.Sin(th) * rr)); }
-                        Primitives.Fan(m, fh, star, Vec3.Up, new[] { 1.0, 1.0, 0.96 }, new[] { 0.96, 0.9, 0.7 });
+                        int florets = 5 + rng.NextInt(3);
+                        for (int fl = 0; fl < florets; fl++)
+                        {
+                            double fa = 2 * Math.PI * fl / florets + rng.Range(-0.2, 0.2);
+                            double fPitch = rng.Range(0.3, 1.4);
+                            double fSize = 0.03 * rng.Range(0.8, 1.2);
+                            var petalAxis = new AxisParams(Length: fSize, BaseAngle: fPitch, BaseAzimuth: fa,
+                                Droop: rng.Range(0.0, 0.3), Segments: 3);
+                            var bp = new LeafBladeParams(
+                                Midrib: petalAxis, Profile: BladeProfile.Obcordate, HalfWidth: fSize * 0.4,
+                                Camber: rng.Range(0.16, 0.26), Cup: rng.Range(0.08, 0.16),
+                                MidribThickness: fSize * 0.08, DetailLevel: 1);
+                            ulong flSeed = Rng.Mix(seed, (ulong)(k * 331 + fl * 11 + 5));
+                            var tmp = new MeshData();
+                            LeafBlade.Build(tmp, bp, flSeed, new[] { 1.0, 1.0, 0.96 }, new[] { 0.96, 0.9, 0.7 });
+                            AppendTranslated(m, tmp, fh);
+                        }
                     }
                 }
                 break;
@@ -328,6 +354,58 @@ public static class OrganismMeshes
         }
         dst.Normals.AddRange(src.Normals); dst.Colors.AddRange(src.Colors); dst.UV.AddRange(src.UV); dst.UV2.AddRange(src.UV2);
         foreach (var i in src.Indices) dst.Indices.Add(baseIndex + i);
+    }
+
+    /// <summary>Shallow cup of cambered, thick petals (cheap ThickOvateLeaflet blades) around a small centre disc, staged by
+    /// <paramref name="stageT"/> in [0,1]: 0 is a near-closed upright bud, ~0.5 is fully open and splayed, and 1 is
+    /// spent (petals drooping past horizontal, discoloured, some dropped). Built at the origin and translated to
+    /// <paramref name="topPos"/> so callers can place it atop any stalk/pedicel.</summary>
+    private static void FlowerHead(MeshData m, Rng rng, ulong seed, Vec3 topPos, double size, double stageT,
+        double[] petalCol1, double[] petalCol2, double[] centerCol, int petalCountMax = 7)
+    {
+        // petalCountMax caps the upper end of the 4..7 range: each petal is a full LeafBlade (a tri-cost floor
+        // around 128 tris), so callers with a tight budget (e.g. one flower head per plant) can cap the count.
+        int petalCount = 4 + rng.NextInt(Math.Max(1, petalCountMax - 3)); // 4..petalCountMax, unequal size/angle below
+        double t = MathD.Clamp01(stageT);
+        // pitch from vertical: bud stays near-upright/closed, opens outward, then droops past horizontal when spent
+        double basePitch = t <= 0.5 ? MathD.Lerp(0.22, 1.2, t / 0.5) : MathD.Lerp(1.2, 2.5, (t - 0.5) / 0.5);
+        double openness = t <= 0.5 ? MathD.Lerp(0.4, 1.0, t / 0.5) : 1.0;
+        int visiblePetals = t > 0.7 ? Math.Max(2, petalCount - 1 - rng.NextInt(2)) : petalCount;
+        double wiltAmt = t > 0.55 ? MathD.Clamp01((t - 0.55) / 0.45) : 0.0;
+        var wilt = new[] { 0.5, 0.4, 0.2 };
+        var col1 = wiltAmt > 0 ? Primitives.Mix(petalCol1, wilt, wiltAmt * 0.75) : petalCol1;
+        var col2 = wiltAmt > 0 ? Primitives.Mix(petalCol2, wilt, wiltAmt * 0.75) : petalCol2;
+
+        // Petals are cheap cambered ThickOvateLeaflet blades (same double-sided crown/camber technique the
+        // pairedleaf leaves use) spread around a spherical (pitch, azimuth) direction, not full LeafBlade calls
+        // per petal: a full LeafBlade has a ~128-tri floor in this kernel, which would blow the plant's tri
+        // budget once multiplied by several flower heads.
+        var tmp = new MeshData();
+        for (int i = 0; i < visiblePetals; i++)
+        {
+            double ang = 2 * Math.PI * i / petalCount + rng.Range(-0.18, 0.18);
+            double pitch = MathD.Clamp(basePitch + rng.Range(-0.12, 0.12), 0, Math.PI);
+            double petalLen = size * openness * rng.Range(0.85, 1.3); // unequal petal size
+            var azimuthDir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
+            var fwd = (Vec3.Up * Math.Cos(pitch) + azimuthDir * Math.Sin(pitch)).Normalized();
+            var side = fwd.Cross(Vec3.Up);
+            if (side.LengthSq < 1e-8) side = fwd.Cross(new Vec3(1, 0, 0));
+            side = side.Normalized();
+            var up = side.Cross(fwd).Normalized();
+            var center = fwd * (petalLen * 0.55);
+            ulong pSeed = Rng.Mix(seed, (ulong)(i * 331 + 13));
+            ThickOvateLeaflet(tmp, center, fwd, side, up, petalLen * 1.3, petalLen * 0.55,
+                petalLen * rng.Range(0.18, 0.32), pSeed, Primitives.Scale(col1, 0.9), col2);
+        }
+        double centerR = size * 0.22;
+        var centerRim = new List<Vec3>();
+        for (int s = 0; s <= 8; s++)
+        {
+            double th = 2 * Math.PI * s / 8;
+            centerRim.Add(new Vec3(Math.Cos(th) * centerR, 0, Math.Sin(th) * centerR));
+        }
+        Primitives.Fan(tmp, new Vec3(0, centerR * 0.6, 0), centerRim, Vec3.Up, centerCol, Primitives.Scale(centerCol, 0.85));
+        AppendTranslated(m, tmp, topPos);
     }
 
     /// <summary>Dense mat of cupped reniform/cordate leaflets on short arching petioles (dichondra, watercress),
