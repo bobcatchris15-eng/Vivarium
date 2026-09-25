@@ -20,52 +20,72 @@ public static class PropMeshes
     /// <summary>Unit rock (bounding radius ≈ 1, flattened base). Scale by the rock's half-extents when drawing.</summary>
     public static MeshData Rock(ulong variantSeed, int detail = 3)
     {
-        var (verts, tris) = Primitives.Icosphere(detail);
         var rng = Rng.Keyed(variantSeed, "rock.mesh", 0);
-        ulong ns = Rng.Mix(variantSeed, 0x70C4);
         var basePal = RockPalette[rng.NextInt(RockPalette.Length)];
-        int family = rng.NextInt(5);
-        double shearX = rng.Range(-0.16, 0.16), shearZ = rng.Range(-0.16, 0.16);
-        double p1 = rng.Range(0, Math.PI * 2), p2 = rng.Range(0, Math.PI * 2);
-        var cuts = Enumerable.Range(0, family == 2 ? 8 : 3)
-            .Select(_ => (N: new Vec3(rng.Range(-1, 1), rng.Range(-0.35, 1), rng.Range(-1, 1)).Normalized(), D: rng.Range(0.62, 0.9)))
-            .ToArray();
-
-        var m = new MeshData();
-        for (int i = 0; i < verts.Count; i++)
+        int family = rng.NextInt(3); // fractured block, layered slab, upright shard
+        const int sides = 10;
+        double phase = rng.Range(0, Math.PI * 2);
+        double shearX = rng.Range(-0.12, 0.12), shearZ = rng.Range(-0.12, 0.12);
+        double[] heights = family switch
         {
-            var v = verts[i];
-            double ang = Math.Atan2(v.Z, v.X);
-            double macro = 0.055 * Math.Sin(2 * ang + p1) + 0.035 * Math.Sin(3 * ang + p2);
-            double weather = Noise.Value3(ns, v.X * 2.2, v.Y * 2.0, v.Z * 2.2);
-            double rr = 1 + macro + (family == 4 ? 0.025 : 0.065) * weather;
-            var p = v * rr;
-            switch (family)
-            {
-                case 0: p = new Vec3(p.X * 1.04, p.Y * 0.84, p.Z * 0.96); break;
-                case 1: p = new Vec3(p.X * 1.12, p.Y * 0.58, p.Z * 0.94); break;
-                case 2: p = new Vec3(p.X * 1.02, p.Y * 0.9, p.Z); break;
-                case 3: p = new Vec3(p.X * 0.82, p.Y * 1.16, p.Z * 0.95); break;
-                default: p = new Vec3(p.X * 1.06, p.Y * 0.78, p.Z * 1.02); break;
-            }
-            p = new Vec3(p.X + p.Y * shearX, p.Y, p.Z + p.Y * shearZ);
-            foreach (var cut in cuts)
-            {
-                double over = p.Dot(cut.N) - cut.D;
-                if (over > 0) p -= cut.N * over * (family == 2 ? 0.88 : 0.35);
-            }
-            if (p.Y < -0.32)
-            {
-                double t = MathD.Clamp01((-0.32 - p.Y) / 0.45);
-                p = new Vec3(p.X * (1.0 + 0.08 * t), MathD.Lerp(p.Y, -0.38, t * 0.85), p.Z * (1.0 + 0.08 * t));
-            }
-            double fine = Noise.Value3(Rng.Mix(ns, 9), v.X * 6, v.Y * 6, v.Z * 6);
-            var col = Primitives.Scale(basePal, 0.88 + 0.15 * weather + 0.06 * fine);
-            if (v.Y > 0.35) col = Primitives.Mix(col, Primitives.Scale(basePal, 1.08), 0.22);
-            m.AddVertex(p, v, col, 1, v.X, v.Z, weather, family / 4.0);
+            0 => new[] { -0.38, -0.20, 0.46, 0.76 },
+            1 => new[] { -0.38, -0.14, 0.12, 0.37 },
+            _ => new[] { -0.38, -0.18, 0.42, 1.05 },
+        };
+        double[] radii = family switch
+        {
+            0 => new[] { 0.78, 1.0, 0.91, 0.46 },
+            1 => new[] { 0.86, 1.0, 0.84, 0.72 },
+            _ => new[] { 0.79, 0.96, 0.67, 0.24 },
+        };
+        var sector = new double[sides];
+        var angular = new double[sides];
+        for (int s = 0; s < sides; s++)
+        {
+            sector[s] = rng.Range(0.85, 1.07);
+            angular[s] = phase + 2 * Math.PI * (s + rng.Range(-0.10, 0.10)) / sides;
         }
-        foreach (var t in tris) m.Indices.Add(t);
-        m.RecomputeNormals();
+        var rings = new Vec3[heights.Length, sides];
+        for (int r = 0; r < heights.Length; r++)
+            for (int s = 0; s < sides; s++)
+            {
+                double y = heights[r] + rng.Range(-0.025, 0.025);
+                // Whole-sector offsets make long fracture edges; slab bands step outward at each layer.
+                double radius = radii[r] * sector[s] * rng.Range(0.96, 1.04);
+                double a = angular[s];
+                rings[r, s] = new Vec3(Math.Cos(a) * radius + y * shearX, y,
+                    Math.Sin(a) * radius + y * shearZ);
+            }
+        var m = new MeshData();
+        void Face(Vec3 a, Vec3 b, Vec3 c, Vec3 outward, double shade)
+        {
+            var n = (b - a).Cross(c - a).Normalized();
+            if (n.Dot(outward) < 0) { (b, c) = (c, b); n = n * -1; }
+            var col = Primitives.Scale(basePal, shade);
+            int start = m.AddVertex(a, n, col, 1, a.X, a.Z, family, 0);
+            m.AddVertex(b, n, col, 1, b.X, b.Z, family, 0);
+            m.AddVertex(c, n, col, 1, c.X, c.Z, family, 0);
+            m.AddTriangle(start, start + 1, start + 2);
+        }
+        for (int r = 0; r < heights.Length - 1; r++)
+            for (int s = 0; s < sides; s++)
+            {
+                int next = (s + 1) % sides;
+                var a = rings[r, s]; var b = rings[r, next];
+                var c = rings[r + 1, next]; var d = rings[r + 1, s];
+                var outwards = new Vec3(a.X + b.X + c.X + d.X, 0, a.Z + b.Z + c.Z);
+                double shade = rng.Range(0.86, 1.10);
+                Face(a, b, c, outwards, shade);
+                Face(a, c, d, outwards, shade * rng.Range(0.96, 1.04));
+            }
+        var bottom = new Vec3(0, heights[0], 0);
+        var top = new Vec3(heights[^1] * shearX, heights[^1], heights[^1] * shearZ);
+        for (int s = 0; s < sides; s++)
+        {
+            int next = (s + 1) % sides;
+            Face(bottom, rings[0, next], rings[0, s], new Vec3(0, -1, 0), 0.76);
+            Face(top, rings[heights.Length - 1, s], rings[heights.Length - 1, next], new Vec3(0, 1, 0), rng.Range(0.98, 1.12));
+        }
         return m;
     }
 
