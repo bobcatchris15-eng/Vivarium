@@ -412,3 +412,46 @@ Causal loop: **contraction → pressure → flow → mass redistribution → mor
 **Abstraction.** `SpatialOrganism` base (territory + per-cell fields + step), with `Plasmodium` first and `ColonialMat` (moss/lichen coverage) second. `Mycelium` is reserved for later.
 
 Packets: **Pl-1** local mass + conservative transport · **Pl-2** phase field + cadence + rectification · **Pl-3** stress replaces Migrating; re-prove two_food/maze/fusion · **Pl-4** SpatialOrganism refactor + in-game slime off FloraIndividual (old G8b) · **P3-slime** renderer.
+
+---
+
+## 15. Aquatic flora: algae, duckweed, lily pads (2026-09-25)
+
+Existing inputs:
+- hydrology `Water.Depth[]`, `FlowX[]`/`FlowZ[]`, `SurfaceAt`;
+- fields `Nutrients`, `Light`, `Biofilm` (already grazed by aquatic fauna), `Plankton`;
+- `watercress` is the only aquatic-margin flora today.
+
+### 15.1 Algae: `SpatialOrganism` coverage, two layers
+- **Benthic/epilithic film** (layer `AlgaeBed`, on the submerged bed, rocks and logs in water): logistic growth ∝ light at depth (Beer–Lambert with the water shader's absorption) × nutrients. Growth is suppressed by flow above a threshold (scour) and by grazing.
+  - **It becomes the source of the `Biofilm` field.** Biofilm stops being an abstract scalar: grazers eat algae biomass, and the field is derived from it. This closes the loop so that visible algae and grazing agree.
+- **Filamentous mats** (layer `AlgaeFloat`, on the water surface): these form in still, warm, nutrient-rich water, where flow is below a threshold. They detach from the bed as the film thickens (bubbles lift them), then drift with flow (§15.2 advection) and pile up against margins and emergent plants. They shade everything below.
+- **Render:** the bed film is a colour/roughness overlay on the submerged terrain (slippery green-brown, darker in shade). Surface mats are thin, stringy, translucent green sheets with bubbles, draped on the water surface mesh.
+
+### 15.2 Duckweed: floating clonal `SpatialOrganism`, one layer
+- The layer `SurfaceFloat` lives on water-surface cells. The state per cell is frond density ρ (fronds/cm²) plus age.
+- **Growth:** clonal budding, logistic `dρ/dt = r·g(N)·g(L)·ρ(1 − ρ/ρmax)`, fast (doubling in about 2–3 bio-days).
+- **Advection:** density moves with water flow and a gentle deterministic wind term, using an upwind donor-cell scheme on the surface cells (mass conserving). Fronds pile against banks, logs and lily pads, and still bays fill completely while channels stay clear. Nothing is placed; the pattern comes from the flow.
+- **Coupling:**
+  - Coverage shades the water column, reducing algae and submerged growth and plankton light: a real competitive interaction.
+  - Fauna can graze it.
+  - Dead fronds sink into detritus.
+- **Render:** instanced tiny fronds (2–4 mm, 1–3 lobes, a root thread below). The count per visible cell comes from ρ, with deterministic hashed placement and rotation, so the renderer never feeds back into the sim. Dense areas use a continuous frond-mat texture with individual fronds at the edges (the same colony-rim idea as moss). They float on the water surface and bob with the water shader's displacement.
+
+### 15.3 Lily pads: rooted vascular individuals (`FloraIndividual`), new body plan
+- These are true plants. The rhizome is anchored on the bed, restricted to a depth band (e.g. 0.05–0.4 m), and spreads by rhizome budding like other clonal plants.
+- **Floating leaves:** kernel `LeafBlade` with an orbicular/cordate profile and a basal sinus notch, nearly flat but with a slightly upturned rim. Leaves are thick (waxy top, matte underside), float exactly at `SurfaceAt`, and the petiole is a flexible `SoftTube` from the rhizome to the leaf. It has slack when the water is deep, and the leaf lies over when the water level drops.
+- There are 4–12 leaves per plant, of unequal age: young leaves are rolled scrolls rising, old leaves are torn, yellowed and nibbled. Flowers sit at or just above the surface in bud/open/spent stages.
+- **Coupling:**
+  - It shades the water below and blocks duckweed advection locally (fronds collect against pads).
+  - It needs a still or slow flow band.
+  - It dies back if the pond dries, leaving stranded pads.
+- Fictional-identity work later changes the leaf and flower shape, not the ecology.
+
+### 15.4 Packets (after the current slime work unless reprioritised)
+| id | Outcome | Depends |
+|---|---|---|
+| Aq-1 | `SurfaceFloat` + `AlgaeBed` + `AlgaeFloat` layers on the water surface/bed coordinate spaces; upwind advection; lab scenarios (duckweed piles in a still bay against a bank, channel stays clear; algae scoured in flow, blooms in still nutrient-rich water; shading suppresses algae) | coverage core |
+| Aq-2 | Biofilm derived from algae; grazing hooks; duckweed/algae species content; world seeding; scheduler | Aq-1 |
+| Aq-3 | Lily species: content, depth-band habitat, rhizome spread, mesh (pads, petioles, flowers, age states) | form kernel |
+| Aq-4 | Renderers: frond instancing from density, surface algae mats, bed film overlay, pads floating at SurfaceAt with water bob | Aq-1..3 |
