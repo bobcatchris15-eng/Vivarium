@@ -180,13 +180,16 @@ public static class CoverageEnvironment
 
     // ------------------------------------------------------------------ light
 
+    [ThreadStatic] private static List<Flora.FloraIndividual>? _lightBuf;
+
     /// <summary>Base light already bakes in terrain horizon and prop shading (<see cref="EnvironmentFields.RecomputeLight"/>);
     /// this subtracts vascular-plant canopy shade sampled from the flora spatial index (§2).</summary>
     private static double SampleLight(VivariumWorld w, Vec2 p)
     {
         double light = w.Fields.Light.Sample(p);
         double shade = 0;
-        var buf = new List<Flora.FloraIndividual>(8);
+        var buf = _lightBuf ??= new List<Flora.FloraIndividual>(16);
+        buf.Clear();
         w.Flora.Neighbours(p, 1.5, buf);
         foreach (var f in buf)
         {
@@ -202,6 +205,9 @@ public static class CoverageEnvironment
     }
 
     // ------------------------------------------------------------------ substrate
+
+    public static CoverageSubstrate SampleSubstrate(VivariumWorld w, Vec2 p) =>
+        ClassifySubstrate(w, p, w.Clock.SimSeconds);
 
     private static CoverageSubstrate ClassifySubstrate(VivariumWorld w, Vec2 p, double now)
     {

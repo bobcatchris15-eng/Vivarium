@@ -10,6 +10,7 @@ namespace Vivarium.Sim.Coverage.Rules;
 public interface ILichenEnvSource
 {
     MicroEnv Sample(int gx, int gz);
+    CoverageSubstrate Substrate(int gx, int gz) => Sample(gx, gz).Substrate;
 }
 
 /// <summary>
@@ -119,11 +120,11 @@ public static class LichenRules
 
         foreach (var (gx, gz) in candidates)
         {
-            var me = env.Sample(gx, gz);
+            var sub = env.Substrate(gx, gz);
             foreach (var sp in species)
             {
-                if (!sp.AllowsSubstrate(me.Substrate)) continue;
-                double substrateRate = me.Substrate == CoverageSubstrate.Gravel ? sp.GravelRateMultiplier : 1.0;
+                if (!sp.AllowsSubstrate(sub)) continue;
+                double substrateRate = sub == CoverageSubstrate.Gravel ? sp.GravelRateMultiplier : 1.0;
                 if (substrateRate <= 0) continue;
 
                 double p;
@@ -186,58 +187,116 @@ public static class LichenRules
         layer.Advance();
     }
 
+    [ThreadStatic] private static bool[]? _visitedPool;
+    [ThreadStatic] private static Stack<int>? _stackPool;
+
     /// <summary>
     /// Flood-fills the exterior of <paramref name="sp"/>'s occupied-cell bounding box from its border; any empty
-    /// cell not reached is enclosed by this species and gets colonised. Cheap for a single growth-lab colony;
-    /// capped to avoid runaway cost if a species ever spans a huge area.
+    /// cell not reached is enclosed by this species and gets colonised. Evaluated per connected cluster of tiles
+    /// so separated colonies across a large island don't balloon the flood-fill into a huge global grid scan.
     /// </summary>
     private static void FillInteriorHoles(CoverageLayer layer, ILichenEnvSource env, LichenParams sp)
     {
-        int minX = int.MaxValue, maxX = int.MinValue, minZ = int.MaxValue, maxZ = int.MinValue;
-        bool any = false;
+        // 1. Collect all tiles that contain any cells of sp.OccSlot
+        var occupiedTiles = new List<CoverageTile>();
         foreach (var t in layer.Tiles)
         {
+            if (t.IsEmpty()) continue;
             for (int li = 0; li < CoverageTile.N; li++)
             {
-                if (t.Occ[li] != sp.OccSlot) continue;
-                any = true;
-                int lx = li % CoverageSpec.TileEdge, lz = li / CoverageSpec.TileEdge;
-                int gx = t.Ti * CoverageSpec.TileEdge + lx, gz = t.Tj * CoverageSpec.TileEdge + lz;
-                if (gx < minX) minX = gx;
-                if (gx > maxX) maxX = gx;
-                if (gz < minZ) minZ = gz;
-                if (gz > maxZ) maxZ = gz;
+                if (t.Occ[li] == sp.OccSlot) { occupiedTiles.Add(t); break; }
             }
         }
-        if (!any) return;
-        minX--; maxX++; minZ--; maxZ++;
-        int w = maxX - minX + 1, h = maxZ - minZ + 1;
-        if ((long)w * h > 400_000) return; // safety cap; not expected in growth-lab scale
+        if (occupiedTiles.Count == 0) return;
 
-        var visited = new bool[w * h];
-        var stack = new Stack<(int x, int z)>();
-        for (int x = minX; x <= maxX; x++) { stack.Push((x, minZ)); stack.Push((x, maxZ)); }
-        for (int z = minZ; z <= maxZ; z++) { stack.Push((minX, z)); stack.Push((maxX, z)); }
+        // 2. Group touching/neighbouring tiles into connected clusters
+        var tileClusters = new List<List<CoverageTile>>();
+        var unassigned = new HashSet<CoverageTile>(occupiedTiles);
+        var q = new Queue<CoverageTile>();
 
-        while (stack.Count > 0)
+        while (unassigned.Count > 0)
         {
-            var (x, z) = stack.Pop();
-            if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
-            int idx = (z - minZ) * w + (x - minX);
-            if (visited[idx]) continue;
-            if (layer.GetOcc(x, z) == sp.OccSlot) continue; // this species' own wall stops the exterior flood
-            visited[idx] = true;
-            stack.Push((x + 1, z)); stack.Push((x - 1, z)); stack.Push((x, z + 1)); stack.Push((x, z - 1));
+            var root = unassigned.First();
+            unassigned.Remove(root);
+            var cluster = new List<CoverageTile> { root };
+            q.Enqueue(root);
+
+            while (q.Count > 0)
+            {
+                var cur = q.Dequeue();
+                foreach (var other in unassigned.ToArray())
+                {
+                    if (Math.Abs(cur.Ti - other.Ti) <= 1 && Math.Abs(cur.Tj - other.Tj) <= 1)
+                    {
+                        unassigned.Remove(other);
+                        cluster.Add(other);
+                        q.Enqueue(other);
+                    }
+                }
+            }
+            tileClusters.Add(cluster);
         }
 
-        for (int z = minZ; z <= maxZ; z++)
-        for (int x = minX; x <= maxX; x++)
+        // 3. For each cluster, flood fill its local bounding box
+        foreach (var cluster in tileClusters)
         {
-            int idx = (z - minZ) * w + (x - minX);
-            if (visited[idx]) continue;         // reached from outside: not a hole
-            if (layer.GetOcc(x, z) != 0) continue; // occupied (by this or another species): nothing to fill
-            if (!sp.AllowsSubstrate(env.Sample(x, z).Substrate)) continue;
-            layer.SetCell(x, z, sp.OccSlot, (float)sp.SeedBiomass, 0, 0, 0, 0, 0);
+            int minX = int.MaxValue, maxX = int.MinValue, minZ = int.MaxValue, maxZ = int.MinValue;
+            foreach (var t in cluster)
+            {
+                for (int li = 0; li < CoverageTile.N; li++)
+                {
+                    if (t.Occ[li] != sp.OccSlot) continue;
+                    int lx = li % CoverageSpec.TileEdge, lz = li / CoverageSpec.TileEdge;
+                    int gx = t.Ti * CoverageSpec.TileEdge + lx, gz = t.Tj * CoverageSpec.TileEdge + lz;
+                    if (gx < minX) minX = gx;
+                    if (gx > maxX) maxX = gx;
+                    if (gz < minZ) minZ = gz;
+                    if (gz > maxZ) maxZ = gz;
+                }
+            }
+            minX--; maxX++; minZ--; maxZ++;
+            int w = maxX - minX + 1, h = maxZ - minZ + 1;
+            int totalCells = w * h;
+            if ((long)totalCells > 100_000) continue;
+
+            if (_visitedPool == null || _visitedPool.Length < totalCells)
+                _visitedPool = new bool[Math.Max(totalCells, 16384)];
+            var visited = _visitedPool;
+            Array.Clear(visited, 0, totalCells);
+
+            var stack = _stackPool ??= new Stack<int>(4096);
+            stack.Clear();
+
+            void Push(int x, int z)
+            {
+                if (x < minX || x > maxX || z < minZ || z > maxZ) return;
+                int idx = (z - minZ) * w + (x - minX);
+                if (visited[idx]) return;
+                if (layer.GetOcc(x, z) == sp.OccSlot) return; // this species' own wall stops the exterior flood
+                visited[idx] = true;
+                stack.Push(idx);
+            }
+
+            for (int x = minX; x <= maxX; x++) { Push(x, minZ); Push(x, maxZ); }
+            for (int z = minZ + 1; z < maxZ; z++) { Push(minX, z); Push(maxX, z); }
+
+            while (stack.Count > 0)
+            {
+                int idx = stack.Pop();
+                int x = minX + (idx % w);
+                int z = minZ + (idx / w);
+                Push(x + 1, z); Push(x - 1, z); Push(x, z + 1); Push(x, z - 1);
+            }
+
+            for (int z = minZ; z <= maxZ; z++)
+            for (int x = minX; x <= maxX; x++)
+            {
+                int idx = (z - minZ) * w + (x - minX);
+                if (visited[idx]) continue;         // reached from outside: not a hole
+                if (layer.GetOcc(x, z) != 0) continue; // occupied (by this or another species): nothing to fill
+                if (!sp.AllowsSubstrate(env.Substrate(x, z))) continue;
+                layer.SetCell(x, z, sp.OccSlot, (float)sp.SeedBiomass, 0, 0, 0, 0, 0);
+            }
         }
     }
 

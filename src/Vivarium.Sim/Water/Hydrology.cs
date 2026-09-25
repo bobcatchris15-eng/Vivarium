@@ -102,6 +102,7 @@ public sealed class Hydrology
         if (total <= 0 || volume <= 0) return 0;
         foreach (var (c, wgt) in cells) Depth[c] += volume * wgt / total / CellArea;
         Budget.ToolInflow += volume;
+        InvalidateWaterDistance();
         return volume;
     }
 
@@ -118,6 +119,7 @@ public sealed class Hydrology
             removed += take * CellArea;
         }
         Budget.ToolRemoval += removed;
+        InvalidateWaterDistance();
         return removed;
     }
 
@@ -156,6 +158,7 @@ public sealed class Hydrology
             double need = WaterTable - Bed[idx];
             if (need > Depth[idx]) { Budget.GroundwaterInflow += (need - Depth[idx]) * CellArea; Depth[idx] = need; }
         }
+        InvalidateWaterDistance();
     }
 
     public void Step(double dt)
@@ -163,6 +166,7 @@ public sealed class Hydrology
         int sub = Math.Max(1, Config.SubSteps);
         double h = dt / sub;
         for (int s = 0; s < sub; s++) SubStep(h);
+        InvalidateWaterDistance();
     }
 
     private void SubStep(double dt)
@@ -248,6 +252,19 @@ public sealed class Hydrology
     }
 
     private double[]? _waterDistance;
+    private long _lastDepthHash = -1;
+
+    public void InvalidateWaterDistance() => _lastDepthHash = -1;
+
+    private long ComputeDepthHash()
+    {
+        long hash = 17;
+        foreach (int c in Grid.DomainCells)
+        {
+            hash = unchecked(hash * 31 + BitConverter.DoubleToInt64Bits(Depth[c]));
+        }
+        return hash;
+    }
 
     /// <summary>
     /// Distance (m) from each domain cell to the nearest wet cell: a two-pass chamfer transform (3-4 weights),
@@ -255,6 +272,8 @@ public sealed class Hydrology
     /// </summary>
     public double[] DistanceToWater()
     {
+        long hash = ComputeDepthHash();
+        if (_waterDistance != null && hash == _lastDepthHash) return _waterDistance;
         int nx = Grid.Nx, nz = Grid.Nz, n = Grid.Count;
         var d = _waterDistance ??= new double[n];
         const double Inf = double.PositiveInfinity;
@@ -279,6 +298,7 @@ public sealed class Hydrology
                 int k = j * nx + i;
                 Relax(k, i, j, 1, 0, a); Relax(k, i, j, 0, 1, a); Relax(k, i, j, 1, 1, b); Relax(k, i, j, -1, 1, b);
             }
+        _lastDepthHash = hash;
         return d;
     }
 

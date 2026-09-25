@@ -87,6 +87,12 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         return CoverageEnvironment.Sample(_w, p);
     }
 
+    public CoverageSubstrate Substrate(int gx, int gz)
+    {
+        var p = CellCentre(gx, gz);
+        return CoverageEnvironment.SampleSubstrate(_w, p);
+    }
+
     // ------------------------------------------------------------------ IDetritusSink
 
     public void AddDetritus(int gx, int gz, double amount)

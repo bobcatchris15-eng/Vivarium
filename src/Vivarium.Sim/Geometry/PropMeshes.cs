@@ -59,13 +59,13 @@ public static class PropMeshes
         var m = new MeshData();
         void Face(Vec3 a, Vec3 b, Vec3 c, Vec3 outward, double shade)
         {
-            var n = (b - a).Cross(c - a).Normalized();
-            if (n.Dot(outward) < 0) { (b, c) = (c, b); n = n * -1; }
+            var rawCross = (b - a).Cross(c - a).Normalized();
+            var n = rawCross.Dot(outward) >= 0 ? rawCross : rawCross * -1;
             var col = Primitives.Scale(basePal, shade);
             int start = m.AddVertex(a, n, col, 1, a.X, a.Z, family, 0);
             m.AddVertex(b, n, col, 1, b.X, b.Z, family, 0);
             m.AddVertex(c, n, col, 1, c.X, c.Z, family, 0);
-            m.AddTriangle(start, start + 1, start + 2);
+            Primitives.TriangleFacing(m, start, start + 1, start + 2, outward);
         }
         for (int r = 0; r < heights.Length - 1; r++)
             for (int s = 0; s < sides; s++)
@@ -159,7 +159,7 @@ public static class PropMeshes
         var m = new MeshData();
         int around = 28;
         int along = Math.Max(12, (int)(length / 0.05));
-        double barkDepth = rng.Range(0.035, 0.065) * (decay >= 3 ? 0.55 : 1);
+        double barkDepth = radius * rng.Range(0.045, 0.075) * (decay >= 3 ? 0.55 : 1);
         double taper = rng.Range(0.04, 0.14), sag = decay * 0.010 * length;
         double flatten = decay >= 3 ? 0.80 : (decay == 2 ? 0.86 : 1.0);
         double bendY = rng.Range(-0.025, 0.025) * length, bendZ = rng.Range(-0.035, 0.035) * length;
