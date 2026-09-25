@@ -228,7 +228,7 @@ public class PerfTests
     {
         var w = TestUtil.FlatWorld();
         TestUtil.Condition(w, 0.7, 1.0);
-        var sp = w.Content.FloraOrThrow("carpet_moss");
+        var sp = w.Content.FloraOrThrow("creeping_groundcover");
         var rng = Rng.Stream(4, "scale");
         for (int i = 0; i < 4000; i++) w.FloraSystem.Establish(sp, w.Domain.ClampInside(new Vec2(rng.Range(-5, 5), rng.Range(-4.3, 4.3)), 0.1), "t");
         int examined = w.Flora.Index.CandidatesExamined(Vec2.Zero, sp.CompetitionRadius);

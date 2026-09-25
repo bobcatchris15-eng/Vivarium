@@ -34,11 +34,15 @@ public class IntegrationTests
     public void StarterPopulationsAreCompleteAndValid()
     {
         var w = TestUtil.DefaultWorld();
-        foreach (var sp in w.Content.Flora)
+        foreach (var sp in w.Content.Flora.Where(s => !s.IsCoverageSpecies))
         {
             var members = w.Flora.Items.Where(f => f.SpeciesId == sp.Id).ToList();
             Assert.True(members.Count > 0, $"{sp.Id} missing from starters");
             Assert.All(members, f => Assert.False(w.FloraSystem.Suitability(sp, f.Position, f.Id).HardRefused, $"{sp.Id} placed in refused habitat"));
+        }
+        foreach (var sp in w.Content.Flora.Where(s => s.IsCoverageSpecies))
+        {
+            Assert.True(w.CoverageSystem.CoveredArea(sp.Id) > 0, $"{sp.Id} missing from coverage starters");
         }
         foreach (var sp in w.Content.Fauna)
         {
@@ -159,8 +163,8 @@ public class IntegrationTests
         Expect(() => { t.Grab(shrimp.Id); t.ReturnHeld(shrimp.Id, origin); });              // round trip is a no-op
         var spot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewRock(p, 0.2) == null && !w.Water.IsWet(p) && Vec2.Distance(p, land) > 1);
         Expect(() => Assert.True(t.PlaceRock(spot, 0.2, 0, 9).Ok), "world");
-        var mossSpot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("carpet_moss", p) == null);
-        Expect(() => Assert.True(t.IntroduceFlora("carpet_moss", mossSpot).Ok), "flora", "world");
+        var mossSpot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("creeping_groundcover", p) == null);
+        Expect(() => Assert.True(t.IntroduceFlora("creeping_groundcover", mossSpot).Ok), "flora", "world");
         int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
         Expect(() => Assert.True(t.IntroduceFauna("microminnow", w.Grid.CellCenter(pond), 3).Ok), "fauna", "genetics", "world");
         w.Step(8640);                                                                        // ecosystem continues
@@ -172,17 +176,17 @@ public class IntegrationTests
     {
         var w = TestUtil.DefaultWorld();
         foreach (var f in w.Fauna.Items.Where(f => f.SpeciesId == "springtail").ToList()) w.FaunaSystem.Kill(f, "extinction test");
-        foreach (var f in w.Flora.Items.Where(f => f.SpeciesId == "carpet_moss").ToList()) w.FloraSystem.Kill(f, "extinction test");
+        foreach (var f in w.Flora.Items.Where(f => f.SpeciesId == "creeping_groundcover").ToList()) w.FloraSystem.Kill(f, "extinction test");
         w.Step(600);
         Assert.Equal(0, w.Fauna.CountOf("springtail"));
         var t = new ToolActions(w);
         var land = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFauna("springtail", p) == null);
         Assert.True(t.IntroduceFauna("springtail", land, 6).Ok);
-        var moss = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("carpet_moss", p) == null);
-        Assert.True(t.IntroduceFlora("carpet_moss", moss).Ok);
+        var plant = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("creeping_groundcover", p) == null);
+        Assert.True(t.IntroduceFlora("creeping_groundcover", plant).Ok);
         w.Step(8640 * 3);
         Assert.True(w.Fauna.CountOf("springtail") > 0, "reintroduced species persists");
-        Assert.Contains(w.Flora.Items, f => f.SpeciesId == "carpet_moss");
+        Assert.Contains(w.Flora.Items, f => f.SpeciesId == "creeping_groundcover");
         Assert.Empty(w.CheckInvariants());
     }
 
