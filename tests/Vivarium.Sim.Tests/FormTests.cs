@@ -301,6 +301,20 @@ public class FormTests
     }
 
     [Fact]
+    public void FernHasCamberedBladeSurfacesAndGroundedVaryingFronds()
+    {
+        var sp = new FloraSpeciesDef { Id = "maidenhair_fern", Shape = "fern", Color = Green, Color2 = LightGreen };
+        var m = OrganismMeshes.Flora(sp, 42);
+        AssertAllFinite(m);
+        var bounds = m.Bounds();
+        Assert.InRange(bounds.Min.Y, -0.001, 0.001);
+        Assert.True(bounds.Max.Y > 0.55);
+        Assert.True(m.UV2.Count(v => v == 1f) > 500, "fern needs substantial kernel blade surface");
+        Assert.InRange(m.TriangleCount, 4000, 10000);
+        Assert.Equal(m.DigestHex(), OrganismMeshes.Flora(sp, 42).DigestHex());
+    }
+
+    [Fact]
     public void TussockHasGroundedTaperedBladesAndMixedStrawTips()
     {
         var sp = new FloraSpeciesDef { Id = "blue_fescue", Shape = "tussock", Color = new[] { 0.36, 0.55, 0.6 }, Color2 = new[] { 0.8, 0.74, 0.5 } };

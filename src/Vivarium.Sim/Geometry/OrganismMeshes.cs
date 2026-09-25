@@ -290,7 +290,7 @@ public static class OrganismMeshes
                 }
                 break;
             }
-            case "fern": Fern(m, rng, c1, c2); break;
+            case "fern": Fern(m, rng, seed, c1, c2); break;
             case "vine": Vine(m, rng, c1, c2); break;
             case "mushroom_cluster": Mushrooms(m, rng, c1, c2); break;
             case "bracket": Bracket(m, rng, c1, c2); break;
@@ -604,42 +604,54 @@ public static class OrganismMeshes
     }
 
     /// <summary>Arching pinnate fronds with fan leaflets, plus one unrolling fiddlehead.</summary>
-    private static void Fern(MeshData m, Rng rng, double[] c1, double[] c2)
+    private static void Fern(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
     {
         var stalk = new[] { 0.24, 0.2, 0.1 };
         int fronds = 7 + rng.NextInt(3);
         for (int k = 0; k < fronds; k++)
         {
-            double ang = 2 * Math.PI * k / fronds + rng.Range(-0.2, 0.2), reach = rng.Range(0.75, 1.0), rise = rng.Range(0.75, 1.0);
-            var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang)); var side = new Vec3(-dir.Z, 0, dir.X);
-            Vec3 At(double t) => dir * (reach * t) + new Vec3(0, rise * Math.Sin(Math.PI * t * 0.85) * (1 - 0.35 * t), 0);
-            var path = new List<Vec3>(); var rad = new List<double>();
-            for (int i = 0; i <= 8; i++) { path.Add(At(i / 8.0)); rad.Add(0.011 * (1 - i / 10.0)); }
-            Primitives.Tube(m, path, rad, 3, (i, v) => (stalk, 1, i, v, 0, 0));
-            for (int i = 2; i <= 14; i++)
+            double ang = 2 * Math.PI * k / fronds + rng.Range(-0.17, 0.17);
+            var rachis = new AxisParams(Length: rng.Range(1.24, 1.52), BaseAngle: rng.Range(0.27, 0.45),
+                BaseAzimuth: ang, Droop: rng.Range(-1.2, -0.9), WobbleAmplitude: 0.012,
+                WobbleFrequency: 1.2, Segments: 12);
+            ulong rachisSeed = Rng.Mix(seed, (ulong)(k * 301 + 13));
+            var frames = Axis.Build(rachis, rachisSeed);
+            var frond = new MeshData();
+            SoftTube.Build(frond, new SoftTubeParams(rachis, BaseRadius: 0.012, TipRadius: 0.003, Segments: 3),
+                rachisSeed, (i, v) => (stalk, 1, i, v, 0, 0));
+            int pairs = 6 + rng.NextInt(2);
+            for (int i = 0; i < pairs; i++)
             {
-                double t = i / 15.0;
-                var c = At(t);
-                double len = 0.26 * Math.Sin(Math.PI * Math.Min(1, t * 1.15)) + 0.03;
                 foreach (double sgn in new[] { -1.0, 1.0 })
                 {
-                    var tip = c + side * (sgn * len) + dir * (len * 0.25) + new Vec3(0, -len * 0.25, 0);
-                    var planeNormal = (side * sgn).Cross(dir).Normalized();
-                    var leafSide = planeNormal.Cross((tip - c).Normalized()).Normalized();
-                    var col = Primitives.Mix(c1, c2, t);
-                    Primitives.CurvedLeaf(m, c, tip, leafSide, len * rng.Range(0.15, 0.22),
-                        Primitives.Scale(col, 0.82), col, camber: len * rng.Range(0.025, 0.06),
-                        longitudinal: 5, asymmetry: rng.Range(-0.12, 0.12));
+                    double t = 0.19 + (i + (sgn > 0 ? 0.13 : 0.0)) * 0.105 + rng.Range(-0.01, 0.01);
+                    var frame = Axis.Sample(frames, t);
+                    double envelope = Math.Sin(Math.PI * (0.13 + 0.8 * t));
+                    double length = rng.Range(0.24, 0.31) * envelope;
+                    var pinna = new AxisParams(Length: length, BaseAngle: rng.Range(1.14, 1.34),
+                        BaseAzimuth: ang + sgn * rng.Range(1.03, 1.28), Droop: rng.Range(-0.18, 0.1),
+                        Segments: 6);
+                    var col = Primitives.Mix(c1, c2, 0.2 + 0.6 * t);
+                    var blade = new MeshData();
+                    LeafBlade.Build(blade, new LeafBladeParams(Midrib: pinna, Profile: BladeProfile.Obcordate,
+                        HalfWidth: length * rng.Range(0.27, 0.34), Camber: 0.18,
+                        Cup: 0.09, TipCurl: 0.06, Asymmetry: rng.Range(-0.2, 0.2),
+                        Margin: LeafMargin.Crenate, MarginAmplitude: 0.07, MarginFrequency: 3,
+                        DetailLevel: 0), Rng.Mix(rachisSeed, (ulong)(i * 17 + (sgn > 0 ? 1u : 2u))),
+                        Primitives.Scale(col, 0.84), col);
+                    AppendTranslated(frond, blade, frame.Point);
                 }
             }
+            AppendTranslated(m, frond, new Vec3(0, 0.0045, 0));
         }
         // fiddlehead: a coiled young frond
-        var coil = new List<Vec3>(); var cr = new List<double>();
+        var coil = new List<Vec3> { new(0.1, 0.024, 0.05), new(0.1, 0.45, 0.05) };
+        var cr = new List<double> { 0.015, 0.019 };
         for (int i = 0; i <= 14; i++)
         {
             double t = i / 14.0, th = t * Math.PI * 3.2, rr = 0.12 * (1 - t * 0.8);
             coil.Add(new Vec3(0.1 + Math.Sin(th) * rr, 0.45 + 0.35 * t + Math.Cos(th) * rr * 0.6, 0.05));
-            cr.Add(0.03 * (1 - t * 0.6));
+            cr.Add(0.019 * (1 - t * 0.6));
         }
         Primitives.Tube(m, coil, cr, 4, (i, v) => (Primitives.Mix(c1, c2, 0.8), 1, i, v, 0, 0));
     }
