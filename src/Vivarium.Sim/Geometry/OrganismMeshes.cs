@@ -762,58 +762,134 @@ public static class OrganismMeshes
         }
     }
 
-    /// <summary>Tiers of thin semicircular shelves with concentric colour bands (turkey tail), sticking out along +X.</summary>
+    /// <summary>Tiers of leathery bracket shelves with concentric colour bands (turkey tail), sticking out along +X.</summary>
     private static void Bracket(MeshData m, Rng rng, double[] c1, double[] c2)
     {
-        var bands = new[] { Primitives.Scale(c1, 0.5), Primitives.Scale(c1, 1.1), Primitives.Mix(c1, new[] { 0.3, 0.32, 0.4 }, 0.6), Primitives.Scale(c1, 0.75), c2 };
-        int tiers = 3 + rng.NextInt(3);
+        var darkBrown = Primitives.Scale(c1, 0.55);
+        var warmBrown = c1;
+        var greyBrown = Primitives.Mix(c1, new[] { 0.32, 0.35, 0.40 }, 0.65);
+        var tanBuff = Primitives.Mix(c1, c2, 0.55);
+        var lightCream = c2;
+        var paleWhite = Primitives.Scale(c2, 1.12);
+        double[][] bands = [darkBrown, tanBuff, greyBrown, warmBrown, tanBuff, darkBrown, lightCream, paleWhite];
+
+        var poreBase = Primitives.Mix(c2, new[] { 0.92, 0.88, 0.80 }, 0.25);
+        var poreCenter = Primitives.Scale(poreBase, 0.85);
+
+        int tiers = 4 + rng.NextInt(3);
+        const int rings = 7, around = 20;
+
         for (int k = 0; k < tiers; k++)
         {
-            double y = 0.15 + k * 0.75 / tiers + rng.Range(-0.04, 0.04), reach = rng.Range(0.6, 1.0), off = rng.Range(-0.35, 0.35);
-            const int around = 20, rings = 6;
-            int start = m.VertexCount;
+            double tTier = tiers > 1 ? (double)k / (tiers - 1) : 0.5;
+            double y = 0.14 + tTier * 0.66 + rng.Range(-0.02, 0.02);
+            double reach = rng.Range(0.65, 0.92) * (0.85 + 0.15 * Math.Sin(Math.PI * (k + 0.5) / tiers));
+            double spread = reach * rng.Range(0.9, 1.2);
+            double off = (k % 2 == 0 ? -1.0 : 1.0) * rng.Range(0.04, 0.20) + rng.Range(-0.04, 0.04);
+            double tilt = rng.Range(-0.035, 0.035);
+            double cup = rng.Range(0.02, 0.05);
+            double thickness = rng.Range(0.013, 0.018);
+
+            double phaseRuffle = rng.Range(0, 2 * Math.PI);
+            double phaseCren = rng.Range(0, 2 * Math.PI);
             ulong edgeSeed = Rng.Mix((ulong)(k + 1) * 0x9E3779B97F4A7C15UL, (ulong)Math.Round(reach * 10000));
-            double tilt = rng.Range(-0.055, 0.055), cup = rng.Range(0.025, 0.075);
+
+            int topStart = m.VertexCount;
+
+            // 1. Top shelf surface with ruffled crenulated margins and concentric color bands
             for (int ri = 0; ri <= rings; ri++)
             {
-                double f = (double)ri / rings;
-                for (int q = 0; q <= around; q++)
+                double u = (double)ri / rings;
+                var baseBand = bands[ri % bands.Length];
+                for (int s = 0; s <= around; s++)
                 {
-                    double th = -Math.PI / 2 + Math.PI * q / around;
-                    double n = Noise.Gradient(edgeSeed, Math.Cos(th) * 1.35, Math.Sin(th) * 1.35);
-                    double n2 = Noise.Gradient(Rng.Mix(edgeSeed, 19), Math.Cos(th) * 2.7, Math.Sin(th) * 2.7);
-                    double wav = 1 + 0.065 * n + 0.025 * n2;
-                    double z = off + Math.Sin(th) * reach * f * wav * 0.9;
-                    double yy = y + cup * f * f - 0.08 * f * Math.Abs(Math.Sin(th)) + tilt * Math.Sin(th) * f;
-                    var pos = new Vec3(Math.Cos(th) * reach * f * wav, yy, z);
-                    int band = Math.Min(ri, bands.Length - 1);
-                    int innerBand = Math.Min(bands.Length - 1, Math.Max(0, ri - 1));
-                    var col = Primitives.Mix(bands[band], bands[innerBand], MathD.Clamp01(0.25 + n * 0.15));
-                    m.AddVertex(pos, Vec3.Up, col, 1, f, (double)q / around, 0, 0);
+                    double angle = (double)s / around * Math.PI;
+                    double sinA = Math.Sin(angle);
+                    double cosA = -Math.Cos(angle);
+
+                    double edgeFactor = Math.Pow(u, 1.8) * sinA;
+                    double cren = (0.065 * Math.Sin(8.0 * angle + phaseCren) + 0.035 * Math.Cos(14.0 * angle - phaseCren)) * edgeFactor;
+                    double wav = 1.0 + cren;
+                    double wavZ = 1.0 + cren * 0.7;
+
+                    double x = reach * u * sinA * wav;
+                    if (s == 0 || s == around || ri == 0) x = 0.0;
+
+                    double currentSpread = spread * (0.65 + 0.35 * u);
+                    double z = off + currentSpread * cosA * wavZ;
+
+                    double cupDroop = cup * u * u - 0.04 * u * Math.Pow(sinA, 1.5) + tilt * cosA * u;
+                    double ruffleWave = 0.040 * Math.Sin(9.0 * angle + phaseRuffle) + 0.022 * Math.Sin(17.0 * angle - phaseRuffle);
+                    double ruffleNoise = 0.018 * Noise.Gradient(Rng.Mix(edgeSeed, 101), Math.Cos(angle) * 3.0, Math.Sin(angle) * 3.0);
+                    double ruffle = (ruffleWave + ruffleNoise) * edgeFactor;
+
+                    double yTop = y + cupDroop + ruffle;
+                    var posTop = new Vec3(x, yTop, z);
+
+                    double bandNoise = Noise.Gradient(edgeSeed, Math.Cos(angle) * 2.2, Math.Sin(angle) * 2.2);
+                    var col = Primitives.Mix(baseBand, bands[(ri + 1) % bands.Length], MathD.Clamp01(0.15 + 0.15 * bandNoise));
+
+                    m.AddVertex(posTop, Vec3.Up, col, 1, u, (double)s / around, 0, ri == rings ? 1 : 0);
                 }
             }
+
+            int underStart = m.VertexCount;
+
+            // 2. Shelf underside (pore surface) following top shelf contour with thickness (no single-vertex central Fan)
+            for (int ri = 0; ri <= rings; ri++)
+            {
+                double u = (double)ri / rings;
+                var underCol = Primitives.Mix(poreCenter, poreBase, u);
+                double thk = thickness * (1.0 - 0.35 * u);
+
+                for (int s = 0; s <= around; s++)
+                {
+                    double angle = (double)s / around * Math.PI;
+                    double sinA = Math.Sin(angle);
+                    double cosA = -Math.Cos(angle);
+
+                    double edgeFactor = Math.Pow(u, 1.8) * sinA;
+                    double cren = (0.065 * Math.Sin(8.0 * angle + phaseCren) + 0.035 * Math.Cos(14.0 * angle - phaseCren)) * edgeFactor;
+                    double wav = 1.0 + cren;
+                    double wavZ = 1.0 + cren * 0.7;
+
+                    double x = reach * u * sinA * wav;
+                    if (s == 0 || s == around || ri == 0) x = 0.0;
+
+                    double currentSpread = spread * (0.65 + 0.35 * u);
+                    double z = off + currentSpread * cosA * wavZ;
+
+                    double cupDroop = cup * u * u - 0.04 * u * Math.Pow(sinA, 1.5) + tilt * cosA * u;
+                    double ruffleWave = 0.040 * Math.Sin(9.0 * angle + phaseRuffle) + 0.022 * Math.Sin(17.0 * angle - phaseRuffle);
+                    double ruffleNoise = 0.018 * Noise.Gradient(Rng.Mix(edgeSeed, 101), Math.Cos(angle) * 3.0, Math.Sin(angle) * 3.0);
+                    double ruffle = (ruffleWave + ruffleNoise) * edgeFactor;
+
+                    double yTop = y + cupDroop + ruffle;
+                    var posBottom = new Vec3(x, yTop - thk, z);
+
+                    m.AddVertex(posBottom, -Vec3.Up, underCol, 1, u, (double)s / around, 1, 0);
+                }
+            }
+
+            // Top surface triangulation
             for (int ri = 0; ri < rings; ri++)
                 for (int s = 0; s < around; s++)
                 {
-                    int a = start + ri * (around + 1) + s, c = a + around + 1;
+                    int a = topStart + ri * (around + 1) + s, c = a + around + 1;
                     Primitives.TriangleFacing(m, a, c, a + 1, Vec3.Up);
                     Primitives.TriangleFacing(m, a + 1, c, c + 1, Vec3.Up);
                 }
-            // cream pore surface underneath
-            var rim = new List<Vec3>();
-            for (int q = 0; q <= around; q++)
-            {
-                double th = -Math.PI / 2 + Math.PI * q / around;
-                double n = Noise.Gradient(edgeSeed, Math.Cos(th) * 1.35, Math.Sin(th) * 1.35);
-                double n2 = Noise.Gradient(Rng.Mix(edgeSeed, 19), Math.Cos(th) * 2.7, Math.Sin(th) * 2.7);
-                double wav = 1 + 0.065 * n + 0.025 * n2;
-                rim.Add(new Vec3(Math.Cos(th) * reach * wav,
-                    y + cup - 0.08 * Math.Abs(Math.Sin(th)) + tilt * Math.Sin(th),
-                    off + Math.Sin(th) * reach * wav * 0.9));
-            }
-            Primitives.Fan(m, new Vec3(0, y - 0.005, off), rim, -Vec3.Up,
-                new[] { 0.62, 0.56, 0.44 }, new[] { 0.56, 0.5, 0.4 }, 1, 1);
+
+            // Underside triangulation
+            for (int ri = 0; ri < rings; ri++)
+                for (int s = 0; s < around; s++)
+                {
+                    int a = underStart + ri * (around + 1) + s, c = a + around + 1;
+                    Primitives.TriangleFacing(m, a, c, a + 1, -Vec3.Up);
+                    Primitives.TriangleFacing(m, a + 1, c, c + 1, -Vec3.Up);
+                }
         }
+        m.RecomputeNormals();
     }
 
     /// <summary>A mat of fleshy rosettes (stonecrop): plump spiralled leaves, blue-green with red-blushed tips.</summary>

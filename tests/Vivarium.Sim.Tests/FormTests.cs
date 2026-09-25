@@ -361,4 +361,67 @@ public class FormTests
         Assert.InRange(blueTips, 45, 100);
         Assert.Equal(m.DigestHex(), OrganismMeshes.Flora(sp, 42).DigestHex());
     }
+
+    [Fact]
+    public void BracketFungusHasTieredRuffledShelves()
+    {
+        var sp = new FloraSpeciesDef
+        {
+            Id = "turkey_tail",
+            Shape = "bracket",
+            Color = new[] { 0.46, 0.33, 0.22 },
+            Color2 = new[] { 0.86, 0.8, 0.66 }
+        };
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var mesh = OrganismMeshes.Flora(sp, seed);
+            Assert.Equal(mesh.DigestHex(), OrganismMeshes.Flora(sp, seed).DigestHex());
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+
+            // Triangle budget: multi-tiered double-sided bracket shelves
+            Assert.InRange(mesh.TriangleCount, 1500, 4500);
+
+            // Bounds check & base attachment:
+            // Bracket base attaches cleanly along the support surface (local X=0)
+            var bounds = mesh.Bounds();
+            Assert.InRange(bounds.Min.X, -0.0001, 0.0001);
+            Assert.True(bounds.Max.X > 0.5 && bounds.Max.X <= 1.05);
+            Assert.InRange(bounds.Min.Y, 0.02, 0.25);
+            Assert.InRange(bounds.Max.Y, 0.70, 1.05);
+
+            // Base attachment: all base vertices lie along support plane local X=0
+            var baseVerts = Enumerable.Range(0, mesh.VertexCount)
+                .Where(i => Math.Abs(mesh.Position(i).X) < 1e-4)
+                .ToArray();
+            Assert.True(baseVerts.Length >= 50, "must attach cleanly along support surface at X=0");
+
+            // Multi-tiered shelves: top shelf vertices (UV2.x == 0) and pore underside vertices (UV2.x == 1)
+            var topVerts = Enumerable.Range(0, mesh.VertexCount).Where(i => mesh.UV2[i * 2] == 0).ToArray();
+            var underVerts = Enumerable.Range(0, mesh.VertexCount).Where(i => mesh.UV2[i * 2] == 1).ToArray();
+            Assert.True(topVerts.Length > 0 && underVerts.Length > 0);
+            Assert.Equal(topVerts.Length, underVerts.Length);
+            Assert.True(underVerts.Length >= 400, "underside pore surface must be a multi-ring contoured surface");
+
+            // Underside follows top shelf contour with thickness (no single-vertex central Fan)
+            for (int k = 0; k < topVerts.Length; k++)
+            {
+                var pTop = mesh.Position(topVerts[k]);
+                var pUnder = mesh.Position(underVerts[k]);
+                Assert.Equal(pTop.X, pUnder.X, 4);
+                Assert.Equal(pTop.Z, pUnder.Z, 4);
+                Assert.True(pTop.Y >= pUnder.Y, "pore surface must be underneath top shelf with thickness");
+            }
+            double minThickness = topVerts.Select((v, idx) => mesh.Position(v).Y - mesh.Position(underVerts[idx]).Y).Min();
+            Assert.True(minThickness > 0.005, "shelf must have positive leathery thickness throughout");
+
+            // Ruffled crenulated margins: rim vertices tagged with UV2.y == 1 have measurable vertical ruffle
+            var rims = Enumerable.Range(0, mesh.VertexCount).Where(i => mesh.UV2[i * 2 + 1] == 1).Select(i => mesh.Position(i).Y).ToArray();
+            Assert.True(rims.Length >= 60 && rims.Max() - rims.Min() > 0.1, "rim must have ruffled vertical silhouette");
+
+            // Concentric color banding on top surface: multiple distinct zoned color bands
+            var distinctColors = topVerts.Select(i => Math.Round(mesh.Colors[i * 4], 2)).Distinct().ToArray();
+            Assert.True(distinctColors.Length >= 4, "top surface must feature zoned concentric color banding");
+        }
+    }
 }
