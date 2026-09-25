@@ -161,6 +161,21 @@ public class WorldTests
         Assert.Equal(10 - w.SurfaceHeight(new Vec2(1.2, -0.7)), hit, 4);
     }
 
+    [Fact]
+    public void TerrainVisibilityRayRespectsCallerDistance()
+    {
+        var w = TestUtil.FlatWorld();
+        double ground = w.Terrain.Height(Vec2.Zero);
+        var origin = new Vec3(0, ground + 2, 0);
+        var down = new Vec3(0, -1, 0);
+
+        Assert.Equal(double.PositiveInfinity, Tools.Selection.RayTerrain(w, origin, down, maxDistance: 1));
+        Assert.Equal(2, Tools.Selection.RayTerrain(w, origin, down, maxDistance: 3), 4);
+        Assert.Equal(2, Tools.Selection.RayTerrain(w, origin, down), 4);
+        Assert.Equal(double.PositiveInfinity, Tools.Selection.RayOpaque(w, origin, down, maxDistance: 1));
+        Assert.Equal(2, Tools.Selection.RayOpaque(w, origin, down, maxDistance: 3), 4);
+    }
+
     [Fact] // t-020
     public void SubstrateMapIsDeterministicAndCoversAllClasses()
     {

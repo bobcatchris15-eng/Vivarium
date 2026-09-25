@@ -79,7 +79,7 @@ public static class Selection
     {
         var dir = direction.Normalized();
         if (dir.LengthSq < 0.5) return double.PositiveInfinity;
-        double best = RayTerrain(w, origin, dir);
+        double best = RayTerrain(w, origin, dir, maxDistance);
         foreach (var r in w.Props.Rocks)
             best = Math.Min(best, RayEllipsoid(origin, dir, new Vec3(r.X, r.Y, r.Z), r.SizeX, r.SizeY, r.SizeZ, r.RotationY));
         foreach (var l in w.Props.Logs)
@@ -125,12 +125,12 @@ public static class Selection
     };
 
     /// <summary>Ray vs terrain top surface inside the hexagon (march + bisection). Returns distance or +∞.</summary>
-    public static double RayTerrain(VivariumWorld w, Vec3 o, Vec3 d)
+    public static double RayTerrain(VivariumWorld w, Vec3 o, Vec3 d, double maxDistance = MaxDistance)
     {
         double step = 0.04, t = 0, prevT = 0;
         double prev = o.Y - w.Terrain.Height(o.XZ);
         // skip ahead quickly when far above the terrain
-        while (t < MaxDistance)
+        while (t <= maxDistance)
         {
             var p = o + d * t;
             double above = p.Y - (w.Domain.Contains(p.XZ) ? w.Terrain.Height(p.XZ) : double.NegativeInfinity);
@@ -146,8 +146,9 @@ public static class Selection
                 }
                 return hi;
             }
+            if (t == maxDistance) break;
             prev = above; prevT = t;
-            t += double.IsInfinity(above) ? step * 4 : Math.Max(step, Math.Min(above * 0.5, 1.0));
+            t = Math.Min(maxDistance, t + (double.IsInfinity(above) ? step * 4 : Math.Max(step, Math.Min(above * 0.5, 1.0))));
         }
         return double.PositiveInfinity;
     }
