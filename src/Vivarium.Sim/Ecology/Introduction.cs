@@ -73,6 +73,7 @@ public static class Populate
         foreach (var entry in w.Descriptor.StarterFlora)
         {
             var sp = w.Content.FloraOrThrow(entry.Species);
+            if (sp.IsCoverageSpecies) continue; // seeded onto the coverage layers by CoverageSystem.SeedInitial
             var candidates = RankedCells(w, rng, c => { var s = w.FloraSystem.Suitability(sp, c); return s.HardRefused ? -1 : s.Score; }, sp.MinSuitability * 1.2);
             int placed = 0;
             foreach (var (pos, _) in candidates)
