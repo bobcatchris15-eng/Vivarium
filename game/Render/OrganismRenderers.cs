@@ -16,9 +16,12 @@ namespace Vivarium.Game.Render;
 public partial class FloraRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private const int MorphVariants = 5;
+    private const int DefaultMorphVariants = 5;
+    private const int MigratedMorphVariants = 12;
+    private static int MorphVariantsFor(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate"
+        ? MigratedMorphVariants : DefaultMorphVariants;
     private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit; public int FullTris, FruitTris; }
-    private sealed class Layer { public VariantLayer[] Variants = new VariantLayer[MorphVariants]; public MultiMeshInstance3D? Veins; public int VeinTris; }
+    private sealed class Layer { public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris; public Layer(int count) => Variants = new VariantLayer[count]; }
     private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
@@ -41,9 +44,9 @@ public partial class FloraRenderer : Node3D
             mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
             if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            var layer = new Layer();
+            var layer = new Layer(MorphVariantsFor(sp.Shape));
             ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
-            for (int v = 0; v < MorphVariants; v++)
+            for (int v = 0; v < layer.Variants.Length; v++)
             {
                 ulong seed = Rng.Mix(speciesSeed, (ulong)(v + 1) * 0x9E3779B97F4A7C15UL);
                 var full = OrganismMeshes.Flora(sp, seed);
@@ -148,7 +151,7 @@ public partial class FloraRenderer : Node3D
     public void Rebuild()
     {
         foreach (var k in _layers.Keys)
-            for (int v = 0; v < MorphVariants; v++)
+            for (int v = 0; v < _layers[k].Variants.Length; v++)
             {
                 var mk = MorphKey(k, v);
                 var fl = Get(_full, mk); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
@@ -213,7 +216,7 @@ public partial class FloraRenderer : Node3D
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) { wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2); if (wobble <= 0) done.Add(f.Id); }
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
             var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
-            int variant = (int)((hash >> 8) % MorphVariants);
+            int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
             var vl = _layers[sp.Id].Variants[variant];
             var bucket = f.Fruiting && vl.Fruit != null ? _fruit : _full;
             var bd = Get(bucket, MorphKey(sp.Id, variant)); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
@@ -244,7 +247,7 @@ public partial class FloraRenderer : Node3D
             TrianglesDrawn += (long)list.T.Count * layer.VeinTris;
         }
         foreach (var (id, layer) in _layers)
-            for (int v = 0; v < MorphVariants; v++)
+            for (int v = 0; v < layer.Variants.Length; v++)
             {
                 var vl = layer.Variants[v];
                 string mk = MorphKey(id, v);

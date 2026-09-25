@@ -25,11 +25,18 @@ void vertex() {
     inst = INSTANCE_CUSTOM;
     obj_pos = VERTEX;
     float h = max(VERTEX.y, 0.0);
-    float ma = inst.x - 0.5, mb = inst.w - 0.5;
-    VERTEX.xz *= vec2(1.0 + ma * 0.10, 1.0 - ma * 0.07);
-    float grow = smoothstep(0.0, 1.0, h);
-    VERTEX.x += grow * grow * mb * 0.055;
-    VERTEX.z += grow * grow * ma * 0.045;
+    // Migrated blades encode base-to-tip position in UV.x. Keep attachments fixed and
+    // bend the distal blade with smooth, seed-stable variation rather than vertex noise.
+    if (surface_mode == 2) {
+        float tip = smoothstep(0.08, 0.92, UV.x);
+        float above_base = smoothstep(0.0, 0.12, h);
+        float weight = tip * tip * above_base;
+        float bend_x = sin(inst.w * 31.416 + 0.8);
+        float bend_z = cos(inst.w * 24.973 + 1.7);
+        float spread = 1.0 + (inst.w - 0.5) * 0.12 * weight;
+        VERTEX.xz *= vec2(spread, 2.0 - spread);
+        VERTEX.xz += vec2(bend_x, bend_z) * weight * 0.028;
+    }
     float phase = TIME * 1.3 + inst.w * 6.2831;
     float amount = (0.012 * sway + inst.z * 0.15) / stiffness;
     VERTEX.x += sin(phase) * h * h * amount * 3.0 + sin(TIME * 18.0 + inst.w * 40.0) * inst.z * h * 0.2;
