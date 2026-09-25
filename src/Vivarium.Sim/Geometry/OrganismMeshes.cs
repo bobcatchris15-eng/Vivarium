@@ -819,15 +819,16 @@ public static class OrganismMeshes
     {
         for (int k = 0; k < 110; k++)
         {
-            double ang = rng.Range(0, 2 * Math.PI), r0 = Math.Sqrt(rng.NextDouble()) * 0.25;
-            double spread = rng.Range(0.25, 1.0), h = rng.Range(0.6, 1.0) * (1.1 - spread * 0.3);
+            double ang = rng.Range(0, 2 * Math.PI), r0 = Math.Sqrt(rng.NextDouble()) * 0.22;
+            double spread = rng.Range(0.2, 0.94), h = rng.Range(0.46, 1.0) * (1.12 - spread * 0.24);
             var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang)); var side = new Vec3(-dir.Z, 0, dir.X);
             var b = dir * r0;
-            var mid = b + dir * (spread * 0.45) + new Vec3(0, h * 0.75, 0);
-            var tip = b + dir * (spread * 1.0) + new Vec3(0, h * (0.55 + 0.3 * rng.NextDouble()), 0);
-            double w = rng.Range(0.012, 0.02);                      // needle-fine blades (half-width, radius units)
-            var tipCol = Primitives.Mix(c1, c2, rng.Range(0.05, 0.45));   // mostly blue-green, a few straw tips
-            Blade(m, b, mid, tip, side, w, Primitives.Scale(c1, 0.8), tipCol);
+            var mid = b + dir * (spread * rng.Range(0.18, 0.42)) + side * rng.Range(-0.08, 0.08) + new Vec3(0, h * rng.Range(0.8, 1.05), 0);
+            var tip = b + dir * spread + side * rng.Range(-0.16, 0.16) + new Vec3(0, h * rng.Range(0.48, 0.82), 0);
+            double w = rng.Range(0.009, 0.017);
+            var blue = Primitives.Mix(c1, new[] { 0.58, 0.7, 0.72 }, rng.Range(0.08, 0.38));
+            var tipCol = rng.NextDouble() < 0.3 ? Primitives.Mix(c1, c2, rng.Range(0.72, 1.0)) : blue;
+            Blade(m, b, mid, tip, side, w, Primitives.Scale(c1, rng.Range(0.72, 0.92)), tipCol);
         }
     }
 
@@ -849,7 +850,8 @@ public static class OrganismMeshes
             int start = m.VertexCount;
             for (int i = 0; i <= n; i++)
             {
-                double t = (double)i / n, wHere = halfWidth * (1 - t * 0.9);
+                double t = (double)i / n;
+                double wHere = halfWidth * (0.58 + 0.42 * Math.Sin(Math.PI * t)) * (1 - 0.94 * t);
                 var along = (i < n ? pts[i + 1] - pts[i] : pts[i] - pts[i - 1]).Normalized();
                 var nrm = along.Cross(side).Normalized() * (face == 0 ? 1 : -1);
                 var col = Primitives.Mix(colBase, colTip, t);

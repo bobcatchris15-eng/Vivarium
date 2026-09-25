@@ -299,4 +299,30 @@ public class FormTests
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
     }
+
+    [Fact]
+    public void TussockHasGroundedTaperedBladesAndMixedStrawTips()
+    {
+        var sp = new FloraSpeciesDef { Id = "blue_fescue", Shape = "tussock", Color = new[] { 0.36, 0.55, 0.6 }, Color2 = new[] { 0.8, 0.74, 0.5 } };
+        var m = OrganismMeshes.Flora(sp, 42);
+        Assert.Equal(2640, m.TriangleCount);
+        AssertAllFinite(m);
+        var bounds = m.Bounds();
+        Assert.InRange(bounds.Min.Y, -0.001, 0.001);
+        int strawTips = 0, blueTips = 0;
+        for (int blade = 0; blade < 110; blade++)
+        {
+            int start = blade * 28;
+            double baseWidth = (m.Position(start + 1) - m.Position(start)).Length;
+            double tipWidth = (m.Position(start + 13) - m.Position(start + 12)).Length;
+            Assert.True(tipWidth < baseWidth * 0.2, $"blade {blade} should end in a fine point");
+            Assert.InRange(m.Position(start).Y, -0.001, 0.001);
+            int color = (start + 12) * 4;
+            if (m.Colors[color] > m.Colors[color + 2] + 0.04) strawTips++;
+            else blueTips++;
+        }
+        Assert.InRange(strawTips, 10, 65);
+        Assert.InRange(blueTips, 45, 100);
+        Assert.Equal(m.DigestHex(), OrganismMeshes.Flora(sp, 42).DigestHex());
+    }
 }
