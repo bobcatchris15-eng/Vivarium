@@ -88,6 +88,14 @@ public partial class CoverageRenderer : Node3D
         return new Vec3((float)(-dx * invLen), (float)invLen, (float)(-dz * invLen));
     }
 
+    private static float SlopeFade(Vec3 normal)
+    {
+        // A height field cannot drape around a vertical log edge. Thin the coverage as its
+        // sampled surface approaches that discontinuity instead of leaving triangular curtains.
+        float u = Math.Clamp((float)((normal.Y - 0.12) / 0.4), 0f, 1f);
+        return u * u * (3f - 2f * u);
+    }
+
     private static float ComputeThickness(SpeciesRenderInfo sp, CoverageLayerId layerId, float b, byte w, byte d2e, byte flags)
     {
         float bNorm = Math.Clamp(b, 0.1f, 1.0f);
@@ -150,8 +158,11 @@ public partial class CoverageRenderer : Node3D
 
         _matMaterial = Bridge.Shader("res://Shaders/coverage_mat.gdshader");
         _matMaterial.SetShaderParameter("u_pattern", 0.0f); // fibrous moss micro-detail
+        Bridge.BindSurface(_matMaterial, "moss", Bridge.Surfaces.Moss);
         _crustMaterial = Bridge.Shader("res://Shaders/coverage_mat.gdshader");
         _crustMaterial.SetShaderParameter("u_pattern", 1.0f); // cracked/areolate lichen micro-detail
+        Bridge.BindSurface(_crustMaterial, "moss", Bridge.Surfaces.Moss);
+        _crustMaterial.SetShaderParameter("lichen_col", GD.Load<Texture2D>("res://Textures/LichenThallus.png"));
         if (DebugMode)
         {
             _debugMatMaterial = new StandardMaterial3D
@@ -224,7 +235,7 @@ public partial class CoverageRenderer : Node3D
                 lichenId++;
                 Color c1 = sp.Color != null && sp.Color.Length >= 3 ? Bridge.C(sp.Color) : new Color(0.75f, 0.75f, 0.55f);
                 Color c2 = sp.Color2 != null && sp.Color2.Length >= 3 ? Bridge.C(sp.Color2) : c1;
-                // Crustose/foliose lichen has ~0.5 mm thickness
+                // The sheet has its own relief below; this is the substrate-to-sheet gap.
                 double maxH = ld.Form == LichenForm.Fruticose
                     ? (sp.Height > 0 ? sp.Height : 0.008)
                     : 0.0005;
@@ -341,6 +352,64 @@ public partial class CoverageRenderer : Node3D
         record.MeshInstance.MaterialOverride = mat;
         record.Version = t.Version;
         TrianglesBuilt += md.TriangleCount;
+    }
+
+    private static uint ReliefHash(int x, int z)
+    {
+        unchecked
+        {
+            uint h = (uint)(x * 73856093 ^ z * 19349663);
+            h ^= h >> 16; h *= 0x7feb352d; h ^= h >> 15; h *= 0x846ca68b; h ^= h >> 16;
+            return h;
+        }
+    }
+
+    private static float ValueNoise(double x, double z, double spacing)
+    {
+        double fx = x / spacing, fz = z / spacing;
+        int ix = (int)Math.Floor(fx), iz = (int)Math.Floor(fz);
+        float u = (float)(fx - ix), v = (float)(fz - iz);
+        u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v);
+        static float Unit(uint h) => (h & 65535) / 65535f;
+        float a = Mathf.Lerp(Unit(ReliefHash(ix, iz)), Unit(ReliefHash(ix + 1, iz)), u);
+        float b = Mathf.Lerp(Unit(ReliefHash(ix, iz + 1)), Unit(ReliefHash(ix + 1, iz + 1)), u);
+        return Mathf.Lerp(a, b, v);
+    }
+
+    private static float SurfaceRelief(CoverageLayerId layer, double wx, double wz, float alpha, double maxHeight)
+    {
+        if (alpha <= 0) return 0;
+        if (layer == CoverageLayerId.Crust)
+        {
+            // Two nonaligned wavelengths create continuous, crinkled thallus folds. The rim curls up.
+            float broad = Math.Abs(ValueNoise(wx + 0.013, wz, 0.052) - 0.5f) * 2f;
+            float fine = Math.Abs(ValueNoise(wx, wz + 0.021, 0.019) - 0.5f) * 2f;
+            float fold = broad * 0.7f + fine * 0.3f;
+            float edge = MathF.Sqrt(alpha);
+            return edge * (0.002f + fold * 0.018f + (1f - alpha) * 0.012f);
+        }
+
+        // Overlapping rounded pillows are sampled in world coordinates, so the shape merges across
+        // 32-cell tile seams. The low continuous base fills the valleys between adjacent mounds.
+        const double spacing = 0.09;
+        int ix = (int)Math.Floor(wx / spacing), iz = (int)Math.Floor(wz / spacing);
+        float pillow = 0;
+        for (int dz = -1; dz <= 1; dz++)
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            int cx = ix + dx, cz = iz + dz;
+            uint h = ReliefHash(cx, cz);
+            double mx = (cx + 0.5 + ((h & 255) / 255.0 - 0.5) * 0.36) * spacing;
+            double mz = (cz + 0.5 + (((h >> 8) & 255) / 255.0 - 0.5) * 0.36) * spacing;
+            double radius = spacing * (1.08 + (((h >> 16) & 255) / 255.0) * 0.30);
+            double d2 = ((wx - mx) * (wx - mx) + (wz - mz) * (wz - mz)) / (radius * radius);
+            if (d2 >= 1) continue;
+            float cap = (float)((1 - d2) * (1 - d2));
+            pillow += cap;
+        }
+        float height = Math.Clamp((float)maxHeight, 0.014f, 0.028f);
+        float mergedPillows = 1f - MathF.Exp(-pillow * 0.9f);
+        return alpha * height * (0.3f + mergedPillows * 0.7f);
     }
 
     private MeshData BuildTileMesh(CoverageLayer layer, CoverageTile t)
@@ -516,9 +585,12 @@ public partial class CoverageRenderer : Node3D
             double gy = _w.GroundHeight(new Vec2(wx, wz));
             Vec3 gn = GetGroundNormal(wx, wz);
             float th = _cornerThickness[cx, cz];
-            Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th);
+            byte occ = layer.GetOcc(t.Ti * edge + cx, t.Tj * edge + cz);
+            var sp = GetSpecies(layer.Id, occ);
+            float relief = SurfaceRelief(layer.Id, wx, wz, _cornerAlpha[cx, cz], sp.MaxHeightM);
+            Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th + relief);
             Color c = _cornerColor[cx, cz];
-            idx = md.AddVertex(p, gn, c.R, c.G, c.B, _cornerAlpha[cx, cz], wx, wz, cx / (double)edge, cz / (double)edge);
+            idx = md.AddVertex(p, gn, c.R, c.G, c.B, _cornerAlpha[cx, cz] * SlopeFade(gn), wx, wz, cx / (double)edge, cz / (double)edge);
             _cornerIdx[cx, cz] = idx;
             return idx;
         }
@@ -541,8 +613,11 @@ public partial class CoverageRenderer : Node3D
             float a = Bilerp(_cornerAlpha[c0x, c0z], _cornerAlpha[c0x + 1, c0z], _cornerAlpha[c0x, c0z + 1], _cornerAlpha[c0x + 1, c0z + 1], s, t2);
             double gy = _w.GroundHeight(new Vec2(wx, wz));
             Vec3 gn = GetGroundNormal(wx, wz);
-            Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th);
-            return md.AddVertex(p, gn, r, g, b, a, wx, wz, fx / edge, fz / edge);
+            byte occ = layer.GetOcc((int)Math.Floor(wx / cs), (int)Math.Floor(wz / cs));
+            var sp = GetSpecies(layer.Id, occ);
+            float relief = SurfaceRelief(layer.Id, wx, wz, a, sp.MaxHeightM);
+            Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th + relief);
+            return md.AddVertex(p, gn, r, g, b, a * SlopeFade(gn), wx, wz, fx / edge, fz / edge);
         }
 
         int GetOrAddHMid(int ex, int ez)
@@ -585,10 +660,20 @@ public partial class CoverageRenderer : Node3D
             void SubQuad(int q00, int q10, int q11, int q01, double cs2, double ct2)
             {
                 int qc = AddSubDirect(cs2, ct2);
-                md.AddTriangle(q00, qc, q10);
-                md.AddTriangle(q10, qc, q11);
-                md.AddTriangle(q11, qc, q01);
-                md.AddTriangle(q01, qc, q00);
+                AddSurfaceTriangle(q00, qc, q10);
+                AddSurfaceTriangle(q10, qc, q11);
+                AddSurfaceTriangle(q11, qc, q01);
+                AddSurfaceTriangle(q01, qc, q00);
+            }
+
+            void AddSurfaceTriangle(int a, int b, int c)
+            {
+                // GroundHeight can jump from soil to the top of a log or rock within one fine
+                // cell. Joining those samples creates a tall, stretched curtain of moss.
+                double ya = md.Position(a).Y, yb = md.Position(b).Y, yc = md.Position(c).Y;
+                if (Math.Max(ya, Math.Max(yb, yc)) - Math.Min(ya, Math.Min(yb, yc)) > 0.03)
+                    return;
+                md.AddTriangle(a, b, c);
             }
 
             SubQuad(v00, v10, v11, v01, lx + 0.25, lz + 0.25);

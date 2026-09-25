@@ -10,6 +10,10 @@ render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/surface.gdshaderinc"
 
 uniform float u_pattern = 0.0;
+uniform sampler2D moss_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D moss_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D lichen_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 
 varying vec3 world_pos;
 
@@ -32,6 +36,7 @@ void fragment() {
     float rough = 0.92;
     vec3 bump = vec3(0.0);
     float ao = 1.0;
+    vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 
     // Per-patch grain direction so fibre/lobe streaking is not axis-aligned everywhere; derived from
     // a coarse hash of world position so it stays stable per clump instead of jittering per fragment.
@@ -40,6 +45,14 @@ void fragment() {
     vec2 grainOrth = vec2(-grainDir.y, grainDir.x);
 
     if (u_pattern < 0.5) {
+        // Photo-scanned moss supplies irregular leaf clusters and contact shadows across the
+        // geometric pillows. World-space sampling keeps one patch continuous over tile seams.
+        vec3 scan_n;
+        vec4 scan = triplanar(moss_col, moss_nrm, moss_rgh,
+            world_pos / 0.24, wn, 5.0, scan_n);
+        float scan_avg = max(dot(textureLod(moss_col, vec2(0.5), 10.0).rgb,
+            vec3(0.2126, 0.7152, 0.0722)), 0.05);
+        c *= mix(vec3(1.0), clamp(scan.rgb / scan_avg, vec3(0.25), vec3(1.7)), 0.78);
         // Moss: layered fibrous/leaflet micro-detail at ~1-3mm scale with directional grain per clump,
         // plus tip brightening so individual shoots read instead of a flat stippled paint.
         vec2 pg = vec2(dot(wp, grainDir), dot(wp, grainOrth));
@@ -56,39 +69,17 @@ void fragment() {
         vec2 pgz = vec2(dot(wp + vec2(0.0, e), grainDir), dot(wp + vec2(0.0, e), grainOrth));
         float dx = (fbm(pgx * vec2(3.0, 26.0)) + fbm(pgx * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
         float dz = (fbm(pgz * vec2(3.0, 26.0)) + fbm(pgz * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
-        bump = vec3(-dx, 0.0, -dz) * 3.2;
+        bump = vec3(-dx, 0.0, -dz) * 1.2 + (scan_n - wn) * 0.65;
 
         // Crevice AO: darken low-fibre troughs between shoot clusters.
         ao = mix(0.72, 1.0, smoothstep(-0.1, 0.5, fibers));
-        rough = 0.96;
+        rough = mix(0.96, scan.a, 0.55);
     } else {
-        // Crust: cracked, raised-rim areolate tiles. Foliose species (looser tint spread, sp.Color2
-        // farther from sp.Color1) read lobed with lighter edges; reindeer-lichen footprint (fine
-        // branching) shows via the same noise at a finer scale plus pale branch tips.
-        vec2 p = wp * 22.0;
-        float cracks = vnoise(p);
-        float crackLine = smoothstep(0.46, 0.5, cracks) - smoothstep(0.5, 0.56, cracks);
-        float raisedRim = smoothstep(0.5, 0.56, cracks) - smoothstep(0.56, 0.62, cracks);
-        c *= 0.90 + 0.14 * cracks - 0.40 * crackLine;
-        c = mix(c, c * 1.10, raisedRim);
-        ao = mix(1.0, 0.55, crackLine);
-
-        float lobes = fbm(wp * 5.0 + 3.7);
-        vec3 lobeEdgeTint = c * 1.18 + vec3(0.03, 0.03, 0.01);
-        vec3 lobeCenterTint = c * 0.90;
-        c = mix(c, lobeEdgeTint, smoothstep(0.55, 0.72, lobes) * (1.0 - smoothstep(0.72, 0.9, lobes)));
-        c = mix(c, lobeCenterTint, smoothstep(0.3, 0.1, lobes));
-
-        // Fine branching tips (reindeer-lichen character): pale, high-frequency filaments.
-        float branch = fbm(wp * 35.0 + 8.2);
-        float branchTip = smoothstep(0.6, 0.85, branch);
-        c = mix(c, c * 1.4 + vec3(0.08), branchTip * 0.35);
-
-        float e = 0.02;
-        float dx = vnoise(p + vec2(e, 0.0)) - cracks;
-        float dz = vnoise(p + vec2(0.0, e)) - cracks;
-        bump = vec3(-dx, 0.0, -dz) * 3.0;
-        rough = 0.86;
+        // A scanned-style lichen thallus replaces the synthetic dark squiggles. Its light curled
+        // lobes and granular troughs are recoloured by the species, over the folded sheet mesh.
+        vec3 thallus = texture(lichen_col, wp / 0.22).rgb;
+        c *= clamp(vec3(0.42) + thallus * 1.25, vec3(0.3), vec3(1.55));
+        rough = 0.91;
     }
 
     // Rim/interior relief: brighten and lift shading slightly where coverage is thin (rim), consistent
@@ -96,7 +87,6 @@ void fragment() {
     c *= mix(1.05, 0.96, coverMask);
     c *= ao;
 
-    vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
     vec3 n = normalize(wn + bump * 0.5);
 
     ALBEDO = c;
