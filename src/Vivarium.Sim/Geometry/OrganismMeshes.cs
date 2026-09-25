@@ -1,5 +1,6 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry.Form;
 
 namespace Vivarium.Sim.Geometry;
 
@@ -180,70 +181,8 @@ public static class OrganismMeshes
                 }
                 break;
             }
-            case "roundleaf":
-            {
-                // small round/kidney leaflets on short stalks, scattered across the mat
-                int n = 40 + rng.NextInt(15);
-                for (int k = 0; k < n; k++)
-                {
-                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.9;
-                    var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
-                    double stalkH = rng.Range(0.08, 0.18);
-                    var top = b + new Vec3(0, stalkH, 0);
-                    Primitives.Tube(m, new[] { b, top }, new[] { 0.008, 0.006 }, 4, (i, v) => (Primitives.Scale(c1, 0.7), 1, i, v, 0, 0));
-                    double leafR = rng.Range(0.07, 0.13), notchAng = rng.Range(0, 2 * Math.PI);
-                    var rim = new List<Vec3>();
-                    for (int s = 0; s <= 10; s++)
-                    {
-                        double th = 2 * Math.PI * s / 10;
-                        double rr = leafR * (1 - 0.35 * Math.Max(0, Math.Cos(th - notchAng)));
-                        rim.Add(top + new Vec3(Math.Cos(th) * rr, 0.005, Math.Sin(th) * rr));
-                    }
-                    Primitives.Fan(m, top, rim, Vec3.Up, Primitives.Mix(c1, c2, rng.Range(0, 0.5)), c2);
-                }
-                break;
-            }
-            case "pairedleaf":
-            {
-                // opposite pairs of small leaves along thin stems, with occasional tiny white flowers
-                int stems = 10 + rng.NextInt(6);
-                for (int k = 0; k < stems; k++)
-                {
-                    double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.75;
-                    var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
-                    var lean = new Vec3(rng.Range(-0.15, 0.15), 0, rng.Range(-0.15, 0.15));
-                    double h = rng.Range(0.25, 0.5);
-                    var top = b + lean + new Vec3(0, h, 0);
-                    Primitives.Tube(m, new[] { b, b + lean * 0.5 + new Vec3(0, h * 0.5, 0), top }, new[] { 0.01, 0.008, 0.005 }, 4, (i, v) => (Primitives.Scale(c1, 0.75), 1, i, v, 0, 0));
-                    int pairs = 3 + rng.NextInt(2);
-                    var side = new Vec3(-lean.Z, 0, lean.X);
-                    if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
-                    side = side.Normalized();
-                    for (int p = 1; p <= pairs; p++)
-                    {
-                        double t = (double)p / (pairs + 1);
-                        var c = b + lean * t + new Vec3(0, h * t, 0);
-                        double sz = rng.Range(0.05, 0.08);
-                        foreach (double sgn in new[] { -1.0, 1.0 })
-                        {
-                            var leafDir = (side * sgn + new Vec3(0, rng.Range(-0.08, 0.16), 0)).Normalized();
-                            var tip = c + leafDir * sz;
-                            var widthAxis = Vec3.Up.Cross(leafDir).Normalized();
-                            if (widthAxis.LengthSq < 1e-8) widthAxis = side;
-                            Primitives.CurvedLeaf(m, c, tip, widthAxis, sz * rng.Range(0.28, 0.40),
-                                Primitives.Scale(c1, 0.82), Primitives.Mix(c1, c2, rng.Range(0.15, 0.38)),
-                                camber: sz * rng.Range(0.05, 0.12), longitudinal: 4, asymmetry: rng.Range(-0.12, 0.12));
-                        }
-                    }
-                    if (rng.NextDouble() < 0.3)
-                    {
-                        var star = new List<Vec3>();
-                        for (int s = 0; s <= 8; s++) { double th = 2 * Math.PI * s / 8, rr = s % 2 == 0 ? 0.045 : 0.018; star.Add(top + new Vec3(Math.Cos(th) * rr, 0.01, Math.Sin(th) * rr)); }
-                        Primitives.Fan(m, top + new Vec3(0, 0.015, 0), star, Vec3.Up, new[] { 1.0, 1.0, 1.0 }, c2);
-                    }
-                }
-                break;
-            }
+            case "roundleaf": RoundLeaf(m, rng, seed, c1, c2); break;
+            case "pairedleaf": PairedLeaf(m, rng, seed, c1, c2); break;
             case "capitula":
             {
                 // upright stems ending in small star-shaped heads (peat moss capitula)
@@ -357,6 +296,214 @@ public static class OrganismMeshes
             Primitives.Ellipsoid(m, b + new Vec3(0, h + 0.5, 0), new Vec3(0.04, 0.6, 0.04), 4, 6, (u, v) => (head, 1, u, v, 0, 0));
         }
         return m;
+    }
+
+    /// <summary>Appends <paramref name="src"/> into <paramref name="dst"/>, rotating positions and normals about
+    /// world Y by <paramref name="yawRad"/>, then translating the result by <paramref name="translate"/>.</summary>
+    private static void AppendRotatedY(MeshData dst, MeshData src, Vec3 translate, double yawRad)
+    {
+        double cs = Math.Cos(yawRad), sn = Math.Sin(yawRad);
+        Vec3 Rot(Vec3 v) => new Vec3(v.X * cs - v.Z * sn, v.Y, v.X * sn + v.Z * cs);
+        int baseIndex = dst.VertexCount;
+        for (int i = 0; i < src.VertexCount; i++)
+        {
+            var p = Rot(src.Position(i)) + translate;
+            dst.Positions.Add((float)p.X); dst.Positions.Add((float)p.Y); dst.Positions.Add((float)p.Z);
+            var n = Rot(src.NormalAt(i));
+            dst.Normals.Add((float)n.X); dst.Normals.Add((float)n.Y); dst.Normals.Add((float)n.Z);
+        }
+        dst.Colors.AddRange(src.Colors); dst.UV.AddRange(src.UV); dst.UV2.AddRange(src.UV2);
+        foreach (var i in src.Indices) dst.Indices.Add(baseIndex + i);
+    }
+
+    /// <summary>Appends <paramref name="src"/> into <paramref name="dst"/> translated by <paramref name="translate"/>
+    /// with no rotation (positions and normals both left in the source's orientation).</summary>
+    private static void AppendTranslated(MeshData dst, MeshData src, Vec3 translate)
+    {
+        int baseIndex = dst.VertexCount;
+        for (int i = 0; i < src.VertexCount; i++)
+        {
+            var p = src.Position(i) + translate;
+            dst.Positions.Add((float)p.X); dst.Positions.Add((float)p.Y); dst.Positions.Add((float)p.Z);
+        }
+        dst.Normals.AddRange(src.Normals); dst.Colors.AddRange(src.Colors); dst.UV.AddRange(src.UV); dst.UV2.AddRange(src.UV2);
+        foreach (var i in src.Indices) dst.Indices.Add(baseIndex + i);
+    }
+
+    /// <summary>Dense mat of cupped reniform/cordate leaflets on short arching petioles (dichondra, watercress),
+    /// scattered across the full mat footprint like the old scattered-leaflet coverage. A handful of larger
+    /// "hero" leaves (via the LeafBlade kernel) sit among many cheaper cupped-fan leaflets so the mat reads as
+    /// dense and covers the whole footprint within the triangle budget. Youngest leaves are smaller and folded.</summary>
+    private static void RoundLeaf(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
+    {
+        int nHero = 3 + rng.NextInt(4);   // 3..6 larger kernel-built leaves for close-up detail
+        int nMat = 16 + rng.NextInt(16);  // 16..31 cheap cupped leaflets filling out the mat, like the old coverage
+
+        for (int k = 0; k < nHero; k++)
+        {
+            double ageT = nHero <= 1 ? 1.0 : (double)k / (nHero - 1);
+            double ang = rng.Range(0, 2 * Math.PI);
+            double clumpR = rng.Range(0, 0.5) * 0.9;
+            var basePos = new Vec3(Math.Cos(ang) * clumpR, MathD.Lerp(-0.01, 0.03, 1 - ageT), Math.Sin(ang) * clumpR);
+
+            double sizeScale = MathD.Lerp(0.2, 0.12, ageT) * rng.Range(0.85, 1.15);
+            double petioleLen = MathD.Lerp(0.5, 0.22, ageT) * rng.Range(0.85, 1.15);
+            bool folded = ageT > 0.72;
+
+            var petioleAxis = new AxisParams(Length: petioleLen, BaseAngle: rng.Range(0.35, 0.75), BaseAzimuth: 0,
+                Droop: rng.Range(0.9, 1.5), WobbleAmplitude: 0.01, WobbleFrequency: 1.3, Segments: 5);
+            ulong pSeed = Rng.Mix(seed, (ulong)(k * 131 + 7));
+            var petioleFrames = Axis.Build(petioleAxis, pSeed);
+            var tipFrame = petioleFrames[^1];
+
+            var tmp = new MeshData();
+            SoftTube.Build(tmp, new SoftTubeParams(petioleAxis, BaseRadius: 0.007 * (sizeScale / 0.13), TipRadius: 0.004 * (sizeScale / 0.13), Segments: 4),
+                pSeed, (i, v) => (Primitives.Scale(c1, 0.72), 1, i, v, 0, 0));
+
+            double tipPitch = Math.Acos(MathD.Clamp(tipFrame.Tangent.Y, -1.0, 1.0));
+            double tipAz = Math.Atan2(tipFrame.Tangent.Z, tipFrame.Tangent.X);
+            var profile = rng.NextDouble() < 0.5 ? BladeProfile.Reniform : BladeProfile.Cordate;
+            var bladeAxis = new AxisParams(Length: sizeScale * 0.5, BaseAngle: tipPitch, BaseAzimuth: tipAz,
+                Droop: rng.Range(-0.2, 0.2), Segments: 5);
+            var bladeParams = new LeafBladeParams(
+                Midrib: bladeAxis, Profile: profile, HalfWidth: sizeScale,
+                Camber: rng.Range(0.14, 0.22) + (folded ? 0.16 : 0),
+                Cup: rng.Range(0.06, 0.14), MidribFold: folded ? 0.10 : 0.02,
+                Asymmetry: rng.Range(-0.08, 0.08), MidribThickness: 0.002, DetailLevel: 1);
+            var bladeTmp = new MeshData();
+            LeafBlade.Build(bladeTmp, bladeParams, Rng.Mix(seed, (ulong)(k * 977 + 3)),
+                Primitives.Scale(c1, 0.85), Primitives.Mix(c1, c2, rng.Range(0.1, 0.4)));
+            AppendTranslated(tmp, bladeTmp, tipFrame.Point);
+
+            double leafYaw = ang + rng.Range(-0.35, 0.35); // no two leaves share orientation
+            AppendRotatedY(m, tmp, basePos, leafYaw);
+        }
+
+        for (int k = 0; k < nMat; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.88;
+            var basePos = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+            double stalkH = rng.Range(0.05, 0.14);
+            double leafR = rng.Range(0.05, 0.11);
+            bool folded = rng.NextDouble() < 0.18;
+            var profile = rng.NextDouble() < 0.5 ? BladeProfile.Reniform : BladeProfile.Cordate;
+            double leafYaw = ang + rng.Range(-0.5, 0.5);
+            ulong lSeed = Rng.Mix(seed, (ulong)(k * 733 + 91));
+
+            var tmp = new MeshData();
+            var top = new Vec3(0, stalkH, 0);
+            Primitives.Tube(tmp, new[] { Vec3.Zero, top }, new[] { 0.008 * (leafR / 0.08), 0.005 * (leafR / 0.08) }, 4,
+                (i, v) => (Primitives.Scale(c1, 0.72), 1, i, v, 0, 0));
+            CuppedLeaflet(tmp, top, leafR, profile, folded, lSeed, Primitives.Mix(c1, c2, rng.Range(0.1, 0.45)), c2);
+            AppendRotatedY(m, tmp, basePos, leafYaw);
+        }
+    }
+
+    /// <summary>Cheap double-sided cupped/notched leaflet (a raised-centre fan): the mat-filler counterpart to the
+    /// full LeafBlade kernel, used where many instances are needed within the triangle budget.</summary>
+    private static void CuppedLeaflet(MeshData m, Vec3 top, double leafR, BladeProfile profile, bool folded, ulong seed,
+        double[] rimCol, double[] tipCol)
+    {
+        var rng = Rng.Keyed(seed, "flora.mesh.leaflet", 0);
+        double notchAng = rng.Range(0, 2 * Math.PI);
+        double notchDepth = profile == BladeProfile.Reniform ? 0.4 : 0.3;
+        double cup = leafR * rng.Range(0.22, 0.4);
+        double foldAng = rng.Range(0, 2 * Math.PI);
+
+        var rim = new List<Vec3>();
+        for (int s = 0; s <= 10; s++)
+        {
+            double th = 2 * Math.PI * s / 10;
+            double rr = leafR * (1 - notchDepth * Math.Max(0, Math.Cos(th - notchAng)));
+            double lift = -0.08 * leafR; // rim curls down slightly relative to the cupped centre
+            if (folded)
+            {
+                double fold = Math.Max(0, Math.Cos(th - foldAng));
+                lift += fold * fold * leafR * 0.9; // one half folded up against the other
+                rr *= 1 - 0.25 * fold;
+            }
+            rim.Add(top + new Vec3(Math.Cos(th) * rr, lift, Math.Sin(th) * rr));
+        }
+        var apex = top + new Vec3(0, cup, 0);
+        Primitives.Fan(m, apex, rim, Vec3.Up, tipCol, rimCol);
+    }
+
+    /// <summary>Cheap double-sided cupped ovate leaflet oriented by an explicit (fwd, side, up) basis — the
+    /// pairedleaf counterpart to <see cref="CuppedLeaflet"/>, elongated along <paramref name="fwd"/> and cambered
+    /// toward <paramref name="up"/> to read as a thick fleshy leaf rather than a flat card.</summary>
+    private static void ThickOvateLeaflet(MeshData m, Vec3 center, Vec3 fwd, Vec3 side, Vec3 up,
+        double length, double halfWidth, double cupAmt, ulong seed, double[] baseCol, double[] tipCol)
+    {
+        var rng = Rng.Keyed(seed, "flora.mesh.ovateleaflet", 0);
+        double asym = rng.Range(-0.15, 0.15);
+        var rim = new List<Vec3>();
+        const int segs = 8;
+        for (int s = 0; s <= segs; s++)
+        {
+            double th = 2 * Math.PI * s / segs;
+            double envelope = Math.Pow(Math.Abs(Math.Sin(th)), 0.7);
+            double along = Math.Cos(th) * length * 0.5;
+            double across = Math.Sin(th) * halfWidth * envelope * (1 + asym * Math.Sign(Math.Sin(th)));
+            double lift = -0.06 * halfWidth;
+            rim.Add(center + fwd * along + side * across + up * lift);
+        }
+        var apex = center + up * cupAmt;
+        Primitives.Fan(m, apex, rim, up, tipCol, baseCol);
+    }
+
+    /// <summary>Decumbent curved stems with opposite pairs of thick ovate leaves, decussate and tapering to the
+    /// tip (bacopa). Occasional tiny white flower near the growing tip.</summary>
+    private static void PairedLeaf(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
+    {
+        int stems = 6 + rng.NextInt(7); // 6..12 stems, a visible sprawl rather than a few sprigs
+        for (int k = 0; k < stems; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.75;
+            var basePos = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
+            double stemLen = rng.Range(0.4, 0.75);
+            int pairs = 4 + rng.NextInt(4); // 4..7 pairs, tapering toward tip
+
+            var stemAxis = new AxisParams(Length: stemLen, BaseAngle: rng.Range(1.15, 1.45), BaseAzimuth: 0,
+                Droop: rng.Range(-0.15, 0.35), PhototropicBend: rng.Range(0.1, 0.3),
+                WobbleAmplitude: 0.015, WobbleFrequency: 1.6, Segments: 8);
+            ulong sSeed = Rng.Mix(seed, (ulong)(k * 211 + 11));
+            var stemFrames = Axis.Build(stemAxis, sSeed);
+
+            var tmp = new MeshData();
+            SoftTube.Build(tmp, new SoftTubeParams(stemAxis, BaseRadius: 0.012, TipRadius: 0.006, Segments: 6), sSeed,
+                (i, v) => (Primitives.Scale(c1, 0.78), 1, i, v, 0, 0));
+
+            for (int p = 1; p <= pairs; p++)
+            {
+                double t = (double)p / (pairs + 1);
+                var f = Axis.Sample(stemFrames, t);
+                double taper = 1.0 - 0.5 * (double)p / pairs;
+                double leafSize = rng.Range(0.12, 0.18) * taper;
+                double pairYaw = (p % 2 == 0) ? Math.PI / 2 : 0.0; // decussate: successive pairs rotated 90 degrees
+
+                var rotSide = Axis.RotateAround(f.Side, f.Tangent, pairYaw);
+                foreach (double sgn in new[] { -1.0, 1.0 })
+                {
+                    var fwd = rotSide * sgn;
+                    var up = fwd.Cross(f.Tangent).Normalized();
+                    if (up.LengthSq < 1e-8) up = Vec3.Up;
+                    var center = f.Point + fwd * (leafSize * 0.65);
+                    ulong lSeed = Rng.Mix(seed, (ulong)(k * 4111 + p * 17 + (sgn > 0 ? 1u : 2u)));
+                    ThickOvateLeaflet(tmp, center, fwd, f.Tangent, up, leafSize * 1.3, leafSize * 0.55,
+                        leafSize * rng.Range(0.12, 0.22), lSeed,
+                        Primitives.Scale(c1, 0.82), Primitives.Mix(c1, c2, rng.Range(0.15, 0.4)));
+                }
+            }
+            if (rng.NextDouble() < 0.3)
+            {
+                var tipF = stemFrames[^1];
+                var star = new List<Vec3>();
+                for (int s = 0; s <= 8; s++) { double th = 2 * Math.PI * s / 8, rr = s % 2 == 0 ? 0.045 : 0.018; star.Add(tipF.Point + new Vec3(Math.Cos(th) * rr, 0.01, Math.Sin(th) * rr)); }
+                Primitives.Fan(tmp, tipF.Point + new Vec3(0, 0.015, 0), star, Vec3.Up, new[] { 1.0, 1.0, 1.0 }, c2);
+            }
+            double leafYawWhole = rng.Range(0, 2 * Math.PI);
+            AppendRotatedY(m, tmp, basePos, leafYawWhole);
+        }
     }
 
     /// <summary>Arching pinnate fronds with fan leaflets, plus one unrolling fiddlehead.</summary>

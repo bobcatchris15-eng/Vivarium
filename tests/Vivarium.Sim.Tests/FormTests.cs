@@ -1,3 +1,4 @@
+using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Geometry;
 using Vivarium.Sim.Geometry.Form;
@@ -175,5 +176,53 @@ public class FormTests
         Assert.Equal(v1, v2);
         Assert.InRange(v1, 0.5, 1.5);
         Assert.NotEqual(v1, v3);
+    }
+
+    // Old (pre-kernel) shapes, worst case at max leaflet/stem counts:
+    //   roundleaf: up to 54 leaflets x (Tube 8 tris + Fan 10 tris) = ~972 tris  -> 2x budget 1944
+    //   pairedleaf: up to 16 stems x (Tube 16 tris + 4 pairs x 2 x CurvedLeaf 32 tris + flower ~16 tris)
+    //               = ~4608 tris -> 2x budget 9216
+    [Fact]
+    public void RoundLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
+    {
+        var sp = new FloraSpeciesDef { Id = "dichondra", Shape = "roundleaf", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 5; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            AssertNoZeroAreaTriangles(m);
+            Assert.InRange(m.TriangleCount, 1, 1944);
+        }
+    }
+
+    [Fact]
+    public void PairedLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
+    {
+        var sp = new FloraSpeciesDef { Id = "bacopa", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 5; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            AssertNoZeroAreaTriangles(m);
+            Assert.InRange(m.TriangleCount, 1, 9216);
+        }
+    }
+
+    [Fact]
+    public void RoundLeafIsDeterministic()
+    {
+        var sp = new FloraSpeciesDef { Id = "dichondra", Shape = "roundleaf", Color = Green, Color2 = LightGreen };
+        var m1 = OrganismMeshes.Flora(sp, 42);
+        var m2 = OrganismMeshes.Flora(sp, 42);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+    }
+
+    [Fact]
+    public void PairedLeafIsDeterministic()
+    {
+        var sp = new FloraSpeciesDef { Id = "bacopa", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
+        var m1 = OrganismMeshes.Flora(sp, 42);
+        var m2 = OrganismMeshes.Flora(sp, 42);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
     }
 }
