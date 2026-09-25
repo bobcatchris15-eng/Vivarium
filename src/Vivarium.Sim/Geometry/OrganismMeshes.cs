@@ -695,32 +695,46 @@ public static class OrganismMeshes
         }
     }
 
-    /// <summary>A troop of bonnet mushrooms: thin pale stems and conical, slightly translucent caps.</summary>
+    /// <summary>A ground-rooted troop with buds, open bonnets and weathered, drooping caps.</summary>
     private static void Mushrooms(MeshData m, Rng rng, double[] c1, double[] c2)
     {
         var stemCol = new[] { 0.78, 0.74, 0.68 };
         int n = 5 + rng.NextInt(5);
         for (int k = 0; k < n; k++)
         {
-            double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.7, h = rng.Range(0.45, 1.0), capR = rng.Range(0.12, 0.2) * (0.6 + 0.4 * h);
+            int stage = k % 3 + 1; // every troop contains a bud, open cap and old cap
+            double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.7;
+            double h = rng.Range(0.42, 0.92) * (stage == 1 ? 0.72 : 1);
+            double capR = rng.Range(0.13, 0.21) * (stage == 1 ? 0.65 : stage == 3 ? 1.18 : 1);
             var b = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
-            var lean = new Vec3(rng.Range(-0.12, 0.12), 0, rng.Range(-0.12, 0.12));
+            var lean = new Vec3(rng.Range(-0.15, 0.15), 0, rng.Range(-0.15, 0.15));
             var top = b + lean + new Vec3(0, h, 0);
-            Primitives.Tube(m, new[] { b, b + lean * 0.5 + new Vec3(0, h * 0.5, 0), top }, new[] { 0.035, 0.03, 0.026 }, 5, (i, v) => (stemCol, 1, i, v, 0, 0));
-            // conical bonnet: rings from the tip down to a flared, striated rim (UV.y = 1 on the underside gills)
+            var bend = new Vec3(rng.Range(-0.035, 0.035), 0, rng.Range(-0.035, 0.035));
+            Primitives.Tube(m, new[] { b + new Vec3(0, 0.035, 0), b + lean * 0.18 + new Vec3(0, h * 0.12, 0), b + lean * 0.48 + bend + new Vec3(0, h * 0.54, 0), top },
+                new[] { 0.065, 0.037, 0.029, 0.025 }, 7, (i, v) => (stemCol, 1, i, v, 0, 0));
+            // Each cap uses one shared radial profile, so the scalloped brim meets the underside exactly.
             int start = m.VertexCount;
-            const int around = 18, rings = 6;
+            const int around = 24, rings = 5;
+            double phase = rng.Range(0, 2 * Math.PI), asym = rng.Range(0.07, 0.14);
+            double rise = capR * (stage == 1 ? 1.18 : stage == 2 ? 0.62 : 0.31);
+            double droop = stage == 3 ? capR * 0.28 : stage == 2 ? capR * 0.08 : 0;
+            Vec3 CapPoint(double f, int s)
+            {
+                double th = 2 * Math.PI * s / around;
+                double wave = Math.Sin(th * 5 + phase) * 0.055 + Math.Sin(th * 9 - phase) * 0.024;
+                double width = capR * f * (1 + asym * Math.Cos(th - phase) + wave * f);
+                double y = rise * (1 - f * f) - droop * Math.Pow(f, 5) + capR * 0.055 * Math.Sin(th * 5 + phase) * Math.Pow(f, 4);
+                return top + new Vec3(Math.Cos(th) * width, y, Math.Sin(th) * width);
+            }
             for (int ri = 0; ri <= rings; ri++)
             {
                 double t = (double)ri / rings;
-                double rr = capR * Math.Pow(t, 0.7), yy = capR * 1.2 * (1 - t);
-                var col = Primitives.Mix(c2, c1, Math.Min(1, t * 1.4));
+                double f = 0.07 + t * 0.93;
+                var col = Primitives.Mix(c2, c1, Math.Min(1, t * 1.3));
                 for (int s = 0; s <= around; s++)
                 {
-                    double th = 2 * Math.PI * s / around;
-                    var dir = new Vec3(Math.Cos(th), 0, Math.Sin(th));
-                    var pos = top + dir * rr + new Vec3(0, yy - capR * 0.15, 0);
-                    m.AddVertex(pos, (dir * 0.6 + Vec3.Up).Normalized(), col, 1, (double)s / around, 0, t, 0);
+                    var pos = CapPoint(f, s);
+                    m.AddVertex(pos, Vec3.Up, col, 1, (double)s / around, t, stage, ri == rings ? 1 : 0);
                 }
             }
             for (int ri = 0; ri < rings; ri++)
@@ -730,10 +744,21 @@ public static class OrganismMeshes
                     Primitives.TriangleFacing(m, a, c, a + 1, Vec3.Up);
                     Primitives.TriangleFacing(m, a + 1, c, c + 1, Vec3.Up);
                 }
-            // underside with gills
-            var rim = new List<Vec3>();
-            for (int s = 0; s <= around; s++) { double th = 2 * Math.PI * s / around; rim.Add(top + new Vec3(Math.Cos(th) * capR, -capR * 0.15, Math.Sin(th) * capR)); }
-            Primitives.Fan(m, top + new Vec3(0, capR * 0.1, 0), rim, -Vec3.Up, Primitives.Scale(c1, 1.15), Primitives.Scale(c1, 0.95), 1, 1);
+            // Underside gills: alternating radial wedges and a darker inner ring.
+            int under = m.VertexCount;
+            for (int row = 0; row < 2; row++)
+                for (int s = 0; s <= around; s++)
+                {
+                    var p = CapPoint(row == 0 ? 0.16 : 1, s) + new Vec3(0, -capR * 0.035, 0);
+                    var col = Primitives.Scale(c1, row == 0 ? 0.55 : (s % 2 == 0 ? 0.85 : 1.08));
+                    m.AddVertex(p, -Vec3.Up, col, 1, (double)s / around, row, 0, 0);
+                }
+            for (int s = 0; s < around; s++)
+            {
+                int a = under + s, c = a + around + 1;
+                Primitives.TriangleFacing(m, a, c, a + 1, -Vec3.Up);
+                Primitives.TriangleFacing(m, a + 1, c, c + 1, -Vec3.Up);
+            }
         }
     }
 
