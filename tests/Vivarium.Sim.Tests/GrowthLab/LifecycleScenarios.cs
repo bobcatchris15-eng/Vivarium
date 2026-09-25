@@ -4,9 +4,10 @@ using Xunit;
 
 namespace Vivarium.Sim.Tests.GrowthLab;
 
-/// <summary>Growth-lab proofs for the Physarum life cycle (docs/overhaul/growth_models.md §6.1, §6.6, §13 row
-/// G8a): starvation drives Migrating then Fruiting at former transport-network hubs, and drying drives
-/// Sclerotium with a clean resume on rewetting.</summary>
+/// <summary>Growth-lab proofs for the Physarum life cycle (docs/overhaul/growth_models.md §6.1, §6.6, §6R item 8,
+/// §13 row G8a): starvation drives Fruiting at former transport-network hubs (no Migrating state), drying drives
+/// Sclerotium with a clean resume on rewetting, and local light/dryness stress drifts the body's mass centroid
+/// through ordinary rectified transport alone.</summary>
 [Trait("Suite", "GrowthLab")]
 public class LifecycleScenarios
 {
@@ -15,6 +16,9 @@ public class LifecycleScenarios
         public double MoistureValue = 0.6;
         public readonly Dictionary<(int, int), double> DetritusMap = new();
         public double Moisture(int gx, int gz) => MoistureValue;
+        public double LightValue = 0.2;
+        public readonly Dictionary<(int, int), double> LightMap = new();
+        public double Light(int gx, int gz) => LightMap.TryGetValue((gx, gz), out var v) ? v : LightValue;
         public double Detritus(int gx, int gz) => DetritusMap.TryGetValue((gx, gz), out var v) ? v : 0;
         public double TakeDetritus(int gx, int gz, double amount)
         {
@@ -41,7 +45,7 @@ public class LifecycleScenarios
 
     // ------------------------------------------------------------------ physarum_starve
 
-    private static (bool sawMigrating, bool sawFruiting, List<FruitingBody> bodies,
+    private static (bool sawFruiting, List<FruitingBody> bodies,
         Dictionary<(int, int), double> hubSnapshot, PlasmodiumColony colony, CoverageLayer layer,
         Network network, LifecycleController lifecycle)
         RunStarveScenario(int seed)
@@ -77,18 +81,17 @@ public class LifecycleScenarios
         var lifecycle = new LifecycleController(prm);
         colony.Seed(new[] { (0, 0) });
         layer.SetOcc(0, 0, 1);
-        network.SetSources(new[] { source, sink });
 
         long s = 0;
-        bool sawMigrating = false, sawFruiting = false;
+        bool sawFruiting = false;
         Dictionary<(int, int), double> hubSnapshot = new();
         List<FruitingBody> bodies = new();
 
         // Phase 1: grow with food present, building transport-network hub structure. §6R item 1's local mass
         // model grows/starves at a different pace than the retired shared pool did — a sparse, distant food
         // patch means the mean-detritus-over-all-cells starvation gate can fire well before phase 2's explicit
-        // food removal, so the Migrating/Fruiting watch below spans both phases now, not just phase 2.
-        for (; s < 150 && !sawFruiting; s++)
+        // food removal, so the Fruiting watch below spans both phases now, not just phase 2.
+        for (; s < 150 && bodies.Count == 0; s++)
         {
             network.Step(layer, colony.CellId.Keys.ToList(), dt: 1.0);
             colony.Step(layer, attractant, env, s, dt: 1.0, network);
@@ -97,20 +100,22 @@ public class LifecycleScenarios
 
             var p1Org = SoleOrg(colony);
             if (p1Org == null) break;
-            if (p1Org.State == PlasmodiumState.Migrating) sawMigrating = true;
-            if (p1Org.State == PlasmodiumState.Fruiting && !sawFruiting)
+            if (p1Org.State == PlasmodiumState.Fruiting)
             {
                 sawFruiting = true;
-                foreach (var kv in network.NodeMaxD) hubSnapshot[kv.Key] = kv.Value;
-                bodies = lifecycle.FruitingBodies.ToList();
+                if (lifecycle.FruitingBodies.Count > 0)
+                {
+                    foreach (var kv in network.NodeMaxD) hubSnapshot[kv.Key] = kv.Value;
+                    bodies = lifecycle.FruitingBodies.ToList();
+                }
             }
         }
 
-        // Phase 2: food gone. Keep stepping growth/network (Migrating is not frozen — only Sclerotium is) so
-        // starvation and the eventual Fruiting transition can be observed if phase 1 hasn't already reached it.
+        // Phase 2: food gone. Keep stepping growth/network so starvation and the eventual Fruiting transition
+        // can be observed if phase 1 hasn't already reached it.
         env.DetritusMap.Clear();
 
-        for (; s < 300 && !sawFruiting; s++)
+        for (; s < 300 && bodies.Count == 0; s++)
         {
             var org = SoleOrg(colony);
             if (org == null) break;
@@ -125,25 +130,26 @@ public class LifecycleScenarios
 
             org = SoleOrg(colony);
             if (org == null) break;
-            if (org.State == PlasmodiumState.Migrating) sawMigrating = true;
-            if (org.State == PlasmodiumState.Fruiting && !sawFruiting)
+            if (org.State == PlasmodiumState.Fruiting)
             {
                 sawFruiting = true;
-                foreach (var kv in network.NodeMaxD) hubSnapshot[kv.Key] = kv.Value;
-                bodies = lifecycle.FruitingBodies.ToList();
-                break;
+                if (lifecycle.FruitingBodies.Count > 0)
+                {
+                    foreach (var kv in network.NodeMaxD) hubSnapshot[kv.Key] = kv.Value;
+                    bodies = lifecycle.FruitingBodies.ToList();
+                    break;
+                }
             }
         }
 
-        return (sawMigrating, sawFruiting, bodies, hubSnapshot, colony, layer, network, lifecycle);
+        return (sawFruiting, bodies, hubSnapshot, colony, layer, network, lifecycle);
     }
 
     [Fact]
-    public void StarvationMigratesThenFruitsAtFormerHubs()
+    public void StarvationFruitsAtFormerHubs()
     {
-        var (sawMigrating, sawFruiting, bodies, hubSnapshot, _, _, _, _) = RunStarveScenario(seed: 61);
+        var (sawFruiting, bodies, hubSnapshot, _, _, _, _) = RunStarveScenario(seed: 61);
 
-        Assert.True(sawMigrating, "never observed Migrating state");
         Assert.True(sawFruiting, "never reached Fruiting state within budget");
         Assert.True(bodies.Count > 0, "no fruiting bodies placed");
 
@@ -159,7 +165,6 @@ public class LifecycleScenarios
     {
         var a = RunStarveScenario(seed: 61);
         var b = RunStarveScenario(seed: 61);
-        Assert.Equal(a.sawMigrating, b.sawMigrating);
         Assert.Equal(a.sawFruiting, b.sawFruiting);
         Assert.Equal(a.bodies.Select(x => x.Pos).OrderBy(x => x).ToList(), b.bodies.Select(x => x.Pos).OrderBy(x => x).ToList());
     }
@@ -200,7 +205,6 @@ public class LifecycleScenarios
         var lifecycle = new LifecycleController(prm);
         colony.Seed(new[] { (0, 0) });
         layer.SetOcc(0, 0, 1);
-        network.SetSources(new[] { source, sink });
 
         const string scenario = "physarum_starve";
         string dir = GrowthLabRunner.FramesDir(scenario);
@@ -236,6 +240,60 @@ public class LifecycleScenarios
         }
 
         Assert.True(Directory.GetFiles(dir, "frame_*.png").Length > 0);
+    }
+
+    // ------------------------------------------------------------------ stress_avoidance (§6R item 8)
+
+    /// <summary>No Migrating state, no steering vector: a bright half raises local ω-lowering stress and (via
+    /// <see cref="PlasmodiumParams.StressMaintenanceGain"/>) local maintenance cost, so that half's mass drains
+    /// faster than the dark half's under ordinary local withdrawal (§6R items 1, 6, 8) — nothing here ever reads
+    /// or writes a direction toward the dark half, the drift is a side effect of asymmetric local cost.</summary>
+    [Fact]
+    public void StressDrivesMassCentroidTowardComfortableHalf()
+    {
+        var prm = new PlasmodiumParams
+        {
+            Beta = 0, LambdaF = 0, FeedRate = 0,
+            MaintenanceRate = 0.003, StressMaintenanceGain = 5.0,
+        };
+        var env = new TestEnv { MoistureValue = 0.6, LightValue = 0.05 };
+        var layer = new CoverageLayer(CoverageLayerId.Plasmodium, worldSeed: 91);
+        var colony = new PlasmodiumColony(speciesId: 0, prm);
+        var attractant = new Attractant(prm);
+
+        var seedCells = new List<(int, int)>();
+        for (int gz = -2; gz <= 1; gz++)
+            for (int gx = -4; gx <= 3; gx++)
+                seedCells.Add((gx, gz));
+        colony.Seed(seedCells);
+        foreach (var (gx, gz) in seedCells) layer.SetOcc(gx, gz, 1);
+
+        // Bright half: gx >= 0 (higher light -> higher stress -> higher local maintenance cost). Dark half
+        // (gx < 0) keeps the TestEnv default LightValue.
+        foreach (var (gx, gz) in seedCells)
+            if (gx >= 0) env.LightMap[(gx, gz)] = 0.95;
+
+        double Centroid()
+        {
+            double sumX = 0, sumM = 0;
+            foreach (var (gx, gz) in colony.CellId.Keys)
+            {
+                double m = colony.MassAt(gx, gz);
+                sumX += gx * m;
+                sumM += m;
+            }
+            return sumM > 0 ? sumX / sumM : double.NaN;
+        }
+
+        double initial = Centroid();
+
+        for (long s = 0; s < 60; s++)
+            colony.Step(layer, attractant, env, s, dt: 1.0, network: null);
+
+        double final = Centroid();
+        Assert.True(double.IsFinite(final), "colony died out entirely");
+        Assert.True(final < initial - 0.5,
+            $"mass centroid did not drift into the dark/moist half: {initial} -> {final}");
     }
 
     // ------------------------------------------------------------------ physarum_dry_sclerotium
@@ -400,7 +458,6 @@ public class LifecycleScenarios
     {
         PlasmodiumState.Foraging => ((byte)60, (byte)180, (byte)80),
         PlasmodiumState.Sclerotium => ((byte)110, (byte)90, (byte)50),
-        PlasmodiumState.Migrating => ((byte)140, (byte)80, (byte)200),
         PlasmodiumState.Fruiting => ((byte)220, (byte)140, (byte)30),
         PlasmodiumState.Dormant => ((byte)80, (byte)80, (byte)80),
         _ => ((byte)60, (byte)180, (byte)80),

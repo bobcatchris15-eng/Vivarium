@@ -10,6 +10,11 @@ public interface IPlasmodiumEnvironment
     /// <summary>Wetness W in [0,1], feeds the g_W gate on front extension.</summary>
     double Moisture(int gx, int gz);
 
+    /// <summary>Light exposure in [0,1] (§6R item 8): together with dryness this lowers local ω and raises local
+    /// maintenance cost, which is the only channel by which a bright/dry patch drives the body away — no
+    /// steering vector exists.</summary>
+    double Light(int gx, int gz);
+
     /// <summary>Detritus amount at this cell; the attractant field's source term F.</summary>
     double Detritus(int gx, int gz);
 
@@ -31,6 +36,15 @@ public interface IPlasmodiumNetwork
     /// edge connects the coarse nodes they fall in. Zero when the two cells share a coarse node (sheet-only, no
     /// separate vein contribution) or no surviving edge exists between their coarse nodes.</summary>
     double VeinConductance(int gx, int gz, int nx, int nz);
+
+    /// <summary>Reports the actual shuttle-streaming <see cref="Transport"/> flow just computed between two fine
+    /// cells (§6R item 7): the network accumulates this, time-averages it over ~one contraction cycle, and grows
+    /// vein conductance from it directly — no separate steady-state solve with designated sources/sinks. A no-op
+    /// when the two cells share a coarse node (nothing for the vein network to attribute the flow to).</summary>
+    void RecordFlow(int gx, int gz, int nx, int nz, double flow, double dt);
+
+    /// <summary>Returns true if a connected path of surviving vein edges connects coarse node a to b.</summary>
+    bool AreNodesConnected((int cx, int cz) a, (int cx, int cz) b);
 }
 
 /// <summary>Deterministic 8-connected component labelling over a set of occupied cells (union-find).
@@ -132,6 +146,11 @@ public sealed class PlasmodiumColony
     /// instantaneous value, so a mid-cycle shuttle-streaming dip never vacates a cell that recovers next
     /// half-cycle).</summary>
     private readonly Dictionary<(int, int), double> _massEma = new();
+
+    /// <summary>Local stress in [0,1] (§6R item 8: light + dryness), sampled last time <see cref="StepPhase"/> ran.
+    /// Read back by <see cref="ApplyMaintenanceAndWithdrawal"/> so a stressed cell also costs more to maintain —
+    /// no separate steering channel, stress only ever acts through ω (here) and the maintenance rate (there).</summary>
+    private readonly Dictionary<(int, int), double> _stress = new();
     private readonly Dictionary<(int, int), double> _thetaStartBuf = new();
     private readonly Dictionary<(int, int), double> _thetaEndBuf = new();
 
@@ -361,13 +380,17 @@ public sealed class PlasmodiumColony
         attractant.Step(_cellId.Keys, (cx, cz) => SampleDetritusCoarse(env, cx, cz));
 
         // Retraction (§6.5): cells the transport network has flagged as off-network sheet vacate outright,
-        // before front detection runs, so a retracting cell never gets re-flagged as a front the same step. Any
-        // mass still sitting on the cell at that instant is tallied removed (§6R item 1), not discarded silently.
-        if (network != null)
+        // before front detection runs, so a retracting cell never gets re-flagged as a front the same step.
+        // Retraction is only active once the colony has connected two distant food sources with surviving veins (§6.5, §12).
+        bool allowRetraction = HasBridgedDistantFoodSources(env, network);
+        if (network != null && allowRetraction)
         {
             _retractBuf.Clear();
             foreach (var (gx, gz) in _cellId.Keys)
+            {
+                if (env.Detritus(gx, gz) > 0) continue;
                 if (network.ShouldRetract(gx, gz)) _retractBuf.Add((gx, gz));
+            }
             foreach (var cell in _retractBuf) VacateCell(layer, cell);
         }
 
@@ -377,7 +400,7 @@ public sealed class PlasmodiumColony
         foreach (var (gx, gz) in _cellId.Keys)
         {
             ClearFrontFlag(layer, gx, gz); // recomputed fresh every step, so a cell that's no longer a front stops glowing
-            if (network != null && network.ShouldRetract(gx, gz)) continue;
+            if (network != null && allowRetraction && network.ShouldRetract(gx, gz)) continue;
             bool isFront = false;
             foreach (var (dx, dz, _) in Dirs8)
                 if (!_cellId.ContainsKey((gx + dx, gz + dz))) { isFront = true; break; }
@@ -476,6 +499,7 @@ public sealed class PlasmodiumColony
         _retention.Remove(cell);
         _uptakeEma.Remove(cell);
         _massEma.Remove(cell);
+        _stress.Remove(cell);
         SetResidueFlag(layer, cell.gx, cell.gz);
         layer.SetOcc(cell.gx, cell.gz, 0);
         ClearFrontFlag(layer, cell.gx, cell.gz);
@@ -558,6 +582,9 @@ public sealed class PlasmodiumColony
             if (actual <= 0) continue;
             _mass[from] = MassAt(from.gx, from.gz) - actual;
             _mass[to] = MassAt(to.Item1, to.Item2) + actual;
+            double dVein = network?.VeinConductance(from.gx, from.gz, to.Item1, to.Item2) ?? 0;
+            double veinFrac = (0.08 * Params.SheetConductance + dVein) / (Params.SheetConductance + dVein);
+            network?.RecordFlow(from.gx, from.gz, to.Item1, to.Item2, (actual / dt) * veinFrac, dt);
         }
     }
 
@@ -652,7 +679,12 @@ public sealed class PlasmodiumColony
             var cell = cells[i];
             _thetaArr[i] = _theta.TryGetValue(cell, out var th) ? th : InitialTheta(cell.gx, cell.gz);
 
-            double stress = Math.Clamp(1.0 - env.Moisture(cell.gx, cell.gz), 0, 1);
+            // §6R item 8: light and dryness both count as stress (no Migrating state; the body drifts away from
+            // either purely through StepPhaseAndTransport's rectified transport, §6R item 4).
+            double dryness = Math.Clamp(1.0 - env.Moisture(cell.gx, cell.gz), 0, 1);
+            double light = Math.Clamp(env.Light(cell.gx, cell.gz), 0, 1);
+            double stress = Math.Clamp(0.5 * (dryness + light), 0, 1);
+            _stress[cell] = stress;
             double uptake = _uptakeEma.TryGetValue(cell, out var u) ? u : 0;
             double omega = Params.PhaseOmega0 + Params.PhaseOmegaUptakeGain * uptake - Params.PhaseOmegaStressGain * stress;
             _omegaArr[i] = Math.Max(0.1 * Params.PhaseOmega0, omega);
@@ -707,8 +739,12 @@ public sealed class PlasmodiumColony
         {
             foreach (var cell in _cellId.Keys.ToList())
             {
+                // §6R item 8: local stress (light + dryness, sampled this step by StepPhase) raises the
+                // maintenance cost on exactly the cells suffering it — no separate steering signal.
+                double stress = _stress.TryGetValue(cell, out var st) ? st : 0;
+                double rate = Params.MaintenanceRate * (1 + Params.StressMaintenanceGain * stress);
                 double m = MassAt(cell.Item1, cell.Item2);
-                double cost = Math.Min(m, Params.MaintenanceRate * dt);
+                double cost = Math.Min(m, rate * dt);
                 if (cost <= 0) continue;
                 _mass[cell] = m - cost;
                 RemovedMass += cost;
@@ -786,11 +822,40 @@ public sealed class PlasmodiumColony
 
     private static double SampleDetritusCoarse(IPlasmodiumEnvironment env, int cx, int cz)
     {
-        // Coarse cell (cx, cz) covers fine cells (2cx..2cx+1, 2cz..2cz+1); average their detritus as F.
+        // Coarse cell (cx, cz) covers fine cells (2cx..2cx+1, 2cz..2cx+1); average their detritus as F.
         double sum = 0;
         for (int dz = 0; dz < 2; dz++)
             for (int dx = 0; dx < 2; dx++)
                 sum += env.Detritus(cx * 2 + dx, cz * 2 + dz);
         return sum / 4.0;
+    }
+
+    private readonly List<(int cx, int cz)> _foodCoarseNodesBuf = new();
+
+    private bool HasBridgedDistantFoodSources(IPlasmodiumEnvironment env, IPlasmodiumNetwork? network)
+    {
+        if (network == null) return false;
+        _foodCoarseNodesBuf.Clear();
+        foreach (var (gx, gz) in _cellId.Keys)
+        {
+            if (env.Detritus(gx, gz) > 0)
+            {
+                var coarse = Attractant.CoarseOf(gx, gz);
+                if (!_foodCoarseNodesBuf.Contains(coarse)) _foodCoarseNodesBuf.Add(coarse);
+            }
+        }
+        if (_foodCoarseNodesBuf.Count < 2) return false;
+        for (int i = 0; i < _foodCoarseNodesBuf.Count; i++)
+            for (int j = i + 1; j < _foodCoarseNodesBuf.Count; j++)
+            {
+                int dx = _foodCoarseNodesBuf[i].cx - _foodCoarseNodesBuf[j].cx;
+                int dz = _foodCoarseNodesBuf[i].cz - _foodCoarseNodesBuf[j].cz;
+                if (dx * dx + dz * dz >= 16)
+                {
+                    if (network.AreNodesConnected(_foodCoarseNodesBuf[i], _foodCoarseNodesBuf[j]))
+                        return true;
+                }
+            }
+        return false;
     }
 }

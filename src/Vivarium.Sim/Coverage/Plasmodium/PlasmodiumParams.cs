@@ -81,6 +81,12 @@ public sealed class PlasmodiumParams
     /// a nonzero rate; existing lab scenarios that never configured a global mass pool upkeep stay unaffected.</summary>
     public double MaintenanceRate { get; init; } = 0.0;
 
+    /// <summary>Extra maintenance-rate multiplier per unit of local stress (§6R item 8: light + dryness), on top
+    /// of <see cref="MaintenanceRate"/>: effective rate = MaintenanceRate * (1 + StressMaintenanceGain * stress).
+    /// No effect while MaintenanceRate is 0, which is why every scenario that never configured upkeep stays
+    /// unaffected by this addition.</summary>
+    public double StressMaintenanceGain { get; init; } = 1.0;
+
     /// <summary>Feeding rate, mass/second, taken from detritus under an occupied cell.</summary>
     public double FeedRate { get; init; } = 4.0;
 

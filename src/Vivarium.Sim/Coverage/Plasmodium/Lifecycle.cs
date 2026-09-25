@@ -80,9 +80,15 @@ public sealed class LifecycleController
                         org.EnterState(PlasmodiumState.Sclerotium);
                         SetFlag(layer, cells, CoverageFlags.Sclerotium, true);
                     }
-                    else if (org.TimeStarving >= _prm.TStarve)
+                    else if (org.TimeStarving >= _prm.TStarve + _prm.TMig)
                     {
-                        org.EnterState(PlasmodiumState.Migrating);
+                        // §6R item 8: no Migrating state. The body has no commanded transform — starvation just
+                        // buys extra time (TMig) for the transport network to settle into real hub structure
+                        // before Fruiting commits, while stress (§6R item 8, in Foraging.cs) already drove
+                        // whatever drift happened via ordinary rectified transport.
+                        org.EnterState(PlasmodiumState.Fruiting);
+                        PlaceFruitingBodies(org, colony, network, cells);
+                        SetFlag(layer, cells, CoverageFlags.Fruiting, true);
                     }
                     break;
 
@@ -94,15 +100,6 @@ public sealed class LifecycleController
                         SetFlag(layer, cells, CoverageFlags.Sclerotium, false);
                     }
                     // else: frozen. D/occupancy untouched here; caller does not step growth for this organism.
-                    break;
-
-                case PlasmodiumState.Migrating:
-                    if (org.TimeInState >= _prm.TMig)
-                    {
-                        org.EnterState(PlasmodiumState.Fruiting);
-                        PlaceFruitingBodies(org, colony, network, cells);
-                        SetFlag(layer, cells, CoverageFlags.Fruiting, true);
-                    }
                     break;
 
                 case PlasmodiumState.Fruiting:
@@ -179,10 +176,14 @@ public sealed class LifecycleController
         _bodiesPlacedForOrg.Add(org.Id);
 
         double orgMass = cells.Sum(c => colony.MassAt(c.gx, c.gz));
+        int k = (int)Math.Round(orgMass / Math.Max(1e-6, _prm.MassPerFruitingBody));
+        if (k <= 0) return;
+
+        var orgCoarse = cells.Select(c => Attractant.CoarseOf(c.gx, c.gz)).ToHashSet();
 
         var candidates = network != null
-            ? LocalMaximaOf(network)
-            : cells.Select(c => Attractant.CoarseOf(c.gx, c.gz)).Distinct().Select(n => (n, 0.0)).ToList();
+            ? LocalMaximaOf(network).Where(c => orgCoarse.Contains(c.node)).ToList()
+            : orgCoarse.Select(n => (n, 0.0)).ToList();
 
         if (candidates.Count == 0) return;
 
@@ -190,8 +191,6 @@ public sealed class LifecycleController
 
         double coarseCellSize = CoverageSpec.CellSize * 2;
         double minSpacingCells = _prm.FruitingMinSpacingMeters / coarseCellSize;
-
-        int k = Math.Max(1, (int)Math.Round(orgMass / Math.Max(1e-6, _prm.MassPerFruitingBody)));
 
         var chosen = new List<(int cx, int cz)>();
         foreach (var (node, _) in candidates)

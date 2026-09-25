@@ -16,6 +16,9 @@ public class NetworkScenarios
         public double MoistureValue = 0.6;
         public readonly Dictionary<(int, int), double> DetritusMap = new();
         public double Moisture(int gx, int gz) => MoistureValue;
+        public double LightValue = 0.2;
+        public readonly Dictionary<(int, int), double> LightMap = new();
+        public double Light(int gx, int gz) => LightMap.TryGetValue((gx, gz), out var v) ? v : LightValue;
         public double Detritus(int gx, int gz) => DetritusMap.TryGetValue((gx, gz), out var v) ? v : 0;
         public double TakeDetritus(int gx, int gz, double amount)
         {
@@ -69,7 +72,7 @@ public class NetworkScenarios
         // Real foraging growth (not a hand-seeded symmetric slab: a perfectly symmetric rectangle has no
         // asymmetry for flux adaptation to break, so it never collapses to one path) spans both food sources,
         // then the network prunes the resulting sheet down to one dominant tube.
-        var prm = new PlasmodiumParams { InitialMass = 1800, Beta = 0.02, LambdaF = 6.0, Sigma = 2.0, FeedRate = 0 };
+        var prm = new PlasmodiumParams { InitialMass = 1800, Beta = 0.02, LambdaF = 6.0, Sigma = 2.0 };
         var env = new TestEnv();
         var source = (0, -8);
         var sink = (0, 8);
@@ -88,13 +91,12 @@ public class NetworkScenarios
         var network = new Network { Gamma = 0.4, QGain = 6.0 };
         colony.Seed(new[] { (0, 0) });
         layer.SetOcc(0, 0, 1);
-        network.SetSources(new[] { source, sink });
 
         int peakCount = 0;
         // Pl-2 setup-only adaptation: the contraction phase field's mass-proportional pressure term and
         // interleaved transport sub-stepping change the sheet's growth/pruning cadence slightly; a bit more
-        // budget (700, was 500) still reaches the same peak->final retraction ratio deterministically.
-        for (long s = 0; s < 700; s++)
+        // budget still reaches the same peak->final retraction ratio deterministically.
+        for (long s = 0; s < 850; s++)
         {
             network.Step(layer, colony.CellId.Keys.ToList(), dt: 1.0);
             colony.Step(layer, attractant, env, s, dt: 1.0, network);
@@ -103,9 +105,9 @@ public class NetworkScenarios
         }
 
         int finalCount = colony.CellId.Count;
+        var edges = network.SurvivingEdges.Select(e => (e.a, e.b, EdgeLen(e.a, e.b))).ToList();
         Assert.True(finalCount < peakCount / 2, $"sheet did not retract: peak {peakCount} -> final {finalCount}");
 
-        var edges = network.SurvivingEdges.Select(e => (e.a, e.b, EdgeLen(e.a, e.b))).ToList();
         Assert.True(edges.Count > 0, "no surviving tube edges");
 
         double pathLen = Dijkstra(source, sink, edges);
@@ -141,7 +143,6 @@ public class NetworkScenarios
         var network = new Network();
         colony.Seed(new[] { (0, 0) });
         layer.SetOcc(0, 0, 1);
-        network.SetSources(new[] { source, sink });
 
         const string scenario = "physarum_two_food";
         string dir = GrowthLabRunner.FramesDir(scenario);
@@ -194,8 +195,13 @@ public class NetworkScenarios
     public void MazeSurvivingPathMatchesShortestPath()
     {
         var (open, start, end) = BuildMaze();
-        var prm = new PlasmodiumParams { Beta = 0, LambdaF = 0 };
+        var prm = new PlasmodiumParams { InitialMass = 1000, Beta = 0, LambdaF = 0, MaintenanceRate = 0.02 };
         var env = new TestEnv();
+        // A maze covered by a uniformly fed, unstressed sheet has no persistent transport demand. Feed
+        // one end locally; maintenance across the occupied maze provides a physical demand along the route.
+        for (int dz = 0; dz < 2; dz++)
+            for (int dx = 0; dx < 2; dx++)
+                env.DetritusMap[(start.Item1 * 2 + dx, start.Item2 * 2 + dz)] = 1e6;
         var layer = new CoverageLayer(CoverageLayerId.Plasmodium, worldSeed: 33);
         var colony = new PlasmodiumColony(speciesId: 0, prm);
         var attractant = new Attractant(prm);
@@ -210,7 +216,6 @@ public class NetworkScenarios
                     seedCells.Add((cx * 2 + dx, cz * 2 + dz));
         colony.Seed(seedCells);
         foreach (var (gx, gz) in seedCells) layer.SetOcc(gx, gz, 1);
-        network.SetSources(new[] { start, end });
 
         // Ground truth: shortest path over the open-cell graph itself (8-connected, same adjacency the
         // network graph uses), independent of the simulation.
@@ -234,8 +239,8 @@ public class NetworkScenarios
         }
 
         var edges = network.SurvivingEdges.Select(e => (e.a, e.b, EdgeLen(e.a, e.b))).ToList();
-        Assert.True(edges.Count > 0, "network fully pruned away, no surviving path");
         double surviving = Dijkstra(start, end, edges);
+        Assert.True(edges.Count > 0, "network fully pruned away, no surviving path");
         Assert.True(double.IsFinite(surviving), "surviving network no longer connects S to E");
         Assert.True(surviving <= groundTruth * 1.10,
             $"surviving path {surviving} exceeds ground-truth shortest {groundTruth} by more than 10%");
@@ -261,7 +266,6 @@ public class NetworkScenarios
                     seedCells.Add((cx * 2 + dx, cz * 2 + dz));
         colony.Seed(seedCells);
         foreach (var (gx, gz) in seedCells) layer.SetOcc(gx, gz, 1);
-        network.SetSources(new[] { start, end });
 
         const string scenario = "physarum_maze";
         string dir = GrowthLabRunner.FramesDir(scenario);
@@ -392,7 +396,6 @@ public class NetworkScenarios
                 seedCells.Add((gx, gz));
         colony.Seed(seedCells);
         foreach (var (gx, gz) in seedCells) layer.SetOcc(gx, gz, 1);
-        network.SetSources(new[] { (0, 0), (29, 19) });
 
         var cells = colony.CellId.Keys.ToList();
         const int warmup = 5, timed = 20;
@@ -401,7 +404,6 @@ public class NetworkScenarios
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < timed; i++) network.Step(layer, cells, dt: 1.0);
         sw.Stop();
-        Console.WriteLine($"DEBUG_TOTAL {sw.Elapsed.TotalMilliseconds / timed:F3} ms nodes={cells.Count}");
 
         double msPerStep = sw.Elapsed.TotalMilliseconds / timed;
         Console.WriteLine($"network step (~600 nodes): {msPerStep:F3} ms");

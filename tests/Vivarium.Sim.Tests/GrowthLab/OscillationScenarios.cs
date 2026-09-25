@@ -16,6 +16,9 @@ public class OscillationScenarios
         public double MoistureValue = 0.6;
         public readonly Dictionary<(int, int), double> DetritusMap = new();
         public double Moisture(int gx, int gz) => MoistureValue;
+        public double LightValue = 0.2;
+        public readonly Dictionary<(int, int), double> LightMap = new();
+        public double Light(int gx, int gz) => LightMap.TryGetValue((gx, gz), out var v) ? v : LightValue;
         public double Detritus(int gx, int gz) => DetritusMap.TryGetValue((gx, gz), out var v) ? v : 0;
         public double TakeDetritus(int gx, int gz, double amount)
         {

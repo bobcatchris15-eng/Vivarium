@@ -8,7 +8,6 @@ public enum PlasmodiumState
     Dormant,
     Foraging,
     Sclerotium,
-    Migrating,
     Fruiting,
 }
 
