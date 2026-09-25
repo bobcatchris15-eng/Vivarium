@@ -33,7 +33,31 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | gm-b | monolith | SPLIT | refused SCOPE_TOO_LARGE, no edits |
 | gm-b1 | content mat/lichen blocks + CoverageSystem + seeding + scheduler; flora skips moss/lichen | WIP COMMITTED task/gmb f56a578 | builds; two-day determinism and seven-species six-day establishment tests pass; remaining integration tests and visual check pending |
 | g8a | slime lifecycle rules + lab | DONE | merged 5d84b4f; starve->migrate->fruit OK; dry sclerotium OK but seed never grows; residue rectangle odd (tune in P3) |
-| g8b | slime_mold off FloraIndividual onto Plasmodium layer (after gm-b chain) | QUEUED | — |
+| rev1 | review of agy session work | DONE | 30+ commits; moss/lichen invisible, creeping_groundcover = worst disc icon, fish cartoon, rocks low-poly; 3 stale tests fixed 145fa2b; agy WIP kept f704b97 |
+| cull | remove occlusion pop-in | DONE 9590c61 | ray occlusion removed, frustum+2m margin; perf 60->59.9 fps (noise) |
+| islbug | IslandRenderer IndexOutOfRange | RESOLVED | not a code bug: worktrees lack game/.godot import cache -> textures fail -> crash + blank captures |
+| cullfix | cull merge inverted frustum sign culled all flora on main | FIXED fa766b8 | caught via floraVis=0 in perf samples |
+| logend | log ends not rendering | DONE | hollow-end tris wound inward + backface culled; fixed, regression test; recheck all log scenes in next full capture |
+| haze | humid haze + AO | DONE 4856315 | depth fog 0.02 + aerial persp + SSAO tier1; 0.03 washed overview; no measurable cost |
+| vsync | perf/reference vsync off | DONE | uncapped main: 43.7 fps mean, min-second 30, p95 36ms (fresh world, sim live) |
+| mossvis | coverage-aware reference scenes | MERGED (harness only) | sim areas healthy (carpet 0.45 m², lichens ~0.09); claimed mats visible but images show only log-shader moss tint + terrain green; lichen absent -> covvis |
+| covvis | PROVE coverage renderer draws, fix | DONE (winding flipped, single-sided; 95.9 fps) | root: fan winding reversed -> backface culled (debug magenta proved 266k tris draped correctly incl rock tops). doubleSided fix cost 9% -> asked to flip winding instead |
+| introcov | introduce/remove moss & lichen clumps via tools | DONE | 52/52 + smoke OK; default back to carpet_moss |
+| edgefld | ScalarField.Sample bilinear near domain edge diluted by out-of-domain cells (moisture 0.7 reads ~0.35) | QUEUED | — |
+| matr | coverage mat renderer | DONE | organic outlines, no grid, ~7% fps; TUNE: reads flat felt/paint, no fibre texture/relief; lichen flat mustard -> mat2 |
+| mat2 | mats: visible fibre/shoot texture, thickness+relief, rim shoots instancing, lichen areolate/lobed look | QUEUED | — |
+| creep | creeping_groundcover rebuild | DONE | discs gone; TUNE: stolons too thick/straight, too few/tiny leaves (reads as sticks) |
+| vine | climbing_vine giant flat faceted leaves = next icon | QUEUED | — |
+| harn | (folded into mossvis) | — | — |
+| g8b | superseded by Pl-4 | — | — |
+| pl1 | local mass + conservative transport | DONE | far end drains toward food w/o steering; exact conservation; setups retuned (two_food gamma/qgain, starve thresholds) |
+| pl2 | phase field + rectification | DONE a2 | coherent sheet, waves, rectified drift; 8.4ms/600 nodes Debug (runs every 30 sim-s) ; K=0.001 |
+| pl3 | stress replaces Migrating; veins from shuttle Q (remove Network's separate source/sink CG solve, §6R.7); re-prove two_food/maze/fusion | QUEUED | — |
+| aq1 | algae/duckweed surface+bed layers, advection, lab (§15) | QUEUED | — |
+| aq2 | biofilm from algae, grazing, content, seeding | QUEUED | — |
+| aq3 | lily pad species + mesh | DONE a3 | round notched flat pads confirmed visually; a2: pads visible but lanceolate blades tilted on tall stalks, not round flat floating pads; | a1: tests pass, 14 plants; visual FAIL: only petioles visible, no pads on surface (suspect non-uniform depth scale/culling/below surface) |
+| aq4 | aquatic renderers | QUEUED | — |
+| pl4 | SpatialOrganism refactor + in-game slime migration | QUEUED | — |
 | gm-b2 | delete colony code + tests + grazing/tools/stats hooks | QUEUED | — |
 | gm-b3 | interim draped raster renderer + reference | QUEUED | — |
 
@@ -69,6 +93,11 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 
 - D10 09-25: numeric lab asserts are gameable (foliose passed via holes, fan passed as square) -> orchestrator always eyeballs lab frames before merge; packets must write legible frames (species hue, flags, B brightness).
 
+- D18 09-25: user: add algae, duckweed, lily pads. Algae+duckweed = SpatialOrganism coverage on water bed/surface with flow advection (patterns from hydrology, not placement); algae becomes the source of the Biofilm field; lily = rooted FloraIndividual with floating kernel leaves. Spec growth_models.md §15.
+- D17 09-25: user: plasmodium = spatial organism (no transform), local mass moved only by flow, contraction phase field on own 30 sim-s cadence (explicit, option a), rhythm in sim-seconds (=real time at 1x) + wall-clock shader pulse. Spec docs/overhaul/growth_models.md §6R.
+- D16 09-25: every fps number before this commit in this session was vsync-capped at ~60 (baseline v0.1.2 wasn't capped then) -> re-baseline needed for true comparison.
+- D15 09-25: WORKTREE SEED: robocopy game/.godot (155 MB) into every worktree before any Godot run, and gate every capture on log containing no 'IndexOutOfRange'/'Unable to open file' AND flora_visible>0. Unseeded worktree results are void (cull+haze perf numbers were void). Also update CLAUDE.md Seed line.
+- D14 09-25: user: occlusion culling pops partially hidden objects -> remove ray occlusion, conservative frustum only. Paired perf runs done while 3 Godot instances share the GPU are noisy; re-measure serially before trusting.
 - D13 09-25: timing asserts flake under parallel Clanker load -> all ms asserts tagged Speed=Slow + Suite=Perf; per-task validate uses Speed!=Slow.
 - D12 09-25: Tero network budget 1.5->3 ms Debug/600 nodes — runs once per flora step (600 sim-s) per plasmodium; Release faster. Revisit if many plasmodia coexist.
 - D11 09-25: Clankers refuse packets spanning >~8 files / >2 subsystems (p1, gm-b both). Default packet size: one subsystem, ≤6 files, one validate.
