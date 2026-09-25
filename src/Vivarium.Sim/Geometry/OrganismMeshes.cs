@@ -1039,40 +1039,114 @@ public static class OrganismMeshes
 
     private static readonly double[] White = { 1, 1, 1 };
 
+    private static void BodySegment(MeshData m, Vec3 centre, Vec3 radii, int rings, int segments,
+        Func<double, double, (double[] Col, double A, double U, double V, double U2, double V2)> attr, double pitch = 0)
+    {
+        int start = m.VertexCount;
+        double cp = Math.Cos(pitch), sp = Math.Sin(pitch);
+        for (int r = 0; r <= rings; r++)
+        {
+            double phi = Math.PI * r / rings;
+            for (int s = 0; s <= segments; s++)
+            {
+                double th = 2 * Math.PI * s / segments;
+                var local = new Vec3(Math.Cos(phi) * radii.X, Math.Sin(phi) * Math.Cos(th) * radii.Y, Math.Sin(phi) * Math.Sin(th) * radii.Z);
+                var n = new Vec3(Math.Cos(phi) / radii.X, Math.Sin(phi) * Math.Cos(th) / radii.Y, Math.Sin(phi) * Math.Sin(th) / radii.Z).Normalized();
+                var rp = new Vec3(local.X * cp - local.Y * sp, local.X * sp + local.Y * cp, local.Z);
+                var rn = new Vec3(n.X * cp - n.Y * sp, n.X * sp + n.Y * cp, n.Z);
+                var a = attr((double)r / rings, (double)s / segments);
+                m.AddVertex(centre + rp, rn, a.Col, a.A, a.U, a.V, a.U2, a.V2);
+            }
+        }
+        for (int r = 0; r < rings; r++)
+            for (int s = 0; s < segments; s++)
+            {
+                int a = start + r * (segments + 1) + s, b = a + segments + 1;
+                if (r > 0) m.AddTriangle(a, a + 1, b);
+                if (r < rings - 1) m.AddTriangle(a + 1, b + 1, b);
+            }
+    }
+
     public static MeshData Fauna(FaunaSpeciesDef sp, ulong visualSeed = 0)
     {
         var m = new MeshData();
-        switch (sp.Model)
+        var model = !string.IsNullOrEmpty(sp.Model) ? sp.Model : sp.Id;
+        switch (model)
         {
             case "springtail": Springtail(m); break;
             case "shrimp": Shrimp(m); break;
             case "triops": Triops(m); break;
             case "minnow": Minnow(m); break;
-            case "isopod": Isopod(m); break;
+            case "isopod":
+            case "pill_bug":
+                Isopod(m);
+                break;
             case "beetle": Beetle(m); break;
             case "silverfish": Silverfish(m); break;
             default: Primitives.Ellipsoid(m, new Vec3(0, 0.2, 0), new Vec3(0.5, 0.2, 0.2), 8, 10, (a, b) => (Body, 0, a, b, 1, 0)); break;
         }
-        if (visualSeed != 0) ApplyFaunaMorph(m, sp.Model, visualSeed);
+        if (visualSeed != 0) ApplyFaunaMorph(m, model, visualSeed);
         return m;
     }
 
     /// <summary>Rolled-up pose for conglobating species (pill bug ball); null for species that never curl.</summary>
     public static MeshData? FaunaCurled(FaunaSpeciesDef sp, ulong visualSeed = 0)
     {
-        if (sp.Model != "isopod") return null;
+        var model = !string.IsNullOrEmpty(sp.Model) ? sp.Model : sp.Id;
+        if (model is not ("isopod" or "pill_bug")) return null;
         var m = new MeshData();
-        const int plates = 11;
-        const double cy = 0.22, ring = 0.17;
-        Primitives.Ellipsoid(m, new Vec3(0, cy, 0), new Vec3(0.19, 0.19, 0.2), 8, 12, (a, b) => Region(0.5, b, 3));
+        const double cy = 0.22, ringR = 0.175;
+
+        // Ventral sphere: inner sphere representing the tightly curled belly
+        BodySegment(m, new Vec3(0, cy, 0), new Vec3(0.185, 0.185, 0.195), 4, 7, (a, b) => Region(0.5, b, 3));
+
+        // Exactly 7 arched overlapping armor plates (Pereonites 1 to 7) wrapping tightly over the sphere
+        const int plates = 7;
         for (int k = 0; k < plates; k++)
         {
-            double ang = Math.PI / 2 - k * 2 * Math.PI / plates;   // plates run over the top and around the ball
-            var c = new Vec3(Math.Cos(ang) * ring, cy + Math.Sin(ang) * ring, 0);
-            double t = (double)k / plates;
-            Primitives.Ellipsoid(m, c, new Vec3(0.075, 0.05, 0.25 - 0.02 * Math.Abs(Math.Sin(ang))), 5, 12, (a, b) => Region(0.95 - t * 0.9, b, 1), pitch: ang + Math.PI / 2);
+            double t = (double)k / (plates - 1);
+            // Plates run across the dorsal circumference from anterior to posterior
+            double ang = Math.PI * 0.72 - k * (Math.PI * 1.44 / (plates - 1));
+            var c = new Vec3(Math.Cos(ang) * ringR, cy + Math.Sin(ang) * ringR, 0);
+            double w = 0.22 + 0.02 * Math.Sin(Math.PI * t);
+
+            // Arched pereonite armor plate tightly fitted over sphere
+            BodySegment(m, c, new Vec3(0.075, 0.040, w), 2, 6, (a, b) => Region(0.85 - t * 0.6, b, 1), pitch: ang + Math.PI / 2);
+
+            // Lateral epimera flanges on each plate
+            foreach (double z in new[] { -1.0, 1.0 })
+            {
+                var epiC = c + new Vec3(0, 0, (w - 0.01) * z);
+                BodySegment(m, epiC, new Vec3(0.055, 0.018, 0.028), 2, 3, (a, b) => Region(0.85 - t * 0.6, b, 1), pitch: ang + Math.PI / 2);
+            }
         }
-        if (visualSeed != 0) ApplyFaunaMorph(m, sp.Model, visualSeed);
+
+        // Tucked cephalon at anterior end
+        double headAng = Math.PI * 0.72 + 0.32;
+        var headC = new Vec3(Math.Cos(headAng) * ringR, cy + Math.Sin(headAng) * ringR, 0);
+        BodySegment(m, headC, new Vec3(0.055, 0.038, 0.15), 2, 5, (a, b) => Region(0.95, b, 1), pitch: headAng + Math.PI / 2);
+
+        // Lateral compound eyes
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            var eyeC = headC + new Vec3(0, 0.008, 0.12 * z);
+            BodySegment(m, eyeC, new Vec3(0.016, 0.014, 0.012), 2, 4, (a, b) => Region(0.97, b, 2));
+        }
+
+        // Tucked pleotelson at posterior end meeting cephalon
+        double tailAng = Math.PI * 0.72 - 1.44 - 0.28;
+        var tailC = new Vec3(Math.Cos(tailAng) * ringR, cy + Math.Sin(tailAng) * ringR, 0);
+        BodySegment(m, tailC, new Vec3(0.050, 0.035, 0.11), 2, 5, (a, b) => Region(0.05, b, 1), pitch: tailAng + Math.PI / 2);
+
+        // Tucked appendages (antennae / legs sealed in ventral seam)
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            var attach = headC + new Vec3(0, -0.018, 0.04 * z);
+            Appendage(m, new[] { attach, attach + new Vec3(0.015, -0.025, 0.025 * z), attach + new Vec3(0.01, -0.04, 0.04 * z) },
+                new[] { 0.012, 0.008, 0.004 }, 6, 4);
+        }
+
+        if (visualSeed != 0) ApplyFaunaMorph(m, model, visualSeed);
         return m;
     }
 
@@ -1096,7 +1170,7 @@ public static class OrganismMeshes
             height *= rng.Range(0.96, 1.05);
             width *= rng.Range(0.95, 1.06);
         }
-        else if (model is "isopod" or "beetle")
+        else if (model is "isopod" or "beetle" or "pill_bug")
         {
             length = MathD.Lerp(1, length, 0.7);
             height = MathD.Lerp(1, height, 0.7);
@@ -1182,51 +1256,98 @@ public static class OrganismMeshes
 
     private static void Springtail(MeshData m)
     {
-        // Entomobryid collembolan, length 1 along +X: one plump, slightly humped capsule (no waist), a large
-        // rounded head, long four-segmented antennae, three short leg pairs, the spring (furcula) folded forward
-        // under the rear and a small ventral tube. Segment rings come from the body UV in the shader.
-        var path = new List<Vec3>(); var radius = new List<double>();
-        for (int i = 0; i <= 16; i++)
-        {
-            double t = i / 16.0;                                        // 0 = neck, 1 = tail tip
-            double x = 0.2 - t * 0.66;
-            double r = 0.125 * Math.Pow(Math.Sin(Math.PI * (0.12 + 0.86 * t)), 0.55) + 0.012;
-            path.Add(new Vec3(x, 0.14 + 0.03 * Math.Sin(Math.PI * t), 0)); radius.Add(r);
-        }
-        int start = m.VertexCount;
-        Primitives.Tube(m, path, radius, 14, (i, v) => (Body, 0, 0.72 - i / 16.0 * 0.7, v, v > 0.62 && v < 0.88 ? 3 : 1, 0), new Vec3(0, 0, 1));
-        for (int i = start; i < m.VertexCount; i++)   // slightly flattened belly, rounder back
-        {
-            var q = m.Position(i);
-            if (q.Y < 0.14) m.Positions[i * 3 + 1] = (float)(0.14 + (q.Y - 0.14) * 0.75);
-        }
-        // head: big and round, tilted a little downward
-        Primitives.Ellipsoid(m, new Vec3(0.31, 0.13, 0), new Vec3(0.13, 0.105, 0.115), 8, 12, (a, b) => Region(0.86 + a * 0.1, b, 1), pitch: -0.25);
+        // Entomobryid collembolan: length 1 along +X (head forward), origin at underside center.
+        // Articulated arthropod anatomy:
+        // 1. Globular head with clypeus/mouthparts and lateral ocellar compound eye patches
+        // 2. 3 thoracic segments (pro-, meso-, metathorax)
+        // 3. 6 abdominal segments (A1..A6) with smooth tapering posterior
+        // 4. Ventral sternum (belly) and ventral collophore tube
+        // 5. 4-segmented elbowed antennae
+        // 6. 3 pairs of jointed legs (coxa, femur, tibia, tarsus)
+        // 7. Folded jumping fork (furcula: manubrium, paired dentes, mucro tips) tucked underneath
+
+        // --- 1. Globular Head & Clypeus / Mouthparts ---
+        // Globular head capsule
+        BodySegment(m, new Vec3(0.36, 0.165, 0), new Vec3(0.095, 0.085, 0.080), 4, 7, (a, b) => Region(0.90, b, 1), pitch: -0.22);
+        // Clypeus / mouthparts (anterior-ventral projection)
+        BodySegment(m, new Vec3(0.43, 0.105, 0), new Vec3(0.040, 0.032, 0.032), 3, 5, (a, b) => Region(0.96, b, 1), pitch: -0.45);
+
+        // Lateral eye patches (clusters of ocelli)
         foreach (double z in new[] { -1.0, 1.0 })
         {
-            // eye patches (clusters of ocelli) on the sides of the head
-            Primitives.Ellipsoid(m, new Vec3(0.35, 0.17, 0.085 * z), new Vec3(0.03, 0.022, 0.02), 4, 6, (a, b) => Region(0.97, b, 2));
-            // antennae: four segments, gently elbowed, about 70 % of body length
-            var ant = new List<Vec3> { new Vec3(0.41, 0.17, 0.05 * z) };
-            var dir = new Vec3(0.85, 0.35, 0.4 * z).Normalized();
-            double[] seg = { 0.12, 0.14, 0.16, 0.2 };
-            for (int k = 0; k < 4; k++)
-            {
-                dir = (dir + new Vec3(0.05, -0.12 * k, 0.05 * z)).Normalized();
-                ant.Add(ant[^1] + dir * seg[k]);
-            }
-            Appendage(m, ant, new[] { 0.02, 0.017, 0.014, 0.011, 0.007 }, 4);
-            // three short leg pairs under the thorax
+            BodySegment(m, new Vec3(0.38, 0.195, 0.062 * z), new Vec3(0.020, 0.016, 0.014), 2, 4, (a, b) => Region(0.98, b, 2));
+        }
+
+        // --- 2. Three Thoracic Segments ---
+        // Prothorax (T1)
+        BodySegment(m, new Vec3(0.24, 0.165, 0), new Vec3(0.042, 0.082, 0.085), 3, 6, (a, b) => Region(0.78, b, 1));
+        // Mesothorax (T2)
+        BodySegment(m, new Vec3(0.15, 0.172, 0), new Vec3(0.048, 0.090, 0.092), 3, 6, (a, b) => Region(0.70, b, 1));
+        // Metathorax (T3)
+        BodySegment(m, new Vec3(0.05, 0.170, 0), new Vec3(0.050, 0.090, 0.092), 3, 6, (a, b) => Region(0.62, b, 1));
+
+        // --- 3. Six Abdominal Segments (A1..A6) ---
+        // A1
+        BodySegment(m, new Vec3(-0.05, 0.165, 0), new Vec3(0.048, 0.086, 0.088), 3, 6, (a, b) => Region(0.54, b, 1));
+        // A2
+        BodySegment(m, new Vec3(-0.14, 0.160, 0), new Vec3(0.046, 0.082, 0.082), 3, 6, (a, b) => Region(0.46, b, 1));
+        // A3
+        BodySegment(m, new Vec3(-0.22, 0.152, 0), new Vec3(0.044, 0.076, 0.075), 3, 6, (a, b) => Region(0.38, b, 1));
+        // A4
+        BodySegment(m, new Vec3(-0.29, 0.142, 0), new Vec3(0.042, 0.068, 0.065), 3, 6, (a, b) => Region(0.30, b, 1));
+        // A5
+        BodySegment(m, new Vec3(-0.36, 0.130, 0), new Vec3(0.038, 0.058, 0.052), 3, 6, (a, b) => Region(0.22, b, 1));
+        // A6 (tapering terminal segment)
+        BodySegment(m, new Vec3(-0.42, 0.115, 0), new Vec3(0.032, 0.042, 0.038), 3, 6, (a, b) => Region(0.14, b, 1));
+
+        // --- 4. Ventral Sternum (Belly) and Collophore Tube ---
+        // Ventral belly floor connecting sternites (Region 3)
+        BodySegment(m, new Vec3(-0.06, 0.082, 0), new Vec3(0.36, 0.030, 0.062), 3, 6, (a, b) => Region(0.50, b, 3));
+        // Ventral tube (collophore) projecting downward from A1 sternite
+        BodySegment(m, new Vec3(-0.03, 0.045, 0), new Vec3(0.022, 0.028, 0.018), 3, 5, (a, b) => Region(0.50, b, 3));
+
+        // --- 5. Appendages: Antennae and Legs ---
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            // 4-segmented elbowed antennae:
+            // Ant I (scape) -> Ant II (pedicel) -> elbow bend -> Ant III -> Ant IV (flagellum tip)
+            var antSocket = new Vec3(0.42, 0.18, 0.045 * z);
+            var ant1 = antSocket + new Vec3(0.07, 0.025, 0.040 * z);
+            var ant2 = ant1 + new Vec3(0.08, 0.010, 0.060 * z); // elbow
+            var ant3 = ant2 + new Vec3(0.09, -0.018, 0.035 * z);
+            var ant4 = ant3 + new Vec3(0.09, -0.035, 0.015 * z); // tip
+            Appendage(m, new[] { antSocket, ant1, ant2, ant3, ant4 }, new[] { 0.016, 0.013, 0.010, 0.007, 0.004 }, 6, 4);
+
+            // 3 pairs of jointed legs (coxa / femur / tibia / tarsus) under T1, T2, T3
             for (int leg = 0; leg < 3; leg++)
             {
-                double x = 0.17 - leg * 0.085;
-                Appendage(m, new[] { new Vec3(x, 0.07, 0.06 * z), new Vec3(x + 0.015, 0.05, 0.13 * z), new Vec3(x - 0.01, 0.0, 0.15 * z) }, new[] { 0.016, 0.012, 0.008 }, 4);
+                double legX = 0.24 - leg * 0.095;
+                double sweep = (leg - 1) * -0.018;
+                var pCoxa = new Vec3(legX, 0.088, 0.052 * z);
+                var pFemur = new Vec3(legX + sweep * 0.3, 0.078, 0.082 * z);
+                var pTibia = new Vec3(legX + sweep * 0.7, 0.055, 0.120 * z);
+                var pTarsus = new Vec3(legX + sweep * 1.1, 0.025, 0.145 * z);
+                var pClaw = new Vec3(legX + sweep * 1.5, 0.000, 0.160 * z);
+                Appendage(m, new[] { pCoxa, pFemur, pTibia, pTarsus, pClaw }, new[] { 0.015, 0.013, 0.010, 0.007, 0.004 }, 6, 4);
             }
         }
-        // ventral tube (collophore) and the folded spring
-        Primitives.Ellipsoid(m, new Vec3(0.04, 0.03, 0), new Vec3(0.03, 0.025, 0.025), 4, 6, (a, b) => Region(0.5, b, 3));
-        Appendage(m, new[] { new Vec3(-0.38, 0.06, 0), new Vec3(-0.3, 0.025, 0), new Vec3(-0.12, 0.02, 0.03), new Vec3(-0.02, 0.025, 0.035) }, new[] { 0.022, 0.018, 0.012, 0.008 }, 4);
-        Appendage(m, new[] { new Vec3(-0.3, 0.025, 0), new Vec3(-0.12, 0.02, -0.03), new Vec3(-0.02, 0.025, -0.035) }, new[] { 0.016, 0.012, 0.008 }, 4);
+
+        // --- 6. Folded Jumping Fork (Furcula: Manubrium, Paired Dentes, Mucro Tips) ---
+        // Basal piece (manubrium) attached at ventral A4/A5 and extending forward along midline
+        var manuAttach = new Vec3(-0.31, 0.068, 0);
+        var manuMid = new Vec3(-0.24, 0.050, 0);
+        var manuFork = new Vec3(-0.17, 0.038, 0);
+        Appendage(m, new[] { manuAttach, manuMid, manuFork }, new[] { 0.016, 0.013, 0.010 }, 6, 4);
+
+        // Paired dentes with hooked mucro tips extending forward under belly
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            var densAttach = new Vec3(-0.17, 0.038, 0.008 * z);
+            var densMid = new Vec3(-0.10, 0.035, 0.016 * z);
+            var densApex = new Vec3(-0.04, 0.032, 0.016 * z);
+            var mucroTip = new Vec3(-0.015, 0.038, 0.010 * z); // hooked tip
+            Appendage(m, new[] { densAttach, densMid, densApex, mucroTip }, new[] { 0.009, 0.007, 0.005, 0.003 }, 6, 4);
+        }
     }
 
     private static void Shrimp(MeshData m)
@@ -1281,36 +1402,96 @@ public static class OrganismMeshes
 
     private static void Isopod(MeshData m)
     {
-        // domed oval of seven overlapping armour plates (pereon), small head, tapering tail plates; length 1 along +X
-        Primitives.Ellipsoid(m, new Vec3(0.02, 0.05, 0), new Vec3(0.44, 0.045, 0.24), 6, 12, (a, b) => Region(0.5, b, 3)); // pale underside
+        // Oniscidean isopod (woodlouse / pill bug): length 1 along +X, origin at underside center.
+        // Articulated arthropod anatomy:
+        // 1. Distinct cephalon with lateral compound eyes
+        // 2. Elbowed antennae (antenna 2)
+        // 3. 7 overlapping arched pereonite plates with articulated lateral epimera flanges
+        // 4. 5 pleonites + shield-like pleotelson
+        // 5. Ventral belly (sternites)
+        // 6. 7 pairs of jointed walking pereopods
+        // 7. Sensory uropods at rear
+
+        // --- 1. Distinct Cephalon & Lateral Compound Eyes ---
+        // Cephalon: broad, rounded anterior shield
+        BodySegment(m, new Vec3(0.36, 0.075, 0), new Vec3(0.065, 0.055, 0.150), 3, 6, (a, b) => Region(0.92, b, 1));
+
+        // Lateral compound eyes
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            BodySegment(m, new Vec3(0.37, 0.095, 0.125 * z), new Vec3(0.018, 0.016, 0.014), 2, 4, (a, b) => Region(0.97, b, 2));
+        }
+
+        // --- 2. Elbowed Antennae ---
+        foreach (double z in new[] { -1.0, 1.0 })
+        {
+            var ant0 = new Vec3(0.40, 0.065, 0.055 * z); // socket
+            var ant1 = new Vec3(0.47, 0.082, 0.110 * z); // pedicel
+            var ant2 = new Vec3(0.55, 0.060, 0.170 * z); // elbow
+            var ant3 = new Vec3(0.62, 0.020, 0.200 * z); // flagellum tip
+            Appendage(m, new[] { ant0, ant1, ant2, ant3 }, new[] { 0.015, 0.012, 0.009, 0.005 }, 6, 4);
+        }
+
+        // --- 3. Seven Overlapping Arched Pereonite Plates with Lateral Epimera Flanges ---
         for (int s = 0; s < 7; s++)
         {
             double t = s / 6.0;
-            double x = 0.27 - t * 0.5;
-            double dome = Math.Sin(Math.PI * (0.18 + t * 0.64));
-            double w = 0.25 + 0.03 * dome, h = 0.1 + 0.08 * dome;
-            Primitives.Ellipsoid(m, new Vec3(x, 0.07, 0), new Vec3(0.062, h, w), 6, 14, (a, b) => Region(0.85 - t * 0.6, b, b > 0.3 && b < 0.7 ? 1 : 1), pitch: -0.18);
+            double x = 0.26 - s * 0.078;
+            double dome = Math.Sin(Math.PI * (0.15 + t * 0.70));
+            double w = 0.22 + 0.04 * dome;
+            double h = 0.085 + 0.065 * dome;
+
+            // Arched central tergite plate (tilted with pitch so trailing edge overlaps next plate)
+            BodySegment(m, new Vec3(x, 0.065, 0), new Vec3(0.048, h, w), 2, 6, (a, b) => Region(0.85 - t * 0.55, b, 1), pitch: -0.16);
+
+            // Articulated lateral epimera flanges on left and right
+            double sweep = (s >= 3 ? (s - 2) * 0.012 : 0);
+            foreach (double z in new[] { -1.0, 1.0 })
+            {
+                var epiC = new Vec3(x - sweep * 0.5, 0.038 + 0.015 * dome, (w + 0.015) * z);
+                var epiR = new Vec3(0.040 + sweep * 0.5, 0.016, 0.030);
+                BodySegment(m, epiC, epiR, 2, 3, (a, b) => Region(0.85 - t * 0.55, b, 1), pitch: -0.14);
+            }
         }
-        for (int s = 0; s < 4; s++)
+
+        // --- 4. Five Pleonites and Shield-like Pleotelson ---
+        for (int s = 0; s < 5; s++)
         {
-            double t = s / 3.0;
-            double w = 0.19 - t * 0.09;
-            Primitives.Ellipsoid(m, new Vec3(-0.29 - t * 0.07, 0.07, 0), new Vec3(0.045, 0.085 - t * 0.03, w), 5, 12, (a, b) => Region(0.22 - t * 0.15, b, 1), pitch: -0.25);
+            double t = s / 4.0;
+            double px = -0.26 - s * 0.028;
+            double pw = 0.17 - s * 0.018;
+            double ph = 0.070 - s * 0.010;
+            BodySegment(m, new Vec3(px, 0.062, 0), new Vec3(0.020, ph, pw), 2, 4, (a, b) => Region(0.26 - t * 0.15, b, 1), pitch: -0.20);
         }
-        Primitives.Ellipsoid(m, new Vec3(-0.43, 0.05, 0), new Vec3(0.05, 0.035, 0.07), 4, 8, (a, b) => Region(0.03, b, 1)); // telson
-        Primitives.Ellipsoid(m, new Vec3(0.37, 0.08, 0), new Vec3(0.07, 0.07, 0.15), 6, 10, (a, b) => Region(0.95, b, 1));  // head
+
+        // Shield-like pleotelson
+        BodySegment(m, new Vec3(-0.42, 0.050, 0), new Vec3(0.042, 0.028, 0.065), 2, 5, (a, b) => Region(0.05, b, 1), pitch: -0.22);
+
+        // --- 5. Ventral Belly (Sternites) ---
+        BodySegment(m, new Vec3(0.0, 0.042, 0), new Vec3(0.42, 0.030, 0.18), 2, 6, (a, b) => Region(0.50, b, 3));
+
+        // --- 6. Seven Pairs of Jointed Walking Pereopods ---
+        for (int s = 0; s < 7; s++)
+        {
+            double legX = 0.26 - s * 0.078;
+            double sweep = (s - 3) * -0.012;
+            foreach (double z in new[] { -1.0, 1.0 })
+            {
+                var p0 = new Vec3(legX, 0.042, 0.13 * z);
+                var p1 = new Vec3(legX + sweep * 0.5, 0.048, 0.19 * z);
+                var p2 = new Vec3(legX + sweep, 0.024, 0.25 * z);
+                var p3 = new Vec3(legX + sweep * 1.4, 0.000, 0.28 * z);
+                Appendage(m, new[] { p0, p1, p2, p3 }, new[] { 0.014, 0.011, 0.008, 0.005 }, 6, 4);
+            }
+        }
+
+        // --- 7. Sensory Uropods at Rear ---
         foreach (double z in new[] { -1.0, 1.0 })
         {
-            Primitives.Ellipsoid(m, new Vec3(0.4, 0.1, 0.11 * z), new Vec3(0.022, 0.022, 0.018), 4, 6, (a, b) => Region(0.97, b, 2)); // eyes
-            // elbowed antennae
-            Appendage(m, new[] { new Vec3(0.43, 0.08, 0.06 * z), new Vec3(0.52, 0.12, 0.13 * z), new Vec3(0.6, 0.08, 0.2 * z), new Vec3(0.68, 0.03, 0.22 * z) }, new[] { 0.016, 0.013, 0.01, 0.006 }, 4);
-            for (int leg = 0; leg < 7; leg++)
-            {
-                double x = 0.26 - leg * 0.075;
-                Appendage(m, new[] { new Vec3(x, 0.04, 0.16 * z), new Vec3(x + 0.01, 0.03, 0.25 * z), new Vec3(x - 0.01, 0.0, 0.28 * z) }, new[] { 0.013, 0.01, 0.006 }, 3);
-            }
-            // uropods (little tail prongs)
-            Appendage(m, new[] { new Vec3(-0.42, 0.04, 0.05 * z), new Vec3(-0.49, 0.03, 0.09 * z) }, new[] { 0.014, 0.008 }, 3);
+            var uro0 = new Vec3(-0.41, 0.042, 0.045 * z);
+            var uro1 = new Vec3(-0.46, 0.034, 0.075 * z);
+            var uro2 = new Vec3(-0.51, 0.024, 0.095 * z);
+            Appendage(m, new[] { uro0, uro1, uro2 }, new[] { 0.012, 0.008, 0.004 }, 6, 4);
         }
     }
 

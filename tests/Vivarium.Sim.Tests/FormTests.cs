@@ -424,4 +424,98 @@ public class FormTests
             Assert.True(distinctColors.Length >= 4, "top surface must feature zoned concentric color banding");
         }
     }
+    [Fact]
+    public void SpringtailHasArticulatedAnatomyAndAppendages()
+    {
+        var sp = new FaunaSpeciesDef { Id = "springtail", Model = "springtail" };
+        for (ulong seed = 1; seed <= 3; seed++)
+        {
+            var mesh = OrganismMeshes.Fauna(sp, seed);
+            var mesh2 = OrganismMeshes.Fauna(sp, seed);
+            Assert.Equal(mesh.DigestHex(), mesh2.DigestHex());
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+            Assert.InRange(mesh.TriangleCount, 150, 1500);
+
+            // Validate all UV2 regions present: 1 (body/tergites), 2 (eyes), 3 (ventral/belly), 4 (appendages)
+            var regions = Enumerable.Range(0, mesh.VertexCount)
+                .Select(i => (int)Math.Round(mesh.UV2[i * 2]))
+                .Distinct()
+                .ToHashSet();
+            Assert.Contains(1, regions);
+            Assert.Contains(2, regions);
+            Assert.Contains(3, regions);
+            Assert.Contains(4, regions);
+
+            // Validate shader vertex contracts: COLOR.a == 1.0 on region 4, COLOR.a == 0.0 on regions 1, 2, 3
+            for (int i = 0; i < mesh.VertexCount; i++)
+            {
+                int r = (int)Math.Round(mesh.UV2[i * 2]);
+                float a = mesh.Colors[i * 4 + 3];
+                if (r == 4)
+                    Assert.True(a > 0.99f, $"Appendage vertex {i} must have COLOR.a = 1.0");
+                else
+                    Assert.True(a < 0.01f, $"Body vertex {i} (region {r}) must have COLOR.a = 0.0");
+            }
+        }
+
+        // Springtail never curls: FaunaCurled must be null
+        Assert.Null(OrganismMeshes.FaunaCurled(sp));
+    }
+
+    [Fact]
+    public void IsopodHasArticulatedPlatesAndCurledPose()
+    {
+        var spIsopod = new FaunaSpeciesDef { Id = "isopod", Model = "isopod" };
+        var spPillBug = new FaunaSpeciesDef { Id = "pill_bug", Model = "pill_bug" };
+
+        foreach (var sp in new[] { spIsopod, spPillBug })
+        {
+            for (ulong seed = 1; seed <= 3; seed++)
+            {
+                var mesh = OrganismMeshes.Fauna(sp, seed);
+                var mesh2 = OrganismMeshes.Fauna(sp, seed);
+                Assert.Equal(mesh.DigestHex(), mesh2.DigestHex());
+                AssertAllFinite(mesh);
+                AssertNoZeroAreaTriangles(mesh);
+                Assert.InRange(mesh.TriangleCount, 150, 1500);
+
+                var regions = Enumerable.Range(0, mesh.VertexCount)
+                    .Select(i => (int)Math.Round(mesh.UV2[i * 2]))
+                    .Distinct()
+                    .ToHashSet();
+                Assert.Contains(1, regions);
+                Assert.Contains(2, regions);
+                Assert.Contains(3, regions);
+                Assert.Contains(4, regions);
+
+                for (int i = 0; i < mesh.VertexCount; i++)
+                {
+                    int r = (int)Math.Round(mesh.UV2[i * 2]);
+                    float a = mesh.Colors[i * 4 + 3];
+                    if (r == 4)
+                        Assert.True(a > 0.99f, $"Appendage vertex {i} must have COLOR.a = 1.0");
+                    else
+                        Assert.True(a < 0.01f, $"Body vertex {i} (region {r}) must have COLOR.a = 0.0");
+                }
+
+                // FaunaCurled: pill bug rolled-up ball pose preserves 7 arched overlapping armor plates
+                var curled = OrganismMeshes.FaunaCurled(sp, seed);
+                Assert.NotNull(curled);
+                Assert.Equal(curled.DigestHex(), OrganismMeshes.FaunaCurled(sp, seed)!.DigestHex());
+                AssertAllFinite(curled);
+                AssertNoZeroAreaTriangles(curled);
+                Assert.InRange(curled.TriangleCount, 150, 1500);
+
+                var curledRegions = Enumerable.Range(0, curled.VertexCount)
+                    .Select(i => (int)Math.Round(curled.UV2[i * 2]))
+                    .Distinct()
+                    .ToHashSet();
+                Assert.Contains(1, curledRegions);
+                Assert.Contains(2, curledRegions);
+                Assert.Contains(3, curledRegions);
+                Assert.Contains(4, curledRegions);
+            }
+        }
+    }
 }
