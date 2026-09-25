@@ -362,7 +362,10 @@ public static class PropMeshes
                     if (decay >= 3 && rFrac < 0.62)
                     {
                         var col = Primitives.Scale(cavityWood, 0.90);
-                        var nrm = new Vec3(-endSign * 0.7, -Math.Cos(th) * 0.5, -Math.Sin(th) * 0.5).Normalized();
+                        // Cavity floor still faces outward (toward the viewer looking into the end) with a
+                        // slight inward-radial tilt for concave shading; it must not point back into the log
+                        // or it back-face-culls and the hollow end reads as an open hole.
+                        var nrm = new Vec3(endSign * 0.7, -Math.Cos(th) * 0.5, -Math.Sin(th) * 0.5).Normalized();
                         m.AddVertex(p, nrm, col, 1, rFrac, th, decay, 2);
                     }
                     else
@@ -373,7 +376,10 @@ public static class PropMeshes
                     }
                 }
 
-                var faceNorm = (decay >= 3 && rFrac < 0.62) ? -endNorm : endNorm;
+                // Whether solid heartwood or a hollow cavity floor, the fracture-plane surface faces outward
+                // (toward a viewer looking at the end); winding must never flip to -endNorm here or the
+                // hollow interior back-face-culls and the log end reads as an open hole.
+                var faceNorm = endNorm;
                 for (int s = 0; s < around; s++)
                 {
                     int p0 = (r == rings - 1) ? rimVertexIndex(s) : (prevRing + s);
@@ -391,10 +397,10 @@ public static class PropMeshes
             var centerPos = cEnd + new Vec3(endSign * centerSplinter, 0, 0);
             if (decay >= 3)
             {
-                int centerIdx = m.AddVertex(centerPos, -endNorm, cavityWood, 1, 0, 0, decay, 2);
+                int centerIdx = m.AddVertex(centerPos, endNorm, cavityWood, 1, 0, 0, decay, 2);
                 for (int s = 0; s < around; s++)
                 {
-                    Primitives.TriangleFacing(m, centerIdx, prevRing + s, prevRing + s + 1, -endNorm);
+                    Primitives.TriangleFacing(m, centerIdx, prevRing + s, prevRing + s + 1, endNorm);
                 }
             }
             else
@@ -426,11 +432,13 @@ public static class PropMeshes
                 var b1 = baseCenter - sideA * 0.5 + sideB * 0.866;
                 var b2 = baseCenter - sideA * 0.5 - sideB * 0.866;
 
+                // Tagged 3 (not 1): these are radial splinter shards, not the end-cap fracture face, and are
+                // intentionally allowed to face any outward-from-base direction rather than strictly ±axis.
                 var tineCol = Primitives.Scale(heart, 1.05);
-                int vb0 = m.AddVertex(b0, endNorm, tineCol, 1, 0, 0, decay, 1);
-                int vb1 = m.AddVertex(b1, endNorm, tineCol, 1, 0, 0, decay, 1);
-                int vb2 = m.AddVertex(b2, endNorm, tineCol, 1, 0, 0, decay, 1);
-                int vTip = m.AddVertex(tip, endNorm, Primitives.Scale(tineCol, 1.15), 1, 0, 0, decay, 1);
+                int vb0 = m.AddVertex(b0, endNorm, tineCol, 1, 0, 0, decay, 3);
+                int vb1 = m.AddVertex(b1, endNorm, tineCol, 1, 0, 0, decay, 3);
+                int vb2 = m.AddVertex(b2, endNorm, tineCol, 1, 0, 0, decay, 3);
+                int vTip = m.AddVertex(tip, endNorm, Primitives.Scale(tineCol, 1.15), 1, 0, 0, decay, 3);
 
                 Primitives.TriangleFacing(m, vb0, vb1, vTip, (b0 + b1 + tip) / 3 - baseCenter);
                 Primitives.TriangleFacing(m, vb1, vb2, vTip, (b1 + b2 + tip) / 3 - baseCenter);
@@ -464,14 +472,15 @@ public static class PropMeshes
                 var tipCenter = p3;
                 var tipNorm = dir;
                 int tipStart = m.VertexCount;
-                m.AddVertex(tipCenter + tipNorm * (stubRad * 0.35), tipNorm, Primitives.Scale(heart, 0.85), 1, 0, 0, decay, 1);
+                // Tagged 3: broken branch-stub tip, not a log-end cap face (see tine comment above).
+                m.AddVertex(tipCenter + tipNorm * (stubRad * 0.35), tipNorm, Primitives.Scale(heart, 0.85), 1, 0, 0, decay, 3);
                 for (int s = 0; s <= 8; s++)
                 {
                     double a = 2 * Math.PI * s / 8;
                     var sideDir = (new Vec3(-dir.Z, 0, dir.X).Normalized() * Math.Cos(a) + new Vec3(0, 1, 0) * Math.Sin(a)).Normalized();
                     double splinter = stubRad * 0.30 * Math.Abs(Math.Sin(a * 2.5 + k));
                     var pt = tipCenter + sideDir * (stubRad * 0.40) + tipNorm * splinter;
-                    m.AddVertex(pt, tipNorm, Primitives.Scale(heart, 0.80), 1, Math.Cos(a), Math.Sin(a), decay, 1);
+                    m.AddVertex(pt, tipNorm, Primitives.Scale(heart, 0.80), 1, Math.Cos(a), Math.Sin(a), decay, 3);
                 }
                 for (int s = 0; s < 8; s++)
                 {

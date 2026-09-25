@@ -393,4 +393,49 @@ public class WorldTests
         }
         Assert.True(maxRadius > 0.22, $"Knot swelling should elevate radius above nominal 0.20, got {maxRadius:0.000}");
     }
+
+    [Fact] // regression: hollow/decayed log ends must not back-face-cull into a visible hole
+    public void LogEndCapTrianglesFaceOutwardForAllDecayClasses()
+    {
+        for (int decay = 0; decay <= 3; decay++)
+        {
+            for (int seedIdx = 1; seedIdx <= 6; seedIdx++)
+            {
+                ulong seed = (ulong)seedIdx * 10007;
+                double length = 2.0, radius = 0.2;
+                var m = PropMeshes.Log(seed, length, radius, decay);
+
+                // End-cap / cavity-floor vertices are tagged 1 (solid fracture face) or 2 (hollow cavity) in UV2.y.
+                var capIndex = new HashSet<int>();
+                for (int i = 0; i < m.VertexCount; i++)
+                {
+                    double tag = m.UV2[i * 2 + 1];
+                    if (tag == 1 || tag == 2) capIndex.Add(i);
+                }
+                Assert.NotEmpty(capIndex);
+
+                int checkedTriangles = 0, outward = 0;
+                for (int t = 0; t < m.TriangleCount; t++)
+                {
+                    int a = m.Indices[t * 3], b = m.Indices[t * 3 + 1], c = m.Indices[t * 3 + 2];
+                    if (!capIndex.Contains(a) || !capIndex.Contains(b) || !capIndex.Contains(c)) continue;
+
+                    var pa = m.Position(a);
+                    double meanX = (pa.X + m.Position(b).X + m.Position(c).X) / 3.0;
+                    double endSign = meanX < 0 ? -1.0 : 1.0;
+
+                    // Primitives.TriangleFacing's stored winding yields cross(b-a,c-a) opposite the
+                    // requested visible-normal side (verified empirically against known-good geometry),
+                    // so a correctly outward-facing cap triangle has normal.X opposite the end's sign.
+                    var normal = (m.Position(b) - pa).Cross(m.Position(c) - pa);
+                    checkedTriangles++;
+                    if (normal.X * endSign < 0) outward++;
+                }
+
+                Assert.True(checkedTriangles > 0, $"decay={decay} seed={seed}: no end-cap triangles found");
+                Assert.Equal(checkedTriangles, outward);
+                // (was: some cap triangles silently wound inward and back-face-culled, making the end look open)
+            }
+        }
+    }
 }
