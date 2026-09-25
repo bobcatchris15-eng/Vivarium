@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Coverage;
 using Vivarium.Sim.Persistence;
 using Vivarium.Sim.Tools;
 
@@ -42,6 +43,8 @@ public partial class SmokeRunner
         _facts["flora_total"] = W.Flora.Count;
         _facts["fauna_total"] = W.Fauna.Count;
         _facts["species_present"] = W.Flora.Items.GroupBy(f => f.SpeciesId).OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Count());
+        _facts["coverage_area_m2"] = W.Content.Flora.Where(sp => sp.IsCoverageSpecies).OrderBy(sp => sp.Id)
+            .ToDictionary(sp => sp.Id, sp => Math.Round(W.CoverageSystem.CoveredArea(sp.Id), 4));
         string digest = WorldSerializer.Digest(W);
         _facts["digest"] = digest;
 
@@ -191,10 +194,29 @@ public partial class SmokeRunner
         if (rock != null) list.Add(Orbit("rock_contact", "rock", Ground(rock.Position) + new Vector3(0, (float)(rock.SizeY * 0.35), 0), (float)(rock.FootprintRadius * 2.8), 25, 30));
         var log = W.Props.Logs.OrderBy(l => l.Id.Value).FirstOrDefault();
         if (log != null) list.Add(Orbit("log_contact", "log", Ground(log.Position), (float)(log.Radius * 5), 18, 60));
-        // 12 dense colony
-        var colonial = flora.Where(f => Colonial(f.SpeciesId)).ToList();
-        AddHub("dense_colony", "colony", colonial, 0.4, 0.8f, 40);
-        AddHub("colony_edge", "colony", colonial, 0.4, 0.35f, 18, 160);
+        // 12 dense colony: moss/lichen no longer live as FloraIndividuals (coverage layers, §CoverageSystem), so
+        // "colony" here means the densest coverage patch, not a Colony-flagged flora species (none remain).
+        var coverageHubs = new List<(Vec2 center, double area, string id)>();
+        foreach (var sp in W.Content.Flora.Where(sp => sp.IsCoverageSpecies).OrderBy(sp => sp.Id))
+        {
+            var layerId = sp.Mat != null ? CoverageLayerId.Mat : CoverageLayerId.Crust;
+            var layer = W.Coverage.ById(layerId);
+            byte? occ = FindCoverageOccupant(layerId, sp.Id);
+            if (occ == null) continue;
+            var hit = DensestCoverageTile(layer, occ.Value);
+            if (hit == null) continue;
+            var (center, count) = hit.Value;
+            double area = count * CoverageSpec.CellSize * CoverageSpec.CellSize;
+            double dist = Math.Max(0.1, CoverageSpec.TileWorldSize * 0.9);
+            list.Add(Orbit("species_" + sp.Id, "species", Ground(center), (float)dist, 35));
+            coverageHubs.Add((center, area, sp.Id));
+        }
+        if (coverageHubs.Count > 0)
+        {
+            var best = coverageHubs.OrderByDescending(h => h.area).ThenBy(h => h.id).First();
+            list.Add(Orbit("dense_colony", "colony", Ground(best.center), 0.45f, 40));
+            list.Add(Orbit("colony_edge", "colony", Ground(best.center), 0.3f, 18, 160));
+        }
         // 13 sparse dry area: driest domain cell far from water with ground visible
         var dry = W.Grid.DomainCells.Where(c => !W.Water.IsWet(c) && W.Domain.ContainsDisc(W.Grid.CellCenter(c), 1.5) && double.IsNaN(W.Props.PropTopAt(W.Grid.CellCenter(c))))
             .OrderBy(c => W.Fields.Moisture[c]).ThenBy(c => c).FirstOrDefault(-1);
@@ -215,5 +237,41 @@ public partial class SmokeRunner
             list.Add(Orbit("species_" + g.Key, "species", Ground(f.Position) + new Vector3(0, (float)H(f) * 0.3f, 0), d, 50));
         }
         return list;
+    }
+
+    /// <summary>First occupant byte in <paramref name="layerId"/> resolving to <paramref name="speciesId"/> (occupant
+    /// slots are assigned once at <see cref="Vivarium.Sim.Coverage.CoverageSystem"/> construction, so this is stable
+    /// for the life of the world).</summary>
+    private byte? FindCoverageOccupant(CoverageLayerId layerId, string speciesId)
+    {
+        for (int occ = 1; occ < 256; occ++)
+            if (W.CoverageSystem.SpeciesId(layerId, (byte)occ) == speciesId) return (byte)occ;
+        return null;
+    }
+
+    /// <summary>The tile with the most cells occupied by <paramref name="occ"/>, and the world-space centroid of
+    /// just those cells (not the tile centre, so a patch hugging a tile edge still frames correctly).</summary>
+    private (Vec2 center, int count)? DensestCoverageTile(CoverageLayer layer, byte occ)
+    {
+        CoverageTile? best = null;
+        int bestCount = 0;
+        foreach (var t in layer.Tiles)
+        {
+            int c = 0;
+            for (int i = 0; i < CoverageTile.N; i++) if (t.Occ[i] == occ) c++;
+            if (c > bestCount) { bestCount = c; best = t; }
+        }
+        if (best == null) return null;
+
+        double sx = 0, sz = 0;
+        for (int li = 0; li < CoverageTile.N; li++)
+        {
+            if (best.Occ[li] != occ) continue;
+            int lx = li % CoverageSpec.TileEdge, lz = li / CoverageSpec.TileEdge;
+            int gx = best.Ti * CoverageSpec.TileEdge + lx, gz = best.Tj * CoverageSpec.TileEdge + lz;
+            sx += (gx + 0.5) * CoverageSpec.CellSize;
+            sz += (gz + 0.5) * CoverageSpec.CellSize;
+        }
+        return (new Vec2(sx / bestCount, sz / bestCount), bestCount);
     }
 }
