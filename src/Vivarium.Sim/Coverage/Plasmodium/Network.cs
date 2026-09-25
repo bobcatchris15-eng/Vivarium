@@ -29,10 +29,16 @@ public sealed class Network : IPlasmodiumNetwork
     /// <summary>Edges below this conductance are treated as pruned (no flux, no splat, retraction-eligible).</summary>
     public double PruneThreshold { get; init; } = 0.05;
 
+    /// <summary>Time constant, seconds, for the exponential running average of |Q| that drives conductance
+    /// growth (§6R Cadence: veins adapt on the cycle-averaged flow, not the instantaneous per-step value, so a
+    /// vein does not decay every half-cycle just because the shuttle-streaming flow reversed sign).</summary>
+    public double FlowAvgTau { get; init; } = 5.0;
+
     /// <summary>Tube width splat scale: byte width = clamp(W0 * sqrt(D), 0, 255).</summary>
     public double W0 { get; init; } = 40.0;
 
     private readonly Dictionary<((int, int) a, (int, int) b), double> _edgeD = new();
+    private readonly Dictionary<((int, int) a, (int, int) b), double> _edgeAvgQ = new();
     private readonly HashSet<(int, int)> _retractCoarse = new();
     private readonly Dictionary<(int, int), double> _nodeMaxD = new();
     private readonly HashSet<(int, int)> _sources = new();
@@ -164,7 +170,16 @@ public sealed class Network : IPlasmodiumNetwork
             var e = edges[i];
             double flux = e.W * (p[e.A] - p[e.B]);
             double dOld = dOldBuf[i];
-            double dNew = (dOld + dt * QGain * Math.Abs(flux)) / (1 + dt * Gamma);
+
+            // Cycle-averaged |Q| (exponential running average, time constant FlowAvgTau) drives growth, not the
+            // instantaneous flux, so a vein does not thin every time shuttle streaming reverses sign.
+            double fluxAbs = Math.Abs(flux);
+            var edgeKey = edgeCoords[i];
+            double avgOld = _edgeAvgQ.TryGetValue(edgeKey, out var av) ? av : fluxAbs;
+            double avgNew = avgOld + (dt / FlowAvgTau) * (fluxAbs - avgOld);
+            _edgeAvgQ[edgeKey] = avgNew;
+
+            double dNew = (dOld + dt * QGain * avgNew) / (1 + dt * Gamma);
             if (dNew < PruneThreshold) dNew = 0;
             _edgeD[edgeCoords[i]] = dNew;
 

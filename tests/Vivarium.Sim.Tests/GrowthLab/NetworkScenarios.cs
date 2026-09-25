@@ -91,7 +91,10 @@ public class NetworkScenarios
         network.SetSources(new[] { source, sink });
 
         int peakCount = 0;
-        for (long s = 0; s < 500; s++)
+        // Pl-2 setup-only adaptation: the contraction phase field's mass-proportional pressure term and
+        // interleaved transport sub-stepping change the sheet's growth/pruning cadence slightly; a bit more
+        // budget (700, was 500) still reaches the same peak->final retraction ratio deterministically.
+        for (long s = 0; s < 700; s++)
         {
             network.Step(layer, colony.CellId.Keys.ToList(), dt: 1.0);
             colony.Step(layer, attractant, env, s, dt: 1.0, network);
