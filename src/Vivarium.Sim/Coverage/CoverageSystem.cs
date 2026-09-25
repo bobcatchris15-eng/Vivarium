@@ -197,6 +197,95 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         }
     }
 
+    // ------------------------------------------------------------------ player introduction / removal (tools)
+
+    /// <summary>True when speciesId (a coverage species) may be seeded at p, using the same habitat/substrate
+    /// gates as <see cref="SeedInitial"/>. False with a human reason otherwise (unknown/non-coverage species,
+    /// wrong substrate, too dry/dark, etc).</summary>
+    public bool CanSeed(string speciesId, Vec2 p, out string reason)
+    {
+        foreach (var mp in _matSpecies)
+            if (mp.Name == speciesId)
+            {
+                if (IsMatSuitable(mp, p)) { reason = "ok"; return true; }
+                var e = CoverageEnvironment.Sample(_w, p);
+                reason = e.Substrate == CoverageSubstrate.Water ? "underwater" :
+                    e.Moisture < mp.HardMinMoisture ? "too dry here" : "conditions too poor here";
+                return false;
+            }
+        foreach (var lp in _lichenSpecies)
+            if (_lichenSpeciesId[lp.OccSlot] == speciesId)
+            {
+                if (IsLichenSuitable(lp, p)) { reason = "ok"; return true; }
+                var e = CoverageEnvironment.Sample(_w, p);
+                reason = !lp.AllowsSubstrate(e.Substrate) ? "wrong substrate (needs rock, log or stable soil)" : "conditions too poor here";
+                return false;
+            }
+        reason = $"unknown coverage species '{speciesId}'";
+        return false;
+    }
+
+    /// <summary>Seeds a small clump of speciesId centred on p, at seed biomass, filling every suitable
+    /// unoccupied cell within radius (m). Caller must have checked <see cref="CanSeed"/> first.</summary>
+    public void SeedClump(string speciesId, Vec2 center, double radius)
+    {
+        int radiusCells = Math.Max(1, (int)Math.Round(radius / CoverageSpec.CellSize));
+        var (gx0, gz0) = CoverageSpec.CellOf(center);
+
+        foreach (var mp in _matSpecies)
+            if (mp.Name == speciesId)
+            {
+                SeedClumpCells(_w.Coverage.Mat, mp.OccupantId, mp.SeedBiomass, gx0, gz0, radiusCells, q => IsMatSuitable(mp, q));
+                return;
+            }
+        foreach (var lp in _lichenSpecies)
+            if (_lichenSpeciesId[lp.OccSlot] == speciesId)
+            {
+                SeedClumpCells(_w.Coverage.Crust, lp.OccSlot, lp.SeedBiomass, gx0, gz0, radiusCells, q => IsLichenSuitable(lp, q));
+                return;
+            }
+    }
+
+    private void SeedClumpCells(CoverageLayer layer, byte occ, double seedB, int gx0, int gz0, int radiusCells, Func<Vec2, bool> suitable)
+    {
+        byte seedW = (byte)Math.Round(0.6 * 255);
+        for (int dz = -radiusCells; dz <= radiusCells; dz++)
+        for (int dx = -radiusCells; dx <= radiusCells; dx++)
+        {
+            if (dx * dx + dz * dz > radiusCells * radiusCells) continue;
+            int gx = gx0 + dx, gz = gz0 + dz;
+            if (layer.GetOcc(gx, gz) != 0 || !suitable(CellCentre(gx, gz))) continue;
+            layer.SetCell(gx, gz, occ, (float)seedB, seedW, 0, 0, 0, 0);
+        }
+    }
+
+    /// <summary>Clears all coverage cells (any species, or only speciesFilter if given) within radius (m) of center.</summary>
+    public int ClearDisc(Vec2 center, double radius, string? speciesFilter = null)
+    {
+        int radiusCells = Math.Max(1, (int)Math.Round(radius / CoverageSpec.CellSize));
+        var (gx0, gz0) = CoverageSpec.CellOf(center);
+        int cleared = 0;
+        cleared += ClearDiscLayer(_w.Coverage.Mat, gx0, gz0, radiusCells, occ => _matSpeciesId.GetValueOrDefault(occ) is { } id && (speciesFilter == null || id == speciesFilter));
+        cleared += ClearDiscLayer(_w.Coverage.Crust, gx0, gz0, radiusCells, occ => _lichenSpeciesId.GetValueOrDefault(occ) is { } id && (speciesFilter == null || id == speciesFilter));
+        return cleared;
+    }
+
+    private static int ClearDiscLayer(CoverageLayer layer, int gx0, int gz0, int radiusCells, Func<byte, bool> matches)
+    {
+        int cleared = 0;
+        for (int dz = -radiusCells; dz <= radiusCells; dz++)
+        for (int dx = -radiusCells; dx <= radiusCells; dx++)
+        {
+            if (dx * dx + dz * dz > radiusCells * radiusCells) continue;
+            int gx = gx0 + dx, gz = gz0 + dz;
+            byte occ = layer.GetOcc(gx, gz);
+            if (occ == 0 || !matches(occ)) continue;
+            layer.SetCell(gx, gz, 0, 0, 0, 0, 0, 0, 0);
+            cleared++;
+        }
+        return cleared;
+    }
+
     // ------------------------------------------------------------------ queries (stats/catalog, §7, §9)
 
     /// <summary>Resolves an occupied coverage cell to its content species. Occupant slots are local to each

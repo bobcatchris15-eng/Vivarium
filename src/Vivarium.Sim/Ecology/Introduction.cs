@@ -17,10 +17,21 @@ public readonly record struct IntroductionResult(bool Ok, string Message, IReadO
 /// </summary>
 public static class Introduction
 {
+    /// <summary>Radius (m) of a hand-introduced coverage clump: small enough to read as a starter patch, not a preset disc.</summary>
+    public const double CoverageIntroduceRadius = 0.045;
+
     public static IntroductionResult IntroduceFlora(VivariumWorld w, string speciesId, Vec2 p)
     {
         var sp = w.Content.FloraById(speciesId);
         if (sp == null) return IntroductionResult.Fail($"unknown flora species '{speciesId}'");
+        if (sp.IsCoverageSpecies)
+        {
+            if (!w.CoverageSystem.CanSeed(sp.Id, p, out var covReason)) return IntroductionResult.Fail($"{sp.Name} cannot establish here: {covReason}");
+            w.CoverageSystem.SeedClump(sp.Id, p, CoverageIntroduceRadius);
+            w.Tally.Of(sp.Id).Introduced++;
+            Log.Info(LogCategory.Ecology, $"Introduced {sp.Name} clump at {p}.");
+            return new IntroductionResult(true, $"{sp.Name} introduced", Array.Empty<EntityId>());
+        }
         if (!w.FloraSystem.CanEstablish(sp, p, out var reason)) return IntroductionResult.Fail($"{sp.Name} cannot establish here: {reason}");
         var f = w.FloraSystem.Establish(sp, p, "introduced", sp.MaxBiomass * 0.25);
         w.Tally.Of(sp.Id).Introduced++;
