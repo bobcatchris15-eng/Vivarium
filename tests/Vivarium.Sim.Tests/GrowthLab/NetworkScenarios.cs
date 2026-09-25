@@ -197,11 +197,15 @@ public class NetworkScenarios
         var (open, start, end) = BuildMaze();
         var prm = new PlasmodiumParams { InitialMass = 1000, Beta = 0, LambdaF = 0, MaintenanceRate = 0.02 };
         var env = new TestEnv();
-        // A maze covered by a uniformly fed, unstressed sheet has no persistent transport demand. Feed
-        // one end locally; maintenance across the occupied maze provides a physical demand along the route.
+        // A maze covered by a uniformly fed, unstressed sheet has no persistent transport demand. Local
+        // feeding at both endpoints and maintenance over the occupied maze supply pressure gradients through
+        // the actual cytoplasm transport; the network receives no designated source or sink.
         for (int dz = 0; dz < 2; dz++)
             for (int dx = 0; dx < 2; dx++)
+            {
                 env.DetritusMap[(start.Item1 * 2 + dx, start.Item2 * 2 + dz)] = 1e6;
+                env.DetritusMap[(end.Item1 * 2 + dx, end.Item2 * 2 + dz)] = 1e6;
+            }
         var layer = new CoverageLayer(CoverageLayerId.Plasmodium, worldSeed: 33);
         var colony = new PlasmodiumColony(speciesId: 0, prm);
         var attractant = new Attractant(prm);
@@ -241,6 +245,7 @@ public class NetworkScenarios
         var edges = network.SurvivingEdges.Select(e => (e.a, e.b, EdgeLen(e.a, e.b))).ToList();
         double surviving = Dijkstra(start, end, edges);
         Assert.True(edges.Count > 0, "network fully pruned away, no surviving path");
+        Assert.True(edges.Count < groundEdges.Count, "maze sheet did not prune low-flow branches");
         Assert.True(double.IsFinite(surviving), "surviving network no longer connects S to E");
         Assert.True(surviving <= groundTruth * 1.10,
             $"surviving path {surviving} exceeds ground-truth shortest {groundTruth} by more than 10%");

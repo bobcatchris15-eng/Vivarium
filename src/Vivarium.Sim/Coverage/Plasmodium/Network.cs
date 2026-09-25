@@ -185,7 +185,10 @@ public sealed class Network : IPlasmodiumNetwork
             double avgNew = avgOld + (dt / FlowAvgTau) * (meanFlow - avgOld);
             _edgeAvgQ[edgeKey] = avgNew;
 
-            double qPow = Math.Pow(avgNew, 1.8);
+            // Superlinear reinforcement separates sustained trunk flow from low-flow sheet edges. The
+            // prior 1.8 response removed even the direct occupied route between the food patches; a
+            // gentler response keeps that route while low-flow branches still decay below D_min.
+            double qPow = Math.Pow(avgNew, 1.5);
             double fQ = qPow / (1.0 + qPow);
             double dNew = (dOld + dt * QGain * fQ) / (1 + dt * Gamma);
             if (dNew < PruneThreshold) dNew = 0;
