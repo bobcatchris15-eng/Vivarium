@@ -8,6 +8,28 @@ namespace Vivarium.Sim.Tests;
 [Trait("Suite", "Geometry")]
 public class FormTests
 {
+    [Fact]
+    public void MushroomClusterHasGroundedStagesAndIrregularSilhouettes()
+    {
+        var sp = new FloraSpeciesDef { Id = "bonnet_mushroom", Shape = "mushroom_cluster", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var mesh = OrganismMeshes.Flora(sp, seed);
+            Assert.Equal(mesh.DigestHex(), OrganismMeshes.Flora(sp, seed).DigestHex());
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+            Assert.InRange(mesh.TriangleCount, 500, 4500);
+            Assert.InRange(mesh.Bounds().Min.Y, -0.04, 0.02);
+            // Cap profile samples are tagged in UV2.x: buds, open and aged specimens.
+            var stages = Enumerable.Range(0, mesh.VertexCount).Where(i => mesh.UV2[i * 2] >= 1).Select(i => (int)mesh.UV2[i * 2]).Distinct().ToArray();
+            Assert.Contains(1, stages);
+            Assert.Contains(2, stages);
+            Assert.Contains(3, stages);
+            // Rim samples have a measurable uneven vertical silhouette.
+            var rims = Enumerable.Range(0, mesh.VertexCount).Where(i => mesh.UV2[i * 2 + 1] == 1).Select(i => mesh.Position(i).Y).ToArray();
+            Assert.True(rims.Length >= 40 && rims.Max() - rims.Min() > 0.1);
+        }
+    }
     private static readonly double[] Green = { 0.2, 0.6, 0.2 };
     private static readonly double[] LightGreen = { 0.5, 0.8, 0.4 };
 
