@@ -20,7 +20,7 @@ public partial class EnvironmentRig : Node3D
 
     // Pale warm-grey/green humid haze — reads as damp terrarium air, not smoke or mist.
     private static readonly Color HazeFogColor = new(0.78f, 0.80f, 0.74f);
-    private const float HazeFogDensity = 0.012f;
+    private const float HazeFogDensity = 0.02f;
     private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
     private const float UnderwaterFogDensity = 0.18f;
 
