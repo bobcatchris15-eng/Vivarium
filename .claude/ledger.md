@@ -31,7 +31,7 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | g7 | Tero network + fusion | DONE | merged; two_food 1-trunk, maze=BFS, fusion 2->1; 2.4ms/600 nodes (budget relaxed to 3ms Debug). TUNE: retraction leaves lattice chevron shapes |
 | gm-a | vascular groundcovers -> plain plants | COMMITTED on task/gma, merge after p1c | suites PASS; counts unmeasured -> check in next reference |
 | gm-b | monolith | SPLIT | refused SCOPE_TOO_LARGE, no edits |
-| gm-b1 | content mat/lichen blocks + CoverageSystem + seeding + scheduler; flora skips moss/lichen | DISPATCHED wt gmb | — |
+| gm-b1 | content mat/lichen blocks + CoverageSystem + seeding + scheduler; flora skips moss/lichen | WIP COMMITTED task/gmb f56a578 | builds; two-day determinism and seven-species six-day establishment tests pass; remaining integration tests and visual check pending |
 | g8a | slime lifecycle rules + lab | DONE | merged 5d84b4f; starve->migrate->fruit OK; dry sclerotium OK but seed never grows; residue rectangle odd (tune in P3) |
 | g8b | slime_mold off FloraIndividual onto Plasmodium layer (after gm-b chain) | QUEUED | — |
 | gm-b2 | delete colony code + tests + grazing/tools/stats hooks | QUEUED | — |
@@ -79,4 +79,4 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 ## Resume checkpoint (2026-09-25)
 - Main: reduced herb leaf detail from 128 to 72 triangles, retained both faces and nondegenerate geometry, and reduced flower-head size from 0.32 to 0.12 so petals no longer cover the crown. `FormTests` 24/24; `dotnet build game/Vivarium.csproj` clean; reference returned `VIVARIUM_REFERENCE_OK` for 40 scenes. `species_ornamental_herb` now shows a green crown, though its flowers remain visually small. Sim digest matches the earlier p1c capture.
 - `task/gma` is committed in its worktree and awaits integration after the remaining p1c art review.
-- `task/gmb` is still uncommitted coverage integration. It compiles; its 6-bio-day world tests are slow and were stopped before a verdict. Do not merge without a focused test and visual check.
+- `task/gmb` coverage integration is preserved at `f56a578`. It compiles; its two-day determinism and seven-species six-day establishment tests pass. Remaining integration tests and visual check are pending; do not merge yet.
