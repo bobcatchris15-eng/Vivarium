@@ -17,6 +17,8 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | id | outcome | status | last |
 |----|---------|--------|------|
 | c0 | reference mode, perf summary, compare tool, baseline, VALIDATE | DONE | VIVARIUM_REFERENCE_OK 40 scenes; digest repeatable |
+| p1 | S1 kernel + broadleaf migration (docs/overhaul/S1_S2_plan.md) | DISPATCHED sonnet, Mode S on main | — |
+| p2 | S2 CoverageLayer sim: moss/lichen CA + Physarum front + Tero network | PLANNED (after p1) | — |
 
 ## Baseline v0.1.2 (860M, 1600×900, paused sim, 899 flora/300 fauna)
 - fps range 16 (overview, cutaway) – 36; most close scenes 25–30. p95 frame ≈50 ms even at ~30 fps mean (pacing hitch — investigate in S6).
@@ -38,6 +40,8 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 ## Known harness issues
 - Some species_* shots are blocked by nearby foliage (bonnet_mushroom, creeping_groundcover, turkey_tail, dichondra) — `Orbit` only tests opaque props/terrain, not flora. Fix when those species are reworked.
 - No sky scene yet (mixed_depth shows a dark blob in the sky at 0.1.2 — unidentified; check in S5).
+
+- D5 09-25: ~~D1 colony = many FloraIndividual cells~~ superseded — cell instances are intrinsically a field of chips. OBS: colonies/slime read as scattered chips/sticks → DECISION: sim-authoritative sparse 1.5cm CoverageLayer raster (moss/lichen CA, Physarum front + Tero flow-adaptation network) → EFFECT: continuous mats, hierarchical veins emerging from dynamics → TEST: dense_colony, colony_edge, slime_* scenes. Revisit if sim cost > Perf suite budget.
 
 ## Unverified assumptions
 - Worktree seed/cost for Mode P with windowed Probe unmeasured.
