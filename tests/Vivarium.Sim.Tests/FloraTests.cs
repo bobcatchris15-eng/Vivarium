@@ -194,6 +194,24 @@ public class FloraTests
         Assert.False(cressWet.HardRefused);
     }
 
+    [Fact]
+    public void LilyPadOnlyEstablishesWithinItsWaterDepthBand()
+    {
+        var w = TestUtil.FlatWorld();
+        TestUtil.Condition(w, 0.95, 0.5, 0.45);
+        var shallow = new Vec2(-2, -2);
+        var mid = new Vec2(0, 0);
+        var deep = new Vec2(2, 2);
+        TestUtil.Flood(w, shallow, 0.5, 0.02); // below minWaterDepth (0.05)
+        TestUtil.Flood(w, mid, 0.5, 0.2);      // within 0.05..0.4
+        TestUtil.Flood(w, deep, 0.5, 0.6);     // above maxWaterDepth (0.4)
+        TestUtil.Condition(w, 0.95, 0.5, 0.45);
+        var lily = Sp("lily_pad");
+        Assert.True(w.FloraSystem.Suitability(lily, shallow).HardRefused);
+        Assert.False(w.FloraSystem.Suitability(lily, mid).HardRefused);
+        Assert.True(w.FloraSystem.Suitability(lily, deep).HardRefused);
+    }
+
     [Fact] // t-073
     public void OvercrowdingReducesGrowthAndRecruitment()
     {

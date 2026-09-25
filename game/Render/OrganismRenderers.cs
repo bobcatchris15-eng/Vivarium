@@ -169,6 +169,19 @@ public partial class FloraRenderer : Node3D
                 ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
                 : sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
             var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
+            if (sp.Shape == "floatleaf")
+            {
+                // Pads are authored directly in metres (not the unit-XZ-radius-1 convention every other flora
+                // shape uses), so fixing the horizontal scale to 1 keeps pad size constant regardless of the
+                // individual's growth radius or local water depth. Only the vertical scale follows depth: the
+                // petiole/flower stalks are built to reach unit Y = 1, so scaling Y by (surface - ground) + a
+                // small proud offset lands every pad just above the true water surface instead of at a fixed
+                // plant height (or, worse, fractionally submerged and hidden by the water surface shader).
+                r = 1.0;
+                double surface = _w.Water.SurfaceAt(f.Position);
+                double rise = double.IsNaN(surface) ? 0.05 : Math.Max(0.02, surface - pos.Y);
+                h = rise + 0.003;
+            }
             if (Camera is { } camera && !FloraVisible(camera, pos, (float)r, (float)h)) continue;
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
@@ -180,7 +193,7 @@ public partial class FloraRenderer : Node3D
             {
                 yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
             }
-            else if (sp.Archetype == "plant" && sp.Shape != "vine")
+            else if (sp.Archetype == "plant" && sp.Shape != "vine" && sp.Shape != "floatleaf")
             {
                 var fp = f.Position;
                 double e = Math.Max(_w.Grid.CellSize * 0.55, Math.Min(0.35, Math.Max(r, 0.05)));
