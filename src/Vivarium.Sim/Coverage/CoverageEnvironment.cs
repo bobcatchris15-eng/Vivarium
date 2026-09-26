@@ -179,8 +179,31 @@ public static class CoverageEnvironment
 
     // ------------------------------------------------------------------ light
 
-    /// <summary>Base terrain/prop light plus authoritative living-canopy shade from the flora system.</summary>
-    private static double SampleLight(VivariumWorld w, Vec2 p) => w.FloraSystem.EffectiveLight(p);
+    [ThreadStatic] private static List<Flora.FloraIndividual>? _lightBuf;
+
+    /// <summary>
+    /// Structural tree/shrub canopy comes from FloraSystem. The pre-existing low vascular-plant microshade stays
+    /// local to coverage growth so ordinary herbs do not turn every FloraSystem suitability check into a broad
+    /// neighbour scan.
+    /// </summary>
+    private static double SampleLight(VivariumWorld w, Vec2 p)
+    {
+        double light = w.FloraSystem.EffectiveLight(p);
+        double shade = 0;
+        var buf = _lightBuf ??= new List<Flora.FloraIndividual>(16);
+        w.Flora.Neighbours(p, 1.5, buf);
+        foreach (var f in buf)
+        {
+            var sp = w.Content.FloraById(f.SpeciesId);
+            if (sp == null || sp.Archetype != "plant" || sp.Woody != null) continue;
+            double r = f.Radius(sp);
+            if (r <= 1e-6) continue;
+            double d = Vec2.Distance(f.Position, p);
+            if (d >= r) continue;
+            shade += 0.22 * (1 - d / r);
+        }
+        return MathD.Clamp01(light - Math.Min(shade, light));
+    }
 
     // ------------------------------------------------------------------ substrate
 
