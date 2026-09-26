@@ -58,6 +58,22 @@ vec3 rotate_y(vec3 p, float a) {
     return vec3(p.x * c + p.z * s, p.y, -p.x * s + p.z * c);
 }
 
+// Foot trajectory with an authored stance fraction: sweep backward while planted, then recover forward
+// through a lifted swing. This is the core contact-preserving primitive shared by walking families.
+float gait_sweep(float phase01, float duty) {
+    float p = fract(phase01);
+    return p < duty
+        ? mix(1.0, -1.0, p / max(duty, 0.001))
+        : mix(-1.0, 1.0, (p - duty) / max(1.0 - duty, 0.001));
+}
+
+float gait_lift(float phase01, float duty) {
+    float p = fract(phase01);
+    if (p < duty) return 0.0;
+    float swing = (p - duty) / max(1.0 - duty, 0.001);
+    return sin(3.14159265359 * swing);
+}
+
 void vertex() {
     genes = INSTANCE_CUSTOM;
     float packed = genes.w;
@@ -109,21 +125,22 @@ void vertex() {
     // 3: ordinary walking/scuttling. Contralateral phase and a real swing/stance lift instead of universal wriggle.
     else if (anim_family == 3) {
         if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
-            float lp = theta + longitudinal * TAU_ * anim_phase_spread + (side > 0.0 ? PI_ : 0.0);
-            float swing = sin(lp);
-            float lift = max(0.0, cos(lp));
-            off.x += swing * anim_limb_sweep * reach * 0.42 * pose;
+            float lp = cycle + longitudinal * anim_phase_spread + (side > 0.0 ? 0.5 : 0.0);
+            float sweep = gait_sweep(lp, anim_duty_factor);
+            float lift = gait_lift(lp, anim_duty_factor);
+            off.x += sweep * anim_limb_sweep * reach * 0.42 * pose;
             off.y += lift * anim_limb_lift * reach * 0.32 * pose;
             VERTEX = attach + off;
         }
+        VERTEX.z += sin(theta - VERTEX.x * TAU_) * anim_body_wave * 0.010 * pose * body_mask;
         VERTEX.y += abs(sin(theta * 2.0)) * anim_bob * 0.015 * pose;
     }
     // 4: many-legged metachronal walking. Longitudinal phase spread produces the visible leg wave.
     else if (anim_family == 4) {
         if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
-            float lp = theta + longitudinal * TAU_ * anim_phase_spread + (side > 0.0 ? PI_ * 0.6 : 0.0);
-            off.x += sin(lp) * anim_limb_sweep * reach * 0.30 * pose;
-            off.y += max(0.0, cos(lp)) * anim_limb_lift * reach * 0.22 * pose;
+            float lp = cycle + longitudinal * anim_phase_spread + (side > 0.0 ? 0.30 : 0.0);
+            off.x += gait_sweep(lp, anim_duty_factor) * anim_limb_sweep * reach * 0.30 * pose;
+            off.y += gait_lift(lp, anim_duty_factor) * anim_limb_lift * reach * 0.22 * pose;
             VERTEX = attach + off;
         }
         VERTEX.z += sin(theta - VERTEX.x * TAU_) * anim_body_wave * 0.010 * pose;
@@ -160,10 +177,10 @@ void vertex() {
     else if (anim_family == 8) {
         if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
             float fore = smoothstep(-0.05, 0.22, attach.x);
-            float diagonal = side > 0.0 ? PI_ : 0.0;
-            float lp = theta + diagonal + fore * PI_ + longitudinal * TAU_ * anim_phase_spread;
-            off.x += sin(lp) * anim_limb_sweep * reach * 0.46 * pose;
-            off.y += max(0.0, cos(lp)) * anim_limb_lift * reach * 0.28 * pose;
+            float diagonal = side > 0.0 ? 0.5 : 0.0;
+            float lp = cycle + diagonal + fore * 0.5 + longitudinal * anim_phase_spread;
+            off.x += gait_sweep(lp, anim_duty_factor) * anim_limb_sweep * reach * 0.46 * pose;
+            off.y += gait_lift(lp, anim_duty_factor) * anim_limb_lift * reach * 0.28 * pose;
             VERTEX = attach + off;
         }
         VERTEX.z += sin(theta - VERTEX.x * TAU_ * 0.8) * anim_body_wave * 0.020 * pose * body_mask;
