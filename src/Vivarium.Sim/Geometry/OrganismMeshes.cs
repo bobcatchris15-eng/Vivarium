@@ -122,18 +122,8 @@ public static class OrganismMeshes
                 break;
             case "creeper": Creeper(m, rng, seed, c1, c2); break;
             case "reed":
-                for (int k = 0; k < 11; k++)
-                {
-                    double ang = rng.Range(0, 2 * Math.PI), r = rng.Range(0, 0.45);
-                    var baseP = new Vec3(Math.Cos(ang) * r, 0, Math.Sin(ang) * r);
-                    var lean = new Vec3(rng.Range(-0.35, 0.35), 0, rng.Range(-0.35, 0.35));
-                    double h = rng.Range(0.6, 1.0), w = rng.Range(0.03, 0.06);
-                    var side = new Vec3(Math.Cos(ang + Math.PI / 2), 0, Math.Sin(ang + Math.PI / 2));
-                    var tip = baseP + lean * h + new Vec3(0, h, 0);
-                    Primitives.CurvedLeaf(m, baseP + new Vec3(0, 0.015, 0), tip, side, w,
-                        Primitives.Scale(c1, 0.78), c2, camber: rng.Range(0.01, 0.035),
-                        longitudinal: 7, asymmetry: rng.Range(-0.10, 0.10));
-                }
+                if (sp.Id == "ringreed") Ringreed(m, rng, c1, c2);
+                else Glassrush(m, rng, c1, c2);
                 break;
             case "herb":
             {
@@ -419,6 +409,81 @@ public static class OrganismMeshes
     /// scattered across the full mat footprint like the old scattered-leaflet coverage. A handful of larger
     /// "hero" leaves (via the LeafBlade kernel) sit among many cheaper cupped-fan leaflets so the mat reads as
     /// dense and covers the whole footprint within the triangle budget. Youngest leaves are smaller and folded.</summary>
+    // Rush: an uneven basal fan of nearly cylindrical, unjointed stems.
+    // The lateral brown heads sit slightly below the green extending stem tip.
+    private static void Glassrush(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        int count = 15 + rng.NextInt(5);
+        for (int k = 0; k < count; k++)
+        {
+            double angle = rng.Range(0, Math.PI * 2);
+            double radius = Math.Sqrt(rng.NextDouble()) * 0.20;
+            var foot = new Vec3(Math.Cos(angle) * radius, -0.025, Math.Sin(angle) * radius);
+            var sway = new Vec3(Math.Cos(angle), 0, Math.Sin(angle)) * rng.Range(0.07, 0.31);
+            double height = rng.Range(0.56, 1.0);
+            var mid = foot + new Vec3(0, height * 0.57, 0) + sway * 0.32;
+            var tip = foot + new Vec3(0, height, 0) + sway;
+            var green = Primitives.Mix(c1, c2, rng.Range(0.12, 0.38));
+            Primitives.Tube(m, new[] { foot, mid, tip }, new[] { 0.023, 0.018, 0.004 }, 5,
+                (i, v) => (Primitives.Mix(Primitives.Scale(green, 0.67), green, i / 2.0), 1, i, v, 0, 0));
+            if (k % 3 != 0)
+            {
+                var head = Vec3.Lerp(mid, tip, rng.Range(0.66, 0.83));
+                var headDir = new Vec3(Math.Cos(angle + 1.2), 0.34, Math.Sin(angle + 1.2)).Normalized();
+                var seedCol = new[] { 0.38, 0.29, 0.17 };
+                for (int j = 0; j < 3; j++)
+                {
+                    var baseP = head + headDir * (0.026 * j);
+                    var end = baseP + headDir * rng.Range(0.07, 0.11) + Vec3.Up * rng.Range(-0.016, 0.016);
+                    Primitives.Tube(m, new[] { baseP, end }, new[] { 0.012, 0.003 }, 4,
+                        (i, v) => (Primitives.Mix(seedCol, c2, 0.08), 1, i, v, 0, 0));
+                }
+            }
+        }
+    }
+
+    // Ringreed: segmented horsetail-like stalks with dark joint collars and
+    // fine branch whorls. The repeated nodes make its silhouette distinct.
+    private static void Ringreed(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        int count = 9 + rng.NextInt(4);
+        for (int k = 0; k < count; k++)
+        {
+            double angle = rng.Range(0, Math.PI * 2);
+            var foot = new Vec3(Math.Cos(angle), 0, Math.Sin(angle)) * rng.Range(0.0, 0.32);
+            var sway = new Vec3(Math.Cos(angle), 0, Math.Sin(angle)) * rng.Range(0.04, 0.21);
+            double height = rng.Range(0.63, 1.0);
+            var joints = new Vec3[6];
+            var radii = new double[6];
+            for (int j = 0; j < joints.Length; j++)
+            {
+                double t = j / 5.0;
+                joints[j] = foot + sway * (t * t) + Vec3.Up * (height * t);
+                radii[j] = 0.031 * (1 - t * 0.68);
+            }
+            var green = Primitives.Mix(c1, c2, rng.Range(0.1, 0.4));
+            Primitives.Tube(m, joints, radii, 6,
+                (i, v) => (Primitives.Scale(green, i % 2 == 0 ? 0.75 : 1.02), 1, i, v, 0, 0));
+            for (int j = 1; j < 5; j++)
+            {
+                var collar = joints[j];
+                Primitives.Tube(m, new[] { collar - Vec3.Up * 0.012, collar + Vec3.Up * 0.012 },
+                    new[] { radii[j] * 1.2, radii[j] * 1.15 }, 7,
+                    (i, v) => (Primitives.Scale(c1, 0.56), 1, i, v, 0, 0));
+                int whorl = 5 + rng.NextInt(3);
+                for (int b = 0; b < whorl; b++)
+                {
+                    double a = b * Math.PI * 2 / whorl + angle + j * 0.37;
+                    var radial = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                    double reach = rng.Range(0.13, 0.23) * (1 - j * 0.09);
+                    var end = collar + radial * reach + Vec3.Up * rng.Range(0.015, 0.05);
+                    Primitives.Tube(m, new[] { collar, collar + radial * reach * 0.48 + Vec3.Up * 0.035, end },
+                        new[] { 0.006, 0.004, 0.001 }, 4,
+                        (i, v) => (Primitives.Mix(c1, c2, 0.36), 1, i, v, 0, 0));
+                }
+            }
+        }
+    }
     private static void RoundLeaf(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
     {
         int nHero = 3 + rng.NextInt(4);   // 3..6 larger kernel-built leaves for close-up detail
@@ -1355,19 +1420,42 @@ public static class OrganismMeshes
     {
         bool broad = kind == 1;
         int branches = kind == 2 ? 8 : broad ? 6 : 8;
-        var trunk = TreeBole(m, rng, broad ? 0.11 : kind == 2 ? 0.083 : 0.075,
-            broad ? 0.80 : 0.95, broad ? 0.045 : 0.07);
+        // Only fenneedle keeps an uninterrupted central leader. Broadleaf boles
+        // end at a fork; ascending scaffolds carry the height of the crown.
+        double forkHeight = broad ? 0.23 : kind == 2 ? 0.43 : 0.34;
+        double boleRadius = broad ? 0.11 : kind == 2 ? 0.083 : 0.075;
+        var trunk = TreeBole(m, rng, boleRadius, forkHeight, broad ? 0.025 : 0.045);
         double phase = rng.Range(0, Math.PI * 2);
+        int leaders = broad ? 4 : kind == 2 ? 3 : 2;
+        var leaderTips = new Vec3[leaders];
+        var leaderRoots = new Vec3[leaders];
+        var leaderControls = new Vec3[leaders];
+        for (int leader = 0; leader < leaders; leader++)
+        {
+            double a = phase + leader * Math.PI * 2 / leaders + rng.Range(-0.24, 0.24);
+            var radial = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+            var root = Along(trunk, broad ? 0.70 + leader * 0.07 : 0.81 + leader * 0.05);
+            double spread = broad ? rng.Range(0.36, 0.55) : kind == 2
+                ? rng.Range(0.26, 0.42) : rng.Range(0.28, 0.49);
+            var tip = root + radial * spread + Vec3.Up *
+                (broad ? rng.Range(0.43, 0.55) : kind == 2 ? rng.Range(0.51, 0.66) : rng.Range(0.53, 0.68));
+            var control = root + radial * (spread * 0.30) + Vec3.Up * (tip.Y - root.Y) * 0.53;
+            WoodyCurve(m, root, control, tip, boleRadius * (broad ? 0.53 : 0.45), 5);
+            leaderRoots[leader] = root;
+            leaderControls[leader] = control;
+            leaderTips[leader] = tip;
+        }
         for (int k = 0; k < branches; k++)
         {
             double fraction = k / (double)(branches - 1);
             double angle = phase + k * 2.39996 + rng.Range(-0.3, 0.3);
             var radial = new Vec3(Math.Cos(angle), 0, Math.Sin(angle));
             var sideways = radial.Cross(Vec3.Up);
-            double stemT = (broad ? 0.38 : kind == 2 ? 0.48 : 0.35) + fraction * (broad ? 0.35 : 0.42);
-            var root = Along(trunk, stemT);
-            double length = rng.Range(0.49, broad ? 0.72 : 0.66) * (1 - fraction * 0.27);
-            var tip = root + radial * length + Vec3.Up * (broad ? rng.Range(0.13, 0.22) : rng.Range(0.16, 0.27));
+            int parent = k % leaders;
+            double stemT = 0.31 + fraction * 0.56;
+            var root = Curve(leaderRoots[parent], leaderControls[parent], leaderTips[parent], stemT);
+            double length = rng.Range(0.29, broad ? 0.47 : 0.42) * (1 - fraction * 0.18);
+            var tip = root + radial * length + Vec3.Up * (broad ? rng.Range(0.02, 0.10) : rng.Range(0.08, 0.19));
             var control = root + radial * (length * 0.40) + Vec3.Up * (broad ? 0.20 : 0.18)
                 + sideways * rng.Range(-0.06, 0.06);
             WoodyCurve(m, root, control, tip, broad ? 0.039 : 0.026, 4);
@@ -1386,12 +1474,12 @@ public static class OrganismMeshes
             }
         }
         // Leader foliage closes the top without an opaque canopy volume.
-        var crown = trunk[^1];
-        for (int j = 0; j < 2; j++)
+        for (int j = 0; j < leaders; j++)
         {
-            double a = phase + j * 2.9;
-            var end = crown + new Vec3(Math.Cos(a) * 0.20, broad ? 0.04 : -0.015, Math.Sin(a) * 0.20);
-            LeafSpray(m, rng, trunk[^2], crown, end, broad ? 0.26 : 0.19,
+            double a = phase + j * Math.PI * 2 / leaders;
+            var crown = leaderTips[j];
+            var end = crown + new Vec3(Math.Cos(a) * 0.15, broad ? -0.035 : 0.045, Math.Sin(a) * 0.15);
+            LeafSpray(m, rng, leaderControls[j], crown, end, broad ? 0.26 : 0.19,
                 broad ? 0.47 : 0.30, 4, c1, c2, broad);
         }
     }
@@ -1405,43 +1493,61 @@ public static class OrganismMeshes
     {
         var trunk = TreeBole(m, rng, 0.067, 1.0, 0.025);
         double phase = rng.Range(0, Math.PI * 2);
-        for (int tier = 0; tier < 6; tier++)
+        for (int tier = 0; tier < 7; tier++)
         {
-            int branches = tier < 3 ? 5 : 4;
-            double height = 0.24 + tier * 0.12;
+            int branches = tier < 4 ? 5 : 4;
+            double height = 0.20 + tier * 0.115;
             for (int b = 0; b < branches; b++)
             {
                 double angle = phase + b * Math.PI * 2 / branches + tier * 0.81 + rng.Range(-0.19, 0.19);
                 var radial = new Vec3(Math.Cos(angle), 0, Math.Sin(angle));
                 var side = radial.Cross(Vec3.Up);
-                double reach = (0.63 - tier * 0.072) * rng.Range(0.82, 1.10);
+                double reach = (0.67 - tier * 0.070) * rng.Range(0.82, 1.10);
                 var root = new Vec3(trunk[3].X, height + rng.Range(-0.017, 0.017), trunk[3].Z);
                 var tip = root + radial * reach + Vec3.Up * rng.Range(0.025, 0.07);
                 var control = root + radial * (reach * 0.48) - Vec3.Up * 0.035;
                 WoodyCurve(m, root, control, tip, 0.018 * (1 - tier * 0.085), 3);
-                for (int shoot = 0; shoot < 6; shoot++)
+                for (int shoot = 0; shoot < 8; shoot++)
                 {
-                    double t = 0.25 + (shoot / 2) * 0.29;
+                    double t = 0.18 + (shoot / 2) * 0.22;
                     double sign = shoot % 2 == 0 ? -1 : 1;
                     var attach = Curve(root, control, tip, t);
                     var outward = (radial * 0.60 + side * sign).Normalized();
-                    double len = (0.20 - tier * 0.012) * rng.Range(0.82, 1.15);
-                    var end = attach + outward * len + Vec3.Up * rng.Range(-0.04, 0.02);
-                    var bend = (attach + end) * 0.5 + Vec3.Up * 0.025;
+                    double len = (0.22 - tier * 0.011) * rng.Range(0.82, 1.15);
+                    var end = attach + outward * len + Vec3.Up * rng.Range(-0.105, -0.035);
+                    var bend = (attach + end) * 0.5 + Vec3.Up * 0.018;
                     WoodyCurve(m, attach, bend, end, 0.005, 2);
                     var cross = outward.Cross(Vec3.Up).Normalized();
-                    for (int needle = 0; needle < 14; needle++)
+                    for (int needle = 0; needle < 16; needle++)
                     {
-                        double nt = 0.10 + 0.87 * needle / 13.0;
+                        double nt = 0.10 + 0.87 * needle / 15.0;
                         var node = Curve(attach, bend, end, nt);
                         double rotation = needle * 2.39996;
                         var flare = cross * Math.Cos(rotation) + Vec3.Up * Math.Sin(rotation) * 0.58;
                         var dir = (outward * 0.46 + flare).Normalized();
-                        double needleLength = rng.Range(0.065, 0.105) * (1 - 0.36 * nt);
+                        double needleLength = rng.Range(0.072, 0.112) * (1 - 0.36 * nt);
                         var color = Primitives.Mix(c1, c2, rng.Range(0.10, 0.38));
                         FoliageBlade.Build(m, node, node + dir * needleLength, dir.Cross(Vec3.Up),
-                            needleLength * 0.105, Primitives.Scale(color, 0.78), color,
+                            needleLength * 0.13, Primitives.Scale(color, 0.78), color,
                             camber: 0.10, curl: 0.14, shoulder: 1, segments: 2);
+                    }
+                }
+                // Older wood carries little short shoots with radiating soft needle
+                // tufts, rather than only needles on the elongated branchlets.
+                for (int spur = 0; spur < 4; spur++)
+                {
+                    double t = 0.18 + spur * 0.18;
+                    var node = Curve(root, control, tip, t);
+                    var spurColor = Primitives.Mix(c1, c2, rng.Range(0.20, 0.45));
+                    for (int n = 0; n < 7; n++)
+                    {
+                        double a = n * Math.PI * 2 / 7 + spur * 0.47;
+                        var dir = (side * Math.Cos(a) + Vec3.Up * Math.Sin(a) * 0.65
+                            + radial * 0.25).Normalized();
+                        double length = rng.Range(0.052, 0.079);
+                        FoliageBlade.Build(m, node, node + dir * length, dir.Cross(radial),
+                            length * 0.13, Primitives.Scale(spurColor, 0.76), spurColor,
+                            camber: 0.08, curl: 0.12, shoulder: 1, segments: 2);
                     }
                 }
             }
