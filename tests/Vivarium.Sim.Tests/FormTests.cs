@@ -280,6 +280,20 @@ public class FormTests
     }
 
     [Fact]
+    public void VineBladesAreDeterministicCurvedMeshesWithinBudget()
+    {
+        var sp = new FloraSpeciesDef { Id = "spiralvine", Shape = "vine", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 3; seed++)
+        {
+            var mesh = OrganismMeshes.Flora(sp, seed);
+            Assert.Equal(mesh.DigestHex(), OrganismMeshes.Flora(sp, seed).DigestHex());
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+            Assert.InRange(mesh.TriangleCount, 10000, 19000);
+        }
+    }
+
+    [Fact]
     public void CreeperHasNoLargeFlatDiscsAndSpansExpectedFootprint()
     {
         // Regression: the old shape was a handful of near-vertical, wide flat fans (a "disc" reads as many
