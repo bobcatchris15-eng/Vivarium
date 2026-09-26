@@ -36,13 +36,14 @@ reintroduce it from the catalog.
 
 ## What's in the ecosystem
 
-**Flora (22).**
+**Flora (28).**
 - **Mosses:** carpet, cushion and bank moss, plus Sphagnum.
 - **Lichens:** crust, leafy and reindeer lichen.
 - **Groundcovers:**
   - Dry ground: dichondra, clover, carpobrotus and stonecrop.
   - Wet ground: creeping pennywort, creeping fig, watercress and bacopa.
 - **Taller plants:** maidenhair fern, blue fescue, dwarf rush and starflower.
+- **Trees & shrubs:** black locust, catalpa, tamarack, cottonwood and staghorn sumac. Tree recruitment shares an island-wide carrying limit of roughly one tree per 15 m²; shrubs use a looser structural budget.
 - **Fungi and slime mold:** bonnet mushrooms, turkey tail and a many-headed slime mold.
 
 **Fauna (7).** Springtails, pill bugs, silverfish and darkling beetles on land. Cherry shrimp, triops and
@@ -152,6 +153,7 @@ Species are data. Most additions need only a JSON file.
    - `growth` and `spread`.
    - `colony`, if it should grow as an edge-budding mat, with a colour palette and a random or banded pattern.
    - `visual`: shape, colours and height.
+   - `woody`, for trees/shrubs: structural layer, canopy radius, shade opacity and same-layer spacing.
 2. Register it in `game/content/index.json`, and add it to the presets in `game/content/presets/` if it should
    appear in new worlds.
 3. Give it a place in the food web by adding it to a grazer's diet in `game/content/fauna/*.json`.
