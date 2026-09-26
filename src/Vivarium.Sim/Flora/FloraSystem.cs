@@ -391,7 +391,8 @@ public sealed class FloraSystem
             _colonialTotal++;
         }
         // Tree/shrub biomass changed during this step; rebuild derived shade lazily on the next light sample.
-        _canopyShadeDirty = true;
+        // Empty fixture worlds keep their all-zero canopy cache indefinitely instead of clearing the whole grid.
+        if (_woodyCanopy.Count > 0) _canopyShadeDirty = true;
     }
 
     /// <summary>
