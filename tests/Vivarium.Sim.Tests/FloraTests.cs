@@ -502,6 +502,51 @@ public class FloraTests
         Assert.True(w.FloraSystem.CanEstablish(Sp("clover"), p, out var why), why);
     }
 
+    [Fact]
+    public void WoodyPlantsUseSharedAreaBasedPopulationBudgets()
+    {
+        var w = TestUtil.FlatWorld(51);
+        TestUtil.Condition(w, 0.55, 0.6, 1.0);
+        Assert.Equal(4, w.FloraSystem.WoodyPopulationCap(WoodyLayer.Tree));   // 10 m hex ≈ 65 m² / 15
+        Assert.Equal(16, w.FloraSystem.WoodyPopulationCap(WoodyLayer.Shrub));
+
+        var tree = Sp("black_locust");
+        foreach (double x in new[] { -3.0, -1.0, 1.0, 3.0 })
+            w.FloraSystem.Establish(tree, new Vec2(x, 0), "budget fixture", tree.MaxBiomass);
+        Assert.Equal(4, w.FloraSystem.WoodyPopulation(WoodyLayer.Tree));
+        Assert.False(w.FloraSystem.CanEstablish(Sp("catalpa"), new Vec2(0, 2.5), out var why));
+        Assert.Contains("carrying limit", why);
+    }
+
+    [Fact]
+    public void WoodySpacingPreventsTreePilesWithoutGroundcoverBlockingRecruitment()
+    {
+        var w = TestUtil.FlatWorld(52);
+        TestUtil.Condition(w, 0.62, 0.7, 1.0);
+        var locust = Sp("black_locust");
+        w.FloraSystem.Establish(locust, Vec2.Zero, "fixture", locust.MaxBiomass);
+        Assert.False(w.FloraSystem.CanEstablish(Sp("catalpa"), new Vec2(0.6, 0), out var why));
+        Assert.Contains("too close", why);
+        Assert.True(w.FloraSystem.CanEstablish(Sp("catalpa"), new Vec2(2.2, 0), out why), why);
+    }
+
+    [Fact]
+    public void MatureTreeCanopyShadesFloraCoverageAndAquaticLightPath()
+    {
+        var w = TestUtil.FlatWorld(53);
+        TestUtil.Condition(w, 0.65, 0.7, 1.0);
+        var catalpa = Sp("catalpa");
+        w.FloraSystem.Establish(catalpa, Vec2.Zero, "fixture", catalpa.MaxBiomass);
+
+        double under = w.FloraSystem.EffectiveLight(new Vec2(0.1, 0));
+        double open = w.FloraSystem.EffectiveLight(new Vec2(3.5, 0));
+        Assert.True(under < open - 0.45, $"catalpa shade should be strong: under={under:0.00}, open={open:0.00}");
+        Assert.Equal(under, Coverage.CoverageEnvironment.Sample(w, new Vec2(0.1, 0)).Light, 10);
+
+        foreach (var id in new[] { "black_locust", "catalpa", "tamarack", "cottonwood", "staghorn_sumac" })
+            Assert.True(OrganismMeshes.Flora(Sp(id)).TriangleCount > 100, $"{id} should have a structural procedural mesh");
+    }
+
     [Fact(Skip = "carpet_moss now grows on the Mat coverage layer, not as FloraIndividuals/colony (docs/overhaul/growth_models.md §4); see CoverageSystemTests.")] // colony-edge growth: rim buds, interior thickens
     public void ColonyGrowsAtRimOnlyAndInteriorHeightRises()
     {
