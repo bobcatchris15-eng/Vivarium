@@ -1247,10 +1247,51 @@ public static class OrganismMeshes
 
     private static void FoliageClump(MeshData m, Vec3 centre, Vec3 radii, Rng rng, double[] c1, double[] c2)
     {
-        var a = Primitives.Mix(c1, c2, rng.Range(0.1, 0.55));
-        var b = Primitives.Mix(c1, c2, rng.Range(0.45, 0.9));
-        Primitives.Ellipsoid(m, centre, radii, 5, 10,
-            (u, v) => (Primitives.Mix(a, b, 0.25 + 0.55 * u), 1, u, v, 0, 1));
+        // Crown volume is made from overlapping real blade geometry rather than an opaque green ellipsoid.
+        // At Vivarium scale this keeps nearby trees leafy while the aggregate still reads as a coherent crown.
+        double horizontal = Math.Max(radii.X, radii.Z);
+        int leaves = 10 + (int)Math.Round(horizontal * 18);
+        for (int k = 0; k < leaves; k++)
+        {
+            double ang = rng.Range(0, 2 * Math.PI);
+            double rr = Math.Sqrt(rng.NextDouble()) * 0.92;
+            var root = centre + new Vec3(
+                Math.Cos(ang) * radii.X * rr,
+                rng.Range(-0.78, 0.78) * radii.Y,
+                Math.Sin(ang) * radii.Z * rr);
+            var dir = new Vec3(
+                Math.Cos(ang) * rng.Range(0.65, 1.0),
+                rng.Range(-0.2, 0.35),
+                Math.Sin(ang) * rng.Range(0.65, 1.0)).Normalized();
+            var side = dir.Cross(Vec3.Up);
+            if (side.LengthSq < 1e-8) side = new Vec3(1, 0, 0);
+            double len = horizontal * rng.Range(0.42, 0.7);
+            var col = Primitives.Mix(c1, c2, rng.Range(0.08, 0.92));
+            Primitives.CurvedLeaf(m, root, root + dir * len, side, len * rng.Range(0.20, 0.31),
+                Primitives.Scale(col, 0.82), col, camber: len * rng.Range(0.06, 0.12),
+                longitudinal: 4, asymmetry: rng.Range(-0.16, 0.16));
+        }
+    }
+
+    private static void NeedleTuft(MeshData m, Vec3 centre, Vec3 radii, Rng rng, double[] c1, double[] c2)
+    {
+        int needles = 11;
+        for (int k = 0; k < needles; k++)
+        {
+            double ang = 2 * Math.PI * k / needles + rng.Range(-0.16, 0.16);
+            var root = centre + new Vec3(
+                Math.Cos(ang) * radii.X * rng.Range(0.1, 0.65),
+                rng.Range(-0.5, 0.5) * radii.Y,
+                Math.Sin(ang) * radii.Z * rng.Range(0.1, 0.65));
+            var dir = new Vec3(Math.Cos(ang), rng.Range(-0.08, 0.16), Math.Sin(ang)).Normalized();
+            double len = rng.Range(0.055, 0.09);
+            var side = dir.Cross(Vec3.Up);
+            if (side.LengthSq < 1e-8) side = new Vec3(1, 0, 0);
+            var col = Primitives.Mix(c1, c2, rng.Range(0.15, 0.85));
+            Primitives.CurvedLeaf(m, root, root + dir * len, side, rng.Range(0.004, 0.008),
+                Primitives.Scale(col, 0.82), col, camber: 0.0025, longitudinal: 3,
+                asymmetry: rng.Range(-0.05, 0.05));
+        }
     }
 
     /// <summary>Open, irregular crown with many small compound-leaf masses and visible branch structure.</summary>
@@ -1258,7 +1299,7 @@ public static class OrganismMeshes
     {
         var trunk = new[] { new Vec3(0, 0, 0), new Vec3(0.02, 0.34, -0.01), new Vec3(-0.015, 0.68, 0.02), new Vec3(0, 0.9, 0) };
         Primitives.Tube(m, trunk, new[] { 0.11, 0.09, 0.055, 0.018 }, 8,
-            (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 3.0), 1, i, v, 0, 0));
+            (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 3.0), 1, i, v, 2, 0));
         for (int k = 0; k < 8; k++)
         {
             double y = 0.35 + 0.055 * k + rng.Range(-0.025, 0.025);
@@ -1268,7 +1309,7 @@ public static class OrganismMeshes
             var mid = root + new Vec3(Math.Cos(ang) * len * 0.45, len * 0.22, Math.Sin(ang) * len * 0.45);
             var tip = root + new Vec3(Math.Cos(ang) * len, len * 0.34, Math.Sin(ang) * len);
             Primitives.Tube(m, new[] { root, mid, tip }, new[] { 0.032, 0.022, 0.008 }, 6,
-                (i, v) => (WoodyBarkLight, 1, i, v, 0, 0));
+                (i, v) => (WoodyBarkLight, 1, i, v, 2, 0));
             FoliageClump(m, tip, new Vec3(rng.Range(0.18, 0.27), rng.Range(0.11, 0.18), rng.Range(0.16, 0.24)), rng, c1, c2);
             if (k % 2 == 0)
                 FoliageClump(m, (mid + tip) * 0.5 + new Vec3(0, 0.05, 0),
@@ -1281,7 +1322,7 @@ public static class OrganismMeshes
     {
         var trunk = new[] { new Vec3(0, 0, 0), new Vec3(0.01, 0.30, 0), new Vec3(-0.02, 0.54, 0.01), new Vec3(0, 0.68, 0) };
         Primitives.Tube(m, trunk, new[] { 0.14, 0.12, 0.085, 0.035 }, 9,
-            (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 3.0), 1, i, v, 0, 0));
+            (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 3.0), 1, i, v, 2, 0));
         for (int k = 0; k < 6; k++)
         {
             double ang = 2 * Math.PI * k / 6 + rng.Range(-0.22, 0.22);
@@ -1289,7 +1330,7 @@ public static class OrganismMeshes
             var root = new Vec3(0, rng.Range(0.43, 0.62), 0);
             var tip = root + new Vec3(Math.Cos(ang) * len, rng.Range(0.18, 0.34), Math.Sin(ang) * len);
             Primitives.Tube(m, new[] { root, (root + tip) * 0.5 + new Vec3(0, 0.07, 0), tip },
-                new[] { 0.045, 0.027, 0.009 }, 6, (i, v) => (WoodyBarkLight, 1, i, v, 0, 0));
+                new[] { 0.045, 0.027, 0.009 }, 6, (i, v) => (WoodyBarkLight, 1, i, v, 2, 0));
             FoliageClump(m, tip, new Vec3(0.34, 0.19, 0.31), rng, c1, c2);
             for (int j = 0; j < 3; j++)
             {
@@ -1308,7 +1349,7 @@ public static class OrganismMeshes
     private static void TreeTamarack(MeshData m, Rng rng, double[] c1, double[] c2)
     {
         Primitives.Tube(m, new[] { new Vec3(0, 0, 0), new Vec3(0.01, 0.52, 0), new Vec3(-0.01, 1.0, 0) },
-            new[] { 0.09, 0.055, 0.008 }, 8, (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 2.0), 1, i, v, 0, 0));
+            new[] { 0.09, 0.055, 0.008 }, 8, (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 2.0), 1, i, v, 2, 0));
         for (int ring = 0; ring < 6; ring++)
         {
             double y = 0.24 + ring * 0.115;
@@ -1320,16 +1361,16 @@ public static class OrganismMeshes
                 var root = new Vec3(0, y, 0);
                 var tip = root + new Vec3(Math.Cos(ang) * len, rng.Range(-0.015, 0.055), Math.Sin(ang) * len);
                 Primitives.Tube(m, new[] { root, tip }, new[] { 0.018, 0.004 }, 6,
-                    (i, v) => (WoodyBarkLight, 1, i, v, 0, 0));
+                    (i, v) => (WoodyBarkLight, 1, i, v, 2, 0));
                 for (int j = 1; j <= 3; j++)
                 {
                     double t = j / 3.0;
                     var p = root + (tip - root) * t + new Vec3(0, rng.Range(0.0, 0.035), 0);
-                    FoliageClump(m, p, new Vec3(0.15 * (1 - 0.12 * j), 0.055, 0.095), rng, c1, c2);
+                    NeedleTuft(m, p, new Vec3(0.15 * (1 - 0.12 * j), 0.055, 0.095), rng, c1, c2);
                 }
             }
         }
-        FoliageClump(m, new Vec3(0, 0.94, 0), new Vec3(0.17, 0.10, 0.17), rng, c1, c2);
+        NeedleTuft(m, new Vec3(0, 0.94, 0), new Vec3(0.17, 0.10, 0.17), rng, c1, c2);
     }
 
     /// <summary>Tall fast pioneer with an ascending scaffold and an irregular, airy oval crown.</summary>
@@ -1337,7 +1378,7 @@ public static class OrganismMeshes
     {
         Primitives.Tube(m, new[] { new Vec3(0, 0, 0), new Vec3(-0.015, 0.38, 0.01), new Vec3(0.018, 0.72, -0.01), new Vec3(0, 0.98, 0) },
             new[] { 0.12, 0.095, 0.052, 0.012 }, 9,
-            (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 3.0), 1, i, v, 0, 0));
+            (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 3.0), 1, i, v, 2, 0));
         for (int k = 0; k < 9; k++)
         {
             double ang = k * 2.18 + rng.Range(-0.22, 0.22);
@@ -1346,7 +1387,7 @@ public static class OrganismMeshes
             var root = new Vec3(0, y, 0);
             var tip = root + new Vec3(Math.Cos(ang) * len, rng.Range(0.2, 0.42), Math.Sin(ang) * len);
             Primitives.Tube(m, new[] { root, (root + tip) * 0.52 + new Vec3(0, 0.08, 0), tip },
-                new[] { 0.038, 0.021, 0.006 }, 6, (i, v) => (WoodyBarkLight, 1, i, v, 0, 0));
+                new[] { 0.038, 0.021, 0.006 }, 6, (i, v) => (WoodyBarkLight, 1, i, v, 2, 0));
             FoliageClump(m, tip, new Vec3(rng.Range(0.24, 0.34), rng.Range(0.16, 0.24), rng.Range(0.22, 0.31)), rng, c1, c2);
         }
         FoliageClump(m, new Vec3(0.02, 0.91, 0), new Vec3(0.34, 0.22, 0.31), rng, c1, c2);
@@ -1364,7 +1405,7 @@ public static class OrganismMeshes
             var root = new Vec3(Math.Cos(ang) * spread * 0.25, 0, Math.Sin(ang) * spread * 0.25);
             var top = new Vec3(Math.Cos(ang) * spread, rng.Range(0.68, 0.96), Math.Sin(ang) * spread);
             Primitives.Tube(m, new[] { root, (root + top) * 0.52 + new Vec3(rng.Range(-0.04, 0.04), 0.04, rng.Range(-0.04, 0.04)), top },
-                new[] { 0.035, 0.025, 0.012 }, 6, (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, 0.45), 1, i, v, 0, 0));
+                new[] { 0.035, 0.025, 0.012 }, 6, (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, 0.45), 1, i, v, 2, 0));
             for (int pair = 0; pair < 5; pair++)
             {
                 double t = 0.38 + pair * 0.105;
