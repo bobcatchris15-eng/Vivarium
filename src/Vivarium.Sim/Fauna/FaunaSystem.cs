@@ -59,10 +59,10 @@ public sealed class FaunaSystem
         if (sp.Flies)
         {
             var groundSub = sub == Substrate.Water ? Substrate.Soil : sub;
-            double aff = sp.SubstrateAffinity.GetValueOrDefault(groundSub);
-            double score = aff * sp.Moisture.Eval(moisture);
-            if (depth > sp.MaxWaterDepth) score *= 0.75; // crossing water is allowed; lingering there is merely suboptimal
-            return new FaunaSuitability { Score = MathD.Clamp01(score), WaterDepth = depth, Moisture = moisture, Substrate = sub };
+            double flightAffinity = sp.SubstrateAffinity.GetValueOrDefault(groundSub);
+            double flightScore = flightAffinity * sp.Moisture.Eval(moisture);
+            if (depth > sp.MaxWaterDepth) flightScore *= 0.75; // crossing water is allowed; lingering there is merely suboptimal
+            return new FaunaSuitability { Score = MathD.Clamp01(flightScore), WaterDepth = depth, Moisture = moisture, Substrate = sub };
         }
         if (sp.Medium == Medium.Aquatic)
         {
