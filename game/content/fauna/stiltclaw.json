@@ -98,7 +98,22 @@
       0.68,
       0.43,
       0.22
-    ]
+    ],
+    "animation": {
+      "family": "walk",
+      "cyclesPerBody": 1,
+      "idleHz": 0,
+      "maxHz": 8,
+      "fullSpeed": 4,
+      "idleMotion": 0,
+      "amplitude": 1,
+      "bodyWave": 0.08,
+      "limbSweep": 0.85,
+      "limbLift": 0.55,
+      "bob": 0.06,
+      "phaseSpread": 0.45,
+      "dutyFactor": 0.58
+    }
   },
   "behaviors": []
 }
