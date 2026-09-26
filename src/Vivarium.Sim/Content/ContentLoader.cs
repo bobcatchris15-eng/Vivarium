@@ -276,13 +276,13 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen");
+        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
         string placementGroupId = n.Str("placementGroup");
         if (!FloraPlacementGroups.TryParse(placementGroupId, out var placementGroup))
-            n["placementGroup"].Error("expected moss_lichen | terrestrial | waterside_aquatic | decomposer");
+            n["placementGroup"].Error("expected moss_lichen | terrestrial | waterside_aquatic | decomposer | woody");
         var h = n.Req("habitat");
         h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "minWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
         string feeds = h.Str("feeds", "nutrients");
@@ -423,6 +423,26 @@ public static class ContentLoader
                 EdenNoiseExponent = lc.Num("edenNoise", 1.0, 0.1, 10),
             };
         }
+        WoodyDef? woody = null;
+        if (n.Has("woody"))
+        {
+            var wd = n["woody"];
+            wd.RejectUnknown("layer", "canopyRadius", "shadeOpacity", "minSpacing");
+            string layer = wd.Str("layer");
+            if (layer is not ("tree" or "shrub")) wd["layer"].Error("expected tree | shrub");
+            woody = new WoodyDef
+            {
+                Layer = layer == "tree" ? WoodyLayer.Tree : WoodyLayer.Shrub,
+                CanopyRadius = wd.Num("canopyRadius", min: 0.1, max: 5),
+                ShadeOpacity = wd.Num("shadeOpacity", min: 0, max: 0.95),
+                MinSpacing = wd.Num("minSpacing", min: 0.05, max: 6),
+            };
+            if (arch != "plant") wd.Error("woody flora must use archetype 'plant'");
+            if (placementGroup != FloraPlacementGroup.Woody) wd.Error("woody flora must use placementGroup 'woody'");
+        }
+        else if (placementGroup == FloraPlacementGroup.Woody)
+            n["placementGroup"].Error("placementGroup 'woody' requires a woody block");
+
         var col = v.Color("color");
         var def = new FloraSpeciesDef
         {
@@ -439,13 +459,14 @@ public static class ContentLoader
             SpreadMinBiomassFraction = s.Num("minBiomassFraction", 0.5, 0, 1),
             CompetitionRadius = c.Num("radius", min: 0.01, max: 3), CrowdingLimit = c.Num("crowdingLimit", min: 0.01, max: 100), CompetitionSensitivity = c.Num("sensitivity", 1, 0, 10),
             Proximity = prox, LitterFraction = n.Num("litterFraction", 0.8, 0, 1), SheddingRate = n.Num("sheddingPerDay", 0.035, 0, 0.5) / D, GrazingValue = n.Num("grazingValue", 0, 0, 1),
-            Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 2),
+            Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 8),
             Tags = n.StrList("tags"),
             Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,
             CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,
             Colony = colony,
             Mat = mat,
             Lichen = lichen,
+            Woody = woody,
         };
         if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");
