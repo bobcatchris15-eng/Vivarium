@@ -91,6 +91,7 @@
     "supportTypes": [
       "woody",
       "log"
-    ]
+    ],
+    "nodeCap": 96
   }
 }

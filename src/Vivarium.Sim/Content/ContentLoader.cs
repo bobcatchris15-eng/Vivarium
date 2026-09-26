@@ -427,7 +427,7 @@ public static class ContentLoader
         if (n.Has("climber"))
         {
             var cl = n["climber"];
-            cl.RejectUnknown("searchRadius", "groundSpeedPerDay", "segmentLength", "attachmentRadius", "branchChance", "maxUnsupportedLength", "verticalGrowthMultiplier", "supportTypes");
+            cl.RejectUnknown("searchRadius", "groundSpeedPerDay", "segmentLength", "attachmentRadius", "branchChance", "maxUnsupportedLength", "verticalGrowthMultiplier", "nodeCap", "supportTypes");
             var supportTypes = new HashSet<string>(cl.StrList("supportTypes", required: true), StringComparer.Ordinal);
             foreach (var support in supportTypes)
                 if (support is not ("woody" or "log" or "rock")) cl["supportTypes"].Error($"unknown climber support '{support}' (expected woody | log | rock)");
@@ -441,6 +441,7 @@ public static class ContentLoader
                 BranchChance = cl.Num("branchChance", 0.1, 0, 1),
                 MaxUnsupportedLength = cl.Num("maxUnsupportedLength", min: 0.2, max: 12),
                 VerticalGrowthMultiplier = cl.Num("verticalGrowthMultiplier", 1.0, 0.5, 6),
+                NodeCap = cl.Int("nodeCap", 96, min: 8, max: 1000),
                 SupportTypes = supportTypes,
             };
             if (arch != "plant") cl.Error("climbers must use archetype 'plant'");

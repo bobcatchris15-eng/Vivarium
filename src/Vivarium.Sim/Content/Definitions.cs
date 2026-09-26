@@ -139,6 +139,8 @@ public sealed class ClimberDef
     public double MaxUnsupportedLength { get; init; }
     /// <summary>Visual vertical-growth multiplier once attached.</summary>
     public double VerticalGrowthMultiplier { get; init; } = 1;
+    /// <summary>Maximum persistent stem nodes of this climber species in one world.</summary>
+    public int NodeCap { get; init; } = 96;
     /// <summary>Allowed support classes: woody, log, rock.</summary>
     public HashSet<string> SupportTypes { get; init; } = new(StringComparer.Ordinal);
 }

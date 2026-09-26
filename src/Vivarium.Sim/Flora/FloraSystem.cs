@@ -241,6 +241,7 @@ public sealed class FloraSystem
     private const double MergeFactorCap = 6.0;
     private readonly List<(FloraSpeciesDef Sp, Vec2 P, EntityId Root, double RingDist)> _colonyBuds = new();
     private readonly Dictionary<EntityId, int> _colonySize = new();
+    private readonly Dictionary<string, int> _climberNodeCounts = new(StringComparer.Ordinal);
     private readonly List<FloraIndividual> _nbColony = new();
     private int _colonialTotal;
 
@@ -251,12 +252,15 @@ public sealed class FloraSystem
         _climberBuds.Clear();
         _colonyBuds.Clear();
         _colonySize.Clear();
+        _climberNodeCounts.Clear();
         var deaths = new List<(FloraIndividual F, string Cause)>();
         var eco = C.Ecology;
         _colonialTotal = 0;
         foreach (var f in _w.Flora.Items)
         {
             var sp0 = C.FloraOrThrow(f.SpeciesId);
+            if (sp0.Climber != null)
+                _climberNodeCounts[f.SpeciesId] = _climberNodeCounts.GetValueOrDefault(f.SpeciesId) + 1;
             if (sp0.Colony == null) continue;
             var root0 = f.ColonyRoot.IsNone ? f.Id : f.ColonyRoot;
             _colonySize[root0] = _colonySize.GetValueOrDefault(root0) + 1;
@@ -585,6 +589,11 @@ public sealed class FloraSystem
     private bool ClimberStep(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd, double dt)
     {
         if (f.ClimberAttached || !f.ClimberTip) return true;
+        if (_climberNodeCounts.GetValueOrDefault(sp.Id) >= cd.NodeCap)
+        {
+            f.ClimberTip = false;
+            return true;
+        }
 
         var p = f.Position;
         var support = NearestClimberSupport(f, cd);
@@ -635,6 +644,7 @@ public sealed class FloraSystem
         f.CreepCredit -= cd.SegmentLength;
         f.ClimberTip = rng.NextDouble() < cd.BranchChance;
         _climberBuds.Add((sp, chosen.Value, f.Id, share, f.UnsupportedLength + cd.SegmentLength));
+        _climberNodeCounts[sp.Id] = _climberNodeCounts.GetValueOrDefault(sp.Id) + 1;
         return true;
     }
 
