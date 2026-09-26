@@ -13,7 +13,8 @@
     "flora/fern.json", "flora/climbing_vine.json", "flora/bonnet_mushroom.json", "flora/turkey_tail.json", "flora/slime_mold.json",
     "flora/stonecrop.json", "flora/blue_fescue.json", "flora/reindeer_lichen.json",
     "flora/watercress.json", "flora/bacopa.json", "flora/sphagnum.json",
-    "flora/dichondra.json", "flora/clover.json", "flora/carpobrotus.json", "flora/lily_pad.json"
+    "flora/dichondra.json", "flora/clover.json", "flora/carpobrotus.json", "flora/lily_pad.json",
+    "flora/black_locust.json", "flora/catalpa.json", "flora/tamarack.json", "flora/cottonwood.json", "flora/staghorn_sumac.json"
   ],
   "fauna": ["fauna/springtail.json", "fauna/shrimp.json", "fauna/triops.json", "fauna/microminnow.json", "fauna/pill_bug.json", "fauna/darkling_beetle.json", "fauna/silverfish.json"],
   "presets": ["presets/default.json", "presets/rocky_rise.json"]
