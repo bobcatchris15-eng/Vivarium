@@ -64,9 +64,9 @@ public partial class FloraRenderer : Node3D
                 }
                 layer.Variants[v] = vl;
             }
-            if (sp.CreepSpeed > 0)
+            if (sp.CreepSpeed > 0 || sp.Climber != null)
             {
-                // veins joining each patch of the network to the patch it grew from (unit tube along +X)
+                // Persistent links joining each network node to the node it grew from (plasmodial veins or climber stems).
                 var vein = new MeshData();
                 var col = Primitives.Mix(sp.Color, sp.Color2, 0.3);
                 // a slightly arched, pinched tube: thinner at mid-length like a real plasmodial vein
@@ -117,11 +117,12 @@ public partial class FloraRenderer : Node3D
     /// Where a climber or bracket attaches: the nearest log or rock (sim angle toward it from p, its top height,
     /// and for logs the point on the trunk surface closest to p). Null when nothing is within reach.
     /// </summary>
-    private (double Angle, double Top, double Dist, Vector3 Surface, double Outward)? Anchor(Vector2 p, double reach)
+    private (double Angle, double Top, double Dist, Vector3 Surface, double Outward)? Anchor(Vector2 p, double reach, HashSet<string>? supports = null)
     {
         (double, double, double, Vector3, double)? best = null;
         double bestD = reach;
         var sp = new Vivarium.Sim.Core.Vec2(p.X, p.Y);
+        if (supports == null || supports.Contains("log"))
         foreach (var l in _w.Props.Logs)
         {
             var axis = Vivarium.Sim.Core.Vec2.FromAngle(l.RotationY);
@@ -137,6 +138,7 @@ public partial class FloraRenderer : Node3D
             best = ((onAxis - sp).LengthSq > 1e-10 ? (onAxis - sp).Angle : outward + Math.PI, l.Y + l.Radius, d,
                     new Vector3((float)surf.X, (float)l.Y, (float)surf.Z), outward);
         }
+        if (supports == null || supports.Contains("rock"))
         foreach (var r in _w.Props.Rocks)
         {
             double d = Math.Max(0, Vivarium.Sim.Core.Vec2.Distance(sp, r.Position) - r.FootprintRadius * 0.8);
@@ -145,6 +147,23 @@ public partial class FloraRenderer : Node3D
             var to = r.Position - sp;
             double ang = to.LengthSq > 1e-10 ? to.Angle : 0;
             best = (ang, r.Y + r.SizeY, d, new Vector3((float)r.X, (float)(r.Y + r.SizeY * 0.5), (float)r.Z), ang + Math.PI);
+        }
+        if (supports != null && supports.Contains("woody"))
+        {
+            foreach (var w in _w.Flora.Items)
+            {
+                var wsp = _w.Content.FloraOrThrow(w.SpeciesId);
+                if (wsp.Woody == null) continue;
+                double d = Vivarium.Sim.Core.Vec2.Distance(sp, w.Position);
+                if (d > bestD) continue;
+                bestD = d;
+                var to = w.Position - sp;
+                double ang = to.LengthSq > 1e-10 ? to.Angle : 0;
+                double height = wsp.Height * (0.45 + 0.55 * Math.Sqrt(w.BiomassFraction(wsp)));
+                double ground = _w.GroundHeight(w.Position);
+                best = (ang, ground + height, d,
+                    new Vector3((float)w.X, (float)(ground + height * 0.45), (float)w.Z), ang + Math.PI);
+            }
         }
         return best;
     }
@@ -212,11 +231,19 @@ public partial class FloraRenderer : Node3D
                 h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
                 r *= 1.0 + stress * 0.035;
             }
-            var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
-            if (sp.Shape == "vine" && Anchor(new Vector2(pos.X, pos.Z), 0.6) is { } va)
+            if (sp.Climber != null && !f.ClimberAttached)
             {
-                // climb: turn the stems toward the log/rock and stretch them up and over its top
-                float up = Mathf.Clamp((float)(va.Top - pos.Y) + 0.04f, 0.06f, 1.2f) * (float)(0.55 + 0.45 * Math.Sqrt(f.BiomassFraction(sp)));
+                // Searching runners stay prostrate. Their persistent parent links provide the visible horizontal stem network.
+                h = Math.Min(h, 0.035);
+                r = Math.Max(r, 0.06);
+            }
+            var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+            if (sp.Climber is { } climber && f.ClimberAttached
+                && Anchor(new Vector2(pos.X, pos.Z), Math.Max(0.6, climber.AttachmentRadius * 3), climber.SupportTypes) is { } va)
+            {
+                float rawUp = Mathf.Clamp((float)(va.Top - pos.Y) + 0.04f, 0.06f, 1.5f)
+                    * (float)(0.55 + 0.45 * Math.Sqrt(f.BiomassFraction(sp)));
+                float up = Mathf.Min(3.2f, rawUp * (float)climber.VerticalGrowthMultiplier);
                 float across = Mathf.Max((float)r, (float)(va.Dist + 0.12));
                 t = new Transform3D(Bridge.Yaw(va.Angle).Scaled(new Vector3(across, up, (float)r)), pos);
             }
@@ -250,7 +277,8 @@ public partial class FloraRenderer : Node3D
                 var b = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position) + 0.004f, (float)f.Z);
                 var d = b - a;
                 if (d.Length() < 1e-4f || d.Length() > 0.6f) continue;
-                float thick = 0.004f + 0.009f * (float)Math.Sqrt(Math.Min(f.BiomassFraction(vsp), parent.BiomassFraction(vsp)));
+                float frac = (float)Math.Sqrt(Math.Min(f.BiomassFraction(vsp), parent.BiomassFraction(vsp)));
+                float thick = vsp.Climber != null ? 0.0025f + 0.0045f * frac : 0.004f + 0.009f * frac;
                 var xAxis = d; var zAxis = xAxis.Cross(Vector3.Up).Normalized() * thick; var yAxis = zAxis.Cross(xAxis).Normalized() * thick * 0.45f;
                 list.T.Add(new Transform3D(new Basis(xAxis, yAxis, zAxis), a));
                 list.Tint.Add(new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f));

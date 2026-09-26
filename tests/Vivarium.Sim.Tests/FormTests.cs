@@ -11,7 +11,7 @@ public class FormTests
     [Fact]
     public void MushroomClusterHasGroundedStagesAndIrregularSilhouettes()
     {
-        var sp = new FloraSpeciesDef { Id = "bonnet_mushroom", Shape = "mushroom_cluster", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "dewbonnet", Shape = "mushroom_cluster", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 4; seed++)
         {
             var mesh = OrganismMeshes.Flora(sp, seed);
@@ -232,7 +232,7 @@ public class FormTests
     [Fact]
     public void RoundLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
-        var sp = new FloraSpeciesDef { Id = "dichondra", Shape = "roundleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "mooncoin", Shape = "roundleaf", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 5; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
@@ -245,7 +245,7 @@ public class FormTests
     [Fact]
     public void PairedLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
-        var sp = new FloraSpeciesDef { Id = "bacopa", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "fenbead", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 5; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
@@ -260,7 +260,7 @@ public class FormTests
     [Fact]
     public void CreeperIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
-        var sp = new FloraSpeciesDef { Id = "creeping_groundcover", Shape = "creeper", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "coinrunner", Shape = "creeper", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
@@ -273,10 +273,24 @@ public class FormTests
     [Fact]
     public void CreeperIsDeterministic()
     {
-        var sp = new FloraSpeciesDef { Id = "creeping_groundcover", Shape = "creeper", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "coinrunner", Shape = "creeper", Color = Green, Color2 = LightGreen };
         var m1 = OrganismMeshes.Flora(sp, 42);
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
+    }
+
+    [Fact]
+    public void VineBladesAreDeterministicCurvedMeshesWithinBudget()
+    {
+        var sp = new FloraSpeciesDef { Id = "spiralvine", Shape = "vine", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 3; seed++)
+        {
+            var mesh = OrganismMeshes.Flora(sp, seed);
+            Assert.Equal(mesh.DigestHex(), OrganismMeshes.Flora(sp, seed).DigestHex());
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+            Assert.InRange(mesh.TriangleCount, 10000, 19000);
+        }
     }
 
     [Fact]
@@ -285,7 +299,7 @@ public class FormTests
         // Regression: the old shape was a handful of near-vertical, wide flat fans (a "disc" reads as many
         // co-planar rim vertices at one height/normal). The new shape must be prostrate (low profile) and
         // spread leaves/runners across a footprint comparable to the old radius (~0.85), not shrunk down.
-        var sp = new FloraSpeciesDef { Id = "creeping_groundcover", Shape = "creeper", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "coinrunner", Shape = "creeper", Color = Green, Color2 = LightGreen };
         var m = OrganismMeshes.Flora(sp, 7);
         var bounds = m.Bounds();
         Assert.True(bounds.Max.Y < 0.35, $"creeper must stay low/prostrate, got max Y {bounds.Max.Y}");
@@ -297,7 +311,7 @@ public class FormTests
     [Fact]
     public void RoundLeafIsDeterministic()
     {
-        var sp = new FloraSpeciesDef { Id = "dichondra", Shape = "roundleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "mooncoin", Shape = "roundleaf", Color = Green, Color2 = LightGreen };
         var m1 = OrganismMeshes.Flora(sp, 42);
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
@@ -306,7 +320,7 @@ public class FormTests
     [Fact]
     public void PairedLeafIsDeterministic()
     {
-        var sp = new FloraSpeciesDef { Id = "bacopa", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "fenbead", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
         var m1 = OrganismMeshes.Flora(sp, 42);
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
@@ -317,7 +331,7 @@ public class FormTests
     [Fact]
     public void FloatLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
-        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "mirrorleaf", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
@@ -330,7 +344,7 @@ public class FormTests
     [Fact]
     public void FloatLeafIsDeterministic()
     {
-        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "mirrorleaf", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
         var m1 = OrganismMeshes.Flora(sp, 42);
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
@@ -342,7 +356,7 @@ public class FormTests
         // The renderer scales this mesh's Y axis directly by local water depth, so every leaf pad's petiole
         // must rise close to unit Y = 1 regardless of its horizontal lean, or pads would float above/below
         // the water surface once scaled.
-        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "mirrorleaf", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
         var m = OrganismMeshes.Flora(sp, 5);
         var bounds = m.Bounds();
         Assert.True(bounds.Max.Y > 0.85 && bounds.Max.Y < 1.3, $"floatleaf pads should sit near unit Y=1, got max Y {bounds.Max.Y}");
@@ -355,7 +369,7 @@ public class FormTests
         // horizontal scale to 1 so pad size stays constant regardless of growth radius/water depth). Regression
         // guard: if this ever reverts to unit-radius authoring, the plant's XZ footprint would balloon back up
         // toward ~1 m instead of staying within a small multi-pad clump a few tens of centimetres across.
-        var sp = new FloraSpeciesDef { Id = "lily_pad", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "mirrorleaf", Shape = "floatleaf", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var bounds = OrganismMeshes.Flora(sp, seed).Bounds();
@@ -374,7 +388,7 @@ public class FormTests
     public void HerbIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
         // The flower centre uses Primitives.Fan, which can have degenerate centre/rim triangles.
-        var sp = new FloraSpeciesDef { Id = "ornamental_herb", Shape = "herb", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "prismstar", Shape = "herb", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 5; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
@@ -386,7 +400,7 @@ public class FormTests
     [Fact]
     public void HerbIsDeterministic()
     {
-        var sp = new FloraSpeciesDef { Id = "ornamental_herb", Shape = "herb", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "prismstar", Shape = "herb", Color = Green, Color2 = LightGreen };
         var m1 = OrganismMeshes.Flora(sp, 42);
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
@@ -396,7 +410,7 @@ public class FormTests
     public void TrifoliateIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
         // Existing CurvedLeaf-based clover leaflets collapse to a point at the root.
-        var sp = new FloraSpeciesDef { Id = "clover", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "trifold", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 5; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
@@ -408,7 +422,7 @@ public class FormTests
     [Fact]
     public void TrifoliateIsDeterministic()
     {
-        var sp = new FloraSpeciesDef { Id = "clover", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "trifold", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
         var m1 = OrganismMeshes.Flora(sp, 42);
         var m2 = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
@@ -417,7 +431,7 @@ public class FormTests
     [Fact]
     public void FernHasCamberedBladeSurfacesAndGroundedVaryingFronds()
     {
-        var sp = new FloraSpeciesDef { Id = "maidenhair_fern", Shape = "fern", Color = Green, Color2 = LightGreen };
+        var sp = new FloraSpeciesDef { Id = "maidenhair_fern", Shape = "veilfern", Color = Green, Color2 = LightGreen };
         var m = OrganismMeshes.Flora(sp, 42);
         AssertAllFinite(m);
         var bounds = m.Bounds();
@@ -431,7 +445,7 @@ public class FormTests
     [Fact]
     public void TussockHasGroundedTaperedBladesAndMixedStrawTips()
     {
-        var sp = new FloraSpeciesDef { Id = "blue_fescue", Shape = "tussock", Color = new[] { 0.36, 0.55, 0.6 }, Color2 = new[] { 0.8, 0.74, 0.5 } };
+        var sp = new FloraSpeciesDef { Id = "frosttussock", Shape = "tussock", Color = new[] { 0.36, 0.55, 0.6 }, Color2 = new[] { 0.8, 0.74, 0.5 } };
         var m = OrganismMeshes.Flora(sp, 42);
         Assert.Equal(2640, m.TriangleCount);
         AssertAllFinite(m);
@@ -459,7 +473,7 @@ public class FormTests
     {
         var sp = new FloraSpeciesDef
         {
-            Id = "turkey_tail",
+            Id = "emberfan_fungus",
             Shape = "bracket",
             Color = new[] { 0.46, 0.33, 0.22 },
             Color2 = new[] { 0.86, 0.8, 0.66 }
@@ -519,7 +533,7 @@ public class FormTests
     [Fact]
     public void SpringtailHasArticulatedAnatomyAndAppendages()
     {
-        var sp = new FaunaSpeciesDef { Id = "springtail", Model = "springtail" };
+        var sp = new FaunaSpeciesDef { Id = "prismhopper", Model = "prismhopper" };
         for (ulong seed = 1; seed <= 3; seed++)
         {
             var mesh = OrganismMeshes.Fauna(sp, seed);
@@ -559,7 +573,7 @@ public class FormTests
     public void IsopodHasArticulatedPlatesAndCurledPose()
     {
         var spIsopod = new FaunaSpeciesDef { Id = "isopod", Model = "isopod" };
-        var spPillBug = new FaunaSpeciesDef { Id = "pill_bug", Model = "pill_bug" };
+        var spPillBug = new FaunaSpeciesDef { Id = "marbleback", Model = "marbleback" };
 
         foreach (var sp in new[] { spIsopod, spPillBug })
         {

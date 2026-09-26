@@ -86,15 +86,15 @@ public class IntegrationTests
     public void GeneticDriftIsVisibleAndExplainedByLineage()
     {
         var w = FaunaFixtures.PondWorld(2027);
-        var sp = w.Content.FaunaOrThrow("triops");
-        Assert.True(Introduction.IntroduceFauna(w, "triops", FaunaFixtures.Pond, 10).Ok);
+        var sp = w.Content.FaunaOrThrow("siltshield");
+        Assert.True(Introduction.IntroduceFauna(w, "siltshield", FaunaFixtures.Pond, 10).Ok);
         for (int day = 0; day < 60; day++)
         {
             FaunaFixtures.HoldWater(w);
             foreach (int c in w.Grid.DomainCells) { w.Fields.Detritus[c] = Math.Max(w.Fields.Detritus[c], 1.5); if (w.Water.IsWet(c)) w.Fields.Biofilm[c] = Math.Max(w.Fields.Biofilm[c], 0.3); }
             w.Step(8640);
         }
-        var alive = w.Fauna.Items.Where(f => f.SpeciesId == "triops").ToList();
+        var alive = w.Fauna.Items.Where(f => f.SpeciesId == "siltshield").ToList();
         Assert.NotEmpty(alive);
         int maxGen = alive.Max(f => w.Genomes.Get(f.GenomeId)!.Generation);
         Assert.True(maxGen >= 4, $"only {maxGen} generations");
@@ -156,17 +156,17 @@ public class IntegrationTests
         Expect(() => Assert.True(t.ApplyNutrients(land, 0.4).Ok), "fields", "world");     // world: tally of applied nutrients
         var plant = w.Flora.Items[0];
         Expect(() => Assert.True(t.RemovePlant(plant.Id).Ok), "flora", "fields", "world");
-        var critter = w.Fauna.Items.First(f => f.SpeciesId == "springtail");
+        var critter = w.Fauna.Items.First(f => f.SpeciesId == "prismhopper");
         Expect(() => t.Poke(new PokeAction(critter.Position, new Vec3(0, -1, 0), 1, new WorldHit(HitKind.Fauna, critter.Id, critter.Position, 1))), "fauna");
-        var shrimp = w.Fauna.Items.First(f => f.SpeciesId == "shrimp");
+        var shrimp = w.Fauna.Items.First(f => f.SpeciesId == "emberglass_swimmer");
         var origin = shrimp.Position;
         Expect(() => { t.Grab(shrimp.Id); t.ReturnHeld(shrimp.Id, origin); });              // round trip is a no-op
         var spot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewRock(p, 0.2) == null && !w.Water.IsWet(p) && Vec2.Distance(p, land) > 1);
         Expect(() => Assert.True(t.PlaceRock(spot, 0.2, 0, 9).Ok), "world");
-        var mossSpot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("creeping_groundcover", p) == null);
-        Expect(() => Assert.True(t.IntroduceFlora("creeping_groundcover", mossSpot).Ok), "flora", "world");
+        var mossSpot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("coinrunner", p) == null);
+        Expect(() => Assert.True(t.IntroduceFlora("coinrunner", mossSpot).Ok), "flora", "world");
         int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
-        Expect(() => Assert.True(t.IntroduceFauna("microminnow", w.Grid.CellCenter(pond), 3).Ok), "fauna", "genetics", "world");
+        Expect(() => Assert.True(t.IntroduceFauna("glintfin", w.Grid.CellCenter(pond), 3).Ok), "fauna", "genetics", "world");
         w.Step(8640);                                                                        // ecosystem continues
         Assert.Empty(w.CheckInvariants());
     }
@@ -175,18 +175,18 @@ public class IntegrationTests
     public void ExtinctionIsRecoverableThroughOrdinaryTools()
     {
         var w = TestUtil.DefaultWorld();
-        foreach (var f in w.Fauna.Items.Where(f => f.SpeciesId == "springtail").ToList()) w.FaunaSystem.Kill(f, "extinction test");
-        foreach (var f in w.Flora.Items.Where(f => f.SpeciesId == "creeping_groundcover").ToList()) w.FloraSystem.Kill(f, "extinction test");
+        foreach (var f in w.Fauna.Items.Where(f => f.SpeciesId == "prismhopper").ToList()) w.FaunaSystem.Kill(f, "extinction test");
+        foreach (var f in w.Flora.Items.Where(f => f.SpeciesId == "coinrunner").ToList()) w.FloraSystem.Kill(f, "extinction test");
         w.Step(600);
-        Assert.Equal(0, w.Fauna.CountOf("springtail"));
+        Assert.Equal(0, w.Fauna.CountOf("prismhopper"));
         var t = new ToolActions(w);
-        var land = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFauna("springtail", p) == null);
-        Assert.True(t.IntroduceFauna("springtail", land, 6).Ok);
-        var plant = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("creeping_groundcover", p) == null);
-        Assert.True(t.IntroduceFlora("creeping_groundcover", plant).Ok);
+        var land = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFauna("prismhopper", p) == null);
+        Assert.True(t.IntroduceFauna("prismhopper", land, 6).Ok);
+        var plant = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("coinrunner", p) == null);
+        Assert.True(t.IntroduceFlora("coinrunner", plant).Ok);
         w.Step(8640 * 3);
-        Assert.True(w.Fauna.CountOf("springtail") > 0, "reintroduced species persists");
-        Assert.Contains(w.Flora.Items, f => f.SpeciesId == "creeping_groundcover");
+        Assert.True(w.Fauna.CountOf("prismhopper") > 0, "reintroduced species persists");
+        Assert.Contains(w.Flora.Items, f => f.SpeciesId == "coinrunner");
         Assert.Empty(w.CheckInvariants());
     }
 
@@ -248,11 +248,11 @@ public class IntegrationTests
             var spot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewRock(p, 0.25) == null && !w.Water.IsWet(p));
             t.PlaceRock(spot, 0.25, 0.4, 12345);
             w.Step(1500);
-            var st = w.Fauna.Items.First(f => f.SpeciesId == "springtail");
+            var st = w.Fauna.Items.First(f => f.SpeciesId == "prismhopper");
             t.Poke(new PokeAction(st.Position, new Vec3(0, -1, 0), 1, WorldHit.None));
             t.RemovePlant(w.Flora.Items[3].Id);
             int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
-            t.IntroduceFauna("shrimp", w.Grid.CellCenter(pond), 3);
+            t.IntroduceFauna("emberglass_swimmer", w.Grid.CellCenter(pond), 3);
             w.Step(8640);
             return TestUtil.Digest(w);
         }

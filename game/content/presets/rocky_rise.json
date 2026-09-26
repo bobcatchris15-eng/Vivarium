@@ -14,13 +14,31 @@
     "bottom": -2.6,
     "rockExposure": 0.25,
     "features": [
-      { "type": "hill", "x": 0.0, "z": 0.0, "radius": 3.5, "amount": 0.9 },
-      { "type": "basin", "x": -3.6, "z": 1.8, "radius": 2.4, "amount": 1.1 }
+      {
+        "type": "hill",
+        "x": 0,
+        "z": 0,
+        "radius": 3.5,
+        "amount": 0.9
+      },
+      {
+        "type": "basin",
+        "x": -3.6,
+        "z": 1.8,
+        "radius": 2.4,
+        "amount": 1.1
+      }
     ]
   },
   "water": {
-    "waterTable": 0.0,
-    "springs": [ { "x": 0.4, "z": -0.5, "dischargePerHour": 0.04 } ],
+    "waterTable": 0,
+    "springs": [
+      {
+        "x": 0.4,
+        "z": -0.5,
+        "dischargePerHour": 0.04
+      }
+    ],
     "flowRate": 0.2,
     "evaporationPerDay": 0.004,
     "infiltrationPerDay": 0.02,
@@ -29,41 +47,141 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 18, "rockMinScale": 0.15, "rockMaxScale": 0.7,
-    "logs": 2, "logMinLength": 1.0, "logMaxLength": 2.0, "logMinRadius": 0.1, "logMaxRadius": 0.2,
-    "gravelPatches": 4, "gravelMinRadius": 0.4, "gravelMaxRadius": 0.8,
+    "rocks": 18,
+    "rockMinScale": 0.15,
+    "rockMaxScale": 0.7,
+    "logs": 2,
+    "logMinLength": 1,
+    "logMaxLength": 2,
+    "logMinRadius": 0.1,
+    "logMaxRadius": 0.2,
+    "gravelPatches": 4,
+    "gravelMinRadius": 0.4,
+    "gravelMaxRadius": 0.8,
     "spacing": 0.3
   },
   "starterFlora": [
-    { "species": "cushion_moss", "count": 12 },
-    { "species": "crust_lichen", "count": 12 },
-    { "species": "carpet_moss", "count": 8 },
-    { "species": "marginal_waterside", "count": 8 },
-    { "species": "ornamental_herb", "count": 6 },
-    { "species": "fern", "count": 5 },
-    { "species": "climbing_vine", "count": 6 },
-    { "species": "bonnet_mushroom", "count": 6 },
-    { "species": "turkey_tail", "count": 4 },
-    { "species": "slime_mold", "count": 4 },
-    { "species": "stonecrop", "count": 14 },
-    { "species": "blue_fescue", "count": 10 },
-    { "species": "reindeer_lichen", "count": 10 },
-    { "species": "watercress", "count": 6 },
-    { "species": "bacopa", "count": 5 },
-    { "species": "sphagnum", "count": 5 },
-    { "species": "dichondra", "count": 8 },
-    { "species": "clover", "count": 8 },
-    { "species": "carpobrotus", "count": 10 },
-    { "species": "black_locust", "count": 1 },
-    { "species": "tamarack", "count": 1 },
-    { "species": "staghorn_sumac", "count": 3 }
+    {
+      "species": "pearl_cushion_moss",
+      "count": 12
+    },
+    {
+      "species": "embercrust_lichen",
+      "count": 12
+    },
+    {
+      "species": "velvetweave_moss",
+      "count": 8
+    },
+    {
+      "species": "glassrush",
+      "count": 8
+    },
+    {
+      "species": "prismstar",
+      "count": 6
+    },
+    {
+      "species": "veilfern",
+      "count": 5
+    },
+    {
+      "species": "clinglace",
+      "count": 6
+    },
+    {
+      "species": "dewbonnet",
+      "count": 6
+    },
+    {
+      "species": "emberfan_fungus",
+      "count": 4
+    },
+    {
+      "species": "ambervein",
+      "count": 4
+    },
+    {
+      "species": "sunstone_rosette",
+      "count": 14
+    },
+    {
+      "species": "frosttussock",
+      "count": 10
+    },
+    {
+      "species": "antlerlace_lichen",
+      "count": 10
+    },
+    {
+      "species": "brooklace",
+      "count": 6
+    },
+    {
+      "species": "fenbead",
+      "count": 5
+    },
+    {
+      "species": "bogglass_moss",
+      "count": 5
+    },
+    {
+      "species": "mooncoin",
+      "count": 8
+    },
+    {
+      "species": "trifold",
+      "count": 8
+    },
+    {
+      "species": "glassfinger",
+      "count": 10
+    },
+    {
+      "species": "ironlace",
+      "count": 1
+    },
+    {
+      "species": "fenneedle",
+      "count": 1
+    },
+    {
+      "species": "embercrown",
+      "count": 3
+    },
+    {
+      "species": "shadebell",
+      "count": 1
+    },
+    {
+      "species": "spiralvine",
+      "count": 2
+    }
   ],
   "starterFauna": [
-    { "species": "springtail", "count": 40 },
-    { "species": "pill_bug", "count": 18 },
-    { "species": "darkling_beetle", "count": 12 },
-    { "species": "silverfish", "count": 14 },
-    { "species": "triops", "count": 8 },
-    { "species": "shrimp", "count": 10 }
+    {
+      "species": "prismhopper",
+      "count": 40
+    },
+    {
+      "species": "marbleback",
+      "count": 18
+    },
+    {
+      "species": "coalback_beetle",
+      "count": 12
+    },
+    {
+      "species": "ghostbristle",
+      "count": 14
+    },
+    {
+      "species": "siltshield",
+      "count": 8
+    },
+    {
+      "species": "emberglass_swimmer",
+      "count": 10
+    }
   ]
 }

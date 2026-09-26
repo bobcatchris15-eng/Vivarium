@@ -276,7 +276,7 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody");
+        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
@@ -423,6 +423,32 @@ public static class ContentLoader
                 EdenNoiseExponent = lc.Num("edenNoise", 1.0, 0.1, 10),
             };
         }
+        ClimberDef? climber = null;
+        if (n.Has("climber"))
+        {
+            var cl = n["climber"];
+            cl.RejectUnknown("searchRadius", "groundSpeedPerDay", "segmentLength", "attachmentRadius", "branchChance", "maxUnsupportedLength", "verticalGrowthMultiplier", "nodeCap", "supportTypes");
+            var supportTypes = new HashSet<string>(cl.StrList("supportTypes", required: true), StringComparer.Ordinal);
+            foreach (var support in supportTypes)
+                if (support is not ("woody" or "log" or "rock")) cl["supportTypes"].Error($"unknown climber support '{support}' (expected woody | log | rock)");
+            if (supportTypes.Count == 0) cl["supportTypes"].Error("at least one support type is required");
+            climber = new ClimberDef
+            {
+                SearchRadius = cl.Num("searchRadius", min: 0.2, max: 8),
+                GroundSpeed = cl.Num("groundSpeedPerDay", min: 0.001, max: 5) / D,
+                SegmentLength = cl.Num("segmentLength", min: 0.04, max: 0.5),
+                AttachmentRadius = cl.Num("attachmentRadius", min: 0.02, max: 0.75),
+                BranchChance = cl.Num("branchChance", 0.1, 0, 1),
+                MaxUnsupportedLength = cl.Num("maxUnsupportedLength", min: 0.2, max: 12),
+                VerticalGrowthMultiplier = cl.Num("verticalGrowthMultiplier", 1.0, 0.5, 6),
+                NodeCap = cl.Int("nodeCap", 96, min: 8, max: 1000),
+                SupportTypes = supportTypes,
+            };
+            if (arch != "plant") cl.Error("climbers must use archetype 'plant'");
+            if (climber.AttachmentRadius >= climber.SearchRadius) cl["attachmentRadius"].Error("attachmentRadius must be smaller than searchRadius");
+            if (climber.SegmentLength > climber.MaxUnsupportedLength) cl["segmentLength"].Error("segmentLength exceeds maxUnsupportedLength");
+        }
+
         WoodyDef? woody = null;
         if (n.Has("woody"))
         {
@@ -467,6 +493,7 @@ public static class ContentLoader
             Mat = mat,
             Lichen = lichen,
             Woody = woody,
+            Climber = climber,
         };
         if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");

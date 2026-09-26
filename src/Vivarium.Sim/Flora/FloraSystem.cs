@@ -241,6 +241,7 @@ public sealed class FloraSystem
     private const double MergeFactorCap = 6.0;
     private readonly List<(FloraSpeciesDef Sp, Vec2 P, EntityId Root, double RingDist)> _colonyBuds = new();
     private readonly Dictionary<EntityId, int> _colonySize = new();
+    private readonly Dictionary<string, int> _climberNodeCounts = new(StringComparer.Ordinal);
     private readonly List<FloraIndividual> _nbColony = new();
     private int _colonialTotal;
 
@@ -248,14 +249,18 @@ public sealed class FloraSystem
     {
         var births = new List<(FloraSpeciesDef Sp, Vec2 P)>();
         _buds.Clear();
+        _climberBuds.Clear();
         _colonyBuds.Clear();
         _colonySize.Clear();
+        _climberNodeCounts.Clear();
         var deaths = new List<(FloraIndividual F, string Cause)>();
         var eco = C.Ecology;
         _colonialTotal = 0;
         foreach (var f in _w.Flora.Items)
         {
             var sp0 = C.FloraOrThrow(f.SpeciesId);
+            if (sp0.Climber != null)
+                _climberNodeCounts[f.SpeciesId] = _climberNodeCounts.GetValueOrDefault(f.SpeciesId) + 1;
             if (sp0.Colony == null) continue;
             var root0 = f.ColonyRoot.IsNone ? f.Id : f.ColonyRoot;
             _colonySize[root0] = _colonySize.GetValueOrDefault(root0) + 1;
@@ -325,6 +330,7 @@ public sealed class FloraSystem
             }
 
             if (sp.CreepSpeed > 0 && Creep(f, sp, dt, births)) continue;
+            if (sp.Climber is { } climber && ClimberStep(f, sp, climber, dt)) continue;
 
             if (sp.Colony is { } cd)
             {
@@ -379,6 +385,24 @@ public sealed class FloraSystem
             int gen = (_w.Flora.Get(parent)?.Generation ?? -1) + 1;
             AssignSlimeTint(nf, gen);
         }
+        foreach (var (sp, q, parent, biomass, unsupportedLength) in _climberBuds)
+        {
+            if (!CanEstablish(sp, q, out _))
+            {
+                if (_w.Flora.Get(parent) is { } back) back.Biomass += biomass;
+                continue;
+            }
+            var nf = Establish(sp, q, "climber runner", biomass);
+            nf.ParentId = parent;
+            nf.Generation = (_w.Flora.Get(parent)?.Generation ?? -1) + 1;
+            nf.UnsupportedLength = unsupportedLength;
+            nf.ClimberTip = true;
+            if (sp.Climber is { } cd && NearestClimberSupport(nf, cd) is { } support && support.Distance <= cd.AttachmentRadius)
+            {
+                nf.ClimberAttached = true;
+                nf.ClimberTip = false;
+            }
+        }
         foreach (var (sp, q, root, ringDist) in _colonyBuds)
         {
             if (_colonialTotal >= GlobalColonialCellBudget) break;
@@ -401,6 +425,7 @@ public sealed class FloraSystem
     /// skipped this step (creepers only reproduce by fruiting).
     /// </summary>
     private readonly List<(FloraSpeciesDef Sp, Vec2 P, EntityId Parent, double Biomass)> _buds = new();
+    private readonly List<(FloraSpeciesDef Sp, Vec2 P, EntityId Parent, double Biomass, double UnsupportedLength)> _climberBuds = new();
 
     /// <summary>A decomposer species this scarce keeps receiving airborne spores.</summary>
     public const int SporeBankThreshold = 3;
@@ -505,6 +530,124 @@ public sealed class FloraSystem
         f.Biomass -= share;
         f.CreepCredit -= BudStep;
         _buds.Add((sp, best, f.Id, share));
+        return true;
+    }
+
+    private readonly List<FloraIndividual> _climberSupportNeighbours = new();
+
+    private (Vec2 Target, double Distance)? NearestClimberSupport(FloraIndividual f, ClimberDef cd)
+    {
+        var p = f.Position;
+        Vec2 bestTarget = default;
+        double bestDistance = cd.SearchRadius + 1;
+
+        if (cd.SupportTypes.Contains("woody"))
+        {
+            _w.Flora.Neighbours(p, cd.SearchRadius, _climberSupportNeighbours);
+            foreach (var n in _climberSupportNeighbours)
+            {
+                if (n.Id == f.Id) continue;
+                var nsp = C.FloraOrThrow(n.SpeciesId);
+                if (nsp.Woody == null) continue;
+                double d = Vec2.Distance(p, n.Position);
+                if (d < bestDistance) { bestDistance = d; bestTarget = n.Position; }
+            }
+        }
+
+        if (cd.SupportTypes.Contains("log"))
+        {
+            foreach (var l in _w.Props.Logs)
+            {
+                var axis = Vec2.FromAngle(l.RotationY);
+                var rel = p - l.Position;
+                double along = Math.Clamp(rel.Dot(axis), -l.Length / 2, l.Length / 2);
+                var onAxis = l.Position + axis * along;
+                var outV = p - onAxis;
+                double edgeDistance = Math.Max(0, outV.Length - l.Radius);
+                if (edgeDistance >= bestDistance || edgeDistance > cd.SearchRadius) continue;
+                var outward = outV.LengthSq > 1e-10 ? outV / outV.Length : Vec2.FromAngle(l.RotationY + Math.PI / 2);
+                bestDistance = edgeDistance;
+                bestTarget = onAxis + outward * l.Radius;
+            }
+        }
+
+        if (cd.SupportTypes.Contains("rock"))
+        {
+            foreach (var r in _w.Props.Rocks)
+            {
+                var to = r.Position - p;
+                double centre = to.Length;
+                double edgeDistance = Math.Max(0, centre - r.FootprintRadius * 0.8);
+                if (edgeDistance >= bestDistance || edgeDistance > cd.SearchRadius) continue;
+                bestDistance = edgeDistance;
+                bestTarget = centre > 1e-10 ? p + to / centre * edgeDistance : p;
+            }
+        }
+        return bestDistance <= cd.SearchRadius ? (bestTarget, bestDistance) : null;
+    }
+
+    private bool ClimberStep(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd, double dt)
+    {
+        // Attached nodes have finished structural search, but mature attached plants still use the ordinary
+        // propagule pathway below. Dormant ground nodes remain part of the stem network without becoming seed factories.
+        if (f.ClimberAttached) return false;
+        if (!f.ClimberTip) return true;
+        if (_climberNodeCounts.GetValueOrDefault(sp.Id) >= cd.NodeCap)
+        {
+            f.ClimberTip = false;
+            return true;
+        }
+
+        var p = f.Position;
+        var support = NearestClimberSupport(f, cd);
+        if (support is { } contact && contact.Distance <= cd.AttachmentRadius)
+        {
+            f.ClimberAttached = true;
+            f.ClimberTip = false;
+            f.CreepCredit = 0;
+            return false;
+        }
+
+        f.CreepCredit = Math.Min(f.CreepCredit + cd.GroundSpeed * dt, cd.SegmentLength * 2.5);
+        if (f.CreepCredit < cd.SegmentLength || f.BiomassFraction(sp) < 0.18) return true;
+        if (f.UnsupportedLength + cd.SegmentLength > cd.MaxUnsupportedLength)
+        {
+            f.ClimberTip = false;
+            return true;
+        }
+
+        var rng = Rng.Keyed(_w.Seed, "flora.climber.tip", f.Id.Value, (ulong)f.SpreadCount++);
+        double baseAngle;
+        if (support is { } target && (target.Target - p).LengthSq > 1e-10)
+            baseAngle = (target.Target - p).Angle;
+        else if (_w.Flora.Get(f.ParentId) is { } parent && (p - parent.Position).LengthSq > 1e-10)
+            baseAngle = (p - parent.Position).Angle;
+        else
+            baseAngle = rng.Range(0, 2 * Math.PI);
+
+        // Deterministic local fan: support bias sets the centre line, while alternating offsets let a tip route
+        // around rocks, crowded stems and unsuitable cells without pathfinding or teleporting.
+        double phase = rng.Range(-0.18, 0.18);
+        double[] offsets = { 0, 0.32, -0.32, 0.64, -0.64, 0.96, -0.96 };
+        Vec2? chosen = null;
+        double chosenScore = double.PositiveInfinity;
+        foreach (double off in offsets)
+        {
+            var q = p + Vec2.FromAngle(baseAngle + phase + off) * cd.SegmentLength;
+            if (!CanEstablish(sp, q, out _)) continue;
+            double score = support is { } s0 ? Vec2.Distance(q, s0.Target) : Math.Abs(off);
+            if (score < chosenScore) { chosen = q; chosenScore = score; }
+        }
+        if (!chosen.HasValue) return true;
+
+        double share = Math.Max(sp.InitialBiomass * 0.55, f.Biomass * 0.28);
+        share = Math.Min(share, f.Biomass * 0.42);
+        if (share < sp.InitialBiomass * 0.25) return true;
+        f.Biomass -= share;
+        f.CreepCredit -= cd.SegmentLength;
+        f.ClimberTip = rng.NextDouble() < cd.BranchChance;
+        _climberBuds.Add((sp, chosen.Value, f.Id, share, f.UnsupportedLength + cd.SegmentLength));
+        _climberNodeCounts[sp.Id] = _climberNodeCounts.GetValueOrDefault(sp.Id) + 1;
         return true;
     }
 
@@ -662,6 +805,7 @@ public sealed class FloraSystem
         {
             Id = id, SpeciesId = sp.Id, X = q.X, Z = q.Z, Biomass = biomass ?? sp.InitialBiomass, Health = 1,
             LifespanFactor = rng.Range(0.8, 1.2),
+            ClimberTip = sp.Climber != null,
         };
         _w.Flora.Add(f);
         _w.Tally.Birth(sp.Id);

@@ -8,8 +8,8 @@ namespace Vivarium.Sim.Tests;
 [Trait("Suite", "Coverage")]
 public class CoverageSystemTests
 {
-    private static readonly string[] MossSpecies = { "carpet_moss", "wetbank_moss", "cushion_moss", "sphagnum" };
-    private static readonly string[] LichenSpecies = { "crust_lichen", "foliose_lichen", "reindeer_lichen" };
+    private static readonly string[] MossSpecies = { "velvetweave_moss", "floodlace_moss", "pearl_cushion_moss", "bogglass_moss" };
+    private static readonly string[] LichenSpecies = { "embercrust_lichen", "ruffle_lichen", "antlerlace_lichen" };
 
     /// <summary>Advances a default-preset world by <paramref name="bioDays"/> biological days at the shipped
     /// acceleration, matching the Reference-scenario convention used elsewhere in this suite.</summary>
@@ -39,7 +39,7 @@ public class CoverageSystemTests
     {
         var w = TestUtil.DefaultWorld(populate: false);
         int before = w.Flora.Count;
-        foreach (var id in new[] { "carpet_moss", "crust_lichen" })
+        foreach (var id in new[] { "velvetweave_moss", "embercrust_lichen" })
         {
             var ex = Assert.Throws<InvalidOperationException>(() =>
                 w.FloraSystem.Establish(w.Content.FloraOrThrow(id), Core.Vec2.Zero, "test"));

@@ -1,0 +1,99 @@
+{
+  "id": "coalback_beetle",
+  "name": "Coalback beetle",
+  "medium": "terrestrial",
+  "role": "Dry-ground detritivore and opportunistic grazer.",
+  "description": "A matte charcoal beetle-like scavenger with ridged wing cases, most active across dry litter and exposed soil.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.25,
+      "tolerance": 0.22
+    },
+    "substrates": {
+      "soil": 1,
+      "gravel": 1,
+      "rock": 0.8,
+      "wood": 0.5
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.002,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 2.4,
+    "turnRatePerMinute": 1.5,
+    "wander": 0.45,
+    "habitatSeek": 0.7,
+    "senseRadius": 0.5
+  },
+  "diet": [
+    {
+      "resource": "flora:plant",
+      "ratePerHour": 0.002,
+      "efficiency": 8
+    },
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.003,
+      "efficiency": 8
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.005,
+    "maxEnergy": 1,
+    "initialEnergy": 0.8,
+    "hungerThreshold": 0.8,
+    "wasteFraction": 0.35
+  },
+  "lifecycle": {
+    "maturityDays": 20,
+    "lifespanDays": 150,
+    "lifespanVariance": 0.2,
+    "dailyMortality": 0.003
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 1,
+    "clutchMax": 3,
+    "cooldownDays": 12,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.5,
+    "maxLocalDensity": 6,
+    "populationCap": 60
+  },
+  "body": {
+    "sizeMin": 0.012,
+    "sizeMax": 0.02,
+    "visualScale": 2.2,
+    "massAtMid": 0.12,
+    "detritusOnDeath": 2.5
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.07
+  },
+  "visual": {
+    "model": "beetle",
+    "baseColor": [
+      0.08,
+      0.08,
+      0.09
+    ],
+    "ornamentColor": [
+      0.22,
+      0.2,
+      0.18
+    ]
+  },
+  "behaviors": []
+}

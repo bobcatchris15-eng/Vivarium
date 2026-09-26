@@ -1,0 +1,96 @@
+{
+  "id": "kiteleaf",
+  "name": "Kiteleaf",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Very fast riparian pioneer with broad seed dispersal and an airy high canopy.",
+  "description": "A pale tall trunk carries angular silver-backed leaves on long flexible stalks, producing a restless high crown over wet ground.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.45,
+      "water": 0.16
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.72,
+      "tolerance": 0.27
+    },
+    "light": {
+      "optimum": 0.94,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.38
+    },
+    "maxWaterDepth": 0.025,
+    "hardMinMoisture": 0.3,
+    "hardMaxMoisture": 1,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.12,
+    "maxBiomass": 24,
+    "initialBiomass": 0.1,
+    "declinePerDay": 0.1,
+    "maturityDays": 28,
+    "lifespanDays": 1500,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 1.85,
+    "minRadius": 0.08
+  },
+  "spread": {
+    "intervalDays": 14,
+    "radius": 4.8,
+    "propagules": 3,
+    "minBiomassFraction": 0.62
+  },
+  "competition": {
+    "radius": 1.8,
+    "crowdingLimit": 5.4,
+    "sensitivity": 0.32
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 1.8,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.92,
+  "sheddingPerDay": 0.012,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "tree",
+    "canopyRadius": 2.4,
+    "shadeOpacity": 0.54,
+    "minSpacing": 1.9
+  },
+  "visual": {
+    "shape": "tree_kiteleaf",
+    "color": [
+      0.32,
+      0.55,
+      0.38
+    ],
+    "color2": [
+      0.68,
+      0.78,
+      0.52
+    ],
+    "colorVariance": 0.08,
+    "height": 4.8
+  },
+  "tags": [
+    "plant",
+    "tree",
+    "woody",
+    "riparian",
+    "pioneer"
+  ]
+}

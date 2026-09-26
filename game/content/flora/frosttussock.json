@@ -1,0 +1,79 @@
+{
+  "id": "frosttussock",
+  "name": "Frosttussock",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Tufted dry-ground grasslike plant of open nutrient-poor soil.",
+  "description": "Fine blue-silver blades arch from dense tussocks, thriving in bright dry gaps where broader leaves wilt.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.8,
+      "rock": 0.2
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.28,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.3,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.2,
+    "maturityDays": 10,
+    "lifespanDays": 360,
+    "nutrientPerBiomass": 0.25,
+    "radiusAtMax": 0.16,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.25,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.03,
+  "grazingValue": 0.35,
+  "visual": {
+    "shape": "tussock",
+    "color": [
+      0.36,
+      0.55,
+      0.6
+    ],
+    "color2": [
+      0.8,
+      0.74,
+      0.5
+    ],
+    "colorVariance": 0.06,
+    "height": 0.22
+  },
+  "tags": [
+    "plant",
+    "grass",
+    "xerophyte"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "id": "shadebell",
+  "name": "Shadebell",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Broad-leaved understory shrub that is favored beneath partial woody canopy.",
+  "description": "Low forked stems carry dark matte leaves and downward bell-shaped pale flowers, filling humid shade beneath larger woody plants.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.16,
+      "rock": 0.05
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.62,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.34,
+      "tolerance": 0.22
+    },
+    "nutrients": {
+      "optimum": 0.6,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.22,
+    "hardMaxMoisture": 0.94,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.075,
+    "maxBiomass": 6.8,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.07,
+    "maturityDays": 28,
+    "lifespanDays": 1200,
+    "nutrientPerBiomass": 0.27,
+    "radiusAtMax": 0.78,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 18,
+    "radius": 1.2,
+    "propagules": 1,
+    "minBiomassFraction": 0.68
+  },
+  "competition": {
+    "radius": 0.9,
+    "crowdingLimit": 3.5,
+    "sensitivity": 0.42
+  },
+  "proximity": [],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 1,
+    "shadeOpacity": 0.43,
+    "minSpacing": 0.62
+  },
+  "visual": {
+    "shape": "shrub_shadebell",
+    "color": [
+      0.14,
+      0.32,
+      0.23
+    ],
+    "color2": [
+      0.31,
+      0.51,
+      0.34
+    ],
+    "colorVariance": 0.06,
+    "height": 1.25
+  },
+  "tags": [
+    "plant",
+    "shrub",
+    "woody",
+    "understory",
+    "shade"
+  ]
+}

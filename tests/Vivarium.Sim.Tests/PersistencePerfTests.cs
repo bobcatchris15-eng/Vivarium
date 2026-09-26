@@ -228,7 +228,7 @@ public class PerfTests
     {
         var w = TestUtil.FlatWorld();
         TestUtil.Condition(w, 0.7, 1.0);
-        var sp = w.Content.FloraOrThrow("creeping_groundcover");
+        var sp = w.Content.FloraOrThrow("coinrunner");
         var rng = Rng.Stream(4, "scale");
         for (int i = 0; i < 4000; i++) w.FloraSystem.Establish(sp, w.Domain.ClampInside(new Vec2(rng.Range(-5, 5), rng.Range(-4.3, 4.3)), 0.1), "t");
         int examined = w.Flora.Index.CandidatesExamined(Vec2.Zero, sp.CompetitionRadius);
@@ -244,7 +244,7 @@ public class PerfTests
     {
         var w = FaunaFixtures.PondWorld();
         var rng = Rng.Stream(8, "scale");
-        for (int i = 0; i < 2000; i++) w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(rng.Range(0.5, 4), rng.Range(-3, 3)));
+        for (int i = 0; i < 2000; i++) w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(rng.Range(0.5, 4), rng.Range(-3, 3)));
         w.Fauna.RebuildIndex();
         Assert.True(w.Fauna.Index.CandidatesExamined(new Vec2(2, 0), 0.4) < 300);
         string a = Run(), b = Run();
@@ -253,7 +253,7 @@ public class PerfTests
         {
             var x = FaunaFixtures.PondWorld();
             var r = Rng.Stream(8, "scale");
-            for (int i = 0; i < 600; i++) x.FaunaSystem.CreateFounder(FaunaFixtures.Sp("microminnow"), FaunaFixtures.Pond + new Vec2(r.Range(-1, 1), r.Range(-1, 1)));
+            for (int i = 0; i < 600; i++) x.FaunaSystem.CreateFounder(FaunaFixtures.Sp("glintfin"), FaunaFixtures.Pond + new Vec2(r.Range(-1, 1), r.Range(-1, 1)));
             for (int i = 0; i < 50; i++) { x.FaunaSystem.StepBehaviour(20); x.Clock.Tick += 2; }
             return Persistence.WorldSerializer.Text(WorldSerializer.Serialize(x)["fauna"]);
         }

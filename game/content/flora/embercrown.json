@@ -1,0 +1,90 @@
+{
+  "id": "embercrown",
+  "name": "Embercrown",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Fast clonal shrub that builds loose sunny thickets on dry disturbed ground.",
+  "description": "Several crooked dark stems carry long divided leaves and upright ember-red fruit lanterns, spreading outward by short clonal runs.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.58,
+      "rock": 0.16
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.38,
+      "tolerance": 0.34
+    },
+    "light": {
+      "optimum": 0.92,
+      "tolerance": 0.34
+    },
+    "nutrients": {
+      "optimum": 0.32,
+      "tolerance": 0.45
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.08,
+    "hardMaxMoisture": 0.85,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.16,
+    "maxBiomass": 5.5,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.1,
+    "maturityDays": 16,
+    "lifespanDays": 650,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.62,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.9,
+    "propagules": 2,
+    "minBiomassFraction": 0.58
+  },
+  "competition": {
+    "radius": 0.72,
+    "crowdingLimit": 3,
+    "sensitivity": 0.55
+  },
+  "proximity": [],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 0.82,
+    "shadeOpacity": 0.34,
+    "minSpacing": 0.48
+  },
+  "visual": {
+    "shape": "shrub_embercrown",
+    "color": [
+      0.28,
+      0.47,
+      0.2
+    ],
+    "color2": [
+      0.64,
+      0.58,
+      0.18
+    ],
+    "colorVariance": 0.09,
+    "height": 1.25
+  },
+  "tags": [
+    "plant",
+    "shrub",
+    "woody",
+    "clonal",
+    "pioneer"
+  ]
+}

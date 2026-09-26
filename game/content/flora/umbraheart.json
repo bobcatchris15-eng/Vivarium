@@ -1,0 +1,95 @@
+{
+  "id": "umbraheart",
+  "name": "Umbraheart",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Broad-crowned tree of moist fertile ground; its oversized leaves cast the deepest shade in the canopy guild.",
+  "description": "A low-forking stout trunk carries huge asymmetrical shield leaves with dusky undersides, forming a dense umbrella of shade.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.18
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.62,
+      "tolerance": 0.27
+    },
+    "light": {
+      "optimum": 0.78,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.67,
+      "tolerance": 0.34
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.2,
+    "hardMaxMoisture": 0.95,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.085,
+    "maxBiomass": 20,
+    "initialBiomass": 0.12,
+    "declinePerDay": 0.09,
+    "maturityDays": 42,
+    "lifespanDays": 2200,
+    "nutrientPerBiomass": 0.34,
+    "radiusAtMax": 1.65,
+    "minRadius": 0.09
+  },
+  "spread": {
+    "intervalDays": 28,
+    "radius": 3.2,
+    "propagules": 1,
+    "minBiomassFraction": 0.75
+  },
+  "competition": {
+    "radius": 1.7,
+    "crowdingLimit": 5,
+    "sensitivity": 0.4
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 2,
+      "bonus": 0.08
+    }
+  ],
+  "litterFraction": 0.95,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "tree",
+    "canopyRadius": 2.2,
+    "shadeOpacity": 0.7,
+    "minSpacing": 1.8
+  },
+  "visual": {
+    "shape": "tree_umbraheart",
+    "color": [
+      0.16,
+      0.38,
+      0.24
+    ],
+    "color2": [
+      0.38,
+      0.58,
+      0.3
+    ],
+    "colorVariance": 0.06,
+    "height": 3.5
+  },
+  "tags": [
+    "plant",
+    "tree",
+    "woody",
+    "broadleaf"
+  ]
+}

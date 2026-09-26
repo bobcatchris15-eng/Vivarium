@@ -1,0 +1,97 @@
+{
+  "id": "fenhook",
+  "name": "Fenhook",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Wet-ground scrambling climber that searches through saturated margins for shrubs and low woody structure.",
+  "description": "Flexible hooked leaf stalks drag long stems across wet soil, catching low branches and shrub stems before scrambling upward in tangled curtains.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.65,
+      "rock": 0.18,
+      "gravel": 0.28
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.82,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.62,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.56,
+      "tolerance": 0.34
+    },
+    "maxWaterDepth": 0.018,
+    "minSuitability": 0.18,
+    "hardMinMoisture": 0.34,
+    "hardMaxMoisture": 1
+  },
+  "growth": {
+    "ratePerDay": 0.31,
+    "maxBiomass": 1.1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 7,
+    "lifespanDays": 320,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.1,
+    "crowdingLimit": 4,
+    "sensitivity": 0.4
+  },
+  "proximity": [],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.015,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "vine",
+    "color": [
+      0.16,
+      0.44,
+      0.34
+    ],
+    "color2": [
+      0.38,
+      0.66,
+      0.5
+    ],
+    "colorVariance": 0.07,
+    "height": 0.24
+  },
+  "tags": [
+    "plant",
+    "climber",
+    "wetland",
+    "scrambler"
+  ],
+  "climber": {
+    "searchRadius": 2.8,
+    "groundSpeedPerDay": 0.22,
+    "segmentLength": 0.13,
+    "attachmentRadius": 0.2,
+    "branchChance": 0.22,
+    "maxUnsupportedLength": 3.2,
+    "verticalGrowthMultiplier": 2.1,
+    "supportTypes": [
+      "woody",
+      "log"
+    ],
+    "nodeCap": 96
+  }
+}

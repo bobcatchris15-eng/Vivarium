@@ -1,0 +1,80 @@
+{
+  "id": "mooncoin",
+  "name": "Mooncoin",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Low dry-ground mat former that tolerates lean sunny soil.",
+  "description": "Small silver-green round leaves hug the ground on wiry runners, forming thin mats across warm open soil.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.4,
+      "rock": 0.2
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.4,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.35,
+      "tolerance": 0.4
+    },
+    "nutrients": {
+      "optimum": 0.3,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "hardMaxMoisture": 0.75,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.28,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.22,
+    "maturityDays": 7,
+    "lifespanDays": 180,
+    "nutrientPerBiomass": 0.16,
+    "radiusAtMax": 0.11,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 2.3,
+    "sensitivity": 0.75
+  },
+  "proximity": [],
+  "litterFraction": 0.75,
+  "grazingValue": 0.25,
+  "visual": {
+    "shape": "roundleaf",
+    "color": [
+      0.52,
+      0.6,
+      0.44
+    ],
+    "color2": [
+      0.68,
+      0.72,
+      0.54
+    ],
+    "colorVariance": 0.06,
+    "height": 0.06
+  },
+  "tags": [
+    "plant",
+    "groundcover",
+    "xerophyte"
+  ]
+}

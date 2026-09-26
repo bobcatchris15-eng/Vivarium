@@ -1,0 +1,99 @@
+{
+  "id": "ghostbristle",
+  "name": "Ghostbristle",
+  "medium": "terrestrial",
+  "role": "Fast litter-dwelling detritivore of cool sheltered ground.",
+  "description": "A pale flattened runner with three long sensory tail filaments that slips through shaded litter and under woody debris.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.3,
+      "tolerance": 0.22
+    },
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.9,
+      "rock": 1,
+      "wood": 0.8
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.002,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 5,
+    "turnRatePerMinute": 3,
+    "wander": 0.6,
+    "habitatSeek": 0.6,
+    "senseRadius": 0.4
+  },
+  "diet": [
+    {
+      "resource": "flora:lichen",
+      "ratePerHour": 0.0015,
+      "efficiency": 10
+    },
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.0022,
+      "efficiency": 10
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.008,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 14,
+    "lifespanDays": 120,
+    "lifespanVariance": 0.2,
+    "dailyMortality": 0.004
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.62,
+    "cost": 0.28,
+    "clutchMin": 1,
+    "clutchMax": 3,
+    "cooldownDays": 8,
+    "mateRadius": 0.5,
+    "offspringEnergy": 0.5,
+    "maxLocalDensity": 8,
+    "populationCap": 90
+  },
+  "body": {
+    "sizeMin": 0.008,
+    "sizeMax": 0.014,
+    "visualScale": 2.6,
+    "massAtMid": 0.04,
+    "detritusOnDeath": 1.5
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.07
+  },
+  "visual": {
+    "model": "silverfish",
+    "baseColor": [
+      0.62,
+      0.64,
+      0.68
+    ],
+    "ornamentColor": [
+      0.4,
+      0.38,
+      0.36
+    ]
+  },
+  "behaviors": []
+}

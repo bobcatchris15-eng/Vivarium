@@ -1,0 +1,109 @@
+{
+  "id": "glintfin",
+  "name": "Glintfin",
+  "medium": "aquatic",
+  "role": "Small schooling plankton feeder of open water.",
+  "description": "A narrow silver-blue swimmer with a reflective lateral flash; groups hold loose schools over the deeper pond.",
+  "habitat": {
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.5
+    },
+    "substrates": {
+      "soil": 1,
+      "gravel": 1,
+      "rock": 1,
+      "wood": 1,
+      "water": 1
+    },
+    "minWaterDepth": 0.05,
+    "maxWaterDepth": 1.5,
+    "minSuitability": 0.1
+  },
+  "movement": {
+    "speedPerHour": 2.6,
+    "turnRatePerMinute": 3,
+    "wander": 0.4,
+    "habitatSeek": 0.5,
+    "senseRadius": 0.5
+  },
+  "diet": [
+    {
+      "resource": "plankton",
+      "ratePerHour": 0.005,
+      "efficiency": 7
+    },
+    {
+      "resource": "biofilm",
+      "ratePerHour": 0.001,
+      "efficiency": 3
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.01,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.8,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 25,
+    "lifespanDays": 140,
+    "lifespanVariance": 0.15,
+    "dailyMortality": 0.003
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.7,
+    "cost": 0.35,
+    "clutchMin": 2,
+    "clutchMax": 6,
+    "cooldownDays": 10,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 80,
+    "populationCap": 90
+  },
+  "body": {
+    "sizeMin": 0.01,
+    "sizeMax": 0.02,
+    "visualScale": 1.5,
+    "massAtMid": 0.02,
+    "detritusOnDeath": 1
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "ornament_density",
+      "hue_shift",
+      "pattern_strength",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "minnow",
+    "baseColor": [
+      0.3,
+      0.74,
+      0.88
+    ],
+    "ornamentColor": [
+      0.98,
+      0.36,
+      0.24
+    ]
+  },
+  "behaviors": [
+    "schooling"
+  ],
+  "schooling": {
+    "radius": 0.6,
+    "cohesion": 1,
+    "alignment": 1.2,
+    "separation": 1.5,
+    "separationDistance": 0.05
+  }
+}
