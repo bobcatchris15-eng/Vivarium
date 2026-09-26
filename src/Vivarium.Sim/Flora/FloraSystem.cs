@@ -30,21 +30,13 @@ public sealed class FloraSystem
 {
     private readonly VivariumWorld _w;
     private readonly List<FloraIndividual> _nb = new();
-    [ThreadStatic] private static List<FloraIndividual>? _lightNb;
-    private readonly double _lightQueryRadius;
+    private readonly List<FloraIndividual> _woodyCanopy = new();
+    private int _woodyCanopyVersion = -1;
     public const string PropagationStream = "flora.propagation";
     public const double TreeAreaPerIndividual = 15.0;
     public const double ShrubAreaPerIndividual = 4.0;
 
-    public FloraSystem(VivariumWorld w)
-    {
-        _w = w;
-        _lightQueryRadius = Math.Max(1.5, w.Content.Flora
-            .Where(sp => sp.Woody != null)
-            .Select(sp => sp.Woody!.CanopyRadius)
-            .DefaultIfEmpty(0)
-            .Max());
-    }
+    public FloraSystem(VivariumWorld w) { _w = w; }
 
     private ContentLibrary C => _w.Content;
 
@@ -66,30 +58,35 @@ public sealed class FloraSystem
         return count;
     }
 
+    private void RefreshWoodyCanopy()
+    {
+        if (_woodyCanopyVersion == _w.Flora.Version) return;
+        _woodyCanopy.Clear();
+        foreach (var f in _w.Flora.Items)
+            if (C.FloraOrThrow(f.SpeciesId).Woody != null) _woodyCanopy.Add(f);
+        _woodyCanopyVersion = _w.Flora.Version;
+    }
+
     /// <summary>
-    /// Incident ecological light after living-plant shade. Base light contains terrain/prop occlusion; ordinary
-    /// vascular plants retain the old light canopy effect while woody plants use their explicit crown metadata.
+    /// Incident ecological light after the structural tree/shrub canopy. The canopy list is rebuilt only when
+    /// flora membership changes, so this hot path is O(number of woody plants), whose island-wide population is
+    /// explicitly bounded. Low herb/fern shade is a coverage-layer microhabitat effect and remains local there.
     /// </summary>
     public double EffectiveLight(Vec2 p, EntityId self = default)
     {
         double light = _w.Fields.Light.Sample(p);
         double shade = 0;
-        var lightBuf = _lightNb ??= new List<FloraIndividual>(24);
-        _w.Flora.Neighbours(p, _lightQueryRadius, lightBuf);
-        foreach (var f in lightBuf)
+        RefreshWoodyCanopy();
+        foreach (var f in _woodyCanopy)
         {
             if (f.Id == self) continue;
             var sp = C.FloraOrThrow(f.SpeciesId);
-            if (sp.Archetype != "plant") continue;
+            var woody = sp.Woody!;
             double maturity = Math.Sqrt(f.BiomassFraction(sp));
-            double radius = sp.Woody is { } woody
-                ? woody.CanopyRadius * (0.3 + 0.7 * maturity)
-                : f.Radius(sp);
-            if (radius <= 1e-6) continue;
+            double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
             double d = Vec2.Distance(f.Position, p);
             if (d >= radius) continue;
-            double opacity = sp.Woody?.ShadeOpacity ?? 0.22;
-            shade += opacity * maturity * (1 - d / radius);
+            shade += woody.ShadeOpacity * maturity * (1 - d / radius);
         }
         return MathD.Clamp01(light - Math.Min(shade, light));
     }
