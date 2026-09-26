@@ -2,6 +2,7 @@
   "id": "carpobrotus",
   "name": "Carpobrotus",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Driest-ground succulent groundcover of full sun; holds sand and gravel together on poor soil.",
   "description": "A trailing succulent with thick, triangular-section leaves blushed red at the tips, occasionally lit by a magenta flower. Tolerates the driest, sunniest, least fertile ground on the island.",
   "habitat": {

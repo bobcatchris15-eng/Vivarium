@@ -2,6 +2,7 @@
   "id": "wetbank_moss",
   "name": "Bank Moss",
   "archetype": "moss",
+  "placementGroup": "moss_lichen",
   "role": "Saturation specialist of stream banks and pond margins.",
   "description": "A glossy emerald moss that needs near-saturated ground; tolerates splash but not submersion.",
   "habitat": {

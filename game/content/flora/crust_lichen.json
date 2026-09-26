@@ -2,6 +2,7 @@
   "id": "crust_lichen",
   "name": "Crust Lichen",
   "archetype": "lichen",
+  "placementGroup": "moss_lichen",
   "role": "Pioneer of bare, sunlit stone.",
   "description": "Flat mineral-orange rosettes that etch into exposed rock. Extremely slow, extremely persistent.",
   "habitat": {

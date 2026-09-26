@@ -2,6 +2,7 @@
   "id": "watercress",
   "name": "Watercress",
   "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
   "role": "Dense colonial carpet of the shallows; fills open shallow water before moss can reach it.",
   "description": "Bright round-leaved cress rafting over shallow water, rooted in the mud below and knitting into thick mats.",
   "habitat": {

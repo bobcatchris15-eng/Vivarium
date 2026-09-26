@@ -2,6 +2,7 @@
   "id": "stonecrop",
   "name": "Stonecrop",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Drought-proof succulent of bare, sunny ground; stores water in fleshy leaves and holds poor soil together.",
   "description": "Low mats of plump blue-green rosettes (Sedum) whose leaf tips blush red in strong light. Thrives where nothing else can: dry gravel, rock and thin soil.",
   "habitat": {

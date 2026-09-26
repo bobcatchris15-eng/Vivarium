@@ -2,6 +2,7 @@
   "id": "creeping_groundcover",
   "name": "Creeping Pennywort",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Fast vascular groundcover of rich soil.",
   "description": "Round glossy leaves on creeping runners; outcompetes mosses where nutrients are plentiful.",
   "habitat": {

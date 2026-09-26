@@ -2,6 +2,7 @@
   "id": "dichondra",
   "name": "Dichondra",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Shade-tolerant dry-ground groundcover; knits into a fine silvery mat under cover.",
   "description": "A creeping mat of small round, kidney-shaped silver-green leaves on short stalks, rooting at each node. Tolerates shade and dry soil, but will not stand in wet ground.",
   "habitat": {

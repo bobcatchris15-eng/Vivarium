@@ -2,6 +2,7 @@
   "id": "bacopa",
   "name": "Bacopa",
   "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
   "role": "Emergent creeper of shallow water and wet margins; small paired leaves, tiny white flowers.",
   "description": "A succulent creeping herb with small round paired leaves along soft stems, rooting as it spreads; tips carry tiny white flowers.",
   "habitat": {

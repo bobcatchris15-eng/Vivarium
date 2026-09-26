@@ -2,6 +2,7 @@
   "id": "cushion_moss",
   "name": "Cushion Moss",
   "archetype": "moss",
+  "placementGroup": "moss_lichen",
   "role": "Slow clumping moss of stones and thin soil.",
   "description": "Dense rounded cushions that grow slowly but persist for years on rock and gravel.",
   "habitat": {

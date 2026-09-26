@@ -276,10 +276,13 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen");
+        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
+        string placementGroupId = n.Str("placementGroup");
+        if (!FloraPlacementGroups.TryParse(placementGroupId, out var placementGroup))
+            n["placementGroup"].Error("expected moss_lichen | terrestrial | waterside_aquatic | decomposer");
         var h = n.Req("habitat");
         h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "minWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
         string feeds = h.Str("feeds", "nutrients");
@@ -423,7 +426,7 @@ public static class ContentLoader
         var col = v.Color("color");
         var def = new FloraSpeciesDef
         {
-            Id = n.Str("id"), Name = n.Str("name"), Archetype = arch, Role = n.Str("role", ""), Description = n.Str("description", ""), SourceFile = n.File,
+            Id = n.Str("id"), Name = n.Str("name"), Archetype = arch, PlacementGroup = placementGroup, Role = n.Str("role", ""), Description = n.Str("description", ""), SourceFile = n.File,
             SubstrateAffinity = ParseAffinity(h, "substrates"), RefuseSubstrates = ParseSubstrateSet(h, "refuseSubstrates"),
             RefuseTags = new HashSet<string>(h.StrList("refuseTags"), StringComparer.Ordinal),
             Moisture = ParsePref(h, "moisture"), Light = ParsePref(h, "light"), Nutrients = ParsePref(h, "nutrients"),

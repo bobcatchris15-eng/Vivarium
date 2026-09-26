@@ -2,6 +2,7 @@
   "id": "foliose_lichen",
   "name": "Leafy Lichen",
   "archetype": "lichen",
+  "placementGroup": "moss_lichen",
   "role": "Leafy lichen of weathered bark and shaded stone.",
   "description": "Blue-grey leafy lobes on weathered logs and shaded rock; cannot hold on to crumbling rotten wood.",
   "habitat": {
