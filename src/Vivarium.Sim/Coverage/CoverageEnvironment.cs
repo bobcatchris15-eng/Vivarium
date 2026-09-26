@@ -96,7 +96,6 @@ public static class CoverageEnvironment
     private const double ConcavitySampleStep = 0.15;   // m, terrain curvature finite-difference offset
     private const double ConcavityGain = 0.35;          // moisture per unit Laplacian (m^-1)
     private const double GradientStep = 0.15;           // m, moisture-field finite-difference offset
-    private const double CanopyShadePerPlant = 0.22;    // light fraction removed at a canopy's centre
 
     /// <summary>Samples the full micro-environment at world position p. Deterministic given world state.</summary>
     public static MicroEnv Sample(VivariumWorld w, Vec2 p)
@@ -180,29 +179,8 @@ public static class CoverageEnvironment
 
     // ------------------------------------------------------------------ light
 
-    [ThreadStatic] private static List<Flora.FloraIndividual>? _lightBuf;
-
-    /// <summary>Base light already bakes in terrain horizon and prop shading (<see cref="EnvironmentFields.RecomputeLight"/>);
-    /// this subtracts vascular-plant canopy shade sampled from the flora spatial index (§2).</summary>
-    private static double SampleLight(VivariumWorld w, Vec2 p)
-    {
-        double light = w.Fields.Light.Sample(p);
-        double shade = 0;
-        var buf = _lightBuf ??= new List<Flora.FloraIndividual>(16);
-        buf.Clear();
-        w.Flora.Neighbours(p, 1.5, buf);
-        foreach (var f in buf)
-        {
-            var sp = w.Content.FloraById(f.SpeciesId);
-            if (sp == null) continue;
-            double r = f.Radius(sp);
-            if (r <= 1e-6) continue;
-            double d = Vec2.Distance(f.Position, p);
-            if (d >= r) continue;
-            shade += CanopyShadePerPlant * (1 - d / r);
-        }
-        return MathD.Clamp01(light - Math.Min(shade, light));
-    }
+    /// <summary>Base terrain/prop light plus authoritative living-canopy shade from the flora system.</summary>
+    private static double SampleLight(VivariumWorld w, Vec2 p) => w.FloraSystem.EffectiveLight(p);
 
     // ------------------------------------------------------------------ substrate
 
