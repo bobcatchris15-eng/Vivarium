@@ -1,5 +1,17 @@
 # Vivarium photoreal overhaul — handoff (2026-09-25)
 
+## Latest checkpoint — 2026-09-25
+
+`main` at `be0789a` has been pushed to `origin/main`. It includes the edge field sampling fix, the continuous gravel blend, and the latest moss/lichen volume and rendering pass. The moss now has merged pillow relief, while lichen has a crinkled sheet surface. Moss texture projection was changed to avoid stretching over logs; review further renders before calling either material final. The moss/lichen reference pass completed 44/44 scenes; the paired moss performance comparison had median FPS ratio 0.995 and minimum 0.94 across 41 shared scenes. See `build/reference/mat2a-paired-candidate` and `build/reference/mat2a-paired-main`.
+
+Three unfinished branches are pushed to origin and remain separate from main:
+
+- `task/aq2-biofilm` at `921c4e5`: aquatic world integration and biofilm work, including a WIP performance pass. The temporary benchmark is saved as `AquaticBenchTemporary.cs.disabled` so it cannot make the test suite fail by design. Focused tests passed 47/47 before this latest WIP; rerun them and complete visual/performance review before merging.
+- `task/pl3` at `8d058db`: plasmodium cycle averaged flow work. Focused tests pass 62/63; two-food sheet retraction remains unresolved. Do not merge yet.
+- `task/vine-form` at `dbf7214`: climbing vine form work. Form tests passed 39/39; visual and performance review remain before merge.
+
+The sections below preserve the original project plan and historical checkpoint; their worktree status table predates these merges. The full S1–S7 overhaul remains in progress.
+
 Read this first, then `.claude/ledger.md` (task table and decisions), then `CLAUDE.md` (`## VALIDATE`).
 Design docs: `docs/overhaul/S1_S2_plan.md` (form kernel), `docs/overhaul/growth_models.md` (coverage growth; **§6R** plasmodium revision; **§15** aquatic flora).
 Baseline images: `docs/baseline/v0.1.2_sheet*.jpg`. Latest valid full capture of main: `build/reference/pair_main` (older), per-feature captures in `build/reference/<task>/`.
