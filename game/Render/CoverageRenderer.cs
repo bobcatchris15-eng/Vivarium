@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
@@ -28,11 +29,13 @@ public partial class CoverageRenderer : Node3D
 
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
+    public float RebuildBudgetMs { get; set; } = 3.0f;
 
     /// <summary>Diagnostics for reference/perf capture (updated every SyncTiles).</summary>
     public int TileCount => _tiles.Count;
     public int TrianglesBuilt { get; private set; } // cumulative triangles built this session (diagnostic only)
     public int InstanceCount => GetChildCount();
+    public int PendingRebuildCount => _pendingRebuilds.Count;
 
     private sealed class TileRecord
     {
@@ -74,6 +77,8 @@ public partial class CoverageRenderer : Node3D
     private readonly Color[,] _cornerColor = new Color[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly float[,] _cornerAlpha = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly List<(CoverageLayerId layer, int ti, int tj)> _toRemove = new();
+    private readonly Queue<(CoverageLayerId layer, int ti, int tj)> _pendingRebuilds = new();
+    private readonly HashSet<(CoverageLayerId layer, int ti, int tj)> _pendingKeys = new();
 
     private Vec3 GetGroundNormal(double wx, double wz)
     {
@@ -155,6 +160,8 @@ public partial class CoverageRenderer : Node3D
         _w = w;
         foreach (var c in GetChildren()) c.QueueFree();
         _tiles.Clear();
+        _pendingRebuilds.Clear();
+        _pendingKeys.Clear();
 
         _matMaterial = Bridge.Shader("res://Shaders/coverage_mat.gdshader");
         _matMaterial.SetShaderParameter("u_pattern", 0.0f); // fibrous moss micro-detail
@@ -180,7 +187,7 @@ public partial class CoverageRenderer : Node3D
         }
 
         InitSpecies();
-        SyncTiles();
+        SyncTiles(immediate: true);
     }
 
     public override void _Process(double delta)
@@ -193,7 +200,7 @@ public partial class CoverageRenderer : Node3D
         }
         if (!Visible) Visible = true;
 
-        SyncTiles();
+        SyncTiles(immediate: false);
     }
 
     private void InitSpecies()
@@ -258,7 +265,7 @@ public partial class CoverageRenderer : Node3D
         return _defaultSpecies;
     }
 
-    private void SyncTiles()
+    private void SyncTiles(bool immediate = false)
     {
         if (_w == null) return;
 
@@ -283,12 +290,34 @@ public partial class CoverageRenderer : Node3D
             }
         }
 
-        // Check tile versions and rebuild dirty / new tiles
-        CheckLayer(_w.Coverage.Mat);
-        CheckLayer(_w.Coverage.Crust);
+        // Check tile versions and enqueue dirty / new tiles
+        EnqueueTiles(_w.Coverage.Mat);
+        EnqueueTiles(_w.Coverage.Crust);
+
+        if (immediate)
+        {
+            while (_pendingRebuilds.Count > 0)
+            {
+                var key = _pendingRebuilds.Dequeue();
+                _pendingKeys.Remove(key);
+                ProcessTile(key);
+            }
+        }
+        else
+        {
+            long started = Stopwatch.GetTimestamp();
+            while (_pendingRebuilds.Count > 0)
+            {
+                var key = _pendingRebuilds.Dequeue();
+                _pendingKeys.Remove(key);
+                ProcessTile(key);
+                if (Stopwatch.GetElapsedTime(started).TotalMilliseconds >= RebuildBudgetMs)
+                    break;
+            }
+        }
     }
 
-    private void CheckLayer(CoverageLayer layer)
+    private void EnqueueTiles(CoverageLayer layer)
     {
         foreach (var t in layer.Tiles)
         {
@@ -297,15 +326,45 @@ public partial class CoverageRenderer : Node3D
             var key = (layer.Id, t.Ti, t.Tj);
             if (_tiles.TryGetValue(key, out var record))
             {
-                if (t.Version > record.Version)
+                if (t.Version > record.Version && _pendingKeys.Add(key))
                 {
-                    RebuildTile(layer, t, record);
+                    _pendingRebuilds.Enqueue(key);
                 }
             }
             else
             {
-                CreateTile(layer, t, key);
+                if (_pendingKeys.Add(key))
+                {
+                    _pendingRebuilds.Enqueue(key);
+                }
             }
+        }
+    }
+
+    private void ProcessTile((CoverageLayerId layer, int ti, int tj) key)
+    {
+        var layer = _w.Coverage.ById(key.layer);
+        if (!layer.TryGetTile(key.ti, key.tj, out var tile) || tile == null || tile.IsEmpty())
+        {
+            if (_tiles.TryGetValue(key, out var record))
+            {
+                record.MeshInstance.QueueFree();
+                RemoveChild(record.MeshInstance);
+                _tiles.Remove(key);
+            }
+            return;
+        }
+
+        if (_tiles.TryGetValue(key, out var rec))
+        {
+            if (tile.Version > rec.Version)
+            {
+                RebuildTile(layer, tile, rec);
+            }
+        }
+        else
+        {
+            CreateTile(layer, tile, key);
         }
     }
 

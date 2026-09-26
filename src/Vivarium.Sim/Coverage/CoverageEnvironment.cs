@@ -98,19 +98,29 @@ public static class CoverageEnvironment
     private const double GradientStep = 0.15;           // m, moisture-field finite-difference offset
 
     /// <summary>Samples the full micro-environment at world position p. Deterministic given world state.</summary>
-    public static MicroEnv Sample(VivariumWorld w, Vec2 p)
+    public static MicroEnv Sample(VivariumWorld w, Vec2 p, double[]? waterDist = null, (double slope, Vec2 downslope, double laplacian)? terrainGeo = null)
     {
         double now = w.Clock.SimSeconds;
 
-        double moisture = SampleMoisture(w, p);
-        double humidity = SampleHumidity(w, p, moisture);
+        double moisture = SampleMoisture(w, p, terrainGeo?.laplacian);
+        double humidity = SampleHumidity(w, p, moisture, waterDist);
         double light = SampleLight(w, p);
         double nutrients = w.Fields.Nutrients.Sample(p);
         double detritus = w.Fields.Detritus.Sample(p);
         var substrate = ClassifySubstrate(w, p, now);
-        double slope = w.Terrain.Slope(p);
-        var n = w.Terrain.Normal(p);
-        var downslope = new Vec2(n.X, n.Z).Normalized();
+        double slope;
+        Vec2 downslope;
+        if (terrainGeo.HasValue)
+        {
+            slope = terrainGeo.Value.slope;
+            downslope = terrainGeo.Value.downslope;
+        }
+        else
+        {
+            var n = w.Terrain.Normal(p);
+            slope = Math.Acos(MathD.Clamp(n.Y, -1, 1));
+            downslope = new Vec2(n.X, n.Z).Normalized();
+        }
         var gradient = SampleMoistureGradient(w, p);
 
         return new MicroEnv
@@ -129,29 +139,37 @@ public static class CoverageEnvironment
 
     // ------------------------------------------------------------------ moisture
 
-    private static double SampleMoisture(VivariumWorld w, Vec2 p)
+    private static double SampleMoisture(VivariumWorld w, Vec2 p, double? laplacian = null)
     {
         if (HasNearbySeepage(w, p)) return 1;
 
         double m = w.Fields.Moisture.Sample(p) + MoistureBonusOf(w).At(p);
-        m += ConcavityGain * MathD.Clamp(TerrainLaplacian(w, p), -1, 1);
+        double lap = laplacian ?? TerrainLaplacian(w, p);
+        m += ConcavityGain * MathD.Clamp(lap, -1, 1);
         return MathD.Clamp01(m);
     }
+
+    private static readonly Vec2[] SeepageOffsets =
+    {
+        new(SeepageRadius, 0),
+        new(0, SeepageRadius),
+        new(-SeepageRadius, 0),
+        new(0, -SeepageRadius),
+    };
 
     /// <summary>Water within 3 cm of p (own cell or a small ring around it) saturates the ground (§2).</summary>
     private static bool HasNearbySeepage(VivariumWorld w, Vec2 p)
     {
         if (w.Water.DepthAt(p) > 0) return true;
-        for (int k = 0; k < 4; k++)
+        for (int k = 0; k < SeepageOffsets.Length; k++)
         {
-            var dir = Vec2.FromAngle(k * Math.PI / 2);
-            if (w.Water.DepthAt(p + dir * SeepageRadius) > 0) return true;
+            if (w.Water.DepthAt(p + SeepageOffsets[k]) > 0) return true;
         }
         return false;
     }
 
     /// <summary>Discrete terrain Laplacian: positive in a bowl (concave up, wetter), negative on a ridge.</summary>
-    private static double TerrainLaplacian(VivariumWorld w, Vec2 p)
+    internal static double TerrainLaplacian(VivariumWorld w, Vec2 p)
     {
         double h = ConcavitySampleStep;
         double c = w.Terrain.Height(p);
@@ -168,9 +186,9 @@ public static class CoverageEnvironment
         return new Vec2((mx1 - mx0) / (2 * h), (mz1 - mz0) / (2 * h));
     }
 
-    private static double SampleHumidity(VivariumWorld w, Vec2 p, double moisture)
+    private static double SampleHumidity(VivariumWorld w, Vec2 p, double moisture, double[]? waterDist = null)
     {
-        var dist = w.Water.DistanceToWater();
+        var dist = waterDist ?? w.Water.DistanceToWater();
         int c = w.Grid.NearestDomainCell(p);
         double d = c >= 0 ? dist[c] : double.PositiveInfinity;
         double proximity = double.IsInfinity(d) ? 0 : Math.Exp(-d / 0.6);

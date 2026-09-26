@@ -117,6 +117,7 @@ public partial class GameSession : Node3D
         Autosave.Completed -= OnAutosaved;
         Autosave.Completed += OnAutosaved;
         History.Clear(); _lastHistoryDay = -1;
+        world.Scheduler.SystemTimed += (sys, ms) => FrameProfiler.Record("Sys." + sys.Name, ms);
         Log.Info(LogCategory.App, $"World started: '{world.Descriptor.Name}' seed {world.Seed}, day {world.Clock.BioDays:0.0}.");
         WorldChanged?.Invoke();
     }
@@ -169,13 +170,13 @@ public partial class GameSession : Node3D
     {
         using var prof = FrameProfiler.Measure("Session");
         if (Host == null) return;
-        Host.Advance(delta);
-        Autosave?.Tick(Host.World, delta);
+        using (FrameProfiler.Measure("Session.Advance")) Host.Advance(delta);
+        using (FrameProfiler.Measure("Session.Autosave")) Autosave?.Tick(Host.World, delta);
         var w = Host.World;
         if (w.Clock.BioDays - _lastHistoryDay >= 1.0 / 24 || _lastHistoryDay < 0)
         {
             _lastHistoryDay = w.Clock.BioDays;
-            History.Add(EcosystemStatistics.Compute(w));
+            using (FrameProfiler.Measure("Session.Stats")) History.Add(EcosystemStatistics.Compute(w));
             if (History.Count > 400) History.RemoveAt(0);
         }
     }

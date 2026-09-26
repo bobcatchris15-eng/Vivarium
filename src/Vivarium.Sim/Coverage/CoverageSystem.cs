@@ -81,16 +81,53 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
 
     // ------------------------------------------------------------------ IMicroEnvSource / ILichenEnvSource
 
+    private readonly Dictionary<long, MicroEnv> _stepEnvCache = new();
+    private readonly Dictionary<long, CoverageSubstrate> _stepSubstrateCache = new();
+    private readonly Dictionary<long, (double slope, Vec2 downslope, double laplacian)> _terrainGeoCache = new();
+    private int _terrainVersion = -1;
+    private double[]? _stepWaterDist;
+    private bool _inStep;
+
     public MicroEnv Sample(int gx, int gz)
     {
-        var p = CellCentre(gx, gz);
-        return CoverageEnvironment.Sample(_w, p);
+        if (_inStep)
+        {
+            long key = ((long)gx << 32) | (uint)gz;
+            if (_stepEnvCache.TryGetValue(key, out var cached)) return cached;
+            var p = CellCentre(gx, gz);
+            if (_terrainVersion != _w.Terrain.Version)
+            {
+                _terrainGeoCache.Clear();
+                _terrainVersion = _w.Terrain.Version;
+            }
+            if (!_terrainGeoCache.TryGetValue(key, out var geo))
+            {
+                var n = _w.Terrain.Normal(p);
+                double slope = Math.Acos(MathD.Clamp(n.Y, -1, 1));
+                var downslope = new Vec2(n.X, n.Z).Normalized();
+                double laplacian = CoverageEnvironment.TerrainLaplacian(_w, p);
+                geo = (slope, downslope, laplacian);
+                _terrainGeoCache[key] = geo;
+            }
+            var env = CoverageEnvironment.Sample(_w, p, _stepWaterDist, geo);
+            _stepEnvCache[key] = env;
+            return env;
+        }
+        return CoverageEnvironment.Sample(_w, CellCentre(gx, gz));
     }
 
     public CoverageSubstrate Substrate(int gx, int gz)
     {
-        var p = CellCentre(gx, gz);
-        return CoverageEnvironment.SampleSubstrate(_w, p);
+        if (_inStep)
+        {
+            long key = ((long)gx << 32) | (uint)gz;
+            if (_stepSubstrateCache.TryGetValue(key, out var cached)) return cached;
+            var p = CellCentre(gx, gz);
+            var sub = CoverageEnvironment.SampleSubstrate(_w, p);
+            _stepSubstrateCache[key] = sub;
+            return sub;
+        }
+        return CoverageEnvironment.SampleSubstrate(_w, CellCentre(gx, gz));
     }
 
     // ------------------------------------------------------------------ IDetritusSink
@@ -115,11 +152,25 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     public void Step(double dtSeconds)
     {
         double dtDays = dtSeconds / SimUnits.Day;
-        if (_matSpecies.Count > 0)
-            LastMatStats = MatRules.Step(_w.Coverage.Mat, this, _matSpecies, dtDays, _step, _w.Seed, this);
-        if (_lichenSpecies.Count > 0)
-            LichenRules.Step(_w.Coverage.Crust, this, _lichenSpecies, dtDays, _step, _w.Seed);
-        _step++;
+        _inStep = true;
+        _stepWaterDist = _w.Water.DistanceToWater();
+        _stepEnvCache.Clear();
+        _stepSubstrateCache.Clear();
+        try
+        {
+            if (_matSpecies.Count > 0)
+                LastMatStats = MatRules.Step(_w.Coverage.Mat, this, _matSpecies, dtDays, _step, _w.Seed, this);
+            if (_lichenSpecies.Count > 0)
+                LichenRules.Step(_w.Coverage.Crust, this, _lichenSpecies, dtDays, _step, _w.Seed);
+            _step++;
+        }
+        finally
+        {
+            _inStep = false;
+            _stepWaterDist = null;
+            _stepEnvCache.Clear();
+            _stepSubstrateCache.Clear();
+        }
     }
 
     // ------------------------------------------------------------------ initial seeding (world creation)

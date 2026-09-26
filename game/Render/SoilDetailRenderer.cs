@@ -73,7 +73,7 @@ public partial class SoilDetailRenderer : Node3D
         // (a blind rebuild every 0.75 s was a periodic multi-millisecond hitch)
         Vector3 cam = Camera?.GlobalPosition ?? Vector3.Zero;
         bool moved = cam.DistanceSquaredTo(_lastCam) > 0.8f * 0.8f;
-        if (!moved && _terrainVersion == _w.Terrain.Version && _accum < 6.0) return;
+        if (!moved && _terrainVersion == _w.Terrain.Version) return;
         _accum = 0;
         _lastCam = cam;
         _terrainVersion = _w.Terrain.Version;
@@ -90,6 +90,21 @@ public partial class SoilDetailRenderer : Node3D
         var clodXf = new List<Transform3D>(); var clodCol = new List<Color>();
         var twigXf = new List<Transform3D>(); var twigCol = new List<Color>();
         var flakeXf = new List<Transform3D>(); var flakeCol = new List<Color>();
+
+        var nearRocks = new List<Vivarium.Sim.World.Rock>();
+        var nearLogs = new List<Vivarium.Sim.World.LogProp>();
+        float searchRadius = CullRadius + 3.0f;
+        var camP = new Vivarium.Sim.Core.Vec2(camPos.X, camPos.Z);
+        foreach (var r in _w.Props.Rocks)
+        {
+            if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, r.Position) <= searchRadius + r.FootprintRadius)
+                nearRocks.Add(r);
+        }
+        foreach (var l in _w.Props.Logs)
+        {
+            if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, l.Position) <= searchRadius + l.Length * 0.5 + l.Radius)
+                nearLogs.Add(l);
+        }
 
         // step over a fine lattice near the camera: this layer only needs to exist within CullRadius, so the
         // scan cost stays bounded regardless of world size.
@@ -133,7 +148,16 @@ public partial class SoilDetailRenderer : Node3D
             double hz1 = _w.Terrain.Height(p + new Vivarium.Sim.Core.Vec2(0, e));
             double slope = Math.Sqrt(Math.Pow((hx1 - hx0) / (2 * e), 2) + Math.Pow((hz1 - hz0) / (2 * e), 2));
             double hollow = Math.Clamp(((hx0 + hx1 + hz0 + hz1) * 0.25 - hc) * 7.0, -0.25, 0.35);
-            double propDist = Math.Min(_w.Props.DistanceToFeature(p, "log"), _w.Props.DistanceToFeature(p, "rock"));
+
+            double rockDist = double.PositiveInfinity;
+            for (int ri = 0; ri < nearRocks.Count; ri++)
+                rockDist = Math.Min(rockDist, Math.Max(0, Vivarium.Sim.Core.Vec2.Distance(p, nearRocks[ri].Position) - nearRocks[ri].FootprintRadius));
+
+            double logDist = double.PositiveInfinity;
+            for (int li = 0; li < nearLogs.Count; li++)
+                logDist = Math.Min(logDist, Math.Max(0, nearLogs[li].AxisDistance(p) - nearLogs[li].Radius));
+
+            double propDist = Math.Min(logDist, rockDist);
             double shelter = double.IsInfinity(propDist) ? 0 : Math.Exp(-propDist / 0.45);
             double patch = 0.65 + 0.35 * rng.Randf();
             double deposition = Math.Clamp((0.62 - Math.Min(slope, 1.0) * 0.28 + hollow + shelter * 0.24) * patch, 0.12, 1.25);
@@ -151,10 +175,12 @@ public partial class SoilDetailRenderer : Node3D
             Color twigTint = new Color(0.33f, 0.26f, 0.19f) * darken;
             Color litterTint = new Color(0.55f, 0.42f, 0.18f) * darken;
 
-            for (int k = 0; k < crumbCount; k++) Place(crumbXf, crumbCol, g, p, ref rng, soilTint, 0.7f, 1.3f, DetailKind.Crumb);
-            for (int k = 0; k < clodCount; k++) Place(clodXf, clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f, DetailKind.Clod);
-            for (int k = 0; k < twigCount; k++) Place(twigXf, twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f, DetailKind.Twig);
-            for (int k = 0; k < flakeCount; k++) Place(flakeXf, flakeCol, g, p, ref rng, litterTint, 0.7f, 1.3f, DetailKind.Flake);
+            var cellTilt = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, (float)p.X, (float)p.Z, 0.04));
+
+            for (int k = 0; k < crumbCount; k++) Place(crumbXf, crumbCol, g, p, ref rng, soilTint, 0.7f, 1.3f, DetailKind.Crumb, cellTilt);
+            for (int k = 0; k < clodCount; k++) Place(clodXf, clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f, DetailKind.Clod, cellTilt);
+            for (int k = 0; k < twigCount; k++) Place(twigXf, twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f, DetailKind.Twig, cellTilt);
+            for (int k = 0; k < flakeCount; k++) Place(flakeXf, flakeCol, g, p, ref rng, litterTint, 0.7f, 1.3f, DetailKind.Flake, cellTilt);
         }
 
         SetInstances(_crumbs, crumbXf, crumbCol);
@@ -165,7 +191,7 @@ public partial class SoilDetailRenderer : Node3D
 
     private enum DetailKind { Crumb, Clod, Twig, Flake }
 
-    private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale, DetailKind kind)
+    private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale, DetailKind kind, Basis cellTilt)
     {
         // Triangular jitter favours the middle of each source cell but has no visible axis-aligned edge.
         float jx = (rng.Randf() + rng.Randf() - 1f) * (float)(g.CellSize * (Quality >= 2 ? 0.52 : 1.04));
@@ -195,7 +221,7 @@ public partial class SoilDetailRenderer : Node3D
         }
 
         // Litter follows the substrate slope rather than hovering across it.
-        basis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, (float)wp.X, (float)wp.Z, 0.025)) * basis;
+        basis = cellTilt * basis;
         xf.Add(new Transform3D(basis, new Vector3((float)wp.X, y + 0.0015f * scale, (float)wp.Z)));
         float v = rng.RandfRange(0.82f, 1.16f);
         col.Add(new Color(tint.R * v, tint.G * v, tint.B * v));
