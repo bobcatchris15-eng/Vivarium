@@ -282,11 +282,13 @@ public static class OrganismMeshes
             case "succulent": Succulent(m, rng, c1, c2); break;
             case "tussock": Tussock(m, rng, c1, c2); break;
             case "fruticose": Fruticose(m, rng, c1, c2); break;
-            case "tree_locust": TreeLocust(m, rng, c1, c2); break;
-            case "tree_catalpa": TreeCatalpa(m, rng, c1, c2); break;
-            case "tree_tamarack": TreeTamarack(m, rng, c1, c2); break;
-            case "tree_cottonwood": TreeCottonwood(m, rng, c1, c2); break;
-            case "shrub_sumac": ShrubSumac(m, rng, c1, c2); break;
+            case "tree_ironlace": TreeIronlace(m, rng, c1, c2); break;
+            case "tree_umbraheart": TreeUmbraheart(m, rng, c1, c2); break;
+            case "tree_fenneedle": TreeFenneedle(m, rng, c1, c2); break;
+            case "tree_kiteleaf": TreeKiteleaf(m, rng, c1, c2); break;
+            case "shrub_embercrown": ShrubEmbercrown(m, rng, c1, c2); break;
+            case "shrub_lanternbrush": ShrubLanternbrush(m, rng, c1, c2); break;
+            case "shrub_shadebell": ShrubShadebell(m, rng, c1, c2); break;
             default:
                 Primitives.Ellipsoid(m, Vec3.Zero, new Vec3(1, 1, 1), 6, 8, (a, b) => (c1, 1, a, b, 0, 0));
                 break;
@@ -1295,7 +1297,7 @@ public static class OrganismMeshes
     }
 
     /// <summary>Open, irregular crown with many small compound-leaf masses and visible branch structure.</summary>
-    private static void TreeLocust(MeshData m, Rng rng, double[] c1, double[] c2)
+    private static void TreeIronlace(MeshData m, Rng rng, double[] c1, double[] c2)
     {
         var trunk = new[] { new Vec3(0, 0, 0), new Vec3(0.02, 0.34, -0.01), new Vec3(-0.015, 0.68, 0.02), new Vec3(0, 0.9, 0) };
         Primitives.Tube(m, trunk, new[] { 0.11, 0.09, 0.055, 0.018 }, 8,
@@ -1317,8 +1319,8 @@ public static class OrganismMeshes
         }
     }
 
-    /// <summary>Low-forking broad crown; oversized leaves make the miniature tree read as catalpa at a glance.</summary>
-    private static void TreeCatalpa(MeshData m, Rng rng, double[] c1, double[] c2)
+    /// <summary>Low-forking broad crown; oversized asymmetric shield leaves give the fictional tree its heavy silhouette.</summary>
+    private static void TreeUmbraheart(MeshData m, Rng rng, double[] c1, double[] c2)
     {
         var trunk = new[] { new Vec3(0, 0, 0), new Vec3(0.01, 0.30, 0), new Vec3(-0.02, 0.54, 0.01), new Vec3(0, 0.68, 0) };
         Primitives.Tube(m, trunk, new[] { 0.14, 0.12, 0.085, 0.035 }, 9,
@@ -1345,8 +1347,8 @@ public static class OrganismMeshes
         FoliageClump(m, new Vec3(0, 0.88, 0), new Vec3(0.42, 0.2, 0.38), rng, c1, c2);
     }
 
-    /// <summary>Feathery deciduous conifer: straight bole with layered whorls and soft needle masses.</summary>
-    private static void TreeTamarack(MeshData m, Rng rng, double[] c1, double[] c2)
+    /// <summary>Soft-needle wetland tree: straight bole with layered whorls and radial bottlebrush foliage.</summary>
+    private static void TreeFenneedle(MeshData m, Rng rng, double[] c1, double[] c2)
     {
         Primitives.Tube(m, new[] { new Vec3(0, 0, 0), new Vec3(0.01, 0.52, 0), new Vec3(-0.01, 1.0, 0) },
             new[] { 0.09, 0.055, 0.008 }, 8, (i, v) => (Primitives.Mix(WoodyBark, WoodyBarkLight, i / 2.0), 1, i, v, 2, 0));
@@ -1373,8 +1375,8 @@ public static class OrganismMeshes
         NeedleTuft(m, new Vec3(0, 0.94, 0), new Vec3(0.17, 0.10, 0.17), rng, c1, c2);
     }
 
-    /// <summary>Tall fast pioneer with an ascending scaffold and an irregular, airy oval crown.</summary>
-    private static void TreeCottonwood(MeshData m, Rng rng, double[] c1, double[] c2)
+    /// <summary>Tall fast pioneer with an ascending scaffold and an irregular, airy high crown.</summary>
+    private static void TreeKiteleaf(MeshData m, Rng rng, double[] c1, double[] c2)
     {
         Primitives.Tube(m, new[] { new Vec3(0, 0, 0), new Vec3(-0.015, 0.38, 0.01), new Vec3(0.018, 0.72, -0.01), new Vec3(0, 0.98, 0) },
             new[] { 0.12, 0.095, 0.052, 0.012 }, 9,
@@ -1393,8 +1395,8 @@ public static class OrganismMeshes
         FoliageClump(m, new Vec3(0.02, 0.91, 0), new Vec3(0.34, 0.22, 0.31), rng, c1, c2);
     }
 
-    /// <summary>Staghorn sumac clump: several crooked stems, pinnate sprays and a few upright crimson fruit cones.</summary>
-    private static void ShrubSumac(MeshData m, Rng rng, double[] c1, double[] c2)
+    /// <summary>Embercrown clump: several crooked stems, divided sprays and a few upright ember-red fruit lanterns.</summary>
+    private static void ShrubEmbercrown(MeshData m, Rng rng, double[] c1, double[] c2)
     {
         var fruit = new[] { 0.52, 0.08, 0.07 };
         int stems = 5 + rng.NextInt(3);
@@ -1423,6 +1425,73 @@ public static class OrganismMeshes
                 var fc = top + new Vec3(0, 0.055, 0);
                 Primitives.Ellipsoid(m, fc, new Vec3(0.055, 0.11, 0.055), 5, 8,
                     (u, v) => (Primitives.Mix(fruit, new[] { 0.70, 0.13, 0.08 }, u), 1, u, v, 0, 0));
+            }
+        }
+    }
+
+    /// <summary>Arching wet-margin shrub with broad leaves and dangling translucent seed lanterns.</summary>
+    private static void ShrubLanternbrush(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        var bark = new[] { 0.24, 0.12, 0.16 };
+        int stems = 4 + rng.NextInt(3);
+        for (int k = 0; k < stems; k++)
+        {
+            double ang = 2 * Math.PI * k / stems + rng.Range(-0.35, 0.35);
+            var root = new Vec3(Math.Cos(ang) * 0.08, 0, Math.Sin(ang) * 0.08);
+            var mid = new Vec3(Math.Cos(ang) * rng.Range(0.24, 0.38), rng.Range(0.42, 0.58), Math.Sin(ang) * rng.Range(0.24, 0.38));
+            var top = new Vec3(Math.Cos(ang) * rng.Range(0.40, 0.58), rng.Range(0.62, 0.82), Math.Sin(ang) * rng.Range(0.40, 0.58));
+            Primitives.Tube(m, new[] { root, mid, top }, new[] { 0.032, 0.020, 0.008 }, 6, (i, v) => (bark, 1, i, v, 2, 0));
+            for (int j = 1; j <= 4; j++)
+            {
+                double t = 0.22 + j * 0.16;
+                var p = root + (top - root) * t;
+                double sideAng = ang + Math.PI / 2 + rng.Range(-0.25, 0.25);
+                foreach (double sign in new[] { -1.0, 1.0 })
+                {
+                    var dir = new Vec3(Math.Cos(sideAng) * sign, rng.Range(0.02, 0.14), Math.Sin(sideAng) * sign).Normalized();
+                    var side = dir.Cross(Vec3.Up); if (side.LengthSq < 1e-8) side = new Vec3(1, 0, 0);
+                    double len = rng.Range(0.15, 0.23);
+                    Primitives.CurvedLeaf(m, p, p + dir * len, side, len * rng.Range(0.28, 0.38),
+                        Primitives.Scale(c1, 0.82), c2, camber: len * 0.10, longitudinal: 4, asymmetry: rng.Range(-0.12, 0.12));
+                }
+            }
+            if (k % 2 == 0)
+            {
+                var fruit = top + new Vec3(0, -0.08, 0);
+                Primitives.Ellipsoid(m, fruit, new Vec3(0.045, 0.075, 0.045), 5, 8,
+                    (u, v) => (new[] { 0.55 + 0.15 * u, 0.30 + 0.18 * u, 0.18 + 0.10 * u }, 0.82, u, v, 0, 0));
+            }
+        }
+    }
+
+    /// <summary>Low forked understory shrub with broad dark leaves and pendent pale bell flowers.</summary>
+    private static void ShrubShadebell(MeshData m, Rng rng, double[] c1, double[] c2)
+    {
+        var bark = new[] { 0.25, 0.22, 0.20 };
+        int stems = 5;
+        for (int k = 0; k < stems; k++)
+        {
+            double ang = 2 * Math.PI * k / stems + rng.Range(-0.3, 0.3);
+            var root = new Vec3(0, 0, 0);
+            var fork = new Vec3(Math.Cos(ang) * 0.18, rng.Range(0.26, 0.36), Math.Sin(ang) * 0.18);
+            var top = new Vec3(Math.Cos(ang) * rng.Range(0.34, 0.48), rng.Range(0.52, 0.68), Math.Sin(ang) * rng.Range(0.34, 0.48));
+            Primitives.Tube(m, new[] { root, fork, top }, new[] { 0.030, 0.018, 0.007 }, 6, (i, v) => (bark, 1, i, v, 2, 0));
+            for (int j = 0; j < 3; j++)
+            {
+                double t = 0.45 + j * 0.20;
+                var p = root + (top - root) * t;
+                double la = ang + (j % 2 == 0 ? 0.75 : -0.75);
+                var dir = new Vec3(Math.Cos(la), rng.Range(0.00, 0.10), Math.Sin(la)).Normalized();
+                var side = dir.Cross(Vec3.Up); if (side.LengthSq < 1e-8) side = new Vec3(1, 0, 0);
+                double len = rng.Range(0.18, 0.26);
+                Primitives.CurvedLeaf(m, p, p + dir * len, side, len * 0.34,
+                    Primitives.Scale(c1, 0.78), c2, camber: len * 0.12, longitudinal: 5, asymmetry: rng.Range(-0.08, 0.08));
+            }
+            if (k < 3)
+            {
+                var bell = top + new Vec3(0, -0.07, 0);
+                Primitives.Ellipsoid(m, bell, new Vec3(0.050, 0.065, 0.050), 5, 8,
+                    (u, v) => (new[] { 0.80, 0.78 + 0.08 * u, 0.62 + 0.12 * u }, 1, u, v, 0, 0));
             }
         }
     }

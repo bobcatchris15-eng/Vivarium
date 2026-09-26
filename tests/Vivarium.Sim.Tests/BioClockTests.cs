@@ -21,7 +21,7 @@ public class BioClockTests
         double Grown(double bio)
         {
             var w = Pond(bio);
-            var f = w.FloraSystem.Establish(w.Content.FloraOrThrow("creeping_groundcover"), FaunaFixtures.Land + new Vec2(-0.4, 1), "t", 0.05);
+            var f = w.FloraSystem.Establish(w.Content.FloraOrThrow("coinrunner"), FaunaFixtures.Land + new Vec2(-0.4, 1), "t", 0.05);
             TestUtil.Condition(w, 0.68, 0.3, 0.45);
             w.Step(360);
             return f.Biomass - 0.05;
@@ -32,7 +32,7 @@ public class BioClockTests
         double Walked(double bio)
         {
             var w = Pond(bio);
-            var st = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), FaunaFixtures.Land);
+            var st = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), FaunaFixtures.Land);
             var start = st.PositionXZ;
             double path = 0; var last = start;
             for (int i = 0; i < 60; i++) { w.FaunaSystem.StepBehaviour(20); w.Clock.Tick += 2; path += Vec2.Distance(last, st.PositionXZ); last = st.PositionXZ; }
@@ -73,8 +73,8 @@ public class BioClockTests
         Assert.Equal(WorldDescriptor.MinBioAcceleration, w.Clock.BioAcceleration);
         t.SetBioAcceleration(10);
         w.Step(50);
-        var f = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), FaunaFixtures.Land);
-        Assert.True(f.ReproCooldownUntil > w.Clock.BioSeconds && f.ReproCooldownUntil < w.Clock.BioSeconds + FaunaFixtures.Sp("springtail").ReproCooldown + 1);
+        var f = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), FaunaFixtures.Land);
+        Assert.True(f.ReproCooldownUntil > w.Clock.BioSeconds && f.ReproCooldownUntil < w.Clock.BioSeconds + FaunaFixtures.Sp("prismhopper").ReproCooldown + 1);
     }
 
     [Fact]

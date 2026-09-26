@@ -49,6 +49,12 @@ public sealed class FloraIndividual
     /// <summary>Slime mold: network depth from the founding plasmodium (0 = founder), set once at bud creation.
     /// Drives the old-dark-ochre to front-bright-yellow tint gradient; not walked from ParentId per frame.</summary>
     public int Generation { get; set; }
+    /// <summary>Climbers: this node is an active horizontal growth tip.</summary>
+    public bool ClimberTip { get; set; }
+    /// <summary>Climbers: this node has physically reached and attached to structural support.</summary>
+    public bool ClimberAttached { get; set; }
+    /// <summary>Climbers: accumulated runner length from the founder without an attachment (m).</summary>
+    public double UnsupportedLength { get; set; }
 
     public Vec2 Position => new(X, Z);
 

@@ -107,13 +107,13 @@ public class BootstrapTests
         var b = ContentLoader.Load(TestUtil.ContentSource);
         Assert.Equal(a.ContentDigest, b.ContentDigest);
         Assert.Equal(a.Flora.Select(f => f.Id), b.Flora.Select(f => f.Id));
-        Assert.Equal(28, a.Flora.Count);
+        Assert.Equal(32, a.Flora.Count);
         Assert.Equal(7, a.Fauna.Count);
         Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
-        Assert.Equal(9, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
+        Assert.Equal(11, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
         Assert.Equal(4, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));
         Assert.Equal(3, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Decomposer));
-        Assert.Equal(5, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody));
+        Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody));
         Assert.Empty(a.Warnings);
     }
 
@@ -121,24 +121,24 @@ public class BootstrapTests
     public void InvalidDefinitionsNameFileAndField()
     {
         var src = new OverlayContentSource(TestUtil.ContentSource);
-        var carpet = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "flora", "carpet_moss.json"))
+        var carpet = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "flora", "velvetweave_moss.json"))
             .Replace("\"ratePerDay\": 0.35", "\"ratePerDay\": -3").Replace("\"soil\": 1.0", "\"loam\": 1.0")
             .Replace("\"placementGroup\": \"moss_lichen\"", "\"placementGroup\": \"bog_goblin\"");
-        src.Set("flora/carpet_moss.json", carpet);
+        src.Set("flora/velvetweave_moss.json", carpet);
         src.Set("tools.json", "{ \"nutrients\": { \"amount\": 0.6 } ");
         var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(src));
-        Assert.Contains(ex.Errors, e => e.File == "flora/carpet_moss.json" && e.Path == "$.growth.ratePerDay" && e.Message.Contains("out of range"));
-        Assert.Contains(ex.Errors, e => e.File == "flora/carpet_moss.json" && e.Path == "$.habitat.substrates.loam" && e.Message.Contains("unknown substrate"));
-        Assert.Contains(ex.Errors, e => e.File == "flora/carpet_moss.json" && e.Path == "$.placementGroup" && e.Message.Contains("expected moss_lichen"));
+        Assert.Contains(ex.Errors, e => e.File == "flora/velvetweave_moss.json" && e.Path == "$.growth.ratePerDay" && e.Message.Contains("out of range"));
+        Assert.Contains(ex.Errors, e => e.File == "flora/velvetweave_moss.json" && e.Path == "$.habitat.substrates.loam" && e.Message.Contains("unknown substrate"));
+        Assert.Contains(ex.Errors, e => e.File == "flora/velvetweave_moss.json" && e.Path == "$.placementGroup" && e.Message.Contains("expected moss_lichen"));
         Assert.Contains(ex.Errors, e => e.File == "tools.json" && e.Message.Contains("invalid JSON"));
     }
 
     [Fact] // t-010
     public void MissingIndexedFileAndUnknownFieldsAreReported()
     {
-        var src = new OverlayContentSource(TestUtil.ContentSource).Set("fauna/shrimp.json", null);
+        var src = new OverlayContentSource(TestUtil.ContentSource).Set("fauna/emberglass_swimmer.json", null);
         var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(src));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/shrimp.json" && e.Message.Contains("does not exist"));
+        Assert.Contains(ex.Errors, e => e.File == "fauna/emberglass_swimmer.json" && e.Message.Contains("does not exist"));
 
         var src2 = new OverlayContentSource(TestUtil.ContentSource);
         src2.Set("genetics.json", File.ReadAllText(Path.Combine(TestUtil.ContentDir, "genetics.json")).Replace("\"mutationProbability\"", "\"mutationChance\""));

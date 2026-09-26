@@ -1,0 +1,96 @@
+{
+  "id": "fenneedle",
+  "name": "Fenneedle",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Wet-ground soft-needle tree for pond margins, saturated hollows and cool open soil.",
+  "description": "A straight narrow tree bears radial bottlebrush tufts of soft blue-green needles that thin dramatically under drought.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.55,
+      "gravel": 0.22
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.84,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.78,
+      "tolerance": 0.34
+    },
+    "nutrients": {
+      "optimum": 0.42,
+      "tolerance": 0.38
+    },
+    "maxWaterDepth": 0.07,
+    "hardMinMoisture": 0.42,
+    "hardMaxMoisture": 1,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.062,
+    "maxBiomass": 17,
+    "initialBiomass": 0.1,
+    "declinePerDay": 0.075,
+    "maturityDays": 48,
+    "lifespanDays": 2600,
+    "nutrientPerBiomass": 0.23,
+    "radiusAtMax": 1.15,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 24,
+    "radius": 3.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.7
+  },
+  "competition": {
+    "radius": 1.35,
+    "crowdingLimit": 5.2,
+    "sensitivity": 0.34
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 1.5,
+      "bonus": 0.16
+    }
+  ],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.01,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "tree",
+    "canopyRadius": 1.5,
+    "shadeOpacity": 0.48,
+    "minSpacing": 1.35
+  },
+  "visual": {
+    "shape": "tree_fenneedle",
+    "color": [
+      0.27,
+      0.55,
+      0.42
+    ],
+    "color2": [
+      0.65,
+      0.78,
+      0.35
+    ],
+    "colorVariance": 0.08,
+    "height": 4.2
+  },
+  "tags": [
+    "plant",
+    "tree",
+    "woody",
+    "conifer",
+    "wetland"
+  ]
+}

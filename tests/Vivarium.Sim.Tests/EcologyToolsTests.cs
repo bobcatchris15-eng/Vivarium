@@ -14,8 +14,8 @@ public class EcologyTests
     public void FloraAndFaunaDeathShareOneDetritusPathwayWithoutDoubleCounting()
     {
         var w = TestUtil.FlatWorld(17);
-        var fl = w.FloraSystem.Establish(TestUtil.Content.FloraOrThrow("creeping_groundcover"), new Vec2(2, 1), "t", 0.8);
-        var fa = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(2, -1));
+        var fl = w.FloraSystem.Establish(TestUtil.Content.FloraOrThrow("coinrunner"), new Vec2(2, 1), "t", 0.8);
+        var fa = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(2, -1));
         double d0 = w.Fields.Detritus.Total();
         w.FloraSystem.Kill(fl, "t"); w.FaunaSystem.Kill(fa, "t");
         double d1 = w.Fields.Detritus.Total();
@@ -33,7 +33,7 @@ public class EcologyTests
     public void SpringtailsGainEnergyByProcessingDetritus()
     {
         var w = FaunaFixtures.PondWorld(detritus: 1.0);
-        var st = Enumerable.Range(0, 10).Select(i => w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), FaunaFixtures.Land + new Vec2(0.03 * i, 0))).ToList();
+        var st = Enumerable.Range(0, 10).Select(i => w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), FaunaFixtures.Land + new Vec2(0.03 * i, 0))).ToList();
         foreach (var s in st) s.Energy = 0.3;
         double det = w.Fields.Detritus.Total();
         for (int i = 0; i < 200; i++) w.FaunaSystem.StepMetabolism(30);
@@ -63,7 +63,7 @@ public class EcologyTests
     public void FedPopulationReturnsBoundedWasteNutrients()
     {
         var w = FaunaFixtures.PondWorld(detritus: 2.0);
-        for (int i = 0; i < 20; i++) w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), FaunaFixtures.Land + new Vec2(0.04 * i, 0)).Energy = 0.3;
+        for (int i = 0; i < 20; i++) w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), FaunaFixtures.Land + new Vec2(0.04 * i, 0)).Energy = 0.3;
         for (int i = 0; i < 400; i++) w.FaunaSystem.StepMetabolism(30);
         Assert.True(w.Tally.NutrientsFromWaste > 0);
         Assert.True(w.Fields.Nutrients.AllFinite());
@@ -77,14 +77,14 @@ public class EcologyTests
         {
             var w = FaunaFixtures.PondWorld(71, detritus: food);
             foreach (int c in w.Grid.DomainCells) w.Fields.Nutrients[c] = 0;
-            var sp = FaunaFixtures.Sp("springtail");
+            var sp = FaunaFixtures.Sp("prismhopper");
             for (int i = 0; i < 20; i++) { var f = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Land + new Vec2(0.04 * (i % 5), 0.04 * (i / 5)), 0.4); f.Energy = 0.7; }
             for (long t = 0; t < 12 * 8640; t++)
             {
                 w.FaunaSystem.StepBehaviour(10); if (t % 3 == 0) w.FaunaSystem.StepMetabolism(30); if (t % 30 == 0) w.FaunaSystem.StepLifecycle(300);
                 w.Clock.Tick++;
             }
-            return w.Fauna.CountOf("springtail");
+            return w.Fauna.CountOf("prismhopper");
         }
         int scarce = Run(0.002), abundant = Run(3.0);
         Assert.True(abundant > scarce * 1.5, $"abundant {abundant} vs scarce {scarce}");
@@ -94,16 +94,16 @@ public class EcologyTests
     public void AnyCatalogSpeciesCanBeReintroducedWithoutReset()
     {
         var w = TestUtil.DefaultWorld();
-        foreach (var f in w.Fauna.Items.Where(x => x.SpeciesId == "triops").ToList()) w.FaunaSystem.Kill(f, "extinction test");
-        Assert.Equal(0, w.Fauna.CountOf("triops"));
+        foreach (var f in w.Fauna.Items.Where(x => x.SpeciesId == "siltshield").ToList()) w.FaunaSystem.Kill(f, "extinction test");
+        Assert.Equal(0, w.Fauna.CountOf("siltshield"));
         int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
-        var r = Introduction.IntroduceFauna(w, "triops", w.Grid.CellCenter(pond), 5);
+        var r = Introduction.IntroduceFauna(w, "siltshield", w.Grid.CellCenter(pond), 5);
         Assert.True(r.Ok, r.Message);
-        Assert.Equal(5, w.Fauna.CountOf("triops"));
-        foreach (var fl in w.Flora.Items.Where(x => x.SpeciesId == "ornamental_herb").ToList()) w.FloraSystem.Kill(fl, "t");
-        var spot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => w.FloraSystem.CanEstablish(w.Content.FloraOrThrow("ornamental_herb"), p, out _));
-        Assert.True(Introduction.IntroduceFlora(w, "ornamental_herb", spot).Ok);
-        Assert.False(Introduction.IntroduceFauna(w, "triops", new Vec2(-6, -3), 1).Ok);  // dry ground refused
+        Assert.Equal(5, w.Fauna.CountOf("siltshield"));
+        foreach (var fl in w.Flora.Items.Where(x => x.SpeciesId == "prismstar").ToList()) w.FloraSystem.Kill(fl, "t");
+        var spot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => w.FloraSystem.CanEstablish(w.Content.FloraOrThrow("prismstar"), p, out _));
+        Assert.True(Introduction.IntroduceFlora(w, "prismstar", spot).Ok);
+        Assert.False(Introduction.IntroduceFauna(w, "siltshield", new Vec2(-6, -3), 1).Ok);  // dry ground refused
         Assert.Empty(w.CheckInvariants());
     }
 
@@ -158,11 +158,11 @@ public class ToolTests
     {
         var (w, _) = Setup();
         var p = new Vec2(2, 1);
-        var fl = w.FloraSystem.Establish(w.Content.FloraOrThrow("creeping_groundcover"), p, "t", 1.0);
+        var fl = w.FloraSystem.Establish(w.Content.FloraOrThrow("coinrunner"), p, "t", 1.0);
         var eye = new Vec3(p.X, 3, p.Z);
         var hit = Selection.Raycast(w, eye, new Vec3(0, -1, 0));
         Assert.Equal(HitKind.Flora, hit.Kind); Assert.Equal(fl.Id, hit.Id);
-        var fa = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), p);
+        var fa = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), p);
         hit = Selection.Raycast(w, eye, new Vec3(0, -1, 0));
         Assert.Equal(HitKind.Fauna, hit.Kind); Assert.Equal(fa.Id, hit.Id);
         var rock = w.Placement.PlaceRock(new Vec2(-0.5, 2.5), 0.4, 0, 1);
@@ -173,7 +173,7 @@ public class ToolTests
         Assert.Equal(w.SurfaceHeight(new Vec2(3.5, -2)), hit.Point.Y, 3);
         Assert.False(Selection.Raycast(w, new Vec3(0, 3, 0), new Vec3(0, 1, 0)).IsHit);
         // an organism hidden behind a rock is not selected through it
-        var hidden = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(-0.5, 2.5));
+        var hidden = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(-0.5, 2.5));
         hit = Selection.Raycast(w, new Vec3(-2, 0.8, 2.5), new Vec3(1, -0.2, 0));
         Assert.NotEqual(hidden.Id, hit.Id);
     }
@@ -182,8 +182,8 @@ public class ToolTests
     public void GrabCircleFindsNearestCritterInside()
     {
         var (w, t) = Setup();
-        var a = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(3, -2));
-        var b = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(3.2, -2));
+        var a = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(3, -2));
+        var b = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(3.2, -2));
         Assert.Equal(a.Id, Selection.NearestFauna(w, new Vec2(3.05, -2), 0.1)?.Id);
         Assert.Equal(b.Id, Selection.NearestFauna(w, new Vec2(3.14, -2), 0.1)?.Id);
         Assert.Null(Selection.NearestFauna(w, new Vec2(3.6, -2), 0.1));
@@ -195,7 +195,7 @@ public class ToolTests
     public void GrabAndReleaseKeepIdentityAndValidateHabitat()
     {
         var (w, t) = Setup();
-        var shrimp = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("shrimp"), FaunaFixtures.Pond);
+        var shrimp = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("emberglass_swimmer"), FaunaFixtures.Pond);
         var id = shrimp.Id; var genome = shrimp.GenomeId; var origin = shrimp.Position;
         Assert.True(t.Grab(id).Ok);
         Assert.True(t.MoveHeld(id, new Vec3(1, 1.5, 1)).Ok);
@@ -210,7 +210,7 @@ public class ToolTests
         Assert.True(good.Ok, good.Message);
         Assert.Equal(id, shrimp.Id); Assert.Equal(genome, shrimp.GenomeId);
         Assert.False(shrimp.Grabbed);
-        Assert.True(w.Water.DepthAt(shrimp.PositionXZ) >= FaunaFixtures.Sp("shrimp").MinWaterDepth);
+        Assert.True(w.Water.DepthAt(shrimp.PositionXZ) >= FaunaFixtures.Sp("emberglass_swimmer").MinWaterDepth);
         Assert.True(t.Grab(id).Ok);
         Assert.True(t.ReturnHeld(id, origin).Ok);
     }
@@ -219,7 +219,7 @@ public class ToolTests
     public void RemovePlantUsesEcologicalPathwayOnce()
     {
         var (w, t) = Setup();
-        var f = w.FloraSystem.Establish(w.Content.FloraOrThrow("ornamental_herb"), new Vec2(2, 2), "t", 0.5);
+        var f = w.FloraSystem.Establish(w.Content.FloraOrThrow("prismstar"), new Vec2(2, 2), "t", 0.5);
         double det = w.Fields.Detritus.Total();
         Assert.True(t.RemovePlant(f.Id).Ok);
         Assert.Null(w.Flora.Get(f.Id));
@@ -254,8 +254,8 @@ public class ToolTests
     public void PokeDisturbsFaunaAndOnlyWobblesFlora()
     {
         var (w, t) = Setup();
-        var st = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(2, 0));
-        var fl = w.FloraSystem.Establish(w.Content.FloraOrThrow("creeping_groundcover"), new Vec2(2.1, 0.1), "t", 0.5);
+        var st = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(2, 0));
+        var fl = w.FloraSystem.Establish(w.Content.FloraOrThrow("coinrunner"), new Vec2(2.1, 0.1), "t", 0.5);
         double biomass = fl.Biomass;
         var hit = Selection.Raycast(w, new Vec3(2, 2, 0), new Vec3(0, -1, 0));
         var res = t.Poke(new PokeAction(hit.Point, new Vec3(0, -1, 0), 1.0, hit));
@@ -298,16 +298,16 @@ public class ToolTests
     public void IntroductionToolsValidateHabitat()
     {
         var (w, t) = Setup();
-        Assert.False(t.IntroduceFlora("crust_lichen", new Vec2(2, 1)).Ok);        // soil: hard refusal
-        Assert.NotNull(t.PreviewFlora("crust_lichen", new Vec2(2, 1)));
-        var ok = t.IntroduceFlora("creeping_groundcover", new Vec2(2, 1));
+        Assert.False(t.IntroduceFlora("embercrust_lichen", new Vec2(2, 1)).Ok);        // soil: hard refusal
+        Assert.NotNull(t.PreviewFlora("embercrust_lichen", new Vec2(2, 1)));
+        var ok = t.IntroduceFlora("coinrunner", new Vec2(2, 1));
         Assert.True(ok.Ok, ok.Message);
-        Assert.Equal("creeping_groundcover", w.Flora.Get(ok.Affected[0])!.SpeciesId);
-        Assert.False(t.IntroduceFauna("microminnow", FaunaFixtures.Land).Ok);
-        var fish = t.IntroduceFauna("microminnow", FaunaFixtures.Pond);
+        Assert.Equal("coinrunner", w.Flora.Get(ok.Affected[0])!.SpeciesId);
+        Assert.False(t.IntroduceFauna("glintfin", FaunaFixtures.Land).Ok);
+        var fish = t.IntroduceFauna("glintfin", FaunaFixtures.Pond);
         Assert.True(fish.Ok, fish.Message);
         Assert.All(fish.Affected, id => Assert.True(w.Genomes.Contains(w.Fauna.Get(id)!.GenomeId)));
-        Assert.False(t.IntroduceFauna("springtail", FaunaFixtures.Pond).Ok);
+        Assert.False(t.IntroduceFauna("prismhopper", FaunaFixtures.Pond).Ok);
     }
 
     [Fact] // introduce/remove moss and lichen through the ordinary tools
@@ -320,37 +320,37 @@ public class ToolTests
 
         // moss establishes on moist ground and shows up as coverage, not a FloraIndividual (world may already
         // carry unrelated starter moss elsewhere from SeedInitial, so compare deltas, not absolute area)
-        double baselineMoss = w.CoverageSystem.CoveredArea("carpet_moss");
-        var moss = t.IntroduceFlora("carpet_moss", mossPt);
+        double baselineMoss = w.CoverageSystem.CoveredArea("velvetweave_moss");
+        var moss = t.IntroduceFlora("velvetweave_moss", mossPt);
         Assert.True(moss.Ok, moss.Message);
         Assert.Empty(moss.Affected);
-        double afterIntroduce = w.CoverageSystem.CoveredArea("carpet_moss");
+        double afterIntroduce = w.CoverageSystem.CoveredArea("velvetweave_moss");
         Assert.True(afterIntroduce > baselineMoss);
-        Assert.Null(t.PreviewFlora("carpet_moss", mossPt));
+        Assert.Null(t.PreviewFlora("velvetweave_moss", mossPt));
 
         // fails underwater
-        var wet = t.IntroduceFlora("carpet_moss", FaunaFixtures.Pond);
+        var wet = t.IntroduceFlora("velvetweave_moss", FaunaFixtures.Pond);
         Assert.False(wet.Ok);
-        Assert.NotNull(t.PreviewFlora("carpet_moss", FaunaFixtures.Pond));
+        Assert.NotNull(t.PreviewFlora("velvetweave_moss", FaunaFixtures.Pond));
 
         // fails on dry ground
         var dryPt = new Vec2(0, -2);
         foreach (int c in w.Grid.CellsInRadius(dryPt, 0.6)) { w.Fields.Light[c] = 0.4; w.Fields.Moisture[c] = 0.02; }
-        Assert.False(t.IntroduceFlora("carpet_moss", dryPt).Ok);
-        Assert.NotNull(t.PreviewFlora("carpet_moss", dryPt));
+        Assert.False(t.IntroduceFlora("velvetweave_moss", dryPt).Ok);
+        Assert.NotNull(t.PreviewFlora("velvetweave_moss", dryPt));
 
         // lichen refuses soil but succeeds on rock
-        Assert.False(t.IntroduceFlora("crust_lichen", mossPt).Ok);
+        Assert.False(t.IntroduceFlora("embercrust_lichen", mossPt).Ok);
         var rockPos = new Vec2(2.5, -1.5);
         Assert.True(t.PlaceRock(rockPos, 0.35, 0.2, 77).Ok);
-        var lichen = t.IntroduceFlora("crust_lichen", rockPos);
+        var lichen = t.IntroduceFlora("embercrust_lichen", rockPos);
         Assert.True(lichen.Ok, lichen.Message);
-        Assert.True(w.CoverageSystem.CoveredArea("crust_lichen") > 0);
+        Assert.True(w.CoverageSystem.CoveredArea("embercrust_lichen") > 0);
 
         // remove tool clears the coverage disc
         var cleared = t.RemoveCoverage(mossPt);
         Assert.True(cleared.Ok, cleared.Message);
-        Assert.True(w.CoverageSystem.CoveredArea("carpet_moss") < afterIntroduce);
+        Assert.True(w.CoverageSystem.CoveredArea("velvetweave_moss") < afterIntroduce);
         Assert.False(t.RemoveCoverage(mossPt).Ok);
     }
 
@@ -360,13 +360,13 @@ public class ToolTests
         var mossPt = new Vec2(0, 2);
         var (w1, t1) = Setup();
         foreach (int c in w1.Grid.CellsInRadius(mossPt, 0.6)) w1.Fields.Light[c] = 0.4;
-        Assert.True(t1.IntroduceFlora("carpet_moss", mossPt).Ok);
+        Assert.True(t1.IntroduceFlora("velvetweave_moss", mossPt).Ok);
         for (int i = 0; i < 20; i++) w1.Step(60);
         var digest1 = TestUtil.Digest(w1);
 
         var (w2, t2) = Setup();
         foreach (int c in w2.Grid.CellsInRadius(mossPt, 0.6)) w2.Fields.Light[c] = 0.4;
-        Assert.True(t2.IntroduceFlora("carpet_moss", mossPt).Ok);
+        Assert.True(t2.IntroduceFlora("velvetweave_moss", mossPt).Ok);
         for (int i = 0; i < 20; i++) w2.Step(60);
         var digest2 = TestUtil.Digest(w2);
         Assert.Equal(digest1, digest2);
@@ -376,7 +376,7 @@ public class ToolTests
         Assert.True(Persistence.SaveSystem.Save(w1, path).Ok);
         var loaded = Persistence.SaveSystem.Load(w1.Content, path);
         Assert.True(loaded.Ok, loaded.Message);
-        Assert.True(loaded.World!.CoverageSystem.CoveredArea("carpet_moss") > 0);
+        Assert.True(loaded.World!.CoverageSystem.CoveredArea("velvetweave_moss") > 0);
         Assert.Equal(digest1, TestUtil.Digest(loaded.World));
     }
 }

@@ -1,0 +1,95 @@
+{
+  "id": "lanternbrush",
+  "name": "Lanternbrush",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Arching wet-margin shrub of bright saturated soil and pond edges.",
+  "description": "Smooth wine-dark stems bow over wet ground beneath translucent bladderlike seed lanterns and broad blue-green leaves.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.28,
+      "water": 0.08
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.78,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.74,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.58,
+      "tolerance": 0.36
+    },
+    "maxWaterDepth": 0.018,
+    "hardMinMoisture": 0.3,
+    "hardMaxMoisture": 1,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.11,
+    "maxBiomass": 6.2,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.09,
+    "maturityDays": 22,
+    "lifespanDays": 900,
+    "nutrientPerBiomass": 0.25,
+    "radiusAtMax": 0.72,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 11,
+    "radius": 1.35,
+    "propagules": 2,
+    "minBiomassFraction": 0.62
+  },
+  "competition": {
+    "radius": 0.82,
+    "crowdingLimit": 3.2,
+    "sensitivity": 0.5
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 1.5,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 0.95,
+    "shadeOpacity": 0.38,
+    "minSpacing": 0.55
+  },
+  "visual": {
+    "shape": "shrub_lanternbrush",
+    "color": [
+      0.18,
+      0.42,
+      0.38
+    ],
+    "color2": [
+      0.43,
+      0.66,
+      0.52
+    ],
+    "colorVariance": 0.08,
+    "height": 1.4
+  },
+  "tags": [
+    "plant",
+    "shrub",
+    "woody",
+    "wetland"
+  ]
+}

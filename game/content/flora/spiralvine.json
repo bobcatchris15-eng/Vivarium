@@ -1,0 +1,96 @@
+{
+  "id": "spiralvine",
+  "name": "Spiralvine",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Fast sun-seeking twiner that searches widely for tall structure before racing upward.",
+  "description": "A corded stem advances over open ground in broad searching arcs; after contact it coils around woody supports and throws narrow leaves into the brightest canopy.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.8,
+      "rock": 0.6,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.52,
+      "tolerance": 0.3
+    },
+    "light": {
+      "optimum": 0.84,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.36
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.17,
+    "hardMinMoisture": 0.14,
+    "hardMaxMoisture": 0.92
+  },
+  "growth": {
+    "ratePerDay": 0.34,
+    "maxBiomass": 1.25,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 7,
+    "lifespanDays": 360,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.48
+  },
+  "competition": {
+    "radius": 0.11,
+    "crowdingLimit": 4,
+    "sensitivity": 0.35
+  },
+  "proximity": [],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.015,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "vine",
+    "color": [
+      0.2,
+      0.48,
+      0.24
+    ],
+    "color2": [
+      0.56,
+      0.72,
+      0.26
+    ],
+    "colorVariance": 0.08,
+    "height": 0.28
+  },
+  "tags": [
+    "plant",
+    "climber",
+    "sun_seeking"
+  ],
+  "climber": {
+    "searchRadius": 4,
+    "groundSpeedPerDay": 0.28,
+    "segmentLength": 0.16,
+    "attachmentRadius": 0.18,
+    "branchChance": 0.18,
+    "maxUnsupportedLength": 4.5,
+    "verticalGrowthMultiplier": 2.8,
+    "supportTypes": [
+      "woody",
+      "log",
+      "rock"
+    ]
+  }
+}

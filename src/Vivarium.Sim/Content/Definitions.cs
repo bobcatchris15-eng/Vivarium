@@ -123,6 +123,26 @@ public sealed class WoodyDef
     public double MinSpacing { get; init; }
 }
 
+public sealed class ClimberDef
+{
+    /// <summary>Radius (m) within which a searching tip can bias growth toward a support. Sensing never teleports growth.</summary>
+    public double SearchRadius { get; init; }
+    /// <summary>Horizontal runner extension in metres per biological second.</summary>
+    public double GroundSpeed { get; init; }
+    /// <summary>Persistent stem-node spacing in metres.</summary>
+    public double SegmentLength { get; init; }
+    /// <summary>Physical contact distance at which a searching tip attaches to a support.</summary>
+    public double AttachmentRadius { get; init; }
+    /// <summary>Chance that the parent remains an active tip after budding, producing a branch.</summary>
+    public double BranchChance { get; init; }
+    /// <summary>Maximum lineage length that may be produced without finding a support.</summary>
+    public double MaxUnsupportedLength { get; init; }
+    /// <summary>Visual vertical-growth multiplier once attached.</summary>
+    public double VerticalGrowthMultiplier { get; init; } = 1;
+    /// <summary>Allowed support classes: woody, log, rock.</summary>
+    public HashSet<string> SupportTypes { get; init; } = new(StringComparer.Ordinal);
+}
+
 public sealed class FloraSpeciesDef
 {
     public string Id { get; init; } = "";
@@ -200,6 +220,8 @@ public sealed class FloraSpeciesDef
 
     /// <summary>Tree/shrub structural metadata; null for ordinary flora.</summary>
     public WoodyDef? Woody { get; init; }
+    /// <summary>Horizontal search and attachment behaviour for structural climbers; null for ordinary flora.</summary>
+    public ClimberDef? Climber { get; init; }
     public bool IsTree => Woody?.Layer == WoodyLayer.Tree;
     public bool IsShrub => Woody?.Layer == WoodyLayer.Shrub;
 

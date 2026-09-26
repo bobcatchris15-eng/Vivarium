@@ -1,0 +1,86 @@
+{
+  "id": "ambervein",
+  "name": "Ambervein plasmodium",
+  "archetype": "slime_mold",
+  "placementGroup": "decomposer",
+  "role": "Mobile network decomposer that forages through litter and fruits when local food is exhausted.",
+  "description": "A branching ochre-to-gold plasmodial network flows through dead matter, reinforcing productive veins and raising dark glassy spore stalks when starved.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "soil": 1,
+      "wood": 1,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.75,
+      "tolerance": 0.2
+    },
+    "light": {
+      "optimum": 0.2,
+      "tolerance": 0.6
+    },
+    "nutrients": {
+      "optimum": 0.1,
+      "tolerance": 0.2
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.4,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 1,
+    "maxBiomass": 0.6,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.5,
+    "maturityDays": 1.5,
+    "lifespanDays": 30,
+    "nutrientPerBiomass": 0.8,
+    "radiusAtMax": 0.1,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 3,
+    "radius": 1,
+    "propagules": 4,
+    "minBiomassFraction": 0.3
+  },
+  "competition": {
+    "radius": 0.12,
+    "crowdingLimit": 1.2,
+    "sensitivity": 0.4
+  },
+  "creep": {
+    "speedPerDay": 1.2,
+    "starvedDays": 2,
+    "foodThreshold": 0.12
+  },
+  "proximity": [],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0,
+  "grazingValue": 0.4,
+  "visual": {
+    "shape": "plasmodium",
+    "color": [
+      0.95,
+      0.8,
+      0.12
+    ],
+    "color2": [
+      0.98,
+      0.9,
+      0.35
+    ],
+    "colorVariance": 0.05,
+    "height": 0.02
+  },
+  "tags": [
+    "slime_mold",
+    "protist"
+  ]
+}

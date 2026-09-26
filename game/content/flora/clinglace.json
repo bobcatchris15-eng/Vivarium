@@ -1,0 +1,93 @@
+{
+  "id": "clinglace",
+  "name": "Clinglace",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Shade-tolerant climber that runs across the ground until it finds structure, then adheres and ascends.",
+  "description": "Fine rooting stems creep widely through litter before attaching to wood, rock or woody plants; overlapping plated leaves thicken after attachment.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.8,
+      "rock": 0.6,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.45,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 8,
+    "lifespanDays": 300,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.5,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.1,
+    "crowdingLimit": 4,
+    "sensitivity": 0.35
+  },
+  "proximity": [],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.015,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "vine",
+    "color": [
+      0.22,
+      0.45,
+      0.18
+    ],
+    "color2": [
+      0.38,
+      0.6,
+      0.24
+    ],
+    "colorVariance": 0.06,
+    "height": 0.2
+  },
+  "tags": [
+    "plant",
+    "climber"
+  ],
+  "climber": {
+    "searchRadius": 3.2,
+    "groundSpeedPerDay": 0.18,
+    "segmentLength": 0.14,
+    "attachmentRadius": 0.16,
+    "branchChance": 0.12,
+    "maxUnsupportedLength": 4,
+    "verticalGrowthMultiplier": 2.2,
+    "supportTypes": [
+      "woody",
+      "log",
+      "rock"
+    ]
+  }
+}

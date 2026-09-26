@@ -1,0 +1,106 @@
+{
+  "id": "pearl_cushion_moss",
+  "name": "Pearl-cushion moss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Compact mound-forming moss of bright mineral surfaces.",
+  "description": "Dense blue-green cushions rise into pearl-tipped hummocks where exposed stone stays intermittently damp.",
+  "habitat": {
+    "substrates": {
+      "rock": 0.95,
+      "soil": 0.55,
+      "gravel": 0.5,
+      "wood": 0.5
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.55,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.15,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "hardMaxMoisture": 0.9,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.16,
+    "maxBiomass": 0.6,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.1,
+    "maturityDays": 14,
+    "lifespanDays": 320,
+    "nutrientPerBiomass": 0.15,
+    "radiusAtMax": 0.14,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.3,
+    "propagules": 1,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.25,
+    "crowdingLimit": 2,
+    "sensitivity": 0.6
+  },
+  "proximity": [
+    {
+      "target": "feature:rock",
+      "radius": 0.3,
+      "bonus": 0.12
+    }
+  ],
+  "litterFraction": 0.8,
+  "grazingValue": 0,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.012,
+    "maxHeight": 0.025,
+    "heightRule": "dome",
+    "domeLength": 6,
+    "water": {
+      "kWet": 4,
+      "kDry": 0.6,
+      "wMin": 0.15,
+      "wOpt": 0.5
+    },
+    "light": {
+      "k": 0.3,
+      "max": 0.9
+    },
+    "dormBrownDays": 4,
+    "dormDeathDays": 20,
+    "sporeRate": 0.0008,
+    "moistureFeedback": 0,
+    "seedBiomass": 0.06
+  },
+  "visual": {
+    "shape": "cushion",
+    "color": [
+      0.22,
+      0.52,
+      0.18
+    ],
+    "color2": [
+      0.62,
+      0.74,
+      0.2
+    ],
+    "colorVariance": 0.05,
+    "height": 0.06
+  },
+  "tags": [
+    "moss"
+  ]
+}

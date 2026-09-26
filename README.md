@@ -36,34 +36,27 @@ reintroduce it from the catalog.
 
 ## What's in the ecosystem
 
-**Flora (28).**
-- **Mosses:** carpet, cushion and bank moss, plus Sphagnum.
-- **Lichens:** crust, leafy and reindeer lichen.
-- **Groundcovers:**
-  - Dry ground: dichondra, clover, carpobrotus and stonecrop.
-  - Wet ground: creeping pennywort, creeping fig, watercress and bacopa.
-- **Taller plants:** maidenhair fern, blue fescue, dwarf rush and starflower.
-- **Trees & shrubs:** black locust, catalpa, tamarack, cottonwood and staghorn sumac. Tree recruitment shares an island-wide carrying limit of roughly one tree per 15 m²; shrubs use a looser structural budget.
-- **Fungi and slime mold:** bonnet mushrooms, turkey tail and a many-headed slime mold.
+**Flora (32).**
+- **Mosses:** Velvetweave, Pearl-cushion, Floodlace and Bogglass moss.
+- **Lichens:** Embercrust, Ruffle and Antlerlace lichen.
+- **Low ground flora:** Coinrunner, Mooncoin, Trifold, Glassfinger, Sunstone rosette and Frosttussock.
+- **Wetland & aquatic:** Glassrush, Brooklace, Fenbead and Mirrorleaf.
+- **Understory & herbs:** Veilfern and Prismstar.
+- **Trees:** Ironlace, Umbraheart, Fenneedle and Kiteleaf.
+- **Shrubs:** Embercrown, Lanternbrush and Shadebell. Trees retain an island-wide carrying limit of roughly one tree per 15 m²; shrubs use a looser structural budget.
+- **Climbers:** Clinglace, Spiralvine and Fenhook. Climbers establish on suitable ground, run horizontally as persistent stem networks while searching for structure, then attach to woody plants, logs or rocks and transition to vertical growth.
+- **Fungi & plasmodium:** Dewbonnet fungus, Emberfan fungus and Ambervein plasmodium.
 
-**Fauna (7).** Springtails, pill bugs, silverfish and darkling beetles on land. Cherry shrimp, triops and
-microminnows in the water. Critters carry heritable genomes (colour, markings, size and appendages) with
-lineage tracking, so populations drift and adapt over generations.
+**Fauna (7).** Prismhoppers, Marblebacks, Ghostbristles and Coalback beetles work the land detrital web. Emberglass swimmers, Siltshields and Glintfins occupy the pond. Fauna still carry heritable genomes for colour, markings, size and appendages with lineage tracking, so populations drift over generations.
 
 Some behaviour worth knowing about:
 
-- **Colonial growth.** Mosses, lichens and mat-forming groundcovers grow as colonies of small cells that bud
-  only at the rim. The interior thickens and rises. Each cell takes a colour from its species' palette, so
-  moss comes out mottled and lichen banded in rings around where the colony started. Mature interiors merge
-  into fewer, larger cells to keep the simulation bounded.
-- **Slime mold.** It forages as a network that follows dead matter in the soil. Veins thicken where food
-  flows and change colour with age, from ochre at the old core to bright yellow at the growing front. When
-  food runs out it fruits and releases spores.
-- **Water.** A groundwater table and surface water both move across the terrain. Moisture wicks outward from
-  wet ground. Each species has a moisture optimum and hard limits, so land mosses stay out of standing water
-  while cress, bacopa and Sphagnum fill the shallows and bog margins.
-- **Food web.** Grazers eat plants, biofilm and plankton. Decomposers and dead matter feed nutrients back
-  into the soil.
+- **Structural succession.** Woody pioneers create persistent shade and vertical structure. Lanternbrush occupies wet bright margins; Shadebell is an understory shrub favored by partial canopy.
+- **Searching climbers.** A climber does not require a support beside its germination point. Active tips extend node by node across the ground, bias toward supports within a wide sensing radius, branch occasionally, and only switch to vertical growth after physically reaching a support. Unsupported runners have a finite lineage length.
+- **Colonial growth.** Mosses and lichens grow as coverage-layer colonies that advance at their edges and thicken internally while remaining bounded.
+- **Ambervein.** The plasmodium forages as a network that follows dead matter. Productive veins thicken and the growth front brightens; prolonged starvation triggers fruiting and spore release.
+- **Water.** Groundwater and surface water move across the terrain. Moisture wicks outward from wet ground, producing distinct dry, mesic, saturated and aquatic niches.
+- **Food web.** Grazers consume plants, biofilm and plankton. Decomposers and dead matter return nutrients to the soil.
 
 ## Building from source
 
@@ -153,7 +146,7 @@ Species are data. Most additions need only a JSON file.
    - `growth` and `spread`.
    - `colony`, if it should grow as an edge-budding mat, with a colour palette and a random or banded pattern.
    - `visual`: shape, colours and height.
-   - `woody`, for trees/shrubs: structural layer, canopy radius, shade opacity and same-layer spacing.
+   - `woody`, for trees/shrubs: structural layer, canopy radius, shade opacity and same-layer spacing.\n   - `climber`, for ground-searching climbers: support search, runner speed, node spacing, attachment and unsupported-length limits.
 2. Register it in `game/content/index.json`, and add it to the presets in `game/content/presets/` if it should
    appear in new worlds.
 3. Give it a place in the food web by adding it to a grazer's diet in `game/content/fauna/*.json`.
