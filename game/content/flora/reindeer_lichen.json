@@ -2,6 +2,7 @@
   "id": "reindeer_lichen",
   "name": "Reindeer lichen",
   "archetype": "lichen",
+  "placementGroup": "moss_lichen",
   "role": "Slow, shrubby lichen of dry, sunny soil and gravel; tolerates drought by drying out and reviving when damp.",
   "description": "Spongy, pale grey-green tufts of finely branching hollow stalks (Cladonia), crisp when dry and soft when wet.",
   "habitat": {

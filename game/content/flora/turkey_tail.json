@@ -2,6 +2,7 @@
   "id": "turkey_tail",
   "name": "Turkey tail",
   "archetype": "fungus",
+  "placementGroup": "decomposer",
   "role": "Wood-rotting bracket fungus: slowly breaks down fallen logs and releases their nutrients.",
   "description": "Thin leathery shelves in overlapping tiers, banded in browns, tans and cream like a fanned tail. Only grows on dead wood.",
   "habitat": {

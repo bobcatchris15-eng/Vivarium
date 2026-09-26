@@ -148,10 +148,22 @@ public partial class Windows : Control
                 UiKit.Label(role, 13, null, wrap: true), UiKit.Label(habitat, 12, UiKit.Muted, wrap: true));
             _catalogList.AddChild(UiKit.Panel("CatalogEntry_" + id, text));
         }
-        foreach (var sp in Session.Content.Flora)
-            Entry(sp.Id, sp.Name, sp.Archetype, sp.Role,
-                $"Grows on {string.Join(", ", sp.SubstrateAffinity.Where(kv => kv.Value > 0.4).Select(kv => SubstrateIds.Id(kv.Key)))}; moisture ≈{sp.Moisture.Optimum:0.0}, light ≈{sp.Light.Optimum:0.0}" +
-                (sp.RefuseSubstrates.Count + sp.RefuseTags.Count > 0 ? $"; refuses {string.Join(", ", sp.RefuseSubstrates.Select(SubstrateIds.Id).Concat(sp.RefuseTags))}" : ""), false);
+        bool firstSection = true;
+        void Section(string title)
+        {
+            if (!firstSection) _catalogList.AddChild(new HSeparator());
+            firstSection = false;
+            _catalogList.AddChild(UiKit.Label(title, 14, UiKit.Accent));
+        }
+        foreach (var group in FloraPlacementGroups.All)
+        {
+            Section(FloraPlacementGroups.Name(group));
+            foreach (var sp in Session.Content.Flora.Where(sp => sp.PlacementGroup == group).OrderBy(sp => sp.Name))
+                Entry(sp.Id, sp.Name, sp.Archetype, sp.Role,
+                    $"Grows on {string.Join(", ", sp.SubstrateAffinity.Where(kv => kv.Value > 0.4).Select(kv => SubstrateIds.Id(kv.Key)))}; moisture ≈{sp.Moisture.Optimum:0.0}, light ≈{sp.Light.Optimum:0.0}" +
+                    (sp.RefuseSubstrates.Count + sp.RefuseTags.Count > 0 ? $"; refuses {string.Join(", ", sp.RefuseSubstrates.Select(SubstrateIds.Id).Concat(sp.RefuseTags))}" : ""), false);
+        }
+        Section("Fauna");
         foreach (var sp in Session.Content.Fauna)
             Entry(sp.Id, sp.Name, sp.Medium.ToString().ToLowerInvariant(), sp.Role,
                 $"{(sp.Medium == Medium.Aquatic ? $"Needs water ≥{sp.MinWaterDepth * 100:0} cm" : "Moist ground")}; eats {string.Join(", ", sp.Diet.Select(d => d.Resource))}; lives ~{sp.Lifespan / SimUnits.Day:0} days", true);

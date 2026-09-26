@@ -2,6 +2,7 @@
   "id": "clover",
   "name": "Clover",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Sun-loving mid-dry groundcover of open soil; occasional globe flowers draw grazers.",
   "description": "A low mat of three-lobed leaves on short stalks, rooting as it spreads, with occasional white globe flower heads. Prefers open sun and ordinary soil, not too wet.",
   "habitat": {

@@ -2,6 +2,7 @@
   "id": "bonnet_mushroom",
   "name": "Bonnet mushrooms",
   "archetype": "fungus",
+  "placementGroup": "decomposer",
   "role": "Decomposer of leaf litter and rotting wood: digests dead matter and returns nutrients to the soil.",
   "description": "Troops of tiny grey-brown conical caps on hair-thin stems (Mycena). They pop up after the ground stays damp and fade within days.",
   "habitat": {

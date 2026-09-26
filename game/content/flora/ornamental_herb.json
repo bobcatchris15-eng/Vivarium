@@ -2,6 +2,7 @@
   "id": "ornamental_herb",
   "name": "Starflower",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Small flowering herb of bright, fertile ground.",
   "description": "A compact rosette crowned with vivid violet star flowers; hungry for light and nutrients.",
   "habitat": {

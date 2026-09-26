@@ -2,6 +2,7 @@
   "id": "climbing_vine",
   "name": "Creeping fig",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Climber that roots beside logs and rocks and scrambles over them toward the light.",
   "description": "Wiry stems with small heart-shaped leaves that cling with aerial roots, draping every log and boulder it reaches.",
   "habitat": {

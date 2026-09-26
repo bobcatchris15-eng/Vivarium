@@ -2,14 +2,15 @@ using System;
 using System.Collections.Generic;
 using Godot;
 using Vivarium.Game.App;
+using Vivarium.Sim.Content;
 using Vivarium.Sim.Tools;
 
 namespace Vivarium.Game.UI;
 
 /// <summary>
 /// Tool wheel that pops up at the cursor on a right-click tap. Inner ring: the tools plus two groups
-/// (Terrain, Water). Choosing a group, "Add flora" or "Add fauna" opens an outer ring (the group's tools or
-/// the species). Esc, right-click or clicking outside closes it. Tool buttons persist (hidden) so keyboard
+/// (Terrain, Water). Choosing a group opens its tools; Add flora opens placement drawers before species,
+/// while Add fauna opens species directly. Esc, right-click or clicking outside closes it. Tool buttons persist (hidden) so keyboard
 /// shortcuts and scripted runs can press them too.
 /// </summary>
 public partial class RadialMenu : Control
@@ -45,6 +46,14 @@ public partial class RadialMenu : Control
     {
         (ToolKind.TerrainRaise, "▲", "Raise"), (ToolKind.TerrainLower, "▼", "Lower"), (ToolKind.TerrainSmooth, "∿", "Smooth"),
         (ToolKind.PourWater, "⇣", "Pour"), (ToolKind.DrainWater, "⇡", "Soak up"), (ToolKind.Spring, "⊚", "Spring"),
+    };
+
+    private static readonly (FloraPlacementGroup Group, string Glyph, string ButtonName)[] FloraGroups =
+    {
+        (FloraPlacementGroup.MossLichen, "▧", "Moss &\nlichen"),
+        (FloraPlacementGroup.Terrestrial, "♧", "Terrestrial"),
+        (FloraPlacementGroup.WatersideAquatic, "≈", "Waterside &\naquatic"),
+        (FloraPlacementGroup.Decomposer, "◌", "Decomposers"),
     };
 
     private static int InnerCount => Items.Length + Groups.Length;
@@ -200,27 +209,64 @@ public partial class RadialMenu : Control
 
     private void ShowSpecies(bool fauna)
     {
+        if (!fauna) { ShowFloraGroups(); return; }
         ClearOuter();
-        var list = new List<(string Id, string Name)>();
-        if (fauna) foreach (var sp in Session.Content.Fauna) list.Add((sp.Id, sp.Name));
-        else foreach (var sp in Session.Content.Flora) list.Add((sp.Id, sp.Name));
-        int toolIndex = _tools.FindIndex(t => t.Kind == (fauna ? ToolKind.IntroduceFauna : ToolKind.IntroduceFlora));
+        int toolIndex = _tools.FindIndex(t => t.Kind == ToolKind.IntroduceFauna);
         var made = new List<Button>();
-        foreach (var (id, name) in list)
+        foreach (var sp in Session.Content.Fauna)
         {
-            var b = MakeButton("Species_" + id, name.Replace(' ', '\n'), () => { if (fauna) Session.Tools.FaunaSpecies = id; else Session.Tools.FloraSpecies = id; Session.Ui.RefreshToolChip(); Close(); });
-            b.SetPressedNoSignal(id == (fauna ? Session.Tools.FaunaSpecies : Session.Tools.FloraSpecies));
+            var id = sp.Id; var name = sp.Name;
+            var b = MakeButton("Species_" + id, name.Replace(' ', '\n'), () => { Session.Tools.FaunaSpecies = id; Session.Ui.RefreshToolChip(); Close(); });
+            b.SetPressedNoSignal(id == Session.Tools.FaunaSpecies);
             b.MouseEntered += () => _hubLabel.Text = name;
             _species.Add(b); made.Add(b);
         }
         FanOut(InnerAngle(toolIndex), made);
-        _hubLabel.Text = fauna ? "Choose an animal" : "Choose a plant";
+        _hubLabel.Text = "Choose an animal";
+    }
+
+    private void ShowFloraGroups()
+    {
+        ClearOuter();
+        int toolIndex = _tools.FindIndex(t => t.Kind == ToolKind.IntroduceFlora);
+        var made = new List<Button>();
+        foreach (var (group, glyph, buttonName) in FloraGroups)
+        {
+            var g = group;
+            var b = MakeButton("FloraGroup_" + FloraPlacementGroups.Id(g), $"{glyph}\n{buttonName}", () => ShowFloraSpecies(g));
+            b.SetPressedNoSignal(Session.Tools.FloraSpecies != null && Session.Content.FloraById(Session.Tools.FloraSpecies)?.PlacementGroup == g);
+            b.MouseEntered += () => _hubLabel.Text = FloraPlacementGroups.Name(g);
+            _species.Add(b); made.Add(b);
+        }
+        FanOut(InnerAngle(toolIndex), made);
+        _hubLabel.Text = "Choose flora";
+    }
+
+    private void ShowFloraSpecies(FloraPlacementGroup group)
+    {
+        ClearOuter();
+        int toolIndex = _tools.FindIndex(t => t.Kind == ToolKind.IntroduceFlora);
+        var made = new List<Button>();
+        var back = MakeButton("FloraGroup_Back", "↩\nFlora", ShowFloraGroups);
+        back.MouseEntered += () => _hubLabel.Text = "Back to flora groups";
+        _species.Add(back); made.Add(back);
+        foreach (var sp in Session.Content.Flora)
+        {
+            if (sp.PlacementGroup != group) continue;
+            var id = sp.Id; var name = sp.Name;
+            var b = MakeButton("Species_" + id, name.Replace(' ', '\n'), () => { Session.Tools.FloraSpecies = id; Session.Ui.RefreshToolChip(); Close(); });
+            b.SetPressedNoSignal(id == Session.Tools.FloraSpecies);
+            b.MouseEntered += () => _hubLabel.Text = name;
+            _species.Add(b); made.Add(b);
+        }
+        FanOut(InnerAngle(toolIndex), made);
+        _hubLabel.Text = FloraPlacementGroups.Name(group);
     }
 
     /// <summary>
-    /// Spreads buttons along the outer ring, centred on the direction of the item that opened them. When there are
-    /// more than one ring holds (the plant list outgrew it), the rest spill onto further rings outward, so buttons
-    /// never wrap round onto each other; the wheel is re-centred if the extra rings would leave the screen.
+    /// Spreads buttons along the outer ring, centred on the direction of the item that opened them. If a submenu
+    /// outgrows one ring, the rest spill onto further rings outward so buttons never overlap; the wheel is
+    /// re-centred if the extra rings would leave the screen.
     /// </summary>
     private void FanOut(float baseAng, List<Button> buttons)
     {
@@ -250,7 +296,12 @@ public partial class RadialMenu : Control
 
     private void ClearOuter()
     {
-        foreach (var b in _species) b.QueueFree();
+        foreach (var b in _species)
+        {
+            b.Visible = false;
+            if (b.GetParent() == _ring) _ring.RemoveChild(b);
+            b.QueueFree();
+        }
         _species.Clear();
         foreach (var (_, b) in _subTools) b.Visible = false;
     }

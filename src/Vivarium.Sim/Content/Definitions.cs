@@ -17,6 +17,51 @@ public static class SubstrateIds
     }
 }
 
+public enum FloraPlacementGroup : byte
+{
+    MossLichen = 0,
+    Terrestrial = 1,
+    WatersideAquatic = 2,
+    Decomposer = 3,
+}
+
+public static class FloraPlacementGroups
+{
+    public static readonly FloraPlacementGroup[] All =
+    {
+        FloraPlacementGroup.MossLichen,
+        FloraPlacementGroup.Terrestrial,
+        FloraPlacementGroup.WatersideAquatic,
+        FloraPlacementGroup.Decomposer,
+    };
+
+    public static string Id(FloraPlacementGroup group) => group switch
+    {
+        FloraPlacementGroup.MossLichen => "moss_lichen",
+        FloraPlacementGroup.Terrestrial => "terrestrial",
+        FloraPlacementGroup.WatersideAquatic => "waterside_aquatic",
+        FloraPlacementGroup.Decomposer => "decomposer",
+        _ => throw new ArgumentOutOfRangeException(nameof(group)),
+    };
+
+    public static string Name(FloraPlacementGroup group) => group switch
+    {
+        FloraPlacementGroup.MossLichen => "Moss & lichen",
+        FloraPlacementGroup.Terrestrial => "Terrestrial plants",
+        FloraPlacementGroup.WatersideAquatic => "Waterside & aquatic",
+        FloraPlacementGroup.Decomposer => "Decomposers",
+        _ => group.ToString(),
+    };
+
+    public static bool TryParse(string id, out FloraPlacementGroup group)
+    {
+        foreach (var candidate in All)
+            if (Id(candidate) == id) { group = candidate; return true; }
+        group = default;
+        return false;
+    }
+}
+
 public static class SimUnits
 {
     public const double Minute = 60, Hour = 3600, Day = 86400, Week = 7 * Day;
@@ -68,6 +113,8 @@ public sealed class FloraSpeciesDef
     public string Role { get; init; } = "";
     public string Description { get; init; } = "";
     public string SourceFile { get; init; } = "";
+    /// <summary>Player-facing drawer used by flora introduction UI; ecology still decides where the species can live.</summary>
+    public FloraPlacementGroup PlacementGroup { get; init; }
 
     // habitat
     public Dictionary<Substrate, double> SubstrateAffinity { get; init; } = new();

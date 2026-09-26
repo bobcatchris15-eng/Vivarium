@@ -2,6 +2,7 @@
   "id": "carpet_moss",
   "name": "Carpet Moss",
   "archetype": "moss",
+  "placementGroup": "moss_lichen",
   "role": "Groundcover colonist of moist, shaded soil; spreads laterally in mats.",
   "description": "A bright feather-moss forming continuous carpets. Avoids fresh bark, which sheds before it can anchor.",
   "habitat": {

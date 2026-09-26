@@ -2,6 +2,7 @@
   "id": "fern",
   "name": "Maidenhair fern",
   "archetype": "plant",
+  "placementGroup": "terrestrial",
   "role": "Shade-loving fern of damp soil; its fronds shelter springtails and drop steady leaf litter.",
   "description": "Delicate arching fronds of fan-shaped leaflets on dark wiry stalks. New fronds unroll as fiddleheads.",
   "habitat": {

@@ -2,6 +2,7 @@
   "id": "sphagnum",
   "name": "Sphagnum",
   "archetype": "moss",
+  "placementGroup": "moss_lichen",
   "role": "Saturated boggy-margin colonist; upright tufted capitula in mottled bog colours.",
   "description": "Peat moss forming dense tufted colonies on saturated ground, mottled pale green through ochre to blood red.",
   "habitat": {

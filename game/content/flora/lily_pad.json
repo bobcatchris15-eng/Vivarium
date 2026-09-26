@@ -2,6 +2,7 @@
   "id": "lily_pad",
   "name": "Lily Pad",
   "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
   "role": "Rooted floating-leaf plant of still, deeper pond water.",
   "description": "A rhizome rooted in the pond floor sends up thick, notched, orbicular leaves on slack petioles that reach the surface and float flat on it, along with occasional cup-shaped flowers.",
   "habitat": {
