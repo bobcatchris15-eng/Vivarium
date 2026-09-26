@@ -63,7 +63,7 @@ public sealed class FloraSystem
     /// </summary>
     public double EffectiveLight(Vec2 p, EntityId self = default)
     {
-        double light = EffectiveLight(p, self);
+        double light = _w.Fields.Light.Sample(p);
         double shade = 0;
         var lightBuf = _lightNb ??= new List<FloraIndividual>(24);
         _w.Flora.Neighbours(p, 5.0, lightBuf);
@@ -111,7 +111,7 @@ public sealed class FloraSystem
                 if (n.Id != self && n.SpeciesId == rel.B) return FloraSuitability.Refused($"excluded by nearby {C.FloraOrThrow(rel.B).Name}: {rel.Reason}", sub);
         }
 
-        double light = _w.Fields.Light.Sample(p);
+        double light = EffectiveLight(p, self);
         // decomposers judge their food (dead matter) where plants judge soil nutrients
         double nutrients = sp.Decomposer ? MathD.Clamp01(_w.Fields.Detritus.Sample(p) / C.Ecology.DetritusMax) : _w.Fields.Nutrients.Sample(p) / C.Ecology.NutrientMax;
         double fs = sp.SubstrateAffinity.GetValueOrDefault(sub);
