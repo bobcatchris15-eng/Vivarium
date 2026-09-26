@@ -31,11 +31,20 @@ public sealed class FloraSystem
     private readonly VivariumWorld _w;
     private readonly List<FloraIndividual> _nb = new();
     [ThreadStatic] private static List<FloraIndividual>? _lightNb;
+    private readonly double _lightQueryRadius;
     public const string PropagationStream = "flora.propagation";
     public const double TreeAreaPerIndividual = 15.0;
     public const double ShrubAreaPerIndividual = 4.0;
 
-    public FloraSystem(VivariumWorld w) { _w = w; }
+    public FloraSystem(VivariumWorld w)
+    {
+        _w = w;
+        _lightQueryRadius = Math.Max(1.5, w.Content.Flora
+            .Where(sp => sp.Woody != null)
+            .Select(sp => sp.Woody!.CanopyRadius)
+            .DefaultIfEmpty(0)
+            .Max());
+    }
 
     private ContentLibrary C => _w.Content;
 
@@ -66,7 +75,7 @@ public sealed class FloraSystem
         double light = _w.Fields.Light.Sample(p);
         double shade = 0;
         var lightBuf = _lightNb ??= new List<FloraIndividual>(24);
-        _w.Flora.Neighbours(p, 5.0, lightBuf);
+        _w.Flora.Neighbours(p, _lightQueryRadius, lightBuf);
         foreach (var f in lightBuf)
         {
             if (f.Id == self) continue;
@@ -571,12 +580,20 @@ public sealed class FloraSystem
                 reason = $"{(woody.Layer == WoodyLayer.Tree ? "tree" : "shrub")} population at island carrying limit ({count}/{cap})";
                 return false;
             }
-            _w.Flora.Neighbours(q, woody.MinSpacing, _nb);
+            double querySpacing = C.Flora
+                .Where(candidate => candidate.Woody?.Layer == woody.Layer)
+                .Select(candidate => candidate.Woody!.MinSpacing)
+                .DefaultIfEmpty(woody.MinSpacing)
+                .Max();
+            _w.Flora.Neighbours(q, querySpacing, _nb);
             foreach (var n in _nb)
             {
                 var nsp = C.FloraOrThrow(n.SpeciesId);
                 if (nsp.Woody?.Layer != woody.Layer) continue;
-                reason = $"too close to {nsp.Name} ({Vec2.Distance(q, n.Position):0.00} m < {woody.MinSpacing:0.00} m)";
+                double spacing = Math.Max(woody.MinSpacing, nsp.Woody.MinSpacing);
+                double distance = Vec2.Distance(q, n.Position);
+                if (distance >= spacing) continue;
+                reason = $"too close to {nsp.Name} ({distance:0.00} m < {spacing:0.00} m)";
                 return false;
             }
         }
