@@ -49,9 +49,21 @@ public class EcologyTests
             Assert.NotEmpty(sp.Diet);
             foreach (var d in sp.Diet)
             {
-                var res = TestUtil.Content.Ecology.Resources.SingleOrDefault(r => r.Id == d.Resource);
-                Assert.NotNull(res);
-                Assert.NotEqual("terrestrial", res!.Medium);
+                if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal))
+                {
+                    var prey = TestUtil.Content.FaunaOrThrow(d.Resource[6..]);
+                    Assert.Equal(Medium.Aquatic, prey.Medium);
+                }
+                else if (d.Resource.StartsWith("flora:", StringComparison.Ordinal))
+                {
+                    Assert.Contains(TestUtil.Content.Flora, f => f.Archetype == d.Resource[6..]);
+                }
+                else
+                {
+                    var res = TestUtil.Content.Ecology.Resources.SingleOrDefault(r => r.Id == d.Resource);
+                    Assert.NotNull(res);
+                    Assert.NotEqual("terrestrial", res!.Medium);
+                }
             }
         }
         var w = TestUtil.DefaultWorld(populate: false);

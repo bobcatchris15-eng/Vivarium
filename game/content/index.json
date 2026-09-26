@@ -38,7 +38,8 @@
     "flora/lanternbrush.json",
     "flora/shadebell.json",
     "flora/spiralvine.json",
-    "flora/fenhook.json"
+    "flora/fenhook.json",
+    "flora/ringreed.json"
   ],
   "fauna": [
     "fauna/prismhopper.json",
@@ -47,7 +48,17 @@
     "fauna/glintfin.json",
     "fauna/marbleback.json",
     "fauna/coalback_beetle.json",
-    "fauna/ghostbristle.json"
+    "fauna/ghostbristle.json",
+    "fauna/dewmantle.json",
+    "fauna/stonebell.json",
+    "fauna/moonveil.json",
+    "fauna/rustcoil.json",
+    "fauna/rainspine.json",
+    "fauna/loamthread.json",
+    "fauna/stiltclaw.json",
+    "fauna/reedjaw.json",
+    "fauna/glasscoil.json",
+    "fauna/duskflicker.json"
   ],
   "presets": [
     "presets/default.json",

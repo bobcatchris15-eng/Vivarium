@@ -119,6 +119,24 @@ public class FaunaTests
         Assert.Contains(ex.Errors, e => e.File == "fauna/prismhopper.json" && e.Path.StartsWith("$.diet[") && e.Path.EndsWith("].resource") && e.Message.Contains("cheese"));
     }
 
+    [Fact]
+    public void PredationTransfersEnergyAndReturnsUneatenBiomassToDetritus()
+    {
+        var w = FaunaFixtures.PondWorld(detritus: 0);
+        var hunter = w.FaunaSystem.CreateFounder(Sp("stonebell"), FaunaFixtures.Land, 0.5);
+        var prey = w.FaunaSystem.CreateFounder(Sp("dewmantle"), FaunaFixtures.Land + new Vec2(0.03, 0), 0.5);
+        hunter.Energy = 0.2;
+        double before = hunter.Energy;
+        double detritus = w.Fields.Detritus.Total();
+
+        w.FaunaSystem.StepMetabolism(3600);
+
+        Assert.Null(w.Fauna.Get(prey.Id));
+        Assert.True(hunter.Energy > before);
+        Assert.True(w.Fields.Detritus.Total() > detritus);
+        Assert.True(w.Tally.Of("dewmantle").Deaths > 0);
+    }
+
     [Fact] // t-093
     public void AquaticLocomotionStaysInWater()
     {
@@ -253,12 +271,30 @@ public class FaunaTests
         var at = sp.Medium == Medium.Aquatic ? FaunaFixtures.Pond : FaunaFixtures.Land;
         var r = Introduction.IntroduceFauna(w, id, at, 8);
         Assert.True(r.Ok, r.Message);
+
+        void RefillPrey()
+        {
+            foreach (var d in sp.Diet.Where(x => x.Resource.StartsWith("fauna:", StringComparison.Ordinal)))
+            {
+                string preyId = d.Resource[6..];
+                var preySp = Sp(preyId);
+                int need = Math.Max(0, 16 - w.Fauna.CountOf(preyId));
+                for (int i = 0; i < need; i++)
+                {
+                    double a = i * (Math.PI * 2 / Math.Max(1, need));
+                    var q = at + Vec2.FromAngle(a) * (0.05 + 0.02 * (i % 4));
+                    w.FaunaSystem.CreateFounder(preySp, q, 0.5).Energy = 0.9;
+                }
+            }
+        }
+        RefillPrey();
         double days = Math.Max(8, sp.ReproCooldown / 86400 * 1.5);
         for (long t = 0; t < days * 8640; t++)
         {
             if (t % 8640 == 0)
             {
                 FaunaFixtures.HoldWater(w);
+                RefillPrey();
                 foreach (int c in w.Grid.DomainCells) { if (w.Water.IsWet(c)) { w.Fields.Biofilm[c] = Math.Max(w.Fields.Biofilm[c], 0.3); w.Fields.Plankton[c] = Math.Max(w.Fields.Plankton[c], 0.2); } w.Fields.Detritus[c] = Math.Max(w.Fields.Detritus[c], 1.0); }
             }
             // dry-land species get the parched ground they are built for (the fixture's land is moist by default)
@@ -313,7 +349,7 @@ public class FaunaTests
     public void FaunaLibraryLoadsCleanAndBrokenFixtureIsActionable()
     {
         Assert.Empty(TestUtil.Content.Warnings);
-        Assert.Equal(new[] { "coalback_beetle", "glintfin", "marbleback", "emberglass_swimmer", "ghostbristle", "prismhopper", "siltshield" }, TestUtil.Content.Fauna.Select(f => f.Id));
+        Assert.Equal(new[] { "coalback_beetle", "dewmantle", "duskflicker", "emberglass_swimmer", "glasscoil", "glintfin", "ghostbristle", "loamthread", "marbleback", "moonveil", "prismhopper", "rainspine", "reedjaw", "rustcoil", "siltshield", "stiltclaw", "stonebell" }, TestUtil.Content.Fauna.Select(f => f.Id));
         var src = new OverlayContentSource(TestUtil.ContentSource);
         var broken = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "glintfin.json"))
             .Replace("\"model\": \"minnow\"", "\"model\": \"whale\"")

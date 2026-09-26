@@ -156,6 +156,10 @@
     {
       "species": "spiralvine",
       "count": 2
+    },
+    {
+      "species": "ringreed",
+      "count": 5
     }
   ],
   "starterFauna": [
@@ -182,6 +186,46 @@
     {
       "species": "emberglass_swimmer",
       "count": 10
+    },
+    {
+      "species": "dewmantle",
+      "count": 8
+    },
+    {
+      "species": "rustcoil",
+      "count": 10
+    },
+    {
+      "species": "loamthread",
+      "count": 10
+    },
+    {
+      "species": "moonveil",
+      "count": 7
+    },
+    {
+      "species": "duskflicker",
+      "count": 12
+    },
+    {
+      "species": "stiltclaw",
+      "count": 6
+    },
+    {
+      "species": "glasscoil",
+      "count": 5
+    },
+    {
+      "species": "reedjaw",
+      "count": 4
+    },
+    {
+      "species": "rainspine",
+      "count": 3
+    },
+    {
+      "species": "stonebell",
+      "count": 2
     }
   ]
 }

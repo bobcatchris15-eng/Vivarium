@@ -213,6 +213,10 @@
     {
       "species": "fenhook",
       "count": 3
+    },
+    {
+      "species": "ringreed",
+      "count": 8
     }
   ],
   "starterFauna": [
@@ -243,6 +247,46 @@
     {
       "species": "glintfin",
       "count": 16
+    },
+    {
+      "species": "dewmantle",
+      "count": 12
+    },
+    {
+      "species": "rustcoil",
+      "count": 12
+    },
+    {
+      "species": "loamthread",
+      "count": 18
+    },
+    {
+      "species": "moonveil",
+      "count": 12
+    },
+    {
+      "species": "duskflicker",
+      "count": 20
+    },
+    {
+      "species": "stiltclaw",
+      "count": 8
+    },
+    {
+      "species": "glasscoil",
+      "count": 10
+    },
+    {
+      "species": "reedjaw",
+      "count": 6
+    },
+    {
+      "species": "rainspine",
+      "count": 4
+    },
+    {
+      "species": "stonebell",
+      "count": 3
     }
   ]
 }

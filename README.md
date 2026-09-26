@@ -36,18 +36,18 @@ reintroduce it from the catalog.
 
 ## What's in the ecosystem
 
-**Flora (32).**
+**Flora (33).**
 - **Mosses:** Velvetweave, Pearl-cushion, Floodlace and Bogglass moss.
 - **Lichens:** Embercrust, Ruffle and Antlerlace lichen.
 - **Low ground flora:** Coinrunner, Mooncoin, Trifold, Glassfinger, Sunstone rosette and Frosttussock.
-- **Wetland & aquatic:** Glassrush, Brooklace, Fenbead and Mirrorleaf.
+- **Wetland & aquatic:** Glassrush, Brooklace, Fenbead, Mirrorleaf and Ringreed.
 - **Understory & herbs:** Veilfern and Prismstar.
 - **Trees:** Ironlace, Umbraheart, Fenneedle and Kiteleaf.
 - **Shrubs:** Embercrown, Lanternbrush and Shadebell. Trees retain an island-wide carrying limit of roughly one tree per 15 m²; shrubs use a looser structural budget.
 - **Climbers:** Clinglace, Spiralvine and Fenhook. Climbers establish on suitable ground, run horizontally as persistent stem networks while searching for structure, then attach to woody plants, logs or rocks and transition to vertical growth.
 - **Fungi & plasmodium:** Dewbonnet fungus, Emberfan fungus and Ambervein plasmodium.
 
-**Fauna (7).** Prismhoppers, Marblebacks, Ghostbristles and Coalback beetles work the land detrital web. Emberglass swimmers, Siltshields and Glintfins occupy the pond. Fauna still carry heritable genomes for colour, markings, size and appendages with lineage tracking, so populations drift over generations.
+**Fauna (17).** The original Prismhoppers, Marblebacks, Ghostbristles and Coalback beetles are joined by Dewmantles, Rustcoils and Loamthreads as damp-litter grazers and decomposers; Moonveils and Duskflickers add aerial movement; Stiltclaws hunt small terrestrial prey; Rainspines and Stonebells form the larger damp-ground predator tier. In the pond, Emberglass swimmers, Siltshields and Glintfins are joined by Glasscoils and predatory Reedjaws. Fauna still carry heritable genomes for colour, markings, size and appendages with lineage tracking, so populations drift over generations.
 
 Some behaviour worth knowing about:
 
