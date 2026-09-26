@@ -192,14 +192,14 @@ public partial class SmokeRunner : Node
         Check("place log", r?.Ok == true, r?.Message ?? "");
 
         await Press("Tool_IntroduceFlora");
-        tools.FloraSpecies = "creeping_groundcover";
-        var mossSpot = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).First(p => W.FloraSystem.CanEstablish(W.Content.FloraOrThrow("creeping_groundcover"), p, out _));
+        tools.FloraSpecies = "coinrunner";
+        var mossSpot = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).First(p => W.FloraSystem.CanEstablish(W.Content.FloraOrThrow("coinrunner"), p, out _));
         int flora = W.Flora.Count;
         Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(mossSpot));
         Check("introduce flora", r?.Ok == true && W.Flora.Count == flora + 1, r?.Message ?? "");
         // one of each new kind of organism: fern, fungus, slime mold (where their habitat allows)
-        foreach (var newId in new[] { "fern", "bonnet_mushroom", "slime_mold" })
+        foreach (var newId in new[] { "veilfern", "dewbonnet", "ambervein" })
         {
             tools.FloraSpecies = newId;
             var nsp = W.Content.FloraOrThrow(newId);
@@ -210,20 +210,20 @@ public partial class SmokeRunner : Node
         }
 
         await Press("Tool_IntroduceFauna");
-        tools.FaunaSpecies = "shrimp";
-        int shrimp = W.Fauna.CountOf("shrimp");
+        tools.FaunaSpecies = "emberglass_swimmer";
+        int shrimp = W.Fauna.CountOf("emberglass_swimmer");
         Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(HitAt(DeepestWater(), true));
-        Check("introduce fauna", r?.Ok == true && W.Fauna.CountOf("shrimp") > shrimp, r?.Message ?? "");
+        Check("introduce fauna", r?.Ok == true && W.Fauna.CountOf("emberglass_swimmer") > shrimp, r?.Message ?? "");
 
         await Press("Tool_Poke");
-        var critter = W.Fauna.Items.First(f => f.SpeciesId == "springtail");
+        var critter = W.Fauna.Items.First(f => f.SpeciesId == "prismhopper");
         Log.Info(LogCategory.Test, "apply " + tools.Current);
         r = tools.ApplyAt(new WorldHit(HitKind.Fauna, critter.Id, critter.Position, 1));
         Check("pokin' stick", r?.Ok == true && critter.DisturbedUntil > W.Clock.SimSeconds, r?.Message ?? "");
 
         await Press("Tool_Grab");
-        var fish = W.Fauna.Items.First(f => f.SpeciesId == "shrimp");
+        var fish = W.Fauna.Items.First(f => f.SpeciesId == "emberglass_swimmer");
         var id = fish.Id; var genome = fish.GenomeId;
         tools.ApplyAt(new WorldHit(HitKind.Fauna, id, fish.Position, 1));
         bool held = W.Fauna.Get(id)?.Grabbed == true;
@@ -240,7 +240,7 @@ public partial class SmokeRunner : Node
         Check("pick plant", r?.Ok == true && W.Flora.Get(plant.Id) == null, r?.Message ?? "");
 
         await Press("Tool_Poke");
-        var bug = W.Fauna.Items.First(f => f.SpeciesId == "pill_bug" && !W.FaunaSystem.IsCurled(f));
+        var bug = W.Fauna.Items.First(f => f.SpeciesId == "marbleback" && !W.FaunaSystem.IsCurled(f));
         r = tools.ApplyAt(new WorldHit(HitKind.Fauna, bug.Id, bug.Position, 1));
         Check("pill bug rolls up when poked", r?.Ok == true && W.FaunaSystem.IsCurled(bug), r?.Message ?? "");
 
@@ -427,7 +427,7 @@ public partial class SmokeRunner : Node
         var aquatic = W.Fauna.Items.Where(f => W.Content.FaunaOrThrow(f.SpeciesId).Medium == Vivarium.Sim.Content.Medium.Aquatic).OrderBy(f => Vec2.Distance(f.PositionXZ, deep)).FirstOrDefault();
         var target = aquatic != null ? Bridge.V(aquatic.Position) : new Vector3((float)deep.X, (float)surf - 0.1f, (float)deep.Z);
         views.Add(("underwater", target + new Vector3(0.5f, 0.05f, 0.5f), target));
-        foreach (var species in new[] { "shrimp", "microminnow", "triops", "springtail", "pill_bug", "darkling_beetle", "silverfish" })
+        foreach (var species in new[] { "emberglass_swimmer", "glintfin", "siltshield", "prismhopper", "marbleback", "coalback_beetle", "ghostbristle" })
         {
             var f = W.Fauna.Items.FirstOrDefault(x => x.SpeciesId == species);
             if (f == null) continue;
@@ -435,7 +435,7 @@ public partial class SmokeRunner : Node
             float scale = (float)(W.FaunaSystem.PhenotypeOf(f).BodySize * W.Content.FaunaOrThrow(species).VisualScale);
             views.Add(("closeup_" + species, p + new Vector3(scale * 2.2f, scale * 1.6f, scale * 2.2f), p));
         }
-        foreach (var species in new[] { "carpet_moss", "crust_lichen", "marginal_waterside", "ornamental_herb", "fern", "climbing_vine", "bonnet_mushroom", "turkey_tail", "slime_mold", "stonecrop", "blue_fescue", "reindeer_lichen" })
+        foreach (var species in new[] { "velvetweave_moss", "embercrust_lichen", "glassrush", "prismstar", "veilfern", "clinglace", "dewbonnet", "emberfan_fungus", "ambervein", "sunstone_rosette", "frosttussock", "antlerlace_lichen" })
         {
             var f = W.Flora.Items.FirstOrDefault(x => x.SpeciesId == species);
             if (f == null) continue;
@@ -459,17 +459,17 @@ public partial class SmokeRunner : Node
             await Screenshot(name);
         }
         // the pond view once more without the water surface (tells water artefacts from terrain artefacts)
-        var tt = views.FirstOrDefault(v => v.Item1 == "closeup_turkey_tail");
+        var tt = views.FirstOrDefault(v => v.Item1 == "closeup_emberfan_fungus");
         if (tt.Item1 != null)
         {
             cam.LookAtPoint(tt.Item2, tt.Item3);
             Session.Water.Visible = false;
             await Frames(8);
-            await Screenshot("closeup_turkey_tail_nowater");
+            await Screenshot("closeup_emberfan_fungus_nowater");
             Session.Water.Visible = true;
         }
         // growth you can watch: the same view before and after ~15 real seconds at the fastest speed
-        var mossPatch = W.Flora.Items.Where(x => x.SpeciesId == "carpet_moss").OrderBy(x => x.Id.Value).FirstOrDefault();
+        var mossPatch = W.Flora.Items.Where(x => x.SpeciesId == "velvetweave_moss").OrderBy(x => x.Id.Value).FirstOrDefault();
         if (mossPatch != null)
         {
             var mp = new Vector3((float)mossPatch.X, (float)W.GroundHeight(mossPatch.Position), (float)mossPatch.Z);
@@ -487,7 +487,7 @@ public partial class SmokeRunner : Node
             await Screenshot("growth_t1");
             _facts["growth_timelapse"] = $"{W.Clock.BioDays - day0:0.0} biological days, flora {flora0} -> {W.Flora.Count}";
             // the slime-mold network after those days: centre on its largest cluster of patches
-            var slime = W.Flora.Items.Where(x => x.SpeciesId == "slime_mold").ToList();
+            var slime = W.Flora.Items.Where(x => x.SpeciesId == "ambervein").ToList();
             if (slime.Count > 0)
             {
                 var hub = slime.OrderByDescending(x => slime.Count(o => Vec2.Distance(o.Position, x.Position) < 0.5)).ThenBy(x => x.Id.Value).First();
