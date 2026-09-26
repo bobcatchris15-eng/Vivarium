@@ -1,5 +1,6 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Flora;
@@ -31,12 +32,19 @@ public sealed class FloraSystem
     private readonly VivariumWorld _w;
     private readonly List<FloraIndividual> _nb = new();
     private readonly List<FloraIndividual> _woodyCanopy = new();
+    private readonly ScalarField _canopyShade;
     private int _woodyCanopyVersion = -1;
+    private int _canopyShadeVersion = -1;
+    private bool _canopyShadeDirty = true;
     public const string PropagationStream = "flora.propagation";
     public const double TreeAreaPerIndividual = 15.0;
     public const double ShrubAreaPerIndividual = 4.0;
 
-    public FloraSystem(VivariumWorld w) { _w = w; }
+    public FloraSystem(VivariumWorld w)
+    {
+        _w = w;
+        _canopyShade = new ScalarField("woody_canopy_shade", w.Grid, 0, 0, 1);
+    }
 
     private ContentLibrary C => _w.Content;
 
@@ -65,28 +73,59 @@ public sealed class FloraSystem
         foreach (var f in _w.Flora.Items)
             if (C.FloraOrThrow(f.SpeciesId).Woody != null) _woodyCanopy.Add(f);
         _woodyCanopyVersion = _w.Flora.Version;
+        _canopyShadeDirty = true;
     }
 
     /// <summary>
-    /// Incident ecological light after the structural tree/shrub canopy. The canopy list is rebuilt only when
-    /// flora membership changes, so this hot path is O(number of woody plants), whose island-wide population is
-    /// explicitly bounded. Low herb/fern shade is a coverage-layer microhabitat effect and remains local there.
+    /// Rebuilds the derived woody-canopy shade field. Cost is paid once per canopy state change and only touches
+    /// grid cells under a bounded number of tree/shrub crowns; all ecology consumers then get O(1) bilinear samples.
     /// </summary>
-    public double EffectiveLight(Vec2 p, EntityId self = default)
+    private void RefreshCanopyShade()
     {
-        double light = _w.Fields.Light.Sample(p);
-        double shade = 0;
         RefreshWoodyCanopy();
+        if (!_canopyShadeDirty && _canopyShadeVersion == _w.Flora.Version) return;
+
+        foreach (int cell in _w.Grid.DomainCells) _canopyShade.Values[cell] = 0;
         foreach (var f in _woodyCanopy)
         {
-            if (f.Id == self) continue;
             var sp = C.FloraOrThrow(f.SpeciesId);
             var woody = sp.Woody!;
             double maturity = Math.Sqrt(f.BiomassFraction(sp));
             double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
-            double d = Vec2.Distance(f.Position, p);
-            if (d >= radius) continue;
-            shade += woody.ShadeOpacity * maturity * (1 - d / radius);
+            if (radius <= 1e-6) continue;
+            foreach (int cell in _w.Grid.CellsInRadius(f.Position, radius))
+            {
+                double d = Vec2.Distance(f.Position, _w.Grid.CellCenter(cell));
+                if (d >= radius) continue;
+                _canopyShade.Add(cell, woody.ShadeOpacity * maturity * (1 - d / radius));
+            }
+        }
+        _canopyShadeVersion = _w.Flora.Version;
+        _canopyShadeDirty = false;
+    }
+
+    /// <summary>
+    /// Incident ecological light after the structural tree/shrub canopy. Low herb/fern shade is a coverage-layer
+    /// microhabitat effect and remains local there; tree/shrub shade is shared by every ecology consumer.
+    /// </summary>
+    public double EffectiveLight(Vec2 p, EntityId self = default)
+    {
+        // Self-exclusion is only material while evaluating a woody individual's own habitat. Rebuilding a second
+        // field per self would defeat the cache, so remove that individual's analytical contribution locally.
+        RefreshCanopyShade();
+        double light = _w.Fields.Light.Sample(p);
+        double shade = _canopyShade.Sample(p);
+        if (!self.IsNone && _w.Flora.Get(self) is { } own)
+        {
+            var sp = C.FloraOrThrow(own.SpeciesId);
+            if (sp.Woody is { } woody)
+            {
+                double maturity = Math.Sqrt(own.BiomassFraction(sp));
+                double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
+                double d = Vec2.Distance(own.Position, p);
+                if (radius > 1e-6 && d < radius)
+                    shade = Math.Max(0, shade - woody.ShadeOpacity * maturity * (1 - d / radius));
+            }
         }
         return MathD.Clamp01(light - Math.Min(shade, light));
     }
@@ -344,6 +383,8 @@ public sealed class FloraSystem
             _colonySize[root] = _colonySize.GetValueOrDefault(root) + 1;
             _colonialTotal++;
         }
+        // Tree/shrub biomass changed during this step; rebuild derived shade lazily on the next light sample.
+        _canopyShadeDirty = true;
     }
 
     /// <summary>
