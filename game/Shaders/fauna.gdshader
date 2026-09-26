@@ -1,15 +1,22 @@
 // Fauna instances. Species colours are material uniforms; per-individual genetics arrive in
-// INSTANCE_CUSTOM = (hue shift, marking density, pattern contrast, appendage scale ×1000 + walk-cycle phase).
-// The phase is accumulated on the CPU from each animal's real speed, so legs and tails move with the body.
-// Vertex COLOR.rgb = offset from the appendage attachment, COLOR.a = appendage flag (see OrganismMeshes).
-// UV = body coordinates for markings, UV2.x = region (1 body, 2 eye, 3 belly, 4 fin/limb).
+// INSTANCE_CUSTOM = (hue shift, marking density, pattern contrast, packed appendage scale + speed + phase).
+// The CPU accumulates phase from species-authored body-relative cadence. Vertex COLOR.rgb is the appendage
+// offset from its attachment and COLOR.a flags appendages. UV2.x is the visual region; UV2.y is animation role:
+// 0 body, 1 locomotor limb, 2 wing/fin, 3 sensory appendage.
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx, cull_disabled;
 
 uniform vec3 base_color : source_color = vec3(0.9, 0.3, 0.2);
 uniform vec3 ornament_color : source_color = vec3(1.0);
-uniform float wiggle = 1.0;
-uniform float wiggle_speed = 9.0;
+uniform int anim_family = 0;
+uniform float anim_amplitude = 1.0;
+uniform float anim_idle_motion = 0.0;
+uniform float anim_body_wave = 0.2;
+uniform float anim_limb_sweep = 0.5;
+uniform float anim_limb_lift = 0.3;
+uniform float anim_bob = 0.05;
+uniform float anim_phase_spread = 0.5;
+uniform float anim_duty_factor = 0.6;
 uniform float translucency = 0.0;
 uniform float carapace = 0.0;   // clearcoat for hard, glossy exoskeletons
 uniform float scales = 0.0;     // 1 = fish scales + silvery sheen
@@ -21,6 +28,8 @@ varying vec4 genes;
 varying float region;
 varying vec2 body_uv;
 varying float seed;
+varying float anim_role;
+varying float motion_amount;
 
 vec3 hue_rotate(vec3 c, float shift) {
     // rotate hue in YIQ space
@@ -39,22 +48,145 @@ float vnoise(vec2 p) {
     return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
 }
 
+vec3 rotate_x(vec3 p, float a) {
+    float c = cos(a), s = sin(a);
+    return vec3(p.x, p.y * c - p.z * s, p.y * s + p.z * c);
+}
+
+vec3 rotate_y(vec3 p, float a) {
+    float c = cos(a), s = sin(a);
+    return vec3(p.x * c + p.z * s, p.y, -p.x * s + p.z * c);
+}
+
 void vertex() {
     genes = INSTANCE_CUSTOM;
-    float cycle = fract(genes.w);
-    genes.w = floor(genes.w) / 1000.0;
+    float packed = genes.w;
+    float cycle = fract(packed);
+    float code = floor(packed);
+    float speed01 = mod(code, 16.0) / 15.0;
+    genes.w = floor(code / 16.0) / 1000.0;
+
     region = UV2.x;
+    anim_role = UV2.y;
     body_uv = UV;
     seed = float(INSTANCE_ID);
-    float bodyMask = 1.0 - COLOR.a;
-    VERTEX.y *= 1.0 + (genes.y - 0.5) * 0.08 * bodyMask;
-    VERTEX.z *= 1.0 + (genes.z - 0.5) * 0.07 * bodyMask;
-    VERTEX += COLOR.rgb * (genes.w - 1.0) * COLOR.a;
-    // cosmetic locomotion: tail-to-head travelling wave (render-only)
-    float phase = cycle * 6.2831853 + seed * 1.37;
-    float along = clamp(0.5 - VERTEX.x, 0.0, 1.5);
-    VERTEX.z += sin(phase - VERTEX.x * 7.0) * 0.035 * wiggle * along;
-    VERTEX.y += COLOR.a * sin(phase * 2.0 + VERTEX.x * 11.0) * 0.012 * max(wiggle, 0.3);
+    motion_amount = anim_amplitude * mix(anim_idle_motion, 1.0, speed01);
+
+    float body_mask = 1.0 - COLOR.a;
+    VERTEX.y *= 1.0 + (genes.y - 0.5) * 0.08 * body_mask;
+    VERTEX.z *= 1.0 + (genes.z - 0.5) * 0.07 * body_mask;
+
+    vec3 attach = VERTEX - COLOR.rgb;
+    vec3 off = COLOR.rgb * genes.w;
+    if (COLOR.a > 0.5) VERTEX = attach + off;
+
+    const float TAU_ = 6.28318530718;
+    const float PI_ = 3.14159265359;
+    float theta = cycle * TAU_;
+    float side = off.z < 0.0 ? -1.0 : 1.0;
+    float reach = max(length(off), 0.001);
+    float longitudinal = clamp(attach.x + 0.5, 0.0, 1.0);
+    float pose = motion_amount;
+
+    // 1: axial swimmer. Tail amplitude grows toward the rear while fins only make small stabilizing motions.
+    if (anim_family == 1) {
+        float along = clamp(0.58 - VERTEX.x, 0.0, 1.25);
+        float wave = sin(theta - VERTEX.x * TAU_ * anim_phase_spread);
+        VERTEX.z += wave * anim_body_wave * 0.065 * pose * along;
+        if (COLOR.a > 0.5 && anim_role > 1.5) VERTEX.y += sin(theta + longitudinal * PI_) * anim_limb_lift * 0.02 * pose;
+        VERTEX.y += sin(theta * 2.0) * anim_bob * 0.012 * pose;
+    }
+    // 2: paddler. Modest trunk wave, paired appendages sweep through the water continuously.
+    else if (anim_family == 2) {
+        VERTEX.z += sin(theta - VERTEX.x * TAU_ * anim_phase_spread) * anim_body_wave * 0.025 * pose;
+        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 2.5) {
+            float lp = theta + longitudinal * TAU_ * anim_phase_spread + (side > 0.0 ? PI_ : 0.0);
+            off.x += sin(lp) * anim_limb_sweep * reach * 0.38 * pose;
+            off.y += cos(lp) * anim_limb_lift * reach * 0.18 * pose;
+            VERTEX = attach + off;
+        }
+    }
+    // 3: ordinary walking/scuttling. Contralateral phase and a real swing/stance lift instead of universal wriggle.
+    else if (anim_family == 3) {
+        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+            float lp = theta + longitudinal * TAU_ * anim_phase_spread + (side > 0.0 ? PI_ : 0.0);
+            float swing = sin(lp);
+            float lift = max(0.0, cos(lp));
+            off.x += swing * anim_limb_sweep * reach * 0.42 * pose;
+            off.y += lift * anim_limb_lift * reach * 0.32 * pose;
+            VERTEX = attach + off;
+        }
+        VERTEX.y += abs(sin(theta * 2.0)) * anim_bob * 0.015 * pose;
+    }
+    // 4: many-legged metachronal walking. Longitudinal phase spread produces the visible leg wave.
+    else if (anim_family == 4) {
+        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+            float lp = theta + longitudinal * TAU_ * anim_phase_spread + (side > 0.0 ? PI_ * 0.6 : 0.0);
+            off.x += sin(lp) * anim_limb_sweep * reach * 0.30 * pose;
+            off.y += max(0.0, cos(lp)) * anim_limb_lift * reach * 0.22 * pose;
+            VERTEX = attach + off;
+        }
+        VERTEX.z += sin(theta - VERTEX.x * TAU_) * anim_body_wave * 0.010 * pose;
+    }
+    // 5: slug/snail style muscular foot. No snake-like lateral motion; the body subtly advances a compression wave.
+    else if (anim_family == 5) {
+        float wave = sin(theta - (VERTEX.x + 0.5) * TAU_ * anim_phase_spread);
+        VERTEX.y += wave * anim_body_wave * 0.008 * pose * body_mask;
+        VERTEX.z *= 1.0 + wave * anim_body_wave * 0.015 * pose * body_mask;
+    }
+    // 6: annelid peristalsis: alternating longitudinal shortening and radial expansion.
+    else if (anim_family == 6) {
+        float wave = sin(theta - (VERTEX.x + 0.5) * TAU_ * anim_phase_spread);
+        VERTEX.x += cos(theta - (VERTEX.x + 0.5) * TAU_ * anim_phase_spread) * anim_body_wave * 0.012 * pose;
+        VERTEX.y *= 1.0 + wave * anim_body_wave * 0.075 * pose;
+        VERTEX.z *= 1.0 + wave * anim_body_wave * 0.075 * pose;
+    }
+    // 7: saltatory/hopping gait. The stance portion crouches; the remainder describes a clean airborne arc.
+    else if (anim_family == 7) {
+        float airborne = step(anim_duty_factor, cycle);
+        float air_t = clamp((cycle - anim_duty_factor) / max(1.0 - anim_duty_factor, 0.01), 0.0, 1.0);
+        float hop = sin(PI_ * air_t) * airborne;
+        float crouch_t = clamp(cycle / max(anim_duty_factor, 0.01), 0.0, 1.0);
+        float crouch = sin(PI_ * crouch_t) * (1.0 - airborne);
+        VERTEX.y += hop * anim_bob * 0.20 * pose;
+        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+            float hind = 1.0 - smoothstep(-0.18, 0.18, attach.x);
+            off.x -= hind * (crouch - hop * 0.35) * anim_limb_sweep * reach * 0.50 * pose;
+            off.y += (hop - crouch * 0.35) * anim_limb_lift * reach * 0.30 * pose;
+            VERTEX = attach + off + vec3(0.0, hop * anim_bob * 0.20 * pose, 0.0);
+        }
+    }
+    // 8: sprawled tetrapod gait. Diagonal limb phasing is coupled to a small trunk/tail counter-wave.
+    else if (anim_family == 8) {
+        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+            float fore = smoothstep(-0.05, 0.22, attach.x);
+            float diagonal = side > 0.0 ? PI_ : 0.0;
+            float lp = theta + diagonal + fore * PI_ + longitudinal * TAU_ * anim_phase_spread;
+            off.x += sin(lp) * anim_limb_sweep * reach * 0.46 * pose;
+            off.y += max(0.0, cos(lp)) * anim_limb_lift * reach * 0.28 * pose;
+            VERTEX = attach + off;
+        }
+        VERTEX.z += sin(theta - VERTEX.x * TAU_ * 0.8) * anim_body_wave * 0.020 * pose * body_mask;
+        VERTEX.y += abs(sin(theta * 2.0)) * anim_bob * 0.012 * pose;
+    }
+    // 9: flight. Only role-2 geometry hinges as a wing; legs and sensory structures are not forced to flap.
+    else if (anim_family == 9) {
+        if (COLOR.a > 0.5 && anim_role > 1.5 && anim_role < 2.5) {
+            float flap = sin(theta);
+            off = rotate_x(off, side * flap * anim_limb_sweep * 1.15 * pose);
+            VERTEX = attach + off;
+        }
+        VERTEX.y += -cos(theta * 2.0) * anim_bob * 0.030 * pose;
+    }
+
+    // Sensory structures get a slow independent searching motion regardless of gait family.
+    if (COLOR.a > 0.5 && anim_role > 2.5) {
+        float search = sin(theta * 0.37 + seed * 0.73 + longitudinal * 1.9);
+        off = COLOR.rgb * genes.w;
+        off = rotate_y(off, search * anim_limb_sweep * 0.12 * max(pose, anim_idle_motion));
+        off.y += cos(theta * 0.29 + seed) * anim_limb_lift * reach * 0.05 * max(pose, anim_idle_motion);
+        VERTEX = attach + off;
+    }
 }
 
 void fragment() {

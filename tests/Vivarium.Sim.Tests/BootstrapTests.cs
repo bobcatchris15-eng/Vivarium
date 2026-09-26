@@ -109,6 +109,12 @@ public class BootstrapTests
         Assert.Equal(a.Flora.Select(f => f.Id), b.Flora.Select(f => f.Id));
         Assert.Equal(33, a.Flora.Count);
         Assert.Equal(17, a.Fauna.Count);
+        Assert.All(a.Fauna, f =>
+        {
+            Assert.NotEqual(FaunaAnimationFamily.Still, f.Animation.Family);
+            Assert.True(f.Animation.MaxHz >= f.Animation.IdleHz);
+            Assert.InRange(f.Animation.DutyFactor, 0.05, 0.95);
+        });
         Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
         Assert.Equal(11, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
         Assert.Equal(5, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));

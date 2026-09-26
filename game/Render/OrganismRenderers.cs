@@ -369,7 +369,7 @@ public partial class FaunaRenderer : Node3D
     private sealed class Layer
     {
         public VariantLayer[] Variants = new VariantLayer[MorphVariants];
-        public double CycleHz;
+        public FaunaAnimationDef Animation = null!;
     }
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     /// <summary>
@@ -381,7 +381,7 @@ public partial class FaunaRenderer : Node3D
     {
         public Vector3 Prev, Cur, Shown;
         public double PrevT, CurT;
-        public float Yaw, Speed;
+        public float Yaw, Speed, Pitch;
         public double Phase;
         public Vector3 Up = Vector3.Up;
     }
@@ -405,8 +405,16 @@ public partial class FaunaRenderer : Node3D
             var hiMat = Bridge.Shader("res://Shaders/fauna.gdshader");
             hiMat.SetShaderParameter("base_color", Bridge.C(sp.BaseColor));
             hiMat.SetShaderParameter("ornament_color", Bridge.C(sp.OrnamentColor));
-            hiMat.SetShaderParameter("wiggle", sp.Medium == Medium.Aquatic ? 1.0f : sp.Model is "isopod" or "beetle" ? 0.08f : 0.35f);
-            hiMat.SetShaderParameter("wiggle_speed", sp.Model == "minnow" ? 11.0f : 7.0f);
+            var anim = sp.Animation;
+            hiMat.SetShaderParameter("anim_family", (int)anim.Family);
+            hiMat.SetShaderParameter("anim_amplitude", (float)anim.Amplitude);
+            hiMat.SetShaderParameter("anim_idle_motion", (float)anim.IdleMotion);
+            hiMat.SetShaderParameter("anim_body_wave", (float)anim.BodyWave);
+            hiMat.SetShaderParameter("anim_limb_sweep", (float)anim.LimbSweep);
+            hiMat.SetShaderParameter("anim_limb_lift", (float)anim.LimbLift);
+            hiMat.SetShaderParameter("anim_bob", (float)anim.Bob);
+            hiMat.SetShaderParameter("anim_phase_spread", (float)anim.PhaseSpread);
+            hiMat.SetShaderParameter("anim_duty_factor", (float)anim.DutyFactor);
             hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
             hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.15f, "triops" => 0.45f, "shrimp" => 0.35f, "springtail" => 0.0f, "beetle" => 0.3f, "silverfish" => 0.2f, _ => 0.0f });
             hiMat.SetShaderParameter("segment_rings", sp.Model switch { "springtail" => 5.5f, "silverfish" => 4.5f, _ => 0.0f });
@@ -414,8 +422,8 @@ public partial class FaunaRenderer : Node3D
             hiMat.SetShaderParameter("wet", sp.Model is "shrimp" or "minnow" or "triops" ? 1.0f : 0.0f);
             hiMat.SetShaderParameter("scales", sp.Model is "minnow" or "silverfish" ? 1.0f : 0.0f);
             var still = (ShaderMaterial)hiMat.Duplicate();
-            still.SetShaderParameter("wiggle", 0.0f);
-            var layer = new Layer();
+            still.SetShaderParameter("anim_amplitude", 0.0f);
+            var layer = new Layer { Animation = sp.Animation };
             ulong speciesSeed = Hash.Fnv1a64("fauna.visual." + sp.Id);
             for (int v = 0; v < MorphVariants; v++)
             {
@@ -435,7 +443,6 @@ public partial class FaunaRenderer : Node3D
                 }
                 layer.Variants[v] = vl;
             }
-            layer.CycleHz = (sp.Model == "minnow" ? 11.0 : 7.0) / (2 * Math.PI) * 6;
             _layers[sp.Id] = layer;
         }
     }
@@ -508,21 +515,31 @@ public partial class FaunaRenderer : Node3D
             var motion = new Vector2(tr.Cur.X - tr.Prev.X, tr.Cur.Z - tr.Prev.Z);
             float yawTarget = motion.LengthSquared() > 1e-8 ? Mathf.Atan2(-motion.Y, motion.X) : (float)-f.Heading;
             tr.Yaw += Mathf.Wrap(yawTarget - tr.Yaw, -Mathf.Pi, Mathf.Pi) * k;
-            // walk/swim cycle advances with on-screen speed (body lengths per real second), accumulated so it never jumps
+            // Animation cadence is species-authored in body-relative units: apparent gait survives genetic size changes
+            // and simulation time-scale changes without hard-coding a model name in the renderer.
             float bodyLen = (float)Math.Max(1e-4, ph.BodySize * sp.VisualScale);
             float speed = delta > 1e-6 ? frameDist / (float)delta / bodyLen : 0;
             tr.Speed += (speed - tr.Speed) * k;
-            double idle = sp.Medium == Medium.Aquatic ? 0.15 : 0.0;
-            tr.Phase = (tr.Phase + (idle + Math.Min(tr.Speed * 0.08, 1.5)) * delta * _layers[sp.Id].CycleHz) % 1.0;
+            var layer = _layers[sp.Id];
+            var anim = layer.Animation;
+            double hz = Math.Min(anim.MaxHz, anim.IdleHz + tr.Speed * anim.CyclesPerBody);
+            tr.Phase = (tr.Phase + hz * delta) % 1.0;
+            float speed01 = (float)Math.Clamp(tr.Speed / anim.FullSpeed, 0, 1);
             var d = (Pos: shown, Yaw: tr.Yaw);
             // full detail at any distance; only animals outside the view are skipped (invisible either way)
             float scale = (float)(ph.BodySize * sp.VisualScale);
             if (cam != null && !f.Grabbed && !cam.IsPositionInFrustum(d.Pos) && !cam.IsPositionInFrustum(d.Pos + Vector3.Up * scale)) { OffScreen++; continue; }
-            // walkers follow the slope under them (damped so they don't jitter over bumps); swimmers stay level
+            // Walkers follow the surface; swimmers derive pitch from their actual interpolated 3-D travel rather than
+            // the simulation's water-column fraction. This is render-only and never feeds orientation back into ecology.
             var upTarget = sp.Medium == Medium.Aquatic ? Vector3.Up : SurfaceFrame.SurfaceNormal(_w, d.Pos.X, d.Pos.Z, Math.Max(scale * 0.5, 0.01));
             tr.Up = (tr.Up + (upTarget - tr.Up) * k).Normalized();
-            var basis = (SurfaceFrame.TiltTo(tr.Up) * new Basis(Vector3.Up, d.Yaw)).Scaled(new Vector3(scale, scale, scale));
-            var layer = _layers[sp.Id];
+            var motion3 = tr.Cur - tr.Prev;
+            float horizontal = new Vector2(motion3.X, motion3.Z).Length();
+            float pitchTarget = sp.Medium == Medium.Aquatic && horizontal > 1e-5f ? Mathf.Atan2(motion3.Y, horizontal) : 0.0f;
+            tr.Pitch += (pitchTarget - tr.Pitch) * k;
+            var orient = SurfaceFrame.TiltTo(tr.Up) * new Basis(Vector3.Up, d.Yaw);
+            if (sp.Medium == Medium.Aquatic) orient *= new Basis(Vector3.Back, tr.Pitch);
+            var basis = orient.Scaled(new Vector3(scale, scale, scale));
             int variant = (int)(Rng.Mix(f.Id.Value, 0xFA0AUL) % MorphVariants);
             var vl = layer.Variants[variant];
             bool curled = vl.Curled != null && _w.FaunaSystem.IsCurled(f);
@@ -532,9 +549,11 @@ public partial class FaunaRenderer : Node3D
             buf[o + 0] = basis.X.X; buf[o + 1] = basis.Y.X; buf[o + 2] = basis.Z.X; buf[o + 3] = d.Pos.X;
             buf[o + 4] = basis.X.Y; buf[o + 5] = basis.Y.Y; buf[o + 6] = basis.Z.Y; buf[o + 7] = d.Pos.Y;
             buf[o + 8] = basis.X.Z; buf[o + 9] = basis.Y.Z; buf[o + 10] = basis.Z.Z; buf[o + 11] = d.Pos.Z;
-            // custom.w packs the appendage scale (integer thousandths) with the walk-cycle phase (fraction)
+            // custom.w packs appendage scale, a 4-bit motion-amplitude bucket, and locomotion phase.
+            // Keeping this in one channel preserves the three inherited colour/pattern traits already using xyz.
+            int speedBucket = (int)Math.Round(speed01 * 15.0f);
             buf[o + 12] = (float)ph.HueShift; buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength;
-            buf[o + 15] = (float)(Math.Round(ph.AppendageScale * 1000) + Math.Min(tr.Phase, 0.999));
+            buf[o + 15] = (float)(Math.Round(ph.AppendageScale * 1000) * 16 + speedBucket + Math.Min(tr.Phase, 0.999));
             Drawn++;
         }
         foreach (var layer in _layers.Values)
