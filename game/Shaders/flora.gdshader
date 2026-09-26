@@ -89,19 +89,28 @@ void fragment() {
         c *= 0.85 + 0.3 * pulse;
         rough = 0.3;
     } else {
-        // vascular plants: midrib + lateral veins from the leaf uv, slight waxy sheen
-        float along = UV.x, across = UV.y;
-        float veinWarp = (vnoise(vec2(along * 5.0, across * 3.0) + inst.w * 5.0) - 0.5) * 0.06;
-        float mid = 1.0 - smoothstep(0.0, 0.035, abs(fract(across + veinWarp) - 0.5));
-        float lat = 1.0 - smoothstep(0.0, 0.07, abs(fract(along * 5.3 + abs(fract(across) - 0.5) * 2.1 + veinWarp) - 0.5));
-        c *= 1.0 + 0.12 * mid + 0.045 * lat - 0.035 * vnoise(world_pos.xz * 110.0);
-        rough = 0.55;
+        // vascular plants normally use leaf veins; woody meshes mark trunk/branch vertices with UV2.x=2 so
+        // bark stays matte, opaque-looking and longitudinally rough instead of acquiring leaf venation.
+        if (UV2.x > 1.5) {
+            float grain = vnoise(vec2(UV.x * 1.7 + inst.w * 3.0, UV.y * 13.0));
+            float furrow = 0.5 + 0.5 * sin(UV.y * 47.0 + grain * 4.0);
+            c *= 0.74 + 0.22 * grain + 0.08 * furrow;
+            rough = 0.92;
+        } else {
+            float along = UV.x, across = UV.y;
+            float veinWarp = (vnoise(vec2(along * 5.0, across * 3.0) + inst.w * 5.0) - 0.5) * 0.06;
+            float mid = 1.0 - smoothstep(0.0, 0.035, abs(fract(across + veinWarp) - 0.5));
+            float lat = 1.0 - smoothstep(0.0, 0.07, abs(fract(along * 5.3 + abs(fract(across) - 0.5) * 2.1 + veinWarp) - 0.5));
+            c *= 1.0 + 0.12 * mid + 0.045 * lat - 0.035 * vnoise(world_pos.xz * 110.0);
+            rough = 0.55;
+        }
     }
     float health = clamp(inst.y, 0.0, 1.0);
     vec3 faded = mix(vec3(dot(c, vec3(0.33))), vec3(0.62, 0.55, 0.32), 0.5);
     ALBEDO = mix(faded, c, 0.35 + 0.65 * health);
     ROUGHNESS = rough;
-    SPECULAR = surface_mode == 2 ? 0.45 : surface_mode == 4 ? 0.6 : 0.25;
-    BACKLIGHT = c * (surface_mode == 2 ? 0.45 : surface_mode >= 3 ? 0.35 : 0.2);
+    bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
+    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.18 : 0.45) : surface_mode == 4 ? 0.6 : 0.25;
+    BACKLIGHT = c * (surface_mode == 2 ? (woody_surface ? 0.04 : 0.45) : surface_mode >= 3 ? 0.35 : 0.2);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

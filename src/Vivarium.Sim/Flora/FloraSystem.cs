@@ -1,5 +1,6 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Flora;
@@ -30,11 +31,111 @@ public sealed class FloraSystem
 {
     private readonly VivariumWorld _w;
     private readonly List<FloraIndividual> _nb = new();
+    private readonly List<FloraIndividual> _woodyCanopy = new();
+    private readonly ScalarField _canopyShade;
+    private int _woodyCanopyVersion = -1;
+    private int _canopyShadeVersion = -1;
+    private bool _canopyShadeDirty = true;
     public const string PropagationStream = "flora.propagation";
+    public const double TreeAreaPerIndividual = 15.0;
+    public const double ShrubAreaPerIndividual = 4.0;
 
-    public FloraSystem(VivariumWorld w) { _w = w; }
+    public FloraSystem(VivariumWorld w)
+    {
+        _w = w;
+        _canopyShade = new ScalarField("woody_canopy_shade", w.Grid, 0, 0, 1);
+    }
 
     private ContentLibrary C => _w.Content;
+
+    /// <summary>Plan-view area of the regular hexagonal island.</summary>
+    public double IslandAreaM2 => 3 * Math.Sqrt(3) / 2 * _w.Domain.Radius * _w.Domain.Radius;
+
+    /// <summary>Shared structural population budget for the whole island, not per species.</summary>
+    public int WoodyPopulationCap(WoodyLayer layer)
+    {
+        double areaPer = layer == WoodyLayer.Tree ? TreeAreaPerIndividual : ShrubAreaPerIndividual;
+        return Math.Max(1, (int)Math.Floor(IslandAreaM2 / areaPer));
+    }
+
+    public int WoodyPopulation(WoodyLayer layer)
+    {
+        int count = 0;
+        foreach (var f in _w.Flora.Items)
+            if (C.FloraOrThrow(f.SpeciesId).Woody?.Layer == layer) count++;
+        return count;
+    }
+
+    private void RefreshWoodyCanopy()
+    {
+        if (_woodyCanopyVersion == _w.Flora.Version) return;
+        _woodyCanopy.Clear();
+        foreach (var f in _w.Flora.Items)
+            if (C.FloraOrThrow(f.SpeciesId).Woody != null) _woodyCanopy.Add(f);
+        _woodyCanopyVersion = _w.Flora.Version;
+        _canopyShadeDirty = true;
+    }
+
+    /// <summary>
+    /// Rebuilds the derived woody-canopy shade field. Cost is paid once per canopy state change and only touches
+    /// grid cells under a bounded number of tree/shrub crowns; all ecology consumers then get O(1) bilinear samples.
+    /// </summary>
+    private void RefreshCanopyShade()
+    {
+        RefreshWoodyCanopy();
+        if (!_canopyShadeDirty && _canopyShadeVersion == _w.Flora.Version) return;
+
+        foreach (int cell in _w.Grid.DomainCells) _canopyShade.Values[cell] = 0;
+        foreach (var f in _woodyCanopy)
+        {
+            var sp = C.FloraOrThrow(f.SpeciesId);
+            var woody = sp.Woody!;
+            double maturity = Math.Sqrt(f.BiomassFraction(sp));
+            double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
+            if (radius <= 1e-6) continue;
+            foreach (int cell in _w.Grid.CellsInRadius(f.Position, radius))
+            {
+                double d = Vec2.Distance(f.Position, _w.Grid.CellCenter(cell));
+                if (d >= radius) continue;
+                _canopyShade.Add(cell, woody.ShadeOpacity * maturity * (1 - d / radius));
+            }
+        }
+        _canopyShadeVersion = _w.Flora.Version;
+        _canopyShadeDirty = false;
+    }
+
+    /// <summary>
+    /// Incident ecological light after the structural tree/shrub canopy. Low herb/fern shade is a coverage-layer
+    /// microhabitat effect and remains local there; tree/shrub shade is shared by every ecology consumer.
+    /// </summary>
+    public double EffectiveLight(Vec2 p, EntityId self = default)
+    {
+        double light = _w.Fields.Light.Sample(p);
+
+        // Only a woody plant needs self-exclusion. For those few bounded individuals, evaluate the other crowns
+        // directly rather than subtracting an analytic value from the interpolated shade grid.
+        if (!self.IsNone && _w.Flora.Get(self) is { } own && C.FloraOrThrow(own.SpeciesId).Woody != null)
+        {
+            RefreshWoodyCanopy();
+            double directShade = 0;
+            foreach (var f in _woodyCanopy)
+            {
+                if (f.Id == self) continue;
+                var sp = C.FloraOrThrow(f.SpeciesId);
+                var woody = sp.Woody!;
+                double maturity = Math.Sqrt(f.BiomassFraction(sp));
+                double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
+                double d = Vec2.Distance(f.Position, p);
+                if (radius > 1e-6 && d < radius)
+                    directShade += woody.ShadeOpacity * maturity * (1 - d / radius);
+            }
+            return MathD.Clamp01(light - Math.Min(directShade, light));
+        }
+
+        RefreshCanopyShade();
+        double shade = _canopyShade.Sample(p);
+        return MathD.Clamp01(light - Math.Min(shade, light));
+    }
 
     public FloraSuitability Suitability(FloraSpeciesDef sp, Vec2 p, EntityId self = default)
     {
@@ -62,7 +163,7 @@ public sealed class FloraSystem
                 if (n.Id != self && n.SpeciesId == rel.B) return FloraSuitability.Refused($"excluded by nearby {C.FloraOrThrow(rel.B).Name}: {rel.Reason}", sub);
         }
 
-        double light = _w.Fields.Light.Sample(p);
+        double light = EffectiveLight(p, self);
         // decomposers judge their food (dead matter) where plants judge soil nutrients
         double nutrients = sp.Decomposer ? MathD.Clamp01(_w.Fields.Detritus.Sample(p) / C.Ecology.DetritusMax) : _w.Fields.Nutrients.Sample(p) / C.Ecology.NutrientMax;
         double fs = sp.SubstrateAffinity.GetValueOrDefault(sub);
@@ -289,6 +390,9 @@ public sealed class FloraSystem
             _colonySize[root] = _colonySize.GetValueOrDefault(root) + 1;
             _colonialTotal++;
         }
+        // Tree/shrub biomass changed during this step; rebuild derived shade lazily on the next light sample.
+        // Empty fixture worlds keep their all-zero canopy cache indefinitely instead of clearing the whole grid.
+        if (_woodyCanopy.Count > 0) _canopyShadeDirty = true;
     }
 
     /// <summary>
@@ -512,6 +616,32 @@ public sealed class FloraSystem
         {
             reason = $"{sp.Name} grows on the coverage layers, not as individuals";
             return false;
+        }
+        if (sp.Woody is { } woody)
+        {
+            int cap = WoodyPopulationCap(woody.Layer);
+            int count = WoodyPopulation(woody.Layer);
+            if (count >= cap)
+            {
+                reason = $"{(woody.Layer == WoodyLayer.Tree ? "tree" : "shrub")} population at island carrying limit ({count}/{cap})";
+                return false;
+            }
+            double querySpacing = C.Flora
+                .Where(candidate => candidate.Woody?.Layer == woody.Layer)
+                .Select(candidate => candidate.Woody!.MinSpacing)
+                .DefaultIfEmpty(woody.MinSpacing)
+                .Max();
+            _w.Flora.Neighbours(q, querySpacing, _nb);
+            foreach (var n in _nb)
+            {
+                var nsp = C.FloraOrThrow(n.SpeciesId);
+                if (nsp.Woody?.Layer != woody.Layer) continue;
+                double spacing = Math.Max(woody.MinSpacing, nsp.Woody.MinSpacing);
+                double distance = Vec2.Distance(q, n.Position);
+                if (distance >= spacing) continue;
+                reason = $"too close to {nsp.Name} ({distance:0.00} m < {spacing:0.00} m)";
+                return false;
+            }
         }
         var s = Suitability(sp, q);
         if (s.HardRefused) { reason = s.RefusalReason; return false; }

@@ -111,7 +111,7 @@ public partial class IslandRenderer : Node3D
             _bytes[o] = (byte)(Mathf.Clamp((float)f.Moisture.Values[d], 0, 1) * 255);
             _bytes[o + 1] = (byte)(code * 255 / 4);
             _bytes[o + 2] = (byte)(Mathf.Clamp((float)(f.Nutrients.Values[d] / nmax), 0, 1) * 255);
-            _bytes[o + 3] = (byte)(Mathf.Clamp((float)f.Light.Values[d], 0, 1) * 255);
+            _bytes[o + 3] = (byte)(Mathf.Clamp((float)_w.FloraSystem.EffectiveLight(p), 0, 1) * 255);
             bool gravel = _w.Props.GravelAt(p) != null;
             bool rock = !gravel && (Substrate)f.BaseSubstrate[d] == Substrate.Rock;
             _subBytes[c * 2] = gravel ? (byte)255 : (byte)0;

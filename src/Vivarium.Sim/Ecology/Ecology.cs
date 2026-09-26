@@ -96,7 +96,7 @@ public sealed class EcologySystem
             bool wet = _w.Water.IsWet(idx);
             if (wet)
             {
-                double light = f.Light.Values[idx];
+                double light = _w.FloraSystem.EffectiveLight(_w.Grid.CellCenter(idx));
                 double nutr = f.Nutrients.Values[idx] / eco.NutrientMax;
                 Grow(f.Biofilm, f.Nutrients, idx, eco.BiofilmGrowth * light * (0.3 + 0.7 * nutr), eco.BiofilmCapacity, eco.BiofilmNutrientUse, dt);
                 double depthFactor = MathD.Clamp01(_w.Water.Depth[idx] / 0.15);

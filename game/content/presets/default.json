@@ -60,7 +60,12 @@
     { "species": "dichondra", "count": 10 },
     { "species": "clover", "count": 10 },
     { "species": "carpobrotus", "count": 8 },
-    { "species": "lily_pad", "count": 8 }
+    { "species": "lily_pad", "count": 8 },
+    { "species": "black_locust", "count": 1 },
+    { "species": "catalpa", "count": 1 },
+    { "species": "tamarack", "count": 1 },
+    { "species": "cottonwood", "count": 1 },
+    { "species": "staghorn_sumac", "count": 4 }
   ],
   "starterFauna": [
     { "species": "springtail", "count": 60 },

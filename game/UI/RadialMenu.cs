@@ -54,6 +54,7 @@ public partial class RadialMenu : Control
         (FloraPlacementGroup.Terrestrial, "♧", "Terrestrial"),
         (FloraPlacementGroup.WatersideAquatic, "≈", "Waterside &\naquatic"),
         (FloraPlacementGroup.Decomposer, "◌", "Decomposers"),
+        (FloraPlacementGroup.Woody, "♣", "Trees &\nshrubs"),
     };
 
     private static int InnerCount => Items.Length + Groups.Length;
