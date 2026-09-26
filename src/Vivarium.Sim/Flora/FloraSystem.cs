@@ -30,11 +30,59 @@ public sealed class FloraSystem
 {
     private readonly VivariumWorld _w;
     private readonly List<FloraIndividual> _nb = new();
+    private readonly List<FloraIndividual> _lightNb = new();
     public const string PropagationStream = "flora.propagation";
+    public const double TreeAreaPerIndividual = 15.0;
+    public const double ShrubAreaPerIndividual = 4.0;
 
     public FloraSystem(VivariumWorld w) { _w = w; }
 
     private ContentLibrary C => _w.Content;
+
+    /// <summary>Plan-view area of the regular hexagonal island.</summary>
+    public double IslandAreaM2 => 3 * Math.Sqrt(3) / 2 * _w.Domain.Radius * _w.Domain.Radius;
+
+    /// <summary>Shared structural population budget for the whole island, not per species.</summary>
+    public int WoodyPopulationCap(WoodyLayer layer)
+    {
+        double areaPer = layer == WoodyLayer.Tree ? TreeAreaPerIndividual : ShrubAreaPerIndividual;
+        return Math.Max(1, (int)Math.Floor(IslandAreaM2 / areaPer));
+    }
+
+    public int WoodyPopulation(WoodyLayer layer)
+    {
+        int count = 0;
+        foreach (var f in _w.Flora.Items)
+            if (C.FloraOrThrow(f.SpeciesId).Woody?.Layer == layer) count++;
+        return count;
+    }
+
+    /// <summary>
+    /// Incident ecological light after living-plant shade. Base light contains terrain/prop occlusion; ordinary
+    /// vascular plants retain the old light canopy effect while woody plants use their explicit crown metadata.
+    /// </summary>
+    public double EffectiveLight(Vec2 p, EntityId self = default)
+    {
+        double light = EffectiveLight(p, self);
+        double shade = 0;
+        _w.Flora.Neighbours(p, 5.0, _lightNb);
+        foreach (var f in _lightNb)
+        {
+            if (f.Id == self) continue;
+            var sp = C.FloraOrThrow(f.SpeciesId);
+            if (sp.Archetype != "plant") continue;
+            double maturity = Math.Sqrt(f.BiomassFraction(sp));
+            double radius = sp.Woody is { } woody
+                ? woody.CanopyRadius * (0.3 + 0.7 * maturity)
+                : f.Radius(sp);
+            if (radius <= 1e-6) continue;
+            double d = Vec2.Distance(f.Position, p);
+            if (d >= radius) continue;
+            double opacity = sp.Woody?.ShadeOpacity ?? 0.22;
+            shade += opacity * maturity * (1 - d / radius);
+        }
+        return MathD.Clamp01(light - Math.Min(shade, light));
+    }
 
     public FloraSuitability Suitability(FloraSpeciesDef sp, Vec2 p, EntityId self = default)
     {
@@ -512,6 +560,24 @@ public sealed class FloraSystem
         {
             reason = $"{sp.Name} grows on the coverage layers, not as individuals";
             return false;
+        }
+        if (sp.Woody is { } woody)
+        {
+            int cap = WoodyPopulationCap(woody.Layer);
+            int count = WoodyPopulation(woody.Layer);
+            if (count >= cap)
+            {
+                reason = $"{(woody.Layer == WoodyLayer.Tree ? "tree" : "shrub")} population at island carrying limit ({count}/{cap})";
+                return false;
+            }
+            _w.Flora.Neighbours(q, woody.MinSpacing, _nb);
+            foreach (var n in _nb)
+            {
+                var nsp = C.FloraOrThrow(n.SpeciesId);
+                if (nsp.Woody?.Layer != woody.Layer) continue;
+                reason = $"too close to {nsp.Name} ({Vec2.Distance(q, n.Position):0.00} m < {woody.MinSpacing:0.00} m)";
+                return false;
+            }
         }
         var s = Suitability(sp, q);
         if (s.HardRefused) { reason = s.RefusalReason; return false; }
