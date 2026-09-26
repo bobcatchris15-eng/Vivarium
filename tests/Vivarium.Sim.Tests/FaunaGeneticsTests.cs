@@ -349,7 +349,7 @@ public class FaunaTests
     public void FaunaLibraryLoadsCleanAndBrokenFixtureIsActionable()
     {
         Assert.Empty(TestUtil.Content.Warnings);
-        Assert.Equal(new[] { "coalback_beetle", "dewmantle", "duskflicker", "emberglass_swimmer", "glasscoil", "glintfin", "ghostbristle", "loamthread", "marbleback", "moonveil", "prismhopper", "rainspine", "reedjaw", "rustcoil", "siltshield", "stiltclaw", "stonebell" }, TestUtil.Content.Fauna.Select(f => f.Id));
+        Assert.Equal(new[] { "coalback_beetle", "dewmantle", "duskflicker", "emberglass_swimmer", "ghostbristle", "glasscoil", "glintfin", "loamthread", "marbleback", "moonveil", "prismhopper", "rainspine", "reedjaw", "rustcoil", "siltshield", "stiltclaw", "stonebell" }, TestUtil.Content.Fauna.Select(f => f.Id));
         var src = new OverlayContentSource(TestUtil.ContentSource);
         var broken = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "glintfin.json"))
             .Replace("\"model\": \"minnow\"", "\"model\": \"whale\"")
