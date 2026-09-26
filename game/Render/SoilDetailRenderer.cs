@@ -36,11 +36,13 @@ public partial class SoilDetailRenderer : Node3D
     public void Build(VivariumWorld w)
     {
         _w = w;
+        _buffers.Clear();
         foreach (var c in GetChildren()) c.QueueFree();
 
         var mat = new StandardMaterial3D
         {
             VertexColorUseAsAlbedo = true,
+            VertexColorIsSrgb = true,
             Roughness = 0.95f,
             Metallic = 0f,
             AlbedoColor = Colors.White,
@@ -61,7 +63,10 @@ public partial class SoilDetailRenderer : Node3D
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("SoilDetail");
-        if (_w == null || Quality <= 0) return;
+        if (_w == null) return;
+        bool enabled = Quality > 0;
+        _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = enabled;
+        if (!enabled) { _accum = 999; return; }
         _accum += delta;
         if (_accum < 0.5) return;
         // rebuild only when the view has moved enough to matter, the ground changed, or occasionally for moisture drift
@@ -163,10 +168,11 @@ public partial class SoilDetailRenderer : Node3D
     private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale, DetailKind kind)
     {
         // Triangular jitter favours the middle of each source cell but has no visible axis-aligned edge.
-        float jx = (rng.Randf() + rng.Randf() - 1f) * (float)(g.CellSize * 0.52);
-        float jz = (rng.Randf() + rng.Randf() - 1f) * (float)(g.CellSize * 0.52);
+        float jx = (rng.Randf() + rng.Randf() - 1f) * (float)(g.CellSize * (Quality >= 2 ? 0.52 : 1.04));
+        float jz = (rng.Randf() + rng.Randf() - 1f) * (float)(g.CellSize * (Quality >= 2 ? 0.52 : 1.04));
         var wp = center + new Vivarium.Sim.Core.Vec2(jx, jz);
         if (!_w.Domain.Contains(wp)) return;
+        if (_w.Water.IsWet(wp) || !double.IsNaN(_w.Props.PropTopAt(wp)) || _w.Props.GravelAt(wp) != null) return;
         float y = (float)_w.Terrain.Height(wp);
         float scale = rng.RandfRange(minScale, maxScale);
         var basis = new Basis(Vector3.Up, rng.RandfRange(0, Mathf.Tau));
@@ -188,6 +194,8 @@ public partial class SoilDetailRenderer : Node3D
                 break;
         }
 
+        // Litter follows the substrate slope rather than hovering across it.
+        basis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, (float)wp.X, (float)wp.Z, 0.025)) * basis;
         xf.Add(new Transform3D(basis, new Vector3((float)wp.X, y + 0.0015f * scale, (float)wp.Z)));
         float v = rng.RandfRange(0.82f, 1.16f);
         col.Add(new Color(tint.R * v, tint.G * v, tint.B * v));

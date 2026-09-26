@@ -18,6 +18,21 @@ uniform sampler2D moss_col : source_color, filter_linear_mipmap_anisotropic, rep
 uniform sampler2D moss_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 
+uniform sampler2D bark_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D bark_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D bark_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
+
+// Derivative frame follows each branch/leaf's authored UVs, including curved attachments.
+vec3 surface_normal(vec3 base, vec3 p, vec2 uv, vec3 detail) {
+    vec3 px = dFdx(p), py = dFdy(p);
+    vec2 ux = dFdx(uv), uy = dFdy(uv);
+    vec3 r1 = cross(py, base), r2 = cross(base, px);
+    vec3 t = r1 * ux.x + r2 * uy.x;
+    vec3 b = r1 * ux.y + r2 * uy.y;
+    float inv = inversesqrt(max(max(dot(t,t), dot(b,b)), 1e-12));
+    return normalize(base * detail.z + (t * detail.x - b * detail.y) * inv);
+}
+
 varying vec4 inst;
 varying vec3 world_pos;
 varying vec3 obj_pos;
@@ -92,17 +107,33 @@ void fragment() {
         // vascular plants normally use leaf veins; woody meshes mark trunk/branch vertices with UV2.x=2 so
         // bark stays matte, opaque-looking and longitudinally rough instead of acquiring leaf venation.
         if (UV2.x > 1.5) {
-            float grain = vnoise(vec2(UV.x * 1.7 + inst.w * 3.0, UV.y * 13.0));
-            float furrow = 0.5 + 0.5 * sin(UV.y * 47.0 + grain * 4.0);
-            c *= 0.74 + 0.22 * grain + 0.08 * furrow;
-            rough = 0.92;
+            // Isotropic physical mapping: UV.x is distance along trunk in metres; UV.y is 0..1 around circumference.
+            vec2 buv = vec2(UV.y * 1.0, UV.x * 2.2 + inst.w * 3.0);
+            vec3 bark = texture(bark_col, buv).rgb;
+            // Retain the authentic photo-scanned bark tones, gently modulated by species tint
+            c = mix(bark, bark * (c / max(lum(c), 0.05)), 0.35);
+            vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
+            n = surface_normal(wn, world_pos, buv, normalize(vec3(bn.xy * 1.25, bn.z)));
+            rough = clamp(texture(bark_rgh, buv).r, 0.72, 0.98);
+        } else if (UV2.y > 0.5) {
+            float along = UV.x, across = UV.y - 0.5;
+            float aa = max(fwidth(across), 0.002);
+            float mid = 1.0 - smoothstep(0.012, 0.028 + aa, abs(across));
+            float phase = along * 7.0 - abs(across) * 3.4;
+            float vaa = max(fwidth(phase), 0.025);
+            float vein = 1.0 - smoothstep(0.025, 0.07 + vaa, abs(fract(phase) - 0.5));
+            vein *= 1.0 - smoothstep(0.16, 0.65, vaa);
+            float cells = vnoise(vec2(along * 29.0, across * 37.0) + inst.w * 13.0);
+            float edge = smoothstep(0.28, 0.5, abs(across));
+            c *= (0.88 + 0.15 * cells + 0.1 * mid + 0.055 * vein) * mix(1.0, 0.86, edge);
+            c = mix(c, c * vec3(1.16, 1.03, 0.72), smoothstep(0.7, 1.0, along) * 0.2);
+            float ridge = (mid * 0.45 + vein * 0.12) * (1.0 - smoothstep(0.01, 0.07, fwidth(along)));
+            vec3 leaf_n = normalize(vec3(-dFdx(ridge) * 1.5, -dFdy(ridge) * 1.5, 1.0));
+            n = surface_normal(wn, world_pos, UV, leaf_n);
+            rough = mix(0.48, 0.68, cells) + edge * 0.08;
         } else {
-            float along = UV.x, across = UV.y;
-            float veinWarp = (vnoise(vec2(along * 5.0, across * 3.0) + inst.w * 5.0) - 0.5) * 0.06;
-            float mid = 1.0 - smoothstep(0.0, 0.035, abs(fract(across + veinWarp) - 0.5));
-            float lat = 1.0 - smoothstep(0.0, 0.07, abs(fract(along * 5.3 + abs(fract(across) - 0.5) * 2.1 + veinWarp) - 0.5));
-            c *= 1.0 + 0.12 * mid + 0.045 * lat - 0.035 * vnoise(world_pos.xz * 110.0);
-            rough = 0.55;
+            // Petioles and young stems stay opaque and waxy, without leaf veins.
+            rough = 0.69;
         }
     }
     float health = clamp(inst.y, 0.0, 1.0);
@@ -111,6 +142,6 @@ void fragment() {
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
     SPECULAR = surface_mode == 2 ? (woody_surface ? 0.18 : 0.45) : surface_mode == 4 ? 0.6 : 0.25;
-    BACKLIGHT = c * (surface_mode == 2 ? (woody_surface ? 0.04 : 0.45) : surface_mode >= 3 ? 0.35 : 0.2);
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? c * vec3(1.1, 1.15, 0.75) * 0.26 : c * 0.04)) : c * (surface_mode >= 3 ? 0.35 : 0.2);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

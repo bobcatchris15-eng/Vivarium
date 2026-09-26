@@ -203,7 +203,7 @@ public static class Primitives
                     if (n.LengthSq < 1e-8) n = faceN;
                     if (n.Dot(faceN) < 0) n = -n;
                     var col = Mix(rootCol, tipCol, t);
-                    m.AddVertex(p, n, col, 1, t, (x + 1) * 0.5, 0, 0);
+                    m.AddVertex(p, n, col, 1, t, (x + 1) * 0.5, face, 1);
                 }
             }
             int row = across + 1;

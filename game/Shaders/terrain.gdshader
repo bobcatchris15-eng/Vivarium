@@ -30,7 +30,7 @@ uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform float tile_metres = 0.9;    // real-world size of one texture repeat
+uniform float tile_metres = 0.45;    // real-world size of one texture repeat
 uniform float soil_relief_amp = 0.012;   // metres of fine geometric relief on soil (lumps, furrows)
 uniform float soil_relief_freq = 2.6;
 uniform float soil_clumps = 1.0;        // 0 skips the clump/cavity detail (low quality tiers)
@@ -76,7 +76,7 @@ void vertex() {
     vec3 grad = vec3(eps, (h1 - h0) * amp, 0.0);
     vec3 grad2 = vec3(0.0, (h2 - h0) * amp, eps);
     vec3 n2 = normalize(cross(grad2, grad));
-    relief_wn = normalize((MODEL_MATRIX * vec4(mix(NORMAL, n2, soilMask), 0.0)).xyz);
+    relief_wn = normalize((MODEL_MATRIX * vec4(normalize(NORMAL + vec3(n2.x, 0.0, n2.z) * soilMask), 0.0)).xyz);
     relief_mix = soilMask;
     relief_h = h0;
 }
@@ -145,10 +145,16 @@ void fragment() {
         col = mix(col, l.rgb, w); rough = mix(rough, l.a, w); tn = normalize(mix(tn, unpack_normal(texture(leaf_nrm, lu).rgb), w));
     }
     if (wMoss > 0.01) {
-        vec2 mu = uv * 2.2 + 7.3;
+        vec2 mu = uv * 2.4 + 7.3;
         vec4 m = vec4(texture(moss_col, mu).rgb, texture(moss_rgh, mu).r);
-        float w = hblend(wMoss, dot(m.rgb, vec3(0.33)) * 2.5);
-        col = mix(col, m.rgb, w * 0.85); rough = mix(rough, m.a, w); tn = normalize(mix(tn, unpack_normal(texture(moss_nrm, mu).rgb), w));
+        // Ground the bright moss texture with earthy forest tones and rhizoid boundary
+        vec3 natural_moss = mix(m.rgb, m.rgb * vec3(0.74, 0.88, 0.58), 0.5);
+        float h = dot(m.rgb, vec3(0.333)) * 1.2;
+        float w = hblend(wMoss, h);
+        vec3 rhizoid_col = mix(col * 0.78, natural_moss, smoothstep(0.08, 0.45, w));
+        col = mix(col, rhizoid_col, w * 0.75);
+        rough = mix(rough, m.a, w * 0.7);
+        tn = normalize(mix(tn, unpack_normal(texture(moss_nrm, mu).rgb), w));
     }
     if (wGrav > 0.01) {
         vec2 gu = uv * 2.4;
@@ -173,13 +179,16 @@ void fragment() {
     col *= mix(1.0, 0.72, smoothstep(0.3, 0.75, moisture) * (1.0 - wMoss * 0.5));
     float wet = smoothstep(0.7, 1.0, moisture);
     col *= mix(1.0, 0.8, wet * (1.0 - wMoss * 0.6));
-    rough = mix(rough, 0.28, wet * 0.8);
+    rough = mix(rough, 0.38, wet * 0.7);
     detail = normalize(mix(detail, wn, wet * 0.35));
 
     if (overlay_mode == 1) col = mix(col, ramp(moisture), overlay_strength);
     else if (overlay_mode == 2) col = mix(col, ramp(f.b), overlay_strength);
     else if (overlay_mode == 3) col = mix(col, ramp(light), overlay_strength);
     else if (overlay_mode == 4) col = mix(col, vec3(code == 0.0 ? 0.55 : 0.0, code == 1.0 ? 0.8 : (code == 0.0 ? 0.35 : 0.0), code >= 2.0 ? 0.3 + 0.2 * code : 0.1), overlay_strength);
+    // Preserve pore shadows even when the wet surface catches the sky.
+    AO = mix(0.82, 1.0, smoothstep(0.12, 0.6, dot(soil.rgb, vec3(0.333))));
+    AO_LIGHT_AFFECT = 0.25;
     ALBEDO = col;
     ROUGHNESS = rough;
     SPECULAR = mix(0.35, 0.6, wet);

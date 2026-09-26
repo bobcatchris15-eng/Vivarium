@@ -20,7 +20,7 @@ public partial class EnvironmentRig : Node3D
 
     // Pale warm-grey/green humid haze — reads as damp terrarium air, not smoke or mist.
     private static readonly Color HazeFogColor = new(0.78f, 0.80f, 0.74f);
-    private const float HazeFogDensity = 0.02f;
+    private const float HazeFogDensity = 0.006f;
     private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
     private const float UnderwaterFogDensity = 0.18f;
 
@@ -41,14 +41,14 @@ public partial class EnvironmentRig : Node3D
             AmbientLightSource = Environment.AmbientSource.Sky,
             AmbientLightColor = new Color(0.86f, 0.84f, 0.8f),
             AmbientLightSkyContribution = 0.45f,
-            AmbientLightEnergy = 0.78f,
+            AmbientLightEnergy = 0.56f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Agx,
             TonemapExposure = 1.0f,
             TonemapWhite = 6f,
             AdjustmentEnabled = true,
-            AdjustmentSaturation = 1.07f,
-            AdjustmentContrast = 1.02f,
+            AdjustmentSaturation = 1.0f,
+            AdjustmentContrast = 1.04f,
             AdjustmentBrightness = 1.0f,
             GlowEnabled = false,
             // Humid-air haze: gentle aerial perspective, not a fog wall. Kept very low density so
@@ -60,7 +60,7 @@ public partial class EnvironmentRig : Node3D
             FogDensity = HazeFogDensity,
             FogSunScatter = 0.35f,
             FogSkyAffect = 0.1f,
-            FogAerialPerspective = 0.35f,
+            FogAerialPerspective = 0.12f,
             SsaoRadius = 0.5f, SsaoIntensity = 0.8f, SsaoPower = 1.2f,
         };
         WorldEnv = new WorldEnvironment { Environment = Env };
@@ -69,12 +69,12 @@ public partial class EnvironmentRig : Node3D
         Sun = new DirectionalLight3D
         {
             LightColor = new Color(1.0f, 0.96f, 0.9f),
-            LightEnergy = 1.22f,
+            LightEnergy = 1.35f,
             ShadowEnabled = true,
             // The entire specimen is only 10–20 m across. Spend the directional map on that scale instead of
             // the engine's generic scene scale, and keep bias small enough that leaf/stem contact shadows stay attached.
             ShadowBias = 0.035f,
-            ShadowNormalBias = 0.85f,
+            ShadowNormalBias = 0.35f,
             ShadowBlur = 1.15f,
             DirectionalShadowMaxDistance = 28,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits,
