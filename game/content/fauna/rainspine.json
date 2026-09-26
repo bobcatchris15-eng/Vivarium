@@ -98,7 +98,22 @@
       0.82,
       0.42,
       0.18
-    ]
+    ],
+    "animation": {
+      "family": "sprawl",
+      "cyclesPerBody": 0.65,
+      "idleHz": 0,
+      "maxHz": 5,
+      "fullSpeed": 3,
+      "idleMotion": 0,
+      "amplitude": 1,
+      "bodyWave": 0.55,
+      "limbSweep": 0.75,
+      "limbLift": 0.45,
+      "bob": 0.08,
+      "phaseSpread": 0.55,
+      "dutyFactor": 0.62
+    }
   },
   "behaviors": []
 }
