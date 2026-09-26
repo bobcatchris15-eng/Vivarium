@@ -55,7 +55,8 @@ public partial class Main : Node3D
             var mode = UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
             var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode };
             AddChild(runner);
-            if (mode != SmokeRunner.Mode.Reload) Session.StartWorld(Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default")));
+            if (ArgAfter("--load") is { } loadPath && File.Exists(loadPath)) Session.LoadFrom(loadPath);
+            else if (mode != SmokeRunner.Mode.Reload) Session.StartWorld(Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default")));
             return;
         }
 

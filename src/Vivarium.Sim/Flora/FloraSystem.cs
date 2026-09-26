@@ -66,14 +66,20 @@ public sealed class FloraSystem
         return count;
     }
 
+    private readonly object _canopyLock = new();
+
     private void RefreshWoodyCanopy()
     {
         if (_woodyCanopyVersion == _w.Flora.Version) return;
-        _woodyCanopy.Clear();
-        foreach (var f in _w.Flora.Items)
-            if (C.FloraOrThrow(f.SpeciesId).Woody != null) _woodyCanopy.Add(f);
-        _woodyCanopyVersion = _w.Flora.Version;
-        _canopyShadeDirty = true;
+        lock (_canopyLock)
+        {
+            if (_woodyCanopyVersion == _w.Flora.Version) return;
+            _woodyCanopy.Clear();
+            foreach (var f in _w.Flora.Items)
+                if (C.FloraOrThrow(f.SpeciesId).Woody != null) _woodyCanopy.Add(f);
+            _woodyCanopyVersion = _w.Flora.Version;
+            _canopyShadeDirty = true;
+        }
     }
 
     /// <summary>
@@ -84,24 +90,27 @@ public sealed class FloraSystem
     {
         RefreshWoodyCanopy();
         if (!_canopyShadeDirty && _canopyShadeVersion == _w.Flora.Version) return;
-
-        foreach (int cell in _w.Grid.DomainCells) _canopyShade.Values[cell] = 0;
-        foreach (var f in _woodyCanopy)
+        lock (_canopyLock)
         {
-            var sp = C.FloraOrThrow(f.SpeciesId);
-            var woody = sp.Woody!;
-            double maturity = Math.Sqrt(f.BiomassFraction(sp));
-            double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
-            if (radius <= 1e-6) continue;
-            foreach (int cell in _w.Grid.CellsInRadius(f.Position, radius))
+            if (!_canopyShadeDirty && _canopyShadeVersion == _w.Flora.Version) return;
+            foreach (int cell in _w.Grid.DomainCells) _canopyShade.Values[cell] = 0;
+            foreach (var f in _woodyCanopy)
             {
-                double d = Vec2.Distance(f.Position, _w.Grid.CellCenter(cell));
-                if (d >= radius) continue;
-                _canopyShade.Add(cell, woody.ShadeOpacity * maturity * (1 - d / radius));
+                var sp = C.FloraOrThrow(f.SpeciesId);
+                var woody = sp.Woody!;
+                double maturity = Math.Sqrt(f.BiomassFraction(sp));
+                double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
+                if (radius <= 1e-6) continue;
+                foreach (int cell in _w.Grid.CellsInRadius(f.Position, radius))
+                {
+                    double d = Vec2.Distance(f.Position, _w.Grid.CellCenter(cell));
+                    if (d >= radius) continue;
+                    _canopyShade.Add(cell, woody.ShadeOpacity * maturity * (1 - d / radius));
+                }
             }
+            _canopyShadeVersion = _w.Flora.Version;
+            _canopyShadeDirty = false;
         }
-        _canopyShadeVersion = _w.Flora.Version;
-        _canopyShadeDirty = false;
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Coverage.Rules;
@@ -15,6 +16,7 @@ namespace Vivarium.Sim.Coverage;
 public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritusSink
 {
     private readonly VivariumWorld _w;
+    private readonly MoistureBonusField _moistureBonus;
     private readonly List<MatParams> _matSpecies = new();
     private readonly Dictionary<byte, string> _matSpeciesId = new();
     private readonly List<LichenParams> _lichenSpecies = new();
@@ -36,6 +38,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     public CoverageSystem(VivariumWorld w)
     {
         _w = w;
+        _moistureBonus = CoverageEnvironment.MoistureBonusOf(w);
         byte matId = 0, lichenId = 0;
         foreach (var sp in w.Content.Flora)
         {
@@ -83,7 +86,9 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
 
     private readonly Dictionary<long, MicroEnv> _stepEnvCache = new();
     private readonly Dictionary<long, CoverageSubstrate> _stepSubstrateCache = new();
-    private readonly Dictionary<long, (double slope, Vec2 downslope, double laplacian)> _terrainGeoCache = new();
+    private readonly ConcurrentDictionary<long, (double slope, Vec2 downslope, double laplacian)> _terrainGeoCache = new();
+    private readonly ConcurrentDictionary<long, (double Moisture, double Humidity, double Light, double Nutrients)> _stepPhysiologyCache = new();
+    private readonly ConcurrentDictionary<(int ti, int tj), List<Flora.FloraIndividual>> _stepTileFlora = new();
     private int _terrainVersion = -1;
     private double[]? _stepWaterDist;
     private bool _inStep;
@@ -109,11 +114,86 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                 geo = (slope, downslope, laplacian);
                 _terrainGeoCache[key] = geo;
             }
-            var env = CoverageEnvironment.Sample(_w, p, _stepWaterDist, geo);
+            var (ti, tj) = CoverageSpec.TileOf(gx, gz);
+            var tileFlora = _stepTileFlora.GetOrAdd((ti, tj), static (tCoord, state) =>
+            {
+                var (w, tc) = state;
+                var tileCenter = new Vec2((tc.ti + 0.5) * CoverageSpec.TileEdge * CoverageSpec.CellSize, (tc.tj + 0.5) * CoverageSpec.TileEdge * CoverageSpec.CellSize);
+                var list = new List<Flora.FloraIndividual>(8);
+                w.Flora.Neighbours(tileCenter, 2.65, list);
+                return list;
+            }, (_w, (ti, tj)));
+
+            var env = CoverageEnvironment.Sample(_w, p, _stepWaterDist, geo, tileFlora);
             _stepEnvCache[key] = env;
             return env;
         }
         return CoverageEnvironment.Sample(_w, CellCentre(gx, gz));
+    }
+
+    public (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz)
+    {
+        if (_inStep)
+        {
+            long key = ((long)gx << 32) | (uint)gz;
+            if (_stepEnvCache.TryGetValue(key, out var cachedEnv))
+                return (cachedEnv.Moisture, cachedEnv.Humidity, cachedEnv.Light, cachedEnv.Nutrients);
+            if (_stepPhysiologyCache.TryGetValue(key, out var cachedPhys))
+                return cachedPhys;
+
+            var p = CellCentre(gx, gz);
+            double laplacian;
+            if (_terrainVersion != _w.Terrain.Version)
+            {
+                _terrainGeoCache.Clear();
+                _terrainVersion = _w.Terrain.Version;
+            }
+            if (_terrainGeoCache.TryGetValue(key, out var geo))
+            {
+                laplacian = geo.laplacian;
+            }
+            else
+            {
+                laplacian = CoverageEnvironment.TerrainLaplacian(_w, p);
+                _terrainGeoCache[key] = (0, Vec2.Zero, laplacian);
+            }
+
+            var (ti, tj) = CoverageSpec.TileOf(gx, gz);
+            var tileFlora = _stepTileFlora.GetOrAdd((ti, tj), static (tCoord, state) =>
+            {
+                var (w, tc) = state;
+                var tileCenter = new Vec2((tc.ti + 0.5) * CoverageSpec.TileEdge * CoverageSpec.CellSize, (tc.tj + 0.5) * CoverageSpec.TileEdge * CoverageSpec.CellSize);
+                var list = new List<Flora.FloraIndividual>(8);
+                w.Flora.Neighbours(tileCenter, 2.65, list);
+                return list;
+            }, (_w, (ti, tj)));
+
+            var res = CoverageEnvironment.SamplePhysiology(_w, p, _stepWaterDist, laplacian, tileFlora, _moistureBonus);
+            _stepPhysiologyCache[key] = res;
+            return res;
+        }
+        return CoverageEnvironment.SamplePhysiology(_w, CellCentre(gx, gz), bonus: _moistureBonus);
+    }
+
+    public (Vec2 DownslopeDir, Vec2 MoistureGradient) SampleGradient(int gx, int gz)
+    {
+        var p = CellCentre(gx, gz);
+        long key = ((long)gx << 32) | (uint)gz;
+        Vec2 downslope;
+        if (_terrainGeoCache.TryGetValue(key, out var geo) && (geo.downslope.X != 0 || geo.downslope.Z != 0))
+        {
+            downslope = geo.downslope;
+        }
+        else
+        {
+            var n = _w.Terrain.Normal(p);
+            double slope = Math.Acos(MathD.Clamp(n.Y, -1, 1));
+            downslope = new Vec2(n.X, n.Z).Normalized();
+            double laplacian = geo.laplacian != 0 ? geo.laplacian : CoverageEnvironment.TerrainLaplacian(_w, p);
+            _terrainGeoCache[key] = (slope, downslope, laplacian);
+        }
+        var gradient = CoverageEnvironment.SampleMoistureGradient(_w, p);
+        return (downslope, gradient);
     }
 
     public CoverageSubstrate Substrate(int gx, int gz)
@@ -156,6 +236,8 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         _stepWaterDist = _w.Water.DistanceToWater();
         _stepEnvCache.Clear();
         _stepSubstrateCache.Clear();
+        _stepTileFlora.Clear();
+        _stepPhysiologyCache.Clear();
         try
         {
             if (_matSpecies.Count > 0)
@@ -170,6 +252,8 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
             _stepWaterDist = null;
             _stepEnvCache.Clear();
             _stepSubstrateCache.Clear();
+            _stepTileFlora.Clear();
+            _stepPhysiologyCache.Clear();
         }
     }
 

@@ -71,8 +71,6 @@ public partial class CoverageRenderer : Node3D
     private readonly float[,] _cellThickness = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
     private readonly Color[,] _cellColor = new Color[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
     private readonly int[,] _cornerIdx = new int[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
-    private readonly int[,] _hMidIdx = new int[CoverageSpec.TileEdge, CoverageSpec.TileEdge + 1];
-    private readonly int[,] _vMidIdx = new int[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge];
     private readonly float[,] _cornerThickness = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly Color[,] _cornerColor = new Color[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly float[,] _cornerAlpha = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
@@ -618,20 +616,9 @@ public partial class CoverageRenderer : Node3D
             }
         }
 
-        for (int cz = 0; cz <= edge; cz++)
-        for (int cx = 0; cx < edge; cx++)
-        {
-            _hMidIdx[cx, cz] = -1;
-        }
-        for (int cz = 0; cz < edge; cz++)
-        for (int cx = 0; cx <= edge; cx++)
-        {
-            _vMidIdx[cx, cz] = -1;
-        }
-
-        // 3. Assemble MeshData draped over terrain. Each cell is subdivided into a 2x2 grid of
-        // sub-quads whose corners are bilinearly interpolated from the cell's 4 true corners, so
-        // color/height/alpha vary smoothly across the cell instead of faceting at cell boundaries.
+        // 3. Assemble MeshData draped over terrain using the continuous corner grid.
+        // Vertices are evaluated and cached once at cell corners, giving smooth normals,
+        // watertight coverage boundaries, and eliminating redundant per-subquad relief evaluations.
         var md = new MeshData();
 
         int GetOrAddCorner(int cx, int cz)
@@ -654,47 +641,14 @@ public partial class CoverageRenderer : Node3D
             return idx;
         }
 
-        static float Bilerp(float v00, float v10, float v01, float v11, double s, double t)
-            => (float)((v00 * (1 - s) + v10 * s) * (1 - t) + (v01 * (1 - s) + v11 * s) * t);
-
-        int AddSubDirect(double fx, double fz)
+        void AddSurfaceTriangle(int a, int b, int c)
         {
-            double wx = (t.Ti * edge + fx) * cs;
-            double wz = (t.Tj * edge + fz) * cs;
-            int c0x = Math.Clamp((int)Math.Floor(fx), 0, edge - 1);
-            int c0z = Math.Clamp((int)Math.Floor(fz), 0, edge - 1);
-            double s = fx - c0x;
-            double t2 = fz - c0z;
-            float th = Bilerp(_cornerThickness[c0x, c0z], _cornerThickness[c0x + 1, c0z], _cornerThickness[c0x, c0z + 1], _cornerThickness[c0x + 1, c0z + 1], s, t2);
-            float r = Bilerp(_cornerColor[c0x, c0z].R, _cornerColor[c0x + 1, c0z].R, _cornerColor[c0x, c0z + 1].R, _cornerColor[c0x + 1, c0z + 1].R, s, t2);
-            float g = Bilerp(_cornerColor[c0x, c0z].G, _cornerColor[c0x + 1, c0z].G, _cornerColor[c0x, c0z + 1].G, _cornerColor[c0x + 1, c0z + 1].G, s, t2);
-            float b = Bilerp(_cornerColor[c0x, c0z].B, _cornerColor[c0x + 1, c0z].B, _cornerColor[c0x, c0z + 1].B, _cornerColor[c0x + 1, c0z + 1].B, s, t2);
-            float a = Bilerp(_cornerAlpha[c0x, c0z], _cornerAlpha[c0x + 1, c0z], _cornerAlpha[c0x, c0z + 1], _cornerAlpha[c0x + 1, c0z + 1], s, t2);
-            double gy = _w.GroundHeight(new Vec2(wx, wz));
-            Vec3 gn = GetGroundNormal(wx, wz);
-            byte occ = layer.GetOcc((int)Math.Floor(wx / cs), (int)Math.Floor(wz / cs));
-            var sp = GetSpecies(layer.Id, occ);
-            float relief = SurfaceRelief(layer.Id, wx, wz, a, sp.MaxHeightM);
-            Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th + relief);
-            return md.AddVertex(p, gn, r, g, b, a * SlopeFade(gn), wx, wz, fx / edge, fz / edge);
-        }
-
-        int GetOrAddHMid(int ex, int ez)
-        {
-            int idx = _hMidIdx[ex, ez];
-            if (idx >= 0) return idx;
-            idx = AddSubDirect(ex + 0.5, ez);
-            _hMidIdx[ex, ez] = idx;
-            return idx;
-        }
-
-        int GetOrAddVMid(int ex, int ez)
-        {
-            int idx = _vMidIdx[ex, ez];
-            if (idx >= 0) return idx;
-            idx = AddSubDirect(ex, ez + 0.5);
-            _vMidIdx[ex, ez] = idx;
-            return idx;
+            // GroundHeight can jump from soil to the top of a log or rock within one fine
+            // cell. Joining those samples creates a tall, stretched curtain of moss.
+            double ya = md.Position(a).Y, yb = md.Position(b).Y, yc = md.Position(c).Y;
+            if (Math.Max(ya, Math.Max(yb, yc)) - Math.Min(ya, Math.Min(yb, yc)) > 0.03)
+                return;
+            md.AddTriangle(a, b, c);
         }
 
         for (int lz = 0; lz < edge; lz++)
@@ -705,40 +659,13 @@ public partial class CoverageRenderer : Node3D
                 || _cornerAlpha[lx, lz + 1] > 0f || _cornerAlpha[lx + 1, lz + 1] > 0f;
             if (!anyCoverage) continue;
 
-            // 3x3 local vertex grid: true corners and edge midpoints cached across cells.
-            int v00 = GetOrAddCorner(lx, lz);
-            int v20 = GetOrAddCorner(lx + 1, lz);
-            int v02 = GetOrAddCorner(lx, lz + 1);
-            int v22 = GetOrAddCorner(lx + 1, lz + 1);
-            int v10 = GetOrAddHMid(lx, lz);
-            int v12 = GetOrAddHMid(lx, lz + 1);
-            int v01 = GetOrAddVMid(lx, lz);
-            int v21 = GetOrAddVMid(lx + 1, lz);
-            int v11 = AddSubDirect(lx + 0.5, lz + 0.5);
+            int c00 = GetOrAddCorner(lx, lz);
+            int c10 = GetOrAddCorner(lx + 1, lz);
+            int c01 = GetOrAddCorner(lx, lz + 1);
+            int c11 = GetOrAddCorner(lx + 1, lz + 1);
 
-            void SubQuad(int q00, int q10, int q11, int q01, double cs2, double ct2)
-            {
-                int qc = AddSubDirect(cs2, ct2);
-                AddSurfaceTriangle(q00, qc, q10);
-                AddSurfaceTriangle(q10, qc, q11);
-                AddSurfaceTriangle(q11, qc, q01);
-                AddSurfaceTriangle(q01, qc, q00);
-            }
-
-            void AddSurfaceTriangle(int a, int b, int c)
-            {
-                // GroundHeight can jump from soil to the top of a log or rock within one fine
-                // cell. Joining those samples creates a tall, stretched curtain of moss.
-                double ya = md.Position(a).Y, yb = md.Position(b).Y, yc = md.Position(c).Y;
-                if (Math.Max(ya, Math.Max(yb, yc)) - Math.Min(ya, Math.Min(yb, yc)) > 0.03)
-                    return;
-                md.AddTriangle(a, b, c);
-            }
-
-            SubQuad(v00, v10, v11, v01, lx + 0.25, lz + 0.25);
-            SubQuad(v10, v20, v21, v11, lx + 0.75, lz + 0.25);
-            SubQuad(v01, v11, v12, v02, lx + 0.25, lz + 0.75);
-            SubQuad(v11, v21, v22, v12, lx + 0.75, lz + 0.75);
+            AddSurfaceTriangle(c00, c11, c10);
+            AddSurfaceTriangle(c00, c01, c11);
         }
 
         if (md.TriangleCount > 0)

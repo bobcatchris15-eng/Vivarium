@@ -8,6 +8,16 @@ namespace Vivarium.Sim.Coverage.Rules;
 public interface IMicroEnvSource
 {
     MicroEnv Sample(int gx, int gz);
+    (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz)
+    {
+        var e = Sample(gx, gz);
+        return (e.Moisture, e.Humidity, e.Light, e.Nutrients);
+    }
+    (Vec2 DownslopeDir, Vec2 MoistureGradient) SampleGradient(int gx, int gz)
+    {
+        var e = Sample(gx, gz);
+        return (e.DownslopeDir, e.MoistureGradient);
+    }
 }
 
 /// <summary>Where dead biomass and sphagnum moisture feedback go (docs/overhaul/growth_models.md §4.1, §4.5).
@@ -197,9 +207,14 @@ public static class MatRules
 
     private static void RunPhysiology(IMicroEnvSource env, MatParams?[] byId, List<CoverageTile> tiles, double dtDays, long step, IDetritusSink? sink, List<(CoverageTile, int, int)> changedCells)
     {
-        foreach (var t in tiles)
+        var tileChanges = new (List<(int gx, int gz, double amount)>? detritus,
+                               List<(int gx, int gz, double amount)>? moisture,
+                               List<(int lx, int lz)>? changed)[tiles.Count];
+
+        Parallel.For(0, tiles.Count, i =>
         {
-            if (t.Occ.AsSpan().IndexOfAnyExcept((byte)0) < 0) continue; // nothing occupied at all
+            var t = tiles[i];
+            if (t.Occ.AsSpan().IndexOfAnyExcept((byte)0) < 0) return; // nothing occupied at all
 
             int cgx = t.Ti * TileEdge + TileEdge / 2, cgz = t.Tj * TileEdge + TileEdge / 2;
             double dt = dtDays;
@@ -207,7 +222,7 @@ public static class MatRules
 
             if (t.Steady)
             {
-                double curMoisture = env.Sample(cgx, cgz).Moisture;
+                double curMoisture = env.SamplePhysiology(cgx, cgz).Moisture;
                 bool envStable = !double.IsNaN(t.EnvMoistureCache) && Math.Abs(curMoisture - t.EnvMoistureCache) <= EnvTolerance;
                 t.SkippedPhysiologySteps++;
                 if (envStable && t.SkippedPhysiologySteps < SteadyPeriod)
@@ -222,10 +237,13 @@ public static class MatRules
                 t.EnvMoistureCache = curMoisture;
             }
 
-            if (!runFull) continue;
+            if (!runFull) return;
 
             bool tileDirty = false, anyDorm = false;
             double maxDeltaB = 0;
+            List<(int gx, int gz, double amount)>? localDetritus = null;
+            List<(int gx, int gz, double amount)>? localMoisture = null;
+            List<(int lx, int lz)>? localChanged = null;
 
             for (int lz = 0; lz < TileEdge; lz++)
             for (int lx = 0; lx < TileEdge; lx++)
@@ -237,7 +255,7 @@ public static class MatRules
                 if (p is null) continue;
 
                 int gx = t.Ti * TileEdge + lx, gz = t.Tj * TileEdge + lz;
-                var e = env.Sample(gx, gz);
+                var e = env.SamplePhysiology(gx, gz);
                 double w01 = t.W[li] / 255.0;
                 double newW01 = WaterBalance.StepWater(w01, e.Moisture, e.Humidity, p, dt);
 
@@ -248,10 +266,10 @@ public static class MatRules
 
                 if (newDorm > p.DormDeathDays)
                 {
-                    sink?.AddDetritus(gx, gz, t.B[li]);
+                    (localDetritus ??= new()).Add((gx, gz, t.B[li]));
                     t.Occ[li] = 0; t.B[li] = 0f; t.W[li] = 0; t.Age[li] = 0; t.Dorm[li] = 0; t.Flags[li] = 0; t.D2E[li] = 0;
                     tileDirty = true;
-                    changedCells.Add((t, lx, lz));
+                    (localChanged ??= new()).Add((lx, lz));
                     continue;
                 }
 
@@ -263,14 +281,20 @@ public static class MatRules
                 maxDeltaB = Math.Max(maxDeltaB, Math.Abs(newB - t.B[li]));
                 if (newDorm > 0) anyDorm = true;
 
+                byte newWByte = (byte)Math.Round(Math.Clamp(newW01, 0, 1) * 255);
+                ushort newAge = (ushort)Math.Min(65535, t.Age[li] + (int)Math.Round(dt * 4));
+                if (Math.Abs(newB - t.B[li]) > 0.005f || Math.Abs((int)newWByte - (int)t.W[li]) > 2 || newDorm != t.Dorm[li])
+                {
+                    tileDirty = true;
+                }
+
                 t.B[li] = (float)newB;
-                t.W[li] = (byte)Math.Round(Math.Clamp(newW01, 0, 1) * 255);
-                t.Age[li] = (ushort)Math.Min(65535, t.Age[li] + (int)Math.Round(dt * 4));
+                t.W[li] = newWByte;
+                t.Age[li] = newAge;
                 t.Dorm[li] = newDorm;
-                tileDirty = true;
 
                 if (p.MoistureFeedback > 0)
-                    sink?.AddMoistureBonus(gx, gz, p.MoistureFeedback * newB * dt);
+                    (localMoisture ??= new()).Add((gx, gz, p.MoistureFeedback * newB * dt));
             }
 
             if (tileDirty) { t.Active = true; t.Touch(); }
@@ -279,8 +303,25 @@ public static class MatRules
             if (t.Steady)
             {
                 t.SkippedPhysiologySteps = 0;
-                t.EnvMoistureCache = env.Sample(cgx, cgz).Moisture;
+                t.EnvMoistureCache = env.SamplePhysiology(cgx, cgz).Moisture;
             }
+
+            if (localDetritus != null || localMoisture != null || localChanged != null)
+            {
+                tileChanges[i] = (localDetritus, localMoisture, localChanged);
+            }
+        });
+
+        for (int i = 0; i < tiles.Count; i++)
+        {
+            var t = tiles[i];
+            var (localDetritus, localMoisture, localChanged) = tileChanges[i];
+            if (localDetritus != null)
+                foreach (var (dgx, dgz, damount) in localDetritus) sink?.AddDetritus(dgx, dgz, damount);
+            if (localMoisture != null)
+                foreach (var (mgx, mgz, mamount) in localMoisture) sink?.AddMoistureBonus(mgx, mgz, mamount);
+            if (localChanged != null)
+                foreach (var (clx, clz) in localChanged) changedCells.Add((t, clx, clz));
         }
     }
 
@@ -309,23 +350,33 @@ public static class MatRules
                 sporeSums[occA] += ba;
 
                 int gx = t.Ti * TileEdge + lx, gz = t.Tj * TileEdge + lz;
-                var ea = env.Sample(gx, gz);
+                var ea = env.SamplePhysiology(gx, gz);
                 double gWa = WaterBalance.GrowthMultiplierWater(ea.Moisture, pa);
                 double gLa = WaterBalance.GrowthMultiplierLight(ea.Light, pa);
                 double va = ba * gWa * gLa;
 
                 byte bestOcc = 0;
                 double bestVigourP = 0;
+                Vec2 downslopeDir = default;
+                Vec2 moistureGrad = default;
+                bool geoSampled = false;
 
                 foreach (var (dx, dz) in Neighbours8)
                 {
                     var (occB, bb) = SnapAt(tileDict, t, lx + dx, lz + dz);
                     if (occB == 0)
                     {
+                        if (!geoSampled)
+                        {
+                            var (gDownslope, gMoistGrad) = env.SampleGradient(gx, gz);
+                            downslopeDir = gDownslope;
+                            moistureGrad = gMoistGrad;
+                            geoSampled = true;
+                        }
                         var dir = new Vec2(dx, dz);
                         double wdir = 1.0
-                            + AnisoSlope * Math.Max(0, ea.DownslopeDir.Dot(dir))
-                            + AnisoMoist * Math.Max(0, ea.MoistureGradient.Dot(dir));
+                            + AnisoSlope * Math.Max(0, downslopeDir.Dot(dir))
+                            + AnisoMoist * Math.Max(0, moistureGrad.Dot(dir));
                         if (wdir <= 0) continue;
                         var key = (gx + dx, gz + dz);
                         if (!pressure.TryGetValue(key, out var arr)) { arr = new double[n]; pressure[key] = arr; }
@@ -361,10 +412,14 @@ public static class MatRules
             }
         }
 
-        foreach (var (key, arr) in pressure)
+        var pressureList = pressure.ToList();
+        var winners = new (int gx, int gz, byte bestOcc)[pressureList.Count];
+
+        Parallel.For(0, pressureList.Count, idx =>
         {
+            var (key, arr) = pressureList[idx];
             var (gx, gz) = key;
-            var e = env.Sample(gx, gz);
+            var e = env.SamplePhysiology(gx, gz);
 
             byte bestOcc = 0;
             double bestP = 0;
@@ -387,6 +442,15 @@ public static class MatRules
                 if (u < totalP && totalP > bestP) { bestP = totalP; bestOcc = p.OccupantId; }
             }
 
+            if (bestOcc != 0)
+            {
+                winners[idx] = (gx, gz, bestOcc);
+            }
+        });
+
+        for (int i = 0; i < winners.Length; i++)
+        {
+            var (gx, gz, bestOcc) = winners[i];
             if (bestOcc != 0)
             {
                 var p = byId[bestOcc]!;
