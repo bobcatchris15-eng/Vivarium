@@ -234,6 +234,7 @@ public partial class RadialMenu : Control
         {
             var g = group;
             var b = MakeButton("FloraGroup_" + FloraPlacementGroups.Id(g), $"{glyph}\n{buttonName}", () => ShowFloraSpecies(g));
+            b.SetPressedNoSignal(Session.Tools.FloraSpecies != null && Session.Content.FloraById(Session.Tools.FloraSpecies)?.PlacementGroup == g);
             b.MouseEntered += () => _hubLabel.Text = FloraPlacementGroups.Name(g);
             _species.Add(b); made.Add(b);
         }
@@ -295,7 +296,12 @@ public partial class RadialMenu : Control
 
     private void ClearOuter()
     {
-        foreach (var b in _species) b.QueueFree();
+        foreach (var b in _species)
+        {
+            b.Visible = false;
+            if (b.GetParent() == _ring) _ring.RemoveChild(b);
+            b.QueueFree();
+        }
         _species.Clear();
         foreach (var (_, b) in _subTools) b.Visible = false;
     }

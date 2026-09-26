@@ -148,9 +148,11 @@ public partial class Windows : Control
                 UiKit.Label(role, 13, null, wrap: true), UiKit.Label(habitat, 12, UiKit.Muted, wrap: true));
             _catalogList.AddChild(UiKit.Panel("CatalogEntry_" + id, text));
         }
+        bool firstSection = true;
         void Section(string title)
         {
-            if (_catalogList.GetChildCount() > 0) _catalogList.AddChild(new HSeparator());
+            if (!firstSection) _catalogList.AddChild(new HSeparator());
+            firstSection = false;
             _catalogList.AddChild(UiKit.Label(title, 14, UiKit.Accent));
         }
         foreach (var group in FloraPlacementGroups.All)
