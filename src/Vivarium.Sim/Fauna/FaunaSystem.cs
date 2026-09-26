@@ -29,6 +29,7 @@ public sealed class FaunaSystem
     /// <summary>Ticks between wander control values (60 ticks = 10 simulated minutes).</summary>
     private const int WanderPeriod = 60;
     private readonly ulong _mortalityHash = Hash.Fnv1a64("fauna.mortality");
+    private readonly Dictionary<EntityId, (string Cause, double Detritus)> _predationDeaths = new();
     public const string ReproStream = "fauna.reproduction";
 
     public FaunaSystem(VivariumWorld w) { _w = w; }
@@ -55,6 +56,14 @@ public sealed class FaunaSystem
         double depth = _w.Water.DepthAt(p);
         double moisture = _w.Fields.Moisture.Sample(p);
         var sub = _w.SubstrateAtCell(p);
+        if (sp.Flies)
+        {
+            var groundSub = sub == Substrate.Water ? Substrate.Soil : sub;
+            double aff = sp.SubstrateAffinity.GetValueOrDefault(groundSub);
+            double score = aff * sp.Moisture.Eval(moisture);
+            if (depth > sp.MaxWaterDepth) score *= 0.75; // crossing water is allowed; lingering there is merely suboptimal
+            return new FaunaSuitability { Score = MathD.Clamp01(score), WaterDepth = depth, Moisture = moisture, Substrate = sub };
+        }
         if (sp.Medium == Medium.Aquatic)
         {
             if (depth < sp.MinWaterDepth) return new FaunaSuitability { HardRefused = true, RefusalReason = $"{sp.Name} needs water at least {sp.MinWaterDepth * 100:0.#} cm deep (found {depth * 100:0.#} cm)", WaterDepth = depth, Moisture = moisture, Substrate = sub };
@@ -72,6 +81,7 @@ public sealed class FaunaSystem
     /// <summary>Position an animal of this species would occupy at xz (Y from terrain, prop top, or water column).</summary>
     public double RestingY(FaunaSpeciesDef sp, Vec2 p, double columnFraction = 0.5)
     {
+        if (sp.Flies) return _w.GroundHeight(p) + Math.Max(0.14, sp.VisualScale * (sp.SizeMin + sp.SizeMax) * 0.8);
         if (sp.Medium == Medium.Aquatic)
         {
             double bed = _w.Terrain.Height(p), depth = _w.Water.DepthAt(p);
@@ -195,7 +205,7 @@ public sealed class FaunaSystem
                 if (sp.Schooling != null) f.Pitch = MathD.Lerp(f.Pitch, 0.55, 0.05);
                 f.Y = RestingY(sp, f.PositionXZ, f.Pitch);
             }
-            else f.Y = _w.GroundHeight(f.PositionXZ);
+            else f.Y = RestingY(sp, f.PositionXZ);
         }
     }
 
@@ -206,6 +216,7 @@ public sealed class FaunaSystem
     public bool IsPassable(FaunaSpeciesDef sp, Vec2 q)
     {
         if (!_w.Domain.ContainsDisc(q, 0.04)) return false;
+        if (sp.Flies) return true;
         double depth = _w.Water.DepthAt(q);
         if (sp.Medium == Medium.Aquatic) return depth >= sp.MinWaterDepth;
         return depth <= sp.MaxWaterDepth || !double.IsNaN(_w.Props.PropTopAt(q));
@@ -255,6 +266,14 @@ public sealed class FaunaSystem
         double best = 0;
         foreach (var d in sp.Diet)
         {
+            if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal))
+            {
+                string prey = d.Resource[6..];
+                _w.Fauna.Neighbours(p, sp.SenseRadius, _nb);
+                int count = _nb.Count(x => x.SpeciesId == prey && x.Energy > 0);
+                best = Math.Max(best, MathD.Clamp01(count / 3.0));
+                continue;
+            }
             var field = _w.Fields.Resource(d.Resource);
             if (field != null) best = Math.Max(best, MathD.Clamp01(field.Sample(p) / Math.Max(field.Max * 0.25, 1e-9)));
         }
@@ -266,9 +285,10 @@ public sealed class FaunaSystem
     public void StepMetabolism(double dt)
     {
         double now = _w.Clock.SimSeconds;
-        var dead = new List<(FaunaIndividual, string)>();
+        var naturalDeaths = new Dictionary<EntityId, string>();
         foreach (var f in _w.Fauna.Items)
         {
+            if (_predationDeaths.ContainsKey(f.Id)) continue;
             var sp = C.FaunaOrThrow(f.SpeciesId);
             var ph = PhenotypeOf(f);
             var suit = Suitability(sp, f.PositionXZ);
@@ -278,9 +298,17 @@ public sealed class FaunaSystem
             f.Energy -= sp.BasalRate * ph.MetabolicScale * stress * dt;
             if (f.Energy < sp.HungerThreshold * sp.MaxEnergy && !f.Grabbed) Feed(f, sp, ph, dt);
             f.Energy = MathD.Clamp(f.Energy, 0, sp.MaxEnergy);
-            if (f.Energy <= 0) dead.Add((f, suit.HardRefused ? "stranded" : "starvation"));
+            if (f.Energy <= 0 && !_predationDeaths.ContainsKey(f.Id))
+                naturalDeaths[f.Id] = suit.HardRefused ? "stranded" : "starvation";
         }
-        foreach (var (f, cause) in dead) Kill(f, cause);
+
+        foreach (var f in _w.Fauna.Items.Where(x => x.Energy <= 0).ToList())
+        {
+            if (_predationDeaths.Remove(f.Id, out var pred))
+                RemoveFauna(f, pred.Cause, pred.Detritus);
+            else
+                Kill(f, naturalDeaths.GetValueOrDefault(f.Id, "starvation"));
+        }
     }
 
     private void Feed(FaunaIndividual f, FaunaSpeciesDef sp, Phenotype ph, double dt)
@@ -296,6 +324,7 @@ public sealed class FaunaSystem
             double want = Math.Min(d.RatePerSecond * ph.MassScale * dt, room / Math.Max(d.Efficiency, 1e-9));
             double got;
             if (d.Resource.StartsWith("flora:", StringComparison.Ordinal)) got = GrazeFlora(p, d.Resource[6..], want);
+            else if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal)) got = GrazeFauna(f, sp, d.Resource[6..], want);
             else
             {
                 var field = _w.Fields.Resource(d.Resource);
@@ -329,6 +358,27 @@ public sealed class FaunaSystem
             if (got >= want) break;
         }
         return got;
+    }
+
+    private double GrazeFauna(FaunaIndividual hunter, FaunaSpeciesDef hunterSp, string preySpecies, double want)
+    {
+        double radius = MathD.Clamp(hunterSp.SenseRadius * 0.35, 0.10, 0.30);
+        _w.Fauna.Neighbours(hunter.PositionXZ, radius, _nb);
+        _nb.RemoveAll(x => x.Id == hunter.Id || x.SpeciesId != preySpecies || x.Grabbed || x.Energy <= 0);
+        if (_nb.Count == 0) return 0;
+        if (_nb.Count > 1) _nb.Sort((a, b) => a.Id.Value.CompareTo(b.Id.Value));
+
+        var prey = _nb[0];
+        var preySp = C.FaunaOrThrow(prey.SpeciesId);
+        double biomass = preySp.MassAtMid * PhenotypeOf(prey).MassScale;
+        double take = Math.Min(want, biomass);
+        if (take <= 0) return 0;
+
+        // Predation consumes part of the prey's organic mass and returns the uneaten remainder to detritus.
+        double organic = biomass * preySp.DetritusOnDeath;
+        _predationDeaths[prey.Id] = ($"predation:{hunter.SpeciesId}", Math.Max(0, organic - take));
+        prey.Energy = 0;
+        return take;
     }
 
     // ------------------------------------------------------------------ lifecycle
@@ -469,11 +519,18 @@ public sealed class FaunaSystem
     public bool Kill(FaunaIndividual f, string cause)
     {
         if (_w.Fauna.Get(f.Id) == null) return false;
-        _w.Fauna.Remove(f.Id);
         var sp = C.FaunaOrThrow(f.SpeciesId);
         var ph = PhenotypeOf(f);
         double mass = sp.MassAtMid * ph.MassScale * sp.DetritusOnDeath;
-        _w.Ecology.ReturnOrganicMatter(f.PositionXZ, mass, 0, fromFlora: false);
+        return RemoveFauna(f, cause, mass);
+    }
+
+    private bool RemoveFauna(FaunaIndividual f, string cause, double detritus)
+    {
+        if (_w.Fauna.Get(f.Id) == null) return false;
+        _w.Fauna.Remove(f.Id);
+        var sp = C.FaunaOrThrow(f.SpeciesId);
+        if (detritus > 0) _w.Ecology.ReturnOrganicMatter(f.PositionXZ, detritus, 0, fromFlora: false);
         _w.Lineage.MarkDead(f.Id, _w.Clock.Tick, cause, _w.Clock.BioDays);
         _w.Tally.Death(sp.Id, cause);
         return true;

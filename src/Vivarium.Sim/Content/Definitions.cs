@@ -445,6 +445,8 @@ public sealed class FaunaSpeciesDef
     public SchoolingParams? Schooling { get; init; }
     /// <summary>Rolls into a ball instead of fleeing when disturbed ("conglobate" behaviour).</summary>
     public bool Conglobates => Behaviors.Contains("conglobate");
+    /// <summary>True for aerial species that can cross water/terrain while remaining tied to terrestrial habitat quality.</summary>
+    public bool Flies => Behaviors.Contains("flying");
 
     public bool HasTrait(string id) => Traits.Contains(id);
     public int TraitIndex(string id) => Traits.IndexOf(id);

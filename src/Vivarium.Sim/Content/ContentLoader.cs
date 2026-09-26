@@ -530,7 +530,7 @@ public static class ContentLoader
         SchoolingParams? school = null;
         var behaviors = n.StrList("behaviors");
         foreach (var bh in behaviors)
-            if (bh is not ("schooling" or "conglobate")) n["behaviors"].Error($"unknown behavior component '{bh}'");
+            if (bh is not ("schooling" or "conglobate" or "flying")) n["behaviors"].Error($"unknown behavior component '{bh}'");
         if (n.Has("schooling"))
         {
             var sc = n["schooling"]; sc.RejectUnknown("radius", "cohesion", "alignment", "separation", "separationDistance");
@@ -691,6 +691,17 @@ public static class ContentLoader
                 var d = f.Diet[i];
                 bool ok;
                 if (d.Resource.StartsWith("flora:", StringComparison.Ordinal)) ok = archetypes.Contains(d.Resource[6..]);
+                else if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal))
+                {
+                    string preyId = d.Resource[6..];
+                    ok = faunaIds.Contains(preyId);
+                    if (ok)
+                    {
+                        var prey = fauna.First(x => x.Id == preyId);
+                        if (prey.Medium != f.Medium)
+                            errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"predator and prey currently need the same simulation medium ('{f.Id}' -> '{preyId}')");
+                    }
+                }
                 else
                 {
                     var res = ecology.Resources.FirstOrDefault(r => r.Id == d.Resource);
@@ -700,15 +711,15 @@ public static class ContentLoader
                     if (res != null && res.Medium == "terrestrial" && f.Medium == Medium.Aquatic)
                         errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"aquatic species cannot eat terrestrial-only resource '{d.Resource}'");
                 }
-                if (!ok) errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"unknown diet resource '{d.Resource}' (known: {string.Join(", ", ecology.Resources.Select(r => r.Id))}, flora:<{string.Join("|", archetypes)}>)");
+                if (!ok) errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"unknown diet resource '{d.Resource}' (known fields: {string.Join(", ", ecology.Resources.Select(r => r.Id))}; flora:<archetype>; fauna:<species-id>)");
             }
             for (int i = 0; i < f.Traits.Count; i++)
                 if (genetics.Get(f.Traits[i]) == null) errors.Add(f.SourceFile, $"$.genetics.traits[{i}]", $"unknown trait '{f.Traits[i]}'");
             if (!f.Traits.Contains("size")) errors.Add(f.SourceFile, "$.genetics.traits", "every fauna species must enable the 'size' trait");
             if (!f.Traits.Any(t => t is "ornament_density" or "hue_shift" or "pattern_strength" or "appendage_length"))
                 errors.Add(f.SourceFile, "$.genetics.traits", "at least one ornamentation trait is required");
-            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow" or "isopod" or "beetle" or "silverfish"))
-                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}' (springtail | shrimp | triops | minnow | isopod | beetle | silverfish)");
+            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow" or "isopod" or "beetle" or "silverfish" or "slug" or "millipede" or "moth" or "toad" or "salamander" or "worm" or "harvestman" or "aquatic_larva" or "snail" or "midge"))
+                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}'");
         }
 
         for (int i = 0; i < inter.Relations.Count; i++)
