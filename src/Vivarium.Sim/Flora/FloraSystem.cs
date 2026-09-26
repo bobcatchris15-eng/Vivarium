@@ -588,7 +588,10 @@ public sealed class FloraSystem
 
     private bool ClimberStep(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd, double dt)
     {
-        if (f.ClimberAttached || !f.ClimberTip) return true;
+        // Attached nodes have finished structural search, but mature attached plants still use the ordinary
+        // propagule pathway below. Dormant ground nodes remain part of the stem network without becoming seed factories.
+        if (f.ClimberAttached) return false;
+        if (!f.ClimberTip) return true;
         if (_climberNodeCounts.GetValueOrDefault(sp.Id) >= cd.NodeCap)
         {
             f.ClimberTip = false;
@@ -602,7 +605,7 @@ public sealed class FloraSystem
             f.ClimberAttached = true;
             f.ClimberTip = false;
             f.CreepCredit = 0;
-            return true;
+            return false;
         }
 
         f.CreepCredit = Math.Min(f.CreepCredit + cd.GroundSpeed * dt, cd.SegmentLength * 2.5);

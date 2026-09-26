@@ -73,9 +73,10 @@ A climber species owns a `climber` content block:
 - `branchChance`: probability that a parent tip remains active after producing a child tip.
 - `maxUnsupportedLength`: practical search limit before a tip exhausts.
 - `verticalGrowthMultiplier`: visual/growth advantage after attachment.
+- `nodeCap`: per-species persistent stem-node budget so branching networks remain bounded.
 - `supportTypes`: any of `woody`, `log`, `rock`.
 
-Each founder begins as a ground tip. Tips accumulate extension credit, choose a heading biased toward the nearest valid support inside searchRadius, and bud a connected node only after physically covering segmentLength. Without a support they persist in exploratory growth with directional inertia and jitter. A node inside attachmentRadius marks itself attached and stops ground extension. Branching produces multiple searching tips. Unsupported length is tracked along the lineage so runners cannot become immortal spaghetti.
+Each founder begins as a ground tip. Tips accumulate extension credit, choose a heading biased toward the nearest valid support inside searchRadius, and bud a connected node only after physically covering segmentLength. Without a support they persist in exploratory growth with directional inertia and jitter. A node inside attachmentRadius marks itself attached and stops ground extension. Mature attached nodes resume ordinary propagule production, so a successful climb is not a reproductive dead end. Branching produces multiple searching tips. Unsupported length is tracked along the lineage and each species has a node budget so runners cannot become immortal spaghetti or consume the world entity budget.
 
 Woody individuals are valid supports based on their actual simulated positions. Logs and rocks remain supports. Rendering draws the persistent ground stems between parent and child nodes; attached nodes stretch/leaf upward against the selected support.
 
