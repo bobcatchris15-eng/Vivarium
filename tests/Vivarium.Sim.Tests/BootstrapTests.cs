@@ -107,12 +107,13 @@ public class BootstrapTests
         var b = ContentLoader.Load(TestUtil.ContentSource);
         Assert.Equal(a.ContentDigest, b.ContentDigest);
         Assert.Equal(a.Flora.Select(f => f.Id), b.Flora.Select(f => f.Id));
-        Assert.Equal(23, a.Flora.Count);
+        Assert.Equal(28, a.Flora.Count);
         Assert.Equal(7, a.Fauna.Count);
         Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
         Assert.Equal(9, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
         Assert.Equal(4, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));
         Assert.Equal(3, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Decomposer));
+        Assert.Equal(5, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody));
         Assert.Empty(a.Warnings);
     }
 
