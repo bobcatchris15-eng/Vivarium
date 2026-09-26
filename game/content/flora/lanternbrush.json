@@ -12,7 +12,7 @@
       "water": 0.08
     },
     "refuseSubstrates": [
-      "water",
+      "rock",
       "wood"
     ],
     "refuseTags": [],
