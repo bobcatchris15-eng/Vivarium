@@ -8,10 +8,25 @@ public static class AquaticBiofilm
     public static void ProjectCell(CoverageLayer bed, ScalarField biofilm, int cell)
     {
         if (!biofilm.Grid.InDomain(cell)) return;
-        var cells = FineCells(biofilm.Grid, cell);
+        var bounds = new FineBounds(biofilm.Grid, cell);
         double total = 0;
-        foreach (var (x, z) in cells) total += bed.GetB(x, z);
-        biofilm[cell] = cells.Count == 0 ? 0 : total / cells.Count * biofilm.Max;
+        int count = 0;
+        int lastTi = int.MinValue, lastTj = int.MinValue;
+        CoverageTile? tile = null;
+        for (int z = bounds.MinZ; z <= bounds.MaxZ; z++)
+        for (int x = bounds.MinX; x <= bounds.MaxX; x++)
+        {
+            if (!bounds.Contains(x, z)) continue;
+            var (ti, tj) = CoverageSpec.TileOf(x, z);
+            if (ti != lastTi || tj != lastTj)
+            {
+                bed.TryGetTile(ti, tj, out tile);
+                lastTi = ti; lastTj = tj;
+            }
+            if (tile != null) total += tile.B[CoverageSpec.LocalIndex(x, z)];
+            count++;
+        }
+        biofilm[cell] = count == 0 ? 0 : total / count * biofilm.Max;
     }
 
     public static void Project(CoverageLayer bed, ScalarField biofilm)
@@ -23,16 +38,33 @@ public static class AquaticBiofilm
     public static double GrazeCell(CoverageLayer bed, ScalarField biofilm, int cell, double want)
     {
         if (want <= 0 || !biofilm.Grid.InDomain(cell)) return 0;
-        var cells = FineCells(biofilm.Grid, cell);
-        if (cells.Count == 0) return 0;
+        var bounds = new FineBounds(biofilm.Grid, cell);
+        int count = 0;
         double biomass = 0;
-        foreach (var (x, z) in cells) biomass += bed.GetB(x, z);
-        double available = biomass / cells.Count * biofilm.Max;
+        int lastTi = int.MinValue, lastTj = int.MinValue;
+        CoverageTile? tile = null;
+        for (int z = bounds.MinZ; z <= bounds.MaxZ; z++)
+        for (int x = bounds.MinX; x <= bounds.MaxX; x++)
+        {
+            if (!bounds.Contains(x, z)) continue;
+            var (ti, tj) = CoverageSpec.TileOf(x, z);
+            if (ti != lastTi || tj != lastTj)
+            {
+                bed.TryGetTile(ti, tj, out tile);
+                lastTi = ti; lastTj = tj;
+            }
+            if (tile != null) biomass += tile.B[CoverageSpec.LocalIndex(x, z)];
+            count++;
+        }
+        if (count == 0) return 0;
+        double available = biomass / count * biofilm.Max;
         double got = Math.Min(want, available);
         if (got <= 0) { biofilm[cell] = 0; return 0; }
         double retained = (available - got) / available;
-        foreach (var (x, z) in cells)
+        for (int z = bounds.MinZ; z <= bounds.MaxZ; z++)
+        for (int x = bounds.MinX; x <= bounds.MaxX; x++)
         {
+            if (!bounds.Contains(x, z)) continue;
             float before = bed.GetB(x, z);
             if (before <= 0) continue;
             float after = (float)(before * retained);
@@ -43,21 +75,28 @@ public static class AquaticBiofilm
         return got;
     }
 
-    private static List<(int x, int z)> FineCells(GridSpec grid, int cell)
+    private readonly struct FineBounds
     {
-        var center = grid.CellCenter(cell);
-        double half = grid.CellSize * 0.5;
-        double minX = center.X - half, maxX = center.X + half;
-        double minZ = center.Z - half, maxZ = center.Z + half;
-        double s = CoverageSpec.CellSize;
-        var result = new List<(int, int)>();
-        for (int z = (int)Math.Floor(minZ / s); z <= (int)Math.Ceiling(maxZ / s); z++)
-        for (int x = (int)Math.Floor(minX / s); x <= (int)Math.Ceiling(maxX / s); x++)
+        public readonly int MinX, MaxX, MinZ, MaxZ;
+        private readonly double _minX, _maxX, _minZ, _maxZ;
+
+        public FineBounds(GridSpec grid, int cell)
         {
-            double px = (x + 0.5) * s, pz = (z + 0.5) * s;
-            if (px >= minX - 1e-10 && px < maxX - 1e-10 && pz >= minZ - 1e-10 && pz < maxZ - 1e-10)
-                result.Add((x, z));
+            var center = grid.CellCenter(cell);
+            double half = grid.CellSize * 0.5;
+            _minX = center.X - half; _maxX = center.X + half;
+            _minZ = center.Z - half; _maxZ = center.Z + half;
+            double s = CoverageSpec.CellSize;
+            MinX = (int)Math.Floor(_minX / s); MaxX = (int)Math.Ceiling(_maxX / s);
+            MinZ = (int)Math.Floor(_minZ / s); MaxZ = (int)Math.Ceiling(_maxZ / s);
         }
-        return result;
+
+        public bool Contains(int x, int z)
+        {
+            double s = CoverageSpec.CellSize;
+            double px = (x + 0.5) * s, pz = (z + 0.5) * s;
+            return px >= _minX - 1e-10 && px < _maxX - 1e-10 &&
+                   pz >= _minZ - 1e-10 && pz < _maxZ - 1e-10;
+        }
     }
 }

@@ -10,6 +10,20 @@ namespace Vivarium.Sim.Tests.GrowthLab;
 public class AquaticBiofilmTests
 {
     [Fact]
+    public void ProjectionAvoidsPerFineCellAllocations()
+    {
+        var grid = new GridSpec(new HexDomain(2), 0.1);
+        var field = new ScalarField("biofilm", grid, 0, 0, 4);
+        var bed = new CoverageLayer(CoverageLayerId.AlgaeBed, 17);
+        int cell = grid.NearestDomainCell(new(0, 0));
+        AquaticBiofilm.ProjectCell(bed, field, cell); // JIT and one-time initialization
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++) AquaticBiofilm.ProjectCell(bed, field, cell);
+        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(bytes < 64_000, $"projection allocated {bytes} bytes");
+    }
+
+    [Fact]
     public void ProjectionAndGrazingKeepFieldAndAlgaeMassInSync()
     {
         var grid = new GridSpec(new HexDomain(2), 0.1);

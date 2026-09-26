@@ -136,6 +136,7 @@ public static class SurfaceFloatRules
             int idx = d.Index(gx, gz);
             if (blocked[idx]) continue;
             double nb = rho[idx];
+            if (nb <= 0 && layer.GetOcc(gx, gz) == 0) continue; // keep empty water out of the sparse tile map
             layer.SetB(gx, gz, (float)nb);
             layer.SetOcc(gx, gz, nb > 1e-6 ? OccupantId : (byte)0);
         }

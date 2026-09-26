@@ -29,29 +29,49 @@ public sealed class AquaticSystem : IAquaticEnv
 
     public void Step(double physicalSeconds, double bioSeconds)
     {
-        var bounds = WetBounds();
-        if (bounds is not { } area) { ProjectBiofilm(); return; }
         double dtDays = bioSeconds / AquaticConst.SecondsPerDay;
         double flowDays = physicalSeconds / AquaticConst.SecondsPerDay;
-        AlgaeRules.Step(_w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat, this,
-            new AlgaeBedParams(), new AlgaeFloatParams(), area, dtDays, _step, _w.Seed, flowDays);
-        SurfaceFloatRules.Step(_w.Coverage.SurfaceFloat, this, new DuckweedParams(), area, dtDays, _step, _w.Seed, flowDays);
+        int pad = FlowHalo(physicalSeconds);
+        var algaeArea = OccupiedBounds(pad, _w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat);
+        if (algaeArea is { } a)
+            AlgaeRules.Step(_w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat, this,
+                new AlgaeBedParams(), new AlgaeFloatParams(), a, dtDays, _step, _w.Seed, flowDays);
+        var duckweedArea = OccupiedBounds(pad, _w.Coverage.SurfaceFloat);
+        if (duckweedArea is { } d)
+            SurfaceFloatRules.Step(_w.Coverage.SurfaceFloat, this, new DuckweedParams(), d, dtDays, _step, _w.Seed, flowDays);
         _step++;
         ProjectBiofilm();
     }
 
     public void ProjectBiofilm() => AquaticBiofilm.Project(_w.Coverage.AlgaeBed, _w.Fields.Biofilm);
 
-    private GridBounds? WetBounds()
+    private int FlowHalo(double physicalSeconds)
     {
-        int minX = int.MaxValue, minZ = int.MaxValue, maxX = int.MinValue, maxZ = int.MinValue;
+        double maxSpeed = 0;
         foreach (int cell in _w.Grid.DomainCells)
         {
             if (!_w.Water.IsWet(cell)) continue;
-            var (x, z) = CoverageSpec.CellOf(_w.Grid.CellCenter(cell));
-            int pad = (int)Math.Ceiling(_w.Grid.CellSize / CoverageSpec.CellSize);
-            minX = Math.Min(minX, x - pad); maxX = Math.Max(maxX, x + pad);
-            minZ = Math.Min(minZ, z - pad); maxZ = Math.Max(maxZ, z + pad);
+            double speed = Math.Sqrt(_w.Water.FlowX[cell] * _w.Water.FlowX[cell] + _w.Water.FlowZ[cell] * _w.Water.FlowZ[cell]);
+            maxSpeed = Math.Max(maxSpeed, speed);
+        }
+        // An upwind step can advance at most one fine cell per CFL substep. One extra cell keeps occupied
+        // biomass away from the artificial rectangular boundary, so no transport is clipped there.
+        return Math.Clamp((int)Math.Ceiling(maxSpeed * physicalSeconds /
+            (AquaticConst.CflSafety * CoverageSpec.CellSize)) + 1, 1, AquaticConst.MaxSubsteps + 1);
+    }
+
+    private static GridBounds? OccupiedBounds(int pad, params CoverageLayer[] layers)
+    {
+        int minX = int.MaxValue, minZ = int.MaxValue, maxX = int.MinValue, maxZ = int.MinValue;
+        foreach (var layer in layers)
+        foreach (var tile in layer.Tiles)
+        for (int li = 0; li < CoverageTile.N; li++)
+        {
+            if (tile.B[li] <= 0 && tile.Occ[li] == 0) continue;
+            int x = tile.Ti * CoverageSpec.TileEdge + li % CoverageSpec.TileEdge;
+            int z = tile.Tj * CoverageSpec.TileEdge + li / CoverageSpec.TileEdge;
+            minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+            minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
         }
         return minX == int.MaxValue ? null : new GridBounds(minX, minZ, maxX, maxZ);
     }
