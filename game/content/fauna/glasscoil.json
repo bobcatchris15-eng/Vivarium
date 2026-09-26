@@ -94,7 +94,22 @@
       0.86,
       0.72,
       0.38
-    ]
+    ],
+    "animation": {
+      "family": "soft_glide",
+      "cyclesPerBody": 0.25,
+      "idleHz": 0.1,
+      "maxHz": 1.2,
+      "fullSpeed": 1,
+      "idleMotion": 0.25,
+      "amplitude": 0.5,
+      "bodyWave": 0.4,
+      "limbSweep": 0.12,
+      "limbLift": 0.08,
+      "bob": 0.01,
+      "phaseSpread": 1,
+      "dutyFactor": 0.8
+    }
   },
   "behaviors": []
 }

@@ -88,7 +88,22 @@
       0.72,
       0.48,
       0.42
-    ]
+    ],
+    "animation": {
+      "family": "peristaltic",
+      "cyclesPerBody": 0.45,
+      "idleHz": 0.05,
+      "maxHz": 2,
+      "fullSpeed": 1.5,
+      "idleMotion": 0.1,
+      "amplitude": 1,
+      "bodyWave": 1,
+      "limbSweep": 0,
+      "limbLift": 0,
+      "bob": 0.02,
+      "phaseSpread": 1.8,
+      "dutyFactor": 0.7
+    }
   },
   "behaviors": []
 }
