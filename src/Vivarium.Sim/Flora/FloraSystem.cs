@@ -110,23 +110,30 @@ public sealed class FloraSystem
     /// </summary>
     public double EffectiveLight(Vec2 p, EntityId self = default)
     {
-        // Self-exclusion is only material while evaluating a woody individual's own habitat. Rebuilding a second
-        // field per self would defeat the cache, so remove that individual's analytical contribution locally.
-        RefreshCanopyShade();
         double light = _w.Fields.Light.Sample(p);
-        double shade = _canopyShade.Sample(p);
-        if (!self.IsNone && _w.Flora.Get(self) is { } own)
+
+        // Only a woody plant needs self-exclusion. For those few bounded individuals, evaluate the other crowns
+        // directly rather than subtracting an analytic value from the interpolated shade grid.
+        if (!self.IsNone && _w.Flora.Get(self) is { } own && C.FloraOrThrow(own.SpeciesId).Woody != null)
         {
-            var sp = C.FloraOrThrow(own.SpeciesId);
-            if (sp.Woody is { } woody)
+            RefreshWoodyCanopy();
+            double directShade = 0;
+            foreach (var f in _woodyCanopy)
             {
-                double maturity = Math.Sqrt(own.BiomassFraction(sp));
+                if (f.Id == self) continue;
+                var sp = C.FloraOrThrow(f.SpeciesId);
+                var woody = sp.Woody!;
+                double maturity = Math.Sqrt(f.BiomassFraction(sp));
                 double radius = woody.CanopyRadius * (0.3 + 0.7 * maturity);
-                double d = Vec2.Distance(own.Position, p);
+                double d = Vec2.Distance(f.Position, p);
                 if (radius > 1e-6 && d < radius)
-                    shade = Math.Max(0, shade - woody.ShadeOpacity * maturity * (1 - d / radius));
+                    directShade += woody.ShadeOpacity * maturity * (1 - d / radius);
             }
+            return MathD.Clamp01(light - Math.Min(directShade, light));
         }
+
+        RefreshCanopyShade();
+        double shade = _canopyShade.Sample(p);
         return MathD.Clamp01(light - Math.Min(shade, light));
     }
 
