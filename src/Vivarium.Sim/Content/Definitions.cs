@@ -23,6 +23,7 @@ public enum FloraPlacementGroup : byte
     Terrestrial = 1,
     WatersideAquatic = 2,
     Decomposer = 3,
+    Woody = 4,
 }
 
 public static class FloraPlacementGroups
@@ -33,6 +34,7 @@ public static class FloraPlacementGroups
         FloraPlacementGroup.Terrestrial,
         FloraPlacementGroup.WatersideAquatic,
         FloraPlacementGroup.Decomposer,
+        FloraPlacementGroup.Woody,
     };
 
     public static string Id(FloraPlacementGroup group) => group switch
@@ -41,6 +43,7 @@ public static class FloraPlacementGroups
         FloraPlacementGroup.Terrestrial => "terrestrial",
         FloraPlacementGroup.WatersideAquatic => "waterside_aquatic",
         FloraPlacementGroup.Decomposer => "decomposer",
+        FloraPlacementGroup.Woody => "woody",
         _ => throw new ArgumentOutOfRangeException(nameof(group)),
     };
 
@@ -50,6 +53,7 @@ public static class FloraPlacementGroups
         FloraPlacementGroup.Terrestrial => "Terrestrial plants",
         FloraPlacementGroup.WatersideAquatic => "Waterside & aquatic",
         FloraPlacementGroup.Decomposer => "Decomposers",
+        FloraPlacementGroup.Woody => "Trees & shrubs",
         _ => group.ToString(),
     };
 
@@ -103,6 +107,20 @@ public sealed class ProximityRule
     public double Bonus { get; init; }
     public bool IsFeature => Target.StartsWith("feature:", StringComparison.Ordinal);
     public string Feature => IsFeature ? Target.Substring(8) : "";
+}
+
+public enum WoodyLayer : byte { Shrub = 0, Tree = 1 }
+
+/// <summary>Structural-plant metadata. Population budgets are shared by layer across species.</summary>
+public sealed class WoodyDef
+{
+    public WoodyLayer Layer { get; init; }
+    /// <summary>Mature crown radius used for ecological shade; independent from render/competition radius.</summary>
+    public double CanopyRadius { get; init; }
+    /// <summary>Fraction of incident light removed at the crown centre by a mature individual (0..0.95).</summary>
+    public double ShadeOpacity { get; init; }
+    /// <summary>Minimum centre-to-centre clearance from another woody individual in the same layer.</summary>
+    public double MinSpacing { get; init; }
 }
 
 public sealed class FloraSpeciesDef
@@ -179,6 +197,11 @@ public sealed class FloraSpeciesDef
     public double ColorVariance { get; init; }
     public double Height { get; init; }
     public List<string> Tags { get; init; } = new();
+
+    /// <summary>Tree/shrub structural metadata; null for ordinary flora.</summary>
+    public WoodyDef? Woody { get; init; }
+    public bool IsTree => Woody?.Layer == WoodyLayer.Tree;
+    public bool IsShrub => Woody?.Layer == WoodyLayer.Shrub;
 
     /// <summary>Optional colonial growth mode (moss/lichen); null = ordinary radial spread. Retained alongside
     /// <see cref="Mat"/>/<see cref="Lichen"/> for now (docs/overhaul/growth_models.md §8); species with a
