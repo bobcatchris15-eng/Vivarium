@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Flora;
 using Vivarium.Sim.Geometry;
 using Vivarium.Sim.World;
 
@@ -20,20 +22,47 @@ public partial class FloraRenderer : Node3D
     private const int MigratedMorphVariants = 12;
     private static int MorphVariantsFor(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate"
         ? MigratedMorphVariants : DefaultMorphVariants;
-    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit; public int FullTris, FruitTris; }
+    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit; public int FullTris, FruitTris; public bool CanCastShadow; }
     private sealed class Layer { public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris; public Layer(int count) => Variants = new VariantLayer[count]; }
     private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
     private double _accum = 999;
     private double _clock;
+    // Keep the currently drawn buffers intact while preparing the next population snapshot. Each unit of
+    // work is one individual or one upload, so camera input never waits for an entire flora rebuild.
+    private const double RefreshBudgetMs = 2.0;
+    private IEnumerator<bool>? _refresh;
+    private readonly List<FloraIndividual> _snapshot = new();
+    private readonly List<EntityId> _expired = new();
+    private int _quality = 1;
     public Camera3D? Camera { get; set; }
-    public int Quality { get; set; } = 1;
+    public int Quality
+    {
+        get => _quality;
+        set
+        {
+            if (_quality == value) return;
+            _quality = value;
+            foreach (var layer in _layers.Values)
+                foreach (var variant in layer.Variants)
+                {
+                    var shadow = value >= 1 && variant.CanCastShadow
+                        ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
+                    variant.Full.CastShadow = shadow;
+                    if (variant.Fruit != null) variant.Fruit.CastShadow = shadow;
+                }
+        }
+    }
     public int Visible_ { get; private set; }
     public long TrianglesDrawn { get; private set; }
 
     public void Build(VivariumWorld w)
     {
+        _refresh?.Dispose(); _refresh = null;
+        _snapshot.Clear(); _wobbleStart.Clear();
+        _buffers.Clear(); _full.Clear(); _fruit.Clear(); _veins.Clear();
+        Visible_ = 0; TrianglesDrawn = 0;
         _w = w;
         foreach (var c in GetChildren()) c.QueueFree();
         _layers.Clear();
@@ -45,14 +74,16 @@ public partial class FloraRenderer : Node3D
             mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
             if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
+            if (sp.Woody != null) Bridge.BindSurface(mat, "bark", Bridge.Surfaces.Bark);
             var layer = new Layer(MorphVariantsFor(sp.Shape));
             ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
             for (int v = 0; v < layer.Variants.Length; v++)
             {
                 ulong seed = Rng.Mix(speciesSeed, (ulong)(v + 1) * 0x9E3779B97F4A7C15UL);
                 var full = OrganismMeshes.Flora(sp, seed);
-                bool castShadow = Quality >= 1 && sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
-                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", Bridge.ToArrayMesh(full, mat), castShadow), FullTris = full.TriangleCount };
+                bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
+                bool castShadow = Quality >= 1 && canCastShadow;
+                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", Bridge.ToArrayMesh(full, mat), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full);
                 if (OrganismMeshes.FloraFruiting(sp, seed) is { } fruit)
                 {
@@ -106,9 +137,25 @@ public partial class FloraRenderer : Node3D
         if (_w == null) return;
         _accum += delta;
         bool wobbling = _wobbleStart.Count > 0;
-        if (_accum < (wobbling ? 0.05 : 0.4)) return;
-        _accum = 0;
-        Rebuild();
+        if (_refresh == null)
+        {
+            if (_accum < (wobbling ? 0.05 : 0.4)) return;
+            _accum = 0;
+            _refresh = Refresh().GetEnumerator();
+        }
+        long started = Stopwatch.GetTimestamp();
+        do
+        {
+            if (_refresh.MoveNext()) continue;
+            _refresh.Dispose(); _refresh = null;
+            break;
+        } while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < RefreshBudgetMs);
+    }
+
+    public override void _ExitTree()
+    {
+        _refresh?.Dispose(); _refresh = null;
+        _buffers.Clear(); _snapshot.Clear(); _wobbleStart.Clear();
     }
 
     private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _veins = new();
@@ -168,8 +215,27 @@ public partial class FloraRenderer : Node3D
         return best;
     }
 
+    /// <summary>Explicit callers get a complete synchronous refresh; normal frames use the bounded path.</summary>
     public void Rebuild()
     {
+        if (_w == null) return;
+        _refresh?.Dispose(); _refresh = null;
+        foreach (bool _ in Refresh()) { }
+        _accum = 0;
+    }
+
+    private IEnumerable<bool> Refresh()
+    {
+        // The authoritative list may change between frames. Copy references once rather than keeping a
+        // population enumerator alive, and check membership before preparing each individual.
+        _snapshot.Clear(); _snapshot.AddRange(_w.Flora.Items);
+        var planes = Camera?.GetFrustum(); // one native array per refresh, never one per plant
+        Plane[]? frustum = planes == null ? null : new Plane[planes.Count];
+        if (planes != null) planes.CopyTo(frustum!, 0); // plane tests below stay entirely in managed code
+        _expired.Clear();
+        foreach (var (id, start) in _wobbleStart)
+            if (_clock - start >= 1.2 || _w.Flora.Get(id) == null) _expired.Add(id);
+        foreach (var id in _expired) _wobbleStart.Remove(id);
         foreach (var k in _layers.Keys)
             for (int v = 0; v < _layers[k].Variants.Length; v++)
             {
@@ -177,11 +243,12 @@ public partial class FloraRenderer : Node3D
                 var fl = Get(_full, mk); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
                 var fr = Get(_fruit, mk); fr.T.Clear(); fr.Tint.Clear(); fr.C.Clear();
             }
-        var camPos = Camera?.GlobalPosition ?? Vector3.Zero;
-        Visible_ = 0; TrianglesDrawn = 0;
-        var done = new List<EntityId>();
-        foreach (var f in _w.Flora.Items)
+        int visible = 0;
+        long triangles = 0;
+        foreach (var f in _snapshot)
         {
+            yield return false;
+            if (_w.Flora.Get(f.Id) != f) continue;
             var sp = _w.Content.FloraOrThrow(f.SpeciesId);
             double r = f.Radius(sp);
             double h = sp.Colony != null
@@ -201,7 +268,7 @@ public partial class FloraRenderer : Node3D
                 double rise = double.IsNaN(surface) ? 0.05 : Math.Max(0.02, surface - pos.Y);
                 h = rise + 0.003;
             }
-            if (Camera is { } camera && !FloraVisible(camera, pos, (float)r, (float)h)) continue;
+            if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
             // Mats conform to their substrate. Upright vascular plants respond to the actual local sky-openness
@@ -254,23 +321,24 @@ public partial class FloraRenderer : Node3D
                 t = new Transform3D(Bridge.Yaw(ba.Outward).Scaled(new Vector3((float)r, (float)(h * 2.5), (float)r)), at - new Vector3(0, (float)h, 0));
             }
             float wobble = 0;
-            if (_wobbleStart.TryGetValue(f.Id, out var ws)) { wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2); if (wobble <= 0) done.Add(f.Id); }
+            if (_wobbleStart.TryGetValue(f.Id, out var ws)) wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2);
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
             var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
             int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
             var vl = _layers[sp.Id].Variants[variant];
             var bucket = f.Fruiting && vl.Fruit != null ? _fruit : _full;
             var bd = Get(bucket, MorphKey(sp.Id, variant)); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
-            Visible_++;
+            visible++;
         }
-        foreach (var id in done) _wobbleStart.Remove(id);
         // slime-mold veins: thickness follows the biomass flowing through each link
         foreach (var (id, layer) in _layers)
         {
             if (layer.Veins == null) continue;
             var list = Get(_veins, id); list.T.Clear(); list.Tint.Clear(); list.C.Clear();
-            foreach (var f in _w.Flora.Items)
+            foreach (var f in _snapshot)
             {
+                yield return false;
+                if (_w.Flora.Get(f.Id) != f) continue;
                 if (f.SpeciesId != id || f.ParentId.IsNone || _w.Flora.Get(f.ParentId) is not { } parent) continue;
                 var vsp = _w.Content.FloraOrThrow(id);
                 var a = new Vector3((float)parent.X, (float)_w.GroundHeight(parent.Position) + 0.004f, (float)parent.Z);
@@ -285,19 +353,24 @@ public partial class FloraRenderer : Node3D
                 ulong hash = Rng.Mix(f.Id.Value, 0xF10);
                 list.C.Add(new Color((hash % 1000) / 1000f, (float)Math.Min(f.Health, parent.Health), 0, ((hash >> 12) % 1000) / 1000f));
             }
+            yield return true;
             Fill(layer.Veins.Multimesh, list);
-            TrianglesDrawn += (long)list.T.Count * layer.VeinTris;
+            triangles += (long)list.T.Count * layer.VeinTris;
         }
         foreach (var (id, layer) in _layers)
             for (int v = 0; v < layer.Variants.Length; v++)
             {
+                yield return true;
                 var vl = layer.Variants[v];
                 string mk = MorphKey(id, v);
+                // Full and fruit share one upload step: a phase change never briefly draws both forms.
                 Fill(vl.Full.Multimesh, Get(_full, mk));
                 if (vl.Fruit != null) Fill(vl.Fruit.Multimesh, Get(_fruit, mk));
-                TrianglesDrawn += (long)vl.Full.Multimesh.InstanceCount * vl.FullTris
+                triangles += (long)vl.Full.Multimesh.InstanceCount * vl.FullTris
                     + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.InstanceCount * vl.FruitTris : 0);
             }
+        Visible_ = visible; TrianglesDrawn = triangles;
+        _snapshot.Clear();
     }
 
     // World-space slack added around the bounding sphere before the frustum test. The instance list is only
@@ -305,7 +378,7 @@ public partial class FloraRenderer : Node3D
     // the next rebuild must still test as visible; this margin absorbs a normal camera turn across that window.
     private const float FrustumSafetyMargin = 2.0f;
 
-    private bool FloraVisible(Camera3D camera, Vector3 basePos, float radius, float height)
+    private static bool FloraVisible(Plane[] frustum, Vector3 basePos, float radius, float height)
     {
         // Occlusion is intentionally never tested here: a plant that is only partly behind a log/rock must never
         // be culled, since any ray-based "opaque in front" test flips on/off with sub-pixel camera motion and
@@ -315,7 +388,7 @@ public partial class FloraRenderer : Node3D
         var center = basePos + Vector3.Up * mid;
         float sphereRadius = Math.Max(radius, mid) + FrustumSafetyMargin;
         // Godot frustum planes face outward: inside points have negative distance, outside positive.
-        foreach (var plane in camera.GetFrustum())
+        foreach (var plane in frustum)
             if (plane.DistanceTo(center) > sphereRadius) return false;
         return true;
     }
@@ -328,9 +401,11 @@ public partial class FloraRenderer : Node3D
 
     /// <summary>Uploads all instances in one packed buffer (12 transform + 4 instance-colour tint + 4 custom floats
     /// each) instead of two engine calls per instance, which caused frame hitches once the island filled with plants.</summary>
-    private static readonly Dictionary<MultiMesh, float[]> _buffers = new();
+    // Per-renderer ownership is essential: a static dictionary kept the meshes and buffers of every
+    // replaced world alive after their nodes were freed.
+    private readonly Dictionary<MultiMesh, float[]> _buffers = new();
 
-    private static void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> Tint, List<Color> C) data)
+    private void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> Tint, List<Color> C) data)
     {
         int n = data.T.Count;
         if (mm.InstanceCount != n) mm.InstanceCount = n;
