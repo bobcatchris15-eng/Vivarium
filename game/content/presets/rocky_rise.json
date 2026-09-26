@@ -53,7 +53,10 @@
     { "species": "sphagnum", "count": 5 },
     { "species": "dichondra", "count": 8 },
     { "species": "clover", "count": 8 },
-    { "species": "carpobrotus", "count": 10 }
+    { "species": "carpobrotus", "count": 10 },
+    { "species": "black_locust", "count": 1 },
+    { "species": "tamarack", "count": 1 },
+    { "species": "staghorn_sumac", "count": 3 }
   ],
   "starterFauna": [
     { "species": "springtail", "count": 40 },
