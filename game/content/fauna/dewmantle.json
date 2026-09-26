@@ -1,0 +1,104 @@
+{
+  "id": "dewmantle",
+  "name": "Dewmantle",
+  "medium": "terrestrial",
+  "role": "Moisture-bound soft-bodied grazer of fungi, tender growth and decaying plant matter.",
+  "description": "A broad velvet-skinned crawler with translucent sensory crowns; it emerges into saturated litter and retreats rapidly from drying ground.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.82,
+      "tolerance": 0.16
+    },
+    "substrates": {
+      "soil": 1,
+      "wood": 0.9,
+      "rock": 0.5,
+      "gravel": 0.3
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.012,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 1.1,
+    "turnRatePerMinute": 1.4,
+    "wander": 0.4,
+    "habitatSeek": 0.85,
+    "senseRadius": 0.45
+  },
+  "diet": [
+    {
+      "resource": "flora:fungus",
+      "ratePerHour": 0.0035,
+      "efficiency": 8
+    },
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.0025,
+      "efficiency": 7
+    },
+    {
+      "resource": "flora:plant",
+      "ratePerHour": 0.0012,
+      "efficiency": 6
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.006,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 10,
+    "lifespanDays": 80,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.004
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 2,
+    "clutchMax": 5,
+    "cooldownDays": 8,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 10,
+    "populationCap": 90
+  },
+  "body": {
+    "sizeMin": 0.018,
+    "sizeMax": 0.04,
+    "visualScale": 2.2,
+    "massAtMid": 0.09,
+    "detritusOnDeath": 1.2
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "slug",
+    "baseColor": [
+      0.34,
+      0.42,
+      0.28
+    ],
+    "ornamentColor": [
+      0.72,
+      0.82,
+      0.56
+    ]
+  },
+  "behaviors": []
+}

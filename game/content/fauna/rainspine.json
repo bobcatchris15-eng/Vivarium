@@ -1,0 +1,104 @@
+{
+  "id": "rainspine",
+  "name": "Rainspine",
+  "medium": "terrestrial",
+  "role": "Cool-wet litter predator linking soil invertebrates to the pond margin.",
+  "description": "A slender slick-skinned hunter with a finned tail ridge and bright dorsal flecks, most active under logs after wetting pulses.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.88,
+      "tolerance": 0.13
+    },
+    "substrates": {
+      "soil": 1,
+      "wood": 1,
+      "rock": 0.6,
+      "gravel": 0.25
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.025,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 2.6,
+    "turnRatePerMinute": 2.4,
+    "wander": 0.35,
+    "habitatSeek": 0.9,
+    "senseRadius": 0.7
+  },
+  "diet": [
+    {
+      "resource": "fauna:prismhopper",
+      "ratePerHour": 0.006,
+      "efficiency": 11
+    },
+    {
+      "resource": "fauna:loamthread",
+      "ratePerHour": 0.01,
+      "efficiency": 9
+    },
+    {
+      "resource": "fauna:duskflicker",
+      "ratePerHour": 0.006,
+      "efficiency": 12
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.005,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 30,
+    "lifespanDays": 420,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.0018
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 1,
+    "clutchMax": 3,
+    "cooldownDays": 24,
+    "mateRadius": 0.8,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 4,
+    "populationCap": 24
+  },
+  "body": {
+    "sizeMin": 0.035,
+    "sizeMax": 0.075,
+    "visualScale": 1.7,
+    "massAtMid": 0.32,
+    "detritusOnDeath": 1.2
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "salamander",
+    "baseColor": [
+      0.16,
+      0.29,
+      0.22
+    ],
+    "ornamentColor": [
+      0.82,
+      0.42,
+      0.18
+    ]
+  },
+  "behaviors": []
+}

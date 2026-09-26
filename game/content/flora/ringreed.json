@@ -1,0 +1,86 @@
+{
+  "id": "ringreed",
+  "name": "Ringreed",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Jointed rhizomatous wet-margin herb filling the horsetail-like structural niche.",
+  "description": "Dark ringed joints divide upright hollow stems into stacked segments, with fine radial branchlets forming sparse collars along saturated banks.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.65,
+      "water": 0.75
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.92,
+      "tolerance": 0.16
+    },
+    "light": {
+      "optimum": 0.65,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.42,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0.055,
+    "hardMinMoisture": 0.62,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.28,
+    "maxBiomass": 1.35,
+    "initialBiomass": 0.055,
+    "declinePerDay": 0.28,
+    "maturityDays": 10,
+    "lifespanDays": 150,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.22,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.26,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.85
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.7,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.02,
+  "grazingValue": 0.18,
+  "visual": {
+    "shape": "reed",
+    "color": [
+      0.18,
+      0.46,
+      0.25
+    ],
+    "color2": [
+      0.62,
+      0.72,
+      0.34
+    ],
+    "colorVariance": 0.06,
+    "height": 0.48
+  },
+  "tags": [
+    "plant",
+    "riparian"
+  ]
+}

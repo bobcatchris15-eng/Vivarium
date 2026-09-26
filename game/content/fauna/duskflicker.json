@@ -1,0 +1,101 @@
+{
+  "id": "duskflicker",
+  "name": "Duskflicker",
+  "medium": "terrestrial",
+  "role": "Tiny pond-edge flying insect analogue carrying biomass from wet margins into the terrestrial web.",
+  "description": "Needle-bodied adults rise in loose dusk swarms above damp ground and water margins; the aquatic juvenile phase is represented abstractly by its strong moisture dependence.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.84,
+      "tolerance": 0.16
+    },
+    "substrates": {
+      "soil": 1,
+      "wood": 0.5,
+      "rock": 0.4,
+      "gravel": 0.6
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.02,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 9,
+    "turnRatePerMinute": 5,
+    "wander": 0.75,
+    "habitatSeek": 0.7,
+    "senseRadius": 0.6
+  },
+  "diet": [
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.0012,
+      "efficiency": 7
+    },
+    {
+      "resource": "flora:plant",
+      "ratePerHour": 0.0005,
+      "efficiency": 6
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.0045,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 6,
+    "lifespanDays": 28,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.012
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 2,
+    "clutchMax": 5,
+    "cooldownDays": 3,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 20,
+    "populationCap": 180
+  },
+  "body": {
+    "sizeMin": 0.003,
+    "sizeMax": 0.008,
+    "visualScale": 4,
+    "massAtMid": 0.006,
+    "detritusOnDeath": 1
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "midge",
+    "baseColor": [
+      0.18,
+      0.2,
+      0.22
+    ],
+    "ornamentColor": [
+      0.7,
+      0.76,
+      0.82
+    ]
+  },
+  "behaviors": [
+    "flying"
+  ]
+}

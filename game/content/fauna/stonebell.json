@@ -1,0 +1,109 @@
+{
+  "id": "stonebell",
+  "name": "Stonebell",
+  "medium": "terrestrial",
+  "role": "Large damp-ground ambush predator of soft invertebrates and flying insects.",
+  "description": "A squat mottled hunter with a resonant throat sac and broad springing hind limbs; it waits near wet margins for passing prey.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.74,
+      "tolerance": 0.22
+    },
+    "substrates": {
+      "soil": 1,
+      "wood": 0.75,
+      "rock": 0.65,
+      "gravel": 0.35
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.03,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 2,
+    "turnRatePerMinute": 2,
+    "wander": 0.3,
+    "habitatSeek": 0.8,
+    "senseRadius": 0.8
+  },
+  "diet": [
+    {
+      "resource": "fauna:dewmantle",
+      "ratePerHour": 0.012,
+      "efficiency": 10
+    },
+    {
+      "resource": "fauna:moonveil",
+      "ratePerHour": 0.009,
+      "efficiency": 11
+    },
+    {
+      "resource": "fauna:prismhopper",
+      "ratePerHour": 0.006,
+      "efficiency": 12
+    },
+    {
+      "resource": "fauna:rustcoil",
+      "ratePerHour": 0.008,
+      "efficiency": 9
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.0055,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 35,
+    "lifespanDays": 520,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.0015
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 1,
+    "clutchMax": 3,
+    "cooldownDays": 28,
+    "mateRadius": 1,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 3,
+    "populationCap": 18
+  },
+  "body": {
+    "sizeMin": 0.045,
+    "sizeMax": 0.085,
+    "visualScale": 1.6,
+    "massAtMid": 0.55,
+    "detritusOnDeath": 1.2
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "toad",
+    "baseColor": [
+      0.3,
+      0.38,
+      0.2
+    ],
+    "ornamentColor": [
+      0.78,
+      0.66,
+      0.3
+    ]
+  },
+  "behaviors": []
+}

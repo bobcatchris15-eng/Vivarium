@@ -1,0 +1,104 @@
+{
+  "id": "stiltclaw",
+  "name": "Stiltclaw",
+  "medium": "terrestrial",
+  "role": "Long-legged surface predator of minute litter and flying arthropods.",
+  "description": "A compact copper body rides on eight filamentous legs, stepping over moss and litter while probing for moving prey.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.48,
+      "tolerance": 0.3
+    },
+    "substrates": {
+      "soil": 1,
+      "wood": 1,
+      "rock": 0.9,
+      "gravel": 0.8
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.006,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 4.2,
+    "turnRatePerMinute": 3,
+    "wander": 0.5,
+    "habitatSeek": 0.65,
+    "senseRadius": 0.7
+  },
+  "diet": [
+    {
+      "resource": "fauna:prismhopper",
+      "ratePerHour": 0.0045,
+      "efficiency": 12
+    },
+    {
+      "resource": "fauna:duskflicker",
+      "ratePerHour": 0.004,
+      "efficiency": 11
+    },
+    {
+      "resource": "fauna:moonveil",
+      "ratePerHour": 0.004,
+      "efficiency": 10
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.005,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 16,
+    "lifespanDays": 110,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.0035
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 1,
+    "clutchMax": 3,
+    "cooldownDays": 10,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 6,
+    "populationCap": 55
+  },
+  "body": {
+    "sizeMin": 0.012,
+    "sizeMax": 0.026,
+    "visualScale": 2.4,
+    "massAtMid": 0.045,
+    "detritusOnDeath": 1
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "harvestman",
+    "baseColor": [
+      0.3,
+      0.18,
+      0.11
+    ],
+    "ornamentColor": [
+      0.68,
+      0.43,
+      0.22
+    ]
+  },
+  "behaviors": []
+}

@@ -1,0 +1,99 @@
+{
+  "id": "rustcoil",
+  "name": "Rustcoil",
+  "medium": "terrestrial",
+  "role": "Large many-segmented litter shredder and fungal detritivore.",
+  "description": "Copper-ringed body segments advance in slow waves through damp litter, reducing coarse dead material to fine organic fragments.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.68,
+      "tolerance": 0.24
+    },
+    "substrates": {
+      "soil": 1,
+      "wood": 1,
+      "rock": 0.45,
+      "gravel": 0.5
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.008,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 1.4,
+    "turnRatePerMinute": 1.2,
+    "wander": 0.4,
+    "habitatSeek": 0.8,
+    "senseRadius": 0.45
+  },
+  "diet": [
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.0055,
+      "efficiency": 8
+    },
+    {
+      "resource": "flora:fungus",
+      "ratePerHour": 0.002,
+      "efficiency": 7
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.006,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 24,
+    "lifespanDays": 220,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.0025
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 2,
+    "clutchMax": 5,
+    "cooldownDays": 16,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 7,
+    "populationCap": 70
+  },
+  "body": {
+    "sizeMin": 0.025,
+    "sizeMax": 0.06,
+    "visualScale": 1.9,
+    "massAtMid": 0.18,
+    "detritusOnDeath": 1.4
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "millipede",
+    "baseColor": [
+      0.34,
+      0.16,
+      0.08
+    ],
+    "ornamentColor": [
+      0.72,
+      0.36,
+      0.16
+    ]
+  },
+  "behaviors": []
+}

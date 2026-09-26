@@ -1,0 +1,101 @@
+{
+  "id": "moonveil",
+  "name": "Moonveil",
+  "medium": "terrestrial",
+  "role": "Nocturnal flying foliage grazer and canopy-to-understory biomass shuttle.",
+  "description": "Powdery pale wings carry a thick-bodied night flier between shrubs and trees; its larval stage is abstracted into the same population as persistent plant grazing.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.52,
+      "tolerance": 0.3
+    },
+    "substrates": {
+      "soil": 0.8,
+      "wood": 1,
+      "rock": 0.5,
+      "gravel": 0.5
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.02,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 7,
+    "turnRatePerMinute": 4,
+    "wander": 0.65,
+    "habitatSeek": 0.55,
+    "senseRadius": 0.75
+  },
+  "diet": [
+    {
+      "resource": "flora:plant",
+      "ratePerHour": 0.0018,
+      "efficiency": 8
+    },
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.0008,
+      "efficiency": 5
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.007,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 12,
+    "lifespanDays": 65,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.006
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 2,
+    "clutchMax": 5,
+    "cooldownDays": 6,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 12,
+    "populationCap": 100
+  },
+  "body": {
+    "sizeMin": 0.012,
+    "sizeMax": 0.028,
+    "visualScale": 2.1,
+    "massAtMid": 0.025,
+    "detritusOnDeath": 1
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "moth",
+    "baseColor": [
+      0.58,
+      0.55,
+      0.48
+    ],
+    "ornamentColor": [
+      0.88,
+      0.82,
+      0.63
+    ]
+  },
+  "behaviors": [
+    "flying"
+  ]
+}

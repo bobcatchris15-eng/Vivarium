@@ -1,0 +1,94 @@
+{
+  "id": "loamthread",
+  "name": "Loamthread",
+  "medium": "terrestrial",
+  "role": "Subsurface-leaning soil detritivore and nutrient recycler.",
+  "description": "A flexible ringed burrower that tracks damp mineral soil and periodically surfaces beneath litter, accelerating dead-matter turnover.",
+  "habitat": {
+    "moisture": {
+      "optimum": 0.76,
+      "tolerance": 0.22
+    },
+    "substrates": {
+      "soil": 1,
+      "wood": 0.45,
+      "gravel": 0.25,
+      "rock": 0.1
+    },
+    "minWaterDepth": 0,
+    "maxWaterDepth": 0.01,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 0.75,
+    "turnRatePerMinute": 1,
+    "wander": 0.35,
+    "habitatSeek": 0.9,
+    "senseRadius": 0.35
+  },
+  "diet": [
+    {
+      "resource": "detritus",
+      "ratePerHour": 0.005,
+      "efficiency": 9
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.0038,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 18,
+    "lifespanDays": 180,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.0025
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 2,
+    "clutchMax": 4,
+    "cooldownDays": 12,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 12,
+    "populationCap": 120
+  },
+  "body": {
+    "sizeMin": 0.025,
+    "sizeMax": 0.07,
+    "visualScale": 1.8,
+    "massAtMid": 0.12,
+    "detritusOnDeath": 1.3
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "worm",
+    "baseColor": [
+      0.42,
+      0.26,
+      0.23
+    ],
+    "ornamentColor": [
+      0.72,
+      0.48,
+      0.42
+    ]
+  },
+  "behaviors": []
+}

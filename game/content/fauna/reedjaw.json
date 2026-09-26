@@ -1,0 +1,105 @@
+{
+  "id": "reedjaw",
+  "name": "Reedjaw",
+  "medium": "aquatic",
+  "role": "Shallow-water ambush larva and predator of small aquatic animals.",
+  "description": "A broad-headed segmented nymph waits among stems and submerged debris, lunging with folding mouthparts at nearby swimmers.",
+  "habitat": {
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.5
+    },
+    "substrates": {
+      "soil": 1,
+      "gravel": 1,
+      "rock": 0.7,
+      "wood": 0.8,
+      "water": 1
+    },
+    "minWaterDepth": 0.018,
+    "maxWaterDepth": 0.7,
+    "minSuitability": 0.12
+  },
+  "movement": {
+    "speedPerHour": 2,
+    "turnRatePerMinute": 2.2,
+    "wander": 0.35,
+    "habitatSeek": 0.75,
+    "senseRadius": 0.65
+  },
+  "diet": [
+    {
+      "resource": "fauna:emberglass_swimmer",
+      "ratePerHour": 0.008,
+      "efficiency": 11
+    },
+    {
+      "resource": "fauna:siltshield",
+      "ratePerHour": 0.006,
+      "efficiency": 9
+    },
+    {
+      "resource": "biofilm",
+      "ratePerHour": 0.001,
+      "efficiency": 3
+    }
+  ],
+  "metabolism": {
+    "basalPerHour": 0.007,
+    "maxEnergy": 1,
+    "initialEnergy": 0.75,
+    "hungerThreshold": 0.82,
+    "wasteFraction": 0.3
+  },
+  "lifecycle": {
+    "maturityDays": 15,
+    "lifespanDays": 95,
+    "lifespanVariance": 0.18,
+    "dailyMortality": 0.004
+  },
+  "reproduction": {
+    "mode": "sexual",
+    "minEnergy": 0.65,
+    "cost": 0.3,
+    "clutchMin": 2,
+    "clutchMax": 4,
+    "cooldownDays": 10,
+    "mateRadius": 0.6,
+    "offspringEnergy": 0.45,
+    "maxLocalDensity": 5,
+    "populationCap": 45
+  },
+  "body": {
+    "sizeMin": 0.018,
+    "sizeMax": 0.04,
+    "visualScale": 1.8,
+    "massAtMid": 0.07,
+    "detritusOnDeath": 1
+  },
+  "genetics": {
+    "traits": [
+      "size",
+      "hue_shift",
+      "pattern_strength",
+      "ornament_density",
+      "appendage_length",
+      "metabolic_efficiency"
+    ],
+    "mutationMagnitude": 0.12,
+    "initialVariance": 0.08
+  },
+  "visual": {
+    "model": "aquatic_larva",
+    "baseColor": [
+      0.24,
+      0.34,
+      0.16
+    ],
+    "ornamentColor": [
+      0.62,
+      0.48,
+      0.18
+    ]
+  },
+  "behaviors": []
+}
