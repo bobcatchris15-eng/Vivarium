@@ -40,7 +40,7 @@ public partial class FloraRenderer : Node3D
         foreach (var sp in w.Content.Flora)
         {
             var mat = Bridge.Shader("res://Shaders/flora.gdshader");
-            mat.SetShaderParameter("stiffness", sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
+            mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
             mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
             mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
             if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
@@ -197,10 +197,10 @@ public partial class FloraRenderer : Node3D
             {
                 var fp = f.Position;
                 double e = Math.Max(_w.Grid.CellSize * 0.55, Math.Min(0.35, Math.Max(r, 0.05)));
-                double gx = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(e, 0))
-                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(e, 0));
-                double gz = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(0, e))
-                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(0, e));
+                double gx = _w.FloraSystem.EffectiveLight(fp + new Vivarium.Sim.Core.Vec2(e, 0), f.Id)
+                          - _w.FloraSystem.EffectiveLight(fp - new Vivarium.Sim.Core.Vec2(e, 0), f.Id);
+                double gz = _w.FloraSystem.EffectiveLight(fp + new Vivarium.Sim.Core.Vec2(0, e), f.Id)
+                          - _w.FloraSystem.EffectiveLight(fp - new Vivarium.Sim.Core.Vec2(0, e), f.Id);
                 double moisture = _w.Fields.Moisture.Sample(fp);
                 double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
                 double stressAngle = ((hash >> 24) % 6283) / 1000.0;
