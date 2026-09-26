@@ -219,14 +219,14 @@ public static class Primitives
 
     /// <summary>Double-sided flat polygon (fan) — for leaves, fins, lichen lobes.</summary>
     public static void Fan(MeshData m, Vec3 centre, IReadOnlyList<Vec3> rim, Vec3 normal, double[] colCentre, double[] colRim,
-        double a = 1, double u2 = 0, Func<Vec3, Vec3>? appendageOffset = null)
+        double a = 1, double u2 = 0, Func<Vec3, Vec3>? appendageOffset = null, double v2 = 0)
     {
         for (int side = 0; side < 2; side++)
         {
             var n = side == 0 ? normal : -normal;
-            int c = m.AddVertex(centre, n, colCentre, a, 0.5, 0.5, u2, 0);
+            int c = m.AddVertex(centre, n, colCentre, a, 0.5, 0.5, u2, v2);
             var ids = new int[rim.Count];
-            for (int i = 0; i < rim.Count; i++) ids[i] = m.AddVertex(rim[i], n, colRim, a, (double)i / rim.Count, 1, u2, 0);
+            for (int i = 0; i < rim.Count; i++) ids[i] = m.AddVertex(rim[i], n, colRim, a, (double)i / rim.Count, 1, u2, v2);
             for (int i = 0; i < rim.Count - 1; i++) TriangleFacing(m, c, ids[i], ids[i + 1], n);
         }
     }

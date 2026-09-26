@@ -103,7 +103,22 @@
       0.82,
       0.8,
       0.86
-    ]
+    ],
+    "animation": {
+      "family": "hop",
+      "cyclesPerBody": 0.8,
+      "idleHz": 0,
+      "maxHz": 5,
+      "fullSpeed": 5,
+      "idleMotion": 0,
+      "amplitude": 1,
+      "bodyWave": 0.08,
+      "limbSweep": 0.9,
+      "limbLift": 0.8,
+      "bob": 0.5,
+      "phaseSpread": 0.3,
+      "dutyFactor": 0.68
+    }
   },
   "behaviors": []
 }

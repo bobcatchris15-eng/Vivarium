@@ -93,7 +93,22 @@
       0.88,
       0.82,
       0.63
-    ]
+    ],
+    "animation": {
+      "family": "flight",
+      "cyclesPerBody": 0.2,
+      "idleHz": 3.5,
+      "maxHz": 7,
+      "fullSpeed": 4,
+      "idleMotion": 0.7,
+      "amplitude": 1,
+      "bodyWave": 0.05,
+      "limbSweep": 0.95,
+      "limbLift": 0.1,
+      "bob": 0.14,
+      "phaseSpread": 0,
+      "dutyFactor": 0.5
+    }
   },
   "behaviors": [
     "flying"

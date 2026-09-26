@@ -10,8 +10,9 @@ namespace Vivarium.Sim.Geometry;
 /// underside centre.
 /// Fauna vertex encoding (read by the fauna shader):
 ///   COLOR.rgb = offset from the appendage's attachment point (0 for body), COLOR.a = 1 on appendages;
-///   UV = (position along body 0..1, around 0..1) for markings; UV2.x = region
-///   (0 body, 1 marking-eligible body, 2 eye, 3 belly/light, 4 fin/limb).
+///   UV = (position along body 0..1, around 0..1) for markings; UV2.x = material/visual region
+///   (0 body, 1 marking-eligible body, 2 eye, 3 belly/light, 4 fin/limb); UV2.y = render-only
+///   animation role (0 none/body, 1 locomotor limb, 2 wing/fin, 3 sensory appendage).
 /// </summary>
 public static class OrganismMeshes
 {
@@ -1852,7 +1853,7 @@ public static class OrganismMeshes
     private static (double[] Col, double A, double U, double V, double U2, double V2) Region(double u, double v, int region) => (Body, 0, u, v, region, 0);
 
     /// <summary>Appendage vertex attributes: colour carries the offset from the attachment point.</summary>
-    private static void Appendage(MeshData m, IReadOnlyList<Vec3> path, IReadOnlyList<double> radius, int segs, int region = 4)
+    private static void Appendage(MeshData m, IReadOnlyList<Vec3> path, IReadOnlyList<double> radius, int segs, int region = 4, double animationRole = 1)
     {
         if (path.Count < 2 || radius.Count != path.Count) return;
         var attach = path[0];
@@ -1865,7 +1866,7 @@ public static class OrganismMeshes
         for (int k = 1; k < path.Count; k++) { p.Add(path[k]); r.Add(radius[k]); }
 
         int start = m.VertexCount;
-        Primitives.Tube(m, p, r, segs, (i, v) => (Body, 1, 0.5, v, region, 0));
+        Primitives.Tube(m, p, r, segs, (i, v) => (Body, 1, 0.5, v, region, animationRole));
         for (int i = start; i < m.VertexCount; i++)
         {
             var off = m.Position(i) - attach;
@@ -1873,10 +1874,10 @@ public static class OrganismMeshes
         }
     }
 
-    private static void AppendageFan(MeshData m, Vec3 attach, Vec3 centre, IReadOnlyList<Vec3> rim, Vec3 normal)
+    private static void AppendageFan(MeshData m, Vec3 attach, Vec3 centre, IReadOnlyList<Vec3> rim, Vec3 normal, double animationRole = 2)
     {
         int start = m.VertexCount;
-        Primitives.Fan(m, centre, rim, normal, White, White, 1, 4);
+        Primitives.Fan(m, centre, rim, normal, White, White, 1, 4, v2: animationRole);
         for (int i = start; i < m.VertexCount; i++)
         {
             var off = m.Position(i) - attach;
@@ -1946,7 +1947,7 @@ public static class OrganismMeshes
             var ant2 = ant1 + new Vec3(0.08, 0.010, 0.060 * z); // elbow
             var ant3 = ant2 + new Vec3(0.09, -0.018, 0.035 * z);
             var ant4 = ant3 + new Vec3(0.09, -0.035, 0.015 * z); // tip
-            Appendage(m, new[] { antSocket, ant1, ant2, ant3, ant4 }, new[] { 0.016, 0.013, 0.010, 0.007, 0.004 }, 6, 4);
+            Appendage(m, new[] { antSocket, ant1, ant2, ant3, ant4 }, new[] { 0.016, 0.013, 0.010, 0.007, 0.004 }, 6, 4, 3);
 
             // 3 pairs of jointed legs (coxa / femur / tibia / tarsus) under T1, T2, T3
             for (int leg = 0; leg < 3; leg++)
@@ -1995,11 +1996,11 @@ public static class OrganismMeshes
         var tailAttach = new Vec3(-0.46, 0.1, 0);
         AppendageFan(m, tailAttach, tailAttach, new List<Vec3> { tailAttach + new Vec3(-0.02, 0.0, -0.1), tailAttach + new Vec3(-0.14, -0.02, -0.08), tailAttach + new Vec3(-0.16, -0.02, 0), tailAttach + new Vec3(-0.14, -0.02, 0.08), tailAttach + new Vec3(-0.02, 0.0, 0.1) }, Vec3.Up);
         // rostrum, eyes, antennae, legs
-        Appendage(m, new[] { new Vec3(0.4, 0.24, 0), new Vec3(0.5, 0.26, 0) }, new[] { 0.015, 0.004 }, 4, 1);
+        Appendage(m, new[] { new Vec3(0.4, 0.24, 0), new Vec3(0.5, 0.26, 0) }, new[] { 0.015, 0.004 }, 4, 1, 0);
         foreach (double z in new[] { -1.0, 1.0 })
         {
             Primitives.Ellipsoid(m, new Vec3(0.38, 0.25, 0.06 * z), new Vec3(0.03, 0.03, 0.03), 4, 6, (a, b) => Region(0.95, b, 2));
-            Appendage(m, new[] { new Vec3(0.4, 0.22, 0.04 * z), new Vec3(0.7, 0.3, 0.18 * z), new Vec3(1.0, 0.25, 0.32 * z), new Vec3(1.25, 0.15, 0.4 * z) }, new[] { 0.01, 0.007, 0.005, 0.003 }, 4);
+            Appendage(m, new[] { new Vec3(0.4, 0.22, 0.04 * z), new Vec3(0.7, 0.3, 0.18 * z), new Vec3(1.0, 0.25, 0.32 * z), new Vec3(1.25, 0.15, 0.4 * z) }, new[] { 0.01, 0.007, 0.005, 0.003 }, 4, 4, 3);
             for (int leg = 0; leg < 5; leg++)
             {
                 double x = 0.28 - leg * 0.08;
@@ -2059,7 +2060,7 @@ public static class OrganismMeshes
             var ant1 = new Vec3(0.47, 0.082, 0.110 * z); // pedicel
             var ant2 = new Vec3(0.55, 0.060, 0.170 * z); // elbow
             var ant3 = new Vec3(0.62, 0.020, 0.200 * z); // flagellum tip
-            Appendage(m, new[] { ant0, ant1, ant2, ant3 }, new[] { 0.015, 0.012, 0.009, 0.005 }, 6, 4);
+            Appendage(m, new[] { ant0, ant1, ant2, ant3 }, new[] { 0.015, 0.012, 0.009, 0.005 }, 6, 4, 3);
         }
 
         // --- 3. Seven Overlapping Arched Pereonite Plates with Lateral Epimera Flanges ---
@@ -2138,7 +2139,7 @@ public static class OrganismMeshes
             Primitives.Ellipsoid(m, new Vec3(0.43, 0.14, 0.06 * z), new Vec3(0.018, 0.016, 0.015), 4, 6, (a, b) => Region(0.97, b, 2));
             var ant = new List<Vec3> { new Vec3(0.45, 0.13, 0.05 * z) };
             for (int k = 1; k <= 5; k++) ant.Add(ant[^1] + new Vec3(0.045, 0.012, 0.03 * z));
-            Appendage(m, ant, new[] { 0.013, 0.012, 0.013, 0.014, 0.015, 0.017 }, 4);
+            Appendage(m, ant, new[] { 0.013, 0.012, 0.013, 0.014, 0.015, 0.017 }, 4, 4, 3);
             for (int leg = 0; leg < 3; leg++)
             {
                 double x = 0.24 - leg * 0.16, sweep = (leg - 1) * 0.12;
@@ -2184,7 +2185,7 @@ public static class OrganismMeshes
         BodySegment(m, new Vec3(0.12, 0.145, 0), new Vec3(0.19, 0.065, 0.11), 5, 10, (a,b) => Region(0.72, b, 2));
         foreach (double z in new[] {-1.0, 1.0})
         {
-            Appendage(m, new[] { new Vec3(0.31,0.13,0.055*z), new Vec3(0.43,0.21,0.11*z), new Vec3(0.50,0.24,0.14*z) }, new[] {0.015,0.009,0.005}, 5);
+            Appendage(m, new[] { new Vec3(0.31,0.13,0.055*z), new Vec3(0.43,0.21,0.11*z), new Vec3(0.50,0.24,0.14*z) }, new[] {0.015,0.009,0.005}, 5, 4, 3);
             BodySegment(m, new Vec3(0.505,0.242,0.142*z), new Vec3(0.012,0.012,0.012), 3, 5, (a,b)=>Region(0.98,b,3));
         }
     }
@@ -2212,7 +2213,7 @@ public static class OrganismMeshes
             var a=new Vec3(0.05,0.16,0.04*z);
             AppendageFan(m,a,a,new[]{a+new Vec3(0.12,0.02,0.38*z),a+new Vec3(-0.12,0.02,0.48*z),a+new Vec3(-0.28,-0.01,0.24*z)},Vec3.Up);
             var ant=new Vec3(0.34,0.17,0.035*z);
-            Appendage(m,new[]{ant,ant+new Vec3(0.11,0.07,0.07*z),ant+new Vec3(0.22,0.09,0.13*z)},new[]{0.009,0.005,0.003},3);
+            Appendage(m,new[]{ant,ant+new Vec3(0.11,0.07,0.07*z),ant+new Vec3(0.22,0.09,0.13*z)},new[]{0.009,0.005,0.003},3,4,3);
         }
     }
 
@@ -2275,7 +2276,7 @@ public static class OrganismMeshes
         BodySegment(m,new Vec3(-0.08,0.22,0),new Vec3(0.22,0.22,0.10),8,14,(a,b)=>Region(0.35,b,2));
         BodySegment(m,new Vec3(0.36,0.10,0),new Vec3(0.11,0.07,0.09),4,8,(a,b)=>Region(0.9,b,1));
         foreach(double z in new[]{-1.0,1.0})
-            Appendage(m,new[]{new Vec3(0.40,0.13,0.04*z),new Vec3(0.49,0.21,0.08*z),new Vec3(0.54,0.23,0.10*z)},new[]{0.012,0.007,0.004},4);
+            Appendage(m,new[]{new Vec3(0.40,0.13,0.04*z),new Vec3(0.49,0.21,0.08*z),new Vec3(0.54,0.23,0.10*z)},new[]{0.012,0.007,0.004},4,4,3);
     }
 
     private static void Midge(MeshData m)

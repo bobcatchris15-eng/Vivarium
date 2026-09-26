@@ -94,7 +94,22 @@
       0.98,
       0.92,
       0.86
-    ]
+    ],
+    "animation": {
+      "family": "paddle",
+      "cyclesPerBody": 0.7,
+      "idleHz": 0.6,
+      "maxHz": 7,
+      "fullSpeed": 5,
+      "idleMotion": 0.3,
+      "amplitude": 0.9,
+      "bodyWave": 0.35,
+      "limbSweep": 0.9,
+      "limbLift": 0.65,
+      "bob": 0.05,
+      "phaseSpread": 1.6,
+      "dutyFactor": 0.5
+    }
   },
   "behaviors": []
 }

@@ -517,7 +517,43 @@ public static class ContentLoader
         var r = n.Req("reproduction"); r.RejectUnknown("mode", "minEnergy", "cost", "clutchMin", "clutchMax", "cooldownDays", "mateRadius", "offspringEnergy", "maxLocalDensity", "populationCap");
         var b = n.Req("body"); b.RejectUnknown("sizeMin", "sizeMax", "visualScale", "massAtMid", "detritusOnDeath");
         var ge = n.Req("genetics"); ge.RejectUnknown("traits", "mutationMagnitude", "initialVariance");
-        var v = n.Req("visual"); v.RejectUnknown("model", "baseColor", "ornamentColor");
+        var v = n.Req("visual"); v.RejectUnknown("model", "baseColor", "ornamentColor", "animation");
+        var an = v.Req("animation");
+        an.RejectUnknown("family", "cyclesPerBody", "idleHz", "maxHz", "fullSpeed", "idleMotion", "amplitude", "bodyWave", "limbSweep", "limbLift", "bob", "phaseSpread", "dutyFactor");
+        string animationFamilyId = an.Str("family");
+        var animationFamily = animationFamilyId switch
+        {
+            "still" => FaunaAnimationFamily.Still,
+            "undulate" => FaunaAnimationFamily.Undulate,
+            "paddle" => FaunaAnimationFamily.Paddle,
+            "walk" => FaunaAnimationFamily.Walk,
+            "metachronal" => FaunaAnimationFamily.Metachronal,
+            "soft_glide" => FaunaAnimationFamily.SoftGlide,
+            "peristaltic" => FaunaAnimationFamily.Peristaltic,
+            "hop" => FaunaAnimationFamily.Hop,
+            "sprawl" => FaunaAnimationFamily.Sprawl,
+            "flight" => FaunaAnimationFamily.Flight,
+            _ => FaunaAnimationFamily.Still,
+        };
+        if (animationFamilyId is not ("still" or "undulate" or "paddle" or "walk" or "metachronal" or "soft_glide" or "peristaltic" or "hop" or "sprawl" or "flight"))
+            an["family"].Error("expected still | undulate | paddle | walk | metachronal | soft_glide | peristaltic | hop | sprawl | flight");
+        var animation = new FaunaAnimationDef
+        {
+            Family = animationFamily,
+            CyclesPerBody = an.Num("cyclesPerBody", 0.6, 0, 8),
+            IdleHz = an.Num("idleHz", 0, 0, 30),
+            MaxHz = an.Num("maxHz", 8, 0.1, 40),
+            FullSpeed = an.Num("fullSpeed", 4, 0.1, 50),
+            IdleMotion = an.Num("idleMotion", 0, 0, 1),
+            Amplitude = an.Num("amplitude", 1, 0, 2),
+            BodyWave = an.Num("bodyWave", 0.2, 0, 2),
+            LimbSweep = an.Num("limbSweep", 0.5, 0, 2),
+            LimbLift = an.Num("limbLift", 0.3, 0, 2),
+            Bob = an.Num("bob", 0.05, 0, 1),
+            PhaseSpread = an.Num("phaseSpread", 0.5, 0, 8),
+            DutyFactor = an.Num("dutyFactor", 0.6, 0.05, 0.95),
+        };
+        if (animation.IdleHz > animation.MaxHz) an["idleHz"].Error("idleHz must not exceed maxHz");
         var diet = new List<DietEntry>();
         foreach (var d in n.Items("diet"))
         {
@@ -556,7 +592,7 @@ public static class ContentLoader
             SizeMin = b.Num("sizeMin", min: 0.0001, max: 1), SizeMax = b.Num("sizeMax", min: 0.0001, max: 1), VisualScale = b.Num("visualScale", 1, 1, 100),
             MassAtMid = b.Num("massAtMid", min: 0.00001, max: 10), DetritusOnDeath = b.Num("detritusOnDeath", 1, 0, 10),
             Traits = ge.StrList("traits", required: true), MutationMagnitude = ge.Num("mutationMagnitude", min: 0, max: 1), InitialVariance = ge.Num("initialVariance", 0.08, 0, 0.5),
-            Model = v.Str("model"), BaseColor = v.Color("baseColor"), OrnamentColor = v.Color("ornamentColor"),
+            Model = v.Str("model"), BaseColor = v.Color("baseColor"), OrnamentColor = v.Color("ornamentColor"), Animation = animation,
             Behaviors = behaviors, Schooling = school,
         };
         if (def.SizeMin >= def.SizeMax) b["sizeMin"].Error("sizeMin must be smaller than sizeMax");

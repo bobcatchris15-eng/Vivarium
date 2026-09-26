@@ -374,6 +374,53 @@ public sealed class SchoolingParams
 
 public enum Medium { Terrestrial, Aquatic }
 
+/// <summary>
+/// Render-only locomotion families. The simulation remains authoritative for position and behaviour; these
+/// describe how a body should visibly realize that motion. Numeric values are passed directly to the fauna shader.
+/// </summary>
+public enum FaunaAnimationFamily : byte
+{
+    Still = 0,
+    Undulate = 1,
+    Paddle = 2,
+    Walk = 3,
+    Metachronal = 4,
+    SoftGlide = 5,
+    Peristaltic = 6,
+    Hop = 7,
+    Sprawl = 8,
+    Flight = 9,
+}
+
+/// <summary>
+/// Species-tunable presentation parameters for fauna locomotion. Speeds are measured in body lengths per real
+/// second on the render side, so a species keeps the same apparent gait as genetics change its absolute size.
+/// </summary>
+public sealed class FaunaAnimationDef
+{
+    public FaunaAnimationFamily Family { get; init; } = FaunaAnimationFamily.Walk;
+    /// <summary>Locomotor cycles added per body length travelled.</summary>
+    public double CyclesPerBody { get; init; } = 0.6;
+    /// <summary>Minimum cycle rate while nearly stationary (useful for swimming, flight and soft-body ripples).</summary>
+    public double IdleHz { get; init; }
+    /// <summary>Maximum render cadence.</summary>
+    public double MaxHz { get; init; } = 8;
+    /// <summary>Body lengths/second at which the pose reaches full amplitude.</summary>
+    public double FullSpeed { get; init; } = 4;
+    /// <summary>Fraction of full pose amplitude retained at zero translation.</summary>
+    public double IdleMotion { get; init; }
+    public double Amplitude { get; init; } = 1;
+    public double BodyWave { get; init; } = 0.2;
+    public double LimbSweep { get; init; } = 0.5;
+    public double LimbLift { get; init; } = 0.3;
+    /// <summary>Whole-body vertical excursion; for Hop this is the hop height in body-length units.</summary>
+    public double Bob { get; init; } = 0.05;
+    /// <summary>How strongly phase changes from head to tail / front legs to rear legs.</summary>
+    public double PhaseSpread { get; init; } = 0.5;
+    /// <summary>Fraction of a cycle treated as stance/contact. Most important for Walk, Sprawl and Hop.</summary>
+    public double DutyFactor { get; init; } = 0.6;
+}
+
 public sealed class FaunaSpeciesDef
 {
     public string Id { get; init; } = "";
@@ -440,6 +487,7 @@ public sealed class FaunaSpeciesDef
     public string Model { get; init; } = "";
     public double[] BaseColor { get; init; } = { 0.8, 0.5, 0.3 };
     public double[] OrnamentColor { get; init; } = { 0.9, 0.9, 0.9 };
+    public FaunaAnimationDef Animation { get; init; } = new();
 
     public List<string> Behaviors { get; init; } = new();
     public SchoolingParams? Schooling { get; init; }

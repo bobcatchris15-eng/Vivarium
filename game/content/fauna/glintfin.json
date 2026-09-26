@@ -94,7 +94,22 @@
       0.98,
       0.36,
       0.24
-    ]
+    ],
+    "animation": {
+      "family": "undulate",
+      "cyclesPerBody": 0.55,
+      "idleHz": 0.8,
+      "maxHz": 8,
+      "fullSpeed": 6,
+      "idleMotion": 0.25,
+      "amplitude": 1,
+      "bodyWave": 1,
+      "limbSweep": 0.25,
+      "limbLift": 0.15,
+      "bob": 0.03,
+      "phaseSpread": 1.4,
+      "dutyFactor": 0.5
+    }
   },
   "behaviors": [
     "schooling"
