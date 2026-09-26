@@ -30,7 +30,7 @@ public sealed class FloraSystem
 {
     private readonly VivariumWorld _w;
     private readonly List<FloraIndividual> _nb = new();
-    private readonly List<FloraIndividual> _lightNb = new();
+    [ThreadStatic] private static List<FloraIndividual>? _lightNb;
     public const string PropagationStream = "flora.propagation";
     public const double TreeAreaPerIndividual = 15.0;
     public const double ShrubAreaPerIndividual = 4.0;
@@ -65,8 +65,9 @@ public sealed class FloraSystem
     {
         double light = EffectiveLight(p, self);
         double shade = 0;
-        _w.Flora.Neighbours(p, 5.0, _lightNb);
-        foreach (var f in _lightNb)
+        var lightBuf = _lightNb ??= new List<FloraIndividual>(24);
+        _w.Flora.Neighbours(p, 5.0, lightBuf);
+        foreach (var f in lightBuf)
         {
             if (f.Id == self) continue;
             var sp = C.FloraOrThrow(f.SpeciesId);
