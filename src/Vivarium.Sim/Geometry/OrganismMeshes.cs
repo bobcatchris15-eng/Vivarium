@@ -275,7 +275,7 @@ public static class OrganismMeshes
                 break;
             }
             case "fern": Fern(m, rng, seed, c1, c2); break;
-            case "vine": Vine(m, rng, c1, c2); break;
+            case "vine": Vine(m, rng, seed, c1, c2); break;
             case "mushroom_cluster": Mushrooms(m, rng, c1, c2); break;
             case "bracket": Bracket(m, rng, c1, c2); break;
             case "plasmodium": Plasmodium(m, rng, c1, c2); break;
@@ -867,7 +867,7 @@ public static class OrganismMeshes
 
     /// <summary>Stems that rise from the root (origin) toward +X, arch over and drape down, with small heart leaves.
     /// The renderer turns +X toward the log/rock being climbed and scales the height to its top.</summary>
-    private static void Vine(MeshData m, Rng rng, double[] c1, double[] c2)
+    private static void Vine(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
     {
         var stem = new[] { 0.3, 0.36, 0.17 };
         for (int k = 0; k < 6; k++)
@@ -892,14 +892,24 @@ public static class OrganismMeshes
                 var c = At(i / 22.0 - 0.01);
                 double ang = rng.Range(0, 2 * Math.PI), sz = rng.Range(0.1, 0.17);
                 var d = new Vec3(Math.Cos(ang), rng.Range(-0.2, 0.4), Math.Sin(ang)).Normalized();
-                var side = d.Cross(Vec3.Up).Normalized();
-                if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
                 var col = Primitives.Mix(c1, c2, rng.Range(0, 1));
                 var root = c + d * (sz * 0.08);
                 var tip = c + d * (sz * rng.Range(1.35, 1.65));
-                Primitives.CurvedLeaf(m, root, tip, side, sz * rng.Range(0.48, 0.66),
-                    Primitives.Scale(col, 0.88), col, camber: sz * rng.Range(0.12, 0.22),
-                    longitudinal: 6, asymmetry: rng.Range(-0.22, 0.22));
+                var dir = (tip - root).Normalized();
+                var bladeAxis = new AxisParams(Length: (tip - root).Length,
+                    BaseAngle: Math.Acos(MathD.Clamp(dir.Y, -1, 1)),
+                    BaseAzimuth: Math.Atan2(dir.Z, dir.X),
+                    Droop: rng.Range(-0.16, 0.22), Segments: 6);
+                var blade = new MeshData();
+                LeafBlade.Build(blade, new LeafBladeParams(
+                    Midrib: bladeAxis, Profile: BladeProfile.Cordate,
+                    HalfWidth: sz * rng.Range(0.48, 0.66),
+                    Camber: rng.Range(0.13, 0.22), MidribFold: rng.Range(0.04, 0.10),
+                    Cup: rng.Range(0.06, 0.12), TipCurl: rng.Range(-0.09, 0.06),
+                    Asymmetry: rng.Range(-0.16, 0.16), MidribThickness: 0.002,
+                    DetailLevel: 1), Rng.Mix(seed, (ulong)(k * 23 + i)),
+                    Primitives.Scale(col, 0.88), col);
+                AppendTranslated(m, blade, root);
             }
         }
     }
