@@ -541,7 +541,7 @@ public class FloraTests
         double under = w.FloraSystem.EffectiveLight(new Vec2(0.1, 0));
         double open = w.FloraSystem.EffectiveLight(new Vec2(3.5, 0));
         Assert.True(under < open - 0.45, $"catalpa shade should be strong: under={under:0.00}, open={open:0.00}");
-        Assert.Equal(under, Coverage.CoverageEnvironment.Sample(w, new Vec2(0.1, 0)).Light, 10);
+        Assert.Equal(under, Vivarium.Sim.Coverage.CoverageEnvironment.Sample(w, new Vec2(0.1, 0)).Light, 10);
 
         foreach (var id in new[] { "black_locust", "catalpa", "tamarack", "cottonwood", "staghorn_sumac" })
             Assert.True(OrganismMeshes.Flora(Sp(id)).TriangleCount > 100, $"{id} should have a structural procedural mesh");
