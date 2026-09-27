@@ -92,5 +92,26 @@
     "woody",
     "conifer",
     "wetland"
-  ]
+  ],
+  "reproduction": {
+    "form": "cone",
+    "dispersal": "wind",
+    "reservePerDay": 0.007,
+    "pulseThreshold": 0.08,
+    "maxAttachedMass": 0.11,
+    "developmentDays": 20,
+    "ripeDays": 24,
+    "cooldownDays": 40,
+    "seedFraction": 0.38,
+    "viability": 0.48,
+    "dormancyDays": 30,
+    "dispersalRadius": 1.8,
+    "fruitColor": [
+      0.42,
+      0.3,
+      0.2
+    ],
+    "displaySize": 0.03,
+    "foodValue": 0.1
+  }
 }

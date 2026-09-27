@@ -91,5 +91,26 @@
     "tree",
     "woody",
     "broadleaf"
-  ]
+  ],
+  "reproduction": {
+    "form": "drupe",
+    "dispersal": "animal",
+    "reservePerDay": 0.009,
+    "pulseThreshold": 0.1,
+    "maxAttachedMass": 0.18,
+    "developmentDays": 16,
+    "ripeDays": 18,
+    "cooldownDays": 35,
+    "seedFraction": 0.18,
+    "viability": 0.52,
+    "dormancyDays": 22,
+    "dispersalRadius": 0.75,
+    "fruitColor": [
+      0.3,
+      0.12,
+      0.38
+    ],
+    "displaySize": 0.04,
+    "foodValue": 1.3
+  }
 }

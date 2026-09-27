@@ -12,8 +12,10 @@ namespace Vivarium.Sim.Ecology;
 public sealed class LitterSystem
 {
     private readonly VivariumWorld _world;
+    private readonly List<Flora.FloraIndividual> _nearbyDecomposers = new();
     public double[] FineMass { get; }
     public double[] CoarseMass { get; }
+    public double[] FruitMass { get; }
     public long Revision { get; private set; }
 
     public LitterSystem(VivariumWorld world)
@@ -21,6 +23,7 @@ public sealed class LitterSystem
         _world = world;
         FineMass = new double[world.Grid.Count];
         CoarseMass = new double[world.Grid.Count];
+        FruitMass = new double[world.Grid.Count];
     }
 
     /// <summary>Deposit surface matter across a plant's footprint. The returned amount is exactly the mass stored.</summary>
@@ -62,6 +65,24 @@ public sealed class LitterSystem
         return total;
     }
 
+    public double DepositFruit(Vec2 centre, double mass, double radius = 0.12)
+    {
+        if (!double.IsFinite(mass) || mass < 0) throw new ArgumentOutOfRangeException(nameof(mass));
+        if (mass <= 0) return 0;
+        var grid = _world.Grid;
+        var cells = radius <= grid.CellSize * 0.5 ? new[] { grid.NearestDomainCell(centre) } : grid.CellsInRadius(centre, radius).ToArray();
+        cells = cells.Where(c => c >= 0).ToArray();
+        if (cells.Length == 0) return 0;
+        double each = mass / cells.Length, added = 0;
+        for (int i = 0; i < cells.Length; i++)
+        {
+            double part = i == cells.Length - 1 ? mass - added : each;
+            FruitMass[cells[i]] += part; added += part;
+        }
+        Revision++; _world.Tally.FruitDropped += mass;
+        return mass;
+    }
+
     /// <summary>Baseline microbial breakdown. Detritus capacity limits transfer, preserving excess litter mass.</summary>
     public void Step(double dt)
     {
@@ -69,13 +90,42 @@ public sealed class LitterSystem
         bool changed = false;
         foreach (int idx in _world.Grid.DomainCells)
         {
+            double fine = FineMass[idx], coarse = CoarseMass[idx], fruit = FruitMass[idx];
+            if (fine <= 0 && coarse <= 0 && fruit <= 0) continue;
             double moisture = _world.Fields.Moisture.Values[idx];
             double light = _world.Fields.Light.Values[idx];
             double environment = (0.35 + moisture * 1.15) * (1.15 - light * 0.3);
-            changed |= Decay(FineMass, idx, Math.Log(2) / (20 * SimUnits.Day) * environment, dt);
-            changed |= Decay(CoarseMass, idx, Math.Log(2) / (140 * SimUnits.Day) * environment, dt);
+            var bonus = DecomposerBonus(idx);
+            if (fruit > 0)
+            {
+                double fruitRate = Math.Log(2) / (6 * SimUnits.Day) * environment * bonus.Fine;
+                double rotted = fruit * (1 - Math.Exp(-fruitRate * dt));
+                FruitMass[idx] = Math.Max(0, fruit - rotted);
+                FineMass[idx] += rotted;
+                if (rotted > 0) { _world.Tally.FruitToLitter += rotted; changed = true; }
+            }
+            changed |= Decay(FineMass, idx, Math.Log(2) / (20 * SimUnits.Day) * environment * bonus.Fine, dt);
+            changed |= Decay(CoarseMass, idx, Math.Log(2) / (140 * SimUnits.Day) * environment * bonus.Coarse, dt);
         }
         if (changed) Revision++;
+    }
+
+    private (double Fine, double Coarse) DecomposerBonus(int idx)
+    {
+        _nearbyDecomposers.Clear();
+        var p = _world.Grid.CellCenter(idx);
+        _world.Flora.Index.Query(p, 0.55, _nearbyDecomposers);
+        double fine = 1, coarse = 1;
+        foreach (var f in _nearbyDecomposers)
+        {
+            var sp = _world.Content.FloraOrThrow(f.SpeciesId);
+            if (!sp.Decomposer) continue;
+            double activity = 0.25 + 0.75 * f.BiomassFraction(sp);
+            if (sp.Shape == "bracket") coarse += 1.4 * activity;
+            else if (sp.Archetype == "slime_mold") { fine += 0.35 * activity; coarse += 0.15 * activity; }
+            else fine += 0.85 * activity;
+        }
+        return (Math.Min(fine, 3.0), Math.Min(coarse, 3.0));
     }
 
     private bool Decay(double[] mass, int idx, double rate, double dt)
@@ -90,9 +140,9 @@ public sealed class LitterSystem
         return true;
     }
 
-    public void Restore(double[] fine, double[] coarse)
+    public void Restore(double[] fine, double[] coarse, double[]? fruit = null)
     {
-        if (fine.Length != _world.Grid.DomainCells.Length || coarse.Length != fine.Length)
+        if (fine.Length != _world.Grid.DomainCells.Length || coarse.Length != fine.Length || (fruit != null && fruit.Length != fine.Length))
             throw new InvalidDataException("litter grid size does not match world");
         for (int i = 0; i < fine.Length; i++)
         {
@@ -101,13 +151,16 @@ public sealed class LitterSystem
             int idx = _world.Grid.DomainCells[i];
             FineMass[idx] = fine[i];
             CoarseMass[idx] = coarse[i];
+            FruitMass[idx] = fruit?[i] ?? 0;
         }
         Revision++;
     }
 
     public double[] ExportFine() => _world.Grid.DomainCells.Select(idx => FineMass[idx]).ToArray();
     public double[] ExportCoarse() => _world.Grid.DomainCells.Select(idx => CoarseMass[idx]).ToArray();
+    public double[] ExportFruit() => _world.Grid.DomainCells.Select(idx => FruitMass[idx]).ToArray();
 
     public bool AllFinite() => _world.Grid.DomainCells.All(idx =>
-        double.IsFinite(FineMass[idx]) && FineMass[idx] >= 0 && double.IsFinite(CoarseMass[idx]) && CoarseMass[idx] >= 0);
+        double.IsFinite(FineMass[idx]) && FineMass[idx] >= 0 && double.IsFinite(CoarseMass[idx]) && CoarseMass[idx] >= 0
+        && double.IsFinite(FruitMass[idx]) && FruitMass[idx] >= 0);
 }

@@ -29,6 +29,8 @@ public sealed class VivariumWorld
     public Hydrology Water { get; }
     public PropSet Props { get; set; } = new();
     public FloraPopulation Flora { get; }
+    public DeadPlantPopulation DeadFlora { get; }
+    public SeedBank SeedBank { get; }
     public FaunaPopulation Fauna { get; }
     /// <summary>Fine coverage rasters (moss/lichen/slime), empty by default. See docs/overhaul/growth_models.md.</summary>
     public CoverageWorld Coverage { get; }
@@ -41,6 +43,8 @@ public sealed class VivariumWorld
 
     public PropPlacement Placement { get; }
     public FloraSystem FloraSystem { get; }
+    public DeadFloraSystem DeadFloraSystem { get; }
+    public ReproductionSystem ReproductionSystem { get; }
     public FaunaSystem FaunaSystem { get; }
     public EcologySystem Ecology { get; }
     /// <summary>Moss/lichen growth on the coverage layers (docs/overhaul/growth_models.md §4, §5, §9).</summary>
@@ -68,12 +72,16 @@ public sealed class VivariumWorld
         Fields.GenerateBaseSubstrate(Descriptor, Terrain);
         Water = new Hydrology(Grid, Descriptor.Water, Terrain);
         Flora = new FloraPopulation(Domain.Radius + 1);
+        DeadFlora = new DeadPlantPopulation();
+        SeedBank = new SeedBank(this);
         Fauna = new FaunaPopulation(Domain.Radius + 1);
         Coverage = new CoverageWorld(Descriptor.Seed);
         Scheduler = new Scheduler(Clock);
         Clock.BioAcceleration = Descriptor.BioAcceleration;
         Placement = new PropPlacement(this);
         FloraSystem = new FloraSystem(this);
+        DeadFloraSystem = new DeadFloraSystem(this);
+        ReproductionSystem = new ReproductionSystem(this);
         FaunaSystem = new FaunaSystem(this);
         Ecology = new EcologySystem(this);
         CoverageSystem = new CoverageSystem(this);
@@ -138,6 +146,9 @@ public sealed class VivariumWorld
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         Scheduler.Register("ecology.litter", Cadence.Resources, 65, Bio(Litter.Step), phase: 20);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
+        Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
+        Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
+        Scheduler.Register("flora.seedbank", Cadence.Flora, 73, Bio(SeedBank.Step), phase: 29);
         Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.StepMat), phase: 30);
         Scheduler.Register("coverage.lichen", Cadence.Flora, 76, Bio(CoverageSystem.StepLichen), phase: 31);
         Scheduler.Register("coverage.plasmodium", Cadence.FaunaMetabolism, 77, Bio(CoverageSystem.StepPlasmodium), phase: 2);

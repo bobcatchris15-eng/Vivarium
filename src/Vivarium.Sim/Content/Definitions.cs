@@ -145,6 +145,25 @@ public sealed class ClimberDef
     public HashSet<string> SupportTypes { get; init; } = new(StringComparer.Ordinal);
 }
 
+public sealed class ReproductionDef
+{
+    public string Form { get; init; } = "berry";
+    public string Dispersal { get; init; } = "gravity";
+    public double ReserveRate { get; init; }
+    public double PulseThreshold { get; init; }
+    public double MaxAttachedMass { get; init; }
+    public double DevelopmentTime { get; init; }
+    public double RipeTime { get; init; }
+    public double CooldownTime { get; init; }
+    public double SeedFraction { get; init; }
+    public double Viability { get; init; }
+    public double DormancyTime { get; init; }
+    public double DispersalRadius { get; init; }
+    public double[] FruitColor { get; init; } = { 0.65, 0.2, 0.15 };
+    public double DisplaySize { get; init; } = 0.02;
+    public double FoodValue { get; init; } = 1;
+}
+
 public sealed class FloraSpeciesDef
 {
     public string Id { get; init; } = "";
@@ -224,6 +243,7 @@ public sealed class FloraSpeciesDef
     public WoodyDef? Woody { get; init; }
     /// <summary>Horizontal search and attachment behaviour for structural climbers; null for ordinary flora.</summary>
     public ClimberDef? Climber { get; init; }
+    public ReproductionDef? Reproduction { get; init; }
     public bool IsTree => Woody?.Layer == WoodyLayer.Tree;
     public bool IsShrub => Woody?.Layer == WoodyLayer.Shrub;
 

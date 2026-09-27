@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 namespace Vivarium.Sim.Flora;
 
 public enum FloraStage { Juvenile, Mature, Senescent }
+public enum PlantReproductiveStage : byte { Dormant = 0, Developing = 1, Ripe = 2, Spent = 3 }
 
 /// <summary>
 /// One plant individual or moss/lichen colony. Colonies and individuals share this API: a colony's
@@ -23,6 +24,11 @@ public sealed class FloraIndividual
     public double Health { get; set; } = 1;
     public int SpreadCount { get; set; }
     public double LastSpreadAge { get; set; }
+    public PlantReproductiveStage ReproductiveStage { get; set; }
+    public double ReproductiveStageAge { get; set; }
+    public double ReproductiveReserve { get; set; }
+    public double FruitLoad { get; set; }
+    public int FruitPulseCount { get; set; }
     /// <summary>Lifespan multiplier drawn at establishment (deterministic).</summary>
     public double LifespanFactor { get; set; } = 1;
     /// <summary>Last evaluated habitat suitability (0..1), for inspection.</summary>

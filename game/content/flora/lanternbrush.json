@@ -91,5 +91,26 @@
     "shrub",
     "woody",
     "wetland"
-  ]
+  ],
+  "reproduction": {
+    "form": "capsule",
+    "dispersal": "gravity",
+    "reservePerDay": 0.012,
+    "pulseThreshold": 0.06,
+    "maxAttachedMass": 0.1,
+    "developmentDays": 12,
+    "ripeDays": 16,
+    "cooldownDays": 26,
+    "seedFraction": 0.34,
+    "viability": 0.55,
+    "dormancyDays": 10,
+    "dispersalRadius": 0.7,
+    "fruitColor": [
+      0.66,
+      0.43,
+      0.18
+    ],
+    "displaySize": 0.032,
+    "foodValue": 0.35
+  }
 }

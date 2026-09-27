@@ -86,5 +86,26 @@
     "woody",
     "understory",
     "shade"
-  ]
+  ],
+  "reproduction": {
+    "form": "berry",
+    "dispersal": "animal",
+    "reservePerDay": 0.011,
+    "pulseThreshold": 0.055,
+    "maxAttachedMass": 0.11,
+    "developmentDays": 11,
+    "ripeDays": 20,
+    "cooldownDays": 24,
+    "seedFraction": 0.17,
+    "viability": 0.64,
+    "dormancyDays": 14,
+    "dispersalRadius": 0.55,
+    "fruitColor": [
+      0.3,
+      0.16,
+      0.55
+    ],
+    "displaySize": 0.024,
+    "foodValue": 1.2
+  }
 }

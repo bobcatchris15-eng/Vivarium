@@ -15,8 +15,8 @@ namespace Vivarium.Game.Render;
 public partial class SoilDetailRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private MultiMesh _crumbs = null!, _clods = null!, _twigs = null!, _flakes = null!;
-    private MultiMeshInstance3D _crumbMmi = null!, _clodMmi = null!, _twigMmi = null!, _flakeMmi = null!;
+    private MultiMesh _crumbs = null!, _clods = null!, _twigs = null!, _flakes = null!, _fruit = null!;
+    private MultiMeshInstance3D _crumbMmi = null!, _clodMmi = null!, _twigMmi = null!, _flakeMmi = null!, _fruitMmi = null!;
     private double _accum = 999;
     private int _terrainVersion = int.MinValue;
     private long _litterRevision = -1;
@@ -51,11 +51,13 @@ public partial class SoilDetailRenderer : Node3D
         _clods = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildClod(0.007f, 8) };
         _twigs = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildTwig(mat) };
         _flakes = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFlake(mat) };
+        _fruit = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildClod(0.011f, 11) };
         _crumbMmi = new MultiMeshInstance3D { Name = "SoilCrumbs", Multimesh = _crumbs, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _clodMmi = new MultiMeshInstance3D { Name = "SoilClods", Multimesh = _clods, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _twigMmi = new MultiMeshInstance3D { Name = "SoilTwigs", Multimesh = _twigs, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _flakeMmi = new MultiMeshInstance3D { Name = "LeafLitter", Multimesh = _flakes, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
-        AddChild(_crumbMmi); AddChild(_clodMmi); AddChild(_twigMmi); AddChild(_flakeMmi);
+        _fruitMmi = new MultiMeshInstance3D { Name = "FallenFruit", Multimesh = _fruit, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
+        AddChild(_crumbMmi); AddChild(_clodMmi); AddChild(_twigMmi); AddChild(_flakeMmi); AddChild(_fruitMmi);
         _accum = 999;
         _terrainVersion = int.MinValue;
         _litterRevision = -1;
@@ -66,7 +68,7 @@ public partial class SoilDetailRenderer : Node3D
         using var prof = FrameProfiler.Measure("SoilDetail");
         if (_w == null) return;
         bool enabled = Quality > 0;
-        _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = enabled;
+        _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = _fruitMmi.Visible = enabled;
         if (!enabled) { _accum = 999; return; }
         _accum += delta;
         if (_accum < 1.0) return;
@@ -93,6 +95,7 @@ public partial class SoilDetailRenderer : Node3D
         var clodXf = new List<Transform3D>(); var clodCol = new List<Color>();
         var twigXf = new List<Transform3D>(); var twigCol = new List<Color>();
         var flakeXf = new List<Transform3D>(); var flakeCol = new List<Color>();
+        var fruitXf = new List<Transform3D>(); var fruitCol = new List<Color>();
 
         var nearRocks = new List<Vivarium.Sim.World.Rock>();
         var nearLogs = new List<Vivarium.Sim.World.LogProp>();
@@ -179,7 +182,7 @@ public partial class SoilDetailRenderer : Node3D
                 * deposition * Mathf.Clamp(1f - (d - ClodRadius * 0.6f) / (ClodRadius * 0.4f), 0f, 1f));
             // Normal quality visits every second cell. Include its whole block so a deposit in an
             // unvisited cell still produces visible pieces and the two tiers show the same history.
-            double fineMass = 0, coarseMass = 0;
+            double fineMass = 0, coarseMass = 0, fruitMass = 0;
             for (int dj = 0; dj < stride; dj++)
             for (int di = 0; di < stride; di++)
             {
@@ -187,15 +190,27 @@ public partial class SoilDetailRenderer : Node3D
                 int sample = g.Index(i + di, j + dj);
                 fineMass += _w.Litter.FineMass[sample];
                 coarseMass += _w.Litter.CoarseMass[sample];
+                fruitMass += _w.Litter.FruitMass[sample];
             }
             double fineCover = 1.0 - Math.Exp(-fineMass * 55.0);
             double coarseCover = 1.0 - Math.Exp(-coarseMass * 65.0);
             int twigCount = Mathf.RoundToInt((1 + rng.RandiRange(0, 1)) * Quality * distFade * coarseCover * deposition);
             int flakeCount = Mathf.RoundToInt((1 + rng.RandiRange(0, 2)) * Quality * distFade * fineCover * deposition);
+            double fruitCover = 1.0 - Math.Exp(-fruitMass * 45.0);
+            int fruitCount = Mathf.Clamp(Mathf.RoundToInt((2 + rng.RandiRange(0, 3)) * Quality * distFade * fruitCover), 0, 12);
             float darken = (float)Mathf.Clamp(1.0 - moisture * 0.55, 0.45, 1.0);
             Color soilTint = new Color(0.30f, 0.22f, 0.16f) * darken;
             Color twigTint = new Color(0.33f, 0.26f, 0.19f) * darken;
             Color litterTint = new Color(0.34f, 0.26f, 0.15f) * darken;
+            // Until source-colour composition is stored per litter cell, stable cell variation keeps fruit
+            // readable as reproductive material without pretending every drop is the same generic red berry.
+            Color fruitTint = (idx % 3) switch
+            {
+                0 => new Color(0.50f, 0.09f, 0.07f),
+                1 => new Color(0.28f, 0.10f, 0.36f),
+                _ => new Color(0.58f, 0.32f, 0.09f),
+            };
+            fruitTint *= (float)Mathf.Lerp(0.62, 1.0, Math.Min(1.0, fruitMass * 4.0));
 
             var norm = new Vector3((float)(hx0 - hx1), (float)(2 * e), (float)(hz0 - hz1)).Normalized();
             var cellTilt = SurfaceFrame.TiltTo(norm.Y < 0.5f ? new Vector3(norm.X, 0, norm.Z).Normalized() * 0.866f + Vector3.Up * 0.5f : norm);
@@ -204,15 +219,17 @@ public partial class SoilDetailRenderer : Node3D
             for (int k = 0; k < clodCount; k++) Place(clodXf, clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f, DetailKind.Clod, cellTilt, nearRocks, nearLogs, nearGravel);
             for (int k = 0; k < twigCount; k++) Place(twigXf, twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f, DetailKind.Twig, cellTilt, nearRocks, nearLogs, nearGravel);
             for (int k = 0; k < flakeCount; k++) Place(flakeXf, flakeCol, g, p, ref rng, litterTint, 0.7f, 1.3f, DetailKind.Flake, cellTilt, nearRocks, nearLogs, nearGravel);
+            for (int k = 0; k < fruitCount; k++) Place(fruitXf, fruitCol, g, p, ref rng, fruitTint, 0.75f, 1.45f, DetailKind.Fruit, cellTilt, nearRocks, nearLogs, nearGravel);
         }
 
         SetInstances(_crumbs, crumbXf, crumbCol);
         SetInstances(_clods, clodXf, clodCol);
         SetInstances(_twigs, twigXf, twigCol);
         SetInstances(_flakes, flakeXf, flakeCol);
+        SetInstances(_fruit, fruitXf, fruitCol);
     }
 
-    private enum DetailKind { Crumb, Clod, Twig, Flake }
+    private enum DetailKind { Crumb, Clod, Twig, Flake, Fruit }
 
     private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale, DetailKind kind, Basis cellTilt, List<Vivarium.Sim.World.Rock> nearRocks, List<Vivarium.Sim.World.LogProp> nearLogs, List<Vivarium.Sim.World.GravelPatch> nearGravel)
     {
@@ -235,6 +252,10 @@ public partial class SoilDetailRenderer : Node3D
             case DetailKind.Clod:
                 basis = basis * new Basis(Vector3.Right, rng.RandfRange(-0.5f, 0.5f)) * new Basis(Vector3.Back, rng.RandfRange(-0.5f, 0.5f));
                 basis = basis.Scaled(new Vector3(scale * rng.RandfRange(0.72f, 1.3f), scale * rng.RandfRange(0.65f, 1.08f), scale * rng.RandfRange(0.72f, 1.3f)));
+                break;
+            case DetailKind.Fruit:
+                basis = basis * new Basis(Vector3.Right, rng.RandfRange(-0.25f, 0.25f));
+                basis = basis.Scaled(new Vector3(scale * rng.RandfRange(0.86f, 1.16f), scale * rng.RandfRange(0.78f, 1.20f), scale * rng.RandfRange(0.86f, 1.16f)));
                 break;
             case DetailKind.Twig:
                 basis = basis * new Basis(Vector3.Right, rng.RandfRange(-0.16f, 0.16f));

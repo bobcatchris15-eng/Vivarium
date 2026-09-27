@@ -50,6 +50,7 @@ public sealed class LitterPayload
     public int CellCount { get; set; }
     public string FineMass { get; set; } = "";
     public string CoarseMass { get; set; } = "";
+    public string FruitMass { get; set; } = "";
 }
 
 public sealed class CoverageTilePayload
@@ -87,6 +88,8 @@ public sealed class CoveragePayload
 }
 
 public sealed class FloraPayload { public List<FloraIndividual> Items { get; set; } = new(); }
+public sealed class DeadFloraPayload { public List<DeadPlant> Items { get; set; } = new(); }
+public sealed class SeedBankPayload { public List<SeedLot> Lots { get; set; } = new(); }
 public sealed class FaunaPayload { public List<FaunaIndividual> Items { get; set; } = new(); }
 public sealed class GeneticsPayload
 {
@@ -100,7 +103,7 @@ public sealed class GeneticsPayload
 /// </summary>
 public static class WorldSerializer
 {
-    public static readonly string[] PayloadOrder = { "world", "fields", "water", "litter", "coverage", "flora", "fauna", "genetics" };
+    public static readonly string[] PayloadOrder = { "world", "fields", "water", "litter", "coverage", "flora", "dead_flora", "seed_bank", "fauna", "genetics" };
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -133,7 +136,7 @@ public static class WorldSerializer
         p["litter"] = Bytes(new LitterPayload
         {
             CellCount = w.Grid.DomainCells.Length,
-            FineMass = Pack(w.Litter.ExportFine()), CoarseMass = Pack(w.Litter.ExportCoarse()),
+            FineMass = Pack(w.Litter.ExportFine()), CoarseMass = Pack(w.Litter.ExportCoarse()), FruitMass = Pack(w.Litter.ExportFruit()),
         });
         p["coverage"] = Bytes(new CoveragePayload
         {
@@ -154,6 +157,8 @@ public static class WorldSerializer
             MoistureBonus = Pack(CoverageEnvironment.MoistureBonusOf(w).ExportDomainValues()),
         });
         p["flora"] = Bytes(new FloraPayload { Items = w.Flora.Items });
+        p["dead_flora"] = Bytes(new DeadFloraPayload { Items = w.DeadFlora.Items });
+        p["seed_bank"] = Bytes(new SeedBankPayload { Lots = w.SeedBank.Lots });
         p["fauna"] = Bytes(new FaunaPayload { Items = w.Fauna.Items });
         p["genetics"] = Bytes(new GeneticsPayload { Genomes = w.Genomes.Ordered().ToList(), Lineage = w.Lineage.Ordered().ToList() });
         return p;
@@ -220,7 +225,7 @@ public static class WorldSerializer
 
         var litter = Read<LitterPayload>(payloads, "litter");
         if (litter.CellCount != w.Grid.DomainCells.Length) throw new InvalidDataException("litter grid mismatch");
-        w.Litter.Restore(Unpack(litter.FineMass, "fine litter"), Unpack(litter.CoarseMass, "coarse litter"));
+        w.Litter.Restore(Unpack(litter.FineMass, "fine litter"), Unpack(litter.CoarseMass, "coarse litter"), Unpack(litter.FruitMass, "fruit litter"));
 
         var cp = Read<CoveragePayload>(payloads, "coverage");
         var coverageSchedule = w.Scheduler.Systems.Single(s => s.Name == "coverage");
@@ -244,6 +249,8 @@ public static class WorldSerializer
         if (cp.MoistureBonus != null) CoverageEnvironment.MoistureBonusOf(w).ImportDomainValues(Unpack(cp.MoistureBonus, "moisture bonus"));
 
         foreach (var f in Read<FloraPayload>(payloads, "flora").Items.OrderBy(f => f.Id.Value)) w.Flora.Add(f);
+        foreach (var d in Read<DeadFloraPayload>(payloads, "dead_flora").Items.OrderBy(d => d.Id.Value)) w.DeadFlora.Add(d);
+        foreach (var lot in Read<SeedBankPayload>(payloads, "seed_bank").Lots) w.SeedBank.Lots.Add(lot);
         foreach (var f in Read<FaunaPayload>(payloads, "fauna").Items.OrderBy(f => f.Id.Value)) w.Fauna.Add(f);
         var gp = Read<GeneticsPayload>(payloads, "genetics");
         foreach (var g in gp.Genomes) w.Genomes.Add(g);
@@ -275,6 +282,15 @@ public static class WorldSerializer
             if (w.Content.FloraById(f.SpeciesId) == null) errors.Add($"flora {f.Id} references unknown species '{f.SpeciesId}'");
             if (!w.Domain.Contains(f.Position)) errors.Add($"flora {f.Id} outside island");
             if (!double.IsFinite(f.Biomass) || f.Biomass < 0 || !double.IsFinite(f.Age)) errors.Add($"flora {f.Id} has invalid numbers");
+        }
+        foreach (var d in w.DeadFlora.Items)
+        {
+            Id(d.Id, "dead flora");
+            if (w.Content.FloraById(d.SpeciesId) == null) errors.Add($"dead flora {d.Id} references unknown species '{d.SpeciesId}'");
+            if (!w.Domain.Contains(d.Position)) errors.Add($"dead flora {d.Id} outside island");
+            if (!double.IsFinite(d.RemainingBiomass) || d.RemainingBiomass < 0 || !double.IsFinite(d.AgeSinceDeath)
+                || !double.IsFinite(d.OriginalRadius) || !double.IsFinite(d.OriginalHeight))
+                errors.Add($"dead flora {d.Id} has invalid numbers");
         }
         foreach (var g in w.Genomes.Ordered())
         {

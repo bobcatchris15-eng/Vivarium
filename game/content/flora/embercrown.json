@@ -86,5 +86,26 @@
     "woody",
     "clonal",
     "pioneer"
-  ]
+  ],
+  "reproduction": {
+    "form": "berry",
+    "dispersal": "animal",
+    "reservePerDay": 0.016,
+    "pulseThreshold": 0.06,
+    "maxAttachedMass": 0.14,
+    "developmentDays": 10,
+    "ripeDays": 18,
+    "cooldownDays": 24,
+    "seedFraction": 0.16,
+    "viability": 0.6,
+    "dormancyDays": 12,
+    "dispersalRadius": 0.65,
+    "fruitColor": [
+      0.72,
+      0.08,
+      0.05
+    ],
+    "displaySize": 0.025,
+    "foodValue": 1.4
+  }
 }

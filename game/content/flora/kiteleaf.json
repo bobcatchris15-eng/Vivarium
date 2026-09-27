@@ -92,5 +92,26 @@
     "woody",
     "riparian",
     "pioneer"
-  ]
+  ],
+  "reproduction": {
+    "form": "wind_seed",
+    "dispersal": "wind",
+    "reservePerDay": 0.014,
+    "pulseThreshold": 0.07,
+    "maxAttachedMass": 0.1,
+    "developmentDays": 9,
+    "ripeDays": 12,
+    "cooldownDays": 20,
+    "seedFraction": 0.62,
+    "viability": 0.62,
+    "dormancyDays": 6,
+    "dispersalRadius": 3.5,
+    "fruitColor": [
+      0.78,
+      0.76,
+      0.64
+    ],
+    "displaySize": 0.015,
+    "foodValue": 0.05
+  }
 }

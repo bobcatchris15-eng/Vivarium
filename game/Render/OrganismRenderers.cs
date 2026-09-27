@@ -34,6 +34,7 @@ public partial class FloraRenderer : Node3D
     private const double RefreshBudgetMs = 2.0;
     private IEnumerator<bool>? _refresh;
     private readonly List<FloraIndividual> _snapshot = new();
+    private readonly List<DeadPlant> _deadSnapshot = new();
     private readonly List<EntityId> _expired = new();
     private int _quality = 1;
     public Camera3D? Camera { get; set; }
@@ -61,7 +62,7 @@ public partial class FloraRenderer : Node3D
     public void Build(VivariumWorld w)
     {
         _refresh?.Dispose(); _refresh = null;
-        _snapshot.Clear(); _wobbleStart.Clear();
+        _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
         _buffers.Clear(); _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
         _w = w;
@@ -163,7 +164,7 @@ public partial class FloraRenderer : Node3D
     public override void _ExitTree()
     {
         _refresh?.Dispose(); _refresh = null;
-        _buffers.Clear(); _snapshot.Clear(); _wobbleStart.Clear();
+        _buffers.Clear(); _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
     }
 
     private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _juvenile = new(), _veins = new();
@@ -240,6 +241,7 @@ public partial class FloraRenderer : Node3D
         // The authoritative list may change between frames. Copy references once rather than keeping a
         // population enumerator alive, and check membership before preparing each individual.
         _snapshot.Clear(); _snapshot.AddRange(_w.Flora.Items);
+        _deadSnapshot.Clear(); _deadSnapshot.AddRange(_w.DeadFlora.Items);
         var planes = Camera?.GetFrustum(); // one native array per refresh, never one per plant
         Plane[]? frustum = planes == null ? null : new Plane[planes.Count];
         if (planes != null) planes.CopyTo(frustum!, 0); // plane tests below stay entirely in managed code
@@ -367,6 +369,54 @@ public partial class FloraRenderer : Node3D
             var bd = Get(bucket, MorphKey(sp.Id, variant)); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
             visible++;
         }
+        // Dead vascular plants remain visible after leaving the living population. Reuse the species mesh and
+        // drive pose/tint from authoritative corpse state so no per-corpse mesh or physics body is required.
+        foreach (var dead in _deadSnapshot)
+        {
+            yield return false;
+            if (_w.DeadFlora.Get(dead.Id) != dead) continue;
+            var sp = _w.Content.FloraOrThrow(dead.SpeciesId);
+            double remain = Math.Sqrt(dead.RemainingFraction);
+            double r = dead.OriginalRadius * (0.82 + 0.18 * remain);
+            double h = dead.OriginalHeight * (0.78 + 0.22 * remain);
+            var pos = new Vector3((float)dead.X, (float)_w.GroundHeight(dead.Position), (float)dead.Z);
+            if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
+
+            float lean = dead.Stage switch
+            {
+                DeadPlantStage.StandingDead => 0.05f + 0.10f * (float)dead.StageProgress,
+                DeadPlantStage.Collapsing => Mathf.Lerp(0.15f, 1.38f, (float)dead.StageProgress),
+                DeadPlantStage.Fallen => 1.42f,
+                _ => 1.47f,
+            };
+            var basis = new Basis(Vector3.Up, (float)dead.CollapseHeading) * new Basis(Vector3.Forward, lean);
+            if (dead.Stage >= DeadPlantStage.Fallen) h *= 0.92;
+            var t = new Transform3D(basis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+
+            int cell = _w.Grid.NearestDomainCell(dead.Position);
+            double moisture = cell >= 0 ? _w.Fields.Moisture.Values[cell] : 0.5;
+            double litterMass = cell >= 0 ? _w.Litter.FineMass[cell] + _w.Litter.CoarseMass[cell] : 0;
+            double stageFade = dead.Stage switch
+            {
+                DeadPlantStage.StandingDead => 0.20 + 0.20 * dead.StageProgress,
+                DeadPlantStage.Collapsing => 0.42 + 0.16 * dead.StageProgress,
+                DeadPlantStage.Fallen => 0.60 + 0.20 * dead.StageProgress,
+                _ => 0.82 + 0.18 * dead.StageProgress,
+            };
+            double litterBlend = MathD.Clamp01(stageFade * (0.7 + Math.Min(0.3, litterMass * 0.08)));
+            var localLitter = moisture > 0.62
+                ? new Color(0.47f, 0.42f, 0.31f, 1f)
+                : moisture < 0.28 ? new Color(0.72f, 0.64f, 0.46f, 1f)
+                : new Color(0.60f, 0.53f, 0.36f, 1f);
+            var tint = Colors.White.Lerp(localLitter, (float)(0.35 + 0.55 * litterBlend));
+            ulong hash = Rng.Mix(dead.Id.Value, 0xD34DUL);
+            var custom = new Color((hash % 1000) / 1000f, 0f, 0f, ((hash >> 12) % 1000) / 1000f);
+            int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
+            var bd = Get(_full, MorphKey(sp.Id, variant));
+            bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
+            visible++;
+        }
+
         // slime-mold veins: thickness follows the biomass flowing through each link
         foreach (var (id, layer) in _layers)
         {

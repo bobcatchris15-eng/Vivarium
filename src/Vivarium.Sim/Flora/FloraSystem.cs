@@ -376,7 +376,7 @@ public sealed class FloraSystem
             }
 
             // propagation
-            if (f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
+            if (sp.Reproduction == null && f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
                 && f.Age - f.LastSpreadAge >= sp.SpreadInterval && sp.Propagules > 0)
             {
                 var rng = Rng.Keyed(_w.Seed, PropagationStream, f.Id.Value, (ulong)f.SpreadCount);
@@ -1265,10 +1265,20 @@ public sealed class FloraSystem
     {
         if (!_w.Flora.Remove(f.Id)) return false;
         var sp = C.FloraOrThrow(f.SpeciesId);
+        _w.Tally.Death(sp.Id, cause);
+
+        bool persistentCorpse = sp.Archetype == "plant" && sp.Colony == null && !sp.IsCoverageSpecies
+            && sp.Climber == null && sp.Shape != "floatleaf";
+        if (persistentCorpse)
+        {
+            _w.DeadFloraSystem.CreateFrom(f, sp, cause);
+            _w.Tally.DeadFloraCreated++;
+            return true;
+        }
+
         double litter = f.Biomass * sp.LitterFraction;
         double direct = f.Biomass * (1 - sp.LitterFraction) * sp.NutrientPerBiomass;
         _w.Ecology.ReturnOrganicMatter(f.Position, litter, direct, fromFlora: true);
-        _w.Tally.Death(sp.Id, cause);
         return true;
     }
 }

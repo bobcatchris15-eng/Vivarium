@@ -276,7 +276,7 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber");
+        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber", "reproduction");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
@@ -469,6 +469,39 @@ public static class ContentLoader
         else if (placementGroup == FloraPlacementGroup.Woody)
             n["placementGroup"].Error("placementGroup 'woody' requires a woody block");
 
+        ReproductionDef? reproduction = null;
+        if (n.Has("reproduction"))
+        {
+            var rp = n["reproduction"];
+            rp.RejectUnknown("form", "dispersal", "reservePerDay", "pulseThreshold", "maxAttachedMass",
+                "developmentDays", "ripeDays", "cooldownDays", "seedFraction", "viability", "dormancyDays",
+                "dispersalRadius", "fruitColor", "displaySize", "foodValue");
+            string form = rp.Str("form");
+            if (form is not ("berry" or "drupe" or "nut" or "pod" or "cone" or "capsule" or "wind_seed" or "achene"))
+                rp["form"].Error("invalid reproductive form");
+            string dispersal = rp.Str("dispersal", "gravity");
+            if (dispersal is not ("gravity" or "wind" or "animal" or "water" or "ballistic"))
+                rp["dispersal"].Error("invalid dispersal mode");
+            reproduction = new ReproductionDef
+            {
+                Form = form, Dispersal = dispersal,
+                ReserveRate = rp.Num("reservePerDay", 0.01, 0, 10) / D,
+                PulseThreshold = rp.Num("pulseThreshold", 0.05, 0.0001, 100),
+                MaxAttachedMass = rp.Num("maxAttachedMass", 0.1, 0.0001, 100),
+                DevelopmentTime = rp.Num("developmentDays", 10, 0.1, 3650) * D,
+                RipeTime = rp.Num("ripeDays", 10, 0.1, 3650) * D,
+                CooldownTime = rp.Num("cooldownDays", 20, 0, 3650) * D,
+                SeedFraction = rp.Num("seedFraction", 0.2, 0, 1),
+                Viability = rp.Num("viability", 0.5, 0, 1),
+                DormancyTime = rp.Num("dormancyDays", 5, 0, 3650) * D,
+                DispersalRadius = rp.Num("dispersalRadius", 0.5, 0.01, 10),
+                FruitColor = rp.Color("fruitColor"),
+                DisplaySize = rp.Num("displaySize", 0.02, 0.002, 0.5),
+                FoodValue = rp.Num("foodValue", 1, 0, 100),
+            };
+            if (arch != "plant") rp.Error("reproduction requires archetype plant");
+        }
+
         var col = v.Color("color");
         var def = new FloraSpeciesDef
         {
@@ -494,6 +527,7 @@ public static class ContentLoader
             Lichen = lichen,
             Woody = woody,
             Climber = climber,
+            Reproduction = reproduction,
         };
         if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");
