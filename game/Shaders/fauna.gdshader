@@ -1,7 +1,7 @@
 // Fauna instances. Species colours are material uniforms; per-individual genetics arrive in
 // INSTANCE_CUSTOM = (hue shift, marking density, pattern contrast, packed appendage scale + speed + phase).
-// The CPU accumulates phase from species-authored body-relative cadence. Vertex COLOR.rgb is the appendage
-// offset from its attachment and COLOR.a flags appendages. UV2.x is the visual region; UV2.y is animation role:
+// The CPU accumulates phase from species-authored body-relative cadence. Vertex CUSTOM0.rgb is the signed
+// appendage offset from its attachment and CUSTOM0.a flags appendages. UV2.x is the visual region; UV2.y is animation role:
 // 0 body, 1 locomotor limb, 2 wing/fin, 3 sensory appendage.
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx, cull_disabled;
@@ -88,13 +88,13 @@ void vertex() {
     seed = float(INSTANCE_ID);
     motion_amount = anim_amplitude * mix(anim_idle_motion, 1.0, speed01);
 
-    float body_mask = 1.0 - COLOR.a;
+    float body_mask = 1.0 - CUSTOM0.a;
     VERTEX.y *= 1.0 + (genes.y - 0.5) * 0.08 * body_mask;
     VERTEX.z *= 1.0 + (genes.z - 0.5) * 0.07 * body_mask;
 
-    vec3 attach = VERTEX - COLOR.rgb;
-    vec3 off = COLOR.rgb * genes.w;
-    if (COLOR.a > 0.5) VERTEX = attach + off;
+    vec3 attach = VERTEX - CUSTOM0.rgb;
+    vec3 off = CUSTOM0.rgb * genes.w;
+    if (CUSTOM0.a > 0.5) VERTEX = attach + off;
 
     const float TAU_ = 6.28318530718;
     const float PI_ = 3.14159265359;
@@ -109,13 +109,13 @@ void vertex() {
         float along = clamp(0.58 - VERTEX.x, 0.0, 1.25);
         float wave = sin(theta - VERTEX.x * TAU_ * anim_phase_spread);
         VERTEX.z += wave * anim_body_wave * 0.065 * pose * along;
-        if (COLOR.a > 0.5 && anim_role > 1.5) VERTEX.y += sin(theta + longitudinal * PI_) * anim_limb_lift * 0.02 * pose;
+        if (CUSTOM0.a > 0.5 && anim_role > 1.5) VERTEX.y += sin(theta + longitudinal * PI_) * anim_limb_lift * 0.02 * pose;
         VERTEX.y += sin(theta * 2.0) * anim_bob * 0.012 * pose;
     }
     // 2: paddler. Modest trunk wave, paired appendages sweep through the water continuously.
     else if (anim_family == 2) {
         VERTEX.z += sin(theta - VERTEX.x * TAU_ * anim_phase_spread) * anim_body_wave * 0.025 * pose;
-        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 2.5) {
+        if (CUSTOM0.a > 0.5 && anim_role > 0.5 && anim_role < 2.5) {
             float lp = theta + longitudinal * TAU_ * anim_phase_spread + (side > 0.0 ? PI_ : 0.0);
             off.x += sin(lp) * anim_limb_sweep * reach * 0.38 * pose;
             off.y += cos(lp) * anim_limb_lift * reach * 0.18 * pose;
@@ -124,7 +124,7 @@ void vertex() {
     }
     // 3: ordinary walking/scuttling. Contralateral phase and a real swing/stance lift instead of universal wriggle.
     else if (anim_family == 3) {
-        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+        if (CUSTOM0.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
             float lp = cycle + longitudinal * anim_phase_spread + (side > 0.0 ? 0.5 : 0.0);
             float sweep = gait_sweep(lp, anim_duty_factor);
             float lift = gait_lift(lp, anim_duty_factor);
@@ -137,13 +137,13 @@ void vertex() {
     }
     // 4: many-legged metachronal walking. Longitudinal phase spread produces the visible leg wave.
     else if (anim_family == 4) {
-        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+        if (CUSTOM0.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
             float lp = cycle + longitudinal * anim_phase_spread + (side > 0.0 ? 0.30 : 0.0);
-            off.x += gait_sweep(lp, anim_duty_factor) * anim_limb_sweep * reach * 0.30 * pose;
-            off.y += gait_lift(lp, anim_duty_factor) * anim_limb_lift * reach * 0.22 * pose;
+            off.x += gait_sweep(lp, anim_duty_factor) * anim_limb_sweep * reach * 0.60 * pose;
+            off.y += gait_lift(lp, anim_duty_factor) * anim_limb_lift * reach * 0.50 * pose;
             VERTEX = attach + off;
         }
-        VERTEX.z += sin(theta - VERTEX.x * TAU_) * anim_body_wave * 0.010 * pose;
+        VERTEX.z += sin(theta - VERTEX.x * TAU_) * anim_body_wave * 0.035 * pose;
     }
     // 5: slug/snail style muscular foot. No snake-like lateral motion; the body subtly advances a compression wave.
     else if (anim_family == 5) {
@@ -166,7 +166,7 @@ void vertex() {
         float crouch_t = clamp(cycle / max(anim_duty_factor, 0.01), 0.0, 1.0);
         float crouch = sin(PI_ * crouch_t) * (1.0 - airborne);
         VERTEX.y += hop * anim_bob * 0.20 * pose;
-        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+        if (CUSTOM0.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
             float hind = 1.0 - smoothstep(-0.18, 0.18, attach.x);
             off.x -= hind * (crouch - hop * 0.35) * anim_limb_sweep * reach * 0.50 * pose;
             off.y += (hop - crouch * 0.35) * anim_limb_lift * reach * 0.30 * pose;
@@ -175,7 +175,7 @@ void vertex() {
     }
     // 8: sprawled tetrapod gait. Diagonal limb phasing is coupled to a small trunk/tail counter-wave.
     else if (anim_family == 8) {
-        if (COLOR.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
+        if (CUSTOM0.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
             float fore = smoothstep(-0.05, 0.22, attach.x);
             float diagonal = side > 0.0 ? 0.5 : 0.0;
             float lp = cycle + diagonal + fore * 0.5 + longitudinal * anim_phase_spread;
@@ -188,7 +188,7 @@ void vertex() {
     }
     // 9: flight. Only role-2 geometry hinges as a wing; legs and sensory structures are not forced to flap.
     else if (anim_family == 9) {
-        if (COLOR.a > 0.5 && anim_role > 1.5 && anim_role < 2.5) {
+        if (CUSTOM0.a > 0.5 && anim_role > 1.5 && anim_role < 2.5) {
             float flap = sin(theta);
             off = rotate_x(off, side * flap * anim_limb_sweep * 1.15 * pose);
             VERTEX = attach + off;
@@ -197,9 +197,9 @@ void vertex() {
     }
 
     // Sensory structures get a slow independent searching motion regardless of gait family.
-    if (COLOR.a > 0.5 && anim_role > 2.5) {
+    if (CUSTOM0.a > 0.5 && anim_role > 2.5) {
         float search = sin(theta * 0.37 + seed * 0.73 + longitudinal * 1.9);
-        off = COLOR.rgb * genes.w;
+        off = CUSTOM0.rgb * genes.w;
         off = rotate_y(off, search * anim_limb_sweep * 0.12 * max(pose, anim_idle_motion));
         off.y += cos(theta * 0.29 + seed) * anim_limb_lift * reach * 0.05 * max(pose, anim_idle_motion);
         VERTEX = attach + off;

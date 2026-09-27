@@ -10,8 +10,8 @@ public static class AppVersion
     public const string ProductName = "Vivarium";
     public const string Application = "0.1.2";
 
-    /// <summary>Save format version. Bump together with a migration in Persistence.SaveMigrations.</summary>
-    public const int SaveSchema = 1;
+    /// <summary>Save format version. Schema 2 adds authoritative litter; older overhaul saves are unsupported.</summary>
+    public const int SaveSchema = 2;
 
     public static string Describe() => $"{ProductName} {Application} (save schema {SaveSchema})";
 }

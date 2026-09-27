@@ -17,6 +17,8 @@ public sealed class EcologyTally
 {
     public SortedDictionary<string, SpeciesTally> Species { get; set; } = new(StringComparer.Ordinal);
     public double DetritusFromFlora { get; set; }
+    public double LitterDeposited { get; set; }
+    public double LitterToDetritus { get; set; }
     public double DetritusFromFauna { get; set; }
     public double NutrientsFromDecay { get; set; }
     /// <summary>Dead matter consumed by decomposers (fungi, slime molds) and the nutrients they released.</summary>

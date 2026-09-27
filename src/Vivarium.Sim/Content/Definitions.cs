@@ -241,9 +241,9 @@ public sealed class FloraSpeciesDef
     /// block). Null = this species does not run on the coverage layers.</summary>
     public FloraLichenDef? Lichen { get; init; }
 
-    /// <summary>True for species that run on the coverage layers (Mat or Lichen) rather than as
+    /// <summary>True for species that run on the coverage layers (Mat, Lichen, or Plasmodium) rather than as
     /// <see cref="Vivarium.Sim.Flora.FloraIndividual"/>s.</summary>
-    public bool IsCoverageSpecies => Mat != null || Lichen != null;
+    public bool IsCoverageSpecies => Mat != null || Lichen != null || Archetype == "slime_mold";
 }
 
 /// <summary>Moss ("mat") species content, parsed from the "mat" JSON block (docs/overhaul/growth_models.md §8).

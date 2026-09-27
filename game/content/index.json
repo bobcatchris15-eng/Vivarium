@@ -39,7 +39,9 @@
     "flora/shadebell.json",
     "flora/spiralvine.json",
     "flora/fenhook.json",
-    "flora/ringreed.json"
+    "flora/ringreed.json",
+    "flora/streamribbon.json",
+    "flora/fencomb.json"
   ],
   "fauna": [
     "fauna/prismhopper.json",
@@ -62,6 +64,13 @@
   ],
   "presets": [
     "presets/default.json",
-    "presets/rocky_rise.json"
+    "presets/rocky_rise.json",
+    "presets/shoreline.json",
+    "presets/creek.json",
+    "presets/bayou_marsh.json",
+    "presets/steep_rocky_slope.json",
+    "presets/isolated_pond.json",
+    "presets/oxbow_creek.json",
+    "presets/deep_inlet.json"
   ]
 }

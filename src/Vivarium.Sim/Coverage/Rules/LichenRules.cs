@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Vivarium.Sim.Coverage;
 
 namespace Vivarium.Sim.Coverage.Rules;
@@ -10,6 +11,11 @@ namespace Vivarium.Sim.Coverage.Rules;
 public interface ILichenEnvSource
 {
     MicroEnv Sample(int gx, int gz);
+    (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz)
+    {
+        var e = Sample(gx, gz);
+        return (e.Moisture, e.Humidity, e.Light, e.Nutrients);
+    }
     CoverageSubstrate Substrate(int gx, int gz) => Sample(gx, gz).Substrate;
 }
 
@@ -19,6 +25,8 @@ public interface ILichenEnvSource
 /// A pure step function: all state lives in the layer, all randomness is the layer's hash RNG, all neighbour
 /// reads are the previous-step snapshot (§1.4-1.5), so results are order-independent and deterministic.
 /// </summary>
+public readonly record struct LichenStepStats(double ScanMs, double PhysiologyMs, double D2EMs, double CandidatesMs, double ColoniseMs, double BoundaryMs, double HolesMs);
+
 public static class LichenRules
 {
     private static readonly (int dx, int dz)[] N8 =
@@ -28,9 +36,10 @@ public static class LichenRules
 
     /// <summary>Advances the Crust layer one growth-lab step. <paramref name="seed"/> is accepted for API symmetry
     /// with the other rule sets; the layer's own <see cref="CoverageLayer.WorldSeed"/> already seeds every draw.</summary>
-    public static void Step(CoverageLayer layer, ILichenEnvSource env, IReadOnlyList<LichenParams> species, double dtDays, long step, ulong seed)
+    public static LichenStepStats Step(CoverageLayer layer, ILichenEnvSource env, IReadOnlyList<LichenParams> species, double dtDays, long step, ulong seed)
     {
         _ = seed;
+        var clock = Stopwatch.StartNew();
         layer.BeginStep();
 
         var occupied = new List<(int gx, int gz, int ti, int tj, int li)>();
@@ -46,19 +55,23 @@ public static class LichenRules
             }
         }
 
+        double scanMs = clock.Elapsed.TotalMilliseconds; clock.Restart();
         var boundary = new HashSet<(int, int)>();
         var toClear = new List<(int, int)>();
 
         // ---- 1. physiology: water (§3), age, boundary/prothallus (§5.2), centre senescence (§5.3) ----
-        foreach (var (gx, gz, ti, tj, li) in occupied)
+        var boundaryFlags = new bool[occupied.Count];
+        var clearFlags = new bool[occupied.Count];
+        void UpdateCell(int index)
         {
-            if (!layer.TryGetTile(ti, tj, out var tile) || tile == null) continue;
+            var (gx, gz, ti, tj, li) = occupied[index];
+            if (!layer.TryGetTile(ti, tj, out var tile) || tile == null) return;
             byte occ = tile.Occ[li];
-            if (occ == 0) continue;
+            if (occ == 0) return;
             var sp = SpeciesOf(species, occ);
-            if (sp == null) continue;
+            if (sp == null) return;
 
-            var me = env.Sample(gx, gz);
+            var me = env.SamplePhysiology(gx, gz);
 
             byte w = LichenWater.StepWater(tile.W[li], me.Moisture, me.Humidity, dtDays, sp.KWet, sp.KDry);
             tile.W[li] = w;
@@ -77,7 +90,7 @@ public static class LichenRules
             if (isBoundary)
             {
                 tile.Flags[li] |= (byte)CoverageFlags.Boundary;
-                boundary.Add((gx, gz));
+                boundaryFlags[index] = true;
             }
 
             double b = tile.B[li];
@@ -95,19 +108,29 @@ public static class LichenRules
             {
                 double nb = Math.Max(0, tile.B[li] - sp.DeadDecayPerDay * dtDays);
                 tile.B[li] = (float)nb;
-                if (nb <= 1e-4) toClear.Add((gx, gz));
+                if (nb <= 1e-4) clearFlags[index] = true;
             }
 
-            tile.Touch();
+            System.Threading.Interlocked.Increment(ref tile.Version);
         }
-
+        if (occupied.Count >= 128)
+            Parallel.For(0, occupied.Count, UpdateCell);
+        else
+            for (int i = 0; i < occupied.Count; i++) UpdateCell(i);
+        for (int i = 0; i < occupied.Count; i++)
+        {
+            var (gx, gz, _, _, _) = occupied[i];
+            if (boundaryFlags[i]) boundary.Add((gx, gz));
+            if (clearFlags[i]) toClear.Add((gx, gz));
+        }
         foreach (var (gx, gz) in toClear) layer.SetCell(gx, gz, 0, 0, 0, 0, 0, 0, 0);
 
+        double physiologyMs = clock.Elapsed.TotalMilliseconds; clock.Restart();
         UpdateD2E(layer, occupied);
+        double d2eMs = clock.Elapsed.TotalMilliseconds; clock.Restart();
 
         // ---- 2. colonisation over the pre-step snapshot (§5.1-5.4) ----
-        var candidates = new SortedSet<(int, int)>(Comparer<(int, int)>.Create(
-            (a, b) => a.Item1 != b.Item1 ? a.Item1.CompareTo(b.Item1) : a.Item2.CompareTo(b.Item2)));
+        var candidates = new HashSet<(int, int)>();
         foreach (var (gx, gz, _, _, _) in occupied)
         {
             if (boundary.Contains((gx, gz))) continue;
@@ -118,8 +141,13 @@ public static class LichenRules
             }
         }
 
-        foreach (var (gx, gz) in candidates)
+        double candidatesMs = clock.Elapsed.TotalMilliseconds; clock.Restart();
+        var candidateList = candidates.ToArray();
+        Array.Sort(candidateList, (a, b) => a.Item1 != b.Item1 ? a.Item1.CompareTo(b.Item1) : a.Item2.CompareTo(b.Item2));
+        var winners = new byte[candidateList.Length];
+        void EvaluateCandidate(int index)
         {
+            var (gx, gz) = candidateList[index];
             var sub = env.Substrate(gx, gz);
             foreach (var sp in species)
             {
@@ -128,21 +156,22 @@ public static class LichenRules
                 if (substrateRate <= 0) continue;
 
                 double p;
+                double wx = gx * CoverageSpec.CellSize;
+                double wz = gz * CoverageSpec.CellSize;
+                double micro = 0.82 + 0.36 * Vivarium.Sim.Core.Noise.Gradient(layer.WorldSeed ^ (ulong)(sp.OccSlot * 773), wx * 4.5, wz * 4.5);
+
                 if (sp.Form == LichenForm.Foliose)
                 {
-                    // Contiguity gate first (§5.3 note from lab review): a candidate needs enough occupied
-                    // same-species support to keep lobes solid fingers, not porous speckle. Then tip bias.
                     int support = 0;
                     foreach (var (dx, dz) in N8)
                         if (layer.SnapshotOcc(gx + dx, gz + dz) == sp.OccSlot) support++;
                     if (support < sp.MinNeighboursToColonise) continue;
 
                     double openness = Openness(layer, gx, gz, sp.OpennessRadius);
-                    p = 1 - Math.Exp(-sp.Lateral * Math.Pow(openness, sp.TipBiasGamma) * substrateRate * dtDays);
+                    p = 1 - Math.Exp(-sp.Lateral * Math.Pow(openness, sp.TipBiasGamma) * substrateRate * dtDays / micro);
                 }
                 else
                 {
-                    // Crustose/fruticose: plain Eden front, w_dir == 1 (§5.2, §5.4), softened by a small per-cell noise draw.
                     double pressure = 0;
                     foreach (var (dx, dz) in N8)
                     {
@@ -152,19 +181,31 @@ public static class LichenRules
                     if (pressure <= 0) continue;
                     double noiseDraw = layer.Hash01(gx, gz, step, purpose: 100 + sp.OccSlot);
                     double noise = Math.Pow(0.9 + 0.2 * noiseDraw, sp.EdenNoiseExponent);
-                    p = 1 - Math.Exp(-sp.Lateral * pressure * substrateRate * noise * dtDays);
+                    p = 1 - Math.Exp(-sp.Lateral * pressure * substrateRate * noise * dtDays / micro);
                 }
 
                 if (p <= 0) continue;
                 double u = layer.Hash01(gx, gz, step, purpose: sp.OccSlot);
                 if (u < p)
                 {
-                    layer.SetCell(gx, gz, sp.OccSlot, (float)sp.SeedBiomass, 0, 0, 0, 0, 0);
-                    break; // first winning species in list order claims the cell (deterministic order, not draw order)
+                    winners[index] = sp.OccSlot;
+                    return; // first winning species in list order claims the cell
                 }
             }
         }
-
+        if (candidateList.Length >= 128)
+            Parallel.For(0, candidateList.Length, EvaluateCandidate);
+        else
+            for (int i = 0; i < candidateList.Length; i++) EvaluateCandidate(i);
+        for (int i = 0; i < candidateList.Length; i++)
+        {
+            byte occ = winners[i];
+            if (occ == 0) continue;
+            var (gx, gz) = candidateList[i];
+            var sp = SpeciesOf(species, occ)!;
+            layer.SetCell(gx, gz, occ, (float)sp.SeedBiomass, 0, 0, 0, 0, 0);
+        }
+        double coloniseMs = clock.Elapsed.TotalMilliseconds; clock.Restart();
         // ---- 3. re-flag any pairs of newly-adjacent different species from this step's colonisation (avoids a
         // one-step race where two fronts advance into adjacent cells before either sees the other, §5.2) ----
         foreach (var (gx, gz) in candidates)
@@ -178,13 +219,16 @@ public static class LichenRules
             }
         }
 
+        double boundaryMs = clock.Elapsed.TotalMilliseconds; clock.Restart();
         // ---- 4. fill interior holes for foliose species (§5.3 lab review): keeps the thallus one solid piece with
         // a lobed outer boundary instead of a porous interior, which the contiguity gate alone does not guarantee
         // once a lobe closes back on itself. ----
         foreach (var sp in species)
             if (sp.Form == LichenForm.Foliose) FillInteriorHoles(layer, env, sp);
 
+        double holesMs = clock.Elapsed.TotalMilliseconds;
         layer.Advance();
+        return new LichenStepStats(scanMs, physiologyMs, d2eMs, candidatesMs, coloniseMs, boundaryMs, holesMs);
     }
 
     [ThreadStatic] private static bool[]? _visitedPool;
@@ -221,18 +265,22 @@ public static class LichenRules
             var cluster = new List<CoverageTile> { root };
             q.Enqueue(root);
 
+            var toRemoveCluster = new List<CoverageTile>();
             while (q.Count > 0)
             {
                 var cur = q.Dequeue();
-                foreach (var other in unassigned.ToArray())
+                toRemoveCluster.Clear();
+                foreach (var other in unassigned)
                 {
                     if (Math.Abs(cur.Ti - other.Ti) <= 1 && Math.Abs(cur.Tj - other.Tj) <= 1)
                     {
-                        unassigned.Remove(other);
+                        toRemoveCluster.Add(other);
                         cluster.Add(other);
                         q.Enqueue(other);
                     }
                 }
+                for (int ri = 0; ri < toRemoveCluster.Count; ri++)
+                    unassigned.Remove(toRemoveCluster[ri]);
             }
             tileClusters.Add(cluster);
         }

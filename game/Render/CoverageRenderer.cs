@@ -24,6 +24,7 @@ public partial class CoverageRenderer : Node3D
     private VivariumWorld _w = null!;
     private ShaderMaterial _matMaterial = null!;
     private ShaderMaterial _crustMaterial = null!;
+    private ShaderMaterial _plasmodiumMaterial = null!;
     private StandardMaterial3D _debugMatMaterial = null!;
     private StandardMaterial3D _debugCrustMaterial = null!;
 
@@ -44,18 +45,34 @@ public partial class CoverageRenderer : Node3D
         public ArrayMesh Mesh = null!;
     }
 
+    private enum CoverageFloraType : byte
+    {
+        Generic,
+        Sphagnum,        // bogglass_moss
+        PearlCushion,    // pearl_cushion_moss
+        Floodlace,       // floodlace_moss
+        Velvetweave,     // velvetweave_moss
+        Antlerlace,      // antlerlace_lichen
+        RuffleLichen,    // ruffle_lichen
+        Embercrust,      // embercrust_lichen
+        Plasmodium,      // ambervein
+    }
+
     private sealed class SpeciesRenderInfo
     {
+        public string SpeciesId = "";
         public Color Color1;
         public Color Color2;
         public MatHeightForm HeightForm;
         public double MaxHeightM;
         public double DomeLength;
+        public CoverageFloraType FloraType;
     }
 
     private readonly Dictionary<(CoverageLayerId layer, int ti, int tj), TileRecord> _tiles = new();
     private readonly Dictionary<byte, SpeciesRenderInfo> _matSpecies = new();
     private readonly Dictionary<byte, SpeciesRenderInfo> _crustSpecies = new();
+    private readonly Dictionary<byte, SpeciesRenderInfo> _plasmodiumSpecies = new();
 
     private static readonly SpeciesRenderInfo _defaultSpecies = new()
     {
@@ -64,32 +81,25 @@ public partial class CoverageRenderer : Node3D
         HeightForm = MatHeightForm.Flat,
         MaxHeightM = 0.003,
         DomeLength = 5.0,
+        FloraType = CoverageFloraType.Generic,
     };
 
     // Pre-allocated scratch buffers to eliminate per-step/per-tile allocations
     private readonly bool[,] _cellOccupied = new bool[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
     private readonly float[,] _cellThickness = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
     private readonly Color[,] _cellColor = new Color[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
+    private readonly float[,] _cellVeinW = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
+    private readonly float[,] _cellFront = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
     private readonly int[,] _cornerIdx = new int[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly float[,] _cornerThickness = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly Color[,] _cornerColor = new Color[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly float[,] _cornerAlpha = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+    private readonly float[,] _cornerVeinW = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+    private readonly float[,] _cornerFront = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly List<(CoverageLayerId layer, int ti, int tj)> _toRemove = new();
     private readonly Queue<(CoverageLayerId layer, int ti, int tj)> _pendingRebuilds = new();
     private readonly HashSet<(CoverageLayerId layer, int ti, int tj)> _pendingKeys = new();
 
-    private Vec3 GetGroundNormal(double wx, double wz)
-    {
-        const double step = CoverageSpec.CellSize * 0.5;
-        double hL = _w.GroundHeight(new Vec2(wx - step, wz));
-        double hR = _w.GroundHeight(new Vec2(wx + step, wz));
-        double hD = _w.GroundHeight(new Vec2(wx, wz - step));
-        double hU = _w.GroundHeight(new Vec2(wx, wz + step));
-        double dx = (hR - hL) / (2.0 * step);
-        double dz = (hU - hD) / (2.0 * step);
-        double invLen = 1.0 / Math.Sqrt(dx * dx + 1.0 + dz * dz);
-        return new Vec3((float)(-dx * invLen), (float)invLen, (float)(-dz * invLen));
-    }
 
     private static float SlopeFade(Vec3 normal)
     {
@@ -104,7 +114,16 @@ public partial class CoverageRenderer : Node3D
         float bNorm = Math.Clamp(b, 0.1f, 1.0f);
         float th;
 
-        if (layerId == CoverageLayerId.Mat)
+        if (layerId == CoverageLayerId.Plasmodium)
+        {
+            float veinFactor = w / 255.0f;
+            float baseSheet = 0.0010f * bNorm;
+            float veinRidge = (float)(sp.MaxHeightM * bNorm * Math.Sqrt(veinFactor));
+            th = baseSheet + veinRidge;
+            if ((flags & (byte)CoverageFlags.Front) != 0) th = Math.Max(0.0006f, th * 0.7f);
+            if ((flags & (byte)CoverageFlags.Fruiting) != 0) th = 0.0004f;
+        }
+        else if (layerId == CoverageLayerId.Mat)
         {
             switch (sp.HeightForm)
             {
@@ -168,6 +187,8 @@ public partial class CoverageRenderer : Node3D
         _crustMaterial.SetShaderParameter("u_pattern", 1.0f); // cracked/areolate lichen micro-detail
         Bridge.BindSurface(_crustMaterial, "moss", Bridge.Surfaces.Moss);
         _crustMaterial.SetShaderParameter("lichen_col", GD.Load<Texture2D>("res://Textures/LichenThallus.png"));
+        _plasmodiumMaterial = Bridge.Shader("res://Shaders/coverage_plasmodium.gdshader");
+        Bridge.BindSurface(_plasmodiumMaterial, "moss", Bridge.Surfaces.Moss);
         if (DebugMode)
         {
             _debugMatMaterial = new StandardMaterial3D
@@ -205,6 +226,7 @@ public partial class CoverageRenderer : Node3D
     {
         _matSpecies.Clear();
         _crustSpecies.Clear();
+        _plasmodiumSpecies.Clear();
         if (_w == null) return;
 
         byte matId = 0, lichenId = 0;
@@ -226,13 +248,23 @@ public partial class CoverageRenderer : Node3D
                     // Cushion / sphagnum moss produces distinct rounded dome profiles
                     maxH = md.MaxHeightM > 0 ? md.MaxHeightM : (sp.Height > 0 ? sp.Height : 0.025);
                 }
+                CoverageFloraType fType = sp.Id switch
+                {
+                    "bogglass_moss" => CoverageFloraType.Sphagnum,
+                    "pearl_cushion_moss" => CoverageFloraType.PearlCushion,
+                    "floodlace_moss" => CoverageFloraType.Floodlace,
+                    "velvetweave_moss" => CoverageFloraType.Velvetweave,
+                    _ => CoverageFloraType.Generic,
+                };
                 _matSpecies[matId] = new SpeciesRenderInfo
                 {
+                    SpeciesId = sp.Id,
                     Color1 = c1,
                     Color2 = c2,
                     HeightForm = md.HeightForm,
                     MaxHeightM = maxH,
                     DomeLength = md.DomeLength > 0 ? md.DomeLength : 5.0,
+                    FloraType = fType,
                 };
             }
             if (sp.Lichen is { } ld)
@@ -244,13 +276,37 @@ public partial class CoverageRenderer : Node3D
                 double maxH = ld.Form == LichenForm.Fruticose
                     ? (sp.Height > 0 ? sp.Height : 0.008)
                     : 0.0005;
+                CoverageFloraType fType = sp.Id switch
+                {
+                    "antlerlace_lichen" => CoverageFloraType.Antlerlace,
+                    "ruffle_lichen" => CoverageFloraType.RuffleLichen,
+                    "embercrust_lichen" => CoverageFloraType.Embercrust,
+                    _ => CoverageFloraType.Generic,
+                };
                 _crustSpecies[lichenId] = new SpeciesRenderInfo
                 {
+                    SpeciesId = sp.Id,
                     Color1 = c1,
                     Color2 = c2,
                     HeightForm = MatHeightForm.Flat,
                     MaxHeightM = maxH,
                     DomeLength = 3.0,
+                    FloraType = fType,
+                };
+            }
+            if (sp.Archetype == "slime_mold")
+            {
+                Color c1 = sp.Color != null && sp.Color.Length >= 3 ? Bridge.C(sp.Color) : new Color(0.96f, 0.65f, 0.08f);
+                Color c2 = sp.Color2 != null && sp.Color2.Length >= 3 ? Bridge.C(sp.Color2) : new Color(0.98f, 0.86f, 0.18f);
+                _plasmodiumSpecies[1] = new SpeciesRenderInfo
+                {
+                    SpeciesId = sp.Id,
+                    Color1 = c1,
+                    Color2 = c2,
+                    HeightForm = MatHeightForm.Flat,
+                    MaxHeightM = 0.006,
+                    DomeLength = 2.0,
+                    FloraType = CoverageFloraType.Plasmodium,
                 };
             }
         }
@@ -258,7 +314,9 @@ public partial class CoverageRenderer : Node3D
 
     private SpeciesRenderInfo GetSpecies(CoverageLayerId layerId, byte occ)
     {
-        var dict = layerId == CoverageLayerId.Mat ? _matSpecies : _crustSpecies;
+        var dict = layerId == CoverageLayerId.Mat ? _matSpecies
+            : layerId == CoverageLayerId.Crust ? _crustSpecies
+            : _plasmodiumSpecies;
         if (dict.TryGetValue(occ, out var info)) return info;
         return _defaultSpecies;
     }
@@ -291,6 +349,7 @@ public partial class CoverageRenderer : Node3D
         // Check tile versions and enqueue dirty / new tiles
         EnqueueTiles(_w.Coverage.Mat);
         EnqueueTiles(_w.Coverage.Crust);
+        EnqueueTiles(_w.Coverage.Plasmodium);
 
         if (immediate)
         {
@@ -372,6 +431,7 @@ public partial class CoverageRenderer : Node3D
         if (md.VertexCount == 0 || md.TriangleCount == 0) return;
 
         var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial)
+            : layer.Id == CoverageLayerId.Plasmodium ? _plasmodiumMaterial
             : (Material)(layer.Id == CoverageLayerId.Crust ? _crustMaterial : _matMaterial);
         var mesh = Bridge.ToArrayMesh(md, mat);
         var mi = new MeshInstance3D
@@ -403,6 +463,7 @@ public partial class CoverageRenderer : Node3D
         }
 
         var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial)
+            : layer.Id == CoverageLayerId.Plasmodium ? _plasmodiumMaterial
             : (Material)(layer.Id == CoverageLayerId.Crust ? _crustMaterial : _matMaterial);
         record.Mesh = Bridge.ToArrayMesh(md, mat, record.Mesh);
         record.MeshInstance.Mesh = record.Mesh;
@@ -436,6 +497,11 @@ public partial class CoverageRenderer : Node3D
     private static float SurfaceRelief(CoverageLayerId layer, double wx, double wz, float alpha, double maxHeight)
     {
         if (alpha <= 0) return 0;
+        if (layer == CoverageLayerId.Plasmodium)
+        {
+            float wave = ValueNoise(wx + 0.015, wz + 0.015, 0.025);
+            return alpha * 0.0025f * wave;
+        }
         if (layer == CoverageLayerId.Crust)
         {
             // Two nonaligned wavelengths create continuous, crinkled thallus folds. The rim curls up.
@@ -473,7 +539,7 @@ public partial class CoverageRenderer : Node3D
     {
         const int edge = CoverageSpec.TileEdge;
         const double cs = CoverageSpec.CellSize;
-        float baseOffset = layer.Id == CoverageLayerId.Crust ? 0.002f : 0.0035f;
+        float baseOffset = layer.Id == CoverageLayerId.Crust ? 0.002f : layer.Id == CoverageLayerId.Plasmodium ? 0.0038f : 0.0035f;
 
         // 1. Compute per-cell thickness and vertex color
         for (int lz = 0; lz < edge; lz++)
@@ -486,6 +552,8 @@ public partial class CoverageRenderer : Node3D
                 _cellOccupied[lx, lz] = false;
                 _cellThickness[lx, lz] = 0f;
                 _cellColor[lx, lz] = Colors.Black;
+                _cellVeinW[lx, lz] = 0f;
+                _cellFront[lx, lz] = 0f;
                 continue;
             }
 
@@ -499,10 +567,35 @@ public partial class CoverageRenderer : Node3D
 
             float th = ComputeThickness(sp, layer.Id, b, w, d2e, flags);
             _cellThickness[lx, lz] = th;
+            _cellVeinW[lx, lz] = w / 255f;
+            _cellFront[lx, lz] = (flags & (byte)CoverageFlags.Front) != 0 ? 1f : 0f;
+
+            if (layer.Id == CoverageLayerId.Plasmodium)
+            {
+                float veinFrac = Math.Clamp(w / 180f, 0f, 1f);
+                Color pCol = sp.Color2.Lerp(sp.Color1, veinFrac);
+                if ((flags & (byte)CoverageFlags.Front) != 0)
+                {
+                    pCol = sp.Color2 * 1.15f;
+                }
+                else if ((flags & (byte)CoverageFlags.Fruiting) != 0)
+                {
+                    pCol = new Color(0.48f, 0.44f, 0.36f);
+                }
+                else if ((flags & (byte)CoverageFlags.Sclerotium) != 0)
+                {
+                    pCol = new Color(0.82f, 0.42f, 0.10f);
+                }
+                pCol.A = 1f;
+                _cellColor[lx, lz] = pCol;
+                continue;
+            }
 
             // Vertex colors derive from species Color and Color2 modulated by biomass, dormancy (browning), and health
             float bNorm = Mathf.Clamp(b, 0f, 1f);
-            Color col = sp.Color2.Lerp(sp.Color1, bNorm);
+            Color col = sp.FloraType == CoverageFloraType.Sphagnum
+                ? sp.Color1.Lerp(sp.Color2, (1f - bNorm) * 0.15f)
+                : sp.Color2.Lerp(sp.Color1, bNorm);
             col = col * (0.8f + 0.2f * bNorm);
 
             float dormRatio = dorm / 255f;
@@ -552,6 +645,7 @@ public partial class CoverageRenderer : Node3D
             int occCount = 0;
             float sumTh = 0f;
             float sumR = 0f, sumG = 0f, sumB = 0f;
+            float sumVeinW = 0f, sumFront = 0f;
 
             for (int oz = -1; oz <= 0; oz++)
             for (int ox = -1; ox <= 0; ox++)
@@ -566,6 +660,8 @@ public partial class CoverageRenderer : Node3D
                         sumTh += _cellThickness[nlx, nlz];
                         var c = _cellColor[nlx, nlz];
                         sumR += c.R; sumG += c.G; sumB += c.B;
+                        sumVeinW += _cellVeinW[nlx, nlz];
+                        sumFront += _cellFront[nlx, nlz];
                     }
                 }
                 else
@@ -593,6 +689,8 @@ public partial class CoverageRenderer : Node3D
                         float nth = ComputeThickness(nsp, layer.Id, nb, nw, nd2e, nflags);
                         sumTh += nth;
                         sumR += nsp.Color1.R; sumG += nsp.Color1.G; sumB += nsp.Color1.B;
+                        sumVeinW += nw / 255f;
+                        sumFront += (nflags & (byte)CoverageFlags.Front) != 0 ? 1f : 0f;
                     }
                 }
             }
@@ -602,17 +700,28 @@ public partial class CoverageRenderer : Node3D
                 _cornerThickness[cx, cz] = 0f;
                 _cornerColor[cx, cz] = Colors.Black;
                 _cornerAlpha[cx, cz] = 0f;
+                _cornerVeinW[cx, cz] = 0f;
+                _cornerFront[cx, cz] = 0f;
             }
             else
             {
                 float inv = 1.0f / occCount;
                 Color avgCol = new Color(sumR * inv, sumG * inv, sumB * inv, 1.0f);
                 float alpha = occCount / 4.0f;
+                if (alpha < 1.0f)
+                {
+                    double wx = (t.Ti * edge + cx) * cs;
+                    double wz = (t.Tj * edge + cz) * cs;
+                    float edgeNoise = (float)Vivarium.Sim.Core.Noise.Gradient(0xB10CUL, wx * 10.0, wz * 10.0);
+                    alpha = Mathf.Clamp(alpha + 0.16f * edgeNoise, 0.05f, 0.95f);
+                }
                 _cornerAlpha[cx, cz] = alpha;
                 // Smooth rounded edge falloff for corner thickness
                 float falloff = alpha * alpha * (3f - 2f * alpha);
                 _cornerThickness[cx, cz] = (sumTh * inv) * falloff;
                 _cornerColor[cx, cz] = avgCol;
+                _cornerVeinW[cx, cz] = sumVeinW * inv;
+                _cornerFront[cx, cz] = sumFront * inv;
             }
         }
 
@@ -621,6 +730,62 @@ public partial class CoverageRenderer : Node3D
         // watertight coverage boundaries, and eliminating redundant per-subquad relief evaluations.
         var md = new MeshData();
 
+        double tileMinX = t.Ti * edge * cs - 0.1;
+        double tileMaxX = (t.Ti + 1) * edge * cs + 0.1;
+        double tileMinZ = t.Tj * edge * cs - 0.1;
+        double tileMaxZ = (t.Tj + 1) * edge * cs + 0.1;
+
+        List<Rock>? localRocks = null;
+        List<LogProp>? localLogs = null;
+        foreach (var r in _w.Props.Rocks)
+        {
+            if (r.X + r.FootprintRadius >= tileMinX && r.X - r.FootprintRadius <= tileMaxX &&
+                r.Z + r.FootprintRadius >= tileMinZ && r.Z - r.FootprintRadius <= tileMaxZ)
+            {
+                localRocks ??= new List<Rock>();
+                localRocks.Add(r);
+            }
+        }
+        foreach (var l in _w.Props.Logs)
+        {
+            if (l.X + l.FootprintRadius >= tileMinX && l.X - l.FootprintRadius <= tileMaxX &&
+                l.Z + l.FootprintRadius >= tileMinZ && l.Z - l.FootprintRadius <= tileMaxZ)
+            {
+                localLogs ??= new List<LogProp>();
+                localLogs.Add(l);
+            }
+        }
+        bool hasLocalProps = localRocks != null || localLogs != null;
+
+        double TileGroundHeight(Vec2 wp)
+        {
+            double h = _w.Terrain.Height(wp);
+            if (!hasLocalProps) return h;
+            double best = double.NaN;
+            if (localRocks != null)
+                for (int ri = 0; ri < localRocks.Count; ri++) { double top = localRocks[ri].TopAt(wp); if (!double.IsNaN(top) && !(top <= best)) best = top; }
+            if (localLogs != null)
+                for (int li = 0; li < localLogs.Count; li++) { double top = localLogs[li].TopAt(wp); if (!double.IsNaN(top) && !(top <= best)) best = top; }
+            return double.IsNaN(best) ? h : Math.Max(h, best);
+        }
+
+        Vec3 TileGroundNormal(double wx, double wz, double gy)
+        {
+            var wp = new Vec2(wx, wz);
+            if (!hasLocalProps) return _w.Terrain.Normal(wp);
+            double th = _w.Terrain.Height(wp);
+            if (Math.Abs(gy - th) < 0.001) return _w.Terrain.Normal(wp);
+            const double step = CoverageSpec.CellSize * 0.5;
+            double hL = TileGroundHeight(new Vec2(wx - step, wz));
+            double hR = TileGroundHeight(new Vec2(wx + step, wz));
+            double hD = TileGroundHeight(new Vec2(wx, wz - step));
+            double hU = TileGroundHeight(new Vec2(wx, wz + step));
+            double dx = (hR - hL) / (2.0 * step);
+            double dz = (hU - hD) / (2.0 * step);
+            double invLen = 1.0 / Math.Sqrt(dx * dx + 1.0 + dz * dz);
+            return new Vec3((float)(-dx * invLen), (float)invLen, (float)(-dz * invLen));
+        }
+
         int GetOrAddCorner(int cx, int cz)
         {
             int idx = _cornerIdx[cx, cz];
@@ -628,15 +793,17 @@ public partial class CoverageRenderer : Node3D
 
             double wx = (t.Ti * edge + cx) * cs;
             double wz = (t.Tj * edge + cz) * cs;
-            double gy = _w.GroundHeight(new Vec2(wx, wz));
-            Vec3 gn = GetGroundNormal(wx, wz);
+            double gy = TileGroundHeight(new Vec2(wx, wz));
+            Vec3 gn = TileGroundNormal(wx, wz, gy);
             float th = _cornerThickness[cx, cz];
             byte occ = layer.GetOcc(t.Ti * edge + cx, t.Tj * edge + cz);
             var sp = GetSpecies(layer.Id, occ);
             float relief = SurfaceRelief(layer.Id, wx, wz, _cornerAlpha[cx, cz], sp.MaxHeightM);
             Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th + relief);
             Color c = _cornerColor[cx, cz];
-            idx = md.AddVertex(p, gn, c.R, c.G, c.B, _cornerAlpha[cx, cz] * SlopeFade(gn), wx, wz, cx / (double)edge, cz / (double)edge);
+            double u2 = layer.Id == CoverageLayerId.Plasmodium ? _cornerVeinW[cx, cz] : cx / (double)edge;
+            double v2 = layer.Id == CoverageLayerId.Plasmodium ? _cornerFront[cx, cz] : cz / (double)edge;
+            idx = md.AddVertex(p, gn, c.R, c.G, c.B, _cornerAlpha[cx, cz] * SlopeFade(gn), wx, wz, u2, v2);
             _cornerIdx[cx, cz] = idx;
             return idx;
         }
@@ -673,6 +840,384 @@ public partial class CoverageRenderer : Node3D
             md.RecomputeNormals();
         }
 
+        // Append procedural 3D flora structures (setae, capsules, fronds, podetia, ruffles, apothecia)
+        for (int lz = 0; lz < edge; lz++)
+        for (int lx = 0; lx < edge; lx++)
+        {
+            if (!_cellOccupied[lx, lz]) continue;
+            if ((t.Flags[lz * edge + lx] & (byte)CoverageFlags.Dead) != 0) continue;
+            var sp = GetSpecies(layer.Id, t.Occ[lz * edge + lx]);
+            if (sp.FloraType == CoverageFloraType.Generic) continue;
+
+            int gx = t.Ti * edge + lx, gz = t.Tj * edge + lz;
+            uint hash = ReliefHash(gx, gz);
+            double wx = (gx + 0.5) * cs + ((hash & 255) / 255.0 - 0.5) * 0.017;
+            double wz = (gz + 0.5) * cs + (((hash >> 8) & 255) / 255.0 - 0.5) * 0.017;
+            double gy = TileGroundHeight(new Vec2(wx, wz));
+            Vec3 normal = TileGroundNormal(wx, wz, gy);
+            if (normal.Y < 0.45) continue;
+            double relief = SurfaceRelief(layer.Id, wx, wz, 1f, sp.MaxHeightM);
+            var foot = new Vec3(wx, gy + baseOffset + _cellThickness[lx, lz] + relief - 0.002, wz);
+            float vigour = Math.Clamp(t.B[lz * edge + lx] * 3f, 0.72f, 1f);
+            Color shootColor = sp.Color1.Lerp(_cellColor[lx, lz], 0.35f);
+
+            switch (sp.FloraType)
+            {
+                case CoverageFloraType.Sphagnum:
+                    if ((hash >> 24) < 70)
+                        AppendSphagnumShoot(md, foot, shootColor, sp.Color2, hash, vigour);
+                    break;
+                case CoverageFloraType.PearlCushion:
+                    if ((hash >> 24) < 110)
+                        AppendPearlCushionStructures(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
+                case CoverageFloraType.Floodlace:
+                    if ((hash >> 24) < 95)
+                        AppendFloodlaceFronds(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
+                case CoverageFloraType.Velvetweave:
+                    if ((hash >> 24) < 100)
+                        AppendVelvetweaveTurf(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
+                case CoverageFloraType.Antlerlace:
+                    if ((hash >> 24) < 85)
+                        AppendAntlerlacePodetia(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
+                case CoverageFloraType.RuffleLichen:
+                    if ((hash >> 24) < 90)
+                        AppendRuffleLobes(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
+                case CoverageFloraType.Embercrust:
+                    if ((hash >> 24) < 120)
+                        AppendEmbercrustApothecia(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
+                case CoverageFloraType.Plasmodium:
+                    if ((t.Flags[lz * edge + lx] & (byte)CoverageFlags.Fruiting) != 0 || ((hash >> 24) < 75 && t.W[lz * edge + lx] >= 140))
+                        AppendPlasmodiumSporangia(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
+            }
+        }
+
         return md;
+    }
+
+    private static void AppendSphagnumShoot(MeshData mesh, Vec3 foot, Color color, Color color2, uint hash, float vigour)
+    {
+        double height = (0.034 + ((hash >> 16) & 255) / 255.0 * 0.016) * vigour;
+        double leanX = (((hash >> 4) & 15) / 15.0 - 0.5) * 0.005;
+        double leanZ = (((hash >> 12) & 15) / 15.0 - 0.5) * 0.005;
+        var tip = foot + new Vec3(leanX, height, leanZ);
+        var stem = new[] { foot, Vec3.Lerp(foot, tip, 0.36), Vec3.Lerp(foot, tip, 0.72), tip };
+        var dark = new[] { color.R * 0.82, color.G * 0.90, color.B * 0.79 };
+        Primitives.Tube(mesh, stem, new[] { 0.0018, 0.0015, 0.0012, 0.0009 }, 6,
+            (i, v) => (dark, 1, 0, 0, 0, 0));
+
+        var branchColor = new[] { Math.Min(1, color.R * 1.1), Math.Min(1, color.G * 1.13), Math.Min(1, color.B * 1.08) };
+        var crownColor = new[] { Math.Min(1, color.R * 1.12 + 0.03), Math.Min(1, color.G * 1.12 + 0.03), Math.Min(1, color.B * 1.10 + 0.02) };
+        double phase = (hash & 1023) / 1023.0 * Math.PI * 2;
+        for (int whorl = 0; whorl < 3; whorl++)
+        {
+            double t = whorl == 2 ? 0.96 : whorl == 1 ? 0.68 : 0.39;
+            var node = Vec3.Lerp(foot, tip, t);
+            int branches = whorl == 2 ? 9 : 5;
+            double reach = whorl == 2 ? 0.008 : whorl == 1 ? 0.012 : 0.010;
+            for (int b = 0; b < branches; b++)
+            {
+                uint variation = ReliefHash(unchecked((int)hash) + b * 31, whorl * 17 + b);
+                double a = phase + b * Math.PI * 2 / branches + whorl * 0.37
+                    + ((variation & 255) / 255.0 - 0.5) * 0.16;
+                var radial = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                var side = new Vec3(-radial.Z, 0, radial.X);
+                double droop = whorl == 2 ? 0.003 : whorl == 1 ? -0.001 : -0.004;
+                double branchReach = reach * (0.78 + ((variation >> 8) & 255) / 255.0 * 0.4);
+                var end = node + radial * branchReach + Vec3.Up * droop;
+                var middle = Vec3.Lerp(node, end, 0.56) + Vec3.Up * 0.002;
+                var col = whorl == 2 ? crownColor : branchColor;
+                int a0 = mesh.AddVertex(node - side * 0.0009, Vec3.Up, col, 1, node.X, node.Z);
+                int a1 = mesh.AddVertex(node + side * 0.0009, Vec3.Up, col, 1, node.X, node.Z);
+                int mid = mesh.AddVertex(middle + side * 0.0010, Vec3.Up, col, 1, middle.X, middle.Z);
+                int midOther = mesh.AddVertex(middle - side * 0.0010, Vec3.Up, col, 1, middle.X, middle.Z);
+                int apex = mesh.AddVertex(end, Vec3.Up, col, 1, end.X, end.Z);
+                Primitives.TriangleFacing(mesh, a0, a1, mid, Vec3.Up);
+                Primitives.TriangleFacing(mesh, a0, mid, midOther, Vec3.Up);
+                Primitives.TriangleFacing(mesh, midOther, mid, apex, Vec3.Up);
+            }
+        }
+
+        // Sphagnum raised spherical spore capsule on mature shoots
+        if ((hash & 3) == 0)
+        {
+            var stalkTip = tip + Vec3.Up * (0.008 + ((hash >> 8) & 15) * 0.0005);
+            Primitives.Tube(mesh, new[] { tip, stalkTip }, new[] { 0.0007, 0.0005 }, 4,
+                (i, v) => (new[] { 0.50, 0.42, 0.28 }, 1, 0, 0, 0, 0));
+            Primitives.Ellipsoid(mesh, stalkTip + Vec3.Up * 0.0015, new Vec3(0.0014, 0.0018, 0.0014), 4, 6,
+                (u, v) => (new[] { 0.16, 0.12, 0.08 }, 1, u, v, 0, 0));
+        }
+    }
+
+    private static void AppendPearlCushionStructures(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // 1. Wiry setae stalk carrying glossy spore capsule with beaked calyptra
+        double height = (0.015 + ((hash >> 16) & 255) / 255.0 * 0.009) * vigour;
+        double leanX = (((hash >> 4) & 15) / 15.0 - 0.5) * 0.004;
+        double leanZ = (((hash >> 12) & 15) / 15.0 - 0.5) * 0.004;
+        var tip = foot + normal * height + new Vec3(leanX, 0, leanZ);
+        var setaPath = new[] { foot, Vec3.Lerp(foot, tip, 0.45) + new Vec3(leanX * 0.3, 0, leanZ * 0.3), tip };
+        var setaCol = new[] { 0.62, 0.28, 0.12 }; // amber-bronze wire
+        Primitives.Tube(mesh, setaPath, new[] { 0.0007, 0.0005, 0.0004 }, 4,
+            (i, v) => (setaCol, 1, 0, 0, 0, 0));
+
+        // Spore capsule ellipsoid
+        var capCenter = tip + normal * 0.0018 + new Vec3(leanX * 0.4, 0, leanZ * 0.4);
+        var capCol = new[] { 0.78, 0.48, 0.16 };
+        Primitives.Ellipsoid(mesh, capCenter, new Vec3(0.0012, 0.0022, 0.0012), 4, 6,
+            (u, v) => (capCol, 1, u, v, 0, 0));
+
+        // Beaked calyptra cap
+        var calyptraCol = new[] { 0.88, 0.80, 0.42 };
+        var beakTip = capCenter + normal * 0.0024 + new Vec3(leanX * 0.3, 0.0005, leanZ * 0.3);
+        Primitives.Tube(mesh, new[] { capCenter + normal * 0.0012, beakTip }, new[] { 0.0010, 0.0002 }, 4,
+            (i, v) => (calyptraCol, 1, i, v, 0, 0));
+
+        // 2. Silvery-pearl hair points (hyaline awns)
+        var pearlCol = new[] { 0.94, 0.98, 0.95 };
+        for (int p = 0; p < 5; p++)
+        {
+            double a = (hash & 255) / 255.0 * Math.PI * 2 + p * Math.PI * 2 / 5.0;
+            var rad = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+            var awnEnd = foot + rad * 0.0055 + normal * 0.0035;
+            var awnSide = new Vec3(-rad.Z, 0, rad.X) * 0.0004;
+
+            int v0 = mesh.AddVertex(foot - awnSide, normal, pearlCol, 0.95);
+            int v1 = mesh.AddVertex(foot + awnSide, normal, pearlCol, 0.95);
+            int vTip = mesh.AddVertex(awnEnd, normal, pearlCol, 0.98);
+            Primitives.TriangleFacing(mesh, v0, v1, vTip, normal);
+        }
+    }
+
+    private static void AppendFloodlaceFronds(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // Pleurocarpous feathery trailing runner and pinnate branchlets
+        double ang = (hash & 1023) / 1023.0 * Math.PI * 2;
+        var dir = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
+        var side = new Vec3(-dir.Z, 0, dir.X);
+
+        double reach = (0.016 + ((hash >> 16) & 255) / 255.0 * 0.009) * vigour;
+        var p0 = foot;
+        var p1 = foot + dir * (reach * 0.35) + side * 0.002 + normal * 0.001;
+        var p2 = foot + dir * (reach * 0.70) - side * 0.002 + normal * 0.001;
+        var p3 = foot + dir * reach;
+
+        var stemCol = new[] { col1.R * 0.65, col1.G * 0.72, col1.B * 0.62 };
+        Primitives.Tube(mesh, new[] { p0, p1, p2, p3 }, new[] { 0.0008, 0.0006, 0.0005, 0.0003 }, 4,
+            (i, v) => (stemCol, 1, 0, 0, 0, 0));
+
+        // Feather pinnule sprays
+        var leafCol = new[] { Math.Min(1, col1.R * 1.15), Math.Min(1, col1.G * 1.25), Math.Min(1, col1.B * 1.08) };
+        for (int p = 1; p <= 5; p++)
+        {
+            double t = p / 6.0;
+            var node = Vec3.Lerp(p0, p3, t);
+            double pinSpread = 0.0045 * (1.0 - t * 0.3);
+
+            for (int sSign = -1; sSign <= 1; sSign += 2)
+            {
+                double pinAng = ang + sSign * (1.1 + ((hash >> (p * 2)) & 3) * 0.08);
+                var pinDir = new Vec3(Math.Cos(pinAng), 0, Math.Sin(pinAng));
+                var pinSide = new Vec3(-pinDir.Z, 0, pinDir.X) * 0.0005;
+                var pinTip = node + pinDir * pinSpread + normal * 0.001;
+
+                int v0 = mesh.AddVertex(node - pinSide, normal, leafCol, 1);
+                int v1 = mesh.AddVertex(node + pinSide, normal, leafCol, 1);
+                int vTip = mesh.AddVertex(pinTip, normal, leafCol, 1);
+                Primitives.TriangleFacing(mesh, v0, v1, vTip, normal);
+            }
+        }
+
+        // Occasional lateral curved sporophyte
+        if ((hash & 3) == 0)
+        {
+            var stalkNode = Vec3.Lerp(p0, p2, 0.5);
+            var stalkTip = stalkNode + side * 0.003 + normal * 0.008;
+            Primitives.Tube(mesh, new[] { stalkNode, stalkTip }, new[] { 0.0005, 0.00035 }, 4,
+                (i, v) => (new[] { 0.55, 0.30, 0.15 }, 1, 0, 0, 0, 0));
+            Primitives.Ellipsoid(mesh, stalkTip + side * 0.0015, new Vec3(0.0009, 0.0016, 0.0009), 4, 5,
+                (u, v) => (new[] { 0.68, 0.45, 0.18 }, 1, u, v, 0, 0));
+        }
+    }
+
+    private static void AppendVelvetweaveTurf(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // 1. Clustered upright pointed micro-turf shoots
+        var deepGreen = new[] { col1.R * 0.72, col1.G * 0.85, col1.B * 0.68 };
+        var tipGreen = new[] { Math.Min(1, col1.R * 1.15), Math.Min(1, col1.G * 1.25), Math.Min(1, col1.B * 1.05) };
+
+        for (int j = 0; j < 6; j++)
+        {
+            double a = (hash & 511) / 511.0 * Math.PI * 2 + j * Math.PI * 2 / 6.0;
+            var rad = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+            var shootFoot = foot + rad * 0.003;
+            double shootH = 0.005 + ((hash >> (j * 3)) & 7) * 0.0008;
+            var shootTip = shootFoot + normal * shootH + rad * 0.0015;
+            var side = new Vec3(-rad.Z, 0, rad.X) * 0.0005;
+
+            int v0 = mesh.AddVertex(shootFoot - side, normal, deepGreen, 1);
+            int v1 = mesh.AddVertex(shootFoot + side, normal, deepGreen, 1);
+            int vTip = mesh.AddVertex(shootTip, normal, tipGreen, 1);
+            Primitives.TriangleFacing(mesh, v0, v1, vTip, normal);
+        }
+
+        // 2. Tall wire seta and nodding angular urn capsule
+        double height = (0.020 + ((hash >> 16) & 255) / 255.0 * 0.010) * vigour;
+        double leanX = (((hash >> 4) & 15) / 15.0 - 0.5) * 0.005;
+        double leanZ = (((hash >> 12) & 15) / 15.0 - 0.5) * 0.005;
+        var tip = foot + normal * height + new Vec3(leanX, 0, leanZ);
+
+        var setaCol = new[] { 0.50, 0.18, 0.12 }; // crimson-bronze wire
+        Primitives.Tube(mesh, new[] { foot, Vec3.Lerp(foot, tip, 0.45), tip }, new[] { 0.0006, 0.00045, 0.00035 }, 4,
+            (i, v) => (setaCol, 1, 0, 0, 0, 0));
+
+        // Nodding urn capsule
+        var urnDir = (new Vec3(leanX, -0.003, leanZ) + normal * 0.001).Normalized();
+        var urnCol = new[] { 0.70, 0.52, 0.20 };
+        var capCol = new[] { 0.86, 0.78, 0.40 };
+        var urnCenter = tip + urnDir * 0.0022;
+
+        Primitives.Tube(mesh, new[] { tip, urnCenter }, new[] { 0.0005, 0.0012 }, 4,
+            (i, v) => (urnCol, 1, 0, 0, 0, 0));
+        Primitives.Tube(mesh, new[] { urnCenter, urnCenter + urnDir * 0.0016 }, new[] { 0.0012, 0.0002 }, 4,
+            (i, v) => (capCol, 1, 0, 0, 0, 0));
+    }
+
+    private static void AppendAntlerlacePodetia(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // Fruticose lichen upright antler-like branching podetia
+        double totalH = (0.016 + ((hash >> 16) & 255) / 255.0 * 0.009) * vigour;
+        var podetiaCol = new[] { col1.R * 1.08, col1.G * 1.15, col1.B * 1.05 };
+        var buttonCol = new[] { 0.45, 0.32, 0.18 };
+
+        double ang = (hash & 1023) / 1023.0 * Math.PI * 2;
+        var sideFork = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
+
+        var trunkTop = foot + normal * (totalH * 0.45);
+        Primitives.Tube(mesh, new[] { foot, trunkTop }, new[] { 0.0022, 0.0016 }, 5,
+            (i, v) => (podetiaCol, 1, 0, 0, 0, 0));
+
+        for (int b = -1; b <= 1; b += 2)
+        {
+            var branchDir = (normal * 0.7 + sideFork * (b * 0.45)).Normalized();
+            var fork1 = trunkTop + branchDir * (totalH * 0.30);
+            Primitives.Tube(mesh, new[] { trunkTop, fork1 }, new[] { 0.0015, 0.0011 }, 4,
+                (i, v) => (podetiaCol, 1, 0, 0, 0, 0));
+
+            // Palmate tines
+            for (int t = -1; t <= 1; t += 2)
+            {
+                var tineDir = (branchDir * 0.7 + sideFork * (b * t * 0.35)).Normalized();
+                var tineTip = fork1 + tineDir * (totalH * 0.25);
+                Primitives.Tube(mesh, new[] { fork1, tineTip }, new[] { 0.0009, 0.0004 }, 4,
+                    (i, v) => (podetiaCol, 1, 0, 0, 0, 0));
+
+                Primitives.Ellipsoid(mesh, tineTip + tineDir * 0.0005, new Vec3(0.0007, 0.0007, 0.0007), 3, 4,
+                    (u, v) => (buttonCol, 1, u, v, 0, 0));
+            }
+        }
+    }
+
+    private static void AppendRuffleLobes(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // Foliose lichen wavy ruffled thallus lobes and apothecia saucers
+        var upperCol = new[] { (double)col1.R, (double)col1.G, (double)col1.B };
+        var underCol = new[] { 0.82, 0.80, 0.70 };
+        var discCol = new[] { 0.80, 0.45, 0.18 };
+
+        double baseAng = (hash & 1023) / 1023.0 * Math.PI * 2;
+        for (int l = 0; l < 3; l++)
+        {
+            double a = baseAng + l * Math.PI * 2 / 3.0;
+            var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+            var side = new Vec3(-dir.Z, 0, dir.X) * 0.004;
+            double len = 0.008 + ((hash >> (l * 4)) & 15) * 0.0004;
+
+            var pMid = foot + dir * (len * 0.5) + normal * 0.0025;
+            var pTip = foot + dir * len + normal * 0.004; // curled up edge!
+
+            // Curled thallus lobe
+            int u0 = mesh.AddVertex(foot - side * 0.5, normal, upperCol);
+            int u1 = mesh.AddVertex(foot + side * 0.5, normal, upperCol);
+            int uMidL = mesh.AddVertex(pMid - side, normal, upperCol);
+            int uMidR = mesh.AddVertex(pMid + side, normal, upperCol);
+            int uApex = mesh.AddVertex(pTip, normal, underCol); // edge shows pale underside
+
+            Primitives.TriangleFacing(mesh, u0, u1, uMidR, normal);
+            Primitives.TriangleFacing(mesh, u0, uMidR, uMidL, normal);
+            Primitives.TriangleFacing(mesh, uMidL, uMidR, uApex, normal);
+        }
+
+        // Apothecium saucer cup
+        var cupCenter = foot + normal * 0.0018;
+        double cupR = 0.0022;
+        Primitives.Tube(mesh, new[] { foot, cupCenter }, new[] { cupR * 0.8, cupR }, 5,
+            (i, v) => (underCol, 1, 0, 0, 0, 0));
+        Primitives.Ellipsoid(mesh, cupCenter + normal * 0.0003, new Vec3(cupR * 0.8, 0.0004, cupR * 0.8), 3, 5,
+            (u, v) => (discCol, 1, u, v, 0, 0));
+    }
+
+    private static void AppendEmbercrustApothecia(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // Crustose lichen raised ember-orange apothecial discs
+        var rimCol = new[] { 0.88, 0.76, 0.40 };
+        var discCol = new[] { 0.92, 0.38, 0.08 };
+
+        int discCount = 2 + (int)((hash & 3));
+        for (int d = 0; d < discCount; d++)
+        {
+            double a = (hash & 255) / 255.0 * Math.PI * 2 + d * Math.PI * 2 / discCount;
+            double dist = 0.0035 * ((d + 1) / (double)discCount);
+            var center = foot + new Vec3(Math.Cos(a), 0, Math.Sin(a)) * dist + normal * 0.0008;
+            double r = 0.0016;
+
+            Primitives.Tube(mesh, new[] { center, center + normal * 0.0008 }, new[] { r * 0.9, r }, 5,
+                (i, v) => (rimCol, 1, 0, 0, 0, 0));
+            Primitives.Ellipsoid(mesh, center + normal * 0.0009, new Vec3(r * 0.75, 0.0003, r * 0.75), 3, 5,
+                (u, v) => (discCol, 1, u, v, 0, 0));
+        }
+    }
+
+    private static void AppendPlasmodiumSporangia(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // Physarum polycephalum sporangia: clusters of 3-6 erect wire-thin stipes with gleaming spore capsules
+        var stipeCol = new[] { 0.12, 0.10, 0.08 }; // chocolate-black gleaming stipe
+        var sporeCol = new[] { 0.22, 0.16, 0.09 }; // deep bronze spore mass
+        var apexCol = new[] { 0.94, 0.82, 0.32 };  // golden peridium dusting / apex
+
+        int count = 3 + (int)(hash & 3);
+        double baseAng = (hash & 1023) / 1023.0 * Math.PI * 2;
+
+        for (int i = 0; i < count; i++)
+        {
+            double a = baseAng + i * (Math.PI * 2.0 / count) + (((hash >> (i * 3)) & 7) - 3.5) * 0.15;
+            double rOffset = 0.0025 + (((hash >> (i * 4)) & 15) / 15.0) * 0.0035;
+            var stalkFoot = foot + new Vec3(Math.Cos(a) * rOffset, 0, Math.Sin(a) * rOffset);
+
+            double height = (0.0045 + (((hash >> (i * 2 + 8)) & 15) / 15.0) * 0.0035) * vigour;
+            double leanX = (((hash >> (i * 3)) & 15) / 15.0 - 0.5) * 0.0015;
+            double leanZ = (((hash >> (i * 3 + 4)) & 15) / 15.0 - 0.5) * 0.0015;
+            var tip = stalkFoot + normal * height + new Vec3(leanX, 0, leanZ);
+
+            // Stipe: hair-thin tapering stalk (0.35mm to 0.2mm)
+            Primitives.Tube(mesh, new[] { stalkFoot, Vec3.Lerp(stalkFoot, tip, 0.5), tip }, new[] { 0.00035, 0.00028, 0.00020 }, 4,
+                (idx, v) => (stipeCol, 1, 0, 0, 0, 0));
+
+            // Sporangium head: oval/spherical capsule (~0.8mm radius)
+            double capR = 0.00075 + (((hash >> (i * 2)) & 7) / 7.0) * 0.0003;
+            var capCenter = tip + normal * (capR * 0.9);
+            Primitives.Ellipsoid(mesh, capCenter, new Vec3(capR, capR * 1.3, capR), 3, 5,
+                (u, v) => (sporeCol, 1, u, v, 0, 0));
+
+            // Apex dusting
+            Primitives.Ellipsoid(mesh, capCenter + normal * (capR * 0.7), new Vec3(capR * 0.5, capR * 0.4, capR * 0.5), 3, 4,
+                (u, v) => (apexCol, 1, u, v, 0, 0));
+        }
     }
 }

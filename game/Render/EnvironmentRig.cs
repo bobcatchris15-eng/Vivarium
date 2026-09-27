@@ -4,8 +4,7 @@ using Vivarium.Game.App;
 namespace Vivarium.Game.Render;
 
 /// <summary>
-/// Lighting, sky, tone mapping and post-processing tuned for "vibrant sanitized realism": clean saturated colour,
-/// soft but present shadows, no crushed blacks. Quality tiers change render cost only — never simulation.
+/// Daylight calibrated for natural tissue and soil reflectance. Quality tiers change render cost only.
 /// </summary>
 public partial class EnvironmentRig : Node3D
 {
@@ -19,7 +18,7 @@ public partial class EnvironmentRig : Node3D
     public int Quality { get; private set; } = -1;
 
     // Pale warm-grey/green humid haze — reads as damp terrarium air, not smoke or mist.
-    private static readonly Color HazeFogColor = new(0.78f, 0.80f, 0.74f);
+    private static readonly Color HazeFogColor = new(0.72f, 0.75f, 0.71f);
     private const float HazeFogDensity = 0.006f;
     private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
     private const float UnderwaterFogDensity = 0.18f;
@@ -28,10 +27,10 @@ public partial class EnvironmentRig : Node3D
     {
         var sky = new ProceduralSkyMaterial
         {
-            SkyTopColor = new Color(0.34f, 0.52f, 0.72f),
-            SkyHorizonColor = new Color(0.72f, 0.80f, 0.86f),
-            GroundBottomColor = new Color(0.48f, 0.58f, 0.64f),
-            GroundHorizonColor = new Color(0.70f, 0.78f, 0.83f),
+            SkyTopColor = new Color(0.30f, 0.44f, 0.57f),
+            SkyHorizonColor = new Color(0.65f, 0.73f, 0.76f),
+            GroundBottomColor = new Color(0.43f, 0.48f, 0.47f),
+            GroundHorizonColor = new Color(0.65f, 0.70f, 0.68f),
             SunAngleMax = 30, SunCurve = 0.12f,
         };
         Env = new Environment
@@ -39,16 +38,16 @@ public partial class EnvironmentRig : Node3D
             BackgroundMode = Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = sky },
             AmbientLightSource = Environment.AmbientSource.Sky,
-            AmbientLightColor = new Color(0.86f, 0.84f, 0.8f),
-            AmbientLightSkyContribution = 0.45f,
-            AmbientLightEnergy = 0.56f,
+            AmbientLightColor = new Color(0.83f, 0.86f, 0.86f),
+            AmbientLightSkyContribution = 0.55f,
+            AmbientLightEnergy = 0.49f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Agx,
-            TonemapExposure = 1.0f,
+            TonemapExposure = 0.92f,
             TonemapWhite = 6f,
             AdjustmentEnabled = true,
-            AdjustmentSaturation = 1.0f,
-            AdjustmentContrast = 1.04f,
+            AdjustmentSaturation = 0.97f,
+            AdjustmentContrast = 1.07f,
             AdjustmentBrightness = 1.0f,
             GlowEnabled = false,
             // Humid-air haze: gentle aerial perspective, not a fog wall. Kept very low density so
@@ -61,27 +60,27 @@ public partial class EnvironmentRig : Node3D
             FogSunScatter = 0.35f,
             FogSkyAffect = 0.1f,
             FogAerialPerspective = 0.12f,
-            SsaoRadius = 0.5f, SsaoIntensity = 0.8f, SsaoPower = 1.2f,
+            SsaoRadius = 0.32f, SsaoIntensity = 0.56f, SsaoPower = 1.05f,
         };
         WorldEnv = new WorldEnvironment { Environment = Env };
         AddChild(WorldEnv);
 
         Sun = new DirectionalLight3D
         {
-            LightColor = new Color(1.0f, 0.96f, 0.9f),
-            LightEnergy = 1.35f,
+            LightColor = new Color(1.0f, 0.95f, 0.87f),
+            LightEnergy = 1.26f,
             ShadowEnabled = true,
             // The entire specimen is only 10–20 m across. Spend the directional map on that scale instead of
             // the engine's generic scene scale, and keep bias small enough that leaf/stem contact shadows stay attached.
             ShadowBias = 0.035f,
             ShadowNormalBias = 0.35f,
-            ShadowBlur = 1.15f,
+            ShadowBlur = 1.6f,
             DirectionalShadowMaxDistance = 28,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits,
         };
         Sun.RotationDegrees = new Vector3(-52, -35, 0);
         AddChild(Sun);
-        var fill = new DirectionalLight3D { LightColor = new Color(0.75f, 0.85f, 1.0f), LightEnergy = 0.14f, ShadowEnabled = false };
+        var fill = new DirectionalLight3D { LightColor = new Color(0.81f, 0.87f, 0.93f), LightEnergy = 0.22f, ShadowEnabled = false };
         fill.RotationDegrees = new Vector3(-20, 150, 0);
         AddChild(fill);
 
@@ -141,6 +140,6 @@ public partial class EnvironmentRig : Node3D
         Env.FogLightColor = HazeFogColor.Lerp(UnderwaterFogColor, _underwater);
         Env.FogDensity = Mathf.Lerp(HazeFogDensity, UnderwaterFogDensity, _underwater);
         Env.FogSkyAffect = Mathf.Lerp(0.1f, 1.0f, _underwater);
-        Env.AdjustmentSaturation = Mathf.Lerp(1.07f, 1.02f, _underwater);
+        Env.AdjustmentSaturation = Mathf.Lerp(0.97f, 0.94f, _underwater);
     }
 }

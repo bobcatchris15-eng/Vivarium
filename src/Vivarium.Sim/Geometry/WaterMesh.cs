@@ -12,16 +12,37 @@ namespace Vivarium.Sim.Geometry;
 /// vertical faces on the specimen cut so the water column is visible from outside. Read-only on the simulation.
 /// Vertex data: COLOR.a = depth factor (0..1 over 0..0.3 m), UV2 = flow velocity (m/s sim) for visuals.
 /// </summary>
+/// <summary>Separate mesh sets for the static water table pond and dynamic flowing streams, plus combined for compatibility.</summary>
+public sealed record WaterMeshSet(MeshData TableMesh, MeshData StreamMesh, MeshData CombinedMesh);
+
+/// <summary>Immutable inputs captured on the game thread for background water geometry.</summary>
+public sealed record WaterMeshSnapshot(double[] Depth, double[] Bed, double[] FlowX, double[] FlowZ, Heightfield Terrain, double WaterTable = 0.0);
 public static class WaterMesh
 {
     public const int Subdivisions = 2;
     /// <summary>Dry cells around the water that are still drawn (covered only where the ground lies below the water level).</summary>
     public const int RingCells = 2;
 
-    public static MeshData Build(VivariumWorld w)
+    public static WaterMeshSnapshot Capture(VivariumWorld w) => new(
+        (double[])w.Water.Depth.Clone(), (double[])w.Water.Bed.Clone(),
+        (double[])w.Water.FlowX.Clone(), (double[])w.Water.FlowZ.Clone(), w.Terrain.Snapshot(),
+        w.Water.WaterTable);
+
+    public static MeshData Build(VivariumWorld w, WaterMeshSnapshot? snapshot = null) =>
+        BuildSet(w, snapshot).CombinedMesh;
+
+    public static WaterMeshSet BuildSet(VivariumWorld w, WaterMeshSnapshot? snapshot = null)
     {
-        var g = w.Grid; var water = w.Water; var dom = w.Domain; var hf = w.Terrain;
+        var g = w.Grid; var water = w.Water; var dom = w.Domain;
+        var hf = snapshot?.Terrain ?? w.Terrain;
+        var depth = snapshot?.Depth ?? water.Depth;
+        var bed = snapshot?.Bed ?? water.Bed;
+        var flowX = snapshot?.FlowX ?? water.FlowX;
+        var flowZ = snapshot?.FlowZ ?? water.FlowZ;
+        double waterTable = snapshot?.WaterTable ?? water.WaterTable;
         var mesh = new MeshData();
+        var tableMesh = new MeshData();
+        var streamMesh = new MeshData();
         double cs = g.CellSize;
         int cx = g.Nx + 1, cz = g.Nz + 1;
         // corner surface heights: average of the wet cells touching each corner, then one dilation pass so the
@@ -32,14 +53,14 @@ public static class WaterMesh
         var cornerW = new int[corner.Length];
         foreach (int idx in g.DomainCells)
         {
-            if (!water.IsWet(idx)) continue;
+            if (depth[idx] < water.Config.WetDepth) continue;
             int i = idx % g.Nx, j = idx / g.Nx;
-            double s = water.Bed[idx] + water.Depth[idx];
-            double vel = Math.Max(water.Depth[idx] * cs, 1e-6);
+            double s = bed[idx] + depth[idx];
+            double vel = Math.Max(depth[idx] * cs, 1e-6);
             for (int dj = 0; dj <= 1; dj++) for (int di = 0; di <= 1; di++)
             {
                 int c = (j + dj) * cx + (i + di);
-                corner[c] += s; cfx[c] += water.FlowX[idx] / vel; cfz[c] += water.FlowZ[idx] / vel; cornerW[c]++;
+                corner[c] += s; cfx[c] += flowX[idx] / vel; cfz[c] += flowZ[idx] / vel; cornerW[c]++;
             }
         }
         var level = new double[corner.Length];
@@ -91,7 +112,7 @@ public static class WaterMesh
         var draw = new HashSet<int>();
         foreach (int idx in g.DomainCells)
         {
-            if (!water.IsWet(idx)) continue;
+            if (depth[idx] < water.Config.WetDepth) continue;
             int i = idx % g.Nx, j = idx / g.Nx;
             for (int dj = -RingCells; dj <= RingCells; dj++) for (int di = -RingCells; di <= RingCells; di++)
                 if (g.InDomain(i + di, j + dj)) draw.Add(g.Index(i + di, j + dj));
@@ -127,6 +148,13 @@ public static class WaterMesh
                     bool needsClip = g.IsBoundaryCell[idx] || square.Any(q => dom.SignedDistance(q) > 0);
                     var poly = needsClip ? dom.ClipPolygon(square) : square.ToList();
                     if (poly.Count < 3) continue;
+                    double centroidX = 0, centroidZ = 0;
+                    for (int k = 0; k < poly.Count; k++) { centroidX += poly[k].X; centroidZ += poly[k].Z; }
+                    var centroid = new Vec2(centroidX / poly.Count, centroidZ / poly.Count);
+                    double hCentroid = hf.Height(centroid);
+                    bool isTable = hCentroid < waterTable + 0.02;
+                    bool isStream = hCentroid >= waterTable - 0.02;
+
                     var ids = new int[poly.Count];
                     for (int k = 0; k < poly.Count; k++)
                     {
@@ -136,6 +164,32 @@ public static class WaterMesh
                         ids[k] = mesh.AddVertex(new Vec3(poly[k].X, sk, poly[k].Z), Vec3.Up, 0.2, 0.55, 0.7, depthFactor, poly[k].X, poly[k].Z, fl.X, fl.Z);
                     }
                     for (int k = 1; k + 1 < poly.Count; k++) mesh.AddTriangle(ids[0], ids[k], ids[k + 1]);
+
+                    if (isTable)
+                    {
+                        var tableIds = new int[poly.Count];
+                        for (int k = 0; k < poly.Count; k++)
+                        {
+                            double sk = Math.Max(waterTable, Surface(poly[k], out _));
+                            double depthFactor = MathD.Clamp01((sk - hf.Height(poly[k])) / 0.3);
+                            var fl = Flow(poly[k]);
+                            tableIds[k] = tableMesh.AddVertex(new Vec3(poly[k].X, sk, poly[k].Z), Vec3.Up, 0.2, 0.55, 0.7, depthFactor, poly[k].X, poly[k].Z, fl.X, fl.Z);
+                        }
+                        for (int k = 1; k + 1 < poly.Count; k++) tableMesh.AddTriangle(tableIds[0], tableIds[k], tableIds[k + 1]);
+                    }
+
+                    if (isStream)
+                    {
+                        var streamIds = new int[poly.Count];
+                        for (int k = 0; k < poly.Count; k++)
+                        {
+                            double sk = Surface(poly[k], out _);
+                            double depthFactor = MathD.Clamp01((sk - hf.Height(poly[k])) / 0.15);
+                            var fl = Flow(poly[k]);
+                            streamIds[k] = streamMesh.AddVertex(new Vec3(poly[k].X, sk, poly[k].Z), Vec3.Up, 0.2, 0.55, 0.7, depthFactor, poly[k].X, poly[k].Z, fl.X, fl.Z);
+                        }
+                        for (int k = 1; k + 1 < poly.Count; k++) streamMesh.AddTriangle(streamIds[0], streamIds[k], streamIds[k + 1]);
+                    }
 
                     // cut face: any clipped edge on a hexagon side becomes a vertical wall of water down to the bed
                     if (!needsClip) continue;
@@ -155,10 +209,30 @@ public static class WaterMesh
                         // polygon runs counter-clockwise (x→z), so a→b along the boundary matches the terrain wall order
                         mesh.AddTriangle(ta, la, lb);
                         mesh.AddTriangle(ta, lb, tb);
+
+                        bool cutIsTable = sa <= waterTable + 0.05 || sb <= waterTable + 0.05;
+                        if (cutIsTable)
+                        {
+                            int tTa = tableMesh.AddVertex(new Vec3(a.X, sa, a.Z), n, 0.2, 0.55, 0.7, dfa, a.X, 0, 0, 0);
+                            int tTb = tableMesh.AddVertex(new Vec3(b.X, sb, b.Z), n, 0.2, 0.55, 0.7, dfb, b.X, 0, 0, 0);
+                            int tLa = tableMesh.AddVertex(new Vec3(a.X, ba, a.Z), n, 0.2, 0.55, 0.7, dfa, a.X, sa - ba, 0, 0);
+                            int tLb = tableMesh.AddVertex(new Vec3(b.X, bb, b.Z), n, 0.2, 0.55, 0.7, dfb, b.X, sb - bb, 0, 0);
+                            tableMesh.AddTriangle(tTa, tLa, tLb);
+                            tableMesh.AddTriangle(tTa, tLb, tTb);
+                        }
+                        else
+                        {
+                            int sTa = streamMesh.AddVertex(new Vec3(a.X, sa, a.Z), n, 0.2, 0.55, 0.7, dfa, a.X, 0, 0, 0);
+                            int sTb = streamMesh.AddVertex(new Vec3(b.X, sb, b.Z), n, 0.2, 0.55, 0.7, dfb, b.X, 0, 0, 0);
+                            int sLa = streamMesh.AddVertex(new Vec3(a.X, ba, a.Z), n, 0.2, 0.55, 0.7, dfa, a.X, sa - ba, 0, 0);
+                            int sLb = streamMesh.AddVertex(new Vec3(b.X, bb, b.Z), n, 0.2, 0.55, 0.7, dfb, b.X, sb - bb, 0, 0);
+                            streamMesh.AddTriangle(sTa, sLa, sLb);
+                            streamMesh.AddTriangle(sTa, sLb, sTb);
+                        }
                     }
                 }
         }
-        return mesh;
+        return new WaterMeshSet(tableMesh, streamMesh, mesh);
     }
 
     /// <summary>Index of the hexagon side both points lie on (within 1e-7), or -1.</summary>

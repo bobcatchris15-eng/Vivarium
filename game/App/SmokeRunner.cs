@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
+using Vivarium.Sim.Coverage;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Fauna;
 using Vivarium.Sim.Persistence;
@@ -23,10 +24,11 @@ namespace Vivarium.Game.App;
 /// </summary>
 public partial class SmokeRunner : Node
 {
-    public enum Mode { Smoke, Reload, Render, Perf, Reference }
+    public enum Mode { Smoke, Reload, Render, Perf, Reference, SpeciesWorld }
     public GameSession Session { get; set; } = null!;
     public string OutDir { get; set; } = "";
     public Mode RunMode { get; set; }
+    public string SpeciesId { get; set; } = "";
     private readonly List<Dictionary<string, object>> _checks = new();
     private readonly Dictionary<string, object> _facts = new();
     private int _errorsAtStart;
@@ -56,6 +58,7 @@ public partial class SmokeRunner : Node
                 case Mode.Render: await RenderAsync(); break;
                 case Mode.Perf: await PerfAsync(); break;
                 case Mode.Reference: await ReferenceAsync(); break;
+                case Mode.SpeciesWorld: await SpeciesWorldAsync(); break;
             }
             Check("no errors logged", _log.Count(LogLevel.Error) == _errorsAtStart, string.Join(" | ", _log.Snapshot().Where(e => e.Level >= LogLevel.Error).Select(e => e.Message).Take(5)));
         }
@@ -71,7 +74,7 @@ public partial class SmokeRunner : Node
             ["mode"] = RunMode.ToString(), ["version"] = AppVersion.Application, ["ok"] = ok && code == 0,
             ["checks"] = _checks, ["facts"] = _facts, ["exported"] = OS.HasFeature("template"),
         };
-        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", Mode.Reference => "reference_report.json", _ => "render_report.json" };
+        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", Mode.Reference => "reference_report.json", Mode.SpeciesWorld => "species_world_report.json", _ => "render_report.json" };
         File.WriteAllText(Path.Combine(OutDir, name), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print($"VIVARIUM_{RunMode.ToString().ToUpperInvariant()}_{(code == 0 ? "OK" : "FAILED")} checks={_checks.Count} failed={_checks.Count(c => !(bool)c["ok"])}");
         foreach (var c in _checks.Where(c => !(bool)c["ok"])) GD.PrintErr($"  FAILED: {c["name"]}: {c["detail"]}");
@@ -496,6 +499,20 @@ public partial class SmokeRunner : Node
                 await Frames(8);
                 await Screenshot("slime_network");
                 _facts["slime_patches"] = slime.Count;
+            }
+            else if (W.Coverage.Plasmodium.Tiles.Any(t => !t.IsEmpty()))
+            {
+                var firstTile = W.Coverage.Plasmodium.Tiles.First(t => !t.IsEmpty());
+                int firstLi = 0;
+                for (int i = 0; i < CoverageTile.N; i++) if (firstTile.Occ[i] != 0) { firstLi = i; break; }
+                int gx = firstTile.Ti * CoverageSpec.TileEdge + (firstLi % CoverageSpec.TileEdge);
+                int gz = firstTile.Tj * CoverageSpec.TileEdge + (firstLi / CoverageSpec.TileEdge);
+                var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
+                var hp = new Vector3((float)p.X, (float)W.GroundHeight(p), (float)p.Z);
+                cam.LookAtPoint(hp + new Vector3(0.55f, 0.6f, 0.55f), hp);
+                await Frames(8);
+                await Screenshot("slime_network");
+                _facts["slime_patches"] = 1;
             }
         }
         // full detail at distance: from the far overview every animal is either drawn with its full model or is

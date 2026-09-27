@@ -45,6 +45,13 @@ public sealed class WaterPayload
     public WaterBudget Budget { get; set; } = new();
 }
 
+public sealed class LitterPayload
+{
+    public int CellCount { get; set; }
+    public string FineMass { get; set; } = "";
+    public string CoarseMass { get; set; } = "";
+}
+
 public sealed class CoverageTilePayload
 {
     public int Ti { get; set; }
@@ -93,7 +100,7 @@ public sealed class GeneticsPayload
 /// </summary>
 public static class WorldSerializer
 {
-    public static readonly string[] PayloadOrder = { "world", "fields", "water", "coverage", "flora", "fauna", "genetics" };
+    public static readonly string[] PayloadOrder = { "world", "fields", "water", "litter", "coverage", "flora", "fauna", "genetics" };
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -123,6 +130,11 @@ public static class WorldSerializer
         var depth = new double[w.Grid.DomainCells.Length];
         for (int k = 0; k < depth.Length; k++) depth[k] = w.Water.Depth[w.Grid.DomainCells[k]];
         p["water"] = Bytes(new WaterPayload { Depth = Pack(depth), Budget = w.Water.Budget });
+        p["litter"] = Bytes(new LitterPayload
+        {
+            CellCount = w.Grid.DomainCells.Length,
+            FineMass = Pack(w.Litter.ExportFine()), CoarseMass = Pack(w.Litter.ExportCoarse()),
+        });
         p["coverage"] = Bytes(new CoveragePayload
         {
             Step = w.CoverageSystem.StepIndex,
@@ -205,6 +217,10 @@ public static class WorldSerializer
             w.Water.Depth[w.Grid.DomainCells[k]] = depth[k];
         }
         w.Water.Budget = wa.Budget ?? new WaterBudget();
+
+        var litter = Read<LitterPayload>(payloads, "litter");
+        if (litter.CellCount != w.Grid.DomainCells.Length) throw new InvalidDataException("litter grid mismatch");
+        w.Litter.Restore(Unpack(litter.FineMass, "fine litter"), Unpack(litter.CoarseMass, "coarse litter"));
 
         var cp = Read<CoveragePayload>(payloads, "coverage");
         var coverageSchedule = w.Scheduler.Systems.Single(s => s.Name == "coverage");

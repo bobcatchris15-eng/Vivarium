@@ -53,12 +53,33 @@
     "crowdingLimit": 4,
     "sensitivity": 0.35
   },
-  "proximity": [],
+  "proximity": [
+    {
+      "target": "ironlace",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "umbraheart",
+      "radius": 3.0,
+      "bonus": 0.40
+    },
+    {
+      "target": "fenneedle",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "kiteleaf",
+      "radius": 2.5,
+      "bonus": 0.35
+    }
+  ],
   "litterFraction": 0.8,
   "sheddingPerDay": 0.015,
   "grazingValue": 0,
   "visual": {
-    "shape": "vine",
+    "shape": "vine_clinglace",
     "color": [
       0.22,
       0.45,

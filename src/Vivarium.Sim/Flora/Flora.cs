@@ -1,5 +1,6 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using System.Text.Json.Serialization;
 
 namespace Vivarium.Sim.Flora;
 
@@ -55,6 +56,11 @@ public sealed class FloraIndividual
     public bool ClimberAttached { get; set; }
     /// <summary>Climbers: accumulated runner length from the founder without an attachment (m).</summary>
     public double UnsupportedLength { get; set; }
+    /// <summary>Climbers: sequence of stem nodes and segments grown by this plant.</summary>
+    public System.Collections.Generic.List<ClimberSegment>? ClimberSegments { get; set; }
+    /// <summary>Cached ground height at establishment; avoids repeating expensive terrain + prop queries every frame.</summary>
+    [JsonIgnore] // Derived from position and terrain; NaN is the uncached sentinel, never save state.
+    public double GroundHeight { get; set; } = double.NaN;
 
     public Vec2 Position => new(X, Z);
 
@@ -69,6 +75,20 @@ public sealed class FloraIndividual
     public double Radius(FloraSpeciesDef sp) => sp.Colony != null
         ? sp.Colony.CellRadius * (0.9 + 0.3 * HeightFactor) * Math.Sqrt(MergeFactor)
         : sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(BiomassFraction(sp));
+}
+
+/// <summary>One node and internode segment of a climbing or creeping vine, grown sequentially.</summary>
+public sealed class ClimberSegment
+{
+    public Vec3 Position { get; set; }
+    public Vec3 Normal { get; set; } = Vec3.Up;
+    public Vec3 Forward { get; set; } = new Vec3(0, 0, 1);
+    public int ParentIndex { get; set; } = -1;
+    public int ShootOrder { get; set; }
+    public bool Attached { get; set; }
+    public bool Terminal { get; set; }
+    public double Age { get; set; }
+    public bool Senescent { get; set; }
 }
 
 /// <summary>Uniform-grid bucket index for local flora queries (avoids whole-population scans).</summary>

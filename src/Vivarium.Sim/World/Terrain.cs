@@ -89,6 +89,15 @@ public sealed class Heightfield
     /// <summary>Call before changing <see cref="H"/>; remembers the generated baseline for delta saves.</summary>
     public void BeginEdit() => _baseline ??= (double[])H.Clone();
     public void Touch() => Version++;
+    /// <summary>Stable height data for read-only geometry jobs running off the render thread.</summary>
+    public Heightfield Snapshot()
+    {
+        var copy = new Heightfield(Step, OriginX, OriginZ, Nx, Nz, MinHeight, MaxHeight, Bottom);
+        Array.Copy(H, copy.H, H.Length);
+        copy.Version = Version;
+        return copy;
+    }
+
     public int VertexIndex(int i, int j) => j * Nx + i;
 
     /// <summary>Per-vertex difference from the generated terrain, or null when the terrain was never edited.</summary>

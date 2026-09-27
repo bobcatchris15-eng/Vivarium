@@ -1,5 +1,7 @@
 # Flora art plan — 33 species
 
+For the current user-reviewed species pass, see [flora visual review log](../flora_visual_review_log.md). This older plan remains the broader art backlog.
+
 This plan treats the [photographic reference board](flora_reference_board.md) as structural grounding. Each species keeps its fictional palette and ecological role. Reference photos are study material, not texture assets. Build mature, juvenile, and stressed variants from the same branching rule; vary age, asymmetry, loss, and lean through stable seeds.
 
 ## Shared art rules
@@ -17,7 +19,7 @@ This plan treats the [photographic reference board](flora_reference_board.md) as
 |---|---|---|---|
 | Fenneedle | **Only tree with one continuous straight leader.** Tamarack-like, uneven conical tiers; subordinate branchlets droop, with both long-shoot needles and short-spur tufts. Increase crown occupancy without an opaque cone. | Fine scaly bark, muted blue-green mature needles, slightly brighter tips and sparse gold aging needles; low-gloss soft needles. | Drooping sprays and short-spur tufts implemented; full-crown capture review next. |
 | Ironlace | Crooked bole ends low in two unequal ascending leaders. Thin widely spaced scaffolds and true compound sprays with paired narrow leaflets; keep visible sky between sprays. | Dark fissured bark, olive outer leaves and subdued underside; small leaflet tonal variation. | Fork implemented; leaflet hierarchy and bark next. |
-| Umbraheart | Stout buttressed trunk breaks at roughly one quarter height into 3–5 weight-bearing limbs. Wide low umbrella, overlapping large asymmetric shield/heart leaves, high crown mass. | Deep matte upper leaves, warm or lighter underside, old branch scars and coarse bark. | Four-way low fork implemented; leaf shape/crown fill next. |
+| Umbraheart | Stout buttressed trunk breaks at roughly one quarter height into 3–5 weight-bearing limbs. Wide low umbrella, overlapping large asymmetric shield/heart leaves, high crown mass. | Deep matte upper leaves, warm or lighter underside, old branch scars and coarse bark. | Individually large Catalpa-style cordate shield leaves, tabular root buttresses, spreading umbrella scaffolds, and two-tone dusky underside implemented; capture review ready. |
 | Kiteleaf | Pale trunk branches into several upper rising leaders; leaf-bearing twigs flutter on longer petioles, leaving airy gaps. Angular leaves expose silver backs by orientation, not noise alone. | Pale striated bark and two-sided green/silver blades; varied leaf roll. | Three upper leaders implemented; silver back and petioles next. |
 
 ## Shrubs and climbing plants

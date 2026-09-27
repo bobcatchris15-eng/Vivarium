@@ -148,6 +148,51 @@ public sealed class Hydrology
     public bool IsWet(int idx) => Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth;
     public bool IsWet(Vec2 p) => DepthAt(p) >= Config.WetDepth;
 
+    /// <summary>True if the cell or position is part of the hydrostatic water table (ground below water table).</summary>
+    public bool IsWaterTable(int idx) => Grid.InDomain(idx) && Bed[idx] < WaterTable;
+    public bool IsWaterTable(Vec2 p)
+    {
+        int c = Grid.CellAt(p);
+        return c >= 0 && Grid.InDomain(c) && Bed[c] < WaterTable;
+    }
+
+    /// <summary>Depth of the hydrostatic water table above the terrain bed (0 if ground is above the water table).</summary>
+    public double WaterTableDepth(int idx) => Grid.InDomain(idx) ? Math.Max(0.0, WaterTable - Bed[idx]) : 0;
+    public double WaterTableDepth(Vec2 p)
+    {
+        int c = Grid.CellAt(p);
+        return c >= 0 && Grid.InDomain(c) ? Math.Max(0.0, WaterTable - Bed[c]) : 0;
+    }
+
+    /// <summary>True if the cell or position has active surface stream / spring runoff above the water table.</summary>
+    public bool IsStream(int idx) => Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth && Bed[idx] >= WaterTable - 0.02;
+    public bool IsStream(Vec2 p)
+    {
+        int c = Grid.CellAt(p);
+        return c >= 0 && Grid.InDomain(c) && Depth[c] >= Config.WetDepth && Bed[c] >= WaterTable - 0.02;
+    }
+
+    /// <summary>Depth of surface stream flow above the water table.</summary>
+    public double StreamDepth(int idx) => Grid.InDomain(idx) ? Math.Max(0.0, Depth[idx] - WaterTableDepth(idx)) : 0;
+    public double StreamDepth(Vec2 p)
+    {
+        int c = Grid.CellAt(p);
+        return c >= 0 && Grid.InDomain(c) ? Math.Max(0.0, Depth[c] - WaterTableDepth(p)) : 0;
+    }
+
+    /// <summary>Flow velocity vector (m/s) in world XZ for a cell.</summary>
+    public Vec2 StreamVelocity(int idx)
+    {
+        if (!Grid.InDomain(idx) || Depth[idx] < Config.WetDepth) return Vec2.Zero;
+        double area = Math.Max(Depth[idx] * Grid.CellSize, 1e-6);
+        return new Vec2(FlowX[idx] / area, FlowZ[idx] / area);
+    }
+    public Vec2 StreamVelocity(Vec2 p)
+    {
+        int c = Grid.CellAt(p);
+        return c >= 0 ? StreamVelocity(c) : Vec2.Zero;
+    }
+
     public double Volume() { double v = 0; foreach (int idx in Grid.DomainCells) v += Depth[idx]; return v * CellArea; }
 
     /// <summary>Initial state: fill cells below the water table (the pond baseline).</summary>

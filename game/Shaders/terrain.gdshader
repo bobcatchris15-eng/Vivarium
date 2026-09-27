@@ -8,6 +8,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 
 uniform sampler2D field_tex : filter_linear, repeat_disable;
 uniform sampler2D sub_tex : filter_linear, repeat_disable;
+uniform sampler2D litter_tex : filter_linear, repeat_disable;
 uniform vec4 field_rect;            // origin.x, origin.z, size.x, size.z
 uniform int overlay_mode = 0;       // 0 none, 1 moisture, 2 nutrients, 3 light, 4 substrate
 uniform float overlay_strength = 0.85;
@@ -30,7 +31,7 @@ uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform float tile_metres = 0.45;    // real-world size of one texture repeat
+uniform float tile_metres = 0.56;    // physical scale of the main soil scan
 uniform float soil_relief_amp = 0.012;   // metres of fine geometric relief on soil (lumps, furrows)
 uniform float soil_relief_freq = 2.6;
 uniform float soil_clumps = 1.0;        // 0 skips the clump/cavity detail (low quality tiers)
@@ -96,14 +97,20 @@ void fragment() {
     f.g = texture(field_tex, fuv).g;              // the substrate code (overlay only) must not be smoothed
     float moisture = f.r, light = f.a;
     float code = floor(f.g * 4.0 + 0.5);         // overlay only: 0 soil, 1 gravel, 2 rock, 3 wood, 4 water
-    vec2 uv = world_pos.xz / tile_metres;
     float macro = fbm(world_pos.xz * 0.35);
+    // Smooth world-space distortion keeps the albedo, normal and roughness of every scan registered.
+    // The broad field changes scale subtly rather than repeating one 56 cm square across the island.
+    vec2 drift = vec2(vnoise(world_pos.xz * 0.72 + vec2(6.2, 1.7)),
+                      vnoise(world_pos.xz * 0.72 + vec2(23.7, 14.2))) - 0.5;
+    vec2 uv = world_pos.xz / (tile_metres * mix(0.84, 1.24, macro)) + drift * 0.36;
     vec3 wn = normalize(mix(normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz), relief_wn, relief_mix));
 
     // weights first, then sample only the layers that actually show here (big saving on an iGPU)
-    float wDamp = smoothstep(0.5, 0.92, moisture + (macro - 0.5) * 0.12);
-    float wLeaf = smoothstep(0.55, 0.25, light) * smoothstep(0.3, 0.55, moisture) * smoothstep(0.35, 0.7, macro);
-    float wMoss = smoothstep(0.55, 0.9, moisture) * smoothstep(0.25, 0.6, light) * smoothstep(0.3, 0.6, fbm(world_pos.xz * 1.7));
+    float wDamp = smoothstep(0.38, 0.82, moisture + (macro - 0.5) * 0.18);
+    float stored_litter = smooth_field(litter_tex, fuv).r;
+    float wLeaf = stored_litter * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
+    float wMoss = smoothstep(0.48, 0.83, moisture) * smoothstep(0.20, 0.53, light)
+        * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8));
     float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
     float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
     float wRock = max(smoothstep(0.3, 0.8, sub.g), smoothstep(0.55, 0.8, 1.0 - wn.y));  // steep banks show bare rock
@@ -133,19 +140,22 @@ void fragment() {
         rough = mix(rough, 0.95, clump * 0.3);
     }
     if (wDamp > 0.01) {
-        vec3 n2 = unpack_normal(texture(damp_nrm, uv * 1.15 + 3.1).rgb);
-        vec4 d = vec4(texture(damp_col, uv * 1.15 + 3.1).rgb, texture(damp_rgh, uv * 1.15 + 3.1).r);
+        vec2 du = uv * 1.15 + 3.1;
+        vec3 n2 = unpack_normal(texture(damp_nrm, du).rgb);
+        vec4 d = vec4(texture(damp_col, du).rgb, texture(damp_rgh, du).r);
         float w = mix(wDamp, hblend(wDamp, dot(d.rgb, vec3(0.33)) * 2.0), 0.35);   // soft: moisture creeps, it has no edge
         col = mix(col, d.rgb, w); rough = mix(rough, d.a, w); tn = normalize(mix(tn, n2, w));
     }
     if (wLeaf > 0.01) {
         vec2 lu = uv * 1.3 + 1.7;
+        vec3 ln = unpack_normal(texture(leaf_nrm, lu).rgb);
         vec4 l = vec4(texture(leaf_col, lu).rgb, texture(leaf_rgh, lu).r);
         float w = hblend(wLeaf, dot(l.rgb, vec3(0.33)) * 2.0);
-        col = mix(col, l.rgb, w); rough = mix(rough, l.a, w); tn = normalize(mix(tn, unpack_normal(texture(leaf_nrm, lu).rgb), w));
+        col = mix(col, l.rgb, w); rough = mix(rough, l.a, w); tn = normalize(mix(tn, ln, w));
     }
     if (wMoss > 0.01) {
         vec2 mu = uv * 2.4 + 7.3;
+        vec3 mn = unpack_normal(texture(moss_nrm, mu).rgb);
         vec4 m = vec4(texture(moss_col, mu).rgb, texture(moss_rgh, mu).r);
         // Ground the bright moss texture with earthy forest tones and rhizoid boundary
         vec3 natural_moss = mix(m.rgb, m.rgb * vec3(0.74, 0.88, 0.58), 0.5);
@@ -154,14 +164,15 @@ void fragment() {
         vec3 rhizoid_col = mix(col * 0.78, natural_moss, smoothstep(0.08, 0.45, w));
         col = mix(col, rhizoid_col, w * 0.75);
         rough = mix(rough, m.a, w * 0.7);
-        tn = normalize(mix(tn, unpack_normal(texture(moss_nrm, mu).rgb), w));
+        tn = normalize(mix(tn, mn, w));
     }
     if (wGrav > 0.01) {
         vec2 gu = uv * 2.4;
+        vec3 gn = unpack_normal(texture(gravel_nrm, gu).rgb);
         vec4 g = vec4(texture(gravel_col, gu).rgb, texture(gravel_rgh, gu).r);
         g.rgb = mix(vec3(dot(g.rgb, vec3(0.3, 0.59, 0.11))), g.rgb, 0.45) * vec3(1.03, 1.0, 0.95);   // desaturate, warm slightly
         float w = hblend(wGrav, dot(g.rgb, vec3(0.33)) * 2.0);
-        col = mix(col, g.rgb, w); rough = mix(rough, g.a, w); tn = normalize(mix(tn, unpack_normal(texture(gravel_nrm, gu).rgb), w));
+        col = mix(col, g.rgb, w); rough = mix(rough, g.a, w); tn = normalize(mix(tn, gn, w));
     }
 
     // world-space normal: geometry normal perturbed by the blended detail (uv = world xz; GL green = -z)

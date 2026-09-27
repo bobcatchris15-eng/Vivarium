@@ -25,6 +25,7 @@ public sealed class VivariumWorld
     public Heightfield Terrain { get; }
     public StrataModel Strata { get; }
     public EnvironmentFields Fields { get; }
+    public LitterSystem Litter { get; }
     public Hydrology Water { get; }
     public PropSet Props { get; set; } = new();
     public FloraPopulation Flora { get; }
@@ -63,6 +64,7 @@ public sealed class VivariumWorld
         Terrain = Heightfield.Generate(Descriptor, Domain);
         Strata = new StrataModel(content.Strata);
         Fields = new EnvironmentFields(Grid, content.Ecology);
+        Litter = new LitterSystem(this);
         Fields.GenerateBaseSubstrate(Descriptor, Terrain);
         Water = new Hydrology(Grid, Descriptor.Water, Terrain);
         Flora = new FloraPopulation(Domain.Radius + 1);
@@ -134,8 +136,11 @@ public sealed class VivariumWorld
             if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props);
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
+        Scheduler.Register("ecology.litter", Cadence.Resources, 65, Bio(Litter.Step), phase: 20);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
-        Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.Step), phase: 30);
+        Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.StepMat), phase: 30);
+        Scheduler.Register("coverage.lichen", Cadence.Flora, 76, Bio(CoverageSystem.StepLichen), phase: 31);
+        Scheduler.Register("coverage.plasmodium", Cadence.FaunaMetabolism, 77, Bio(CoverageSystem.StepPlasmodium), phase: 2);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);
     }
 
@@ -208,6 +213,7 @@ public sealed class VivariumWorld
     {
         var e = new List<string>();
         if (!Fields.AllFinite()) e.Add("environment field contains non-finite values");
+        if (!Litter.AllFinite()) e.Add("litter contains negative or non-finite mass");
         if (!Water.AllFinite()) e.Add("water depth contains negative or non-finite values");
         var seen = new HashSet<EntityId>();
         foreach (var f in Flora.Items)

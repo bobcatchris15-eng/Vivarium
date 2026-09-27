@@ -33,6 +33,8 @@ public sealed class CoverageTile
     public byte[] Dorm = new byte[N];
     public byte[] Flags = new byte[N];
     public byte[] D2E = new byte[N];
+    public byte[] Vigour = new byte[N];
+    public byte[] GW = new byte[N];
 
     // previous-step snapshot, used for neighbour reads while the live arrays above are being written
     public byte[]? SnapOcc;

@@ -25,10 +25,15 @@ public partial class IslandRenderer : Node3D
     private Image _subImage = null!;
     private ImageTexture _subTex = null!;
     private byte[] _subBytes = System.Array.Empty<byte>();
+    // Broad leaf-litter coverage is sourced from the simulation's fine surface-mass reservoir.
+    private Image _litterImage = null!;
+    private ImageTexture _litterTex = null!;
+    private byte[] _litterBytes = System.Array.Empty<byte>();
     public int OverlayMode { get; set; }
     private ShaderMaterial _strataMat = null!;
     private MeshInstance3D _top = null!, _walls = null!;
     private int _terrainVersion;
+    private int _propsVersion = int.MinValue;
     private double _sinceMeshBuild;
     public int TriangleCount { get; private set; }
 
@@ -54,6 +59,10 @@ public partial class IslandRenderer : Node3D
         _subTex = ImageTexture.CreateFromImage(_subImage);
         _terrainMat.SetShaderParameter("sub_tex", _subTex);
         _subBytes = new byte[g.Nx * g.Nz * 2];
+        _litterImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.R8);
+        _litterTex = ImageTexture.CreateFromImage(_litterImage);
+        _terrainMat.SetShaderParameter("litter_tex", _litterTex);
+        _litterBytes = new byte[g.Count];
         _nearestDomain = new int[g.Count];
         for (int c = 0; c < g.Count; c++) _nearestDomain[c] = g.InDomain(c) ? c : g.NearestDomainCell(g.CellCenter(c));
 
@@ -91,12 +100,13 @@ public partial class IslandRenderer : Node3D
         // sculpting: follow the heightfield at up to ~12 rebuilds per second
         if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08) BuildMeshes();
         _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
-        if (_accum < 0.5) return;
+        bool propsDirty = _propsVersion != _w.Props.Version;
+        if (!propsDirty && _accum < 1.5) return;
         _accum = 0;
-        UpdateFieldTexture();
+        UpdateFieldTexture(propsDirty);
     }
 
-    private void UpdateFieldTexture()
+    private void UpdateFieldTexture(bool updateSubstrate = true)
     {
         var g = _w.Grid; var f = _w.Fields;
         double nmax = _w.Content.Ecology.NutrientMax;
@@ -111,15 +121,25 @@ public partial class IslandRenderer : Node3D
             _bytes[o] = (byte)(Mathf.Clamp((float)f.Moisture.Values[d], 0, 1) * 255);
             _bytes[o + 1] = (byte)(code * 255 / 4);
             _bytes[o + 2] = (byte)(Mathf.Clamp((float)(f.Nutrients.Values[d] / nmax), 0, 1) * 255);
-            _bytes[o + 3] = (byte)(Mathf.Clamp((float)_w.FloraSystem.EffectiveLight(p), 0, 1) * 255);
-            bool gravel = _w.Props.GravelAt(p) != null;
-            bool rock = !gravel && (Substrate)f.BaseSubstrate[d] == Substrate.Rock;
-            _subBytes[c * 2] = gravel ? (byte)255 : (byte)0;
-            _subBytes[c * 2 + 1] = rock ? (byte)255 : (byte)0;
+            _bytes[o + 3] = (byte)(Mathf.Clamp((float)_w.FloraSystem.EffectiveLightCell(d), 0, 1) * 255);
+            _litterBytes[c] = (byte)(Mathf.Clamp((float)(1.0 - System.Math.Exp(-_w.Litter.FineMass[d] * 55.0)), 0, 1) * 255);
+            if (updateSubstrate)
+            {
+                bool gravel = _w.Props.GravelAt(p) != null;
+                bool rock = !gravel && (Substrate)f.BaseSubstrate[d] == Substrate.Rock;
+                _subBytes[c * 2] = gravel ? (byte)255 : (byte)0;
+                _subBytes[c * 2 + 1] = rock ? (byte)255 : (byte)0;
+            }
         }
         _fieldImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _bytes);
         _fieldTex.Update(_fieldImage);
-        _subImage.SetData(g.Nx, g.Nz, false, Image.Format.Rg8, _subBytes);
-        _subTex.Update(_subImage);
+        _litterImage.SetData(g.Nx, g.Nz, false, Image.Format.R8, _litterBytes);
+        _litterTex.Update(_litterImage);
+        if (updateSubstrate)
+        {
+            _propsVersion = _w.Props.Version;
+            _subImage.SetData(g.Nx, g.Nz, false, Image.Format.Rg8, _subBytes);
+            _subTex.Update(_subImage);
+        }
     }
 }

@@ -100,6 +100,139 @@ public partial class SmokeRunner
         Check("rendering leaves the simulation digest unchanged", WorldSerializer.Digest(W) == digest);
     }
 
+    private async Task SpeciesWorldAsync()
+    {
+        W.Clock.Paused = true;
+        var sp = W.Content.FloraOrThrow(SpeciesId);
+        if (sp.IsCoverageSpecies)
+        {
+            var layerId = sp.Mat != null ? CoverageLayerId.Mat : sp.Lichen != null ? CoverageLayerId.Crust : CoverageLayerId.Plasmodium;
+            var layer = W.Coverage.ById(layerId);
+            byte occ = FindCoverageOccupant(layerId, SpeciesId)
+                ?? throw new InvalidOperationException($"No coverage slot for {SpeciesId}");
+            var patch = DensestCoverageTile(layer, occ)
+                ?? throw new InvalidOperationException($"No {SpeciesId} patch in this world");
+            var patchTarget = Ground(patch.center) + new Vector3(0, 0.045f, 0);
+            var patchView = new RefScene("species_" + SpeciesId, "species",
+                patchTarget + new Vector3(0.16f, 0.32f, 0.16f), patchTarget);
+            Session.Ui.Visible = false;
+            GetWindow().Size = new Vector2I(1600, 900);
+            Session.CameraRig.LookAtPoint(patchView.Eye, patchView.Target);
+            await Frames(30);
+            await Screenshot(patchView.Name);
+            if (SpeciesId == "bogglass_moss")
+            {
+                Session.CameraRig.LookAtPoint(patchTarget + new Vector3(-0.19f, 0.13f, -0.15f), patchTarget);
+                await Frames(12);
+                await Screenshot("species_" + SpeciesId + "_side");
+            }
+            else if (SpeciesId == "ambervein")
+            {
+                Session.CameraRig.LookAtPoint(patchTarget + new Vector3(-0.12f, 0.08f, -0.10f), patchTarget);
+                await Frames(12);
+                await Screenshot("species_" + SpeciesId + "_close");
+            }
+            _facts["species"] = SpeciesId;
+            _facts["coverage_cells"] = patch.count;
+            _facts["patch_at"] = new[] { patch.center.X, patch.center.Z };
+            _facts["water_depth_at_patch"] = W.Water.DepthAt(patch.center);
+            Check("species coverage patch in the running world", patch.count > 0);
+            return;
+        }
+
+        // Stage one mature plant in the normal rendered world at a clear habitat
+        // point. This run is transient and never touches the player's save.
+        double Clearance(Vec2 p)
+        {
+            double rock = W.Props.Rocks.Select(r => Vec2.Distance(r.Position, p) - r.FootprintRadius)
+                .DefaultIfEmpty(10).Min();
+            double log = W.Props.Logs.Select(l => l.AxisDistance(p) - l.Radius)
+                .DefaultIfEmpty(10).Min();
+            return Math.Min(rock, log);
+        }
+        bool floating = sp.Shape == "floatleaf";
+        bool aquatic = floating || sp.MinWaterDepth > 0;
+        var spots = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c))
+            .Where(p => aquatic
+                ? W.Water.DepthAt(p) >= Math.Max(0.05, sp.MinWaterDepth) && W.Domain.ContainsDisc(p, 0.5)
+                : !W.Water.IsWet(p) && W.Domain.ContainsDisc(p, 1.0))
+            .OrderByDescending(Clearance).ToList();
+        var spot = spots.Where(p => W.FloraSystem.CanEstablish(sp, p, out _)).Cast<Vec2?>().FirstOrDefault()
+            ?? spots.Cast<Vec2?>().FirstOrDefault()
+            ?? throw new InvalidOperationException("No suitable review site in the world");
+        var candidate = W.FloraSystem.Establish(sp, spot, "visual review", sp.MaxBiomass);
+        candidate.Age = sp.MaturityAge + 1;
+        Session.Ui.Visible = false;
+        var target = floating
+            ? new Vector3((float)spot.X, (float)W.Water.SurfaceAt(spot), (float)spot.Z)
+            : Ground(spot) + new Vector3(0, (float)sp.Height * 0.38f, 0);
+        var view = floating
+            ? new RefScene("species_" + SpeciesId, "species", target + new Vector3(0.14f, 0.30f, 0.18f), target)
+            : Orbit("species_" + SpeciesId, "species", target,
+                (float)Math.Max(0.8, sp.Height * 3.0), 22, 35);
+        GetWindow().Size = new Vector2I(1600, 900);
+        Session.CameraRig.LookAtPoint(view.Eye, view.Target);
+        await Frames(30);
+        await Screenshot(view.Name);
+        if (SpeciesId == "kiteleaf")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(4.8f, 1.6f, 7.8f), target);
+            await Frames(12);
+            await Screenshot("species_kiteleaf_close");
+        }
+        else if (SpeciesId == "umbraheart")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(2.2f, 0.35f, -1.8f), target);
+            await Frames(12);
+            await Screenshot("species_umbraheart_close");
+        }
+        else if (SpeciesId == "embercrown")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(1.3f, 0.55f, 1.4f), target);
+            await Frames(12);
+            await Screenshot("species_embercrown_close");
+        }
+        else if (SpeciesId == "dewbonnet")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(0.18f, 0.12f, 0.22f), target);
+            await Frames(12);
+            await Screenshot("species_dewbonnet_close");
+        }
+        else if (SpeciesId == "sunstone_rosette")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(0.20f, 0.14f, 0.22f), target);
+            await Frames(12);
+            await Screenshot("species_sunstone_rosette_close");
+        }
+        else if (SpeciesId is "streamribbon" or "fencomb")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(0.35f, 0.30f, 0.35f), target + new Vector3(0, 0.12f, 0));
+            await Frames(12);
+            await Screenshot("species_" + SpeciesId + "_close");
+        }
+        else if (SpeciesId == "fenneedle")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(3.5f, 1.8f, 3.2f), target + new Vector3(0, 0.8f, 0));
+            await Frames(12);
+            await Screenshot("species_fenneedle_close");
+        }
+        else if (SpeciesId == "ironlace")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(3.2f, 1.6f, 2.8f), target + new Vector3(0, 0.6f, 0));
+            await Frames(12);
+            await Screenshot("species_ironlace_close");
+        }
+        else if (SpeciesId == "shadebell")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(1.2f, 0.45f, 1.3f), target);
+            await Frames(12);
+            await Screenshot("species_shadebell_close");
+        }
+        _facts["species"] = SpeciesId;
+        _facts["staged_at"] = new[] { spot.X, spot.Z };
+        _facts["flora_visible"] = Session.Flora.Visible_;
+        Check("staged species in the running world", Session.Flora.Visible_ > 0);
+    }
     private Vector3 Ground(Vec2 p) => new((float)p.X, (float)W.GroundHeight(p), (float)p.Z);
 
     /// <summary>Camera at a fixed distance/elevation from a target. Starting from the preferred bearing it steps round
@@ -201,7 +334,7 @@ public partial class SmokeRunner
         var coverageHubs = new List<(Vec2 center, double area, string id)>();
         foreach (var sp in W.Content.Flora.Where(sp => sp.IsCoverageSpecies).OrderBy(sp => sp.Id))
         {
-            var layerId = sp.Mat != null ? CoverageLayerId.Mat : CoverageLayerId.Crust;
+            var layerId = sp.Mat != null ? CoverageLayerId.Mat : sp.Lichen != null ? CoverageLayerId.Crust : CoverageLayerId.Plasmodium;
             var layer = W.Coverage.ById(layerId);
             byte? occ = FindCoverageOccupant(layerId, sp.Id);
             if (occ == null) continue;

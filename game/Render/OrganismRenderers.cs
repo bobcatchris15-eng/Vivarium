@@ -20,9 +20,9 @@ public partial class FloraRenderer : Node3D
     private VivariumWorld _w = null!;
     private const int DefaultMorphVariants = 5;
     private const int MigratedMorphVariants = 12;
-    private static int MorphVariantsFor(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate"
+    private static int MorphVariantsFor(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate" or "vine_clinglace" or "vine_spiralvine" or "vine_fenhook"
         ? MigratedMorphVariants : DefaultMorphVariants;
-    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit; public int FullTris, FruitTris; public bool CanCastShadow; }
+    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Juvenile; public int FullTris, FruitTris, JuvenileTris; public bool CanCastShadow; }
     private sealed class Layer { public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris; public Layer(int count) => Variants = new VariantLayer[count]; }
     private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
@@ -51,6 +51,7 @@ public partial class FloraRenderer : Node3D
                         ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
                     variant.Full.CastShadow = shadow;
                     if (variant.Fruit != null) variant.Fruit.CastShadow = shadow;
+                    if (variant.Juvenile != null) variant.Juvenile.CastShadow = shadow;
                 }
         }
     }
@@ -61,7 +62,7 @@ public partial class FloraRenderer : Node3D
     {
         _refresh?.Dispose(); _refresh = null;
         _snapshot.Clear(); _wobbleStart.Clear();
-        _buffers.Clear(); _full.Clear(); _fruit.Clear(); _veins.Clear();
+        _buffers.Clear(); _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
         _w = w;
         foreach (var c in GetChildren()) c.QueueFree();
@@ -74,17 +75,24 @@ public partial class FloraRenderer : Node3D
             mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
             if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            if (sp.Woody != null) Bridge.BindSurface(mat, "bark", Bridge.Surfaces.Bark);
+            FloraSurfaceProfiles.Bind(mat, sp);
             var layer = new Layer(MorphVariantsFor(sp.Shape));
             ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
             for (int v = 0; v < layer.Variants.Length; v++)
             {
                 ulong seed = Rng.Mix(speciesSeed, (ulong)(v + 1) * 0x9E3779B97F4A7C15UL);
-                var full = OrganismMeshes.Flora(sp, seed);
+                var full = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: true) : OrganismMeshes.Flora(sp, seed);
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
                 bool castShadow = Quality >= 1 && canCastShadow;
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", Bridge.ToArrayMesh(full, mat), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full);
+                if (sp.Shape is "fern" or "veilfern" || sp.Climber != null)
+                {
+                    var young = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: false) : OrganismMeshes.Flora(sp, seed, juvenile: true);
+                    vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", Bridge.ToArrayMesh(young, mat), castShadow);
+                    vl.JuvenileTris = young.TriangleCount;
+                    AddChild(vl.Juvenile);
+                }
                 if (OrganismMeshes.FloraFruiting(sp, seed) is { } fruit)
                 {
                     var fruitMat = (ShaderMaterial)mat.Duplicate();
@@ -105,8 +113,8 @@ public partial class FloraRenderer : Node3D
                 for (int i = 0; i <= 8; i++)
                 {
                     double t = i / 8.0;
-                    vpath.Add(new Vec3(-0.05 + 1.1 * t, 0.1 * Math.Sin(Math.PI * t), 0));
-                    vrad.Add(0.75 + 0.25 * Math.Cos(t * 2 * Math.PI));
+                    vpath.Add(new Vec3(-0.02 + 1.04 * t, sp.Climber != null ? 0.008 * Math.Sin(Math.PI * t) : 0.1 * Math.Sin(Math.PI * t), 0));
+                    vrad.Add(sp.Climber != null ? 0.85 : 0.75 + 0.25 * Math.Cos(t * 2 * Math.PI));
                 }
                 Primitives.Tube(vein, vpath, vrad, 6, (i, v) => (col, 1, i, v, 0, 0));
                 layer.Veins = MakeMmi($"Flora_{sp.Id}_veins", Bridge.ToArrayMesh(vein, mat));
@@ -158,7 +166,7 @@ public partial class FloraRenderer : Node3D
         _buffers.Clear(); _snapshot.Clear(); _wobbleStart.Clear();
     }
 
-    private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _veins = new();
+    private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _juvenile = new(), _veins = new();
 
     /// <summary>
     /// Where a climber or bracket attaches: the nearest log or rock (sim angle toward it from p, its top height,
@@ -197,7 +205,7 @@ public partial class FloraRenderer : Node3D
         }
         if (supports != null && supports.Contains("woody"))
         {
-            foreach (var w in _w.Flora.Items)
+            foreach (var w in _snapshot)
             {
                 var wsp = _w.Content.FloraOrThrow(w.SpeciesId);
                 if (wsp.Woody == null) continue;
@@ -208,8 +216,11 @@ public partial class FloraRenderer : Node3D
                 double ang = to.LengthSq > 1e-10 ? to.Angle : 0;
                 double height = wsp.Height * (0.45 + 0.55 * Math.Sqrt(w.BiomassFraction(wsp)));
                 double ground = _w.GroundHeight(w.Position);
-                best = (ang, ground + height, d,
-                    new Vector3((float)w.X, (float)(ground + height * 0.45), (float)w.Z), ang + Math.PI);
+                double boleR = Math.Max(0.08, wsp.RadiusAtMax * 0.12);
+                var toNorm = to.LengthSq > 1e-10 ? to.Normalized() : new Vivarium.Sim.Core.Vec2(1, 0);
+                var surfacePt = w.Position - toNorm * boleR;
+                best = (ang, ground + height, Math.Max(0, d - boleR),
+                    new Vector3((float)surfacePt.X, (float)ground, (float)surfacePt.Z), (-toNorm).Angle);
             }
         }
         return best;
@@ -242,6 +253,7 @@ public partial class FloraRenderer : Node3D
                 var mk = MorphKey(k, v);
                 var fl = Get(_full, mk); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
                 var fr = Get(_fruit, mk); fr.T.Clear(); fr.Tint.Clear(); fr.C.Clear();
+                var ju = Get(_juvenile, mk); ju.T.Clear(); ju.Tint.Clear(); ju.C.Clear();
             }
         int visible = 0;
         long triangles = 0;
@@ -298,23 +310,47 @@ public partial class FloraRenderer : Node3D
                 h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
                 r *= 1.0 + stress * 0.035;
             }
+            if (sp.Climber != null && f.ClimberSegments is { Count: > 1 } segs)
+            {
+                // Multi-segment climber: each node is rendered at its exact 3D position and orientation
+                var cTint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
+                int cVariant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
+                for (int s = 0; s < segs.Count; s++)
+                {
+                    var seg = segs[s];
+                    if (seg.Senescent) continue; // Leaves shed / withered during senescence!
+
+                    var nodePos = new Vector3((float)seg.Position.X, (float)seg.Position.Y, (float)seg.Position.Z);
+                    var fwd = new Vector3((float)seg.Forward.X, (float)seg.Forward.Y, (float)seg.Forward.Z);
+                    var nrm = new Vector3((float)seg.Normal.X, (float)seg.Normal.Y, (float)seg.Normal.Z);
+                    if (fwd.LengthSquared() < 1e-6f) fwd = Vector3.Up; else fwd = fwd.Normalized();
+                    if (nrm.LengthSquared() < 1e-6f) nrm = Vector3.Forward; else nrm = nrm.Normalized();
+                    var side = fwd.Cross(nrm);
+                    if (side.LengthSquared() < 1e-6f) side = fwd.Cross(Vector3.Up);
+                    if (side.LengthSquared() < 1e-6f) side = fwd.Cross(Vector3.Right);
+                    side = side.Normalized();
+                    var orthoNrm = side.Cross(fwd).Normalized();
+                    // Mesh X = side, Mesh Y = fwd (along stem), Mesh Z = orthoNrm (outward from host)
+                    var nodeBasis = new Basis(side, fwd, orthoNrm);
+
+                    float nodeScale = 1.0f;
+                    var nodeT = new Transform3D(nodeBasis.Scaled(new Vector3(nodeScale, nodeScale, nodeScale)), nodePos);
+                    var nodeBucket = seg.Attached ? _full : _juvenile;
+                    var nodeBd = Get(nodeBucket, MorphKey(sp.Id, cVariant));
+                    nodeBd.T.Add(nodeT);
+                    nodeBd.Tint.Add(cTint);
+                    nodeBd.C.Add(new Color((hash % 1000) / 1000f, (float)f.Health, 0, ((hash >> 12) % 1000) / 1000f));
+                    visible++;
+                }
+                continue;
+            }
             if (sp.Climber != null && !f.ClimberAttached)
             {
-                // Searching runners stay prostrate. Their persistent parent links provide the visible horizontal stem network.
                 h = Math.Min(h, 0.035);
                 r = Math.Max(r, 0.06);
             }
             var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
-            if (sp.Climber is { } climber && f.ClimberAttached
-                && Anchor(new Vector2(pos.X, pos.Z), Math.Max(0.6, climber.AttachmentRadius * 3), climber.SupportTypes) is { } va)
-            {
-                float rawUp = Mathf.Clamp((float)(va.Top - pos.Y) + 0.04f, 0.06f, 1.5f)
-                    * (float)(0.55 + 0.45 * Math.Sqrt(f.BiomassFraction(sp)));
-                float up = Mathf.Min(3.2f, rawUp * (float)climber.VerticalGrowthMultiplier);
-                float across = Mathf.Max((float)r, (float)(va.Dist + 0.12));
-                t = new Transform3D(Bridge.Yaw(va.Angle).Scaled(new Vector3(across, up, (float)r)), pos);
-            }
-            else if (sp.Shape == "bracket" && Anchor(new Vector2(pos.X, pos.Z), 0.35) is { } ba)
+            if (sp.Shape == "bracket" && Anchor(new Vector2(pos.X, pos.Z), 0.35) is { } ba)
             {
                 // shelves grow out of the trunk's side
                 var at = ba.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.08f, 0);
@@ -326,7 +362,8 @@ public partial class FloraRenderer : Node3D
             var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
             int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
             var vl = _layers[sp.Id].Variants[variant];
-            var bucket = f.Fruiting && vl.Fruit != null ? _fruit : _full;
+            var bucket = vl.Juvenile != null && (f.Stage(sp) == FloraStage.Juvenile || (sp.Climber != null && !f.ClimberAttached)) ? _juvenile
+                : f.Fruiting && vl.Fruit != null ? _fruit : _full;
             var bd = Get(bucket, MorphKey(sp.Id, variant)); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
             visible++;
         }
@@ -339,8 +376,39 @@ public partial class FloraRenderer : Node3D
             {
                 yield return false;
                 if (_w.Flora.Get(f.Id) != f) continue;
-                if (f.SpeciesId != id || f.ParentId.IsNone || _w.Flora.Get(f.ParentId) is not { } parent) continue;
+                if (f.SpeciesId != id) continue;
                 var vsp = _w.Content.FloraOrThrow(id);
+
+                // Multi-segment climber stems:
+                if (vsp.Climber != null && f.ClimberSegments is { Count: > 1 } segs)
+                {
+                    for (int s = 0; s < segs.Count; s++)
+                    {
+                        var seg = segs[s];
+                        if (seg.ParentIndex < 0 || seg.ParentIndex >= segs.Count) continue;
+                        var pSeg = segs[seg.ParentIndex];
+                        var pA = new Vector3((float)pSeg.Position.X, (float)pSeg.Position.Y, (float)pSeg.Position.Z);
+                        var pB = new Vector3((float)seg.Position.X, (float)seg.Position.Y, (float)seg.Position.Z);
+                        var segD = pB - pA;
+                        if (segD.Length() < 1e-4f) continue;
+                        float cFrac = (float)Math.Sqrt(f.BiomassFraction(vsp));
+                        float cThick = (0.0028f + 0.0048f * cFrac) * (seg.Senescent ? 0.6f : 1.0f);
+                        var cXAxis = segD;
+                        var norm = new Vector3((float)seg.Normal.X, (float)seg.Normal.Y, (float)seg.Normal.Z);
+                        if (norm.LengthSquared() < 1e-6f) norm = Vector3.Up; else norm = norm.Normalized();
+                        var cZAxis = cXAxis.Cross(norm);
+                        if (cZAxis.LengthSquared() < 1e-6f) cZAxis = cXAxis.Cross(Vector3.Up);
+                        cZAxis = cZAxis.Normalized() * cThick;
+                        var cYAxis = cZAxis.Cross(cXAxis).Normalized() * cThick;
+                        list.T.Add(new Transform3D(new Basis(cXAxis, cYAxis, cZAxis), pA));
+                        list.Tint.Add(new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f));
+                        ulong sHash = Rng.Mix(f.Id.Value, (ulong)s);
+                        list.C.Add(new Color((sHash % 1000) / 1000f, (float)(seg.Senescent ? f.Health * 0.4 : f.Health), 0, ((sHash >> 12) % 1000) / 1000f));
+                    }
+                    continue;
+                }
+
+                if (f.ParentId.IsNone || _w.Flora.Get(f.ParentId) is not { } parent) continue;
                 var a = new Vector3((float)parent.X, (float)_w.GroundHeight(parent.Position) + 0.004f, (float)parent.Z);
                 var b = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position) + 0.004f, (float)f.Z);
                 var d = b - a;
@@ -366,8 +434,10 @@ public partial class FloraRenderer : Node3D
                 // Full and fruit share one upload step: a phase change never briefly draws both forms.
                 Fill(vl.Full.Multimesh, Get(_full, mk));
                 if (vl.Fruit != null) Fill(vl.Fruit.Multimesh, Get(_fruit, mk));
+                if (vl.Juvenile != null) Fill(vl.Juvenile.Multimesh, Get(_juvenile, mk));
                 triangles += (long)vl.Full.Multimesh.InstanceCount * vl.FullTris
-                    + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.InstanceCount * vl.FruitTris : 0);
+                    + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.InstanceCount * vl.FruitTris : 0)
+                    + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.InstanceCount * vl.JuvenileTris : 0);
             }
         Visible_ = visible; TrianglesDrawn = triangles;
         _snapshot.Clear();
@@ -506,13 +576,13 @@ public partial class FaunaRenderer : Node3D
                 var hi = OrganismMeshes.Fauna(sp, seed);
                 var vl = new VariantLayer
                 {
-                    High = MakeMmi($"Fauna_{sp.Id}_{v}_high", Bridge.ToArrayMesh(hi, hiMat)),
+                    High = MakeMmi($"Fauna_{sp.Id}_{v}_high", Bridge.ToArrayMesh(hi, hiMat, signedVertexData: true)),
                     HighTris = hi.TriangleCount,
                 };
                 AddChild(vl.High);
                 if (OrganismMeshes.FaunaCurled(sp, seed) is { } curled)
                 {
-                    vl.Curled = MakeMmi($"Fauna_{sp.Id}_{v}_curled", Bridge.ToArrayMesh(curled, still));
+                    vl.Curled = MakeMmi($"Fauna_{sp.Id}_{v}_curled", Bridge.ToArrayMesh(curled, still, signedVertexData: true));
                     vl.CurledTris = curled.TriangleCount;
                     AddChild(vl.Curled);
                 }
@@ -548,6 +618,9 @@ public partial class FaunaRenderer : Node3D
 
         var cam = Camera;
         var camPos = cam?.GlobalPosition ?? Vector3.Zero;
+        var planes = cam?.GetFrustum();
+        Plane[]? frustum = planes == null ? null : new Plane[planes.Count];
+        if (planes != null) planes.CopyTo(frustum!, 0);
         Drawn = OffScreen = 0; TrianglesDrawn = 0;
         // Each species has a small bank of full-detail morphs. Capacity is deliberately conservative so hash
         // imbalance cannot overflow a variant buffer; populations are small enough that this is cheap memory.
@@ -603,10 +676,19 @@ public partial class FaunaRenderer : Node3D
             var d = (Pos: shown, Yaw: tr.Yaw);
             // full detail at any distance; only animals outside the view are skipped (invisible either way)
             float scale = (float)(ph.BodySize * sp.VisualScale);
-            if (cam != null && !f.Grabbed && !cam.IsPositionInFrustum(d.Pos) && !cam.IsPositionInFrustum(d.Pos + Vector3.Up * scale)) { OffScreen++; continue; }
-            // Walkers follow the surface; swimmers derive pitch from their actual interpolated 3-D travel rather than
-            // the simulation's water-column fraction. This is render-only and never feeds orientation back into ecology.
-            var upTarget = sp.Medium == Medium.Aquatic ? Vector3.Up : SurfaceFrame.SurfaceNormal(_w, d.Pos.X, d.Pos.Z, Math.Max(scale * 0.5, 0.01));
+            if (frustum != null && !f.Grabbed)
+            {
+                float radius = Math.Max(scale * 1.5f, 0.05f);
+                bool inView = true;
+                for (int pIdx = 0; pIdx < frustum.Length; pIdx++)
+                {
+                    if (frustum[pIdx].DistanceTo(d.Pos) > radius) { inView = false; break; }
+                }
+                if (!inView) { OffScreen++; continue; }
+            }
+            // Walkers follow the surface; swimmers derive pitch from interpolated 3-D travel.
+            // This is render-only and never feeds orientation back into ecology.
+            var upTarget = sp.Medium == Medium.Aquatic ? Vector3.Up : (frameDist > 1e-4f ? SurfaceFrame.SurfaceNormal(_w, d.Pos.X, d.Pos.Z, Math.Max(scale * 0.5, 0.01)) : tr.Up);
             tr.Up = (tr.Up + (upTarget - tr.Up) * k).Normalized();
             var motion3 = tr.Cur - tr.Prev;
             float horizontal = new Vector2(motion3.X, motion3.Z).Length();

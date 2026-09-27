@@ -1,0 +1,132 @@
+{
+  "id": "shoreline",
+  "name": "Pebble Shoreline",
+  "seed": 40192,
+  "diameter": 16,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": -0.05,
+    "relief": 0.32,
+    "noiseScale": 0.22,
+    "octaves": 4,
+    "minHeight": -0.9,
+    "maxHeight": 1.8,
+    "bottom": -2.8,
+    "rockExposure": 0.12,
+    "features": [
+      {
+        "type": "hill",
+        "x": -4.2,
+        "z": -3.2,
+        "radius": 4.5,
+        "amount": 0.95
+      },
+      {
+        "type": "basin",
+        "x": 3.2,
+        "z": 2.2,
+        "radius": 5.2,
+        "amount": 1.05
+      },
+      {
+        "type": "ridge",
+        "x": -1.2,
+        "z": -2.2,
+        "toX": 1.8,
+        "toZ": -1.0,
+        "width": 1.2,
+        "amount": 0.25
+      }
+    ]
+  },
+  "water": {
+    "waterTable": 0.0,
+    "springs": [
+      {
+        "x": -3.8,
+        "z": -2.6,
+        "dischargePerHour": 0.025
+      }
+    ],
+    "flowRate": 0.2,
+    "evaporationPerDay": 0.004,
+    "infiltrationPerDay": 0.025,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.3,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 14,
+    "rockMinScale": 0.15,
+    "rockMaxScale": 0.55,
+    "logs": 3,
+    "logMinLength": 1.1,
+    "logMaxLength": 2.2,
+    "logMinRadius": 0.1,
+    "logMaxRadius": 0.2,
+    "gravelPatches": 8,
+    "gravelMinRadius": 0.45,
+    "gravelMaxRadius": 1.1,
+    "spacing": 0.35
+  },
+  "starterFlora": [
+    {
+      "species": "ringreed",
+      "count": 10
+    },
+    {
+      "species": "glassrush",
+      "count": 10
+    },
+    {
+      "species": "floodlace_moss",
+      "count": 12
+    },
+    {
+      "species": "mooncoin",
+      "count": 8
+    },
+    {
+      "species": "brooklace",
+      "count": 8
+    },
+    {
+      "species": "fenbead",
+      "count": 6
+    },
+    {
+      "species": "trifold",
+      "count": 8
+    },
+    {
+      "species": "velvetweave_moss",
+      "count": 10
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "stiltclaw",
+      "count": 4
+    },
+    {
+      "species": "glintfin",
+      "count": 12
+    },
+    {
+      "species": "emberglass_swimmer",
+      "count": 8
+    },
+    {
+      "species": "siltshield",
+      "count": 6
+    },
+    {
+      "species": "prismhopper",
+      "count": 8
+    },
+    {
+      "species": "marbleback",
+      "count": 6
+    }
+  ]
+}

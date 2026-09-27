@@ -144,6 +144,19 @@ public class HydrologyTests
         Assert.True(bank > dry + 0.3, $"bank {bank:0.00} vs dry {dry:0.00}");
     }
 
+    [Fact]
+    public void WaterMeshSnapshotPreservesGeometryAcrossLaterDepthChanges()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        var snapshot = WaterMesh.Capture(w);
+        string original = WaterMesh.Build(w).DigestHex();
+        Assert.Equal(original, WaterMesh.Build(w, snapshot).DigestHex());
+
+        int wet = w.Grid.DomainCells.First(w.Water.IsWet);
+        w.Water.Depth[wet] += 0.25;
+        w.Water.FlowX[wet] += 0.2;
+        Assert.Equal(original, WaterMesh.Build(w, snapshot).DigestHex());
+    }
     [Fact] // t-059, t-060, t-062
     public void WaterGeometryFollowsWetCellsAndEndsCleanlyAtTheCut()
     {
@@ -259,5 +272,47 @@ public class HydrologyTests
             }
             Assert.True(p.Y <= top + 1e-6, $"surface at {p} is above the nearby water level {top:0.000}");
         }
+    }
+
+    [Fact]
+    public void WaterTableAndStreamSeparationIsQueryable()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        // Basin pond has ground below water table (waterTable = 0)
+        var pondPoint = new Vec2(4.6, 3.1);
+        Assert.True(w.Water.IsWaterTable(pondPoint), "basin should be classified as water table");
+        Assert.True(w.Water.WaterTableDepth(pondPoint) > 0.05, "basin should have positive water table depth");
+        Assert.False(w.Water.IsStream(pondPoint), "deep pond is not a surface stream");
+
+        // High ground far from the spring is dry
+        var dryPoint = new Vec2(-4.0, 4.0);
+        Assert.False(w.Water.IsWaterTable(dryPoint));
+        Assert.False(w.Water.IsStream(dryPoint));
+
+        // Step hydrology so the spring flows
+        for (int i = 0; i < 20; i++) w.Water.Step(30);
+
+        // Near spring source (-4.1, -2.1) on high ground (bed > 0)
+        var springPoint = new Vec2(-4.1, -2.1);
+        Assert.True(w.Water.IsStream(springPoint), "spring runoff on high ground should be classified as stream");
+        Assert.False(w.Water.IsWaterTable(springPoint), "high ground spring is not the groundwater table");
+        Assert.True(w.Water.StreamDepth(springPoint) > 0, "stream depth should be positive at the spring");
+    }
+
+    [Fact]
+    public void WaterMeshBuildSetSeparatesPondAndStreamMeshes()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        for (int i = 0; i < 30; i++) w.Water.Step(30);
+
+        var set = WaterMesh.BuildSet(w);
+        Assert.NotNull(set.TableMesh);
+        Assert.NotNull(set.StreamMesh);
+        Assert.NotNull(set.CombinedMesh);
+
+        // Table mesh must cover the standing pond and cut face
+        Assert.True(set.TableMesh.TriangleCount > 20, "table mesh should have pond triangles");
+        // Combined mesh must match Build(w)
+        Assert.Equal(set.CombinedMesh.DigestHex(), WaterMesh.Build(w).DigestHex());
     }
 }

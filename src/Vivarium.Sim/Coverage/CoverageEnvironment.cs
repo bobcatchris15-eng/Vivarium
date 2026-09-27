@@ -78,6 +78,8 @@ public sealed class MoistureBonusField
     }
 }
 
+public readonly record struct ShadeCaster(double X, double Z, double Radius, double InvRadius);
+
 /// <summary>
 /// Samples the micro-environment coverage growth rules see (docs/overhaul/growth_models.md §2). Stateless except
 /// for the two per-world side-tables (<see cref="SubstrateStability"/>, <see cref="MoistureBonusField"/>), which
@@ -98,13 +100,25 @@ public static class CoverageEnvironment
     private const double GradientStep = 0.15;           // m, moisture-field finite-difference offset
 
     /// <summary>Lightweight sample for physiology only: evaluates moisture, humidity, light, nutrients without substrate or slope.</summary>
-    public static (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(VivariumWorld w, Vec2 p, double[]? waterDist = null, double? laplacian = null, IReadOnlyList<Flora.FloraIndividual>? candidateFlora = null, MoistureBonusField? bonus = null)
+    public static (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(VivariumWorld w, Vec2 p, double[]? waterDist = null, double? laplacian = null, IReadOnlyList<ShadeCaster>? shadeCasters = null, MoistureBonusField? bonus = null)
     {
-        double moisture = SampleMoisture(w, p, laplacian, bonus);
-        double humidity = SampleHumidity(w, p, moisture, waterDist);
-        double light = SampleLight(w, p, candidateFlora);
+        double d = double.PositiveInfinity;
+        if (waterDist != null)
+        {
+            int c = w.Grid.NearestDomainCell(p);
+            if (c >= 0) d = waterDist[c];
+        }
+        double moisture = SampleMoisture(w, p, laplacian, bonus, d);
+        double humidity = SampleHumidityFast(moisture, d);
+        double light = SampleLight(w, p, shadeCasters);
         double nutrients = w.Fields.Nutrients.Sample(p);
         return (moisture, humidity, light, nutrients);
+    }
+
+    private static double SampleHumidityFast(double moisture, double d)
+    {
+        double proximity = double.IsInfinity(d) ? 0 : Math.Exp(-d / 0.6);
+        return MathD.Clamp01(0.7 * moisture + 0.3 * proximity);
     }
 
     /// <summary>Samples the full micro-environment at world position p. Deterministic given world state.</summary>
@@ -149,9 +163,9 @@ public static class CoverageEnvironment
 
     // ------------------------------------------------------------------ moisture
 
-    private static double SampleMoisture(VivariumWorld w, Vec2 p, double? laplacian = null, MoistureBonusField? bonus = null)
+    private static double SampleMoisture(VivariumWorld w, Vec2 p, double? laplacian = null, MoistureBonusField? bonus = null, double distToWater = -1)
     {
-        if (HasNearbySeepage(w, p)) return 1;
+        if ((distToWater < 0 || distToWater <= 0.08) && HasNearbySeepage(w, p)) return 1;
 
         double bonusVal = bonus != null ? bonus.At(p) : MoistureBonusOf(w).At(p);
         double m = w.Fields.Moisture.Sample(p) + bonusVal;
@@ -215,22 +229,38 @@ public static class CoverageEnvironment
     /// local to coverage growth so ordinary herbs do not turn every FloraSystem suitability check into a broad
     /// neighbour scan.
     /// </summary>
-    private static double SampleLight(VivariumWorld w, Vec2 p, IReadOnlyList<Flora.FloraIndividual>? candidateFlora = null)
+    private static double SampleLight(VivariumWorld w, Vec2 p, IReadOnlyList<Flora.FloraIndividual>? candidateFlora)
+    {
+        if (candidateFlora == null) return SampleLight(w, p, (IReadOnlyList<ShadeCaster>?)null);
+        var casters = new ShadeCaster[candidateFlora.Count];
+        int count = 0;
+        for (int i = 0; i < candidateFlora.Count; i++)
+        {
+            var f = candidateFlora[i];
+            var sp = w.Content.FloraById(f.SpeciesId);
+            if (sp == null || sp.Archetype != "plant" || sp.Woody != null) continue;
+            double r = f.Radius(sp);
+            if (r > 1e-6) casters[count++] = new ShadeCaster(f.X, f.Z, r, 1.0 / r);
+        }
+        return SampleLight(w, p, count == casters.Length ? casters : casters.AsSpan(0, count).ToArray());
+    }
+
+    private static double SampleLight(VivariumWorld w, Vec2 p, IReadOnlyList<ShadeCaster>? shadeCasters = null)
     {
         double light = w.FloraSystem.EffectiveLight(p);
         double shade = 0;
-        if (candidateFlora != null)
+        if (shadeCasters != null)
         {
-            for (int i = 0; i < candidateFlora.Count; i++)
+            for (int i = 0; i < shadeCasters.Count; i++)
             {
-                var f = candidateFlora[i];
-                var sp = w.Content.FloraById(f.SpeciesId);
-                if (sp == null || sp.Archetype != "plant" || sp.Woody != null) continue;
-                double r = f.Radius(sp);
-                if (r <= 1e-6) continue;
-                double d = Vec2.Distance(f.Position, p);
-                if (d >= r) continue;
-                shade += 0.22 * (1 - d / r);
+                var c = shadeCasters[i];
+                double dx = Math.Abs(c.X - p.X);
+                if (dx >= c.Radius) continue;
+                double dz = Math.Abs(c.Z - p.Z);
+                if (dz >= c.Radius) continue;
+                double d2 = dx * dx + dz * dz;
+                if (d2 >= c.Radius * c.Radius) continue;
+                shade += 0.22 * (1 - Math.Sqrt(d2) * c.InvRadius);
             }
         }
         else
@@ -243,9 +273,13 @@ public static class CoverageEnvironment
                 if (sp == null || sp.Archetype != "plant" || sp.Woody != null) continue;
                 double r = f.Radius(sp);
                 if (r <= 1e-6) continue;
-                double d = Vec2.Distance(f.Position, p);
-                if (d >= r) continue;
-                shade += 0.22 * (1 - d / r);
+                double dx = Math.Abs(f.X - p.X);
+                if (dx >= r) continue;
+                double dz = Math.Abs(f.Z - p.Z);
+                if (dz >= r) continue;
+                double d2 = dx * dx + dz * dz;
+                if (d2 >= r * r) continue;
+                shade += 0.22 * (1 - Math.Sqrt(d2) / r);
             }
         }
         return MathD.Clamp01(light - Math.Min(shade, light));

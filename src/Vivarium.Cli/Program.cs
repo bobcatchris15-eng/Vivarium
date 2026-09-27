@@ -44,10 +44,14 @@ switch (cmd)
             if (count > 0)
                 Console.WriteLine($"  Flora '{sp.Id}': {count} instances x {m.TriangleCount} tris = {count * m.TriangleCount:N0} tris");
         }
-        var sw = Stopwatch.StartNew();
-        w.CoverageSystem.Step(1800);
-        sw.Stop();
-        Console.WriteLine($"CoverageSystem.Step took {sw.ElapsedMilliseconds} ms. Mat stats: {w.CoverageSystem.LastMatStats}");
+        for (int s = 1; s <= 3; s++)
+        {
+            var sw = Stopwatch.StartNew();
+            w.CoverageSystem.Step(1800);
+            sw.Stop();
+            int steadyCount = w.Coverage.Mat.Tiles.Count(t => t.Steady);
+            Console.WriteLine($"CoverageSystem.Step #{s} took {sw.ElapsedMilliseconds} ms (Steady tiles: {steadyCount}/{w.Coverage.Mat.TileCount}). Mat stats: {w.CoverageSystem.LastMatStats}");
+        }
         return 0;
     }
     case "schedule":

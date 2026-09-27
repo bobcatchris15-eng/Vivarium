@@ -50,16 +50,22 @@ public static class Selection
             double t = RayWater(w, origin, dir, Math.Min(tTerrain, MaxDistance));
             if (!double.IsInfinity(t)) hits.Add(new WorldHit(HitKind.Water, EntityId.None, origin + dir * t, t));
         }
+        double maxDist = Math.Min(tTerrain + 0.5, MaxDistance);
         foreach (var f in w.Flora.Items)
         {
             var sp = w.Content.FloraOrThrow(f.SpeciesId);
             double r = Math.Max(f.Radius(sp) * 0.7, 0.06);
-            var c = new Vec3(f.X, w.GroundHeight(f.Position) + Math.Min(sp.Height * 0.5, r), f.Z);
+            double gy = double.IsNaN(f.GroundHeight) ? (f.GroundHeight = w.GroundHeight(f.Position)) : f.GroundHeight;
+            var c = new Vec3(f.X, gy + Math.Min(sp.Height * 0.5, r), f.Z);
+            double along = (c - origin).Dot(dir);
+            if (along < -r || along > maxDist + r) continue;
             double t = RaySphere(origin, dir, c, r);
             if (!double.IsInfinity(t)) hits.Add(new WorldHit(HitKind.Flora, f.Id, origin + dir * t, t));
         }
         foreach (var a in w.Fauna.Items)
         {
+            double along = (a.Position - origin).Dot(dir);
+            if (along < -0.5 || along > maxDist + 0.5) continue;
             var sp = w.Content.FaunaOrThrow(a.SpeciesId);
             double visual = w.FaunaSystem.PhenotypeOf(a).BodySize * sp.VisualScale;
             // pick radius grows gently with distance so tiny animals stay clickable

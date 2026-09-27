@@ -96,6 +96,9 @@ public partial class GameSession : Node3D
     public void StartWorld(VivariumWorld world, string? saveName = null)
     {
         if (Host == null) Host = new SimHost(world); else Host.Swap(world);
+        // Leave room for camera and rendering after every fixed simulation tick.
+        world.Scheduler.WallBudgetMs = 4;
+        world.CoverageSystem.AsyncMode = true;
         CurrentSaveName = saveName;
         Island.Build(world);
         Water.Build(world);
@@ -139,6 +142,7 @@ public partial class GameSession : Node3D
     public SaveResult SaveTo(string name)
     {
         if (World == null) return new SaveResult { Ok = false, Message = "no world" };
+        World.CoverageSystem.WaitPending();
         var safe = string.Concat(name.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_' or ' ')).Trim();
         if (safe.Length == 0) safe = "vivarium";
         var r = SaveSystem.Save(World, Path.Combine(SavesDir, safe + SaveSystem.Extension));
@@ -185,6 +189,7 @@ public partial class GameSession : Node3D
     {
         if (what == NotificationWMCloseRequest || what == NotificationPredelete)
         {
+            try { World?.CoverageSystem.WaitPending(); } catch { }
             try { Autosave?.Flush(TimeSpan.FromSeconds(5)); } catch { }
         }
     }

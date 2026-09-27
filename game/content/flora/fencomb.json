@@ -1,0 +1,87 @@
+{
+  "id": "fencomb",
+  "name": "Fencomb",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Feathery whorled milfoil forming dense submerged thickets in quiet deep water.",
+  "description": "Delicate comb-like whorls of fine segmented leaves clothe flexuous red-tinted stems, creating lush underwater nurseries.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.6,
+      "water": 1
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.05
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.55,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 1.1,
+    "minWaterDepth": 0.12,
+    "hardMinMoisture": 0.9,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.38,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.3,
+    "maturityDays": 7,
+    "lifespanDays": 120,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.16,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.2,
+    "crowdingLimit": 2.8,
+    "sensitivity": 0.6
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.6,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0.35,
+  "visual": {
+    "shape": "milfoil",
+    "color": [
+      0.22,
+      0.48,
+      0.25
+    ],
+    "color2": [
+      0.55,
+      0.28,
+      0.18
+    ],
+    "colorVariance": 0.06,
+    "height": 0.42
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "submerged"
+  ]
+}

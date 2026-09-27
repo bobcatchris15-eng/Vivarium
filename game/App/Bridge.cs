@@ -36,7 +36,7 @@ public static class Bridge
     /// </summary>
     public static Basis Yaw(double simAngle) => new(Vector3.Up, (float)-simAngle);
 
-    public static ArrayMesh ToArrayMesh(MeshData m, Material? material = null, ArrayMesh? reuse = null)
+    public static ArrayMesh ToArrayMesh(MeshData m, Material? material = null, ArrayMesh? reuse = null, bool signedVertexData = false)
     {
         var mesh = reuse ?? new ArrayMesh();
         mesh.ClearSurfaces();
@@ -55,11 +55,17 @@ public static class Bridge
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = verts;
         arrays[(int)Mesh.ArrayType.Normal] = norms;
-        arrays[(int)Mesh.ArrayType.Color] = cols;
+        // Vertex COLOR is RGBA8 UNORM in Godot, so it loses negative appendage offsets.
+        // Fauna carries those signed offsets and the appendage flag in float CUSTOM0 instead.
+        if (signedVertexData) arrays[(int)Mesh.ArrayType.Custom0] = m.Colors.ToArray();
+        else arrays[(int)Mesh.ArrayType.Color] = cols;
         arrays[(int)Mesh.ArrayType.TexUV] = uv;
         arrays[(int)Mesh.ArrayType.TexUV2] = uv2;
         arrays[(int)Mesh.ArrayType.Index] = m.Indices.ToArray();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        var flags = signedVertexData
+            ? (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift)
+            : (Mesh.ArrayFormat)0;
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         if (material != null) mesh.SurfaceSetMaterial(0, material);
         return mesh;
     }

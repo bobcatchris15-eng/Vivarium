@@ -134,6 +134,19 @@ public sealed class ScalarField
         double fx = (p.X - Grid.OriginX) / Grid.CellSize - 0.5, fz = (p.Z - Grid.OriginZ) / Grid.CellSize - 0.5;
         int i0 = (int)Math.Floor(fx), j0 = (int)Math.Floor(fz);
         double tx = fx - i0, tz = fz - j0;
+        int nx = Grid.Nx;
+        if ((uint)i0 < (uint)(nx - 1) && (uint)j0 < (uint)(Grid.Nz - 1))
+        {
+            int idx = j0 * nx + i0;
+            if (Grid.InDomain(idx) && Grid.InDomain(idx + 1) && Grid.InDomain(idx + nx) && Grid.InDomain(idx + nx + 1))
+            {
+                double v00 = Values[idx];
+                double v10 = Values[idx + 1];
+                double v01 = Values[idx + nx];
+                double v11 = Values[idx + nx + 1];
+                return (v00 + tx * (v10 - v00)) * (1 - tz) + (v01 + tx * (v11 - v01)) * tz;
+            }
+        }
         double sum = 0, wsum = 0;
         for (int dj = 0; dj <= 1; dj++)
             for (int di = 0; di <= 1; di++)

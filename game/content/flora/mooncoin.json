@@ -40,7 +40,7 @@
     "maturityDays": 7,
     "lifespanDays": 180,
     "nutrientPerBiomass": 0.16,
-    "radiusAtMax": 0.11,
+    "radiusAtMax": 0.20,
     "minRadius": 0.03
   },
   "spread": {
