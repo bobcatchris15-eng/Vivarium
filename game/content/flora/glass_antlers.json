@@ -1,0 +1,97 @@
+{
+  "id": "glass_antlers",
+  "name": "Glass Antlers",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Persistent translucent branching wood fungus.",
+  "description": "Opaline antler branches emerge from damp deadwood and persist far longer than ordinary mushroom flushes.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "wood": 1,
+      "soil": 0.25
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock",
+      "gravel"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.64,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.3,
+      "tolerance": 2
+    },
+    "nutrients": {
+      "optimum": 0.1,
+      "tolerance": 0.2
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.18,
+    "requiresFeature": {
+      "feature": "log",
+      "radius": 0.18
+    }
+  },
+  "growth": {
+    "ratePerDay": 0.14,
+    "maxBiomass": 0.85,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.16,
+    "maturityDays": 9,
+    "lifespanDays": 260,
+    "nutrientPerBiomass": 0.44,
+    "radiusAtMax": 0.24,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 12,
+    "radius": 0.72,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.28,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.62
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.45,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.92,
+  "sheddingPerDay": 0.006,
+  "grazingValue": 0.24,
+  "visual": {
+    "shape": "glass_antlers",
+    "color": [
+      0.62,
+      0.76,
+      0.76
+    ],
+    "color2": [
+      0.9,
+      0.92,
+      0.98
+    ],
+    "colorVariance": 0.035,
+    "height": 0.25
+  },
+  "tags": [
+    "fungus",
+    "wood_rot",
+    "decomposer"
+  ],
+  "decomposition": {
+    "radius": 0.58,
+    "fineMultiplier": 1.1,
+    "coarseMultiplier": 1.82,
+    "fruitMultiplier": 1.05
+  }
+}
