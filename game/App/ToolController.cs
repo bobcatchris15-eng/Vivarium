@@ -15,8 +15,8 @@ public partial class ToolController : Node
 {
     public GameSession Session { get; set; } = null!;
     public ToolKind Current { get; private set; } = ToolKind.Select;
-    public string? FloraSpecies { get; set; } = "carpet_moss";
-    public string? FaunaSpecies { get; set; } = "springtail";
+    public string? FloraSpecies { get; set; } = "velvetweave_moss";
+    public string? FaunaSpecies { get; set; } = "prismhopper";
     public double NutrientRadius { get; set; } = 0.5;
     public double RockScale { get; set; } = 0.3;
     public double LogLength { get; set; } = 1.4;

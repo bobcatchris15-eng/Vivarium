@@ -24,6 +24,36 @@ switch (cmd)
     case "validate":
         Console.WriteLine($"content OK: {content.Flora.Count} flora, {content.Fauna.Count} fauna, {content.Presets.Count} presets, digest {content.ContentDigest[..16]}");
         return 0;
+    case "inspect-save":
+    {
+        string savePath = Opt("file", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Vivarium", "saves", "autosave.vivsave"));
+        Console.WriteLine($"Loading {savePath}...");
+        var save = Vivarium.Sim.Persistence.SaveSystem.Load(content, savePath);
+        if (!save.Ok) { Console.WriteLine("Failed to load: " + save.Message); return 1; }
+        var w = save.World!;
+        Console.WriteLine($"World loaded: day {w.Clock.BioDays:0.0}, tick {w.Clock.Tick}, flora {w.Flora.Count}, fauna {w.Fauna.Count}");
+        Console.WriteLine($"Coverage mat tiles: {w.Coverage.Mat.TileCount}, crust tiles: {w.Coverage.Crust.TileCount}");
+        int matCells = 0, crustCells = 0;
+        foreach (var t in w.Coverage.Mat.Tiles) matCells += t.Occ.Count(o => o != 0);
+        foreach (var t in w.Coverage.Crust.Tiles) crustCells += t.Occ.Count(o => o != 0);
+        Console.WriteLine($"Occupied cells: mat {matCells}, crust {crustCells}");
+        foreach (var sp in content.Flora)
+        {
+            var m = Vivarium.Sim.Geometry.OrganismMeshes.Flora(sp, 0);
+            int count = w.Flora.Items.Count(f => f.SpeciesId == sp.Id);
+            if (count > 0)
+                Console.WriteLine($"  Flora '{sp.Id}': {count} instances x {m.TriangleCount} tris = {count * m.TriangleCount:N0} tris");
+        }
+        for (int s = 1; s <= 3; s++)
+        {
+            var sw = Stopwatch.StartNew();
+            w.CoverageSystem.Step(1800);
+            sw.Stop();
+            int steadyCount = w.Coverage.Mat.Tiles.Count(t => t.Steady);
+            Console.WriteLine($"CoverageSystem.Step #{s} took {sw.ElapsedMilliseconds} ms (Steady tiles: {steadyCount}/{w.Coverage.Mat.TileCount}). Mat stats: {w.CoverageSystem.LastMatStats}");
+        }
+        return 0;
+    }
     case "schedule":
     {
         var w = VivariumWorld.Create(content, content.PresetOrThrow("default"));
@@ -89,6 +119,8 @@ static void Print(VivariumWorld w)
 {
     var s = EcosystemStatistics.Compute(w);
     Console.WriteLine($"  env: moisture {s.MeanMoisture:0.00} nutrients {s.MeanNutrients:0.000} detritus {s.TotalDetritus:0.0} water {s.WaterVolume:0.00} m3 wet {s.WetFraction:P1} light {s.MeanLight:0.00} lineage {s.LineageRecords} genomes {s.Genomes}");
+    var ambientSoil = w.Grid.DomainCells.Where(i => w.SubstrateAtCell(w.Grid.CellCenter(i)) == Vivarium.Sim.Content.Substrate.Soil && w.Water.DepthAt(w.Grid.CellCenter(i)) <= 0.006).ToArray();
+    Console.WriteLine($"  ground: ambient all {w.Grid.DomainCells.Average(i => w.AmbientGroundCover.Cover[i]):P1}  eligible-soil {(ambientSoil.Length > 0 ? ambientSoil.Average(i => w.AmbientGroundCover.Cover[i]) : 0):P1}  litter {(w.Litter.ExportFine().Sum() + w.Litter.ExportCoarse().Sum()):0.00}");
     Console.WriteLine("  flora: " + string.Join("  ", s.Flora.Select(f => $"{f.Id}={f.Count}({f.Biomass:0.0})")));
     Console.WriteLine("  fauna: " + string.Join("  ", s.Fauna.Select(f => $"{f.Id}={f.Count} e{f.MeanEnergy:0.00} g{f.MaxGeneration} b{f.Births}/d{f.Deaths} {f.MeanBodySizeMm:0.0}mm")));
     var causes = w.Tally.Species.Where(kv => kv.Value.DeathsByCause.Count > 0).Select(kv => kv.Key + ":" + string.Join(",", kv.Value.DeathsByCause.Select(c => $"{c.Key}={c.Value}")));

@@ -18,6 +18,8 @@ jobs:
         run: dotnet restore Vivarium.sln
       - name: Camera collision fast check
         run: dotnet test tests/Vivarium.Sim.Tests/Vivarium.Sim.Tests.csproj --configuration Release --no-restore --filter FullyQualifiedName~CameraCollisionTests
+      - name: Fauna expansion fast check
+        run: dotnet test tests/Vivarium.Sim.Tests/Vivarium.Sim.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PredationTransfersEnergyAndReturnsUneatenBiomassToDetritus|FullyQualifiedName~FaunaLibraryLoadsCleanAndBrokenFixtureIsActionable|FullyQualifiedName~ValidContentLoadsDeterministically"
       - name: Full simulation tests
         run: dotnet test Vivarium.sln --configuration Release --no-restore
 

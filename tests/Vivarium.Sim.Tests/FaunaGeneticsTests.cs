@@ -21,7 +21,10 @@ public static class FaunaFixtures
         foreach (int c in w.Grid.DomainCells)
         {
             w.Fields.Moisture[c] = w.Water.IsWet(c) ? 1 : 0.7;
-            w.Fields.Detritus[c] = detritus;
+            w.Fields.Detritus[c] = 0;
+            w.Litter.FineMass[c] = detritus;
+            w.Litter.CoarseMass[c] = 0;
+            w.Litter.FruitMass[c] = 0;
             if (w.Water.IsWet(c)) { w.Fields.Biofilm[c] = biofilm; w.Fields.Plankton[c] = plankton; }
         }
         return w;
@@ -46,7 +49,7 @@ public class FaunaTests
         for (int x = gx - 5; x <= gx + 5; x++)
             w.Coverage.AlgaeBed.SetCell(x, z, Coverage.Aquatic.AlgaeRules.OccupantId, 0.9f, 0, 0, 0, 0, 0);
         w.AquaticSystem.ProjectBiofilm();
-        var shrimp = w.FaunaSystem.CreateFounder(Sp("shrimp"), p);
+        var shrimp = w.FaunaSystem.CreateFounder(Sp("emberglass_swimmer"), p);
         shrimp.Energy = 0.01;
         float before = w.Coverage.AlgaeBed.GetB(gx, gz);
         w.FaunaSystem.StepMetabolism(30);
@@ -72,7 +75,7 @@ public class FaunaTests
     public void IndividualStateRoundTripsWithoutRenderObjects()
     {
         var w = FaunaFixtures.PondWorld();
-        var f = w.FaunaSystem.CreateFounder(Sp("springtail"), FaunaFixtures.Land);
+        var f = w.FaunaSystem.CreateFounder(Sp("prismhopper"), FaunaFixtures.Land);
         var json = System.Text.Json.JsonSerializer.Serialize(f, Persistence.WorldSerializer.Json);
         var back = System.Text.Json.JsonSerializer.Deserialize<FaunaIndividual>(json, Persistence.WorldSerializer.Json)!;
         Assert.Equal(json, System.Text.Json.JsonSerializer.Serialize(back, Persistence.WorldSerializer.Json));
@@ -87,7 +90,7 @@ public class FaunaTests
         var w = FaunaFixtures.PondWorld();
         var ids = new List<EntityId>();
         var rng = Rng.Stream(3, "t");
-        for (int i = 0; i < 200; i++) ids.Add(w.FaunaSystem.CreateFounder(Sp("springtail"), new Vec2(rng.Range(0.5, 3.5), rng.Range(-2, 2))).Id);
+        for (int i = 0; i < 200; i++) ids.Add(w.FaunaSystem.CreateFounder(Sp("prismhopper"), new Vec2(rng.Range(0.5, 3.5), rng.Range(-2, 2))).Id);
         w.Fauna.RebuildIndex();
         var q = new Vec2(2, 0); double r = 0.6;
         var got = new List<FaunaIndividual>();
@@ -105,49 +108,67 @@ public class FaunaTests
     public void AquaticRejectsDryAndTerrestrialExpressesPreferences()
     {
         var w = FaunaFixtures.PondWorld();
-        Assert.True(w.FaunaSystem.Suitability(Sp("shrimp"), FaunaFixtures.Land).HardRefused);
-        Assert.False(w.FaunaSystem.Suitability(Sp("shrimp"), FaunaFixtures.Pond).HardRefused);
-        Assert.True(w.FaunaSystem.Suitability(Sp("springtail"), FaunaFixtures.Pond).HardRefused);
-        var moist = w.FaunaSystem.Suitability(Sp("springtail"), FaunaFixtures.Land).Score;
+        Assert.True(w.FaunaSystem.Suitability(Sp("emberglass_swimmer"), FaunaFixtures.Land).HardRefused);
+        Assert.False(w.FaunaSystem.Suitability(Sp("emberglass_swimmer"), FaunaFixtures.Pond).HardRefused);
+        Assert.True(w.FaunaSystem.Suitability(Sp("prismhopper"), FaunaFixtures.Pond).HardRefused);
+        var moist = w.FaunaSystem.Suitability(Sp("prismhopper"), FaunaFixtures.Land).Score;
         foreach (int c in w.Grid.CellsInRadius(FaunaFixtures.Land, 0.3)) w.Fields.Moisture[c] = 0.1;
-        Assert.True(w.FaunaSystem.Suitability(Sp("springtail"), FaunaFixtures.Land).Score < moist * 0.5);
+        Assert.True(w.FaunaSystem.Suitability(Sp("prismhopper"), FaunaFixtures.Land).Score < moist * 0.5);
     }
 
     [Fact] // t-091, t-092
     public void MetabolismAndFeedingAreBoundedAndTimeDriven()
     {
         var w = FaunaFixtures.PondWorld(detritus: 0);
-        var f = w.FaunaSystem.CreateFounder(Sp("springtail"), FaunaFixtures.Land);
+        var f = w.FaunaSystem.CreateFounder(Sp("prismhopper"), FaunaFixtures.Land);
         f.Energy = 0.5;
         for (int i = 0; i < 20; i++) w.FaunaSystem.StepMetabolism(30);
         double hungry = f.Energy;
         Assert.True(hungry < 0.5, "energy is consumed over simulated time");
-        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 2;
+        foreach (int c in w.Grid.DomainCells) { w.Fields.Detritus[c] = 0; w.Litter.FineMass[c] = 2; w.Litter.CoarseMass[c] = 0; w.Litter.FruitMass[c] = 0; }
         int cell = w.Grid.CellAt(f.PositionXZ);
-        double food = w.Fields.Detritus[cell];
+        double food = w.Litter.FineMass[cell];
         for (int i = 0; i < 40; i++) w.FaunaSystem.StepMetabolism(30);
         Assert.True(f.Energy > hungry, "feeding replenishes energy");
-        Assert.True(w.Fields.Detritus[cell] < food, "feeding consumes the resource");
-        Assert.InRange(f.Energy, 0, Sp("springtail").MaxEnergy);
+        Assert.True(w.Litter.FineMass[cell] < food, "feeding consumes visible leaf litter");
+        Assert.InRange(f.Energy, 0, Sp("prismhopper").MaxEnergy);
         // invalid diet targets are rejected by content validation
         var src = new OverlayContentSource(TestUtil.ContentSource);
-        src.Set("fauna/springtail.json", File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "springtail.json")).Replace("\"resource\": \"detritus\"", "\"resource\": \"cheese\""));
+        src.Set("fauna/prismhopper.json", File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "prismhopper.json")).Replace("\"resource\": \"detritus\"", "\"resource\": \"cheese\""));
         var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(src));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/springtail.json" && e.Path.StartsWith("$.diet[") && e.Path.EndsWith("].resource") && e.Message.Contains("cheese"));
+        Assert.Contains(ex.Errors, e => e.File == "fauna/prismhopper.json" && e.Path.StartsWith("$.diet[") && e.Path.EndsWith("].resource") && e.Message.Contains("cheese"));
+    }
+
+    [Fact]
+    public void PredationTransfersEnergyAndReturnsUneatenBiomassToDetritus()
+    {
+        var w = FaunaFixtures.PondWorld(detritus: 0);
+        var hunter = w.FaunaSystem.CreateFounder(Sp("stonebell"), FaunaFixtures.Land, 0.5);
+        var prey = w.FaunaSystem.CreateFounder(Sp("dewmantle"), FaunaFixtures.Land + new Vec2(0.03, 0), 0.5);
+        hunter.Energy = 0.2;
+        double before = hunter.Energy;
+        double detritus = w.Litter.TotalDetritus();
+
+        w.FaunaSystem.StepMetabolism(3600);
+
+        Assert.Null(w.Fauna.Get(prey.Id));
+        Assert.True(hunter.Energy > before);
+        Assert.True(w.Litter.TotalDetritus() > detritus);
+        Assert.True(w.Tally.Of("dewmantle").Deaths > 0);
     }
 
     [Fact] // t-093
     public void AquaticLocomotionStaysInWater()
     {
         var w = FaunaFixtures.PondWorld();
-        var shrimp = Enumerable.Range(0, 20).Select(i => w.FaunaSystem.CreateFounder(Sp("shrimp"), FaunaFixtures.Pond + new Vec2(0.05 * i - 0.5, 0.02 * i))).ToList();
+        var shrimp = Enumerable.Range(0, 20).Select(i => w.FaunaSystem.CreateFounder(Sp("emberglass_swimmer"), FaunaFixtures.Pond + new Vec2(0.05 * i - 0.5, 0.02 * i))).ToList();
         var start = shrimp.Select(s => s.PositionXZ).ToList();
         for (int t = 0; t < 2000; t++)
         {
             w.FaunaSystem.StepBehaviour(20); w.Clock.Tick += 2;
             foreach (var s in shrimp)
             {
-                Assert.True(w.Water.DepthAt(s.PositionXZ) >= Sp("shrimp").MinWaterDepth, "shrimp left the water");
+                Assert.True(w.Water.DepthAt(s.PositionXZ) >= Sp("emberglass_swimmer").MinWaterDepth, "shrimp left the water");
                 Assert.InRange(s.Y, w.Terrain.Height(s.PositionXZ) - 1e-9, w.Terrain.Height(s.PositionXZ) + w.Water.DepthAt(s.PositionXZ) + 1e-9);
             }
         }
@@ -160,7 +181,7 @@ public class FaunaTests
         var w = FaunaFixtures.PondWorld();
         // dry the eastern strip: springtails should drift toward the moist middle
         foreach (int c in w.Grid.DomainCells) if (w.Grid.CellCenter(c).X > 3) w.Fields.Moisture[c] = 0.05;
-        var st = Enumerable.Range(0, 30).Select(i => w.FaunaSystem.CreateFounder(Sp("springtail"), new Vec2(3.4, -1.5 + 0.1 * i))).ToList();
+        var st = Enumerable.Range(0, 30).Select(i => w.FaunaSystem.CreateFounder(Sp("prismhopper"), new Vec2(3.4, -1.5 + 0.1 * i))).ToList();
         for (int t = 0; t < 1500; t++)
         {
             w.FaunaSystem.StepBehaviour(20); w.Clock.Tick += 2;
@@ -177,7 +198,7 @@ public class FaunaTests
     public void ReproductionEligibilityAndOffspringPipeline()
     {
         var w = FaunaFixtures.PondWorld();
-        var sp = Sp("springtail");
+        var sp = Sp("prismhopper");
         var a = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Land, ageFraction: 0.5);
         var juvenile = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Land + new Vec2(0.05, 0), ageFraction: 0.01);
         a.Energy = 0.9; juvenile.Energy = 0.9;
@@ -203,7 +224,7 @@ public class FaunaTests
         string Run()
         {
             var w = FaunaFixtures.PondWorld(77);
-            for (int i = 0; i < 6; i++) { var f = w.FaunaSystem.CreateFounder(Sp("springtail"), FaunaFixtures.Land + new Vec2(0.04 * i, 0), 0.5); f.Energy = 0.95; f.ReproCooldownUntil = 0; }
+            for (int i = 0; i < 6; i++) { var f = w.FaunaSystem.CreateFounder(Sp("prismhopper"), FaunaFixtures.Land + new Vec2(0.04 * i, 0), 0.5); f.Energy = 0.95; f.ReproCooldownUntil = 0; }
             for (int i = 0; i < 10; i++) { w.FaunaSystem.StepLifecycle(300); w.Clock.Tick += 30; }
             Assert.True(w.Fauna.Count > 6, "eligible fixture must reproduce");
             return Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["fauna"]);
@@ -215,18 +236,18 @@ public class FaunaTests
     public void AgingIsTimeDrivenAndDeathReturnsDetritusOnce()
     {
         var w = FaunaFixtures.PondWorld();
-        var sp = Sp("triops");
+        var sp = Sp("siltshield");
         var f = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Pond, ageFraction: 0.99);
         f.LifespanFactor = 1;
-        double det0 = w.Fields.Detritus.Total();
+        double det0 = w.Litter.TotalDetritus();
         int steps = 0;
         while (w.Fauna.Get(f.Id) != null && steps++ < 100) { w.FaunaSystem.StepLifecycle(300); w.Clock.Tick += 30; }
         Assert.Null(w.Fauna.Get(f.Id));
         Assert.Equal("old age", w.Lineage.Get(f.Id)!.DeathCause);
         double expected = sp.MassAtMid * w.FaunaSystem.PhenotypeOf(f).MassScale * sp.DetritusOnDeath;
-        Assert.Equal(expected, w.Fields.Detritus.Total() - det0, 9);
+        Assert.Equal(expected, w.Litter.TotalDetritus() - det0, 9);
         Assert.False(w.FaunaSystem.Kill(f, "again"));
-        Assert.Equal(expected, w.Fields.Detritus.Total() - det0, 9);
+        Assert.Equal(expected, w.Litter.TotalDetritus() - det0, 9);
     }
 
     [Fact] // t-099
@@ -238,16 +259,16 @@ public class FaunaTests
             if (!schooling)
             {
                 var src = new OverlayContentSource(TestUtil.ContentSource);
-                var json = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "microminnow.json"));
-                src.Set("fauna/microminnow.json", System.Text.RegularExpressions.Regex.Replace(json, "\"behaviors\"\\s*:\\s*\\[\\s*\"schooling\"\\s*\\]", "\"behaviors\": []"));
+                var json = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "glintfin.json"));
+                src.Set("fauna/glintfin.json", System.Text.RegularExpressions.Regex.Replace(json, "\"behaviors\"\\s*:\\s*\\[\\s*\"schooling\"\\s*\\]", "\"behaviors\": []"));
                 content = ContentLoader.Load(src);
-                Assert.DoesNotContain("schooling", content.FaunaOrThrow("microminnow").Behaviors);
+                Assert.DoesNotContain("schooling", content.FaunaOrThrow("glintfin").Behaviors);
             }
             var d = TestUtil.FlatDescriptor(9);
             d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = -2, Z = 0, Radius = 2.2, Amount = 0.3 });
             var w = VivariumWorld.Create(content, d, false);
             TestUtil.Flood(w, FaunaFixtures.Pond, 1.5, 0.2);
-            var sp = content.FaunaOrThrow("microminnow");
+            var sp = content.FaunaOrThrow("glintfin");
             var rng = Rng.Stream(1, "school");
             for (int i = 0; i < 16; i++) w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Pond + new Vec2(rng.Range(-0.9, 0.9), rng.Range(-0.9, 0.9)));
             for (int t = 0; t < 600; t++) { w.FaunaSystem.StepBehaviour(20); w.Clock.Tick += 2; }
@@ -270,12 +291,30 @@ public class FaunaTests
         var at = sp.Medium == Medium.Aquatic ? FaunaFixtures.Pond : FaunaFixtures.Land;
         var r = Introduction.IntroduceFauna(w, id, at, 8);
         Assert.True(r.Ok, r.Message);
+
+        void RefillPrey()
+        {
+            foreach (var d in sp.Diet.Where(x => x.Resource.StartsWith("fauna:", StringComparison.Ordinal)))
+            {
+                string preyId = d.Resource[6..];
+                var preySp = Sp(preyId);
+                int need = Math.Max(0, 16 - w.Fauna.CountOf(preyId));
+                for (int i = 0; i < need; i++)
+                {
+                    double a = i * (Math.PI * 2 / Math.Max(1, need));
+                    var q = at + Vec2.FromAngle(a) * (0.05 + 0.02 * (i % 4));
+                    w.FaunaSystem.CreateFounder(preySp, q, 0.5).Energy = 0.9;
+                }
+            }
+        }
+        RefillPrey();
         double days = Math.Max(8, sp.ReproCooldown / 86400 * 1.5);
         for (long t = 0; t < days * 8640; t++)
         {
             if (t % 8640 == 0)
             {
                 FaunaFixtures.HoldWater(w);
+                RefillPrey();
                 foreach (int c in w.Grid.DomainCells) { if (w.Water.IsWet(c)) { w.Fields.Biofilm[c] = Math.Max(w.Fields.Biofilm[c], 0.3); w.Fields.Plankton[c] = Math.Max(w.Fields.Plankton[c], 0.2); } w.Fields.Detritus[c] = Math.Max(w.Fields.Detritus[c], 1.0); }
             }
             // dry-land species get the parched ground they are built for (the fixture's land is moist by default)
@@ -298,8 +337,8 @@ public class FaunaTests
     public void PillBugsRollUpInPlaceWhenPokedWhileSpringtailsFlee()
     {
         var w = FaunaFixtures.PondWorld();
-        var bug = w.FaunaSystem.CreateFounder(Sp("pill_bug"), FaunaFixtures.Land);
-        var st = w.FaunaSystem.CreateFounder(Sp("springtail"), FaunaFixtures.Land + new Vec2(0.1, 0));
+        var bug = w.FaunaSystem.CreateFounder(Sp("marbleback"), FaunaFixtures.Land);
+        var st = w.FaunaSystem.CreateFounder(Sp("prismhopper"), FaunaFixtures.Land + new Vec2(0.1, 0));
         var bugAt = bug.PositionXZ; var stAt = st.PositionXZ;
         Assert.False(w.FaunaSystem.IsCurled(bug));
         var res = new ToolActions(w).Poke(new PokeAction(new Vec3(FaunaFixtures.Land.X + 0.05, 0.6, FaunaFixtures.Land.Z), new Vec3(0, -1, 0), 1, WorldHit.None));
@@ -311,14 +350,14 @@ public class FaunaTests
         Assert.True(Vec2.Distance(stAt, st.PositionXZ) > 0.05, "springtail should flee");
         w.Clock.Tick += (long)(w.Content.Tools.PokeDisturbSeconds / 10) + 10;
         Assert.False(w.FaunaSystem.IsCurled(bug), "unrolls once the disturbance passes");
-        Assert.NotNull(OrganismMeshes.FaunaCurled(Sp("pill_bug")));
-        Assert.Null(OrganismMeshes.FaunaCurled(Sp("springtail")));
+        Assert.NotNull(OrganismMeshes.FaunaCurled(Sp("marbleback")));
+        Assert.Null(OrganismMeshes.FaunaCurled(Sp("prismhopper")));
     }
 
     [Fact] // t-114
     public void TriopsIsDistinctFromShrimp()
     {
-        var s = Sp("shrimp"); var t = Sp("triops");
+        var s = Sp("emberglass_swimmer"); var t = Sp("siltshield");
         Assert.NotEqual(s.Model, t.Model);
         Assert.True(t.Lifespan < s.Lifespan / 2);
         Assert.True(t.BasalRate > s.BasalRate);
@@ -330,23 +369,23 @@ public class FaunaTests
     public void FaunaLibraryLoadsCleanAndBrokenFixtureIsActionable()
     {
         Assert.Empty(TestUtil.Content.Warnings);
-        Assert.Equal(new[] { "darkling_beetle", "microminnow", "pill_bug", "shrimp", "silverfish", "springtail", "triops" }, TestUtil.Content.Fauna.Select(f => f.Id));
+        Assert.Equal(new[] { "coalback_beetle", "dewmantle", "duskflicker", "emberglass_swimmer", "ghostbristle", "glasscoil", "glintfin", "loamthread", "marbleback", "moonveil", "prismhopper", "rainspine", "reedjaw", "rustcoil", "siltshield", "stiltclaw", "stonebell" }, TestUtil.Content.Fauna.Select(f => f.Id));
         var src = new OverlayContentSource(TestUtil.ContentSource);
-        var broken = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "microminnow.json"))
+        var broken = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "glintfin.json"))
             .Replace("\"model\": \"minnow\"", "\"model\": \"whale\"")
             .Replace("\"resource\": \"plankton\"", "\"resource\": \"krill\"")
             .Replace("\"ornament_density\",", "\"glow\",");
-        src.Set("fauna/microminnow.json", broken);
+        src.Set("fauna/glintfin.json", broken);
         // also a terrestrial species eating an aquatic-only resource, and schooling without parameters
-        var st = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "springtail.json"))
+        var st = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "fauna", "prismhopper.json"))
             .Replace("\"resource\": \"detritus\"", "\"resource\": \"plankton\"").Replace("\"behaviors\": []", "\"behaviors\": [\"schooling\"]");
-        src.Set("fauna/springtail.json", st);
+        src.Set("fauna/prismhopper.json", st);
         var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(src));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/microminnow.json" && e.Path == "$.visual.model");
-        Assert.Contains(ex.Errors, e => e.File == "fauna/microminnow.json" && e.Message.Contains("krill"));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/microminnow.json" && e.Message.Contains("unknown trait 'glow'"));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/springtail.json" && e.Message.Contains("aquatic-only"));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/springtail.json" && e.Path == "$.schooling");
+        Assert.Contains(ex.Errors, e => e.File == "fauna/glintfin.json" && e.Path == "$.visual.model");
+        Assert.Contains(ex.Errors, e => e.File == "fauna/glintfin.json" && e.Message.Contains("krill"));
+        Assert.Contains(ex.Errors, e => e.File == "fauna/glintfin.json" && e.Message.Contains("unknown trait 'glow'"));
+        Assert.Contains(ex.Errors, e => e.File == "fauna/prismhopper.json" && e.Message.Contains("aquatic-only"));
+        Assert.Contains(ex.Errors, e => e.File == "fauna/prismhopper.json" && e.Path == "$.schooling");
     }
 }
 
@@ -362,14 +401,14 @@ public class GeneticsTests
     public void SchemaHasBoundsDefaultsAndSpeciesTraitSets()
     {
         foreach (var t in Cfg.Traits) { Assert.InRange(t.Default, t.Min, t.Max); Assert.True(t.Max > t.Min); }
-        Assert.DoesNotContain("ornament_density", Sp("triops").Traits);
-        Assert.Contains("ornament_density", Sp("shrimp").Traits);
+        Assert.DoesNotContain("ornament_density", Sp("siltshield").Traits);
+        Assert.Contains("ornament_density", Sp("emberglass_swimmer").Traits);
     }
 
     [Fact] // t-103
     public void OffspringBaseTraitsAreExactParentalMidpoints()
     {
-        var sp = Sp("shrimp");
+        var sp = Sp("emberglass_swimmer");
         var a = new Genome { Id = EntityId.Make(EntityKind.Genome, 1), SpeciesId = sp.Id, Traits = new[] { 0.2, 0.4, 0.6, 0.8, 1.0, 0.0 } };
         var b = new Genome { Id = EntityId.Make(EntityKind.Genome, 2), SpeciesId = sp.Id, Traits = new[] { 0.4, 0.4, 0.2, 0.0, 0.5, 1.0 } };
         Assert.Equal(new[] { 0.30000000000000004, 0.4, 0.4, 0.4, 0.75, 0.5 }, Inheritance.Midpoint(a.Traits, b.Traits));
@@ -386,7 +425,7 @@ public class GeneticsTests
     public void MutationProbabilityIsTenPercentPerOffspring()
     {
         Assert.Equal(0.10, Cfg.MutationProbability);
-        var sp = Sp("springtail");
+        var sp = Sp("prismhopper");
         var a = G(sp, 0.5);
         int n = 20000, mutated = 0;
         var perTrait = new int[sp.Traits.Count];
@@ -405,7 +444,7 @@ public class GeneticsTests
     [Fact] // t-106
     public void ExtremeMutationStaysFiniteAndInBounds()
     {
-        var sp = Sp("shrimp");
+        var sp = Sp("emberglass_swimmer");
         var extreme = new FaunaSpeciesDef { Id = sp.Id, Traits = sp.Traits, MutationMagnitude = 50, SizeMin = sp.SizeMin, SizeMax = sp.SizeMax };
         var cfg = new GeneticsConfig { MutationProbability = 1.0, Traits = Cfg.Traits };
         foreach (var start in new[] { 0.0, 1.0 })
@@ -425,7 +464,7 @@ public class GeneticsTests
     [Fact] // t-107
     public void SizeGeneDrivesVisibleAndSimulatedSize()
     {
-        var sp = Sp("shrimp");
+        var sp = Sp("emberglass_swimmer");
         var small = G(sp, 0.5); small.Traits[sp.TraitIndex("size")] = 0;
         var large = G(sp, 0.5); large.Traits[sp.TraitIndex("size")] = 1;
         var ps = Phenotype.From(sp, small); var pl = Phenotype.From(sp, large);
@@ -438,7 +477,7 @@ public class GeneticsTests
     [Fact] // t-108
     public void OrnamentationGenesProduceDistinguishableVariants()
     {
-        var sp = Sp("microminnow");
+        var sp = Sp("glintfin");
         var plain = G(sp, 0.5); var fancy = G(sp, 0.5);
         foreach (var t in new[] { "ornament_density", "pattern_strength", "hue_shift", "appendage_length" }) { plain.Traits[sp.TraitIndex(t)] = 0.05; fancy.Traits[sp.TraitIndex(t)] = 0.95; }
         var a = Phenotype.From(sp, plain); var b = Phenotype.From(sp, fancy);
@@ -452,7 +491,7 @@ public class GeneticsTests
     public void LineageSurvivesParentDeath()
     {
         var w = FaunaFixtures.PondWorld();
-        var sp = Sp("springtail");
+        var sp = Sp("prismhopper");
         var a = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Land, 0.5);
         var b = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Land + new Vec2(0.05, 0), 0.5);
         var c = w.FaunaSystem.CreateOffspring(sp, a, b);
@@ -471,7 +510,7 @@ public class GeneticsTests
     [Fact] // t-110
     public void GenomeRoundTripsExactly()
     {
-        var sp = Sp("shrimp");
+        var sp = Sp("emberglass_swimmer");
         var g = Inheritance.CreateFounder(sp, Cfg, EntityId.Make(EntityKind.Genome, 42), 99);
         g.Traits[0] = 0.1 + 0.2; // non-terminating binary fraction
         var json = System.Text.Json.JsonSerializer.Serialize(g, Persistence.WorldSerializer.Json);
@@ -487,7 +526,7 @@ public class GeneticsTests
         string Run()
         {
             var w = FaunaFixtures.PondWorld(88);
-            for (int i = 0; i < 8; i++) { var f = w.FaunaSystem.CreateFounder(Sp("triops"), FaunaFixtures.Pond + new Vec2(0.05 * i, 0), 0.4); f.Energy = 0.95; f.ReproCooldownUntil = 0; }
+            for (int i = 0; i < 8; i++) { var f = w.FaunaSystem.CreateFounder(Sp("siltshield"), FaunaFixtures.Pond + new Vec2(0.05 * i, 0), 0.4); f.Energy = 0.95; f.ReproCooldownUntil = 0; }
             for (int i = 0; i < 60; i++) { w.FaunaSystem.StepLifecycle(300); w.Clock.Tick += 30; foreach (var f in w.Fauna.Items) f.Energy = 0.95; }
             return Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["genetics"]);
         }

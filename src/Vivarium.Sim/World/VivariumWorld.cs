@@ -26,9 +26,13 @@ public sealed class VivariumWorld
     public Heightfield Terrain { get; }
     public StrataModel Strata { get; }
     public EnvironmentFields Fields { get; }
+    public LitterSystem Litter { get; }
     public Hydrology Water { get; }
     public PropSet Props { get; set; } = new();
     public FloraPopulation Flora { get; }
+    public DeadPlantPopulation DeadFlora { get; }
+    public SeedBank SeedBank { get; }
+    public AmbientGroundCoverSystem AmbientGroundCover { get; }
     public FaunaPopulation Fauna { get; }
     /// <summary>Fine coverage rasters (moss/lichen/slime), empty by default. See docs/overhaul/growth_models.md.</summary>
     public CoverageWorld Coverage { get; }
@@ -41,6 +45,8 @@ public sealed class VivariumWorld
 
     public PropPlacement Placement { get; }
     public FloraSystem FloraSystem { get; }
+    public DeadFloraSystem DeadFloraSystem { get; }
+    public ReproductionSystem ReproductionSystem { get; }
     public FaunaSystem FaunaSystem { get; }
     public EcologySystem Ecology { get; }
     /// <summary>Moss/lichen growth on the coverage layers (docs/overhaul/growth_models.md §4, §5, §9).</summary>
@@ -65,15 +71,21 @@ public sealed class VivariumWorld
         Terrain = Heightfield.Generate(Descriptor, Domain);
         Strata = new StrataModel(content.Strata);
         Fields = new EnvironmentFields(Grid, content.Ecology);
+        Litter = new LitterSystem(this);
         Fields.GenerateBaseSubstrate(Descriptor, Terrain);
         Water = new Hydrology(Grid, Descriptor.Water, Terrain);
         Flora = new FloraPopulation(Domain.Radius + 1);
+        DeadFlora = new DeadPlantPopulation();
+        SeedBank = new SeedBank(this);
+        AmbientGroundCover = new AmbientGroundCoverSystem(this);
         Fauna = new FaunaPopulation(Domain.Radius + 1);
         Coverage = new CoverageWorld(Descriptor.Seed);
         Scheduler = new Scheduler(Clock);
         Clock.BioAcceleration = Descriptor.BioAcceleration;
         Placement = new PropPlacement(this);
         FloraSystem = new FloraSystem(this);
+        DeadFloraSystem = new DeadFloraSystem(this);
+        ReproductionSystem = new ReproductionSystem(this);
         FaunaSystem = new FaunaSystem(this);
         Ecology = new EcologySystem(this);
         CoverageSystem = new CoverageSystem(this);
@@ -115,9 +127,13 @@ public sealed class VivariumWorld
         }
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
-        w.CoverageSystem.SeedInitial();
         w.AquaticSystem.SeedInitial();
-        if (populate) Populate.Starters(w);
+        if (populate)
+        {
+            w.CoverageSystem.SeedInitial();
+            Populate.Starters(w);
+        }
+        w.AmbientGroundCover.InitializeFromHabitat();
         Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna.");
         return w;
     }
@@ -139,8 +155,15 @@ public sealed class VivariumWorld
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 20);
+        Scheduler.Register("ecology.litter", Cadence.Resources, 66, Bio(Litter.Step), phase: 20);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
-        Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.Step), phase: 30);
+        Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
+        Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
+        Scheduler.Register("flora.seedbank", Cadence.Flora, 73, Bio(SeedBank.Step), phase: 29);
+        Scheduler.Register("flora.ambient", Cadence.Flora, 74, Bio(AmbientGroundCover.Step), phase: 29);
+        Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.StepMat), phase: 30);
+        Scheduler.Register("coverage.lichen", Cadence.Flora, 76, Bio(CoverageSystem.StepLichen), phase: 31);
+        Scheduler.Register("coverage.plasmodium", Cadence.FaunaMetabolism, 77, Bio(CoverageSystem.StepPlasmodium), phase: 2);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);
     }
 
@@ -213,6 +236,7 @@ public sealed class VivariumWorld
     {
         var e = new List<string>();
         if (!Fields.AllFinite()) e.Add("environment field contains non-finite values");
+        if (!Litter.AllFinite()) e.Add("litter contains negative or non-finite mass");
         if (!Water.AllFinite()) e.Add("water depth contains negative or non-finite values");
         var seen = new HashSet<EntityId>();
         foreach (var f in Flora.Items)

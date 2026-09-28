@@ -95,6 +95,14 @@ public static class Populate
                 var f = w.FloraSystem.Establish(sp, q, "starter", sp.MaxBiomass * rng.Range(0.3, 0.8));
                 f.Age = rng.Range(0.3, 0.9) * sp.Lifespan * 0.6;
                 f.LastSpreadAge = f.Age - rng.Range(0, 1) * sp.SpreadInterval;   // staggered first spread
+                // Starters represent established plants in an existing habitat. Give woody canopies
+                // a short history of fallen material so a new world does not open on bare soil.
+                if (sp.Woody != null && sp.SheddingRate > 0)
+                {
+                    double litter = f.Biomass * (1 - Math.Exp(-sp.SheddingRate * SimUnits.Day * 8)) * sp.LitterFraction;
+                    double footprint = sp.Woody.CanopyRadius * Math.Sqrt(f.BiomassFraction(sp));
+                    w.Litter.Deposit(q, litter * 0.88, litter * 0.12, footprint);
+                }
                 placed++;
             }
             if (placed < entry.Count) Log.Warn(LogCategory.Ecology, $"Placed {placed}/{entry.Count} starter {sp.Name} (limited suitable habitat).");

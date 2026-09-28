@@ -108,7 +108,11 @@ public static class CameraCollision
 
         foreach (var r in w.Props.Rocks)
         {
-            double rx = r.SizeX + radius, ry = r.SizeY + radius, rz = r.SizeZ + radius;
+            double ry = r.SizeY + radius;
+            if (p.Y > r.Y + ry || p.Y < r.Y - ry) continue;
+            double rMax = r.FootprintRadius + radius;
+            if (Math.Abs(p.X - r.X) > rMax || Math.Abs(p.Z - r.Z) > rMax) continue;
+            double rx = r.SizeX + radius, rz = r.SizeZ + radius;
             var localXZ = (p.XZ - r.Position).Rotated(-r.RotationY);
             double ly = p.Y - r.Y;
             double q = localXZ.X * localXZ.X / (rx * rx) + ly * ly / (ry * ry) + localXZ.Z * localXZ.Z / (rz * rz);
@@ -121,6 +125,10 @@ public static class CameraCollision
 
         foreach (var l in w.Props.Logs)
         {
+            double rr = l.Radius + radius;
+            if (p.Y > l.Y + rr || p.Y < l.Y - rr) continue;
+            double rMax = l.FootprintRadius + radius;
+            if (Math.Abs(p.X - l.X) > rMax || Math.Abs(p.Z - l.Z) > rMax) continue;
             var (a2, b2) = l.Ends;
             var a = new Vec3(a2.X, l.Y, a2.Z);
             var b = new Vec3(b2.X, l.Y, b2.Z);
@@ -129,7 +137,6 @@ public static class CameraCollision
             var q = a + ab * u;
             var dvec = p - q;
             double dist = dvec.Length;
-            double rr = l.Radius + radius;
             if (dist < rr) Consider(rr - dist, dist > 1e-9 ? dvec / dist : Vec3.Up);
         }
 

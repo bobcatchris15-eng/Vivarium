@@ -1,0 +1,180 @@
+{
+  "id": "oxbow_creek",
+  "name": "Twin Meadows Creek",
+  "seed": 63481,
+  "diameter": 15,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.32,
+    "relief": 0.22,
+    "noiseScale": 0.22,
+    "octaves": 4,
+    "minHeight": -0.7,
+    "maxHeight": 1.6,
+    "bottom": -2.6,
+    "rockExposure": 0.10,
+    "features": [
+      {
+        "type": "hill",
+        "x": -3.5,
+        "z": 2.5,
+        "radius": 3.6,
+        "amount": 0.35
+      },
+      {
+        "type": "hill",
+        "x": 3.5,
+        "z": -2.5,
+        "radius": 3.6,
+        "amount": 0.35
+      },
+      {
+        "type": "channel",
+        "x": -8.8,
+        "z": -5.0,
+        "toX": -2.0,
+        "toZ": -0.6,
+        "width": 1.1,
+        "amount": 0.42
+      },
+      {
+        "type": "channel",
+        "x": -2.0,
+        "z": -0.6,
+        "toX": 0.8,
+        "toZ": -1.4,
+        "width": 1.15,
+        "amount": 0.40
+      },
+      {
+        "type": "channel",
+        "x": 0.8,
+        "z": -1.4,
+        "toX": 1.8,
+        "toZ": 1.2,
+        "width": 1.15,
+        "amount": 0.42
+      },
+      {
+        "type": "channel",
+        "x": 1.8,
+        "z": 1.2,
+        "toX": 8.8,
+        "toZ": 5.0,
+        "width": 1.2,
+        "amount": 0.46
+      },
+      {
+        "type": "basin",
+        "x": 0.2,
+        "z": -0.8,
+        "radius": 1.6,
+        "amount": 0.26
+      },
+      {
+        "type": "basin",
+        "x": 2.0,
+        "z": 1.5,
+        "radius": 1.8,
+        "amount": 0.24
+      }
+    ]
+  },
+  "water": {
+    "waterTable": 0.0,
+    "springs": [
+      {
+        "x": -5.4,
+        "z": -2.8,
+        "dischargePerHour": 0.12
+      }
+    ],
+    "flowRate": 0.22,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.004,
+    "infiltrationPerDay": 0.02,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.35,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 14,
+    "rockMinScale": 0.15,
+    "rockMaxScale": 0.55,
+    "logs": 4,
+    "logMinLength": 1.3,
+    "logMaxLength": 2.4,
+    "logMinRadius": 0.11,
+    "logMaxRadius": 0.22,
+    "gravelPatches": 8,
+    "gravelMinRadius": 0.4,
+    "gravelMaxRadius": 0.95,
+    "spacing": 0.34
+  },
+  "starterFlora": [
+    {
+      "species": "brooklace",
+      "count": 10
+    },
+    {
+      "species": "velvetweave_moss",
+      "count": 12
+    },
+    {
+      "species": "trifold",
+      "count": 12
+    },
+    {
+      "species": "glassrush",
+      "count": 8
+    },
+    {
+      "species": "ringreed",
+      "count": 6
+    },
+    {
+      "species": "pearl_cushion_moss",
+      "count": 8
+    },
+    {
+      "species": "coinrunner",
+      "count": 8
+    },
+    {
+      "species": "dewbonnet",
+      "count": 6
+    },
+    {
+      "species": "shadebell",
+      "count": 4
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "glintfin",
+      "count": 12
+    },
+    {
+      "species": "emberglass_swimmer",
+      "count": 8
+    },
+    {
+      "species": "stiltclaw",
+      "count": 4
+    },
+    {
+      "species": "rainspine",
+      "count": 6
+    },
+    {
+      "species": "prismhopper",
+      "count": 10
+    },
+    {
+      "species": "marbleback",
+      "count": 6
+    }
+  ]
+}

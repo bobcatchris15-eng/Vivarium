@@ -54,6 +54,10 @@ public class TerrainWaterToolTests
         w.Step(60);
         Assert.True(w.Water.IsWet(c), "ground dug below the water table fills with water");
         Assert.True(w.Water.SurfaceAt(c) is var s && Math.Abs(s - 0.3) < 0.01);
+        Assert.Equal(0.0, w.Water.SurfaceVolume(), 12);
+        Assert.False(t.DrainWater(c, 0.6, 0.5).Ok, "drain tool must not remove the hydrostatic groundwater reservoir");
+        Assert.True(w.Water.IsWet(c));
+        Assert.Equal(0.3, w.Water.SurfaceAt(c), 2);
         var r = (Rock)w.Props.Find(rock.Id)!;
         Assert.Equal(w.Terrain.Height(r.Position) - r.SizeY * 0.25, r.Y, 9);
         Assert.Empty(w.CheckInvariants());

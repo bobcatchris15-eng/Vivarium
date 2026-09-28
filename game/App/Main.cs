@@ -40,10 +40,41 @@ public partial class Main : Node3D
         }
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (UserArgs.Contains("--flora-bake")) { AddChild(new LeafMaterialBaker()); return; }
         if (ArgAfter("--licenses") is { } licFile) { WriteLicenses(licFile); GetTree().Quit(0); return; }
 
+        if (UserArgs.Contains("--fauna-motion-check"))
+        {
+            AddChild(new FaunaMotionCheck { Content = content, OutDir = ArgAfter("--output") ?? "build/fauna-motion-check" });
+            return;
+        }
+        if (ArgAfter("--fauna-preview") is { } faunaId)
+        {
+            AddChild(new FaunaPreview { Content = content, SpeciesId = faunaId,
+                OutDir = ArgAfter("--output") ?? "build/fauna-preview", SpeedReview = UserArgs.Contains("--speed-review") });
+            return;
+        }
+        if (ArgAfter("--specimen") is { } specimenId)
+        {
+            AddChild(new SpecimenPreview
+            {
+                Name = "SpecimenPreview",
+                Content = content,
+                SpeciesId = specimenId,
+                Juvenile = UserArgs.Contains("--juvenile"),
+                Underside = UserArgs.Contains("--underside"),
+                Lighting = ArgAfter("--lighting") ?? "front",
+                Detail = int.TryParse(ArgAfter("--detail"), out int specimenDetail) ? Math.Clamp(specimenDetail,0,2) : 0,
+                Phase = float.TryParse(ArgAfter("--phase"), out float specimenPhase) ? specimenPhase : -1,
+                Reverse = UserArgs.Contains("--reverse"),
+                Legacy = UserArgs.Contains("--legacy-flora"),
+                Close = UserArgs.Contains("--close"),
+                OutDir = ArgAfter("--output") ?? "build/specimens",
+            });
+            return;
+        }
         var settings = UserSettings.Load();
-        string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference");
+        string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference") ?? (UserArgs.Contains("--species-view") ? ArgAfter("--output") ?? "build/specimens/world" : null);
         if (testDir != null) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
 
         Session = new GameSession { Name = "Session" };
@@ -52,10 +83,16 @@ public partial class Main : Node3D
 
         if (testDir != null)
         {
-            var mode = UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
-            var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode };
+            var mode = UserArgs.Contains("--species-view") ? SmokeRunner.Mode.SpeciesWorld : UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
+            var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode, SpeciesId = ArgAfter("--species-view") ?? "" };
             AddChild(runner);
-            if (mode != SmokeRunner.Mode.Reload) Session.StartWorld(Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default")));
+            if (ArgAfter("--load") is { } loadPath && File.Exists(loadPath)) Session.LoadFrom(loadPath);
+            else if (mode != SmokeRunner.Mode.Reload)
+            {
+                var world = Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default"));
+                if (mode == SmokeRunner.Mode.Perf && System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_FREEZE") == "1") world.Clock.Paused = true;
+                Session.StartWorld(world);
+            }
             return;
         }
 

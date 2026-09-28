@@ -148,10 +148,22 @@ public partial class Windows : Control
                 UiKit.Label(role, 13, null, wrap: true), UiKit.Label(habitat, 12, UiKit.Muted, wrap: true));
             _catalogList.AddChild(UiKit.Panel("CatalogEntry_" + id, text));
         }
-        foreach (var sp in Session.Content.Flora)
-            Entry(sp.Id, sp.Name, sp.Archetype, sp.Role,
-                $"Grows on {string.Join(", ", sp.SubstrateAffinity.Where(kv => kv.Value > 0.4).Select(kv => SubstrateIds.Id(kv.Key)))}; moisture ≈{sp.Moisture.Optimum:0.0}, light ≈{sp.Light.Optimum:0.0}" +
-                (sp.RefuseSubstrates.Count + sp.RefuseTags.Count > 0 ? $"; refuses {string.Join(", ", sp.RefuseSubstrates.Select(SubstrateIds.Id).Concat(sp.RefuseTags))}" : ""), false);
+        bool firstSection = true;
+        void Section(string title)
+        {
+            if (!firstSection) _catalogList.AddChild(new HSeparator());
+            firstSection = false;
+            _catalogList.AddChild(UiKit.Label(title, 14, UiKit.Accent));
+        }
+        foreach (var group in FloraPlacementGroups.All)
+        {
+            Section(FloraPlacementGroups.Name(group));
+            foreach (var sp in Session.Content.Flora.Where(sp => sp.PlacementGroup == group).OrderBy(sp => sp.Name))
+                Entry(sp.Id, sp.Name, sp.Woody?.Layer.ToString().ToLowerInvariant() ?? sp.Archetype, sp.Role,
+                    $"Grows on {string.Join(", ", sp.SubstrateAffinity.Where(kv => kv.Value > 0.4).Select(kv => SubstrateIds.Id(kv.Key)))}; moisture ≈{sp.Moisture.Optimum:0.0}, light ≈{sp.Light.Optimum:0.0}" +
+                    (sp.RefuseSubstrates.Count + sp.RefuseTags.Count > 0 ? $"; refuses {string.Join(", ", sp.RefuseSubstrates.Select(SubstrateIds.Id).Concat(sp.RefuseTags))}" : ""), false);
+        }
+        Section("Fauna");
         foreach (var sp in Session.Content.Fauna)
             Entry(sp.Id, sp.Name, sp.Medium.ToString().ToLowerInvariant(), sp.Role,
                 $"{(sp.Medium == Medium.Aquatic ? $"Needs water ≥{sp.MinWaterDepth * 100:0} cm" : "Moist ground")}; eats {string.Join(", ", sp.Diet.Select(d => d.Resource))}; lives ~{sp.Lifespan / SimUnits.Day:0} days", true);
@@ -164,8 +176,17 @@ public partial class Windows : Control
         if (w == null) return;
         foreach (var (id, label) in _catalogCounts)
         {
-            int n = w.Content.FloraById(id) != null ? w.Flora.Items.Count(f => f.SpeciesId == id) : w.Fauna.CountOf(id);
-            label.Text = n == 0 ? "extinct — reintroduce" : $"{n} alive";
+            var flora = w.Content.FloraById(id);
+            int n = flora != null ? w.Flora.Items.Count(f => f.SpeciesId == id) : w.Fauna.CountOf(id);
+            string status = n == 0 ? "extinct — reintroduce" : $"{n} alive";
+            if (flora?.Woody is { } woody)
+            {
+                int structural = w.FloraSystem.WoodyPopulation(woody.Layer);
+                int cap = w.FloraSystem.WoodyPopulationCap(woody.Layer);
+                string layer = woody.Layer == WoodyLayer.Tree ? "trees" : "shrubs";
+                status += $" · {layer} {structural}/{cap}";
+            }
+            label.Text = status;
             label.AddThemeColorOverride("font_color", n == 0 ? new Color(1f, 0.7f, 0.5f) : UiKit.Muted);
         }
     }

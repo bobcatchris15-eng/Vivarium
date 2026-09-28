@@ -73,7 +73,7 @@ public sealed class AquaticSystem : IAquaticEnv
             minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
             minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
         }
-        return minX == int.MaxValue ? null : new GridBounds(minX, minZ, maxX, maxZ);
+        return minX == int.MaxValue ? null : new GridBounds(minX - pad, minZ - pad, maxX + pad, maxZ + pad);
     }
 
     private int Cell(int gx, int gz)
@@ -83,7 +83,7 @@ public sealed class AquaticSystem : IAquaticEnv
         return _w.Grid.InDomain(cell) ? cell : -1;
     }
 
-    public double DepthAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 && _w.Water.IsWet(c) ? _w.Water.Depth[c] : 0; }
+    public double DepthAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 && _w.Water.HasSurfaceWater(c) ? _w.Water.SurfaceWaterDepth(c) : 0; }
     public Vec2 FlowAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? new Vec2(_w.Water.FlowX[c], _w.Water.FlowZ[c]) : Vec2.Zero; }
     public double LightAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? _w.Fields.Light[c] : 0; }
     public double NutrientsAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? MathD.Clamp01(_w.Fields.Nutrients[c] / Math.Max(_w.Fields.Nutrients.Max, 1e-9)) : 0; }

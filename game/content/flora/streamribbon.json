@@ -1,0 +1,87 @@
+{
+  "id": "streamribbon",
+  "name": "Streamribbon",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Long translucent ribbon-grass of deep channels and submerged pools.",
+  "description": "Flexible tape-like blades rise from deep silt and gravel beds, undulating in currents and sheltering aquatic swimmers.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.8,
+      "water": 1
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.05
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.45,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 1.25,
+    "minWaterDepth": 0.1,
+    "hardMinMoisture": 0.9,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.32,
+    "maxBiomass": 1.4,
+    "initialBiomass": 0.06,
+    "declinePerDay": 0.25,
+    "maturityDays": 8,
+    "lifespanDays": 180,
+    "nutrientPerBiomass": 0.24,
+    "radiusAtMax": 0.18,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.45,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.22,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.65
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.6,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.8,
+  "grazingValue": 0.3,
+  "visual": {
+    "shape": "ribbonweed",
+    "color": [
+      0.18,
+      0.52,
+      0.28
+    ],
+    "color2": [
+      0.38,
+      0.72,
+      0.42
+    ],
+    "colorVariance": 0.06,
+    "height": 0.48
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "submerged"
+  ]
+}

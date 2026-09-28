@@ -1,0 +1,78 @@
+{
+  "id": "coinrunner",
+  "name": "Coinrunner",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Fast vascular groundcover of moist fertile soil.",
+  "description": "Round coinlike leaves ride on creeping runners that rapidly stitch together rich open ground.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [
+      "rock",
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.06,
+    "declinePerDay": 0.3,
+    "maturityDays": 7,
+    "lifespanDays": 90,
+    "nutrientPerBiomass": 0.35,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 3,
+    "radius": 0.5,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.35,
+    "crowdingLimit": 2.2,
+    "sensitivity": 1
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "creeper",
+    "color": [
+      0.36,
+      0.72,
+      0.26
+    ],
+    "color2": [
+      0.55,
+      0.85,
+      0.35
+    ],
+    "colorVariance": 0.06,
+    "height": 0.05
+  },
+  "tags": [
+    "plant",
+    "groundcover"
+  ]
+}

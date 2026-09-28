@@ -1,0 +1,108 @@
+{
+  "id": "velvetweave_moss",
+  "name": "Velvetweave moss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Low mat-forming moss of humid soil and old wood.",
+  "description": "Fine dark-green threads knit into broad velvety mats that hold surface moisture and soften disturbed ground.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.8,
+      "rock": 0.35,
+      "gravel": 0.2
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [
+      "bark_fresh"
+    ],
+    "moisture": {
+      "optimum": 0.68,
+      "tolerance": 0.2
+    },
+    "light": {
+      "optimum": 0.45,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.25,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMaxMoisture": 0.9,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.35,
+    "maxBiomass": 1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 6,
+    "lifespanDays": 150,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.34,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.45,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.35,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.6,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.8,
+  "grazingValue": 0,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.05,
+    "maxHeight": 0.004,
+    "heightRule": "flat",
+    "water": {
+      "kWet": 6,
+      "kDry": 1.2,
+      "wMin": 0.25,
+      "wOpt": 0.6
+    },
+    "light": {
+      "k": 0.3,
+      "max": 0.85
+    },
+    "dormBrownDays": 2,
+    "dormDeathDays": 8,
+    "sporeRate": 0.002,
+    "moistureFeedback": 0,
+    "seedBiomass": 0.08
+  },
+  "visual": {
+    "shape": "carpet",
+    "color": [
+      0.3,
+      0.66,
+      0.2
+    ],
+    "color2": [
+      0.52,
+      0.78,
+      0.24
+    ],
+    "colorVariance": 0.06,
+    "height": 0.025
+  },
+  "tags": [
+    "moss",
+    "groundcover"
+  ]
+}

@@ -32,6 +32,7 @@ public partial class GameSession : Node3D
     public WaterRenderer Water { get; private set; } = null!;
     public PropRenderer Props { get; private set; } = null!;
     public SoilDetailRenderer SoilDetail { get; private set; } = null!;
+    public AmbientGroundCoverRenderer AmbientGround { get; private set; } = null!;
     public CoverageRenderer Coverage { get; private set; } = null!;
     public FloraRenderer Flora { get; private set; } = null!;
     public FaunaRenderer Fauna { get; private set; } = null!;
@@ -63,6 +64,7 @@ public partial class GameSession : Node3D
         Water = new WaterRenderer { Name = "WaterRenderer" }; AddChild(Water);
         Props = new PropRenderer { Name = "PropRenderer" }; AddChild(Props);
         SoilDetail = new SoilDetailRenderer { Name = "SoilDetail" }; AddChild(SoilDetail);
+        AmbientGround = new AmbientGroundCoverRenderer { Name = "AmbientGroundCover" }; AddChild(AmbientGround);
         Coverage = new CoverageRenderer { Name = "Coverage" }; AddChild(Coverage);
         Flora = new FloraRenderer { Name = "FloraRenderer" }; AddChild(Flora);
         Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
@@ -83,6 +85,7 @@ public partial class GameSession : Node3D
         EnvRig.ApplyQuality(Settings.Quality);
         Flora.Quality = Fauna.Quality = Settings.Quality;
         SoilDetail.Quality = Settings.Quality;
+        AmbientGround.Quality = Settings.Quality;
         Coverage.Quality = Settings.Quality;
         CameraRig.Speed = Settings.CameraSpeed;
         CameraRig.Sensitivity = Settings.MouseSensitivity;
@@ -96,12 +99,17 @@ public partial class GameSession : Node3D
     public void StartWorld(VivariumWorld world, string? saveName = null)
     {
         if (Host == null) Host = new SimHost(world); else Host.Swap(world);
+        // Leave room for camera and rendering after every fixed simulation tick.
+        world.Scheduler.WallBudgetMs = 4;
+        world.CoverageSystem.AsyncMode = true;
         CurrentSaveName = saveName;
         Island.Build(world);
         Water.Build(world);
         Props.Build(world);
         SoilDetail.Camera = CameraRig.Cam;
         SoilDetail.Build(world);
+        AmbientGround.Camera = CameraRig.Cam;
+        AmbientGround.Build(world);
         Coverage.Camera = CameraRig.Cam;
         Coverage.Build(world);
         Flora.Camera = Fauna.Camera = CameraRig.Cam;
@@ -117,6 +125,7 @@ public partial class GameSession : Node3D
         Autosave.Completed -= OnAutosaved;
         Autosave.Completed += OnAutosaved;
         History.Clear(); _lastHistoryDay = -1;
+        world.Scheduler.SystemTimed += (sys, ms) => FrameProfiler.Record("Sys." + sys.Name, ms);
         Log.Info(LogCategory.App, $"World started: '{world.Descriptor.Name}' seed {world.Seed}, day {world.Clock.BioDays:0.0}.");
         WorldChanged?.Invoke();
     }
@@ -138,6 +147,7 @@ public partial class GameSession : Node3D
     public SaveResult SaveTo(string name)
     {
         if (World == null) return new SaveResult { Ok = false, Message = "no world" };
+        World.CoverageSystem.WaitPending();
         var safe = string.Concat(name.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_' or ' ')).Trim();
         if (safe.Length == 0) safe = "vivarium";
         var r = SaveSystem.Save(World, Path.Combine(SavesDir, safe + SaveSystem.Extension));
@@ -169,13 +179,13 @@ public partial class GameSession : Node3D
     {
         using var prof = FrameProfiler.Measure("Session");
         if (Host == null) return;
-        Host.Advance(delta);
-        Autosave?.Tick(Host.World, delta);
+        using (FrameProfiler.Measure("Session.Advance")) Host.Advance(delta);
+        using (FrameProfiler.Measure("Session.Autosave")) Autosave?.Tick(Host.World, delta);
         var w = Host.World;
         if (w.Clock.BioDays - _lastHistoryDay >= 1.0 / 24 || _lastHistoryDay < 0)
         {
             _lastHistoryDay = w.Clock.BioDays;
-            History.Add(EcosystemStatistics.Compute(w));
+            using (FrameProfiler.Measure("Session.Stats")) History.Add(EcosystemStatistics.Compute(w));
             if (History.Count > 400) History.RemoveAt(0);
         }
     }
@@ -184,6 +194,7 @@ public partial class GameSession : Node3D
     {
         if (what == NotificationWMCloseRequest || what == NotificationPredelete)
         {
+            try { World?.CoverageSystem.WaitPending(); } catch { }
             try { Autosave?.Flush(TimeSpan.FromSeconds(5)); } catch { }
         }
     }

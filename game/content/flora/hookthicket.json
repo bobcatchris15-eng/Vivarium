@@ -1,0 +1,96 @@
+{
+  "id": "hookthicket",
+  "name": "Hookthicket",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Interlaced thorn-brake shrub analogue used as a dense visual and movement-looking barrier.",
+  "description": "Arching hook-spined canes cross and brace one another into a tangled living wall dotted with small tough leaves.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.55
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.46,
+      "tolerance": 0.3
+    },
+    "light": {
+      "optimum": 0.7,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.42,
+      "tolerance": 0.36
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.17
+  },
+  "growth": {
+    "ratePerDay": 0.13,
+    "maxBiomass": 2,
+    "initialBiomass": 0.07,
+    "declinePerDay": 0.15,
+    "maturityDays": 34,
+    "lifespanDays": 760,
+    "nutrientPerBiomass": 0.42,
+    "radiusAtMax": 0.9,
+    "minRadius": 0.12
+  },
+  "spread": {
+    "intervalDays": 12,
+    "radius": 1.25,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 1,
+    "crowdingLimit": 1.9,
+    "sensitivity": 0.9
+  },
+  "proximity": [],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.009,
+  "grazingValue": 0.12,
+  "visual": {
+    "shape": "hookthicket_brake",
+    "color": [
+      0.23,
+      0.4,
+      0.18
+    ],
+    "color2": [
+      0.47,
+      0.58,
+      0.25
+    ],
+    "colorVariance": 0.06,
+    "height": 1.72
+  },
+  "tags": [
+    "plant",
+    "screen",
+    "thorn",
+    "brake"
+  ],
+  "postLife": {
+    "standingDays": 130,
+    "collapseDays": 25,
+    "fallenDays": 130,
+    "advancedDays": 35,
+    "coarseFraction": 0.72,
+    "decayHalfLifeMultiplier": 2.1,
+    "standingRetention": 0.96,
+    "deadColor": [
+      0.48,
+      0.37,
+      0.26
+    ],
+    "litterColorInfluence": 0.52,
+    "dryBleach": 0.2,
+    "wetDarken": 0.14
+  }
+}

@@ -17,13 +17,17 @@ public partial class PropRenderer : Node3D
     private readonly Dictionary<EntityId, ArrayMesh> _logMeshes = new();
     private ArrayMesh[] _pebbles = System.Array.Empty<ArrayMesh>();
     private ShaderMaterial _rockMat = null!, _logMat = null!;
-    private Node3D _root = null!;
+    private Node3D _propRoot = null!, _gravelRoot = null!;
+    private readonly Dictionary<EntityId, MeshInstance3D> _placedRocks = new();
+    private readonly Dictionary<EntityId, MeshInstance3D> _placedLogs = new();
+    private int _gravelCount = -1;
     public int PebbleCount { get; private set; }
 
     public void Build(VivariumWorld w)
     {
         _w = w;
         _version = int.MinValue;
+        _terrainVersion = int.MinValue;
         if (_rockMat == null)
         {
             _rockMat = Bridge.Shader("res://Shaders/rock.gdshader");
@@ -41,6 +45,14 @@ public partial class PropRenderer : Node3D
             for (int i = 0; i < _pebbles.Length; i++) _pebbles[i] = Bridge.ToArrayMesh(PropMeshes.Pebble(1000 + (ulong)i * 7), pebbleMat);
         }
         _logMeshes.Clear();
+        _placedRocks.Clear();
+        _placedLogs.Clear();
+        foreach (var c in GetChildren()) c.QueueFree();
+        _propRoot = new Node3D { Name = "Props" };
+        AddChild(_propRoot);
+        _gravelRoot = new Node3D { Name = "Gravel" };
+        AddChild(_gravelRoot);
+        _gravelCount = -1;
         Refresh();
     }
 
@@ -56,24 +68,80 @@ public partial class PropRenderer : Node3D
     private void Refresh()
     {
         _version = _w.Props.Version;
-        _terrainVersion = _w.Terrain.Version;
         _sinceRefresh = 0;
-        _root?.QueueFree();
-        _root = new Node3D { Name = "Props" };
-        AddChild(_root);
+        RefreshProps();
+        if (_w.Props.Gravel.Count != _gravelCount || _w.Terrain.Version != _terrainVersion)
+        {
+            _terrainVersion = _w.Terrain.Version;
+            _gravelCount = _w.Props.Gravel.Count;
+            RefreshGravel();
+        }
+    }
+
+    private void RefreshProps()
+    {
+        var activeRockIds = new HashSet<EntityId>();
         foreach (var r in _w.Props.Rocks)
         {
-            if (!_rockMeshes.TryGetValue(r.VariantSeed, out var mesh))
-                _rockMeshes[r.VariantSeed] = mesh = Bridge.ToArrayMesh(PropMeshes.Rock(r.VariantSeed), _rockMat);
+            activeRockIds.Add(r.Id);
             var basis = Bridge.Yaw(r.RotationY).Scaled(new Vector3((float)r.SizeX, (float)r.SizeY, (float)r.SizeZ));
-            _root.AddChild(new MeshInstance3D { Name = $"Rock_{r.Id.Serial}", Mesh = mesh, Transform = new Transform3D(basis, new Vector3((float)r.X, (float)r.Y, (float)r.Z)) });
+            var xform = new Transform3D(basis, new Vector3((float)r.X, (float)r.Y, (float)r.Z));
+            if (_placedRocks.TryGetValue(r.Id, out var mi))
+            {
+                mi.Transform = xform;
+            }
+            else
+            {
+                if (!_rockMeshes.TryGetValue(r.VariantSeed, out var mesh))
+                    _rockMeshes[r.VariantSeed] = mesh = Bridge.ToArrayMesh(PropMeshes.Rock(r.VariantSeed), _rockMat);
+                var newMi = new MeshInstance3D { Name = $"Rock_{r.Id.Serial}", Mesh = mesh, Transform = xform };
+                _placedRocks[r.Id] = newMi;
+                _propRoot.AddChild(newMi);
+            }
         }
+        var removedRocks = new List<EntityId>();
+        foreach (var (id, mi) in _placedRocks)
+        {
+            if (!activeRockIds.Contains(id))
+            {
+                mi.QueueFree();
+                removedRocks.Add(id);
+            }
+        }
+        foreach (var id in removedRocks) _placedRocks.Remove(id);
+
+        var activeLogIds = new HashSet<EntityId>();
         foreach (var l in _w.Props.Logs)
         {
-            if (!_logMeshes.TryGetValue(l.Id, out var mesh)) _logMeshes[l.Id] = mesh = Bridge.ToArrayMesh(PropMeshes.Log(l), _logMat);
-            _root.AddChild(new MeshInstance3D { Name = $"Log_{l.Id.Serial}", Mesh = mesh, Transform = new Transform3D(Bridge.Yaw(l.RotationY), new Vector3((float)l.X, (float)l.Y, (float)l.Z)) });
+            activeLogIds.Add(l.Id);
+            var xform = new Transform3D(Bridge.Yaw(l.RotationY), new Vector3((float)l.X, (float)l.Y, (float)l.Z));
+            if (_placedLogs.TryGetValue(l.Id, out var mi))
+            {
+                mi.Transform = xform;
+            }
+            else
+            {
+                if (!_logMeshes.TryGetValue(l.Id, out var mesh)) _logMeshes[l.Id] = mesh = Bridge.ToArrayMesh(PropMeshes.Log(l), _logMat);
+                var newMi = new MeshInstance3D { Name = $"Log_{l.Id.Serial}", Mesh = mesh, Transform = xform };
+                _placedLogs[l.Id] = newMi;
+                _propRoot.AddChild(newMi);
+            }
         }
-        // gravel: render-only pebble instances (no simulation entities)
+        var removedLogs = new List<EntityId>();
+        foreach (var (id, mi) in _placedLogs)
+        {
+            if (!activeLogIds.Contains(id))
+            {
+                mi.QueueFree();
+                removedLogs.Add(id);
+            }
+        }
+        foreach (var id in removedLogs) _placedLogs.Remove(id);
+    }
+
+    private void RefreshGravel()
+    {
+        foreach (var c in _gravelRoot.GetChildren()) c.QueueFree();
         var byVariant = new List<Transform3D>[_pebbles.Length];
         for (int i = 0; i < byVariant.Length; i++) byVariant[i] = new List<Transform3D>();
         PebbleCount = 0;
@@ -92,7 +160,7 @@ public partial class PropRenderer : Node3D
             if (byVariant[v].Count == 0) continue;
             var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = _pebbles[v], InstanceCount = byVariant[v].Count };
             for (int i = 0; i < byVariant[v].Count; i++) mm.SetInstanceTransform(i, byVariant[v][i]);
-            _root.AddChild(new MultiMeshInstance3D { Name = $"Gravel_{v}", Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+            _gravelRoot.AddChild(new MultiMeshInstance3D { Name = $"Gravel_{v}", Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
         }
     }
 }

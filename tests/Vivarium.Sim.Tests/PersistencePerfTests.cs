@@ -21,7 +21,7 @@ public class PersistenceTests
     public void ManifestClassifiesVersionsBeforeTouchingState()
     {
         Assert.Equal(SaveCompatibility.Current, SaveSystem.Classify(AppVersion.SaveSchema));
-        Assert.Equal(SaveCompatibility.Migratable, SaveSystem.Classify(AppVersion.SaveSchema - 1));
+        Assert.Equal(SaveCompatibility.UnsupportedOlder, SaveSystem.Classify(AppVersion.SaveSchema - 1));
         Assert.Equal(SaveCompatibility.UnsupportedNewer, SaveSystem.Classify(AppVersion.SaveSchema + 1));
         var w = Running(100);
         var path = Path.Combine(TestUtil.TempDir(), "m.vivsave");
@@ -115,23 +115,17 @@ public class PersistenceTests
     }
 
     [Fact] // t-161
-    public void PreviousVersionFixtureMigrates()
+    public void PreviousVersionFixtureIsRejectedForLitterSchema()
     {
         var w = Running(400);
-        var path = Path.Combine(TestUtil.TempDir(), "v0.vivsave");
+        var path = Path.Combine(TestUtil.TempDir(), "v1.vivsave");
         Assert.True(SaveSystem.Save(w, path).Ok);
-        // synthesise a v0 file: clock as seconds, fauna energy as percent, format version 0
-        long tick = w.Clock.Tick;
-        Rewrite(path, "world.json", n => { n.AsObject().Remove("Tick"); n["SimSeconds"] = tick * 10.0; });
-        Rewrite(path, "fauna.json", n => { foreach (var f in n["Items"]!.AsArray()) { var e = (double)f!["Energy"]!; f.AsObject().Remove("Energy"); f["EnergyPercent"] = e * 100; } });
-        Rewrite(path, "manifest.json", n => n["FormatVersion"] = 0);
-        Assert.Equal(SaveCompatibility.Migratable, SaveSystem.Inspect(path).Compat);
+        Rewrite(path, "manifest.json", n => n["FormatVersion"] = 1);
+        Assert.Equal(SaveCompatibility.UnsupportedOlder, SaveSystem.Inspect(path).Compat);
         var r = SaveSystem.Load(w.Content, path);
-        Assert.True(r.Ok, r.Message);
-        Assert.Equal(AppVersion.SaveSchema, r.Manifest!.FormatVersion);
-        Assert.Single(r.Manifest.AppliedMigrations);
-        Assert.Equal(tick, r.World!.Clock.Tick);
-        Assert.Equal(w.Fauna.Items.Select(f => Math.Round(f.Energy, 9)), r.World.Fauna.Items.Select(f => Math.Round(f.Energy, 9)));
+        Assert.False(r.Ok);
+        Assert.Equal(SaveCompatibility.UnsupportedOlder, r.Compatibility);
+        Assert.Null(r.World);
     }
 
     [Fact] // t-162
@@ -228,7 +222,7 @@ public class PerfTests
     {
         var w = TestUtil.FlatWorld();
         TestUtil.Condition(w, 0.7, 1.0);
-        var sp = w.Content.FloraOrThrow("creeping_groundcover");
+        var sp = w.Content.FloraOrThrow("coinrunner");
         var rng = Rng.Stream(4, "scale");
         for (int i = 0; i < 4000; i++) w.FloraSystem.Establish(sp, w.Domain.ClampInside(new Vec2(rng.Range(-5, 5), rng.Range(-4.3, 4.3)), 0.1), "t");
         int examined = w.Flora.Index.CandidatesExamined(Vec2.Zero, sp.CompetitionRadius);
@@ -244,7 +238,7 @@ public class PerfTests
     {
         var w = FaunaFixtures.PondWorld();
         var rng = Rng.Stream(8, "scale");
-        for (int i = 0; i < 2000; i++) w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("springtail"), new Vec2(rng.Range(0.5, 4), rng.Range(-3, 3)));
+        for (int i = 0; i < 2000; i++) w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(rng.Range(0.5, 4), rng.Range(-3, 3)));
         w.Fauna.RebuildIndex();
         Assert.True(w.Fauna.Index.CandidatesExamined(new Vec2(2, 0), 0.4) < 300);
         string a = Run(), b = Run();
@@ -253,7 +247,7 @@ public class PerfTests
         {
             var x = FaunaFixtures.PondWorld();
             var r = Rng.Stream(8, "scale");
-            for (int i = 0; i < 600; i++) x.FaunaSystem.CreateFounder(FaunaFixtures.Sp("microminnow"), FaunaFixtures.Pond + new Vec2(r.Range(-1, 1), r.Range(-1, 1)));
+            for (int i = 0; i < 600; i++) x.FaunaSystem.CreateFounder(FaunaFixtures.Sp("glintfin"), FaunaFixtures.Pond + new Vec2(r.Range(-1, 1), r.Range(-1, 1)));
             for (int i = 0; i < 50; i++) { x.FaunaSystem.StepBehaviour(20); x.Clock.Tick += 2; }
             return Persistence.WorldSerializer.Text(WorldSerializer.Serialize(x)["fauna"]);
         }

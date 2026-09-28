@@ -276,10 +276,13 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen");
+        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber", "reproduction", "postLife", "decomposition");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
+        string placementGroupId = n.Str("placementGroup");
+        if (!FloraPlacementGroups.TryParse(placementGroupId, out var placementGroup))
+            n["placementGroup"].Error("expected moss_lichen | terrestrial | waterside_aquatic | decomposer | woody");
         var h = n.Req("habitat");
         h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "minWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
         string feeds = h.Str("feeds", "nutrients");
@@ -420,14 +423,131 @@ public static class ContentLoader
                 EdenNoiseExponent = lc.Num("edenNoise", 1.0, 0.1, 10),
             };
         }
+        ClimberDef? climber = null;
+        if (n.Has("climber"))
+        {
+            var cl = n["climber"];
+            cl.RejectUnknown("searchRadius", "groundSpeedPerDay", "segmentLength", "attachmentRadius", "branchChance", "maxUnsupportedLength", "verticalGrowthMultiplier", "nodeCap", "supportTypes");
+            var supportTypes = new HashSet<string>(cl.StrList("supportTypes", required: true), StringComparer.Ordinal);
+            foreach (var support in supportTypes)
+                if (support is not ("woody" or "log" or "rock")) cl["supportTypes"].Error($"unknown climber support '{support}' (expected woody | log | rock)");
+            if (supportTypes.Count == 0) cl["supportTypes"].Error("at least one support type is required");
+            climber = new ClimberDef
+            {
+                SearchRadius = cl.Num("searchRadius", min: 0.2, max: 8),
+                GroundSpeed = cl.Num("groundSpeedPerDay", min: 0.001, max: 5) / D,
+                SegmentLength = cl.Num("segmentLength", min: 0.04, max: 0.5),
+                AttachmentRadius = cl.Num("attachmentRadius", min: 0.02, max: 0.75),
+                BranchChance = cl.Num("branchChance", 0.1, 0, 1),
+                MaxUnsupportedLength = cl.Num("maxUnsupportedLength", min: 0.2, max: 12),
+                VerticalGrowthMultiplier = cl.Num("verticalGrowthMultiplier", 1.0, 0.5, 6),
+                NodeCap = cl.Int("nodeCap", 96, min: 8, max: 1000),
+                SupportTypes = supportTypes,
+            };
+            if (arch != "plant") cl.Error("climbers must use archetype 'plant'");
+            if (climber.AttachmentRadius >= climber.SearchRadius) cl["attachmentRadius"].Error("attachmentRadius must be smaller than searchRadius");
+            if (climber.SegmentLength > climber.MaxUnsupportedLength) cl["segmentLength"].Error("segmentLength exceeds maxUnsupportedLength");
+        }
+
+        WoodyDef? woody = null;
+        if (n.Has("woody"))
+        {
+            var wd = n["woody"];
+            wd.RejectUnknown("layer", "canopyRadius", "shadeOpacity", "minSpacing");
+            string layer = wd.Str("layer");
+            if (layer is not ("tree" or "shrub")) wd["layer"].Error("expected tree | shrub");
+            woody = new WoodyDef
+            {
+                Layer = layer == "tree" ? WoodyLayer.Tree : WoodyLayer.Shrub,
+                CanopyRadius = wd.Num("canopyRadius", min: 0.1, max: 5),
+                ShadeOpacity = wd.Num("shadeOpacity", min: 0, max: 0.95),
+                MinSpacing = wd.Num("minSpacing", min: 0.05, max: 6),
+            };
+            if (arch != "plant") wd.Error("woody flora must use archetype 'plant'");
+            if (placementGroup != FloraPlacementGroup.Woody) wd.Error("woody flora must use placementGroup 'woody'");
+        }
+        else if (placementGroup == FloraPlacementGroup.Woody)
+            n["placementGroup"].Error("placementGroup 'woody' requires a woody block");
+
+        ReproductionDef? reproduction = null;
+        if (n.Has("reproduction"))
+        {
+            var rp = n["reproduction"];
+            rp.RejectUnknown("form", "dispersal", "reservePerDay", "pulseThreshold", "maxAttachedMass",
+                "developmentDays", "ripeDays", "cooldownDays", "seedFraction", "viability", "dormancyDays",
+                "dispersalRadius", "fruitColor", "displaySize", "foodValue");
+            string form = rp.Str("form");
+            if (form is not ("berry" or "drupe" or "nut" or "pod" or "cone" or "capsule" or "wind_seed" or "achene"))
+                rp["form"].Error("invalid reproductive form");
+            string dispersal = rp.Str("dispersal", "gravity");
+            if (dispersal is not ("gravity" or "wind" or "animal" or "water" or "ballistic"))
+                rp["dispersal"].Error("invalid dispersal mode");
+            reproduction = new ReproductionDef
+            {
+                Form = form, Dispersal = dispersal,
+                ReserveRate = rp.Num("reservePerDay", 0.01, 0, 10) / D,
+                PulseThreshold = rp.Num("pulseThreshold", 0.05, 0.0001, 100),
+                MaxAttachedMass = rp.Num("maxAttachedMass", 0.1, 0.0001, 100),
+                DevelopmentTime = rp.Num("developmentDays", 10, 0.1, 3650) * D,
+                RipeTime = rp.Num("ripeDays", 10, 0.1, 3650) * D,
+                CooldownTime = rp.Num("cooldownDays", 20, 0, 3650) * D,
+                SeedFraction = rp.Num("seedFraction", 0.2, 0, 1),
+                Viability = rp.Num("viability", 0.5, 0, 1),
+                DormancyTime = rp.Num("dormancyDays", 5, 0, 3650) * D,
+                DispersalRadius = rp.Num("dispersalRadius", 0.5, 0.01, 10),
+                FruitColor = rp.Color("fruitColor"),
+                DisplaySize = rp.Num("displaySize", 0.02, 0.002, 0.5),
+                FoodValue = rp.Num("foodValue", 1, 0, 100),
+            };
+            if (arch != "plant") rp.Error("reproduction requires archetype plant");
+        }
+
+        DecomposerProfileDef? decomposition = null;
+        if (n.Has("decomposition"))
+        {
+            var dc = n["decomposition"];
+            dc.RejectUnknown("radius", "fineMultiplier", "coarseMultiplier", "fruitMultiplier");
+            decomposition = new DecomposerProfileDef
+            {
+                Radius = dc.Num("radius", 0.55, 0.05, 3),
+                FineMultiplier = dc.Num("fineMultiplier", 1, 0.1, 10),
+                CoarseMultiplier = dc.Num("coarseMultiplier", 1, 0.1, 10),
+                FruitMultiplier = dc.Num("fruitMultiplier", 1, 0.1, 10),
+            };
+            if (feeds != "detritus") dc.Error("decomposition profile requires habitat.feeds = detritus");
+        }
+
+        PostLifeDef? postLife = null;
+        if (n.Has("postLife"))
+        {
+            var pl = n["postLife"];
+            pl.RejectUnknown("standingDays", "collapseDays", "fallenDays", "advancedDays", "coarseFraction",
+                "decayHalfLifeMultiplier", "standingRetention", "deadColor", "litterColorInfluence", "dryBleach", "wetDarken");
+            postLife = new PostLifeDef
+            {
+                StandingTime = pl.Num("standingDays", 10, 0, 36500) * D,
+                CollapseTime = pl.Num("collapseDays", 2, 0.01, 3650) * D,
+                FallenTime = pl.Num("fallenDays", 28, 0, 36500) * D,
+                AdvancedTime = pl.Num("advancedDays", 10, 0.01, 3650) * D,
+                CoarseFraction = pl.Num("coarseFraction", 0.05, 0, 1),
+                DecayHalfLifeMultiplier = pl.Num("decayHalfLifeMultiplier", 1, 0.05, 50),
+                StandingRetention = pl.Num("standingRetention", 1, 0, 1),
+                DeadColor = pl.Color("deadColor", new[] { 0.62, 0.54, 0.38 }),
+                LitterColorInfluence = pl.Num("litterColorInfluence", 0.7, 0, 1),
+                DryBleach = pl.Num("dryBleach", 0.15, 0, 1),
+                WetDarken = pl.Num("wetDarken", 0.12, 0, 1),
+            };
+            if (arch != "plant") pl.Error("postLife currently applies to vascular plants");
+        }
+
         var col = v.Color("color");
         var def = new FloraSpeciesDef
         {
-            Id = n.Str("id"), Name = n.Str("name"), Archetype = arch, Role = n.Str("role", ""), Description = n.Str("description", ""), SourceFile = n.File,
+            Id = n.Str("id"), Name = n.Str("name"), Archetype = arch, PlacementGroup = placementGroup, Role = n.Str("role", ""), Description = n.Str("description", ""), SourceFile = n.File,
             SubstrateAffinity = ParseAffinity(h, "substrates"), RefuseSubstrates = ParseSubstrateSet(h, "refuseSubstrates"),
             RefuseTags = new HashSet<string>(h.StrList("refuseTags"), StringComparer.Ordinal),
             Moisture = ParsePref(h, "moisture"), Light = ParsePref(h, "light"), Nutrients = ParsePref(h, "nutrients"),
-            MaxWaterDepth = h.Num("maxWaterDepth", 0, 0, 1), MinWaterDepth = h.Num("minWaterDepth", 0, 0, 1),
+            MaxWaterDepth = h.Num("maxWaterDepth", 0, 0, 5), MinWaterDepth = h.Num("minWaterDepth", 0, 0, 5),
             HardMinMoisture = h.Num("hardMinMoisture", 0, 0, 1), HardMaxMoisture = h.Num("hardMaxMoisture", 1.0, 0, 1), MinSuitability = h.Num("minSuitability", 0.15, 0, 1),
             GrowthRate = ratePerDayRaw / D, MaxBiomass = g.Num("maxBiomass", min: 0.001, max: 100), InitialBiomass = g.Num("initialBiomass", min: 0.0001, max: 100),
             DeclineRate = g.Num("declinePerDay", min: 0, max: 20) / D, MaturityAge = g.Num("maturityDays", min: 0.1, max: 3650) * D, Lifespan = g.Num("lifespanDays", min: 1, max: 36500) * D,
@@ -436,13 +556,18 @@ public static class ContentLoader
             SpreadMinBiomassFraction = s.Num("minBiomassFraction", 0.5, 0, 1),
             CompetitionRadius = c.Num("radius", min: 0.01, max: 3), CrowdingLimit = c.Num("crowdingLimit", min: 0.01, max: 100), CompetitionSensitivity = c.Num("sensitivity", 1, 0, 10),
             Proximity = prox, LitterFraction = n.Num("litterFraction", 0.8, 0, 1), SheddingRate = n.Num("sheddingPerDay", 0.035, 0, 0.5) / D, GrazingValue = n.Num("grazingValue", 0, 0, 1),
-            Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 2),
+            Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 8),
             Tags = n.StrList("tags"),
             Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,
             CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,
             Colony = colony,
             Mat = mat,
             Lichen = lichen,
+            Woody = woody,
+            Climber = climber,
+            Reproduction = reproduction,
+            PostLife = postLife,
+            Decomposition = decomposition,
         };
         if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");
@@ -466,7 +591,43 @@ public static class ContentLoader
         var r = n.Req("reproduction"); r.RejectUnknown("mode", "minEnergy", "cost", "clutchMin", "clutchMax", "cooldownDays", "mateRadius", "offspringEnergy", "maxLocalDensity", "populationCap");
         var b = n.Req("body"); b.RejectUnknown("sizeMin", "sizeMax", "visualScale", "massAtMid", "detritusOnDeath");
         var ge = n.Req("genetics"); ge.RejectUnknown("traits", "mutationMagnitude", "initialVariance");
-        var v = n.Req("visual"); v.RejectUnknown("model", "baseColor", "ornamentColor");
+        var v = n.Req("visual"); v.RejectUnknown("model", "baseColor", "ornamentColor", "animation");
+        var an = v.Req("animation");
+        an.RejectUnknown("family", "cyclesPerBody", "idleHz", "maxHz", "fullSpeed", "idleMotion", "amplitude", "bodyWave", "limbSweep", "limbLift", "bob", "phaseSpread", "dutyFactor");
+        string animationFamilyId = an.Str("family");
+        var animationFamily = animationFamilyId switch
+        {
+            "still" => FaunaAnimationFamily.Still,
+            "undulate" => FaunaAnimationFamily.Undulate,
+            "paddle" => FaunaAnimationFamily.Paddle,
+            "walk" => FaunaAnimationFamily.Walk,
+            "metachronal" => FaunaAnimationFamily.Metachronal,
+            "soft_glide" => FaunaAnimationFamily.SoftGlide,
+            "peristaltic" => FaunaAnimationFamily.Peristaltic,
+            "hop" => FaunaAnimationFamily.Hop,
+            "sprawl" => FaunaAnimationFamily.Sprawl,
+            "flight" => FaunaAnimationFamily.Flight,
+            _ => FaunaAnimationFamily.Still,
+        };
+        if (animationFamilyId is not ("still" or "undulate" or "paddle" or "walk" or "metachronal" or "soft_glide" or "peristaltic" or "hop" or "sprawl" or "flight"))
+            an["family"].Error("expected still | undulate | paddle | walk | metachronal | soft_glide | peristaltic | hop | sprawl | flight");
+        var animation = new FaunaAnimationDef
+        {
+            Family = animationFamily,
+            CyclesPerBody = an.Num("cyclesPerBody", 0.6, 0, 8),
+            IdleHz = an.Num("idleHz", 0, 0, 30),
+            MaxHz = an.Num("maxHz", 8, 0.1, 40),
+            FullSpeed = an.Num("fullSpeed", 4, 0.1, 50),
+            IdleMotion = an.Num("idleMotion", 0, 0, 1),
+            Amplitude = an.Num("amplitude", 1, 0, 2),
+            BodyWave = an.Num("bodyWave", 0.2, 0, 2),
+            LimbSweep = an.Num("limbSweep", 0.5, 0, 2),
+            LimbLift = an.Num("limbLift", 0.3, 0, 2),
+            Bob = an.Num("bob", 0.05, 0, 1),
+            PhaseSpread = an.Num("phaseSpread", 0.5, 0, 8),
+            DutyFactor = an.Num("dutyFactor", 0.6, 0.05, 0.95),
+        };
+        if (animation.IdleHz > animation.MaxHz) an["idleHz"].Error("idleHz must not exceed maxHz");
         var diet = new List<DietEntry>();
         foreach (var d in n.Items("diet"))
         {
@@ -479,7 +640,7 @@ public static class ContentLoader
         SchoolingParams? school = null;
         var behaviors = n.StrList("behaviors");
         foreach (var bh in behaviors)
-            if (bh is not ("schooling" or "conglobate")) n["behaviors"].Error($"unknown behavior component '{bh}'");
+            if (bh is not ("schooling" or "conglobate" or "flying")) n["behaviors"].Error($"unknown behavior component '{bh}'");
         if (n.Has("schooling"))
         {
             var sc = n["schooling"]; sc.RejectUnknown("radius", "cohesion", "alignment", "separation", "separationDistance");
@@ -505,7 +666,7 @@ public static class ContentLoader
             SizeMin = b.Num("sizeMin", min: 0.0001, max: 1), SizeMax = b.Num("sizeMax", min: 0.0001, max: 1), VisualScale = b.Num("visualScale", 1, 1, 100),
             MassAtMid = b.Num("massAtMid", min: 0.00001, max: 10), DetritusOnDeath = b.Num("detritusOnDeath", 1, 0, 10),
             Traits = ge.StrList("traits", required: true), MutationMagnitude = ge.Num("mutationMagnitude", min: 0, max: 1), InitialVariance = ge.Num("initialVariance", 0.08, 0, 0.5),
-            Model = v.Str("model"), BaseColor = v.Color("baseColor"), OrnamentColor = v.Color("ornamentColor"),
+            Model = v.Str("model"), BaseColor = v.Color("baseColor"), OrnamentColor = v.Color("ornamentColor"), Animation = animation,
             Behaviors = behaviors, Schooling = school,
         };
         if (def.SizeMin >= def.SizeMax) b["sizeMin"].Error("sizeMin must be smaller than sizeMax");
@@ -557,7 +718,7 @@ public static class ContentLoader
         var t = n.Req("terrain");
         t.RejectUnknown("baseHeight", "relief", "noiseScale", "octaves", "minHeight", "maxHeight", "bottom", "rockExposure", "features");
         var w = n.Req("water");
-        w.RejectUnknown("waterTable", "springs", "flowRate", "evaporationPerDay", "infiltrationPerDay", "wetDepth", "boundaryDrop", "subSteps");
+        w.RejectUnknown("waterTable", "springs", "flowRate", "flowMemorySeconds", "flowResponseSeconds", "streamVelocityThreshold", "evaporationPerDay", "infiltrationPerDay", "wetDepth", "boundaryDrop", "subSteps");
         var p = n.Req("placement");
         p.RejectUnknown("rocks", "rockMinScale", "rockMaxScale", "logs", "logMinLength", "logMaxLength", "logMinRadius", "logMaxRadius", "gravelPatches", "gravelMinRadius", "gravelMaxRadius", "spacing");
         var d = new WorldDescriptor
@@ -586,7 +747,11 @@ public static class ContentLoader
             Water = new WaterConfig
             {
                 WaterTable = w.Num("waterTable", min: -3, max: 3),
-                FlowRate = w.Num("flowRate", 0.2, 0.01, 0.24), Evaporation = w.Num("evaporationPerDay", 0.004, 0, 1), Infiltration = w.Num("infiltrationPerDay", 0.01, 0, 1),
+                FlowRate = w.Num("flowRate", 0.2, 0.01, 0.24),
+                FlowMemorySeconds = w.Num("flowMemorySeconds", 45.0, 1, 600),
+                FlowResponseSeconds = w.Num("flowResponseSeconds", 30.0, 1, 600),
+                StreamVelocityThreshold = w.Num("streamVelocityThreshold", 0.0001, 0, 1),
+                Evaporation = w.Num("evaporationPerDay", 0.004, 0, 1), Infiltration = w.Num("infiltrationPerDay", 0.01, 0, 1),
                 WetDepth = w.Num("wetDepth", 0.008, 0.0005, 0.2), BoundaryDrop = w.Num("boundaryDrop", 0.3, 0.01, 5), SubSteps = w.Int("subSteps", 4, 1, 32),
                 Springs = w.Items("springs", required: false).Select(s =>
                 {
@@ -640,6 +805,17 @@ public static class ContentLoader
                 var d = f.Diet[i];
                 bool ok;
                 if (d.Resource.StartsWith("flora:", StringComparison.Ordinal)) ok = archetypes.Contains(d.Resource[6..]);
+                else if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal))
+                {
+                    string preyId = d.Resource[6..];
+                    ok = faunaIds.Contains(preyId);
+                    if (ok)
+                    {
+                        var prey = fauna.First(x => x.Id == preyId);
+                        if (prey.Medium != f.Medium)
+                            errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"predator and prey currently need the same simulation medium ('{f.Id}' -> '{preyId}')");
+                    }
+                }
                 else
                 {
                     var res = ecology.Resources.FirstOrDefault(r => r.Id == d.Resource);
@@ -649,15 +825,15 @@ public static class ContentLoader
                     if (res != null && res.Medium == "terrestrial" && f.Medium == Medium.Aquatic)
                         errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"aquatic species cannot eat terrestrial-only resource '{d.Resource}'");
                 }
-                if (!ok) errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"unknown diet resource '{d.Resource}' (known: {string.Join(", ", ecology.Resources.Select(r => r.Id))}, flora:<{string.Join("|", archetypes)}>)");
+                if (!ok) errors.Add(f.SourceFile, $"$.diet[{i}].resource", $"unknown diet resource '{d.Resource}' (known fields: {string.Join(", ", ecology.Resources.Select(r => r.Id))}; flora:<archetype>; fauna:<species-id>)");
             }
             for (int i = 0; i < f.Traits.Count; i++)
                 if (genetics.Get(f.Traits[i]) == null) errors.Add(f.SourceFile, $"$.genetics.traits[{i}]", $"unknown trait '{f.Traits[i]}'");
             if (!f.Traits.Contains("size")) errors.Add(f.SourceFile, "$.genetics.traits", "every fauna species must enable the 'size' trait");
             if (!f.Traits.Any(t => t is "ornament_density" or "hue_shift" or "pattern_strength" or "appendage_length"))
                 errors.Add(f.SourceFile, "$.genetics.traits", "at least one ornamentation trait is required");
-            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow" or "isopod" or "beetle" or "silverfish"))
-                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}' (springtail | shrimp | triops | minnow | isopod | beetle | silverfish)");
+            if (f.Model is not ("springtail" or "shrimp" or "triops" or "minnow" or "isopod" or "beetle" or "silverfish" or "slug" or "millipede" or "moth" or "toad" or "salamander" or "worm" or "harvestman" or "aquatic_larva" or "snail" or "midge"))
+                errors.Add(f.SourceFile, "$.visual.model", $"unknown visual model '{f.Model}'");
         }
 
         for (int i = 0; i < inter.Relations.Count; i++)

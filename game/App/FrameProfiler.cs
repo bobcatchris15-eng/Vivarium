@@ -25,6 +25,11 @@ public static class FrameProfiler
 
     public static Scope Measure(string name) => new(name);
 
+    public static void Record(string name, double ms)
+    {
+        if (!_max.TryGetValue(name, out var m) || ms > m) _max[name] = ms;
+    }
+
     /// <summary>The slowest scopes since the last call ("name=ms"), then resets.</summary>
     public static string TakeReport(int top = 5)
     {

@@ -17,6 +17,16 @@ public sealed class EcologyTally
 {
     public SortedDictionary<string, SpeciesTally> Species { get; set; } = new(StringComparer.Ordinal);
     public double DetritusFromFlora { get; set; }
+    public double LitterDeposited { get; set; }
+    public double LitterToDetritus { get; set; }
+    public long DeadFloraCreated { get; set; }
+    public long DeadFloraAssimilated { get; set; }
+    public double CorpseToLitter { get; set; }
+    public double CorpseToNutrients { get; set; }
+    public double FruitDropped { get; set; }
+    public double FruitToLitter { get; set; }
+    public double SeedsDeposited { get; set; }
+    public long SeedsGerminated { get; set; }
     public double DetritusFromFauna { get; set; }
     public double NutrientsFromDecay { get; set; }
     /// <summary>Dead matter consumed by decomposers (fungi, slime molds) and the nutrients they released.</summary>
@@ -42,34 +52,18 @@ public sealed class EcologySystem
     private readonly VivariumWorld _w;
     public EcologySystem(VivariumWorld w) { _w = w; }
 
-    /// <summary>Single entry point for returning organic matter. detritus → detritus field; directNutrients → nutrient field.</summary>
+    /// <summary>Single entry point for returning organic matter to visible detritus and/or soil nutrients.</summary>
     public void ReturnOrganicMatter(Vec2 p, double detritus, double directNutrients, bool fromFlora)
     {
         int c = _w.Grid.NearestDomainCell(p);
         if (c < 0) return;
         if (detritus > 0)
         {
-            double applied = SpreadAdd(_w.Fields.Detritus, c, detritus);
-            _w.Tally.DetritusOverflow += detritus - applied;
+            double applied = _w.Litter.Deposit(p, detritus);
             if (fromFlora) _w.Tally.DetritusFromFlora += applied; else _w.Tally.DetritusFromFauna += applied;
         }
         if (directNutrients > 0) _w.Tally.NutrientsDirectReturn += _w.Fields.Nutrients.Add(c, directNutrients);
     }
-
-    /// <summary>Adds into a cell; any overflow above the field maximum spills into neighbouring cells.</summary>
-    private double SpreadAdd(Fields.ScalarField f, int c, double amount)
-    {
-        double applied = f.Add(c, amount);
-        double rest = amount - applied;
-        if (rest <= 1e-15) return applied;
-        foreach (int n in _w.Grid.CellsInRadius(_w.Grid.CellCenter(c), _w.Grid.CellSize * 2.2))
-        {
-            if (rest <= 1e-15) break;
-            double a = f.Add(n, rest); applied += a; rest -= a;
-        }
-        return applied;
-    }
-
     public void AddWasteNutrients(Vec2 p, double amount)
     {
         if (amount <= 0) return;
@@ -81,18 +75,8 @@ public sealed class EcologySystem
     {
         var eco = _w.Content.Ecology;
         var f = _w.Fields;
-        double decay = 1 - Math.Exp(-eco.DetritusDecay * dt);
         foreach (int idx in _w.Grid.DomainCells)
         {
-            // detritus decomposition → nutrients
-            double d = f.Detritus.Values[idx];
-            if (d > 0)
-            {
-                double dec = d * decay;
-                f.Detritus[idx] = d - dec;
-                double n = f.Nutrients.Add(idx, dec * eco.DetritusNutrientYield);
-                _w.Tally.NutrientsFromDecay += n;
-            }
             bool wet = _w.Water.IsWet(idx);
             if (wet)
             {

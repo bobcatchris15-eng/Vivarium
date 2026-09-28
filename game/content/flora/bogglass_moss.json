@@ -1,0 +1,104 @@
+{
+  "id": "bogglass_moss",
+  "name": "Bogglass moss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Water-holding bog moss of saturated nutrient-poor ground.",
+  "description": "Pale translucent branchlets form springy hummocks that retain water and favor persistently saturated ground.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.97,
+      "tolerance": 0.1
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.2,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.01,
+    "hardMinMoisture": 0.6,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 0.8,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.3,
+    "maturityDays": 8,
+    "lifespanDays": 200,
+    "nutrientPerBiomass": 0.15,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.35,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.28,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.45,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.03,
+    "maxHeight": 0.03,
+    "heightRule": "dome",
+    "domeLength": 7,
+    "water": {
+      "kWet": 8,
+      "kDry": 0.6,
+      "wMin": 0.45,
+      "wOpt": 0.8
+    },
+    "light": {
+      "k": 0.3,
+      "max": 0.85
+    },
+    "dormBrownDays": 2,
+    "dormDeathDays": 10,
+    "sporeRate": 0.0015,
+    "moistureFeedback": 0.015,
+    "seedBiomass": 0.07
+  },
+  "visual": {
+    "shape": "capitula",
+    "color": [
+      0.5,
+      0.68,
+      0.36
+    ],
+    "color2": [
+      0.6,
+      0.3,
+      0.2
+    ],
+    "colorVariance": 0.07,
+    "height": 0.04
+  },
+  "tags": [
+    "moss",
+    "riparian",
+    "bog"
+  ]
+}

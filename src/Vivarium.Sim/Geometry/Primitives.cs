@@ -173,8 +173,9 @@ public static class Primitives
         if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
         side = side.Normalized();
         var normal = dir.Cross(side).Normalized();
-        longitudinal = Math.Max(3, longitudinal);
+        longitudinal = m.FloraDetailLevel switch { 1 => Math.Max(3,longitudinal-1), 2 => 2, _ => Math.Max(3,longitudinal) };
         const int across = 2; // left / midrib / right
+        int leafVertex=m.VertexCount,leafIndex=m.Indices.Count;
 
         Vec3 At(double t, double x)
         {
@@ -185,7 +186,7 @@ public static class Primitives
             return root + axis * t + side * (width * x + sweep) + normal * crown;
         }
 
-        for (int face = 0; face < 2; face++)
+        for (int face = 0; face < (m.FloraDetailLevel.HasValue ? 1 : 2); face++)
         {
             var faceN = face == 0 ? normal : -normal;
             int start = m.VertexCount;
@@ -203,7 +204,7 @@ public static class Primitives
                     if (n.LengthSq < 1e-8) n = faceN;
                     if (n.Dot(faceN) < 0) n = -n;
                     var col = Mix(rootCol, tipCol, t);
-                    m.AddVertex(p, n, col, 1, t, (x + 1) * 0.5, 0, 0);
+                    m.AddVertex(p, n, col, 1, t, (x + 1) * 0.5, face, 1);
                 }
             }
             int row = across + 1;
@@ -215,18 +216,19 @@ public static class Primitives
                     TriangleFacing(m, a + 1, b, b + 1, faceN);
                 }
         }
+        m.RecordLeaf(leafVertex,leafIndex,root,length);
     }
 
     /// <summary>Double-sided flat polygon (fan) — for leaves, fins, lichen lobes.</summary>
     public static void Fan(MeshData m, Vec3 centre, IReadOnlyList<Vec3> rim, Vec3 normal, double[] colCentre, double[] colRim,
-        double a = 1, double u2 = 0, Func<Vec3, Vec3>? appendageOffset = null)
+        double a = 1, double u2 = 0, Func<Vec3, Vec3>? appendageOffset = null, double v2 = 0)
     {
         for (int side = 0; side < 2; side++)
         {
             var n = side == 0 ? normal : -normal;
-            int c = m.AddVertex(centre, n, colCentre, a, 0.5, 0.5, u2, 0);
+            int c = m.AddVertex(centre, n, colCentre, a, 0.5, 0.5, u2, v2);
             var ids = new int[rim.Count];
-            for (int i = 0; i < rim.Count; i++) ids[i] = m.AddVertex(rim[i], n, colRim, a, (double)i / rim.Count, 1, u2, 0);
+            for (int i = 0; i < rim.Count; i++) ids[i] = m.AddVertex(rim[i], n, colRim, a, (double)i / rim.Count, 1, u2, v2);
             for (int i = 0; i < rim.Count - 1; i++) TriangleFacing(m, c, ids[i], ids[i + 1], n);
         }
     }

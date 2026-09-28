@@ -1,0 +1,151 @@
+{
+  "id": "creek",
+  "name": "Whispering Creek",
+  "seed": 58210,
+  "diameter": 14,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.65,
+    "relief": 0.58,
+    "noiseScale": 0.26,
+    "octaves": 5,
+    "minHeight": -0.6,
+    "maxHeight": 2.5,
+    "bottom": -2.6,
+    "rockExposure": 0.28,
+    "features": [
+      {
+        "type": "hill",
+        "x": -4.2,
+        "z": -3.5,
+        "radius": 3.2,
+        "amount": 1.1
+      },
+      {
+        "type": "hill",
+        "x": 3.8,
+        "z": -2.0,
+        "radius": 3.5,
+        "amount": 0.8
+      },
+      {
+        "type": "channel",
+        "x": -4.4,
+        "z": -3.6,
+        "toX": -0.8,
+        "toZ": -0.4,
+        "width": 0.70,
+        "amount": 0.45
+      },
+      {
+        "type": "channel",
+        "x": -0.8,
+        "z": -0.4,
+        "toX": 7.2,
+        "toZ": 6.4,
+        "width": 0.85,
+        "amount": 0.48
+      },
+      {
+        "type": "basin",
+        "x": -0.6,
+        "z": -0.3,
+        "radius": 1.5,
+        "amount": 0.35
+      }
+    ]
+  },
+  "water": {
+    "waterTable": -0.4,
+    "springs": [
+      {
+        "x": -3.9,
+        "z": -3.2,
+        "dischargePerHour": 0.12
+      }
+    ],
+    "flowRate": 0.22,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.004,
+    "infiltrationPerDay": 0.02,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.35,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 22,
+    "rockMinScale": 0.16,
+    "rockMaxScale": 0.68,
+    "logs": 4,
+    "logMinLength": 1.2,
+    "logMaxLength": 2.3,
+    "logMinRadius": 0.11,
+    "logMaxRadius": 0.22,
+    "gravelPatches": 9,
+    "gravelMinRadius": 0.4,
+    "gravelMaxRadius": 0.95,
+    "spacing": 0.32
+  },
+  "starterFlora": [
+    {
+      "species": "brooklace",
+      "count": 10
+    },
+    {
+      "species": "velvetweave_moss",
+      "count": 14
+    },
+    {
+      "species": "pearl_cushion_moss",
+      "count": 10
+    },
+    {
+      "species": "veilfern",
+      "count": 8
+    },
+    {
+      "species": "dewbonnet",
+      "count": 8
+    },
+    {
+      "species": "fenbead",
+      "count": 6
+    },
+    {
+      "species": "frosttussock",
+      "count": 6
+    },
+    {
+      "species": "clinglace",
+      "count": 6
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "emberglass_swimmer",
+      "count": 10
+    },
+    {
+      "species": "ghostbristle",
+      "count": 8
+    },
+    {
+      "species": "glintfin",
+      "count": 8
+    },
+    {
+      "species": "rainspine",
+      "count": 6
+    },
+    {
+      "species": "rustcoil",
+      "count": 6
+    },
+    {
+      "species": "prismhopper",
+      "count": 10
+    }
+  ]
+}

@@ -306,7 +306,7 @@ public class MossScenarios
         int Run(double moistureFeedback)
         {
             var p = new MatParams(
-                OccupantId: 1, Name: "sphagnum", HeightForm: MatHeightForm.Dome,
+                OccupantId: 1, Name: "bogglass_moss", HeightForm: MatHeightForm.Dome,
                 Lateral: 0.8, MaxHeightM: 0.03, GrowthRate: 1.5,
                 KWet: 6, KDry: 1.2, WMin: 0.3, WOpt: 0.6, KLight: 0.3, LightMax: 1.0,
                 DormBrownDays: 2, DormDeathDays: 8, SporeRate: 0.0005, MoistureFeedback: moistureFeedback,
@@ -600,7 +600,7 @@ public class MossScenarios
     public void SphagnumFeedbackWritesTimelapseFrames()
     {
         var p = new MatParams(
-            OccupantId: 1, Name: "sphagnum", HeightForm: MatHeightForm.Dome,
+            OccupantId: 1, Name: "bogglass_moss", HeightForm: MatHeightForm.Dome,
             Lateral: 0.8, MaxHeightM: 0.03, GrowthRate: 1.5,
             KWet: 6, KDry: 1.2, WMin: 0.3, WOpt: 0.6, KLight: 0.3, LightMax: 1.0,
             DormBrownDays: 2, DormDeathDays: 8, SporeRate: 0.0005, MoistureFeedback: 0.05,

@@ -1,0 +1,9 @@
+{
+  "enabled":true, "species":"embercrown", "veins":"compound", "volumetric":false,
+  "top":[0.060,0.155,0.035], "back":[0.15,0.21,0.095],
+  "roughness":0.63, "backRoughness":0.85, "transmission":0.27,
+  "relief":0.23, "veinStrength":0.30, "wind":0.028,
+  "tissueScale":1.1, "canopyOcclusion":0.10,
+  "microScale":1.0, "microRelief":0.018,
+  "bark":"Bark001", "barkTint":[0.47,0.38,0.33]
+}

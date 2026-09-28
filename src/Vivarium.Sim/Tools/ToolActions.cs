@@ -188,7 +188,7 @@ public sealed class ToolActions
 
     private ToolResult Wrap(PlacementResult r, string what)
     {
-        if (r.Ok) _w.RefreshDerived();
+        if (r.Ok && what != "gravel") _w.RefreshDerived();
         return r.Ok ? ToolResult.Success($"{r.Message} {what}", r.Id) : ToolResult.Fail($"Can't place {what}: {r.Message}");
     }
 

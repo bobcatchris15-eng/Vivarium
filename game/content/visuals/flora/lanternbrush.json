@@ -1,0 +1,9 @@
+{
+  "enabled":true, "species":"lanternbrush", "veins":"slender", "volumetric":false,
+  "top":[0.047,0.145,0.095], "back":[0.14,0.21,0.145],
+  "roughness":0.57, "backRoughness":0.82, "transmission":0.28,
+  "relief":0.22, "veinStrength":0.32, "wind":0.032,
+  "tissueScale":1.15, "canopyOcclusion":0.08,
+  "microScale":0.9, "microRelief":0.018,
+  "bark":"Bark014", "barkTint":[0.38,0.29,0.27]
+}

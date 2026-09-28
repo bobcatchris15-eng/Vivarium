@@ -1,9 +1,11 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using System.Text.Json.Serialization;
 
 namespace Vivarium.Sim.Flora;
 
 public enum FloraStage { Juvenile, Mature, Senescent }
+public enum PlantReproductiveStage : byte { Dormant = 0, Developing = 1, Ripe = 2, Spent = 3 }
 
 /// <summary>
 /// One plant individual or moss/lichen colony. Colonies and individuals share this API: a colony's
@@ -22,6 +24,11 @@ public sealed class FloraIndividual
     public double Health { get; set; } = 1;
     public int SpreadCount { get; set; }
     public double LastSpreadAge { get; set; }
+    public PlantReproductiveStage ReproductiveStage { get; set; }
+    public double ReproductiveStageAge { get; set; }
+    public double ReproductiveReserve { get; set; }
+    public double FruitLoad { get; set; }
+    public int FruitPulseCount { get; set; }
     /// <summary>Lifespan multiplier drawn at establishment (deterministic).</summary>
     public double LifespanFactor { get; set; } = 1;
     /// <summary>Last evaluated habitat suitability (0..1), for inspection.</summary>
@@ -49,6 +56,17 @@ public sealed class FloraIndividual
     /// <summary>Slime mold: network depth from the founding plasmodium (0 = founder), set once at bud creation.
     /// Drives the old-dark-ochre to front-bright-yellow tint gradient; not walked from ParentId per frame.</summary>
     public int Generation { get; set; }
+    /// <summary>Climbers: this node is an active horizontal growth tip.</summary>
+    public bool ClimberTip { get; set; }
+    /// <summary>Climbers: this node has physically reached and attached to structural support.</summary>
+    public bool ClimberAttached { get; set; }
+    /// <summary>Climbers: accumulated runner length from the founder without an attachment (m).</summary>
+    public double UnsupportedLength { get; set; }
+    /// <summary>Climbers: sequence of stem nodes and segments grown by this plant.</summary>
+    public System.Collections.Generic.List<ClimberSegment>? ClimberSegments { get; set; }
+    /// <summary>Cached ground height at establishment; avoids repeating expensive terrain + prop queries every frame.</summary>
+    [JsonIgnore] // Derived from position and terrain; NaN is the uncached sentinel, never save state.
+    public double GroundHeight { get; set; } = double.NaN;
 
     public Vec2 Position => new(X, Z);
 
@@ -63,6 +81,20 @@ public sealed class FloraIndividual
     public double Radius(FloraSpeciesDef sp) => sp.Colony != null
         ? sp.Colony.CellRadius * (0.9 + 0.3 * HeightFactor) * Math.Sqrt(MergeFactor)
         : sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(BiomassFraction(sp));
+}
+
+/// <summary>One node and internode segment of a climbing or creeping vine, grown sequentially.</summary>
+public sealed class ClimberSegment
+{
+    public Vec3 Position { get; set; }
+    public Vec3 Normal { get; set; } = Vec3.Up;
+    public Vec3 Forward { get; set; } = new Vec3(0, 0, 1);
+    public int ParentIndex { get; set; } = -1;
+    public int ShootOrder { get; set; }
+    public bool Attached { get; set; }
+    public bool Terminal { get; set; }
+    public double Age { get; set; }
+    public bool Senescent { get; set; }
 }
 
 /// <summary>Uniform-grid bucket index for local flora queries (avoids whole-population scans).</summary>

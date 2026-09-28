@@ -1,0 +1,1614 @@
+{
+ "preset_bio_days": 6.157,
+ "ticks": 6206,
+ "flora_total": 495,
+ "fauna_total": 136,
+ "species_present": {
+  "ambervein": 73,
+  "brooklace": 25,
+  "clinglace": 17,
+  "coinrunner": 19,
+  "dewbonnet": 24,
+  "embercrown": 6,
+  "emberfan_fungus": 7,
+  "fenbead": 26,
+  "fenhook": 13,
+  "fenneedle": 1,
+  "frosttussock": 36,
+  "glassfinger": 24,
+  "glassrush": 46,
+  "ironlace": 1,
+  "kiteleaf": 1,
+  "lanternbrush": 2,
+  "mirrorleaf": 11,
+  "mooncoin": 17,
+  "prismstar": 26,
+  "ringreed": 21,
+  "shadebell": 2,
+  "spiralvine": 11,
+  "sunstone_rosette": 38,
+  "trifold": 35,
+  "umbraheart": 1,
+  "veilfern": 12
+ },
+ "coverage_area_m2": {
+  "antlerlace_lichen": 0.09,
+  "bogglass_moss": 0.2512,
+  "embercrust_lichen": 0.0988,
+  "floodlace_moss": 0.7944,
+  "pearl_cushion_moss": 0.174,
+  "ruffle_lichen": 0.0952,
+  "velvetweave_moss": 0.7084
+ },
+ "digest": "97479118fdb46f14b42709b00a2f8bc0a8dfd82f27f24c0d737c0e081b2cc985",
+ "scenes": [
+  {
+   "name": "overview",
+   "category": "overview",
+   "eye": [
+    0,
+    8.5,
+    14.5
+   ],
+   "target": [
+    0,
+    -0.5,
+    0
+   ],
+   "fps_mean": 232.9,
+   "frame_ms_p50": 4,
+   "frame_ms_p95": 5.54,
+   "frame_ms_worst": 6.28,
+   "draw_calls": 448,
+   "primitives": 4797440,
+   "objects": 448,
+   "flora_visible": 495,
+   "flora_triangles": 2211014,
+   "fauna_drawn": 136,
+   "fauna_triangles": 107974,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Fauna=1.9 Coverage=0.3 Tools=0.2 Camera=0.1"
+  },
+  {
+   "name": "interaction",
+   "category": "interaction",
+   "eye": [
+    3.440322,
+    2.3308568,
+    -1.7523489
+   ],
+   "target": [
+    1.657257,
+    0.36073992,
+    -3.5354137
+   ],
+   "fps_mean": 178.8,
+   "frame_ms_p50": 5.49,
+   "frame_ms_p95": 6.16,
+   "frame_ms_worst": 8.31,
+   "draw_calls": 396,
+   "primitives": 5806148,
+   "objects": 396,
+   "flora_visible": 336,
+   "flora_triangles": 1429598,
+   "fauna_drawn": 19,
+   "fauna_triangles": 17106,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.5 Flora=2.0 Fauna=1.2 Coverage=0.4 Tools=0.2"
+  },
+  {
+   "name": "ground_vegetation",
+   "category": "ground",
+   "eye": [
+    1.2359549,
+    0.518391,
+    -3.1409369
+   ],
+   "target": [
+    0.93113244,
+    0.3931352,
+    -3.9784298
+   ],
+   "fps_mean": 225,
+   "frame_ms_p50": 4.02,
+   "frame_ms_p95": 4.46,
+   "frame_ms_worst": 37.04,
+   "draw_calls": 197,
+   "primitives": 2565102,
+   "objects": 197,
+   "flora_visible": 168,
+   "flora_triangles": 738228,
+   "fauna_drawn": 3,
+   "fauna_triangles": 2346,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Water=27.5 Island=5.9 Flora=2.0 Fauna=1.0 Coverage=0.4"
+  },
+  {
+   "name": "macro_flora",
+   "category": "macro",
+   "eye": [
+    5.6017747,
+    6.354639,
+    7.79522
+   ],
+   "target": [
+    -1.3215519,
+    2.3987932,
+    0.87189347
+   ],
+   "fps_mean": 208.7,
+   "frame_ms_p50": 4.71,
+   "frame_ms_p95": 5.31,
+   "frame_ms_worst": 8.74,
+   "draw_calls": 440,
+   "primitives": 4973117,
+   "objects": 440,
+   "flora_visible": 495,
+   "flora_triangles": 2211014,
+   "fauna_drawn": 94,
+   "fauna_triangles": 85536,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.4 Flora=2.0 Fauna=1.6 Coverage=0.3 Tools=0.1"
+  },
+  {
+   "name": "slime_network",
+   "category": "slime",
+   "eye": [
+    2.6461582,
+    0.8547138,
+    3.5168076
+   ],
+   "target": [
+    2.2370908,
+    0.16527385,
+    3.10774
+   ],
+   "fps_mean": 208.7,
+   "frame_ms_p50": 4.72,
+   "frame_ms_p95": 5.22,
+   "frame_ms_worst": 8.2,
+   "draw_calls": 321,
+   "primitives": 3634279,
+   "objects": 321,
+   "flora_visible": 390,
+   "flora_triangles": 1748202,
+   "fauna_drawn": 4,
+   "fauna_triangles": 2440,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.5 Flora=2.0 Tools=1.2 Fauna=0.8 Coverage=0.3"
+  },
+  {
+   "name": "slime_macro",
+   "category": "slime",
+   "eye": [
+    3.5644186,
+    0.15595014,
+    4.69585
+   ],
+   "target": [
+    3.3365552,
+    0.01595014,
+    4.778785
+   ],
+   "fps_mean": 254.4,
+   "frame_ms_p50": 3.92,
+   "frame_ms_p95": 4.29,
+   "frame_ms_worst": 4.7,
+   "draw_calls": 131,
+   "primitives": 1703539,
+   "objects": 131,
+   "flora_visible": 171,
+   "flora_triangles": 959096,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Tools=1.0 Fauna=0.6 Coverage=0.3 Environment=0.1"
+  },
+  {
+   "name": "fungi_patch",
+   "category": "fungi",
+   "eye": [
+    0.9879162,
+    0.84760076,
+    -3.079863
+   ],
+   "target": [
+    0.6354452,
+    0.6151607,
+    -3.4323342
+   ],
+   "fps_mean": 213.6,
+   "frame_ms_p50": 4.63,
+   "frame_ms_p95": 4.98,
+   "frame_ms_worst": 7.57,
+   "draw_calls": 219,
+   "primitives": 1744250,
+   "objects": 219,
+   "flora_visible": 183,
+   "flora_triangles": 814190,
+   "fauna_drawn": 6,
+   "fauna_triangles": 6670,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.3 Flora=2.0 Fauna=0.8 Coverage=0.4 Tools=0.2"
+  },
+  {
+   "name": "bracket_macro",
+   "category": "fungi",
+   "eye": [
+    1.8131822,
+    0.7715791,
+    -0.5790982
+   ],
+   "target": [
+    1.9122921,
+    0.69393337,
+    -0.3067962
+   ],
+   "fps_mean": 264,
+   "frame_ms_p50": 3.72,
+   "frame_ms_p95": 4.11,
+   "frame_ms_worst": 7.98,
+   "draw_calls": 266,
+   "primitives": 2406422,
+   "objects": 266,
+   "flora_visible": 257,
+   "flora_triangles": 1028744,
+   "fauna_drawn": 70,
+   "fauna_triangles": 46254,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.2 Fauna=1.6 Coverage=0.3 Tools=0.1 Environment=0.1"
+  },
+  {
+   "name": "fauna_terrestrial",
+   "category": "fauna",
+   "eye": [
+    4.899505,
+    -0.27222034,
+    3.0531247
+   ],
+   "target": [
+    4.8337126,
+    -0.61946917,
+    2.9873319
+   ],
+   "fps_mean": 266.6,
+   "frame_ms_p50": 3.6,
+   "frame_ms_p95": 4.3,
+   "frame_ms_worst": 12.73,
+   "draw_calls": 237,
+   "primitives": 506105,
+   "objects": 237,
+   "flora_visible": 56,
+   "flora_triangles": 121368,
+   "fauna_drawn": 5,
+   "fauna_triangles": 1440,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=8.9 Flora=2.0 Fauna=1.1 Tools=0.7 Coverage=0.6"
+  },
+  {
+   "name": "fauna_aquatic",
+   "category": "fauna",
+   "eye": [
+    5.69542,
+    -0.27675614,
+    2.690653
+   ],
+   "target": [
+    5.6272388,
+    -0.29030746,
+    2.6224718
+   ],
+   "fps_mean": 108,
+   "frame_ms_p50": 8.95,
+   "frame_ms_p95": 14.34,
+   "frame_ms_worst": 20.31,
+   "draw_calls": 480,
+   "primitives": 5197209,
+   "objects": 480,
+   "flora_visible": 455,
+   "flora_triangles": 2000846,
+   "fauna_drawn": 90,
+   "fauna_triangles": 74454,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=13.3 Tools=4.6 Fauna=4.3 Flora=2.5 Coverage=1.5"
+  },
+  {
+   "name": "water_margin",
+   "category": "water",
+   "eye": [
+    0.22500002,
+    0.8235396,
+    -3.025
+   ],
+   "target": [
+    1.375,
+    0.3735396,
+    -3.625
+   ],
+   "fps_mean": 185.5,
+   "frame_ms_p50": 4.82,
+   "frame_ms_p95": 6.73,
+   "frame_ms_worst": 33.97,
+   "draw_calls": 334,
+   "primitives": 3353996,
+   "objects": 334,
+   "flora_visible": 251,
+   "flora_triangles": 1089332,
+   "fauna_drawn": 8,
+   "fauna_triangles": 7770,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=6.8 Tools=2.5 Flora=2.0 Fauna=0.9 Coverage=0.8"
+  },
+  {
+   "name": "rock_contact",
+   "category": "rock",
+   "eye": [
+    -4.5721164,
+    1.9337986,
+    -1.8334119
+   ],
+   "target": [
+    -5.1608644,
+    1.3847232,
+    -2.8531532
+   ],
+   "fps_mean": 337.3,
+   "frame_ms_p50": 2.66,
+   "frame_ms_p95": 4.8,
+   "frame_ms_worst": 5.12,
+   "draw_calls": 61,
+   "primitives": 469535,
+   "objects": 61,
+   "flora_visible": 50,
+   "flora_triangles": 132372,
+   "fauna_drawn": 4,
+   "fauna_triangles": 4732,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Tools=1.3 Fauna=1.0 Coverage=0.4 Environment=0.1 Camera=0.0"
+  },
+  {
+   "name": "log_contact",
+   "category": "log",
+   "eye": [
+    2.158742,
+    0.9901073,
+    -0.8702767
+   ],
+   "target": [
+    1.3435234,
+    0.6842496,
+    -1.3409433
+   ],
+   "fps_mean": 183.5,
+   "frame_ms_p50": 5.37,
+   "frame_ms_p95": 5.88,
+   "frame_ms_worst": 10.62,
+   "draw_calls": 400,
+   "primitives": 4347524,
+   "objects": 400,
+   "flora_visible": 341,
+   "flora_triangles": 1521726,
+   "fauna_drawn": 35,
+   "fauna_triangles": 32298,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=7.1 Flora=2.0 Fauna=1.3 Coverage=0.5 Tools=0.2"
+  },
+  {
+   "name": "species_antlerlace_lichen",
+   "category": "species",
+   "eye": [
+    -0.2645847,
+    1.0730867,
+    -1.0245847
+   ],
+   "target": [
+    -0.37,
+    0.5167135,
+    -1.13
+   ],
+   "fps_mean": 222.4,
+   "frame_ms_p50": 4.46,
+   "frame_ms_p95": 4.7,
+   "frame_ms_worst": 10.1,
+   "draw_calls": 325,
+   "primitives": 2409341,
+   "objects": 325,
+   "flora_visible": 229,
+   "flora_triangles": 938442,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=7.5 Flora=2.0 Fauna=0.7 Coverage=0.4 Tools=0.2"
+  },
+  {
+   "name": "detail_antlerlace_lichen",
+   "category": "species_detail",
+   "eye": [
+    -0.32973722,
+    0.7292172,
+    -1.0897372
+   ],
+   "target": [
+    -0.37,
+    0.5167135,
+    -1.13
+   ],
+   "fps_mean": 279.2,
+   "frame_ms_p50": 3.57,
+   "frame_ms_p95": 3.86,
+   "frame_ms_worst": 4.48,
+   "draw_calls": 307,
+   "primitives": 2240737,
+   "objects": 307,
+   "flora_visible": 216,
+   "flora_triangles": 912004,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Fauna=1.7 Coverage=0.3 Tools=0.2 Environment=0.1 Camera=0.1"
+  },
+  {
+   "name": "species_bogglass_moss",
+   "category": "species",
+   "eye": [
+    -3.7913013,
+    0.7283246,
+    2.9978125
+   ],
+   "target": [
+    -4.1249366,
+    0.39794457,
+    2.6641772
+   ],
+   "fps_mean": 189.7,
+   "frame_ms_p50": 5.25,
+   "frame_ms_p95": 5.56,
+   "frame_ms_worst": 7.87,
+   "draw_calls": 109,
+   "primitives": 1007399,
+   "objects": 109,
+   "flora_visible": 88,
+   "flora_triangles": 450708,
+   "fauna_drawn": 6,
+   "fauna_triangles": 5440,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.7 Flora=2.0 Fauna=1.0 Tools=0.6 Coverage=0.3"
+  },
+  {
+   "name": "species_embercrust_lichen",
+   "category": "species",
+   "eye": [
+    0.2036353,
+    0.9995202,
+    -3.7963648
+   ],
+   "target": [
+    -0.13,
+    0.66914016,
+    -4.13
+   ],
+   "fps_mean": 217.1,
+   "frame_ms_p50": 4.26,
+   "frame_ms_p95": 4.55,
+   "frame_ms_worst": 34.1,
+   "draw_calls": 141,
+   "primitives": 866790,
+   "objects": 141,
+   "flora_visible": 135,
+   "flora_triangles": 506018,
+   "fauna_drawn": 4,
+   "fauna_triangles": 4158,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Water=22.9 Island=7.8 Flora=2.0 Fauna=1.1 Tools=0.9"
+  },
+  {
+   "name": "detail_embercrust_lichen",
+   "category": "species_detail",
+   "eye": [
+    0.010988399,
+    0.7621162,
+    -3.9890118
+   ],
+   "target": [
+    -0.13,
+    0.66914016,
+    -4.13
+   ],
+   "fps_mean": 284.8,
+   "frame_ms_p50": 3.52,
+   "frame_ms_p95": 3.78,
+   "frame_ms_worst": 4.38,
+   "draw_calls": 101,
+   "primitives": 633538,
+   "objects": 101,
+   "flora_visible": 132,
+   "flora_triangles": 497130,
+   "fauna_drawn": 6,
+   "fauna_triangles": 6670,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Fauna=0.8 Tools=0.6 Coverage=0.3 Environment=0.1"
+  },
+  {
+   "name": "species_floodlace_moss",
+   "category": "species",
+   "eye": [
+    0.6832949,
+    0.72076803,
+    -3.8744073
+   ],
+   "target": [
+    0.34965956,
+    0.390388,
+    -4.2080426
+   ],
+   "fps_mean": 205.9,
+   "frame_ms_p50": 4.82,
+   "frame_ms_p95": 5.11,
+   "frame_ms_worst": 9.36,
+   "draw_calls": 172,
+   "primitives": 1178810,
+   "objects": 172,
+   "flora_visible": 146,
+   "flora_triangles": 591432,
+   "fauna_drawn": 3,
+   "fauna_triangles": 3330,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.9 Flora=2.0 Tools=1.0 Fauna=0.8 Coverage=0.4"
+  },
+  {
+   "name": "species_pearl_cushion_moss",
+   "category": "species",
+   "eye": [
+    -1.8047857,
+    0.9162906,
+    3.6899512
+   ],
+   "target": [
+    -2.138421,
+    0.58591056,
+    3.3563159
+   ],
+   "fps_mean": 199,
+   "frame_ms_p50": 4.99,
+   "frame_ms_p95": 5.23,
+   "frame_ms_worst": 10.01,
+   "draw_calls": 208,
+   "primitives": 2730975,
+   "objects": 208,
+   "flora_visible": 158,
+   "flora_triangles": 916284,
+   "fauna_drawn": 17,
+   "fauna_triangles": 15620,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=7.3 Flora=2.0 Fauna=1.1 Tools=0.6 Coverage=0.3"
+  },
+  {
+   "name": "species_ruffle_lichen",
+   "category": "species",
+   "eye": [
+    3.4619331,
+    1.1271563,
+    -2.7946625
+   ],
+   "target": [
+    3.1282978,
+    0.7967763,
+    -3.1282978
+   ],
+   "fps_mean": 196.4,
+   "frame_ms_p50": 5.07,
+   "frame_ms_p95": 5.41,
+   "frame_ms_worst": 10.06,
+   "draw_calls": 331,
+   "primitives": 3174670,
+   "objects": 331,
+   "flora_visible": 259,
+   "flora_triangles": 1068416,
+   "fauna_drawn": 8,
+   "fauna_triangles": 7614,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.3 Flora=2.0 Fauna=1.5 Tools=0.8 Coverage=0.4"
+  },
+  {
+   "name": "detail_ruffle_lichen",
+   "category": "species_detail",
+   "eye": [
+    3.2692862,
+    0.8897523,
+    -2.9873095
+   ],
+   "target": [
+    3.1282978,
+    0.7967763,
+    -3.1282978
+   ],
+   "fps_mean": 264.3,
+   "frame_ms_p50": 3.74,
+   "frame_ms_p95": 4.35,
+   "frame_ms_worst": 8.22,
+   "draw_calls": 307,
+   "primitives": 3084242,
+   "objects": 307,
+   "flora_visible": 241,
+   "flora_triangles": 1035792,
+   "fauna_drawn": 10,
+   "fauna_triangles": 10126,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.4 Flora=2.0 Fauna=1.0 Tools=0.9 Coverage=0.3"
+  },
+  {
+   "name": "species_velvetweave_moss",
+   "category": "species",
+   "eye": [
+    0.69258046,
+    0.71802914,
+    -3.8103733
+   ],
+   "target": [
+    0.35894516,
+    0.38764912,
+    -4.1440086
+   ],
+   "fps_mean": 213.3,
+   "frame_ms_p50": 4.63,
+   "frame_ms_p95": 4.87,
+   "frame_ms_worst": 10.75,
+   "draw_calls": 185,
+   "primitives": 1223822,
+   "objects": 185,
+   "flora_visible": 148,
+   "flora_triangles": 609384,
+   "fauna_drawn": 3,
+   "fauna_triangles": 3330,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=8.0 Flora=2.0 Fauna=1.5 Coverage=0.5 Tools=0.2"
+  },
+  {
+   "name": "dense_colony",
+   "category": "colony",
+   "eye": [
+    0.602699,
+    0.6769035,
+    -3.9002547
+   ],
+   "target": [
+    0.35894516,
+    0.38764912,
+    -4.1440086
+   ],
+   "fps_mean": 213.6,
+   "frame_ms_p50": 4.68,
+   "frame_ms_p95": 5.03,
+   "frame_ms_worst": 7.47,
+   "draw_calls": 181,
+   "primitives": 1216522,
+   "objects": 181,
+   "flora_visible": 145,
+   "flora_triangles": 582600,
+   "fauna_drawn": 3,
+   "fauna_triangles": 3330,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.3 Flora=2.0 Fauna=1.4 Tools=0.4 Coverage=0.4"
+  },
+  {
+   "name": "colony_edge",
+   "category": "colony",
+   "eye": [
+    0.45652932,
+    0.48035422,
+    -4.412119
+   ],
+   "target": [
+    0.35894516,
+    0.38764912,
+    -4.1440086
+   ],
+   "fps_mean": 174.6,
+   "frame_ms_p50": 5.77,
+   "frame_ms_p95": 6.18,
+   "frame_ms_worst": 9.86,
+   "draw_calls": 451,
+   "primitives": 5486381,
+   "objects": 451,
+   "flora_visible": 447,
+   "flora_triangles": 1978812,
+   "fauna_drawn": 74,
+   "fauna_triangles": 65576,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=6.1 Flora=2.0 Fauna=1.9 Tools=0.4 Coverage=0.3"
+  },
+  {
+   "name": "sparse_dry",
+   "category": "dry",
+   "eye": [
+    -1.2750001,
+    1.4294442,
+    4.894615
+   ],
+   "target": [
+    -0.375,
+    0.82944417,
+    4.375
+   ],
+   "fps_mean": 168.4,
+   "frame_ms_p50": 5.9,
+   "frame_ms_p95": 6.3,
+   "frame_ms_worst": 10.49,
+   "draw_calls": 430,
+   "primitives": 4915112,
+   "objects": 430,
+   "flora_visible": 418,
+   "flora_triangles": 1813026,
+   "fauna_drawn": 85,
+   "fauna_triangles": 60812,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=6.1 Flora=2.0 Fauna=1.5 Tools=1.0 Coverage=0.4"
+  },
+  {
+   "name": "mixed_depth",
+   "category": "depth",
+   "eye": [
+    -4.5,
+    0.6,
+    4.5
+   ],
+   "target": [
+    1.5,
+    0.1,
+    -1.5
+   ],
+   "fps_mean": 194.9,
+   "frame_ms_p50": 5.09,
+   "frame_ms_p95": 5.75,
+   "frame_ms_worst": 8,
+   "draw_calls": 484,
+   "primitives": 5726529,
+   "objects": 484,
+   "flora_visible": 492,
+   "flora_triangles": 2203094,
+   "fauna_drawn": 116,
+   "fauna_triangles": 87144,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Fauna=2.0 Tools=1.1 Coverage=0.3 Camera=0.1"
+  },
+  {
+   "name": "cutaway_pond",
+   "category": "water",
+   "eye": [
+    8.603373,
+    0.4,
+    5.3549275
+   ],
+   "target": [
+    5.832092,
+    -0.6,
+    3.7549274
+   ],
+   "fps_mean": 202.1,
+   "frame_ms_p50": 4.84,
+   "frame_ms_p95": 5.71,
+   "frame_ms_worst": 9.23,
+   "draw_calls": 459,
+   "primitives": 5279815,
+   "objects": 459,
+   "flora_visible": 495,
+   "flora_triangles": 2211014,
+   "fauna_drawn": 136,
+   "fauna_triangles": 107974,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.7 Flora=2.0 Fauna=1.9 Coverage=1.2 Tools=0.7"
+  },
+  {
+   "name": "species_ambervein",
+   "category": "species",
+   "eye": [
+    2.846296,
+    0.6847915,
+    -3.1563761
+   ],
+   "target": [
+    2.7917538,
+    0.5928662,
+    -3.2109184
+   ],
+   "fps_mean": 243.9,
+   "frame_ms_p50": 4.1,
+   "frame_ms_p95": 4.36,
+   "frame_ms_worst": 5.11,
+   "draw_calls": 320,
+   "primitives": 5582949,
+   "objects": 320,
+   "flora_visible": 214,
+   "flora_triangles": 874808,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Tools=0.9 Fauna=0.7 Coverage=0.3 Environment=0.2"
+  },
+  {
+   "name": "species_brooklace",
+   "category": "species",
+   "eye": [
+    1.4278907,
+    0.6280887,
+    -2.727006
+   ],
+   "target": [
+    1.2915348,
+    0.39827535,
+    -2.8633618
+   ],
+   "fps_mean": 194.4,
+   "frame_ms_p50": 5.13,
+   "frame_ms_p95": 5.5,
+   "frame_ms_worst": 8.28,
+   "draw_calls": 284,
+   "primitives": 2399399,
+   "objects": 284,
+   "flora_visible": 227,
+   "flora_triangles": 921156,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=6.0 Flora=2.0 Tools=0.9 Fauna=0.9 Coverage=0.5"
+  },
+  {
+   "name": "species_clinglace",
+   "category": "species",
+   "eye": [
+    1.2330261,
+    0.8947691,
+    -3.5795834
+   ],
+   "target": [
+    0.96031445,
+    0.4351424,
+    -3.8522952
+   ],
+   "fps_mean": 198.4,
+   "frame_ms_p50": 4.78,
+   "frame_ms_p95": 5.08,
+   "frame_ms_worst": 27.15,
+   "draw_calls": 257,
+   "primitives": 2077420,
+   "objects": 257,
+   "flora_visible": 186,
+   "flora_triangles": 801680,
+   "fauna_drawn": 1,
+   "fauna_triangles": 408,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Water=18.8 Island=5.4 Flora=2.0 Fauna=0.7 Tools=0.4"
+  },
+  {
+   "name": "species_coinrunner",
+   "category": "species",
+   "eye": [
+    2.844398,
+    0.71758157,
+    -3.1564052
+   ],
+   "target": [
+    2.77622,
+    0.6026749,
+    -3.2245831
+   ],
+   "fps_mean": 282.1,
+   "frame_ms_p50": 3.58,
+   "frame_ms_p95": 3.82,
+   "frame_ms_worst": 3.88,
+   "draw_calls": 279,
+   "primitives": 2497383,
+   "objects": 279,
+   "flora_visible": 216,
+   "flora_triangles": 880320,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Fauna=0.7 Coverage=0.4 Tools=0.1 Camera=0.1 Environment=0.1"
+  },
+  {
+   "name": "species_dewbonnet",
+   "category": "species",
+   "eye": [
+    0.73089427,
+    0.7970301,
+    -3.336885
+   ],
+   "target": [
+    0.6354452,
+    0.63616073,
+    -3.4323342
+   ],
+   "fps_mean": 229.9,
+   "frame_ms_p50": 4.3,
+   "frame_ms_p95": 4.6,
+   "frame_ms_worst": 7.67,
+   "draw_calls": 243,
+   "primitives": 2122711,
+   "objects": 243,
+   "flora_visible": 173,
+   "flora_triangles": 739746,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.2 Flora=2.0 Fauna=1.0 Coverage=0.6 Tools=0.2"
+  },
+  {
+   "name": "species_embercrown",
+   "category": "species",
+   "eye": [
+    -2.6582475,
+    1.37375,
+    4.4143834
+   ],
+   "target": [
+    -2.9309592,
+    0.9141233,
+    4.1416717
+   ],
+   "fps_mean": 219.2,
+   "frame_ms_p50": 4.56,
+   "frame_ms_p95": 4.81,
+   "frame_ms_worst": 7.48,
+   "draw_calls": 197,
+   "primitives": 2466819,
+   "objects": 197,
+   "flora_visible": 128,
+   "flora_triangles": 798140,
+   "fauna_drawn": 8,
+   "fauna_triangles": 7376,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.2 Flora=2.0 Fauna=0.9 Coverage=0.4 Tools=0.3"
+  },
+  {
+   "name": "species_emberfan_fungus",
+   "category": "species",
+   "eye": [
+    2.0213768,
+    0.851784,
+    -0.19771153
+   ],
+   "target": [
+    1.9122921,
+    0.66793334,
+    -0.3067962
+   ],
+   "fps_mean": 217.9,
+   "frame_ms_p50": 4.51,
+   "frame_ms_p95": 4.8,
+   "frame_ms_worst": 11.91,
+   "draw_calls": 359,
+   "primitives": 3542362,
+   "objects": 359,
+   "flora_visible": 345,
+   "flora_triangles": 1433258,
+   "fauna_drawn": 1,
+   "fauna_triangles": 828,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=8.0 Flora=2.0 Fauna=0.7 Tools=0.3 Coverage=0.3"
+  },
+  {
+   "name": "species_fenbead",
+   "category": "species",
+   "eye": [
+    1.2008482,
+    0.6479186,
+    -2.586963
+   ],
+   "target": [
+    1.0644923,
+    0.41810527,
+    -2.7233188
+   ],
+   "fps_mean": 201.6,
+   "frame_ms_p50": 4.88,
+   "frame_ms_p95": 5.38,
+   "frame_ms_worst": 7.87,
+   "draw_calls": 309,
+   "primitives": 3452901,
+   "objects": 309,
+   "flora_visible": 226,
+   "flora_triangles": 918948,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.3 Flora=2.0 Fauna=1.3 Tools=0.4 Coverage=0.3"
+  },
+  {
+   "name": "species_fenhook",
+   "category": "species",
+   "eye": [
+    -1.4256289,
+    0.9897396,
+    0.9413766
+   ],
+   "target": [
+    -1.6983407,
+    0.5301129,
+    0.66866493
+   ],
+   "fps_mean": 219.5,
+   "frame_ms_p50": 4.46,
+   "frame_ms_p95": 4.98,
+   "frame_ms_worst": 11.39,
+   "draw_calls": 245,
+   "primitives": 1894885,
+   "objects": 245,
+   "flora_visible": 170,
+   "flora_triangles": 837328,
+   "fauna_drawn": 1,
+   "fauna_triangles": 288,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=8.2 Flora=2.0 Fauna=0.7 Tools=0.3 Coverage=0.3"
+  },
+  {
+   "name": "species_fenneedle",
+   "category": "species",
+   "eye": [
+    2.4948,
+    1.8791138,
+    2.9902437
+   ],
+   "target": [
+    2.2220883,
+    1.4194871,
+    2.717532
+   ],
+   "fps_mean": 166.2,
+   "frame_ms_p50": 5.96,
+   "frame_ms_p95": 6.25,
+   "frame_ms_worst": 11.53,
+   "draw_calls": 409,
+   "primitives": 5527248,
+   "objects": 409,
+   "flora_visible": 456,
+   "flora_triangles": 2066214,
+   "fauna_drawn": 22,
+   "fauna_triangles": 20230,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=7.9 Flora=2.0 Fauna=1.2 Coverage=0.3 Tools=0.2"
+  },
+  {
+   "name": "species_frosttussock",
+   "category": "species",
+   "eye": [
+    4.371028,
+    0.9263825,
+    -3.9257479
+   ],
+   "target": [
+    4.098316,
+    0.4667558,
+    -4.1984596
+   ],
+   "fps_mean": 215.6,
+   "frame_ms_p50": 4.61,
+   "frame_ms_p95": 4.97,
+   "frame_ms_worst": 8.65,
+   "draw_calls": 260,
+   "primitives": 2128981,
+   "objects": 260,
+   "flora_visible": 186,
+   "flora_triangles": 828750,
+   "fauna_drawn": 2,
+   "fauna_triangles": 2366,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.6 Flora=2.0 Fauna=0.9 Coverage=0.4 Tools=0.2"
+  },
+  {
+   "name": "species_glassfinger",
+   "category": "species",
+   "eye": [
+    -0.31995335,
+    0.9882401,
+    5.2400527
+   ],
+   "target": [
+    -0.4563092,
+    0.7584268,
+    5.103697
+   ],
+   "fps_mean": 243.1,
+   "frame_ms_p50": 4.16,
+   "frame_ms_p95": 4.26,
+   "frame_ms_worst": 4.47,
+   "draw_calls": 232,
+   "primitives": 2667937,
+   "objects": 232,
+   "flora_visible": 252,
+   "flora_triangles": 1323738,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Fauna=0.7 Coverage=0.3 Tools=0.2 Camera=0.0 Ui=0.0"
+  },
+  {
+   "name": "species_glassrush",
+   "category": "species",
+   "eye": [
+    3.9195194,
+    0.5966745,
+    5.37598
+   ],
+   "target": [
+    3.6468077,
+    0.13704784,
+    5.103268
+   ],
+   "fps_mean": 198,
+   "frame_ms_p50": 5,
+   "frame_ms_p95": 5.4,
+   "frame_ms_worst": 8.5,
+   "draw_calls": 264,
+   "primitives": 1919503,
+   "objects": 264,
+   "flora_visible": 262,
+   "flora_triangles": 999806,
+   "fauna_drawn": 4,
+   "fauna_triangles": 2470,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.8 Flora=2.0 Tools=0.9 Fauna=0.8 Coverage=0.3"
+  },
+  {
+   "name": "species_ironlace",
+   "category": "species",
+   "eye": [
+    -4.901398,
+    2.0420313,
+    2.4501095
+   ],
+   "target": [
+    -5.17411,
+    1.5824046,
+    2.1773977
+   ],
+   "fps_mean": 288.7,
+   "frame_ms_p50": 3.47,
+   "frame_ms_p95": 3.71,
+   "frame_ms_worst": 4.3,
+   "draw_calls": 130,
+   "primitives": 1080523,
+   "objects": 130,
+   "flora_visible": 78,
+   "flora_triangles": 441824,
+   "fauna_drawn": 11,
+   "fauna_triangles": 11248,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Fauna=1.0 Tools=0.8 Coverage=0.3 Environment=0.1"
+  },
+  {
+   "name": "species_kiteleaf",
+   "category": "species",
+   "eye": [
+    -1.0488403,
+    2.3784199,
+    1.1446052
+   ],
+   "target": [
+    -1.3215519,
+    1.9187931,
+    0.87189347
+   ],
+   "fps_mean": 191.5,
+   "frame_ms_p50": 5.22,
+   "frame_ms_p95": 5.65,
+   "frame_ms_worst": 8.23,
+   "draw_calls": 308,
+   "primitives": 2651553,
+   "objects": 308,
+   "flora_visible": 262,
+   "flora_triangles": 1162438,
+   "fauna_drawn": 19,
+   "fauna_triangles": 17736,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.5 Flora=2.0 Coverage=1.4 Fauna=1.1 Tools=0.6"
+  },
+  {
+   "name": "species_lanternbrush",
+   "category": "species",
+   "eye": [
+    4.6459694,
+    1.3153465,
+    -1.1180758
+   ],
+   "target": [
+    4.3732576,
+    0.85571986,
+    -1.3907876
+   ],
+   "fps_mean": 179.4,
+   "frame_ms_p50": 5.51,
+   "frame_ms_p95": 6.02,
+   "frame_ms_worst": 10.72,
+   "draw_calls": 369,
+   "primitives": 3614757,
+   "objects": 369,
+   "flora_visible": 336,
+   "flora_triangles": 1344862,
+   "fauna_drawn": 2,
+   "fauna_triangles": 2084,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.5 Flora=2.0 Fauna=0.8 Tools=0.6 Coverage=0.3"
+  },
+  {
+   "name": "species_mirrorleaf",
+   "category": "species",
+   "eye": [
+    1.7106552,
+    0.66155183,
+    -1.745873
+   ],
+   "target": [
+    1.5687023,
+    0.37484863,
+    -1.887826
+   ],
+   "fps_mean": 187.5,
+   "frame_ms_p50": 5.08,
+   "frame_ms_p95": 5.5,
+   "frame_ms_worst": 26.94,
+   "draw_calls": 332,
+   "primitives": 3506633,
+   "objects": 332,
+   "flora_visible": 267,
+   "flora_triangles": 1035050,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Water=18.5 Island=5.5 Flora=2.0 Fauna=0.9 Tools=0.6"
+  },
+  {
+   "name": "species_mooncoin",
+   "category": "species",
+   "eye": [
+    3.6438866,
+    0.5748172,
+    -3.5954776
+   ],
+   "target": [
+    3.562073,
+    0.4369292,
+    -3.6772912
+   ],
+   "fps_mean": 251.8,
+   "frame_ms_p50": 3.85,
+   "frame_ms_p95": 4.37,
+   "frame_ms_worst": 11.9,
+   "draw_calls": 270,
+   "primitives": 2745125,
+   "objects": 270,
+   "flora_visible": 187,
+   "flora_triangles": 778314,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=8.7 Flora=2.0 Tools=1.4 Fauna=0.8 Coverage=0.4"
+  },
+  {
+   "name": "species_prismstar",
+   "category": "species",
+   "eye": [
+    -2.726734,
+    1.3038708,
+    -2.4325464
+   ],
+   "target": [
+    -2.8903608,
+    1.0280948,
+    -2.5961733
+   ],
+   "fps_mean": 271.5,
+   "frame_ms_p50": 3.7,
+   "frame_ms_p95": 3.97,
+   "frame_ms_worst": 4.79,
+   "draw_calls": 98,
+   "primitives": 610527,
+   "objects": 98,
+   "flora_visible": 82,
+   "flora_triangles": 220296,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Fauna=0.8 Tools=0.6 Coverage=0.3 Environment=0.0"
+  },
+  {
+   "name": "species_ringreed",
+   "category": "species",
+   "eye": [
+    1.9299686,
+    0.9643666,
+    -3.262702
+   ],
+   "target": [
+    1.657257,
+    0.50473994,
+    -3.5354137
+   ],
+   "fps_mean": 183.1,
+   "frame_ms_p50": 5.46,
+   "frame_ms_p95": 5.82,
+   "frame_ms_worst": 11.02,
+   "draw_calls": 283,
+   "primitives": 2651873,
+   "objects": 283,
+   "flora_visible": 219,
+   "flora_triangles": 911998,
+   "fauna_drawn": 1,
+   "fauna_triangles": 408,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=8.2 Flora=2.0 Fauna=1.4 Tools=1.1 Coverage=0.4"
+  },
+  {
+   "name": "species_shadebell",
+   "category": "species",
+   "eye": [
+    -3.951541,
+    1.3336405,
+    0.9626897
+   ],
+   "target": [
+    -4.2242527,
+    0.8740138,
+    0.689978
+   ],
+   "fps_mean": 256,
+   "frame_ms_p50": 3.9,
+   "frame_ms_p95": 4.22,
+   "frame_ms_worst": 8.54,
+   "draw_calls": 153,
+   "primitives": 1108583,
+   "objects": 153,
+   "flora_visible": 94,
+   "flora_triangles": 519852,
+   "fauna_drawn": 2,
+   "fauna_triangles": 2512,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.7 Flora=2.0 Fauna=0.7 Coverage=0.3 Tools=0.2"
+  },
+  {
+   "name": "species_spiralvine",
+   "category": "species",
+   "eye": [
+    1.4547875,
+    1.0649414,
+    -3.898374
+   ],
+   "target": [
+    1.1820757,
+    0.6053147,
+    -4.171086
+   ],
+   "fps_mean": 204.3,
+   "frame_ms_p50": 4.86,
+   "frame_ms_p95": 5.29,
+   "frame_ms_worst": 8.3,
+   "draw_calls": 239,
+   "primitives": 1931230,
+   "objects": 239,
+   "flora_visible": 178,
+   "flora_triangles": 754934,
+   "fauna_drawn": 3,
+   "fauna_triangles": 2628,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=5.8 Flora=2.0 Tools=0.8 Fauna=0.7 Coverage=0.4"
+  },
+  {
+   "name": "species_sunstone_rosette",
+   "category": "species",
+   "eye": [
+    -0.054012746,
+    0.90157866,
+    5.065358
+   ],
+   "target": [
+    -0.14946184,
+    0.74070936,
+    4.969909
+   ],
+   "fps_mean": 247.9,
+   "frame_ms_p50": 3.98,
+   "frame_ms_p95": 4.2,
+   "frame_ms_worst": 11.52,
+   "draw_calls": 242,
+   "primitives": 2755423,
+   "objects": 242,
+   "flora_visible": 285,
+   "flora_triangles": 1418520,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=8.3 Flora=2.0 Fauna=0.7 Coverage=0.3 Tools=0.2"
+  },
+  {
+   "name": "species_trifold",
+   "category": "species",
+   "eye": [
+    0.6971415,
+    0.6096849,
+    -3.9578218
+   ],
+   "target": [
+    0.58805686,
+    0.42583424,
+    -4.0669065
+   ],
+   "fps_mean": 216.7,
+   "frame_ms_p50": 4.57,
+   "frame_ms_p95": 4.99,
+   "frame_ms_worst": 8.71,
+   "draw_calls": 210,
+   "primitives": 2642048,
+   "objects": 210,
+   "flora_visible": 145,
+   "flora_triangles": 601038,
+   "fauna_drawn": 0,
+   "fauna_triangles": 0,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=6.1 Flora=2.0 Fauna=0.8 Coverage=0.3 Tools=0.2"
+  },
+  {
+   "name": "species_umbraheart",
+   "category": "species",
+   "eye": [
+    -3.8027601,
+    2.0448592,
+    0.83681357
+   ],
+   "target": [
+    -4.075472,
+    1.5852325,
+    0.5641019
+   ],
+   "fps_mean": 243.4,
+   "frame_ms_p50": 4.08,
+   "frame_ms_p95": 4.46,
+   "frame_ms_worst": 4.75,
+   "draw_calls": 182,
+   "primitives": 1221809,
+   "objects": 182,
+   "flora_visible": 102,
+   "flora_triangles": 549564,
+   "fauna_drawn": 14,
+   "fauna_triangles": 14310,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Flora=2.0 Fauna=1.5 Tools=1.1 Coverage=0.4 Camera=0.1"
+  },
+  {
+   "name": "species_veilfern",
+   "category": "species",
+   "eye": [
+    1.667202,
+    0.92011046,
+    -0.31686372
+   ],
+   "target": [
+    1.3944904,
+    0.46048382,
+    -0.5895754
+   ],
+   "fps_mean": 203.2,
+   "frame_ms_p50": 4.91,
+   "frame_ms_p95": 5.35,
+   "frame_ms_worst": 8.6,
+   "draw_calls": 354,
+   "primitives": 3441493,
+   "objects": 354,
+   "flora_visible": 329,
+   "flora_triangles": 1371034,
+   "fauna_drawn": 1,
+   "fauna_triangles": 828,
+   "coverage_tiles": 70,
+   "coverage_instances": 70,
+   "coverage_triangles_built": 2321700,
+   "slowest_scopes": "Island=6.0 Flora=2.0 Fauna=0.9 Tools=0.4 Coverage=0.4"
+  }
+ ],
+ "scene_count": 54,
+ "renderer": "NVIDIA GeForce GTX 1080"
+}

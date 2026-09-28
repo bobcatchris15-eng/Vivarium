@@ -8,6 +8,26 @@ namespace Vivarium.Sim.Coverage.Rules;
 public interface IMicroEnvSource
 {
     MicroEnv Sample(int gx, int gz);
+    (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz)
+    {
+        var e = Sample(gx, gz);
+        return (e.Moisture, e.Humidity, e.Light, e.Nutrients);
+    }
+    (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz, double? laplacian)
+    {
+        return SamplePhysiology(gx, gz);
+    }
+    (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz, double? laplacian, IReadOnlyList<ShadeCaster>? casters)
+    {
+        return SamplePhysiology(gx, gz, laplacian);
+    }
+    IReadOnlyList<ShadeCaster>? GetTileShadeCasters(int ti, int tj) => null;
+    double? SampleTerrainLaplacian(int gx, int gz) => null;
+    (Vec2 DownslopeDir, Vec2 MoistureGradient) SampleGradient(int gx, int gz)
+    {
+        var e = Sample(gx, gz);
+        return (e.DownslopeDir, e.MoistureGradient);
+    }
 }
 
 /// <summary>Where dead biomass and sphagnum moisture feedback go (docs/overhaul/growth_models.md §4.1, §4.5).
@@ -197,9 +217,14 @@ public static class MatRules
 
     private static void RunPhysiology(IMicroEnvSource env, MatParams?[] byId, List<CoverageTile> tiles, double dtDays, long step, IDetritusSink? sink, List<(CoverageTile, int, int)> changedCells)
     {
-        foreach (var t in tiles)
+        var tileChanges = new (List<(int gx, int gz, double amount)>? detritus,
+                               List<(int gx, int gz, double amount)>? moisture,
+                               List<(int lx, int lz)>? changed)[tiles.Count];
+
+        Parallel.For(0, tiles.Count, i =>
         {
-            if (t.Occ.AsSpan().IndexOfAnyExcept((byte)0) < 0) continue; // nothing occupied at all
+            var t = tiles[i];
+            if (t.Occ.AsSpan().IndexOfAnyExcept((byte)0) < 0) return; // nothing occupied at all
 
             int cgx = t.Ti * TileEdge + TileEdge / 2, cgz = t.Tj * TileEdge + TileEdge / 2;
             double dt = dtDays;
@@ -207,7 +232,7 @@ public static class MatRules
 
             if (t.Steady)
             {
-                double curMoisture = env.Sample(cgx, cgz).Moisture;
+                double curMoisture = env.SamplePhysiology(cgx, cgz).Moisture;
                 bool envStable = !double.IsNaN(t.EnvMoistureCache) && Math.Abs(curMoisture - t.EnvMoistureCache) <= EnvTolerance;
                 t.SkippedPhysiologySteps++;
                 if (envStable && t.SkippedPhysiologySteps < SteadyPeriod)
@@ -222,11 +247,16 @@ public static class MatRules
                 t.EnvMoistureCache = curMoisture;
             }
 
-            if (!runFull) continue;
+            if (!runFull) return;
 
             bool tileDirty = false, anyDorm = false;
             double maxDeltaB = 0;
+            List<(int gx, int gz, double amount)>? localDetritus = null;
+            List<(int gx, int gz, double amount)>? localMoisture = null;
+            List<(int lx, int lz)>? localChanged = null;
 
+            double? tileLaplacian = env.SampleTerrainLaplacian(cgx, cgz);
+            var tileCasters = env.GetTileShadeCasters(t.Ti, t.Tj);
             for (int lz = 0; lz < TileEdge; lz++)
             for (int lx = 0; lx < TileEdge; lx++)
             {
@@ -237,21 +267,22 @@ public static class MatRules
                 if (p is null) continue;
 
                 int gx = t.Ti * TileEdge + lx, gz = t.Tj * TileEdge + lz;
-                var e = env.Sample(gx, gz);
+                var e = env.SamplePhysiology(gx, gz, tileLaplacian, tileCasters);
                 double w01 = t.W[li] / 255.0;
                 double newW01 = WaterBalance.StepWater(w01, e.Moisture, e.Humidity, p, dt);
 
                 double dryDays = t.Dorm[li];
                 if (newW01 < p.WMin) dryDays = Math.Min(255, dryDays + dt);
                 else if (newW01 > p.WOpt) dryDays = 0;
+                else dryDays = Math.Max(0, dryDays - dt * 2);
                 byte newDorm = (byte)Math.Clamp(Math.Round(dryDays), 0, 255);
 
                 if (newDorm > p.DormDeathDays)
                 {
-                    sink?.AddDetritus(gx, gz, t.B[li]);
+                    (localDetritus ??= new()).Add((gx, gz, t.B[li]));
                     t.Occ[li] = 0; t.B[li] = 0f; t.W[li] = 0; t.Age[li] = 0; t.Dorm[li] = 0; t.Flags[li] = 0; t.D2E[li] = 0;
                     tileDirty = true;
-                    changedCells.Add((t, lx, lz));
+                    (localChanged ??= new()).Add((lx, lz));
                     continue;
                 }
 
@@ -263,14 +294,22 @@ public static class MatRules
                 maxDeltaB = Math.Max(maxDeltaB, Math.Abs(newB - t.B[li]));
                 if (newDorm > 0) anyDorm = true;
 
+                byte newWByte = (byte)Math.Round(Math.Clamp(newW01, 0, 1) * 255);
+                ushort newAge = (ushort)Math.Min(65535, t.Age[li] + (int)Math.Round(dt * 4));
+                if (Math.Abs(newB - t.B[li]) > 0.005f || Math.Abs((int)newWByte - (int)t.W[li]) > 2 || newDorm != t.Dorm[li])
+                {
+                    tileDirty = true;
+                }
+
                 t.B[li] = (float)newB;
-                t.W[li] = (byte)Math.Round(Math.Clamp(newW01, 0, 1) * 255);
-                t.Age[li] = (ushort)Math.Min(65535, t.Age[li] + (int)Math.Round(dt * 4));
+                t.W[li] = newWByte;
+                t.Age[li] = newAge;
                 t.Dorm[li] = newDorm;
-                tileDirty = true;
+                t.Vigour[li] = (byte)Math.Clamp(Math.Round(gW * gL * 255), 0, 255);
+                t.GW[li] = (byte)Math.Clamp(Math.Round(gW * 255), 0, 255);
 
                 if (p.MoistureFeedback > 0)
-                    sink?.AddMoistureBonus(gx, gz, p.MoistureFeedback * newB * dt);
+                    (localMoisture ??= new()).Add((gx, gz, p.MoistureFeedback * newB * dt));
             }
 
             if (tileDirty) { t.Active = true; t.Touch(); }
@@ -279,8 +318,25 @@ public static class MatRules
             if (t.Steady)
             {
                 t.SkippedPhysiologySteps = 0;
-                t.EnvMoistureCache = env.Sample(cgx, cgz).Moisture;
+                t.EnvMoistureCache = env.SamplePhysiology(cgx, cgz).Moisture;
             }
+
+            if (localDetritus != null || localMoisture != null || localChanged != null)
+            {
+                tileChanges[i] = (localDetritus, localMoisture, localChanged);
+            }
+        });
+
+        for (int i = 0; i < tiles.Count; i++)
+        {
+            var t = tiles[i];
+            var (localDetritus, localMoisture, localChanged) = tileChanges[i];
+            if (localDetritus != null)
+                foreach (var (dgx, dgz, damount) in localDetritus) sink?.AddDetritus(dgx, dgz, damount);
+            if (localMoisture != null)
+                foreach (var (mgx, mgz, mamount) in localMoisture) sink?.AddMoistureBonus(mgx, mgz, mamount);
+            if (localChanged != null)
+                foreach (var (clx, clz) in localChanged) changedCells.Add((t, clx, clz));
         }
     }
 
@@ -294,10 +350,41 @@ public static class MatRules
         var sporeSums = new double[256]; // approximated from rim biomass (the front), not the whole colony — bounds cost on huge interiors
         var pressure = new Dictionary<(int, int), double[]>();
 
-        foreach (var t in tiles)
+        var threadLocalPressure = new ThreadLocal<Dictionary<(int, int), double[]>>(() => new(1024), trackAllValues: true);
+        var threadLocalSpores = new ThreadLocal<double[]>(() => new double[256], trackAllValues: true);
+        var threadLocalChanged = new ThreadLocal<List<(CoverageTile, int, int)>>(() => new(), trackAllValues: true);
+        Parallel.For(0, tiles.Count, i =>
         {
-            if (t.Rim.Count == 0) continue;
-            foreach (int li in t.Rim.ToArray())
+            var t = tiles[i];
+            if (t.Rim.Count == 0) return;
+
+            var localPressure = threadLocalPressure.Value!;
+            var localSpores = threadLocalSpores.Value!;
+            var localChanged = threadLocalChanged.Value!;
+
+            int cgx = t.Ti * TileEdge + TileEdge / 2, cgz = t.Tj * TileEdge + TileEdge / 2;
+            var (tileDownslope, tileMoistGrad) = env.SampleGradient(cgx, cgz);
+
+            Span<double> wdir = stackalloc double[8];
+            for (int k = 0; k < 8; k++)
+            {
+                var (dx, dz) = Neighbours8[k];
+                var dir = new Vec2(dx, dz);
+                wdir[k] = 1.0
+                    + AnisoSlope * Math.Max(0, tileDownslope.Dot(dir))
+                    + AnisoMoist * Math.Max(0, tileMoistGrad.Dot(dir));
+            }
+
+            tileDict.TryGetValue((t.Ti + 1, t.Tj), out var tE);
+            tileDict.TryGetValue((t.Ti - 1, t.Tj), out var tW);
+            tileDict.TryGetValue((t.Ti, t.Tj + 1), out var tN);
+            tileDict.TryGetValue((t.Ti, t.Tj - 1), out var tS);
+            tileDict.TryGetValue((t.Ti + 1, t.Tj + 1), out var tNE);
+            tileDict.TryGetValue((t.Ti - 1, t.Tj + 1), out var tNW);
+            tileDict.TryGetValue((t.Ti + 1, t.Tj - 1), out var tSE);
+            tileDict.TryGetValue((t.Ti - 1, t.Tj - 1), out var tSW);
+
+            foreach (int li in t.Rim)
             {
                 int lx = li % TileEdge, lz = li / TileEdge;
                 byte occA = t.SnapOcc![li];
@@ -306,38 +393,65 @@ public static class MatRules
                 if (pa is null) continue;
 
                 double ba = t.SnapB![li];
-                sporeSums[occA] += ba;
+                localSpores[occA] += ba;
 
                 int gx = t.Ti * TileEdge + lx, gz = t.Tj * TileEdge + lz;
-                var ea = env.Sample(gx, gz);
-                double gWa = WaterBalance.GrowthMultiplierWater(ea.Moisture, pa);
-                double gLa = WaterBalance.GrowthMultiplierLight(ea.Light, pa);
-                double va = ba * gWa * gLa;
+                double gWa = t.GW[li] / 255.0;
+                double va = ba * (t.Vigour[li] / 255.0);
 
                 byte bestOcc = 0;
                 double bestVigourP = 0;
+                (double Moisture, double Humidity, double Light, double Nutrients)? lazyEa = null;
 
-                foreach (var (dx, dz) in Neighbours8)
+                for (int k = 0; k < 8; k++)
                 {
-                    var (occB, bb) = SnapAt(tileDict, t, lx + dx, lz + dz);
+                    var (dx, dz) = Neighbours8[k];
+                    int nlx = lx + dx, nlz = lz + dz;
+                    CoverageTile? nt;
+                    int nli;
+                    if ((uint)nlx < TileEdge && (uint)nlz < TileEdge)
+                    {
+                        nt = t;
+                        nli = nlz * TileEdge + nlx;
+                    }
+                    else
+                    {
+                        int tdx = nlx < 0 ? -1 : nlx >= TileEdge ? 1 : 0;
+                        int tdz = nlz < 0 ? -1 : nlz >= TileEdge ? 1 : 0;
+                        nt = (tdx, tdz) switch
+                        {
+                            (1, 0) => tE,
+                            (-1, 0) => tW,
+                            (0, 1) => tN,
+                            (0, -1) => tS,
+                            (1, 1) => tNE,
+                            (-1, 1) => tNW,
+                            (1, -1) => tSE,
+                            (-1, -1) => tSW,
+                            _ => null,
+                        };
+                        int llx = nlx < 0 ? TileEdge - 1 : nlx >= TileEdge ? 0 : nlx;
+                        int llz = nlz < 0 ? TileEdge - 1 : nlz >= TileEdge ? 0 : nlz;
+                        nli = llz * TileEdge + llx;
+                    }
+
+                    byte occB = (nt != null && nt.SnapOcc != null) ? nt.SnapOcc[nli] : (byte)0;
+                    float bb = (nt != null && nt.SnapB != null) ? nt.SnapB[nli] : 0f;
+
                     if (occB == 0)
                     {
-                        var dir = new Vec2(dx, dz);
-                        double wdir = 1.0
-                            + AnisoSlope * Math.Max(0, ea.DownslopeDir.Dot(dir))
-                            + AnisoMoist * Math.Max(0, ea.MoistureGradient.Dot(dir));
-                        if (wdir <= 0) continue;
+                        double w = wdir[k];
+                        if (w <= 0) continue;
                         var key = (gx + dx, gz + dz);
-                        if (!pressure.TryGetValue(key, out var arr)) { arr = new double[n]; pressure[key] = arr; }
-                        arr[occIndex[occA]] += ba * gWa * wdir;
+                        if (!localPressure.TryGetValue(key, out var arr)) { arr = new double[n]; localPressure[key] = arr; }
+                        arr[occIndex[occA]] += ba * gWa * w;
                     }
                     else if (occB != occA)
                     {
                         var pb = byId[occB];
                         if (pb is null) continue;
-                        // Vigour of the CHALLENGER is evaluated at the contested cell's own environment (ea), not
-                        // the challenger's home cell — competition should ask "who is better suited to grow HERE",
-                        // otherwise whichever species has the higher home-turf ceiling wins everywhere (no seam).
+                        if (!lazyEa.HasValue) lazyEa = env.SamplePhysiology(gx, gz);
+                        var ea = lazyEa.Value;
                         double vb = bb * WaterBalance.GrowthMultiplierWater(ea.Moisture, pb) * WaterBalance.GrowthMultiplierLight(ea.Light, pb);
                         if (vb <= va) continue;
                         double p = 1 - Math.Exp(-CompetitionKappa * (vb - va) * dtDays);
@@ -355,16 +469,36 @@ public static class MatRules
                         t.Occ[li] = bestOcc; t.B[li] = (float)winner.SeedBiomass; t.W[li] = (byte)Math.Round(SeedWater01 * 255);
                         t.Age[li] = 0; t.Dorm[li] = 0; t.Flags[li] = 0;
                         t.Active = true; t.Touch();
-                        changedCells.Add((t, lx, lz));
+                        localChanged.Add((t, lx, lz));
                     }
                 }
             }
-        }
+        });
 
-        foreach (var (key, arr) in pressure)
+        foreach (var arr in threadLocalSpores.Values)
+            for (int i = 0; i < 256; i++) sporeSums[i] += arr[i];
+        threadLocalSpores.Dispose();
+
+        foreach (var list in threadLocalChanged.Values)
+            changedCells.AddRange(list);
+        threadLocalChanged.Dispose();
+
+        foreach (var dict in threadLocalPressure.Values)
+            foreach (var (k, v) in dict)
+            {
+                if (!pressure.TryGetValue(k, out var target)) { target = new double[n]; pressure[k] = target; }
+                for (int i = 0; i < n; i++) target[i] += v[i];
+            }
+        threadLocalPressure.Dispose();
+
+        var pressureList = pressure.ToList();
+        var winners = new (int gx, int gz, byte bestOcc)[pressureList.Count];
+
+        Parallel.For(0, pressureList.Count, idx =>
         {
+            var (key, arr) = pressureList[idx];
             var (gx, gz) = key;
-            var e = env.Sample(gx, gz);
+            var e = env.SamplePhysiology(gx, gz);
 
             byte bestOcc = 0;
             double bestP = 0;
@@ -374,19 +508,46 @@ public static class MatRules
                 if (e.Moisture < p.HardMinMoisture) continue;
 
                 double pressureVal = arr[i];
-                double suitability = WaterBalance.GrowthMultiplierWater(e.Moisture, p) * WaterBalance.GrowthMultiplierLight(e.Light, p);
-                double pCol = pressureVal > 0 ? 1 - Math.Exp(-p.Lateral * pressureVal * suitability * dtDays) : 0;
+                if (pressureVal <= 0) continue;
+
+                // Cushion moss requires compact hummock growth (doesn't send single sprawling cells)
+                if (p.HeightForm == MatHeightForm.Dome && pressureVal < 0.65)
+                    continue;
+
                 double sporeSum = sporeSums[p.OccupantId];
-                double sporeP = sporeSum > 0 ? 1 - Math.Exp(-p.SporeRate * sporeSum * suitability * dtDays) : 0;
-                double totalP = 1 - (1 - pCol) * (1 - sporeP);
-                if (totalP <= 0) continue;
+                double sporeEffort = p.SporeRate * Math.Min(sporeSum, 30.0);
+
+                double suitability = WaterBalance.GrowthMultiplierWater(e.Moisture, p) * WaterBalance.GrowthMultiplierLight(e.Light, p);
+                if (suitability <= 0) continue;
+
+                // Persistent spatial micro-resistance: terrain texture, micro-roughness and exposure
+                // break up uniform wavefronts into organic lobed margins and hummocks.
+                double wx = gx * CoverageSpec.CellSize;
+                double wz = gz * CoverageSpec.CellSize;
+                double micro = Noise.Gradient(seed ^ (ulong)(p.OccupantId * 1013), wx * 4.0, wz * 4.0);
+                double microResist = 0.8 + 0.4 * micro;
+
+                double combinedEffort = (p.Lateral * pressureVal + sporeEffort) / microResist;
+                if (combinedEffort <= 0) continue;
+
+                double totalP = 1 - Math.Exp(-combinedEffort * suitability * dtDays);
+                if (totalP <= bestP) continue;
 
                 var (ti2, tj2) = CoverageSpec.TileOf(gx, gz);
                 int li2 = CoverageSpec.LocalIndex(gx, gz);
                 double u = HashRng.Hash01(seed, (int)layer.Id, ti2, tj2, li2, step, purpose: 1000 + p.OccupantId);
-                if (u < totalP && totalP > bestP) { bestP = totalP; bestOcc = p.OccupantId; }
+                if (u < totalP) { bestP = totalP; bestOcc = p.OccupantId; }
             }
 
+            if (bestOcc != 0)
+            {
+                winners[idx] = (gx, gz, bestOcc);
+            }
+        });
+
+        for (int i = 0; i < winners.Length; i++)
+        {
+            var (gx, gz, bestOcc) = winners[i];
             if (bestOcc != 0)
             {
                 var p = byId[bestOcc]!;

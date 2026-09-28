@@ -65,10 +65,18 @@ public partial class CameraRig : Node3D
 
     private void ApplyRotation() => Rotation = new Vector3(_pitch, _yaw, 0);
 
+    private Vector3 _lastResolvedPos;
+    private int _lastTerrainVersion = int.MinValue;
+    private int _lastPropsVersion = int.MinValue;
+
     private Vector3 ResolveCameraPosition(Vector3 desired)
     {
         if (World == null) return desired;
-        return Bridge.V(Vivarium.Sim.Tools.CameraCollision.Resolve(World, Bridge.S(Position), Bridge.S(desired), CameraRadius));
+        var res = Bridge.V(Vivarium.Sim.Tools.CameraCollision.Resolve(World, Bridge.S(Position), Bridge.S(desired), CameraRadius));
+        _lastResolvedPos = res;
+        _lastTerrainVersion = World.Terrain.Version;
+        _lastPropsVersion = World.Props.Version;
+        return res;
     }
 
     private void MoveCamera(Vector3 delta) => Position = ResolveCameraPosition(Position + delta);
@@ -165,7 +173,8 @@ public partial class CameraRig : Node3D
     {
         using var prof = FrameProfiler.Measure("Camera");
         float dt = (float)Math.Min(delta, 0.1);
-        if (World != null) Position = ResolveCameraPosition(Position);
+        if (World != null && (Position != _lastResolvedPos || World.Terrain.Version != _lastTerrainVersion || World.Props.Version != _lastPropsVersion))
+            Position = ResolveCameraPosition(Position);
         // Q / E turn the camera (in focus mode they orbit the target)
         if (!KeyboardBlocked)
         {

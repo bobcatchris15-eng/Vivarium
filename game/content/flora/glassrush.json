@@ -1,0 +1,85 @@
+{
+  "id": "glassrush",
+  "name": "Glassrush",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Emergent waterside plant of saturated margins and shallows.",
+  "description": "Translucent-jointed stems rise in compact fans from mud and very shallow water, trapping humid shade around their bases.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.6,
+      "water": 0.9
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.15
+    },
+    "light": {
+      "optimum": 0.7,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.45,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.09,
+    "hardMinMoisture": 0.7,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.35,
+    "maxBiomass": 1.5,
+    "initialBiomass": 0.06,
+    "declinePerDay": 0.35,
+    "maturityDays": 8,
+    "lifespanDays": 80,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.18,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.25,
+    "crowdingLimit": 2.6,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.4,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.9,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "reed",
+    "color": [
+      0.3,
+      0.62,
+      0.22
+    ],
+    "color2": [
+      0.72,
+      0.8,
+      0.34
+    ],
+    "colorVariance": 0.05,
+    "height": 0.28
+  },
+  "tags": [
+    "plant",
+    "riparian"
+  ]
+}

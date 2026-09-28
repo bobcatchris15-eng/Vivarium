@@ -1,4 +1,4 @@
-using Vivarium.Sim.Content;
+﻿using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Geometry;
 using Vivarium.Sim.World;
@@ -15,7 +15,7 @@ public class HydrologyTests
         edit?.Invoke(d);
     });
 
-    private static double Total(VivariumWorld w) { var b = w.Water.Budget; return w.Water.Volume() + b.BoundaryOutflow + b.Evaporation + b.Infiltration - b.SpringInflow - b.GroundwaterInflow; }
+    private static double Total(VivariumWorld w) { var b = w.Water.Budget; return w.Water.Volume() + b.BoundaryOutflow + b.GroundwaterRecharge + b.Evaporation + b.Infiltration - b.SpringInflow - b.GroundwaterInflow; }
 
     [Fact] // t-051
     public void ConfigurationSupportsZeroOneOrManySpringsAndValidatesBounds()
@@ -44,7 +44,8 @@ public class HydrologyTests
         });
         var c = w.Grid.CellAt(Vec2.Zero);
         Assert.Equal(0.2, w.Water.WaterTable);
-        Assert.True(w.Water.Depth[c] >= 0.2 - w.Water.Bed[c] - 1e-9);
+        Assert.Equal(0.0, w.Water.Depth[c], 12); // groundwater is implicit, never materialized into surface storage
+        Assert.True(w.Water.WaterTableDepth(c) > 0);
         Assert.Equal(0.2, w.Water.SurfaceAt(Vec2.Zero), 2);
         var w2 = TestUtil.FlatWorld(3, d => { d.Water.WaterTable = 0.2; d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.8 }); });
         Assert.Equal(w.Water.DigestHex(), w2.Water.DigestHex());
@@ -53,13 +54,84 @@ public class HydrologyTests
         Assert.Contains("\"Depth\"", Persistence.WorldSerializer.Text(Persistence.WorldSerializer.Serialize(w)["water"]));
     }
 
+
+    [Fact]
+    public void GroundwaterExposureAndSurfaceStorageAreIndependent()
+    {
+        var w = TestUtil.FlatWorld(31, d =>
+        {
+            d.Water.WaterTable = 0.2;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.8 });
+        });
+        int c = w.Grid.CellAt(Vec2.Zero);
+        Assert.True(w.Water.IsWaterTable(c));
+        Assert.True(w.Water.IsWet(c));
+        Assert.Equal(0.0, w.Water.SurfaceWaterDepth(c), 12);
+        Assert.True(w.Water.OpenWaterDepth(c) > 0.2);
+        Assert.Equal(0.0, w.Water.SurfaceVolume(), 12);
+
+        double rechargeBefore = w.Water.Budget.GroundwaterRecharge;
+        w.Water.AddWater(Vec2.Zero, 0.3, 0.01);
+        Assert.Equal(0.0, w.Water.SurfaceWaterDepth(c), 12);
+        Assert.Equal(w.Water.WaterTable, w.Water.SurfaceAt(Vec2.Zero), 12);
+        Assert.True(w.Water.Budget.GroundwaterRecharge > rechargeBefore);
+    }
+
+    [Fact]
+    public void SurfaceWaterThatReachesExposedGroundwaterIsAbsorbedAndTallied()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        Assert.Contains(w.Grid.DomainCells, w.Water.IsWaterTable);
+
+        double beforeRecharge = w.Water.Budget.GroundwaterRecharge;
+        double beforeSurface = w.Water.SurfaceVolume();
+        // The default spring/channel terminates in the groundwater-fed basin.
+        for (int i = 0; i < 120; i++) w.Water.Step(30);
+
+        Assert.True(w.Water.Budget.GroundwaterRecharge > beforeRecharge, "spring runoff should merge into the groundwater basin");
+        foreach (int c in w.Grid.DomainCells.Where(w.Water.IsWaterTable))
+            Assert.Equal(0.0, w.Water.SurfaceWaterDepth(c), 12);
+        Assert.True(w.Water.SurfaceVolume() >= 0 && w.Water.SurfaceVolume() != beforeSurface || w.Water.Budget.GroundwaterRecharge > beforeRecharge);
+    }
+
+    [Fact]
+    public void LegacyCombinedWaterSaveMigratesGroundwaterOutOfDynamicStorage()
+    {
+        var w = TestUtil.FlatWorld(61, d =>
+        {
+            d.Water.WaterTable = 0.25;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.8 });
+        });
+        var payloads = Persistence.WorldSerializer.Serialize(w);
+        var legacyDepth = new double[w.Grid.DomainCells.Length];
+        for (int k = 0; k < legacyDepth.Length; k++)
+            legacyDepth[k] = w.Water.OpenWaterDepth(w.Grid.DomainCells[k]);
+
+        payloads["water"] = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new Persistence.WaterPayload
+            {
+                FormatVersion = null,
+                Depth = Persistence.WorldSerializer.Pack(legacyDepth),
+                FaceFlowEast = null,
+                FaceFlowNorth = null,
+                Budget = new Vivarium.Sim.Water.WaterBudget(),
+            },
+            Persistence.WorldSerializer.Json);
+
+        var loaded = Persistence.WorldSerializer.Deserialize(w.Content, payloads);
+        foreach (int c in loaded.Grid.DomainCells.Where(loaded.Water.IsWaterTable))
+            Assert.Equal(0.0, loaded.Water.SurfaceWaterDepth(c), 12);
+        Assert.True(loaded.Water.IsWaterTable(Vec2.Zero));
+        Assert.Equal(loaded.Water.WaterTable, loaded.Water.SurfaceAt(Vec2.Zero), 6);
+    }
+
     [Fact] // t-053
     public void SpringsOutsideAreRejectedAndValidSpringsFlowDeterministically()
     {
         var d = TestUtil.FlatDescriptor();
         d.Water.Springs.Add(new SpringConfig { X = 0, Z = 9, Discharge = 0.1 });
         Assert.Throws<ArgumentException>(() => VivariumWorld.Create(TestUtil.Content, d, false));
-        var w = TestUtil.FlatWorld(1, x => x.Water.Springs.Add(new SpringConfig { X = 0, Z = 0, Discharge = 0.036 })); // 1e-5 m³/s
+        var w = TestUtil.FlatWorld(1, x => x.Water.Springs.Add(new SpringConfig { X = 0, Z = 0, Discharge = 0.036 })); // 1e-5 mÂ³/s
         double before = w.Water.Budget.SpringInflow;
         for (int i = 0; i < 60; i++) w.Water.Step(60);
         Assert.Equal(0.036, w.Water.Budget.SpringInflow - before, 6);        // exactly one hour of discharge
@@ -79,12 +151,26 @@ public class HydrologyTests
             w.Water.Step(60);
             foreach (int c in w.Grid.DomainCells) Assert.True(w.Water.Depth[c] >= 0);
         }
-        Assert.True(CentreOfMassX(w) < comBefore - 0.5, "water should move toward lower ground (−X)");
+        Assert.True(CentreOfMassX(w) < comBefore - 0.5, "water should move toward lower ground (âˆ’X)");
         // conservation: nothing created or destroyed except tracked boundary outflow
         Assert.Equal(v0, w.Water.Volume() + w.Water.Budget.BoundaryOutflow, 9);
         var w2 = Slope(); TestUtil.Flood(w2, high, 0.6, 0.05);
         for (int i = 0; i < 200; i++) w2.Water.Step(60);
         Assert.Equal(w.Water.DigestHex(), w2.Water.DigestHex());
+    }
+
+    [Fact]
+    public void SurfaceSolverStoresSignedFaceMomentumAndConservesTransfers()
+    {
+        var w = Slope();
+        var high = new Vec2(2.5, 0);
+        TestUtil.Flood(w, high, 0.45, 0.04);
+        double v0 = w.Water.SurfaceVolume();
+        w.Water.Step(30);
+
+        Assert.Contains(w.Grid.DomainCells, c => Math.Abs(w.Water.FaceFlowEast[c]) > 1e-10 || Math.Abs(w.Water.FaceFlowNorth[c]) > 1e-10);
+        Assert.Equal(v0, w.Water.SurfaceVolume() + w.Water.Budget.BoundaryOutflow, 9);
+        Assert.True(w.Water.AllFinite());
     }
 
     private static double CentreOfMassX(VivariumWorld w)
@@ -144,6 +230,19 @@ public class HydrologyTests
         Assert.True(bank > dry + 0.3, $"bank {bank:0.00} vs dry {dry:0.00}");
     }
 
+    [Fact]
+    public void WaterMeshSnapshotPreservesGeometryAcrossLaterDepthChanges()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        var snapshot = WaterMesh.Capture(w);
+        string original = WaterMesh.Build(w).DigestHex();
+        Assert.Equal(original, WaterMesh.Build(w, snapshot).DigestHex());
+
+        int wet = w.Grid.DomainCells.First(w.Water.IsWet);
+        w.Water.Depth[wet] += 0.25;
+        w.Water.FlowX[wet] += 0.2;
+        Assert.Equal(original, WaterMesh.Build(w, snapshot).DigestHex());
+    }
     [Fact] // t-059, t-060, t-062
     public void WaterGeometryFollowsWetCellsAndEndsCleanlyAtTheCut()
     {
@@ -206,6 +305,25 @@ public class HydrologyTests
     }
 
     [Fact]
+    public void SoilHydrationRespondsToSurfaceWaterAmountWithoutLinearOverSaturation()
+    {
+        var w = TestUtil.FlatWorld(41);
+        var shallowP = new Vec2(-2.5, 0);
+        var deepP = new Vec2(2.5, 0);
+        int shallow = w.Grid.CellAt(shallowP), deep = w.Grid.CellAt(deepP);
+        w.Water.Depth[shallow] = 0.003;
+        w.Water.Depth[deep] = 0.06;
+
+        for (int k = 0; k < 12; k++)
+            w.Water.CoupleMoisture(w.Fields.Moisture, w.Content.Ecology, 900, w.Fields.Scratch);
+
+        double a = w.Fields.Moisture[shallow], b = w.Fields.Moisture[deep];
+        Assert.True(b > a + 0.12, $"deeper persistent surface water should hydrate more: shallow={a:0.00}, deep={b:0.00}");
+        Assert.InRange(b, 0, 1);
+        Assert.InRange(a, 0, 1);
+    }
+
+    [Fact]
     public void SoilMoistureFallsOffSmoothlyWithDistanceFromWater()
     {
         var w = TestUtil.FlatWorld(9);
@@ -221,7 +339,7 @@ public class HydrologyTests
             Assert.True(samples[i] <= samples[i - 1] + 1e-9, $"moisture should not rise away from water: {string.Join(" ", samples.Select(x => x.ToString("0.00")))}");
             Assert.True(samples[i - 1] - samples[i] < 0.3, $"no hard edge between neighbouring cells: {string.Join(" ", samples.Select(x => x.ToString("0.00")))}");
         }
-        Assert.True(samples[0] > 0.8 && samples[^1] < 0.4, $"bank wet, far ground dry: {samples[0]:0.00} … {samples[^1]:0.00}");
+        Assert.True(samples[0] > 0.8 && samples[^1] < 0.4, $"bank wet, far ground dry: {samples[0]:0.00} â€¦ {samples[^1]:0.00}");
         var d = w.Water.DistanceToWater();
         Assert.Equal(0, d[w.Grid.CellAt(pond)]);
         Assert.InRange(d[w.Grid.CellAt(pond + new Vec2(2.0, 0))], 0.7, 1.3);
@@ -255,9 +373,74 @@ public class HydrologyTests
             {
                 if (!w.Grid.InDomain(ci + di, cj + dj)) continue;
                 int k = w.Grid.Index(ci + di, cj + dj);
-                if (w.Water.IsWet(k)) top = Math.Max(top, w.Water.Bed[k] + w.Water.Depth[k]);
+                if (w.Water.IsWet(k)) { var ws = w.Water.SurfaceAt(w.Grid.CellCenter(k)); if (!double.IsNaN(ws)) top = Math.Max(top, ws); }
             }
             Assert.True(p.Y <= top + 1e-6, $"surface at {p} is above the nearby water level {top:0.000}");
         }
+    }
+
+    [Fact]
+    public void WaterTableAndStreamSeparationIsQueryable()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        // Basin pond has ground below water table (waterTable = 0)
+        var pondPoint = new Vec2(4.6, 3.1);
+        Assert.True(w.Water.IsWaterTable(pondPoint), "basin should be classified as water table");
+        Assert.True(w.Water.WaterTableDepth(pondPoint) > 0.05, "basin should have positive water table depth");
+        Assert.False(w.Water.IsStream(pondPoint), "deep pond is not a surface stream");
+
+        // High ground far from the spring is dry
+        var dryPoint = new Vec2(-4.0, 4.0);
+        Assert.False(w.Water.IsWaterTable(dryPoint));
+        Assert.False(w.Water.IsStream(dryPoint));
+
+        // Step hydrology so the spring flows
+        for (int i = 0; i < 20; i++) w.Water.Step(30);
+
+        // Near spring source (-4.1, -2.1) on high ground (bed > 0)
+        var springPoint = new Vec2(-4.1, -2.1);
+        Assert.True(w.Water.IsStream(springPoint), "spring runoff on high ground should be classified as stream");
+        Assert.False(w.Water.IsWaterTable(springPoint), "high ground spring is not the groundwater table");
+        Assert.True(w.Water.StreamDepth(springPoint) > 0, "stream depth should be positive at the spring");
+    }
+
+    [Fact]
+    public void GroundwaterAndDynamicSurfaceMeshesUseIndependentState()
+    {
+        var groundwaterOnly = TestUtil.FlatWorld(51, d =>
+        {
+            d.Water.WaterTable = 0.25;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.8 });
+        });
+        var tableSet = WaterMesh.BuildSet(groundwaterOnly);
+        Assert.True(tableSet.TableMesh.TriangleCount > 0);
+        Assert.Equal(0, tableSet.StreamMesh.TriangleCount);
+        for (int i = 0; i < tableSet.TableMesh.VertexCount; i++)
+            if (tableSet.TableMesh.NormalAt(i).Y > 0.5)
+                Assert.Equal(groundwaterOnly.Water.WaterTable, tableSet.TableMesh.Position(i).Y, 5);
+
+        var surfaceOnly = TestUtil.FlatWorld(52, d => d.Water.WaterTable = -2.0);
+        TestUtil.Flood(surfaceOnly, Vec2.Zero, 0.8, 0.08);
+        surfaceOnly.Water.Step(30);
+        var surfaceSet = WaterMesh.BuildSet(surfaceOnly);
+        Assert.Equal(0, surfaceSet.TableMesh.TriangleCount);
+        Assert.True(surfaceSet.StreamMesh.TriangleCount > 0);
+    }
+
+    [Fact]
+    public void WaterMeshBuildSetSeparatesPondAndStreamMeshes()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        for (int i = 0; i < 30; i++) w.Water.Step(30);
+
+        var set = WaterMesh.BuildSet(w);
+        Assert.NotNull(set.TableMesh);
+        Assert.NotNull(set.StreamMesh);
+        Assert.NotNull(set.CombinedMesh);
+
+        // Table mesh must cover the standing pond and cut face
+        Assert.True(set.TableMesh.TriangleCount > 20, "table mesh should have pond triangles");
+        // Combined mesh must match Build(w)
+        Assert.Equal(set.CombinedMesh.DigestHex(), WaterMesh.Build(w).DigestHex());
     }
 }

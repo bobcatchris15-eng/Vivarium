@@ -1,0 +1,103 @@
+{
+  "id": "pitcher_plant",
+  "name": "Raincup Pitcher",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Tracked carnivorous bog plant with a small cluster of rain-filled prey pitchers.",
+  "description": "Each plant carries several swollen upright pitchers with dark rainwater mouths and hooded lids, favoring bright nutrient-poor wet ground.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.15
+    },
+    "refuseSubstrates": [
+      "rock",
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.86,
+      "tolerance": 0.14
+    },
+    "light": {
+      "optimum": 0.73,
+      "tolerance": 0.23
+    },
+    "nutrients": {
+      "optimum": 0.16,
+      "tolerance": 0.2
+    },
+    "maxWaterDepth": 0.006,
+    "hardMinMoisture": 0.55,
+    "minSuitability": 0.19
+  },
+  "growth": {
+    "ratePerDay": 0.15,
+    "maxBiomass": 0.8,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.18,
+    "maturityDays": 24,
+    "lifespanDays": 430,
+    "nutrientPerBiomass": 0.14,
+    "radiusAtMax": 0.34,
+    "minRadius": 0.06
+  },
+  "spread": {
+    "intervalDays": 14,
+    "radius": 0.7,
+    "propagules": 1,
+    "minBiomassFraction": 0.62
+  },
+  "competition": {
+    "radius": 0.42,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.82
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.65,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.82,
+  "sheddingPerDay": 0.008,
+  "grazingValue": 0.08,
+  "visual": {
+    "shape": "pitcher_rosette",
+    "color": [
+      0.3,
+      0.52,
+      0.22
+    ],
+    "color2": [
+      0.68,
+      0.18,
+      0.2
+    ],
+    "colorVariance": 0.055,
+    "height": 0.58
+  },
+  "tags": [
+    "plant",
+    "carnivorous",
+    "bog"
+  ],
+  "postLife": {
+    "standingDays": 20,
+    "collapseDays": 4,
+    "fallenDays": 28,
+    "advancedDays": 10,
+    "coarseFraction": 0.12,
+    "decayHalfLifeMultiplier": 0.78,
+    "standingRetention": 0.45,
+    "deadColor": [
+      0.52,
+      0.34,
+      0.22
+    ],
+    "litterColorInfluence": 0.76,
+    "dryBleach": 0.2,
+    "wetDarken": 0.24
+  }
+}

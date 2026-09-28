@@ -1,5 +1,5 @@
 # Photoreal overhaul — orchestrator ledger
-Updated: 2026-09-25 | HEAD: 956d37b | Plan: ~/.claude/plans/do-2-it-s-fine-fuzzy-journal.md
+Updated: 2026-09-28 | HEAD: de3dd17 | Plan: ~/.claude/plans/do-2-it-s-fine-fuzzy-journal.md
 HANDOFF: read docs/overhaul/HANDOFF.md first (rules, in-flight worktrees, queue).
 
 ## Objective
@@ -44,18 +44,18 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | mossvis | coverage-aware reference scenes | MERGED (harness only) | sim areas healthy (carpet 0.45 m², lichens ~0.09); claimed mats visible but images show only log-shader moss tint + terrain green; lichen absent -> covvis |
 | covvis | PROVE coverage renderer draws, fix | DONE (winding flipped, single-sided; 95.9 fps) | root: fan winding reversed -> backface culled (debug magenta proved 266k tris draped correctly incl rock tops). doubleSided fix cost 9% -> asked to flip winding instead |
 | introcov | introduce/remove moss & lichen clumps via tools | DONE | 52/52 + smoke OK; default back to carpet_moss |
-| edgefld | ScalarField.Sample bilinear near domain edge diluted by out-of-domain cells (moisture 0.7 reads ~0.35) | IN PROGRESS wt edgefld | test added, implementing weight renormalisation |
+| edgefld | ScalarField edge renormalisation | MERGED 78a515c | — |
 | matr | coverage mat renderer | DONE | organic outlines, no grid, ~7% fps; TUNE: reads flat felt/paint, no fibre texture/relief; lichen flat mustard -> mat2 |
 | mat2 | mat texture + relief + shoots | FAIL (honest) | shader-only, still paint; split -> mat2a geometry relief, mat2b instanced shoots |
-| mat2a | mat geometry relief (cushion domes, thickness, displaced normals) | IN PROGRESS wt mat2a | seeded, building, implementing displacement in CoverageRenderer.cs |
-| mat2b | instanced micro-shoots via CoverageShoots.cs | QUEUED | depends on mat2a |
+| mat2a | mat geometry relief | MERGED be0789a | moss pillows + textured lichen sheets |
+| mat2b | instanced micro-shoots via CoverageShoots.cs | UNBLOCKED | mat2a merged |
 | creep | creeping_groundcover rebuild | DONE | discs gone; TUNE: stolons too thick/straight, too few/tiny leaves (reads as sticks) |
-| vine | climbing_vine giant flat faceted leaves = next icon | QUEUED | — |
+| vine | climbing_vine leaf form | MERGED de4361a (task/vine-form) | visual acceptance not re-judged |
 | harn | (folded into mossvis) | — | — |
 | g8b | superseded by Pl-4 | — | — |
 | pl1 | local mass + conservative transport | DONE | far end drains toward food w/o steering; exact conservation; setups retuned (two_food gamma/qgain, starve thresholds) |
 | pl2 | phase field + rectification | DONE a2 | coherent sheet, waves, rectified drift; 8.4ms/600 nodes Debug (runs every 30 sim-s) ; K=0.001 |
-| pl3 | veins from shuttle Q, stress replaces Migrating | IN PROGRESS wt pl3 | 57/60 pass; 3 fail; Foraging.cs boundary retraction fix underway |
+| pl3 | veins from shuttle Q, stress replaces Migrating | ABANDONED 09-28 (user) | worktree+branch deleted; tip was 8d058db (3 commits, 57/60) — recover from reflog if needed |
 | aq1 | algae/duckweed layers + advection + lab | MERGED e2a2b0d | 66/66 tests pass, 41/41 mainline GrowthLab pass, worktree removed |
 | aq2 | biofilm from algae, grazing, content, seeding | UNBLOCKED | ready for dispatch (depends on aq1) |
 | aq3 | lily pad species + mesh | DONE a3 | round notched flat pads confirmed visually; a2: pads visible but lanceolate blades tilted on tall stalks, not round flat floating pads; | a1: tests pass, 14 plants; visual FAIL: only petioles visible, no pads on surface (suspect non-uniform depth scale/culling/below surface) |
@@ -107,6 +107,7 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 
 ## Unverified assumptions
 - Worktree seed/cost for Mode P with windowed Probe unmeasured.
+- de3dd17 only passed build + headless `--import` (clean, 2026-09-28). verify.ps1, reference capture and perf NOT run since the 83-commit pull; baseline/compare numbers predate surface-water and new species.
 
 ## Resume checkpoint (2026-09-25)
 - Main: reduced herb leaf detail from 128 to 72 triangles, retained both faces and nondegenerate geometry, and reduced flower-head size from 0.32 to 0.12 so petals no longer cover the crown. `FormTests` 24/24; `dotnet build game/Vivarium.csproj` clean; reference returned `VIVARIUM_REFERENCE_OK` for 40 scenes. `species_ornamental_herb` now shows a green crown, though its flowers remain visually small. Sim digest matches the earlier p1c capture.
@@ -119,3 +120,12 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 - Main populated perf at `build/perf/overhaul-current/perf_report.json`: mean 43.1 FPS, min second 31, p95 frame 51.1 ms, p99 140.5 ms, worst 196.24 ms, 523/3747 frames over 33 ms. Profiler evidence points to synchronous Flora rebuild hitches. RayOpaque's terrain march currently ignores the caller's near max-distance until after marching (Selection.cs); bounded fix and re-probe underway. Paired runs remain necessary for FPS comparisons.
 - `8f8bede` bounds terrain visibility marching by the caller's ray distance; regression and game build pass. The later absolute probe at `build/perf/bounded-ray` recorded mean 51.7 FPS, min second 40, p95 41.51 ms, p99 81.55 ms, 358/3747 frames over 33 ms. Groundcover migration changed the population between probes, so these are not an isolated before/after attribution.
 - S1 variation commits `9d416ae` and `7455b73` merged after independent review fixed stem/petiole deformation. Combined capture: `build/reference/s1-combined` (40 scenes). Flat silhouettes and oversized groundcover pads remain; S1 geometry foundations have landed, but photoreal visual acceptance remains open.
+
+## Remote sync (2026-09-28, d41c320 -> de3dd17, 83 commits, landed outside this orchestrator)
+- Surface water: groundwater and surface water separated in state + rendering; conservative face solver; surface flow absorbs into water table; soil hydration coupled to water amount; legacy saves migrated; water tuning exposed.
+- Content: 9 new carnivore/fungus species (Kinkcane, Veilblade, Hookthicket, Blue Sundew Mat, Raincup Pitcher, Latchjaw, Rain Jelly, Carrion Bell, Glass Antlers), opted out of generic spore rain; blue sundew renders as spatial coverage rosettes; small fliers seek carrion-scent flora.
+- Ground filler gets real blades/stalks; visible litter is now the detritus food pool; coverage caches persisted across save/load.
+- Merged branches: fictional-ecology, vine-form, fauna-animation-families, codex/photorealism, local flora visuals + fauna motion.
+- Unmerged remote branches: chatgpt/visual-breaks-carnivores-fungi, ci/baseline-main-visual-species, feature/woody-flora, flora-tool-groups (fauna-animation-families/fictional-ecology tips may also have moved on).
+- Worktrees mat2a, gravel-blend, vine-form, pl3 removed 09-28. Only aq2-biofilm remains: 4 commits ahead, 93 behind main; trial merge conflicts in Ecology.cs, FaunaSystem.cs, VivariumWorld.cs (hydrology wiring vs surface-water refactor).
+- Next: run verify.ps1 + fresh reference capture at de3dd17 before new dispatches; new species need critic pass.

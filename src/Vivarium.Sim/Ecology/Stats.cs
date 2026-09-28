@@ -25,33 +25,73 @@ public static class EcosystemStatistics
 {
     public static EcosystemStats Compute(VivariumWorld w)
     {
-        var flora = w.Content.Flora.Select(sp =>
+        var floraBySp = new Dictionary<string, List<Flora.FloraIndividual>>();
+        foreach (var f in w.Flora.Items)
         {
-            var members = w.Flora.Items.Where(f => f.SpeciesId == sp.Id).ToList();
-            var t = w.Tally.Species.GetValueOrDefault(sp.Id);
-            return new FloraSpeciesStats(sp.Id, sp.Name, members.Count, members.Sum(m => m.Biomass), t?.Births ?? 0, t?.Deaths ?? 0);
-        }).ToList();
+            if (!floraBySp.TryGetValue(f.SpeciesId, out var list))
+                floraBySp[f.SpeciesId] = list = new List<Flora.FloraIndividual>();
+            list.Add(f);
+        }
 
-        var fauna = w.Content.Fauna.Select(sp =>
+        var faunaBySp = new Dictionary<string, List<Fauna.FaunaIndividual>>();
+        foreach (var f in w.Fauna.Items)
         {
-            var members = w.Fauna.Items.Where(f => f.SpeciesId == sp.Id).ToList();
+            if (!faunaBySp.TryGetValue(f.SpeciesId, out var list))
+                faunaBySp[f.SpeciesId] = list = new List<Fauna.FaunaIndividual>();
+            list.Add(f);
+        }
+
+        var flora = new List<FloraSpeciesStats>(w.Content.Flora.Count);
+        foreach (var sp in w.Content.Flora)
+        {
+            floraBySp.TryGetValue(sp.Id, out var members);
+            int count = members?.Count ?? 0;
+            double biomass = 0;
+            if (members != null)
+                for (int i = 0; i < members.Count; i++) biomass += members[i].Biomass;
+            var t = w.Tally.Species.GetValueOrDefault(sp.Id);
+            flora.Add(new FloraSpeciesStats(sp.Id, sp.Name, count, biomass, t?.Births ?? 0, t?.Deaths ?? 0));
+        }
+
+        var fauna = new List<FaunaSpeciesStats>(w.Content.Fauna.Count);
+        foreach (var sp in w.Content.Fauna)
+        {
+            faunaBySp.TryGetValue(sp.Id, out var members);
+            int count = members?.Count ?? 0;
             var t = w.Tally.Species.GetValueOrDefault(sp.Id);
             var traits = new SortedDictionary<string, double>(StringComparer.Ordinal);
-            double size = 0; int maxGen = 0;
-            if (members.Count > 0)
+            double size = 0; int maxGen = 0; int adults = 0; double energySum = 0;
+            if (members != null && count > 0)
             {
-                for (int i = 0; i < sp.Traits.Count; i++)
-                    traits[sp.Traits[i]] = members.Average(m => w.Genomes.Get(m.GenomeId)?.Traits[i] ?? 0.5);
-                size = members.Average(m => w.FaunaSystem.PhenotypeOf(m).BodySize) * 1000;
-                maxGen = members.Max(m => w.Genomes.Get(m.GenomeId)?.Generation ?? 0);
+                double totalSize = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    var m = members[i];
+                    if (m.Stage == Fauna.FaunaLifeStage.Adult) adults++;
+                    energySum += m.Energy;
+                    totalSize += w.FaunaSystem.PhenotypeOf(m).BodySize;
+                    var gen = w.Genomes.Get(m.GenomeId)?.Generation ?? 0;
+                    if (gen > maxGen) maxGen = gen;
+                }
+                size = (totalSize / count) * 1000;
+                for (int ti = 0; ti < sp.Traits.Count; ti++)
+                {
+                    double sumTrait = 0;
+                    for (int i = 0; i < count; i++)
+                        sumTrait += w.Genomes.Get(members[i].GenomeId)?.Traits[ti] ?? 0.5;
+                    traits[sp.Traits[ti]] = sumTrait / count;
+                }
             }
-            return new FaunaSpeciesStats(sp.Id, sp.Name, members.Count, members.Count(m => m.Stage == Fauna.FaunaLifeStage.Adult),
-                members.Count > 0 ? members.Average(m => m.Energy) : 0, t?.Births ?? 0, t?.Deaths ?? 0, traits, size, maxGen);
-        }).ToList();
+            fauna.Add(new FaunaSpeciesStats(sp.Id, sp.Name, count, adults,
+                count > 0 ? energySum / count : 0, t?.Births ?? 0, t?.Deaths ?? 0, traits, size, maxGen));
+        }
 
-        int wet = w.Grid.DomainCells.Count(c => w.Water.IsWet(c));
+        int wet = 0;
+        for (int i = 0; i < w.Grid.DomainCells.Length; i++)
+            if (w.Water.IsWet(w.Grid.DomainCells[i])) wet++;
+
         return new EcosystemStats(w.Clock.BioDays, flora, fauna,
-            w.Fields.Moisture.Mean(), w.Fields.Nutrients.Mean(), w.Fields.Detritus.Total() , w.Water.Volume(),
+            w.Fields.Moisture.Mean(), w.Fields.Nutrients.Mean(), w.Litter.TotalDetritus(), w.Water.Volume(),
             (double)wet / Math.Max(1, w.Grid.DomainCells.Length), w.Fields.Light.Mean(), w.Lineage.Count, w.Genomes.Count);
     }
 }

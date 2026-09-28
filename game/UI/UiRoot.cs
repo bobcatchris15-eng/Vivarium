@@ -232,7 +232,7 @@ public partial class UiRoot : Control
             $"Light      {f.Light.Sample(p):0.00}  {UiKit.Bar(f.Light.Sample(p))}\n" +
             $"Moisture   {f.Moisture.Sample(p):0.00}  {UiKit.Bar(f.Moisture.Sample(p))}\n" +
             $"Nutrients  {f.Nutrients.Sample(p):0.00}  {UiKit.Bar(f.Nutrients.Sample(p) / w.Content.Ecology.NutrientMax)}\n" +
-            $"Detritus   {f.Detritus.Sample(p):0.00}\n" +
+            $"Detritus   {w.Litter.DetritusAt(p):0.00}\n" +
             $"Water      {depth * 100:0.0} cm" + (depth >= w.Water.Config.WetDepth ? $", flow {speed * 3600:0.00} m/h" : "") + "\n" +
             (depth >= w.Water.Config.WetDepth ? $"Biofilm {f.Biofilm.Sample(p):0.00} · plankton {f.Plankton.Sample(p):0.00}\n" : "") +
             $"Elevation  {w.SurfaceHeight(p):0.00} m · {w.Strata.Layers[0].Name}";

@@ -9,11 +9,13 @@ also contains the following third-party software and textures:
 | Components bundled inside Godot (FreeType, HarfBuzz, ICU, Vulkan loader, zstd, …) | see `ENGINE_LICENSES.txt` | various (MIT, BSD, Zlib, Apache-2.0, ICU, …) | `Vivarium.exe` |
 | .NET 8 runtime + base class libraries | 8.0.x | MIT | `data_Vivarium_windows_x86_64/` |
 | Photo-scanned surface textures from ambientCG (Ground048, Ground037, Moss002, ScatteredLeaves007, Rock058, Gravel022, Bark014; 1K colour, normal and roughness maps) | downloaded 2026-09-23 | CC0 1.0 (public domain) | `Vivarium.pck` (source: `game/Textures/`) |
+| Photo-scanned [Bark001](https://ambientcg.com/view?id=Bark001) and [Bark013](https://ambientcg.com/view?id=Bark013) (1K colour, NormalGL and roughness maps) | downloaded 2026-09-27 | CC0 1.0 (public domain) | `Vivarium.pck` (source: `game/Textures/`) |
+| Photo-scanned leaf maps from Poly Haven: [Potted Plant 01](https://polyhaven.com/a/potted_plant_01), [Tree Small 02](https://polyhaven.com/a/tree_small_02), and [Crystalline Iceplant](https://polyhaven.com/a/crystalline_iceplant) (2K color, OpenGL normal, roughness) | downloaded 2026-09-27 | CC0 1.0 (public domain) | `Vivarium.pck` (source: `game/Textures/Leaves/`) |
 
 `ENGINE_LICENSES.txt` is generated at export time from the engine's own license inventory
 (`Engine.GetCopyrightInfo()` / `Engine.GetLicenseInfo()`), so it matches exactly what is bundled.
 
 Apart from the CC0 textures above, no third-party art, audio, fonts beyond Godot's built-in default font, or network
-services are used. The textures are public domain and need no attribution; they are credited to ambientCG.com anyway.
+services are used. The textures are public domain and need no attribution; ambientCG and Poly Haven are credited anyway.
 
 .NET runtime license: https://github.com/dotnet/runtime/blob/main/LICENSE.TXT (MIT, Copyright (c) .NET Foundation and Contributors).

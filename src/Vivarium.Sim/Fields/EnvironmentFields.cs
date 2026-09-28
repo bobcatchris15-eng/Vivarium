@@ -61,6 +61,18 @@ public sealed class EnvironmentFields
     /// <summary>Forces a light recompute on the next environment tick (terrain was sculpted).</summary>
     public void MarkLightStale() => _lightPropsVersion = int.MinValue;
 
+    private static readonly Vec2[] LightDirs = new Vec2[]
+    {
+        Vec2.FromAngle(0),
+        Vec2.FromAngle(Math.PI * 0.25),
+        Vec2.FromAngle(Math.PI * 0.5),
+        Vec2.FromAngle(Math.PI * 0.75),
+        Vec2.FromAngle(Math.PI),
+        Vec2.FromAngle(Math.PI * 1.25),
+        Vec2.FromAngle(Math.PI * 1.5),
+        Vec2.FromAngle(Math.PI * 1.75),
+    };
+
     /// <summary>
     /// Computes exposure = sky openness from terrain horizon (8 azimuths, 3 m reach) × prop shading.
     /// Cells on top of props are fully exposed at the prop surface.
@@ -69,30 +81,39 @@ public sealed class EnvironmentFields
     {
         _lightPropsVersion = props.Version;
         const int dirs = 8;
-        foreach (int idx in Grid.DomainCells)
+        var surfaceH = new double[Grid.Count];
+        for (int i = 0; i < Grid.DomainCells.Length; i++)
         {
+            int idx = Grid.DomainCells[i];
             var p = Grid.CellCenter(idx);
             double top = props.PropTopAt(p);
-            double h0 = double.IsNaN(top) ? hf.Height(p) : Math.Max(top, hf.Height(p));
+            surfaceH[idx] = double.IsNaN(top) ? hf.Height(p) : Math.Max(top, hf.Height(p));
+        }
+
+        Parallel.ForEach(Grid.DomainCells, idx =>
+        {
+            var p = Grid.CellCenter(idx);
+            double h0 = surfaceH[idx];
             double occl = 0;
             for (int k = 0; k < dirs; k++)
             {
-                var dir = Vec2.FromAngle(k * 2 * Math.PI / dirs);
+                var dir = LightDirs[k];
                 double maxTan = 0;
                 for (double s = 0.25; s <= 3.0; s += 0.25)
                 {
                     var q = p + dir * s;
                     if (!Grid.Domain.Contains(q)) break;
-                    double hq = hf.Height(q);
-                    double pt = props.PropTopAt(q);
-                    if (!double.IsNaN(pt)) hq = Math.Max(hq, pt);
+                    int qCell = Grid.CellAt(q);
+                    if (qCell < 0) break;
+                    double hq = surfaceH[qCell];
                     maxTan = Math.Max(maxTan, (hq - h0) / s);
                 }
-                occl += Math.Sin(Math.Atan(maxTan));
+                if (maxTan > 0)
+                    occl += maxTan / Math.Sqrt(1.0 + maxTan * maxTan);
             }
             double openness = 1 - occl / dirs;          // 1 = fully open sky
             Light[idx] = MathD.Clamp01(0.08 + 0.92 * openness);
-        }
+        });
     }
 
     /// <summary>Nutrient relaxation toward baseline plus diffusion. Deterministic and bounded.</summary>

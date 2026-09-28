@@ -17,6 +17,55 @@ public static class SubstrateIds
     }
 }
 
+public enum FloraPlacementGroup : byte
+{
+    MossLichen = 0,
+    Terrestrial = 1,
+    WatersideAquatic = 2,
+    Decomposer = 3,
+    Woody = 4,
+}
+
+public static class FloraPlacementGroups
+{
+    public static readonly FloraPlacementGroup[] All =
+    {
+        FloraPlacementGroup.MossLichen,
+        FloraPlacementGroup.Terrestrial,
+        FloraPlacementGroup.WatersideAquatic,
+        FloraPlacementGroup.Decomposer,
+        FloraPlacementGroup.Woody,
+    };
+
+    public static string Id(FloraPlacementGroup group) => group switch
+    {
+        FloraPlacementGroup.MossLichen => "moss_lichen",
+        FloraPlacementGroup.Terrestrial => "terrestrial",
+        FloraPlacementGroup.WatersideAquatic => "waterside_aquatic",
+        FloraPlacementGroup.Decomposer => "decomposer",
+        FloraPlacementGroup.Woody => "woody",
+        _ => throw new ArgumentOutOfRangeException(nameof(group)),
+    };
+
+    public static string Name(FloraPlacementGroup group) => group switch
+    {
+        FloraPlacementGroup.MossLichen => "Moss & lichen",
+        FloraPlacementGroup.Terrestrial => "Terrestrial plants",
+        FloraPlacementGroup.WatersideAquatic => "Waterside & aquatic",
+        FloraPlacementGroup.Decomposer => "Decomposers",
+        FloraPlacementGroup.Woody => "Trees & shrubs",
+        _ => group.ToString(),
+    };
+
+    public static bool TryParse(string id, out FloraPlacementGroup group)
+    {
+        foreach (var candidate in All)
+            if (Id(candidate) == id) { group = candidate; return true; }
+        group = default;
+        return false;
+    }
+}
+
 public static class SimUnits
 {
     public const double Minute = 60, Hour = 3600, Day = 86400, Week = 7 * Day;
@@ -60,6 +109,84 @@ public sealed class ProximityRule
     public string Feature => IsFeature ? Target.Substring(8) : "";
 }
 
+public enum WoodyLayer : byte { Shrub = 0, Tree = 1 }
+
+/// <summary>Structural-plant metadata. Population budgets are shared by layer across species.</summary>
+public sealed class WoodyDef
+{
+    public WoodyLayer Layer { get; init; }
+    /// <summary>Mature crown radius used for ecological shade; independent from render/competition radius.</summary>
+    public double CanopyRadius { get; init; }
+    /// <summary>Fraction of incident light removed at the crown centre by a mature individual (0..0.95).</summary>
+    public double ShadeOpacity { get; init; }
+    /// <summary>Minimum centre-to-centre clearance from another woody individual in the same layer.</summary>
+    public double MinSpacing { get; init; }
+}
+
+public sealed class ClimberDef
+{
+    /// <summary>Radius (m) within which a searching tip can bias growth toward a support. Sensing never teleports growth.</summary>
+    public double SearchRadius { get; init; }
+    /// <summary>Horizontal runner extension in metres per biological second.</summary>
+    public double GroundSpeed { get; init; }
+    /// <summary>Persistent stem-node spacing in metres.</summary>
+    public double SegmentLength { get; init; }
+    /// <summary>Physical contact distance at which a searching tip attaches to a support.</summary>
+    public double AttachmentRadius { get; init; }
+    /// <summary>Chance that the parent remains an active tip after budding, producing a branch.</summary>
+    public double BranchChance { get; init; }
+    /// <summary>Maximum lineage length that may be produced without finding a support.</summary>
+    public double MaxUnsupportedLength { get; init; }
+    /// <summary>Visual vertical-growth multiplier once attached.</summary>
+    public double VerticalGrowthMultiplier { get; init; } = 1;
+    /// <summary>Maximum persistent stem nodes of this climber species in one world.</summary>
+    public int NodeCap { get; init; } = 96;
+    /// <summary>Allowed support classes: woody, log, rock.</summary>
+    public HashSet<string> SupportTypes { get; init; } = new(StringComparer.Ordinal);
+}
+
+public sealed class DecomposerProfileDef
+{
+    public double Radius { get; init; } = 0.55;
+    public double FineMultiplier { get; init; } = 1;
+    public double CoarseMultiplier { get; init; } = 1;
+    public double FruitMultiplier { get; init; } = 1;
+}
+
+public sealed class PostLifeDef
+{
+    public double StandingTime { get; init; }
+    public double CollapseTime { get; init; }
+    public double FallenTime { get; init; }
+    public double AdvancedTime { get; init; }
+    public double CoarseFraction { get; init; }
+    public double DecayHalfLifeMultiplier { get; init; } = 1;
+    public double StandingRetention { get; init; } = 1;
+    public double[] DeadColor { get; init; } = { 0.62, 0.54, 0.38 };
+    public double LitterColorInfluence { get; init; } = 0.7;
+    public double DryBleach { get; init; } = 0.15;
+    public double WetDarken { get; init; } = 0.12;
+}
+
+public sealed class ReproductionDef
+{
+    public string Form { get; init; } = "berry";
+    public string Dispersal { get; init; } = "gravity";
+    public double ReserveRate { get; init; }
+    public double PulseThreshold { get; init; }
+    public double MaxAttachedMass { get; init; }
+    public double DevelopmentTime { get; init; }
+    public double RipeTime { get; init; }
+    public double CooldownTime { get; init; }
+    public double SeedFraction { get; init; }
+    public double Viability { get; init; }
+    public double DormancyTime { get; init; }
+    public double DispersalRadius { get; init; }
+    public double[] FruitColor { get; init; } = { 0.65, 0.2, 0.15 };
+    public double DisplaySize { get; init; } = 0.02;
+    public double FoodValue { get; init; } = 1;
+}
+
 public sealed class FloraSpeciesDef
 {
     public string Id { get; init; } = "";
@@ -68,6 +195,8 @@ public sealed class FloraSpeciesDef
     public string Role { get; init; } = "";
     public string Description { get; init; } = "";
     public string SourceFile { get; init; } = "";
+    /// <summary>Player-facing drawer used by flora introduction UI; ecology still decides where the species can live.</summary>
+    public FloraPlacementGroup PlacementGroup { get; init; }
 
     // habitat
     public Dictionary<Substrate, double> SubstrateAffinity { get; init; } = new();
@@ -133,6 +262,16 @@ public sealed class FloraSpeciesDef
     public double Height { get; init; }
     public List<string> Tags { get; init; } = new();
 
+    /// <summary>Tree/shrub structural metadata; null for ordinary flora.</summary>
+    public WoodyDef? Woody { get; init; }
+    /// <summary>Horizontal search and attachment behaviour for structural climbers; null for ordinary flora.</summary>
+    public ClimberDef? Climber { get; init; }
+    public ReproductionDef? Reproduction { get; init; }
+    public PostLifeDef? PostLife { get; init; }
+    public DecomposerProfileDef? Decomposition { get; init; }
+    public bool IsTree => Woody?.Layer == WoodyLayer.Tree;
+    public bool IsShrub => Woody?.Layer == WoodyLayer.Shrub;
+
     /// <summary>Optional colonial growth mode (moss/lichen); null = ordinary radial spread. Retained alongside
     /// <see cref="Mat"/>/<see cref="Lichen"/> for now (docs/overhaul/growth_models.md §8); species with a
     /// <see cref="Mat"/> or <see cref="Lichen"/> block run on the coverage layers instead and never create
@@ -147,9 +286,9 @@ public sealed class FloraSpeciesDef
     /// block). Null = this species does not run on the coverage layers.</summary>
     public FloraLichenDef? Lichen { get; init; }
 
-    /// <summary>True for species that run on the coverage layers (Mat or Lichen) rather than as
+    /// <summary>True for species that run on the coverage layers (Mat, Lichen, or Plasmodium) rather than as
     /// <see cref="Vivarium.Sim.Flora.FloraIndividual"/>s.</summary>
-    public bool IsCoverageSpecies => Mat != null || Lichen != null;
+    public bool IsCoverageSpecies => Mat != null || Lichen != null || Archetype == "slime_mold";
 }
 
 /// <summary>Moss ("mat") species content, parsed from the "mat" JSON block (docs/overhaul/growth_models.md §8).
@@ -280,6 +419,53 @@ public sealed class SchoolingParams
 
 public enum Medium { Terrestrial, Aquatic }
 
+/// <summary>
+/// Render-only locomotion families. The simulation remains authoritative for position and behaviour; these
+/// describe how a body should visibly realize that motion. Numeric values are passed directly to the fauna shader.
+/// </summary>
+public enum FaunaAnimationFamily : byte
+{
+    Still = 0,
+    Undulate = 1,
+    Paddle = 2,
+    Walk = 3,
+    Metachronal = 4,
+    SoftGlide = 5,
+    Peristaltic = 6,
+    Hop = 7,
+    Sprawl = 8,
+    Flight = 9,
+}
+
+/// <summary>
+/// Species-tunable presentation parameters for fauna locomotion. Speeds are measured in body lengths per real
+/// second on the render side, so a species keeps the same apparent gait as genetics change its absolute size.
+/// </summary>
+public sealed class FaunaAnimationDef
+{
+    public FaunaAnimationFamily Family { get; init; } = FaunaAnimationFamily.Walk;
+    /// <summary>Locomotor cycles added per body length travelled.</summary>
+    public double CyclesPerBody { get; init; } = 0.6;
+    /// <summary>Idle beat for swimming, flight and soft-body ripples. Ground stepping uses distance only.</summary>
+    public double IdleHz { get; init; }
+    /// <summary>Idle cadence ceiling. Travel-driven cycles are never discarded to enforce a frequency cap.</summary>
+    public double MaxHz { get; init; } = 8;
+    /// <summary>Body lengths/second at which non-stepping motion reaches full amplitude. Walking stride is distance-calibrated.</summary>
+    public double FullSpeed { get; init; } = 4;
+    /// <summary>Fraction of full pose amplitude retained at zero translation.</summary>
+    public double IdleMotion { get; init; }
+    public double Amplitude { get; init; } = 1;
+    public double BodyWave { get; init; } = 0.2;
+    public double LimbSweep { get; init; } = 0.5;
+    public double LimbLift { get; init; } = 0.3;
+    /// <summary>Whole-body vertical excursion; for Hop this is the hop height in body-length units.</summary>
+    public double Bob { get; init; } = 0.05;
+    /// <summary>How strongly phase changes from head to tail / front legs to rear legs.</summary>
+    public double PhaseSpread { get; init; } = 0.5;
+    /// <summary>Fraction of a cycle treated as stance/contact. Most important for Walk, Sprawl and Hop.</summary>
+    public double DutyFactor { get; init; } = 0.6;
+}
+
 public sealed class FaunaSpeciesDef
 {
     public string Id { get; init; } = "";
@@ -346,11 +532,14 @@ public sealed class FaunaSpeciesDef
     public string Model { get; init; } = "";
     public double[] BaseColor { get; init; } = { 0.8, 0.5, 0.3 };
     public double[] OrnamentColor { get; init; } = { 0.9, 0.9, 0.9 };
+    public FaunaAnimationDef Animation { get; init; } = new();
 
     public List<string> Behaviors { get; init; } = new();
     public SchoolingParams? Schooling { get; init; }
     /// <summary>Rolls into a ball instead of fleeing when disturbed ("conglobate" behaviour).</summary>
     public bool Conglobates => Behaviors.Contains("conglobate");
+    /// <summary>True for aerial species that can cross water/terrain while remaining tied to terrestrial habitat quality.</summary>
+    public bool Flies => Behaviors.Contains("flying");
 
     public bool HasTrait(string id) => Traits.Contains(id);
     public int TraitIndex(string id) => Traits.IndexOf(id);

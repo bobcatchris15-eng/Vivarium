@@ -37,12 +37,25 @@ public sealed class FieldsPayload
     public string Detritus { get; set; } = "";
     public string Biofilm { get; set; } = "";
     public string Plankton { get; set; } = "";
+    public string AmbientCover { get; set; } = "";
 }
 
 public sealed class WaterPayload
 {
+    /// <summary>2 = dynamic surface depth + persisted face momentum. Null identifies pre-split saves.</summary>
+    public int? FormatVersion { get; set; }
     public string Depth { get; set; } = "";
+    public string? FaceFlowEast { get; set; }
+    public string? FaceFlowNorth { get; set; }
     public WaterBudget Budget { get; set; } = new();
+}
+
+public sealed class LitterPayload
+{
+    public int CellCount { get; set; }
+    public string FineMass { get; set; } = "";
+    public string CoarseMass { get; set; } = "";
+    public string FruitMass { get; set; } = "";
 }
 
 public sealed class CoverageTilePayload
@@ -56,6 +69,9 @@ public sealed class CoverageTilePayload
     public string Dorm { get; set; } = "";
     public string Flags { get; set; } = "";
     public string D2E { get; set; } = "";
+    /// <summary>Per-cell growth caches used by Mat competition. Optional for backward-compatible older saves.</summary>
+    public string? Vigour { get; set; }
+    public string? GrowthWater { get; set; }
     public bool? Steady { get; set; }
     public int? SteadySteps { get; set; }
     public double? EnvCache { get; set; }
@@ -80,6 +96,8 @@ public sealed class CoveragePayload
 }
 
 public sealed class FloraPayload { public List<FloraIndividual> Items { get; set; } = new(); }
+public sealed class DeadFloraPayload { public List<DeadPlant> Items { get; set; } = new(); }
+public sealed class SeedBankPayload { public List<SeedLot> Lots { get; set; } = new(); }
 public sealed class FaunaPayload { public List<FaunaIndividual> Items { get; set; } = new(); }
 public sealed class GeneticsPayload
 {
@@ -93,7 +111,7 @@ public sealed class GeneticsPayload
 /// </summary>
 public static class WorldSerializer
 {
-    public static readonly string[] PayloadOrder = { "world", "fields", "water", "coverage", "flora", "fauna", "genetics" };
+    public static readonly string[] PayloadOrder = { "world", "fields", "water", "litter", "coverage", "flora", "dead_flora", "seed_bank", "fauna", "genetics" };
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -119,10 +137,28 @@ public static class WorldSerializer
             CellCount = w.Grid.DomainCells.Length,
             Nutrients = Pack(f.Nutrients.ExportDomainValues()), Moisture = Pack(f.Moisture.ExportDomainValues()),
             Detritus = Pack(f.Detritus.ExportDomainValues()), Biofilm = Pack(f.Biofilm.ExportDomainValues()), Plankton = Pack(f.Plankton.ExportDomainValues()),
+            AmbientCover = Pack(w.AmbientGroundCover.Export()),
         });
         var depth = new double[w.Grid.DomainCells.Length];
-        for (int k = 0; k < depth.Length; k++) depth[k] = w.Water.Depth[w.Grid.DomainCells[k]];
-        p["water"] = Bytes(new WaterPayload { Depth = Pack(depth), Budget = w.Water.Budget });
+        var flowE = new double[depth.Length];
+        var flowN = new double[depth.Length];
+        for (int k = 0; k < depth.Length; k++)
+        {
+            int c = w.Grid.DomainCells[k];
+            depth[k] = w.Water.Depth[c];
+            flowE[k] = w.Water.FaceFlowEast[c];
+            flowN[k] = w.Water.FaceFlowNorth[c];
+        }
+        p["water"] = Bytes(new WaterPayload
+        {
+            FormatVersion = 2,
+            Depth = Pack(depth), FaceFlowEast = Pack(flowE), FaceFlowNorth = Pack(flowN), Budget = w.Water.Budget
+        });
+        p["litter"] = Bytes(new LitterPayload
+        {
+            CellCount = w.Grid.DomainCells.Length,
+            FineMass = Pack(w.Litter.ExportFine()), CoarseMass = Pack(w.Litter.ExportCoarse()), FruitMass = Pack(w.Litter.ExportFruit()),
+        });
         p["coverage"] = Bytes(new CoveragePayload
         {
             Step = w.CoverageSystem.StepIndex,
@@ -134,6 +170,7 @@ public static class WorldSerializer
                     Ti = t.Ti, Tj = t.Tj,
                     Occ = PackBytes(t.Occ), B = PackFloats(t.B), W = PackBytes(t.W),
                     Age = PackUShorts(t.Age), Dorm = PackBytes(t.Dorm), Flags = PackBytes(t.Flags), D2E = PackBytes(t.D2E),
+                    Vigour = PackBytes(t.Vigour), GrowthWater = PackBytes(t.GW),
                     Steady = t.Steady, SteadySteps = t.SkippedPhysiologySteps,
                     EnvCache = double.IsNaN(t.EnvMoistureCache) ? null : t.EnvMoistureCache,
                 }).ToList(),
@@ -142,6 +179,8 @@ public static class WorldSerializer
             MoistureBonus = Pack(CoverageEnvironment.MoistureBonusOf(w).ExportDomainValues()),
         });
         p["flora"] = Bytes(new FloraPayload { Items = w.Flora.Items });
+        p["dead_flora"] = Bytes(new DeadFloraPayload { Items = w.DeadFlora.Items });
+        p["seed_bank"] = Bytes(new SeedBankPayload { Lots = w.SeedBank.Lots });
         p["fauna"] = Bytes(new FaunaPayload { Items = w.Fauna.Items });
         p["genetics"] = Bytes(new GeneticsPayload { Genomes = w.Genomes.Ordered().ToList(), Lineage = w.Lineage.Ordered().ToList() });
         return p;
@@ -195,16 +234,40 @@ public static class WorldSerializer
         w.Fields.Detritus.ImportDomainValues(Unpack(fp.Detritus, "detritus"));
         w.Fields.Biofilm.ImportDomainValues(Unpack(fp.Biofilm, "biofilm"));
         w.Fields.Plankton.ImportDomainValues(Unpack(fp.Plankton, "plankton"));
+        w.AmbientGroundCover.Restore(Unpack(fp.AmbientCover, "ambient ground cover"));
 
         var wa = Read<WaterPayload>(payloads, "water");
         var depth = Unpack(wa.Depth, "water depth");
         if (depth.Length != w.Grid.DomainCells.Length) throw new InvalidDataException("water depth grid mismatch");
+        double[]? flowE = wa.FaceFlowEast != null ? Unpack(wa.FaceFlowEast, "water east-face flow") : null;
+        double[]? flowN = wa.FaceFlowNorth != null ? Unpack(wa.FaceFlowNorth, "water north-face flow") : null;
+        bool legacyCombinedDepth = wa.FormatVersion == null && flowE == null && flowN == null;
+        if (wa.FormatVersion is > 2) throw new InvalidDataException($"water payload format {wa.FormatVersion} is newer than this build supports");
+        if (flowE != null && flowE.Length != depth.Length) throw new InvalidDataException("water east-face flow grid mismatch");
+        if (flowN != null && flowN.Length != depth.Length) throw new InvalidDataException("water north-face flow grid mismatch");
         for (int k = 0; k < depth.Length; k++)
         {
             if (!(depth[k] >= 0) || !double.IsFinite(depth[k])) throw new InvalidDataException($"water depth {k} is invalid ({depth[k]})");
-            w.Water.Depth[w.Grid.DomainCells[k]] = depth[k];
+            int c = w.Grid.DomainCells[k];
+            // Before the split, Depth included the hydrostatic table itself. In the new model groundwater is
+            // implicit and surface water vanishes into it, so exposed-groundwater cells migrate to zero dynamic depth.
+            w.Water.Depth[c] = legacyCombinedDepth && w.Water.IsWaterTable(c) ? 0 : depth[k];
+            if (flowE != null)
+            {
+                if (!double.IsFinite(flowE[k])) throw new InvalidDataException($"water east-face flow {k} is invalid ({flowE[k]})");
+                w.Water.FaceFlowEast[c] = flowE[k];
+            }
+            if (flowN != null)
+            {
+                if (!double.IsFinite(flowN[k])) throw new InvalidDataException($"water north-face flow {k} is invalid ({flowN[k]})");
+                w.Water.FaceFlowNorth[c] = flowN[k];
+            }
         }
         w.Water.Budget = wa.Budget ?? new WaterBudget();
+
+        var litter = Read<LitterPayload>(payloads, "litter");
+        if (litter.CellCount != w.Grid.DomainCells.Length) throw new InvalidDataException("litter grid mismatch");
+        w.Litter.Restore(Unpack(litter.FineMass, "fine litter"), Unpack(litter.CoarseMass, "coarse litter"), Unpack(litter.FruitMass, "fruit litter"));
 
         var cp = Read<CoveragePayload>(payloads, "coverage");
         var coverageSchedule = w.Scheduler.Systems.Single(s => s.Name == "coverage");
@@ -221,13 +284,17 @@ public static class WorldSerializer
                     UnpackBytes(tp.Occ, "coverage occ"), UnpackFloats(tp.B, "coverage biomass"), UnpackBytes(tp.W, "coverage water"),
                     UnpackUShorts(tp.Age, "coverage age"), UnpackBytes(tp.Dorm, "coverage dormancy"),
                     UnpackBytes(tp.Flags, "coverage flags"), UnpackBytes(tp.D2E, "coverage d2e"),
-                    tp.Steady ?? false, tp.SteadySteps ?? 0, tp.EnvCache ?? double.NaN);
+                    tp.Steady ?? false, tp.SteadySteps ?? 0, tp.EnvCache ?? double.NaN,
+                    tp.Vigour != null ? UnpackBytes(tp.Vigour, "coverage vigour") : null,
+                    tp.GrowthWater != null ? UnpackBytes(tp.GrowthWater, "coverage growth-water") : null);
             }
         }
         if (cp.Stability != null) CoverageEnvironment.StabilityOf(w).ImportDomainValues(Unpack(cp.Stability, "substrate stability"));
         if (cp.MoistureBonus != null) CoverageEnvironment.MoistureBonusOf(w).ImportDomainValues(Unpack(cp.MoistureBonus, "moisture bonus"));
 
         foreach (var f in Read<FloraPayload>(payloads, "flora").Items.OrderBy(f => f.Id.Value)) w.Flora.Add(f);
+        foreach (var d in Read<DeadFloraPayload>(payloads, "dead_flora").Items.OrderBy(d => d.Id.Value)) w.DeadFlora.Add(d);
+        foreach (var lot in Read<SeedBankPayload>(payloads, "seed_bank").Lots) w.SeedBank.Lots.Add(lot);
         foreach (var f in Read<FaunaPayload>(payloads, "fauna").Items.OrderBy(f => f.Id.Value)) w.Fauna.Add(f);
         var gp = Read<GeneticsPayload>(payloads, "genetics");
         foreach (var g in gp.Genomes) w.Genomes.Add(g);
@@ -259,6 +326,15 @@ public static class WorldSerializer
             if (w.Content.FloraById(f.SpeciesId) == null) errors.Add($"flora {f.Id} references unknown species '{f.SpeciesId}'");
             if (!w.Domain.Contains(f.Position)) errors.Add($"flora {f.Id} outside island");
             if (!double.IsFinite(f.Biomass) || f.Biomass < 0 || !double.IsFinite(f.Age)) errors.Add($"flora {f.Id} has invalid numbers");
+        }
+        foreach (var d in w.DeadFlora.Items)
+        {
+            Id(d.Id, "dead flora");
+            if (w.Content.FloraById(d.SpeciesId) == null) errors.Add($"dead flora {d.Id} references unknown species '{d.SpeciesId}'");
+            if (!w.Domain.Contains(d.Position)) errors.Add($"dead flora {d.Id} outside island");
+            if (!double.IsFinite(d.RemainingBiomass) || d.RemainingBiomass < 0 || !double.IsFinite(d.AgeSinceDeath)
+                || !double.IsFinite(d.OriginalRadius) || !double.IsFinite(d.OriginalHeight))
+                errors.Add($"dead flora {d.Id} has invalid numbers");
         }
         foreach (var g in w.Genomes.Ordered())
         {

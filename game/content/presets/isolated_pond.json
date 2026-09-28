@@ -1,0 +1,163 @@
+{
+  "id": "isolated_pond",
+  "name": "Sunken Caldera",
+  "seed": 20485,
+  "diameter": 14,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.52,
+    "relief": 0.35,
+    "noiseScale": 0.22,
+    "octaves": 4,
+    "minHeight": -0.85,
+    "maxHeight": 2.1,
+    "bottom": -2.6,
+    "rockExposure": 0.14,
+    "features": [
+      {
+        "type": "ridge",
+        "x": -3.2,
+        "z": -3.5,
+        "toX": 3.2,
+        "toZ": -3.0,
+        "width": 2.2,
+        "amount": 0.70
+      },
+      {
+        "type": "ridge",
+        "x": -3.2,
+        "z": 3.2,
+        "toX": 3.2,
+        "toZ": 3.5,
+        "width": 2.2,
+        "amount": 0.65
+      },
+      {
+        "type": "hill",
+        "x": -4.2,
+        "z": 0.0,
+        "radius": 2.8,
+        "amount": 0.60
+      },
+      {
+        "type": "hill",
+        "x": 4.2,
+        "z": 0.0,
+        "radius": 2.8,
+        "amount": 0.60
+      },
+      {
+        "type": "basin",
+        "x": 0.0,
+        "z": 0.0,
+        "radius": 3.2,
+        "amount": 1.25
+      }
+    ]
+  },
+  "water": {
+    "waterTable": 0.0,
+    "springs": [
+      {
+        "x": -0.5,
+        "z": -2.2,
+        "dischargePerHour": 0.03
+      }
+    ],
+    "flowRate": 0.18,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.003,
+    "infiltrationPerDay": 0.018,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.35,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 14,
+    "rockMinScale": 0.16,
+    "rockMaxScale": 0.60,
+    "logs": 3,
+    "logMinLength": 1.2,
+    "logMaxLength": 2.2,
+    "logMinRadius": 0.10,
+    "logMaxRadius": 0.20,
+    "gravelPatches": 6,
+    "gravelMinRadius": 0.45,
+    "gravelMaxRadius": 0.95,
+    "spacing": 0.34
+  },
+  "starterFlora": [
+    {
+      "species": "mooncoin",
+      "count": 10
+    },
+    {
+      "species": "brooklace",
+      "count": 10
+    },
+    {
+      "species": "ringreed",
+      "count": 8
+    },
+    {
+      "species": "glassrush",
+      "count": 8
+    },
+    {
+      "species": "floodlace_moss",
+      "count": 10
+    },
+    {
+      "species": "velvetweave_moss",
+      "count": 10
+    },
+    {
+      "species": "mirrorleaf",
+      "count": 6
+    },
+    {
+      "species": "trifold",
+      "count": 8
+    },
+    {
+      "species": "dewbonnet",
+      "count": 6
+    },
+    {
+      "species": "streamribbon",
+      "count": 10
+    },
+    {
+      "species": "fencomb",
+      "count": 8
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "glintfin",
+      "count": 14
+    },
+    {
+      "species": "emberglass_swimmer",
+      "count": 10
+    },
+    {
+      "species": "siltshield",
+      "count": 6
+    },
+    {
+      "species": "dewmantle",
+      "count": 6
+    },
+    {
+      "species": "prismhopper",
+      "count": 8
+    },
+    {
+      "species": "glasscoil",
+      "count": 6
+    }
+  ]
+}

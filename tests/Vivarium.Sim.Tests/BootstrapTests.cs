@@ -107,8 +107,19 @@ public class BootstrapTests
         var b = ContentLoader.Load(TestUtil.ContentSource);
         Assert.Equal(a.ContentDigest, b.ContentDigest);
         Assert.Equal(a.Flora.Select(f => f.Id), b.Flora.Select(f => f.Id));
-        Assert.Equal(23, a.Flora.Count);
-        Assert.Equal(7, a.Fauna.Count);
+        Assert.Equal(44, a.Flora.Count);
+        Assert.Equal(17, a.Fauna.Count);
+        Assert.All(a.Fauna, f =>
+        {
+            Assert.NotEqual(FaunaAnimationFamily.Still, f.Animation.Family);
+            Assert.True(f.Animation.MaxHz >= f.Animation.IdleHz);
+            Assert.InRange(f.Animation.DutyFactor, 0.05, 0.95);
+        });
+        Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
+        Assert.Equal(13, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
+        Assert.Equal(11, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));
+        Assert.Equal(6, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Decomposer));
+        Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody));
         Assert.Empty(a.Warnings);
     }
 
@@ -116,22 +127,24 @@ public class BootstrapTests
     public void InvalidDefinitionsNameFileAndField()
     {
         var src = new OverlayContentSource(TestUtil.ContentSource);
-        var carpet = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "flora", "carpet_moss.json"))
-            .Replace("\"ratePerDay\": 0.35", "\"ratePerDay\": -3").Replace("\"soil\": 1.0", "\"loam\": 1.0");
-        src.Set("flora/carpet_moss.json", carpet);
+        var carpet = File.ReadAllText(Path.Combine(TestUtil.ContentDir, "flora", "velvetweave_moss.json"))
+            .Replace("\"ratePerDay\": 0.35", "\"ratePerDay\": -3").Replace("\"soil\": 1", "\"loam\": 1")
+            .Replace("\"placementGroup\": \"moss_lichen\"", "\"placementGroup\": \"bog_goblin\"");
+        src.Set("flora/velvetweave_moss.json", carpet);
         src.Set("tools.json", "{ \"nutrients\": { \"amount\": 0.6 } ");
         var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(src));
-        Assert.Contains(ex.Errors, e => e.File == "flora/carpet_moss.json" && e.Path == "$.growth.ratePerDay" && e.Message.Contains("out of range"));
-        Assert.Contains(ex.Errors, e => e.File == "flora/carpet_moss.json" && e.Path == "$.habitat.substrates.loam" && e.Message.Contains("unknown substrate"));
+        Assert.Contains(ex.Errors, e => e.File == "flora/velvetweave_moss.json" && e.Path == "$.growth.ratePerDay" && e.Message.Contains("out of range"));
+        Assert.Contains(ex.Errors, e => e.File == "flora/velvetweave_moss.json" && e.Path == "$.habitat.substrates.loam" && e.Message.Contains("unknown substrate"));
+        Assert.Contains(ex.Errors, e => e.File == "flora/velvetweave_moss.json" && e.Path == "$.placementGroup" && e.Message.Contains("expected moss_lichen"));
         Assert.Contains(ex.Errors, e => e.File == "tools.json" && e.Message.Contains("invalid JSON"));
     }
 
     [Fact] // t-010
     public void MissingIndexedFileAndUnknownFieldsAreReported()
     {
-        var src = new OverlayContentSource(TestUtil.ContentSource).Set("fauna/shrimp.json", null);
+        var src = new OverlayContentSource(TestUtil.ContentSource).Set("fauna/emberglass_swimmer.json", null);
         var ex = Assert.Throws<ContentValidationException>(() => ContentLoader.Load(src));
-        Assert.Contains(ex.Errors, e => e.File == "fauna/shrimp.json" && e.Message.Contains("does not exist"));
+        Assert.Contains(ex.Errors, e => e.File == "fauna/emberglass_swimmer.json" && e.Message.Contains("does not exist"));
 
         var src2 = new OverlayContentSource(TestUtil.ContentSource);
         src2.Set("genetics.json", File.ReadAllText(Path.Combine(TestUtil.ContentDir, "genetics.json")).Replace("\"mutationProbability\"", "\"mutationChance\""));
@@ -155,6 +168,81 @@ public class BootstrapTests
             Assert.Equal(0, mem.Count(LogLevel.Error));
         }
         finally { Log.RemoveSink(mem); }
+    }
+
+    [Fact]
+    public void AllPresetsLoadAndBootSuccessfully()
+    {
+        var content = ContentLoader.Load(TestUtil.ContentSource);
+        var expectedPresets = new[] { "default", "rocky_rise", "shoreline", "creek", "bayou_marsh", "steep_rocky_slope", "isolated_pond", "oxbow_creek", "deep_inlet" };
+        foreach (var id in expectedPresets)
+        {
+            Assert.True(content.Presets.ContainsKey(id), $"Preset '{id}' should be loaded");
+            var preset = content.Presets[id];
+            Assert.NotEmpty(preset.Name);
+            var world = VivariumWorld.Create(content, preset);
+            Assert.Empty(world.CheckInvariants());
+        }
+    }
+
+    [Fact]
+    public void WaterwayPresetsHaveDeepChannelBedsAtBoundaryEdges()
+    {
+        var content = ContentLoader.Load(TestUtil.ContentSource);
+
+        // 1. Deep inlet: bed at the northern edge (Z ~ 6.928) must reach deep into negative elevation (below waterTable 0.0)
+        {
+            var preset = content.PresetOrThrow("deep_inlet");
+            var world = VivariumWorld.Create(content, preset, populate: false);
+            var dom = world.Domain;
+            // Sample along edge 1 (Z = Apothem = 6.9282)
+            double edgeZ = dom.Apothem;
+            double minBed = double.PositiveInfinity;
+            for (double x = -3.0; x <= 3.0; x += 0.1)
+            {
+                var p = new Vec2(x, edgeZ - 0.01);
+                minBed = Math.Min(minBed, world.Terrain.Height(p));
+            }
+            Assert.True(minBed <= -0.5, $"Deep inlet bed at boundary edge should be <= -0.5m, got {minBed:F3}m");
+        }
+
+        // 2. Oxbow creek: bed at both entry (edge 3) and exit (edge 0) must be carved well below baseHeight
+        {
+            var preset = content.PresetOrThrow("oxbow_creek");
+            var world = VivariumWorld.Create(content, preset, populate: false);
+            var dom = world.Domain;
+            // Exit along edge 0: normal (0.866, 0.5), crosses near (5.7, 3.1)
+            double minExit = double.PositiveInfinity;
+            for (double t = 0.3; t <= 0.8; t += 0.05)
+            {
+                var p = Vec2.Lerp(dom.Vertices[0], dom.Vertices[1], t);
+                minExit = Math.Min(minExit, world.Terrain.Height(p - dom.EdgeNormals[0] * 0.02));
+            }
+            Assert.True(minExit <= 0.05, $"Oxbow creek exit bed at boundary edge should be <= 0.05m, got {minExit:F3}m");
+
+            // Entry along edge 3: normal (-0.866, -0.5), crosses near (-5.9, -3.1)
+            double minEntry = double.PositiveInfinity;
+            for (double t = 0.3; t <= 0.8; t += 0.05)
+            {
+                var p = Vec2.Lerp(dom.Vertices[3], dom.Vertices[4], t);
+                minEntry = Math.Min(minEntry, world.Terrain.Height(p - dom.EdgeNormals[3] * 0.02));
+            }
+            Assert.True(minEntry <= 0.05, $"Oxbow creek entry bed at boundary edge should be <= 0.05m, got {minEntry:F3}m");
+        }
+
+        // 3. Creek: bed at exit (edge 0) must be carved well below baseHeight
+        {
+            var preset = content.PresetOrThrow("creek");
+            var world = VivariumWorld.Create(content, preset, populate: false);
+            var dom = world.Domain;
+            double minExit = double.PositiveInfinity;
+            for (double t = 0.5; t <= 0.95; t += 0.05)
+            {
+                var p = Vec2.Lerp(dom.Vertices[0], dom.Vertices[1], t);
+                minExit = Math.Min(minExit, world.Terrain.Height(p - dom.EdgeNormals[0] * 0.02));
+            }
+            Assert.True(minExit <= 0.35, $"Creek exit bed at boundary edge should be <= 0.35m, got {minExit:F3}m");
+        }
     }
 
     private sealed class ThrowingSink : ILogSink { public void Write(in LogEntry e) => throw new IOException("sink broken"); }
