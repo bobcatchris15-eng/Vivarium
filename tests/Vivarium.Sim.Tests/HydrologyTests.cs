@@ -405,6 +405,17 @@ public class HydrologyTests
     }
 
     [Fact]
+    public void SubmergedFloraTreatsWaterTablePondAsStandingWater()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        var pondPoint = new Vec2(4.6, 3.1);
+        Assert.True(w.Water.IsWaterTable(pondPoint));
+        var s = w.FloraSystem.Suitability(w.Content.FloraOrThrow("streamribbon"), pondPoint);
+        Assert.DoesNotContain("standing water", s.RefusalReason);
+        Assert.DoesNotContain("submerged", s.RefusalReason);
+    }
+
+    [Fact]
     public void GroundwaterAndDynamicSurfaceMeshesUseIndependentState()
     {
         var groundwaterOnly = TestUtil.FlatWorld(51, d =>
