@@ -16,13 +16,13 @@ public static class SurfaceFloatRules
     /// <summary>The layer's sole occupant id — duckweed cover has no species variation yet (Aq-2).</summary>
     public const byte OccupantId = 1;
 
-    public static SurfaceFloatStats Step(CoverageLayer layer, IAquaticEnv env, DuckweedParams p, GridBounds domain, double dtDays, long step, ulong seed)
+    public static SurfaceFloatStats Step(CoverageLayer layer, IAquaticEnv env, DuckweedParams p, GridBounds domain, double dtDays, long step, ulong seed, double? advectionDays = null)
     {
         var sw = Stopwatch.StartNew();
         Grow(layer, env, p, domain, dtDays);
         double growthMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
 
-        int substeps = Advect(layer, env, domain, dtDays, p.WindX, p.WindZ);
+        int substeps = Advect(layer, env, domain, advectionDays ?? dtDays, p.WindX, p.WindZ);
         double advectMs = sw.Elapsed.TotalMilliseconds;
 
         return new SurfaceFloatStats(growthMs, advectMs, substeps);
@@ -136,6 +136,7 @@ public static class SurfaceFloatRules
             int idx = d.Index(gx, gz);
             if (blocked[idx]) continue;
             double nb = rho[idx];
+            if (nb <= 0 && layer.GetOcc(gx, gz) == 0) continue; // keep empty water out of the sparse tile map
             layer.SetB(gx, gz, (float)nb);
             layer.SetOcc(gx, gz, nb > 1e-6 ? OccupantId : (byte)0);
         }

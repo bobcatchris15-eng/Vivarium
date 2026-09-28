@@ -15,7 +15,7 @@ public static class AlgaeRules
     /// <summary>Sole occupant id for both algae layers — no species variation yet (Aq-2).</summary>
     public const byte OccupantId = 1;
 
-    public static AlgaeStepStats Step(CoverageLayer bed, CoverageLayer floatLayer, IAquaticEnv env, AlgaeBedParams bp, AlgaeFloatParams fp, GridBounds domain, double dtDays, long step, ulong seed)
+    public static AlgaeStepStats Step(CoverageLayer bed, CoverageLayer floatLayer, IAquaticEnv env, AlgaeBedParams bp, AlgaeFloatParams fp, GridBounds domain, double dtDays, long step, ulong seed, double? advectionDays = null)
     {
         var sw = Stopwatch.StartNew();
         StepBed(bed, floatLayer, env, bp, domain, dtDays);
@@ -24,7 +24,7 @@ public static class AlgaeRules
         GrowFloat(floatLayer, env, fp, domain, dtDays);
         double floatGrowMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
 
-        int substeps = SurfaceFloatRules.Advect(floatLayer, env, domain, dtDays, windX: 0, windZ: 0);
+        int substeps = SurfaceFloatRules.Advect(floatLayer, env, domain, advectionDays ?? dtDays, windX: 0, windZ: 0);
         double advectMs = sw.Elapsed.TotalMilliseconds;
 
         return new AlgaeStepStats(bedMs, floatGrowMs, advectMs, substeps);
@@ -45,6 +45,7 @@ public static class AlgaeRules
             }
 
             double b = bed.GetB(gx, gz);
+            if (b <= 0) continue; // no spontaneous bloom; keep unseeded water out of the sparse tile map
             double shade = env.SurfaceShadeAt(gx, gz);
             double lightAtDepth = env.LightAt(gx, gz) * (1 - shade) * Math.Exp(-p.LightAtten * depth); // Beer-Lambert
             double gL = lightAtDepth / (lightAtDepth + p.LightHalfSat);

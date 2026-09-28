@@ -1,0 +1,20 @@
+using System.Diagnostics;
+using Xunit;
+
+namespace Vivarium.Sim.Tests.GrowthLab;
+
+public class AquaticBenchTemporary
+{
+    [Fact]
+    public void Measure()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        double maxFlow = w.Grid.DomainCells.Max(c => Math.Sqrt(w.Water.FlowX[c] * w.Water.FlowX[c] + w.Water.FlowZ[c] * w.Water.FlowZ[c]));
+        var wet = w.Grid.DomainCells.Where(w.Water.IsWet).Select(c => w.Grid.CellCenter(c)).ToArray();
+        double area = ((wet.Max(p => p.X) - wet.Min(p => p.X)) / 0.02) * ((wet.Max(p => p.Z) - wet.Min(p => p.Z)) / 0.02);
+        var sw = Stopwatch.StartNew();
+        w.AquaticSystem.Step(600, 600 * w.Clock.BioAcceleration);
+        sw.Stop();
+        throw new Exception($"AQUATIC_MEASURE elapsedMs={sw.Elapsed.TotalMilliseconds:F1} maxFlow={maxFlow:E3} rectCells={area:F0} bedTiles={w.Coverage.AlgaeBed.TileCount} floatTiles={w.Coverage.AlgaeFloat.TileCount} duckTiles={w.Coverage.SurfaceFloat.TileCount}");
+    }
+}

@@ -15,6 +15,14 @@ namespace Vivarium.Sim.Tests.GrowthLab;
 [Trait("Suite", "GrowthLab")]
 public class AquaticScenarios
 {
+    [Fact]
+    public void AdvectionDoesNotAllocateTilesForEmptyWetWater()
+    {
+        var layer = NewSurfaceFloat();
+        SurfaceFloatRules.Advect(layer, new FuncEnv(), new GridBounds(0, 0, 99, 99), 0.0002, 0, 0);
+        Assert.Equal(0, layer.TileCount);
+    }
+
     private readonly ITestOutputHelper _out;
     public AquaticScenarios(ITestOutputHelper output) => _out = output;
 

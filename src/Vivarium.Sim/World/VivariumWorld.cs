@@ -1,5 +1,6 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Coverage;
+using Vivarium.Sim.Coverage.Aquatic;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
 using Vivarium.Sim.Fauna;
@@ -50,6 +51,7 @@ public sealed class VivariumWorld
     public EcologySystem Ecology { get; }
     /// <summary>Moss/lichen growth on the coverage layers (docs/overhaul/growth_models.md §4, §5, §9).</summary>
     public CoverageSystem CoverageSystem { get; }
+    public AquaticSystem AquaticSystem { get; }
 
     /// <summary>Tick cadences (10 s ticks). Documented in docs/architecture/architecture.md.</summary>
     public static class Cadence
@@ -87,6 +89,7 @@ public sealed class VivariumWorld
         FaunaSystem = new FaunaSystem(this);
         Ecology = new EcologySystem(this);
         CoverageSystem = new CoverageSystem(this);
+        AquaticSystem = new AquaticSystem(this);
         RegisterSystems();
     }
 
@@ -124,6 +127,7 @@ public sealed class VivariumWorld
         }
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
+        w.AquaticSystem.SeedInitial();
         if (populate)
         {
             w.CoverageSystem.SeedInitial();
@@ -150,7 +154,8 @@ public sealed class VivariumWorld
             if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props);
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
-        Scheduler.Register("ecology.litter", Cadence.Resources, 65, Bio(Litter.Step), phase: 20);
+        Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 20);
+        Scheduler.Register("ecology.litter", Cadence.Resources, 66, Bio(Litter.Step), phase: 20);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
         Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
         Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
