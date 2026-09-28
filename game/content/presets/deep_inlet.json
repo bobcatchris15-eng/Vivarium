@@ -76,6 +76,9 @@
       }
     ],
     "flowRate": 0.20,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
     "evaporationPerDay": 0.003,
     "infiltrationPerDay": 0.02,
     "wetDepth": 0.008,

@@ -49,6 +49,11 @@ public sealed class WorldDescriptor
         if (Terrain.Octaves is < 1 or > 8) e.Add("terrain.octaves must be within [1, 8]");
         if (!(BioAcceleration >= MinBioAcceleration && BioAcceleration <= MaxBioAcceleration)) e.Add($"bioAcceleration {BioAcceleration} must be within [{MinBioAcceleration}, {MaxBioAcceleration}]");
         double r = Diameter / 2;
+        if (!(Water.FlowRate > 0 && Water.FlowRate <= 0.24)) e.Add($"water.flowRate {Water.FlowRate} must be within (0, 0.24]");
+        if (!(Water.FlowMemorySeconds >= 1 && Water.FlowMemorySeconds <= 600)) e.Add($"water.flowMemorySeconds {Water.FlowMemorySeconds} must be within [1, 600]");
+        if (!(Water.FlowResponseSeconds >= 1 && Water.FlowResponseSeconds <= 600)) e.Add($"water.flowResponseSeconds {Water.FlowResponseSeconds} must be within [1, 600]");
+        if (!(Water.StreamVelocityThreshold >= 0 && Water.StreamVelocityThreshold <= 1)) e.Add($"water.streamVelocityThreshold {Water.StreamVelocityThreshold} must be within [0, 1]");
+        if (!(Water.SubSteps >= 1 && Water.SubSteps <= 32)) e.Add($"water.subSteps {Water.SubSteps} must be within [1, 32]");
         foreach (var s in Water.Springs)
             if (s.X * s.X + s.Z * s.Z > r * r) e.Add($"spring at ({s.X},{s.Z}) lies outside the island");
         foreach (var f in Terrain.Features)
@@ -90,8 +95,14 @@ public sealed class WaterConfig
     /// <summary>Fixed groundwater surface elevation (world Y).</summary>
     public double WaterTable { get; set; } = 0.0;
     public List<SpringConfig> Springs { get; set; } = new();
-    /// <summary>Fraction of surface-height difference exchanged per hydrology step (0..0.24 for stability).</summary>
+    /// <summary>Dimensionless hydraulic conductance used to turn free-surface head into face discharge.</summary>
     public double FlowRate { get; set; } = 0.2;
+    /// <summary>Seconds over which existing face discharge decays; larger values preserve momentum longer.</summary>
+    public double FlowMemorySeconds { get; set; } = 45.0;
+    /// <summary>Reference seconds used to convert hydraulic head into target discharge; lower values flow faster.</summary>
+    public double FlowResponseSeconds { get; set; } = 30.0;
+    /// <summary>Minimum derived velocity (m/s) for the ecological/query convenience classification IsStream.</summary>
+    public double StreamVelocityThreshold { get; set; } = 0.0001;
     /// <summary>Depth (m) lost per sim-day from exposed surface water above the water table.</summary>
     public double Evaporation { get; set; } = 0.004;
     /// <summary>Depth (m) per sim-day infiltrating into dry ground (cells above the water table).</summary>

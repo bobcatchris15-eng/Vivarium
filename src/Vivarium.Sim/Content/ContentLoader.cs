@@ -718,7 +718,7 @@ public static class ContentLoader
         var t = n.Req("terrain");
         t.RejectUnknown("baseHeight", "relief", "noiseScale", "octaves", "minHeight", "maxHeight", "bottom", "rockExposure", "features");
         var w = n.Req("water");
-        w.RejectUnknown("waterTable", "springs", "flowRate", "evaporationPerDay", "infiltrationPerDay", "wetDepth", "boundaryDrop", "subSteps");
+        w.RejectUnknown("waterTable", "springs", "flowRate", "flowMemorySeconds", "flowResponseSeconds", "streamVelocityThreshold", "evaporationPerDay", "infiltrationPerDay", "wetDepth", "boundaryDrop", "subSteps");
         var p = n.Req("placement");
         p.RejectUnknown("rocks", "rockMinScale", "rockMaxScale", "logs", "logMinLength", "logMaxLength", "logMinRadius", "logMaxRadius", "gravelPatches", "gravelMinRadius", "gravelMaxRadius", "spacing");
         var d = new WorldDescriptor
@@ -747,7 +747,11 @@ public static class ContentLoader
             Water = new WaterConfig
             {
                 WaterTable = w.Num("waterTable", min: -3, max: 3),
-                FlowRate = w.Num("flowRate", 0.2, 0.01, 0.24), Evaporation = w.Num("evaporationPerDay", 0.004, 0, 1), Infiltration = w.Num("infiltrationPerDay", 0.01, 0, 1),
+                FlowRate = w.Num("flowRate", 0.2, 0.01, 0.24),
+                FlowMemorySeconds = w.Num("flowMemorySeconds", 45.0, 1, 600),
+                FlowResponseSeconds = w.Num("flowResponseSeconds", 30.0, 1, 600),
+                StreamVelocityThreshold = w.Num("streamVelocityThreshold", 0.0001, 0, 1),
+                Evaporation = w.Num("evaporationPerDay", 0.004, 0, 1), Infiltration = w.Num("infiltrationPerDay", 0.01, 0, 1),
                 WetDepth = w.Num("wetDepth", 0.008, 0.0005, 0.2), BoundaryDrop = w.Num("boundaryDrop", 0.3, 0.01, 5), SubSteps = w.Int("subSteps", 4, 1, 32),
                 Springs = w.Items("springs", required: false).Select(s =>
                 {

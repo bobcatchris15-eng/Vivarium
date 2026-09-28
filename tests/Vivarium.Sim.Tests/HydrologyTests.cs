@@ -94,6 +94,37 @@ public class HydrologyTests
         Assert.True(w.Water.SurfaceVolume() >= 0 && w.Water.SurfaceVolume() != beforeSurface || w.Water.Budget.GroundwaterRecharge > beforeRecharge);
     }
 
+    [Fact]
+    public void LegacyCombinedWaterSaveMigratesGroundwaterOutOfDynamicStorage()
+    {
+        var w = TestUtil.FlatWorld(61, d =>
+        {
+            d.Water.WaterTable = 0.25;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.8 });
+        });
+        var payloads = Persistence.WorldSerializer.Serialize(w);
+        var legacyDepth = new double[w.Grid.DomainCells.Length];
+        for (int k = 0; k < legacyDepth.Length; k++)
+            legacyDepth[k] = w.Water.OpenWaterDepth(w.Grid.DomainCells[k]);
+
+        payloads["water"] = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new Persistence.WaterPayload
+            {
+                FormatVersion = null,
+                Depth = Persistence.WorldSerializer.Pack(legacyDepth),
+                FaceFlowEast = null,
+                FaceFlowNorth = null,
+                Budget = new Vivarium.Sim.Water.WaterBudget(),
+            },
+            Persistence.WorldSerializer.Json);
+
+        var loaded = Persistence.WorldSerializer.Deserialize(w.Content, payloads);
+        foreach (int c in loaded.Grid.DomainCells.Where(loaded.Water.IsWaterTable))
+            Assert.Equal(0.0, loaded.Water.SurfaceWaterDepth(c), 12);
+        Assert.True(loaded.Water.IsWaterTable(Vec2.Zero));
+        Assert.Equal(loaded.Water.WaterTable, loaded.Water.SurfaceAt(Vec2.Zero), 6);
+    }
+
     [Fact] // t-053
     public void SpringsOutsideAreRejectedAndValidSpringsFlowDeterministically()
     {

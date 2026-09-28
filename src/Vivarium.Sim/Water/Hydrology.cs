@@ -200,7 +200,7 @@ public sealed class Hydrology
 
     /// <summary>Derived convenience classification: dynamic surface water with a measurable current.</summary>
     public bool IsStream(int idx) =>
-        Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth && StreamVelocity(idx).Length > 1e-4;
+        Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth && StreamVelocity(idx).Length > Config.StreamVelocityThreshold;
     public bool IsStream(Vec2 p)
     {
         int c = Grid.CellAt(p);
@@ -267,7 +267,7 @@ public sealed class Hydrology
         // 3. Update signed face discharge from free-surface head. The previous discharge is retained
         // with exponential decay, providing local inertia; the hydraulic target is deliberately bounded
         // so one coarse hydrology tick cannot create an unstable Courant jump.
-        double memory = Math.Exp(-dt / 45.0);
+        double memory = Math.Exp(-dt / Config.FlowMemorySeconds);
         foreach (int idx in Grid.DomainCells)
         {
             int e = _nE[idx], n = _nN[idx];
@@ -385,11 +385,10 @@ public sealed class Hydrology
         double target = 0;
         if (mobileDepth > 1e-12 && Math.Abs(head) > 1e-12)
         {
-            // FlowRate remains the bounded transport fraction for compatibility. The 30 s response scale
-            // converts the old per-step fraction into a discharge rate while making the stored momentum
-            // independent of the caller's current dt.
+            // FlowRate remains the bounded hydraulic conductance for compatibility; response seconds controls
+            // how aggressively free-surface head becomes discharge without tying momentum to the caller's dt.
             double transferableDepth = Math.Min(mobileDepth, Math.Abs(head));
-            target = Math.Sign(head) * Config.FlowRate * transferableDepth * CellArea / 30.0;
+            target = Math.Sign(head) * Config.FlowRate * transferableDepth * CellArea / Config.FlowResponseSeconds;
         }
 
         double q = previous * memory + target * (1 - memory);
@@ -404,7 +403,7 @@ public sealed class Hydrology
         double head = surface - _edgeHeight[idx];
         if (head <= 0 || Depth[idx] <= 0) return 0;
         double transferableDepth = Math.Min(Depth[idx], head);
-        return Config.FlowRate * transferableDepth * CellArea / 30.0;
+        return Config.FlowRate * transferableDepth * CellArea / Config.FlowResponseSeconds;
     }
 
     private double[]? _waterDistance;

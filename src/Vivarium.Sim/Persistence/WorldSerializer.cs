@@ -41,6 +41,8 @@ public sealed class FieldsPayload
 
 public sealed class WaterPayload
 {
+    /// <summary>2 = dynamic surface depth + persisted face momentum. Null identifies pre-split saves.</summary>
+    public int? FormatVersion { get; set; }
     public string Depth { get; set; } = "";
     public string? FaceFlowEast { get; set; }
     public string? FaceFlowNorth { get; set; }
@@ -147,6 +149,7 @@ public static class WorldSerializer
         }
         p["water"] = Bytes(new WaterPayload
         {
+            FormatVersion = 2,
             Depth = Pack(depth), FaceFlowEast = Pack(flowE), FaceFlowNorth = Pack(flowN), Budget = w.Water.Budget
         });
         p["litter"] = Bytes(new LitterPayload
@@ -235,13 +238,17 @@ public static class WorldSerializer
         if (depth.Length != w.Grid.DomainCells.Length) throw new InvalidDataException("water depth grid mismatch");
         double[]? flowE = wa.FaceFlowEast != null ? Unpack(wa.FaceFlowEast, "water east-face flow") : null;
         double[]? flowN = wa.FaceFlowNorth != null ? Unpack(wa.FaceFlowNorth, "water north-face flow") : null;
+        bool legacyCombinedDepth = wa.FormatVersion == null && flowE == null && flowN == null;
+        if (wa.FormatVersion is > 2) throw new InvalidDataException($"water payload format {wa.FormatVersion} is newer than this build supports");
         if (flowE != null && flowE.Length != depth.Length) throw new InvalidDataException("water east-face flow grid mismatch");
         if (flowN != null && flowN.Length != depth.Length) throw new InvalidDataException("water north-face flow grid mismatch");
         for (int k = 0; k < depth.Length; k++)
         {
             if (!(depth[k] >= 0) || !double.IsFinite(depth[k])) throw new InvalidDataException($"water depth {k} is invalid ({depth[k]})");
             int c = w.Grid.DomainCells[k];
-            w.Water.Depth[c] = depth[k];
+            // Before the split, Depth included the hydrostatic table itself. In the new model groundwater is
+            // implicit and surface water vanishes into it, so exposed-groundwater cells migrate to zero dynamic depth.
+            w.Water.Depth[c] = legacyCombinedDepth && w.Water.IsWaterTable(c) ? 0 : depth[k];
             if (flowE != null)
             {
                 if (!double.IsFinite(flowE[k])) throw new InvalidDataException($"water east-face flow {k} is invalid ({flowE[k]})");
