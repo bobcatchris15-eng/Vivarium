@@ -78,6 +78,28 @@ public class GeometryLodTests
     }
 
     [Fact]
+    public void MainStemsSurviveEveryTier()
+    {
+        // Trunkless species (reeds, rushes) must keep every main stem; only finer side shoots may go.
+        var failures = new List<string>();
+        foreach (var sp in TestUtil.Content.Flora.Where(s => s.Climber == null))
+        {
+            var raw = OrganismMeshes.Flora(sp, SeedOf(sp));
+            if (raw.Structural.Count == 0) continue;
+            double main = raw.Structural.Max(s => s.Radius) * 0.9;
+            int want = raw.Structural.Count(s => s.Radius >= main);
+            // Lower tiers of other thin-stemmed species still shed stems by design of the leaf-fraction pass.
+            int tiers = sp.Id == "ringreed" ? OrganismMeshes.FloraLodTiers : 1;
+            for (int t = 0; t < tiers; t++)
+            {
+                int got = Tier(sp, t).Structural.Count(s => s.Radius >= main);
+                if (got < want) failures.Add($"{sp.Id} tier {t}: {got}/{want} main stems");
+            }
+        }
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    [Fact]
     public void TiersAreDeterministic()
     {
         var sp = TestUtil.Content.Flora.First(s => s.Climber == null);

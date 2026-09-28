@@ -603,13 +603,15 @@ public static partial class OrganismMeshes
         var tubePart = new HashSet<int>();
         double maxTube = src.Structural.Count > 0 ? src.Structural.Max(s => s.Radius) : 0;
         double minor = Math.Max(MinorTubeRadius, maxTube * 0.12);
+        // Petioles are judged before the trunkless bump, or a reed's main culm rides along with the collar after it.
+        double petiole = minor * 2;
         // Without a real trunk every tube is a stem or shoot; the finer side branches go before the main stems.
         if (maxTube < 0.03) minor = Math.Max(minor, maxTube * 0.6);
         foreach (var st in src.Structural)
         {
             int end = st.FirstVertex + st.VertexCount;
             int p;
-            if (st.Radius < minor * 2 && end < nv && owner[end] >= 0) p = owner[end];
+            if (st.Radius < petiole && end < nv && owner[end] >= 0) p = owner[end];
             else if (st.Radius < minor) { p = parts++; tubePart.Add(p); }
             else continue;
             for (int v = st.FirstVertex; v < end && v < nv; v++) owner[v] = p;
