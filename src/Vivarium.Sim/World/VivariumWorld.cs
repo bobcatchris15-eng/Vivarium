@@ -122,8 +122,11 @@ public sealed class VivariumWorld
         }
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
-        w.CoverageSystem.SeedInitial();
-        if (populate) Populate.Starters(w);
+        if (populate)
+        {
+            w.CoverageSystem.SeedInitial();
+            Populate.Starters(w);
+        }
         Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna.");
         return w;
     }
