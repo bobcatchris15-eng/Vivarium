@@ -1215,7 +1215,7 @@ public partial class CoverageRenderer : Node3D
 
             var padCol = (i + (int)(hash & 1)) % 3 == 0 ? blue : new[] { 0.46, 0.18, 0.30 };
             Primitives.Ellipsoid(mesh, pad, new Vec3(0.0036, 0.0007, 0.0052), 3, 6,
-                (u, v) => (padCol, 1, u, v, 0, 0), yaw: a);
+                (u, v) => (padCol, 1, u, v, 0, 0));
 
             // Sparse sticky tentacles with pale blue dew beads.
             for (int g = -1; g <= 1; g++)
