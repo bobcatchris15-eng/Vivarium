@@ -86,7 +86,8 @@
   "tags": [
     "fungus",
     "wood_rot",
-    "decomposer"
+    "decomposer",
+    "no_ambient_spore_rain"
   ],
   "decomposition": {
     "radius": 0.58,
