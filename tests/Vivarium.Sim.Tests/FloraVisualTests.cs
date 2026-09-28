@@ -1,4 +1,4 @@
-using Vivarium.Sim.Geometry;
+﻿using Vivarium.Sim.Geometry;
 
 namespace Vivarium.Sim.Tests;
 
@@ -102,9 +102,11 @@ public class FloraVisualTests
     public void LegacyGeometryRemainsUnmigratedAndTierHysteresisIsStable()
     {
         Assert.Empty(OrganismMeshes.Flora(TestUtil.Content.FloraOrThrow("veilfern"),173).Leaves);
-        Assert.Equal(0,FloraDetail.Select(330));Assert.Equal(1,FloraDetail.Select(200));Assert.Equal(2,FloraDetail.Select(100));
-        Assert.Equal(0,FloraDetail.Select(300,0));Assert.Equal(1,FloraDetail.Select(330,1));
-        Assert.Equal(2,FloraDetail.Select(130,2));Assert.Equal(1,FloraDetail.Select(150,2));
-        Assert.Equal(1,FloraDetail.Select(110,1));Assert.Equal(2,FloraDetail.Select(90,1));
+        // full >= 120 px, mid >= 40 px, +/-20% hysteresis around each switch
+        Assert.Equal(0,FloraDetail.Select(130));Assert.Equal(1,FloraDetail.Select(80));Assert.Equal(2,FloraDetail.Select(30));
+        Assert.Equal(0,FloraDetail.Select(100,0));Assert.Equal(1,FloraDetail.Select(90,0));
+        Assert.Equal(1,FloraDetail.Select(140,1));Assert.Equal(0,FloraDetail.Select(150,1));
+        Assert.Equal(1,FloraDetail.Select(33,1));Assert.Equal(2,FloraDetail.Select(30,1));
+        Assert.Equal(2,FloraDetail.Select(46,2));Assert.Equal(1,FloraDetail.Select(50,2));Assert.Equal(0,FloraDetail.Select(150,2));
     }
 }

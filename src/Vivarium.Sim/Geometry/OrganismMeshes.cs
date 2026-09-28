@@ -16,10 +16,10 @@ namespace Vivarium.Sim.Geometry;
 /// </summary>
 public static partial class OrganismMeshes
 {
-    public static MeshData Flora(FloraSpeciesDef sp, ulong seed = 1, bool juvenile = false, int? visualDetail = null)
+    public static MeshData Flora(FloraSpeciesDef sp, ulong seed = 1, bool juvenile = false, int? visualDetail = null, FloraLodParams? lod = null)
     {
         var rng = Rng.Keyed(seed, "flora.mesh." + sp.Id, 0);
-        var m = new MeshData { FloraDetailLevel = visualDetail, FloraVisualSeed = seed };
+        var m = new MeshData { FloraDetailLevel = visualDetail, FloraVisualSeed = seed, Lod = lod };
         var c1 = sp.Color; var c2 = sp.Color2;
         switch (sp.Shape)
         {
@@ -138,9 +138,9 @@ public static partial class OrganismMeshes
 
     /// <summary>Alternate pose for organisms with a visible reproductive stage (slime mold sporangia); null otherwise.</summary>
     /// <summary>Generates a single modular node foliage cluster for a climber segment (attached or ground runner).</summary>
-    public static MeshData ClimberNode(FloraSpeciesDef sp, ulong seed, bool attached)
+    public static MeshData ClimberNode(FloraSpeciesDef sp, ulong seed, bool attached, FloraLodParams? lod = null)
     {
-        var m = new MeshData();
+        var m = new MeshData { Lod = lod };
         var rng = Rng.Keyed(seed, "climber.node", 0);
         var c1 = sp.Color;
         var c2 = sp.Color2;
@@ -154,13 +154,13 @@ public static partial class OrganismMeshes
         return m;
     }
 
-    public static MeshData? FloraFruiting(FloraSpeciesDef sp, ulong seed = 1, int? visualDetail = null)
+    public static MeshData? FloraFruiting(FloraSpeciesDef sp, ulong seed = 1, int? visualDetail = null, FloraLodParams? lod = null)
     {
         if (sp.Shape != "plasmodium")
         {
             if (sp.Reproduction is not { } rp) return null;
             var rngFruit = Rng.Keyed(seed, "flora.reproduction." + sp.Id, 0);
-            var plant = Flora(sp, seed, visualDetail: visualDetail);
+            var plant = Flora(sp, seed, visualDetail: visualDetail, lod: lod);
             var fruitCol = rp.FruitColor;
             var ripe2 = Primitives.Scale(fruitCol, 0.72);
             double rx = MathD.Clamp(rp.DisplaySize / Math.Max(0.02, sp.RadiusAtMax), 0.012, 0.18);
@@ -224,7 +224,7 @@ public static partial class OrganismMeshes
         }
 
         var rng = Rng.Keyed(seed, "flora.fruit." + sp.Id, 0);
-        var m = new MeshData();
+        var m = new MeshData { Lod = lod };
 
         // 1. Withered vein residue tracks on the substrate
         // The protoplasm has drained into the sporangia, leaving dry, flattened silvery-buff residue
@@ -394,7 +394,7 @@ public static partial class OrganismMeshes
         // pairedleaf leaves use) spread around a spherical (pitch, azimuth) direction, not full LeafBlade calls
         // per petal: a full LeafBlade has a ~128-tri floor in this kernel, which would blow the plant's tri
         // budget once multiplied by several flower heads.
-        var tmp = new MeshData();
+        var tmp = new MeshData { Lod = m.Lod };
         for (int i = 0; i < visiblePetals; i++)
         {
             double ang = 2 * Math.PI * i / petalCount + rng.Range(-0.18, 0.18);
@@ -999,7 +999,7 @@ public static partial class OrganismMeshes
             var petioleFrames = Axis.Build(petioleAxis, pSeed);
             var tipFrame = petioleFrames[^1];
 
-            var tmp = new MeshData();
+            var tmp = new MeshData { Lod = m.Lod };
             SoftTube.Build(tmp, new SoftTubeParams(petioleAxis, BaseRadius: 0.007 * (sizeScale / 0.13), TipRadius: 0.004 * (sizeScale / 0.13), Segments: 4),
                 pSeed, (i, v) => (Primitives.Scale(c1, 0.72), 1, i, v, 0, 0));
 
@@ -1013,7 +1013,7 @@ public static partial class OrganismMeshes
                 Camber: rng.Range(0.14, 0.22) + (folded ? 0.16 : 0),
                 Cup: rng.Range(0.06, 0.14), MidribFold: folded ? 0.10 : 0.02,
                 Asymmetry: rng.Range(-0.08, 0.08), MidribThickness: 0.002, DetailLevel: 1);
-            var bladeTmp = new MeshData();
+            var bladeTmp = new MeshData { Lod = m.Lod };
             LeafBlade.Build(bladeTmp, bladeParams, Rng.Mix(seed, (ulong)(k * 977 + 3)),
                 Primitives.Scale(c1, 0.85), Primitives.Mix(c1, c2, rng.Range(0.1, 0.4)));
             AppendTranslated(tmp, bladeTmp, tipFrame.Point);
@@ -1033,7 +1033,7 @@ public static partial class OrganismMeshes
             double leafYaw = ang + rng.Range(-0.5, 0.5);
             ulong lSeed = Rng.Mix(seed, (ulong)(k * 733 + 91));
 
-            var tmp = new MeshData();
+            var tmp = new MeshData { Lod = m.Lod };
             var top = new Vec3(0, stalkH, 0);
             Primitives.Tube(tmp, new[] { Vec3.Zero, top }, new[] { 0.008 * (leafR / 0.08), 0.005 * (leafR / 0.08) }, 4,
                 (i, v) => (Primitives.Scale(c1, 0.72), 1, i, v, 0, 0));
@@ -1111,7 +1111,7 @@ public static partial class OrganismMeshes
             ulong sSeed = Rng.Mix(seed, (ulong)(k * 211 + 11));
             var stemFrames = Axis.Build(stemAxis, sSeed);
 
-            var tmp = new MeshData();
+            var tmp = new MeshData { Lod = m.Lod };
             SoftTube.Build(tmp, new SoftTubeParams(stemAxis, BaseRadius: 0.012, TipRadius: 0.006, Segments: 6), sSeed,
                 (i, v) => (Primitives.Scale(c1, 0.78), 1, i, v, 0, 0));
 
@@ -1225,7 +1225,7 @@ public static partial class OrganismMeshes
             var topCentreCol = isOld ? Primitives.Mix(c1, yellow, rng.Range(0.4, 0.75)) : Primitives.Scale(c1, 0.95);
             var topRimCol = isOld ? Primitives.Mix(c2, yellow, rng.Range(0.5, 0.85)) : Primitives.Mix(c1, c2, rng.Range(0.1, 0.3));
             var bottomCol = isOld ? Primitives.Mix(underCol, yellow, 0.3) : underCol;
-            var tmp = new MeshData();
+            var tmp = new MeshData { Lod = m.Lod };
             OrbicularPad(tmp, lSeed, radius, thickness: 0.02, topCentreCol, topRimCol, bottomCol,
                 torn: isOld, tearAmp: isOld ? rng.Range(0.06, 0.12) : 0);
             AppendRotatedY(m, tmp, padCentre, ang);
@@ -1384,6 +1384,10 @@ public static partial class OrganismMeshes
     /// Multi-lobed rounded cushion mounds studded with glistening silvery-pearl hyaline hair points (awns)
     /// and wiry curved setae stalks carrying glossy amber spore capsules with beaked calyptra hoods.
     /// </summary>
+    /// <summary>Authored tessellation count scaled by the mesh's parametric detail (radial or length axis).</summary>
+    private static int LodCount(MeshData m, int authored, int min, bool radial) =>
+        m.Lod is { } lod ? Math.Max(Math.Min(min, authored), (int)Math.Round(authored * (radial ? lod.Radial : lod.Length))) : authored;
+
     private static void PearlCushion(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
     {
         var matBaseCol = Primitives.Scale(c1, 0.65);
@@ -1404,8 +1408,8 @@ public static partial class OrganismMeshes
             (-0.35, -0.22, 0.48, 0.50)
         };
 
-        const int rings = 18;
-        const int segs = 36;
+        int rings = LodCount(m, 18, 5, radial: false);
+        int segs = LodCount(m, 36, 8, radial: true);
         int startVert = m.VertexCount;
         ulong ns = Rng.Mix(seed, 0xA491);
 
@@ -1666,8 +1670,8 @@ public static partial class OrganismMeshes
         var lidCol = new[] { 0.62, 0.28, 0.12 };
 
         // 1. Gently undulating micro-turf dome
-        const int rings = 16;
-        const int segs = 32;
+        int rings = LodCount(m, 16, 5, radial: false);
+        int segs = LodCount(m, 32, 8, radial: true);
         int startVert = m.VertexCount;
         ulong ns = Rng.Mix(seed, 0x58F3);
 
@@ -5173,7 +5177,7 @@ public static partial class OrganismMeshes
     /// <summary>Raised, irregular longitudinal bark ridges on Kiteleaf's mature cottonwood-like bole.</summary>
     private static void CottonwoodBark(MeshData m, IReadOnlyList<Vec3> path, double baseRadius)
     {
-        const int sides = 48;
+        int sides = m.Lod is { } lod ? Math.Max(8, (int)Math.Round(48 * lod.Radial)) : 48;
         int start = m.VertexCount;
         double[] levels = { -0.006, 0.05, 0.20, 0.40, 0.61, 0.80, 1.0 };
         for (int i = 0; i < path.Count; i++)
@@ -5204,6 +5208,7 @@ public static partial class OrganismMeshes
                 m.AddTriangle(a, a + 1, b);
                 m.AddTriangle(a + 1, b + 1, b);
             }
+        m.Structural.Add((start, m.VertexCount - start, sides, baseRadius * 1.3));
     }
 
     private static Vec3 Along(IReadOnlyList<Vec3> path, double t)
@@ -5228,6 +5233,7 @@ public static partial class OrganismMeshes
         double phase = rng.Range(0, Math.PI * 2);
         double asymmetry = rng.Range(-0.08, 0.08);
         int rimCount = m.FloraDetailLevel switch { 1 => 8, 2 => 6, _ => 12 };
+        if (m.Lod is { } lod) rimCount = Math.Max(5, (int)Math.Round(rimCount * lod.Blade));
         int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
         for (int face = 0; face < (m.FloraDetailLevel.HasValue ? 1 : 2); face++)
         {
