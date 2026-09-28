@@ -1,0 +1,97 @@
+{
+  "id": "kinkcane",
+  "name": "Kinkcane",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Tall rhizomatous cane brake that forms dense visual partitions on moist ordinary soil.",
+  "description": "Crooked jointed canes rise shoulder-high to overhead and knit into irregular brakes, with sparse ribbon leaves and exposed low rhizomes.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.35
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.62,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.58,
+      "tolerance": 0.34
+    },
+    "nutrients": {
+      "optimum": 0.52,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.006,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.18,
+    "maxBiomass": 2.2,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.18,
+    "maturityDays": 24,
+    "lifespanDays": 520,
+    "nutrientPerBiomass": 0.38,
+    "radiusAtMax": 0.82,
+    "minRadius": 0.12
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 1.15,
+    "propagules": 2,
+    "minBiomassFraction": 0.52
+  },
+  "competition": {
+    "radius": 0.9,
+    "crowdingLimit": 2,
+    "sensitivity": 0.85
+  },
+  "proximity": [],
+  "litterFraction": 0.86,
+  "sheddingPerDay": 0.012,
+  "grazingValue": 0.22,
+  "visual": {
+    "shape": "kinkcane_brake",
+    "color": [
+      0.25,
+      0.48,
+      0.2
+    ],
+    "color2": [
+      0.5,
+      0.66,
+      0.28
+    ],
+    "colorVariance": 0.055,
+    "height": 2.45
+  },
+  "tags": [
+    "plant",
+    "screen",
+    "rhizomatous",
+    "cane"
+  ],
+  "postLife": {
+    "standingDays": 80,
+    "collapseDays": 14,
+    "fallenDays": 80,
+    "advancedDays": 22,
+    "coarseFraction": 0.58,
+    "decayHalfLifeMultiplier": 1.6,
+    "standingRetention": 0.9,
+    "deadColor": [
+      0.66,
+      0.58,
+      0.38
+    ],
+    "litterColorInfluence": 0.58,
+    "dryBleach": 0.28,
+    "wetDarken": 0.18
+  }
+}
