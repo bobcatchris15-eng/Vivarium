@@ -349,7 +349,6 @@ public partial class FloraRenderer : Node3D
                 // Multi-segment climber: each node is rendered at its exact 3D position and orientation
                 var cTint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
                 int cTier = VisualTier(f.Id, pos, (float)Math.Max(h, 0.3), (float)Math.Max(r, 0.3));
-                if (cTier < 0) continue;
                 int cVariant = (int)((hash >> 8) % (ulong)_layers[sp.Id].MorphCount) + cTier * _layers[sp.Id].MorphCount;
                 for (int s = 0; s < segs.Count; s++)
                 {
@@ -415,7 +414,6 @@ public partial class FloraRenderer : Node3D
             var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
             int lodTier = VisualTier(f.Id, pos, (float)h, (float)r);
-            if (lodTier < 0) continue; // sub-pixel: not drawn
             variant += lodTier * visualLayer.MorphCount;
             var vl = _layers[sp.Id].Variants[variant];
             bool reproductiveFruit = sp.Reproduction != null
@@ -482,7 +480,6 @@ public partial class FloraRenderer : Node3D
             var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
             int deadTier = VisualTier(dead.Id, pos, (float)h, (float)r);
-            if (deadTier < 0) continue;
             variant += deadTier * visualLayer.MorphCount;
             var bd = Get(_full, MorphKey(sp.Id, variant));
             bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
@@ -566,11 +563,8 @@ public partial class FloraRenderer : Node3D
         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
     }
 
-    // Projected diameters (px) below which an individual is not drawn; the gap is hysteresis.
-    private const float CullPixels = 2f, UncullPixels = 2.6f;
-
-    /// <summary>Geometric tier (0 near .. 2 far) from the projected bounding-sphere diameter, with hysteresis;
-    /// -1 when the individual projects smaller than ~2 px and is skipped.</summary>
+    /// <summary>Geometric tier (0 near .. 2 far) from the projected bounding-sphere diameter, with hysteresis.
+    /// Never skips an individual for screen size: the far tier is still the full parametric plant.</summary>
     private int VisualTier(EntityId id, Vector3 position, float height, float radius)
     {
         if (Camera == null) return 0;
@@ -581,8 +575,7 @@ public partial class FloraRenderer : Node3D
             ? bound * viewport / Camera.Size
             : bound * viewport / (2f * depth * MathF.Tan(Mathf.DegToRad(Camera.Fov) * .5f));
         bool had = _visualTiers.TryGetValue(id, out int old);
-        if (pixels < (had && old >= 0 ? CullPixels : UncullPixels)) { _visualTiers[id] = -1; return -1; }
-        int tier = FloraDetail.Select(pixels, had ? old : -1);
+        int tier = FloraDetail.Select(pixels, had && old >= 0 ? old : -1);
         _visualTiers[id] = tier;
         return tier;
     }

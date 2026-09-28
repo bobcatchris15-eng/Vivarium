@@ -19,9 +19,16 @@ public sealed class MeshData
     public readonly List<FloraLeaf> Leaves = new();
     public int? FloraDetailLevel { get; set; }
     public ulong FloraVisualSeed { get; set; }
+    /// <summary>Render-only parametric flora detail; null = authored full detail.</summary>
+    public FloraLodParams? Lod { get; set; }
+    /// <summary>Vertex spans of closed tubes (trunks, stems, petioles) with their radial side count.</summary>
+    public readonly List<(int FirstVertex, int VertexCount, int Sides, double Radius)> Structural = new();
+    /// <summary>Vertex spans of every leaf blade, recorded regardless of <see cref="FloraDetailLevel"/>.</summary>
+    public readonly List<(int FirstVertex, int VertexCount)> LeafSpans = new();
 
     public void RecordLeaf(int vertex, int index, Vec3 attachment, double length, bool volumetric = false)
     {
+        if (VertexCount > vertex) LeafSpans.Add((vertex, VertexCount - vertex));
         if (FloraDetailLevel == null) return;
         ulong identity = Rng.Mix(FloraVisualSeed, (ulong)Leaves.Count + 1);
         Leaves.Add(new FloraLeaf(vertex, VertexCount - vertex, index, Indices.Count - index,
@@ -117,5 +124,23 @@ public sealed class MeshData
             Leaves.Add(leaf with { FirstVertex = leaf.FirstVertex + baseIndex, FirstIndex = leaf.FirstIndex + baseIndexOffset,
                 Attachment = transform != null ? transform(leaf.Attachment) : leaf.Attachment });
         foreach (var i in other.Indices) Indices.Add(baseIndex + i);
+        foreach (var st in other.Structural) Structural.Add((st.FirstVertex + baseIndex, st.VertexCount, st.Sides, st.Radius));
+        foreach (var ls in other.LeafSpans) LeafSpans.Add((ls.FirstVertex + baseIndex, ls.VertexCount));
     }
+}
+
+/// <summary>
+/// Parametric flora detail: the same generator, seed and form, tessellated coarser. Scales multiply the
+/// authored counts; primitives clamp to minimums (tubes >= 5 sides, blades >= 2 segments).
+/// <see cref="LeafFraction"/> of leaf blades survive (inner/smallest dropped first).
+/// </summary>
+public sealed record FloraLodParams(double Radial = 1, double Length = 1, double Blade = 1, double LeafFraction = 1)
+{
+    public static FloraLodParams FromScale(double s)
+    {
+        s = Math.Clamp(s, 0, 1);
+        return new FloraLodParams(s, Math.Sqrt(s), Math.Sqrt(s), s);
+    }
+    public int Sides(int authored) => Math.Max(5, (int)Math.Round(authored * Radial));
+    public int Segments(int authored, int min = 2) => Math.Max(Math.Min(min, authored), (int)Math.Round(authored * Blade));
 }

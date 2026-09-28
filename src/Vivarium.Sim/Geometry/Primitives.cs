@@ -54,6 +54,11 @@ public static class Primitives
         double maxR = Math.Max(radii.X, Math.Max(radii.Y, radii.Z));
         if (maxR >= 0.08) { rings = Math.Max(rings, 6); segments = Math.Max(segments, 12); }
         else if (maxR >= 0.035) { rings = Math.Max(rings, 5); segments = Math.Max(segments, 8); }
+        if (m.Lod is { } lod)
+        {
+            rings = Math.Max(Math.Min(3, rings), (int)Math.Round(rings * lod.Radial));
+            segments = Math.Max(Math.Min(5, segments), (int)Math.Round(segments * lod.Radial));
+        }
         int start = m.VertexCount;
         double cp = Math.Cos(pitch), sp = Math.Sin(pitch);
         for (int r = 0; r <= rings; r++)
@@ -89,6 +94,23 @@ public static class Primitives
     {
         if (path.Count < 2 || radius.Count != path.Count) return;
         segments = Math.Max(6, segments);
+        var src = path; var srcR = radius;
+        int[]? rows = null;
+        if (m.Lod is { } lod)
+        {
+            segments = lod.Sides(segments);
+            int keep = Math.Max(2, (int)Math.Round((path.Count - 1) * lod.Length) + 1);
+            if (keep < path.Count)
+            {
+                rows = new int[keep];
+                for (int k = 0; k < keep; k++) rows[k] = (int)Math.Round(k * (path.Count - 1) / (double)(keep - 1));
+                var p2 = new Vec3[keep]; var r2 = new double[keep];
+                for (int k = 0; k < keep; k++) { p2[k] = path[rows[k]]; r2[k] = radius[rows[k]]; }
+                path = p2; radius = r2;
+            }
+        }
+        var authoredAttr = attr;
+        if (rows != null) { var map = rows; attr = (i, v) => authoredAttr(map[i], v); }
         int start = m.VertexCount;
         var tangents = new Vec3[path.Count];
         for (int i = 0; i < path.Count; i++)
@@ -155,6 +177,9 @@ public static class Primitives
                 m.AddTriangle(a, a + 1, b);
                 m.AddTriangle(a + 1, b + 1, b);
             }
+        double maxR = 0;
+        for (int i = 0; i < radius.Count; i++) maxR = Math.Max(maxR, Math.Abs(radius[i]));
+        m.Structural.Add((start, m.VertexCount - start, segments, maxR));
     }
 
     /// <summary>
@@ -174,6 +199,7 @@ public static class Primitives
         side = side.Normalized();
         var normal = dir.Cross(side).Normalized();
         longitudinal = m.FloraDetailLevel switch { 1 => Math.Max(3,longitudinal-1), 2 => 2, _ => Math.Max(3,longitudinal) };
+        if (m.Lod is { } lod) longitudinal = lod.Segments(longitudinal);
         const int across = 2; // left / midrib / right
         int leafVertex=m.VertexCount,leafIndex=m.Indices.Count;
 
