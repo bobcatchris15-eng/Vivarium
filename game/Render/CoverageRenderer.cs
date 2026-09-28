@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
@@ -98,8 +99,13 @@ public partial class CoverageRenderer : Node3D
     private readonly float[,] _cornerVeinW = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly float[,] _cornerFront = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
     private readonly List<(CoverageLayerId layer, int ti, int tj)> _toRemove = new();
-    private readonly Queue<(CoverageLayerId layer, int ti, int tj)> _pendingRebuilds = new();
+    private readonly List<(CoverageLayerId layer, int ti, int tj)> _pendingRebuilds = new();
     private readonly HashSet<(CoverageLayerId layer, int ti, int tj)> _pendingKeys = new();
+
+    // Off-thread mesh build pipeline: tasks run pure geometry generation (no Godot API);
+    // results are committed to MeshInstance3D/ArrayMesh on the main thread only.
+    private readonly Dictionary<(CoverageLayerId layer, int ti, int tj), Task<MeshData?>> _inFlight = new();
+    private const int MaxConcurrentBuilds = 4;
 
 
     private static float SlopeFade(Vec3 normal)
@@ -180,6 +186,7 @@ public partial class CoverageRenderer : Node3D
         _tiles.Clear();
         _pendingRebuilds.Clear();
         _pendingKeys.Clear();
+        _inFlight.Clear();
 
         _matMaterial = Bridge.Shader("res://Shaders/coverage_mat.gdshader");
         _matMaterial.SetShaderParameter("u_pattern", 0.0f); // fibrous moss micro-detail
@@ -355,25 +362,84 @@ public partial class CoverageRenderer : Node3D
 
         if (immediate)
         {
-            while (_pendingRebuilds.Count > 0)
+            // Startup build: no budget slicing, no async offload — process everything now,
+            // synchronously, so the world is fully covered before the first frame renders.
+            for (int i = 0; i < _pendingRebuilds.Count; i++)
             {
-                var key = _pendingRebuilds.Dequeue();
+                var key = _pendingRebuilds[i];
                 _pendingKeys.Remove(key);
-                ProcessTile(key);
+                var layer = _w.Coverage.ById(key.layer);
+                if (layer.TryGetTile(key.ti, key.tj, out var tile) && tile != null && !tile.IsEmpty())
+                {
+                    var md = BuildTileMesh(layer, tile);
+                    CommitTile(layer, tile, key, md);
+                }
             }
+            _pendingRebuilds.Clear();
+            return;
         }
-        else
+
+        // Nearest-to-camera-first: sort the pending set once per frame so a bounded
+        // per-frame budget always spends itself on what's most visible.
+        if (_pendingRebuilds.Count > 1 && Camera != null)
         {
-            long started = Stopwatch.GetTimestamp();
-            while (_pendingRebuilds.Count > 0)
-            {
-                var key = _pendingRebuilds.Dequeue();
-                _pendingKeys.Remove(key);
-                ProcessTile(key);
-                if (Stopwatch.GetElapsedTime(started).TotalMilliseconds >= RebuildBudgetMs)
-                    break;
-            }
+            OrderPendingByCameraDistance();
         }
+
+        long started = Stopwatch.GetTimestamp();
+
+        // Kick off async builds (pure geometry, no Godot API) for pending tiles that
+        // aren't already in flight, up to a small concurrency cap.
+        int slots = MaxConcurrentBuilds - _inFlight.Count;
+        for (int i = 0; i < _pendingRebuilds.Count && slots > 0; i++)
+        {
+            var key = _pendingRebuilds[i];
+            if (_inFlight.ContainsKey(key)) continue;
+
+            var layer = _w.Coverage.ById(key.layer);
+            if (!layer.TryGetTile(key.ti, key.tj, out var tile) || tile == null || tile.IsEmpty())
+            {
+                continue;
+            }
+            _inFlight[key] = Task.Run(() => BuildTileMesh(layer, tile));
+            slots--;
+        }
+
+        // Commit whatever finished, nearest-first, within the per-frame time budget.
+        // Godot object creation/assignment happens here, on the main thread only.
+        for (int i = 0; i < _pendingRebuilds.Count; i++)
+        {
+            var key = _pendingRebuilds[i];
+            if (!_inFlight.TryGetValue(key, out var task) || !task.IsCompleted) continue;
+
+            _inFlight.Remove(key);
+            _pendingKeys.Remove(key);
+            var layer = _w.Coverage.ById(key.layer);
+            layer.TryGetTile(key.ti, key.tj, out var tile);
+            CommitTile(layer, tile, key, task.Result);
+
+            if (Stopwatch.GetElapsedTime(started).TotalMilliseconds >= RebuildBudgetMs)
+                break;
+        }
+
+        // Drop committed/obsolete keys from the pending list; anything still in
+        // flight or not yet reached stays for a later frame.
+        _pendingRebuilds.RemoveAll(k => !_pendingKeys.Contains(k));
+    }
+
+    private void OrderPendingByCameraDistance()
+    {
+        const int edge = CoverageSpec.TileEdge;
+        const double cs = CoverageSpec.CellSize;
+        var camPos = Camera!.GlobalPosition;
+        _pendingRebuilds.Sort((a, b) =>
+        {
+            double ax = (a.ti + 0.5) * edge * cs - camPos.X;
+            double az = (a.tj + 0.5) * edge * cs - camPos.Z;
+            double bx = (b.ti + 0.5) * edge * cs - camPos.X;
+            double bz = (b.tj + 0.5) * edge * cs - camPos.Z;
+            return (ax * ax + az * az).CompareTo(bx * bx + bz * bz);
+        });
     }
 
     private void EnqueueTiles(CoverageLayer layer)
@@ -387,28 +453,28 @@ public partial class CoverageRenderer : Node3D
             {
                 if (t.Version > record.Version && _pendingKeys.Add(key))
                 {
-                    _pendingRebuilds.Enqueue(key);
+                    _pendingRebuilds.Add(key);
                 }
             }
             else
             {
                 if (_pendingKeys.Add(key))
                 {
-                    _pendingRebuilds.Enqueue(key);
+                    _pendingRebuilds.Add(key);
                 }
             }
         }
     }
 
-    private void ProcessTile((CoverageLayerId layer, int ti, int tj) key)
+    /// <summary>Applies an off-thread-built (or synchronously-built) mesh result to the scene tree.</summary>
+    private void CommitTile(CoverageLayer layer, CoverageTile? tile, (CoverageLayerId layer, int ti, int tj) key, MeshData? md)
     {
-        var layer = _w.Coverage.ById(key.layer);
-        if (!layer.TryGetTile(key.ti, key.tj, out var tile) || tile == null || tile.IsEmpty())
+        if (tile == null || tile.IsEmpty() || md == null || md.VertexCount == 0 || md.TriangleCount == 0)
         {
-            if (_tiles.TryGetValue(key, out var record))
+            if (_tiles.TryGetValue(key, out var stale))
             {
-                record.MeshInstance.QueueFree();
-                RemoveChild(record.MeshInstance);
+                stale.MeshInstance.QueueFree();
+                RemoveChild(stale.MeshInstance);
                 _tiles.Remove(key);
             }
             return;
@@ -416,22 +482,16 @@ public partial class CoverageRenderer : Node3D
 
         if (_tiles.TryGetValue(key, out var rec))
         {
-            if (tile.Version > rec.Version)
-            {
-                RebuildTile(layer, tile, rec);
-            }
+            RebuildTile(layer, tile, rec, md);
         }
         else
         {
-            CreateTile(layer, tile, key);
+            CreateTile(layer, tile, key, md);
         }
     }
 
-    private void CreateTile(CoverageLayer layer, CoverageTile t, (CoverageLayerId layer, int ti, int tj) key)
+    private void CreateTile(CoverageLayer layer, CoverageTile t, (CoverageLayerId layer, int ti, int tj) key, MeshData md)
     {
-        var md = BuildTileMesh(layer, t);
-        if (md.VertexCount == 0 || md.TriangleCount == 0) return;
-
         var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial)
             : layer.Id == CoverageLayerId.Plasmodium ? _plasmodiumMaterial
             : (Material)(layer.Id == CoverageLayerId.Crust ? _crustMaterial : _matMaterial);
@@ -453,17 +513,8 @@ public partial class CoverageRenderer : Node3D
         TrianglesBuilt += md.TriangleCount;
     }
 
-    private void RebuildTile(CoverageLayer layer, CoverageTile t, TileRecord record)
+    private void RebuildTile(CoverageLayer layer, CoverageTile t, TileRecord record, MeshData md)
     {
-        var md = BuildTileMesh(layer, t);
-        if (md.VertexCount == 0 || md.TriangleCount == 0)
-        {
-            record.MeshInstance.QueueFree();
-            RemoveChild(record.MeshInstance);
-            _tiles.Remove((layer.Id, t.Ti, t.Tj));
-            return;
-        }
-
         var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial)
             : layer.Id == CoverageLayerId.Plasmodium ? _plasmodiumMaterial
             : (Material)(layer.Id == CoverageLayerId.Crust ? _crustMaterial : _matMaterial);
