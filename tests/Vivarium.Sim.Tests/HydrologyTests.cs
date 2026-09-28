@@ -109,6 +109,20 @@ public class HydrologyTests
         Assert.Equal(w.Water.DigestHex(), w2.Water.DigestHex());
     }
 
+    [Fact]
+    public void SurfaceSolverStoresSignedFaceMomentumAndConservesTransfers()
+    {
+        var w = Slope();
+        var high = new Vec2(2.5, 0);
+        TestUtil.Flood(w, high, 0.45, 0.04);
+        double v0 = w.Water.SurfaceVolume();
+        w.Water.Step(30);
+
+        Assert.Contains(w.Grid.DomainCells, c => Math.Abs(w.Water.FaceFlowEast[c]) > 1e-10 || Math.Abs(w.Water.FaceFlowNorth[c]) > 1e-10);
+        Assert.Equal(v0, w.Water.SurfaceVolume() + w.Water.Budget.BoundaryOutflow, 9);
+        Assert.True(w.Water.AllFinite());
+    }
+
     private static double CentreOfMassX(VivariumWorld w)
     {
         double m = 0, mx = 0;

@@ -51,19 +51,27 @@ public sealed class Hydrology
     public List<Spring> Springs { get; set; } = new();
     public WaterBudget Budget { get; set; } = new();
 
-    private readonly double[] _out;      // outgoing volume per cell per substep
-    private readonly double[] _fluxE, _fluxW, _fluxN, _fluxS; // per-direction outgoing (m depth-equivalent)
+    // Signed internal face discharge (m³/s): +E and +N. West/south faces are the neighbour's east/north face.
+    private readonly double[] _faceE, _faceN;
+    private readonly double[] _deltaVolume, _outScale;
+    private readonly double[] _edgeFlowE, _edgeFlowW, _edgeFlowN, _edgeFlowS;
     private readonly double[] _edgeHeight; // virtual exterior surface for boundary cells
     private readonly int[] _nE, _nW, _nN, _nS; // neighbour cell index or -1 when outside the domain
 
     public double CellArea => Grid.CellSize * Grid.CellSize;
+    /// <summary>Signed discharge through each cell's east face (+X), m³/s. Authoritative surface-water momentum.</summary>
+    public double[] FaceFlowEast => _faceE;
+    /// <summary>Signed discharge through each cell's north face (+Z), m³/s. Authoritative surface-water momentum.</summary>
+    public double[] FaceFlowNorth => _faceN;
 
     public Hydrology(GridSpec grid, WaterConfig config, Heightfield hf)
     {
         Grid = grid; Config = config;
         int n = grid.Count;
         Depth = new double[n]; Bed = new double[n]; FlowX = new double[n]; FlowZ = new double[n];
-        _out = new double[n]; _fluxE = new double[n]; _fluxW = new double[n]; _fluxN = new double[n]; _fluxS = new double[n];
+        _faceE = new double[n]; _faceN = new double[n];
+        _deltaVolume = new double[n]; _outScale = new double[n];
+        _edgeFlowE = new double[n]; _edgeFlowW = new double[n]; _edgeFlowN = new double[n]; _edgeFlowS = new double[n];
         _edgeHeight = new double[n];
         _nE = new int[n]; _nW = new int[n]; _nN = new int[n]; _nS = new int[n];
         foreach (int idx in grid.DomainCells)
@@ -231,7 +239,7 @@ public sealed class Hydrology
     private void SubStep(double dt)
     {
         double area = CellArea;
-        // 1. sources: springs
+        // 1. sources: springs inject dynamic surface water.
         foreach (var sp in Springs)
         {
             int c = Grid.NearestDomainCell(sp.Position);
@@ -240,6 +248,7 @@ public sealed class Hydrology
             Depth[c] += vol / area;
             Budget.SpringInflow += vol;
         }
+
         // 2. losses from dynamic surface water only. Groundwater is a separate implicit reservoir.
         double evap = Config.Evaporation / SimUnits.Day * dt, infil = Config.Infiltration / SimUnits.Day * dt;
         foreach (int idx in Grid.DomainCells)
@@ -252,45 +261,127 @@ public sealed class Hydrology
             Depth[idx] -= loss;
         }
 
-        // 3. temporary relaxation flow (replaced by the local-inertial solver in Stage 2)
-        double k = MathD.Clamp(Config.FlowRate, 0, 0.24);
+        // 3. Update signed face discharge from free-surface head. The previous discharge is retained
+        // with exponential decay, providing local inertia; the hydraulic target is deliberately bounded
+        // so one coarse hydrology tick cannot create an unstable Courant jump.
+        double memory = Math.Exp(-dt / 45.0);
         foreach (int idx in Grid.DomainCells)
         {
-            _fluxE[idx] = _fluxW[idx] = _fluxN[idx] = _fluxS[idx] = 0; _out[idx] = 0;
-            double d = Depth[idx];
-            if (d <= 1e-12) continue;
-            double surf = HydraulicBed(idx) + d;
-            _fluxE[idx] = Flux(surf, d, _nE[idx], idx, k);
-            _fluxW[idx] = Flux(surf, d, _nW[idx], idx, k);
-            _fluxN[idx] = Flux(surf, d, _nN[idx], idx, k);
-            _fluxS[idx] = Flux(surf, d, _nS[idx], idx, k);
-            double total = _fluxE[idx] + _fluxW[idx] + _fluxN[idx] + _fluxS[idx];
-            if (total > d) { double sc = d / total; _fluxE[idx] *= sc; _fluxW[idx] *= sc; _fluxN[idx] *= sc; _fluxS[idx] *= sc; total = d; }
-            _out[idx] = total;
+            int e = _nE[idx], n = _nN[idx];
+            _faceE[idx] = e >= 0 ? UpdateFaceDischarge(idx, e, _faceE[idx], memory) : 0;
+            _faceN[idx] = n >= 0 ? UpdateFaceDischarge(idx, n, _faceN[idx], memory) : 0;
+            _deltaVolume[idx] = 0;
+            _outScale[idx] = 1;
+            _edgeFlowE[idx] = _edgeFlowW[idx] = _edgeFlowN[idx] = _edgeFlowS[idx] = 0;
         }
-        double toFlow = CellArea / dt;
+
+        // Boundary discharge is stateless: the specimen can drain out, but the virtual exterior never injects water.
         foreach (int idx in Grid.DomainCells)
         {
+            if (!Grid.IsBoundaryCell[idx] || Depth[idx] <= 0) continue;
+            double surface = HydraulicBed(idx) + Depth[idx];
+            double target = BoundaryDischarge(idx, surface);
+            int i = idx % Grid.Nx, j = idx / Grid.Nx;
+            if (_nE[idx] < 0) _edgeFlowE[idx] = target;
+            if (_nW[idx] < 0) _edgeFlowW[idx] = target;
+            if (_nN[idx] < 0) _edgeFlowN[idx] = target;
+            if (_nS[idx] < 0) _edgeFlowS[idx] = target;
+        }
+
+        // 4. Per-cell outflow limiter. Every internal face has exactly one upstream cell according to its sign.
+        foreach (int idx in Grid.DomainCells)
+        {
+            double outgoing = _edgeFlowE[idx] + _edgeFlowW[idx] + _edgeFlowN[idx] + _edgeFlowS[idx];
             int e = _nE[idx], w = _nW[idx], n = _nN[idx], so = _nS[idx];
-            double inW = w >= 0 ? _fluxE[w] : 0, inE = e >= 0 ? _fluxW[e] : 0, inS = so >= 0 ? _fluxN[so] : 0, inN = n >= 0 ? _fluxS[n] : 0;
-            double exterior = (e < 0 ? _fluxE[idx] : 0) + (w < 0 ? _fluxW[idx] : 0) + (n < 0 ? _fluxN[idx] : 0) + (so < 0 ? _fluxS[idx] : 0);
-            if (exterior > 0) Budget.BoundaryOutflow += exterior * area;
-            // net flow through the cell (average of in- and outgoing faces), m³/s
-            FlowX[idx] = ((_fluxE[idx] - _fluxW[idx]) + (inW - inE)) * 0.5 * toFlow;
-            FlowZ[idx] = ((_fluxN[idx] - _fluxS[idx]) + (inS - inN)) * 0.5 * toFlow;
-            Depth[idx] = Math.Max(0, Depth[idx] - _out[idx] + inW + inE + inS + inN);
+            if (e >= 0 && _faceE[idx] > 0) outgoing += _faceE[idx];
+            if (w >= 0 && _faceE[w] < 0) outgoing += -_faceE[w];
+            if (n >= 0 && _faceN[idx] > 0) outgoing += _faceN[idx];
+            if (so >= 0 && _faceN[so] < 0) outgoing += -_faceN[so];
+            double requested = outgoing * dt;
+            double available = Depth[idx] * area;
+            if (requested > available && requested > 0) _outScale[idx] = available / requested;
+        }
+
+        // Scale each shared face by its upstream cell, then transfer the exact same volume out/in.
+        foreach (int idx in Grid.DomainCells)
+        {
+            int e = _nE[idx], n = _nN[idx];
+            if (e >= 0)
+            {
+                double q = _faceE[idx];
+                q *= q >= 0 ? _outScale[idx] : _outScale[e];
+                _faceE[idx] = q;
+                double vol = q * dt;
+                _deltaVolume[idx] -= vol;
+                _deltaVolume[e] += vol;
+            }
+            if (n >= 0)
+            {
+                double q = _faceN[idx];
+                q *= q >= 0 ? _outScale[idx] : _outScale[n];
+                _faceN[idx] = q;
+                double vol = q * dt;
+                _deltaVolume[idx] -= vol;
+                _deltaVolume[n] += vol;
+            }
+        }
+
+        foreach (int idx in Grid.DomainCells)
+        {
+            double exteriorRate = (_edgeFlowE[idx] + _edgeFlowW[idx] + _edgeFlowN[idx] + _edgeFlowS[idx]) * _outScale[idx];
+            if (exteriorRate > 0)
+            {
+                double vol = exteriorRate * dt;
+                _deltaVolume[idx] -= vol;
+                Budget.BoundaryOutflow += vol;
+            }
+        }
+
+        // 5. Commit depths and expose cell-centred flow for rendering/ecology.
+        foreach (int idx in Grid.DomainCells)
+        {
+            Depth[idx] = Math.Max(0, Depth[idx] + _deltaVolume[idx] / area);
+            int w = _nW[idx], so = _nS[idx];
+            double east = _nE[idx] >= 0 ? _faceE[idx] : _edgeFlowE[idx] * _outScale[idx];
+            double west = w >= 0 ? _faceE[w] : -_edgeFlowW[idx] * _outScale[idx];
+            double north = _nN[idx] >= 0 ? _faceN[idx] : _edgeFlowN[idx] * _outScale[idx];
+            double south = so >= 0 ? _faceN[so] : -_edgeFlowS[idx] * _outScale[idx];
+            FlowX[idx] = 0.5 * (east + west);
+            FlowZ[idx] = 0.5 * (north + south);
         }
     }
 
-    private double Flux(double surf, double depth, int n, int idx, double k)
+    private double UpdateFaceDischarge(int a, int b, double previous, double memory)
     {
-        double nsurf;
-        if (n >= 0) nsurf = HydraulicBed(n) + Depth[n];
-        else if (Grid.IsBoundaryCell[idx]) nsurf = _edgeHeight[idx];
-        else return 0;
-        double diff = surf - nsurf;
-        if (diff <= 0) return 0;
-        return k * Math.Min(depth, diff);
+        double sa = HydraulicBed(a) + Depth[a], sb = HydraulicBed(b) + Depth[b];
+        double head = sa - sb;
+        if (Math.Abs(head) < 1e-12 && Math.Abs(previous) < 1e-15) return 0;
+
+        int upstream = head >= 0 ? a : b;
+        double mobileDepth = Depth[upstream];
+        double target = 0;
+        if (mobileDepth > 1e-12 && Math.Abs(head) > 1e-12)
+        {
+            // FlowRate remains the bounded transport fraction for compatibility. The 30 s response scale
+            // converts the old per-step fraction into a discharge rate while making the stored momentum
+            // independent of the caller's current dt.
+            double transferableDepth = Math.Min(mobileDepth, Math.Abs(head));
+            target = Math.Sign(head) * Config.FlowRate * transferableDepth * CellArea / 30.0;
+        }
+
+        double q = previous * memory + target * (1 - memory);
+        // Never allow retained momentum to pull water out of a completely dry upstream cell.
+        int qUpstream = q >= 0 ? a : b;
+        if (Depth[qUpstream] <= 1e-12) return 0;
+        return q;
+    }
+
+    private double BoundaryDischarge(int idx, double surface)
+    {
+        double head = surface - _edgeHeight[idx];
+        if (head <= 0 || Depth[idx] <= 0) return 0;
+        double transferableDepth = Math.Min(Depth[idx], head);
+        return Config.FlowRate * transferableDepth * CellArea / 30.0;
     }
 
     private double[]? _waterDistance;
@@ -372,12 +463,17 @@ public sealed class Hydrology
         moisture.Diffuse(eco.MoistureDiffusion * dt, scratch);
     }
 
-    public bool AllFinite() { foreach (int idx in Grid.DomainCells) if (!double.IsFinite(Depth[idx]) || Depth[idx] < 0) return false; return true; }
+    public bool AllFinite()
+    {
+        foreach (int idx in Grid.DomainCells)
+            if (!double.IsFinite(Depth[idx]) || Depth[idx] < 0 || !double.IsFinite(_faceE[idx]) || !double.IsFinite(_faceN[idx])) return false;
+        return true;
+    }
 
     public string DigestHex()
     {
         using var d = new DigestBuilder();
-        foreach (int idx in Grid.DomainCells) d.Add(Depth[idx]);
+        foreach (int idx in Grid.DomainCells) d.Add(Depth[idx]).Add(_faceE[idx]).Add(_faceN[idx]);
         foreach (var s in Springs) d.Add(s.Id.Value).Add(s.X).Add(s.Z).Add(s.Discharge);
         d.Add(Budget.SpringInflow).Add(Budget.GroundwaterInflow).Add(Budget.GroundwaterRecharge).Add(Budget.Evaporation).Add(Budget.Infiltration).Add(Budget.BoundaryOutflow).Add(Budget.ToolInflow).Add(Budget.ToolRemoval);
         return d.Hex();

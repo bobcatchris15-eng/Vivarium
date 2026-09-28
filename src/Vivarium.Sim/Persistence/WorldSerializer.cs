@@ -42,6 +42,8 @@ public sealed class FieldsPayload
 public sealed class WaterPayload
 {
     public string Depth { get; set; } = "";
+    public string? FaceFlowEast { get; set; }
+    public string? FaceFlowNorth { get; set; }
     public WaterBudget Budget { get; set; } = new();
 }
 
@@ -134,8 +136,19 @@ public static class WorldSerializer
             Detritus = Pack(f.Detritus.ExportDomainValues()), Biofilm = Pack(f.Biofilm.ExportDomainValues()), Plankton = Pack(f.Plankton.ExportDomainValues()),
         });
         var depth = new double[w.Grid.DomainCells.Length];
-        for (int k = 0; k < depth.Length; k++) depth[k] = w.Water.Depth[w.Grid.DomainCells[k]];
-        p["water"] = Bytes(new WaterPayload { Depth = Pack(depth), Budget = w.Water.Budget });
+        var flowE = new double[depth.Length];
+        var flowN = new double[depth.Length];
+        for (int k = 0; k < depth.Length; k++)
+        {
+            int c = w.Grid.DomainCells[k];
+            depth[k] = w.Water.Depth[c];
+            flowE[k] = w.Water.FaceFlowEast[c];
+            flowN[k] = w.Water.FaceFlowNorth[c];
+        }
+        p["water"] = Bytes(new WaterPayload
+        {
+            Depth = Pack(depth), FaceFlowEast = Pack(flowE), FaceFlowNorth = Pack(flowN), Budget = w.Water.Budget
+        });
         p["litter"] = Bytes(new LitterPayload
         {
             CellCount = w.Grid.DomainCells.Length,
@@ -220,10 +233,25 @@ public static class WorldSerializer
         var wa = Read<WaterPayload>(payloads, "water");
         var depth = Unpack(wa.Depth, "water depth");
         if (depth.Length != w.Grid.DomainCells.Length) throw new InvalidDataException("water depth grid mismatch");
+        double[]? flowE = wa.FaceFlowEast != null ? Unpack(wa.FaceFlowEast, "water east-face flow") : null;
+        double[]? flowN = wa.FaceFlowNorth != null ? Unpack(wa.FaceFlowNorth, "water north-face flow") : null;
+        if (flowE != null && flowE.Length != depth.Length) throw new InvalidDataException("water east-face flow grid mismatch");
+        if (flowN != null && flowN.Length != depth.Length) throw new InvalidDataException("water north-face flow grid mismatch");
         for (int k = 0; k < depth.Length; k++)
         {
             if (!(depth[k] >= 0) || !double.IsFinite(depth[k])) throw new InvalidDataException($"water depth {k} is invalid ({depth[k]})");
-            w.Water.Depth[w.Grid.DomainCells[k]] = depth[k];
+            int c = w.Grid.DomainCells[k];
+            w.Water.Depth[c] = depth[k];
+            if (flowE != null)
+            {
+                if (!double.IsFinite(flowE[k])) throw new InvalidDataException($"water east-face flow {k} is invalid ({flowE[k]})");
+                w.Water.FaceFlowEast[c] = flowE[k];
+            }
+            if (flowN != null)
+            {
+                if (!double.IsFinite(flowN[k])) throw new InvalidDataException($"water north-face flow {k} is invalid ({flowN[k]})");
+                w.Water.FaceFlowNorth[c] = flowN[k];
+            }
         }
         w.Water.Budget = wa.Budget ?? new WaterBudget();
 
