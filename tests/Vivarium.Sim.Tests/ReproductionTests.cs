@@ -1,6 +1,7 @@
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Flora;
+using Vivarium.Sim.Geometry;
 using Vivarium.Sim.Persistence;
 
 namespace Vivarium.Sim.Tests;
@@ -75,5 +76,18 @@ public class ReproductionTests
         Assert.Equal(a.ViableMass, b.ViableMass);
         Assert.Equal(a.DormancyRemaining, b.DormancyRemaining);
         Assert.Equal(WorldSerializer.Digest(w), WorldSerializer.Digest(restored));
+    }
+
+    [Fact]
+    public void WoodyReproductiveMeshesIncludeAttachedStructures()
+    {
+        var w = TestUtil.DefaultWorld();
+        foreach (string id in new[] { "ironlace", "umbraheart", "fenneedle", "kiteleaf", "embercrown", "lanternbrush", "shadebell" })
+        {
+            var sp = w.Content.FloraOrThrow(id);
+            var baseMesh = OrganismMeshes.Flora(sp, 1234);
+            var fruitMesh = Assert.IsType<MeshData>(OrganismMeshes.FloraFruiting(sp, 1234));
+            Assert.True(fruitMesh.TriangleCount > baseMesh.TriangleCount, $"{id} fruiting mesh did not add reproductive geometry");
+        }
     }
 }

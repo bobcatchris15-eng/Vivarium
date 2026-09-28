@@ -147,7 +147,73 @@ public static class OrganismMeshes
 
     public static MeshData? FloraFruiting(FloraSpeciesDef sp, ulong seed = 1)
     {
-        if (sp.Shape != "plasmodium") return null;
+        if (sp.Shape != "plasmodium")
+        {
+            if (sp.Reproduction is not { } rp) return null;
+            var rngFruit = Rng.Keyed(seed, "flora.reproduction." + sp.Id, 0);
+            var plant = Flora(sp, seed);
+            var fruitCol = rp.FruitColor;
+            var ripe2 = Primitives.Scale(fruitCol, 0.72);
+            double rx = MathD.Clamp(rp.DisplaySize / Math.Max(0.02, sp.RadiusAtMax), 0.012, 0.18);
+            double ry = MathD.Clamp(rp.DisplaySize / Math.Max(0.02, sp.Height), 0.008, 0.14);
+            int count = rp.Form switch
+            {
+                "berry" => 18,
+                "drupe" => 12,
+                "nut" => 10,
+                "pod" => 12,
+                "cone" => 10,
+                "capsule" => 14,
+                "wind_seed" => 24,
+                "achene" => 22,
+                _ => 12,
+            };
+
+            for (int i = 0; i < count; i++)
+            {
+                double ang = rngFruit.Range(0, Math.PI * 2);
+                double radial = rngFruit.Range(0.22, 0.88);
+                double y = rngFruit.Range(sp.IsTree ? 0.58 : 0.42, 0.96);
+                var c = new Vec3(Math.Cos(ang) * radial, y, Math.Sin(ang) * radial);
+                var col = rngFruit.NextDouble() < 0.35 ? ripe2 : fruitCol;
+                switch (rp.Form)
+                {
+                    case "pod":
+                        Primitives.Ellipsoid(plant, c, new Vec3(rx * 0.55, ry * 2.5, rx * 0.55), 5, 8,
+                            (u, v) => (col, 1, u, v, 0, 0), pitch: rngFruit.Range(-0.75, 0.75));
+                        break;
+                    case "cone":
+                        Primitives.Ellipsoid(plant, c, new Vec3(rx * 0.9, ry * 1.8, rx * 0.9), 6, 9,
+                            (u, v) => (Primitives.Mix(col, ripe2, v), 1, u, v, 0, 0), pitch: rngFruit.Range(-0.35, 0.35));
+                        break;
+                    case "capsule":
+                        Primitives.Ellipsoid(plant, c, new Vec3(rx * 0.7, ry * 1.45, rx * 0.7), 5, 8,
+                            (u, v) => (col, 1, u, v, 0, 0));
+                        break;
+                    case "wind_seed":
+                    case "achene":
+                    {
+                        Primitives.Ellipsoid(plant, c, new Vec3(rx * 0.28, ry * 0.9, rx * 0.28), 4, 6,
+                            (u, v) => (col, 1, u, v, 0, 0));
+                        var pale = Primitives.Mix(col, new[] { 0.90, 0.86, 0.72 }, 0.72);
+                        for (int k = 0; k < 4; k++)
+                        {
+                            double a = k * Math.PI * 0.5 + rngFruit.Range(-0.18, 0.18);
+                            var tip = c + new Vec3(Math.Cos(a) * rx * 2.2, ry * 1.8, Math.Sin(a) * rx * 2.2);
+                            Primitives.Tube(plant, new[] { c, tip }, new[] { rx * 0.055, rx * 0.018 }, 3,
+                                (u, v) => (pale, 1, u, v, 0, 0));
+                        }
+                        break;
+                    }
+                    default:
+                        Primitives.Ellipsoid(plant, c, new Vec3(rx, ry, rx), 5, 8,
+                            (u, v) => (col, 1, u, v, 0, 0));
+                        break;
+                }
+            }
+            return plant;
+        }
+
         var rng = Rng.Keyed(seed, "flora.fruit." + sp.Id, 0);
         var m = new MeshData();
 

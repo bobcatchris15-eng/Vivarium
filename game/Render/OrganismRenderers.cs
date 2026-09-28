@@ -97,7 +97,7 @@ public partial class FloraRenderer : Node3D
                 if (OrganismMeshes.FloraFruiting(sp, seed) is { } fruit)
                 {
                     var fruitMat = (ShaderMaterial)mat.Duplicate();
-                    fruitMat.SetShaderParameter("surface_mode", 3);
+                    if (sp.Reproduction == null) fruitMat.SetShaderParameter("surface_mode", 3);
                     vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", Bridge.ToArrayMesh(fruit, fruitMat), castShadow);
                     vl.FruitTris = fruit.TriangleCount;
                     AddChild(vl.Fruit);
@@ -364,8 +364,11 @@ public partial class FloraRenderer : Node3D
             var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
             int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
             var vl = _layers[sp.Id].Variants[variant];
+            bool reproductiveFruit = sp.Reproduction != null
+                && f.FruitLoad > sp.Reproduction.MaxAttachedMass * 0.03
+                && f.ReproductiveStage is PlantReproductiveStage.Developing or PlantReproductiveStage.Ripe;
             var bucket = vl.Juvenile != null && (f.Stage(sp) == FloraStage.Juvenile || (sp.Climber != null && !f.ClimberAttached)) ? _juvenile
-                : f.Fruiting && vl.Fruit != null ? _fruit : _full;
+                : (f.Fruiting || reproductiveFruit) && vl.Fruit != null ? _fruit : _full;
             var bd = Get(bucket, MorphKey(sp.Id, variant)); bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
             visible++;
         }
