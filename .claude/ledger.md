@@ -57,7 +57,7 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | pl2 | phase field + rectification | DONE a2 | coherent sheet, waves, rectified drift; 8.4ms/600 nodes Debug (runs every 30 sim-s) ; K=0.001 |
 | pl3 | veins from shuttle Q, stress replaces Migrating | ABANDONED 09-28 (user) | worktree+branch deleted; tip was 8d058db (3 commits, 57/60) — recover from reflog if needed |
 | aq1 | algae/duckweed layers + advection + lab | MERGED e2a2b0d | 66/66 tests pass, 41/41 mainline GrowthLab pass, worktree removed |
-| aq2 | biofilm from algae, grazing, content, seeding | UNBLOCKED | ready for dispatch (depends on aq1) |
+| aq2 | biofilm from algae, grazing, content, seeding | READY TO MERGE task/aq2-biofilm bf40fe6 | main merged in; AquaticSystem depth -> open water (water-table-only cells were obstacles); 194/201, only main's 7 pre-existing fails; awaiting user OK for main |
 | aq3 | lily pad species + mesh | DONE a3 | round notched flat pads confirmed visually; a2: pads visible but lanceolate blades tilted on tall stalks, not round flat floating pads; | a1: tests pass, 14 plants; visual FAIL: only petioles visible, no pads on surface (suspect non-uniform depth scale/culling/below surface) |
 | aq4 | aquatic renderers | QUEUED | — |
 | pl4 | SpatialOrganism refactor + in-game slime migration | QUEUED | — |
@@ -106,6 +106,7 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 - D11 09-25: Clankers refuse packets spanning >~8 files / >2 subsystems (p1, gm-b both). Default packet size: one subsystem, ≤6 files, one validate.
 
 ## Unverified assumptions
+- main de3dd17 has 7 pre-existing test failures: LichenScenarios CrustEdenGrowsRound + FolioseLobes, FaunaTests EachSpecies (rainspine, moonveil, stiltclaw, stonebell, reedjaw). Not investigated.
 - Worktree seed/cost for Mode P with windowed Probe unmeasured.
 - de3dd17 only passed build + headless `--import` (clean, 2026-09-28). verify.ps1, reference capture and perf NOT run since the 83-commit pull; baseline/compare numbers predate surface-water and new species.
 
