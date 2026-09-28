@@ -29,7 +29,7 @@ public partial class FloraRenderer : Node3D
         public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris;
         public int MorphCount; public FloraVisualProfile? Profile;
         public Layer(int count, FloraVisualProfile? profile = null)
-        { MorphCount = count; Profile = profile; Variants = new VariantLayer[count * (profile == null ? 1 : 3)]; }
+        { MorphCount = count; Profile = profile; Variants = new VariantLayer[count * OrganismMeshes.FloraLodTiers]; }
     }
     private readonly Dictionary<EntityId, int> _visualTiers = new();
     private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
@@ -99,21 +99,24 @@ public partial class FloraRenderer : Node3D
             for (int v = 0; v < layer.Variants.Length; v++)
             {
                 int morph = v % layer.MorphCount;
-                int? tier = profile == null ? null : v / layer.MorphCount;
+                // Every species draws from cached geometric tiers (0 near .. 2 far), chosen per individual by
+                // projected screen size. Visual-profile species also switch their leaf tessellation tier.
+                int lod = v / layer.MorphCount;
+                int? tier = profile == null ? null : lod;
                 ulong seed = Rng.Mix(speciesSeed, (ulong)(morph + 1) * 0x9E3779B97F4A7C15UL);
-                var full = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: true) : OrganismMeshes.Flora(sp, seed, visualDetail: tier);
+                var full = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null);
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
                 bool castShadow = Quality >= 1 && canCastShadow;
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full);
                 if (sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null || profile != null && sp.Id == "umbraheart")
                 {
-                    var young = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: false) : OrganismMeshes.Flora(sp, seed, juvenile: true, visualDetail: tier);
+                    var young = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null);
                     vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", profile == null ? Bridge.ToArrayMesh(young, mat) : profile.Compile(young, mat, leafMat!), castShadow);
                     vl.JuvenileTris = young.TriangleCount;
                     AddChild(vl.Juvenile);
                 }
-                if (OrganismMeshes.FloraFruiting(sp, seed, tier) is { } fruit)
+                if (OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null) is { } fruit)
                 {
                     var fruitMat = (ShaderMaterial)mat.Duplicate();
                     if (sp.Reproduction == null) fruitMat.SetShaderParameter("surface_mode", 3);
@@ -345,7 +348,9 @@ public partial class FloraRenderer : Node3D
             {
                 // Multi-segment climber: each node is rendered at its exact 3D position and orientation
                 var cTint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
-                int cVariant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
+                int cTier = VisualTier(f.Id, pos, (float)Math.Max(h, 0.3), (float)Math.Max(r, 0.3));
+                if (cTier < 0) continue;
+                int cVariant = (int)((hash >> 8) % (ulong)_layers[sp.Id].MorphCount) + cTier * _layers[sp.Id].MorphCount;
                 for (int s = 0; s < segs.Count; s++)
                 {
                     var seg = segs[s];
@@ -409,7 +414,9 @@ public partial class FloraRenderer : Node3D
             var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
             var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
-            if (visualLayer.Profile != null) variant += VisualTier(f.Id, pos, (float)h) * visualLayer.MorphCount;
+            int lodTier = VisualTier(f.Id, pos, (float)h, (float)r);
+            if (lodTier < 0) continue; // sub-pixel: not drawn
+            variant += lodTier * visualLayer.MorphCount;
             var vl = _layers[sp.Id].Variants[variant];
             bool reproductiveFruit = sp.Reproduction != null
                 && f.FruitLoad > sp.Reproduction.MaxAttachedMass * 0.03
@@ -474,7 +481,9 @@ public partial class FloraRenderer : Node3D
             var custom = new Color((hash % 1000) / 1000f, 0f, 0f, ((hash >> 12) % 1000) / 1000f);
             var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
-            if (visualLayer.Profile != null) variant += VisualTier(dead.Id, pos, (float)h) * visualLayer.MorphCount;
+            int deadTier = VisualTier(dead.Id, pos, (float)h, (float)r);
+            if (deadTier < 0) continue;
+            variant += deadTier * visualLayer.MorphCount;
             var bd = Get(_full, MorphKey(sp.Id, variant));
             bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
             visible++;
@@ -557,15 +566,23 @@ public partial class FloraRenderer : Node3D
         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
     }
 
-    private int VisualTier(EntityId id, Vector3 position, float height)
+    // Projected diameters (px) below which an individual is not drawn; the gap is hysteresis.
+    private const float CullPixels = 2f, UncullPixels = 2.6f;
+
+    /// <summary>Geometric tier (0 near .. 2 far) from the projected bounding-sphere diameter, with hysteresis;
+    /// -1 when the individual projects smaller than ~2 px and is skipped.</summary>
+    private int VisualTier(EntityId id, Vector3 position, float height, float radius)
     {
         if (Camera == null) return 0;
         float viewport = Camera.GetViewport().GetVisibleRect().Size.Y;
+        float bound = 2f * MathF.Sqrt(radius * radius + height * height * .25f);
         float depth = Math.Max(.05f,(position + Vector3.Up * height * .5f - Camera.GlobalPosition).Dot(-Camera.GlobalBasis.Z));
         float pixels = Camera.Projection == Camera3D.ProjectionType.Orthogonal
-            ? height * viewport / Camera.Size
-            : height * viewport / (2f * depth * MathF.Tan(Mathf.DegToRad(Camera.Fov) * .5f));
-        int tier = FloraDetail.Select(pixels, _visualTiers.TryGetValue(id,out int old) ? old : -1);
+            ? bound * viewport / Camera.Size
+            : bound * viewport / (2f * depth * MathF.Tan(Mathf.DegToRad(Camera.Fov) * .5f));
+        bool had = _visualTiers.TryGetValue(id, out int old);
+        if (pixels < (had && old >= 0 ? CullPixels : UncullPixels)) { _visualTiers[id] = -1; return -1; }
+        int tier = FloraDetail.Select(pixels, had ? old : -1);
         _visualTiers[id] = tier;
         return tier;
     }
