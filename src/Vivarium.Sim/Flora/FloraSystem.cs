@@ -310,7 +310,7 @@ public sealed class FloraSystem
                     if (sp.Decomposer)
                     {
                         // digest dead matter; about half is respired/mineralized straight back into the soil
-                        double got = _w.Fields.Detritus.Take(cell, need);
+                        double got = _w.Litter.TakeForDecomposer(cell, need, sp.Decomposition);
                         grow *= need > 1e-15 ? got / need : 1;
                         double released = _w.Fields.Nutrients.Add(cell, got * 0.5);
                         _w.Tally.DetritusDecomposed += got;
@@ -332,7 +332,7 @@ public sealed class FloraSystem
                 f.Biomass *= Math.Exp(-sp.DeclineRate * severity * dt);
                 f.Health = Math.Max(0, f.Health - severity * dt / SimUnits.Day * (suit.HardRefused ? 1.0 : 0.35));
             }
-            // Shedding becomes visible surface litter first; microbes transfer it to detritus over time.
+            // Shedding enters the authoritative detritus pool immediately; rendering shows this same mass.
             if (sp.SheddingRate > 0)
             {
                 double shed = f.Biomass * (1 - Math.Exp(-sp.SheddingRate * dt));
@@ -491,20 +491,8 @@ public sealed class FloraSystem
     /// <summary>Distance between a patch of plasmodium and the growth-front patch it buds (m).</summary>
     public const double BudStep = 0.15;
 
-    /// <summary>
-    /// Total organic matter available to a decomposer at <paramref name="p"/>: the bioavailable
-    /// detritus field plus the fine surface-litter reservoir that has not yet been microbially
-    /// converted. Litter converts on a ~20 sim-day half-life; using this combined value stops the
-    /// plasmodium from ignoring a thick leaf-litter layer because the decay step has not yet moved
-    /// mass into <c>Fields.Detritus</c>.
-    /// </summary>
-    private double SampleDetritusPlusLitter(Vec2 p)
-    {
-        double detritus = _w.Fields.Detritus.Sample(p);
-        int cell = _w.Grid.NearestDomainCell(p);
-        double litter = cell >= 0 ? _w.Litter.FineMass[cell] : 0;
-        return detritus + litter;
-    }
+    /// <summary>Total visible detrital matter available to decomposers at <paramref name="p"/>.</summary>
+    private double SampleDetritusPlusLitter(Vec2 p) => _w.Litter.DetritusAt(p);
 
     private bool Creep(FloraIndividual f, FloraSpeciesDef sp, double dt, List<(FloraSpeciesDef Sp, Vec2 P)> births)
     {

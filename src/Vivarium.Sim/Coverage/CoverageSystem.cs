@@ -256,7 +256,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     {
         var p = CellCentre(gx, gz);
         int cell = _w.Grid.NearestDomainCell(p);
-        if (cell >= 0) _w.Fields.Detritus.Add(cell, amount);
+        if (cell >= 0) _w.Litter.Deposit(p, amount);
     }
 
     public void AddMoistureBonus(int gx, int gz, double amount)
@@ -388,7 +388,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         if (e.Moisture < 0.25) return false;
         int cell = _w.Grid.NearestDomainCell(p);
         if (cell < 0) return false;
-        double det = _w.Fields.Detritus[cell];
+        double det = _w.Litter.DetritusAt(cell);
         return det > 0.02;
     }
 
@@ -406,7 +406,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
             double angle = a * Math.PI * 0.25;
             Vec2 testP = p + new Vec2(Math.Cos(angle), Math.Sin(angle)) * (radiusCells * CoverageSpec.CellSize * 1.5);
             int domainCell = _w.Grid.NearestDomainCell(testP);
-            double val = domainCell >= 0 ? _w.Fields.Detritus[domainCell] * 2.0 + _w.Fields.Moisture.Sample(testP) : 0;
+            double val = domainCell >= 0 ? _w.Litter.DetritusAt(domainCell) * 2.0 + _w.Fields.Moisture.Sample(testP) : 0;
             if (val > bestVal)
             {
                 bestVal = val;
@@ -493,7 +493,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         var cells = _w.Grid.DomainCells;
         if (cells.Length == 0) return;
         var candidates = cells
-            .Select(c => (_w.Grid.CellCenter(c), _w.Fields.Detritus[c]))
+            .Select(c => (_w.Grid.CellCenter(c), _w.Litter.DetritusAt(c)))
             .Where(x => IsPlasmodiumSuitable(x.Item1))
             .OrderByDescending(x => x.Item2)
             .Select(x => x.Item1)
@@ -759,7 +759,7 @@ internal sealed class PlasmodiumWorldEnv : IPlasmodiumEnvironment
     {
         var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
         int cell = _w.Grid.NearestDomainCell(p);
-        return cell >= 0 ? _w.Fields.Detritus[cell] : 0;
+        return cell >= 0 ? _w.Litter.DetritusAt(cell) : 0;
     }
 
     public double TakeDetritus(int gx, int gz, double amount)
@@ -767,10 +767,6 @@ internal sealed class PlasmodiumWorldEnv : IPlasmodiumEnvironment
         var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
         int cell = _w.Grid.NearestDomainCell(p);
         if (cell < 0 || amount <= 0) return 0;
-        double current = _w.Fields.Detritus[cell];
-        if (current <= 0) return 0;
-        double taken = Math.Min(current, amount);
-        _w.Fields.Detritus[cell] = current - taken;
-        return taken;
+        return _w.Litter.TakeDetritus(cell, amount);
     }
 }

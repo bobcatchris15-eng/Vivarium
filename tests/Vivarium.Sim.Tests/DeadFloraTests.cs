@@ -72,8 +72,10 @@ public class DeadFloraTests
         var control = TestUtil.FlatWorld();
         var fungus = TestUtil.FlatWorld();
         var p = new Vec2(0, 0);
-        control.Fields.Detritus[control.Grid.NearestDomainCell(p)] = 0;
-        fungus.Fields.Detritus[fungus.Grid.NearestDomainCell(p)] = 0;
+        foreach (int c in control.Grid.DomainCells) control.Fields.Detritus[c] = 0;
+        control.Litter.Restore(new double[control.Grid.DomainCells.Length], new double[control.Grid.DomainCells.Length], new double[control.Grid.DomainCells.Length]);
+        foreach (int c in fungus.Grid.DomainCells) fungus.Fields.Detritus[c] = 0;
+        fungus.Litter.Restore(new double[fungus.Grid.DomainCells.Length], new double[fungus.Grid.DomainCells.Length], new double[fungus.Grid.DomainCells.Length]);
         control.Litter.Deposit(p, 1);
         fungus.Litter.Deposit(p, 1);
 
@@ -116,6 +118,8 @@ public class DeadFloraTests
     public void WoodyPostLifeProfileRoutesMostCorpseMassToCoarseLitter()
     {
         var w = TestUtil.FlatWorld();
+        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0;
+        w.Litter.Restore(new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length]);
         var sp = w.Content.FloraOrThrow("ironlace");
         Assert.NotNull(sp.PostLife);
         Assert.True(sp.PostLife!.CoarseFraction > 0.75);

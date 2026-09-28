@@ -11,34 +11,36 @@ namespace Vivarium.Sim.Tests;
 public class EcologyTests
 {
     [Fact] // t-117
-    public void FloraAndFaunaDeathShareOneDetritusPathwayWithoutDoubleCounting()
+    public void FloraAndFaunaDeathFeedTheSameVisibleDetritusCycle()
     {
         var w = TestUtil.FlatWorld(17);
         var fl = w.FloraSystem.Establish(TestUtil.Content.FloraOrThrow("coinrunner"), new Vec2(2, 1), "t", 0.8);
         var fa = w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), new Vec2(2, -1));
-        double d0 = w.Fields.Detritus.Total();
-        w.FloraSystem.Kill(fl, "t"); w.FaunaSystem.Kill(fa, "t");
-        double d1 = w.Fields.Detritus.Total();
-        Assert.Equal(w.Tally.DetritusFromFlora + w.Tally.DetritusFromFauna, d1 - d0, 12);
-        Assert.True(w.Tally.DetritusFromFlora > 0 && w.Tally.DetritusFromFauna > 0);
-        // detritus decays into nutrients through the same pathway
+        double d0 = w.Litter.TotalDetritus();
+        w.FloraSystem.Kill(fl, "t");
+        w.FaunaSystem.Kill(fa, "t");
+        Assert.True(w.Litter.TotalDetritus() > d0, "fauna carcass should enter visible detritus immediately");
+        Assert.NotEmpty(w.DeadFlora.Items);
+        w.DeadFloraSystem.Step(15 * SimUnits.Day);
+        double d1 = w.Litter.TotalDetritus();
+        Assert.True(d1 > d0);
+        Assert.True(w.Tally.CorpseToLitter > 0);
         double n0 = w.Fields.Nutrients.Total();
-        w.Ecology.StepResources(86400);
-        Assert.True(w.Fields.Detritus.Total() < d1);
+        w.Litter.Step(20 * SimUnits.Day);
+        Assert.True(w.Litter.TotalDetritus() < d1);
         Assert.True(w.Fields.Nutrients.Total() > n0 - 1e-9);
         Assert.True(w.Tally.NutrientsFromDecay > 0);
     }
-
     [Fact] // t-118
     public void SpringtailsGainEnergyByProcessingDetritus()
     {
         var w = FaunaFixtures.PondWorld(detritus: 1.0);
         var st = Enumerable.Range(0, 10).Select(i => w.FaunaSystem.CreateFounder(FaunaFixtures.Sp("prismhopper"), FaunaFixtures.Land + new Vec2(0.03 * i, 0))).ToList();
         foreach (var s in st) s.Energy = 0.3;
-        double det = w.Fields.Detritus.Total();
+        double det = w.Litter.TotalDetritus();
         for (int i = 0; i < 200; i++) w.FaunaSystem.StepMetabolism(30);
         Assert.All(st, s => Assert.True(s.Energy > 0.3));
-        Assert.True(w.Fields.Detritus.Total() < det);
+        Assert.True(w.Litter.TotalDetritus() < det);
     }
 
     [Fact] // t-119
@@ -232,13 +234,15 @@ public class ToolTests
     {
         var (w, t) = Setup();
         var f = w.FloraSystem.Establish(w.Content.FloraOrThrow("prismstar"), new Vec2(2, 2), "t", 0.5);
-        double det = w.Fields.Detritus.Total();
+        double det = w.Litter.TotalDetritus();
         Assert.True(t.RemovePlant(f.Id).Ok);
         Assert.Null(w.Flora.Get(f.Id));
-        double after = w.Fields.Detritus.Total();
+        Assert.NotNull(w.DeadFlora.Get(f.Id));
+        w.DeadFloraSystem.Step(15 * SimUnits.Day);
+        double after = w.Litter.TotalDetritus();
         Assert.True(after > det);
         Assert.False(t.RemovePlant(f.Id).Ok);
-        Assert.Equal(after, w.Fields.Detritus.Total());
+        Assert.Equal(after, w.Litter.TotalDetritus());
         w.FloraSystem.Step(600);   // no longer participates
         Assert.DoesNotContain(w.Flora.Items, x => x.Id == f.Id);
     }

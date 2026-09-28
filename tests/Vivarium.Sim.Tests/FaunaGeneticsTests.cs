@@ -21,7 +21,10 @@ public static class FaunaFixtures
         foreach (int c in w.Grid.DomainCells)
         {
             w.Fields.Moisture[c] = w.Water.IsWet(c) ? 1 : 0.7;
-            w.Fields.Detritus[c] = detritus;
+            w.Fields.Detritus[c] = 0;
+            w.Litter.FineMass[c] = detritus;
+            w.Litter.CoarseMass[c] = 0;
+            w.Litter.FruitMass[c] = 0;
             if (w.Water.IsWet(c)) { w.Fields.Biofilm[c] = biofilm; w.Fields.Plankton[c] = plankton; }
         }
         return w;
@@ -105,12 +108,12 @@ public class FaunaTests
         for (int i = 0; i < 20; i++) w.FaunaSystem.StepMetabolism(30);
         double hungry = f.Energy;
         Assert.True(hungry < 0.5, "energy is consumed over simulated time");
-        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 2;
+        foreach (int c in w.Grid.DomainCells) { w.Fields.Detritus[c] = 0; w.Litter.FineMass[c] = 2; w.Litter.CoarseMass[c] = 0; w.Litter.FruitMass[c] = 0; }
         int cell = w.Grid.CellAt(f.PositionXZ);
-        double food = w.Fields.Detritus[cell];
+        double food = w.Litter.FineMass[cell];
         for (int i = 0; i < 40; i++) w.FaunaSystem.StepMetabolism(30);
         Assert.True(f.Energy > hungry, "feeding replenishes energy");
-        Assert.True(w.Fields.Detritus[cell] < food, "feeding consumes the resource");
+        Assert.True(w.Litter.FineMass[cell] < food, "feeding consumes visible leaf litter");
         Assert.InRange(f.Energy, 0, Sp("prismhopper").MaxEnergy);
         // invalid diet targets are rejected by content validation
         var src = new OverlayContentSource(TestUtil.ContentSource);
@@ -127,13 +130,13 @@ public class FaunaTests
         var prey = w.FaunaSystem.CreateFounder(Sp("dewmantle"), FaunaFixtures.Land + new Vec2(0.03, 0), 0.5);
         hunter.Energy = 0.2;
         double before = hunter.Energy;
-        double detritus = w.Fields.Detritus.Total();
+        double detritus = w.Litter.TotalDetritus();
 
         w.FaunaSystem.StepMetabolism(3600);
 
         Assert.Null(w.Fauna.Get(prey.Id));
         Assert.True(hunter.Energy > before);
-        Assert.True(w.Fields.Detritus.Total() > detritus);
+        Assert.True(w.Litter.TotalDetritus() > detritus);
         Assert.True(w.Tally.Of("dewmantle").Deaths > 0);
     }
 
@@ -219,15 +222,15 @@ public class FaunaTests
         var sp = Sp("siltshield");
         var f = w.FaunaSystem.CreateFounder(sp, FaunaFixtures.Pond, ageFraction: 0.99);
         f.LifespanFactor = 1;
-        double det0 = w.Fields.Detritus.Total();
+        double det0 = w.Litter.TotalDetritus();
         int steps = 0;
         while (w.Fauna.Get(f.Id) != null && steps++ < 100) { w.FaunaSystem.StepLifecycle(300); w.Clock.Tick += 30; }
         Assert.Null(w.Fauna.Get(f.Id));
         Assert.Equal("old age", w.Lineage.Get(f.Id)!.DeathCause);
         double expected = sp.MassAtMid * w.FaunaSystem.PhenotypeOf(f).MassScale * sp.DetritusOnDeath;
-        Assert.Equal(expected, w.Fields.Detritus.Total() - det0, 9);
+        Assert.Equal(expected, w.Litter.TotalDetritus() - det0, 9);
         Assert.False(w.FaunaSystem.Kill(f, "again"));
-        Assert.Equal(expected, w.Fields.Detritus.Total() - det0, 9);
+        Assert.Equal(expected, w.Litter.TotalDetritus() - det0, 9);
     }
 
     [Fact] // t-099

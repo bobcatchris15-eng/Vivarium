@@ -11,7 +11,8 @@ public class LitterTests
     public void DepositSpreadsWithoutCreatingOrLosingMass()
     {
         var w = TestUtil.FlatWorld();
-        Assert.All(w.Litter.ExportFine(), mass => Assert.Equal(0, mass));
+        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0;
+        w.Litter.Restore(new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length]);
         var p = new Vec2(0, 0);
         Assert.Equal(0.7, w.Litter.Deposit(p, 0.5, 0.2, 0.8), 10);
         Assert.Equal(0.5, w.Litter.ExportFine().Sum(), 10);
@@ -21,25 +22,42 @@ public class LitterTests
     }
 
     [Fact]
-    public void BreakdownTransfersOnlyWhatDetritusCanAccept()
+    public void BreakdownMineralizesVisibleDetritusDirectly()
     {
         var w = TestUtil.FlatWorld();
         var p = new Vec2(0, 0);
         int cell = w.Grid.NearestDomainCell(p);
         w.Fields.Detritus[cell] = 0;
+        w.Fields.Nutrients[cell] = 0;
         w.Litter.Deposit(p, 1, 0.5);
-        w.Litter.Step(SimUnits.Day);
-        double remaining = w.Litter.FineMass[cell] + w.Litter.CoarseMass[cell];
-        Assert.True(remaining < 1.5);
-        Assert.Equal(1.5, remaining + w.Fields.Detritus[cell], 10);
-        Assert.Equal(w.Fields.Detritus[cell], w.Tally.LitterToDetritus, 10);
+        double before = w.Litter.DetritusAt(cell);
 
-        w.Fields.Detritus[cell] = w.Fields.Detritus.Max;
-        double before = w.Litter.FineMass[cell] + w.Litter.CoarseMass[cell];
         w.Litter.Step(SimUnits.Day);
-        Assert.Equal(before, w.Litter.FineMass[cell] + w.Litter.CoarseMass[cell], 10);
+
+        Assert.True(w.Litter.DetritusAt(cell) < before);
+        Assert.True(w.Fields.Nutrients[cell] > 0);
+        Assert.Equal(0, w.Fields.Detritus[cell]);
+        Assert.True(w.Tally.NutrientsFromDecay > 0);
     }
 
+    [Fact]
+    public void DetritivoreTakeConsumesVisibleFineLitter()
+    {
+        var w = TestUtil.FlatWorld();
+        var p = new Vec2(0, 0);
+        int cell = w.Grid.NearestDomainCell(p);
+        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0;
+        w.Litter.Restore(new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length]);
+        w.Litter.Deposit(p, 0.8, 0.4);
+        double fine0 = w.Litter.FineMass[cell];
+        double coarse0 = w.Litter.CoarseMass[cell];
+
+        double got = w.Litter.TakeDetritus(cell, 0.25);
+
+        Assert.Equal(0.25, got, 10);
+        Assert.Equal(fine0 - 0.25, w.Litter.FineMass[cell], 10);
+        Assert.Equal(coarse0, w.Litter.CoarseMass[cell], 10);
+    }
     [Fact]
     public void FineAndCoarseLitterRoundTripExactly()
     {

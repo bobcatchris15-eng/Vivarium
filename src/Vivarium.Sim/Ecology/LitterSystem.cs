@@ -6,8 +6,8 @@ using Vivarium.Sim.World;
 namespace Vivarium.Sim.Ecology;
 
 /// <summary>
-/// Visible surface organic matter between living flora and bioavailable detritus. Mass is stored on the
-/// environment grid; close litter pieces are a deterministic rendering of these reservoirs, never entities.
+/// Authoritative detritus reservoir. Fine litter, coarse litter/deadwood, and fruit are the actual organic
+/// food pools consumed by detritivores and decomposers; rendering is a deterministic view of this same mass.
 /// </summary>
 public sealed class LitterSystem
 {
@@ -83,10 +83,14 @@ public sealed class LitterSystem
         return mass;
     }
 
-    /// <summary>Baseline microbial breakdown. Detritus capacity limits transfer, preserving excess litter mass.</summary>
+    /// <summary>
+    /// Baseline microbial mineralization of the visible detritus pools. Decay removes litter directly and
+    /// releases its nutrient yield to soil; there is no hidden intermediate detritus reservoir.
+    /// </summary>
     public void Step(double dt)
     {
         if (!(dt > 0) || !double.IsFinite(dt)) return;
+        MigrateLegacyDetritus();
         bool changed = false;
         foreach (int idx in _world.Grid.DomainCells)
         {
@@ -104,8 +108,8 @@ public sealed class LitterSystem
                 FineMass[idx] += rotted;
                 if (rotted > 0) { _world.Tally.FruitToLitter += rotted; changed = true; }
             }
-            changed |= Decay(FineMass, idx, Math.Log(2) / (20 * SimUnits.Day) * environment * bonus.Fine, dt);
-            changed |= Decay(CoarseMass, idx, Math.Log(2) / (140 * SimUnits.Day) * environment * bonus.Coarse, dt);
+            changed |= Mineralize(FineMass, idx, Math.Log(2) / (20 * SimUnits.Day) * environment * bonus.Fine, dt);
+            changed |= Mineralize(CoarseMass, idx, Math.Log(2) / (140 * SimUnits.Day) * environment * bonus.Coarse, dt);
         }
         if (changed) Revision++;
     }
@@ -135,16 +139,93 @@ public sealed class LitterSystem
         return (Math.Clamp(fine, 0.1, 4.0), Math.Clamp(coarse, 0.1, 4.0), Math.Clamp(fruit, 0.1, 4.0));
     }
 
-    private bool Decay(double[] mass, int idx, double rate, double dt)
+    private bool Mineralize(double[] mass, int idx, double rate, double dt)
     {
         double current = mass[idx];
         if (current <= 0) return false;
-        double desired = current * (1 - Math.Exp(-rate * dt));
-        double transferred = _world.Fields.Detritus.Add(idx, desired);
-        if (transferred <= 0) return false;
-        mass[idx] = Math.Max(0, current - transferred);
-        _world.Tally.LitterToDetritus += transferred;
+        double decomposed = current * (1 - Math.Exp(-rate * dt));
+        if (decomposed <= 0) return false;
+        mass[idx] = Math.Max(0, current - decomposed);
+        double nutrients = _world.Fields.Nutrients.Add(idx, decomposed * _world.Content.Ecology.DetritusNutrientYield);
+        _world.Tally.NutrientsFromDecay += nutrients;
         return true;
+    }
+
+    /// <summary>Total visible detrital mass at a cell. Legacy scalar detritus is migrated into fine litter on access.</summary>
+    public double DetritusAt(int idx)
+    {
+        if (idx < 0 || idx >= FineMass.Length) return 0;
+        MigrateLegacyCell(idx);
+        return FineMass[idx] + CoarseMass[idx] + FruitMass[idx];
+    }
+
+    public double DetritusAt(Vec2 p) => DetritusAt(_world.Grid.NearestDomainCell(p));
+
+    /// <summary>Total detrital mass, including any not-yet-migrated legacy scalar detritus.</summary>
+    public double TotalDetritus()
+    {
+        double total = 0;
+        foreach (int idx in _world.Grid.DomainCells)
+            total += FineMass[idx] + CoarseMass[idx] + FruitMass[idx] + Math.Max(0, _world.Fields.Detritus.Values[idx]);
+        return total;
+    }
+
+    /// <summary>
+    /// Detritivore feeding path. Fine leaf litter is eaten first, then soft fruit residue. Coarse deadwood is
+    /// excluded here; specialist decomposers consume it through <see cref="TakeForDecomposer"/>.
+    /// </summary>
+    public double TakeDetritus(int idx, double amount)
+    {
+        if (idx < 0 || idx >= FineMass.Length || amount <= 0 || !double.IsFinite(amount)) return 0;
+        MigrateLegacyCell(idx);
+        double got = TakeFrom(FineMass, idx, amount);
+        got += TakeFrom(FruitMass, idx, amount - got);
+        if (got > 0) Revision++;
+        return got;
+    }
+
+    /// <summary>Consumes detritus according to a decomposer's material specialization.</summary>
+    public double TakeForDecomposer(int idx, double amount, DecomposerProfileDef? profile)
+    {
+        if (idx < 0 || idx >= FineMass.Length || amount <= 0 || !double.IsFinite(amount)) return 0;
+        MigrateLegacyCell(idx);
+        var pools = new (double Weight, double[] Pool)[]
+        {
+            (Math.Max(0.05, profile?.FineMultiplier ?? 1), FineMass),
+            (Math.Max(0.05, profile?.FruitMultiplier ?? 1), FruitMass),
+            (Math.Max(0.05, profile?.CoarseMultiplier ?? 1), CoarseMass),
+        };
+        Array.Sort(pools, (a, b) => b.Weight.CompareTo(a.Weight));
+        double got = 0;
+        foreach (var entry in pools)
+        {
+            got += TakeFrom(entry.Pool, idx, amount - got);
+            if (got >= amount - 1e-15) break;
+        }
+        if (got > 0) Revision++;
+        return got;
+    }
+
+    private static double TakeFrom(double[] pool, int idx, double amount)
+    {
+        if (amount <= 0) return 0;
+        double take = Math.Min(Math.Max(0, pool[idx]), amount);
+        pool[idx] -= take;
+        return take;
+    }
+
+    private void MigrateLegacyCell(int idx)
+    {
+        double legacy = _world.Fields.Detritus.Values[idx];
+        if (!(legacy > 0)) return;
+        FineMass[idx] += legacy;
+        _world.Fields.Detritus[idx] = 0;
+        Revision++;
+    }
+
+    private void MigrateLegacyDetritus()
+    {
+        foreach (int idx in _world.Grid.DomainCells) MigrateLegacyCell(idx);
     }
 
     public void Restore(double[] fine, double[] coarse, double[]? fruit = null)

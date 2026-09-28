@@ -130,7 +130,7 @@ public static class CoverageEnvironment
         double humidity = SampleHumidity(w, p, moisture, waterDist);
         double light = SampleLight(w, p, candidateFlora);
         double nutrients = w.Fields.Nutrients.Sample(p);
-        double detritus = w.Fields.Detritus.Sample(p);
+        double detritus = w.Litter.DetritusAt(p);
         var substrate = ClassifySubstrate(w, p, now);
         double slope;
         Vec2 downslope;

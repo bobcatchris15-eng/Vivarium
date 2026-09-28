@@ -71,7 +71,7 @@ public class CoverageSystemTests
             Assert.True(w.Content.FloraById(id)?.IsCoverageSpecies);
         }
         Assert.Null(w.CoverageSystem.SpeciesId(CoverageLayerId.Mat, 0));
-        Assert.Null(w.CoverageSystem.SpeciesId(CoverageLayerId.Plasmodium, 1));
+        Assert.Equal("ambervein", w.CoverageSystem.SpeciesId(CoverageLayerId.Plasmodium, 1));
     }
 
     [Fact]

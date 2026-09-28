@@ -50,13 +50,14 @@ public class ReproductionTests
         var p = new Vec2(0, 0);
         int c = w.Grid.NearestDomainCell(p);
         w.Litter.DepositFruit(p, 1);
-        double before = w.Litter.FruitMass[c] + w.Litter.FineMass[c] + w.Fields.Detritus[c];
+        double nutrient0 = w.Fields.Nutrients[c];
 
         w.Litter.Step(6 * SimUnits.Day);
 
         Assert.True(w.Litter.FruitMass[c] < 1);
         Assert.True(w.Litter.FineMass[c] > 0);
-        Assert.Equal(before, w.Litter.FruitMass[c] + w.Litter.FineMass[c] + w.Fields.Detritus[c], 10);
+        Assert.True(w.Fields.Nutrients[c] > nutrient0);
+        Assert.Equal(0, w.Fields.Detritus[c]);
     }
 
     [Fact]

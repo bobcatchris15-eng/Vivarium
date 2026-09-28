@@ -91,7 +91,7 @@ public static class EcosystemStatistics
             if (w.Water.IsWet(w.Grid.DomainCells[i])) wet++;
 
         return new EcosystemStats(w.Clock.BioDays, flora, fauna,
-            w.Fields.Moisture.Mean(), w.Fields.Nutrients.Mean(), w.Fields.Detritus.Total(), w.Water.Volume(),
+            w.Fields.Moisture.Mean(), w.Fields.Nutrients.Mean(), w.Litter.TotalDetritus(), w.Water.Volume(),
             (double)wet / Math.Max(1, w.Grid.DomainCells.Length), w.Fields.Light.Mean(), w.Lineage.Count, w.Genomes.Count);
     }
 }

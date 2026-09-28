@@ -274,6 +274,12 @@ public sealed class FaunaSystem
                 best = Math.Max(best, MathD.Clamp01(count / 3.0));
                 continue;
             }
+            if (d.Resource == "detritus")
+            {
+                double detritus = _w.Litter.DetritusAt(p);
+                best = Math.Max(best, MathD.Clamp01(detritus / Math.Max(C.Ecology.DetritusMax * 0.25, 1e-9)));
+                continue;
+            }
             var field = _w.Fields.Resource(d.Resource);
             if (field != null) best = Math.Max(best, MathD.Clamp01(field.Sample(p) / Math.Max(field.Max * 0.25, 1e-9)));
         }
@@ -325,6 +331,10 @@ public sealed class FaunaSystem
             double got;
             if (d.Resource.StartsWith("flora:", StringComparison.Ordinal)) got = GrazeFlora(p, d.Resource[6..], want);
             else if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal)) got = GrazeFauna(f, sp, d.Resource[6..], want);
+            else if (d.Resource == "detritus")
+            {
+                got = _w.Litter.TakeDetritus(cell, want);
+            }
             else
             {
                 var field = _w.Fields.Resource(d.Resource);
@@ -374,7 +384,7 @@ public sealed class FaunaSystem
         double take = Math.Min(want, biomass);
         if (take <= 0) return 0;
 
-        // Predation consumes part of the prey's organic mass and returns the uneaten remainder to detritus.
+        // Predation consumes part of the prey's organic mass and returns the uneaten remainder to visible detritus.
         double organic = biomass * preySp.DetritusOnDeath;
         _predationDeaths[prey.Id] = ($"predation:{hunter.SpeciesId}", Math.Max(0, organic - take));
         prey.Energy = 0;
