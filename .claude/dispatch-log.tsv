@@ -4,3 +4,5 @@
 2026-09-28T18:36:08Z	covfix	impl-worker	sonnet	1	160	14	1	PASS EXC 0	700
 2026-09-28T19:18:34Z	rivulet	impl-worker	opus	4	-	-	1	PASS	2400
 2026-09-28T19:19:44Z	hydroslope	impl-worker	sonnet	2	470	18	3	FAIL(packet wrong)	1500
+2026-09-28T19:32:55Z	lod2	impl-worker	opus	7	751	45	1	PASS	3000
+2026-09-28T20:20:20Z	notrees	impl-worker	opus	40	3667	124	2	PASS(after 2 test fixes by orchestrator)	2500
