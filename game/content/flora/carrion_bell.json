@@ -77,7 +77,8 @@
     "fungus",
     "stinkhorn",
     "decomposer",
-    "carrion_attractor"
+    "carrion_attractor",
+    "no_ambient_spore_rain"
   ],
   "decomposition": {
     "radius": 0.5,
