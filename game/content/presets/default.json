@@ -217,6 +217,42 @@
     {
       "species": "ringreed",
       "count": 8
+    },
+    {
+      "species": "kinkcane",
+      "count": 3
+    },
+    {
+      "species": "veilblade",
+      "count": 4
+    },
+    {
+      "species": "hookthicket",
+      "count": 3
+    },
+    {
+      "species": "blue_sundew",
+      "count": 5
+    },
+    {
+      "species": "pitcher_plant",
+      "count": 5
+    },
+    {
+      "species": "snaptrap",
+      "count": 6
+    },
+    {
+      "species": "rain_jelly",
+      "count": 5
+    },
+    {
+      "species": "carrion_bell",
+      "count": 3
+    },
+    {
+      "species": "glass_antlers",
+      "count": 4
     }
   ],
   "starterFauna": [
