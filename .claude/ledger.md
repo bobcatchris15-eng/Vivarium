@@ -130,3 +130,14 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 - Unmerged remote branches: chatgpt/visual-breaks-carnivores-fungi, ci/baseline-main-visual-species, feature/woody-flora, flora-tool-groups (fauna-animation-families/fictional-ecology tips may also have moved on).
 - Worktrees mat2a, gravel-blend, vine-form, pl3 removed 09-28. Only aq2-biofilm remains: 4 commits ahead, 93 behind main; trial merge conflicts in Ecology.cs, FaunaSystem.cs, VivariumWorld.cs (hydrology wiring vs surface-water refactor).
 - Next: run verify.ps1 + fresh reference capture at de3dd17 before new dispatches; new species need critic pass.
+
+## Effort: aging-perf (2026-09-28)
+Objective: keep FPS >=30 on 860M as a vivarium ages. Measured (build/aged, default preset + user save): prims 4.7M@d0 -> 89M@d90 linear in flora (~20k tris/plant, draws flat ~600) -> 6 fps. Coverage renderer max 13->147 ms. Aquatic 42-47 ms spikes (age-independent). Hydrology 27 ms on user save (post-114beba 10 s sub-step cap).
+- D-ap1: all five fixes, Mode P x3: lod (flora distance tiers + sub-pixel/inner-layer cull), cov (incremental coverage rebuild), simperf (aquatic amortize + hydrology adaptive substeps). Clankers do build+tests only; orchestrator runs paired GPU perf serially after merge (GPU shared => concurrent perf is noise, D14).
+- Gate: build/aged/run-perf.sh with ABSOLUTE save paths (relative --load silently makes a fresh world).
+| id | targets | status | attempts | last return line |
+|----|---------|--------|----------|------------------|
+| lod | OrganismRenderers.cs OrganismMeshes*.cs FloraVisualProfile.cs | DISPATCHED | 0 | |
+| cov | CoverageRenderer.cs | DISPATCHED | 0 | |
+| simperf | AquaticSystem.cs Aquatic/*Rules.cs Hydrology.cs | DISPATCHED | 0 | |
+Unverified: hydrology cost on user save caused by 114beba (not yet profiled before/after).
