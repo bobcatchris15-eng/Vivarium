@@ -55,7 +55,7 @@ S0 baseline+harness (C0,C16) → S1 form-language kernel + per-individual variat
 | g8b | superseded by Pl-4 | — | — |
 | pl1 | local mass + conservative transport | DONE | far end drains toward food w/o steering; exact conservation; setups retuned (two_food gamma/qgain, starve thresholds) |
 | pl2 | phase field + rectification | DONE a2 | coherent sheet, waves, rectified drift; 8.4ms/600 nodes Debug (runs every 30 sim-s) ; K=0.001 |
-| pl3 | veins from shuttle Q, stress replaces Migrating | IN PROGRESS wt pl3 | 57/60 pass; 3 fail; Foraging.cs boundary retraction fix underway |
+| pl3 | veins from shuttle Q, stress replaces Migrating | ABANDONED 09-28 (user) | worktree+branch deleted; tip was 8d058db (3 commits, 57/60) — recover from reflog if needed |
 | aq1 | algae/duckweed layers + advection + lab | MERGED e2a2b0d | 66/66 tests pass, 41/41 mainline GrowthLab pass, worktree removed |
 | aq2 | biofilm from algae, grazing, content, seeding | UNBLOCKED | ready for dispatch (depends on aq1) |
 | aq3 | lily pad species + mesh | DONE a3 | round notched flat pads confirmed visually; a2: pads visible but lanceolate blades tilted on tall stalks, not round flat floating pads; | a1: tests pass, 14 plants; visual FAIL: only petioles visible, no pads on surface (suspect non-uniform depth scale/culling/below surface) |
@@ -127,5 +127,5 @@ Fauna mid-grade: springtail readable but toy-like; aquatic fauna invisible speck
 - Ground filler gets real blades/stalks; visible litter is now the detritus food pool; coverage caches persisted across save/load.
 - Merged branches: fictional-ecology, vine-form, fauna-animation-families, codex/photorealism, local flora visuals + fauna motion.
 - Unmerged remote branches: chatgpt/visual-breaks-carnivores-fungi, ci/baseline-main-visual-species, feature/woody-flora, flora-tool-groups (fauna-animation-families/fictional-ecology tips may also have moved on).
-- Stale local worktrees for already-merged branches: mat2a, gravel-blend, vine-form -> remove. Still live: aq2-biofilm, pl3.
+- Worktrees mat2a, gravel-blend, vine-form, pl3 removed 09-28. Only aq2-biofilm remains: 4 commits ahead, 93 behind main; trial merge conflicts in Ecology.cs, FaunaSystem.cs, VivariumWorld.cs (hydrology wiring vs surface-water refactor).
 - Next: run verify.ps1 + fresh reference capture at de3dd17 before new dispatches; new species need critic pass.
