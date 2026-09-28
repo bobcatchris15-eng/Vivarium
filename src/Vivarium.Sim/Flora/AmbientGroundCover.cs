@@ -49,7 +49,7 @@ public sealed class AmbientGroundCoverSystem
     {
         if (!_w.Grid.InDomain(idx)) return 0;
         var p = _w.Grid.CellCenter(idx);
-        if (_w.SubstrateAtCell(p) != Substrate.Soil || _w.Water.DepthAt(p) > 0.006) return 0;
+        if (_w.SubstrateAtCell(p) != Substrate.Soil || _w.Water.OpenWaterDepth(p) > 0.006) return 0;
 
         double moisture = MathD.Clamp01(_w.Fields.Moisture.Values[idx]);
         double light = MathD.Clamp01(_w.FloraSystem.EffectiveLightCell(idx));

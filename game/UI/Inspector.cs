@@ -214,6 +214,6 @@ public partial class Inspector : GlassPanel
         var p = _sel.Point.XZ;
         _title.Text = _sel.Kind == HitKind.Water ? "Water" : "Ground";
         var layer = w.Strata.Layers[0];
-        return $"Position ({p.X:0.00}, {p.Z:0.00}) · elevation {w.SurfaceHeight(p):0.00} m\nSubstrate {SubstrateIds.Id(w.SubstrateAt(p))}\nSurface stratum: {layer.Name}\nWater depth {w.Water.DepthAt(p) * 100:0.0} cm";
+        return $"Position ({p.X:0.00}, {p.Z:0.00}) · elevation {w.SurfaceHeight(p):0.00} m\nSubstrate {SubstrateIds.Id(w.SubstrateAt(p))}\nSurface stratum: {layer.Name}\nWater depth {w.Water.OpenWaterDepth(p) * 100:0.0} cm";
     }
 }

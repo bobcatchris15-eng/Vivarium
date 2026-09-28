@@ -185,10 +185,10 @@ public static class CoverageEnvironment
     /// <summary>Water within 3 cm of p (own cell or a small ring around it) saturates the ground (§2).</summary>
     private static bool HasNearbySeepage(VivariumWorld w, Vec2 p)
     {
-        if (w.Water.DepthAt(p) > 0) return true;
+        if (w.Water.OpenWaterDepth(p) > 0) return true;
         for (int k = 0; k < SeepageOffsets.Length; k++)
         {
-            if (w.Water.DepthAt(p + SeepageOffsets[k]) > 0) return true;
+            if (w.Water.OpenWaterDepth(p + SeepageOffsets[k]) > 0) return true;
         }
         return false;
     }

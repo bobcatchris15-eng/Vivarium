@@ -234,7 +234,7 @@ public class ToolTests
         Assert.True(good.Ok, good.Message);
         Assert.Equal(id, shrimp.Id); Assert.Equal(genome, shrimp.GenomeId);
         Assert.False(shrimp.Grabbed);
-        Assert.True(w.Water.DepthAt(shrimp.PositionXZ) >= FaunaFixtures.Sp("emberglass_swimmer").MinWaterDepth);
+        Assert.True(w.Water.OpenWaterDepth(shrimp.PositionXZ) >= FaunaFixtures.Sp("emberglass_swimmer").MinWaterDepth);
         Assert.True(t.Grab(id).Ok);
         Assert.True(t.ReturnHeld(id, origin).Ok);
     }

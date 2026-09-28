@@ -127,7 +127,7 @@ public partial class SmokeRunner : Node
     private Vec2 DeepestWater() { var c = W.Grid.DomainCells.OrderByDescending(i => W.Water.Depth[i]).First(); return W.Grid.CellCenter(c); }
 
     private Vec2 DryLand(Func<Vec2, bool>? extra = null) =>
-        W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).First(p => !W.Water.IsWet(p) && W.Domain.ContainsDisc(p, 1.5) && double.IsNaN(W.Props.PropTopAt(p)) && W.Props.GravelAt(p) == null && (extra?.Invoke(p) ?? true) && W.Water.DepthAt(p + new Vec2(0.6, 0)) < 0.001);
+        W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c)).First(p => !W.Water.IsWet(p) && W.Domain.ContainsDisc(p, 1.5) && double.IsNaN(W.Props.PropTopAt(p)) && W.Props.GravelAt(p) == null && (extra?.Invoke(p) ?? true) && W.Water.OpenWaterDepth(p + new Vec2(0.6, 0)) < 0.001);
 
     // ------------------------------------------------------------------ smoke
 

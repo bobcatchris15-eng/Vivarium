@@ -53,7 +53,7 @@ public sealed class FaunaSystem
     public FaunaSuitability Suitability(FaunaSpeciesDef sp, Vec2 p)
     {
         if (!_w.Domain.ContainsDisc(p, 0.03)) return new FaunaSuitability { HardRefused = true, RefusalReason = "outside the island" };
-        double depth = _w.Water.DepthAt(p);
+        double depth = _w.Water.OpenWaterDepth(p);
         double moisture = _w.Fields.Moisture.Sample(p);
         var sub = _w.SubstrateAtCell(p);
         if (sp.Flies)
@@ -84,7 +84,7 @@ public sealed class FaunaSystem
         if (sp.Flies) return _w.GroundHeight(p) + Math.Max(0.14, sp.VisualScale * (sp.SizeMin + sp.SizeMax) * 0.8);
         if (sp.Medium == Medium.Aquatic)
         {
-            double bed = _w.Terrain.Height(p), depth = _w.Water.DepthAt(p);
+            double bed = _w.Terrain.Height(p), depth = _w.Water.OpenWaterDepth(p);
             double margin = Math.Min(0.01, depth * 0.25);
             return bed + margin + MathD.Clamp01(columnFraction) * Math.Max(0, depth - 2 * margin);
         }
@@ -217,7 +217,7 @@ public sealed class FaunaSystem
     {
         if (!_w.Domain.ContainsDisc(q, 0.04)) return false;
         if (sp.Flies) return true;
-        double depth = _w.Water.DepthAt(q);
+        double depth = _w.Water.OpenWaterDepth(q);
         if (sp.Medium == Medium.Aquatic) return depth >= sp.MinWaterDepth;
         return depth <= sp.MaxWaterDepth || !double.IsNaN(_w.Props.PropTopAt(q));
     }

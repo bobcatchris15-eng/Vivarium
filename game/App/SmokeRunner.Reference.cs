@@ -135,7 +135,7 @@ public partial class SmokeRunner
             _facts["species"] = SpeciesId;
             _facts["coverage_cells"] = patch.count;
             _facts["patch_at"] = new[] { patch.center.X, patch.center.Z };
-            _facts["water_depth_at_patch"] = W.Water.DepthAt(patch.center);
+            _facts["water_depth_at_patch"] = W.Water.OpenWaterDepth(patch.center);
             Check("species coverage patch in the running world", patch.count > 0);
             return;
         }
@@ -154,7 +154,7 @@ public partial class SmokeRunner
         bool aquatic = floating || sp.MinWaterDepth > 0;
         var spots = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c))
             .Where(p => aquatic
-                ? W.Water.DepthAt(p) >= Math.Max(0.05, sp.MinWaterDepth) && W.Domain.ContainsDisc(p, 0.5)
+                ? W.Water.OpenWaterDepth(p) >= Math.Max(0.05, sp.MinWaterDepth) && W.Domain.ContainsDisc(p, 0.5)
                 : !W.Water.IsWet(p) && W.Domain.ContainsDisc(p, 1.0))
             .OrderByDescending(Clearance).ToList();
         var spot = spots.Where(p => W.FloraSystem.CanEstablish(sp, p, out _)).Cast<Vec2?>().FirstOrDefault()

@@ -168,8 +168,8 @@ public class FaunaTests
             w.FaunaSystem.StepBehaviour(20); w.Clock.Tick += 2;
             foreach (var s in shrimp)
             {
-                Assert.True(w.Water.DepthAt(s.PositionXZ) >= Sp("emberglass_swimmer").MinWaterDepth, "shrimp left the water");
-                Assert.InRange(s.Y, w.Terrain.Height(s.PositionXZ) - 1e-9, w.Terrain.Height(s.PositionXZ) + w.Water.DepthAt(s.PositionXZ) + 1e-9);
+                Assert.True(w.Water.OpenWaterDepth(s.PositionXZ) >= Sp("emberglass_swimmer").MinWaterDepth, "shrimp left the water");
+                Assert.InRange(s.Y, w.Terrain.Height(s.PositionXZ) - 1e-9, w.Terrain.Height(s.PositionXZ) + w.Water.OpenWaterDepth(s.PositionXZ) + 1e-9);
             }
         }
         Assert.True(shrimp.Zip(start).Average(z => Vec2.Distance(z.First.PositionXZ, z.Second)) > 0.1, "shrimp should actually move");

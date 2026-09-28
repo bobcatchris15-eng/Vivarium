@@ -223,7 +223,7 @@ public partial class UiRoot : Control
         if (!w.Domain.Contains(p)) { _probe.Text = "outside the island"; return; }
         var f = w.Fields;
         int cell = w.Grid.NearestDomainCell(p);
-        double depth = w.Water.DepthAt(p);
+        double depth = w.Water.OpenWaterDepth(p);
         var flow = new Vec2(w.Water.FlowX[cell], w.Water.FlowZ[cell]);
         double speed = depth > 1e-4 ? flow.Length / Math.Max(depth * w.Grid.CellSize, 1e-6) : 0;
         var tags = string.Join(", ", w.Props.HabitatTagsAt(p).Distinct());

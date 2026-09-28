@@ -416,6 +416,17 @@ public class HydrologyTests
     }
 
     [Fact]
+    public void SwimmersCanLiveAndMoveInWaterTablePond()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        var pondPoint = new Vec2(4.6, 3.1);
+        var sp = w.Content.FaunaOrThrow("emberglass_swimmer");
+        Assert.False(w.FaunaSystem.Suitability(sp, pondPoint).HardRefused);
+        Assert.True(w.FaunaSystem.IsPassable(sp, pondPoint));
+        Assert.True(w.FaunaSystem.RestingY(sp, pondPoint) > w.Terrain.Height(pondPoint));
+    }
+
+    [Fact]
     public void GroundwaterAndDynamicSurfaceMeshesUseIndependentState()
     {
         var groundwaterOnly = TestUtil.FlatWorld(51, d =>

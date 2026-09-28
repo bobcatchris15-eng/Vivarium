@@ -127,7 +127,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
                 double jx = (rng.Next01() + rng.Next01() - 1) * g.CellSize * 0.54;
                 double jz = (rng.Next01() + rng.Next01() - 1) * g.CellSize * 0.54;
                 var p = center + new Vivarium.Sim.Core.Vec2(jx, jz);
-                if (!_w.Domain.Contains(p) || _w.SubstrateAtCell(p) != Substrate.Soil || _w.Water.DepthAt(p) > 0.004) continue;
+                if (!_w.Domain.Contains(p) || _w.SubstrateAtCell(p) != Substrate.Soil || _w.Water.OpenWaterDepth(p) > 0.004) continue;
 
                 bool isLeaf = rng.Next01() < broadleaf;
                 float yaw = (float)(rng.Next01() * Math.PI * 2);
