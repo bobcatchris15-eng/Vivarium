@@ -274,6 +274,25 @@ public class HydrologyTests
     }
 
     [Fact]
+    public void SoilHydrationRespondsToSurfaceWaterAmountWithoutLinearOverSaturation()
+    {
+        var w = TestUtil.FlatWorld(41);
+        var shallowP = new Vec2(-2.5, 0);
+        var deepP = new Vec2(2.5, 0);
+        int shallow = w.Grid.CellAt(shallowP), deep = w.Grid.CellAt(deepP);
+        w.Water.Depth[shallow] = 0.003;
+        w.Water.Depth[deep] = 0.06;
+
+        for (int k = 0; k < 12; k++)
+            w.Water.CoupleMoisture(w.Fields.Moisture, w.Content.Ecology, 900, w.Fields.Scratch);
+
+        double a = w.Fields.Moisture[shallow], b = w.Fields.Moisture[deep];
+        Assert.True(b > a + 0.12, $"deeper persistent surface water should hydrate more: shallow={a:0.00}, deep={b:0.00}");
+        Assert.InRange(b, 0, 1);
+        Assert.InRange(a, 0, 1);
+    }
+
+    [Fact]
     public void SoilMoistureFallsOffSmoothlyWithDistanceFromWater()
     {
         var w = TestUtil.FlatWorld(9);
@@ -371,5 +390,3 @@ public class HydrologyTests
         Assert.Equal(set.CombinedMesh.DigestHex(), WaterMesh.Build(w).DigestHex());
     }
 }
-
-

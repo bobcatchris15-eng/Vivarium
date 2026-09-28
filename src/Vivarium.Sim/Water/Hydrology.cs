@@ -1,4 +1,4 @@
-using Vivarium.Sim.Content;
+﻿using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
@@ -15,7 +15,7 @@ public sealed class Spring
     public Vec2 Position => new(X, Z);
 }
 
-/// <summary>Cumulative water budget (m³). Conservation: volume = inflows − outflows − losses.</summary>
+/// <summary>Cumulative water budget (mÂ³). Conservation: volume = inflows âˆ’ outflows âˆ’ losses.</summary>
 public sealed class WaterBudget
 {
     public double SpringInflow { get; set; }
@@ -41,17 +41,17 @@ public sealed class Hydrology
 {
     public GridSpec Grid { get; }
     public WaterConfig Config { get; }
-    /// <summary>Dynamic surface-water depth per cell (m), ≥ 0. Groundwater is never stored here.</summary>
+    /// <summary>Dynamic surface-water depth per cell (m), â‰¥ 0. Groundwater is never stored here.</summary>
     public double[] Depth { get; }
     /// <summary>Terrain height at each cell centre (derived from the heightfield; not saved).</summary>
     public double[] Bed { get; }
-    /// <summary>Net horizontal flow per cell (m³/s along +X/+Z) for visuals and overlays. Derived.</summary>
+    /// <summary>Net horizontal flow per cell (mÂ³/s along +X/+Z) for visuals and overlays. Derived.</summary>
     public double[] FlowX { get; }
     public double[] FlowZ { get; }
     public List<Spring> Springs { get; set; } = new();
     public WaterBudget Budget { get; set; } = new();
 
-    // Signed internal face discharge (m³/s): +E and +N. West/south faces are the neighbour's east/north face.
+    // Signed internal face discharge (mÂ³/s): +E and +N. West/south faces are the neighbour's east/north face.
     private readonly double[] _faceE, _faceN;
     private readonly double[] _deltaVolume, _outScale;
     private readonly double[] _edgeFlowE, _edgeFlowW, _edgeFlowN, _edgeFlowS;
@@ -59,9 +59,9 @@ public sealed class Hydrology
     private readonly int[] _nE, _nW, _nN, _nS; // neighbour cell index or -1 when outside the domain
 
     public double CellArea => Grid.CellSize * Grid.CellSize;
-    /// <summary>Signed discharge through each cell's east face (+X), m³/s. Authoritative surface-water momentum.</summary>
+    /// <summary>Signed discharge through each cell's east face (+X), mÂ³/s. Authoritative surface-water momentum.</summary>
     public double[] FaceFlowEast => _faceE;
-    /// <summary>Signed discharge through each cell's north face (+Z), m³/s. Authoritative surface-water momentum.</summary>
+    /// <summary>Signed discharge through each cell's north face (+Z), mÂ³/s. Authoritative surface-water momentum.</summary>
     public double[] FaceFlowNorth => _faceN;
 
     public Hydrology(GridSpec grid, WaterConfig config, Heightfield hf)
@@ -108,7 +108,7 @@ public sealed class Hydrology
 
     public double WaterTable => Config.WaterTable;
 
-    /// <summary>Pours <paramref name="volume"/> m³ over a disc (smooth falloff). Returns the volume added.</summary>
+    /// <summary>Pours <paramref name="volume"/> mÂ³ over a disc (smooth falloff). Returns the volume added.</summary>
     public double AddWater(Vec2 centre, double radius, double volume)
     {
         var cells = WeightsInDisc(centre, radius, out double total);
@@ -120,7 +120,7 @@ public sealed class Hydrology
         return volume;
     }
 
-    /// <summary>Soaks up to <paramref name="volume"/> m³ of surface water from a disc. Returns the volume removed.</summary>
+    /// <summary>Soaks up to <paramref name="volume"/> mÂ³ of surface water from a disc. Returns the volume removed.</summary>
     public double RemoveWater(Vec2 centre, double radius, double volume)
     {
         var cells = WeightsInDisc(centre, radius, out double total);
@@ -423,7 +423,7 @@ public sealed class Hydrology
 
     /// <summary>
     /// Distance (m) from each domain cell to the nearest wet cell: a two-pass chamfer transform (3-4 weights),
-    /// deterministic and O(cells). Cells with no water anywhere get +∞.
+    /// deterministic and O(cells). Cells with no water anywhere get +âˆž.
     /// </summary>
     public double[] DistanceToWater()
     {
@@ -458,27 +458,52 @@ public sealed class Hydrology
     }
 
     /// <summary>
-    /// Soil moisture coupling: wet cells saturate; nearby soil wicks water sideways with a smooth fall-off by
-    /// distance to open water (capillary fringe); elsewhere ground dries toward the level implied by its
-    /// height above the water table.
+    /// Soil hydration is an ecological field, not stored water. It is driven independently by:
+    /// hydrostatic capillary rise from groundwater, saturating local surface-water depth, neighbouring
+    /// surface-water depth, then the ordinary soil diffusion/drying response.
     /// </summary>
     public void CoupleMoisture(ScalarField moisture, EcologyConfig eco, double dt, double[] scratch)
     {
         double wet = 1 - Math.Exp(-eco.MoistureWetting * dt);
         double dry = 1 - Math.Exp(-eco.MoistureDrying * dt);
-        var dist = DistanceToWater();
+        double depthScale = Math.Max(Config.WetDepth * 2.5, 0.02);
+        double capRange = Math.Max(eco.MoistureCapillaryRange, Grid.CellSize);
+
+        double SurfaceHydration(double depth) =>
+            depth <= 0 ? 0 : MathD.Clamp01(1 - Math.Exp(-depth / depthScale));
+
         foreach (int idx in Grid.DomainCells)
         {
             double m = moisture.Values[idx];
-            double target;
-            if (IsWet(idx)) target = 1;
-            else
-            {
-                double capillary = MathD.Clamp01(1 - (Bed[idx] - WaterTable) / eco.MoistureWaterTableRange);
-                double baseline = Math.Max(eco.MoistureDryBaseline, 0.85 * capillary * capillary);
-                double wick = double.IsInfinity(dist[idx]) ? 0 : 0.95 * Math.Exp(-(dist[idx] - Grid.CellSize) / eco.MoistureCapillaryRange);
-                target = Math.Max(baseline, Math.Min(0.95, wick));
-            }
+
+            // Groundwater influence depends on vertical distance to the hydrostatic table.
+            double aboveTable = Math.Max(0, Bed[idx] - WaterTable);
+            double capillary = MathD.Clamp01(1 - aboveTable / Math.Max(eco.MoistureWaterTableRange, 1e-9));
+            double groundwaterTarget = IsWaterTable(idx)
+                ? 1.0
+                : Math.Max(eco.MoistureDryBaseline, 0.85 * capillary * capillary);
+
+            // Surface water is deliberately saturating: a deeper pool matters, but cannot make soil > fully wet.
+            double localTarget = 0.98 * SurfaceHydration(Depth[idx]);
+
+            // Immediate neighbours contribute according to their actual dynamic water amount. Longer-range
+            // smoothing remains the job of the soil-moisture diffusion field rather than a water-distance binary.
+            int i = idx % Grid.Nx, j = idx / Grid.Nx;
+            double neighbourTarget = 0;
+            for (int dj = -2; dj <= 2; dj++)
+                for (int di = -2; di <= 2; di++)
+                {
+                    if (di == 0 && dj == 0) continue;
+                    int ii = i + di, jj = j + dj;
+                    if (!Grid.InDomain(ii, jj)) continue;
+                    int n = Grid.Index(ii, jj);
+                    double h = SurfaceHydration(Depth[n]);
+                    if (h <= 0) continue;
+                    double distance = Grid.CellSize * Math.Sqrt(di * di + dj * dj);
+                    neighbourTarget = Math.Max(neighbourTarget, 0.98 * h * Math.Exp(-distance / (capRange * 2.5)));
+                }
+
+            double target = MathD.Clamp01(Math.Max(groundwaterTarget, Math.Max(localTarget, neighbourTarget)));
             double rate = target > m ? wet : dry;
             moisture[idx] = m + (target - m) * rate;
         }
