@@ -466,3 +466,36 @@ public class HydrologyTests
         Assert.Equal(set.CombinedMesh.DigestHex(), WaterMesh.Build(w).DigestHex());
     }
 }
+
+public class HydrologyBankContainmentTests
+{
+    /// <summary>Spring inside a closed bowl with a second dry bowl over the rim: water must pool, never jump the bank.</summary>
+    [Theory]
+    [InlineData(0.01, 20)]
+    [InlineData(0.2, 2)]
+    [Trait("Suite", "Hydrology")]
+    public void SpringWaterStaysBehindBanksUntilBowlOverflows(double dischargePerHour, int hours)
+    {
+        var w = TestUtil.FlatWorld(7, d =>
+        {
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = -2, Z = 0, Radius = 1.6, Amount = 0.35 });
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 2, Z = 0, Radius = 1.2, Amount = 0.35 });
+        });
+        // added after creation so the world's settle pass does not pre-fill the bowl
+        w.Water.Springs.Add(new Vivarium.Sim.Water.Spring { X = -2, Z = 0, Discharge = dischargePerHour / SimUnits.Hour });
+        for (int i = 0; i < hours * 20; i++) w.Water.Step(180);
+        double inBowl = 0, outside = 0, lo = double.MaxValue, hi = double.MinValue;
+        foreach (int c in w.Grid.DomainCells)
+        {
+            var p = w.Grid.CellCenter(c);
+            double v = w.Water.Depth[c] * w.Water.CellArea;
+            if ((p - new Vec2(-2, 0)).Length < 1.6) inBowl += v; else outside += v;
+            if ((p - new Vec2(-2, 0)).Length < 0.8) { double sfc = w.Water.Bed[c] + w.Water.Depth[c]; lo = Math.Min(lo, sfc); hi = Math.Max(hi, sfc); }
+        }
+        // a pool finds its level: no odd/even checkerboard of wet and dry cells
+        Assert.True(hi - lo < 0.02, $"pool surface not level: {lo:0.###}..{hi:0.###} m");
+        Assert.True(inBowl > 0, "spring produced no water");
+        Assert.True(w.Water.OpenWaterDepth(new Vec2(2, 0)) < 1e-4, $"far bowl flooded: {w.Water.OpenWaterDepth(new Vec2(2, 0)):0.####} m, outside volume {outside:0.####} m³ vs bowl {inBowl:0.####} m³");
+        Assert.True(outside < inBowl * 0.01, $"water escaped the bowl: outside {outside:0.####} m³ vs bowl {inBowl:0.####} m³");
+    }
+}

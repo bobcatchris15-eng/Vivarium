@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Vivarium.Sim.World;
@@ -95,11 +95,11 @@ public sealed class WaterConfig
     /// <summary>Fixed groundwater surface elevation (world Y).</summary>
     public double WaterTable { get; set; } = 0.0;
     public List<SpringConfig> Springs { get; set; } = new();
-    /// <summary>Dimensionless hydraulic conductance used to turn free-surface head into face discharge.</summary>
+    /// <summary>Legacy: ignored since the level-equalizing solver; still parsed so older presets and saves load.</summary>
     public double FlowRate { get; set; } = 0.2;
-    /// <summary>Seconds over which existing face discharge decays; larger values preserve momentum longer.</summary>
+    /// <summary>Legacy: ignored (the solver carries no momentum); still parsed for compatibility.</summary>
     public double FlowMemorySeconds { get; set; } = 45.0;
-    /// <summary>Reference seconds used to convert hydraulic head into target discharge; lower values flow faster.</summary>
+    /// <summary>Legacy: ignored; still parsed for compatibility.</summary>
     public double FlowResponseSeconds { get; set; } = 30.0;
     /// <summary>Minimum derived velocity (m/s) for the ecological/query convenience classification IsStream.</summary>
     public double StreamVelocityThreshold { get; set; } = 0.0001;
@@ -111,7 +111,7 @@ public sealed class WaterConfig
     public double WetDepth { get; set; } = 0.008;
     /// <summary>How far below the terrain edge the virtual exterior sits for boundary outflow.</summary>
     public double BoundaryDrop { get; set; } = 0.3;
-    /// <summary>Hydrology sub-steps per scheduled hydrology tick.</summary>
+    /// <summary>Minimum hydrology sub-steps per tick; the solver also caps each sub-step at 10 s.</summary>
     public int SubSteps { get; set; } = 4;
 }
 

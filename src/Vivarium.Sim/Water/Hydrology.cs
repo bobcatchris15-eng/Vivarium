@@ -233,7 +233,9 @@ public sealed class Hydrology
 
     public void Step(double dt)
     {
-        int sub = Math.Max(1, Config.SubSteps);
+        // sub-steps are bounded in seconds, not just by count: a pool can only find its level as fast as
+        // EqualizeFraction per sub-step allows, so long ticks need more of them.
+        int sub = Math.Max(Math.Max(1, Config.SubSteps), (int)Math.Ceiling(dt / MaxSubStepSeconds));
         double h = dt / sub;
         for (int s = 0; s < sub; s++) SubStep(h);
         InvalidateWaterDistance();
@@ -264,15 +266,15 @@ public sealed class Hydrology
             Depth[idx] -= loss;
         }
 
-        // 3. Update signed face discharge from free-surface head. The previous discharge is retained
-        // with exponential decay, providing local inertia; the hydraulic target is deliberately bounded
-        // so one coarse hydrology tick cannot create an unstable Courant jump.
-        double memory = Math.Exp(-dt / Config.FlowMemorySeconds);
+        // 3. Face discharge from the free surface. Water can only cross a face if it stands above the higher
+        // of the two beds (a bank blocks it), and each face moves at most EqualizeFraction of the level
+        // difference per sub-step so neighbouring cells converge monotonically instead of overshooting
+        // into an odd/even checkerboard. Manning friction caps the rate on slopes, giving stream speeds.
         foreach (int idx in Grid.DomainCells)
         {
             int e = _nE[idx], n = _nN[idx];
-            _faceE[idx] = e >= 0 ? UpdateFaceDischarge(idx, e, _faceE[idx], memory) : 0;
-            _faceN[idx] = n >= 0 ? UpdateFaceDischarge(idx, n, _faceN[idx], memory) : 0;
+            _faceE[idx] = e >= 0 ? FaceDischarge(idx, e, dt) : 0;
+            _faceN[idx] = n >= 0 ? FaceDischarge(idx, n, dt) : 0;
             _deltaVolume[idx] = 0;
             _outScale[idx] = 1;
             _edgeFlowE[idx] = _edgeFlowW[idx] = _edgeFlowN[idx] = _edgeFlowS[idx] = 0;
@@ -283,7 +285,7 @@ public sealed class Hydrology
         {
             if (!Grid.IsBoundaryCell[idx] || Depth[idx] <= 0) continue;
             double surface = HydraulicBed(idx) + Depth[idx];
-            double target = BoundaryDischarge(idx, surface);
+            double target = BoundaryDischarge(idx, surface, dt);
             int i = idx % Grid.Nx, j = idx / Grid.Nx;
             if (_nE[idx] < 0) _edgeFlowE[idx] = target;
             if (_nW[idx] < 0) _edgeFlowW[idx] = target;
@@ -374,36 +376,44 @@ public sealed class Hydrology
         }
     }
 
-    private double UpdateFaceDischarge(int a, int b, double previous, double memory)
+    /// <summary>Largest share of a level difference one face may transfer per sub-step. Below 1/4 keeps the
+    /// explicit 4-neighbour exchange monotone (no oscillation, no checkerboard).</summary>
+    private const double EqualizeFraction = 0.2;
+    /// <summary>Manning roughness (s/m^1/3) for shallow flow over soil and litter.</summary>
+    private const double Manning = 0.05;
+    /// <summary>Longest hydrology sub-step, seconds.</summary>
+    private const double MaxSubStepSeconds = 10.0;
+
+    /// <summary>Signed discharge (m³/s, + from a to b) through the face shared by cells a and b.</summary>
+    private double FaceDischarge(int a, int b, double dt)
     {
-        double sa = HydraulicBed(a) + Depth[a], sb = HydraulicBed(b) + Depth[b];
+        double za = HydraulicBed(a), zb = HydraulicBed(b);
+        double sa = za + Depth[a], sb = zb + Depth[b];
         double head = sa - sb;
-        if (Math.Abs(head) < 1e-12 && Math.Abs(previous) < 1e-15) return 0;
-
-        int upstream = head >= 0 ? a : b;
-        double mobileDepth = Depth[upstream];
-        double target = 0;
-        if (mobileDepth > 1e-12 && Math.Abs(head) > 1e-12)
-        {
-            // FlowRate remains the bounded hydraulic conductance for compatibility; response seconds controls
-            // how aggressively free-surface head becomes discharge without tying momentum to the caller's dt.
-            double transferableDepth = Math.Min(mobileDepth, Math.Abs(head));
-            target = Math.Sign(head) * Config.FlowRate * transferableDepth * CellArea / Config.FlowResponseSeconds;
-        }
-
-        double q = previous * memory + target * (1 - memory);
-        // Never allow retained momentum to pull water out of a completely dry upstream cell.
-        int qUpstream = q >= 0 ? a : b;
-        if (Depth[qUpstream] <= 1e-12) return 0;
-        return q;
+        if (Math.Abs(head) < 1e-12) return 0;
+        int upstream = head > 0 ? a : b;
+        if (Depth[upstream] <= 1e-12) return 0;
+        // water depth over the face sill: a bank higher than the upstream surface blocks flow entirely
+        double sill = Math.Max(za, zb);
+        double hf = Math.Max(sa, sb) - sill;
+        if (hf <= 1e-9) return 0;
+        return Math.Sign(head) * Transfer(Math.Abs(head), hf, dt);
     }
 
-    private double BoundaryDischarge(int idx, double surface)
+    /// <summary>Discharge magnitude for a level difference <paramref name="head"/> over a sill with flow depth <paramref name="hf"/>.</summary>
+    private double Transfer(double head, double hf, double dt)
+    {
+        double equalize = EqualizeFraction * Math.Min(head, hf) * CellArea / dt;
+        double slope = head / Grid.CellSize;
+        double manning = Grid.CellSize * Math.Pow(hf, 5.0 / 3.0) * Math.Sqrt(slope) / Manning;
+        return Math.Min(equalize, manning);
+    }
+
+    private double BoundaryDischarge(int idx, double surface, double dt)
     {
         double head = surface - _edgeHeight[idx];
         if (head <= 0 || Depth[idx] <= 0) return 0;
-        double transferableDepth = Math.Min(Depth[idx], head);
-        return Config.FlowRate * transferableDepth * CellArea / Config.FlowResponseSeconds;
+        return Transfer(head, Math.Min(Depth[idx], head), dt);
     }
 
     private double[]? _waterDistance;
