@@ -86,18 +86,31 @@ public partial class CoverageRenderer : Node3D
         FloraType = CoverageFloraType.Generic,
     };
 
-    // Pre-allocated scratch buffers to eliminate per-step/per-tile allocations
-    private readonly bool[,] _cellOccupied = new bool[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
-    private readonly float[,] _cellThickness = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
-    private readonly Color[,] _cellColor = new Color[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
-    private readonly float[,] _cellVeinW = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
-    private readonly float[,] _cellFront = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
-    private readonly int[,] _cornerIdx = new int[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
-    private readonly float[,] _cornerThickness = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
-    private readonly Color[,] _cornerColor = new Color[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
-    private readonly float[,] _cornerAlpha = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
-    private readonly float[,] _cornerVeinW = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
-    private readonly float[,] _cornerFront = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+    // Scratch buffers for BuildTileMesh are task-local: BuildTileMesh runs concurrently
+    // (Task.Run, MaxConcurrentBuilds) on a thread pool thread, so per-build state must
+    // never be a shared instance field. Buffers are rented from a pool to avoid a fresh
+    // allocation per tile build while still giving each concurrent call its own storage.
+    private sealed class ScratchBuffers
+    {
+        public readonly bool[,] CellOccupied = new bool[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
+        public readonly float[,] CellThickness = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
+        public readonly Color[,] CellColor = new Color[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
+        public readonly float[,] CellVeinW = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
+        public readonly float[,] CellFront = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
+        public readonly int[,] CornerIdx = new int[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+        public readonly float[,] CornerThickness = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+        public readonly Color[,] CornerColor = new Color[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+        public readonly float[,] CornerAlpha = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+        public readonly float[,] CornerVeinW = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+        public readonly float[,] CornerFront = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentBag<ScratchBuffers> _scratchPool = new();
+
+    private ScratchBuffers RentScratch() => _scratchPool.TryTake(out var s) ? s : new ScratchBuffers();
+
+    private void ReturnScratch(ScratchBuffers s) => _scratchPool.Add(s);
+
     private readonly List<(CoverageLayerId layer, int ti, int tj)> _toRemove = new();
     private readonly List<(CoverageLayerId layer, int ti, int tj)> _pendingRebuilds = new();
     private readonly HashSet<(CoverageLayerId layer, int ti, int tj)> _pendingKeys = new();
@@ -590,6 +603,19 @@ public partial class CoverageRenderer : Node3D
 
     private MeshData BuildTileMesh(CoverageLayer layer, CoverageTile t)
     {
+        var scratch = RentScratch();
+        try
+        {
+            return BuildTileMeshCore(layer, t, scratch);
+        }
+        finally
+        {
+            ReturnScratch(scratch);
+        }
+    }
+
+    private MeshData BuildTileMeshCore(CoverageLayer layer, CoverageTile t, ScratchBuffers s)
+    {
         const int edge = CoverageSpec.TileEdge;
         const double cs = CoverageSpec.CellSize;
         float baseOffset = layer.Id == CoverageLayerId.Crust ? 0.002f : layer.Id == CoverageLayerId.Plasmodium ? 0.0038f : 0.0035f;
@@ -602,15 +628,15 @@ public partial class CoverageRenderer : Node3D
             byte occ = t.Occ[li];
             if (occ == 0)
             {
-                _cellOccupied[lx, lz] = false;
-                _cellThickness[lx, lz] = 0f;
-                _cellColor[lx, lz] = Colors.Black;
-                _cellVeinW[lx, lz] = 0f;
-                _cellFront[lx, lz] = 0f;
+                s.CellOccupied[lx, lz] = false;
+                s.CellThickness[lx, lz] = 0f;
+                s.CellColor[lx, lz] = Colors.Black;
+                s.CellVeinW[lx, lz] = 0f;
+                s.CellFront[lx, lz] = 0f;
                 continue;
             }
 
-            _cellOccupied[lx, lz] = true;
+            s.CellOccupied[lx, lz] = true;
             var sp = GetSpecies(layer.Id, occ);
             float b = t.B[li];
             byte w = t.W[li];
@@ -619,9 +645,9 @@ public partial class CoverageRenderer : Node3D
             byte d2e = t.D2E[li];
 
             float th = ComputeThickness(sp, layer.Id, b, w, d2e, flags);
-            _cellThickness[lx, lz] = th;
-            _cellVeinW[lx, lz] = w / 255f;
-            _cellFront[lx, lz] = (flags & (byte)CoverageFlags.Front) != 0 ? 1f : 0f;
+            s.CellThickness[lx, lz] = th;
+            s.CellVeinW[lx, lz] = w / 255f;
+            s.CellFront[lx, lz] = (flags & (byte)CoverageFlags.Front) != 0 ? 1f : 0f;
 
             if (layer.Id == CoverageLayerId.Plasmodium)
             {
@@ -640,7 +666,7 @@ public partial class CoverageRenderer : Node3D
                     pCol = new Color(0.82f, 0.42f, 0.10f);
                 }
                 pCol.A = 1f;
-                _cellColor[lx, lz] = pCol;
+                s.CellColor[lx, lz] = pCol;
                 continue;
             }
 
@@ -687,14 +713,14 @@ public partial class CoverageRenderer : Node3D
             }
 
             col.A = 1f;
-            _cellColor[lx, lz] = col;
+            s.CellColor[lx, lz] = col;
         }
 
         // 2. Evaluate 33x33 corner grid for continuity and edge feathering
         for (int cz = 0; cz <= edge; cz++)
         for (int cx = 0; cx <= edge; cx++)
         {
-            _cornerIdx[cx, cz] = -1;
+            s.CornerIdx[cx, cz] = -1;
             int occCount = 0;
             float sumTh = 0f;
             float sumR = 0f, sumG = 0f, sumB = 0f;
@@ -707,14 +733,14 @@ public partial class CoverageRenderer : Node3D
                 int nlz = cz + oz;
                 if (nlx >= 0 && nlx < edge && nlz >= 0 && nlz < edge)
                 {
-                    if (_cellOccupied[nlx, nlz])
+                    if (s.CellOccupied[nlx, nlz])
                     {
                         occCount++;
-                        sumTh += _cellThickness[nlx, nlz];
-                        var c = _cellColor[nlx, nlz];
+                        sumTh += s.CellThickness[nlx, nlz];
+                        var c = s.CellColor[nlx, nlz];
                         sumR += c.R; sumG += c.G; sumB += c.B;
-                        sumVeinW += _cellVeinW[nlx, nlz];
-                        sumFront += _cellFront[nlx, nlz];
+                        sumVeinW += s.CellVeinW[nlx, nlz];
+                        sumFront += s.CellFront[nlx, nlz];
                     }
                 }
                 else
@@ -750,11 +776,11 @@ public partial class CoverageRenderer : Node3D
 
             if (occCount == 0)
             {
-                _cornerThickness[cx, cz] = 0f;
-                _cornerColor[cx, cz] = Colors.Black;
-                _cornerAlpha[cx, cz] = 0f;
-                _cornerVeinW[cx, cz] = 0f;
-                _cornerFront[cx, cz] = 0f;
+                s.CornerThickness[cx, cz] = 0f;
+                s.CornerColor[cx, cz] = Colors.Black;
+                s.CornerAlpha[cx, cz] = 0f;
+                s.CornerVeinW[cx, cz] = 0f;
+                s.CornerFront[cx, cz] = 0f;
             }
             else
             {
@@ -768,13 +794,13 @@ public partial class CoverageRenderer : Node3D
                     float edgeNoise = (float)Vivarium.Sim.Core.Noise.Gradient(0xB10CUL, wx * 10.0, wz * 10.0);
                     alpha = Mathf.Clamp(alpha + 0.16f * edgeNoise, 0.05f, 0.95f);
                 }
-                _cornerAlpha[cx, cz] = alpha;
+                s.CornerAlpha[cx, cz] = alpha;
                 // Smooth rounded edge falloff for corner thickness
                 float falloff = alpha * alpha * (3f - 2f * alpha);
-                _cornerThickness[cx, cz] = (sumTh * inv) * falloff;
-                _cornerColor[cx, cz] = avgCol;
-                _cornerVeinW[cx, cz] = sumVeinW * inv;
-                _cornerFront[cx, cz] = sumFront * inv;
+                s.CornerThickness[cx, cz] = (sumTh * inv) * falloff;
+                s.CornerColor[cx, cz] = avgCol;
+                s.CornerVeinW[cx, cz] = sumVeinW * inv;
+                s.CornerFront[cx, cz] = sumFront * inv;
             }
         }
 
@@ -841,23 +867,23 @@ public partial class CoverageRenderer : Node3D
 
         int GetOrAddCorner(int cx, int cz)
         {
-            int idx = _cornerIdx[cx, cz];
+            int idx = s.CornerIdx[cx, cz];
             if (idx >= 0) return idx;
 
             double wx = (t.Ti * edge + cx) * cs;
             double wz = (t.Tj * edge + cz) * cs;
             double gy = TileGroundHeight(new Vec2(wx, wz));
             Vec3 gn = TileGroundNormal(wx, wz, gy);
-            float th = _cornerThickness[cx, cz];
+            float th = s.CornerThickness[cx, cz];
             byte occ = layer.GetOcc(t.Ti * edge + cx, t.Tj * edge + cz);
             var sp = GetSpecies(layer.Id, occ);
-            float relief = SurfaceRelief(layer.Id, wx, wz, _cornerAlpha[cx, cz], sp.MaxHeightM);
+            float relief = SurfaceRelief(layer.Id, wx, wz, s.CornerAlpha[cx, cz], sp.MaxHeightM);
             Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th + relief);
-            Color c = _cornerColor[cx, cz];
-            double u2 = layer.Id == CoverageLayerId.Plasmodium ? _cornerVeinW[cx, cz] : cx / (double)edge;
-            double v2 = layer.Id == CoverageLayerId.Plasmodium ? _cornerFront[cx, cz] : cz / (double)edge;
-            idx = md.AddVertex(p, gn, c.R, c.G, c.B, _cornerAlpha[cx, cz] * SlopeFade(gn), wx, wz, u2, v2);
-            _cornerIdx[cx, cz] = idx;
+            Color c = s.CornerColor[cx, cz];
+            double u2 = layer.Id == CoverageLayerId.Plasmodium ? s.CornerVeinW[cx, cz] : cx / (double)edge;
+            double v2 = layer.Id == CoverageLayerId.Plasmodium ? s.CornerFront[cx, cz] : cz / (double)edge;
+            idx = md.AddVertex(p, gn, c.R, c.G, c.B, s.CornerAlpha[cx, cz] * SlopeFade(gn), wx, wz, u2, v2);
+            s.CornerIdx[cx, cz] = idx;
             return idx;
         }
 
@@ -874,9 +900,9 @@ public partial class CoverageRenderer : Node3D
         for (int lz = 0; lz < edge; lz++)
         for (int lx = 0; lx < edge; lx++)
         {
-            bool anyCoverage = _cellOccupied[lx, lz]
-                || _cornerAlpha[lx, lz] > 0f || _cornerAlpha[lx + 1, lz] > 0f
-                || _cornerAlpha[lx, lz + 1] > 0f || _cornerAlpha[lx + 1, lz + 1] > 0f;
+            bool anyCoverage = s.CellOccupied[lx, lz]
+                || s.CornerAlpha[lx, lz] > 0f || s.CornerAlpha[lx + 1, lz] > 0f
+                || s.CornerAlpha[lx, lz + 1] > 0f || s.CornerAlpha[lx + 1, lz + 1] > 0f;
             if (!anyCoverage) continue;
 
             int c00 = GetOrAddCorner(lx, lz);
@@ -897,7 +923,7 @@ public partial class CoverageRenderer : Node3D
         for (int lz = 0; lz < edge; lz++)
         for (int lx = 0; lx < edge; lx++)
         {
-            if (!_cellOccupied[lx, lz]) continue;
+            if (!s.CellOccupied[lx, lz]) continue;
             if ((t.Flags[lz * edge + lx] & (byte)CoverageFlags.Dead) != 0) continue;
             var sp = GetSpecies(layer.Id, t.Occ[lz * edge + lx]);
             if (sp.FloraType == CoverageFloraType.Generic) continue;
@@ -910,9 +936,9 @@ public partial class CoverageRenderer : Node3D
             Vec3 normal = TileGroundNormal(wx, wz, gy);
             if (normal.Y < 0.45) continue;
             double relief = SurfaceRelief(layer.Id, wx, wz, 1f, sp.MaxHeightM);
-            var foot = new Vec3(wx, gy + baseOffset + _cellThickness[lx, lz] + relief - 0.002, wz);
+            var foot = new Vec3(wx, gy + baseOffset + s.CellThickness[lx, lz] + relief - 0.002, wz);
             float vigour = Math.Clamp(t.B[lz * edge + lx] * 3f, 0.72f, 1f);
-            Color shootColor = sp.Color1.Lerp(_cellColor[lx, lz], 0.35f);
+            Color shootColor = sp.Color1.Lerp(s.CellColor[lx, lz], 0.35f);
 
             switch (sp.FloraType)
             {
