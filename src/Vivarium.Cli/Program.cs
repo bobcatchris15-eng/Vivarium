@@ -1,11 +1,11 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
 using Vivarium.Sim.World;
 
 // Vivarium developer CLI: headless world runs for tuning, soak and diagnostics.
-//   dotnet run --project src/Vivarium.Cli -- soak [--days N] [--preset id] [--seed N] [--report-days N]
+//   dotnet run --project src/Vivarium.Cli -- soak [--days N] [--preset id] [--seed N] [--report-days N] [--save-days 7,30,90 --save-dir DIR]
 //   dotnet run --project src/Vivarium.Cli -- schedule
 //   dotnet run --project src/Vivarium.Cli -- validate
 
@@ -71,7 +71,19 @@ switch (cmd)
         Console.WriteLine($"created in {sw.ElapsedMilliseconds} ms: props {w.Props.Count}, flora {w.Flora.Count}, fauna {w.Fauna.Count}, wet {EcosystemStatistics.Compute(w).WetFraction:P1}");
         Print(w);
         long ticksPerReport = (long)(report * 86400 / 10);
-        double next = report;
+        var saveDays = new Queue<double>(Opt("save-days", "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(double.Parse).OrderBy(x => x));
+        string saveDir = Opt("save-dir", Path.Combine(root, "build", "aged"));
+        void SaveDue()
+        {
+            while (saveDays.Count > 0 && w.Clock.BioDays >= saveDays.Peek() - 1e-9)
+            {
+                Directory.CreateDirectory(saveDir);
+                string path = Path.Combine(saveDir, $"bioday{saveDays.Dequeue():000}.vivsave");
+                var r = Vivarium.Sim.Persistence.SaveSystem.Save(w, path);
+                Console.WriteLine(r.Ok ? $"saved {path}" : $"SAVE FAILED {path}: {r.Message}");
+            }
+        }
+        SaveDue();
         while (w.Clock.SimDays < days - 1e-9)
         {
             var t0 = sw.Elapsed;
@@ -79,6 +91,7 @@ switch (cmd)
             var inv = w.CheckInvariants();
             Console.WriteLine($"--- day {w.Clock.SimDays:0.0}  ({(sw.Elapsed - t0).TotalMilliseconds / ticksPerReport * 1000:0} µs/tick)");
             Print(w);
+            SaveDue();
             if (inv.Count > 0) { Console.WriteLine("INVARIANT FAILURES:\n  " + string.Join("\n  ", inv.Take(10))); return 2; }
         }
         Console.WriteLine($"total {sw.Elapsed.TotalSeconds:0.0} s wall for {days} sim days");
