@@ -264,6 +264,23 @@ public sealed class FaunaSystem
     public double FoodAt(FaunaSpeciesDef sp, Vec2 p)
     {
         double best = 0;
+
+        // Carrion-scent fungi are navigation attractors rather than food. Keep the hook tag-based so future
+        // stinkhorn/carrion-flower analogues can reuse it without teaching fauna about a specific species id.
+        // Only small fliers respond strongly; large flying fauna keep their ordinary habitat/diet steering.
+        if (sp.Flies && sp.SizeMax <= 0.03 && sp.SenseRadius > 0)
+        {
+            _w.Flora.Neighbours(p, sp.SenseRadius, _fnb);
+            foreach (var fl in _fnb)
+            {
+                var fsp = C.FloraOrThrow(fl.SpeciesId);
+                if (!fsp.Tags.Contains("carrion_attractor")) continue;
+                double d = Vec2.Distance(p, fl.Position);
+                double scent = 0.90 * MathD.Clamp01(1.0 - d / sp.SenseRadius);
+                best = Math.Max(best, scent);
+            }
+        }
+
         foreach (var d in sp.Diet)
         {
             if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal))
