@@ -40,9 +40,13 @@ float water_height(vec2 uv, vec2 f, float t) {
 varying float depthf;
 varying vec2 flow;
 varying float cutface;
+varying float wetbank;   // 1 on the rivulet wet-bank strip (COLOR.r == 1)
+varying float thinfilm;  // 1 for sub-millimetre-to-few-mm films
 
 void vertex() {
     depthf = COLOR.a;
+    wetbank = step(0.95, COLOR.r);
+    thinfilm = (1.0 - wetbank) * (1.0 - smoothstep(0.02, 0.05, COLOR.a));
     flow = UV2;
     cutface = step(abs(NORMAL.y), 0.5);
 }
@@ -125,4 +129,20 @@ void fragment() {
     ROUGHNESS = cutface > 0.5 ? 0.0 : mix(0.035, 0.12, flow_rough);
     METALLIC = 0.0;
     SPECULAR = cutface > 0.5 ? 0.15 : 0.55;
+
+    // Thin moving sheet: the ground shows straight through, the film reads as a glossy highlight.
+    if (thinfilm > 0.0 && cutface < 0.5 && underwater < 0.5) {
+        vec3 wet_ground = behind * vec3(0.62, 0.64, 0.66);
+        EMISSION = mix(EMISSION, mix(wet_ground, scene, 0.35), thinfilm);
+        ALPHA = mix(ALPHA, 0.92, thinfilm);
+        ROUGHNESS = mix(ROUGHNESS, mix(0.015, 0.06, flow_rough), thinfilm);
+        SPECULAR = mix(SPECULAR, 0.85, thinfilm);
+    }
+    // Wet bank strip: darkened, slightly glossy soil beside the rivulet, no water body.
+    if (wetbank > 0.0 && underwater < 0.5) {
+        EMISSION = mix(EMISSION, behind * vec3(0.58, 0.60, 0.62), wetbank);
+        ALPHA = mix(ALPHA, 0.85, wetbank);
+        ROUGHNESS = mix(ROUGHNESS, 0.30, wetbank);
+        SPECULAR = mix(SPECULAR, 0.45, wetbank);
+    }
 }

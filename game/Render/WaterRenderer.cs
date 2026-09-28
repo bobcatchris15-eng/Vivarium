@@ -16,6 +16,9 @@ public partial class WaterRenderer : Node3D
     private VivariumWorld _w = null!;
     private MeshInstance3D _miTable = null!;
     private MeshInstance3D _miStream = null!;
+    private MeshInstance3D _miRivulet = null!;
+    private ArrayMesh _meshRivulet = new();
+    private ShaderMaterial _matRivulet = null!;
     private ArrayMesh _meshTable = new();
     private ArrayMesh _meshStream = new();
     private ShaderMaterial _matTable = null!;
@@ -29,6 +32,7 @@ public partial class WaterRenderer : Node3D
         _w = w;
         _matTable ??= Bridge.Shader("res://Shaders/water_table.gdshader");
         _matStream ??= Bridge.Shader("res://Shaders/water_stream.gdshader");
+        _matRivulet ??= Bridge.Shader("res://Shaders/water.gdshader");
         if (_miTable == null)
         {
             _miTable = new MeshInstance3D { Name = "WaterTable", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
@@ -39,6 +43,11 @@ public partial class WaterRenderer : Node3D
             _miStream = new MeshInstance3D { Name = "WaterStream", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(_miStream);
         }
+        if (_miRivulet == null)
+        {
+            _miRivulet = new MeshInstance3D { Name = "WaterRivulet", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+            AddChild(_miRivulet);
+        }
         Rebuild();
     }
 
@@ -47,6 +56,7 @@ public partial class WaterRenderer : Node3D
         float val = under ? 1.0f : 0.0f;
         _matTable?.SetShaderParameter("underwater", val);
         _matStream?.SetShaderParameter("underwater", val);
+        _matRivulet?.SetShaderParameter("underwater", val);
     }
 
     private double[] _builtDepth = System.Array.Empty<double>();
@@ -72,10 +82,14 @@ public partial class WaterRenderer : Node3D
                 {
                     Bridge.ToArrayMesh(completed.Result.TableMesh, _matTable, _meshTable);
                     Bridge.ToArrayMesh(completed.Result.StreamMesh, _matStream, _meshStream);
+                    Bridge.ToArrayMesh(completed.Result.RivuletMesh ?? new MeshData(), _matRivulet, _meshRivulet);
                 }
                 _miTable.Mesh = _meshTable;
                 _miStream.Mesh = _meshStream;
-                TriangleCount = completed.Result.TableMesh.TriangleCount + completed.Result.StreamMesh.TriangleCount;
+                _miRivulet.Mesh = _meshRivulet;
+                TriangleCount = completed.Result.TableMesh.TriangleCount + completed.Result.StreamMesh.TriangleCount
+                    + (completed.Result.RivuletMesh?.TriangleCount ?? 0);
+                _builtQ = Discharge(_pendingSnapshot.FlowX, _pendingSnapshot.FlowZ);
                 _builtDepth = _pendingSnapshot.Depth;
                 _builtTerrain = _pendingTerrainVersion;
                 _sinceBuild = 0;
@@ -91,8 +105,32 @@ public partial class WaterRenderer : Node3D
         _accum = 0;
         // rebuilding is the expensive part: only do it when the water has visibly changed (ripples and flow
         // animate in the shader regardless), or every few seconds to pick up slow drift
-        if (_builtTerrain == _w.Terrain.Version && (_sinceBuild < 3 || (_sinceBuild < 10 && !DepthChanged(0.005)))) return;
+        if (_builtTerrain == _w.Terrain.Version && (_sinceBuild < 3 || (_sinceBuild < 10 && !DepthChanged(0.005) && !FlowChanged()))) return;
         QueueRebuild();
+    }
+
+    private double[] _builtQ = System.Array.Empty<double>();
+
+    private static double[] Discharge(double[] fx, double[] fz)
+    {
+        var q = new double[fx.Length];
+        for (int i = 0; i < q.Length; i++) q[i] = Math.Sqrt(fx[i] * fx[i] + fz[i] * fz[i]);
+        return q;
+    }
+
+    // rivulet films are sub-millimetre, so depth alone never triggers; watch discharge (log-ratio) instead
+    private bool FlowChanged()
+    {
+        var fx = _w.Water.FlowX; var fz = _w.Water.FlowZ;
+        if (_builtQ.Length != fx.Length) return true;
+        foreach (int c in _w.Grid.DomainCells)
+        {
+            double q = Math.Sqrt(fx[c] * fx[c] + fz[c] * fz[c]), b = _builtQ[c];
+            bool on = q > WaterMesh.RivuletMinDischarge, was = b > WaterMesh.RivuletMinDischarge;
+            if (on != was) return true;
+            if (on && (q > b * 1.5 || q < b / 1.5)) return true;
+        }
+        return false;
     }
 
     private bool DepthChanged(double threshold)
@@ -127,13 +165,16 @@ public partial class WaterRenderer : Node3D
         _sinceBuild = 0;
         WaterMeshSet set;
         using (FrameProfiler.Measure("Water.Geometry")) set = WaterMesh.BuildSet(_w);
-        TriangleCount = set.TableMesh.TriangleCount + set.StreamMesh.TriangleCount;
+        TriangleCount = set.TableMesh.TriangleCount + set.StreamMesh.TriangleCount + (set.RivuletMesh?.TriangleCount ?? 0);
+        _builtQ = Discharge(_w.Water.FlowX, _w.Water.FlowZ);
         using (FrameProfiler.Measure("Water.Upload"))
         {
             Bridge.ToArrayMesh(set.TableMesh, _matTable, _meshTable);
             Bridge.ToArrayMesh(set.StreamMesh, _matStream, _meshStream);
+            Bridge.ToArrayMesh(set.RivuletMesh ?? new MeshData(), _matRivulet, _meshRivulet);
         }
         _miTable.Mesh = _meshTable;
         _miStream.Mesh = _meshStream;
+        _miRivulet.Mesh = _meshRivulet;
     }
 }
