@@ -6,3 +6,4 @@
 2026-09-28T19:19:44Z	hydroslope	impl-worker	sonnet	2	470	18	3	FAIL(packet wrong)	1500
 2026-09-28T19:32:55Z	lod2	impl-worker	opus	7	751	45	1	PASS	3000
 2026-09-28T20:20:20Z	notrees	impl-worker	opus	40	3667	124	2	PASS(after 2 test fixes by orchestrator)	2500
+2026-09-28T20:46:50Z	shrink	impl-worker	sonnet	14	537	20	1	PASS	1800
