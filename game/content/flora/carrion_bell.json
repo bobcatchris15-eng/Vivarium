@@ -1,0 +1,88 @@
+{
+  "id": "carrion_bell",
+  "name": "Carrion Bell",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Short-lived dramatic stinkhorn analogue that erupts from rich litter and rapidly returns to detritus.",
+  "description": "Wine-dark bell chambers rise on pale fleshy stalks after rich wet pulses, advertising themselves to small flying scavengers before collapsing within days.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "soil": 1,
+      "wood": 0.72
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.72,
+      "tolerance": 0.2
+    },
+    "light": {
+      "optimum": 0.32,
+      "tolerance": 2
+    },
+    "nutrients": {
+      "optimum": 0.12,
+      "tolerance": 0.15
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.34,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 1.15,
+    "maxBiomass": 0.42,
+    "initialBiomass": 0.035,
+    "declinePerDay": 0.85,
+    "maturityDays": 0.8,
+    "lifespanDays": 4.5,
+    "nutrientPerBiomass": 0.55,
+    "radiusAtMax": 0.19,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 2.5,
+    "radius": 0.85,
+    "propagules": 3,
+    "minBiomassFraction": 0.58
+  },
+  "competition": {
+    "radius": 0.22,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.45
+  },
+  "proximity": [],
+  "litterFraction": 0.98,
+  "sheddingPerDay": 0.08,
+  "grazingValue": 0.65,
+  "visual": {
+    "shape": "carrion_bell",
+    "color": [
+      0.46,
+      0.09,
+      0.1
+    ],
+    "color2": [
+      0.82,
+      0.74,
+      0.54
+    ],
+    "colorVariance": 0.075,
+    "height": 0.48
+  },
+  "tags": [
+    "fungus",
+    "stinkhorn",
+    "decomposer",
+    "carrion_attractor"
+  ],
+  "decomposition": {
+    "radius": 0.5,
+    "fineMultiplier": 1.75,
+    "coarseMultiplier": 1.08,
+    "fruitMultiplier": 1.95
+  }
+}
