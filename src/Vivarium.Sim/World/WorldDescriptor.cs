@@ -27,7 +27,7 @@ public sealed class WorldDescriptor
     /// </summary>
     public double BioAcceleration { get; set; } = DefaultBioAcceleration;
 
-    public const double MinDiameter = 10, MaxDiameter = 12;
+    public const double MinDiameter = 5, MaxDiameter = 10;
     /// <summary>Largest diameter accepted when loading a save written before the 12 m cap.</summary>
     public const double LegacyMaxDiameter = 20;
 

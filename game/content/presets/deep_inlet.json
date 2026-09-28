@@ -2,7 +2,7 @@
   "id": "deep_inlet",
   "name": "Cobalt Inlet",
   "seed": 77104,
-  "diameter": 12,
+  "diameter": 10,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 0.65,
@@ -16,52 +16,52 @@
     "features": [
       {
         "type": "ridge",
-        "x": -2.85,
-        "z": -3.15,
-        "toX": -2.4,
-        "toZ": 7.5,
-        "width": 2.2,
+        "x": -2.375,
+        "z": -2.625,
+        "toX": -2.0,
+        "toZ": 6.25,
+        "width": 1.833,
         "amount": 1.1
       },
       {
         "type": "ridge",
-        "x": 2.85,
-        "z": -3.15,
-        "toX": 2.4,
-        "toZ": 7.5,
-        "width": 2.2,
+        "x": 2.375,
+        "z": -2.625,
+        "toX": 2.0,
+        "toZ": 6.25,
+        "width": 1.833,
         "amount": 1.0
       },
       {
         "type": "hill",
-        "x": 0,
-        "z": -3.15,
-        "radius": 2.25,
+        "x": 0.0,
+        "z": -2.625,
+        "radius": 1.875,
         "amount": 1.2
       },
       {
         "type": "channel",
-        "x": 0,
-        "z": -0.75,
-        "toX": 0.45,
-        "toZ": 7.5,
-        "width": 2.6,
+        "x": 0.0,
+        "z": -0.625,
+        "toX": 0.375,
+        "toZ": 6.25,
+        "width": 2.167,
         "amount": 1.45
       },
       {
         "type": "basin",
-        "x": 0,
-        "z": -0.75,
-        "radius": 1.88,
+        "x": 0.0,
+        "z": -0.625,
+        "radius": 1.567,
         "amount": 0.85
       },
       {
         "type": "channel",
-        "x": 0,
-        "z": -2.85,
-        "toX": 0,
-        "toZ": -0.75,
-        "width": 0.65,
+        "x": 0.0,
+        "z": -2.375,
+        "toX": 0.0,
+        "toZ": -0.625,
+        "width": 0.542,
         "amount": 0.35
       }
     ]
@@ -70,12 +70,12 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": 0,
-        "z": -2.85,
+        "x": 0.0,
+        "z": -2.375,
         "dischargePerHour": 0.06
       }
     ],
-    "flowRate": 0.20,
+    "flowRate": 0.2,
     "flowMemorySeconds": 45,
     "flowResponseSeconds": 30,
     "streamVelocityThreshold": 0.0001,
@@ -86,15 +86,15 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 24,
+    "rocks": 17,
     "rockMinScale": 0.18,
     "rockMaxScale": 0.72,
-    "logs": 3,
+    "logs": 2,
     "logMinLength": 1.2,
     "logMaxLength": 2.4,
     "logMinRadius": 0.11,
     "logMaxRadius": 0.22,
-    "gravelPatches": 6,
+    "gravelPatches": 4,
     "gravelMinRadius": 0.4,
     "gravelMaxRadius": 0.95,
     "spacing": 0.35
@@ -102,61 +102,61 @@
   "starterFlora": [
     {
       "species": "veilfern",
-      "count": 8
+      "count": 6
     },
     {
       "species": "embercrust_lichen",
-      "count": 12
+      "count": 8
     },
     {
       "species": "antlerlace_lichen",
-      "count": 8
+      "count": 6
     },
     {
       "species": "brooklace",
-      "count": 8
+      "count": 6
     },
     {
       "species": "floodlace_moss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "frosttussock",
-      "count": 8
+      "count": 6
     },
     {
       "species": "dewbonnet",
-      "count": 6
+      "count": 4
     },
     {
       "species": "clinglace",
-      "count": 6
+      "count": 4
     },
     {
       "species": "ringreed",
-      "count": 6
+      "count": 4
     },
     {
       "species": "streamribbon",
-      "count": 12
+      "count": 8
     },
     {
       "species": "fencomb",
-      "count": 10
+      "count": 7
     }
   ],
   "starterFauna": [
     {
       "species": "glintfin",
-      "count": 16
+      "count": 11
     },
     {
       "species": "emberglass_swimmer",
-      "count": 10
+      "count": 7
     },
     {
       "species": "siltshield",
-      "count": 8
+      "count": 6
     },
     {
       "species": "stiltclaw",
@@ -164,7 +164,7 @@
     },
     {
       "species": "prismhopper",
-      "count": 8
+      "count": 6
     },
     {
       "species": "stonebell",

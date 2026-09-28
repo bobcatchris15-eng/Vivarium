@@ -2,7 +2,7 @@
   "id": "bayou_marsh",
   "name": "Mossveil Bayou",
   "seed": 88314,
-  "diameter": 12,
+  "diameter": 10,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 0.04,
@@ -16,38 +16,38 @@
     "features": [
       {
         "type": "basin",
-        "x": -2.4,
-        "z": 1.88,
-        "radius": 2.1,
+        "x": -2.0,
+        "z": 1.567,
+        "radius": 1.75,
         "amount": 0.45
       },
       {
         "type": "basin",
-        "x": 2.1,
-        "z": -1.65,
-        "radius": 2.25,
-        "amount": 0.40
+        "x": 1.75,
+        "z": -1.375,
+        "radius": 1.875,
+        "amount": 0.4
       },
       {
         "type": "basin",
-        "x": 0.38,
-        "z": 1.35,
-        "radius": 1.65,
+        "x": 0.317,
+        "z": 1.125,
+        "radius": 1.375,
         "amount": 0.35
       },
       {
         "type": "hill",
-        "x": -1.12,
-        "z": -1.12,
-        "radius": 1.5,
+        "x": -0.933,
+        "z": -0.933,
+        "radius": 1.25,
         "amount": 0.35
       },
       {
         "type": "hill",
-        "x": 2.62,
-        "z": 1.5,
-        "radius": 1.35,
-        "amount": 0.30
+        "x": 2.183,
+        "z": 1.25,
+        "radius": 1.125,
+        "amount": 0.3
       }
     ]
   },
@@ -55,13 +55,13 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": -1.88,
-        "z": -1.5,
+        "x": -1.567,
+        "z": -1.25,
         "dischargePerHour": 0.02
       },
       {
-        "x": 1.5,
-        "z": 1.65,
+        "x": 1.25,
+        "z": 1.375,
         "dischargePerHour": 0.02
       }
     ],
@@ -76,15 +76,15 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 4,
+    "rocks": 3,
     "rockMinScale": 0.12,
     "rockMaxScale": 0.38,
-    "logs": 8,
+    "logs": 6,
     "logMinLength": 1.4,
     "logMaxLength": 2.6,
     "logMinRadius": 0.12,
     "logMaxRadius": 0.25,
-    "gravelPatches": 3,
+    "gravelPatches": 2,
     "gravelMinRadius": 0.3,
     "gravelMaxRadius": 0.7,
     "spacing": 0.35
@@ -92,39 +92,39 @@
   "starterFlora": [
     {
       "species": "floodlace_moss",
-      "count": 14
+      "count": 10
     },
     {
       "species": "bogglass_moss",
-      "count": 14
+      "count": 10
     },
     {
       "species": "ringreed",
-      "count": 12
+      "count": 8
     },
     {
       "species": "glassrush",
-      "count": 10
+      "count": 7
     },
     {
       "species": "mooncoin",
-      "count": 10
+      "count": 7
     },
     {
       "species": "veilfern",
-      "count": 8
+      "count": 6
     },
     {
       "species": "dewbonnet",
-      "count": 8
+      "count": 6
     },
     {
       "species": "emberfan_fungus",
-      "count": 6
+      "count": 4
     },
     {
       "species": "ambervein",
-      "count": 6
+      "count": 4
     }
   ],
   "starterFauna": [
@@ -134,11 +134,11 @@
     },
     {
       "species": "siltshield",
-      "count": 8
+      "count": 6
     },
     {
       "species": "glintfin",
-      "count": 10
+      "count": 7
     },
     {
       "species": "dewmantle",

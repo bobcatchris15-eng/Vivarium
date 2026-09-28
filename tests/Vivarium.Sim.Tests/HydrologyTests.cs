@@ -384,13 +384,13 @@ public class HydrologyTests
     {
         var w = TestUtil.DefaultWorld(populate: false);
         // Basin pond has ground below water table (waterTable = 0)
-        var pondPoint = new Vec2(4.6, 3.1);
+        var pondPoint = new Vec2(2.3, 1.553);
         Assert.True(w.Water.IsWaterTable(pondPoint), "basin should be classified as water table");
         Assert.True(w.Water.WaterTableDepth(pondPoint) > 0.05, "basin should have positive water table depth");
         Assert.False(w.Water.IsStream(pondPoint), "deep pond is not a surface stream");
 
         // High ground far from the spring is dry
-        var dryPoint = new Vec2(-4.0, 4.0);
+        var dryPoint = new Vec2(-2.667, 2.667);
         Assert.False(w.Water.IsWaterTable(dryPoint));
         Assert.False(w.Water.IsStream(dryPoint));
 
@@ -398,7 +398,7 @@ public class HydrologyTests
         for (int i = 0; i < 20; i++) w.Water.Step(30);
 
         // Near spring source (-4.1, -2.1) on high ground (bed > 0)
-        var springPoint = new Vec2(-4.1, -2.1);
+        var springPoint = new Vec2(-2.047, -1.053);
         Assert.True(w.Water.IsStream(springPoint), "spring runoff on high ground should be classified as stream");
         Assert.False(w.Water.IsWaterTable(springPoint), "high ground spring is not the groundwater table");
         Assert.True(w.Water.StreamDepth(springPoint) > 0, "stream depth should be positive at the spring");
@@ -408,7 +408,7 @@ public class HydrologyTests
     public void SubmergedFloraTreatsWaterTablePondAsStandingWater()
     {
         var w = TestUtil.DefaultWorld(populate: false);
-        var pondPoint = new Vec2(4.6, 3.1);
+        var pondPoint = new Vec2(2.3, 1.553);
         Assert.True(w.Water.IsWaterTable(pondPoint));
         var s = w.FloraSystem.Suitability(w.Content.FloraOrThrow("streamribbon"), pondPoint);
         Assert.DoesNotContain("standing water", s.RefusalReason);
@@ -419,7 +419,7 @@ public class HydrologyTests
     public void SwimmersCanLiveAndMoveInWaterTablePond()
     {
         var w = TestUtil.DefaultWorld(populate: false);
-        var pondPoint = new Vec2(4.6, 3.1);
+        var pondPoint = new Vec2(2.3, 1.553);
         var sp = w.Content.FaunaOrThrow("emberglass_swimmer");
         Assert.False(w.FaunaSystem.Suitability(sp, pondPoint).HardRefused);
         Assert.True(w.FaunaSystem.IsPassable(sp, pondPoint));

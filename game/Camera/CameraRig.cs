@@ -47,7 +47,8 @@ public partial class CameraRig : Node3D
 
     public void ResetView()
     {
-        Position = new Vector3(0, 7.5f, 13.5f);
+        float k = World != null ? (float)(World.Descriptor.Diameter / 12.0) : 1f;
+        Position = new Vector3(0, 7.5f * k, 13.5f * k);
         _yaw = 0; _pitch = -0.5f;
         Focused = false;
         ApplyRotation();

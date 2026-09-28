@@ -2,7 +2,7 @@
   "id": "shoreline",
   "name": "Pebble Shoreline",
   "seed": 40192,
-  "diameter": 12,
+  "diameter": 9,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": -0.05,
@@ -16,25 +16,25 @@
     "features": [
       {
         "type": "hill",
-        "x": -3.15,
-        "z": -2.4,
-        "radius": 3.38,
+        "x": -2.362,
+        "z": -1.8,
+        "radius": 2.535,
         "amount": 0.95
       },
       {
         "type": "basin",
-        "x": 2.4,
-        "z": 1.65,
-        "radius": 3.9,
+        "x": 1.8,
+        "z": 1.237,
+        "radius": 2.925,
         "amount": 1.05
       },
       {
         "type": "ridge",
-        "x": -0.9,
-        "z": -1.65,
-        "toX": 1.35,
-        "toZ": -0.75,
-        "width": 1.2,
+        "x": -0.675,
+        "z": -1.237,
+        "toX": 1.013,
+        "toZ": -0.562,
+        "width": 0.9,
         "amount": 0.25
       }
     ]
@@ -43,8 +43,8 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": -2.85,
-        "z": -1.95,
+        "x": -2.138,
+        "z": -1.462,
         "dischargePerHour": 0.025
       }
     ],
@@ -59,15 +59,15 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 14,
+    "rocks": 8,
     "rockMinScale": 0.15,
     "rockMaxScale": 0.55,
-    "logs": 3,
+    "logs": 2,
     "logMinLength": 1.1,
     "logMaxLength": 2.2,
     "logMinRadius": 0.1,
     "logMaxRadius": 0.2,
-    "gravelPatches": 8,
+    "gravelPatches": 4,
     "gravelMinRadius": 0.45,
     "gravelMaxRadius": 1.1,
     "spacing": 0.35
@@ -75,35 +75,35 @@
   "starterFlora": [
     {
       "species": "ringreed",
-      "count": 10
-    },
-    {
-      "species": "glassrush",
-      "count": 10
-    },
-    {
-      "species": "floodlace_moss",
-      "count": 12
-    },
-    {
-      "species": "mooncoin",
-      "count": 8
-    },
-    {
-      "species": "brooklace",
-      "count": 8
-    },
-    {
-      "species": "fenbead",
       "count": 6
     },
     {
+      "species": "glassrush",
+      "count": 6
+    },
+    {
+      "species": "floodlace_moss",
+      "count": 7
+    },
+    {
+      "species": "mooncoin",
+      "count": 4
+    },
+    {
+      "species": "brooklace",
+      "count": 4
+    },
+    {
+      "species": "fenbead",
+      "count": 3
+    },
+    {
       "species": "trifold",
-      "count": 8
+      "count": 4
     },
     {
       "species": "velvetweave_moss",
-      "count": 10
+      "count": 6
     }
   ],
   "starterFauna": [
@@ -113,11 +113,11 @@
     },
     {
       "species": "glintfin",
-      "count": 12
+      "count": 7
     },
     {
       "species": "emberglass_swimmer",
-      "count": 8
+      "count": 6
     },
     {
       "species": "siltshield",
@@ -125,7 +125,7 @@
     },
     {
       "species": "prismhopper",
-      "count": 8
+      "count": 6
     },
     {
       "species": "marbleback",

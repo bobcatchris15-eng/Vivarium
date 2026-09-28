@@ -117,6 +117,7 @@ public partial class GameSession : Node3D
         Fauna.Build(world);
         Overlay.Bind(world);
         CameraRig.World = world;
+        CameraRig.ResetView();
         Tools.Bind(world);
         Autosave ??= new AutosaveController(AutosavePath);
         Autosave.Path = AutosavePath;

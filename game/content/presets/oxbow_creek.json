@@ -2,7 +2,7 @@
   "id": "oxbow_creek",
   "name": "Twin Meadows Creek",
   "seed": 63481,
-  "diameter": 12,
+  "diameter": 9,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 0.32,
@@ -12,70 +12,70 @@
     "minHeight": -0.7,
     "maxHeight": 1.6,
     "bottom": -2.6,
-    "rockExposure": 0.10,
+    "rockExposure": 0.1,
     "features": [
       {
         "type": "hill",
-        "x": -2.8,
-        "z": 2,
-        "radius": 2.88,
+        "x": -2.1,
+        "z": 1.5,
+        "radius": 2.16,
         "amount": 0.35
       },
       {
         "type": "hill",
-        "x": 2.8,
-        "z": -2,
-        "radius": 2.88,
+        "x": 2.1,
+        "z": -1.5,
+        "radius": 2.16,
         "amount": 0.35
       },
       {
         "type": "channel",
-        "x": -7.04,
-        "z": -4,
-        "toX": -1.6,
-        "toZ": -0.48,
-        "width": 1.1,
+        "x": -5.28,
+        "z": -3.0,
+        "toX": -1.2,
+        "toZ": -0.36,
+        "width": 0.825,
         "amount": 0.42
       },
       {
         "type": "channel",
-        "x": -1.6,
-        "z": -0.48,
-        "toX": 0.64,
-        "toZ": -1.12,
-        "width": 1.15,
-        "amount": 0.40
+        "x": -1.2,
+        "z": -0.36,
+        "toX": 0.48,
+        "toZ": -0.84,
+        "width": 0.862,
+        "amount": 0.4
       },
       {
         "type": "channel",
-        "x": 0.64,
-        "z": -1.12,
-        "toX": 1.44,
-        "toZ": 0.96,
-        "width": 1.15,
+        "x": 0.48,
+        "z": -0.84,
+        "toX": 1.08,
+        "toZ": 0.72,
+        "width": 0.862,
         "amount": 0.42
       },
       {
         "type": "channel",
-        "x": 1.44,
-        "z": 0.96,
-        "toX": 7.04,
-        "toZ": 4,
-        "width": 1.2,
+        "x": 1.08,
+        "z": 0.72,
+        "toX": 5.28,
+        "toZ": 3.0,
+        "width": 0.9,
         "amount": 0.46
       },
       {
         "type": "basin",
-        "x": 0.16,
-        "z": -0.64,
-        "radius": 1.28,
+        "x": 0.12,
+        "z": -0.48,
+        "radius": 0.96,
         "amount": 0.26
       },
       {
         "type": "basin",
-        "x": 1.6,
-        "z": 1.2,
-        "radius": 1.44,
+        "x": 1.2,
+        "z": 0.9,
+        "radius": 1.08,
         "amount": 0.24
       }
     ]
@@ -84,8 +84,8 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": -4.32,
-        "z": -2.24,
+        "x": -3.24,
+        "z": -1.68,
         "dischargePerHour": 0.12
       }
     ],
@@ -100,15 +100,15 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 14,
+    "rocks": 8,
     "rockMinScale": 0.15,
     "rockMaxScale": 0.55,
-    "logs": 4,
+    "logs": 2,
     "logMinLength": 1.3,
     "logMaxLength": 2.4,
     "logMinRadius": 0.11,
     "logMaxRadius": 0.22,
-    "gravelPatches": 8,
+    "gravelPatches": 4,
     "gravelMinRadius": 0.4,
     "gravelMaxRadius": 0.95,
     "spacing": 0.34
@@ -116,49 +116,49 @@
   "starterFlora": [
     {
       "species": "brooklace",
-      "count": 10
+      "count": 6
     },
     {
       "species": "velvetweave_moss",
-      "count": 12
+      "count": 7
     },
     {
       "species": "trifold",
-      "count": 12
+      "count": 7
     },
     {
       "species": "glassrush",
-      "count": 8
+      "count": 4
     },
     {
       "species": "ringreed",
-      "count": 6
+      "count": 3
     },
     {
       "species": "pearl_cushion_moss",
-      "count": 8
+      "count": 4
     },
     {
       "species": "coinrunner",
-      "count": 8
+      "count": 4
     },
     {
       "species": "dewbonnet",
-      "count": 6
+      "count": 3
     },
     {
       "species": "shadebell",
-      "count": 4
+      "count": 3
     }
   ],
   "starterFauna": [
     {
       "species": "glintfin",
-      "count": 12
+      "count": 7
     },
     {
       "species": "emberglass_swimmer",
-      "count": 8
+      "count": 6
     },
     {
       "species": "stiltclaw",
@@ -170,7 +170,7 @@
     },
     {
       "species": "prismhopper",
-      "count": 10
+      "count": 6
     },
     {
       "species": "marbleback",

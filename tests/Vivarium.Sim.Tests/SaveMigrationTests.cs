@@ -50,7 +50,7 @@ public class SaveMigrationTests
     [Fact]
     public void LegacyLargeDiameterSaveStillLoadsButNewWorldsAreCapped()
     {
-        Assert.Equal(12, WorldDescriptor.MaxDiameter);
+        Assert.Equal(10, WorldDescriptor.MaxDiameter);
         var d = TestUtil.FlatDescriptor(78);
         d.Diameter = 16;
         Assert.NotEmpty(d.Validate());

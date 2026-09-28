@@ -2,7 +2,7 @@
   "id": "creek",
   "name": "Whispering Creek",
   "seed": 58210,
-  "diameter": 12,
+  "diameter": 8,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 0.65,
@@ -16,41 +16,41 @@
     "features": [
       {
         "type": "hill",
-        "x": -3.6,
-        "z": -3,
-        "radius": 2.74,
+        "x": -2.4,
+        "z": -2.0,
+        "radius": 1.827,
         "amount": 1.1
       },
       {
         "type": "hill",
-        "x": 3.26,
-        "z": -1.71,
-        "radius": 3,
+        "x": 2.173,
+        "z": -1.14,
+        "radius": 2.0,
         "amount": 0.8
       },
       {
         "type": "channel",
-        "x": -3.77,
-        "z": -3.09,
-        "toX": -0.69,
-        "toZ": -0.34,
-        "width": 0.70,
+        "x": -2.513,
+        "z": -2.06,
+        "toX": -0.46,
+        "toZ": -0.227,
+        "width": 0.467,
         "amount": 0.45
       },
       {
         "type": "channel",
-        "x": -0.69,
-        "z": -0.34,
-        "toX": 6.17,
-        "toZ": 5.49,
-        "width": 0.85,
+        "x": -0.46,
+        "z": -0.227,
+        "toX": 4.113,
+        "toZ": 3.66,
+        "width": 0.567,
         "amount": 0.48
       },
       {
         "type": "basin",
-        "x": -0.51,
-        "z": -0.26,
-        "radius": 1.29,
+        "x": -0.34,
+        "z": -0.173,
+        "radius": 0.86,
         "amount": 0.35
       }
     ]
@@ -59,8 +59,8 @@
     "waterTable": -0.4,
     "springs": [
       {
-        "x": -3.34,
-        "z": -2.74,
+        "x": -2.227,
+        "z": -1.827,
         "dischargePerHour": 0.12
       }
     ],
@@ -75,15 +75,15 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 22,
+    "rocks": 10,
     "rockMinScale": 0.16,
     "rockMaxScale": 0.68,
-    "logs": 4,
+    "logs": 2,
     "logMinLength": 1.2,
     "logMaxLength": 2.3,
     "logMinRadius": 0.11,
     "logMaxRadius": 0.22,
-    "gravelPatches": 9,
+    "gravelPatches": 4,
     "gravelMinRadius": 0.4,
     "gravelMaxRadius": 0.95,
     "spacing": 0.32
@@ -91,49 +91,49 @@
   "starterFlora": [
     {
       "species": "brooklace",
-      "count": 10
+      "count": 4
     },
     {
       "species": "velvetweave_moss",
-      "count": 14
+      "count": 6
     },
     {
       "species": "pearl_cushion_moss",
-      "count": 10
+      "count": 4
     },
     {
       "species": "veilfern",
-      "count": 8
+      "count": 4
     },
     {
       "species": "dewbonnet",
-      "count": 8
+      "count": 4
     },
     {
       "species": "fenbead",
-      "count": 6
+      "count": 3
     },
     {
       "species": "frosttussock",
-      "count": 6
+      "count": 3
     },
     {
       "species": "clinglace",
-      "count": 6
+      "count": 3
     }
   ],
   "starterFauna": [
     {
       "species": "emberglass_swimmer",
-      "count": 10
+      "count": 6
     },
     {
       "species": "ghostbristle",
-      "count": 8
+      "count": 6
     },
     {
       "species": "glintfin",
-      "count": 8
+      "count": 6
     },
     {
       "species": "rainspine",
@@ -145,7 +145,7 @@
     },
     {
       "species": "prismhopper",
-      "count": 10
+      "count": 6
     }
   ]
 }
