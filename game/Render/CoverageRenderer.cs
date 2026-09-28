@@ -56,6 +56,7 @@ public partial class CoverageRenderer : Node3D
         RuffleLichen,    // ruffle_lichen
         Embercrust,      // embercrust_lichen
         Plasmodium,      // ambervein
+        Sundew,          // blue_sundew
     }
 
     private sealed class SpeciesRenderInfo
@@ -254,6 +255,7 @@ public partial class CoverageRenderer : Node3D
                     "pearl_cushion_moss" => CoverageFloraType.PearlCushion,
                     "floodlace_moss" => CoverageFloraType.Floodlace,
                     "velvetweave_moss" => CoverageFloraType.Velvetweave,
+                    "blue_sundew" => CoverageFloraType.Sundew,
                     _ => CoverageFloraType.Generic,
                 };
                 _matSpecies[matId] = new SpeciesRenderInfo
@@ -895,6 +897,10 @@ public partial class CoverageRenderer : Node3D
                     if ((t.Flags[lz * edge + lx] & (byte)CoverageFlags.Fruiting) != 0 || ((hash >> 24) < 75 && t.W[lz * edge + lx] >= 140))
                         AppendPlasmodiumSporangia(md, foot, normal, shootColor, sp.Color2, hash, vigour);
                     break;
+                case CoverageFloraType.Sundew:
+                    if ((hash >> 24) < 125)
+                        AppendBlueSundewRosette(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    break;
             }
         }
 
@@ -1181,6 +1187,61 @@ public partial class CoverageRenderer : Node3D
                 (i, v) => (rimCol, 1, 0, 0, 0, 0));
             Primitives.Ellipsoid(mesh, center + normal * 0.0009, new Vec3(r * 0.75, 0.0003, r * 0.75), 3, 5,
                 (u, v) => (discCol, 1, u, v, 0, 0));
+        }
+    }
+
+
+    private static void AppendBlueSundewRosette(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
+    {
+        // A coverage cell contributes a tiny rosette; adjacent occupied cells make one distributed
+        // rhizomatous sundew patch rather than hundreds of authoritative plant individuals.
+        var green = new[] { (double)col1.R, (double)col1.G, (double)col1.B };
+        var blue = new[] { Math.Max(0.18, (double)col2.R), Math.Max(0.42, (double)col2.G), Math.Max(0.88, (double)col2.B) };
+        var gland = new[] { 0.64, 0.12, 0.24 };
+        int leaves = 5 + (int)(hash & 3);
+        double phase = (hash & 1023) / 1023.0 * Math.PI * 2;
+        double scale = 0.72 + vigour * 0.32;
+        for (int i = 0; i < leaves; i++)
+        {
+            double a = phase + i * Math.PI * 2 / leaves + (((hash >> (i + 4)) & 7) - 3.5) * 0.035;
+            var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+            var side = new Vec3(-dir.Z, 0, dir.X);
+            double reach = (0.010 + ((hash >> (i * 3 + 8)) & 7) * 0.0007) * scale;
+            var root = foot + normal * 0.001;
+            var pad = root + dir * reach + normal * (0.002 + 0.001 * (i & 1));
+            Primitives.Tube(mesh, new[] { root, Vec3.Lerp(root, pad, 0.58) + normal * 0.002, pad },
+                new[] { 0.0008, 0.0006, 0.00035 }, 4,
+                (j, v) => (green, 1, j, v, 0, 0));
+
+            var padCol = (i + (int)(hash & 1)) % 3 == 0 ? blue : new[] { 0.46, 0.18, 0.30 };
+            Primitives.Ellipsoid(mesh, pad, new Vec3(0.0036, 0.0007, 0.0052), 3, 6,
+                (u, v) => (padCol, 1, u, v, 0, 0), yaw: a);
+
+            // Sparse sticky tentacles with pale blue dew beads.
+            for (int g = -1; g <= 1; g++)
+            {
+                var gb = pad + side * (g * 0.0022) + normal * 0.0005;
+                var gt = gb + side * (g * 0.0012) + normal * (0.0020 + 0.00035 * Math.Abs(g));
+                Primitives.Tube(mesh, new[] { gb, gt }, new[] { 0.00022, 0.00008 }, 3,
+                    (j, v) => (gland, 1, j, v, 0, 0));
+                Primitives.Ellipsoid(mesh, gt, new Vec3(0.00045, 0.00045, 0.00045), 3, 4,
+                    (u, v) => (new[] { 0.56, 0.82, 0.98 }, 0.95, u, v, 0, 0));
+            }
+        }
+
+        // Occasional vivid-blue reproductive stalks punctuate the otherwise low mat.
+        if (((hash >> 18) & 7) == 0)
+        {
+            double h = (0.022 + ((hash >> 10) & 15) * 0.00055) * scale;
+            var top = foot + normal * h + new Vec3(((hash & 15) - 7.5) * 0.00020, 0, (((hash >> 4) & 15) - 7.5) * 0.00020);
+            Primitives.Tube(mesh, new[] { foot, Vec3.Lerp(foot, top, 0.55), top }, new[] { 0.00065, 0.00042, 0.00025 }, 4,
+                (j, v) => (green, 1, j, v, 0, 0));
+            for (int b = 0; b < 3; b++)
+            {
+                var bp = top + new Vec3((b - 1) * 0.0018, b * 0.0011, 0);
+                Primitives.Ellipsoid(mesh, bp, new Vec3(0.0014, 0.0007, 0.0014), 3, 5,
+                    (u, v) => (blue, 1, u, v, 0, 0));
+            }
         }
     }
 
