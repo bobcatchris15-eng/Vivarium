@@ -64,6 +64,9 @@ public sealed class CoverageTilePayload
     public string Dorm { get; set; } = "";
     public string Flags { get; set; } = "";
     public string D2E { get; set; } = "";
+    /// <summary>Per-cell growth caches used by Mat competition. Optional for backward-compatible older saves.</summary>
+    public string? Vigour { get; set; }
+    public string? GrowthWater { get; set; }
     public bool? Steady { get; set; }
     public int? SteadySteps { get; set; }
     public double? EnvCache { get; set; }
@@ -149,6 +152,7 @@ public static class WorldSerializer
                     Ti = t.Ti, Tj = t.Tj,
                     Occ = PackBytes(t.Occ), B = PackFloats(t.B), W = PackBytes(t.W),
                     Age = PackUShorts(t.Age), Dorm = PackBytes(t.Dorm), Flags = PackBytes(t.Flags), D2E = PackBytes(t.D2E),
+                    Vigour = PackBytes(t.Vigour), GrowthWater = PackBytes(t.GW),
                     Steady = t.Steady, SteadySteps = t.SkippedPhysiologySteps,
                     EnvCache = double.IsNaN(t.EnvMoistureCache) ? null : t.EnvMoistureCache,
                 }).ToList(),
@@ -242,7 +246,9 @@ public static class WorldSerializer
                     UnpackBytes(tp.Occ, "coverage occ"), UnpackFloats(tp.B, "coverage biomass"), UnpackBytes(tp.W, "coverage water"),
                     UnpackUShorts(tp.Age, "coverage age"), UnpackBytes(tp.Dorm, "coverage dormancy"),
                     UnpackBytes(tp.Flags, "coverage flags"), UnpackBytes(tp.D2E, "coverage d2e"),
-                    tp.Steady ?? false, tp.SteadySteps ?? 0, tp.EnvCache ?? double.NaN);
+                    tp.Steady ?? false, tp.SteadySteps ?? 0, tp.EnvCache ?? double.NaN,
+                    tp.Vigour != null ? UnpackBytes(tp.Vigour, "coverage vigour") : null,
+                    tp.GrowthWater != null ? UnpackBytes(tp.GrowthWater, "coverage growth-water") : null);
             }
         }
         if (cp.Stability != null) CoverageEnvironment.StabilityOf(w).ImportDomainValues(Unpack(cp.Stability, "substrate stability"));
