@@ -9,7 +9,7 @@ public enum SculptMode { Raise, Lower, Smooth }
 /// <summary>
 /// Authoritative terrain sculpting. Edits the heightfield vertices under a disc with a smooth falloff, clamped
 /// to the world's height limits, then brings every dependent system back into agreement: hydrology beds (water
-/// finds its new level on its own, and ground dug below the water table fills as a pond), prop seating, animal
+/// finds its new level on its own, and ground dug below the water table exposes hydrostatic groundwater), prop seating, animal
 /// resting heights and the light field.
 /// </summary>
 public static class TerrainEditing

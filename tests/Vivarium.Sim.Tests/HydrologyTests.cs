@@ -15,7 +15,7 @@ public class HydrologyTests
         edit?.Invoke(d);
     });
 
-    private static double Total(VivariumWorld w) { var b = w.Water.Budget; return w.Water.Volume() + b.BoundaryOutflow + b.Evaporation + b.Infiltration - b.SpringInflow - b.GroundwaterInflow; }
+    private static double Total(VivariumWorld w) { var b = w.Water.Budget; return w.Water.Volume() + b.BoundaryOutflow + b.GroundwaterRecharge + b.Evaporation + b.Infiltration - b.SpringInflow - b.GroundwaterInflow; }
 
     [Fact] // t-051
     public void ConfigurationSupportsZeroOneOrManySpringsAndValidatesBounds()
@@ -70,9 +70,28 @@ public class HydrologyTests
         Assert.True(w.Water.OpenWaterDepth(c) > 0.2);
         Assert.Equal(0.0, w.Water.SurfaceVolume(), 12);
 
+        double rechargeBefore = w.Water.Budget.GroundwaterRecharge;
         w.Water.AddWater(Vec2.Zero, 0.3, 0.01);
-        Assert.True(w.Water.SurfaceWaterDepth(c) > 0);
-        Assert.True(w.Water.SurfaceAt(Vec2.Zero) > w.Water.WaterTable);
+        Assert.Equal(0.0, w.Water.SurfaceWaterDepth(c), 12);
+        Assert.Equal(w.Water.WaterTable, w.Water.SurfaceAt(Vec2.Zero), 12);
+        Assert.True(w.Water.Budget.GroundwaterRecharge > rechargeBefore);
+    }
+
+    [Fact]
+    public void SurfaceWaterThatReachesExposedGroundwaterIsAbsorbedAndTallied()
+    {
+        var w = TestUtil.DefaultWorld(populate: false);
+        Assert.Contains(w.Grid.DomainCells, w.Water.IsWaterTable);
+
+        double beforeRecharge = w.Water.Budget.GroundwaterRecharge;
+        double beforeSurface = w.Water.SurfaceVolume();
+        // The default spring/channel terminates in the groundwater-fed basin.
+        for (int i = 0; i < 120; i++) w.Water.Step(30);
+
+        Assert.True(w.Water.Budget.GroundwaterRecharge > beforeRecharge, "spring runoff should merge into the groundwater basin");
+        foreach (int c in w.Grid.DomainCells.Where(w.Water.IsWaterTable))
+            Assert.Equal(0.0, w.Water.SurfaceWaterDepth(c), 12);
+        Assert.True(w.Water.SurfaceVolume() >= 0 && w.Water.SurfaceVolume() != beforeSurface || w.Water.Budget.GroundwaterRecharge > beforeRecharge);
     }
 
     [Fact] // t-053
@@ -352,4 +371,5 @@ public class HydrologyTests
         Assert.Equal(set.CombinedMesh.DigestHex(), WaterMesh.Build(w).DigestHex());
     }
 }
+
 

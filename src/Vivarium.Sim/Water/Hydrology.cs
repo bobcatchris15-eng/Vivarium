@@ -102,6 +102,7 @@ public sealed class Hydrology
                 _edgeHeight[idx] = Math.Max(hf.Height(edge) - config.BoundaryDrop, config.WaterTable);
             }
         }
+        AbsorbSurfaceIntoGroundwater();
         InvalidateWaterDistance();
     }
 
@@ -114,6 +115,7 @@ public sealed class Hydrology
         if (total <= 0 || volume <= 0) return 0;
         foreach (var (c, wgt) in cells) Depth[c] += volume * wgt / total / CellArea;
         Budget.ToolInflow += volume;
+        AbsorbSurfaceIntoGroundwater();
         InvalidateWaterDistance();
         return volume;
     }
@@ -348,6 +350,26 @@ public sealed class Hydrology
             double south = so >= 0 ? _faceN[so] : -_edgeFlowS[idx] * _outScale[idx];
             FlowX[idx] = 0.5 * (east + west);
             FlowZ[idx] = 0.5 * (north + south);
+        }
+
+        // Exposed groundwater is a fixed-head reservoir, not another dynamic-water cell.
+        // Any surface volume that reaches it is recharged immediately and cannot pile up over the table.
+        AbsorbSurfaceIntoGroundwater();
+    }
+
+    private void AbsorbSurfaceIntoGroundwater()
+    {
+        double recharged = 0;
+        foreach (int idx in Grid.DomainCells)
+        {
+            if (!IsWaterTable(idx) || Depth[idx] <= 0) continue;
+            recharged += Depth[idx] * CellArea;
+            Depth[idx] = 0;
+        }
+        if (recharged > 0)
+        {
+            Budget.GroundwaterRecharge += recharged;
+            InvalidateWaterDistance();
         }
     }
 
