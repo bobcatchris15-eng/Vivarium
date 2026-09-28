@@ -466,6 +466,10 @@ public sealed class FloraSystem
         foreach (var sp in C.Flora)
         {
             if (sp.Archetype is not ("fungus" or "slime_mold")) continue;
+            // Some highly episodic or substrate-specific fungi are introduced as starters and then spread
+            // locally. Excluding them from generic atmospheric spore rain prevents total spore pressure from
+            // scaling linearly with every fungus definition added to the library.
+            if (sp.Tags.Contains("no_ambient_spore_rain")) continue;
             if (_sporeCounts.GetValueOrDefault(sp.Id) >= SporeBankThreshold) continue;
             var rng = Rng.Keyed(_w.Seed, "flora.spores." + sp.Id, (ulong)_w.Clock.Tick * 1_000_003UL + _w.Ids.LastSerial);
             if (rng.NextDouble() >= Math.Min(1, dt / SimUnits.Day)) continue;

@@ -1,0 +1,103 @@
+{
+  "id": "veilblade",
+  "name": "Veilblade",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Tall wet-ground ribbon plant that closes into a soft visual curtain.",
+  "description": "Long flexible blades rise from saturated soil and bow together into dense green curtains with a few wiry fertile stalks above them.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.28
+    },
+    "refuseSubstrates": [
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.84,
+      "tolerance": 0.16
+    },
+    "light": {
+      "optimum": 0.56,
+      "tolerance": 0.34
+    },
+    "nutrients": {
+      "optimum": 0.48,
+      "tolerance": 0.34
+    },
+    "maxWaterDepth": 0.018,
+    "hardMinMoisture": 0.48,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1.7,
+    "initialBiomass": 0.07,
+    "declinePerDay": 0.23,
+    "maturityDays": 18,
+    "lifespanDays": 300,
+    "nutrientPerBiomass": 0.32,
+    "radiusAtMax": 0.68,
+    "minRadius": 0.1
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.9,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.72,
+    "crowdingLimit": 2.1,
+    "sensitivity": 0.82
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.8,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.88,
+  "sheddingPerDay": 0.016,
+  "grazingValue": 0.32,
+  "visual": {
+    "shape": "veilblade_curtain",
+    "color": [
+      0.2,
+      0.5,
+      0.27
+    ],
+    "color2": [
+      0.48,
+      0.72,
+      0.36
+    ],
+    "colorVariance": 0.055,
+    "height": 1.62
+  },
+  "tags": [
+    "plant",
+    "screen",
+    "wetland",
+    "blade"
+  ],
+  "postLife": {
+    "standingDays": 28,
+    "collapseDays": 5,
+    "fallenDays": 36,
+    "advancedDays": 12,
+    "coarseFraction": 0.2,
+    "decayHalfLifeMultiplier": 0.92,
+    "standingRetention": 0.72,
+    "deadColor": [
+      0.7,
+      0.63,
+      0.4
+    ],
+    "litterColorInfluence": 0.72,
+    "dryBleach": 0.3,
+    "wetDarken": 0.16
+  }
+}

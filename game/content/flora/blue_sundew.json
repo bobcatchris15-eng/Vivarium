@@ -1,0 +1,109 @@
+{
+  "id": "blue_sundew",
+  "name": "Blue Sundew Mat",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Distributed carnivorous sundew analogue carpeting saturated mossy soil.",
+  "description": "A rhizomatous mat threads through wet ground, carrying sticky red-green feeding pads beaded with dew and occasional startling cobalt reproductive stalks.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.18
+    },
+    "refuseSubstrates": [
+      "rock",
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.91,
+      "tolerance": 0.11
+    },
+    "light": {
+      "optimum": 0.62,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.18,
+      "tolerance": 0.24
+    },
+    "maxWaterDepth": 0.008,
+    "hardMinMoisture": 0.62,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.2,
+    "maxBiomass": 0.55,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.22,
+    "maturityDays": 14,
+    "lifespanDays": 220,
+    "nutrientPerBiomass": 0.12,
+    "radiusAtMax": 0.18,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.45,
+    "propagules": 2,
+    "minBiomassFraction": 0.48
+  },
+  "competition": {
+    "radius": 0.2,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.68
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.55,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.84,
+  "sheddingPerDay": 0.012,
+  "grazingValue": 0.1,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.038,
+    "maxHeight": 0.006,
+    "heightRule": "flat",
+    "domeLength": 3,
+    "water": {
+      "kWet": 8,
+      "kDry": 0.7,
+      "wMin": 0.58,
+      "wOpt": 0.88
+    },
+    "light": {
+      "k": 0.3,
+      "max": 0.9
+    },
+    "dormBrownDays": 2,
+    "dormDeathDays": 8,
+    "sporeRate": 0.0012,
+    "moistureFeedback": 0.006,
+    "seedBiomass": 0.055
+  },
+  "visual": {
+    "shape": "sundew_mat",
+    "color": [
+      0.28,
+      0.46,
+      0.2
+    ],
+    "color2": [
+      0.18,
+      0.48,
+      0.96
+    ],
+    "colorVariance": 0.045,
+    "height": 0.035
+  },
+  "tags": [
+    "plant",
+    "carnivorous",
+    "rhizomatous",
+    "wetland"
+  ]
+}

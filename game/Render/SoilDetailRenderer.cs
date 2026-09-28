@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
+using Vivarium.Sim.Core;
 using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
 
@@ -15,8 +16,8 @@ namespace Vivarium.Game.Render;
 public partial class SoilDetailRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private MultiMesh _crumbs = null!, _clods = null!, _twigs = null!, _flakes = null!, _fruit = null!;
-    private MultiMeshInstance3D _crumbMmi = null!, _clodMmi = null!, _twigMmi = null!, _flakeMmi = null!, _fruitMmi = null!;
+    private MultiMesh _crumbs = null!, _clods = null!, _twigs = null!, _flakes = null!, _fruit = null!, _blades = null!, _stalks = null!;
+    private MultiMeshInstance3D _crumbMmi = null!, _clodMmi = null!, _twigMmi = null!, _flakeMmi = null!, _fruitMmi = null!, _bladeMmi = null!, _stalkMmi = null!;
     private double _accum = 999;
     private int _terrainVersion = int.MinValue;
     private long _litterRevision = -1;
@@ -52,12 +53,16 @@ public partial class SoilDetailRenderer : Node3D
         _twigs = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildTwig(mat) };
         _flakes = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFlake(mat) };
         _fruit = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildClod(0.011f, 11) };
+        _blades = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFillerBlade(mat) };
+        _stalks = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFillerStalk(mat) };
         _crumbMmi = new MultiMeshInstance3D { Name = "SoilCrumbs", Multimesh = _crumbs, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _clodMmi = new MultiMeshInstance3D { Name = "SoilClods", Multimesh = _clods, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _twigMmi = new MultiMeshInstance3D { Name = "SoilTwigs", Multimesh = _twigs, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _flakeMmi = new MultiMeshInstance3D { Name = "LeafLitter", Multimesh = _flakes, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _fruitMmi = new MultiMeshInstance3D { Name = "FallenFruit", Multimesh = _fruit, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
-        AddChild(_crumbMmi); AddChild(_clodMmi); AddChild(_twigMmi); AddChild(_flakeMmi); AddChild(_fruitMmi);
+        _bladeMmi = new MultiMeshInstance3D { Name = "AmbientGroundBlades", Multimesh = _blades, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
+        _stalkMmi = new MultiMeshInstance3D { Name = "AmbientGroundStalks", Multimesh = _stalks, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
+        AddChild(_crumbMmi); AddChild(_clodMmi); AddChild(_twigMmi); AddChild(_flakeMmi); AddChild(_fruitMmi); AddChild(_bladeMmi); AddChild(_stalkMmi);
         _accum = 999;
         _terrainVersion = int.MinValue;
         _litterRevision = -1;
@@ -68,7 +73,7 @@ public partial class SoilDetailRenderer : Node3D
         using var prof = FrameProfiler.Measure("SoilDetail");
         if (_w == null) return;
         bool enabled = Quality > 0;
-        _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = _fruitMmi.Visible = enabled;
+        _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = _fruitMmi.Visible = _bladeMmi.Visible = _stalkMmi.Visible = enabled;
         if (!enabled) { _accum = 999; return; }
         _accum += delta;
         if (_accum < 1.0) return;
@@ -96,6 +101,8 @@ public partial class SoilDetailRenderer : Node3D
         var twigXf = new List<Transform3D>(); var twigCol = new List<Color>();
         var flakeXf = new List<Transform3D>(); var flakeCol = new List<Color>();
         var fruitXf = new List<Transform3D>(); var fruitCol = new List<Color>();
+        var bladeXf = new List<Transform3D>(); var bladeCol = new List<Color>();
+        var stalkXf = new List<Transform3D>(); var stalkCol = new List<Color>();
 
         var nearRocks = new List<Vivarium.Sim.World.Rock>();
         var nearLogs = new List<Vivarium.Sim.World.LogProp>();
@@ -116,6 +123,20 @@ public partial class SoilDetailRenderer : Node3D
         {
             if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, gr.Position) <= searchRadius + gr.Radius)
                 nearGravel.Add(gr);
+        }
+
+        // Render-only filler deliberately avoids named flora. It can borrow a little colour/silhouette character
+        // from the nearest plant outside that exclusion halo, but it never participates in simulation or competition.
+        var nearFlora = new List<(Vivarium.Sim.Core.Vec2 P, double Exclusion, Color Tint, bool BladeBias)>();
+        foreach (var plant in _w.Flora.Items)
+        {
+            var sp = _w.Content.FloraOrThrow(plant.SpeciesId);
+            if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, plant.Position) <= searchRadius + Math.Max(0.4, plant.Radius(sp)))
+            {
+                var tint = new Color((float)sp.Color[0], (float)sp.Color[1], (float)sp.Color[2]);
+                bool bladeBias = sp.Shape is "reed" or "tussock" or "veilblade_curtain" or "kinkcane_brake" || sp.Tags.Contains("grass");
+                nearFlora.Add((plant.Position, Math.Max(0.13, plant.Radius(sp) + 0.075), tint, bladeBias));
+            }
         }
 
         // step over a fine lattice near the camera: this layer only needs to exist within CullRadius, so the
@@ -215,6 +236,44 @@ public partial class SoilDetailRenderer : Node3D
             var norm = new Vector3((float)(hx0 - hx1), (float)(2 * e), (float)(hz0 - hz1)).Normalized();
             var cellTilt = SurfaceFrame.TiltTo(norm.Y < 0.5f ? new Vector3(norm.X, 0, norm.Z).Normalized() * 0.866f + Vector3.Up * 0.5f : norm);
 
+            // Ambient vegetation is strongest on ordinary moist exposed soil, but remains intentionally visually
+            // subordinate. It is geometry, not a green terrain wash: many short blades plus sparse seed stalks.
+            double nearest = double.PositiveInfinity;
+            Color neighbourTint = new Color(0.30f, 0.48f, 0.20f);
+            bool neighbourBladeBias = false;
+            bool excludedByNamedPlant = false;
+            for (int pi = 0; pi < nearFlora.Count; pi++)
+            {
+                double fd = Vivarium.Sim.Core.Vec2.Distance(p, nearFlora[pi].P);
+                if (fd < nearFlora[pi].Exclusion) { excludedByNamedPlant = true; break; }
+                if (fd < nearest)
+                {
+                    nearest = fd;
+                    neighbourTint = nearFlora[pi].Tint;
+                    neighbourBladeBias = nearFlora[pi].BladeBias;
+                }
+            }
+            if (!excludedByNamedPlant && slope < 0.72 && moisture > 0.16 && moisture < 0.94)
+            {
+                double light = _w.FloraSystem.EffectiveLightCell(idx);
+                double moistureFit = MathD.Clamp01(1.0 - Math.Abs(moisture - 0.55) / 0.48);
+                double lightFit = 0.35 + 0.65 * MathD.Clamp01(light / 0.72);
+                double litterPenalty = 1.0 - 0.45 * MathD.Clamp01(fineCover);
+                double filler = moistureFit * lightFit * litterPenalty * distFade;
+                int bladeCount = Mathf.Clamp(Mathf.RoundToInt((Quality >= 2 ? 7 : 11) * filler), 0, Quality >= 2 ? 9 : 13);
+                int stalkCount = filler > 0.32 && rng.Randf() < (neighbourBladeBias ? 0.30f : 0.18f) ? 1 : 0;
+                var baseGreen = new Color(
+                    (float)Mathf.Lerp(0.24, 0.34, moisture),
+                    (float)Mathf.Lerp(0.38, 0.58, moisture),
+                    (float)Mathf.Lerp(0.16, 0.28, moisture));
+                if (nearest < 1.1)
+                    baseGreen = baseGreen.Lerp(neighbourTint, (float)(0.12 + 0.16 * (1.0 - nearest / 1.1)));
+                for (int k = 0; k < bladeCount; k++)
+                    Place(bladeXf, bladeCol, g, p, ref rng, baseGreen, 0.72f, 1.38f, DetailKind.Blade, cellTilt, nearRocks, nearLogs, nearGravel);
+                for (int k = 0; k < stalkCount; k++)
+                    Place(stalkXf, stalkCol, g, p, ref rng, baseGreen.Lerp(new Color(0.62f, 0.56f, 0.30f), 0.30f), 0.78f, 1.28f, DetailKind.Stalk, cellTilt, nearRocks, nearLogs, nearGravel);
+            }
+
             for (int k = 0; k < crumbCount; k++) Place(crumbXf, crumbCol, g, p, ref rng, soilTint, 0.7f, 1.3f, DetailKind.Crumb, cellTilt, nearRocks, nearLogs, nearGravel);
             for (int k = 0; k < clodCount; k++) Place(clodXf, clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f, DetailKind.Clod, cellTilt, nearRocks, nearLogs, nearGravel);
             for (int k = 0; k < twigCount; k++) Place(twigXf, twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f, DetailKind.Twig, cellTilt, nearRocks, nearLogs, nearGravel);
@@ -227,9 +286,11 @@ public partial class SoilDetailRenderer : Node3D
         SetInstances(_twigs, twigXf, twigCol);
         SetInstances(_flakes, flakeXf, flakeCol);
         SetInstances(_fruit, fruitXf, fruitCol);
+        SetInstances(_blades, bladeXf, bladeCol);
+        SetInstances(_stalks, stalkXf, stalkCol);
     }
 
-    private enum DetailKind { Crumb, Clod, Twig, Flake, Fruit }
+    private enum DetailKind { Crumb, Clod, Twig, Flake, Fruit, Blade, Stalk }
 
     private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale, DetailKind kind, Basis cellTilt, List<Vivarium.Sim.World.Rock> nearRocks, List<Vivarium.Sim.World.LogProp> nearLogs, List<Vivarium.Sim.World.GravelPatch> nearGravel)
     {
@@ -260,6 +321,14 @@ public partial class SoilDetailRenderer : Node3D
             case DetailKind.Twig:
                 basis = basis * new Basis(Vector3.Right, rng.RandfRange(-0.16f, 0.16f));
                 basis = basis.Scaled(new Vector3(scale * rng.RandfRange(0.7f, 1.2f), scale, scale * rng.RandfRange(0.72f, 1.45f)));
+                break;
+            case DetailKind.Blade:
+                basis = basis * new Basis(Vector3.Right, rng.RandfRange(-0.22f, 0.22f)) * new Basis(Vector3.Back, rng.RandfRange(-0.12f, 0.12f));
+                basis = basis.Scaled(new Vector3(scale * rng.RandfRange(0.70f, 1.12f), scale * rng.RandfRange(0.75f, 1.35f), scale));
+                break;
+            case DetailKind.Stalk:
+                basis = basis * new Basis(Vector3.Right, rng.RandfRange(-0.12f, 0.12f));
+                basis = basis.Scaled(new Vector3(scale, scale * rng.RandfRange(0.86f, 1.28f), scale));
                 break;
             default:
                 basis = basis * new Basis(Vector3.Right, rng.RandfRange(-0.35f, 0.35f)) * new Basis(Vector3.Back, rng.RandfRange(-0.25f, 0.25f));
@@ -400,6 +469,81 @@ public partial class SoilDetailRenderer : Node3D
                 Tri(rings[j, k], rings[j + 1, k], rings[j + 1, n]);
                 Tri(rings[j, k], rings[j + 1, n], rings[j, n]);
             }
+        st.SetMaterial(mat);
+        return st.Commit();
+    }
+
+
+    /// <summary>A small curved crossed blade cluster used only for anonymous bare-ground visual filler.</summary>
+    private static ArrayMesh BuildFillerBlade(Material mat)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        void Tri(Vector3 a, Vector3 b, Vector3 c)
+        {
+            var n = (b - a).Cross(c - a).Normalized();
+            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(a);
+            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(b);
+            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(c);
+            st.SetNormal(-n); st.SetColor(Colors.White); st.AddVertex(a);
+            st.SetNormal(-n); st.SetColor(Colors.White); st.AddVertex(c);
+            st.SetNormal(-n); st.SetColor(Colors.White); st.AddVertex(b);
+        }
+        void Blade(float yaw, float height, float width, float bend)
+        {
+            var dir = new Vector3(Mathf.Cos(yaw), 0, Mathf.Sin(yaw));
+            var side = new Vector3(-dir.Z, 0, dir.X);
+            var root = Vector3.Zero;
+            var mid = dir * bend * 0.35f + Vector3.Up * height * 0.58f;
+            var tip = dir * bend + Vector3.Up * height;
+            Tri(root - side * width * 0.36f, root + side * width * 0.36f, mid + side * width);
+            Tri(root - side * width * 0.36f, mid + side * width, mid - side * width);
+            Tri(mid - side * width, mid + side * width, tip);
+        }
+        Blade(0.1f, 0.085f, 0.0065f, 0.020f);
+        Blade(2.05f, 0.066f, 0.0055f, 0.025f);
+        Blade(4.15f, 0.105f, 0.0050f, 0.018f);
+        st.SetMaterial(mat);
+        return st.Commit();
+    }
+
+    /// <summary>Occasional wiry reproductive stem that rises above the anonymous blade matrix.</summary>
+    private static ArrayMesh BuildFillerStalk(Material mat)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        void Tri(Vector3 a, Vector3 b, Vector3 c)
+        {
+            var n = (b - a).Cross(c - a).Normalized();
+            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(a);
+            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(b);
+            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(c);
+            st.SetNormal(-n); st.SetColor(Colors.White); st.AddVertex(a);
+            st.SetNormal(-n); st.SetColor(Colors.White); st.AddVertex(c);
+            st.SetNormal(-n); st.SetColor(Colors.White); st.AddVertex(b);
+        }
+        // crossed tapered stem cards
+        for (int q = 0; q < 2; q++)
+        {
+            float yaw = q * Mathf.Pi * 0.5f;
+            var side = new Vector3(Mathf.Cos(yaw), 0, Mathf.Sin(yaw)) * 0.0018f;
+            var root = Vector3.Zero;
+            var mid = new Vector3(0.006f, 0.085f, -0.004f);
+            var top = new Vector3(0.012f, 0.17f, -0.007f);
+            Tri(root - side, root + side, mid + side * 0.65f);
+            Tri(root - side, mid + side * 0.65f, mid - side * 0.65f);
+            Tri(mid - side * 0.65f, mid + side * 0.65f, top);
+        }
+        // loose narrow seed head rather than a cattail blob
+        var headBase = new Vector3(0.012f, 0.13f, -0.007f);
+        for (int i = 0; i < 5; i++)
+        {
+            float y = headBase.Y + i * 0.010f;
+            float side = (i % 2 == 0 ? 1f : -1f) * (0.010f + i * 0.0015f);
+            var p = new Vector3(headBase.X, y, headBase.Z);
+            var tip = p + new Vector3(side, 0.014f, side * 0.28f);
+            Tri(p + new Vector3(-0.0012f,0,0), p + new Vector3(0.0012f,0,0), tip);
+        }
         st.SetMaterial(mat);
         return st.Commit();
     }

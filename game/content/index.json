@@ -41,7 +41,16 @@
     "flora/fenhook.json",
     "flora/ringreed.json",
     "flora/streamribbon.json",
-    "flora/fencomb.json"
+    "flora/fencomb.json",
+    "flora/kinkcane.json",
+    "flora/veilblade.json",
+    "flora/hookthicket.json",
+    "flora/blue_sundew.json",
+    "flora/pitcher_plant.json",
+    "flora/snaptrap.json",
+    "flora/rain_jelly.json",
+    "flora/carrion_bell.json",
+    "flora/glass_antlers.json"
   ],
   "fauna": [
     "fauna/prismhopper.json",
