@@ -198,12 +198,13 @@ public sealed class Hydrology
         return c >= 0 && Grid.InDomain(c) ? Math.Max(0.0, WaterTable - Bed[c]) : 0;
     }
 
-    /// <summary>True if the cell or position has active surface stream / spring runoff above the water table.</summary>
-    public bool IsStream(int idx) => Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth && Bed[idx] >= WaterTable - 0.02;
+    /// <summary>Derived convenience classification: dynamic surface water with a measurable current.</summary>
+    public bool IsStream(int idx) =>
+        Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth && StreamVelocity(idx).Length > 1e-4;
     public bool IsStream(Vec2 p)
     {
         int c = Grid.CellAt(p);
-        return c >= 0 && Grid.InDomain(c) && Depth[c] >= Config.WetDepth && Bed[c] >= WaterTable - 0.02;
+        return c >= 0 && IsStream(c);
     }
 
     /// <summary>Dynamic surface-water depth. Stream classification remains a convenience query.</summary>

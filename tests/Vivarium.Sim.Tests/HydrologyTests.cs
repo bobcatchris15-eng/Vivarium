@@ -374,6 +374,29 @@ public class HydrologyTests
     }
 
     [Fact]
+    public void GroundwaterAndDynamicSurfaceMeshesUseIndependentState()
+    {
+        var groundwaterOnly = TestUtil.FlatWorld(51, d =>
+        {
+            d.Water.WaterTable = 0.25;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.8 });
+        });
+        var tableSet = WaterMesh.BuildSet(groundwaterOnly);
+        Assert.True(tableSet.TableMesh.TriangleCount > 0);
+        Assert.Equal(0, tableSet.StreamMesh.TriangleCount);
+        for (int i = 0; i < tableSet.TableMesh.VertexCount; i++)
+            if (tableSet.TableMesh.NormalAt(i).Y > 0.5)
+                Assert.Equal(groundwaterOnly.Water.WaterTable, tableSet.TableMesh.Position(i).Y, 5);
+
+        var surfaceOnly = TestUtil.FlatWorld(52, d => d.Water.WaterTable = -2.0);
+        TestUtil.Flood(surfaceOnly, Vec2.Zero, 0.8, 0.08);
+        surfaceOnly.Water.Step(30);
+        var surfaceSet = WaterMesh.BuildSet(surfaceOnly);
+        Assert.Equal(0, surfaceSet.TableMesh.TriangleCount);
+        Assert.True(surfaceSet.StreamMesh.TriangleCount > 0);
+    }
+
+    [Fact]
     public void WaterMeshBuildSetSeparatesPondAndStreamMeshes()
     {
         var w = TestUtil.DefaultWorld(populate: false);

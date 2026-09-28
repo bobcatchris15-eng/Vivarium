@@ -8,8 +8,8 @@ using Vivarium.Sim.World;
 namespace Vivarium.Game.Render;
 
 /// <summary>
-/// Rebuilds water surfaces from the authoritative depth field: separates the static water table
-/// (clear standing pond + cut face) and dynamic flowing water (spring streams) into dedicated meshes and shaders.
+/// Rebuilds two independent water surfaces: hydrostatic groundwater clipped against terrain, and
+/// dynamic surface water reconstructed from solver depth/velocity, each with its own mesh and shader.
 /// </summary>
 public partial class WaterRenderer : Node3D
 {
