@@ -16,9 +16,13 @@ uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform sampler2D lichen_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 
 varying vec3 world_pos;
+varying float sundew_surface;
+varying float sundew_dew;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    sundew_surface = float(UV2.y < -4.5);
+    sundew_dew = UV2.x;
 }
 
 void fragment() {
@@ -44,7 +48,10 @@ void fragment() {
     vec2 grainDir = vec2(cos(grainAngle), sin(grainAngle));
     vec2 grainOrth = vec2(-grainDir.y, grainDir.x);
 
-    if (u_pattern < 0.5) {
+    if (sundew_surface > 0.5) {
+        // Living spoon leaves, tentacles and dew retain their own smooth tissue surface.
+        rough = mix(0.48, 0.08, sundew_dew);
+    } else if (u_pattern < 0.5) {
         // Photo-scanned moss supplies irregular leaf clusters and contact shadows across the
         // geometric pillows. World-space sampling keeps one patch continuous over tile seams.
         vec3 scan_n;
@@ -91,6 +98,6 @@ void fragment() {
 
     ALBEDO = c;
     ROUGHNESS = rough;
-    SPECULAR = 0.15;
+    SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : 0.15;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

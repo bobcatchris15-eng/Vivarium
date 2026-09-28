@@ -14,7 +14,7 @@ namespace Vivarium.Sim.Geometry;
 ///   (0 body, 1 marking-eligible body, 2 eye, 3 belly/light, 4 fin/limb); UV2.y = render-only
 ///   animation role (0 none/body, 1 locomotor limb, 2 wing/fin, 3 sensory appendage).
 /// </summary>
-public static class OrganismMeshes
+public static partial class OrganismMeshes
 {
     public static MeshData Flora(FloraSpeciesDef sp, ulong seed = 1, bool juvenile = false, int? visualDetail = null)
     {
@@ -107,9 +107,9 @@ public static class OrganismMeshes
             case "plasmodium": Plasmodium(m, rng, c1, c2); break;
             case "succulent": Succulent(m, rng, seed, c1, c2, juvenile); break;
             case "tussock": Tussock(m, rng, seed, c1, c2, juvenile); break;
-            case "kinkcane_brake": Kinkcane(m, rng, c1, c2); break;
+            case "kinkcane_brake": Kinkcane(m, rng, c1, c2, sp.Height / Math.Max(0.01, sp.RadiusAtMax)); break;
             case "veilblade_curtain": Veilblade(m, rng, c1, c2); break;
-            case "hookthicket_brake": Hookthicket(m, rng, c1, c2); break;
+            case "hookthicket_brake": Hookthicket(m, rng, c1, c2, juvenile); break;
             case "sundew_mat": BlueSundewRosette(m, rng, c1, c2); break;
             case "pitcher_rosette": PitcherPlant(m, rng, c1, c2); break;
             case "snaptrap_rosette": SnapTrap(m, rng, c1, c2); break;
@@ -4254,220 +4254,6 @@ public static class OrganismMeshes
         Primitives.TriangleFacing(m, b, a, d, -n);
         Primitives.TriangleFacing(m, d, a, c, -n);
         Primitives.TriangleFacing(m, d, c, e, -n);
-    }
-
-    /// <summary>Dense rhizomatous cane brake. Crooked segmented culms form a real 1.5-3 m visual wall.</summary>
-    private static void Kinkcane(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        var nodeCol = Primitives.Scale(c1, 0.58);
-        var youngCol = Primitives.Mix(c1, c2, 0.42);
-        int canes = 14 + rng.NextInt(7);
-        for (int k = 0; k < canes; k++)
-        {
-            double a = rng.Range(0, Math.PI * 2);
-            double rr = Math.Sqrt(rng.NextDouble()) * 0.72;
-            var foot = new Vec3(Math.Cos(a) * rr, 0, Math.Sin(a) * rr);
-            var drift = new Vec3(Math.Cos(a + rng.Range(-0.9, 0.9)), 0, Math.Sin(a + rng.Range(-0.9, 0.9)));
-            const int joints = 7;
-            var path = new Vec3[joints];
-            var rad = new double[joints];
-            for (int j = 0; j < joints; j++)
-            {
-                double t = j / (double)(joints - 1);
-                double kink = (j % 2 == 0 ? -1 : 1) * rng.Range(0.025, 0.075) * t;
-                var side = new Vec3(-drift.Z, 0, drift.X);
-                path[j] = foot + Vec3.Up * t + drift * (0.10 * t * t) + side * kink;
-                rad[j] = MathD.Lerp(0.040, 0.016, t);
-            }
-            Primitives.Tube(m, path, rad, 7,
-                (i, v) => (Primitives.Mix(Primitives.Scale(c1, 0.68), youngCol, i / 6.0), 1, i / 6.0, v, 0, 0));
-            for (int j = 1; j < joints - 1; j++)
-            {
-                var p = path[j];
-                Primitives.Ellipsoid(m, p, new Vec3(rad[j] * 1.24, 0.014, rad[j] * 1.24), 4, 7,
-                    (u, v) => (nodeCol, 1, u, v, 0, 0));
-                if ((j + k) % 2 != 0) continue;
-                var seg = (path[j + 1] - path[j - 1]).Normalized();
-                var outward = new Vec3(-seg.Z, 0.15, seg.X).Normalized() * (j % 4 == 0 ? -1 : 1);
-                var root = p + outward * 0.015;
-                var mid = root + outward * rng.Range(0.14, 0.22) + Vec3.Up * 0.035;
-                var tip = root + outward * rng.Range(0.28, 0.42) - Vec3.Up * rng.Range(0.01, 0.06);
-                AddSimpleBlade(m, root, mid, tip, rng.Range(0.035, 0.055), c1, c2);
-            }
-        }
-        // A few low horizontal rhizome glimpses stitch the clump into a brake.
-        for (int r = 0; r < 5; r++)
-        {
-            double a = rng.Range(0, Math.PI * 2);
-            var p0 = new Vec3(Math.Cos(a) * 0.12, 0.018, Math.Sin(a) * 0.12);
-            var p2 = new Vec3(Math.Cos(a) * 0.92, 0.014, Math.Sin(a) * 0.92);
-            var p1 = Vec3.Lerp(p0, p2, 0.52) + new Vec3(rng.Range(-0.08,0.08), 0.012, rng.Range(-0.08,0.08));
-            Primitives.Tube(m, new[] { p0, p1, p2 }, new[] { 0.017, 0.013, 0.008 }, 5,
-                (i, v) => (nodeCol, 1, i, v, 0, 0));
-        }
-    }
-
-    /// <summary>Wet-ground curtain of tall ribbon leaves, deliberately dense enough to break sightlines.</summary>
-    private static void Veilblade(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        int leaves = 28 + rng.NextInt(9);
-        for (int k = 0; k < leaves; k++)
-        {
-            double a = rng.Range(0, Math.PI * 2);
-            double rr = Math.Sqrt(rng.NextDouble()) * 0.55;
-            var root = new Vec3(Math.Cos(a) * rr, 0, Math.Sin(a) * rr);
-            var outDir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
-            double lean = rng.Range(0.18, 0.58);
-            double h = rng.Range(0.78, 1.04);
-            var mid = root + outDir * (lean * 0.30) + Vec3.Up * (h * 0.62);
-            var tip = root + outDir * lean + Vec3.Up * (h * rng.Range(0.58, 0.82));
-            var col = Primitives.Mix(c1, c2, rng.Range(0.04, 0.48));
-            AddSimpleBlade(m, root, mid, tip, rng.Range(0.045, 0.075), Primitives.Scale(col, 0.78), col);
-        }
-        // Sparse taller fertile stalks give the wall a vertical comb above the leaf curtain.
-        for (int k = 0; k < 5; k++)
-        {
-            double a = rng.Range(0, Math.PI * 2);
-            var foot = new Vec3(Math.Cos(a) * rng.Range(0.05,0.36), 0, Math.Sin(a) * rng.Range(0.05,0.36));
-            var top = foot + new Vec3(rng.Range(-0.08,0.08), rng.Range(0.88,1.04), rng.Range(-0.08,0.08));
-            Primitives.Tube(m, new[] { foot, Vec3.Lerp(foot, top, 0.6), top }, new[] { 0.010, 0.007, 0.004 }, 5,
-                (i,v)=>(Primitives.Scale(c1,0.76),1,i,v,0,0));
-            Primitives.Ellipsoid(m, top - Vec3.Up * 0.035, new Vec3(0.018,0.075,0.018), 5, 8,
-                (u,v)=>(Primitives.Mix(c2,new[]{0.55,0.42,0.22},0.55),1,u,v,0,0));
-        }
-    }
-
-    /// <summary>Interlaced arching thorn canes that read as a dense, mechanically difficult shrub wall.</summary>
-    private static void Hookthicket(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        var wood = Primitives.Mix(c1, new[] { 0.25, 0.16, 0.10 }, 0.66);
-        var thorn = new[] { 0.42, 0.31, 0.18 };
-        int canes = 11 + rng.NextInt(5);
-        for (int k = 0; k < canes; k++)
-        {
-            double a = 2 * Math.PI * k / canes + rng.Range(-0.28,0.28);
-            var dir = new Vec3(Math.Cos(a),0,Math.Sin(a));
-            var side = new Vec3(-dir.Z,0,dir.X);
-            var root = dir * rng.Range(0.05,0.34);
-            var p1 = root + dir * rng.Range(0.18,0.38) + Vec3.Up * rng.Range(0.28,0.48);
-            var p2 = root + dir * rng.Range(0.08,0.30) + side * rng.Range(-0.30,0.30) + Vec3.Up * rng.Range(0.66,0.88);
-            var p3 = root - dir * rng.Range(0.05,0.28) + side * rng.Range(-0.34,0.34) + Vec3.Up * rng.Range(0.78,1.02);
-            var path = new[] { root, p1, p2, p3 };
-            Primitives.Tube(m, path, new[] { 0.036,0.029,0.021,0.012 }, 6,
-                (i,v)=>(Primitives.Mix(wood,c1,i/3.0*0.35),1,i/3.0,v,0,0));
-            for (int j=1;j<3;j++)
-            {
-                var p=path[j];
-                var outv=(side*(j%2==0?-1:1)+Vec3.Up*0.12).Normalized();
-                var thornTip=p+outv*rng.Range(0.055,0.085)-Vec3.Up*0.018;
-                Primitives.Tube(m,new[]{p,thornTip},new[]{0.010,0.0015},4,(i,v)=>(thorn,1,i,v,0,0));
-                if ((k+j)%2==0)
-                {
-                    var leafTip=p+outv*rng.Range(0.16,0.24)+Vec3.Up*0.03;
-                    AddSimpleBlade(m,p,Vec3.Lerp(p,leafTip,0.55)+Vec3.Up*0.018,leafTip,0.040,c1,c2);
-                }
-            }
-        }
-        // Cross-braces make neighbouring canes visibly knit together rather than reading as separate shrubs.
-        for(int b=0;b<6;b++)
-        {
-            double a=rng.Range(0,Math.PI*2);
-            var p0=new Vec3(Math.Cos(a)*0.55,rng.Range(0.25,0.68),Math.Sin(a)*0.55);
-            var p1=new Vec3(Math.Cos(a+Math.PI+rng.Range(-0.5,0.5))*0.55,rng.Range(0.35,0.82),Math.Sin(a+Math.PI+rng.Range(-0.5,0.5))*0.55);
-            Primitives.Tube(m,new[]{p0,Vec3.Lerp(p0,p1,0.5)+Vec3.Up*0.10,p1},new[]{0.018,0.013,0.008},5,(i,v)=>(wood,1,i,v,0,0));
-        }
-    }
-
-    /// <summary>One sundew rosette; spatial colonies render many of these from the coverage layer.</summary>
-    private static void BlueSundewRosette(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        int leaves=9+rng.NextInt(4);
-        for(int k=0;k<leaves;k++)
-        {
-            double a=2*Math.PI*k/leaves+rng.Range(-0.16,0.16);
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            var root=new Vec3(0,0.018,0);
-            var pad=root+dir*rng.Range(0.55,0.92)+Vec3.Up*rng.Range(0.01,0.08);
-            Primitives.Tube(m,new[]{root,Vec3.Lerp(root,pad,0.55)+Vec3.Up*0.035,pad},new[]{0.025,0.017,0.010},5,
-                (i,v)=>(Primitives.Mix(c1,c2,0.18+i*0.18),1,i,v,0,0));
-            var padCol=Primitives.Mix(c1,c2,rng.Range(0.25,0.62));
-            Primitives.Ellipsoid(m,pad,new Vec3(0.12,0.020,0.18),4,10,(u,v)=>(padCol,1,u,v,0,0));
-            for(int d=0;d<6;d++)
-            {
-                double da=a+(d-2.5)*0.20;
-                var baseP=pad+new Vec3(Math.Cos(da)*0.08,0.012,Math.Sin(da)*0.08);
-                var tip=baseP+new Vec3(Math.Cos(da)*0.025,0.045,Math.Sin(da)*0.025);
-                Primitives.Tube(m,new[]{baseP,tip},new[]{0.004,0.0015},3,(i,v)=>(new[]{0.64,0.14,0.26},1,i,v,0,0));
-                Primitives.Ellipsoid(m,tip,new Vec3(0.010,0.010,0.010),3,4,(u,v)=>(new[]{0.52,0.78,0.98},0.92,u,v,0,0));
-            }
-        }
-        if(rng.NextDouble()<0.7)
-        {
-            var top=new Vec3(rng.Range(-0.08,0.08),1.0,rng.Range(-0.08,0.08));
-            Primitives.Tube(m,new[]{new Vec3(0,0.02,0),new Vec3(0,0.55,0),top},new[]{0.018,0.010,0.005},5,(i,v)=>(c1,1,i,v,0,0));
-            for(int i=0;i<3;i++)
-            {
-                var p=Vec3.Lerp(new Vec3(0,0.55,0),top,(i+1)/4.0)+new Vec3((i-1)*0.055,0,0);
-                Primitives.Ellipsoid(m,p,new Vec3(0.055,0.026,0.055),4,8,(u,v)=>(new[]{0.18,0.46,0.96},1,u,v,0,0));
-            }
-        }
-    }
-
-    private static void PitcherPlant(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        int count=3+rng.NextInt(6);
-        for(int k=0;k<count;k++)
-        {
-            double a=2*Math.PI*k/count+rng.Range(-0.25,0.25);
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            double d=rng.Range(0.20,0.56);
-            var foot=dir*d;
-            double h=rng.Range(0.58,0.96);
-            var p1=foot+dir*0.04+Vec3.Up*(h*0.34);
-            var p2=foot-dir*0.03+Vec3.Up*(h*0.78);
-            var mouth=foot+dir*rng.Range(-0.04,0.05)+Vec3.Up*h;
-            var bodyCol=Primitives.Mix(c1,c2,rng.Range(0.10,0.55));
-            Primitives.Tube(m,new[]{foot,p1,p2,mouth},new[]{0.055,0.12,0.095,0.16},10,
-                (i,v)=>(Primitives.Mix(Primitives.Scale(bodyCol,0.72),bodyCol,i/3.0),1,i/3.0,v,0,0));
-            // dark liquid plane and thick lip make the mouth visibly hollow/rain-filled.
-            Primitives.Ellipsoid(m,mouth+Vec3.Up*0.003,new Vec3(0.135,0.010,0.135),3,10,
-                (u,v)=>(new[]{0.10,0.12,0.12},0.92,u,v,0,0));
-            Primitives.Ellipsoid(m,mouth+Vec3.Up*0.015,new Vec3(0.165,0.020,0.165),3,10,
-                (u,v)=>(Primitives.Mix(c2,new[]{0.58,0.18,0.18},0.35),1,u,v,0,0));
-            // lid held above and outward from the mouth.
-            var lidRoot=mouth+Vec3.Up*0.025-dir*0.02;
-            var lidMid=lidRoot-dir*0.07+Vec3.Up*0.09;
-            var lidTip=lidRoot-dir*0.20+Vec3.Up*0.10;
-            AddSimpleBlade(m,lidRoot,lidMid,lidTip,0.12,c1,c2);
-        }
-    }
-
-    private static void SnapTrap(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        int traps=6+rng.NextInt(4);
-        for(int k=0;k<traps;k++)
-        {
-            double a=2*Math.PI*k/traps+rng.Range(-0.18,0.18);
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            var side=new Vec3(-dir.Z,0,dir.X);
-            var root=dir*rng.Range(0.02,0.12)+Vec3.Up*0.025;
-            var hinge=root+dir*rng.Range(0.42,0.72)+Vec3.Up*rng.Range(0.10,0.24);
-            Primitives.Tube(m,new[]{root,Vec3.Lerp(root,hinge,0.55)+Vec3.Up*0.06,hinge},new[]{0.025,0.018,0.010},5,
-                (i,v)=>(c1,1,i,v,0,0));
-            var lobeCol=Primitives.Mix(c1,c2,0.55);
-            for(int sgn=-1;sgn<=1;sgn+=2)
-            {
-                var center=hinge+side*(sgn*0.075)+dir*0.08+Vec3.Up*0.018;
-                var tip=center+dir*0.19+side*(sgn*0.045);
-                AddSimpleBlade(m,hinge,center,tip,0.105,lobeCol,c2);
-                for(int t=0;t<5;t++)
-                {
-                    var toothBase=Vec3.Lerp(hinge,tip,0.18+t*0.16)+side*(sgn*0.08);
-                    var toothTip=toothBase+side*(sgn*0.07)+Vec3.Up*0.025;
-                    Primitives.Tube(m,new[]{toothBase,toothTip},new[]{0.005,0.001},3,(i,v)=>(Primitives.Scale(c2,0.82),1,i,v,0,0));
-                }
-            }
-        }
     }
 
     private static void RainJelly(MeshData m, Rng rng, double[] c1, double[] c2)

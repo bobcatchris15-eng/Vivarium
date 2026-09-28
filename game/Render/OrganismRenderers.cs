@@ -106,7 +106,7 @@ public partial class FloraRenderer : Node3D
                 bool castShadow = Quality >= 1 && canCastShadow;
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full);
-                if (sp.Shape is "fern" or "veilfern" || sp.Climber != null || profile != null && sp.Id == "umbraheart")
+                if (sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null || profile != null && sp.Id == "umbraheart")
                 {
                     var young = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: false) : OrganismMeshes.Flora(sp, seed, juvenile: true, visualDetail: tier);
                     vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", profile == null ? Bridge.ToArrayMesh(young, mat) : profile.Compile(young, mat, leafMat!), castShadow);
@@ -287,6 +287,10 @@ public partial class FloraRenderer : Node3D
             double h = sp.Colony != null
                 ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
                 : sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
+            // Preserve Kinkcane's authored internode angles at every growth size. The ordinary
+            // radius/height curves stretch young plants vertically and would shrink a 34-degree bend.
+            if (sp.Shape == "kinkcane_brake" && sp.Height > 0)
+                r = h * sp.RadiusAtMax / sp.Height;
             var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
             if (sp.Shape == "floatleaf")
             {
@@ -310,6 +314,12 @@ public partial class FloraRenderer : Node3D
             var yawBasis = new Basis(Vector3.Up, yaw);
             if (sp.Colony != null || sp.Archetype is "moss" or "lichen" or "slime_mold")
             {
+                yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
+            }
+            else if (sp.Shape == "hookthicket_brake")
+            {
+                // Mature runner tips are authored at ground level; retain their ground plane
+                // rather than lifting one side of the arch with the generic light-seeking tilt.
                 yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
             }
             else if (sp.Archetype == "plant" && sp.Shape != "vine" && sp.Shape != "floatleaf")

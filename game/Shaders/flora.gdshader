@@ -22,6 +22,8 @@ uniform float vein_strength = 0.5;
 uniform float cuticle_sheen = 0.3;
 uniform float leaf_transmission = 0.25;
 uniform int leaf_pattern = 0;
+uniform bool pitcher_tissue = false;
+uniform bool single_leaf_sheets = false;
 uniform sampler2D leaf_scan_col : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler2D leaf_scan_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler2D leaf_scan_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -143,9 +145,25 @@ void fragment() {
             vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
             n = surface_normal(wn, world_pos, buv, normalize(vec3(bn.xy * 0.9, bn.z)));
             rough = clamp(texture(bark_rgh, buv).r + bark_weathering * 0.07, 0.7, 0.98);
+        } else if (pitcher_tissue && UV2.y < -1.5 && UV2.y > -3.5) {
+            // Trap walls and hoods carry ochre/green/brown living tissue, distinct from the flower.
+            // Original procedural pigment follows organ UVs; it is stable while the plant sways.
+            vec2 p = vec2(UV.x * 8.0, UV.y * 17.0) + vec2(inst.w * 19.0, inst.w * 7.0);
+            float patch = fbm(p + vec2(vnoise(p * 0.7), vnoise(p * 0.9 + 8.0)) * 1.3);
+            vec3 yellow = srgb_to_linear(vec3(0.72, 0.69, 0.30));
+            vec3 green = srgb_to_linear(vec3(0.34, 0.48, 0.17));
+            vec3 brown = srgb_to_linear(vec3(0.42, 0.27, 0.12));
+            vec3 mottled = mix(yellow, green, smoothstep(0.26, 0.55, patch));
+            mottled = mix(mottled, brown, smoothstep(0.56, 0.72, patch));
+            c = mix(c, mottled, 0.65);
+            if (UV2.y < -2.5) c *= 0.40 + UV.x * 0.25;
+            c *= 0.94 + 0.08 * vnoise(p * 5.0);
+            rough = 0.49;
+        } else if (pitcher_tissue && UV2.y < -3.5) {
+            rough = 0.19;
         } else if (UV2.y > 0.5) {
             float along = UV.x, across = UV.y - 0.5;
-            float face = step(0.5, UV2.x);
+            float face = single_leaf_sheets ? float(!FRONT_FACING) : step(0.5, UV2.x);
             vec3 pigment = mix(leaf_top, leaf_back, face);
             float cells = vnoise(vec2(along * 24.0, across * 31.0) + inst.w * 13.0);
             float micro = vnoise(vec2(along * 91.0, across * 105.0) + inst.w * 27.0);

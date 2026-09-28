@@ -1193,56 +1193,97 @@ public partial class CoverageRenderer : Node3D
 
     private static void AppendBlueSundewRosette(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
     {
-        // A coverage cell contributes a tiny rosette; adjacent occupied cells make one distributed
-        // rhizomatous sundew patch rather than hundreds of authoritative plant individuals.
-        var green = new[] { (double)col1.R, (double)col1.G, (double)col1.B };
-        var blue = new[] { Math.Max(0.18, (double)col2.R), Math.Max(0.42, (double)col2.G), Math.Max(0.88, (double)col2.B) };
-        var gland = new[] { 0.64, 0.12, 0.24 };
-        int leaves = 5 + (int)(hash & 3);
+        int firstPlantVertex = mesh.VertexCount;
+        // Raised petioles carry spoon leaves above the substrate. Keep compact colony geometry
+        // independent of the large inspection mesh: every occupied cell can contribute a rosette.
+        var blue = new[] { (double)col1.R, (double)col1.G, (double)col1.B };
+        var pale = new[] { .40, .67, .77 };
+        var gland = new[] { .56, .17, .28 };
+        int leaves = 6 + (int)(hash & 1);
         double phase = (hash & 1023) / 1023.0 * Math.PI * 2;
-        double scale = 0.72 + vigour * 0.32;
+        double scale = .72 + vigour * .32;
         for (int i = 0; i < leaves; i++)
         {
-            double a = phase + i * Math.PI * 2 / leaves + (((hash >> (i + 4)) & 7) - 3.5) * 0.035;
+            double a = phase + i * 2.39996;
             var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
-            var side = new Vec3(-dir.Z, 0, dir.X);
-            double reach = (0.010 + ((hash >> (i * 3 + 8)) & 7) * 0.0007) * scale;
-            var root = foot + normal * 0.001;
-            var pad = root + dir * reach + normal * (0.002 + 0.001 * (i & 1));
-            Primitives.Tube(mesh, new[] { root, Vec3.Lerp(root, pad, 0.58) + normal * 0.002, pad },
-                new[] { 0.0008, 0.0006, 0.00035 }, 4,
-                (j, v) => (green, 1, j, v, 0, 0));
-
-            var padCol = (i + (int)(hash & 1)) % 3 == 0 ? blue : new[] { 0.46, 0.18, 0.30 };
-            Primitives.Ellipsoid(mesh, pad, new Vec3(0.0036, 0.0007, 0.0052), 3, 6,
-                (u, v) => (padCol, 1, u, v, 0, 0));
-
-            // Sparse sticky tentacles with pale blue dew beads.
-            for (int g = -1; g <= 1; g++)
+            dir = (dir - normal * dir.Dot(normal)).Normalized();
+            var side = dir.Cross(normal).Normalized();
+            double reach = (.005 + ((hash >> (i * 3 + 8)) & 7) * .0007) * scale;
+            var root = foot + normal * .001;
+            var neck = root + dir * reach + normal * ((.006 + .001 * (i % 3)) * scale);
+            Primitives.Tube(mesh, new[] { root, Vec3.Lerp(root, neck, .55) + normal * .001, neck },
+                new[] { .00055, .0004, .0002 }, 6, (j, v) => (blue, 1, j * .5, v, 0, 0));
+            double length = .009 * scale, width = .004 * scale;
+            var tip = neck + dir * length + normal * .0015;
+            var forward = (tip - neck).Normalized();
+            var up = side.Cross(forward).Normalized();
+            Vivarium.Sim.Geometry.Form.FoliageBlade.Build(mesh, neck, tip, side, width, blue, pale,
+                camber: .22, curl: .08, shoulder: .85, segments: 5);
+            Vec3 At(double t, double x)
             {
-                var gb = pad + side * (g * 0.0022) + normal * 0.0005;
-                var gt = gb + side * (g * 0.0012) + normal * (0.0020 + 0.00035 * Math.Abs(g));
-                Primitives.Tube(mesh, new[] { gb, gt }, new[] { 0.00022, 0.00008 }, 3,
-                    (j, v) => (gland, 1, j, v, 0, 0));
-                Primitives.Ellipsoid(mesh, gt, new Vec3(0.00045, 0.00045, 0.00045), 3, 4,
-                    (u, v) => (new[] { 0.56, 0.82, 0.98 }, 0.95, u, v, 0, 0));
+                double env = Math.Pow(Math.Max(0, Math.Sin(Math.PI * Math.Pow(t, .85))), .8);
+                double lift = (tip-neck).Length * .08 * Math.Sin(Math.PI*t) * (1-1.5*t)
+                    + width * env * (.22*(1-x*x)-.06*Math.Abs(x));
+                return neck + (tip-neck)*t + side*(x*width*env) + up*lift;
+            }
+            for (int g = 0; g < 13; g++)
+            {
+                bool margin = g < 10;
+                double t = margin ? .12 + (g % 5)*.18 : .28 + (g-10)*.20;
+                double x = margin ? (g < 5 ? -1 : 1) : .25 * (g-11);
+                var gb = At(t, x);
+                var gt = gb + side*(x*.00065) + up*(margin ? .0025 : .0015);
+                // A submillimetre tentacle needs a solid tapered silhouette, not a six-sided tube.
+                var tangent = (gt-gb).Normalized();
+                var cross = (side-tangent*side.Dot(tangent)).Normalized();
+                var other = cross.Cross(tangent).Normalized();
+                int stalk = mesh.VertexCount;
+                for(int q=0;q<3;q++)
+                {
+                    double angle=q*Math.PI*2/3;
+                    var radial=cross*Math.Cos(angle)+other*Math.Sin(angle);
+                    mesh.AddVertex(gb+radial*.00016,radial,gland,1,0,q/3.0,0,0);
+                }
+                mesh.AddVertex(gt,tangent,gland,1,1,.5,0,0);
+                for(int q=0;q<3;q++)
+                    Primitives.TriangleFacing(mesh,stalk+q,stalk+(q+1)%3,stalk+3,
+                        (mesh.NormalAt(stalk+q)+mesh.NormalAt(stalk+(q+1)%3)).Normalized());
+                // Eight-faced closed droplet, instead of a costly sphere for each submillimetre bead.
+                var dew = new[] { .65, .86, .97 };
+                double radius = .00035;
+                var equator = new[] { gt+side*radius, gt+forward*radius, gt-side*radius, gt-forward*radius };
+                int bead=mesh.VertexCount;
+                for(int q=0;q<4;q++)
+                    mesh.AddVertex(equator[q],(equator[q]-gt).Normalized(),dew,1,q/4.0,.5,1,0);
+                mesh.AddVertex(gt-up*radius,-up,dew,1,.5,0,1,0);
+                mesh.AddVertex(gt+up*radius,up,dew,1,.5,1,1,0);
+                for (int q = 0; q < 4; q++)
+                {
+                    for(int sign=-1;sign<=1;sign+=2)
+                    {
+                        int pole=bead+(sign<0?4:5);
+                        var n=(mesh.NormalAt(bead+q)+mesh.NormalAt(bead+(q+1)%4)+mesh.NormalAt(pole)).Normalized();
+                        Primitives.TriangleFacing(mesh,bead+q,bead+(q+1)%4,pole,n);
+                    }
+                }
             }
         }
-
-        // Occasional vivid-blue reproductive stalks punctuate the otherwise low mat.
         if (((hash >> 18) & 7) == 0)
         {
-            double h = (0.022 + ((hash >> 10) & 15) * 0.00055) * scale;
-            var top = foot + normal * h + new Vec3(((hash & 15) - 7.5) * 0.00020, 0, (((hash >> 4) & 15) - 7.5) * 0.00020);
-            Primitives.Tube(mesh, new[] { foot, Vec3.Lerp(foot, top, 0.55), top }, new[] { 0.00065, 0.00042, 0.00025 }, 4,
-                (j, v) => (green, 1, j, v, 0, 0));
+            double h = (.025 + ((hash >> 10) & 15)*.00055)*scale;
+            var top = foot + normal*h;
+            Primitives.Tube(mesh, new[] { foot, top }, new[] { .00055, .0002 }, 6,
+                (j, v) => (blue, 1, j, v, 0, 0));
             for (int b = 0; b < 3; b++)
             {
-                var bp = top + new Vec3((b - 1) * 0.0018, b * 0.0011, 0);
-                Primitives.Ellipsoid(mesh, bp, new Vec3(0.0014, 0.0007, 0.0014), 3, 5,
-                    (u, v) => (blue, 1, u, v, 0, 0));
+                var bp = top + new Vec3((b-1)*.0018, b*.0011, 0);
+                Primitives.Ellipsoid(mesh, bp, new Vec3(.0014, .0007, .0014), 3, 5,
+                    (u, v) => (pale, 1, u, v, 0, 0));
             }
         }
+        // Keep living leaves and dew out of the substrate's moss texture branch.
+        for (int v = firstPlantVertex; v < mesh.VertexCount; v++)
+            mesh.UV2[v * 2 + 1] = -5f;
     }
 
     private static void AppendPlasmodiumSporangia(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)

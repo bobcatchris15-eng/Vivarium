@@ -1,5 +1,51 @@
 # Flora visual review log
 
+### New flora refinement, 2026-09-28 — implemented, finishes pending review
+
+The user approved the carnivorous-plant direction and supplied explicit refinements for Veilblade,
+Hookthicket and Kinkcane. Follow-up direction raised Sundew's leaf stalks above the substrate and
+required mature Hookthicket canes to return to the soil as rooting runners.
+
+| Species | Candidate treatment |
+|---|---|
+| Raincup Pitcher | Shared basal crown; inflated curved traps with an open annular lip, descending inner wall and deeply recessed liquid; original yellow/green/brown mottled tissue on trap walls and upright hoods; tall central leafless scape with a nodding five-part flower. |
+| Blue Sundew | Layered spoon leaves on short ascending petioles; long marginal and shorter surface tentacles with pale dew glands. The live coverage renderer also uses ascending stalks and curved blades, with compact droplets suitable for colonies. |
+| Latchjaw | Broad photosynthetic petioles; paired cupped red-green lobes around a continuous hinge; curved marginal cilia and three trigger hairs per lobe. |
+| Veilblade | Several unequal basal fans of continuously bowed, tapered ribbons; variable heights, lengths, lean and twist, with shorter outer leaves and taller inner growth. |
+| Hookthicket | Much thinner canes with smooth sweeping half-ellipse arches and gentle lateral bow; dense three-leaflet foliage, hooked prickles, attached lateral shoots; young tips remain raised, while mature arches descend to soil and bear fine tip roots. Rooting is a visual cue; authoritative propagation remains the existing spread system. |
+| Kinkcane | Curved lanceolate sprays on nodal twigs; each successive internode turns 34–46 degrees toward an upward/open-side preference. Authoring accounts for the species height/radius ratio; proportional render scaling preserves the angles through growth. The existing local-light-gradient tilt remains active. |
+
+Structural grounding: [RHS Sarracenia purpurea](https://www.rhs.org.uk/plants/16472/sarracenia-purpurea/details),
+[Kew pitcher flower description](https://powo.science.kew.org/taxon/urn%3Alsid%3Aipni.org%3Anames%3A30030166-2/general-information),
+[Kew round-leaf sundew](https://www.kew.org/plants/round-leafed-sundew),
+[NC State Venus flytrap](https://plants.ces.ncsu.edu/plants/dionaea-muscipula/) and
+[NC State Rubus](https://plants.ces.ncsu.edu/plants/rubus/). These are structural analogues; fictional colors
+and the explicitly requested Kinkcane angles remain authoritative. No reference photographs were copied into textures.
+
+Review gallery: `build/flora-refinement/index.html`; final specimen images: `build/flora-refinement/final/`;
+in-game captures and reports: `build/flora-refinement/world/`; six-species contact sheet:
+`build/flora-refinement/refined-species.jpg`. New geometry is isolated in
+`src/Vivarium.Sim/Geometry/OrganismMeshes.VisualBreakFlora.cs`. Thin blade sheets use backface pigment
+instead of duplicate coincident triangles. The Hookthicket renderer selects its separate young form
+until maturity and uses the local ground plane for its returning canes.
+
+Verification: build has zero warnings/errors. Eight focused refinement/reproduction checks pass;
+the Kinkcane check samples 24 seeds after species scaling, and the Hookthicket check samples 12 seeds
+for grounded mature tips versus raised young tips. A third refinement check verifies smooth cane
+direction changes below 15 degrees at in-game scale across 12 seeds. All six in-game species views
+report two checks passed and no logged errors; Hookthicket and Sundew were recaptured after their final
+geometry changes. Before the final curve check was added, the geometry suite had 33 passes and 12 failures; an original-code
+comparison has 31 passes and the identical 12 failures, confirming no newly failing test in that suite.
+The existing failures concern other forms' triangle budgets/degenerate faces and are not resolved by this pass.
+
+Performance evidence: the original-code 40-second moving-camera sample averaged 33.5 FPS (minimum
+sampled second 31). The single-sheet candidate also averaged 33.5 FPS (minimum 26), with p50 25.70 ms,
+p95 53.74 ms and p99 77.77 ms. Later samples varied substantially, including 14.3 FPS after the final
+Hookthicket curve pass. Two other Godot processes were found running after that measurement, so these
+results do not establish an isolated regression or a sustained 30 FPS pass. One compact-Sundew sample
+also overlapped a test run and must not be used as a performance comparison. The final colony path uses
+solid three-sided tentacles and shared-vertex eight-faced dew droplets to keep its additional glands compact.
+
 Updated 2026-09-27. This is the user-reviewed species pass in the live `E:\Vivarium\game\project.godot` project. "Approved" means the user liked the current visual direction; it does not mean every age or lighting condition has been reviewed. These edits are currently in the working tree, alongside unrelated work.
 
 | Species | Review state | Agreed visual direction |

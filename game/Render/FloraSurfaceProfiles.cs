@@ -19,6 +19,9 @@ internal static class FloraSurfaceProfiles
         material.SetShaderParameter("cuticle_sheen", leaf.Sheen);
         material.SetShaderParameter("leaf_transmission", leaf.Transmission);
         material.SetShaderParameter("leaf_pattern", LeafPattern(species.Id));
+        material.SetShaderParameter("pitcher_tissue", species.Id == "pitcher_plant");
+        material.SetShaderParameter("single_leaf_sheets", species.Id is "pitcher_plant" or "blue_sundew"
+            or "snaptrap" or "veilblade" or "hookthicket" or "kinkcane");
         if (photographedLeaves && Scan(species.Id) is { } scan)
         {
             material.SetShaderParameter("leaf_scan_col", GD.Load<Texture2D>($"res://Textures/Leaves/{scan.Asset}_2K-JPG_Color.jpg"));
@@ -76,6 +79,11 @@ internal static class FloraSurfaceProfiles
         "prismstar" => new(new(.055f, .17f, .055f), new(.13f, .20f, .09f), 0, .59f, .27f, .32f),
         "streamribbon" => new(new(.045f, .16f, .055f), new(.12f, .22f, .09f), 0, .45f, .38f, .48f),
         "fencomb" => new(new(.055f, .14f, .06f), new(.13f, .18f, .085f), 1, .30f, .32f, .42f),
+        "veilblade" => new(new(.055f, .16f, .065f), new(.11f, .19f, .08f), 5, .18f, .28f, .25f),
+        "kinkcane" => new(new(.055f, .17f, .04f), new(.12f, .20f, .085f), 5, .20f, .28f, .22f),
+        "hookthicket" => new(new(.045f, .14f, .032f), new(.15f, .20f, .095f), 0, .50f, .23f, .25f),
+        "blue_sundew" => new(new(.055f, .20f, .23f), new(.10f, .23f, .27f), 0, .22f, .48f, .28f),
+        "snaptrap" => new(new(.065f, .19f, .045f), new(.13f, .22f, .085f), 0, .35f, .32f, .22f),
         _ => new(new(.07f, .16f, .055f), new(.14f, .19f, .09f), 0, .45f, .30f, .25f),
     };
 
@@ -88,7 +96,7 @@ internal static class FloraSurfaceProfiles
         "kiteleaf" => 2,
         "clinglace" or "spiralvine" => 3,
         "fenhook" or "glassfinger" or "sunstone_rosette" or "mooncoin" => 4,
-        "fenneedle" or "glassrush" or "ringreed" or "frosttussock" or "streamribbon" => 5,
+        "fenneedle" or "glassrush" or "ringreed" or "frosttussock" or "streamribbon" or "veilblade" or "kinkcane" => 5,
         "veilfern" => 6,
         _ => 0,
     };
