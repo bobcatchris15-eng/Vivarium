@@ -137,7 +137,11 @@ Objective: keep FPS >=30 on 860M as a vivarium ages. Measured (build/aged, defau
 - Gate: build/aged/run-perf.sh with ABSOLUTE save paths (relative --load silently makes a fresh world).
 | id | targets | status | attempts | last return line |
 |----|---------|--------|----------|------------------|
-| lod | OrganismRenderers.cs OrganismMeshes*.cs FloraVisualProfile.cs | DISPATCHED | 0 | |
-| cov | CoverageRenderer.cs | DISPATCHED | 0 | |
-| simperf | AquaticSystem.cs Aquatic/*Rules.cs Hydrology.cs | DISPATCHED | 0 | |
+| lod | OrganismRenderers.cs VisualBreakFlora.cs GeometryLodTests.cs | MERGED f292475 | 1 | 3 tiers all 44 species, e.g. kiteleaf 84k/17k/3.4k; <2px cull |
+| cov | CoverageRenderer.cs | MERGED 8b1db28 | 1 | incremental dirty rebuild, camera-priority queue, async build |
+| simperf | Aquatic/* Hydrology.cs | MERGED 65fcffe, PARTIAL | 1 | aquatic mean 35->~10ms, max 109->34-51 (target 7/20 missed: Advect dense bbox buffer). Hydro adaptive substeps. |
 Unverified: hydrology cost on user save caused by 114beba (not yet profiled before/after).
+- PRE-EXISTING on main 463d53e: 12 FormTests fail (Suite=Geometry) — likely from wip 77944f8. Not caused by aging-perf.
+- PRE-EXISTING GrowthLab fails (4): NetworkStepIsFastOn600Nodes, CrustEdenGrowsRound..., FolioseLobes..., FlowAdvectionUsesPhysicalSeconds... (simperf confirmed on base).
+- aging-perf RESULT (paired, aged saves, 860M): fps d0 47->74, d7 34->73, d30 16.5->57, d90 6.1->32.9, user d45 7.4->42.7. Prims d90 89M->8.3M. covfix 2a: race fixed (task-local scratch), 0 exceptions.
+- OPEN: (a) cov background build reads live sim tiles unsnapshotted -> possible torn one-frame tile; (b) Sys.aquatic max still 82-152 ms in-game (Advect dense bbox buffer; tile-clustered Advect is the lever); (c) remaining spikes: Sys.flora 110, ecology.litter 101, SoilDetail 115, flora.ambient 94 ms max -> p99 still 40-100 ms; (d) kiteleaf top tier 84k tris; (e) tier visuals not yet reviewed on screen.
