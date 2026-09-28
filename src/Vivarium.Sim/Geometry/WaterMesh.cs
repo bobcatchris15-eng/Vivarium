@@ -23,10 +23,15 @@ public static class WaterMesh
     /// <summary>Dry cells around the water that are still drawn (covered only where the ground lies below the water level).</summary>
     public const int RingCells = 2;
 
-    public static WaterMeshSnapshot Capture(VivariumWorld w) => new(
-        (double[])w.Water.Depth.Clone(), (double[])w.Water.Bed.Clone(),
-        (double[])w.Water.FlowX.Clone(), (double[])w.Water.FlowZ.Clone(), w.Terrain.Snapshot(),
-        w.Water.WaterTable);
+    public static WaterMeshSnapshot Capture(VivariumWorld w)
+    {
+        var renderDepth = new double[w.Grid.Count];
+        foreach (int idx in w.Grid.DomainCells) renderDepth[idx] = w.Water.OpenWaterDepth(idx);
+        return new WaterMeshSnapshot(
+            renderDepth, (double[])w.Water.Bed.Clone(),
+            (double[])w.Water.FlowX.Clone(), (double[])w.Water.FlowZ.Clone(), w.Terrain.Snapshot(),
+            w.Water.WaterTable);
+    }
 
     public static MeshData Build(VivariumWorld w, WaterMeshSnapshot? snapshot = null) =>
         BuildSet(w, snapshot).CombinedMesh;
@@ -35,7 +40,12 @@ public static class WaterMesh
     {
         var g = w.Grid; var water = w.Water; var dom = w.Domain;
         var hf = snapshot?.Terrain ?? w.Terrain;
-        var depth = snapshot?.Depth ?? water.Depth;
+        var depth = snapshot?.Depth;
+        if (depth == null)
+        {
+            depth = new double[g.Count];
+            foreach (int idx in g.DomainCells) depth[idx] = water.OpenWaterDepth(idx);
+        }
         var bed = snapshot?.Bed ?? water.Bed;
         var flowX = snapshot?.FlowX ?? water.FlowX;
         var flowZ = snapshot?.FlowZ ?? water.FlowZ;
