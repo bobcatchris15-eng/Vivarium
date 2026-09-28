@@ -82,7 +82,8 @@
   "tags": [
     "fungus",
     "jelly",
-    "decomposer"
+    "decomposer",
+    "no_ambient_spore_rain"
   ],
   "decomposition": {
     "radius": 0.42,
