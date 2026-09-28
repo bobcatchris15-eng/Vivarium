@@ -83,3 +83,54 @@ Goal: replace the current single hydrology depth field that simultaneously repre
 - Focused HydrologyTests + TerrainWaterToolTests: 20/20 passing before refactor.
 - Full suite has pre-existing unrelated form/visual/performance failures on this baseline; those are not stage blockers but will be compared again at integration hardening.
 
+
+## Implementation result - 2026-09-27
+
+All implementation stages are complete on `main`.
+
+### Landed checkpoints
+- `776fdc5` - implementation plan and baseline verification.
+- `b083c5d` - groundwater removed from dynamic surface-water storage.
+- `6a4e60a` - conservative signed-face surface-water solver and persisted momentum.
+- `e5fd3b1` - dynamic surface water merges into exposed groundwater as tracked recharge.
+- `b33a9db` - soil hydration driven by groundwater, local surface depth and neighbouring surface water.
+- `4811ecc` - independent groundwater and dynamic surface-water render meshes.
+- `2599016` - solver tuning controls, explicit water payload format, legacy-save migration and tool invariants.
+
+### Final architecture
+- `WaterTable` is an implicit hydrostatic reservoir. Terrain below it exposes groundwater at the fixed table elevation; groundwater is never stored in `Hydrology.Depth`.
+- `Hydrology.Depth` is dynamic surface-water depth only.
+- Signed east/north face discharges are authoritative surface-water momentum. Shared face transfers are applied once and mass-conservatively, with per-cell outflow limiting so depth cannot become negative.
+- Springs and the pour tool add dynamic surface volume. Evaporation, infiltration, boundary drainage and groundwater recharge are explicit budget terms.
+- Surface water entering an exposed groundwater cell is removed from dynamic storage and tallied as `GroundwaterRecharge`.
+- Soil moisture is a separate ecological field driven by vertical groundwater proximity, saturating local surface-water depth, neighbouring surface-water depth and ordinary soil diffusion/drying.
+- Groundwater rendering is generated directly as a horizontal table clipped against terrain. Dynamic-water rendering is generated only from simulated surface depth and velocity. Rendering never feeds back into simulation state.
+- `IsStream` is now only a convenience classification derived from dynamic depth plus velocity.
+
+### Solver characterization
+This is intentionally not 3D CFD, particles, FLIP/SPH, or a full Navier-Stokes solve. It is a deterministic, mass-conserving 2D heightfield fluid using persistent signed face discharge driven by free-surface head. It therefore follows edited terrain, pools, overtops, routes through channels, retains momentum and drains through specimen boundaries at a cost appropriate to the small Vivarium heightfield.
+
+### Primary tuning controls
+Every shipped preset now exposes:
+- `flowRate` - hydraulic conductance. Higher moves a larger fraction of available head/volume per response interval.
+- `flowMemorySeconds` - momentum persistence. Higher values keep existing current direction/strength longer.
+- `flowResponseSeconds` - hydraulic response time. Lower values make water respond and move faster for the same head.
+- `streamVelocityThreshold` - minimum velocity for the derived `IsStream` classification.
+- `subSteps` - internal hydrology substeps per scheduled hydrology tick; increasing it costs CPU but gives more frequent conservative transfers.
+- Existing `wetDepth`, `evaporationPerDay`, `infiltrationPerDay` and `boundaryDrop` remain relevant.
+
+Current shipped starting values are `flowMemorySeconds = 45`, `flowResponseSeconds = 30`, and `streamVelocityThreshold = 0.0001`. These are deliberately starting points, not final aesthetic tuning.
+
+### Compatibility
+New water payloads are explicitly format version 2 and persist dynamic depth plus east/north face momentum. Pre-split payloads with no momentum/version are treated as legacy combined-depth saves; hydrostatic groundwater is removed from dynamic storage during load. Intermediate post-split payloads that already contain face momentum remain distinguishable from legacy saves.
+
+### Verification
+- Pre-refactor focused baseline: 20/20 Hydrology + TerrainWaterTool tests passing.
+- Final focused water/tool gate: 26/26 passing.
+- Shipped preset loading/boot verification: all nine presets pass, including waterway boundary/channel checks.
+- Godot `game/Vivarium.csproj`: builds successfully with 0 warnings / 0 errors.
+- Long-running hydrology coverage includes conservation, downhill routing, basin fill/overtopping, boundary drainage, determinism, groundwater recharge, moisture gradients, render separation and save/load.
+- A full solution run still reports existing non-water failures in form meshes, GrowthLab/lichen thresholds and flora/climber/slime-mold behavior. No water/hydrology/tool/render/persistence-water failure appeared before the run entered the pre-existing long CPU-bound flora/coverage portion; that broad run was stopped after several minutes because it was no longer providing water-specific signal.
+
+The water refactor is therefore in `main` and ready for visual/behavioral tuning rather than further architectural migration.
+
