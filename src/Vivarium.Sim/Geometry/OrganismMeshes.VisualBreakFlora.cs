@@ -1,3 +1,4 @@
+using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Geometry.Form;
 
@@ -459,5 +460,252 @@ public static partial class OrganismMeshes
             }
             Primitives.Tube(m,new[]{hinge,hinge+forward*length},new[]{.006,.003},6,(i,v)=>(c1,1,i,v,0,0));
         }
+    }
+}
+
+/// <summary>
+/// Render-only geometric detail tiers for flora. Tier 0 is the authored mesh; lower tiers are real,
+/// simplified 3D meshes derived deterministically from it: inner/back leaf layers of dense clumps are
+/// dropped and every remaining part (leaf, tube, cap) is re-tessellated coarser by per-part vertex
+/// clustering, which removes segments and radial sides while keeping each part's silhouette.
+/// Nothing here is simulation state.
+/// </summary>
+public static partial class OrganismMeshes
+{
+    public const int FloraLodTiers = 3;
+
+    /// <summary>Triangle budget for a tier, given the top-tier triangle count.</summary>
+    public static int FloraTierBudget(int topTris, int tier) => tier switch
+    {
+        <= 0 => topTris,
+        1 => Math.Max(1, (int)(topTris * 0.25)),
+        _ => Math.Max(1, topTris >= 8000 ? (int)(topTris * 0.045) : Math.Min(380, (int)(topTris * 0.1))),
+    };
+
+    /// <summary>
+    /// Flora mesh for one detail tier. <paramref name="tieredSource"/> selects the dedicated leaf system's
+    /// own tessellation tiers as the source (visual-profile species); otherwise the plain mesh is the source.
+    /// </summary>
+    public static MeshData FloraTier(FloraSpeciesDef sp, ulong seed, int tier, bool juvenile = false, bool tieredSource = false)
+    {
+        var top = Flora(sp, seed, juvenile, tieredSource ? 0 : null);
+        if (tier <= 0) return top;
+        var src = tieredSource ? Flora(sp, seed, juvenile, tier) : top;
+        return SimplifyFloraTier(src, top.TriangleCount, tier);
+    }
+
+    public static MeshData? FloraFruitingTier(FloraSpeciesDef sp, ulong seed, int tier, bool tieredSource = false)
+    {
+        var top = FloraFruiting(sp, seed, tieredSource ? 0 : null);
+        if (top == null || tier <= 0) return top;
+        var src = tieredSource ? FloraFruiting(sp, seed, tier)! : top;
+        return SimplifyFloraTier(src, top.TriangleCount, tier);
+    }
+
+    public static MeshData ClimberNodeTier(FloraSpeciesDef sp, ulong seed, bool attached, int tier)
+    {
+        var top = ClimberNode(sp, seed, attached);
+        return tier <= 0 ? top : SimplifyFloraTier(top, top.TriangleCount, tier);
+    }
+
+    /// <summary>Simplifies <paramref name="src"/> to the budget of <paramref name="tier"/> relative to <paramref name="topTris"/>.</summary>
+    public static MeshData SimplifyFloraTier(MeshData src, int topTris, int tier)
+    {
+        int budget = FloraTierBudget(topTris, tier);
+        if (tier <= 0 || src.TriangleCount <= budget) return src;
+        var parts = BuildParts(src);
+        var keep = KeepParts(src, parts, tier);
+        var (min, max) = src.Bounds();
+        double diag = Math.Max(1e-4, (max - min).Length);
+        double g = diag * 1.2 * Math.Sqrt(1.0 / Math.Max(1, budget));
+        MeshData? best = null;
+        double lo = 0, hi = double.MaxValue;
+        for (int it = 0; it < 10; it++)
+        {
+            var mesh = Cluster(src, parts, keep, g);
+            int n = mesh.TriangleCount;
+            if (n <= budget)
+            {
+                if (best == null || n > best.TriangleCount) best = mesh;
+                if (n >= budget * 0.8) break;
+                hi = Math.Min(hi, g);
+            }
+            else lo = Math.Max(lo, g);
+            double next = g * Math.Pow(Math.Max(1e-3, n / (double)budget), 0.5);
+            if (hi < double.MaxValue && lo > 0) next = Math.Sqrt(lo * hi);
+            else if (hi < double.MaxValue) next = Math.Min(next, hi * 0.97);
+            else if (lo > 0) next = Math.Max(next, lo * 1.25);
+            g = next;
+        }
+        for (int guard = 0; best == null && guard < 40; guard++)
+        {
+            g *= 1.6;
+            var mesh = Cluster(src, parts, keep, g);
+            if (mesh.TriangleCount <= budget) best = mesh;
+        }
+        return best ?? src;
+    }
+
+    private sealed class LodPart { public int Leaf = -1; public readonly List<int> Tris = new(); public Vec3 Min, Max; }
+
+    private static List<LodPart> BuildParts(MeshData src)
+    {
+        int nv = src.VertexCount;
+        var owner = new int[nv];
+        Array.Fill(owner, -1);
+        for (int k = 0; k < src.Leaves.Count; k++)
+        {
+            var leaf = src.Leaves[k];
+            for (int v = leaf.FirstVertex; v < leaf.FirstVertex + leaf.VertexCount && v < nv; v++) owner[v] = k;
+        }
+        var parent = new int[nv];
+        for (int i = 0; i < nv; i++) parent[i] = i;
+        int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+        void Union(int a, int b) { a = Find(a); b = Find(b); if (a != b) { if (a < b) parent[b] = a; else parent[a] = b; } }
+        var idx = src.Indices;
+        for (int t = 0; t < idx.Count; t += 3)
+        {
+            int a = idx[t], b = idx[t + 1], c = idx[t + 2];
+            if (owner[a] < 0 && owner[b] < 0) Union(a, b);
+            if (owner[a] < 0 && owner[c] < 0) Union(a, c);
+        }
+        var parts = new List<LodPart>();
+        var byLeaf = new Dictionary<int, int>();
+        var byRoot = new Dictionary<int, int>();
+        for (int t = 0; t < idx.Count; t += 3)
+        {
+            int a = idx[t];
+            int pi;
+            if (owner[a] >= 0)
+            {
+                if (!byLeaf.TryGetValue(owner[a], out pi)) { pi = parts.Count; byLeaf[owner[a]] = pi; parts.Add(new LodPart { Leaf = owner[a] }); }
+            }
+            else
+            {
+                int r = Find(a);
+                if (!byRoot.TryGetValue(r, out pi)) { pi = parts.Count; byRoot[r] = pi; parts.Add(new LodPart()); }
+            }
+            parts[pi].Tris.Add(t / 3);
+        }
+        foreach (var p in parts)
+        {
+            double x0 = double.MaxValue, y0 = double.MaxValue, z0 = double.MaxValue;
+            double x1 = double.MinValue, y1 = double.MinValue, z1 = double.MinValue;
+            foreach (int t in p.Tris)
+                for (int j = 0; j < 3; j++)
+                {
+                    var q = src.Position(idx[t * 3 + j]);
+                    x0 = Math.Min(x0, q.X); y0 = Math.Min(y0, q.Y); z0 = Math.Min(z0, q.Z);
+                    x1 = Math.Max(x1, q.X); y1 = Math.Max(y1, q.Y); z1 = Math.Max(z1, q.Z);
+                }
+            p.Min = new Vec3(x0, y0, z0); p.Max = new Vec3(x1, y1, z1);
+        }
+        return parts;
+    }
+
+    /// <summary>Dense clumps lose their inner/back leaf layers at lower tiers: the leaves nearest the
+    /// plant's core (least exposed) go first. Large structural parts are always kept.</summary>
+    private static bool[] KeepParts(MeshData src, List<LodPart> parts, int tier)
+    {
+        var keep = new bool[parts.Count];
+        Array.Fill(keep, true);
+        var leafParts = new List<int>();
+        for (int i = 0; i < parts.Count; i++) if (parts[i].Leaf >= 0 || parts[i].Tris.Count <= 160) leafParts.Add(i);
+        if (leafParts.Count < 8) return keep;
+        var (min, max) = src.Bounds();
+        var c = (min + max) * 0.5;
+        var ext = max - min;
+        double sx = Math.Max(1e-4, ext.X * 0.5), sy = Math.Max(1e-4, ext.Y * 0.5), sz = Math.Max(1e-4, ext.Z * 0.5);
+        double Exposure(LodPart p)
+        {
+            var q = (p.Min + p.Max) * 0.5 - c;
+            double r = Math.Sqrt(q.X / sx * (q.X / sx) + q.Z / sz * (q.Z / sz));
+            return r + 0.3 * (q.Y / sy + 1);
+        }
+        var order = leafParts.Select(i => (i, e: Exposure(parts[i]))).OrderBy(x => x.e).ThenBy(x => x.i).ToList();
+        double fraction = tier == 1 ? 0.3 : 0.55;
+        int drop = (int)(order.Count * fraction);
+        for (int k = 0; k < drop; k++) keep[order[k].i] = false;
+        return keep;
+    }
+
+    private static MeshData Cluster(MeshData src, List<LodPart> parts, bool[] keep, double g)
+    {
+        var dst = new MeshData { FloraDetailLevel = src.FloraDetailLevel, FloraVisualSeed = src.FloraVisualSeed };
+        bool c0 = src.Custom0.Count > 0 && src.Custom0.Count >= src.VertexCount * 4;
+        bool c1 = src.Custom1.Count > 0 && src.Custom1.Count >= src.VertexCount * 4;
+        var idx = src.Indices;
+        var cells = new Dictionary<(long, long, long), int>();
+        var sums = new List<(Vec3 P, int N)>();
+        var seen = new HashSet<(int, int, int)>();
+        var tris = new List<int>();
+        for (int pi = 0; pi < parts.Count; pi++)
+        {
+            if (!keep[pi]) continue;
+            var p = parts[pi];
+            var ext = p.Max - p.Min;
+            double minExt = Math.Min(ext.X, Math.Min(ext.Y, ext.Z));
+            double maxExt = Math.Max(ext.X, Math.Max(ext.Y, ext.Z));
+            // Thin but long parts (stems, trunks, blades) keep a coarse spine instead of vanishing.
+            double pg = g;
+            if (maxExt > g * 3 && minExt < g) pg = Math.Max(minExt * 0.75, Math.Min(g, maxExt / 3.0));
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                int vStart = dst.VertexCount, iStart = dst.Indices.Count;
+                cells.Clear(); sums.Clear(); seen.Clear(); tris.Clear();
+                double cg = pg;
+                int Map(int v)
+                {
+                    var q = src.Position(v);
+                    var key = ((long)Math.Floor(q.X / cg), (long)Math.Floor(q.Y / cg), (long)Math.Floor(q.Z / cg));
+                    if (cells.TryGetValue(key, out int o)) { var s = sums[o - vStart]; sums[o - vStart] = (s.P + q, s.N + 1); return o; }
+                    o = dst.VertexCount;
+                    dst.Positions.Add(0); dst.Positions.Add(0); dst.Positions.Add(0);
+                    dst.Normals.Add(src.Normals[v * 3]); dst.Normals.Add(src.Normals[v * 3 + 1]); dst.Normals.Add(src.Normals[v * 3 + 2]);
+                    for (int j = 0; j < 4; j++) dst.Colors.Add(src.Colors[v * 4 + j]);
+                    dst.UV.Add(src.UV[v * 2]); dst.UV.Add(src.UV[v * 2 + 1]);
+                    dst.UV2.Add(src.UV2[v * 2]); dst.UV2.Add(src.UV2[v * 2 + 1]);
+                    if (c0) for (int j = 0; j < 4; j++) dst.Custom0.Add(src.Custom0[v * 4 + j]);
+                    if (c1) for (int j = 0; j < 4; j++) dst.Custom1.Add(src.Custom1[v * 4 + j]);
+                    cells[key] = o; sums.Add((q, 1));
+                    return o;
+                }
+                foreach (int t in p.Tris)
+                {
+                    int a = Map(idx[t * 3]), b = Map(idx[t * 3 + 1]), cc = Map(idx[t * 3 + 2]);
+                    if (a == b || b == cc || a == cc) continue;
+                    int l = Math.Min(a, Math.Min(b, cc)), h = Math.Max(a, Math.Max(b, cc)), mid = a + b + cc - l - h;
+                    if (!seen.Add((l, mid, h))) continue;
+                    tris.Add(a); tris.Add(b); tris.Add(cc);
+                }
+                for (int k = 0; k < sums.Count; k++)
+                {
+                    var avg = sums[k].P * (1.0 / sums[k].N);
+                    int o = (vStart + k) * 3;
+                    dst.Positions[o] = (float)avg.X; dst.Positions[o + 1] = (float)avg.Y; dst.Positions[o + 2] = (float)avg.Z;
+                }
+                if (tris.Count == 0)
+                {
+                    TrimTo(dst, vStart, c0, c1);
+                    if (attempt == 0 && maxExt > g * 1.5) { pg = Math.Max(1e-5, Math.Min(pg, Math.Max(minExt, maxExt * 0.05)) * 0.5); continue; }
+                    break;
+                }
+                dst.Indices.AddRange(tris);
+                if (p.Leaf >= 0 && p.Leaf < src.Leaves.Count)
+                    dst.Leaves.Add(src.Leaves[p.Leaf] with { FirstVertex = vStart, VertexCount = dst.VertexCount - vStart, FirstIndex = iStart, IndexCount = dst.Indices.Count - iStart });
+                break;
+            }
+        }
+        return dst;
+    }
+
+    private static void TrimTo(MeshData m, int vertexCount, bool c0, bool c1)
+    {
+        int n = m.VertexCount - vertexCount;
+        if (n <= 0) return;
+        m.Positions.RemoveRange(vertexCount * 3, n * 3); m.Normals.RemoveRange(vertexCount * 3, n * 3);
+        m.Colors.RemoveRange(vertexCount * 4, n * 4); m.UV.RemoveRange(vertexCount * 2, n * 2); m.UV2.RemoveRange(vertexCount * 2, n * 2);
+        if (c0) m.Custom0.RemoveRange(vertexCount * 4, n * 4);
+        if (c1) m.Custom1.RemoveRange(vertexCount * 4, n * 4);
     }
 }
