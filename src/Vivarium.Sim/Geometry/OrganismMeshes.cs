@@ -4387,7 +4387,7 @@ public static class OrganismMeshes
             Primitives.Tube(m,new[]{root,Vec3.Lerp(root,pad,0.55)+Vec3.Up*0.035,pad},new[]{0.025,0.017,0.010},5,
                 (i,v)=>(Primitives.Mix(c1,c2,0.18+i*0.18),1,i,v,0,0));
             var padCol=Primitives.Mix(c1,c2,rng.Range(0.25,0.62));
-            Primitives.Ellipsoid(m,pad,new Vec3(0.12,0.020,0.18),4,10,(u,v)=>(padCol,1,u,v,0,0),yaw:a);
+            Primitives.Ellipsoid(m,pad,new Vec3(0.12,0.020,0.18),4,10,(u,v)=>(padCol,1,u,v,0,0));
             for(int d=0;d<6;d++)
             {
                 double da=a+(d-2.5)*0.20;
@@ -4475,7 +4475,7 @@ public static class OrganismMeshes
             var p=new Vec3(Math.Cos(a)*rr,rng.Range(0.05,0.20),Math.Sin(a)*rr);
             var col=Primitives.Mix(c1,c2,rng.Range(0.05,0.62));
             Primitives.Ellipsoid(m,p,new Vec3(rng.Range(0.20,0.36),rng.Range(0.12,0.28),rng.Range(0.20,0.38)),6,10,
-                (u,v)=>(col,0.88,u,v,0,0),yaw:rng.Range(0,Math.PI*2));
+                (u,v)=>(col,0.88,u,v,0,0));
         }
         // low basal smear visually joins the swollen lobes.
         Primitives.Ellipsoid(m,new Vec3(0,0.035,0),new Vec3(0.76,0.055,0.70),4,12,
