@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
+using Vivarium.Sim.Core;
 using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
 
