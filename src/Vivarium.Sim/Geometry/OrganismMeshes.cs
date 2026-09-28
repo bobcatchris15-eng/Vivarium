@@ -6131,27 +6131,7 @@ public static partial class OrganismMeshes
         }
     }
 
-    private static void Triops(MeshData m)
-    {
-        // broad shield carapace (flattened dome) over the front, segmented abdomen behind
-        Primitives.Ellipsoid(m, new Vec3(0.15, 0.08, 0), new Vec3(0.34, 0.08, 0.3), 12, 16, (a, b) => Region(0.9 - a * 0.4, b, b > 0.55 ? 3 : 1));
-        for (int s = 0; s < 7; s++)
-        {
-            double t = s / 6.0;
-            double r = 0.07 * (1 - t * 0.5);
-            Primitives.Ellipsoid(m, new Vec3(-0.12 - t * 0.28, 0.06, 0), new Vec3(0.05, r * 0.6, r), 5, 8, (a, b) => Region(0.4 - t * 0.35, b, 1));
-        }
-        foreach (double z in new[] { -1.0, 1.0 })
-        {
-            Primitives.Ellipsoid(m, new Vec3(0.34, 0.15, 0.04 * z), new Vec3(0.022, 0.015, 0.022), 4, 6, (a, b) => Region(0.95, b, 2));
-            Appendage(m, new[] { new Vec3(-0.42, 0.06, 0.02 * z), new Vec3(-0.62, 0.07, 0.07 * z), new Vec3(-0.85, 0.06, 0.12 * z) }, new[] { 0.012, 0.008, 0.004 }, 4, 4, 3);
-            for (int leg = 0; leg < 6; leg++)
-            {
-                double x = 0.2 - leg * 0.06;
-                Appendage(m, new[] { new Vec3(x, 0.03, 0.12 * z), new Vec3(x - 0.02, 0.0, 0.24 * z) }, new[] { 0.01, 0.005 }, 3);
-            }
-        }
-    }
+
 
     private static void Isopod(MeshData m)
     {
@@ -6301,53 +6281,11 @@ public static partial class OrganismMeshes
         Appendage(m, new[] { new Vec3(-0.37, 0.07, 0), new Vec3(-0.62, 0.08, 0), new Vec3(-0.85, 0.075, 0) }, new[] { 0.008, 0.005, 0.003 }, 3, 4, 3);
     }
 
-    private static void Slug(MeshData m)
-    {
-        BodySegment(m, new Vec3(-0.05, 0.08, 0), new Vec3(0.43, 0.075, 0.13), 6, 12, (a,b) => Region(0.45, b, 1), pitch: -0.04);
-        BodySegment(m, new Vec3(0.12, 0.145, 0), new Vec3(0.19, 0.065, 0.11), 5, 10, (a,b) => Region(0.72, b, 2));
-        foreach (double z in new[] {-1.0, 1.0})
-        {
-            Appendage(m, new[] { new Vec3(0.31,0.13,0.055*z), new Vec3(0.43,0.21,0.11*z), new Vec3(0.50,0.24,0.14*z) }, new[] {0.015,0.009,0.005}, 5, 4, 3);
-            int eyeStart = m.VertexCount;
-            BodySegment(m, new Vec3(0.505,0.242,0.142*z), new Vec3(0.012,0.012,0.012), 3, 5, (a,b)=>Region(0.98,b,3));
-            // Eye caps belong to the sensory stalk, including its searching motion and body-root deformation.
-            var root = new Vec3(0.31,0.13,0.055*z);
-            for (int i = eyeStart; i < m.VertexCount; i++)
-            {
-                var off = m.Position(i) - root;
-                m.Colors[i * 4] = (float)off.X; m.Colors[i * 4 + 1] = (float)off.Y;
-                m.Colors[i * 4 + 2] = (float)off.Z; m.Colors[i * 4 + 3] = 1;
-                m.UV2[i * 2 + 1] = 3;
-            }
-        }
-    }
 
-    private static void Millipede(MeshData m)
-    {
-        const int n = 12;
-        for (int k=0;k<n;k++)
-        {
-            double t=k/(double)(n-1), x=0.44-t*0.88, r=0.065*(0.65+0.35*Math.Sin(Math.PI*t));
-            BodySegment(m,new Vec3(x,0.085,0),new Vec3(0.047,r,r*1.15),3,8,(a,b)=>Region(1-t,b,1));
-            foreach(double z in new[]{-1.0,1.0})
-                Appendage(m,new[]{new Vec3(x,0.055,r*0.75*z),new Vec3(x-0.015,0.025,(r+0.055)*z),new Vec3(x+0.01,0,(r+0.09)*z)},new[]{0.009,0.006,0.003},3);
-        }
-        BodySegment(m,new Vec3(0.50,0.09,0),new Vec3(0.065,0.06,0.07),4,8,(a,b)=>Region(0.98,b,2));
-    }
 
-    private static void Moth(MeshData m)
-    {
-        BodySegment(m,new Vec3(0.08,0.13,0),new Vec3(0.18,0.08,0.08),5,9,(a,b)=>Region(0.55,b,1));
-        BodySegment(m,new Vec3(0.29,0.14,0),new Vec3(0.09,0.08,0.09),4,8,(a,b)=>Region(0.9,b,2));
-        BodySegment(m,new Vec3(-0.18,0.12,0),new Vec3(0.18,0.055,0.055),4,8,(a,b)=>Region(0.28,b,1));
-        foreach(double z in new[]{-1.0,1.0})
-        {
-            var a=new Vec3(0.05,0.16,0.04*z);
-            AppendageFan(m,a,a,new[]{a+new Vec3(0.12,0.02,0.38*z),a+new Vec3(-0.12,0.02,0.48*z),a+new Vec3(-0.28,-0.01,0.24*z)},Vec3.Up);
-            var ant=new Vec3(0.34,0.17,0.035*z);
-            Appendage(m,new[]{ant,ant+new Vec3(0.11,0.07,0.07*z),ant+new Vec3(0.22,0.09,0.13*z)},new[]{0.009,0.005,0.003},3,4,3);
-        }
-    }
+
+
+
 
     private static void Toad(MeshData m, ulong visualSeed)
     {
@@ -6444,61 +6382,104 @@ public static partial class OrganismMeshes
             {
                 var off = m.Position(i) - root;
                 m.SetColor(i, off.X, off.Y, off.Z, 1);
-                bool socket = path[0] == root && m.UV2[i * 2 + 1] == 1;
-                m.UV2[i * 2 + 1] = socket ? 1 : (float)(1 + 0.25 * Math.Clamp(off.Length / 0.32, 0, 1));
+                // Digits move with the wrist/ankle at the full planted-foot stroke.
+                // Main limbs keep the tube's root-to-tip weights (including anchored sockets).
+                if (path[0] != root) m.UV2[i * 2 + 1] = 1.25f;
             }
         }
     }
 
     private static void Salamander(MeshData m)
     {
-        BodySegment(m,new Vec3(0.02,0.11,0),new Vec3(0.34,0.09,0.10),6,10,(a,b)=>Region(0.52,b,1));
-        BodySegment(m,new Vec3(0.37,0.12,0),new Vec3(0.12,0.09,0.11),5,9,(a,b)=>Region(0.92,b,2));
-        var path=new List<Vec3>(); var rad=new List<double>();
-        for(int i=0;i<=8;i++){double t=i/8.0; path.Add(new Vec3(-0.28-t*0.42,0.10+0.02*Math.Sin(t*Math.PI),0)); rad.Add(0.07*(1-t)+0.008);}
-        Primitives.Tube(m,path,rad,8,(i,v)=>(Body,0,0.2,v,1,0));
-        foreach(double z in new[]{-1.0,1.0})
-            foreach(double x in new[]{0.22,-0.14})
-                Appendage(m,new[]{new Vec3(x,0.08,0.07*z),new Vec3(x+0.02,0.035,0.17*z),new Vec3(x+0.08,0.0,0.23*z)},new[]{0.025,0.017,0.009},4);
-    }
-
-    private static void Worm(MeshData m)
-    {
-        var path=new List<Vec3>(); var rad=new List<double>();
-        for(int i=0;i<=16;i++){double t=i/16.0; path.Add(new Vec3(0.48-t*0.96,0.055+0.012*Math.Sin(t*Math.PI*3),0.025*Math.Sin(t*Math.PI*2))); rad.Add(0.045*(0.55+0.45*Math.Sin(Math.PI*t))+0.006);}
-        Primitives.Tube(m,path,rad,9,(i,v)=>(Body,0,1-i/16.0,v,1,0),new Vec3(0,0,1));
-    }
-
-    private static void Harvestman(MeshData m)
-    {
-        BodySegment(m,new Vec3(0,0.13,0),new Vec3(0.13,0.09,0.12),5,9,(a,b)=>Region(0.55,b,1));
-        BodySegment(m,new Vec3(0.14,0.14,0),new Vec3(0.07,0.06,0.07),4,8,(a,b)=>Region(0.85,b,2));
-        for(int leg=0;leg<4;leg++) foreach(double z in new[]{-1.0,1.0})
+        // Low, slender trunk and broad flattened head. +X is the direction of travel.
+        BodySegment(m, new Vec3(0.005, 0.102, 0), new Vec3(0.30, 0.078, 0.093), 22, 24,
+            (a, b) => Region(a, b, 1));
+        BodySegment(m, new Vec3(0.265, 0.105, 0), new Vec3(0.085, 0.056, 0.075), 12, 20,
+            (a, b) => Region(a, b, 1));
+        BodySegment(m, new Vec3(0.355, 0.105, 0), new Vec3(0.125, 0.053, 0.105), 16, 28,
+            (a, b) => Region(a, b, 1));
+        BodySegment(m, new Vec3(0.37, 0.072, 0), new Vec3(0.102, 0.024, 0.091), 12, 24,
+            (a, b) => Region(a, b, 3));
+        var mouth = new List<Vec3>();
+        for (int i = 0; i <= 24; i++)
         {
-            double x=0.13-leg*0.085;
-            Appendage(m,new[]{new Vec3(x,0.11,0.08*z),new Vec3(x+(leg-1.5)*0.035,0.13,0.34*z),new Vec3(x+(leg-1.5)*0.10,0.01,0.55*z)},new[]{0.014,0.008,0.004},4);
+            double t = -1.4 + 2.8 * i / 24;
+            mouth.Add(new Vec3(0.352 + 0.118 * Math.Cos(t), 0.080 - 0.006 * Math.Cos(t), 0.100 * Math.Sin(t)));
+        }
+        Primitives.Tube(m, mouth, mouth.Select(_ => 0.0018).ToArray(), 6, (i, v) => Region(i / 24.0, v, 7));
+        foreach (double side in new[] { -1.0, 1.0 })
+        {
+            BodySegment(m, new Vec3(0.359, 0.135, 0.079 * side), new Vec3(0.032, 0.023, 0.030), 10, 18,
+                (a, b) => Region(a, b, 1));
+            BodySegment(m, new Vec3(0.367, 0.148, 0.089 * side), new Vec3(0.022, 0.017, 0.017), 10, 20,
+                (a, b) => Region(a, b, 2));
+            BodySegment(m, new Vec3(0.378, 0.149, 0.101 * side), new Vec3(0.010, 0.011, 0.008), 8, 16,
+                (a, b) => Region(a, b, 5));
+            BodySegment(m, new Vec3(0.381, 0.149, 0.107 * side), new Vec3(0.006, 0.008, 0.0035), 8, 12,
+                (a, b) => Region(a, b, 6));
+            BodySegment(m, new Vec3(0.460, 0.123, 0.043 * side), new Vec3(0.0035, 0.0022, 0.0035), 5, 8,
+                (a, b) => Region(a, b, 7));
+            foreach (bool fore in new[] { true, false })
+            {
+                var root = new Vec3(fore ? 0.205 : -0.195, 0.094, 0.064 * side);
+                var foot = new Vec3(fore ? 0.268 : -0.178, 0.018, (fore ? 0.178 : 0.195) * side);
+                var elbow = new Vec3(fore ? 0.173 : -0.285, 0.048, 0.137 * side);
+                Limb(root, new[] { root, elbow, foot }, new[] { fore ? 0.025 : 0.030, 0.022, 0.010 }, false);
+                int digits = fore ? 4 : 5;
+                for (int digit = 0; digit < digits; digit++)
+                {
+                    double spread = (digit - (digits - 1) * 0.5) * 0.013;
+                    double reach = 0.057 - Math.Abs(digit - (digits - 1) * 0.5) * 0.009;
+                    Limb(root, new[] { foot, foot + new Vec3(0.022, -0.008, spread * side),
+                        foot + new Vec3(reach, -0.013, spread * 1.65 * side) }, new[] { 0.0055, 0.004, 0.0015 }, true);
+                }
+            }
+        }
+        var tail = new List<Vec3>(); var radius = new List<double>();
+        for (int i = 0; i <= 24; i++)
+        {
+            double t = i / 24.0;
+            tail.Add(new Vec3(-0.255 - t * 0.57, 0.100 - t * 0.069, 0));
+            radius.Add(0.038 * Math.Pow(1 - t, 1.1) + 0.0018);
+        }
+        int firstTail = m.VertexCount;
+        Primitives.Tube(m, tail, radius, 18, (i, v) => Region(i / 24.0, v, 1));
+        for (int i = firstTail; i < m.VertexCount; i++) m.Positions[i * 3 + 2] *= 0.73f;
+
+        void Limb(Vec3 root, Vec3[] points, double[] radii, bool digit)
+        {
+            var path = new List<Vec3>(); var thickness = new List<double>();
+            for (int k = 0; k < points.Length - 1; k++)
+            {
+                var a = points[Math.Max(0, k - 1)]; var b = points[k];
+                var c = points[k + 1]; var d = points[Math.Min(points.Length - 1, k + 2)];
+                for (int j = 0; j < 4; j++)
+                {
+                    double t = j / 4.0;
+                    path.Add((b * 2 + (c - a) * t + (a * 2 - b * 5 + c * 4 - d) * t * t
+                        + (-a + b * 3 - c * 3 + d) * t * t * t) * 0.5);
+                    thickness.Add(MathD.Lerp(radii[k], radii[k + 1], t));
+                }
+            }
+            path.Add(points[^1]); thickness.Add(radii[^1]);
+            int first = m.VertexCount;
+            Appendage(m, path, thickness, 10);
+            for (int i = first; i < m.VertexCount; i++)
+            {
+                var offset = m.Position(i) - root;
+                m.SetColor(i, offset.X, offset.Y, offset.Z, 1);
+                if (digit) m.UV2[i * 2 + 1] = 1.25f;
+            }
         }
     }
 
-    private static void AquaticLarva(MeshData m)
-    {
-        for(int k=0;k<8;k++){double t=k/7.0,x=0.25-t*0.58,r=0.075*(1-0.45*t); BodySegment(m,new Vec3(x,0.11,0),new Vec3(0.05,r,r),3,8,(a,b)=>Region(0.75-t*0.55,b,1));}
-        BodySegment(m,new Vec3(0.36,0.12,0),new Vec3(0.13,0.085,0.11),5,9,(a,b)=>Region(0.94,b,2));
-        foreach(double z in new[]{-1.0,1.0})
-        {
-            for(int leg=0;leg<3;leg++){double x=0.25-leg*0.10; Appendage(m,new[]{new Vec3(x,0.08,0.06*z),new Vec3(x+0.02,0.02,0.15*z),new Vec3(x+0.08,0.0,0.20*z)},new[]{0.014,0.009,0.004},4);}
-            var tail=new Vec3(-0.34,0.11,0.02*z); AppendageFan(m,tail,tail,new[]{tail+new Vec3(-0.16,0.08,0.09*z),tail+new Vec3(-0.22,0,0.12*z),tail+new Vec3(-0.16,-0.07,0.09*z)},new Vec3(0,0,z));
-        }
-    }
 
-    private static void Snail(MeshData m)
-    {
-        BodySegment(m,new Vec3(0.05,0.07,0),new Vec3(0.42,0.055,0.12),5,11,(a,b)=>Region(0.45,b,1));
-        BodySegment(m,new Vec3(-0.08,0.22,0),new Vec3(0.22,0.22,0.10),8,14,(a,b)=>(Body,0,0.35,b,2,4));
-        BodySegment(m,new Vec3(0.36,0.10,0),new Vec3(0.11,0.07,0.09),4,8,(a,b)=>Region(0.9,b,1));
-        foreach(double z in new[]{-1.0,1.0})
-            Appendage(m,new[]{new Vec3(0.40,0.13,0.04*z),new Vec3(0.49,0.21,0.08*z),new Vec3(0.54,0.23,0.10*z)},new[]{0.012,0.007,0.004},4,4,3);
-    }
+
+
+
+
+
+
 
     private static void Midge(MeshData m)
     {

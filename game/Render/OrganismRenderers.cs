@@ -661,7 +661,8 @@ public partial class FaunaRenderer : Node3D
     /// </summary>
     private sealed class Track
     {
-        public Vector3 Prev, Cur, Shown;
+        public Vector3 Prev, Cur, Shown, SourceShown;
+        public ToadLocomotion? Toad;
         public double PrevT, CurT;
         public float Yaw, Speed, Pitch, Bend, Activity;
         public double Phase;
@@ -688,12 +689,6 @@ public partial class FaunaRenderer : Node3D
             hiMat.SetShaderParameter("base_color", Bridge.C(sp.BaseColor));
             hiMat.SetShaderParameter("ornament_color", Bridge.C(sp.OrnamentColor));
             FaunaBodyProfiles.Bind(hiMat, sp);
-            hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
-            hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.15f, "triops" => 0.45f, "shrimp" => 0.35f, "springtail" => 0.0f, "beetle" => 0.3f, "silverfish" => 0.2f, _ => 0.0f });
-            hiMat.SetShaderParameter("segment_rings", sp.Model switch { "springtail" => 5.5f, "silverfish" => 4.5f, _ => 0.0f });
-            hiMat.SetShaderParameter("bloom", sp.Model switch { "springtail" => 1.0f, "isopod" => 0.85f, "silverfish" => 0.7f, "beetle" => 0.7f, "triops" or "shrimp" or "minnow" => 0.1f, _ => 0.6f });
-            hiMat.SetShaderParameter("wet", sp.Model is "shrimp" or "minnow" or "triops" ? 1.0f : 0.0f);
-            hiMat.SetShaderParameter("scales", sp.Model is "minnow" or "silverfish" ? 1.0f : 0.0f);
             var still = (ShaderMaterial)hiMat.Duplicate();
             still.SetShaderParameter("anim_amplitude", 0.0f);
             var layer = new Layer { Animation = sp.Animation };
@@ -738,6 +733,8 @@ public partial class FaunaRenderer : Node3D
     /// <summary>Render phase for deterministic distance-clock checks.</summary>
     public double DisplayPhase(EntityId id) => _tracks.TryGetValue(id, out var tr) ? tr.Phase : 0;
 
+    public bool DisplayCrawling(EntityId id) => _tracks.TryGetValue(id, out var tr) && tr.Toad?.IsCrawling == true;
+
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("Fauna");
@@ -774,23 +771,29 @@ public partial class FaunaRenderer : Node3D
             var target = Bridge.V(f.Position);
             double now = _w.Clock.SimSeconds;
             if (!_tracks.TryGetValue(f.Id, out var tr))
-                _tracks[f.Id] = tr = new Track { Prev = target, Cur = target, Shown = target, PrevT = now, CurT = now, Yaw = (float)-f.Heading };
+                _tracks[f.Id] = tr = new Track { Prev = target, Cur = target, Shown = target, SourceShown = target, PrevT = now, CurT = now, Yaw = (float)-f.Heading };
             else if (f.Grabbed || tr.Cur.DistanceTo(target) > 0.5f)
             {
                 // held, released or reintroduced: jump there rather than slide across the island
-                tr.Prev = tr.Cur = tr.Shown = target; tr.PrevT = tr.CurT = now;
+                tr.Prev = tr.Cur = tr.Shown = tr.SourceShown = target;
+                tr.Toad?.Reset(new Vec3(target.X, target.Y, target.Z)); tr.PrevT = tr.CurT = now;
                 tr.Bend = tr.Speed = tr.Activity = 0;
             }
             else if (tr.Cur.DistanceSquaredTo(target) > 1e-12)
             {
-                tr.Prev = tr.Shown; tr.PrevT = Math.Min(renderT, tr.CurT);
+                tr.Prev = tr.SourceShown; tr.PrevT = Math.Min(renderT, tr.CurT);
                 tr.Cur = target; tr.CurT = Math.Max(now, tr.PrevT + 1e-6);
             }
             double span = tr.CurT - tr.PrevT;
             float alpha = span > 1e-9 ? (float)Math.Clamp((renderT - tr.PrevT) / span, 0, 1) : 1f;
             var shown = tr.Prev.Lerp(tr.Cur, alpha);
-            float frameDist = shown.DistanceTo(tr.Shown);
-            tr.Shown = shown;
+            // Pausing freezes simulated interpolation time. Let the toad land at its
+            // authoritative foothold rather than permanently retain the interpolation delay.
+            if (sp.Model == "toad" && _w.Clock.Paused) shown = target;
+            var previousShown = tr.Shown;
+            float sourceDist = shown.DistanceTo(tr.SourceShown);
+            tr.SourceShown = shown;
+            float frameDist = sourceDist;
             // face the direction of travel (or the simulated heading when standing), critically damped
             var motion = new Vector2(tr.Cur.X - tr.Prev.X, tr.Cur.Z - tr.Prev.Z);
             float yawTarget = motion.LengthSquared() > 1e-8 ? Mathf.Atan2(-motion.Y, motion.X) : (float)-f.Heading;
@@ -799,7 +802,7 @@ public partial class FaunaRenderer : Node3D
             // Animation cadence is species-authored in body-relative units: apparent gait survives genetic size changes
             // and simulation time-scale changes without hard-coding a model name in the renderer.
             float bodyLen = (float)Math.Max(1e-4, ph.BodySize * sp.VisualScale);
-            float speed = delta > 1e-6 ? frameDist / (float)delta / bodyLen : 0;
+            float speed = delta > 1e-6 ? sourceDist / (float)delta / bodyLen : 0;
             tr.Speed += (speed - tr.Speed) * k;
             var layer = _layers[sp.Id];
             var anim = layer.Animation;
@@ -809,11 +812,27 @@ public partial class FaunaRenderer : Node3D
                 ? Mathf.Clamp(yawStep * bodyLen / Math.Max(frameDist, bodyLen * 0.002f), -1.25f, 1.25f) : 0;
             float bendK = 1 - Mathf.Exp(-(float)delta * 4f);
             tr.Bend += (bendTarget - tr.Bend) * bendK;
-            tr.Phase = (tr.Phase + FaunaGait.Advance(anim, frameDist, bodyLen, f.Grabbed ? 0 : delta)) % 1.0;
+            if (sp.Model == "toad")
+            {
+                if (tr.Toad == null)
+                {
+                    tr.Toad = new ToadLocomotion();
+                    tr.Toad.Reset(new Vec3(previousShown.X, previousShown.Y, previousShown.Z));
+                }
+                if (!f.Grabbed)
+                    tr.Toad.Step(new Vec3(shown.X, shown.Y, shown.Z), bodyLen, delta, tr.Speed, anim);
+                var position = tr.Toad.Position;
+                shown = new Vector3((float)position.X, (float)position.Y, (float)position.Z);
+                frameDist = shown.DistanceTo(previousShown);
+                tr.Phase = tr.Toad.Phase;
+            }
+            else tr.Phase = (tr.Phase + FaunaGait.Advance(anim, frameDist, bodyLen, f.Grabbed ? 0 : delta)) % 1.0;
+            tr.Shown = shown;
             // Ground stride stays constant; only lift/body activity fades when travel stops.
-            float activityTarget = speed > 1e-5f && !f.Grabbed ? 1 : 0;
+            float activityTarget = frameDist > 1e-7f && !f.Grabbed ? 1 : 0;
             tr.Activity += (activityTarget - tr.Activity) * k;
             float speed01 = FaunaGait.GroundSteps(anim) ? tr.Activity : (float)Math.Clamp(tr.Speed / anim.FullSpeed, 0, 1);
+            if (tr.Toad != null && !tr.Toad.IsCrawling) speed01 = !f.Grabbed && tr.Toad.Hopping ? 1 : 0;
             var d = (Pos: shown, Yaw: tr.Yaw);
             // full detail at any distance; only animals outside the view are skipped (invisible either way)
             float scale = (float)(ph.BodySize * sp.VisualScale);
@@ -853,7 +872,7 @@ public partial class FaunaRenderer : Node3D
             buf[o + 12] = (float)ph.HueShift; buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength;
             // Flexible bodies reserve the integer part of x for a signed bend bucket;
             // hue remains in the residual. Zero/unpacked x is also a valid straight preview pose.
-            buf[o + 12] = FaunaBodyProfiles.PackHue(sp, (float)ph.HueShift, tr.Bend);
+            buf[o + 12] = FaunaBodyProfiles.PackHue(sp, (float)ph.HueShift, tr.Bend, tr.Toad?.IsCrawling == true);
             buf[o + 15] = (float)(Math.Round(ph.AppendageScale * 1000) * 16 + speedBucket + Math.Min(tr.Phase, 0.999));
             Drawn++;
         }

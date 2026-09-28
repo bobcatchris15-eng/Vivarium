@@ -51,7 +51,8 @@ public partial class Main : Node3D
         if (ArgAfter("--fauna-preview") is { } faunaId)
         {
             AddChild(new FaunaPreview { Content = content, SpeciesId = faunaId,
-                OutDir = ArgAfter("--output") ?? "build/fauna-preview", SpeedReview = UserArgs.Contains("--speed-review") });
+                OutDir = ArgAfter("--output") ?? "build/fauna-preview", SpeedReview = UserArgs.Contains("--speed-review"),
+                LiveMotion = UserArgs.Contains("--live-motion") });
             return;
         }
         if (ArgAfter("--specimen") is { } specimenId)

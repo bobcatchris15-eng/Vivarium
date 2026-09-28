@@ -31,7 +31,7 @@ public partial class FaunaMotionCheck : Node3D
             const double dt = 1.0 / 60;
             renderer._Process(dt);
             double worst = 0;
-            int checks = 0;
+            int checks = 0, crawlChecks = 0, groundedHopChecks = 0, airborneHopChecks = 0;
             var reports = new List<object>();
             var movingTravel = new List<double>();
             foreach (double rate in new[] { 0.2, 0.8, 4.0, 0.0 })
@@ -40,11 +40,13 @@ public partial class FaunaMotionCheck : Node3D
                 for (int frame = 0; frame < 90; frame++)
                 {
                     var oldPosition = new Vector3[animals.Count]; var oldPhase = new double[animals.Count];
+                    var oldCrawl = new bool[animals.Count];
                     for (int i = 0; i < animals.Count; i++)
                     {
                         var f = animals[i]; var sp = Content.FaunaOrThrow(f.SpeciesId);
                         float length = (float)(world.FaunaSystem.PhenotypeOf(f).BodySize * sp.VisualScale);
                         oldPosition[i] = renderer.DisplayPosition(f.Id); oldPhase[i] = renderer.DisplayPhase(f.Id);
+                        oldCrawl[i] = renderer.DisplayCrawling(f.Id);
                         // Include pure vertical swimming: horizontal-only speed must fail this check.
                         // Authoritative movement updates at the production two-tick behaviour cadence.
                         // Updating every render frame would keep resetting interpolation before it can advance.
@@ -61,10 +63,29 @@ public partial class FaunaMotionCheck : Node3D
                         var f = animals[i]; var sp = Content.FaunaOrThrow(f.SpeciesId);
                         float length = (float)Math.Max(1e-4, world.FaunaSystem.PhenotypeOf(f).BodySize * sp.VisualScale);
                         double dist = renderer.DisplayPosition(f.Id).DistanceTo(oldPosition[i]);
-                        double expected = (oldPhase[i] + FaunaGait.Advance(sp.Animation, dist, length, dt)) % 1;
-                        double error = Math.Abs(renderer.DisplayPhase(f.Id) - expected);
-                        error = Math.Min(error, 1 - error); worst = Math.Max(worst, error); checks++;
-                        if (error > 1e-7) throw new InvalidOperationException($"{sp.Id} distance phase drift {error}");
+                        bool toad = sp.Model == "toad", crawl = renderer.DisplayCrawling(f.Id);
+                        if (!toad || (crawl && oldCrawl[i]))
+                        {
+                            var gait = toad ? ToadLocomotion.Crawl : sp.Animation;
+                            double expected = (oldPhase[i] + FaunaGait.Advance(gait, dist, length, dt)) % 1;
+                            double error = Math.Abs(renderer.DisplayPhase(f.Id) - expected);
+                            error = Math.Min(error, 1 - error); worst = Math.Max(worst, error);
+                            // Float scene transforms introduce tiny round-off into the crawl distance.
+                            if (error > (toad ? 0.00001 : 0.0000001)) throw new InvalidOperationException($"{sp.Id} distance phase drift {error}");
+                            if (toad && dist > length * 0.0001) crawlChecks++;
+                        }
+                        if (toad && !crawl && !oldCrawl[i])
+                        {
+                            double phase = renderer.DisplayPhase(f.Id);
+                            if (phase >= oldPhase[i] && oldPhase[i] < sp.Animation.DutyFactor && phase < sp.Animation.DutyFactor)
+                            {
+                                groundedHopChecks++;
+                                if (dist > length * 0.0001)
+                                    throw new InvalidOperationException($"Stonebell slides during grounded hop stance: {dist / length:0.0000} body lengths");
+                            }
+                            if (phase >= sp.Animation.DutyFactor && dist > length * 0.0001) airborneHopChecks++;
+                        }
+                        checks++;
                         travel += dist;
                     }
                 }
@@ -73,8 +94,15 @@ public partial class FaunaMotionCheck : Node3D
             }
             if (movingTravel[0] <= 0 || movingTravel[1] <= movingTravel[0] * 2 || movingTravel[2] <= movingTravel[1] * 2)
                 throw new InvalidOperationException("Motion check did not exercise increasing visible speeds");
+            if (crawlChecks == 0 || groundedHopChecks == 0 || airborneHopChecks == 0)
+                throw new InvalidOperationException("Stonebell check did not exercise crawl, grounded stance and airborne travel");
+            // A stopped toad finishes landing/catching up; it cannot freeze in mid-air behind its target.
+            world.Clock.Paused = true;
+            for (int frame = 0; frame < 180; frame++) renderer._Process(dt);
             foreach (var f in animals)
             {
+                if (f.SpeciesId == "stonebell" && renderer.DisplayPosition(f.Id).DistanceTo(Bridge.V(f.Position)) > 0.001)
+                    throw new InvalidOperationException("Stonebell failed to settle at its stopped target");
                 double phase = renderer.DisplayPhase(f.Id);
                 f.Grabbed = true; f.X += 1;
                 renderer._Process(dt);
@@ -83,7 +111,7 @@ public partial class FaunaMotionCheck : Node3D
             }
             Directory.CreateDirectory(OutDir);
             File.WriteAllText(Path.Combine(OutDir, "distance-clock.json"), System.Text.Json.JsonSerializer.Serialize(
-                new { species = animals.Count, checks, maxPhaseError = worst, verticalSwimming = true, grabTeleport = true, rates = reports },
+                new { species = animals.Count, checks, crawlChecks, groundedHopChecks, airborneHopChecks, maxPhaseError = worst, verticalSwimming = true, grabTeleport = true, rates = reports },
                 new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
             GD.Print($"FAUNA_MOTION_OK species={animals.Count} checks={checks} max_error={worst}");
             GetTree().Quit();
