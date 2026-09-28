@@ -351,12 +351,28 @@ public partial class FloraRenderer : Node3D
                 h = Math.Min(h, 0.035);
                 r = Math.Max(r, 0.06);
             }
+            if (sp.Shape == "rain_jelly")
+            {
+                // Jelly fungi change silhouette within minutes of wetting; keep that as render-time turgor
+                // rather than manufacturing/losing authoritative biomass every weather tick.
+                double jellyMoisture = _w.Fields.Moisture.Sample(f.Position);
+                double swell = MathD.Clamp01((jellyMoisture - 0.24) / 0.62);
+                r *= 0.72 + 0.58 * swell;
+                h *= 0.52 + 1.05 * swell;
+            }
             var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
             if (sp.Shape == "bracket" && Anchor(new Vector2(pos.X, pos.Z), 0.35) is { } ba)
             {
                 // shelves grow out of the trunk's side
                 var at = ba.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.08f, 0);
                 t = new Transform3D(Bridge.Yaw(ba.Outward).Scaled(new Vector3((float)r, (float)(h * 2.5), (float)r)), at - new Vector3(0, (float)h, 0));
+            }
+            else if (sp.Shape == "glass_antlers" && Anchor(new Vector2(pos.X, pos.Z), 0.22, new HashSet<string>(StringComparer.Ordinal) { "log" }) is { } ga)
+            {
+                // Glass Antlers are authored upright from their attachment foot. Plant them directly on the
+                // cylindrical log surface, with a slight outward yaw so branches don't disappear into the wood.
+                var at = ga.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.05f, 0);
+                t = new Transform3D(Bridge.Yaw(ga.Outward).Scaled(new Vector3((float)r, (float)(h * 1.35), (float)r)), at);
             }
             float wobble = 0;
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2);
