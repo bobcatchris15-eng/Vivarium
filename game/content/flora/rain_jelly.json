@@ -1,0 +1,93 @@
+{
+  "id": "rain_jelly",
+  "name": "Rain Jelly",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Moisture-responsive jelly fungus that swells dramatically after rain and shrinks in dry spells.",
+  "description": "Translucent lobes lie low against rich litter and deadwood, becoming plump glassy cushions when the substrate is wet.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "wood": 1,
+      "soil": 0.82
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.82,
+      "tolerance": 0.18
+    },
+    "light": {
+      "optimum": 0.28,
+      "tolerance": 2
+    },
+    "nutrients": {
+      "optimum": 0.12,
+      "tolerance": 0.2
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.38,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.42,
+    "maxBiomass": 0.55,
+    "initialBiomass": 0.035,
+    "declinePerDay": 0.34,
+    "maturityDays": 3,
+    "lifespanDays": 46,
+    "nutrientPerBiomass": 0.48,
+    "radiusAtMax": 0.24,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.55,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.28,
+    "crowdingLimit": 2.1,
+    "sensitivity": 0.55
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.55,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.94,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0.34,
+  "visual": {
+    "shape": "rain_jelly",
+    "color": [
+      0.52,
+      0.34,
+      0.5
+    ],
+    "color2": [
+      0.78,
+      0.66,
+      0.82
+    ],
+    "colorVariance": 0.065,
+    "height": 0.095
+  },
+  "tags": [
+    "fungus",
+    "jelly",
+    "decomposer"
+  ],
+  "decomposition": {
+    "radius": 0.42,
+    "fineMultiplier": 1.65,
+    "coarseMultiplier": 1.18,
+    "fruitMultiplier": 1.35
+  }
+}
