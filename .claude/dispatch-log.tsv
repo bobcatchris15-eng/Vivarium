@@ -2,3 +2,5 @@
 2026-09-28T18:08:08Z	lod	impl-worker	opus	6	296	18	1	PASS(pre-existing FormTests x12)	1400
 2026-09-28T18:25:35Z	simperf	impl-worker	sonnet	7	1335	76	1	PARTIAL(aquatic 35->~10 mean, max 34-51; turn cap)	2600
 2026-09-28T18:36:08Z	covfix	impl-worker	sonnet	1	160	14	1	PASS EXC 0	700
+2026-09-28T19:18:34Z	rivulet	impl-worker	opus	4	-	-	1	PASS	2400
+2026-09-28T19:19:44Z	hydroslope	impl-worker	sonnet	2	470	18	3	FAIL(packet wrong)	1500
