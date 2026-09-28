@@ -119,6 +119,8 @@ static void Print(VivariumWorld w)
 {
     var s = EcosystemStatistics.Compute(w);
     Console.WriteLine($"  env: moisture {s.MeanMoisture:0.00} nutrients {s.MeanNutrients:0.000} detritus {s.TotalDetritus:0.0} water {s.WaterVolume:0.00} m3 wet {s.WetFraction:P1} light {s.MeanLight:0.00} lineage {s.LineageRecords} genomes {s.Genomes}");
+    var ambientSoil = w.Grid.DomainCells.Where(i => w.SubstrateAtCell(w.Grid.CellCenter(i)) == Vivarium.Sim.Content.Substrate.Soil && w.Water.DepthAt(w.Grid.CellCenter(i)) <= 0.006).ToArray();
+    Console.WriteLine($"  ground: ambient all {w.Grid.DomainCells.Average(i => w.AmbientGroundCover.Cover[i]):P1}  eligible-soil {(ambientSoil.Length > 0 ? ambientSoil.Average(i => w.AmbientGroundCover.Cover[i]) : 0):P1}  litter {(w.Litter.ExportFine().Sum() + w.Litter.ExportCoarse().Sum()):0.00}");
     Console.WriteLine("  flora: " + string.Join("  ", s.Flora.Select(f => $"{f.Id}={f.Count}({f.Biomass:0.0})")));
     Console.WriteLine("  fauna: " + string.Join("  ", s.Fauna.Select(f => $"{f.Id}={f.Count} e{f.MeanEnergy:0.00} g{f.MaxGeneration} b{f.Births}/d{f.Deaths} {f.MeanBodySizeMm:0.0}mm")));
     var causes = w.Tally.Species.Where(kv => kv.Value.DeathsByCause.Count > 0).Select(kv => kv.Key + ":" + string.Join(",", kv.Value.DeathsByCause.Select(c => $"{c.Key}={c.Value}")));

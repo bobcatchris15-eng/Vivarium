@@ -14,6 +14,7 @@ uniform float sway = 1.0;
 uniform float stiffness = 1.0;
 uniform int surface_mode = 2;
 uniform bool deform_leaf_tips = false;
+uniform float review_time = -1.0;
 uniform vec3 leaf_top = vec3(0.07, 0.16, 0.055);
 uniform vec3 leaf_back = vec3(0.14, 0.19, 0.09);
 uniform int leaf_type = 0;
@@ -57,6 +58,7 @@ varying vec3 world_pos;
 varying vec3 obj_pos;
 
 void vertex() {
+    float clock = review_time >= 0.0 ? review_time : TIME;
     inst = INSTANCE_CUSTOM;
     obj_pos = VERTEX;
     float h = max(VERTEX.y, 0.0);
@@ -72,9 +74,9 @@ void vertex() {
         VERTEX.xz *= vec2(spread, 2.0 - spread);
         VERTEX.xz += vec2(bend_x, bend_z) * weight * 0.028;
     }
-    float phase = TIME * 1.3 + inst.w * 6.2831;
+    float phase = clock * 1.3 + inst.w * 6.2831;
     float amount = (0.012 * sway + inst.z * 0.15) / stiffness;
-    VERTEX.x += sin(phase) * h * h * amount * 3.0 + sin(TIME * 18.0 + inst.w * 40.0) * inst.z * h * 0.2;
+    VERTEX.x += sin(phase) * h * h * amount * 3.0 + sin(clock * 18.0 + inst.w * 40.0) * inst.z * h * 0.2;
     VERTEX.z += cos(phase * 0.8) * h * h * amount * 2.0;
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }

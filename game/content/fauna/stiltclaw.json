@@ -101,18 +101,18 @@
     ],
     "animation": {
       "family": "walk",
-      "cyclesPerBody": 1,
+      "cyclesPerBody": 2,
       "idleHz": 0,
       "maxHz": 8,
-      "fullSpeed": 4,
+      "fullSpeed": 1.0,
       "idleMotion": 0,
       "amplitude": 1,
       "bodyWave": 0.08,
-      "limbSweep": 0.85,
-      "limbLift": 0.55,
-      "bob": 0.06,
+      "limbSweep": 0.65,
+      "limbLift": 0.45,
+      "bob": 0.12,
       "phaseSpread": 0.45,
-      "dutyFactor": 0.58
+      "dutyFactor": 0.65
     }
   },
   "behaviors": []

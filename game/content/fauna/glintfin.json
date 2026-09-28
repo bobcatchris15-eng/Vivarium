@@ -97,15 +97,15 @@
     ],
     "animation": {
       "family": "undulate",
-      "cyclesPerBody": 0.55,
+      "cyclesPerBody": 1.5,
       "idleHz": 0.8,
       "maxHz": 8,
-      "fullSpeed": 6,
+      "fullSpeed": 1,
       "idleMotion": 0.25,
       "amplitude": 1,
       "bodyWave": 1,
       "limbSweep": 0.25,
-      "limbLift": 0.15,
+      "limbLift": 0.55,
       "bob": 0.03,
       "phaseSpread": 1.4,
       "dutyFactor": 0.5

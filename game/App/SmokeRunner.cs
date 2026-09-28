@@ -355,7 +355,7 @@ public partial class SmokeRunner : Node
     private async Task PerfAsync()
     {
         var cam = Session.CameraRig;
-        W.Clock.Paused = false;
+        W.Clock.Paused = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_FREEZE") == "1";
         var samples = new List<string>();
         ulong start = Time.GetTicksMsec();
         int second = 0;

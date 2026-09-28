@@ -62,3 +62,47 @@ The shader now accepts a color, tangent-space normal, and roughness map for each
 | Glassfinger | Olive mottling and subtle roughness variation on fleshy facets; red tips and pale flecks survive. | `game/build/specimens/leaf-scan-pilot/glassfinger-v2/glassfinger-mature.png` |
 
 The Mono build passed, all three in-game `--species-view` runs reported `checks=2 failed=0`, and the Godot editor imported the nine 2K maps with mipmaps and VRAM compression. These are candidate materials awaiting the user's visual review.
+
+### Dedicated leaf system pilot, 2026-09-27 — pending approval
+
+The user authorized the dedicated visual-system plan. Umbraheart, Kiteleaf, and Glassfinger now use separate stem/leaf surfaces, stable per-leaf tissue selection, attachment-based wind, coordinated baked vein relief/transmission, and three cached tessellation tiers. Reviewed silhouettes and simulation/save data remain unchanged; other species retain the previous path.
+
+Twelve generated tissue masters and their prompts are retained under `game/Textures/LeafPools/Masters`. Runtime pools are four-layer 1K BC7 textures with mipmaps. Physical relief is authored independently of generated color. Umbraheart has a matte broadleaf surface with cordate basal veins; Kiteleaf has finer branching veins and pale matte undersides; Glassfinger retains its fleshy volume, flecks, and reddish tips with lower transmission. These are candidate treatments, not measured scan materials.
+
+Matched front/back/shade comparisons: `game/build/flora-system/review/<species>/<lighting>/{before,after}/`. Detail, underside, fixed wind-phase, and integrated-world views are stored alongside them. Implementation, bake commands, limitations, and performance evidence are in `docs/photorealism/flora_visual_system.md`.
+
+Build: zero warnings/errors. Focused geometry and persistence checks: 11 passed. GTX 1080 isolated moving-camera p99: 11.89 → 10.71 ms (no frames over 33.4 ms); running simulation: 23.25 → 20.63 ms (9 → 5 long frames). The 5% p99 gate passes in both tested pairs. Another game sharing the GPU contaminated earlier attempts; the accepted pairs were captured after the user stopped it.
+
+User feedback after the gallery: **"Okay that is notably better."** The pilot direction is accepted; this does not imply every lighting condition or individual finish has been approved. The user requested inspection of the remaining trees and shrubs first.
+
+### Remaining woody species audit, 2026-09-27
+
+Fresh whole-plant and close specimen captures of Ironlace, Fenneedle, Lanternbrush, Embercrown, and Shadebell are under `game/build/flora-system/woody-audit`. All ten captures loaded and exited cleanly. These five retain the legacy material path; no species geometry or materials were changed during this audit.
+
+| Species | Current visual finding | Proposed next material direction |
+|---|---|---|
+| Ironlace | Canopy reads as pale, flat pointed sheets; fine twigs and papery fruit remain legible. | Thin matte broadleaves, clearer branching veins and distinct paler undersides; retain sinewy trunk and papery seed clusters. |
+| Fenneedle | Long drooping sprays have little tissue character; one surface treatment dominates. | Longitudinal needle anatomy, a narrow midrib, subtle wax and underside bands; retain the current tiered/weeping form. |
+| Lanternbrush | Narrow compound leaflets merge into pale fans, with little variation between leaflets. | Stable leaflet identities, fine pinnate veins, restrained satin tops and paler undersides; preserve wine-dark curved wood and seed lanterns. |
+| Embercrown | Repeated yellow vein marks dominate dark leaflets and look diagrammatic. | Replace repeated marks with finer compound-leaf anatomy and restrained tissue variation; preserve dense fronds and red fruit spikes. |
+| Shadebell | Broad overlapping whorls look flat and pale despite distinctive hanging bells. | A leathery cuticle, broad midrib, subtle smaller veins, and matte undersides; preserve pagoda shelves and flower clusters. |
+
+Suggested first migration: Shadebell, because its broad leaves make sidedness, cuticle, and vein relief easy to review. Real surface reference: [Pieris japonica, NC State Extension](https://plants.ces.ncsu.edu/plants/pieris-japonica/), whose leathery glossy foliage and hanging flower chains provide useful cues. This is a material reference for the fictional species, not a proposal to replace its approved form. Other references: [Ostrya](https://plants.ces.ncsu.edu/plants/ostrya-virginiana/), [Rhus typhina](https://plants.ces.ncsu.edu/plants/rhus-typhina/), and [Podocarpus](https://ask.ifas.ufl.edu/publication/ST496).
+
+### Woody material migration, 2026-09-27 — integrated, finishes pending review
+
+The user authorized continuing through the remaining trees and shrubs: **"Go for it. Keep going as long as you have quota tonight."** Twenty new native-resolution tissue masters, their exact prompts, and provenance are retained in `game/Textures/LeafPools/Masters`; all five profiles are active in the live Godot project.
+
+| Species | Implemented treatment | Review status |
+|---|---|---|
+| Shadebell | Leathery emerald tissue, quiet branching veins, matte undersides; pagoda shelves and hanging bells retained. | New finish pending |
+| Ironlace | Matte forest-green broadleaf tissue, fine pinnate veins, paler undersides; sinewy bark and papery seeds retained. | New finish pending |
+| Fenneedle | Waxy blue-green longitudinal tissue, narrow midrib and restrained longitudinal ribs. Broad, long sweeping needles retained. | New finish pending |
+| Lanternbrush | Satin teal leaflets with independent stable variants, fine baked anatomy and moving blade midribs; wine-brown curved wood retained. | New finish pending |
+| Embercrown | Warm green compound tissue, continuous coordinates across leaflet facets, quieter branching anatomy; red spikes retained. | New finish pending |
+
+Fenneedle's direction follows the user's clarification: **"needles can be wider and longer than earth analogues ... PRETTY."** Its tissue grain follows the needle length; proportions were not narrowed to match an Earth reference.
+
+Each species uses four compressed, mipped 1K tissue variants and authored normal/roughness/transmission/thickness maps. Single authored thin sheets remove duplicate front/back geometry while preserving leaf placement. Build passed with zero warnings/errors; 25 focused flora checks passed. Review comparisons, detail, undersides, wind phases, and integrated captures are in `game/build/flora-system/review/woody-final`, served by `review/woody.html`. These entries record implementation, not user approval of every finish.
+
+Verification: both persistence round-trip checks passed, all five static captures were byte-identical across fresh launches, and all five integrated-world captures loaded and exited cleanly. GTX 1080 paused-world p99 was 16.19 → 14.62 ms; dynamic p99 was 18.87 → 17.39 ms, with a repeat at 16.04 ms. A single 152.54 ms dynamic outlier did not recur in the repeat (worst 41.83 ms). Both 5% p99 gates pass; whole-scene GPU memory increased from 550 to 756 MiB. Full metrics and limitations are in `docs/photorealism/flora_visual_system.md`.

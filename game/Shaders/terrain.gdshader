@@ -9,6 +9,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 uniform sampler2D field_tex : filter_linear, repeat_disable;
 uniform sampler2D sub_tex : filter_linear, repeat_disable;
 uniform sampler2D litter_tex : filter_linear, repeat_disable;
+uniform sampler2D ambient_tex : filter_linear, repeat_disable;
 uniform vec4 field_rect;            // origin.x, origin.z, size.x, size.z
 uniform int overlay_mode = 0;       // 0 none, 1 moisture, 2 nutrients, 3 light, 4 substrate
 uniform float overlay_strength = 0.85;
@@ -108,6 +109,7 @@ void fragment() {
     // weights first, then sample only the layers that actually show here (big saving on an iGPU)
     float wDamp = smoothstep(0.38, 0.82, moisture + (macro - 0.5) * 0.18);
     float stored_litter = smooth_field(litter_tex, fuv).r;
+    float ambient_cover = smooth_field(ambient_tex, fuv).r;
     float wLeaf = stored_litter * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
     float wMoss = smoothstep(0.48, 0.83, moisture) * smoothstep(0.20, 0.53, light)
         * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8));
@@ -183,6 +185,20 @@ void fragment() {
         float w = hblend(wRock, dot(rock.rgb, vec3(0.33)) * 2.0);
         col = mix(col, rock.rgb, w); rough = mix(rough, rock.a, w); detail = normalize(mix(detail, n_rock, w));
     }
+
+    // Anonymous low vegetation reads as a soft green underlayer at distance. Close-up silhouette comes from
+    // AmbientGroundCoverRenderer; this prevents the same field from turning back into brown dirt when geometry culls.
+    float ambient_micro = 0.76 + 0.24 * fbm(world_pos.xz * 7.5 + vec2(19.1, 4.7));
+    float ambient_weight = smoothstep(0.035, 0.72, ambient_cover) * 0.72 * ambient_micro
+        * (1.0 - wGrav) * (1.0 - wRock) * (1.0 - wLeaf * 0.55);
+    vec3 ambient_dry = vec3(0.22, 0.35, 0.09);
+    vec3 ambient_mesic = vec3(0.075, 0.29, 0.065);
+    vec3 ambient_shade = vec3(0.045, 0.205, 0.105);
+    vec3 ambient_col = mix(ambient_dry, ambient_mesic, smoothstep(0.12, 0.58, moisture));
+    ambient_col = mix(ambient_col, ambient_shade, smoothstep(0.62, 0.18, light));
+    ambient_col *= mix(0.88, 1.08, ambient_micro);
+    col = mix(col, ambient_col, ambient_weight);
+    rough = mix(rough, 0.9, ambient_weight * 0.45);
 
     // moisture ramp: dry ground is paler and dustier, damp ground darkens gradually, saturated ground glosses
     float dryness = smoothstep(0.42, 0.18, moisture);

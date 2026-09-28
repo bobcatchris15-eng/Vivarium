@@ -96,16 +96,16 @@
     ],
     "animation": {
       "family": "flight",
-      "cyclesPerBody": 0.25,
+      "cyclesPerBody": 1,
       "idleHz": 9,
       "maxHz": 16,
-      "fullSpeed": 5,
+      "fullSpeed": 1.5,
       "idleMotion": 0.8,
       "amplitude": 1,
       "bodyWave": 0.08,
       "limbSweep": 1,
       "limbLift": 0.15,
-      "bob": 0.2,
+      "bob": 0.28,
       "phaseSpread": 0,
       "dutyFactor": 0.5
     }

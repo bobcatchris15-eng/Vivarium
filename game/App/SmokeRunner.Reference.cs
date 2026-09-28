@@ -172,7 +172,8 @@ public partial class SmokeRunner
                 (float)Math.Max(0.8, sp.Height * 3.0), 22, 35);
         GetWindow().Size = new Vector2I(1600, 900);
         Session.CameraRig.LookAtPoint(view.Eye, view.Target);
-        await Frames(30);
+        // Flora refreshes on a time budget; a frame count can finish before the next refresh at high FPS.
+        await Seconds(1);
         await Screenshot(view.Name);
         if (SpeciesId == "kiteleaf")
         {
@@ -185,6 +186,12 @@ public partial class SmokeRunner
             Session.CameraRig.LookAtPoint(target + new Vector3(2.2f, 0.35f, -1.8f), target);
             await Frames(12);
             await Screenshot("species_umbraheart_close");
+        }
+        else if (SpeciesId == "glassfinger")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(.20f,.19f,.24f), target);
+            await Seconds(1);
+            await Screenshot("species_glassfinger_close");
         }
         else if (SpeciesId == "embercrown")
         {
@@ -227,6 +234,12 @@ public partial class SmokeRunner
             Session.CameraRig.LookAtPoint(target + new Vector3(1.2f, 0.45f, 1.3f), target);
             await Frames(12);
             await Screenshot("species_shadebell_close");
+        }
+        else if (SpeciesId == "lanternbrush")
+        {
+            Session.CameraRig.LookAtPoint(target + new Vector3(1.3f, 0.55f, 1.4f), target);
+            await Seconds(1);
+            await Screenshot("species_lanternbrush_close");
         }
         _facts["species"] = SpeciesId;
         _facts["staged_at"] = new[] { spot.X, spot.Z };

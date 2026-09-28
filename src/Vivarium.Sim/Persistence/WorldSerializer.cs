@@ -37,6 +37,7 @@ public sealed class FieldsPayload
     public string Detritus { get; set; } = "";
     public string Biofilm { get; set; } = "";
     public string Plankton { get; set; } = "";
+    public string AmbientCover { get; set; } = "";
 }
 
 public sealed class WaterPayload
@@ -136,6 +137,7 @@ public static class WorldSerializer
             CellCount = w.Grid.DomainCells.Length,
             Nutrients = Pack(f.Nutrients.ExportDomainValues()), Moisture = Pack(f.Moisture.ExportDomainValues()),
             Detritus = Pack(f.Detritus.ExportDomainValues()), Biofilm = Pack(f.Biofilm.ExportDomainValues()), Plankton = Pack(f.Plankton.ExportDomainValues()),
+            AmbientCover = Pack(w.AmbientGroundCover.Export()),
         });
         var depth = new double[w.Grid.DomainCells.Length];
         var flowE = new double[depth.Length];
@@ -232,6 +234,7 @@ public static class WorldSerializer
         w.Fields.Detritus.ImportDomainValues(Unpack(fp.Detritus, "detritus"));
         w.Fields.Biofilm.ImportDomainValues(Unpack(fp.Biofilm, "biofilm"));
         w.Fields.Plankton.ImportDomainValues(Unpack(fp.Plankton, "plankton"));
+        w.AmbientGroundCover.Restore(Unpack(fp.AmbientCover, "ambient ground cover"));
 
         var wa = Read<WaterPayload>(payloads, "water");
         var depth = Unpack(wa.Depth, "water depth");

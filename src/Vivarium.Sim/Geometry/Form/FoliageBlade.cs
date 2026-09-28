@@ -20,7 +20,8 @@ public static class FoliageBlade
         if (side.LengthSq < 1e-8) side = forward.Cross(new Vec3(1, 0, 0));
         side = Axis.RotateAround(side.Normalized(), forward, roll);
         var up = side.Cross(forward).Normalized();
-        int n = Math.Clamp(segments, 2, 6);
+        int n = m.FloraDetailLevel switch { 1 => Math.Max(2, segments - 1), 2 => 2, _ => Math.Clamp(segments, 2, 6) };
+        int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
 
         Vec3 At(double t, double x)
         {
@@ -39,7 +40,7 @@ public static class FoliageBlade
             var normal = b.Cross(a).Normalized();
             return normal.LengthSq < 1e-8 ? up : normal;
         }
-        for (int face = 0; face < 2; face++)
+        for (int face = 0; face < (m.FloraDetailLevel.HasValue ? 1 : 2); face++)
         {
             double sign = face == 0 ? 1 : -1;
             int Vertex(double t, double x) => m.AddVertex(At(t, x), Normal(t, x) * sign,
@@ -64,5 +65,6 @@ public static class FoliageBlade
             Tri(end - 3, end, end - 2);
             Tri(end - 2, end, end - 1);
         }
+        m.RecordLeaf(leafVertex, leafIndex, root, length);
     }
 }

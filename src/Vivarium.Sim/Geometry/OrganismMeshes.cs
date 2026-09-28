@@ -16,10 +16,10 @@ namespace Vivarium.Sim.Geometry;
 /// </summary>
 public static class OrganismMeshes
 {
-    public static MeshData Flora(FloraSpeciesDef sp, ulong seed = 1, bool juvenile = false)
+    public static MeshData Flora(FloraSpeciesDef sp, ulong seed = 1, bool juvenile = false, int? visualDetail = null)
     {
         var rng = Rng.Keyed(seed, "flora.mesh." + sp.Id, 0);
-        var m = new MeshData();
+        var m = new MeshData { FloraDetailLevel = visualDetail, FloraVisualSeed = seed };
         var c1 = sp.Color; var c2 = sp.Color2;
         switch (sp.Shape)
         {
@@ -154,13 +154,13 @@ public static class OrganismMeshes
         return m;
     }
 
-    public static MeshData? FloraFruiting(FloraSpeciesDef sp, ulong seed = 1)
+    public static MeshData? FloraFruiting(FloraSpeciesDef sp, ulong seed = 1, int? visualDetail = null)
     {
         if (sp.Shape != "plasmodium")
         {
             if (sp.Reproduction is not { } rp) return null;
             var rngFruit = Rng.Keyed(seed, "flora.reproduction." + sp.Id, 0);
-            var plant = Flora(sp, seed);
+            var plant = Flora(sp, seed, visualDetail: visualDetail);
             var fruitCol = rp.FruitColor;
             var ripe2 = Primitives.Scale(fruitCol, 0.72);
             double rx = MathD.Clamp(rp.DisplaySize / Math.Max(0.02, sp.RadiusAtMax), 0.012, 0.18);
@@ -465,9 +465,11 @@ public static class OrganismMeshes
     private static void GlassfingerLeaf(MeshData m, Rng rng, Vec3 root, Vec3 direction,
         double length, double width, double[] green, double[] red)
     {
+        int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
         var side = new Vec3(-direction.Z, 0, direction.X);
         double[] stations = { 0.0, 0.25, 0.57, 0.82, 1.0 };
         double[] girth = { 0.24, 0.83, 1.0, 0.68, 0.07 };
+        int[] activeStations = m.FloraDetailLevel switch { 1 => new[] { 0,1,2,4 }, 2 => new[] { 0,2,4 }, _ => new[] { 0,1,2,3,4 } };
         var rings = new Vec3[stations.Length][];
         for (int i = 0; i < stations.Length; i++)
         {
@@ -497,10 +499,11 @@ public static class OrganismMeshes
                 ids[i, 0] = m.AddVertex(rings[i][face], normal, col, 1, stations[i], 0, 0, 1);
                 ids[i, 1] = m.AddVertex(rings[i][next], normal, col, 1, stations[i], 1, 0, 1);
             }
-            for (int i = 0; i < stations.Length - 1; i++)
+            for (int row = 0; row < activeStations.Length - 1; row++)
             {
-                Primitives.TriangleFacing(m, ids[i, 0], ids[i, 1], ids[i + 1, 0], normal);
-                Primitives.TriangleFacing(m, ids[i, 1], ids[i + 1, 1], ids[i + 1, 0], normal);
+                int i = activeStations[row], j = activeStations[row + 1];
+                Primitives.TriangleFacing(m, ids[i, 0], ids[i, 1], ids[j, 0], normal);
+                Primitives.TriangleFacing(m, ids[i, 1], ids[j, 1], ids[j, 0], normal);
             }
         }
         // Sparse pale epidermal flecks sit on the sloping facets, like ice-plant bladder cells.
@@ -521,6 +524,7 @@ public static class OrganismMeshes
             int c = m.AddVertex(p + side * (edge == 1 ? -0.010 : 0.010), normal, fleck);
             Primitives.TriangleFacing(m, a, b, c, normal);
         }
+        m.RecordLeaf(leafVertex, leafIndex, root, length, volumetric: true);
     }
 
     private static void GlassfingerFlower(MeshData m, Rng rng, Vec3 center, double[] green)
@@ -5437,8 +5441,9 @@ public static class OrganismMeshes
         var up = side.Cross(forward).Normalized();
         double phase = rng.Range(0, Math.PI * 2);
         double asymmetry = rng.Range(-0.08, 0.08);
-        const int rimCount = 12;
-        for (int face = 0; face < 2; face++)
+        int rimCount = m.FloraDetailLevel switch { 1 => 8, 2 => 6, _ => 12 };
+        int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
+        for (int face = 0; face < (m.FloraDetailLevel.HasValue ? 1 : 2); face++)
         {
             var visibleNormal = face == 0 ? up : -up;
             var color = face == 0 ? topColor : new[] { 0.46, 0.59, 0.54 };
@@ -5460,6 +5465,7 @@ public static class OrganismMeshes
                 Primitives.TriangleFacing(m, center, first + s, first + (s + 1) % rimCount,
                     visibleNormal);
         }
+        m.RecordLeaf(leafVertex, leafIndex, root, length);
     }
 
     private static void LeafSpray(MeshData m, Rng rng, Vec3 root, Vec3 control, Vec3 tip,
@@ -5884,15 +5890,16 @@ public static class OrganismMeshes
             const double d = 0.005;
             var du = Pos(Math.Min(1.0, u + d), v) - Pos(Math.Max(0.0, u - d), v);
             var dv = Pos(u, Math.Min(1.0, v + d * 2)) - Pos(u, Math.Max(-1.0, v - d * 2));
-            var norm = du.Cross(dv).Normalized();
+            var norm = (m.FloraDetailLevel.HasValue ? dv.Cross(du) : du.Cross(dv)).Normalized();
             return norm.LengthSq < 1e-6 ? up : norm;
         }
 
-        const int Nu = 5;
-        const int Nv = 4;
+        int Nu = m.FloraDetailLevel switch { 1 => 4, 2 => 3, _ => 5 };
+        int Nv = m.FloraDetailLevel == 2 ? 2 : 4;
         int stride = Nv + 1;
 
-        for (int face = 0; face < 2; face++)
+        int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
+        for (int face = 0; face < (m.FloraDetailLevel.HasValue ? 1 : 2); face++)
         {
             double sign = face == 0 ? 1.0 : -1.0;
             var faceNormTarget = face == 0 ? up : -up;
@@ -5934,6 +5941,7 @@ public static class OrganismMeshes
                 Primitives.TriangleFacing(m, a, tipIdx, b, faceNormTarget);
             }
         }
+        m.RecordLeaf(leafVertex, leafIndex, sinus, leafLen);
     }
 
     /// <summary>
@@ -6442,6 +6450,7 @@ public static class OrganismMeshes
 
         var colTop = Primitives.Mix(c1, c2, rng.Range(0.08, 0.24));
         var colUnder = Primitives.Mix(Primitives.Scale(c2, 0.82), new[] { 0.42, 0.52, 0.32 }, 0.45);
+        int leafVertex=m.VertexCount,leafIndex=m.Indices.Count;
 
         void LeafFace(Vec3 a, Vec3 b, Vec3 c, double[] col, Vec3 upTarget, int faceIdx)
         {
@@ -6451,23 +6460,35 @@ public static class OrganismMeshes
                 var tmp = b; b = c; c = tmp;
                 norm = -norm;
             }
-            int ia = m.AddVertex(a, norm, col, 1.0, 0.2, 0.5, faceIdx, 1.0);
-            int ib = m.AddVertex(b, norm, col, 1.0, 0.5, 0.2, faceIdx, 1.0);
-            int ic = m.AddVertex(c, norm, col, 1.0, 0.8, 0.5, faceIdx, 1.0);
-            m.AddTriangle(ia, ib, ic);
+            int Vertex(Vec3 p,double u,double v) => m.AddVertex(p,norm,col,1.0,
+                m.FloraDetailLevel.HasValue ? (p-root).Dot(lDir)/len : u,
+                m.FloraDetailLevel.HasValue ? .5+(p-root).Dot(lSide)/width : v,faceIdx,1);
+            int ia=Vertex(a,.2,.5),ib=Vertex(b,.5,.2),ic=Vertex(c,.8,.5);
+            if(m.FloraDetailLevel.HasValue) Primitives.TriangleFacing(m,ia,ib,ic,norm);
+            else m.AddTriangle(ia, ib, ic);
         }
 
+        if(m.FloraDetailLevel is 1 or 2)
+        {
+            LeafFace(v0,v1,v4,colTop,lNorm,0);
+            LeafFace(v0,v4,v3,colTop,lNorm,0);
+            m.RecordLeaf(leafVertex,leafIndex,root,len);
+            return;
+        }
         // Upper face (UV2.y = 1.0, normal towards +lNorm)
         LeafFace(v0, v1, v2, colTop, lNorm, 0);
         LeafFace(v0, v2, v3, colTop, lNorm, 0);
         LeafFace(v2, v1, v4, colTop, lNorm, 0);
         LeafFace(v2, v4, v3, colTop, lNorm, 0);
 
-        // Lower face (UV2.y = 1.0, normal towards -lNorm)
-        LeafFace(v0, v1, v2, colUnder, -lNorm, 1);
-        LeafFace(v0, v2, v3, colUnder, -lNorm, 1);
-        LeafFace(v2, v1, v4, colUnder, -lNorm, 1);
-        LeafFace(v2, v4, v3, colUnder, -lNorm, 1);
+        if(!m.FloraDetailLevel.HasValue)
+        {
+            LeafFace(v0, v1, v2, colUnder, -lNorm, 1);
+            LeafFace(v0, v2, v3, colUnder, -lNorm, 1);
+            LeafFace(v2, v1, v4, colUnder, -lNorm, 1);
+            LeafFace(v2, v4, v3, colUnder, -lNorm, 1);
+        }
+        m.RecordLeaf(leafVertex,leafIndex,root,len);
     }
 
     private static void EmbercrownCompoundLeaf(MeshData m, Vec3 root, Vec3 dir, double length,
@@ -6802,7 +6823,7 @@ public static class OrganismMeshes
                     Primitives.CurvedLeaf(m, bladeRoot, bladeTip, side, len * rng.Range(0.12, 0.16),
                         Primitives.Mix(c1, c2, 0.18), Primitives.Mix(c1, c2, rng.Range(0.48, 0.72)),
                         camber: len * rng.Range(0.045, 0.085), longitudinal: 4, asymmetry: rng.Range(-0.12, 0.12));
-                    Primitives.Tube(m, new[] { bladeRoot + new Vec3(0, 0.001, 0), bladeRoot + (bladeTip - bladeRoot) * 0.55 + new Vec3(0, len * 0.025, 0) },
+                    if(!m.FloraDetailLevel.HasValue) Primitives.Tube(m, new[] { bladeRoot + new Vec3(0, 0.001, 0), bladeRoot + (bladeTip - bladeRoot) * 0.55 + new Vec3(0, len * 0.025, 0) },
                         new[] { 0.0018, 0.0006 }, 6, (i, v) => (vein, 1, i, v, 0, 0));
                 }
             }
@@ -7254,7 +7275,10 @@ public static class OrganismMeshes
         for (int k = 1; k < path.Count; k++) { p.Add(path[k]); r.Add(radius[k]); }
 
         int start = m.VertexCount;
-        Primitives.Tube(m, p, r, segs, (i, v) => (Body, 1, 0.5, v, region, animationRole));
+        // Fractional role-1 data is root-to-toe weight. A planted toe gets the full calibrated
+        // stroke, while the socket stays attached regardless of limb length/genetics.
+        Primitives.Tube(m, p, r, segs, (i, v) => (Body, 1, 0.5, v, region,
+            animationRole == 1 ? 1 + 0.25 * i / (p.Count - 1) : animationRole));
         for (int i = start; i < m.VertexCount; i++)
         {
             var off = m.Position(i) - attach;
@@ -7356,7 +7380,7 @@ public static class OrganismMeshes
         var manuAttach = new Vec3(-0.31, 0.068, 0);
         var manuMid = new Vec3(-0.24, 0.050, 0);
         var manuFork = new Vec3(-0.17, 0.038, 0);
-        Appendage(m, new[] { manuAttach, manuMid, manuFork }, new[] { 0.016, 0.013, 0.010 }, 6, 4);
+        Appendage(m, new[] { manuAttach, manuMid, manuFork }, new[] { 0.016, 0.013, 0.010 }, 6, 4, 5);
 
         // Paired dentes with hooked mucro tips extending forward under belly
         foreach (double z in new[] { -1.0, 1.0 })
@@ -7365,7 +7389,7 @@ public static class OrganismMeshes
             var densMid = new Vec3(-0.10, 0.035, 0.016 * z);
             var densApex = new Vec3(-0.04, 0.032, 0.016 * z);
             var mucroTip = new Vec3(-0.015, 0.038, 0.010 * z); // hooked tip
-            Appendage(m, new[] { densAttach, densMid, densApex, mucroTip }, new[] { 0.009, 0.007, 0.005, 0.003 }, 6, 4);
+            Appendage(m, new[] { densAttach, densMid, densApex, mucroTip }, new[] { 0.009, 0.007, 0.005, 0.003 }, 6, 4, 5);
         }
     }
 
@@ -7410,7 +7434,7 @@ public static class OrganismMeshes
         foreach (double z in new[] { -1.0, 1.0 })
         {
             Primitives.Ellipsoid(m, new Vec3(0.34, 0.15, 0.04 * z), new Vec3(0.022, 0.015, 0.022), 4, 6, (a, b) => Region(0.95, b, 2));
-            Appendage(m, new[] { new Vec3(-0.42, 0.06, 0.02 * z), new Vec3(-0.62, 0.07, 0.07 * z), new Vec3(-0.85, 0.06, 0.12 * z) }, new[] { 0.012, 0.008, 0.004 }, 4);
+            Appendage(m, new[] { new Vec3(-0.42, 0.06, 0.02 * z), new Vec3(-0.62, 0.07, 0.07 * z), new Vec3(-0.85, 0.06, 0.12 * z) }, new[] { 0.012, 0.008, 0.004 }, 4, 4, 3);
             for (int leg = 0; leg < 6; leg++)
             {
                 double x = 0.2 - leg * 0.06;
@@ -7510,7 +7534,7 @@ public static class OrganismMeshes
             var uro0 = new Vec3(-0.41, 0.042, 0.045 * z);
             var uro1 = new Vec3(-0.46, 0.034, 0.075 * z);
             var uro2 = new Vec3(-0.51, 0.024, 0.095 * z);
-            Appendage(m, new[] { uro0, uro1, uro2 }, new[] { 0.012, 0.008, 0.004 }, 6, 4);
+            Appendage(m, new[] { uro0, uro1, uro2 }, new[] { 0.012, 0.008, 0.004 }, 6, 4, 3);
         }
     }
 
@@ -7562,9 +7586,9 @@ public static class OrganismMeshes
                 double x = 0.26 - leg * 0.08;
                 Appendage(m, new[] { new Vec3(x, 0.04, 0.06 * z), new Vec3(x - 0.03, 0.02, 0.12 * z), new Vec3(x - 0.06, 0.0, 0.14 * z) }, new[] { 0.012, 0.009, 0.006 }, 3);
             }
-            Appendage(m, new[] { new Vec3(-0.37, 0.07, 0.01 * z), new Vec3(-0.6, 0.075, 0.1 * z), new Vec3(-0.8, 0.07, 0.16 * z) }, new[] { 0.008, 0.005, 0.003 }, 3);
+            Appendage(m, new[] { new Vec3(-0.37, 0.07, 0.01 * z), new Vec3(-0.6, 0.075, 0.1 * z), new Vec3(-0.8, 0.07, 0.16 * z) }, new[] { 0.008, 0.005, 0.003 }, 3, 4, 3);
         }
-        Appendage(m, new[] { new Vec3(-0.37, 0.07, 0), new Vec3(-0.62, 0.08, 0), new Vec3(-0.85, 0.075, 0) }, new[] { 0.008, 0.005, 0.003 }, 3);
+        Appendage(m, new[] { new Vec3(-0.37, 0.07, 0), new Vec3(-0.62, 0.08, 0), new Vec3(-0.85, 0.075, 0) }, new[] { 0.008, 0.005, 0.003 }, 3, 4, 3);
     }
 
     private static void Slug(MeshData m)
@@ -7574,7 +7598,17 @@ public static class OrganismMeshes
         foreach (double z in new[] {-1.0, 1.0})
         {
             Appendage(m, new[] { new Vec3(0.31,0.13,0.055*z), new Vec3(0.43,0.21,0.11*z), new Vec3(0.50,0.24,0.14*z) }, new[] {0.015,0.009,0.005}, 5, 4, 3);
+            int eyeStart = m.VertexCount;
             BodySegment(m, new Vec3(0.505,0.242,0.142*z), new Vec3(0.012,0.012,0.012), 3, 5, (a,b)=>Region(0.98,b,3));
+            // Eye caps belong to the sensory stalk, including its searching motion and body-root deformation.
+            var root = new Vec3(0.31,0.13,0.055*z);
+            for (int i = eyeStart; i < m.VertexCount; i++)
+            {
+                var off = m.Position(i) - root;
+                m.Colors[i * 4] = (float)off.X; m.Colors[i * 4 + 1] = (float)off.Y;
+                m.Colors[i * 4 + 2] = (float)off.Z; m.Colors[i * 4 + 3] = 1;
+                m.UV2[i * 2 + 1] = 3;
+            }
         }
     }
 
@@ -7661,7 +7695,7 @@ public static class OrganismMeshes
     private static void Snail(MeshData m)
     {
         BodySegment(m,new Vec3(0.05,0.07,0),new Vec3(0.42,0.055,0.12),5,11,(a,b)=>Region(0.45,b,1));
-        BodySegment(m,new Vec3(-0.08,0.22,0),new Vec3(0.22,0.22,0.10),8,14,(a,b)=>Region(0.35,b,2));
+        BodySegment(m,new Vec3(-0.08,0.22,0),new Vec3(0.22,0.22,0.10),8,14,(a,b)=>(Body,0,0.35,b,2,4));
         BodySegment(m,new Vec3(0.36,0.10,0),new Vec3(0.11,0.07,0.09),4,8,(a,b)=>Region(0.9,b,1));
         foreach(double z in new[]{-1.0,1.0})
             Appendage(m,new[]{new Vec3(0.40,0.13,0.04*z),new Vec3(0.49,0.21,0.08*z),new Vec3(0.54,0.23,0.10*z)},new[]{0.012,0.007,0.004},4,4,3);

@@ -59,12 +59,18 @@ public static class Bridge
         // Fauna carries those signed offsets and the appendage flag in float CUSTOM0 instead.
         if (signedVertexData) arrays[(int)Mesh.ArrayType.Custom0] = m.Colors.ToArray();
         else arrays[(int)Mesh.ArrayType.Color] = cols;
+        if (!signedVertexData && m.Custom0.Count == n * 4) arrays[(int)Mesh.ArrayType.Custom0] = m.Custom0.ToArray();
+        if (m.Custom1.Count == n * 4) arrays[(int)Mesh.ArrayType.Custom1] = m.Custom1.ToArray();
         arrays[(int)Mesh.ArrayType.TexUV] = uv;
         arrays[(int)Mesh.ArrayType.TexUV2] = uv2;
         arrays[(int)Mesh.ArrayType.Index] = m.Indices.ToArray();
         var flags = signedVertexData
             ? (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift)
             : (Mesh.ArrayFormat)0;
+        if (!signedVertexData && m.Custom0.Count == n * 4)
+            flags |= (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift);
+        if (m.Custom1.Count == n * 4)
+            flags |= (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom1Shift);
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         if (material != null) mesh.SurfaceSetMaterial(0, material);
         return mesh;

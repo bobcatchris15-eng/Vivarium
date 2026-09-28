@@ -17,6 +17,12 @@ public partial class SpecimenPreview : Node3D
     public bool Juvenile { get; set; }
     public bool Underside { get; set; }
     public string OutDir { get; set; } = "";
+    public string Lighting { get; set; } = "front";
+    public int Detail { get; set; }
+    public float Phase { get; set; } = -1;
+    public bool Reverse { get; set; }
+    public bool Legacy { get; set; }
+    public bool Close { get; set; }
 
     public override void _Ready() => _ = CaptureAsync();
 
@@ -27,7 +33,11 @@ public partial class SpecimenPreview : Node3D
             var sp = Content.FloraOrThrow(SpeciesId);
             bool floating = sp.Shape == "floatleaf";
             GetWindow().Size = new Vector2I(1024, 1024);
-            AddChild(new EnvironmentRig { Name = "Environment" });
+            var environment = new EnvironmentRig { Name = "Environment" };
+            AddChild(environment);
+            environment.ApplyQuality(2);
+            if (Lighting == "back") environment.Sun.RotationDegrees = new Vector3(-28,145,0);
+            if (Lighting == "shade") { environment.Sun.LightEnergy = .22f; environment.Env.AmbientLightEnergy = .35f; }
 
             float groundR = Math.Max(0.18f, (float)sp.RadiusAtMax * 1.35f);
             var ground = new MeshInstance3D
@@ -79,16 +89,20 @@ public partial class SpecimenPreview : Node3D
             mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
             mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
             mat.SetShaderParameter("sway", 0.0f);
+            if (Phase >= 0) { mat.SetShaderParameter("sway",1f); mat.SetShaderParameter("review_time",Phase); }
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            FloraSurfaceProfiles.Bind(mat, sp);
+            var profile = Legacy ? null : FloraVisualProfile.Load(sp.Id);
+            FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
             ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + sp.Id), 0x9E3779B97F4A7C15UL);
-            var mesh = OrganismMeshes.Flora(sp, seed, Juvenile);
+            var mesh = OrganismMeshes.Flora(sp, seed, Juvenile, profile == null ? null : Detail);
+            ShaderMaterial? leaf = profile?.LeafMaterial(animated: Phase >= 0);
+            if (leaf != null) { leaf.SetShaderParameter("review_time",Phase); leaf.SetShaderParameter("plant_stiffness",sp.Woody != null ? 7f : 3f); }
             var multimesh = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
                 UseColors = true,
                 UseCustomData = true,
-                Mesh = Bridge.ToArrayMesh(mesh, mat),
+                Mesh = profile == null ? Bridge.ToArrayMesh(mesh, mat) : profile.Compile(mesh, mat, leaf!),
                 InstanceCount = 1,
             };
             multimesh.SetInstanceTransform(0, new Transform3D(Basis.Identity.Scaled(
@@ -113,12 +127,13 @@ public partial class SpecimenPreview : Node3D
                     : (sp.Shape == "bracket")
                         ? new Vector3(0.08f, 0.22f, 0)
                         : new Vector3(0, (float)sp.Height * 0.45f, 0);
+            if (Close) target.Y = (float)sp.Height * .65f;
             float dist = Math.Max(0.6f, boundDim * 1.5f);
             var camera = new Camera3D
             {
                 Name = "SpecimenCamera",
                 Projection = Camera3D.ProjectionType.Orthogonal,
-                Size = floating ? 0.38f : Juvenile ? Math.Max(0.18f, specSize * 0.65f) : specSize,
+                Size = Close ? specSize * .38f : floating ? 0.38f : Juvenile ? Math.Max(0.18f, specSize * 0.65f) : specSize,
                 Position = floating
                     ? new Vector3(0.25f, 0.68f, 0.25f)
                     : Underside
@@ -128,6 +143,7 @@ public partial class SpecimenPreview : Node3D
             };
             AddChild(camera);
             camera.LookAt(target);
+            if (Reverse) { var offset=camera.Position-target; camera.Position=target+new Vector3(-offset.X,offset.Y,-offset.Z); camera.LookAt(target); }
 
             for (int i = 0; i < 12; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -135,7 +151,7 @@ public partial class SpecimenPreview : Node3D
             string path = Path.GetFullPath(Path.Combine(OutDir, SpeciesId + (Juvenile ? "-juvenile" : Underside ? "-underside" : "-mature") + ".png"));
             var error = GetViewport().GetTexture().GetImage().SavePng(path);
             if (error != Error.Ok) throw new IOException($"SavePng returned {error}");
-            GD.Print($"SPECIMEN_OK {path} triangles={mesh.TriangleCount}");
+            GD.Print($"SPECIMEN_OK {path} triangles={mesh.TriangleCount} leaves={mesh.Leaves.Count} tier={Detail} lighting={Lighting}");
             GetTree().Quit(0);
         }
         catch (Exception ex)

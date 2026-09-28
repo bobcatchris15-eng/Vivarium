@@ -446,11 +446,11 @@ public sealed class FaunaAnimationDef
     public FaunaAnimationFamily Family { get; init; } = FaunaAnimationFamily.Walk;
     /// <summary>Locomotor cycles added per body length travelled.</summary>
     public double CyclesPerBody { get; init; } = 0.6;
-    /// <summary>Minimum cycle rate while nearly stationary (useful for swimming, flight and soft-body ripples).</summary>
+    /// <summary>Idle beat for swimming, flight and soft-body ripples. Ground stepping uses distance only.</summary>
     public double IdleHz { get; init; }
-    /// <summary>Maximum render cadence.</summary>
+    /// <summary>Idle cadence ceiling. Travel-driven cycles are never discarded to enforce a frequency cap.</summary>
     public double MaxHz { get; init; } = 8;
-    /// <summary>Body lengths/second at which the pose reaches full amplitude.</summary>
+    /// <summary>Body lengths/second at which non-stepping motion reaches full amplitude. Walking stride is distance-calibrated.</summary>
     public double FullSpeed { get; init; } = 4;
     /// <summary>Fraction of full pose amplitude retained at zero translation.</summary>
     public double IdleMotion { get; init; }

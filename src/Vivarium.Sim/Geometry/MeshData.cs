@@ -14,6 +14,20 @@ public sealed class MeshData
     public readonly List<float> UV = new();          // uv
     public readonly List<float> UV2 = new();         // uv2
     public readonly List<int> Indices = new();
+    public readonly List<float> Custom0 = new(); // optional RGBA float render data
+    public readonly List<float> Custom1 = new();
+    public readonly List<FloraLeaf> Leaves = new();
+    public int? FloraDetailLevel { get; set; }
+    public ulong FloraVisualSeed { get; set; }
+
+    public void RecordLeaf(int vertex, int index, Vec3 attachment, double length, bool volumetric = false)
+    {
+        if (FloraDetailLevel == null) return;
+        ulong identity = Rng.Mix(FloraVisualSeed, (ulong)Leaves.Count + 1);
+        Leaves.Add(new FloraLeaf(vertex, VertexCount - vertex, index, Indices.Count - index,
+            identity, attachment, length, (int)(identity % 4), ((identity >> 8) % 1000) / 1000.0,
+            volumetric ? 0.14 : 0.65 + ((identity >> 20) % 1000) / 3000.0, volumetric));
+    }
 
     public int VertexCount => Positions.Count / 3;
     public int TriangleCount => Indices.Count / 3;
@@ -88,6 +102,20 @@ public sealed class MeshData
             Positions.Add((float)p.X); Positions.Add((float)p.Y); Positions.Add((float)p.Z);
         }
         Normals.AddRange(other.Normals); Colors.AddRange(other.Colors); UV.AddRange(other.UV); UV2.AddRange(other.UV2);
+        if (Custom0.Count > 0 || other.Custom0.Count > 0)
+        {
+            while (Custom0.Count < baseIndex * 4) Custom0.Add(0);
+            for (int i = 0; i < other.VertexCount * 4; i++) Custom0.Add(i < other.Custom0.Count ? other.Custom0[i] : 0);
+        }
+        if (Custom1.Count > 0 || other.Custom1.Count > 0)
+        {
+            while (Custom1.Count < baseIndex * 4) Custom1.Add(0);
+            for (int i = 0; i < other.VertexCount * 4; i++) Custom1.Add(i < other.Custom1.Count ? other.Custom1[i] : 0);
+        }
+        int baseIndexOffset = Indices.Count;
+        foreach (var leaf in other.Leaves)
+            Leaves.Add(leaf with { FirstVertex = leaf.FirstVertex + baseIndex, FirstIndex = leaf.FirstIndex + baseIndexOffset,
+                Attachment = transform != null ? transform(leaf.Attachment) : leaf.Attachment });
         foreach (var i in other.Indices) Indices.Add(baseIndex + i);
     }
 }

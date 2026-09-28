@@ -173,8 +173,9 @@ public static class Primitives
         if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
         side = side.Normalized();
         var normal = dir.Cross(side).Normalized();
-        longitudinal = Math.Max(3, longitudinal);
+        longitudinal = m.FloraDetailLevel switch { 1 => Math.Max(3,longitudinal-1), 2 => 2, _ => Math.Max(3,longitudinal) };
         const int across = 2; // left / midrib / right
+        int leafVertex=m.VertexCount,leafIndex=m.Indices.Count;
 
         Vec3 At(double t, double x)
         {
@@ -185,7 +186,7 @@ public static class Primitives
             return root + axis * t + side * (width * x + sweep) + normal * crown;
         }
 
-        for (int face = 0; face < 2; face++)
+        for (int face = 0; face < (m.FloraDetailLevel.HasValue ? 1 : 2); face++)
         {
             var faceN = face == 0 ? normal : -normal;
             int start = m.VertexCount;
@@ -215,6 +216,7 @@ public static class Primitives
                     TriangleFacing(m, a + 1, b, b + 1, faceN);
                 }
         }
+        m.RecordLeaf(leafVertex,leafIndex,root,length);
     }
 
     /// <summary>Double-sided flat polygon (fan) — for leaves, fins, lichen lobes.</summary>

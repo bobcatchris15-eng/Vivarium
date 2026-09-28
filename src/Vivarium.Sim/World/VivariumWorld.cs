@@ -31,6 +31,7 @@ public sealed class VivariumWorld
     public FloraPopulation Flora { get; }
     public DeadPlantPopulation DeadFlora { get; }
     public SeedBank SeedBank { get; }
+    public AmbientGroundCoverSystem AmbientGroundCover { get; }
     public FaunaPopulation Fauna { get; }
     /// <summary>Fine coverage rasters (moss/lichen/slime), empty by default. See docs/overhaul/growth_models.md.</summary>
     public CoverageWorld Coverage { get; }
@@ -74,6 +75,7 @@ public sealed class VivariumWorld
         Flora = new FloraPopulation(Domain.Radius + 1);
         DeadFlora = new DeadPlantPopulation();
         SeedBank = new SeedBank(this);
+        AmbientGroundCover = new AmbientGroundCoverSystem(this);
         Fauna = new FaunaPopulation(Domain.Radius + 1);
         Coverage = new CoverageWorld(Descriptor.Seed);
         Scheduler = new Scheduler(Clock);
@@ -127,6 +129,7 @@ public sealed class VivariumWorld
             w.CoverageSystem.SeedInitial();
             Populate.Starters(w);
         }
+        w.AmbientGroundCover.InitializeFromHabitat();
         Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna.");
         return w;
     }
@@ -152,6 +155,7 @@ public sealed class VivariumWorld
         Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
         Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
         Scheduler.Register("flora.seedbank", Cadence.Flora, 73, Bio(SeedBank.Step), phase: 29);
+        Scheduler.Register("flora.ambient", Cadence.Flora, 74, Bio(AmbientGroundCover.Step), phase: 29);
         Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.StepMat), phase: 30);
         Scheduler.Register("coverage.lichen", Cadence.Flora, 76, Bio(CoverageSystem.StepLichen), phase: 31);
         Scheduler.Register("coverage.plasmodium", Cadence.FaunaMetabolism, 77, Bio(CoverageSystem.StepPlasmodium), phase: 2);

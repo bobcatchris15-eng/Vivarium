@@ -29,6 +29,9 @@ public partial class IslandRenderer : Node3D
     private Image _litterImage = null!;
     private ImageTexture _litterTex = null!;
     private byte[] _litterBytes = System.Array.Empty<byte>();
+    private Image _ambientImage = null!;
+    private ImageTexture _ambientTex = null!;
+    private byte[] _ambientBytes = System.Array.Empty<byte>();
     public int OverlayMode { get; set; }
     private ShaderMaterial _strataMat = null!;
     private MeshInstance3D _top = null!, _walls = null!;
@@ -63,6 +66,10 @@ public partial class IslandRenderer : Node3D
         _litterTex = ImageTexture.CreateFromImage(_litterImage);
         _terrainMat.SetShaderParameter("litter_tex", _litterTex);
         _litterBytes = new byte[g.Count];
+        _ambientImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.R8);
+        _ambientTex = ImageTexture.CreateFromImage(_ambientImage);
+        _terrainMat.SetShaderParameter("ambient_tex", _ambientTex);
+        _ambientBytes = new byte[g.Count];
         _nearestDomain = new int[g.Count];
         for (int c = 0; c < g.Count; c++) _nearestDomain[c] = g.InDomain(c) ? c : g.NearestDomainCell(g.CellCenter(c));
 
@@ -123,6 +130,7 @@ public partial class IslandRenderer : Node3D
             _bytes[o + 2] = (byte)(Mathf.Clamp((float)(f.Nutrients.Values[d] / nmax), 0, 1) * 255);
             _bytes[o + 3] = (byte)(Mathf.Clamp((float)_w.FloraSystem.EffectiveLightCell(d), 0, 1) * 255);
             _litterBytes[c] = (byte)(Mathf.Clamp((float)(1.0 - System.Math.Exp(-_w.Litter.FineMass[d] * 55.0)), 0, 1) * 255);
+            _ambientBytes[c] = (byte)(Mathf.Clamp((float)_w.AmbientGroundCover.Cover[d], 0, 1) * 255);
             if (updateSubstrate)
             {
                 bool gravel = _w.Props.GravelAt(p) != null;
@@ -135,6 +143,8 @@ public partial class IslandRenderer : Node3D
         _fieldTex.Update(_fieldImage);
         _litterImage.SetData(g.Nx, g.Nz, false, Image.Format.R8, _litterBytes);
         _litterTex.Update(_litterImage);
+        _ambientImage.SetData(g.Nx, g.Nz, false, Image.Format.R8, _ambientBytes);
+        _ambientTex.Update(_ambientImage);
         if (updateSubstrate)
         {
             _propsVersion = _w.Props.Version;

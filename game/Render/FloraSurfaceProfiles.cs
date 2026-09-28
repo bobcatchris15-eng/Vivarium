@@ -9,7 +9,7 @@ internal static class FloraSurfaceProfiles
 {
     private readonly record struct LeafSurface(Vector3 Top, Vector3 Back, int Type, float Veins, float Sheen, float Transmission);
 
-    public static void Bind(ShaderMaterial material, FloraSpeciesDef species)
+    public static void Bind(ShaderMaterial material, FloraSpeciesDef species, bool photographedLeaves = true)
     {
         var leaf = Leaf(species.Id);
         material.SetShaderParameter("leaf_top", leaf.Top);
@@ -19,7 +19,7 @@ internal static class FloraSurfaceProfiles
         material.SetShaderParameter("cuticle_sheen", leaf.Sheen);
         material.SetShaderParameter("leaf_transmission", leaf.Transmission);
         material.SetShaderParameter("leaf_pattern", LeafPattern(species.Id));
-        if (Scan(species.Id) is { } scan)
+        if (photographedLeaves && Scan(species.Id) is { } scan)
         {
             material.SetShaderParameter("leaf_scan_col", GD.Load<Texture2D>($"res://Textures/Leaves/{scan.Asset}_2K-JPG_Color.jpg"));
             material.SetShaderParameter("leaf_scan_nrm", GD.Load<Texture2D>($"res://Textures/Leaves/{scan.Asset}_2K-JPG_NormalGL.jpg"));

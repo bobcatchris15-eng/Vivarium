@@ -1,0 +1,8 @@
+{
+  "species": "glassfinger", "veins": "succulent", "volumetric": true,
+  "top": [0.12,0.20,0.105], "back": [0.17,0.20,0.15],
+  "roughness": 0.46, "backRoughness": 0.62, "transmission": 0.09, "microRelief":0.018,
+  "relief": 0.24, "veinStrength": 0.12, "wind": 0.012,
+  "tissueScale": 1.2, "canopyOcclusion": 0.05,
+  "bark": "Bark014", "barkTint": [0.7,0.67,0.61]
+}

@@ -1,0 +1,9 @@
+{
+  "enabled":true, "species":"ironlace", "veins":"pinnate", "volumetric":false,
+  "top":[0.065,0.165,0.045], "back":[0.14,0.21,0.095],
+  "roughness":0.72, "backRoughness":0.88, "transmission":0.31,
+  "relief":0.27, "veinStrength":0.48, "wind":0.026,
+  "tissueScale":1.2, "canopyOcclusion":0.13,
+  "microScale":1.1, "microRelief":0.021,
+  "bark":"Bark001", "barkTint":[0.48,0.46,0.42]
+}

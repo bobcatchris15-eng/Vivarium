@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
@@ -23,7 +24,14 @@ public partial class FloraRenderer : Node3D
     private static int MorphVariantsFor(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate" or "vine_clinglace" or "vine_spiralvine" or "vine_fenhook"
         ? MigratedMorphVariants : DefaultMorphVariants;
     private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Juvenile; public int FullTris, FruitTris, JuvenileTris; public bool CanCastShadow; }
-    private sealed class Layer { public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris; public Layer(int count) => Variants = new VariantLayer[count]; }
+    private sealed class Layer
+    {
+        public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris;
+        public int MorphCount; public FloraVisualProfile? Profile;
+        public Layer(int count, FloraVisualProfile? profile = null)
+        { MorphCount = count; Profile = profile; Variants = new VariantLayer[count * (profile == null ? 1 : 3)]; }
+    }
+    private readonly Dictionary<EntityId, int> _visualTiers = new();
     private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
@@ -64,41 +72,52 @@ public partial class FloraRenderer : Node3D
         _refresh?.Dispose(); _refresh = null;
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
         _buffers.Clear(); _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear();
+        _visualTiers.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
         _w = w;
         foreach (var c in GetChildren()) c.QueueFree();
         _layers.Clear();
         foreach (var sp in w.Content.Flora)
         {
+            var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id);
             var mat = Bridge.Shader("res://Shaders/flora.gdshader");
             mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
             mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
             mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
             if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            FloraSurfaceProfiles.Bind(mat, sp);
-            var layer = new Layer(MorphVariantsFor(sp.Shape));
+            FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
+            var leafMat = profile?.LeafMaterial();
+            if (profile != null)
+            {
+                Bridge.BindSurface(mat, "bark", profile.Bark);
+                mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0],profile.BarkTint[1],profile.BarkTint[2]));
+                leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
+            }
+            var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
             ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
             for (int v = 0; v < layer.Variants.Length; v++)
             {
-                ulong seed = Rng.Mix(speciesSeed, (ulong)(v + 1) * 0x9E3779B97F4A7C15UL);
-                var full = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: true) : OrganismMeshes.Flora(sp, seed);
+                int morph = v % layer.MorphCount;
+                int? tier = profile == null ? null : v / layer.MorphCount;
+                ulong seed = Rng.Mix(speciesSeed, (ulong)(morph + 1) * 0x9E3779B97F4A7C15UL);
+                var full = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: true) : OrganismMeshes.Flora(sp, seed, visualDetail: tier);
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
                 bool castShadow = Quality >= 1 && canCastShadow;
-                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", Bridge.ToArrayMesh(full, mat), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
+                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full);
-                if (sp.Shape is "fern" or "veilfern" || sp.Climber != null)
+                if (sp.Shape is "fern" or "veilfern" || sp.Climber != null || profile != null && sp.Id == "umbraheart")
                 {
-                    var young = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: false) : OrganismMeshes.Flora(sp, seed, juvenile: true);
-                    vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", Bridge.ToArrayMesh(young, mat), castShadow);
+                    var young = sp.Climber != null ? OrganismMeshes.ClimberNode(sp, seed, attached: false) : OrganismMeshes.Flora(sp, seed, juvenile: true, visualDetail: tier);
+                    vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", profile == null ? Bridge.ToArrayMesh(young, mat) : profile.Compile(young, mat, leafMat!), castShadow);
                     vl.JuvenileTris = young.TriangleCount;
                     AddChild(vl.Juvenile);
                 }
-                if (OrganismMeshes.FloraFruiting(sp, seed) is { } fruit)
+                if (OrganismMeshes.FloraFruiting(sp, seed, tier) is { } fruit)
                 {
                     var fruitMat = (ShaderMaterial)mat.Duplicate();
                     if (sp.Reproduction == null) fruitMat.SetShaderParameter("surface_mode", 3);
-                    vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", Bridge.ToArrayMesh(fruit, fruitMat), castShadow);
+                    vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", profile == null ? Bridge.ToArrayMesh(fruit, fruitMat) : profile.Compile(fruit, fruitMat, leafMat!), castShadow);
                     vl.FruitTris = fruit.TriangleCount;
                     AddChild(vl.Fruit);
                 }
@@ -378,7 +397,9 @@ public partial class FloraRenderer : Node3D
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2);
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
             var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
-            int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
+            var visualLayer = _layers[sp.Id];
+            int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
+            if (visualLayer.Profile != null) variant += VisualTier(f.Id, pos, (float)h) * visualLayer.MorphCount;
             var vl = _layers[sp.Id].Variants[variant];
             bool reproductiveFruit = sp.Reproduction != null
                 && f.FruitLoad > sp.Reproduction.MaxAttachedMass * 0.03
@@ -441,7 +462,9 @@ public partial class FloraRenderer : Node3D
             var tint = deadColor.Lerp(localLitter, (float)(litterBlend * litterInfluence));
             ulong hash = Rng.Mix(dead.Id.Value, 0xD34DUL);
             var custom = new Color((hash % 1000) / 1000f, 0f, 0f, ((hash >> 12) % 1000) / 1000f);
-            int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);
+            var visualLayer = _layers[sp.Id];
+            int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
+            if (visualLayer.Profile != null) variant += VisualTier(dead.Id, pos, (float)h) * visualLayer.MorphCount;
             var bd = Get(_full, MorphKey(sp.Id, variant));
             bd.T.Add(t); bd.Tint.Add(tint); bd.C.Add(custom);
             visible++;
@@ -521,6 +544,20 @@ public partial class FloraRenderer : Node3D
             }
         Visible_ = visible; TrianglesDrawn = triangles;
         _snapshot.Clear();
+        foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
+    }
+
+    private int VisualTier(EntityId id, Vector3 position, float height)
+    {
+        if (Camera == null) return 0;
+        float viewport = Camera.GetViewport().GetVisibleRect().Size.Y;
+        float depth = Math.Max(.05f,(position + Vector3.Up * height * .5f - Camera.GlobalPosition).Dot(-Camera.GlobalBasis.Z));
+        float pixels = Camera.Projection == Camera3D.ProjectionType.Orthogonal
+            ? height * viewport / Camera.Size
+            : height * viewport / (2f * depth * MathF.Tan(Mathf.DegToRad(Camera.Fov) * .5f));
+        int tier = FloraDetail.Select(pixels, _visualTiers.TryGetValue(id,out int old) ? old : -1);
+        _visualTiers[id] = tier;
+        return tier;
     }
 
     // World-space slack added around the bounding sphere before the frustum test. The instance list is only
@@ -606,7 +643,7 @@ public partial class FaunaRenderer : Node3D
     {
         public Vector3 Prev, Cur, Shown;
         public double PrevT, CurT;
-        public float Yaw, Speed, Pitch;
+        public float Yaw, Speed, Pitch, Bend, Activity;
         public double Phase;
         public Vector3 Up = Vector3.Up;
     }
@@ -630,16 +667,7 @@ public partial class FaunaRenderer : Node3D
             var hiMat = Bridge.Shader("res://Shaders/fauna.gdshader");
             hiMat.SetShaderParameter("base_color", Bridge.C(sp.BaseColor));
             hiMat.SetShaderParameter("ornament_color", Bridge.C(sp.OrnamentColor));
-            var anim = sp.Animation;
-            hiMat.SetShaderParameter("anim_family", (int)anim.Family);
-            hiMat.SetShaderParameter("anim_amplitude", (float)anim.Amplitude);
-            hiMat.SetShaderParameter("anim_idle_motion", (float)anim.IdleMotion);
-            hiMat.SetShaderParameter("anim_body_wave", (float)anim.BodyWave);
-            hiMat.SetShaderParameter("anim_limb_sweep", (float)anim.LimbSweep);
-            hiMat.SetShaderParameter("anim_limb_lift", (float)anim.LimbLift);
-            hiMat.SetShaderParameter("anim_bob", (float)anim.Bob);
-            hiMat.SetShaderParameter("anim_phase_spread", (float)anim.PhaseSpread);
-            hiMat.SetShaderParameter("anim_duty_factor", (float)anim.DutyFactor);
+            FaunaBodyProfiles.Bind(hiMat, sp);
             hiMat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : 0.1f);
             hiMat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.15f, "triops" => 0.45f, "shrimp" => 0.35f, "springtail" => 0.0f, "beetle" => 0.3f, "silverfish" => 0.2f, _ => 0.0f });
             hiMat.SetShaderParameter("segment_rings", sp.Model switch { "springtail" => 5.5f, "silverfish" => 4.5f, _ => 0.0f });
@@ -687,6 +715,9 @@ public partial class FaunaRenderer : Node3D
         return f != null ? Bridge.V(f.Position) : Vector3.Zero;
     }
 
+    /// <summary>Render phase for deterministic distance-clock checks.</summary>
+    public double DisplayPhase(EntityId id) => _tracks.TryGetValue(id, out var tr) ? tr.Phase : 0;
+
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("Fauna");
@@ -728,6 +759,7 @@ public partial class FaunaRenderer : Node3D
             {
                 // held, released or reintroduced: jump there rather than slide across the island
                 tr.Prev = tr.Cur = tr.Shown = target; tr.PrevT = tr.CurT = now;
+                tr.Bend = tr.Speed = tr.Activity = 0;
             }
             else if (tr.Cur.DistanceSquaredTo(target) > 1e-12)
             {
@@ -737,12 +769,13 @@ public partial class FaunaRenderer : Node3D
             double span = tr.CurT - tr.PrevT;
             float alpha = span > 1e-9 ? (float)Math.Clamp((renderT - tr.PrevT) / span, 0, 1) : 1f;
             var shown = tr.Prev.Lerp(tr.Cur, alpha);
-            float frameDist = new Vector2(shown.X - tr.Shown.X, shown.Z - tr.Shown.Z).Length();
+            float frameDist = shown.DistanceTo(tr.Shown);
             tr.Shown = shown;
             // face the direction of travel (or the simulated heading when standing), critically damped
             var motion = new Vector2(tr.Cur.X - tr.Prev.X, tr.Cur.Z - tr.Prev.Z);
             float yawTarget = motion.LengthSquared() > 1e-8 ? Mathf.Atan2(-motion.Y, motion.X) : (float)-f.Heading;
-            tr.Yaw += Mathf.Wrap(yawTarget - tr.Yaw, -Mathf.Pi, Mathf.Pi) * k;
+            float yawStep = Mathf.Wrap(yawTarget - tr.Yaw, -Mathf.Pi, Mathf.Pi) * k;
+            tr.Yaw += yawStep;
             // Animation cadence is species-authored in body-relative units: apparent gait survives genetic size changes
             // and simulation time-scale changes without hard-coding a model name in the renderer.
             float bodyLen = (float)Math.Max(1e-4, ph.BodySize * sp.VisualScale);
@@ -750,9 +783,17 @@ public partial class FaunaRenderer : Node3D
             tr.Speed += (speed - tr.Speed) * k;
             var layer = _layers[sp.Id];
             var anim = layer.Animation;
-            double hz = Math.Min(anim.MaxHz, anim.IdleHz + tr.Speed * anim.CyclesPerBody);
-            tr.Phase = (tr.Phase + hz * delta) % 1.0;
-            float speed01 = (float)Math.Clamp(tr.Speed / anim.FullSpeed, 0, 1);
+            // Curvature is heading change per body length travelled. Keep a short trailing memory
+            // so the rear straightens after the head, and suppress bending while held or stationary.
+            float bendTarget = frameDist > 1e-7f && !f.Grabbed
+                ? Mathf.Clamp(yawStep * bodyLen / Math.Max(frameDist, bodyLen * 0.002f), -1.25f, 1.25f) : 0;
+            float bendK = 1 - Mathf.Exp(-(float)delta * 4f);
+            tr.Bend += (bendTarget - tr.Bend) * bendK;
+            tr.Phase = (tr.Phase + FaunaGait.Advance(anim, frameDist, bodyLen, f.Grabbed ? 0 : delta)) % 1.0;
+            // Ground stride stays constant; only lift/body activity fades when travel stops.
+            float activityTarget = speed > 1e-5f && !f.Grabbed ? 1 : 0;
+            tr.Activity += (activityTarget - tr.Activity) * k;
+            float speed01 = FaunaGait.GroundSteps(anim) ? tr.Activity : (float)Math.Clamp(tr.Speed / anim.FullSpeed, 0, 1);
             var d = (Pos: shown, Yaw: tr.Yaw);
             // full detail at any distance; only animals outside the view are skipped (invisible either way)
             float scale = (float)(ph.BodySize * sp.VisualScale);
@@ -790,6 +831,9 @@ public partial class FaunaRenderer : Node3D
             // Keeping this in one channel preserves the three inherited colour/pattern traits already using xyz.
             int speedBucket = (int)Math.Round(speed01 * 15.0f);
             buf[o + 12] = (float)ph.HueShift; buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength;
+            // Flexible bodies reserve the integer part of x for a signed bend bucket;
+            // hue remains in the residual. Zero/unpacked x is also a valid straight preview pose.
+            buf[o + 12] = FaunaBodyProfiles.PackHue(sp, (float)ph.HueShift, tr.Bend);
             buf[o + 15] = (float)(Math.Round(ph.AppendageScale * 1000) * 16 + speedBucket + Math.Min(tr.Phase, 0.999));
             Drawn++;
         }

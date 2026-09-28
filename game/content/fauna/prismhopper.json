@@ -106,18 +106,18 @@
     ],
     "animation": {
       "family": "hop",
-      "cyclesPerBody": 0.8,
+      "cyclesPerBody": 1.5,
       "idleHz": 0,
       "maxHz": 5,
-      "fullSpeed": 5,
+      "fullSpeed": 1,
       "idleMotion": 0,
       "amplitude": 1,
       "bodyWave": 0.08,
       "limbSweep": 0.9,
       "limbLift": 0.8,
-      "bob": 0.5,
+      "bob": 0.65,
       "phaseSpread": 0.3,
-      "dutyFactor": 0.68
+      "dutyFactor": 0.62
     }
   },
   "behaviors": []

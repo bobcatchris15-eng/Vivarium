@@ -109,7 +109,7 @@
       "cyclesPerBody": 0.5,
       "idleHz": 0,
       "maxHz": 3,
-      "fullSpeed": 3,
+      "fullSpeed": 0.8,
       "idleMotion": 0,
       "amplitude": 1,
       "bodyWave": 0.08,
@@ -117,7 +117,7 @@
       "limbLift": 1,
       "bob": 0.65,
       "phaseSpread": 0.2,
-      "dutyFactor": 0.72
+      "dutyFactor": 0.60
     }
   },
   "behaviors": []

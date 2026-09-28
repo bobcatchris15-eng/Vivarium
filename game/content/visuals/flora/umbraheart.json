@@ -1,0 +1,8 @@
+{
+  "species": "umbraheart", "veins": "cordate", "volumetric": false,
+  "top": [0.045,0.145,0.035], "back": [0.14,0.19,0.075],
+  "roughness": 0.76, "backRoughness": 0.9, "transmission": 0.34,
+  "relief": 0.32, "veinStrength": 0.48, "wind": 0.024,
+  "tissueScale": 1.45, "canopyOcclusion": 0.16,
+  "bark": "Bark014", "barkTint": [0.72,0.69,0.61]
+}

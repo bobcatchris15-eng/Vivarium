@@ -96,8 +96,8 @@
     ],
     "animation": {
       "family": "metachronal",
-      "cyclesPerBody": 0.85,
-      "idleHz": 0.05,
+      "cyclesPerBody": 4,
+      "idleHz": 0,
       "maxHz": 5,
       "fullSpeed": 0.7,
       "idleMotion": 0.12,

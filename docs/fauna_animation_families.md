@@ -27,9 +27,9 @@ Each fauna `visual` block now contains an `animation` object:
 ```
 
 - `cyclesPerBody`: cadence response to visible travel, in cycles per body length.
-- `idleHz`: cadence that remains with little/no translation. Keep at zero for ordinary walkers.
-- `maxHz`: hard cadence ceiling.
-- `fullSpeed`: body lengths/second at which deformation reaches full amplitude.
+- `idleHz`: cadence that remains with little/no translation for swimmers, flyers and soft bodies. Ground stepping ignores it.
+- `maxHz`: ceiling on the independent idle beat. Travel-driven cycles are uncapped so fast movement cannot outrun the gait.
+- `fullSpeed`: body lengths/second at which swimming/flying/soft-body deformation reaches full amplitude. Ground stride is constant and activity fades after stopping.
 - `idleMotion`: fraction of pose amplitude retained at zero translation.
 - `amplitude`: master deformation multiplier.
 - `bodyWave`: axial/trunk wave strength.
@@ -60,8 +60,30 @@ Each fauna `visual` block now contains an `animation` object:
 - 1 = locomotor limb
 - 2 = wing or fin
 - 3 = sensory appendage
+- 4 = rigid shell
+- 5 = springtail jumping organ
 
-Procedural appendages still use vertex COLOR.rgb as their attachment-relative offset, so the shader can rotate/deform them around the root without a skeleton.
+Locomotor tubes store root-to-toe weight in the fractional part of `UV2.y`: `1 + 0.25 * weight`. The shader extracts integer role 1 and weight separately; sockets have zero stroke and toe rings have full stroke, including genetic appendage scaling.
+
+Procedural appendages use signed floating-point CUSTOM0.rgb as their attachment-relative offset; CUSTOM0.a flags appendages. COLOR cannot carry signed offsets in Godot.
+
+Flexible profiles bend along an arc after appendage articulation, rotating cross-sections and normals with the spine. Isopod, shield and snail profiles reduce steering curvature to protect stiff structures; the snail shell stays rigid. The renderer derives signed curvature from visible heading change per body length travelled, smooths it, and relaxes it while stationary. INSTANCE_CUSTOM.x stores hue plus `2 * (1 + bendBucket)` for these flexible bodies, where buckets 0–30 represent curvature −1.25 to +1.25. Unpacked hue remains a valid straight pose. Other profiles retain their existing data layout.
+
+`FaunaBodyProfiles` binds the same body style and gait tuning in live rendering and previews. Rainspine uses a restrained trunk wave growing into tail motion and diagonal support pairs. Stonebell loads the hindquarters, springs into a pitched/tucked airborne pose and braces on landing. Stiltclaw alternates support groups under a slightly rocking rigid body. Dewmantle carries a muscular compression wave under independently searching sensory stalks (including their eye caps). Loamthread alternates longitudinal shortening and radial thickening along its body. These are procedural poses, without terrain-aware foot IK or displacement synchronized to Stonebell's airborne interval.
+
+For deterministic close-up review, launch with `-- --fauna-preview SPECIES_ID --output PATH`. This captures both sides at phases 0.05/0.35/0.65/0.85 with straight and opposite turn poses, plus a 60-frame motion sequence. The harvestman species ID is `stiltclaw`. These scripted poses exercise the production mesh/shader; they do not prove live steering or ground contact.
+
+Use `--fauna-preview all` for all 17 species or `rest` for the eleven following the first six. Motion sequences now travel over fixed quarter-body-length markers at 0.6 body lengths/second, using the same distance clock as production. Add `--speed-review` for 0.2 and 0.8 body lengths/second, with a stop after frame 45. Frames represent 1/30 second each.
+
+`--fauna-motion-check --output PATH` separately exercises the actual renderer and interpolation at multiple speeds across all species, including vertical swimming, held animals and teleport resets, and writes `distance-clock.json`.
+
+## Distance and stance
+
+`FaunaGait.Advance` adds exactly `shownDistance / bodyLength * cyclesPerBody` each render frame (3-D distance, including vertical swimming). Ground locomotion has no idle advancement; other families add their independent idle beat. Smoothed speed affects body activity, not travelled phase, so stops no longer cause extra footsteps and cadence caps no longer lose distance.
+
+Walking half-stroke is `dutyFactor / (2 * cyclesPerBody)` in model units. During the linear stance sweep its fore/aft velocity cancels world translation on straight, level travel. Limb length and body amplitude no longer shrink this stride at low speeds. Authored cycles were retuned to keep these calibrated strokes within the limbs' practical reach. The existing lift/sweep tuning remains useful for articulation outside this calibrated fore/aft walking stroke.
+
+This is procedural ground contact, without terrain-aware foot IK. Turns, trunk deformation and sloped terrain can still introduce some foot drift. Hoppers advance their pose by travel distance, but authoritative horizontal movement still runs during their stance interval.
 
 ## Tuning workflow
 
