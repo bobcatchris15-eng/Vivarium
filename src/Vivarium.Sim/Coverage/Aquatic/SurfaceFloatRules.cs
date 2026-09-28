@@ -32,24 +32,33 @@ public static class SurfaceFloatRules
 
     private static void Grow(CoverageLayer layer, IAquaticEnv env, DuckweedParams p, GridBounds d, double dtDays)
     {
-        for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
-        for (int gx = d.MinGx; gx <= d.MaxGx; gx++)
+        // Walk allocated tiles directly instead of the full bounding rectangle (see AlgaeRules.StepBed):
+        // unallocated cells are implicitly empty and Grow is a no-op on them either way.
+        foreach (var tile in layer.Tiles)
         {
-            if (env.DepthAt(gx, gz) <= 0 || env.IsObstacle(gx, gz))
+            int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
+            for (int li = 0; li < CoverageTile.N; li++)
             {
-                if (layer.GetOcc(gx, gz) != 0) { layer.SetOcc(gx, gz, 0); layer.SetB(gx, gz, 0f); }
-                continue;
+                int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
+                if (!d.Contains(gx, gz)) continue;
+
+                if (env.DepthAt(gx, gz) <= 0 || env.IsObstacle(gx, gz))
+                {
+                    if (tile.Occ[li] != 0) { tile.Occ[li] = 0; tile.B[li] = 0f; tile.Active = true; tile.Touch(); }
+                    continue;
+                }
+
+                double b = tile.B[li];
+                double gL = LightResponse(env.LightAt(gx, gz), p);
+                double gN = NutrientResponse(env.NutrientsAt(gx, gz), p);
+                double db = p.GrowthRate * gL * gN * b * (1 - b / p.MaxDensity) * dtDays;
+                double nb = Math.Clamp(b + db, 0, p.MaxDensity);
+                if (nb == b) continue;
+
+                tile.B[li] = (float)nb; tile.Active = true; tile.Touch();
+                byte occ = nb > 1e-6 ? OccupantId : (byte)0;
+                if (tile.Occ[li] != occ) tile.Occ[li] = occ;
             }
-
-            double b = layer.GetB(gx, gz);
-            double gL = LightResponse(env.LightAt(gx, gz), p);
-            double gN = NutrientResponse(env.NutrientsAt(gx, gz), p);
-            double db = p.GrowthRate * gL * gN * b * (1 - b / p.MaxDensity) * dtDays;
-            double nb = Math.Clamp(b + db, 0, p.MaxDensity);
-            if (nb == b) continue;
-
-            layer.SetB(gx, gz, (float)nb);
-            layer.SetOcc(gx, gz, nb > 1e-6 ? OccupantId : (byte)0);
         }
     }
 
@@ -64,6 +73,17 @@ public static class SurfaceFloatRules
 
     /// <summary>Advects <paramref name="layer"/>'s biomass by flow + a constant wind term, upwind donor-cell,
     /// mass-conserving, sub-stepped to satisfy CFL. Returns the substep count used.</summary>
+    // Reused across calls (single-threaded, one call completes before the next starts) so a dense advection
+    // buffer isn't freshly allocated and GC'd on every tick — these dominate large-pond frame time otherwise.
+    [ThreadStatic] private static double[]? _rho, _vx, _vz, _next;
+    [ThreadStatic] private static bool[]? _blocked;
+
+    private static T[] Rent<T>(ref T[]? buf, int n)
+    {
+        if (buf == null || buf.Length < n) buf = new T[n];
+        return buf;
+    }
+
     public static int Advect(CoverageLayer layer, IAquaticEnv env, GridBounds d, double dtDays, double windX, double windZ)
     {
         double dtSeconds = dtDays * AquaticConst.SecondsPerDay;
@@ -71,25 +91,40 @@ public static class SurfaceFloatRules
         int w = d.Width, h = d.Height;
         int n = w * h;
 
-        var rho = new double[n];
-        var blocked = new bool[n];
-        var vx = new double[n];
-        var vz = new double[n];
+        var rho = Rent(ref _rho, n);
+        var blocked = Rent(ref _blocked, n);
+        var vx = Rent(ref _vx, n);
+        var vz = Rent(ref _vz, n);
         double maxSpeed = 0;
 
-        for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
-        for (int gx = d.MinGx; gx <= d.MaxGx; gx++)
-        {
-            int idx = d.Index(gx, gz);
-            rho[idx] = layer.GetB(gx, gz);
-            bool block = env.DepthAt(gx, gz) <= 0 || env.IsObstacle(gx, gz);
-            blocked[idx] = block;
-            if (block) continue;
+        // Tile pointer cached across the row: consecutive gx share a tile most of the time (32 cells per
+        // tile), so this turns ~n dictionary lookups into ~n/32 of them. gx/gz -> (ti,li) tracked by
+        // increment instead of CoverageSpec.TileOf/LocalIndex's div/mod per cell — those add up at this
+        // cell count (a fine 2 cm coverage grid over a whole pond can be hundreds of thousands of cells).
+        int edge = CoverageSpec.TileEdge;
+        CoverageTile? readTile = null; int rTi = int.MinValue, rTj = int.MinValue;
 
-            var v = env.FlowAt(gx, gz) + new Vec2(windX, windZ);
-            vx[idx] = v.X; vz[idx] = v.Z;
-            double s = v.Length;
-            if (s > maxSpeed) maxSpeed = s;
+        for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
+        {
+            int tj = CoverageSpec.FloorDiv(gz, edge), lz = CoverageSpec.FloorMod(gz, edge);
+            int ti = CoverageSpec.FloorDiv(d.MinGx, edge), lx = CoverageSpec.FloorMod(d.MinGx, edge);
+            int idx = d.Index(d.MinGx, gz);
+            for (int gx = d.MinGx; gx <= d.MaxGx; gx++, idx++)
+            {
+                if (ti != rTi || tj != rTj) { layer.TryGetTile(ti, tj, out readTile); rTi = ti; rTj = tj; }
+                rho[idx] = readTile != null ? readTile.B[lz * edge + lx] : 0f;
+                bool block = env.DepthAt(gx, gz) <= 0 || env.IsObstacle(gx, gz);
+                blocked[idx] = block;
+                if (!block)
+                {
+                    var v = env.FlowAt(gx, gz) + new Vec2(windX, windZ);
+                    vx[idx] = v.X; vz[idx] = v.Z;
+                    double s = v.Length;
+                    if (s > maxSpeed) maxSpeed = s;
+                }
+
+                lx++; if (lx == edge) { lx = 0; ti++; }
+            }
         }
 
         int substeps = maxSpeed > 1e-9
@@ -97,7 +132,7 @@ public static class SurfaceFloatRules
             : 1;
         double subDt = dtSeconds / substeps;
 
-        var next = new double[n];
+        var next = Rent(ref _next, n);
         for (int s = 0; s < substeps; s++)
         {
             Array.Copy(rho, next, n);
@@ -130,15 +165,32 @@ public static class SurfaceFloatRules
             Array.Copy(next, rho, n);
         }
 
+        CoverageTile? writeTile = null; int wTi = int.MinValue, wTj = int.MinValue;
         for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
-        for (int gx = d.MinGx; gx <= d.MaxGx; gx++)
         {
-            int idx = d.Index(gx, gz);
-            if (blocked[idx]) continue;
-            double nb = rho[idx];
-            if (nb <= 0 && layer.GetOcc(gx, gz) == 0) continue; // keep empty water out of the sparse tile map
-            layer.SetB(gx, gz, (float)nb);
-            layer.SetOcc(gx, gz, nb > 1e-6 ? OccupantId : (byte)0);
+            int tj = CoverageSpec.FloorDiv(gz, edge), lz = CoverageSpec.FloorMod(gz, edge);
+            int ti = CoverageSpec.FloorDiv(d.MinGx, edge), lx = CoverageSpec.FloorMod(d.MinGx, edge);
+            int idx = d.Index(d.MinGx, gz);
+            for (int gx = d.MinGx; gx <= d.MaxGx; gx++, idx++)
+            {
+                if (!blocked[idx])
+                {
+                    if (ti != wTi || tj != wTj) { layer.TryGetTile(ti, tj, out writeTile); wTi = ti; wTj = tj; }
+                    double nb = rho[idx];
+                    int li = lz * edge + lx;
+                    byte curOcc = writeTile != null ? writeTile.Occ[li] : (byte)0;
+                    if (!(nb <= 0 && curOcc == 0))
+                    {
+                        if (writeTile == null) { writeTile = layer.GetOrCreateTile(ti, tj); wTi = ti; wTj = tj; }
+                        var t = writeTile;
+                        if (t.B[li] != (float)nb) { t.B[li] = (float)nb; t.Active = true; t.Touch(); }
+                        byte occ = nb > 1e-6 ? OccupantId : (byte)0;
+                        if (t.Occ[li] != occ) { t.Occ[li] = occ; t.Active = true; t.Touch(); }
+                    }
+                }
+
+                lx++; if (lx == edge) { lx = 0; ti++; }
+            }
         }
 
         return substeps;

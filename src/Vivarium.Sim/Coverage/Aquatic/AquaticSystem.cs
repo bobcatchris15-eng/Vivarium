@@ -43,7 +43,7 @@ public sealed class AquaticSystem : IAquaticEnv
         ProjectBiofilm();
     }
 
-    public void ProjectBiofilm() => AquaticBiofilm.Project(_w.Coverage.AlgaeBed, _w.Fields.Biofilm);
+    public void ProjectBiofilm() => AquaticBiofilm.Project(_w.Coverage.AlgaeBed, _w.Fields.Biofilm, _w.Water);
 
     private int FlowHalo(double physicalSeconds)
     {
@@ -76,14 +76,32 @@ public sealed class AquaticSystem : IAquaticEnv
         return minX == int.MaxValue ? null : new GridBounds(minX - pad, minZ - pad, maxX + pad, maxZ + pad);
     }
 
+    // The (gx,gz) -> coarse cell mapping is pure grid geometry, invariant for the object's lifetime, so a
+    // 1-slot cache is always valid to reuse (no staleness risk) and turns the common DepthAt-then-IsObstacle-
+    // then-FlowAt call sequence for the same fine cell (the aquatic rules' per-cell pattern) into a single
+    // lookup instead of up to three.
+    private int _cacheGx = int.MinValue, _cacheGz = int.MinValue, _cacheCell = -1;
+
     private int Cell(int gx, int gz)
     {
+        if (gx == _cacheGx && gz == _cacheGz) return _cacheCell;
         var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
         int cell = _w.Grid.CellAt(p);
-        return _w.Grid.InDomain(cell) ? cell : -1;
+        cell = _w.Grid.InDomain(cell) ? cell : -1;
+        _cacheGx = gx; _cacheGz = gz; _cacheCell = cell;
+        return cell;
     }
 
-    public double DepthAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 && _w.Water.IsWet(c) ? _w.Water.OpenWaterDepth(c) : 0; }
+    private int _depthGx = int.MinValue, _depthGz = int.MinValue; private double _depthVal;
+
+    public double DepthAt(int gx, int gz)
+    {
+        if (gx == _depthGx && gz == _depthGz) return _depthVal;
+        int c = Cell(gx, gz);
+        double d = c >= 0 && _w.Water.IsWet(c) ? _w.Water.OpenWaterDepth(c) : 0;
+        _depthGx = gx; _depthGz = gz; _depthVal = d;
+        return d;
+    }
     public Vec2 FlowAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? new Vec2(_w.Water.FlowX[c], _w.Water.FlowZ[c]) : Vec2.Zero; }
     public double LightAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? _w.Fields.Light[c] : 0; }
     public double NutrientsAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? MathD.Clamp01(_w.Fields.Nutrients[c] / Math.Max(_w.Fields.Nutrients.Max, 1e-9)) : 0; }

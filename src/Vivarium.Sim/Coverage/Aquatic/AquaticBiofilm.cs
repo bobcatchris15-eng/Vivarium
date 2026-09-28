@@ -1,4 +1,5 @@
 using Vivarium.Sim.Fields;
+using Vivarium.Sim.Water;
 
 namespace Vivarium.Sim.Coverage.Aquatic;
 
@@ -32,6 +33,18 @@ public static class AquaticBiofilm
     public static void Project(CoverageLayer bed, ScalarField biofilm)
     {
         foreach (int cell in biofilm.Grid.DomainCells) ProjectCell(bed, biofilm, cell);
+    }
+
+    /// <summary>Same projection, but skips the fine-cell scan entirely for cells with no open water — bed
+    /// algae cannot exist there, so the food value is unconditionally 0. On a typically mostly-dry domain
+    /// (single-digit percent wet) this is the large majority of coarse cells.</summary>
+    public static void Project(CoverageLayer bed, ScalarField biofilm, Hydrology water)
+    {
+        foreach (int cell in biofilm.Grid.DomainCells)
+        {
+            if (!water.IsWet(cell)) { biofilm[cell] = 0; continue; }
+            ProjectCell(bed, biofilm, cell);
+        }
     }
 
     /// <summary>Returns actual food removed; the field is refreshed immediately so it cannot be consumed twice.</summary>

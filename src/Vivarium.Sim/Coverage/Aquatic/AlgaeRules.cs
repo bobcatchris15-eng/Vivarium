@@ -34,47 +34,58 @@ public static class AlgaeRules
 
     private static void StepBed(CoverageLayer bed, CoverageLayer floatLayer, IAquaticEnv env, AlgaeBedParams p, GridBounds d, double dtDays)
     {
-        for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
-        for (int gx = d.MinGx; gx <= d.MaxGx; gx++)
+        // Only allocated bed tiles can hold biomass or a lingering occupant flag (see SetB/SetOcc's
+        // allocate-on-write and CoverageLayer.Advance's empty-tile eviction), so walking the sparse tile
+        // set instead of the full bounding rectangle visits the same cells that can possibly do anything,
+        // without a dictionary lookup (GetB/GetOcc/SetB/SetOcc) for every fine cell in between.
+        foreach (var tile in bed.Tiles)
         {
-            double depth = env.DepthAt(gx, gz);
-            if (depth <= 0)
+            int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
+            for (int li = 0; li < CoverageTile.N; li++)
             {
-                if (bed.GetOcc(gx, gz) != 0) { bed.SetOcc(gx, gz, 0); bed.SetB(gx, gz, 0f); }
-                continue;
-            }
+                int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
+                if (!d.Contains(gx, gz)) continue;
 
-            double b = bed.GetB(gx, gz);
-            if (b <= 0) continue; // no spontaneous bloom; keep unseeded water out of the sparse tile map
-            double shade = env.SurfaceShadeAt(gx, gz);
-            double lightAtDepth = env.LightAt(gx, gz) * (1 - shade) * Math.Exp(-p.LightAtten * depth); // Beer-Lambert
-            double gL = lightAtDepth / (lightAtDepth + p.LightHalfSat);
-            double n = env.NutrientsAt(gx, gz);
-            double gN = n / (n + p.NutrientHalfSat);
+                double depth = env.DepthAt(gx, gz);
+                if (depth <= 0)
+                {
+                    if (tile.Occ[li] != 0) { tile.Occ[li] = 0; tile.B[li] = 0f; tile.Active = true; tile.Touch(); }
+                    continue;
+                }
 
-            double flowSpeed = env.FlowAt(gx, gz).Length;
-            double scour = flowSpeed > p.ScourFlowThreshold ? p.ScourRate * (flowSpeed - p.ScourFlowThreshold) : 0;
-            double grazePerDay = p.GrazeRate; // hook: Aq-2 wires fauna consumption here
+                double b = tile.B[li];
+                if (b <= 0) continue; // no spontaneous bloom; keep unseeded water out of the sparse tile map
+                double shade = env.SurfaceShadeAt(gx, gz);
+                double lightAtDepth = env.LightAt(gx, gz) * (1 - shade) * Math.Exp(-p.LightAtten * depth); // Beer-Lambert
+                double gL = lightAtDepth / (lightAtDepth + p.LightHalfSat);
+                double n = env.NutrientsAt(gx, gz);
+                double gN = n / (n + p.NutrientHalfSat);
 
-            double db = (p.GrowthRate * gL * gN * b * (1 - b) - (scour + grazePerDay) * b) * dtDays;
-            double nb = Math.Clamp(b + db, 0, 1);
+                double flowSpeed = env.FlowAt(gx, gz).Length;
+                double scour = flowSpeed > p.ScourFlowThreshold ? p.ScourRate * (flowSpeed - p.ScourFlowThreshold) : 0;
+                double grazePerDay = p.GrazeRate; // hook: Aq-2 wires fauna consumption here
 
-            double detach = 0;
-            if (nb > p.DetachThickness && flowSpeed <= p.ScourFlowThreshold)
-            {
-                detach = Math.Min(p.DetachRate * (nb - p.DetachThickness) * dtDays, nb);
-                nb -= detach;
-            }
+                double db = (p.GrowthRate * gL * gN * b * (1 - b) - (scour + grazePerDay) * b) * dtDays;
+                double nb = Math.Clamp(b + db, 0, 1);
 
-            bed.SetB(gx, gz, (float)nb);
-            bed.SetOcc(gx, gz, nb > 1e-6 ? OccupantId : (byte)0);
+                double detach = 0;
+                if (nb > p.DetachThickness && flowSpeed <= p.ScourFlowThreshold)
+                {
+                    detach = Math.Min(p.DetachRate * (nb - p.DetachThickness) * dtDays, nb);
+                    nb -= detach;
+                }
 
-            if (detach > 0)
-            {
-                double curFloat = floatLayer.GetB(gx, gz);
-                double newFloat = Math.Clamp(curFloat + detach, 0, 1);
-                floatLayer.SetB(gx, gz, (float)newFloat);
-                floatLayer.SetOcc(gx, gz, OccupantId);
+                if (tile.B[li] != (float)nb) { tile.B[li] = (float)nb; tile.Active = true; tile.Touch(); }
+                byte occ = nb > 1e-6 ? OccupantId : (byte)0;
+                if (tile.Occ[li] != occ) { tile.Occ[li] = occ; tile.Active = true; tile.Touch(); }
+
+                if (detach > 0)
+                {
+                    double curFloat = floatLayer.GetB(gx, gz);
+                    double newFloat = Math.Clamp(curFloat + detach, 0, 1);
+                    floatLayer.SetB(gx, gz, (float)newFloat);
+                    floatLayer.SetOcc(gx, gz, OccupantId);
+                }
             }
         }
     }
@@ -84,29 +95,36 @@ public static class AlgaeRules
 
     private static void GrowFloat(CoverageLayer floatLayer, IAquaticEnv env, AlgaeFloatParams p, GridBounds d, double dtDays)
     {
-        for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
-        for (int gx = d.MinGx; gx <= d.MaxGx; gx++)
+        // See StepBed: walk allocated tiles directly instead of the full bounding rectangle.
+        foreach (var tile in floatLayer.Tiles)
         {
-            if (env.DepthAt(gx, gz) <= 0 || env.IsObstacle(gx, gz))
+            int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
+            for (int li = 0; li < CoverageTile.N; li++)
             {
-                if (floatLayer.GetOcc(gx, gz) != 0) { floatLayer.SetOcc(gx, gz, 0); floatLayer.SetB(gx, gz, 0f); }
-                continue;
+                int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
+                if (!d.Contains(gx, gz)) continue;
+
+                if (env.DepthAt(gx, gz) <= 0 || env.IsObstacle(gx, gz))
+                {
+                    if (tile.Occ[li] != 0) { tile.Occ[li] = 0; tile.B[li] = 0f; tile.Active = true; tile.Touch(); }
+                    continue;
+                }
+
+                double b = tile.B[li];
+                if (b <= 0) continue;
+
+                double flowSpeed = env.FlowAt(gx, gz).Length;
+                if (flowSpeed > p.StillFlowThreshold) continue; // established mats only grow (not disperse) in still water
+
+                double n = env.NutrientsAt(gx, gz);
+                double gN = n / (n + p.NutrientHalfSat);
+                double db = p.GrowthRate * gN * b * (1 - b) * dtDays;
+                double nb = Math.Clamp(b + db, 0, 1);
+                if (nb == b) continue;
+
+                tile.B[li] = (float)nb; tile.Active = true; tile.Touch();
+                tile.Occ[li] = OccupantId;
             }
-
-            double b = floatLayer.GetB(gx, gz);
-            if (b <= 0) continue;
-
-            double flowSpeed = env.FlowAt(gx, gz).Length;
-            if (flowSpeed > p.StillFlowThreshold) continue; // established mats only grow (not disperse) in still water
-
-            double n = env.NutrientsAt(gx, gz);
-            double gN = n / (n + p.NutrientHalfSat);
-            double db = p.GrowthRate * gN * b * (1 - b) * dtDays;
-            double nb = Math.Clamp(b + db, 0, 1);
-            if (nb == b) continue;
-
-            floatLayer.SetB(gx, gz, (float)nb);
-            floatLayer.SetOcc(gx, gz, OccupantId);
         }
     }
 }
