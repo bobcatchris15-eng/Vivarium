@@ -55,22 +55,22 @@
   },
   "proximity": [
     {
-      "target": "ironlace",
+      "target": "embercrown",
       "radius": 2.5,
       "bonus": 0.35
     },
     {
-      "target": "umbraheart",
+      "target": "lanternbrush",
       "radius": 3.0,
       "bonus": 0.40
     },
     {
-      "target": "fenneedle",
+      "target": "shadebell",
       "radius": 2.5,
       "bonus": 0.35
     },
     {
-      "target": "kiteleaf",
+      "target": "ringreed",
       "radius": 2.5,
       "bonus": 0.35
     }

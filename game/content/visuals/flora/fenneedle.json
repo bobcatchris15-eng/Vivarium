@@ -1,9 +1,0 @@
-{
-  "enabled":true, "species":"fenneedle", "veins":"needle", "volumetric":false,
-  "top":[0.055,0.17,0.12], "back":[0.125,0.215,0.165],
-  "roughness":0.50, "backRoughness":0.74, "transmission":0.14,
-  "relief":0.20, "veinStrength":0.18, "wind":0.025,
-  "tissueScale":1.05, "canopyOcclusion":0.11,
-  "microScale":0.65, "microRelief":0.006, "striation":0.42, "rotateTissue":true,
-  "bark":"Bark014", "barkTint":[0.68,0.70,0.63]
-}

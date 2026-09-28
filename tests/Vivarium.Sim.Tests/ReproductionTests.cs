@@ -13,7 +13,7 @@ public class ReproductionTests
     public void WoodyRosterHasContentDrivenReproduction()
     {
         var w = TestUtil.DefaultWorld();
-        foreach (string id in new[] { "ironlace", "umbraheart", "fenneedle", "kiteleaf", "embercrown", "lanternbrush", "shadebell" })
+        foreach (string id in new[] { "embercrown", "lanternbrush", "shadebell" })
         {
             var sp = w.Content.FloraOrThrow(id);
             Assert.NotNull(sp.Reproduction);
@@ -65,7 +65,7 @@ public class ReproductionTests
     {
         var w = TestUtil.FlatWorld();
         w.Litter.DepositFruit(new Vec2(0, 0), 0.42);
-        w.SeedBank.Deposit("kiteleaf", new Vec2(0.5, 0), 0.08, 7 * SimUnits.Day);
+        w.SeedBank.Deposit("shadebell", new Vec2(0.5, 0), 0.08, 7 * SimUnits.Day);
 
         var restored = WorldSerializer.Deserialize(w.Content, WorldSerializer.Serialize(w));
 
@@ -83,7 +83,7 @@ public class ReproductionTests
     public void WoodyReproductiveMeshesIncludeAttachedStructures()
     {
         var w = TestUtil.DefaultWorld();
-        foreach (string id in new[] { "ironlace", "umbraheart", "fenneedle", "kiteleaf", "embercrown", "lanternbrush", "shadebell" })
+        foreach (string id in new[] { "embercrown", "lanternbrush", "shadebell" })
         {
             var sp = w.Content.FloraOrThrow(id);
             var baseMesh = OrganismMeshes.Flora(sp, 1234);

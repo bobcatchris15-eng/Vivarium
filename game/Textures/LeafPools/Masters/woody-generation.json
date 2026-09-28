@@ -28,62 +28,6 @@
     "generator": "built-in image_gen"
   },
   {
-    "species": "ironlace",
-    "variant": 0,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 1 of four for ironlace: thin matte hornbeam-like leaf tissue, fresh forest green, delicate fine cells, understated irregular pigment, balanced mature tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-58b68afb-7987-434a-86f2-a71617b91408.png",
-    "generator": "built-in image_gen"
-  },
-  {
-    "species": "ironlace",
-    "variant": 1,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 2 of four for ironlace: thin matte hornbeam-like leaf tissue, fresh forest green, delicate fine cells, understated irregular pigment, slightly cooler tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-ae254f18-167b-4415-baa9-f6ce50aaf2d4.png",
-    "generator": "built-in image_gen"
-  },
-  {
-    "species": "ironlace",
-    "variant": 2,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 3 of four for ironlace: thin matte hornbeam-like leaf tissue, fresh forest green, delicate fine cells, understated irregular pigment, slightly warmer tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-3e1de4d4-db5b-4436-9734-e06a246d4894.png",
-    "generator": "built-in image_gen"
-  },
-  {
-    "species": "ironlace",
-    "variant": 3,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 4 of four for ironlace: thin matte hornbeam-like leaf tissue, fresh forest green, delicate fine cells, understated irregular pigment, slightly fresh tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-1651ba3e-f697-4bf0-a85c-acc4708427d8.png",
-    "generator": "built-in image_gen"
-  },
-  {
-    "species": "fenneedle",
-    "variant": 0,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 1 of four for fenneedle: fictional broad sweeping needle tissue, lush blue-emerald green, soft wax bloom, elegant very fine longitudinal tissue grain; beauty rather than literal Earth needle proportions, balanced mature tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-ecf73493-69d4-41bf-9aa3-55ab9ae74251.png",
-    "generator": "built-in image_gen"
-  },
-  {
-    "species": "fenneedle",
-    "variant": 1,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 2 of four for fenneedle: fictional broad sweeping needle tissue, lush blue-emerald green, soft wax bloom, elegant very fine longitudinal tissue grain; beauty rather than literal Earth needle proportions, slightly cooler tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-01ccfe7e-b33a-494e-8a82-19e8c63206ba.png",
-    "generator": "built-in image_gen"
-  },
-  {
-    "species": "fenneedle",
-    "variant": 2,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 3 of four for fenneedle: fictional broad sweeping needle tissue, lush blue-emerald green, soft wax bloom, elegant very fine longitudinal tissue grain; beauty rather than literal Earth needle proportions, slightly warmer tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-a727d57d-2c55-43be-b958-0a9a7b814da6.png",
-    "generator": "built-in image_gen"
-  },
-  {
-    "species": "fenneedle",
-    "variant": 3,
-    "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 4 of four for fenneedle: fictional broad sweeping needle tissue, lush blue-emerald green, soft wax bloom, elegant very fine longitudinal tissue grain; beauty rather than literal Earth needle proportions, slightly fresh tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",
-    "source": "C:\\Users\\Chris\\.codex\\generated_images\\01a0df08-ba68-73c0-acd4-d0bb8e13d106\\exec-920508b3-11dc-41f9-8259-0ab4b58ad227.png",
-    "generator": "built-in image_gen"
-  },
-  {
     "species": "lanternbrush",
     "variant": 0,
     "prompt": "Create one square high-resolution evenly lit neutral albedo texture master, variation 1 of four for lanternbrush: fictional long narrow compound leaflet tissue, muted rich teal-green with satin epidermis and fine organic pigment mottling, balanced mature tissue. Entire image uninterrupted macro lamina tissue, seamless appearance at edges. Natural and attractive, subtle variations. NO leaf outline, petiole, branches, central midrib, major veins, shadows, highlights, droplets, text or border. Physical microrelief, gloss and anatomy are authored separately by the game. Not leather, stone or camouflage.",

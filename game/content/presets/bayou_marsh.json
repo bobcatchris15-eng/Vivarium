@@ -2,7 +2,7 @@
   "id": "bayou_marsh",
   "name": "Mossveil Bayou",
   "seed": 88314,
-  "diameter": 16,
+  "diameter": 12,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 0.04,
@@ -16,37 +16,37 @@
     "features": [
       {
         "type": "basin",
-        "x": -3.2,
-        "z": 2.5,
-        "radius": 2.8,
+        "x": -2.4,
+        "z": 1.88,
+        "radius": 2.1,
         "amount": 0.45
       },
       {
         "type": "basin",
-        "x": 2.8,
-        "z": -2.2,
-        "radius": 3.0,
+        "x": 2.1,
+        "z": -1.65,
+        "radius": 2.25,
         "amount": 0.40
       },
       {
         "type": "basin",
-        "x": 0.5,
-        "z": 1.8,
-        "radius": 2.2,
+        "x": 0.38,
+        "z": 1.35,
+        "radius": 1.65,
         "amount": 0.35
       },
       {
         "type": "hill",
-        "x": -1.5,
-        "z": -1.5,
-        "radius": 2.0,
+        "x": -1.12,
+        "z": -1.12,
+        "radius": 1.5,
         "amount": 0.35
       },
       {
         "type": "hill",
-        "x": 3.5,
-        "z": 2.0,
-        "radius": 1.8,
+        "x": 2.62,
+        "z": 1.5,
+        "radius": 1.35,
         "amount": 0.30
       }
     ]
@@ -55,13 +55,13 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": -2.5,
-        "z": -2.0,
+        "x": -1.88,
+        "z": -1.5,
         "dischargePerHour": 0.02
       },
       {
-        "x": 2.0,
-        "z": 2.2,
+        "x": 1.5,
+        "z": 1.65,
         "dischargePerHour": 0.02
       }
     ],
@@ -125,10 +125,6 @@
     {
       "species": "ambervein",
       "count": 6
-    },
-    {
-      "species": "fenneedle",
-      "count": 3
     }
   ],
   "starterFauna": [

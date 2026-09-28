@@ -175,19 +175,7 @@ public partial class SmokeRunner
         // Flora refreshes on a time budget; a frame count can finish before the next refresh at high FPS.
         await Seconds(1);
         await Screenshot(view.Name);
-        if (SpeciesId == "kiteleaf")
-        {
-            Session.CameraRig.LookAtPoint(target + new Vector3(4.8f, 1.6f, 7.8f), target);
-            await Frames(12);
-            await Screenshot("species_kiteleaf_close");
-        }
-        else if (SpeciesId == "umbraheart")
-        {
-            Session.CameraRig.LookAtPoint(target + new Vector3(2.2f, 0.35f, -1.8f), target);
-            await Frames(12);
-            await Screenshot("species_umbraheart_close");
-        }
-        else if (SpeciesId == "glassfinger")
+        if (SpeciesId == "glassfinger")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(.20f,.19f,.24f), target);
             await Seconds(1);
@@ -216,18 +204,6 @@ public partial class SmokeRunner
             Session.CameraRig.LookAtPoint(target + new Vector3(0.35f, 0.30f, 0.35f), target + new Vector3(0, 0.12f, 0));
             await Frames(12);
             await Screenshot("species_" + SpeciesId + "_close");
-        }
-        else if (SpeciesId == "fenneedle")
-        {
-            Session.CameraRig.LookAtPoint(target + new Vector3(3.5f, 1.8f, 3.2f), target + new Vector3(0, 0.8f, 0));
-            await Frames(12);
-            await Screenshot("species_fenneedle_close");
-        }
-        else if (SpeciesId == "ironlace")
-        {
-            Session.CameraRig.LookAtPoint(target + new Vector3(3.2f, 1.6f, 2.8f), target + new Vector3(0, 0.6f, 0));
-            await Frames(12);
-            await Screenshot("species_ironlace_close");
         }
         else if (SpeciesId == "shadebell")
         {

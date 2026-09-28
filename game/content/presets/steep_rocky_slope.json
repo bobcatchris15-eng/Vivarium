@@ -2,7 +2,7 @@
   "id": "steep_rocky_slope",
   "name": "Crag & Scree",
   "seed": 91843,
-  "diameter": 14,
+  "diameter": 12,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 1.05,
@@ -16,25 +16,25 @@
     "features": [
       {
         "type": "ridge",
-        "x": -3.5,
-        "z": -3.5,
-        "toX": 3.2,
-        "toZ": -2.5,
+        "x": -3,
+        "z": -3,
+        "toX": 2.74,
+        "toZ": -2.14,
         "width": 1.8,
         "amount": 1.3
       },
       {
         "type": "hill",
-        "x": -2.0,
-        "z": 1.5,
-        "radius": 2.2,
+        "x": -1.71,
+        "z": 1.29,
+        "radius": 1.89,
         "amount": 0.75
       },
       {
         "type": "basin",
-        "x": 1.5,
-        "z": 2.5,
-        "radius": 3.2,
+        "x": 1.29,
+        "z": 2.14,
+        "radius": 2.74,
         "amount": 0.60
       }
     ]
@@ -43,8 +43,8 @@
     "waterTable": -1.5,
     "springs": [
       {
-        "x": -2.5,
-        "z": -2.8,
+        "x": -2.14,
+        "z": -2.4,
         "dischargePerHour": 0.015
       }
     ],

@@ -27,7 +27,12 @@ public sealed class WorldDescriptor
     /// </summary>
     public double BioAcceleration { get; set; } = DefaultBioAcceleration;
 
-    public const double MinDiameter = 10, MaxDiameter = 20;
+    public const double MinDiameter = 10, MaxDiameter = 12;
+    /// <summary>Largest diameter accepted when loading a save written before the 12 m cap.</summary>
+    public const double LegacyMaxDiameter = 20;
+
+    /// <summary>Set by the save loader so older, larger worlds still validate; new worlds use <see cref="MaxDiameter"/>.</summary>
+    [ThreadStatic] public static bool AllowLegacyDiameter;
     public const double DefaultBioAcceleration = 60.0 / 7, MinBioAcceleration = 1, MaxBioAcceleration = 30;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
@@ -42,7 +47,8 @@ public sealed class WorldDescriptor
     public List<string> Validate()
     {
         var e = new List<string>();
-        if (!(Diameter >= MinDiameter && Diameter <= MaxDiameter)) e.Add($"diameter {Diameter} must be within [{MinDiameter}, {MaxDiameter}] m");
+        double maxD = AllowLegacyDiameter ? LegacyMaxDiameter : MaxDiameter;
+        if (!(Diameter >= MinDiameter && Diameter <= maxD)) e.Add($"diameter {Diameter} must be within [{MinDiameter}, {maxD}] m");
         if (!(CellSize >= 0.1 && CellSize <= 1.0)) e.Add($"cellSize {CellSize} must be within [0.1, 1.0] m");
         if (!(Terrain.MaxHeight > Terrain.MinHeight)) e.Add("terrain.maxHeight must exceed terrain.minHeight");
         if (!(Terrain.Bottom < Terrain.MinHeight - 0.5)) e.Add("terrain.bottom must be at least 0.5 m below terrain.minHeight");

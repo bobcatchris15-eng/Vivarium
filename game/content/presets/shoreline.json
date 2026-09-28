@@ -2,7 +2,7 @@
   "id": "shoreline",
   "name": "Pebble Shoreline",
   "seed": 40192,
-  "diameter": 16,
+  "diameter": 12,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": -0.05,
@@ -16,24 +16,24 @@
     "features": [
       {
         "type": "hill",
-        "x": -4.2,
-        "z": -3.2,
-        "radius": 4.5,
+        "x": -3.15,
+        "z": -2.4,
+        "radius": 3.38,
         "amount": 0.95
       },
       {
         "type": "basin",
-        "x": 3.2,
-        "z": 2.2,
-        "radius": 5.2,
+        "x": 2.4,
+        "z": 1.65,
+        "radius": 3.9,
         "amount": 1.05
       },
       {
         "type": "ridge",
-        "x": -1.2,
-        "z": -2.2,
-        "toX": 1.8,
-        "toZ": -1.0,
+        "x": -0.9,
+        "z": -1.65,
+        "toX": 1.35,
+        "toZ": -0.75,
         "width": 1.2,
         "amount": 0.25
       }
@@ -43,8 +43,8 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": -3.8,
-        "z": -2.6,
+        "x": -2.85,
+        "z": -1.95,
         "dischargePerHour": 0.025
       }
     ],

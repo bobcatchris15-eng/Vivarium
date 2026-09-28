@@ -46,6 +46,7 @@ public partial class FaunaPreview : Node3D
         mat.SetShaderParameter("base_color", Bridge.C(sp.BaseColor));
         mat.SetShaderParameter("ornament_color", Bridge.C(sp.OrnamentColor));
         FaunaBodyProfiles.Bind(mat, sp);
+        if (sp.Model == "toad") mat.SetShaderParameter("preview_time", 0.0f);
         ulong seed = Rng.Mix(Hash.Fnv1a64("fauna.visual." + sp.Id), 0x9E3779B97F4A7C15UL);
         var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             UseCustomData = true, Mesh = Bridge.ToArrayMesh(OrganismMeshes.Fauna(sp, seed), mat, signedVertexData: true), InstanceCount = 1 };
@@ -71,6 +72,26 @@ public partial class FaunaPreview : Node3D
                 }
             }
         }
+        if (sp.Model == "toad" && !SpeedReview)
+        {
+            camera.Position = new Vector3(0.72f, 0.62f, 1.35f);
+            camera.LookAt(new Vector3(0, 0.17f, 0));
+            // Review inherited palettes and mottling independently of morphology/draw order.
+            for (int individual = 0; individual < 6; individual++)
+            {
+                float hue = -0.07f + individual * 0.026f;
+                float density = 0.24f + individual * 0.10f;
+                float contrast = 0.35f + individual * 0.09f;
+                mm.SetInstanceCustomData(0, new Color(hue, density, contrast, 16000));
+                await CaptureFrameAsync(dir, $"individual-{individual:00}.png", 3);
+            }
+            mm.SetInstanceCustomData(0, new Color(0, 0.5f, 0.5f, 16000));
+            for (int frame = 0; frame < 90; frame++)
+            {
+                mat.SetShaderParameter("preview_time", frame / 30.0f);
+                await CaptureFrameAsync(dir, $"idle-{frame:000}.png", 1);
+            }
+        }
         // Fixed markers reveal translation relative to the substrate while the camera follows the animal.
         for (int i = -12; i <= 36; i++) stage.AddChild(new MeshInstance3D {
             Mesh = new BoxMesh { Size = new Vector3(0.018f, 0.004f, 1.0f) }, Position = new Vector3(i * 0.25f, -0.021f, 0),
@@ -79,7 +100,7 @@ public partial class FaunaPreview : Node3D
         {
             double phase = 0, distance = 0;
             const double dt = 1.0 / 30;
-            for (int frame = 0; frame < 60; frame++)
+            for (int frame = 0; frame < (sp.Model == "toad" && !SpeedReview ? 120 : 60); frame++)
             {
                 float rate = SpeedReview && frame >= 45 ? 0 : speed;
                 double step = rate * dt; distance += step;
@@ -98,7 +119,9 @@ public partial class FaunaPreview : Node3D
         }
         File.WriteAllText(Path.Combine(dir, "preview.json"), System.Text.Json.JsonSerializer.Serialize(new {
             species = sp.Id, distanceDriven = true, fps = 30, bodyLengthsPerSecond = SpeedReview ? new[] { 0.2, 0.8 } : new[] { 0.6 },
-            stopAtFrame = SpeedReview ? 45 : -1, cyclesPerBody = a.CyclesPerBody, halfStroke = FaunaGait.HalfStroke(a),
+            stopAtFrame = SpeedReview ? 45 : -1, travelFrames = sp.Model == "toad" && !SpeedReview ? 120 : 60,
+            idleFrames = sp.Model == "toad" && !SpeedReview ? 90 : 0, appearanceSamples = sp.Model == "toad" && !SpeedReview ? 6 : 0,
+            cyclesPerBody = a.CyclesPerBody, halfStroke = FaunaGait.HalfStroke(a),
             evidence = "Scripted mesh/material review; production interpolation checked separately with --fauna-motion-check" }));
         stage.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

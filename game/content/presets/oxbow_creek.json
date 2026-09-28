@@ -2,7 +2,7 @@
   "id": "oxbow_creek",
   "name": "Twin Meadows Creek",
   "seed": 63481,
-  "diameter": 15,
+  "diameter": 12,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 0.32,
@@ -16,66 +16,66 @@
     "features": [
       {
         "type": "hill",
-        "x": -3.5,
-        "z": 2.5,
-        "radius": 3.6,
+        "x": -2.8,
+        "z": 2,
+        "radius": 2.88,
         "amount": 0.35
       },
       {
         "type": "hill",
-        "x": 3.5,
-        "z": -2.5,
-        "radius": 3.6,
+        "x": 2.8,
+        "z": -2,
+        "radius": 2.88,
         "amount": 0.35
       },
       {
         "type": "channel",
-        "x": -8.8,
-        "z": -5.0,
-        "toX": -2.0,
-        "toZ": -0.6,
+        "x": -7.04,
+        "z": -4,
+        "toX": -1.6,
+        "toZ": -0.48,
         "width": 1.1,
         "amount": 0.42
       },
       {
         "type": "channel",
-        "x": -2.0,
-        "z": -0.6,
-        "toX": 0.8,
-        "toZ": -1.4,
+        "x": -1.6,
+        "z": -0.48,
+        "toX": 0.64,
+        "toZ": -1.12,
         "width": 1.15,
         "amount": 0.40
       },
       {
         "type": "channel",
-        "x": 0.8,
-        "z": -1.4,
-        "toX": 1.8,
-        "toZ": 1.2,
+        "x": 0.64,
+        "z": -1.12,
+        "toX": 1.44,
+        "toZ": 0.96,
         "width": 1.15,
         "amount": 0.42
       },
       {
         "type": "channel",
-        "x": 1.8,
-        "z": 1.2,
-        "toX": 8.8,
-        "toZ": 5.0,
+        "x": 1.44,
+        "z": 0.96,
+        "toX": 7.04,
+        "toZ": 4,
         "width": 1.2,
         "amount": 0.46
       },
       {
         "type": "basin",
-        "x": 0.2,
-        "z": -0.8,
-        "radius": 1.6,
+        "x": 0.16,
+        "z": -0.64,
+        "radius": 1.28,
         "amount": 0.26
       },
       {
         "type": "basin",
-        "x": 2.0,
-        "z": 1.5,
-        "radius": 1.8,
+        "x": 1.6,
+        "z": 1.2,
+        "radius": 1.44,
         "amount": 0.24
       }
     ]
@@ -84,8 +84,8 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": -5.4,
-        "z": -2.8,
+        "x": -4.32,
+        "z": -2.24,
         "dischargePerHour": 0.12
       }
     ],

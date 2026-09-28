@@ -180,16 +180,7 @@ void fragment() {
             float stripe = 0.5;
             // Each tissue family carries a different visible pigment pattern. Keep
             // the markings broad enough to survive the game's normal camera distance.
-            if (leaf_pattern == 1) {
-                // Catalpa: soft, slightly uneven lamina and a powdery pale underside.
-                c *= mix(0.86, 1.10, cells);
-                c = mix(c, c * vec3(1.10, 1.08, 0.85), face * (0.13 + 0.12 * micro));
-            } else if (leaf_pattern == 2) {
-                // Kiteleaf: irregular silvery bloom beneath finer green blades.
-                float bloom = smoothstep(0.33, 0.73, cells);
-                c = mix(c, c * vec3(1.11, 1.12, 1.06), face * (0.16 + bloom * 0.24));
-                c *= 0.91 + 0.17 * bloom;
-            } else if (leaf_pattern == 3) {
+            if (leaf_pattern == 3) {
                 // Ivy-like leaves: lustrous cuticle and conspicuous pale vein fans.
                 float pale_vein = clamp(mid * 0.58 + branch * 0.42, 0.0, 1.0);
                 c = mix(c, c * vec3(1.27, 1.34, 1.14), pale_vein * (1.0 - face) * 0.42);
@@ -209,9 +200,7 @@ void fragment() {
                 c = mix(c, c * vec3(1.06, 1.13, 0.95), edge * 0.22);
             }
             float ridge = venation * (leaf_type == 1 || leaf_type == 4 ? 0.11 : 0.32);
-            if (leaf_pattern == 1) ridge = venation * 0.18 + (micro - 0.5) * 0.025;
-            else if (leaf_pattern == 2) ridge = venation * 0.16;
-            else if (leaf_pattern == 3) ridge = venation * 0.50;
+            if (leaf_pattern == 3) ridge = venation * 0.50;
             else if (leaf_pattern == 4) ridge = venation * 0.06;
             else if (leaf_pattern == 5) ridge = venation * 0.08 + (stripe - 0.5) * 0.10;
             else if (leaf_pattern == 6) ridge = venation * 0.24 + branch * 0.10;
@@ -219,9 +208,7 @@ void fragment() {
             n = surface_normal(wn, world_pos, UV, leaf_n);
             float family_rough = leaf_type == 1 ? 0.78 : leaf_type == 2 ? 0.74 : leaf_type == 3 ? 0.52 : leaf_type == 4 ? 0.46 : leaf_type == 5 ? 0.68 : 0.61;
             rough = clamp(family_rough - cuticle_sheen * 0.13 + (cells - 0.5) * 0.13 + edge * 0.05 + face * 0.06, 0.38, 0.9);
-            if (leaf_pattern == 1) rough = clamp(rough + 0.13 + face * 0.09 + (micro - 0.5) * 0.08, 0.55, 0.98);
-            else if (leaf_pattern == 2) rough = clamp(rough + face * 0.22, 0.45, 0.96);
-            else if (leaf_pattern == 3) rough = clamp(rough - 0.18 * (1.0 - face), 0.28, 0.82);
+            if (leaf_pattern == 3) rough = clamp(rough - 0.18 * (1.0 - face), 0.28, 0.82);
             else if (leaf_pattern == 4) rough = clamp(rough - 0.09 + (cells - 0.5) * 0.08, 0.34, 0.82);
             else if (leaf_pattern == 5) rough = clamp(rough + 0.10, 0.58, 0.96);
             if (leaf_scan_blend > 0.0) {

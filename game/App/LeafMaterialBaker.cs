@@ -16,7 +16,7 @@ public partial class LeafMaterialBaker : Node
         {
             if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("Run --flora-bake with a rendering device; headless cannot serialize GPU texture arrays.");
             string[] ids = Main.ArgAfter("--bake-species")?.Split(',')
-                ?? new[] { "umbraheart", "kiteleaf", "glassfinger" };
+                ?? new[] { "glassfinger" };
             foreach (string id in ids) Bake(id);
             GD.Print("FLORA_BAKE_OK"); GetTree().Quit();
         }

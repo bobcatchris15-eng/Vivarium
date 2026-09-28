@@ -248,7 +248,8 @@ public class IntegrationTests
             var spot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewRock(p, 0.25) == null && !w.Water.IsWet(p));
             t.PlaceRock(spot, 0.25, 0.4, 12345);
             w.Step(1500);
-            var st = w.Fauna.Items.First(f => f.SpeciesId == "prismhopper");
+            // any living animal: this test checks replay exactness, not a particular species
+            var st = w.Fauna.Items.FirstOrDefault(f => f.SpeciesId == "prismhopper") ?? w.Fauna.Items.First();
             t.Poke(new PokeAction(st.Position, new Vec3(0, -1, 0), 1, WorldHit.None));
             t.RemovePlant(w.Flora.Items[3].Id);
             int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();

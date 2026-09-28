@@ -2,7 +2,7 @@
   "id": "isolated_pond",
   "name": "Sunken Caldera",
   "seed": 20485,
-  "diameter": 14,
+  "diameter": 12,
   "cellSize": 0.25,
   "terrain": {
     "baseHeight": 0.52,
@@ -16,41 +16,41 @@
     "features": [
       {
         "type": "ridge",
-        "x": -3.2,
-        "z": -3.5,
-        "toX": 3.2,
-        "toZ": -3.0,
+        "x": -2.74,
+        "z": -3,
+        "toX": 2.74,
+        "toZ": -2.57,
         "width": 2.2,
         "amount": 0.70
       },
       {
         "type": "ridge",
-        "x": -3.2,
-        "z": 3.2,
-        "toX": 3.2,
-        "toZ": 3.5,
+        "x": -2.74,
+        "z": 2.74,
+        "toX": 2.74,
+        "toZ": 3,
         "width": 2.2,
         "amount": 0.65
       },
       {
         "type": "hill",
-        "x": -4.2,
-        "z": 0.0,
-        "radius": 2.8,
+        "x": -3.6,
+        "z": 0,
+        "radius": 2.4,
         "amount": 0.60
       },
       {
         "type": "hill",
-        "x": 4.2,
-        "z": 0.0,
-        "radius": 2.8,
+        "x": 3.6,
+        "z": 0,
+        "radius": 2.4,
         "amount": 0.60
       },
       {
         "type": "basin",
-        "x": 0.0,
-        "z": 0.0,
-        "radius": 3.2,
+        "x": 0,
+        "z": 0,
+        "radius": 2.74,
         "amount": 1.25
       }
     ]
@@ -59,8 +59,8 @@
     "waterTable": 0.0,
     "springs": [
       {
-        "x": -0.5,
-        "z": -2.2,
+        "x": -0.43,
+        "z": -1.89,
         "dischargePerHour": 0.03
       }
     ],

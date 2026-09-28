@@ -24,6 +24,7 @@ uniform float carapace = 0.0;   // clearcoat for hard, glossy exoskeletons
 uniform float scales = 0.0;     // 1 = fish scales + silvery sheen
 uniform float segment_rings = 0.0;   // body segments to mark as faint grooves along UV.x (0 = none)
 uniform float bloom = 0.5;      // waxy/dusty surface bloom: 1 = matte chalky cuticle, 0 = clean
+uniform float preview_time = -1.0; // deterministic respiration in capture tools; live uses TIME
 uniform float wet = 0.0;        // aquatic animals: a thin wet film keeps a soft sheen
 
 varying vec4 genes;
@@ -32,6 +33,7 @@ varying vec2 body_uv;
 varying float seed;
 varying float anim_role;
 varying float motion_amount;
+varying vec3 skin_position;
 
 vec3 hue_rotate(vec3 c, float shift) {
     // rotate hue in YIQ space
@@ -125,12 +127,15 @@ void vertex() {
     float foot_weight = clamp((UV2.y - 1.0) * 4.0, 0.0, 1.0);
     body_uv = UV;
     seed = float(INSTANCE_ID);
+    // Genetic identity is stable when MultiMesh slots are reordered by visibility/death.
+    if (anim_body_style == 2) seed = hash(genes.xy * 213.7 + genes.z * 91.3) * 97.0;
     motion_amount = anim_amplitude * mix(anim_idle_motion, 1.0, speed01);
 
     float body_mask = 1.0 - CUSTOM0.a;
     VERTEX.y *= 1.0 + (genes.y - 0.5) * 0.08 * body_mask;
     VERTEX.z *= 1.0 + (genes.z - 0.5) * 0.07 * body_mask;
 
+    skin_position = VERTEX;
     vec3 attach = VERTEX - CUSTOM0.rgb;
     vec3 off = CUSTOM0.rgb * genes.w;
     if (CUSTOM0.a > 0.5) VERTEX = attach + off;
@@ -241,6 +246,20 @@ void vertex() {
                 off.x += (-crouch * hind * 0.12 - tuck * 0.10 + hop * (1.0 - hind) * 0.06) * pose * flex;
                 off.y += tuck * 0.09 * pose * flex;
                 off.z *= 1.0 - crouch * hind * 0.12 * pose;
+                if (anim_body_style == 2) {
+                    // Extend the folded hind limb at take-off; gather it under the body
+                    // at the apex, then spread the toes and reach the forelegs to land.
+                    float launch = smoothstep(0.0, 0.09, air_t) * (1.0 - smoothstep(0.12, 0.40, air_t)) * airborne;
+                    float landing = smoothstep(0.55, 0.98, air_t) * airborne;
+                    off = CUSTOM0.rgb * genes.w;
+                    float hinge = hind * (-0.20 * crouch + 0.65 * launch - 0.32 * hop)
+                        + (1.0 - hind) * (0.28 * hop - 0.24 * landing);
+                    off = rotate_z(off, hinge * pose);
+                    NORMAL = rotate_z(NORMAL, hinge * pose);
+                    off.x += (-0.10 * launch * hind + 0.055 * landing * (1.0 - hind)) * foot_weight * pose;
+                    off.y += (0.09 * hop * hind + 0.03 * hop * (1.0 - hind)) * foot_weight * pose;
+                    off.z *= 1.0 - 0.16 * hop * hind * pose;
+                }
                 VERTEX = attach + off;
             }
             hop_squash = 1.0 - crouch * 0.18 * pose;
@@ -295,6 +314,20 @@ void vertex() {
         off = rotate_y(off, search * anim_limb_sweep * 0.12 * max(pose, anim_idle_motion));
         off.y += cos(theta * 0.29 + seed) * anim_limb_lift * reach * 0.05 * max(pose, anim_idle_motion);
         VERTEX = attach + off;
+    }
+
+    if (anim_body_style == 2) {
+        float rest_time = preview_time >= 0.0 ? preview_time : TIME;
+        float breath = sin(rest_time * 2.7 + seed * 1.3);
+        float resting = (1.0 - speed01) * anim_amplitude;
+        float trunk = (1.0 - smoothstep(0.08, 0.28, VERTEX.x)) * body_mask;
+        VERTEX.y += breath * 0.0025 * trunk * resting;
+        VERTEX.z *= 1.0 + breath * 0.012 * trunk * resting;
+        if (region > 7.5 && region < 8.5) {
+            float pulse = sin(rest_time * 4.1 + seed);
+            VERTEX.y -= (0.5 + 0.5 * pulse) * 0.007 * resting;
+            VERTEX.z *= 1.0 + (0.5 + 0.5 * pulse) * 0.06 * resting;
+        }
     }
 
     // Apply whole-animal poses after sensory articulation so antennae cannot be left behind in a jump/flight.
@@ -365,6 +398,11 @@ void vertex() {
     }
 }
 
+// Object-space noise follows the skin across separately authored head/limb UV islands.
+float toad_noise(vec3 p) {
+    return (vnoise(p.xy) + vnoise(p.yz + 17.3) + vnoise(p.zx + 31.7)) / 3.0;
+}
+
 void fragment() {
     vec3 base = hue_rotate(base_color, genes.x);
     float density = genes.y, contrast = genes.z;
@@ -406,12 +444,60 @@ void fragment() {
     float rough = mix(0.62, 0.42, carapace) + 0.18 * micro + 0.25 * dullPatch - 0.15 * wear * carapace;
     rough = mix(rough, 0.3, wet * 0.6);
     if (region > 2.5) rough += 0.1;          // bellies, legs and joints are duller
+    if (anim_body_style == 2) {
+        vec3 p = skin_position;
+        float identity = hash(genes.xy * 39.1 + genes.z * 117.3);
+        vec3 olive = vec3(0.16, 0.19, 0.085);
+        vec3 umber = vec3(0.23, 0.15, 0.075);
+        vec3 stone = vec3(0.21, 0.205, 0.16);
+        vec3 skin = mix(olive, umber, smoothstep(0.05, 0.65, identity));
+        skin = mix(skin, stone, smoothstep(0.65, 1.0, identity));
+        skin *= mix(0.78, 1.25, clamp(0.5 + genes.x * 3.0, 0.0, 1.0));
+        vec3 offset = vec3(seed * 0.73, seed * 0.39, seed * 0.57);
+        float blotches = toad_noise(p * mix(18.0, 32.0, density) + offset);
+        float mottling = toad_noise(p * 72.0 + offset);
+        float pores = toad_noise(p * 230.0 + offset);
+        float patch = smoothstep(0.48, 0.63, blotches);
+        float rim = smoothstep(0.40, 0.49, blotches) - patch;
+        col = skin * mix(0.91, 1.16, mottling);
+        col = mix(col, skin * 0.32, patch * mix(0.4, 0.92, contrast));
+        col += rim * vec3(0.040, 0.032, 0.015);
+        // Faint broken dorsal stripe; only some individuals carry it.
+        float stripe = (1.0 - smoothstep(0.007, 0.020, abs(p.z)))
+            * smoothstep(0.25, 0.33, p.y) * smoothstep(0.58, 0.85, identity);
+        col = mix(col, vec3(0.36, 0.30, 0.15), stripe * 0.45);
+        float ventral = 1.0 - smoothstep(0.065, 0.15, p.y);
+        if (region > 7.5) ventral = 1.0;
+        col = mix(col, vec3(0.29, 0.25, 0.18) * mix(0.8, 1.12, mottling), ventral * 0.88);
+        rough = mix(0.68, 0.87, pores) - patch * 0.045;
+        eye = (region > 1.5 && region < 2.5) || (region > 4.5 && region < 6.5);
+        if (eye) {
+            col = region < 2.5 ? vec3(0.13, 0.09, 0.025) : vec3(0.008, 0.010, 0.005);
+            if (region > 4.5 && region < 5.5) {
+                float fibers = vnoise(body_uv * vec2(100.0, 8.0) + seed);
+                col = mix(vec3(0.16, 0.095, 0.026), vec3(0.49, 0.33, 0.09), fibers);
+            }
+        } else if (region > 6.5 && region < 7.5) {
+            col = vec3(0.045, 0.030, 0.017);
+            rough = 0.76;
+        } else {
+            // Screen derivatives turn attached object-space relief into a view-space
+            // surface gradient, without UV seams or texture tangents on procedural tubes.
+            float relief = mottling * 0.00085 + pores * 0.00025;
+            vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
+            vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
+            float det = dot(dx, rx);
+            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief))
+                * sign(det) / max(abs(det), 0.0000001);
+            NORMAL = normalize(NORMAL - gradient * (1.0 - ventral * 0.65));
+        }
+    }
     ALBEDO = col;
     ROUGHNESS = eye ? 0.08 : clamp(rough, 0.25, 0.95);
     SPECULAR = eye ? 0.5 : mix(0.3, 0.45, max(carapace, wet));
     CLEARCOAT = eye ? 0.0 : carapace * (1.0 - dullPatch) * 0.6;
     CLEARCOAT_ROUGHNESS = mix(0.35, 0.7, micro);
-    RIM = mix(0.08, 0.2, wet);
+    RIM = anim_body_style == 2 ? 0.025 : mix(0.08, 0.2, wet);
     RIM_TINT = 0.6;
     BACKLIGHT = vec3(translucency) * col;
 }

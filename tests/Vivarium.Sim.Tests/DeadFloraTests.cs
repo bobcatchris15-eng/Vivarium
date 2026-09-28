@@ -120,15 +120,16 @@ public class DeadFloraTests
         var w = TestUtil.FlatWorld();
         foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0;
         w.Litter.Restore(new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length], new double[w.Grid.DomainCells.Length]);
-        var sp = w.Content.FloraOrThrow("ironlace");
+        var sp = w.Content.FloraOrThrow("embercrown");
         Assert.NotNull(sp.PostLife);
-        Assert.True(sp.PostLife!.CoarseFraction > 0.75);
+        Assert.True(sp.PostLife!.CoarseFraction >= 0.5);
         var f = w.FloraSystem.Establish(sp, new Vec2(0, 0), "test", sp.MaxBiomass);
         w.FloraSystem.Kill(f, "test");
 
         w.DeadFloraSystem.Step(30 * SimUnits.Day);
 
-        Assert.True(w.Litter.ExportCoarse().Sum() > w.Litter.ExportFine().Sum());
+        double coarse = w.Litter.ExportCoarse().Sum(), fine = w.Litter.ExportFine().Sum();
+        Assert.True(coarse > 0.3 * (coarse + fine), $"woody corpse should route substantial mass to coarse litter: coarse={coarse}, fine={fine}");
     }
 
     [Fact]

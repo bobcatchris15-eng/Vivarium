@@ -5,12 +5,8 @@ namespace Vivarium.Sim.Tests;
 public class FloraVisualTests
 {
     [Theory]
-    [InlineData("umbraheart")]
-    [InlineData("kiteleaf")]
     [InlineData("glassfinger")]
     [InlineData("shadebell")]
-    [InlineData("ironlace")]
-    [InlineData("fenneedle")]
     [InlineData("lanternbrush")]
     [InlineData("embercrown")]
     public void DetailTiersRetainLeavesAndStableMaterialIdentity(string id)
@@ -38,12 +34,8 @@ public class FloraVisualTests
     }
 
     [Theory]
-    [InlineData("umbraheart")]
-    [InlineData("kiteleaf")]
     [InlineData("glassfinger")]
     [InlineData("shadebell")]
-    [InlineData("ironlace")]
-    [InlineData("fenneedle")]
     [InlineData("lanternbrush")]
     [InlineData("embercrown")]
     public void SplitPreservesEveryTriangleAndAllLeafMetadata(string id)
@@ -59,11 +51,7 @@ public class FloraVisualTests
     }
 
     [Theory]
-    [InlineData("umbraheart")]
-    [InlineData("kiteleaf")]
     [InlineData("shadebell")]
-    [InlineData("ironlace")]
-    [InlineData("fenneedle")]
     [InlineData("lanternbrush")]
     [InlineData("embercrown")]
     public void ThinBladesHaveOnlyOneAuthoredSide(string id)

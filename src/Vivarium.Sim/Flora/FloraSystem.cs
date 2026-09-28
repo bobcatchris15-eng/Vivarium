@@ -585,28 +585,8 @@ public sealed class FloraSystem
         double rTree = tree.Radius(sp);
         double hTree = sp.Height * (0.45 + 0.55 * Math.Sqrt(tree.BiomassFraction(sp)));
 
-        double forkRelH;
-        double baseBoleRatio;
-        if (sp.Id == "ironlace")
-        {
-            forkRelH = 0.26;
-            baseBoleRatio = 0.075;
-        }
-        else if (sp.Id == "umbraheart")
-        {
-            forkRelH = 0.42;
-            baseBoleRatio = 0.135;
-        }
-        else if (sp.Id == "fenneedle")
-        {
-            forkRelH = 0.40;
-            baseBoleRatio = 0.080;
-        }
-        else
-        {
-            forkRelH = 0.28;
-            baseBoleRatio = 0.085;
-        }
+        const double forkRelH = 0.28;
+        const double baseBoleRatio = 0.085;
 
         double forkH = forkRelH * hTree;
         double trunkTop = ground + Math.Max(forkH, hTree * 0.70);

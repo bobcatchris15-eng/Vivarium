@@ -78,22 +78,6 @@
       "type": "neutral"
     },
     {
-      "a": "shadebell",
-      "b": "umbraheart",
-      "type": "benefit",
-      "radius": 2.2,
-      "bonus": 0.2,
-      "reason": "Umbraheart canopy creates the cool partial shade Shadebell prefers."
-    },
-    {
-      "a": "shadebell",
-      "b": "kiteleaf",
-      "type": "benefit",
-      "radius": 2,
-      "bonus": 0.12,
-      "reason": "An airy Kiteleaf crown supplies partial cover without eliminating the understory light."
-    },
-    {
       "a": "floodlace_moss",
       "b": "lanternbrush",
       "type": "benefit",

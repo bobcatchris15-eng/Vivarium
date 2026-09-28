@@ -231,10 +231,10 @@ public static class SaveSystem
 
         try
         {
-            var w = WorldSerializer.Deserialize(content, payloads);
+            var w = WorldSerializer.Deserialize(content, payloads, out int droppedRemoved);
             w.Clock.SetSpeedIndex(m.SpeedIndex);
             w.Clock.Paused = m.Paused;
-            if (compat == SaveCompatibility.Current && !string.IsNullOrEmpty(m.StateDigest))
+            if (compat == SaveCompatibility.Current && droppedRemoved == 0 && !string.IsNullOrEmpty(m.StateDigest))
             {
                 string digest = WorldSerializer.Digest(w);
                 if (digest != m.StateDigest) return LoadResult.Fail("save state digest mismatch after load (file damaged or content changed)", compat, m);

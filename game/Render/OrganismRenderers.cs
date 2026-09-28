@@ -109,7 +109,7 @@ public partial class FloraRenderer : Node3D
                 bool castShadow = Quality >= 1 && canCastShadow;
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full);
-                if (sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null || profile != null && sp.Id == "umbraheart")
+                if (sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null)
                 {
                     var young = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null);
                     vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", profile == null ? Bridge.ToArrayMesh(young, mat) : profile.Compile(young, mat, leafMat!), castShadow);

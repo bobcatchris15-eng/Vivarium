@@ -1,8 +1,0 @@
-{
-  "species": "kiteleaf", "veins": "pinnate", "volumetric": false,
-  "top": [0.075,0.19,0.065], "back": [0.16,0.21,0.16],
-  "roughness": 0.58, "backRoughness": 0.84, "transmission": 0.24,
-  "relief": 0.27, "veinStrength": 0.34, "wind": 0.035,
-  "tissueScale": 1.1, "canopyOcclusion": 0.18,
-  "bark": "Bark013", "barkTint": [0.58,0.59,0.56]
-}

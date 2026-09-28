@@ -54,10 +54,6 @@ internal static class FloraSurfaceProfiles
     // Values are linear-light reflectance targets, not the intentionally vivid simulation palette.
     private static LeafSurface Leaf(string id) => id switch
     {
-        "ironlace" => new(new(.065f, .155f, .045f), new(.12f, .18f, .075f), 0, .76f, .28f, .25f),
-        "umbraheart" => new(new(.035f, .13f, .035f), new(.14f, .18f, .075f), 0, .58f, .23f, .30f),
-        "kiteleaf" => new(new(.075f, .19f, .08f), new(.16f, .21f, .16f), 0, .48f, .36f, .22f),
-        "fenneedle" => new(new(.075f, .16f, .095f), new(.12f, .18f, .11f), 1, .14f, .18f, .18f),
         "embercrown" => new(new(.055f, .13f, .032f), new(.14f, .17f, .07f), 0, .42f, .40f, .24f),
         "lanternbrush" => new(new(.055f, .13f, .11f), new(.15f, .20f, .14f), 0, .54f, .31f, .25f),
         "shadebell" => new(new(.025f, .095f, .048f), new(.12f, .16f, .09f), 0, .55f, .32f, .22f),
@@ -88,15 +84,13 @@ internal static class FloraSurfaceProfiles
     };
 
     // Broad pigment and cuticle patterns are separate from the shared leaf silhouette.
-    // 0 plain, 1 soft catalpa, 2 glaucous two-tone, 3 glossy ivy,
+    // 0 plain, 3 glossy ivy (1, 2 retired),
     // 4 fleshy bloom, 5 parallel-striate, 6 finely veined fern.
     private static int LeafPattern(string id) => id switch
     {
-        "umbraheart" => 1,
-        "kiteleaf" => 2,
         "clinglace" or "spiralvine" => 3,
         "fenhook" or "glassfinger" or "sunstone_rosette" or "mooncoin" => 4,
-        "fenneedle" or "glassrush" or "ringreed" or "frosttussock" or "streamribbon" or "veilblade" or "kinkcane" => 5,
+        "glassrush" or "ringreed" or "frosttussock" or "streamribbon" or "veilblade" or "kinkcane" => 5,
         "veilfern" => 6,
         _ => 0,
     };
@@ -107,10 +101,6 @@ internal static class FloraSurfaceProfiles
     // UV.x follows petiole-to-tip and UV.y runs from one blade edge to the other.
     private static LeafScan? Scan(string id) => id switch
     {
-        "umbraheart" => new("UmbraheartLeaf", new(.44f, .70f, .22f, -.20f), true,
-            new(.55f, .85f, 1.10f), .78f, .70f),
-        "kiteleaf" => new("KiteleafLeaf", new(.17f, .065f, -.09f, .045f), false,
-            new(.85f, 1.10f, 1.25f), .78f, .48f),
         "glassfinger" => new("GlassfingerLeaf", new(.36f, .12f, -.15f, .06f), false,
             new(1.12f, 1.55f, 1.55f), .82f, .58f),
         _ => null,
@@ -118,10 +108,6 @@ internal static class FloraSurfaceProfiles
 
     private static (string Asset, float Repeats, float Weathering, Vector3 Tint) Bark(string id) => id switch
     {
-        "kiteleaf" => ("Bark013", 1.55f, .30f, new(.58f, .59f, .56f)),
-        "ironlace" => ("Bark001", 1.85f, .46f, new(.48f, .46f, .42f)),
-        "umbraheart" => ("Bark014", 1.25f, .58f, new(.72f, .69f, .61f)),
-        "fenneedle" => ("Bark014", 2.65f, .22f, new(.68f, .70f, .63f)),
         "embercrown" => ("Bark001", 2.8f, .34f, new(.47f, .38f, .33f)),
         "lanternbrush" => ("Bark014", 3.1f, .18f, new(.38f, .29f, .27f)),
         "shadebell" => ("Bark013", 2.85f, .25f, new(.35f, .34f, .32f)),

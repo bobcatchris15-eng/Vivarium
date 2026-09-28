@@ -510,11 +510,13 @@ public class FloraTests
         Assert.Equal(4, w.FloraSystem.WoodyPopulationCap(WoodyLayer.Tree));   // 10 m hex ≈ 65 m² / 15
         Assert.Equal(16, w.FloraSystem.WoodyPopulationCap(WoodyLayer.Shrub));
 
-        var tree = Sp("ironlace");
-        foreach (double x in new[] { -3.0, -1.0, 1.0, 3.0 })
-            w.FloraSystem.Establish(tree, new Vec2(x, 0), "budget fixture", tree.MaxBiomass);
-        Assert.Equal(4, w.FloraSystem.WoodyPopulation(WoodyLayer.Tree));
-        Assert.False(w.FloraSystem.CanEstablish(Sp("umbraheart"), new Vec2(0, 2.5), out var why));
+        var shrub = Sp("embercrown");
+        foreach (double x in new[] { -2.25, -0.75, 0.75, 2.25 })
+            foreach (double z in new[] { -2.25, -0.75, 0.75, 2.25 })
+                w.FloraSystem.Establish(shrub, new Vec2(x, z), "budget fixture", shrub.MaxBiomass);
+        Assert.Equal(16, w.FloraSystem.WoodyPopulation(WoodyLayer.Shrub));
+        Assert.Equal(0, w.FloraSystem.WoodyPopulation(WoodyLayer.Tree));
+        Assert.False(w.FloraSystem.CanEstablish(Sp("lanternbrush"), new Vec2(0, 3.6), out var why));
         Assert.Contains("carrying limit", why);
     }
 
@@ -523,27 +525,27 @@ public class FloraTests
     {
         var w = TestUtil.FlatWorld(52);
         TestUtil.Condition(w, 0.62, 0.7, 1.0);
-        var locust = Sp("ironlace");
-        w.FloraSystem.Establish(locust, Vec2.Zero, "fixture", locust.MaxBiomass);
-        Assert.False(w.FloraSystem.CanEstablish(Sp("umbraheart"), new Vec2(0.6, 0), out var why));
+        var anchor = Sp("embercrown");
+        w.FloraSystem.Establish(anchor, Vec2.Zero, "fixture", anchor.MaxBiomass);
+        Assert.False(w.FloraSystem.CanEstablish(Sp("lanternbrush"), new Vec2(0.3, 0), out var why));
         Assert.Contains("too close", why);
-        Assert.True(w.FloraSystem.CanEstablish(Sp("umbraheart"), new Vec2(2.2, 0), out why), why);
+        Assert.True(w.FloraSystem.CanEstablish(Sp("lanternbrush"), new Vec2(2.2, 0), out why), why);
     }
 
     [Fact]
-    public void MatureTreeCanopyShadesFloraCoverageAndAquaticLightPath()
+    public void MatureShrubCanopyShadesFloraCoverageAndAquaticLightPath()
     {
         var w = TestUtil.FlatWorld(53);
         TestUtil.Condition(w, 0.65, 0.7, 1.0);
-        var catalpa = Sp("umbraheart");
+        var catalpa = Sp("shadebell");
         w.FloraSystem.Establish(catalpa, Vec2.Zero, "fixture", catalpa.MaxBiomass);
 
         double under = w.FloraSystem.EffectiveLight(new Vec2(0.1, 0));
         double open = w.FloraSystem.EffectiveLight(new Vec2(3.5, 0));
-        Assert.True(under < open - 0.45, $"catalpa shade should be strong: under={under:0.00}, open={open:0.00}");
+        Assert.True(under < open - 0.2, $"shadebell shade should be strong: under={under:0.00}, open={open:0.00}");
         Assert.Equal(under, Vivarium.Sim.Coverage.CoverageEnvironment.Sample(w, new Vec2(0.1, 0)).Light, 10);
 
-        foreach (var id in new[] { "ironlace", "umbraheart", "fenneedle", "kiteleaf", "embercrown" })
+        foreach (var id in new[] { "embercrown", "lanternbrush", "shadebell" })
             Assert.True(OrganismMeshes.Flora(Sp(id)).TriangleCount > 100, $"{id} should have a structural procedural mesh");
     }
 
@@ -626,7 +628,7 @@ public class FloraTests
     {
         var w = TestUtil.FlatWorld(62);
         TestUtil.Condition(w, 0.62, 0.9, 0.75);
-        var supportSp = Sp("umbraheart");
+        var supportSp = Sp("shadebell");
         var support = w.FloraSystem.Establish(supportSp, new Vec2(1.8, 0), "support", supportSp.MaxBiomass);
         support.Age = supportSp.MaturityAge;
         var vineSp = Sp("clinglace");
@@ -642,7 +644,7 @@ public class FloraTests
     [Fact]
     public void FictionalStructuralGuildHasDistinctShrubAndClimberMeshes()
     {
-        foreach (var id in new[] { "ironlace", "umbraheart", "fenneedle", "kiteleaf", "embercrown", "lanternbrush", "shadebell", "clinglace", "spiralvine", "fenhook" })
+        foreach (var id in new[] { "embercrown", "lanternbrush", "shadebell", "clinglace", "spiralvine", "fenhook" })
             Assert.True(OrganismMeshes.Flora(Sp(id)).TriangleCount > 20, $"{id} should have visible procedural geometry");
     }
 

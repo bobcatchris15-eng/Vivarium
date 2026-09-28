@@ -205,6 +205,24 @@ public static class WorldSerializer
     /// with an explanation on any missing, corrupt or inconsistent data. Never touches another world.
     /// </summary>
     public static VivariumWorld Deserialize(ContentLibrary content, IReadOnlyDictionary<string, byte[]> payloads)
+        => Deserialize(content, payloads, out _);
+
+    /// <param name="droppedRemoved">Entries of <see cref="RemovedFloraSpecies"/> dropped on load; when non-zero the state digest legitimately differs from the saved one.</param>
+    public static VivariumWorld Deserialize(ContentLibrary content, IReadOnlyDictionary<string, byte[]> payloads, out int droppedRemoved)
+    {
+        bool prior = WorldDescriptor.AllowLegacyDiameter;
+        WorldDescriptor.AllowLegacyDiameter = true;
+        try { return DeserializeCore(content, payloads, out droppedRemoved); }
+        finally { WorldDescriptor.AllowLegacyDiameter = prior; }
+    }
+
+    /// <summary>Flora species retired from content; saves containing them drop those entries on load.</summary>
+    public static readonly IReadOnlySet<string> RemovedFloraSpecies = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "umbraheart", "kiteleaf", "ironlace", "fenneedle",
+    };
+
+    private static VivariumWorld DeserializeCore(ContentLibrary content, IReadOnlyDictionary<string, byte[]> payloads, out int droppedRemoved)
     {
         foreach (var name in PayloadOrder)
             if (!payloads.ContainsKey(name)) throw new InvalidDataException($"save is missing the '{name}' payload");
@@ -292,13 +310,23 @@ public static class WorldSerializer
         if (cp.Stability != null) CoverageEnvironment.StabilityOf(w).ImportDomainValues(Unpack(cp.Stability, "substrate stability"));
         if (cp.MoistureBonus != null) CoverageEnvironment.MoistureBonusOf(w).ImportDomainValues(Unpack(cp.MoistureBonus, "moisture bonus"));
 
-        foreach (var f in Read<FloraPayload>(payloads, "flora").Items.OrderBy(f => f.Id.Value)) w.Flora.Add(f);
-        foreach (var d in Read<DeadFloraPayload>(payloads, "dead_flora").Items.OrderBy(d => d.Id.Value)) w.DeadFlora.Add(d);
-        foreach (var lot in Read<SeedBankPayload>(payloads, "seed_bank").Lots) w.SeedBank.Lots.Add(lot);
+        int dropped = 0;
+        bool Removed(string speciesId)
+        {
+            if (!RemovedFloraSpecies.Contains(speciesId) || content.FloraById(speciesId) != null) return false;
+            dropped++;
+            return true;
+        }
+        foreach (var f in Read<FloraPayload>(payloads, "flora").Items.OrderBy(f => f.Id.Value)) if (!Removed(f.SpeciesId)) w.Flora.Add(f);
+        foreach (var d in Read<DeadFloraPayload>(payloads, "dead_flora").Items.OrderBy(d => d.Id.Value)) if (!Removed(d.SpeciesId)) w.DeadFlora.Add(d);
+        foreach (var lot in Read<SeedBankPayload>(payloads, "seed_bank").Lots) if (!Removed(lot.SpeciesId)) w.SeedBank.Lots.Add(lot);
         foreach (var f in Read<FaunaPayload>(payloads, "fauna").Items.OrderBy(f => f.Id.Value)) w.Fauna.Add(f);
         var gp = Read<GeneticsPayload>(payloads, "genetics");
         foreach (var g in gp.Genomes) w.Genomes.Add(g);
-        foreach (var r in gp.Lineage) w.Lineage.Add(r);
+        foreach (var r in gp.Lineage) if (!Removed(r.SpeciesId)) w.Lineage.Add(r);
+        droppedRemoved = dropped;
+        if (dropped > 0)
+            Log.Warn(LogCategory.Persistence, $"Save migration dropped {dropped} entr{(dropped == 1 ? "y" : "ies")} of removed flora species ({string.Join(", ", RemovedFloraSpecies.OrderBy(s => s, StringComparer.Ordinal))}).");
 
         Validate(w);
         w.Fields.RecomputeLight(w.Terrain, w.Props);
