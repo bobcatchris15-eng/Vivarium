@@ -657,32 +657,40 @@ public static partial class OrganismMeshes
 
                 // Flared sheath collar with dark tooth rim
                 int sStart = m.VertexCount;
-                const int sSides = 10;
-                for (int si = 0; si <= sSides; si++)
+                int sSides = m.Lod?.Sides(10) ?? 10;
+                // Preserve recognizable joint bands at every tier; distant stalks keep
+                // a representative central sheath rather than erasing all dark nodes.
+                int sheathStep = m.Lod == null ? 1 : m.Lod.LeafFraction < 0.08 ? 4 : m.Lod.LeafFraction < 0.30 ? 2 : 1;
+                bool showSheath = j % sheathStep == 0;
+                if (showSheath)
                 {
-                    double th = 2 * Math.PI * si / sSides;
-                    var nrm = new Vec3(Math.Cos(th), 0, Math.Sin(th));
-                    var pBase = collar - Vec3.Up * (sheathH * 0.5) + nrm * (r * 1.04);
-                    var pMid = collar + nrm * (r * 1.12);
-                    // Pointed appressed black teeth
-                    bool isTooth = (si % 2 == 1);
-                    var pTop = collar + Vec3.Up * (sheathH * (isTooth ? 0.65 : 0.40)) + nrm * (r * (isTooth ? 1.08 : 1.18));
+                    for (int si = 0; si <= sSides; si++)
+                    {
+                        double th = 2 * Math.PI * si / sSides;
+                        var nrm = new Vec3(Math.Cos(th), 0, Math.Sin(th));
+                        var pBase = collar - Vec3.Up * (sheathH * 0.5) + nrm * (r * 1.04);
+                        var pMid = collar + nrm * (r * 1.12);
+                        // Pointed appressed black teeth
+                        bool isTooth = ((si % sSides) % 2 == 1);
+                        var pTop = collar + Vec3.Up * (sheathH * (isTooth ? 0.65 : 0.40)) + nrm * (r * (isTooth ? 1.08 : 1.18));
 
-                    m.AddVertex(pBase, nrm, sheathCol, 1.0, (double)si / sSides, 0.0, 0, 0);
-                    m.AddVertex(pMid, nrm, sheathCol, 1.0, (double)si / sSides, 0.5, 0, 0);
-                    m.AddVertex(pTop, nrm, isTooth ? sheathTeethCol : sheathCol, 1.0, (double)si / sSides, 1.0, 0, 0);
-                }
-                for (int si = 0; si < sSides; si++)
-                {
-                    int a = sStart + si * 3;
-                    int b = a + 3;
-                    Primitives.TriangleFacing(m, a, b, a + 1, Vec3.Up);
-                    Primitives.TriangleFacing(m, b, b + 1, a + 1, Vec3.Up);
-                    Primitives.TriangleFacing(m, a + 1, b + 1, a + 2, Vec3.Up);
-                    Primitives.TriangleFacing(m, b + 1, b + 2, a + 2, Vec3.Up);
+                        m.AddVertex(pBase, nrm, sheathCol, 1.0, (double)si / sSides, 0.0, 0, 0);
+                        m.AddVertex(pMid, nrm, sheathCol, 1.0, (double)si / sSides, 0.5, 0, 0);
+                        m.AddVertex(pTop, nrm, isTooth ? sheathTeethCol : sheathCol, 1.0, (double)si / sSides, 1.0, 0, 0);
+                    }
+                    for (int si = 0; si < sSides; si++)
+                    {
+                        int a = sStart + si * 3;
+                        int b = a + 3;
+                        Primitives.TriangleFacing(m, a, b, a + 1, Vec3.Up);
+                        Primitives.TriangleFacing(m, b, b + 1, a + 1, Vec3.Up);
+                        Primitives.TriangleFacing(m, a + 1, b + 1, a + 2, Vec3.Up);
+                        Primitives.TriangleFacing(m, b + 1, b + 2, a + 2, Vec3.Up);
+                    }
+                    m.EssentialSpans.Add((sStart, m.VertexCount - sStart));
                 }
 
-                // Drooping branchlet whorls from sheath base (tiers 2 through 6)
+// Drooping branchlet whorls from sheath base (tiers 2 through 6)
                 if (j >= 2 && j <= 6)
                 {
                     int whorlCount = 8 + rng.NextInt(5);
@@ -714,7 +722,7 @@ public static partial class OrganismMeshes
                 double coneR = 0.024 * (1.0 + rng.Range(-0.15, 0.15));
 
                 int coneStart = m.VertexCount;
-                const int cRings = 7, cSides = 10;
+                int cRings = m.Lod?.Segments(7) ?? 7, cSides = m.Lod?.Sides(10) ?? 10;
                 for (int cr = 0; cr <= cRings; cr++)
                 {
                     double ct = (double)cr / cRings;
@@ -728,7 +736,7 @@ public static partial class OrganismMeshes
                     {
                         double th = 2 * Math.PI * cs / cSides;
                         // Hexagonal scale faceting
-                        double scaleFacet = 0.003 * Math.Cos(cs * 5.0 + cr * 3.0);
+                        double scaleFacet = 0.003 * Math.Cos(th * 5.0 + cr * 3.0);
                         var nrm = new Vec3(Math.Cos(th), 0.2 * (ct - 0.5), Math.Sin(th)).Normalized();
                         var p = apex + new Vec3(Math.Cos(th) * (rad + scaleFacet), y, Math.Sin(th) * (rad + scaleFacet));
                         m.AddVertex(p, nrm, ringCol, 1.0, (double)cs / cSides, ct, 0, 0);
@@ -744,6 +752,8 @@ public static partial class OrganismMeshes
                         Primitives.TriangleFacing(m, a + 1, c, c + 1, Vec3.Up);
                     }
                 }
+                // A spore cone identifies the fertile culm even at reduced tessellation.
+                m.EssentialSpans.Add((coneStart, m.VertexCount - coneStart));
             }
         }
     }

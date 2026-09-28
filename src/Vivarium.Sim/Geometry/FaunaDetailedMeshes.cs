@@ -22,13 +22,10 @@ public static partial class OrganismMeshes
         var points = new List<Vec3>(); var widths = new List<double>();
         for (int k = 0; k < path.Length - 1; k++)
         {
-            var a = path[Math.Max(0, k - 1)]; var b = path[k];
-            var c = path[k + 1]; var d = path[Math.Min(path.Length - 1, k + 2)];
             for (int j = 0; j < 3; j++)
             {
-                double t = j / 3.0, tt = t * t, ttt = tt * t;
-                points.Add((b * 2 + (c - a) * t + (a * 2 - b * 5 + c * 4 - d) * tt
-                    + (-a + b * 3 - c * 3 + d) * ttt) * 0.5);
+                double t = j / 3.0;
+                points.Add(FaunaCurvePoint(path, k, t));
                 widths.Add(MathD.Lerp(radii[k], radii[k + 1], t));
             }
         }
@@ -36,6 +33,15 @@ public static partial class OrganismMeshes
         int first = m.VertexCount;
         Appendage(m, points, widths, sides, region, role);
         AttachSpan(m, first, root, role, distal);
+    }
+
+    private static Vec3 FaunaCurvePoint(Vec3[] path, int segment, double t)
+    {
+        var a = path[Math.Max(0, segment - 1)]; var b = path[segment];
+        var c = path[segment + 1]; var d = path[Math.Min(path.Length - 1, segment + 2)];
+        double tt = t * t, ttt = tt * t;
+        return (b * 2 + (c - a) * t + (a * 2 - b * 5 + c * 4 - d) * tt
+            + (-a + b * 3 - c * 3 + d) * ttt) * 0.5;
     }
 
     private static void SensoryEye(MeshData m, Vec3 centre, Vec3 radii, Vec3 root)
@@ -143,22 +149,8 @@ public static partial class OrganismMeshes
         // A flattened muscular sole beneath a tapered visceral mass and oval mantle.
         BodySegment(m, new Vec3(-0.025, 0.028, 0), new Vec3(0.46, 0.027, 0.14), 24, 28,
             (a, b) => Region(a, b, 3));
-        var path = new List<Vec3>(); var radii = new List<double>();
-        for (int k = 0; k <= 44; k++)
-        {
-            double t = k / 44.0;
-            double r = 0.004 + 0.091 * Math.Pow(Math.Sin(Math.PI * t), 0.55);
-            path.Add(new Vec3(0.42 - t * 0.91, 0.040 + r * 0.68, 0));
-            radii.Add(r);
-        }
-        int start = m.VertexCount;
-        Primitives.Tube(m, path, radii, 24, (i, v) => Region(1 - i / 44.0, v, 1), Vec3.Up);
-        // Elliptical sections keep the flank smooth while resting on the muscular sole.
-        for (int i = start; i < m.VertexCount; i++)
-        {
-            int sample = Math.Min(44, (i - start) / 25);
-            m.Positions[i * 3 + 1] = (float)(path[sample].Y + (m.Position(i).Y - path[sample].Y) * 0.68);
-        }
+        BodySegment(m, new Vec3(-0.065, 0.098, 0), new Vec3(0.405, 0.092, 0.125), 28, 32,
+            (a, b) => Region(a, b, 1));
         BodySegment(m, new Vec3(0.075, 0.155, 0), new Vec3(0.195, 0.052, 0.098), 20, 28,
             (a, b) => Region(a, b, 5));
         BodySegment(m, new Vec3(0.32, 0.090, 0), new Vec3(0.12, 0.060, 0.10), 16, 24,
@@ -337,12 +329,17 @@ public static partial class OrganismMeshes
             Wing(new Vec3(-0.005, 0.147, 0.048 * side), side, false);
             var root = new Vec3(0.32, 0.173, 0.030 * side);
             var tip = root + new Vec3(0.23, 0.082, 0.13 * side);
-            DetailedTube(m, root, new[] { root, root + new Vec3(0.10, 0.055, 0.06 * side), tip },
+            var shaft = new[] { root, root + new Vec3(0.10, 0.055, 0.06 * side), tip };
+            DetailedTube(m, root, shaft,
                 new[] { 0.006, 0.004, 0.001 }, role: 3, sides: 6);
             for (int k = 1; k < 13; k++)
             {
                 double t = k / 13.0;
-                var p = Vec3.Lerp(root, tip, t);
+                // Attach to the actual tessellated shaft, not its endpoint chord.
+                double sample = t * 6;
+                int lo = (int)Math.Floor(sample), hi = Math.Min(6, lo + 1);
+                Vec3 At(int index) => index == 6 ? tip : FaunaCurvePoint(shaft, index / 3, (index % 3) / 3.0);
+                var p = Vec3.Lerp(At(lo), At(hi), sample - lo);
                 foreach (double direction in new[] { -1.0, 1.0 })
                     DetailedTube(m, root, new[] { p, p + new Vec3(-0.015 * direction, 0.004, 0.030 * direction * side * Math.Sin(Math.PI * t)) },
                         new[] { 0.002, 0.0006 }, role: 3, sides: 4);

@@ -25,6 +25,8 @@ public sealed class MeshData
     public readonly List<(int FirstVertex, int VertexCount, int Sides, double Radius)> Structural = new();
     /// <summary>Vertex spans of every leaf blade, recorded regardless of <see cref="FloraDetailLevel"/>.</summary>
     public readonly List<(int FirstVertex, int VertexCount)> LeafSpans = new();
+    /// <summary>Small silhouette/anatomy features that must survive loose-piece LOD culling.</summary>
+    public readonly List<(int FirstVertex, int VertexCount)> EssentialSpans = new();
 
     public void RecordLeaf(int vertex, int index, Vec3 attachment, double length, bool volumetric = false)
     {

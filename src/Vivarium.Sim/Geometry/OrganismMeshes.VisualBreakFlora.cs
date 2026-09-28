@@ -566,6 +566,8 @@ public static partial class OrganismMeshes
         Array.Fill(owner, -1);
         foreach (var st in src.Structural)
             for (int v = st.FirstVertex; v < st.FirstVertex + st.VertexCount && v < nv; v++) owner[v] = -2;
+        foreach (var span in src.EssentialSpans)
+            for (int v = span.FirstVertex; v < span.FirstVertex + span.VertexCount && v < nv; v++) owner[v] = -2;
         int parts = 0;
         foreach (var ls in src.LeafSpans)
         {
@@ -685,6 +687,8 @@ public static partial class OrganismMeshes
             if (st.FirstVertex < nv && map[st.FirstVertex] >= 0) dst.Structural.Add((map[st.FirstVertex], st.VertexCount, st.Sides, st.Radius));
         foreach (var ls in src.LeafSpans)
             if (ls.FirstVertex < nv && map[ls.FirstVertex] >= 0) dst.LeafSpans.Add((map[ls.FirstVertex], ls.VertexCount));
+        foreach (var span in src.EssentialSpans)
+            if (span.FirstVertex < nv && map[span.FirstVertex] >= 0) dst.EssentialSpans.Add((map[span.FirstVertex], span.VertexCount));
         return dst;
     }
 }

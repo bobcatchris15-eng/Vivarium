@@ -115,3 +115,14 @@ Rainspine has a low flattened head with separate small eyes, irises, pupils, mou
 The salamander-only skin uses stable inherited ornament density/pattern strength to choose eight palette families (black/yellow, blue/cyan, red/dark, black/orange, green/cream, violet, cream/brown and black/ivory) and five marking families (spots, dorsal stripe, transverse bands, blotches and sparse flecks). Hue shift and pattern strength further vary the result. Texture coordinates are attached model-space positions, and pattern hashes avoid the hue channel that packs live steering: culling, draw order and steering do not reseed markings. Fine pores, subdued folds and varied roughness give the skin a moist finish. Idle breathing fades during travel.
 
 Rainspine's normal preview includes twelve appearance samples and idle captures. `--fauna-preview rainspine --live-motion --output ABS_DIR` exercises actual fauna behaviour, scheduler interpolation and the production renderer at slow and fast travel, then a stop. Its JSON trace includes body length and cycles per body for checking phase against shown distance.
+
+
+## Larger fauna detail pass
+
+Detailed anatomy for Siltshield, Stiltclaw, Rustcoil, Loamthread, Dewmantle, Glasscoil, Reedjaw and Moonveil lives in `FaunaDetailedMeshes.cs`. These meshes include rigid shield/shell regions, small separate eyes, jointed legs and claws, muscular soles, sensory tentacles, modeled worm annuli/clitellum, larval wing pads/gills, and four curved moth wings with thoracic pile and feathered antennae. Tiny fauna retain their simpler meshes.
+
+Species-specific materials use stable genetic palette/pattern selection and attached model-space relief: mottling, saddles, stripes, bands, shell growth lines, pores and wing scales/veins. The unencoded genetic channels determine identity, so turning and draw-slot changes do not reseed markings. `FaunaBodyProfiles` now binds the same surface settings for production and review captures.
+
+Walkers retain their last support pose when stopping. Millipede toes preserve their touchdown wave during stance and suppress axial roll; the shield and shell stay rigid. Loamthread now uses 3.2 compression cycles per body length and no idle beat: supporting annuli cancel forward translation while recovering annuli bunch forward. Its recovery compression stays positive to prevent tube inversion. These are procedural contact approximations, without terrain-aware foot IK or simulation-driven muscle physics.
+
+`--fauna-preview large --output ABS_DIR` captures the eight animals with six appearance samples each. Add `--live-motion` for 240 frames per species through actual fauna behavior, scheduler and production renderer, with water for aquatic species: slow travel, faster travel, then a stop. JSON traces record shown positions, body length and gait phase. Flight and paddling retain an idle beat; the worm and walkers stop their locomotion clock at rest.

@@ -48,6 +48,31 @@ public class LargeFaunaVisualTests
     }
 
     [Fact]
+    public void AntennalFeathersMeetTheCurvedShaftAfterInheritedMorphing()
+    {
+        var m = OrganismMeshes.Fauna(TestUtil.Content.FaunaOrThrow("moonveil"), 1234);
+        var sensory = m.Structural.Where(s => m.UV2[s.FirstVertex * 2 + 1] == 3).ToArray();
+        var shafts = sensory.Where(s => s.Radius > 0.004).Select(s =>
+            Enumerable.Range(0, s.VertexCount / (s.Sides + 1)).Select(row =>
+                Enumerable.Range(0, s.Sides).Select(k => m.Position(s.FirstVertex + row * (s.Sides + 1) + k))
+                    .Aggregate(Vivarium.Sim.Core.Vec3.Zero, (sum, p) => sum + p) / s.Sides).ToArray()).ToArray();
+        var feathers = sensory.Where(s => s.Radius < 0.004).ToArray();
+        Assert.Equal(2, shafts.Length); Assert.NotEmpty(feathers);
+        foreach (var feather in feathers)
+        {
+            var root = Enumerable.Range(0, feather.Sides).Select(k => m.Position(feather.FirstVertex + k))
+                .Aggregate(Vivarium.Sim.Core.Vec3.Zero, (sum, p) => sum + p) / feather.Sides;
+            double gap = shafts.SelectMany(shaft => shaft.Zip(shaft.Skip(1), (a, b) =>
+            {
+                var axis = b - a;
+                var nearest = a + axis * Math.Clamp((root - a).Dot(axis) / axis.LengthSq, 0, 1);
+                return (root - nearest).Length;
+            })).Min();
+            Assert.True(gap < 0.001, $"Antennal feather floats {gap} from the shaft");
+        }
+    }
+
+    [Fact]
     public void HarvestmanHasEightLegsAndSeparateSensoryAppendages()
     {
         var m = OrganismMeshes.Fauna(TestUtil.Content.FaunaOrThrow("stiltclaw"), 1234);
