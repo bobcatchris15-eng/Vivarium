@@ -250,11 +250,14 @@ public sealed class CoverageLayer
 
     /// <summary>Rebuilds a tile from saved arrays. Used by <c>WorldSerializer</c>; not for general use.</summary>
     public void ImportTile(int ti, int tj, byte[] occ, float[] b, byte[] w, ushort[] age, byte[] dorm, byte[] flags, byte[] d2e,
-        bool steady = false, int skippedPhysiologySteps = 0, double envMoistureCache = double.NaN)
+        bool steady = false, int skippedPhysiologySteps = 0, double envMoistureCache = double.NaN,
+        byte[]? vigour = null, byte[]? growthWater = null)
     {
         var t = new CoverageTile(ti, tj)
         {
             Occ = occ, B = b, W = w, Age = age, Dorm = dorm, Flags = flags, D2E = d2e,
+            Vigour = vigour ?? new byte[CoverageTile.N],
+            GW = growthWater ?? new byte[CoverageTile.N],
             Steady = steady,
             SkippedPhysiologySteps = skippedPhysiologySteps,
             EnvMoistureCache = envMoistureCache,
