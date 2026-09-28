@@ -233,12 +233,73 @@ public sealed class Hydrology
 
     public void Step(double dt)
     {
-        // sub-steps are bounded in seconds, not just by count: a pool can only find its level as fast as
-        // EqualizeFraction per sub-step allows, so long ticks need more of them.
-        int sub = Math.Max(Math.Max(1, Config.SubSteps), (int)Math.Ceiling(dt / MaxSubStepSeconds));
+        int sub = ComputeSubSteps(dt);
         double h = dt / sub;
         for (int s = 0; s < sub; s++) SubStep(h);
         InvalidateWaterDistance();
+    }
+
+    /// <summary>
+    /// Picks the fewest sub-steps that keep every wet face's Manning-limited transfer within the
+    /// EqualizeFraction stability bound at the full tick length, instead of always assuming the worst case
+    /// (a fixed dt/MaxSubStepSeconds cap regardless of how much water is actually moving). The legacy cap is
+    /// kept as an upper bound, so this can only ever reduce sub-step count, never exceed the old behaviour.
+    /// </summary>
+    private int ComputeSubSteps(double dt)
+    {
+        int floor = Math.Max(1, Config.SubSteps);
+        int legacyCap = Math.Max(floor, (int)Math.Ceiling(dt / MaxSubStepSeconds));
+        if (legacyCap <= floor) return legacyCap; // already at the configured minimum; nothing to save
+
+        double neededRatio = 1;
+        foreach (int idx in Grid.DomainCells)
+        {
+            if (Depth[idx] <= 0 && !Grid.IsBoundaryCell[idx]) continue;
+            int e = _nE[idx], n = _nN[idx];
+            if (e >= 0) neededRatio = Math.Max(neededRatio, FaceSubstepRatio(idx, e, dt));
+            if (n >= 0) neededRatio = Math.Max(neededRatio, FaceSubstepRatio(idx, n, dt));
+            if (Grid.IsBoundaryCell[idx] && Depth[idx] > 0)
+            {
+                double surface = HydraulicBed(idx) + Depth[idx];
+                neededRatio = Math.Max(neededRatio, BoundarySubstepRatio(idx, surface, dt));
+            }
+        }
+        int needed = (int)Math.Ceiling(neededRatio);
+        return Math.Clamp(Math.Max(floor, needed), 1, legacyCap);
+    }
+
+    /// <summary>Sub-step ratio implied by the face between <paramref name="a"/> and <paramref name="b"/>: how
+    /// many times the full tick would have to be divided for a Manning-limited discharge to stay within the
+    /// same volume the equalize cap already allows at one sub-step. 1 when the face isn't the binding one.</summary>
+    private double FaceSubstepRatio(int a, int b, double dt)
+    {
+        double za = HydraulicBed(a), zb = HydraulicBed(b);
+        double sa = za + Depth[a], sb = zb + Depth[b];
+        double head = sa - sb;
+        if (Math.Abs(head) < 1e-12) return 1;
+        int upstream = head > 0 ? a : b;
+        if (Depth[upstream] <= 1e-12) return 1;
+        double sill = Math.Max(za, zb);
+        double hf = Math.Max(sa, sb) - sill;
+        if (hf <= 1e-9) return 1;
+        return ManningSubstepRatio(Math.Abs(head), hf, dt);
+    }
+
+    private double BoundarySubstepRatio(int idx, double surface, double dt)
+    {
+        double head = surface - _edgeHeight[idx];
+        if (head <= 0 || Depth[idx] <= 0) return 1;
+        return ManningSubstepRatio(head, Math.Min(Depth[idx], head), dt);
+    }
+
+    private double ManningSubstepRatio(double head, double hf, double dt)
+    {
+        double slope = head / Grid.CellSize;
+        double manning = Grid.CellSize * Math.Pow(hf, 5.0 / 3.0) * Math.Sqrt(slope) / Manning;
+        if (manning <= 1e-18) return 1;
+        double equalizeVolume = EqualizeFraction * Math.Min(head, hf) * CellArea;
+        double safeDt = equalizeVolume / manning;
+        return safeDt > 0 ? dt / safeDt : 1;
     }
 
     private void SubStep(double dt)
