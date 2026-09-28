@@ -82,5 +82,11 @@
   "tags": [
     "slime_mold",
     "protist"
-  ]
+  ],
+  "decomposition": {
+    "radius": 0.45,
+    "fineMultiplier": 1.38,
+    "coarseMultiplier": 1.18,
+    "fruitMultiplier": 1.28
+  }
 }

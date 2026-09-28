@@ -74,5 +74,22 @@
   "tags": [
     "plant",
     "flowering"
-  ]
+  ],
+  "postLife": {
+    "standingDays": 7,
+    "collapseDays": 2,
+    "fallenDays": 20,
+    "advancedDays": 8,
+    "coarseFraction": 0.03,
+    "decayHalfLifeMultiplier": 0.75,
+    "standingRetention": 0.45,
+    "deadColor": [
+      0.63,
+      0.52,
+      0.3
+    ],
+    "litterColorInfluence": 0.84,
+    "dryBleach": 0.2,
+    "wetDarken": 0.14
+  }
 }

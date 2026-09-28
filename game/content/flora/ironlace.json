@@ -106,5 +106,22 @@
     ],
     "displaySize": 0.025,
     "foodValue": 0.2
+  },
+  "postLife": {
+    "standingDays": 180,
+    "collapseDays": 12,
+    "fallenDays": 520,
+    "advancedDays": 45,
+    "coarseFraction": 0.82,
+    "decayHalfLifeMultiplier": 2.4,
+    "standingRetention": 0.98,
+    "deadColor": [
+      0.43,
+      0.35,
+      0.28
+    ],
+    "litterColorInfluence": 0.48,
+    "dryBleach": 0.18,
+    "wetDarken": 0.1
   }
 }

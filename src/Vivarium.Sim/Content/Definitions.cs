@@ -145,6 +145,29 @@ public sealed class ClimberDef
     public HashSet<string> SupportTypes { get; init; } = new(StringComparer.Ordinal);
 }
 
+public sealed class DecomposerProfileDef
+{
+    public double Radius { get; init; } = 0.55;
+    public double FineMultiplier { get; init; } = 1;
+    public double CoarseMultiplier { get; init; } = 1;
+    public double FruitMultiplier { get; init; } = 1;
+}
+
+public sealed class PostLifeDef
+{
+    public double StandingTime { get; init; }
+    public double CollapseTime { get; init; }
+    public double FallenTime { get; init; }
+    public double AdvancedTime { get; init; }
+    public double CoarseFraction { get; init; }
+    public double DecayHalfLifeMultiplier { get; init; } = 1;
+    public double StandingRetention { get; init; } = 1;
+    public double[] DeadColor { get; init; } = { 0.62, 0.54, 0.38 };
+    public double LitterColorInfluence { get; init; } = 0.7;
+    public double DryBleach { get; init; } = 0.15;
+    public double WetDarken { get; init; } = 0.12;
+}
+
 public sealed class ReproductionDef
 {
     public string Form { get; init; } = "berry";
@@ -244,6 +267,8 @@ public sealed class FloraSpeciesDef
     /// <summary>Horizontal search and attachment behaviour for structural climbers; null for ordinary flora.</summary>
     public ClimberDef? Climber { get; init; }
     public ReproductionDef? Reproduction { get; init; }
+    public PostLifeDef? PostLife { get; init; }
+    public DecomposerProfileDef? Decomposition { get; init; }
     public bool IsTree => Woody?.Layer == WoodyLayer.Tree;
     public bool IsShrub => Woody?.Layer == WoodyLayer.Shrub;
 

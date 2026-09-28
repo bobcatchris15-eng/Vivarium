@@ -119,13 +119,13 @@ public sealed class DeadFloraSystem
                 SetStage(dead, DeadPlantStage.AdvancedDecay,
                     (a - times.Standing - times.Collapse - times.Fallen) / times.Advanced);
 
-            double halfLife = dead.Stage switch
+            double halfLife = (dead.Stage switch
             {
                 DeadPlantStage.StandingDead => sp.IsTree ? 420 : sp.IsShrub ? 220 : 90,
                 DeadPlantStage.Collapsing => sp.IsTree ? 260 : sp.IsShrub ? 130 : 55,
                 DeadPlantStage.Fallen => sp.IsTree ? 190 : sp.IsShrub ? 95 : 32,
                 _ => sp.IsTree ? 48 : sp.IsShrub ? 28 : 10,
-            } * SimUnits.Day;
+            }) * (sp.PostLife?.DecayHalfLifeMultiplier ?? 1.0) * SimUnits.Day;
 
             double lost = dead.RemainingBiomass * (1 - Math.Exp(-Math.Log(2) / halfLife * dt));
             Transfer(dead, sp, lost);
@@ -150,8 +150,8 @@ public sealed class DeadFloraSystem
 
         double litter = amount * sp.LitterFraction;
         double direct = amount * (1 - sp.LitterFraction) * sp.NutrientPerBiomass;
-        double coarseShare = sp.IsTree ? 0.70 : sp.IsShrub ? 0.45 :
-            sp.Shape is "tussock" or "reed" ? 0.20 : 0.05;
+        double coarseShare = sp.PostLife?.CoarseFraction ??
+            (sp.IsTree ? 0.70 : sp.IsShrub ? 0.45 : sp.Shape is "tussock" or "reed" ? 0.20 : 0.05);
         double coarse = litter * coarseShare;
         double fine = litter - coarse;
         if (litter > 0)
@@ -175,6 +175,9 @@ public sealed class DeadFloraSystem
 
     private static (double Standing, double Collapse, double Fallen, double Advanced) StageTimes(FloraSpeciesDef sp)
     {
+        if (sp.PostLife is { } pl)
+            return (Math.Max(0.001, pl.StandingTime), Math.Max(0.001, pl.CollapseTime),
+                Math.Max(0.001, pl.FallenTime), Math.Max(0.001, pl.AdvancedTime));
         if (sp.IsTree) return (90 * SimUnits.Day, 8 * SimUnits.Day, 360 * SimUnits.Day, 30 * SimUnits.Day);
         if (sp.IsShrub) return (40 * SimUnits.Day, 5 * SimUnits.Day, 120 * SimUnits.Day, 18 * SimUnits.Day);
         if (sp.Shape == "tussock") return (35 * SimUnits.Day, 4 * SimUnits.Day, 55 * SimUnits.Day, 12 * SimUnits.Day);

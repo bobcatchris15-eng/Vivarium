@@ -98,7 +98,7 @@ public sealed class LitterSystem
             var bonus = DecomposerBonus(idx);
             if (fruit > 0)
             {
-                double fruitRate = Math.Log(2) / (6 * SimUnits.Day) * environment * bonus.Fine;
+                double fruitRate = Math.Log(2) / (6 * SimUnits.Day) * environment * bonus.Fruit;
                 double rotted = fruit * (1 - Math.Exp(-fruitRate * dt));
                 FruitMass[idx] = Math.Max(0, fruit - rotted);
                 FineMass[idx] += rotted;
@@ -110,22 +110,29 @@ public sealed class LitterSystem
         if (changed) Revision++;
     }
 
-    private (double Fine, double Coarse) DecomposerBonus(int idx)
+    private (double Fine, double Coarse, double Fruit) DecomposerBonus(int idx)
     {
         _nearbyDecomposers.Clear();
         var p = _world.Grid.CellCenter(idx);
-        _world.Flora.Index.Query(p, 0.55, _nearbyDecomposers);
-        double fine = 1, coarse = 1;
+        _world.Flora.Index.Query(p, 1.2, _nearbyDecomposers);
+        double fine = 1, coarse = 1, fruit = 1;
         foreach (var f in _nearbyDecomposers)
         {
             var sp = _world.Content.FloraOrThrow(f.SpeciesId);
             if (!sp.Decomposer) continue;
             double activity = 0.25 + 0.75 * f.BiomassFraction(sp);
-            if (sp.Shape == "bracket") coarse += 1.4 * activity;
-            else if (sp.Archetype == "slime_mold") { fine += 0.35 * activity; coarse += 0.15 * activity; }
-            else fine += 0.85 * activity;
+            if (sp.Decomposition is { } dc)
+            {
+                if (Vec2.DistanceSq(p, f.Position) > dc.Radius * dc.Radius) continue;
+                fine += Math.Max(-0.9, dc.FineMultiplier - 1) * activity;
+                coarse += Math.Max(-0.9, dc.CoarseMultiplier - 1) * activity;
+                fruit += Math.Max(-0.9, dc.FruitMultiplier - 1) * activity;
+            }
+            else if (sp.Shape == "bracket") coarse += 1.4 * activity;
+            else if (sp.Archetype == "slime_mold") { fine += 0.35 * activity; coarse += 0.15 * activity; fruit += 0.2 * activity; }
+            else { fine += 0.85 * activity; fruit += 0.35 * activity; }
         }
-        return (Math.Min(fine, 3.0), Math.Min(coarse, 3.0));
+        return (Math.Clamp(fine, 0.1, 4.0), Math.Clamp(coarse, 0.1, 4.0), Math.Clamp(fruit, 0.1, 4.0));
     }
 
     private bool Decay(double[] mass, int idx, double rate, double dt)

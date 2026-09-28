@@ -408,7 +408,18 @@ public partial class FloraRenderer : Node3D
                 ? new Color(0.47f, 0.42f, 0.31f, 1f)
                 : moisture < 0.28 ? new Color(0.72f, 0.64f, 0.46f, 1f)
                 : new Color(0.60f, 0.53f, 0.36f, 1f);
-            var tint = Colors.White.Lerp(localLitter, (float)(0.35 + 0.55 * litterBlend));
+            var post = sp.PostLife;
+            var deadColor = post != null
+                ? new Color((float)post.DeadColor[0], (float)post.DeadColor[1], (float)post.DeadColor[2], 1f)
+                : new Color(0.62f, 0.54f, 0.38f, 1f);
+            if (post != null)
+            {
+                float dry = (float)(MathD.Clamp01((0.36 - moisture) / 0.36) * post.DryBleach);
+                float wet = (float)(MathD.Clamp01((moisture - 0.58) / 0.42) * post.WetDarken);
+                deadColor = deadColor.Lerp(Colors.White, dry).Darkened(wet);
+            }
+            float litterInfluence = (float)(post?.LitterColorInfluence ?? 0.7);
+            var tint = deadColor.Lerp(localLitter, (float)(litterBlend * litterInfluence));
             ulong hash = Rng.Mix(dead.Id.Value, 0xD34DUL);
             var custom = new Color((hash % 1000) / 1000f, 0f, 0f, ((hash >> 12) % 1000) / 1000f);
             int variant = (int)((hash >> 8) % (ulong)_layers[sp.Id].Variants.Length);

@@ -67,7 +67,7 @@
     "color": [
       0.78,
       0.32,
-      0.10
+      0.1
     ],
     "color2": [
       0.96,
@@ -80,5 +80,11 @@
   "tags": [
     "fungus",
     "wood_rot"
-  ]
+  ],
+  "decomposition": {
+    "radius": 0.72,
+    "fineMultiplier": 1.18,
+    "coarseMultiplier": 2.65,
+    "fruitMultiplier": 1.08
+  }
 }

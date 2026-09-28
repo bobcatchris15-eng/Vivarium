@@ -82,5 +82,11 @@
   },
   "tags": [
     "fungus"
-  ]
+  ],
+  "decomposition": {
+    "radius": 0.55,
+    "fineMultiplier": 2.05,
+    "coarseMultiplier": 1.08,
+    "fruitMultiplier": 1.75
+  }
 }

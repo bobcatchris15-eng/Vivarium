@@ -276,7 +276,7 @@ public static class ContentLoader
 
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
-        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber", "reproduction");
+        n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber", "reproduction", "postLife", "decomposition");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
         if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
@@ -502,6 +502,44 @@ public static class ContentLoader
             if (arch != "plant") rp.Error("reproduction requires archetype plant");
         }
 
+        DecomposerProfileDef? decomposition = null;
+        if (n.Has("decomposition"))
+        {
+            var dc = n["decomposition"];
+            dc.RejectUnknown("radius", "fineMultiplier", "coarseMultiplier", "fruitMultiplier");
+            decomposition = new DecomposerProfileDef
+            {
+                Radius = dc.Num("radius", 0.55, 0.05, 3),
+                FineMultiplier = dc.Num("fineMultiplier", 1, 0.1, 10),
+                CoarseMultiplier = dc.Num("coarseMultiplier", 1, 0.1, 10),
+                FruitMultiplier = dc.Num("fruitMultiplier", 1, 0.1, 10),
+            };
+            if (feeds != "detritus") dc.Error("decomposition profile requires habitat.feeds = detritus");
+        }
+
+        PostLifeDef? postLife = null;
+        if (n.Has("postLife"))
+        {
+            var pl = n["postLife"];
+            pl.RejectUnknown("standingDays", "collapseDays", "fallenDays", "advancedDays", "coarseFraction",
+                "decayHalfLifeMultiplier", "standingRetention", "deadColor", "litterColorInfluence", "dryBleach", "wetDarken");
+            postLife = new PostLifeDef
+            {
+                StandingTime = pl.Num("standingDays", 10, 0, 36500) * D,
+                CollapseTime = pl.Num("collapseDays", 2, 0.01, 3650) * D,
+                FallenTime = pl.Num("fallenDays", 28, 0, 36500) * D,
+                AdvancedTime = pl.Num("advancedDays", 10, 0.01, 3650) * D,
+                CoarseFraction = pl.Num("coarseFraction", 0.05, 0, 1),
+                DecayHalfLifeMultiplier = pl.Num("decayHalfLifeMultiplier", 1, 0.05, 50),
+                StandingRetention = pl.Num("standingRetention", 1, 0, 1),
+                DeadColor = pl.Color("deadColor", new[] { 0.62, 0.54, 0.38 }),
+                LitterColorInfluence = pl.Num("litterColorInfluence", 0.7, 0, 1),
+                DryBleach = pl.Num("dryBleach", 0.15, 0, 1),
+                WetDarken = pl.Num("wetDarken", 0.12, 0, 1),
+            };
+            if (arch != "plant") pl.Error("postLife currently applies to vascular plants");
+        }
+
         var col = v.Color("color");
         var def = new FloraSpeciesDef
         {
@@ -528,6 +566,8 @@ public static class ContentLoader
             Woody = woody,
             Climber = climber,
             Reproduction = reproduction,
+            PostLife = postLife,
+            Decomposition = decomposition,
         };
         if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");

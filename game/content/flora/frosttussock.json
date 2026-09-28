@@ -75,5 +75,22 @@
     "plant",
     "grass",
     "xerophyte"
-  ]
+  ],
+  "postLife": {
+    "standingDays": 45,
+    "collapseDays": 5,
+    "fallenDays": 70,
+    "advancedDays": 16,
+    "coarseFraction": 0.28,
+    "decayHalfLifeMultiplier": 1.35,
+    "standingRetention": 0.95,
+    "deadColor": [
+      0.78,
+      0.7,
+      0.46
+    ],
+    "litterColorInfluence": 0.6,
+    "dryBleach": 0.32,
+    "wetDarken": 0.08
+  }
 }

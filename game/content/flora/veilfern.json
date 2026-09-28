@@ -86,5 +86,22 @@
   "tags": [
     "plant",
     "fern"
-  ]
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.38,
+      0.22
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
 }
