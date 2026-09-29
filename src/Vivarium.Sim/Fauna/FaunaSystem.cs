@@ -38,6 +38,12 @@ public sealed class FaunaSystem
     /// fallback diet is consulted. Low enough that a merely reduced meal keeps an animal on its own diet, high
     /// enough that a genuinely absent resource is caught within the same attempt.</summary>
     private const double FallbackTriggerFraction = 0.25;
+    /// <summary>Smallest prey mid-size, as a fraction of the hunter's, that a hunter will attempt to eat. Below this
+    /// the quarry is too small for the energy to pay for finding it.</summary>
+    private const double MinPreySizeRatio = 0.01;
+    /// <summary>Largest prey mid-size, as a fraction of the hunter's. Above this the quarry is not viable; this bound is
+    /// what stops predation running away up the size ladder until every predator dies of starvation.</summary>
+    private const double MaxPreySizeRatio = 0.75;
     /// <summary>Behaviour steps since the last rebuild. Not serialized: a fresh counter after a load only means
     /// the first behaviour step refills an index that the loader already built incrementally anyway.</summary>
     private int _behaviourStepsSinceIndexRebuild;
@@ -312,6 +318,10 @@ public sealed class FaunaSystem
                 _w.Fauna.Neighbours(p, sp.SenseRadius, _nb);
                 int count = _nb.Count(x => x.SpeciesId == prey && x.Energy > 0);
                 best = Math.Max(best, MathD.Clamp01(count / 3.0));
+                // The named quarry keeps full priority, but its scarcity must not strand a predator that could still
+                // eat something else: any eligible community member is a weaker secondary attractor.
+                int community = _nb.Count(x => IsEdiblePrey(sp, x));
+                if (community > 0) best = Math.Max(best, MathD.Clamp01(community / 6.0) * 0.7);
                 continue;
             }
             if (d.Resource == "detritus")
@@ -364,13 +374,19 @@ public sealed class FaunaSystem
         if (cell < 0) return;
         double room = sp.MaxEnergy - f.Energy;
         double consumed = 0, appetite = 0;
+        // The kill budget for this pass, shared by every predation arm of the diet. A predator normally names three
+        // or four prey species and each of those entries is an independent chance to reach a victim, so without one
+        // shared budget a single feeding pass could remove several whole prey and then do it again on the next
+        // metabolism step - which is what wiped out the small fauna. One kill per pass; abstract bites are still
+        // allowed after it is spent.
+        bool preyKilledThisPass = false;
         foreach (var d in sp.Diet)
         {
             if (room <= 1e-12) break;
             double rate = d.RatePerSecond * ph.MassScale * dt;
             appetite += rate;
             double want = Math.Min(rate, room / Math.Max(d.Efficiency, 1e-9));
-            double got = TakeResource(f, sp, p, cell, d.Resource, want);
+            double got = TakeResource(f, sp, p, cell, d.Resource, want, ref preyKilledThisPass);
             if (got <= 0) continue;
             consumed += got;
             f.Energy += got * d.Efficiency;
@@ -385,7 +401,9 @@ public sealed class FaunaSystem
             if (fb != null)
             {
                 double want = Math.Min(fb.RatePerSecond * ph.MassScale * dt, room / Math.Max(fb.Efficiency, 1e-9));
-                double got = TakeResource(f, sp, p, cell, fb.Resource, want);
+                // A guild fallback is always detritus or biofilm, never a fauna: resource, so threading the shared
+                // kill budget through the dispatcher here is inert - it only keeps one code path for both callers.
+                double got = TakeResource(f, sp, p, cell, fb.Resource, want, ref preyKilledThisPass);
                 if (got > 0) { consumed += got; f.Energy += got * fb.Efficiency; }
             }
         }
@@ -396,12 +414,12 @@ public sealed class FaunaSystem
     /// Resource dispatch shared by the preferred diet and the guild fallback, so a fallback meal is removed from
     /// exactly the same pool a diet entry would use, at exactly the same efficiency model.
     /// </summary>
-    private double TakeResource(FaunaIndividual f, FaunaSpeciesDef sp, Vec2 p, int cell, string resource, double want)
+    private double TakeResource(FaunaIndividual f, FaunaSpeciesDef sp, Vec2 p, int cell, string resource, double want, ref bool preyKilledThisPass)
     {
         if (resource == "biofilm")
             return Coverage.Aquatic.AquaticBiofilm.GrazeCell(_w.Coverage.AlgaeBed, _w.Fields.Biofilm, cell, want);
         if (resource.StartsWith("flora:", StringComparison.Ordinal)) return GrazeFlora(p, resource[6..], want);
-        if (resource.StartsWith("fauna:", StringComparison.Ordinal)) return GrazeFauna(f, sp, resource[6..], want);
+        if (resource.StartsWith("fauna:", StringComparison.Ordinal)) return GrazeFauna(f, sp, resource[6..], want, ref preyKilledThisPass);
         if (resource == "detritus") return _w.Litter.TakeDetritus(cell, want);
         var field = _w.Fields.Resource(resource);
         return field == null ? 0 : field.Take(cell, want);
@@ -428,21 +446,71 @@ public sealed class FaunaSystem
         return got;
     }
 
-    private double GrazeFauna(FaunaIndividual hunter, FaunaSpeciesDef hunterSp, string preySpecies, double want)
+    /// <summary>
+    /// Whether <paramref name="x"/> is a member of the community this hunter is allowed to fall back on when its named
+    /// quarry is absent: alive and unheld, sharing the hunter's medium, not itself a predator, and within the
+    /// size window. This is what decouples a predator's survival from whatever species its diet happens to name -
+    /// without it, a predator whose named prey is locally extinct simply starves beside edible animals.
+    /// </summary>
+    private bool IsEdiblePrey(FaunaSpeciesDef hunterSp, FaunaIndividual x)
+    {
+        if (x.Energy <= 0 || x.Grabbed) return false;
+        var preySp = C.FaunaOrThrow(x.SpeciesId);
+        if (preySp.Medium != hunterSp.Medium) return false;      // no cross-medium eating
+        if (preySp.Guild == EcologyGuild.Predator) return false; // no cannibalism by default
+        double hunterMid = (hunterSp.SizeMin + hunterSp.SizeMax) * 0.5;
+        double preyMid = (preySp.SizeMin + preySp.SizeMax) * 0.5;
+        if (hunterMid <= 0 || preyMid <= 0) return false;
+        return preyMid >= hunterMid * MinPreySizeRatio && preyMid <= hunterMid * MaxPreySizeRatio;
+    }
+
+    /// <summary>
+    /// The one path that yields predation energy and the only path that kills. A <c>fauna:species-id</c> diet entry
+    /// names a steering preference, never a guaranteed kill: the victim is always drawn from the community
+    /// <see cref="IsEdiblePrey"/> admits (alive and unheld, same medium, not itself a predator, mid-size inside the
+    /// huntable window), and the named species only wins first refusal *within that eligible set*. A diet naming four
+    /// prey species therefore reaches this same capped path four times instead of removing four animals, and the
+    /// steering that actually makes those species worth hunting still lives in <see cref="FoodAt"/>.
+    /// </summary>
+    private double GrazeFauna(FaunaIndividual hunter, FaunaSpeciesDef hunterSp, string preySpecies, double want, ref bool preyKilledThisPass)
     {
         double radius = MathD.Clamp(hunterSp.SenseRadius * 0.35, 0.10, 0.30);
         _w.Fauna.Neighbours(hunter.PositionXZ, radius, _nb);
-        _nb.RemoveAll(x => x.Id == hunter.Id || x.SpeciesId != preySpecies || x.Grabbed || x.Energy <= 0);
+        _nb.RemoveAll(x => x.Id == hunter.Id || !IsEdiblePrey(hunterSp, x));
         if (_nb.Count == 0) return 0;
+        // lowest id first, so victim selection stays a pure function of world state: same seed, same victim
         if (_nb.Count > 1) _nb.Sort((a, b) => a.Id.Value.CompareTo(b.Id.Value));
 
-        var prey = _nb[0];
+        // The named species is the author's stated intent, so it is taken first when one is eligible; otherwise the
+        // lowest-id eligible neighbour is taken. Never an ineligible one, so naming a species in a diet can no longer
+        // remove an animal the hunter should not be able to eat at all.
+        int pick = _nb.FindIndex(x => x.SpeciesId == preySpecies);
+        if (pick < 0) pick = 0;
+
+        var prey = _nb[pick];
         var preySp = C.FaunaOrThrow(prey.SpeciesId);
         double biomass = preySp.MassAtMid * PhenotypeOf(prey).MassScale;
         double take = Math.Min(want, biomass);
         if (take <= 0) return 0;
 
-        // Predation consumes part of the prey's organic mass and returns the uneaten remainder to visible detritus.
+        // The victim is removed only when the bite covers its whole body or it is too weak to survive it. Anything
+        // less is an abstract bite: the hunter takes the energy, the prey keeps the rest of its body, and no corpse or
+        // detritus is recorded - the survivor returns its own mass once, when it actually dies, so recording a death
+        // here would count that mass twice.
+        if (take < biomass && take < prey.Energy)
+        {
+            prey.Energy -= take;
+            return take;
+        }
+
+        // This bite would kill, but the pass has already spent its one kill. Leave the victim entirely alone rather
+        // than removing it under a second cause, which is what let a three-entry diet wipe a species in one pass.
+        if (preyKilledThisPass) return 0;
+        preyKilledThisPass = true;
+
+        // The bite covers the whole body or finishes it off, so the individual dies here. Predation consumes part of
+        // the prey's organic mass and returns the uneaten remainder to visible detritus, recorded once against this
+        // one individual.
         double organic = biomass * preySp.DetritusOnDeath;
         _predationDeaths[prey.Id] = ($"predation:{hunter.SpeciesId}", Math.Max(0, organic - take));
         prey.Energy = 0;

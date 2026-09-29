@@ -146,6 +146,10 @@ public class FaunaTests
         var hunter = w.FaunaSystem.CreateFounder(Sp("stonebell"), FaunaFixtures.Land, 0.5);
         var prey = w.FaunaSystem.CreateFounder(Sp("dewmantle"), FaunaFixtures.Land + new Vec2(0.03, 0), 0.5);
         hunter.Energy = 0.2;
+        // A predator only removes a victim when the bite covers it whole or the victim is too weak to survive the
+        // bite (chunk 6). Weaken the prey so that branch is the one under test; a healthy animal now survives a
+        // single small bite, which is exactly the over-harvest fix.
+        prey.Energy = 0.001;
         double before = hunter.Energy;
         double detritus = w.Litter.TotalDetritus();
 
@@ -155,6 +159,26 @@ public class FaunaTests
         Assert.True(hunter.Energy > before);
         Assert.True(w.Litter.TotalDetritus() > detritus);
         Assert.True(w.Tally.Of("dewmantle").Deaths > 0);
+    }
+
+    [Fact]
+    public void HealthyPreySurvivesASingleBiteButLosesCondition()
+    {
+        // The other half of the chunk-6 biomass rule: a bite too small to cover a healthy animal is abstract — the
+        // victim stays alive, loses energy, and no detritus is returned (its mass is not double-counted).
+        var w = FaunaFixtures.PondWorld(detritus: 0);
+        var hunter = w.FaunaSystem.CreateFounder(Sp("stonebell"), FaunaFixtures.Land, 0.5);
+        var prey = w.FaunaSystem.CreateFounder(Sp("dewmantle"), FaunaFixtures.Land + new Vec2(0.03, 0), 0.5);
+        hunter.Energy = 0.2;
+        prey.Energy = 1.0;
+        double detritus = w.Litter.TotalDetritus();
+
+        w.FaunaSystem.StepMetabolism(3600);
+
+        var alive = w.Fauna.Get(prey.Id);
+        Assert.NotNull(alive);
+        Assert.True(alive!.Energy < 1.0, "a partial bite should debit the victim's condition");
+        Assert.True(w.Litter.TotalDetritus() <= detritus, "an abstract bite must not return detritus");
     }
 
     [Fact] // t-093
