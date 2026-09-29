@@ -50,6 +50,17 @@ public sealed class FaunaSystem
     /// <summary>Lifecycle passes since the last rebuild. Separate from the behaviour counter so each system's
     /// cadence is self-contained: lifecycle runs far less often, and sharing one counter would make whether a
     /// lifecycle pass rebuilds depend on how many behaviour steps happened to run before it.</summary>
+    /// <summary>Behaviour steps between steering-intent refreshes for an animal that is comfortable where it is. The
+    /// habitat/food probe fan-out and the schooling neighbour query are the expensive part of behaviour, so between
+    /// refreshes an animal just steers toward the heading it last chose. Anything that must react promptly refreshes
+    /// on every step regardless: a disturbed animal, one stranded by flooding or drying, and one sitting in habitat
+    /// below its species' tolerance.</summary>
+    private const int IntentRefreshPeriod = 2;
+    /// <summary>Longest simulated interval an animal may cross before its destination is re-tested for passability.
+    /// Pinned rather than derived from <c>Cadence.FaunaBehaviour</c> on purpose: raising the cadence then re-decides
+    /// steering less often without ever letting one step carry an animal across a whole habitat boundary between
+    /// two samples. At or below this slice length the advance is the original single one.</summary>
+    private const double MaxLocomotionSlice = 20.0;
     private int _lifecycleStepsSinceIndexRebuild;
 
     public FaunaSystem(VivariumWorld w) { _w = w; }
@@ -133,7 +144,10 @@ public sealed class FaunaSystem
         double now = _w.Clock.SimSeconds;
         foreach (var f in fauna.Items)
         {
-            if (f.Grabbed) continue;
+            // A held animal is teleported by the grab tool, so any heading it decided earlier describes a place it is
+            // no longer in. Drop the cached intent and it re-decides on the first step after release.
+            if (f.Grabbed) { f.IntentActive = false; continue; }
+            f.IntentSteps++;
             var sp = C.FaunaOrThrow(f.SpeciesId);
             var ph = PhenotypeOf(f);
             var p = f.PositionXZ;
@@ -152,60 +166,71 @@ public sealed class FaunaSystem
             {
                 // rolls into a ball and stays put until the disturbance passes (see IsCurled)
                 f.Y = _w.GroundHeight(p);
+                f.IntentActive = false;   // the world moved under it while it was rolled up
                 continue;
             }
-            double desired = double.NaN;
-            if (stranded)
+            // Cheap locomotion (wander, turn integration, advance, clamping) runs every step; only the expensive
+            // decision fan-out is throttled. The refresh point is a pure function of this animal: its own step count
+            // offset by its own id, so a population does not re-decide in lockstep and no animal's timing can depend
+            // on another's. No randomness is involved, so the same seed replays the same trajectory.
+            bool poor = sp.HabitatSeek > 0 && f.LastSuitability < sp.MinSuitability * 2.5;
+            long phase = (f.IntentSteps + (long)(f.Id.Serial % IntentRefreshPeriod)) % IntentRefreshPeriod;
+            if (!f.IntentActive || disturbed || stranded || poor || phase == 0)
             {
-                // habitat changed underneath (flooding or drying): head for the nearest passable ground/water
-                double bestD = double.PositiveInfinity;
-                for (int k = 0; k < 8; k++)
-                    for (double r = sp.SenseRadius * 0.5; r <= sp.SenseRadius * 4; r += sp.SenseRadius * 0.5)
+                double desired = double.NaN;
+                if (stranded)
+                {
+                    // habitat changed underneath (flooding or drying): head for the nearest passable ground/water
+                    double bestD = double.PositiveInfinity;
+                    for (int k = 0; k < 8; k++)
+                        for (double r = sp.SenseRadius * 0.5; r <= sp.SenseRadius * 4; r += sp.SenseRadius * 0.5)
+                        {
+                            var q = p + Vec2.FromAngle(k * Math.PI / 4) * r;
+                            if (IsPassable(sp, q)) { if (r < bestD) { bestD = r; desired = k * Math.PI / 4; } break; }
+                        }
+                }
+                else if (disturbed)
+                {
+                    var away = p - new Vec2(f.DisturbX, f.DisturbZ);
+                    if (away.LengthSq > 1e-10) desired = away.Angle;
+                }
+                else if (sp.HabitatSeek > 0 && (poor || (tick + (long)(f.Id.Serial % 3)) % 3 == 0))
+                {
+                    // Probe headings ahead and steer toward the best habitat/food. An animal in poor habitat
+                    // (per its species' minSuitability) probes wider and farther, and wanders less, so it leaves.
+                    int span = poor ? 3 : 1;
+                    double reach = sp.SenseRadius * (poor ? 2.0 : 1.0);
+                    double best = double.NegativeInfinity, bestAng = f.Heading;
+                    for (int k = -span; k <= span; k++)
                     {
-                        var q = p + Vec2.FromAngle(k * Math.PI / 4) * r;
-                        if (IsPassable(sp, q)) { if (r < bestD) { bestD = r; desired = k * Math.PI / 4; } break; }
+                        double ang = f.Heading + k * (poor ? 0.9 : 0.7);
+                        var q = p + Vec2.FromAngle(ang) * reach;
+                        var s = Suitability(sp, q);
+                        double v = s.HardRefused ? -1 : s.Score + 0.5 * FoodAt(sp, q);
+                        if (k == 0) v += 0.02; // mild preference to keep going
+                        if (v > best) { best = v; bestAng = ang; }
                     }
-            }
-            else if (disturbed)
-            {
-                var away = p - new Vec2(f.DisturbX, f.DisturbZ);
-                if (away.LengthSq > 1e-10) desired = away.Angle;
-            }
-            else if (sp.HabitatSeek > 0 && (f.LastSuitability < sp.MinSuitability * 2.5 || (tick + (long)(f.Id.Serial % 3)) % 3 == 0))
-            {
-                // Probe headings ahead and steer toward the best habitat/food. An animal in poor habitat
-                // (per its species' minSuitability) probes wider and farther, and wanders less, so it leaves.
-                bool poor = f.LastSuitability < sp.MinSuitability * 2.5;
-                int span = poor ? 3 : 1;
-                double reach = sp.SenseRadius * (poor ? 2.0 : 1.0);
-                double best = double.NegativeInfinity, bestAng = f.Heading;
-                for (int k = -span; k <= span; k++)
-                {
-                    double ang = f.Heading + k * (poor ? 0.9 : 0.7);
-                    var q = p + Vec2.FromAngle(ang) * reach;
-                    var s = Suitability(sp, q);
-                    double v = s.HardRefused ? -1 : s.Score + 0.5 * FoodAt(sp, q);
-                    if (k == 0) v += 0.02; // mild preference to keep going
-                    if (v > best) { best = v; bestAng = ang; }
+                    desired = bestAng;
+                    if (poor)
+                    {
+                        turn *= 0.3;
+                        var here = Suitability(sp, p);
+                        f.LastSuitability = here.HardRefused ? 0 : here.Score;
+                    }
                 }
-                desired = bestAng;
-                if (poor)
+
+                if (sp.Schooling != null && sp.Behaviors.Contains("schooling") && !disturbed)
                 {
-                    turn *= 0.3;
-                    var here = Suitability(sp, p);
-                    f.LastSuitability = here.HardRefused ? 0 : here.Score;
+                    var sch = SchoolingHeading(f, sp);
+                    if (sch.HasValue) desired = double.IsNaN(desired) ? sch.Value : BlendAngles(desired, sch.Value, 0.65);
                 }
+                f.IntentActive = !double.IsNaN(desired);
+                if (f.IntentActive) f.IntentHeading = desired;
             }
 
-            if (sp.Schooling != null && sp.Behaviors.Contains("schooling") && !disturbed)
+            if (f.IntentActive)
             {
-                var sch = SchoolingHeading(f, sp);
-                if (sch.HasValue) desired = double.IsNaN(desired) ? sch.Value : BlendAngles(desired, sch.Value, 0.65);
-            }
-
-            if (!double.IsNaN(desired))
-            {
-                double diff = MathD.WrapAngle(desired - f.Heading);
+                double diff = MathD.WrapAngle(f.IntentHeading - f.Heading);
                 double weight = disturbed || stranded ? 1 : Math.Max(sp.HabitatSeek, sp.Schooling != null ? 0.8 : 0);
                 turn += diff * weight;
             }
@@ -213,18 +238,25 @@ public sealed class FaunaSystem
             f.Heading = MathD.WrapAngle(f.Heading + MathD.Clamp(turn, -maxTurn, maxTurn));
 
             double speed = sp.Speed * ph.SpeedScale * (disturbed ? 3.0 : 1.0) * (f.Energy < 0.15 * sp.MaxEnergy ? 0.6 : 1.0);
-            var cand = p + Vec2.FromAngle(f.Heading) * (speed * dt);
-            if (stranded || IsPassable(sp, cand))
+            // Advance in fixed slices so a coarse cadence cannot stretch the gap between two passability samples.
+            int slices = (int)Math.Max(1, Math.Ceiling(dt / MaxLocomotionSlice));
+            double slice = dt / slices;
+            for (int sl = 0; sl < slices; sl++)
             {
-                f.X = cand.X; f.Z = cand.Z;
-            }
-            else
-            {
-                // blocked: turn away deterministically and try a sidestep
-                double flip = Rng.HashUnit(_w.Seed, _wanderHash, f.Id.Value, (ulong)tick ^ 0xABCDUL) < 0.5 ? 1 : -1;
-                f.Heading = MathD.WrapAngle(f.Heading + flip * (Math.PI * 0.6));
-                var side = p + Vec2.FromAngle(f.Heading) * (speed * dt * 0.5);
-                if (IsPassable(sp, side)) { f.X = side.X; f.Z = side.Z; }
+                var from = f.PositionXZ;
+                var cand = from + Vec2.FromAngle(f.Heading) * (speed * slice);
+                if (stranded || IsPassable(sp, cand))
+                {
+                    f.X = cand.X; f.Z = cand.Z;
+                }
+                else
+                {
+                    // blocked: turn away deterministically and try a sidestep
+                    double flip = Rng.HashUnit(_w.Seed, _wanderHash, f.Id.Value, (ulong)tick ^ 0xABCDUL) < 0.5 ? 1 : -1;
+                    f.Heading = MathD.WrapAngle(f.Heading + flip * (Math.PI * 0.6));
+                    var side = from + Vec2.FromAngle(f.Heading) * (speed * slice * 0.5);
+                    if (IsPassable(sp, side)) { f.X = side.X; f.Z = side.Z; }
+                }
             }
             // stay inside the island regardless of anything else
             var clamped = _w.Domain.ClampInside(f.PositionXZ, 0.04);
