@@ -190,11 +190,23 @@ Tasks
 |----|---------|--------|------|
 | daynight | chunk 13: presentation day/night clock + lighting | MERGED (76eb40a) | 15 min day / 5 min night, wall-clock, pause+speed-immune, never serialised; build clean, 11/11 on main. NOT yet seen on screen (needs windowed GPU check). |
 | guilds | chunk 2: EcologyGuild enum + Guild field, 17 species tagged | MERGED (cfa6d8a) | ContentLoader is STRICT (rejects unknown fields) — needed the field before tags would load. `validate`: 40 flora / 17 fauna / 9 presets. Metadata only, no sim branches on it yet. |
+| faunabudget | chunk 1: whole-vivarium fauna budget | WORKTREE (build clean, partial test) | Budget 2000 on descriptor, caps reproduction + CreateFounder. Build 0 err. Open item: CreateFounder THROWS at budget instead of graceful Fail — needs 1-line Introduction.cs follow-up (Clanker flagged). Full fauna suite blocked by box load. |
+| faunaindex | chunk 9: stop per-tick RebuildIndex | WORKTREE (build clean, key test green) | Cadence rebuild N=4 via call counter (a tick%N trigger would never fire — StepBehaviour sees odd tick). Keeps bulk rebuilds; Remove stays O(n) by design. `FaunaNeighbourQueriesAvoidAllToAll` PASS. |
 | siltbed | waterway beds render as silt, not green saturated soil | WORKTREE (unvalidated) | sub_tex.g carries submerged mask (OpenWaterDepth > 4mm); needs build + visual check. RENDER-ONLY per user. |
 | faunabase | chunk 0: CLI low/med/high/none fauna scenarios | WORKTREE (partial) | soak/schedule work and print fauna scheduler lines; scenario flags unrun (subagent denied dotnet). Parent to finish. |
-| cs1 | chunk 1: whole-vivarium fauna budget | QUEUED | next |
-| cs3-6 | forgiving diets, guild fallbacks, generic prey | QUEUED | after cs1 |
+| cs3-6 | forgiving diets, guild fallbacks, generic prey | QUEUED | after cs1/cs9 |
 | cs7-12 | steering/metabolism/lifecycle cadence + accounting queue | QUEUED | — |
+
+BOX CONTENTION (2026-09-29): two heavy Godot processes running — 24056 (user's live session) and 40348
+(a ~25h-old leftover from 09-28, 5698 s CPU). This starves `dotnet test`/`soak` and is why several parent
+validation runs timed out. Day/night+guilds validated while the box was freer; faunabudget/faunaindex
+builds are clean and the critical determinism test passes, but the full suites were NOT completed. Recommend
+the user close 40348 and pause 24056 before the next validation sweep.
+
+Tooling constraint (2026-09-29): the subagent `bash` allowlist DENIES `dotnet` and `godot`. Clankers can
+write + self-review by reading but CANNOT build or test. The parent must run every gate. This caught a real
+break: a Clanker claimed ContentLoader "ignores unknown fields" (it does not — it is strict) and 17 files
+failed to load until the Guild field landed. Do not accept a Clanker PASS without a parent-run gate.
 
 Tooling constraint (2026-09-29): the subagent `bash` allowlist DENIES `dotnet` and `godot`. Clankers can
 write + self-review by reading but CANNOT build or test. The parent must run every gate. This caught a real
