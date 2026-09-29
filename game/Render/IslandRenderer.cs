@@ -20,8 +20,8 @@ public partial class IslandRenderer : Node3D
     private int[] _nearestDomain = System.Array.Empty<int>();
     private double _accum = 999;
     private byte[] _bytes = System.Array.Empty<byte>();
-    // material weights for blending (R = gravel, G = exposed rock), filtered smoothly; water is ignored so
-    // shorelines don't interpolate through fake gravel/rock bands
+    // material weights for blending (R = gravel, G = submerged waterway bed / silt), filtered smoothly;
+    // water itself is ignored so shorelines don't interpolate through fake gravel/rock bands
     private Image _subImage = null!;
     private ImageTexture _subTex = null!;
     private byte[] _subBytes = System.Array.Empty<byte>();
@@ -39,6 +39,11 @@ public partial class IslandRenderer : Node3D
     private int _propsVersion = int.MinValue;
     private double _sinceMeshBuild;
     public int TriangleCount { get; private set; }
+
+    /// <summary>Depth (m) of standing water above which a cell is a waterway bed rather than merely damp soil.
+    /// The same 4 mm cut AmbientGroundCoverRenderer already uses to keep plants out of a channel: below it the
+    /// water is a film that only wets the surface, and the bed stays green.</summary>
+    private const double SiltMinDepthM = 0.004;
 
     public void Build(VivariumWorld w)
     {
@@ -133,7 +138,11 @@ public partial class IslandRenderer : Node3D
             {
                 bool gravel = _w.Props.GravelAt(p) != null;
                 _subBytes[c * 2] = gravel ? (byte)255 : (byte)0;
-                _subBytes[c * 2 + 1] = 0;
+                // Green channel = submerged waterway bed, read by terrain.gdshader as the silt mask. Sourced from
+                // the simulation's own standing/flowing water depth, never from moisture, so a merely damp or
+                // rain-filmed cell keeps its green and only a real waterway bed deposits silt. Render-only: no
+                // substrate code, sim field or gameplay behaviour changes.
+                _subBytes[c * 2 + 1] = _w.Water.OpenWaterDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
             }
         }
         _fieldImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _bytes);
