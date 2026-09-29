@@ -374,21 +374,52 @@ public sealed class FaunaSystem
 
     // ------------------------------------------------------------------ metabolism + feeding
 
+    /// <summary>
+    /// Energy accounting, run once per <c>Cadence.FaunaMetabolism</c> ticks (60 simulated seconds) instead of on a
+    /// small step. Every term below is a rate multiplied by the interval the scheduler actually handed us, so what an
+    /// animal holds is a function of elapsed simulated time and never of how that time happened to be chopped into
+    /// passes: one pass of dt and two of dt/2 move the same energy whenever the exposure is the same, because dt scales
+    /// every term. Nothing here reads render frame time or a wall-clock delta.
+    /// </summary>
     public void StepMetabolism(double dt)
     {
+        // A pass that covers no simulated time must move no energy: no drain, no meal, no death. Stated explicitly so a
+        // zero or nonsensical interval can never be what resolves an animal's starvation.
+        if (!(dt > 0) || double.IsInfinity(dt)) return;
         double now = _w.Clock.SimSeconds;
+        // Span this pass accounts for, in the simulated-seconds unit that DisturbedUntil is stamped in. The scheduler
+        // passes biological seconds (Cadence * FixedStepSeconds * BioAcceleration), so undo the acceleration to get
+        // back the wall-clock span the exposure below is measured against.
+        double accel = _w.Clock.BioAcceleration;
+        double span = accel >= 1 ? dt / accel : dt;
         var naturalDeaths = new Dictionary<EntityId, string>();
         foreach (var f in _w.Fauna.Items)
         {
             if (_predationDeaths.ContainsKey(f.Id)) continue;
             var sp = C.FaunaOrThrow(f.SpeciesId);
             var ph = PhenotypeOf(f);
+            // Habitat is sampled once because it cannot change inside the pass: no other system runs while this loop is
+            // open and the pass moves nothing, so the value read now is the value the whole interval sees. The one
+            // exposure that does straddle the interval boundary is the disturbance, which is a pure timestamp, so it is
+            // integrated rather than sampled.
             var suit = Suitability(sp, f.PositionXZ);
             f.LastSuitability = suit.HardRefused ? 0 : suit.Score;
             double stress = suit.HardRefused && !f.Grabbed ? 6.0 : 1.0;
-            if (now < f.DisturbedUntil) stress *= 1.3;
+            // Seconds of this interval the animal spent disturbed: the overlap of [now, now+span] with the tail of its
+            // disturbance. Clamping both ends makes the extra drain depend only on how long the animal was actually
+            // disturbed, not on where the pass boundary happened to fall - charging a whole wide interval because the
+            // animal was disturbed at its first instant is the frame-rate dependence a coarser cadence would otherwise
+            // introduce, and at cadence 6 it would charge 60 s of stress for a poke that ended 1 s in.
+            double disturbedSeconds = MathD.Clamp(f.DisturbedUntil - now, 0, span);
+            stress *= 1 + 0.3 * (disturbedSeconds / span);
             f.Energy -= sp.BasalRate * ph.MetabolicScale * stress * dt;
+            // One meal per pass, offered at the accounting boundary and scaled by the whole interval, so intake is
+            // rate * dt exactly like the drain. It is deliberately not subdivided: sub-passes would multiply the
+            // number of feeding opportunities - and therefore the number of predation kills - that a span of time
+            // contains, which is a behavioural change, not an accounting one.
             if (f.Energy < sp.HungerThreshold * sp.MaxEnergy && !f.Grabbed) Feed(f, sp, ph, dt);
+            // Clamp and resolve death at the boundary, after feeding has had its chance, so starvation is a pure
+            // function of the state this pass produced and not of the order animals happen to be stored in.
             f.Energy = MathD.Clamp(f.Energy, 0, sp.MaxEnergy);
             if (f.Energy <= 0 && !_predationDeaths.ContainsKey(f.Id))
                 naturalDeaths[f.Id] = suit.HardRefused ? "stranded" : "starvation";
