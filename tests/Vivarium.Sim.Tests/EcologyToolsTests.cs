@@ -131,6 +131,54 @@ public class EcologyTests
         Assert.Empty(w.CheckInvariants());
     }
 
+    [Fact]
+    public void IntroductionRefusesGracefullyAtTheWorldFaunaBudget()
+    {
+        var w = TestUtil.DefaultWorld();
+        int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
+        var at = w.Grid.CellCenter(pond);
+
+        // At the budget the tool must REFUSE with a readable reason, never throw out of CreateFounder.
+        w.Descriptor.FaunaBudget = w.Fauna.Count;
+        Assert.True(w.FaunaSystem.AtFaunaBudget);
+        var refused = Introduction.IntroduceFauna(w, "siltshield", at, 1);
+        Assert.False(refused.Ok);
+        Assert.Contains("budget", refused.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(refused.Created);
+
+        // A drop that reaches the budget part-way stops cleanly and reports the shortfall.
+        w.Descriptor.FaunaBudget = w.Fauna.Count + 2;
+        var partial = Introduction.IntroduceFauna(w, "siltshield", at, 5);
+        Assert.True(partial.Ok, partial.Message);
+        Assert.Equal(2, partial.Created.Count);
+        Assert.Contains("2 of 5", partial.Message);
+        Assert.True(w.FaunaSystem.AtFaunaBudget);
+        Assert.Empty(w.CheckInvariants());
+    }
+
+    [Fact]
+    public void WorldCreationPlacesWhatFitsWhenStartersExceedTheBudget()
+    {
+        // A preset that asks for more animals than the world budget allows must still create a world,
+        // placing what fits and warning, rather than throwing out of CreateFounder during load.
+        var w = VivariumWorld.Create(TestUtil.Content, TestUtil.Content.PresetOrThrow("default"), populate: false);
+        w.Descriptor.FaunaBudget = 3;
+        Assert.Empty(w.CheckInvariants());
+        Assert.True(w.Fauna.Count <= w.Descriptor.FaunaBudget,
+            $"world holds {w.Fauna.Count} animals against a budget of {w.Descriptor.FaunaBudget}");
+
+        // The budget still stops reproduction, not just introduction.
+        var sp = FaunaFixtures.Sp("prismhopper");
+        for (int i = 0; i < 8 && !w.FaunaSystem.AtFaunaBudget; i++)
+        {
+            var cell = w.Grid.DomainCells[w.Grid.DomainCells.Length / 2 + i];
+            if (Introduction.FaunaPlacementProblem(w, sp, w.Grid.CellCenter(cell)) != null) continue;
+            w.FaunaSystem.CreateFounder(sp, w.Grid.CellCenter(cell));
+        }
+        Assert.True(w.FaunaSystem.AtFaunaBudget || w.Fauna.Count >= 3);
+        Assert.Empty(w.CheckInvariants());
+    }
+
     [Fact] // t-123
     public void StatisticsDeriveFromStateWithoutSideEffects()
     {

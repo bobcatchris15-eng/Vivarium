@@ -52,6 +52,9 @@ public static class Introduction
     {
         var sp = w.Content.FaunaById(speciesId);
         if (sp == null) return IntroductionResult.Fail($"unknown fauna species '{speciesId}'");
+        // The whole-vivarium budget is a refusal, not a fault: report it the way every other introduction
+        // problem is reported, so the tool surfaces a readable message instead of throwing out of CreateFounder.
+        if (!w.FaunaSystem.CanIntroduce(sp, out var budgetProblem)) return IntroductionResult.Fail(budgetProblem);
         var problem = FaunaPlacementProblem(w, sp, p);
         if (problem != null) return IntroductionResult.Fail(problem);
         if (w.Fauna.CountOf(sp.Id) >= sp.PopulationCap) return IntroductionResult.Fail($"{sp.Name} population is at its safety cap ({sp.PopulationCap})");
@@ -59,6 +62,9 @@ public static class Introduction
         var rng = Rng.Keyed(w.Seed, "ecology.introduce", w.Ids.LastSerial + 1);
         for (int i = 0; i < count; i++)
         {
+            // A multi-animal drop can reach the world budget part-way through, so re-check per individual and
+            // stop cleanly rather than throwing part of the way through a drop the player asked for.
+            if (!w.FaunaSystem.CanIntroduce(sp, out _)) break;
             var q = p;
             for (int t = 0; t < 8 && i > 0; t++)
             {
@@ -70,8 +76,12 @@ public static class Introduction
             created.Add(f.Id);
             w.Tally.Of(sp.Id).Introduced++;
         }
+        if (created.Count == 0) return IntroductionResult.Fail($"{sp.Name} cannot be introduced: world fauna budget reached ({w.Descriptor.FaunaBudget})");
         Log.Info(LogCategory.Ecology, $"Introduced {created.Count} {sp.Name} at {p}.");
-        return new IntroductionResult(true, $"{created.Count} {sp.Name} introduced", created);
+        var partial = created.Count < count;
+        return new IntroductionResult(true, partial
+            ? $"{created.Count} of {count} {sp.Name} introduced (world fauna budget reached)"
+            : $"{created.Count} {sp.Name} introduced", created);
     }
 }
 
@@ -117,12 +127,16 @@ public static class Populate
             }, 0.05);
             int placed = 0, group = 0;
             var top = candidates.Take(Math.Max(8, candidates.Count / 3)).ToList();
+            // A preset may ask for more animals than the world budget allows. Place what fits and say so,
+            // exactly as the flora starter path does, rather than letting CreateFounder throw mid-world.
+            if (w.FaunaSystem.AtFaunaBudget) { Log.Warn(LogCategory.Ecology, $"Placed 0/{entry.Count} starter {sp.Name} (world fauna budget reached)."); continue; }
             while (placed < entry.Count && top.Count > 0)
             {
                 var (centre, _) = top[rng.NextInt(top.Count)];
                 int n = Math.Min(sp.Behaviors.Contains("schooling") ? 8 : 4, entry.Count - placed);
                 for (int i = 0; i < n; i++)
                 {
+                    if (w.FaunaSystem.AtFaunaBudget) break;
                     var q = centre + new Vec2(rng.Range(-0.15, 0.15), rng.Range(-0.15, 0.15));
                     if (Introduction.FaunaPlacementProblem(w, sp, q) != null) q = centre;
                     w.FaunaSystem.CreateFounder(sp, q);
@@ -130,6 +144,7 @@ public static class Populate
                 }
                 if (++group > entry.Count * 4) break;
             }
+            if (placed < entry.Count) Log.Warn(LogCategory.Ecology, $"Placed {placed}/{entry.Count} starter {sp.Name} (world fauna budget reached).");
         }
     }
 

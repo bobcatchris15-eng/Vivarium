@@ -187,7 +187,9 @@ void fragment() {
         // of its own broad value variation is kept so the channel still reads as a surface, and the fine normal
         // is flattened: settled silt is smooth and matte, not the pebbled relief of a soil scan.
         float silt_grain = fbm(world_pos.xz * 5.3 + vec2(5.1, 31.7));
-        vec3 silt_col = vec3(0.42, 0.38, 0.31) * mix(0.86, 1.12, silt_grain);
+        // Dark, muddy brown: wet organic sediment, not pale dry sand. Warm-biased so it still separates from the
+        // surrounding damp soil, but low-value so a submerged channel reads as a dark bed under the water.
+        vec3 silt_col = vec3(0.21, 0.155, 0.115) * mix(0.82, 1.18, silt_grain);
         col = mix(col, silt_col, wSilt);
         rough = mix(rough, 0.96, wSilt);
         tn = normalize(mix(tn, vec3(0.0, 0.0, 1.0), wSilt * 0.6));
