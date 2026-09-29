@@ -37,6 +37,10 @@ public sealed class FaunaSystem
     /// <summary>Behaviour steps since the last rebuild. Not serialized: a fresh counter after a load only means
     /// the first behaviour step refills an index that the loader already built incrementally anyway.</summary>
     private int _behaviourStepsSinceIndexRebuild;
+    /// <summary>Lifecycle passes since the last rebuild. Separate from the behaviour counter so each system's
+    /// cadence is self-contained: lifecycle runs far less often, and sharing one counter would make whether a
+    /// lifecycle pass rebuilds depend on how many behaviour steps happened to run before it.</summary>
+    private int _lifecycleStepsSinceIndexRebuild;
 
     public FaunaSystem(VivariumWorld w) { _w = w; }
     private ContentLibrary C => _w.Content;
@@ -435,7 +439,15 @@ public sealed class FaunaSystem
     {
         double now = _w.Clock.BioSeconds;
         long tick = _w.Clock.Tick;
-        _w.Fauna.RebuildIndex();
+        // Refill the spatial index on the same bounded cadence as behaviour rather than every lifecycle pass. Ageing,
+        // maturity, mortality, cooldown and birth order read no index at all; the only readers are the mate search and
+        // the local-density check, so the same argument holds. Membership stays exact (Add inserts in place,
+        // Remove/RemoveMany rebuild), and a lagging bucket can only drop a candidate that has just crossed a bucket
+        // boundary, never admit a wrong one, because Query re-tests each candidate's live position. Bucket contents
+        // stay in ascending id order, so the id-ordered mate choice is unchanged. Counted in calls rather than
+        // Clock.Tick % N, because Clock.Tick is assigned after systems run and a modulus on the observed tick would
+        // fire on a different phase than intended.
+        if (++_lifecycleStepsSinceIndexRebuild >= IndexRebuildPeriod) { _lifecycleStepsSinceIndexRebuild = 0; _w.Fauna.RebuildIndex(); }
         var dead = new List<(FaunaIndividual, string)>();
         var births = new List<(FaunaSpeciesDef Sp, FaunaIndividual A, FaunaIndividual? B)>();
         var reproducedThisStep = new HashSet<EntityId>();
