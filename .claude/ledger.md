@@ -204,7 +204,9 @@ Tasks
 | budget-followup | graceful budget refusal | DONE (bff8caf) | IntroduceFauna checks CanIntroduce up front -> readable refusal, not a throw; partial drops report "2 of 5". Populate.Starters guards the same budget so world creation can't crash. 2 new tests. |
 | intro-crash2 | SECOND crash path found | DONE (bff8caf) | Populate.Starters called CreateFounder in a loop during world CREATION — a preset demanding more than the budget would throw while loading a world. Not in the original follow-up note. |
 | flora-overlap | parallel layer builds on load | DONE (28b0a02) | BuildLayers awaited one mesh at a time, once MoveNext per frame -> load time was the SUM of all builds, species appeared in catalog order. Now launches whole species up to a 24-task budget and publishes each when its own meshes finish. Material setup + GPU resources stay on the main thread. |
-| silt-colour | darker muddy brown | DONE (bff8caf) | (0.42,0.38,0.31) -> (0.21,0.155,0.115). |
+| daynight | chunk 13: presentation day/night clock + lighting | MERGED (76eb40a), FIXED (b5a0986) | The cycle NEVER RAN until b5a0986: EnvironmentRig's Stopwatch was declared and read but never started, so Elapsed stayed 0 and lighting was pinned to the first keyframe (flat midday, 1.26). Clock's own 11 tests passed because they inject a time source — nothing covered the wiring. Only a human playtest caught it. See D-dnclock. |
+| silt-colour | darker muddy brown | DONE (bff8caf, b5a0986) | (0.42,0.38,0.31) -> (0.21,0.155,0.115) -> (0.070,0.049,0.034). The middle value still read LIGHT because it is LINEAR albedo (~sRGB 0.5) under Agx. Lesson: shader colour constants here are linear, not sRGB. |
+
 | beforeafter | paired perf measurement of coarsening | OPEN | Populated-world before (c886997) vs after. Not run — soaks exceed tool window. |
 | visual-review | day/night lighting + silt bed on screen | QUEUED | Both boot-clean; no windowed photo review yet. Needs the user's eyes. |
 
@@ -232,7 +234,18 @@ next, and the coroutine was advanced only once per frame in `_Process`, so the o
 serialized and total time was the SUM of every mesh build. Fixed by overlapping species (28-task budget),
 publishing each as it completes. Lesson: on a slow load, suspect the queue, not the item that looks special.
 
-PRE-EXISTING FAILURES (verified identical before and after the flora change, on warm cache):
+DAY/NIGHT LESSON (b5a0986): a unit-tested feature was completely dead, and 11 green tests proved nothing about
+it. `DayNightClock` takes its time source as an injected `Func<double>`, so every test supplied its own and the
+real call site — `new DayNightClock(() => _monotonic.Elapsed.TotalSeconds)` — was never exercised. The rig
+never called `Start()` on that Stopwatch, so the value was 0 forever. Two rules: (1) a test that injects a
+dependency has NOT tested the wiring — the production call site needs its own check; (2) "it compiles, tests
+pass, code looks right" is not evidence a feature runs. Only the human playtest surfaced it. Anything with a
+real-time side effect needs someone to watch it happen.
+
+SHADER COLOUR SPACE: terrain.gdshader colour constants are LINEAR albedo, not sRGB, and the scene tonemaps
+with Agx (which lifts shadows). A "dark brown" written as 0.21 renders as a mid-tone; ~0.07 is needed to read
+as dark. Convert before picking values.
+
   smoke: camera crosses water surface (transitions 0), pause stops simulated time, place rock (overlaps a
   log), introduce ambervein (no valid habitat), quality changes leave simulation untouched — 5 of 30, all
   unrelated to flora layer building. Not investigated; NOT regressions from this session's work.
