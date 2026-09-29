@@ -457,6 +457,34 @@ public static class EcologyGuildIds
 }
 
 /// <summary>
+/// Safety-net diet per guild, consulted only once a species' own preferred diet has come up well short of what the
+/// animal could have eaten. It stops a grazer starving on a resource that simply is not there - a drained basin, a
+/// bare substrate, an uncolonised litter patch - instead of on its own preferences being wrong. Each fallback names a
+/// resource id that a diet entry already uses and is drawn from the same pool through the same code path, so it
+/// sustains an animal rather than replacing its diet. Predators deliberately have none.
+/// </summary>
+public static class EcologyGuildFallbacks
+{
+    /// <summary>Source units per second taken by a fallback meal; comparable to a diet entry's ratePerHour.</summary>
+    private const double FallbackRatePerSecond = 0.002 / SimUnits.Hour;
+
+    /// <summary>Shared immutable entries, so a feeding attempt allocates nothing. Efficiency sits below a typical
+    /// preferred entry: a fallback is a maintenance trickle, not a substitute meal.</summary>
+    private static readonly DietEntry Detritus = new() { Resource = "detritus", RatePerSecond = FallbackRatePerSecond, Efficiency = 6 };
+    private static readonly DietEntry Biofilm = new() { Resource = "biofilm", RatePerSecond = FallbackRatePerSecond, Efficiency = 4 };
+
+    /// <summary>The fallback diet entry for a guild, or null when the guild has none (predators).</summary>
+    public static DietEntry? Fallback(EcologyGuild g) => g switch
+    {
+        EcologyGuild.TerrestrialGrazerDetritivore => Detritus,
+        EcologyGuild.AquaticGrazerDetritivore => Biofilm,
+        EcologyGuild.FlyingGrazerScavenger => Detritus,
+        EcologyGuild.Predator => null,
+        _ => null,
+    };
+}
+
+/// <summary>
 /// Render-only locomotion families. The simulation remains authoritative for position and behaviour; these
 /// describe how a body should visibly realize that motion. Numeric values are passed directly to the fauna shader.
 /// </summary>

@@ -41,7 +41,7 @@
     }
   ],
   "metabolism": {
-    "basalPerHour": 0.01,
+    "basalPerHour": 0.0014,
     "maxEnergy": 1,
     "initialEnergy": 0.75,
     "hungerThreshold": 0.8,
