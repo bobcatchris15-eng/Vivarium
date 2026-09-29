@@ -201,9 +201,12 @@ Tasks
 | cs10 | coarsen metabolism | MERGED (3bfd0f7) | FaunaMetabolism 3->6; disturbance stress now time-weighted (integral of DisturbedUntil inside the window), exactly invariant under chopping. Feeding stays one pass so predation kills don't multiply. |
 | cs11 | coarsen lifecycle onto bio-time | MERGED (43cb396) | FaunaLifecycle 30->120; ageing/maturity/mortality/cooldowns all on the bio axis; MaxLocalDensity got a per-birth re-test. |
 | plasmodium | decouple cadence from fauna metabolism | MERGED (d3a13a7) | coverage.plasmodium was on Cadence.FaunaMetabolism; coarsening to 6 doubled its step to 60s, which its dt clamp [0.1,5.0] truncates — would have starved slime diffusion to ~8%. Gave it Cadence.Plasmodium=3. |
-| beforeafter | paired perf measurement of coarsening | OPEN | Need populated-world before (c886997) vs after. Not done — soaks exceed tool window; do it overnight or with a longer budget. |
-| budget-followup | graceful budget refusal in Introduction.cs | QUEUED | CreateFounder still throws at a spent budget; one-line fix owed. |
-| visual-review | day/night lighting + silt bed on screen | QUEUED | Both boot-clean; no windowed photo review yet. |
+| budget-followup | graceful budget refusal | DONE (bff8caf) | IntroduceFauna checks CanIntroduce up front -> readable refusal, not a throw; partial drops report "2 of 5". Populate.Starters guards the same budget so world creation can't crash. 2 new tests. |
+| intro-crash2 | SECOND crash path found | DONE (bff8caf) | Populate.Starters called CreateFounder in a loop during world CREATION — a preset demanding more than the budget would throw while loading a world. Not in the original follow-up note. |
+| flora-overlap | parallel layer builds on load | DONE (28b0a02) | BuildLayers awaited one mesh at a time, once MoveNext per frame -> load time was the SUM of all builds, species appeared in catalog order. Now launches whole species up to a 24-task budget and publishes each when its own meshes finish. Material setup + GPU resources stay on the main thread. |
+| silt-colour | darker muddy brown | DONE (bff8caf) | (0.42,0.38,0.31) -> (0.21,0.155,0.115). |
+| beforeafter | paired perf measurement of coarsening | OPEN | Populated-world before (c886997) vs after. Not run — soaks exceed tool window. |
+| visual-review | day/night lighting + silt bed on screen | QUEUED | Both boot-clean; no windowed photo review yet. Needs the user's eyes. |
 
 HARD NUMBER — CORRECTED (2026-09-29, second pass). The earlier "0.003 ms/tick, fauna is not a
 bottleneck" figure was measured on `--scenario none`, an EMPTY world. It was a null measurement and the
@@ -221,7 +224,19 @@ its actual win is UNMEASURED — a clean paired before/after on a populated worl
 c886997 (pre-coarsening) exists for that. Until then do not claim a perf win; the ecology/robustness
 value of chunks 3-6 stands on its own.
 
-KEY ECOLOGY FIX (2026-09-29): the dominant failure was NOT basal rate or diet — it was predation over-harvest.
+SAVE-LOAD SLOWNESS (investigated 2026-09-29, fixed 28b0a02): opening a save took ages for plants, and
+carrion bell appeared immediately while everything else trickled in. Cause was NOT carrion bell being special
+— it is 6th of 40 species in CONTENT CATALOG ORDER, i.e. near the front of the build queue. `BuildLayers`
+awaited each variant mesh (`do { yield return false; } while (!pending.IsCompleted)`) before starting the
+next, and the coroutine was advanced only once per frame in `_Process`, so the off-thread work was fully
+serialized and total time was the SUM of every mesh build. Fixed by overlapping species (28-task budget),
+publishing each as it completes. Lesson: on a slow load, suspect the queue, not the item that looks special.
+
+PRE-EXISTING FAILURES (verified identical before and after the flora change, on warm cache):
+  smoke: camera crosses water surface (transitions 0), pause stops simulated time, place rock (overlaps a
+  log), introduce ambervein (no valid habitat), quality changes leave simulation untouched — 5 of 30, all
+  unrelated to flora layer building. Not investigated; NOT regressions from this session's work.
+
 A predator could kill one whole prey per named diet entry per pass. Fixing the kill rate (not the intake) is
 what made small fauna survive. Lesson for future tuning: measure death CAUSES before tuning energy budgets.
 
