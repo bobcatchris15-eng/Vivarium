@@ -588,7 +588,16 @@ public sealed class FaunaSystem
 
     public void StepLifecycle(double dt)
     {
+        // Every quantity in this pass is a function of the interval the scheduler hands over, never of "one pass
+        // = one day". The cadence is coarse (Cadence.FaunaLifecycle) and may be raised again, so the pass must stay
+        // correct when a single call spans far more biological time than the last one did.
+        //   dt  - elapsed BIOLOGICAL seconds for this window: the Bio(...) wrapper has already applied
+        //         BioAcceleration, so it grows with the cadence instead of being a fixed per-call amount.
+        //   now - the authoritative biological clock, the same axis ages and cooldowns are written on.
+        // Ageing, maturity, old age, cooldowns and the death hazard below are therefore all expressed in
+        // biological seconds (or per biological day) and scale with dt by construction.
         double now = _w.Clock.BioSeconds;
+        double bioDays = dt / SimUnits.Day;
         long tick = _w.Clock.Tick;
         // Refill the spatial index on the same bounded cadence as behaviour rather than every lifecycle pass. Ageing,
         // maturity, mortality, cooldown and birth order read no index at all; the only readers are the mate search and
@@ -610,10 +619,19 @@ public sealed class FaunaSystem
             if (f.Age >= sp.Lifespan * f.LifespanFactor) { dead.Add((f, "old age")); continue; }
             if (sp.DailyMortality > 0)
             {
-                double pDie = 1 - Math.Pow(1 - sp.DailyMortality, dt / SimUnits.Day);
+                // Probability of dying somewhere inside the WHOLE window, not on one nominal day: a coarser
+                // cadence must not make an animal less likely to die over the same elapsed biological time. The
+                // draw is still keyed per individual per pass, so it stays deterministic and save-safe (the tick
+                // is part of the serialized clock).
+                double pDie = 1 - Math.Pow(1 - sp.DailyMortality, bioDays);
                 if (Rng.HashUnit(_w.Seed, _mortalityHash, f.Id.Value, (ulong)tick) < pDie) { dead.Add((f, "mortality")); continue; }
             }
             if (reproducedThisStep.Contains(f.Id)) continue;
+            // Eligibility is judged once per pass, against the world as it stood when the window opened: a
+            // coarse cadence means many animals clear it at the same moment. That is a queue, not a licence -
+            // the caps are re-tested per birth in the loop below, so a large eligible cohort is throttled to
+            // what the population can actually carry rather than all firing at once. Cooldowns are written on
+            // `now`, the biological clock, so they last a real biological interval and not "until the next pass".
             if (!CanReproduce(f, sp, now, out _)) continue;
             FaunaIndividual? mate = null;
             if (sp.Sexual)
@@ -642,6 +660,13 @@ public sealed class FaunaSystem
             {
                 if (_w.Fauna.CountOf(sp.Id) >= sp.PopulationCap) break;
                 if (AtFaunaBudget) break;
+                // MaxLocalDensity is the one cap that was only ever consulted at eligibility time, which under a
+                // coarse window let every pair admitted at the window's opening overfill the same patch together.
+                // Re-test it per birth, with the same radius and threshold CanReproduce uses, so it can only ever
+                // refuse a birth the eligibility pass had not yet accounted for. PopulationCap and the world budget
+                // are untouched above.
+                _w.Fauna.Neighbours(a.PositionXZ, sp.SenseRadius, _nb);
+                if (_nb.Count(o => o.SpeciesId == sp.Id) > sp.MaxLocalDensity) break;
                 CreateOffspring(sp, a, b != null && _w.Fauna.Get(b.Id) != null ? b : null);
             }
             a.Energy = Math.Max(0.01, a.Energy);
