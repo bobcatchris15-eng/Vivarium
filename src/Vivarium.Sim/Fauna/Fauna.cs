@@ -84,7 +84,8 @@ public sealed class FaunaPopulation
 
     public void Clear() { Items.Clear(); _byId.Clear(); Index.Clear(); _countBySpecies.Clear(); Version++; }
 
-    /// <summary>Rebuild in id order so neighbour query order is deterministic and position-current.</summary>
+    /// <summary>Rebuild in id order so neighbour query order is deterministic and position-current. Behaviour
+    /// refreshes this on a slow cadence; membership changes rebuild it immediately.</summary>
     public void RebuildIndex() { Index.Clear(); foreach (var f in Items) Index.Add(f); }
 
     public void Neighbours(Vec2 p, double radius, List<FaunaIndividual> into) { into.Clear(); Index.Query(p, radius, into); }
