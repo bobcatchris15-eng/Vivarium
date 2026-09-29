@@ -4,7 +4,7 @@ using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Tools;
 
-public enum HitKind { None = 0, Terrain = 1, Water = 2, Gravel = 3, Log = 4, Rock = 5, Flora = 6, Fauna = 7 }
+public enum HitKind { None = 0, Terrain = 1, Water = 2, Gravel = 3, Log = 4, Rock = 5, Flora = 6, Fauna = 7, PilotTree = 8 }
 
 public readonly record struct WorldHit(HitKind Kind, EntityId Id, Vec3 Point, double Distance)
 {
@@ -27,6 +27,9 @@ public static class Selection
         var dir = direction.Normalized();
         if (dir.LengthSq < 0.5) return WorldHit.None;
         var hits = new List<WorldHit>(8);
+
+        double tPilot = RayPilotTree(w, origin, dir);
+        if (!double.IsInfinity(tPilot)) hits.Add(new WorldHit(HitKind.PilotTree, EntityId.None, origin + dir * tPilot, tPilot));
 
         double tTerrain = RayTerrain(w, origin, dir);
         if (!double.IsInfinity(tTerrain))
@@ -86,6 +89,7 @@ public static class Selection
         var dir = direction.Normalized();
         if (dir.LengthSq < 0.5) return double.PositiveInfinity;
         double best = RayTerrain(w, origin, dir, maxDistance);
+        best = Math.Min(best, RayPilotTree(w, origin, dir, maxDistance));
         foreach (var r in w.Props.Rocks)
             best = Math.Min(best, RayEllipsoid(origin, dir, new Vec3(r.X, r.Y, r.Z), r.SizeX, r.SizeY, r.SizeZ, r.RotationY));
         foreach (var l in w.Props.Logs)
@@ -115,7 +119,7 @@ public static class Selection
     {
         if (hits.Count == 0) return WorldHit.None;
         double opaque = double.PositiveInfinity;
-        foreach (var h in hits) if (h.Kind is HitKind.Terrain or HitKind.Gravel or HitKind.Rock or HitKind.Log) opaque = Math.Min(opaque, h.Distance);
+        foreach (var h in hits) if (h.Kind is HitKind.Terrain or HitKind.Gravel or HitKind.Rock or HitKind.Log or HitKind.PilotTree) opaque = Math.Min(opaque, h.Distance);
         WorldHit best = WorldHit.None;
         foreach (var h in hits)
         {
@@ -127,8 +131,35 @@ public static class Selection
 
     public static int Priority(HitKind k) => k switch
     {
-        HitKind.Fauna => 7, HitKind.Flora => 6, HitKind.Rock => 5, HitKind.Log => 4, HitKind.Gravel => 3, HitKind.Water => 2, HitKind.Terrain => 1, _ => 0,
+        HitKind.Fauna => 7, HitKind.Flora => 6, HitKind.PilotTree => 5, HitKind.Rock => 5, HitKind.Log => 4, HitKind.Gravel => 3, HitKind.Water => 2, HitKind.Terrain => 1, _ => 0,
     };
+
+    public static double RayPilotTree(VivariumWorld w, Vec3 o, Vec3 d, double maxDistance = MaxDistance)
+    {
+        var tree = w.PilotTree;
+        if (tree == null) return double.PositiveInfinity;
+        const double step = 0.035;
+        // Reject rays well outside the tree's conservative bounding sphere before marching.
+        var centre = Vec3.FromXZ(tree.Anchor, tree.BaseHeight + tree.Def.TrunkHeight * 0.5);
+        double bounds = tree.Def.TrunkHeight * 0.5 + w.Domain.Radius;
+        double along = (centre - o).Dot(d);
+        double distanceSq = (centre - o - d * along).LengthSq;
+        if (distanceSq > bounds * bounds || along + bounds < 0 || along - bounds > maxDistance) return double.PositiveInfinity;
+        double start = Math.Max(0, along - bounds), end = Math.Min(maxDistance, along + bounds);
+        double prior = start;
+        for (double t = start; t <= end; t += step)
+        {
+            if (!tree.ContainsVolume(o + d * t)) { prior = t; continue; }
+            double lo = prior, hi = t;
+            for (int k = 0; k < 18; k++)
+            {
+                double mid = (lo + hi) * 0.5;
+                if (tree.ContainsVolume(o + d * mid)) hi = mid; else lo = mid;
+            }
+            return hi;
+        }
+        return double.PositiveInfinity;
+    }
 
     /// <summary>Ray vs terrain top surface inside the hexagon (march + bisection). Returns distance or +∞.</summary>
     public static double RayTerrain(VivariumWorld w, Vec3 o, Vec3 d, double maxDistance = MaxDistance)

@@ -31,6 +31,7 @@ public partial class GameSession : Node3D
     public IslandRenderer Island { get; private set; } = null!;
     public WaterRenderer Water { get; private set; } = null!;
     public PropRenderer Props { get; private set; } = null!;
+    public PilotTreeRenderer PilotTree { get; private set; } = null!;
     public SoilDetailRenderer SoilDetail { get; private set; } = null!;
     public AmbientGroundCoverRenderer AmbientGround { get; private set; } = null!;
     public CoverageRenderer Coverage { get; private set; } = null!;
@@ -63,6 +64,7 @@ public partial class GameSession : Node3D
         Island = new IslandRenderer { Name = "Island" }; AddChild(Island);
         Water = new WaterRenderer { Name = "WaterRenderer" }; AddChild(Water);
         Props = new PropRenderer { Name = "PropRenderer" }; AddChild(Props);
+        PilotTree = new PilotTreeRenderer { Name = "PilotTreeRenderer" }; AddChild(PilotTree);
         SoilDetail = new SoilDetailRenderer { Name = "SoilDetail" }; AddChild(SoilDetail);
         AmbientGround = new AmbientGroundCoverRenderer { Name = "AmbientGroundCover" }; AddChild(AmbientGround);
         Coverage = new CoverageRenderer { Name = "Coverage" }; AddChild(Coverage);
@@ -98,24 +100,33 @@ public partial class GameSession : Node3D
 
     public void StartWorld(VivariumWorld world, string? saveName = null)
     {
+        var startup = System.Diagnostics.Stopwatch.StartNew();
+        void Stage(string name, Action build)
+        {
+            GD.Print($"WORLD_RENDER_STAGE_BEGIN {name} elapsed_ms={startup.ElapsedMilliseconds}");
+            long begin = startup.ElapsedMilliseconds;
+            build();
+            GD.Print($"WORLD_RENDER_STAGE_END {name} stage_ms={startup.ElapsedMilliseconds - begin} elapsed_ms={startup.ElapsedMilliseconds}");
+        }
         if (Host == null) Host = new SimHost(world); else Host.Swap(world);
         // Leave room for camera and rendering after every fixed simulation tick.
         world.Scheduler.WallBudgetMs = 4;
         world.CoverageSystem.AsyncMode = true;
         CurrentSaveName = saveName;
-        Island.Build(world);
-        Water.Build(world);
-        Props.Build(world);
+        Stage("Island", () => Island.Build(world));
+        Stage("Water", () => Water.Build(world));
+        Stage("Props", () => Props.Build(world));
+        Stage("PilotTree", () => PilotTree.Build(world));
         SoilDetail.Camera = CameraRig.Cam;
-        SoilDetail.Build(world);
+        Stage("SoilDetail", () => SoilDetail.Build(world));
         AmbientGround.Camera = CameraRig.Cam;
-        AmbientGround.Build(world);
+        Stage("AmbientGround", () => AmbientGround.Build(world));
         Coverage.Camera = CameraRig.Cam;
-        Coverage.Build(world);
+        Stage("Coverage", () => Coverage.Build(world));
         Flora.Camera = Fauna.Camera = CameraRig.Cam;
-        Flora.Build(world);
-        Fauna.Build(world);
-        Overlay.Bind(world);
+        Stage("Flora", () => Flora.Build(world));
+        Stage("Fauna", () => Fauna.Build(world));
+        Stage("Overlay", () => Overlay.Bind(world));
         CameraRig.World = world;
         CameraRig.ResetView();
         Tools.Bind(world);
@@ -128,7 +139,7 @@ public partial class GameSession : Node3D
         History.Clear(); _lastHistoryDay = -1;
         world.Scheduler.SystemTimed += (sys, ms) => FrameProfiler.Record("Sys." + sys.Name, ms);
         Log.Info(LogCategory.App, $"World started: '{world.Descriptor.Name}' seed {world.Seed}, day {world.Clock.BioDays:0.0}.");
-        WorldChanged?.Invoke();
+        Stage("WorldChanged", () => WorldChanged?.Invoke());
     }
 
     private void OnAutosaved(SaveResult r)

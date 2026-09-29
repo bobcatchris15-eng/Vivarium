@@ -196,17 +196,20 @@ This metadata becomes shared infrastructure for visitor routing and future local
 
 # System B: Pilot Tree
 
+Implementation direction, 2026-09-28: all six forms are required. The user tightened placement to **corners only**, with the two primary root buttresses extending along the neighboring island sides. This supersedes edge-or-corner alternatives elsewhere in this plan. Real anatomy references and the fictional form roster are recorded in [pilot_tree_references.md](pilot_tree_references.md).
+
 ## Goal
 
-Allow zero or one enormous old-growth tree to intersect a world at a corner or edge. It is landscape infrastructure, not an ordinary woody flora individual scaled up.
+Allow zero or one enormous old-growth tree to intersect a world at a corner. It is landscape infrastructure, not an ordinary woody flora individual scaled up.
 
 ## Placement and generation
 
-- choose an allowed edge or vertex anchor,
+- choose a vertex anchor,
 - place most of the trunk outside the specimen,
 - allow only part of the trunk flare and root system to enter,
 - reserve trunk/root volume before rocks, logs, ordinary woody flora, or starter populations,
 - orient roots according to terrain and archetype rather than perfect radial symmetry,
+- extend the two primary buttresses along both sides adjoining the selected corner,
 - let roots alter local terrain, water, and traversal.
 
 Centering the whole giant tree inside the island would undermine the intended scale.
@@ -758,11 +761,11 @@ Implement:
 - shade/root/litter fields,
 - tree-specific substrate opportunities.
 
-Prototype with two strongly different trees first, preferably hemlock analogue and cycad analogue, then fill out the roster.
+Implement all six forms: Gloomspire, Needlevault, Crowncoil, Emberpillar, Basinwarden, and Palehollow. Their real-world references guide ecological and anatomical structure without copying a species.
 
 Acceptance:
 
-- tree occupies an edge/corner while implying much larger size,
+- tree occupies a corner while implying much larger size, with buttresses extending along both adjoining sides,
 - prop placement respects roots,
 - shade/moisture/litter gradients measurably alter habitat,
 - effects are spatial rather than global multipliers.

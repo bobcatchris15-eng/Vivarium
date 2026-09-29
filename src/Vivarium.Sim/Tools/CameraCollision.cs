@@ -86,6 +86,12 @@ public static class CameraCollision
             hit = true;
         }
 
+        if (w.PilotTree != null)
+        {
+            var penetration = w.PilotTree.Penetration(p, radius);
+            Consider(penetration.Depth, penetration.Normal);
+        }
+
         double sd = w.Domain.SignedDistance(p.XZ);
         var surfaceXZ = w.Domain.Contains(p.XZ) ? p.XZ : w.Domain.NearestBoundaryPoint(p.XZ);
         double surface = w.Terrain.Height(surfaceXZ);

@@ -53,7 +53,7 @@ public static class FloraPlacementGroups
         FloraPlacementGroup.Terrestrial => "Terrestrial plants",
         FloraPlacementGroup.WatersideAquatic => "Waterside & aquatic",
         FloraPlacementGroup.Decomposer => "Decomposers",
-        FloraPlacementGroup.Woody => "Trees & shrubs",
+        FloraPlacementGroup.Woody => "Shrubs",
         _ => group.ToString(),
     };
 

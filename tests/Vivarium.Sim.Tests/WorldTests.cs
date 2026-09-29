@@ -90,7 +90,8 @@ public class WorldTests
     [Fact] // t-017
     public void SideWallsAreContinuousAndOutwardFacing()
     {
-        var w = TestUtil.DefaultWorld(populate: false);
+        var descriptor=TestUtil.Default;descriptor.PilotTreeId="none";
+        var w=VivariumWorld.Create(TestUtil.Content,descriptor,populate:false);
         var walls = TerrainMesh.BuildWalls(w);
         Assert.True(walls.TriangleCount > 100);
         // every wall vertex lies on the hexagon perimeter (or the underside) and within vertical bounds
@@ -144,7 +145,8 @@ public class WorldTests
     [Fact] // t-019
     public void QuerySurfaceMatchesGeneratedTerrain()
     {
-        var w = TestUtil.DefaultWorld(populate: false);
+        var descriptor = TestUtil.Default; descriptor.PilotTreeId = "none";
+        var w = VivariumWorld.Create(TestUtil.Content,descriptor,populate:false);
         var hf = w.Terrain;
         var ulong0 = Rng.Mix(w.Seed, Hash.Fnv1a64("terrain.height"));
         for (int j = 2; j < hf.Nz - 2; j += 7)

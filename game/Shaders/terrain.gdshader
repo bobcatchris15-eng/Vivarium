@@ -1,5 +1,5 @@
 // Island top surface from photo-scanned ground materials (CC0, ambientCG): soil, damp forest earth, moss,
-// leaf litter, rock and gravel. Live habitat data arrives as a small field texture (R = moisture,
+// leaf litter and gravel. Live habitat data arrives as a small field texture (R = moisture,
 // G = substrate code / 4, B = nutrients, A = light) sampled by world XZ, and decides where each material shows.
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
@@ -26,9 +26,6 @@ uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform sampler2D leaf_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D leaf_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D leaf_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D rock_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -115,7 +112,6 @@ void fragment() {
         * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8));
     float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
     float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
-    float wRock = max(smoothstep(0.3, 0.8, sub.g), smoothstep(0.55, 0.8, 1.0 - wn.y));  // steep banks show bare rock
 
     vec3 tn;
     vec4 soil = sample_untiled(soil_col, soil_nrm, soil_rgh, uv, tn);
@@ -179,18 +175,13 @@ void fragment() {
 
     // world-space normal: geometry normal perturbed by the blended detail (uv = world xz; GL green = -z)
     vec3 detail = normalize(wn + vec3(tn.x, 0.0, -tn.y) * 0.9);
-    if (wRock > 0.01) {
-        vec3 n_rock;
-        vec4 rock = triplanar(rock_col, rock_nrm, rock_rgh, world_pos / (tile_metres * 0.9), wn, 4.0, n_rock);
-        float w = hblend(wRock, dot(rock.rgb, vec3(0.33)) * 2.0);
-        col = mix(col, rock.rgb, w); rough = mix(rough, rock.a, w); detail = normalize(mix(detail, n_rock, w));
-    }
+
 
     // Anonymous low vegetation reads as a soft green underlayer at distance. Close-up silhouette comes from
     // AmbientGroundCoverRenderer; this prevents the same field from turning back into brown dirt when geometry culls.
     float ambient_micro = 0.76 + 0.24 * fbm(world_pos.xz * 7.5 + vec2(19.1, 4.7));
     float ambient_weight = smoothstep(0.035, 0.72, ambient_cover) * 0.72 * ambient_micro
-        * (1.0 - wGrav) * (1.0 - wRock) * (1.0 - wLeaf * 0.55);
+        * (1.0 - wGrav) * (1.0 - wLeaf * 0.55);
     vec3 ambient_dry = vec3(0.22, 0.35, 0.09);
     vec3 ambient_mesic = vec3(0.075, 0.29, 0.065);
     vec3 ambient_shade = vec3(0.045, 0.205, 0.105);

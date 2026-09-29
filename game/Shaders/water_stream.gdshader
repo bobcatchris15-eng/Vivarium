@@ -55,7 +55,7 @@ void fragment() {
         hx = stream_height(UV + vec2(e, 0.0), fdir, sdir, t);
         hz = stream_height(UV + vec2(0.0, e), fdir, sdir, t);
 
-        float amp = 0.28 + 0.60 * clamp(speed * 3.0, 0.0, 1.0);
+        float amp = (0.10 + 0.30 * clamp(speed, 0.0, 1.0)) * mix(0.12, 1.0, depthf);
         vec2 slope = vec2(h - hx, h - hz) / e * amp * 0.045;
         vec3 wn = normalize(vec3(slope.x, 1.0, slope.y));
         if (underwater > 0.5) wn = -wn;
@@ -82,7 +82,7 @@ void fragment() {
     // Surface foam and aeration on fast-flowing sections
     float u_along = dot(UV, fdir);
     float u_across = dot(UV, sdir);
-    float fast_flow = smoothstep(0.08, 0.40, speed);
+    float fast_flow = smoothstep(0.35, 1.4, speed) * smoothstep(0.008, 0.04, optical_depth);
     float foam_noise = sin(u_along * 38.0 - t * 7.5) * cos(u_across * 24.0 + sin(u_along * 14.0));
     float foam_mask = smoothstep(0.35, 0.80, foam_noise * 0.5 + 0.5 + (h - 0.5) * 0.4) * fast_flow;
     scene = mix(scene, foam_color, foam_mask * 0.60);
@@ -99,7 +99,7 @@ void fragment() {
     ALBEDO = vec3(0.0);
     EMISSION = scene;
     ALPHA = cutface > 0.5 ? 1.0 : smoothstep(0.0, 0.015, base_thickness);
-    ROUGHNESS = cutface > 0.5 ? 0.0 : mix(0.035, 0.16, foam_mask);
+    ROUGHNESS = cutface > 0.5 ? 0.0 : mix(0.12, 0.25, foam_mask);
     METALLIC = 0.0;
     SPECULAR = cutface > 0.5 ? 0.15 : 0.55;
 }

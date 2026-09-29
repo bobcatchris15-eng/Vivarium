@@ -8,7 +8,7 @@ namespace Vivarium.Sim.Fields;
 public sealed class EnvironmentFields
 {
     public GridSpec Grid { get; }
-    /// <summary>Generated base substrate (soil/rock); props and water override it in queries.</summary>
+    /// <summary>Generated soil substrate; props and water override it in queries.</summary>
     public CategoricalField BaseSubstrate { get; }
     /// <summary>Normalized habitat light/exposure (0..1). Derived from terrain + props; recomputed when props change.</summary>
     public ScalarField Light { get; }
@@ -42,19 +42,11 @@ public sealed class EnvironmentFields
         "detritus" => Detritus, "biofilm" => Biofilm, "plankton" => Plankton, "nutrients" => Nutrients, _ => null,
     };
 
-    /// <summary>Generates base substrate classification from terrain slope and seeded exposure noise.</summary>
+    /// <summary>Generates soil terrain. Rock substrate is supplied only by placed rock props.</summary>
     public void GenerateBaseSubstrate(WorldDescriptor d, Heightfield hf)
     {
-        ulong seed = Rng.Mix(d.Seed, Hash.Fnv1a64("world.substrate"));
-        double exposure = d.Terrain.RockExposure;
         foreach (int idx in Grid.DomainCells)
-        {
-            var p = Grid.CellCenter(idx);
-            double slope = hf.Slope(p);
-            double n = 0.5 + 0.5 * Noise.Fbm(seed, p.X * 0.6, p.Z * 0.6, 3);
-            bool rock = slope > 0.75 || n > 1 - exposure;
-            BaseSubstrate[idx] = (byte)(rock ? Substrate.Rock : Substrate.Soil);
-        }
+            BaseSubstrate[idx] = (byte)Substrate.Soil;
     }
 
     public bool LightStale(PropSet props) => _lightPropsVersion != props.Version;
@@ -77,7 +69,7 @@ public sealed class EnvironmentFields
     /// Computes exposure = sky openness from terrain horizon (8 azimuths, 3 m reach) × prop shading.
     /// Cells on top of props are fully exposed at the prop surface.
     /// </summary>
-    public void RecomputeLight(Heightfield hf, PropSet props)
+    public void RecomputeLight(Heightfield hf, PropSet props, PilotTreeState? pilotTree = null)
     {
         _lightPropsVersion = props.Version;
         const int dirs = 8;
@@ -112,7 +104,8 @@ public sealed class EnvironmentFields
                     occl += maxTan / Math.Sqrt(1.0 + maxTan * maxTan);
             }
             double openness = 1 - occl / dirs;          // 1 = fully open sky
-            Light[idx] = MathD.Clamp01(0.08 + 0.92 * openness);
+            double canopy = pilotTree == null ? 1 : 1 - pilotTree.Def.ShadeOpacity * pilotTree.CanopyInfluence(p);
+            Light[idx] = MathD.Clamp01((0.08 + 0.92 * openness) * canopy);
         });
     }
 

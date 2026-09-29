@@ -28,6 +28,7 @@ public sealed class PropPlacement
         double r = Math.Max(sizeX, sizeZ);
         if (!p.IsFinite) return "invalid position";
         if (!Domain.ContainsDisc(p, r * 0.9)) return "rock would extend past the island edge";
+        if (_w.PilotTree?.BlocksDisc(p, r) == true) return "overlaps Pilot Tree roots or trunk";
         var err = OverlapCheck(p, r, ignore, gravelBlocks: false);
         if (err != null) return err;
         if (StackDepth(p, ignore) + 1 > MaxStackLevels) return "stack too high";
@@ -40,6 +41,8 @@ public sealed class PropPlacement
         var axis = Vec2.FromAngle(heading);
         var a = p - axis * (length / 2); var b = p + axis * (length / 2);
         if (!Domain.ContainsDisc(a, radius) || !Domain.ContainsDisc(b, radius)) return "log would extend past the island edge";
+        for (int k = 0; k <= 16; k++)
+            if (_w.PilotTree?.BlocksDisc(a + (b - a) * (k / 16.0), radius + length / 32) == true) return "overlaps Pilot Tree roots or trunk";
         double seat = SupportHeight(p, ignore);
         foreach (var rk in Props.Rocks)
         {
@@ -70,6 +73,7 @@ public sealed class PropPlacement
     {
         if (!p.IsFinite) return "invalid position";
         if (!Domain.ContainsDisc(p, radius * 0.6)) return "gravel patch centre too close to the island edge";
+        if (_w.PilotTree?.BlocksDisc(p, radius) == true) return "overlaps Pilot Tree roots or trunk";
         return null;
     }
 

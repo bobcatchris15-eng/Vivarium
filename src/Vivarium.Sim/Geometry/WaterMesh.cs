@@ -1,93 +1,90 @@
-﻿using Vivarium.Sim.Core;
+using Vivarium.Sim.Core;
 using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Geometry;
 
 /// <summary>
-/// Render geometry for two physically separate water systems:
-/// hydrostatic groundwater clipped against terrain, and dynamic surface water reconstructed from the solver.
+/// One fluid surface reconstructed from stored depth and momentum, clipped to terrain and island.
 /// Rendering is read-only and finer than the authoritative 25 cm environment grid.
 /// </summary>
-public sealed record WaterMeshSet(MeshData TableMesh, MeshData StreamMesh, MeshData CombinedMesh, MeshData? RivuletMesh = null);
+public sealed record WaterMeshSet(MeshData SurfaceMesh);
 
 /// <summary>Immutable inputs captured on the game thread for background water geometry.</summary>
 public sealed record WaterMeshSnapshot(
-    double[] Depth, double[] Bed, double[] FlowX, double[] FlowZ, Heightfield Terrain, double WaterTable = 0.0);
+    double[] Depth, double[] Bed, double[] FlowX, double[] FlowZ, Heightfield Terrain);
 
 public static class WaterMesh
 {
     public const int Subdivisions = 2;
-    public const int RingCells = 2;
+    public const int RingCells = 0;
 
     public static WaterMeshSnapshot Capture(VivariumWorld w) => new(
         (double[])w.Water.Depth.Clone(), (double[])w.Water.Bed.Clone(),
         (double[])w.Water.FlowX.Clone(), (double[])w.Water.FlowZ.Clone(),
-        w.Terrain.Snapshot(), w.Water.WaterTable);
+        w.Terrain.Snapshot());
 
     public static MeshData Build(VivariumWorld w, WaterMeshSnapshot? snapshot = null) =>
-        BuildSet(w, snapshot).CombinedMesh;
+        BuildSet(w, snapshot).SurfaceMesh;
 
-    public static WaterMeshSet BuildSet(VivariumWorld w, WaterMeshSnapshot? snapshot = null)
+    public static WaterMeshSet BuildSet(VivariumWorld w, WaterMeshSnapshot? snapshot = null) =>
+        Combine(w, snapshot);
+
+    private static WaterMeshSet Combine(VivariumWorld w, WaterMeshSnapshot? snapshot)
     {
-        var table = BuildGroundwater(w, snapshot);
-        var surface = BuildSurfaceWater(w, snapshot);
-        var rivulet = BuildRivulets(w, snapshot);
-        var combined = new MeshData();
-        combined.Append(table);
-        combined.Append(surface);
-        return new WaterMeshSet(table, surface, combined, rivulet);
+        var mesh = BuildSurfaceWater(w, snapshot);
+        mesh.Append(BuildWaterTable(w, snapshot?.Terrain ?? w.Terrain));
+        return new(mesh);
     }
 
-    private static MeshData BuildGroundwater(VivariumWorld w, WaterMeshSnapshot? snapshot)
+    /// <summary>Standing groundwater intersects terrain at one hydrostatic elevation.</summary>
+    public static MeshData BuildWaterTable(VivariumWorld w, Heightfield terrain)
     {
-        var g = w.Grid;
-        var dom = w.Domain;
-        var hf = snapshot?.Terrain ?? w.Terrain;
-        var bed = snapshot?.Bed ?? w.Water.Bed;
-        double table = snapshot?.WaterTable ?? w.Water.WaterTable;
         var mesh = new MeshData();
-        double sub = g.CellSize / Subdivisions;
-
-        // Table water is an infinite horizontal hydrostatic plane clipped by terrain + specimen boundary.
-        // Iterate every domain cell so narrow exposed pockets cannot disappear because a cell centre is dry.
-        foreach (int idx in g.DomainCells)
+        double level = w.Water.WaterTable, step = w.Grid.CellSize / 4;
+        foreach (int cell in w.Grid.DomainCells)
         {
-            int i = idx % g.Nx, j = idx / g.Nx;
-            double x0 = g.OriginX + i * g.CellSize, z0 = g.OriginZ + j * g.CellSize;
-            double x1 = x0 + g.CellSize, z1 = z0 + g.CellSize;
-            ExtendBoundarySquare(g, idx, i, j, ref x0, ref z0, ref x1, ref z1);
-
-            int nx = (int)Math.Round((x1 - x0) / sub), nz = (int)Math.Round((z1 - z0) / sub);
-            for (int sj = 0; sj < nz; sj++)
-                for (int si = 0; si < nx; si++)
+            int i = cell % w.Grid.Nx, j = cell / w.Grid.Nx;
+            double x0 = w.Grid.OriginX + i * w.Grid.CellSize;
+            double z0 = w.Grid.OriginZ + j * w.Grid.CellSize;
+            double x1 = x0 + w.Grid.CellSize, z1 = z0 + w.Grid.CellSize;
+            ExtendBoundarySquare(w.Grid, cell, i, j, ref x0, ref z0, ref x1, ref z1);
+            for (double z = z0; z < z1 - 1e-9; z += step)
+                for (double x = x0; x < x1 - 1e-9; x += step)
                 {
-                    double qx0 = x0 + si * sub, qz0 = z0 + sj * sub;
-                    var square = new[]
-                    {
-                        new Vec2(qx0, qz0), new Vec2(qx0 + sub, qz0),
-                        new Vec2(qx0 + sub, qz0 + sub), new Vec2(qx0, qz0 + sub)
-                    };
-                    if (!square.Any(q => table > hf.Height(q) + 0.0005)) continue;
-
-                    bool needsClip = g.IsBoundaryCell[idx] || square.Any(q => dom.SignedDistance(q) > 0);
-                    var poly = needsClip ? dom.ClipPolygon(square) : square.ToList();
-                    if (poly.Count < 3) continue;
-
-                    var ids = new int[poly.Count];
-                    for (int k = 0; k < poly.Count; k++)
-                    {
-                        double depthFactor = MathD.Clamp01((table - hf.Height(poly[k])) / 0.3);
-                        ids[k] = mesh.AddVertex(
-                            new Vec3(poly[k].X, table, poly[k].Z), Vec3.Up,
-                            0.2, 0.55, 0.7, depthFactor, poly[k].X, poly[k].Z, 0, 0);
-                    }
-                    for (int k = 1; k + 1 < poly.Count; k++) mesh.AddTriangle(ids[0], ids[k], ids[k + 1]);
-
-                    if (needsClip) AddCutFaces(mesh, dom, hf, poly, q => table, 0.3);
+                    var a = new Vec2(x,z); var b = new Vec2(x+step,z);
+                    var c = new Vec2(x+step,z+step); var d = new Vec2(x,z+step);
+                    Emit(new[]{a,b,c}); Emit(new[]{a,c,d});
                 }
         }
         return mesh;
+        void Emit(Vec2[] triangle)
+        {
+            var polygon = w.Domain.ClipPolygon(triangle);
+            var wet = new List<Vec2>();
+            for(int k=0;k<polygon.Count;k++)
+            {
+                var a=polygon[k]; var b=polygon[(k+1)%polygon.Count];
+                double ha=terrain.Height(a)-level, hb=terrain.Height(b)-level;
+                if(ha<0)wet.Add(a);
+                if((ha<0)!=(hb<0))
+                {
+                    // Bisect the actual heightfield, rather than averaging neighboring water heights.
+                    double lo=0,hi=1;
+                    for(int n=0;n<24;n++)
+                    {
+                        double t=(lo+hi)*.5; var q=a+(b-a)*t;
+                        if((terrain.Height(q)<level)==(ha<0))lo=t;else hi=t;
+                    }
+                    wet.Add(a+(b-a)*((lo+hi)*.5));
+                }
+            }
+            if(wet.Count<3)return;
+            var ids=wet.Select(q=>mesh.AddVertex(Vec3.FromXZ(q,level),Vec3.Up,.2,.55,.7,
+                MathD.Clamp01((level-terrain.Height(q))/.15),q.X,q.Z)).ToArray();
+            for(int k=1;k+1<ids.Length;k++)mesh.AddTriangle(ids[0],ids[k],ids[k+1]);
+            AddCutFaces(mesh,w.Domain,terrain,wet,_=>level,.15);
+        }
     }
 
     private static MeshData BuildSurfaceWater(VivariumWorld w, WaterMeshSnapshot? snapshot)
@@ -111,7 +108,7 @@ public static class WaterMesh
 
         foreach (int idx in g.DomainCells)
         {
-            if (depth[idx] < water.Config.WetDepth) continue;
+            if (depth[idx] < 0.00005) continue;
             int i = idx % g.Nx, j = idx / g.Nx;
             double surface = bed[idx] + depth[idx];
             double section = Math.Max(depth[idx] * cs, 1e-6);
@@ -136,36 +133,6 @@ public static class WaterMesh
                 cfz[c] /= cornerW[c];
                 defined[c] = true;
             }
-
-        // Rendering-only shoreline extrapolation. It never creates simulation water.
-        for (int pass = 0; pass < RingCells; pass++)
-        {
-            var nextLevel = (double[])level.Clone();
-            var nextDef = (bool[])defined.Clone();
-            for (int j = 0; j < cz; j++)
-                for (int i = 0; i < cx; i++)
-                {
-                    int c = j * cx + i;
-                    if (defined[c]) continue;
-                    double sum = 0;
-                    int n = 0;
-                    for (int dj = -1; dj <= 1; dj++)
-                        for (int di = -1; di <= 1; di++)
-                        {
-                            int ii = i + di, jj = j + dj;
-                            if (ii < 0 || jj < 0 || ii >= cx || jj >= cz || !defined[jj * cx + ii]) continue;
-                            sum += level[jj * cx + ii];
-                            n++;
-                        }
-                    if (n > 0)
-                    {
-                        nextLevel[c] = sum / n;
-                        nextDef[c] = true;
-                    }
-                }
-            level = nextLevel;
-            defined = nextDef;
-        }
 
         double Bilinear(double[] field, Vec2 p, out bool ok)
         {
@@ -197,7 +164,7 @@ public static class WaterMesh
         var draw = new HashSet<int>();
         foreach (int idx in g.DomainCells)
         {
-            if (depth[idx] < water.Config.WetDepth) continue;
+            if (depth[idx] < 0.00005) continue;
             int i = idx % g.Nx, j = idx / g.Nx;
             for (int dj = -RingCells; dj <= RingCells; dj++)
                 for (int di = -RingCells; di <= RingCells; di++)
@@ -227,7 +194,7 @@ public static class WaterMesh
                     {
                         double sq = Surface(q, out bool ok);
                         allOk &= ok;
-                        if (ok && sq > hf.Height(q) + 0.0005) anyAbove = true;
+                        if (ok && sq > hf.Height(q) + 0.00002) anyAbove = true;
                     }
                     if (!allOk || !anyAbove) continue;
 
@@ -251,155 +218,6 @@ public static class WaterMesh
                 }
         }
         return mesh;
-    }
-
-    // ---- Rivulets: thin flowing films drawn by discharge, not depth ----
-    public const double RivuletMinDischarge = 1e-7;   // m3/s
-    public const double RivuletMinDepth = 5e-5;       // m
-    public const double RivuletWidthCoeff = 12.0;     // w = a * sqrt(Q)
-    public const double RivuletMinWidth = 0.01;
-    public const double RivuletMinThickness = 0.002;
-    public const double RivuletBankWidth = 0.012;
-    public const int RivuletSegmentSteps = 4;
-
-    /// <summary>Rivulet width (m) from discharge (m3/s), clamped to [1 cm, cell size].</summary>
-    public static double RivuletWidth(double q, double cellSize) =>
-        Math.Clamp(RivuletWidthCoeff * Math.Sqrt(Math.Max(q, 0)), RivuletMinWidth, cellSize);
-
-    /// <summary>
-    /// Ribbon geometry for sub-WetDepth flowing cells. Centreline passes through each cell's thalweg
-    /// (lowest terrain across the flow) and links downstream into flowing or pooled neighbours.
-    /// Vertex COLOR.r = 1 marks the wet-bank strip; UV2 carries flow velocity (m/s).
-    /// </summary>
-    public static MeshData BuildRivulets(VivariumWorld w, WaterMeshSnapshot? snapshot = null)
-    {
-        var g = w.Grid;
-        var dom = w.Domain;
-        var hf = snapshot?.Terrain ?? w.Terrain;
-        var depth = snapshot?.Depth ?? w.Water.Depth;
-        var flowX = snapshot?.FlowX ?? w.Water.FlowX;
-        var flowZ = snapshot?.FlowZ ?? w.Water.FlowZ;
-        double wet = w.Water.Config.WetDepth;
-        double cs = g.CellSize;
-        var mesh = new MeshData();
-
-        int n = g.Nx * g.Nz;
-        var flowing = new bool[n];
-        var node = new Vec2[n];
-        var dir = new Vec2[n];
-        var width = new double[n];
-        var thick = new double[n];
-        var vel = new Vec2[n];
-
-        Vec2 Centre(int i, int j) => new(g.OriginX + (i + 0.5) * cs, g.OriginZ + (j + 0.5) * cs);
-
-        foreach (int idx in g.DomainCells)
-        {
-            double q = Math.Sqrt(flowX[idx] * flowX[idx] + flowZ[idx] * flowZ[idx]);
-            if (depth[idx] >= wet || depth[idx] <= RivuletMinDepth || q <= RivuletMinDischarge) continue;
-            int i = idx % g.Nx, j = idx / g.Nx;
-            var d = new Vec2(flowX[idx] / q, flowZ[idx] / q);
-            var perp = new Vec2(-d.Z, d.X);
-            var c = Centre(i, j);
-            Vec2 best = c;
-            double bestH = hf.Height(c);
-            for (int k = 1; k <= 3; k++)
-                for (int sgn = -1; sgn <= 1; sgn += 2)
-                {
-                    double off = sgn * k * 0.4 * cs / 3.0;
-                    var p = new Vec2(c.X + perp.X * off, c.Z + perp.Z * off);
-                    double h = hf.Height(p);
-                    if (h < bestH - 1e-9) { bestH = h; best = p; }
-                }
-            flowing[idx] = true;
-            node[idx] = best;
-            dir[idx] = d;
-            width[idx] = RivuletWidth(q, cs);
-            thick[idx] = Math.Max(depth[idx], RivuletMinThickness);
-            double v = Math.Min(q / Math.Max(depth[idx] * cs, 1e-6), 1.0);
-            vel[idx] = new Vec2(d.X * v, d.Z * v);
-        }
-
-        foreach (int idx in g.DomainCells)
-        {
-            if (!flowing[idx]) continue;
-            int i = idx % g.Nx, j = idx / g.Nx;
-            var d = dir[idx];
-            int bestN = -1;
-            double bestDot = 0.38;
-            for (int dj = -1; dj <= 1; dj++)
-                for (int di = -1; di <= 1; di++)
-                {
-                    if ((di == 0 && dj == 0) || !g.InDomain(i + di, j + dj)) continue;
-                    int nb = g.Index(i + di, j + dj);
-                    if (!flowing[nb] && depth[nb] < wet) continue;
-                    double dot = (di * d.X + dj * d.Z) / Math.Sqrt(di * di + dj * dj);
-                    if (dot > bestDot + 1e-12) { bestDot = dot; bestN = nb; }
-                }
-
-            Vec2 a = node[idx], b, perpA = new(-d.Z, d.X), perpB;
-            double wa = width[idx], wb, ta = thick[idx], tb;
-            Vec2 va = vel[idx], vb;
-            if (bestN >= 0 && flowing[bestN])
-            {
-                b = node[bestN]; perpB = new Vec2(-dir[bestN].Z, dir[bestN].X);
-                wb = width[bestN]; tb = thick[bestN]; vb = vel[bestN];
-            }
-            else if (bestN >= 0)
-            {
-                b = Centre(bestN % g.Nx, bestN / g.Nx);   // runs in under the pool surface
-                perpB = perpA; wb = wa; tb = ta; vb = va;
-            }
-            else
-            {
-                b = new Vec2(a.X + d.X * 0.5 * cs, a.Z + d.Z * 0.5 * cs);   // tapered tip
-                perpB = perpA; wb = 0.25 * wa; tb = ta; vb = va;
-            }
-            AddRibbon(mesh, dom, hf, a, b, perpA, perpB, wa, wb, ta, tb, va, vb);
-        }
-        return mesh;
-    }
-
-    private static void AddRibbon(
-        MeshData mesh, HexDomain dom, Heightfield hf, Vec2 a, Vec2 b, Vec2 pa, Vec2 pb,
-        double wa, double wb, double ta, double tb, Vec2 va, Vec2 vb)
-    {
-        int steps = RivuletSegmentSteps;
-        const int across = 7;   // bankL, edgeL, midL, centre, midR, edgeR, bankR
-        for (int s = 0; s <= steps; s++)
-        {
-            double t = (double)s / steps;
-            if (dom.SignedDistance(new Vec2(a.X + (b.X - a.X) * t, a.Z + (b.Z - a.Z) * t)) > 0) return;
-        }
-        int first = mesh.VertexCount;
-        for (int s = 0; s <= steps; s++)
-        {
-            double t = (double)s / steps;
-            var c = new Vec2(a.X + (b.X - a.X) * t, a.Z + (b.Z - a.Z) * t);
-            var p = new Vec2(pa.X + (pb.X - pa.X) * t, pa.Z + (pb.Z - pa.Z) * t).Normalized();
-            double half = 0.5 * (wa + (wb - wa) * t);
-            double th = ta + (tb - ta) * t;
-            double vx = va.X + (vb.X - va.X) * t, vz = va.Z + (vb.Z - va.Z) * t;
-            double[] offs = { -half - RivuletBankWidth, -half, -0.5 * half, 0, 0.5 * half, half, half + RivuletBankWidth };
-            double[] lift = { 0.0004, th * 0.55, th * 0.9, th, th * 0.9, th * 0.55, 0.0004 };
-            for (int k = 0; k < across; k++)
-            {
-                var q = new Vec2(c.X + p.X * offs[k], c.Z + p.Z * offs[k]);
-                double y = hf.Height(q) + lift[k];
-                if (k == 0 || k == across - 1)
-                    mesh.AddVertex(new Vec3(q.X, y, q.Z), Vec3.Up, 1.0, 1.0, 0.7, 0.0, q.X, q.Z, vx, vz);
-                else
-                    mesh.AddVertex(new Vec3(q.X, y, q.Z), Vec3.Up, 0.2, 0.55, 0.7,
-                        MathD.Clamp01(lift[k] / 0.15), q.X, q.Z, vx, vz);
-            }
-        }
-        for (int s = 0; s < steps; s++)
-            for (int k = 0; k + 1 < across; k++)
-            {
-                int i0 = first + s * across + k, i1 = i0 + 1, i2 = i0 + across, i3 = i2 + 1;
-                mesh.AddTriangle(i0, i2, i1);
-                mesh.AddTriangle(i1, i2, i3);
-            }
     }
 
     private static void ExtendBoundarySquare(

@@ -21,6 +21,8 @@ public partial class Windows : Control
     private RichTextLabel _statsEnv = null!, _debugInfo = null!;
     private LineEdit _saveName = null!, _seed = null!;
     private OptionButton _preset = null!;
+    private OptionButton _pilotTree = null!;
+    private static readonly string[] PilotTreeIds = { "random", "none", "gloomspire", "needlevault", "crowncoil", "emberpillar", "basinwarden", "palehollow" };
     private HSlider _diameter = null!, _relief = null!, _springFlow = null!;
     private Label _diameterLabel = null!, _reliefLabel = null!, _springLabel = null!;
     private readonly List<string> _presetIds = new();
@@ -184,7 +186,7 @@ public partial class Windows : Control
                 int structural = w.FloraSystem.WoodyPopulation(woody.Layer);
                 int cap = w.FloraSystem.WoodyPopulationCap(woody.Layer);
                 string layer = woody.Layer == WoodyLayer.Tree ? "trees" : "shrubs";
-                status += $" · {layer} {structural}/{cap}";
+                status += woody.Layer == WoodyLayer.Shrub ? $" · {structural} shrubs" : $" · {layer} {structural}/{cap}";
             }
             label.Text = status;
             label.AddThemeColorOverride("font_color", n == 0 ? new Color(1f, 0.7f, 0.5f) : UiKit.Muted);
@@ -290,7 +292,7 @@ public partial class Windows : Control
 
     private void BuildNewWorld()
     {
-        var (_, body) = Add("NewWorld", "Create a new vivarium", new Vector2(520, 420));
+        var (_, body) = Add("NewWorld", "Create a new vivarium", new Vector2(560, 510));
         _preset = new OptionButton { Name = "PresetPicker" };
         foreach (var (id, d) in Session.Content.Presets.OrderBy(p => p.Key == "default" ? "" : p.Key)) { _preset.AddItem(d.Name); _presetIds.Add(id); }
         _preset.ItemSelected += _ => LoadPresetDefaults();
@@ -300,6 +302,11 @@ public partial class Windows : Control
         _diameter = UiKit.Slider("DiameterSlider", WorldDescriptor.MinDiameter, WorldDescriptor.MaxDiameter, 0.5, 16, v => _diameterLabel.Text = $"{v:0.0} m");
         _relief = UiKit.Slider("ReliefSlider", 0.2, 2.0, 0.05, 1.0, v => _reliefLabel.Text = $"×{v:0.00}");
         _springFlow = UiKit.Slider("SpringSlider", 0.0, 3.0, 0.1, 1.0, v => _springLabel.Text = v < 0.05 ? "dry (no springs)" : $"×{v:0.0}");
+        _pilotTree = new OptionButton { Name = "PilotTreePicker" };
+        foreach (string label in new[] { "Random ancient tree", "None", "Gloomspire", "Needlevault", "Crowncoil", "Emberpillar", "Basinwarden", "Palehollow" }) _pilotTree.AddItem(label);
+
+
+
         var grid = new GridContainer { Columns = 3 };
         void Row(string l, Control c, Control? extra) { grid.AddChild(UiKit.Label(l)); grid.AddChild(c); grid.AddChild(extra ?? new Control()); }
         Row("Preset", _preset, null);
@@ -307,6 +314,8 @@ public partial class Windows : Control
         Row("Island diameter", _diameter, _diameterLabel);
         Row("Terrain relief", _relief, _reliefLabel);
         Row("Spring flow", _springFlow, _springLabel);
+        Row("Pilot tree", _pilotTree, null);
+
         body.AddChild(grid);
         body.AddChild(UiKit.Label("The same seed and settings always grow the same starting island.", 13, UiKit.Muted, wrap: true));
         body.AddChild(UiKit.Row(UiKit.Spacer(), UiKit.Button("CreateWorldButton", "Create vivarium", CreateFromUi)));
@@ -319,6 +328,8 @@ public partial class Windows : Control
         var d = Session.Content.PresetOrThrow(_presetIds[i]);
         _seed.Text = d.Seed.ToString(CultureInfo.InvariantCulture);
         _diameter.Value = d.Diameter; _relief.Value = 1.0; _springFlow.Value = 1.0;
+        _pilotTree.Select(Math.Max(0, Array.IndexOf(PilotTreeIds, d.PilotTreeId)));
+
         _diameterLabel.Text = $"{d.Diameter:0.0} m"; _reliefLabel.Text = "×1.00"; _springLabel.Text = "×1.0";
     }
 
@@ -326,6 +337,8 @@ public partial class Windows : Control
     public WorldDescriptor DescriptorFromUi()
     {
         var d = Session.Content.PresetOrThrow(_presetIds[Math.Max(0, _preset.Selected)]);
+        d.PilotTreeId = PilotTreeIds[Math.Clamp(_pilotTree.Selected, 0, PilotTreeIds.Length - 1)];
+        d.PilotTreeCorner = -1;
         if (ulong.TryParse(_seed.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seed)) d.Seed = seed;
         else d.Seed = Hash.Fnv1a64(_seed.Text.Trim());           // any text works as a seed
         double scale = _diameter.Value / d.Diameter;
@@ -447,7 +460,7 @@ public partial class Windows : Control
             "  [b]6[/b] Rock · [b]7[/b] Log (R rotates) · [b]8[/b] Gravel — [b][ ][/b] or Ctrl+wheel resize\n" +
             "  [b]9[/b] Add flora · [b]0[/b] Add fauna — pick the species in the wheel's outer ring or the catalog\n" +
             "  [b]G[/b] Terrain — raise, lower, smooth (hold and drag). Dig below the water line and a pond fills in.\n" +
-            "  [b]H[/b] Water — pour, soak up (hold), or click to add / remove a spring. Groundwater ponds refill themselves.\n" +
+            "  [b]H[/b] Water — pour, soak up (hold), or click to add / remove a spring. Springs feed flowing water; pools fill and overflow with the terrain.\n" +
             "  The cursor ring turns [color=#4f7]green[/color] where an action is valid and [color=#f66]red[/color] where it isn't.\n" +
             "  Selected rocks, logs and gravel can be moved or removed from the inspector (Delete key).\n\n" +
             "[b]Panels[/b]   [b]C[/b] species catalog · [b]T[/b] statistics · [b]Ctrl+S[/b] quick save · [b]F3[/b] debug overlays · [b]F1[/b] help · [b]Tab[/b] hide UI\n\n" +

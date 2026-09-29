@@ -21,6 +21,10 @@ public sealed class WorldDescriptor
     public PlacementProfile Placement { get; set; } = new();
     public List<StarterEntry> StarterFlora { get; set; } = new();
     public List<StarterEntry> StarterFauna { get; set; } = new();
+    /// <summary>random | none | a PilotTreeCatalog id. Resolved to a specific form when the world is created.</summary>
+    public string PilotTreeId { get; set; } = "random";
+    /// <summary>-1 selects a seeded corner; 0..5 selects an exact hexagon vertex. Edge anchors are not allowed.</summary>
+    public int PilotTreeCorner { get; set; } = -1;
     /// <summary>
     /// Biological seconds per physical simulated second. The default makes one real minute one biological day at
     /// 1× speed (1440 / 168). Worlds saved before this setting existed also load with the default.
@@ -47,6 +51,8 @@ public sealed class WorldDescriptor
     public List<string> Validate()
     {
         var e = new List<string>();
+        if (PilotTreeId is not ("random" or "none") && PilotTreeCatalog.Find(PilotTreeId) == null) e.Add($"unknown Pilot Tree '{PilotTreeId}'");
+        if (PilotTreeCorner is < -1 or > 5) e.Add("Pilot Tree corner must be -1 or 0..5");
         double maxD = AllowLegacyDiameter ? LegacyMaxDiameter : MaxDiameter;
         if (!(Diameter >= MinDiameter && Diameter <= maxD)) e.Add($"diameter {Diameter} must be within [{MinDiameter}, {maxD}] m");
         if (!(CellSize >= 0.1 && CellSize <= 1.0)) e.Add($"cellSize {CellSize} must be within [0.1, 1.0] m");

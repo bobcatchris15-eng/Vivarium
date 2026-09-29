@@ -2,7 +2,7 @@
   "id": "kinkcane",
   "name": "Kinkcane",
   "archetype": "plant",
-  "placementGroup": "terrestrial",
+  "placementGroup": "woody",
   "role": "Tall rhizomatous cane brake that forms dense visual partitions on moist ordinary soil.",
   "description": "Crooked jointed canes rise shoulder-high to overhead and knit into irregular brakes, with sparse ribbon leaves and exposed low rhizomes.",
   "habitat": {
@@ -75,7 +75,9 @@
     "plant",
     "screen",
     "rhizomatous",
-    "cane"
+    "cane",
+    "shrub",
+    "woody"
   ],
   "postLife": {
     "standingDays": 80,
@@ -93,5 +95,11 @@
     "litterColorInfluence": 0.58,
     "dryBleach": 0.28,
     "wetDarken": 0.18
+  },
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 0.82,
+    "shadeOpacity": 0.4,
+    "minSpacing": 0.3
   }
 }

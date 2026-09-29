@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
@@ -41,6 +42,13 @@ public partial class FloraRenderer : Node3D
     // work is one individual or one upload, so camera input never waits for an entire flora rebuild.
     private const double RefreshBudgetMs = 2.0;
     private IEnumerator<bool>? _refresh;
+    private IEnumerator<bool>? _build;
+    private ContentLibrary? _builtContent;
+    private bool _builtLegacy;
+    private readonly List<Node> _buildingNodes = new();
+    /// <summary>All currently present species are built and one complete instance refresh has been uploaded.</summary>
+    public bool PopulationReady { get; private set; }
+    public int LoadedSpeciesCount => _layers.Count;
     private readonly List<FloraIndividual> _snapshot = new();
     private readonly List<DeadPlant> _deadSnapshot = new();
     private readonly List<EntityId> _expired = new();
@@ -69,16 +77,53 @@ public partial class FloraRenderer : Node3D
 
     public void Build(VivariumWorld w)
     {
+        _build?.Dispose(); _build = null;
         _refresh?.Dispose(); _refresh = null;
+        foreach (var node in _buildingNodes) node.QueueFree();
+        _buildingNodes.Clear();
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
         _buffers.Clear(); _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear();
         _visualTiers.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
+        PopulationReady = false;
         _w = w;
-        foreach (var c in GetChildren()) c.QueueFree();
-        _layers.Clear();
-        foreach (var sp in w.Content.Flora)
+        bool legacy = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1";
+        if (!ReferenceEquals(_builtContent, w.Content) || _builtLegacy != legacy)
         {
+            foreach (var c in GetChildren()) c.QueueFree();
+            _layers.Clear();
+            _builtContent = w.Content; _builtLegacy = legacy;
+        }
+        // Completed geometry/materials depend on content, not world seed. Keep them through New World/load.
+        foreach (var layer in _layers.Values)
+        {
+            foreach (var variant in layer.Variants)
+            {
+                variant.Full.Multimesh.InstanceCount = 0;
+                if (variant.Fruit != null) variant.Fruit.Multimesh.InstanceCount = 0;
+                if (variant.Juvenile != null) variant.Juvenile.Multimesh.InstanceCount = 0;
+            }
+            if (layer.Veins != null) layer.Veins.Multimesh.InstanceCount = 0;
+        }
+        RequestMissingLayers();
+        _accum = 999;
+    }
+
+    private void RequestMissingLayers()
+    {
+        if (_build != null) return;
+        var needed = _w.Flora.Items.Select(p => p.SpeciesId).Concat(_w.DeadFlora.Items.Select(p => p.SpeciesId))
+            .Where(id => !_layers.ContainsKey(id)).ToHashSet(StringComparer.Ordinal);
+        if (needed.Count == 0) return;
+        PopulationReady = false;
+        _build = BuildLayers(_w.Content.Flora.Where(sp => needed.Contains(sp.Id))).GetEnumerator();
+    }
+
+    private IEnumerable<bool> BuildLayers(IEnumerable<FloraSpeciesDef> species)
+    {
+        foreach (var sp in species)
+        {
+            GD.Print("FLORA_LAYER_BUILD_BEGIN " + sp.Id);
             var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id);
             var mat = Bridge.Shader("res://Shaders/flora.gdshader");
             mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
@@ -104,27 +149,40 @@ public partial class FloraRenderer : Node3D
                 int lod = v / layer.MorphCount;
                 int? tier = profile == null ? null : lod;
                 ulong seed = Rng.Mix(speciesSeed, (ulong)(morph + 1) * 0x9E3779B97F4A7C15UL);
-                var full = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null);
+                // Calibration and parametric tessellation are pure managed work. Never block input/rendering on them.
+                var pending = Task.Run(() =>
+                {
+                    var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null);
+                    MeshData? youngMesh = sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
+                        ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
+                        : null;
+                    var fruitMesh = OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null);
+                    return (Full: fullMesh, Young: youngMesh, Fruit: fruitMesh);
+                });
+                do { yield return false; } while (!pending.IsCompleted);
+                var prepared = pending.GetAwaiter().GetResult();
+                var full = prepared.Full;
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
                 bool castShadow = Quality >= 1 && canCastShadow;
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
-                AddChild(vl.Full);
+                AddChild(vl.Full); _buildingNodes.Add(vl.Full);
                 if (sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null)
                 {
-                    var young = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null);
+                    var young = prepared.Young!;
                     vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", profile == null ? Bridge.ToArrayMesh(young, mat) : profile.Compile(young, mat, leafMat!), castShadow);
                     vl.JuvenileTris = young.TriangleCount;
-                    AddChild(vl.Juvenile);
+                    AddChild(vl.Juvenile); _buildingNodes.Add(vl.Juvenile);
                 }
-                if (OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null) is { } fruit)
+                if (prepared.Fruit is { } fruit)
                 {
                     var fruitMat = (ShaderMaterial)mat.Duplicate();
                     if (sp.Reproduction == null) fruitMat.SetShaderParameter("surface_mode", 3);
                     vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", profile == null ? Bridge.ToArrayMesh(fruit, fruitMat) : profile.Compile(fruit, fruitMat, leafMat!), castShadow);
                     vl.FruitTris = fruit.TriangleCount;
-                    AddChild(vl.Fruit);
+                    AddChild(vl.Fruit); _buildingNodes.Add(vl.Fruit);
                 }
                 layer.Variants[v] = vl;
+                yield return true;
             }
             if (sp.CreepSpeed > 0 || sp.Climber != null)
             {
@@ -142,11 +200,16 @@ public partial class FloraRenderer : Node3D
                 Primitives.Tube(vein, vpath, vrad, 6, (i, v) => (col, 1, i, v, 0, 0));
                 layer.Veins = MakeMmi($"Flora_{sp.Id}_veins", Bridge.ToArrayMesh(vein, mat));
                 layer.VeinTris = vein.TriangleCount;
-                AddChild(layer.Veins);
+                AddChild(layer.Veins); _buildingNodes.Add(layer.Veins);
             }
+            // Refresh can yield while enumerating the dictionary; retire it before publishing a new layer.
+            _refresh?.Dispose(); _refresh = null;
             _layers[sp.Id] = layer;
+            _buildingNodes.Clear();
+            GD.Print("FLORA_LAYER_BUILD_END " + sp.Id + " loaded_species=" + _layers.Count);
+            _accum = 999;
+            yield return true;
         }
-        _accum = 999;
     }
 
 
@@ -166,6 +229,8 @@ public partial class FloraRenderer : Node3D
         using var prof = FrameProfiler.Measure("Flora");
         _clock += delta;
         if (_w == null) return;
+        RequestMissingLayers();
+        if (_build != null && !_build.MoveNext()) { _build.Dispose(); _build = null; }
         _accum += delta;
         bool wobbling = _wobbleStart.Count > 0;
         if (_refresh == null)
@@ -185,6 +250,7 @@ public partial class FloraRenderer : Node3D
 
     public override void _ExitTree()
     {
+        _build?.Dispose(); _build = null;
         _refresh?.Dispose(); _refresh = null;
         _buffers.Clear(); _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
     }
@@ -215,6 +281,19 @@ public partial class FloraRenderer : Node3D
             var surf = onAxis + Vivarium.Sim.Core.Vec2.FromAngle(outward) * (l.Radius * 0.92);
             best = ((onAxis - sp).LengthSq > 1e-10 ? (onAxis - sp).Angle : outward + Math.PI, l.Y + l.Radius, d,
                     new Vector3((float)surf.X, (float)l.Y, (float)surf.Z), outward);
+        }
+        if ((supports == null || supports.Contains("log")) && _w.PilotTree is { } pilot &&
+            pilot.TryLogSurface(Vivarium.Sim.Core.Vec3.FromXZ(sp, _w.GroundHeight(sp) + .02), reach,
+                out var pilotSurface, out var pilotNormal, out double pilotTop))
+        {
+            double d = Vivarium.Sim.Core.Vec2.Distance(sp, pilotSurface.XZ);
+            if (d <= bestD)
+            {
+                bestD = d;
+                double outward = pilotNormal.XZ.Angle;
+                best = (outward + Math.PI, pilotTop, d,
+                    new Vector3((float)pilotSurface.X, (float)pilotSurface.Y, (float)pilotSurface.Z), outward);
+            }
         }
         if (supports == null || supports.Contains("rock"))
         foreach (var r in _w.Props.Rocks)
@@ -286,6 +365,7 @@ public partial class FloraRenderer : Node3D
             yield return false;
             if (_w.Flora.Get(f.Id) != f) continue;
             var sp = _w.Content.FloraOrThrow(f.SpeciesId);
+            if (!_layers.ContainsKey(sp.Id)) continue;
             double r = f.Radius(sp);
             double h = sp.Colony != null
                 ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
@@ -431,6 +511,7 @@ public partial class FloraRenderer : Node3D
             yield return false;
             if (_w.DeadFlora.Get(dead.Id) != dead) continue;
             var sp = _w.Content.FloraOrThrow(dead.SpeciesId);
+            if (!_layers.ContainsKey(sp.Id)) continue;
             double remain = Math.Sqrt(dead.RemainingFraction);
             double r = dead.OriginalRadius * (0.82 + 0.18 * remain);
             double h = dead.OriginalHeight * (0.78 + 0.22 * remain);
@@ -559,6 +640,8 @@ public partial class FloraRenderer : Node3D
                     + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.InstanceCount * vl.JuvenileTris : 0);
             }
         Visible_ = visible; TrianglesDrawn = triangles;
+        PopulationReady = _build == null && _w.Flora.Items.All(f => _layers.ContainsKey(f.SpeciesId))
+            && _w.DeadFlora.Items.All(f => _layers.ContainsKey(f.SpeciesId));
         _snapshot.Clear();
         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
     }

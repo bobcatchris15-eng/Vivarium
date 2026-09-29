@@ -24,6 +24,7 @@ public sealed class VivariumWorld
     public HexDomain Domain { get; }
     public GridSpec Grid { get; }
     public Heightfield Terrain { get; }
+    public PilotTreeState? PilotTree { get; }
     public StrataModel Strata { get; }
     public EnvironmentFields Fields { get; }
     public LitterSystem Litter { get; }
@@ -56,7 +57,7 @@ public sealed class VivariumWorld
     /// <summary>Tick cadences (10 s ticks). Documented in docs/architecture/architecture.md.</summary>
     public static class Cadence
     {
-        public const int FaunaBehaviour = 2, FaunaMetabolism = 3, FaunaLifecycle = 30, Hydrology = 6,
+        public const int FaunaBehaviour = 2, FaunaMetabolism = 3, FaunaLifecycle = 30, Hydrology = 1,
                          Environment = 30, Resources = 30, Flora = 60, GeneticsPrune = 8640;
     }
 
@@ -69,6 +70,8 @@ public sealed class VivariumWorld
         Domain = new HexDomain(Descriptor.Diameter);
         Grid = new GridSpec(Domain, Descriptor.CellSize);
         Terrain = Heightfield.Generate(Descriptor, Domain);
+        PilotTree = PilotTreeState.Generate(Descriptor, Domain, Terrain);
+        PilotTree?.ShapeTerrain(Domain);
         Strata = new StrataModel(content.Strata);
         Fields = new EnvironmentFields(Grid, content.Ecology);
         Litter = new LitterSystem(this);
@@ -110,23 +113,14 @@ public sealed class VivariumWorld
             w.Water.Springs.Add(sp);
         }
         w.Placement.Generate(w.Descriptor);
-        w.Fields.RecomputeLight(w.Terrain, w.Props);
+        w.Fields.RecomputeLight(w.Terrain, w.Props, w.PilotTree);
         w.Water.InitializeFromWaterTable();
-        // settle hydrology (up to 3 sim-days, stopping at equilibrium) + moisture, so the starting world
-        // already shows its streams, pond and wet banks before anything is planted
-        double lastVol = w.Water.Volume();
-        for (int i = 1; i <= 1440; i++)
-        {
-            w.Water.Step(180);
-            if (i % 120 == 0)
-            {
-                double vol = w.Water.Volume();
-                if (Math.Abs(vol - lastVol) < 0.002 * Math.Max(vol, 1)) break;
-                lastVol = vol;
-            }
-        }
+        // A short physical warmup establishes spring runoff without inventing a water-table plane.
+        for (int i = 0; i < 10; i++) w.Water.Step(30);
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
+        w.PilotTree?.CoupleHabitat(w, SimUnits.Day);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
+        w.PilotTree?.DepositLitter(w, SimUnits.Day * 5);
         w.AquaticSystem.SeedInitial();
         if (populate)
         {
@@ -150,12 +144,13 @@ public sealed class VivariumWorld
         Scheduler.Register("environment", Cadence.Environment, 50, dt =>
         {
             Water.CoupleMoisture(Fields.Moisture, eco, dt, Fields.Scratch);
+            PilotTree?.CoupleHabitat(this, dt);
             Fields.StepNutrients(eco, dt * Clock.BioAcceleration);
-            if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props);
+            if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props, PilotTree);
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 20);
-        Scheduler.Register("ecology.litter", Cadence.Resources, 66, Bio(Litter.Step), phase: 20);
+        Scheduler.Register("ecology.litter", Cadence.Resources, 66, Bio(dt => { PilotTree?.DepositLitter(this, dt); Litter.Step(dt); }), phase: 20);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
         Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
         Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
@@ -176,6 +171,8 @@ public sealed class VivariumWorld
     public double GroundHeight(Vec2 p)
     {
         double h = Terrain.Height(p);
+        double root = PilotTree?.RootSurfaceHeight(p) ?? double.NaN;
+        if (!double.IsNaN(root)) h = Math.Max(h, root);
         double t = Props.PropTopAt(p);
         return double.IsNaN(t) ? h : Math.Max(h, t);
     }
@@ -186,6 +183,7 @@ public sealed class VivariumWorld
     /// </summary>
     public Substrate SubstrateAt(Vec2 p)
     {
+        if (PilotTree?.BlocksDisc(p) == true) return Substrate.Wood;
         if (Props.RockAt(p) != null) return Substrate.Rock;
         if (Props.LogAt(p) != null) return Substrate.Wood;
         if (Water.IsWet(p)) return Substrate.Water;
@@ -203,6 +201,7 @@ public sealed class VivariumWorld
     /// </summary>
     public Substrate SubstrateAtCell(Vec2 p)
     {
+        if (PilotTree?.BlocksDisc(p) == true) return Substrate.Wood;
         int c = Grid.NearestDomainCell(p);
         if (c < 0) return SubstrateAt(p);
         if (_propSubstrateCells == null || _propSubstrateVersion != Props.Version)
@@ -226,7 +225,7 @@ public sealed class VivariumWorld
     public void OnPropsChanged() { /* light recomputes lazily on the next environment tick (LightStale) */ }
 
     /// <summary>Forces derived caches up to date (used after tool actions so probes read fresh values).</summary>
-    public void RefreshDerived() { if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props); }
+    public void RefreshDerived() { if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props, PilotTree); }
 
     public void Step(long ticks = 1) => Scheduler.StepTicks(ticks);
     public void RunFor(double simSeconds) => Scheduler.StepTicks((long)Math.Round(simSeconds / SimClock.FixedStepSeconds));

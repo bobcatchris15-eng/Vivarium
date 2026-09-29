@@ -2,7 +2,7 @@
   "id": "hookthicket",
   "name": "Hookthicket",
   "archetype": "plant",
-  "placementGroup": "terrestrial",
+  "placementGroup": "woody",
   "role": "Interlaced thorn-brake shrub analogue used as a dense visual and movement-looking barrier.",
   "description": "Slender hook-spined canes carry dense serrated compound leaves. Mature canes bow back to the soil, rooting at their tips to extend the tangled thicket.",
   "habitat": {
@@ -74,7 +74,9 @@
     "plant",
     "screen",
     "thorn",
-    "brake"
+    "brake",
+    "shrub",
+    "woody"
   ],
   "postLife": {
     "standingDays": 130,
@@ -92,5 +94,11 @@
     "litterColorInfluence": 0.52,
     "dryBleach": 0.2,
     "wetDarken": 0.14
+  },
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 0.9,
+    "shadeOpacity": 0.48,
+    "minSpacing": 0.3
   }
 }

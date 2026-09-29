@@ -40,6 +40,17 @@ public partial class Main : Node3D
         }
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (UserArgs.Contains("--spring-fluid-preview"))
+        {
+            AddChild(new SpringFluidPreview {Content=content, OutDir=ArgAfter("--output") ?? "build/spring-fluid-preview"});
+            return;
+        }
+        if (ArgAfter("--pilot-tree-preview") is { } pilotId)
+        {
+            AddChild(new PilotTreePreview { Content = content, TreeId = pilotId,
+                OutDir = ArgAfter("--output") ?? "build/pilot-tree-preview" });
+            return;
+        }
         if (UserArgs.Contains("--flora-bake")) { AddChild(new LeafMaterialBaker()); return; }
         if (ArgAfter("--licenses") is { } licFile) { WriteLicenses(licFile); GetTree().Quit(0); return; }
 

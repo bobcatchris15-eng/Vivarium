@@ -227,6 +227,9 @@ public static class WorldSerializer
         foreach (var name in PayloadOrder)
             if (!payloads.ContainsKey(name)) throw new InvalidDataException($"save is missing the '{name}' payload");
         var wp = Read<WorldPayload>(payloads, "world");
+        // Direct deserialization of a pre-Pilot payload must not invent a new tree on an existing world.
+        using (var oldWorld = JsonDocument.Parse(payloads["world"]))
+            if (!oldWorld.RootElement.GetProperty("Descriptor").TryGetProperty("PilotTreeId", out _)) wp.Descriptor.PilotTreeId = "none";
         var problems = wp.Descriptor.Validate();
         if (problems.Count > 0) throw new InvalidDataException("saved world descriptor is invalid: " + string.Join("; ", problems));
 
@@ -329,7 +332,7 @@ public static class WorldSerializer
             Log.Warn(LogCategory.Persistence, $"Save migration dropped {dropped} entr{(dropped == 1 ? "y" : "ies")} of removed flora species ({string.Join(", ", RemovedFloraSpecies.OrderBy(s => s, StringComparer.Ordinal))}).");
 
         Validate(w);
-        w.Fields.RecomputeLight(w.Terrain, w.Props);
+        w.Fields.RecomputeLight(w.Terrain, w.Props, w.PilotTree);
         return w;
     }
 

@@ -47,6 +47,7 @@ public static class TestUtil
             Terrain = new TerrainProfile { BaseHeight = 0.5, Relief = 0.0, NoiseScale = 0.2, Octaves = 1, MinHeight = -1, MaxHeight = 2, Bottom = -2, RockExposure = 0 },
             Water = new WaterConfig { WaterTable = -0.8, FlowRate = 0.2, Evaporation = 0, Infiltration = 0, WetDepth = 0.008, BoundaryDrop = 0.3, SubSteps = 2 },
             Placement = new PlacementProfile { Rocks = 0, Logs = 0, GravelPatches = 0 },
+            PilotTreeId = "none",
             BioAcceleration = 1,
         };
     }

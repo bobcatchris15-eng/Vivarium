@@ -99,6 +99,13 @@ public sealed class LitterSystem
             double moisture = _world.Fields.Moisture.Values[idx];
             double light = _world.Fields.Light.Values[idx];
             double environment = (0.35 + moisture * 1.15) * (1.15 - light * 0.3);
+            if (_world.PilotTree is { } pilot)
+            {
+                var p = _world.Grid.CellCenter(idx);
+                double canopy = pilot.CanopyInfluence(p);
+                double fungalWood = pilot.RootDensity(p) * pilot.Def.FungalAffinity;
+                environment *= MathD.Lerp(1, pilot.Def.LitterDecayMultiplier, canopy) * (1 + fungalWood * 0.18);
+            }
             var bonus = DecomposerBonus(idx);
             if (fruit > 0)
             {

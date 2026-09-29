@@ -50,7 +50,6 @@ public partial class IslandRenderer : Node3D
         Bridge.BindSurface(_terrainMat, "damp", Bridge.Surfaces.Damp);
         Bridge.BindSurface(_terrainMat, "moss", Bridge.Surfaces.Moss);
         Bridge.BindSurface(_terrainMat, "leaf", Bridge.Surfaces.Leaves);
-        Bridge.BindSurface(_terrainMat, "rock", Bridge.Surfaces.Rock);
         Bridge.BindSurface(_terrainMat, "gravel", Bridge.Surfaces.Gravel);
         var g = w.Grid;
         _terrainMat.SetShaderParameter("field_rect", new Vector4((float)g.OriginX, (float)g.OriginZ, (float)(g.Nx * g.CellSize), (float)(g.Nz * g.CellSize)));
@@ -76,7 +75,6 @@ public partial class IslandRenderer : Node3D
         _strataMat = Bridge.Shader("res://Shaders/strata.gdshader");
         Bridge.BindSurface(_strataMat, "soil", Bridge.Surfaces.Soil);
         Bridge.BindSurface(_strataMat, "gravel", Bridge.Surfaces.Gravel);
-        Bridge.BindSurface(_strataMat, "rock", Bridge.Surfaces.Rock);
         _top = new MeshInstance3D { Name = "TerrainTop" };
         _walls = new MeshInstance3D { Name = "StrataWalls" };
         AddChild(_top); AddChild(_walls);
@@ -134,9 +132,8 @@ public partial class IslandRenderer : Node3D
             if (updateSubstrate)
             {
                 bool gravel = _w.Props.GravelAt(p) != null;
-                bool rock = !gravel && (Substrate)f.BaseSubstrate[d] == Substrate.Rock;
                 _subBytes[c * 2] = gravel ? (byte)255 : (byte)0;
-                _subBytes[c * 2 + 1] = rock ? (byte)255 : (byte)0;
+                _subBytes[c * 2 + 1] = 0;
             }
         }
         _fieldImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _bytes);

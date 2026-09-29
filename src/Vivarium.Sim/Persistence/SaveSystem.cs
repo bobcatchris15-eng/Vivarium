@@ -263,6 +263,12 @@ public static class SaveMigrations
 
     private static readonly SortedDictionary<int, (string Name, Step Apply)> Steps = new()
     {
+        [2] = ("v2→v3: retain existing worlds without a Pilot Tree", p =>
+        {
+            var descriptor = p["world"]["Descriptor"]!.AsObject();
+            descriptor["PilotTreeId"] = "none";
+            descriptor["PilotTreeCorner"] = -1;
+        }),
         [0] = ("v0→v1: clock seconds→ticks, fauna energy percent→fraction", p =>
         {
             var world = p["world"].AsObject();

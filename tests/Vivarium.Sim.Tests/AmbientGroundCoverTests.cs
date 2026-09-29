@@ -1,5 +1,6 @@
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Persistence;
+using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Tests;
 
@@ -9,7 +10,9 @@ public class AmbientGroundCoverTests
     [Fact]
     public void VacantMesicSoilGetsBroadAnonymousCover()
     {
-        var w = TestUtil.DefaultWorld(populate: false);
+        var d = TestUtil.Default;
+        d.PilotTreeId = "none";
+        var w = VivariumWorld.Create(TestUtil.Content, d, populate: false);
         TestUtil.Condition(w, moisture: 0.5, nutrients: w.Content.Ecology.NutrientMax * 0.6, light: 0.8);
         w.AmbientGroundCover.InitializeFromHabitat();
 

@@ -41,7 +41,7 @@ public class TerrainWaterToolTests
     }
 
     [Fact]
-    public void DiggingBelowTheWaterTableMakesAPondAndPropsStaySeated()
+    public void DiggingMakesADryBasinUntilWaterIsAddedAndPropsStaySeated()
     {
         var w = TestUtil.FlatWorld(edit: d => d.Water.WaterTable = 0.3);
         var t = new ToolActions(w);
@@ -52,12 +52,12 @@ public class TerrainWaterToolTests
         for (int i = 0; i < 12; i++) t.Sculpt(c, 1.0, SculptMode.Lower, 0.5);
         t.EndSculptStroke();
         w.Step(60);
-        Assert.True(w.Water.IsWet(c), "ground dug below the water table fills with water");
-        Assert.True(w.Water.SurfaceAt(c) is var s && Math.Abs(s - 0.3) < 0.01);
-        Assert.Equal(0.0, w.Water.SurfaceVolume(), 12);
-        Assert.False(t.DrainWater(c, 0.6, 0.5).Ok, "drain tool must not remove the hydrostatic groundwater reservoir");
+        Assert.False(w.Water.IsWet(c), "digging creates a basin, not fluid without a source");
+        Assert.True(double.IsNaN(w.Water.SurfaceAt(c)));
+        Assert.Equal(0,w.Water.SurfaceVolume());
+        t.PourWater(c,.6,2);
         Assert.True(w.Water.IsWet(c));
-        Assert.Equal(0.3, w.Water.SurfaceAt(c), 2);
+        Assert.True(t.DrainWater(c,.6,1).Ok);
         var r = (Rock)w.Props.Find(rock.Id)!;
         Assert.Equal(w.Terrain.Height(r.Position) - r.SizeY * 0.25, r.Y, 9);
         Assert.Empty(w.CheckInvariants());

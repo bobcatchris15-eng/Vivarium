@@ -41,58 +41,32 @@ public class WaterMeshRivuletTests
         return (w, snap, path.ToArray());
     }
 
-    private static List<Vec3> SheetVertices(MeshData m)
-    {
-        var list = new List<Vec3>();
-        for (int v = 0; v < m.VertexCount; v++)
-            if (m.Colors[v * 4] < 0.95f) list.Add(m.Position(v));
-        return list;
-    }
-
     [Fact]
-    public void SpringFilmBelowWetDepthYieldsConnectedRivulet()
+    public void ThinFluidUsesTheSameSurfaceAsPools()
     {
-        var (w, snap, path) = ChannelWorld(3e-6);
-        var m = WaterMesh.BuildRivulets(w, snap);
-        Assert.True(m.TriangleCount > 0);
-        var sheet = SheetVertices(m);
-        var g = w.Grid;
-        // continuous along the channel: every cell's x-span contains ribbon vertices
-        foreach (int c in path)
-        {
-            double x0 = g.OriginX + (c % g.Nx) * g.CellSize;
-            Assert.Contains(sheet, p => p.X >= x0 && p.X <= x0 + g.CellSize);
-        }
-        // follows the thalweg (z ~ 0) and sits above the terrain
-        Assert.All(sheet, p => Assert.True(Math.Abs(p.Z) < 0.1, $"z {p.Z}"));
-        Assert.All(sheet, p => Assert.True(p.Y > snap.Terrain.Height(new Vec2(p.X, p.Z)) + 0.0009));
-        // UV2 carries downstream velocity
-        Assert.True(m.UV2[0] > 0);
-        // deterministic
-        var m2 = WaterMesh.BuildRivulets(w, snap);
-        Assert.Equal(m.Positions, m2.Positions);
+        var (w,snap,path)=ChannelWorld(3e-6);
+        foreach(int c in w.Grid.DomainCells) snap.Bed[c]=snap.Terrain.Height(w.Grid.CellCenter(c));
+        var set=WaterMesh.BuildSet(w,snap);
+        Assert.True(set.SurfaceMesh.TriangleCount>0);
+        Assert.Equal(set.SurfaceMesh.DigestHex(),WaterMesh.Build(w,snap).DigestHex());
     }
-
     [Fact]
-    public void RivuletWidthGrowsWithDischarge()
+    public void DischargeDoesNotInventExtraWidthOrVolume()
     {
-        double Width(double q)
-        {
-            var (w, snap, _) = ChannelWorld(q);
-            var sheet = SheetVertices(WaterMesh.BuildRivulets(w, snap));
-            return sheet.Max(p => p.Z) - sheet.Min(p => p.Z);
-        }
-        double small = Width(1e-6), large = Width(1e-4);
-        Assert.True(large > small * 2, $"{small} vs {large}");
-        Assert.True(WaterMesh.RivuletWidth(1e-6, 0.25) < WaterMesh.RivuletWidth(1e-5, 0.25));
-        Assert.Equal(0.25, WaterMesh.RivuletWidth(1.0, 0.25));
+        var (w,snap,_)=ChannelWorld(3e-6);
+        foreach(int c in w.Grid.DomainCells) snap.Bed[c]=snap.Terrain.Height(w.Grid.CellCenter(c));
+        var small=WaterMesh.Build(w,snap);
+        for(int i=0;i<snap.FlowX.Length;i++) snap.FlowX[i]*=100;
+        var fast=WaterMesh.Build(w,snap);
+        Assert.Equal(small.Positions,fast.Positions);
+        Assert.Equal(small.Indices,fast.Indices);
+        Assert.NotEqual(small.UV2,fast.UV2);
     }
-
     [Fact]
-    public void NoFlowNoRivulet()
+    public void DischargeWithoutDepthNeverDrawsWater()
     {
-        var (w, snap, _) = ChannelWorld(0);
-        Assert.Equal(0, WaterMesh.BuildRivulets(w, snap).TriangleCount);
-        Assert.Equal(0, WaterMesh.BuildSet(w, snap).RivuletMesh!.TriangleCount);
+        var(w,snap,_)=ChannelWorld(0);
+        Array.Fill(snap.FlowX,.1);
+        Assert.Equal(0,WaterMesh.Build(w,snap).TriangleCount);
     }
 }

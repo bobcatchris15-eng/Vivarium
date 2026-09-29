@@ -13,9 +13,6 @@ uniform sampler2D soil_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D rock_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float banding_strength = 0.22;
 uniform vec3 rim_color : source_color = vec3(0.16, 0.20, 0.08);
 uniform float tile_metres = 1.1;
@@ -34,20 +31,18 @@ void fragment() {
 
     // pick the material for this horizon: 0-1 soil, 2 gravelly clay, 3+ bedrock (soft blend at the seams)
     vec3 n_a, n_b;
-    float wSoil = 1.0 - smoothstep(1.5, 2.0, layer), wRock = smoothstep(2.5, 3.0, layer);
-    vec4 a = wRock > 0.5 ? triplanar(rock_col, rock_nrm, rock_rgh, p * 0.8, wn, 6.0, n_a)
-                         : triplanar(soil_col, soil_nrm, soil_rgh, p, wn, 6.0, n_a);
+    float wSoil = 1.0 - smoothstep(1.5, 2.0, layer);
+    vec4 a = triplanar(soil_col, soil_nrm, soil_rgh, p, wn, 6.0, n_a);
     vec4 b = triplanar(gravel_col, gravel_nrm, gravel_rgh, p * 1.6, wn, 6.0, n_b);
-    float wGravel = (1.0 - wSoil) * (1.0 - wRock) + wSoil * 0.18 * layer;   // subsoil gets a little grit
+    float wGravel = (1.0 - wSoil) + wSoil * 0.18 * layer;   // subsoil gets a little grit
     vec4 t = mix(a, b, wGravel);
     vec3 n = normalize(mix(n_a, n_b, wGravel));
 
     // keep the scan's detail and a little of its hue, but take the overall colour from the layer
-    float avg = max(lum(wRock > 0.5 ? textureLod(rock_col, vec2(0.5), 10.0).rgb : textureLod(soil_col, vec2(0.5), 10.0).rgb), 0.02);
+    float avg = max(lum(textureLod(soil_col, vec2(0.5), 10.0).rgb), 0.02);
     vec3 detail = t.rgb / avg;
     layerCol = mix(vec3(lum(layerCol)), layerCol, 0.6);             // content colours are illustrative; tone them down
     vec3 col = layerCol * mix(vec3(lum(detail)), detail, 0.45);
-    col = mix(col, t.rgb * 0.85, wRock * 0.6);                        // bedrock mostly shows the real stone
 
     // Subtle anisotropic laminae: coherent, irregular deposition rather than a periodic sine ruler.
     float warp = (vnoise(vec2(along * 0.43, depth * 0.9) + layer * 2.7) - 0.5) * 0.16;

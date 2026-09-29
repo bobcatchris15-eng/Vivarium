@@ -38,7 +38,6 @@ public sealed class FloraSystem
     private bool _canopyShadeDirty = true;
     public const string PropagationStream = "flora.propagation";
     public const double TreeAreaPerIndividual = 15.0;
-    public const double ShrubAreaPerIndividual = 4.0;
 
     public FloraSystem(VivariumWorld w)
     {
@@ -54,7 +53,8 @@ public sealed class FloraSystem
     /// <summary>Shared structural population budget for the whole island, not per species.</summary>
     public int WoodyPopulationCap(WoodyLayer layer)
     {
-        double areaPer = layer == WoodyLayer.Tree ? TreeAreaPerIndividual : ShrubAreaPerIndividual;
+        if (layer == WoodyLayer.Shrub) return int.MaxValue;
+        double areaPer = TreeAreaPerIndividual;
         return Math.Max(1, (int)Math.Floor(IslandAreaM2 / areaPer));
     }
 
@@ -159,18 +159,20 @@ public sealed class FloraSystem
     public FloraSuitability Suitability(FloraSpeciesDef sp, Vec2 p, EntityId self = default)
     {
         if (!_w.Domain.ContainsDisc(p, 0.02)) return FloraSuitability.Refused("outside the island", Substrate.Soil);
+        if (_w.PilotTree?.BlocksTrunk(p, 0.02) == true) return FloraSuitability.Refused("inside Pilot Tree trunk", Substrate.Wood);
+        if (sp.Woody != null && _w.PilotTree?.BlocksDisc(p, 0.08) == true) return FloraSuitability.Refused("Pilot Tree root volume reserved", Substrate.Wood);
         var sub = _w.SubstrateAt(p);
         if (sp.RefuseSubstrates.Contains(sub)) return FloraSuitability.Refused($"{sp.Name} refuses {SubstrateIds.Id(sub)} substrate", sub);
         foreach (var tag in _w.Props.HabitatTagsAt(p))
             if (sp.RefuseTags.Contains(tag)) return FloraSuitability.Refused($"{sp.Name} refuses '{tag}' habitat", sub);
         double depth = _w.Water.OpenWaterDepth(p);
-        bool onProp = sub is Substrate.Rock or Substrate.Wood && !double.IsNaN(_w.Props.PropTopAt(p));
+        bool onProp = sub is Substrate.Rock or Substrate.Wood && (!double.IsNaN(_w.Props.PropTopAt(p)) || _w.PilotTree?.BlocksDisc(p) == true);
         if (!onProp && depth > sp.MaxWaterDepth + 1e-9) return FloraSuitability.Refused($"submerged ({depth * 100:0.#} cm, tolerates {sp.MaxWaterDepth * 100:0.#} cm)", sub);
         if (sp.MinWaterDepth > 0 && depth < sp.MinWaterDepth - 1e-9) return FloraSuitability.Refused($"needs standing water ({depth * 100:0.#} cm < {sp.MinWaterDepth * 100:0.#} cm)", sub);
         double moisture = _w.Fields.Moisture.Sample(p);
         if (moisture < sp.HardMinMoisture) return FloraSuitability.Refused($"too dry (moisture {moisture:0.00} < {sp.HardMinMoisture:0.00})", sub);
         if (!onProp && moisture > sp.HardMaxMoisture + 1e-9) return FloraSuitability.Refused($"too wet (moisture {moisture:0.00} > {sp.HardMaxMoisture:0.00})", sub);
-        if (sp.RequiresFeature.Length > 0 && _w.Props.DistanceToFeature(p, sp.RequiresFeature) > sp.RequiresFeatureRadius)
+        if (sp.RequiresFeature.Length > 0 && DistanceToFeature(p, sp.RequiresFeature, sp.RequiresFeatureRadius) > sp.RequiresFeatureRadius)
             return FloraSuitability.Refused($"{sp.Name} needs a {sp.RequiresFeature} within {sp.RequiresFeatureRadius * 100:0} cm to climb", sub);
 
         // species-relation refusals (e.g. crust lichen cannot establish under moss)
@@ -206,6 +208,8 @@ public sealed class FloraSystem
             if (rule.IsFeature)
             {
                 double d = rule.Feature == "water" ? DistanceToWater(p, rule.Radius) : _w.Props.DistanceToFeature(p, rule.Feature);
+                if (rule.Feature is "log" or "wood" && _w.PilotTree is { } pilot)
+                    d = Math.Min(d, pilot.BlocksDisc(p, rule.Radius) ? 0 : double.PositiveInfinity);
                 if (d <= rule.Radius) bonus += rule.Bonus;
             }
             else if (AnyFloraNear(p, rule.Target, rule.Radius, self)) bonus += rule.Bonus;
@@ -213,6 +217,13 @@ public sealed class FloraSystem
         foreach (var rel in C.FloraInteractions.Relations)
             if (rel.Type == FloraRelationType.Benefit && rel.A == sp.Id && AnyFloraNear(p, rel.B, rel.Radius, self)) bonus += rel.Bonus;
         return Math.Min(bonus, 0.5);
+    }
+
+    private double DistanceToFeature(Vec2 p, string feature, double radius)
+    {
+        double d = _w.Props.DistanceToFeature(p, feature);
+        if (feature is "log" or "wood" && _w.PilotTree?.BlocksDisc(p, radius) == true) return 0;
+        return d;
     }
 
     private bool AnyFloraNear(Vec2 p, string species, double radius, EntityId self)
@@ -656,6 +667,11 @@ public sealed class FloraSystem
         // 2. Logs
         if (supports == null || supports.Contains("log"))
         {
+            if (_w.PilotTree is { } pilot && pilot.TryLogSurface(pos, searchRadius, out var surface, out var normal, out double top))
+            {
+                bestDist = (surface - pos).Length;
+                best = new HostMaterialHit(true, surface, normal, top, EntityId.None, "log");
+            }
             foreach (var l in _w.Props.Logs)
             {
                 var axis = Vec2.FromAngle(l.RotationY);
@@ -742,6 +758,12 @@ public sealed class FloraSystem
 
         if (cd.SupportTypes.Contains("log"))
         {
+            if (_w.PilotTree is { } pilot && pilot.TryLogSurface(Vec3.FromXZ(p,_w.GroundHeight(p)+.02),
+                cd.SearchRadius,out var surface,out _,out _))
+            {
+                double d=Vec2.Distance(p,surface.XZ);
+                if(d<bestDistance){bestDistance=d;bestTarget=surface.XZ;}
+            }
             foreach (var l in _w.Props.Logs)
             {
                 var axis = Vec2.FromAngle(l.RotationY);
@@ -1184,7 +1206,7 @@ public sealed class FloraSystem
         {
             int cap = WoodyPopulationCap(woody.Layer);
             int count = WoodyPopulation(woody.Layer);
-            if (count >= cap)
+            if (woody.Layer == WoodyLayer.Tree && count >= cap)
             {
                 reason = $"{(woody.Layer == WoodyLayer.Tree ? "tree" : "shrub")} population at island carrying limit ({count}/{cap})";
                 return false;

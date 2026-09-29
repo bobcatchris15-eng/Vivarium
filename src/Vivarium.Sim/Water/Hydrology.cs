@@ -1,4 +1,4 @@
-﻿using Vivarium.Sim.Content;
+using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
@@ -32,10 +32,10 @@ public sealed class WaterBudget
 }
 
 /// <summary>
-/// Dynamic shallow surface water on the environment grid. Groundwater is a separate hydrostatic boundary:
-/// cells whose terrain lies below WaterTable expose groundwater without storing it in <see cref="Depth"/>.
-/// Depth therefore contains only mobile surface-water volume. The temporary relaxation transport is retained
-/// during the state-model migration; a local-inertial shallow-water solver replaces it in the next stage.
+/// Conservative local-inertial shallow water. Springs inject volume at a single grid cell;
+/// persistent shared-face discharge advances under gravity and Manning bed friction.
+/// Adaptive CFL steps and an upstream outflow limiter keep stored depths nonnegative.
+/// Soil groundwater affects moisture only and never creates a visible water surface.
 /// </summary>
 public sealed class Hydrology
 {
@@ -85,8 +85,8 @@ public sealed class Hydrology
         RefreshBed(hf);
     }
 
-    /// <summary>Elevation that dynamic surface water sits on. Exposed groundwater acts as a fixed hydraulic floor.</summary>
-    private double HydraulicBed(int idx) => Math.Max(Bed[idx], WaterTable);
+    /// <summary>Terrain bed elevation supporting the fluid.</summary>
+    private double HydraulicBed(int idx) => Bed[idx];
 
     /// <summary>Re-derives bed heights and the exterior boundary level after the terrain changes.</summary>
     public void RefreshBed(Heightfield hf)
@@ -99,10 +99,9 @@ public sealed class Hydrology
             if (grid.IsBoundaryCell[idx])
             {
                 var edge = grid.Domain.NearestBoundaryPoint(c);
-                _edgeHeight[idx] = Math.Max(hf.Height(edge) - config.BoundaryDrop, config.WaterTable);
+                _edgeHeight[idx] = hf.Height(edge) - config.BoundaryDrop;
             }
         }
-        AbsorbSurfaceIntoGroundwater();
         InvalidateWaterDistance();
     }
 
@@ -115,7 +114,6 @@ public sealed class Hydrology
         if (total <= 0 || volume <= 0) return 0;
         foreach (var (c, wgt) in cells) Depth[c] += volume * wgt / total / CellArea;
         Budget.ToolInflow += volume;
-        AbsorbSurfaceIntoGroundwater();
         InvalidateWaterDistance();
         return volume;
     }
@@ -155,27 +153,27 @@ public sealed class Hydrology
     public double DepthAt(Vec2 p) { int c = Grid.CellAt(p); return c >= 0 && Grid.InDomain(c) ? Depth[c] : 0; }
     public double SurfaceWaterDepth(int idx) => Grid.InDomain(idx) ? Depth[idx] : 0;
     public double SurfaceWaterDepth(Vec2 p) => DepthAt(p);
-    public bool HasSurfaceWater(int idx) => Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth;
-    public bool HasSurfaceWater(Vec2 p) => DepthAt(p) >= Config.WetDepth;
+    public bool HasSurfaceWater(int idx) => Grid.InDomain(idx) && Depth[idx] >= 0.00005;
+    public bool HasSurfaceWater(Vec2 p) => DepthAt(p) >= 0.00005;
 
-    /// <summary>Total visible open-water depth: hydrostatic groundwater exposure plus dynamic water above it.</summary>
-    public double OpenWaterDepth(int idx) => Grid.InDomain(idx) ? WaterTableDepth(idx) + Depth[idx] : 0;
+    /// <summary>Actual mobile fluid depth.</summary>
+    public double OpenWaterDepth(int idx) => Grid.InDomain(idx) ? Math.Max(Depth[idx], WaterTableDepth(idx)) : 0;
     public double OpenWaterDepth(Vec2 p)
     {
         int c = Grid.CellAt(p);
         return c >= 0 && Grid.InDomain(c) ? OpenWaterDepth(c) : 0;
     }
 
-    /// <summary>Visible water-surface elevation, or NaN where neither groundwater nor dynamic surface water is exposed.</summary>
+    /// <summary>Fluid surface elevation, or NaN in dry cells.</summary>
     public double SurfaceAt(Vec2 p)
     {
         int c = Grid.CellAt(p);
-        if (c < 0 || !Grid.InDomain(c) || (!IsWaterTable(c) && !HasSurfaceWater(c))) return double.NaN;
-        return HydraulicBed(c) + Depth[c];
+        if (c < 0 || !Grid.InDomain(c) || !IsWet(c)) return double.NaN;
+        return Math.Max(HydraulicBed(c) + Depth[c], IsWaterTable(c) ? WaterTable : double.NegativeInfinity);
     }
 
-    /// <summary>Open water from either exposed groundwater or dynamic surface water.</summary>
-    public bool IsWet(int idx) => Grid.InDomain(idx) && (IsWaterTable(idx) || HasSurfaceWater(idx));
+    /// <summary>Open water present in stored fluid depth.</summary>
+    public bool IsWet(int idx) => Grid.InDomain(idx) && (HasSurfaceWater(idx) || IsWaterTable(idx));
     public bool IsWet(Vec2 p)
     {
         int c = Grid.CellAt(p);
@@ -200,7 +198,7 @@ public sealed class Hydrology
 
     /// <summary>Derived convenience classification: dynamic surface water with a measurable current.</summary>
     public bool IsStream(int idx) =>
-        Grid.InDomain(idx) && Depth[idx] >= Config.WetDepth && StreamVelocity(idx).Length > Config.StreamVelocityThreshold;
+        Grid.InDomain(idx) && Depth[idx] >= 0.00005 && StreamVelocity(idx).Length > Config.StreamVelocityThreshold;
     public bool IsStream(Vec2 p)
     {
         int c = Grid.CellAt(p);
@@ -214,7 +212,7 @@ public sealed class Hydrology
     /// <summary>Flow velocity vector (m/s) in world XZ for a cell.</summary>
     public Vec2 StreamVelocity(int idx)
     {
-        if (!Grid.InDomain(idx) || Depth[idx] < Config.WetDepth) return Vec2.Zero;
+        if (!Grid.InDomain(idx) || Depth[idx] < 0.00005) return Vec2.Zero;
         double area = Math.Max(Depth[idx] * Grid.CellSize, 1e-6);
         return new Vec2(FlowX[idx] / area, FlowZ[idx] / area);
     }
@@ -233,73 +231,28 @@ public sealed class Hydrology
 
     public void Step(double dt)
     {
-        int sub = ComputeSubSteps(dt);
-        double h = dt / sub;
-        for (int s = 0; s < sub; s++) SubStep(h);
-        InvalidateWaterDistance();
-    }
-
-    /// <summary>
-    /// Picks the fewest sub-steps that keep every wet face's Manning-limited transfer within the
-    /// EqualizeFraction stability bound at the full tick length, instead of always assuming the worst case
-    /// (a fixed dt/MaxSubStepSeconds cap regardless of how much water is actually moving). The legacy cap is
-    /// kept as an upper bound, so this can only ever reduce sub-step count, never exceed the old behaviour.
-    /// </summary>
-    private int ComputeSubSteps(double dt)
-    {
-        int floor = Math.Max(1, Config.SubSteps);
-        int legacyCap = Math.Max(floor, (int)Math.Ceiling(dt / MaxSubStepSeconds));
-        if (legacyCap <= floor) return legacyCap; // already at the configured minimum; nothing to save
-
-        double neededRatio = 1;
-        foreach (int idx in Grid.DomainCells)
+        if (!double.IsFinite(dt) || dt <= 0) return;
+        double remaining = dt;
+        while (remaining > 1e-9)
         {
-            if (Depth[idx] <= 0 && !Grid.IsBoundaryCell[idx]) continue;
-            int e = _nE[idx], n = _nN[idx];
-            if (e >= 0) neededRatio = Math.Max(neededRatio, FaceSubstepRatio(idx, e, dt));
-            if (n >= 0) neededRatio = Math.Max(neededRatio, FaceSubstepRatio(idx, n, dt));
-            if (Grid.IsBoundaryCell[idx] && Depth[idx] > 0)
+            double wave = 0;
+            foreach(int c in Grid.DomainCells)
             {
-                double surface = HydraulicBed(idx) + Depth[idx];
-                neededRatio = Math.Max(neededRatio, BoundarySubstepRatio(idx, surface, dt));
+                double depth = Depth[c];
+                if(depth <= 1e-7) continue;
+                // Local-inertial equations omit advective acceleration: gravity-wave speed sets CFL.
+                // Including q/h here makes vanishingly thin wet fronts stall whole-world simulation.
+                wave = Math.Max(wave,Math.Sqrt(9.81*depth));
             }
+            double h = Math.Min(remaining, 5);
+            // Bound the water a source can add during this step too, including initially dry cells.
+            double sourceRise=Springs.Sum(s=>Math.Max(0,s.Discharge))/CellArea;
+            double predictedWave=Math.Sqrt(wave*wave+9.81*sourceRise*h);
+            if(predictedWave>0) h=Math.Min(h,.45*Grid.CellSize/predictedWave);
+            SubStep(h);
+            remaining -= h;
         }
-        int needed = (int)Math.Ceiling(neededRatio);
-        return Math.Clamp(Math.Max(floor, needed), 1, legacyCap);
-    }
-
-    /// <summary>Sub-step ratio implied by the face between <paramref name="a"/> and <paramref name="b"/>: how
-    /// many times the full tick would have to be divided for a Manning-limited discharge to stay within the
-    /// same volume the equalize cap already allows at one sub-step. 1 when the face isn't the binding one.</summary>
-    private double FaceSubstepRatio(int a, int b, double dt)
-    {
-        double za = HydraulicBed(a), zb = HydraulicBed(b);
-        double sa = za + Depth[a], sb = zb + Depth[b];
-        double head = sa - sb;
-        if (Math.Abs(head) < 1e-12) return 1;
-        int upstream = head > 0 ? a : b;
-        if (Depth[upstream] <= 1e-12) return 1;
-        double sill = Math.Max(za, zb);
-        double hf = Math.Max(sa, sb) - sill;
-        if (hf <= 1e-9) return 1;
-        return ManningSubstepRatio(Math.Abs(head), hf, dt);
-    }
-
-    private double BoundarySubstepRatio(int idx, double surface, double dt)
-    {
-        double head = surface - _edgeHeight[idx];
-        if (head <= 0 || Depth[idx] <= 0) return 1;
-        return ManningSubstepRatio(head, Math.Min(Depth[idx], head), dt);
-    }
-
-    private double ManningSubstepRatio(double head, double hf, double dt)
-    {
-        double slope = head / Grid.CellSize;
-        double manning = Grid.CellSize * Math.Pow(hf, 5.0 / 3.0) * Math.Sqrt(slope) / Manning;
-        if (manning <= 1e-18) return 1;
-        double equalizeVolume = EqualizeFraction * Math.Min(head, hf) * CellArea;
-        double safeDt = equalizeVolume / manning;
-        return safeDt > 0 ? dt / safeDt : 1;
+        InvalidateWaterDistance();
     }
 
     private void SubStep(double dt)
@@ -327,15 +280,13 @@ public sealed class Hydrology
             Depth[idx] -= loss;
         }
 
-        // 3. Face discharge from the free surface. Water can only cross a face if it stands above the higher
-        // of the two beds (a bank blocks it), and each face moves at most EqualizeFraction of the level
-        // difference per sub-step so neighbouring cells converge monotonically instead of overshooting
-        // into an odd/even checkerboard. Manning friction caps the rate on slopes, giving stream speeds.
+        // 3. Advance shared-face momentum from gravity and bed friction. A higher bank remains a physical sill.
+        // Continuity below transfers the exact same volume between cells; outgoing volume is positivity-limited.
         foreach (int idx in Grid.DomainCells)
         {
             int e = _nE[idx], n = _nN[idx];
-            _faceE[idx] = e >= 0 ? FaceDischarge(idx, e, dt) : 0;
-            _faceN[idx] = n >= 0 ? FaceDischarge(idx, n, dt) : 0;
+            _faceE[idx] = e >= 0 ? FaceDischarge(idx, e, _faceE[idx], dt) : 0;
+            _faceN[idx] = n >= 0 ? FaceDischarge(idx, n, _faceN[idx], dt) : 0;
             _deltaVolume[idx] = 0;
             _outScale[idx] = 1;
             _edgeFlowE[idx] = _edgeFlowW[idx] = _edgeFlowN[idx] = _edgeFlowS[idx] = 0;
@@ -416,65 +367,31 @@ public sealed class Hydrology
             FlowZ[idx] = 0.5 * (north + south);
         }
 
-        // Exposed groundwater is a fixed-head reservoir, not another dynamic-water cell.
-        // Any surface volume that reaches it is recharged immediately and cannot pile up over the table.
-        AbsorbSurfaceIntoGroundwater();
+
     }
 
-    private void AbsorbSurfaceIntoGroundwater()
-    {
-        double recharged = 0;
-        foreach (int idx in Grid.DomainCells)
-        {
-            if (!IsWaterTable(idx) || Depth[idx] <= 0) continue;
-            recharged += Depth[idx] * CellArea;
-            Depth[idx] = 0;
-        }
-        if (recharged > 0)
-        {
-            Budget.GroundwaterRecharge += recharged;
-            InvalidateWaterDistance();
-        }
-    }
-
-    /// <summary>Largest share of a level difference one face may transfer per sub-step. Below 1/4 keeps the
-    /// explicit 4-neighbour exchange monotone (no oscillation, no checkerboard).</summary>
-    private const double EqualizeFraction = 0.2;
-    /// <summary>Manning roughness (s/m^1/3) for shallow flow over soil and litter.</summary>
+    // Soil moisture remains a field; it never creates a visible water plane or deletes flowing volume.
     private const double Manning = 0.05;
-    /// <summary>Longest hydrology sub-step, seconds.</summary>
-    private const double MaxSubStepSeconds = 10.0;
 
-    /// <summary>Signed discharge (m³/s, + from a to b) through the face shared by cells a and b.</summary>
-    private double FaceDischarge(int a, int b, double dt)
+    /// <summary>Local-inertial shallow-water momentum on a shared face, in m3/s. Previous momentum survives level equality.</summary>
+    private double FaceDischarge(int a, int b, double previous, double dt)
     {
-        double za = HydraulicBed(a), zb = HydraulicBed(b);
-        double sa = za + Depth[a], sb = zb + Depth[b];
-        double head = sa - sb;
-        if (Math.Abs(head) < 1e-12) return 0;
-        int upstream = head > 0 ? a : b;
-        if (Depth[upstream] <= 1e-12) return 0;
-        // water depth over the face sill: a bank higher than the upstream surface blocks flow entirely
-        double sill = Math.Max(za, zb);
-        double hf = Math.Max(sa, sb) - sill;
-        if (hf <= 1e-9) return 0;
-        return Math.Sign(head) * Transfer(Math.Abs(head), hf, dt);
+        double sa = Bed[a] + Depth[a], sb = Bed[b] + Depth[b];
+        double hf = Math.Max(sa,sb) - Math.Max(Bed[a],Bed[b]);
+        if(hf <= 1e-7) return 0;
+        double width=Grid.CellSize, q=previous/width;
+        double friction=1+9.81*dt*Manning*Manning*Math.Abs(q)/Math.Pow(hf,7.0/3.0);
+        double next=(q-9.81*hf*dt*(sb-sa)/width)/friction;
+        if((next>0&&Depth[a]<=1e-9)||(next<0&&Depth[b]<=1e-9))return 0;
+        return next*width;
     }
-
-    /// <summary>Discharge magnitude for a level difference <paramref name="head"/> over a sill with flow depth <paramref name="hf"/>.</summary>
-    private double Transfer(double head, double hf, double dt)
-    {
-        double equalize = EqualizeFraction * Math.Min(head, hf) * CellArea / dt;
-        double slope = head / Grid.CellSize;
-        double manning = Grid.CellSize * Math.Pow(hf, 5.0 / 3.0) * Math.Sqrt(slope) / Manning;
-        return Math.Min(equalize, manning);
-    }
-
     private double BoundaryDischarge(int idx, double surface, double dt)
     {
-        double head = surface - _edgeHeight[idx];
-        if (head <= 0 || Depth[idx] <= 0) return 0;
-        return Transfer(head, Math.Min(Depth[idx], head), dt);
+        double head = surface-_edgeHeight[idx], hf = Depth[idx];
+        if(head <= 0 || hf <= 1e-7) return 0;
+        // Free discharge over the specimen cut, with bed friction and no exterior inflow.
+        double q = Math.Min(hf*Math.Sqrt(9.81*hf), Math.Pow(hf,5.0/3.0)*Math.Sqrt(head/Grid.CellSize)/Manning);
+        return q*Grid.CellSize;
     }
 
     private double[]? _waterDistance;

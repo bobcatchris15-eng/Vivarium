@@ -53,6 +53,7 @@ public sealed class FaunaSystem
     public FaunaSuitability Suitability(FaunaSpeciesDef sp, Vec2 p)
     {
         if (!_w.Domain.ContainsDisc(p, 0.03)) return new FaunaSuitability { HardRefused = true, RefusalReason = "outside the island" };
+        if (_w.PilotTree?.BlocksTrunk(p, 0.03) == true) return new FaunaSuitability { HardRefused = true, RefusalReason = "inside Pilot Tree trunk" };
         double depth = _w.Water.OpenWaterDepth(p);
         double moisture = _w.Fields.Moisture.Sample(p);
         var sub = _w.SubstrateAtCell(p);
@@ -71,7 +72,7 @@ public sealed class FaunaSystem
             if (depth > sp.MaxWaterDepth) s *= 0.6;
             return new FaunaSuitability { Score = MathD.Clamp01(s), WaterDepth = depth, Moisture = moisture, Substrate = sub };
         }
-        bool onProp = !double.IsNaN(_w.Props.PropTopAt(p));
+        bool onProp = !double.IsNaN(_w.Props.PropTopAt(p)) || _w.PilotTree?.BlocksDisc(p) == true;
         if (!onProp && depth > sp.MaxWaterDepth) return new FaunaSuitability { HardRefused = true, RefusalReason = $"{sp.Name} cannot live in water ({depth * 100:0.#} cm deep)", WaterDepth = depth, Moisture = moisture, Substrate = sub };
         double aff = sp.SubstrateAffinity.GetValueOrDefault(sub == Substrate.Water ? Substrate.Soil : sub);
         double score = aff * sp.Moisture.Eval(moisture);
@@ -216,10 +217,11 @@ public sealed class FaunaSystem
     public bool IsPassable(FaunaSpeciesDef sp, Vec2 q)
     {
         if (!_w.Domain.ContainsDisc(q, 0.04)) return false;
+        if (_w.PilotTree?.BlocksTrunk(q, 0.04) == true) return false;
         if (sp.Flies) return true;
         double depth = _w.Water.OpenWaterDepth(q);
         if (sp.Medium == Medium.Aquatic) return depth >= sp.MinWaterDepth;
-        return depth <= sp.MaxWaterDepth || !double.IsNaN(_w.Props.PropTopAt(q));
+        return depth <= sp.MaxWaterDepth || !double.IsNaN(_w.Props.PropTopAt(q)) || _w.PilotTree?.BlocksDisc(q) == true;
     }
 
     private double? SchoolingHeading(FaunaIndividual f, FaunaSpeciesDef sp)
