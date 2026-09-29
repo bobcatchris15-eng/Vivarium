@@ -1,6 +1,7 @@
-# Photoreal overhaul — orchestrator ledger
-Updated: 2026-09-28 | HEAD: de3dd17 | Plan: ~/.claude/plans/do-2-it-s-fine-fuzzy-journal.md
-HANDOFF: read docs/overhaul/HANDOFF.md first (rules, in-flight worktrees, queue).
+# Vivarium — orchestrator ledger
+Updated: 2026-09-29 | HEAD: 2ff6c65
+CURRENT EFFORT: **coarse-sim + daynight** (bottom of file). Photoreal overhaul (everything below the banner) is
+RETIRED 2026-09-29 by user decision — do not resume, do not dispatch from it. Retained as history only.
 
 ## Objective
 Move Vivarium from procedural-game look to photographed-miniature-terrarium realism (user's 18-campaign brief, 2026-09-25). Photorealism outranks ecology accuracy, species count, compatibility. ≥30 FPS populated play on Radeon 860M; no billboard/blob LOD; sim authoritative, renderer non-authoritative; breaking changes free ("pull the system apart"). Claude critiques each stage; user does final review.
@@ -152,3 +153,46 @@ Unverified: hydrology cost on user save caused by 114beba (not yet profiled befo
 - D-ap4 09-28: user pivot: understory focus. Delete tree layer (umbraheart kiteleaf ironlace fenneedle) completely; keep shrubs; cap island diameter at 12 m (all presets + validation max). Old saves drop removed species on load. Dispatched notrees (Mode S, main).
 - notrees DONE 343c6d5: 80 deleted/32 modified; presets all 12 m; saves migrate (drop removed species, skip digest check). Pre-existing failing at fa5d758 (not ours): FloraTests x9, IntegrationTests x4, FormTests x12. NOTE: prismhopper extinct by tick 3500 on 12 m default — ecology may need retune for smaller island.
 - D-ap5 09-28: user: islands 5-10 m. Min 5 / Max 10; presets rocky_rise 5, steep 6, isolated_pond 7, default 8, creek 8, oxbow 9, shoreline 9, deep_inlet 10, bayou 10; starters scaled by area, floor 6 fauna/3 flora. Dispatched shrink. 12 m soak: duskflicker, emberglass_swimmer, glintfin, moonveil extinct by bio-day 90 — retune needed. Perf at 12 m contaminated by user's running game (PID 22884).
+
+## Effort: coarse-sim + daynight (2026-09-29) — CURRENT
+Objective: from `docs/fauna_coarse_ecology_performance_plan.md` — coarsen the simulation (steering/decision
+cadence, metabolism/lifecycle accounting, deterministic accounting queue) and add a presentation day/night
+clock (15 min day / 5 min night). The realism programme is retired above: do NOT resume aq4, pl4, gm-b2, gm-b3
+or the critic-item tuning backlog. Do not touch the plan doc; it is the human's document and still claims to
+supersede `fauna_expansion_plan.md` population structure.
+
+Directives (2026-09-29)
+- D-reaim-1 SUPERSEDED: "re-aim entirely at the real bottleneck". Overtaken by D-reaim-2 an hour later. Kept
+  because the evidence it rested on is still true and still unaddressed (see A-perf-1).
+- D-reaim-2: work the coarse-sim + day/night half of the fauna plan.
+
+Evidence established this session (facts, not decisions)
+- Live session PID 24056 (day 46, creek, 8 m island): sim backlog 60 -> 560 sim-min at 1x, drained at 0.5x;
+  process used 0.54 of 16 cores. Render-coupled: `WallBudgetMs = 12` (Scheduler.cs:50) per Advance, once per
+  frame (GameSession.cs:194). Low fps => less sim budget/s => backlog. Render spikes and sim throughput are
+  ONE problem, not two.
+- Worst-frame scope costs (428 perf samples, mixed eras + island sizes, MAXIMA not means): Sys.aquatic 320ms >
+  Sys.coverage.plasmodium 70 > Sys.ecology.litter 46 > Sys.flora.ambient 45 > Sys.flora 40 > Sys.hydrology 37 >
+  Sys.fauna.behaviour 37 > Sys.fauna.metabolism 18 > fauna.lifecycle never in worst-5. Whole fauna trio ~56ms.
+- No day/night system exists. EnvironmentRig.cs:34 fixed `SunAngleMax = 30`, no cycle. Chunk 13 is greenfield.
+- fauna.behaviour/metabolism/lifecycle already registered (VivariumWorld.cs:140-142) and already accumulate
+  Runs/TotalMs/LastMs/MaxMs (Scheduler.cs:19-22, 89). `Vivarium.Cli soak` already prints per-system
+  runs/total/mean/max (Program.cs:98) => Chunk 0 needs SCENARIOS, not new instrumentation.
+- `pl4` misnamed: `SpatialOrganism` = 0 occurrences in tree. Re-scope before dispatch.
+- 0 worktrees, 10 stale branches; aq2-biofilm landed via the pull.
+
+Open design forks (human must answer; chunk 13 acceptance is not writable without them)
+- Does the day/night cycle scale with the speed multiplier (1x = 20 min, 8x = 2.5 min) or hold 20 real
+  minutes at every speed?
+- Is it driven by physical `SimSeconds` (deterministic, tick-derived) or by real wall-clock?
+
+Tasks
+| id | outcome | status | last |
+|----|---------|--------|------|
+
+Unverified assumptions
+- A-perf-1: coarsening fauna is expected to relieve the sim backlog. NOT established — fauna is ~56ms of a
+  916ms worst frame and the process is not CPU-saturated; the backlog looks render-coupled. Revisit if chunk 0
+  mean/total data shows fauna dominating, or if the day/night cycle is wanted on its own player-visible merit
+  (plausible — that argument does not depend on A-perf-1).
+
