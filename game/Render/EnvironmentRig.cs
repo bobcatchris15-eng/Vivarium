@@ -95,6 +95,9 @@ public partial class EnvironmentRig : Node3D
     {
         // PRESENTATION clock: a monotonic wall-clock source, injected. Wall-driven means it is not
         // reproducible from a save, so it is never serialized and never reaches the scheduler.
+        // The stopwatch MUST be started here: a Stopwatch that was never started reports Elapsed == 0
+        // forever, which pins the whole cycle to its first keyframe (flat midday, sun energy 1.26).
+        _monotonic.Start();
         Clock = new DayNightClock(() => _monotonic.Elapsed.TotalSeconds);
 
         _sky = new ProceduralSkyMaterial
