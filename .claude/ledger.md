@@ -237,6 +237,7 @@ PRE-EXISTING FAILURES (verified identical before and after the flora change, on 
   log), introduce ambervein (no valid habitat), quality changes leave simulation untouched — 5 of 30, all
   unrelated to flora layer building. Not investigated; NOT regressions from this session's work.
 
+KEY ECOLOGY FIX (2026-09-29): the dominant failure was NOT basal rate or diet — it was predation over-harvest.
 A predator could kill one whole prey per named diet entry per pass. Fixing the kill rate (not the intake) is
 what made small fauna survive. Lesson for future tuning: measure death CAUSES before tuning energy budgets.
 
