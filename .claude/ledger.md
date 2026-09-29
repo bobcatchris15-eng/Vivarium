@@ -246,6 +246,7 @@ SHADER COLOUR SPACE: terrain.gdshader colour constants are LINEAR albedo, not sR
 with Agx (which lifts shadows). A "dark brown" written as 0.21 renders as a mid-tone; ~0.07 is needed to read
 as dark. Convert before picking values.
 
+PRE-EXISTING FAILURES (verified identical before and after the flora change, on warm cache):
   smoke: camera crosses water surface (transitions 0), pause stops simulated time, place rock (overlaps a
   log), introduce ambervein (no valid habitat), quality changes leave simulation untouched — 5 of 30, all
   unrelated to flora layer building. Not investigated; NOT regressions from this session's work.
