@@ -194,8 +194,27 @@ Tasks
 | faunaindex | chunk 9: stop per-tick RebuildIndex | MERGED (706b1ec) | Cadence rebuild N=4 via call counter (tick%N would never fire — StepBehaviour sees odd tick). Bulk rebuilds kept; Remove stays O(n) by design. Spatial/schooling/predation tests pass. |
 | siltbed | waterway beds render as silt | MERGED (bc0ce15) | sub_tex.g submerged mask (OpenWaterDepth>4mm); pale matte silt, green sources suppressed. RENDER-ONLY. Build clean; Godot boot clean (no IndexOutOfRange/file-open). Full 40-scene reference did NOT complete (hung at flora build) — visual review still owed. |
 | faunabase | chunk 0: CLI fauna baseline scenarios | MERGED (d0a8bca) | --scenario none/low/medium/high; prints per-system runs/total/mean/max. none=0 fauna; high=populated. CLI-only. |
-| cs3-6 | forgiving diets, guild fallbacks, generic prey | QUEUED | next — the actual ecological fix |
+| cs3-6 | forgiving diets + capped generic predation | MERGED (8a55d00) | Fixed an over-harvest: a predator with 3-4 named `fauna:` diet entries killed 3-4 whole prey PER feeding pass, wiping small fauna (prismhopper died 74x in one bio-day). Named prey is now preference-only; all kills flow through one capped generic path (IsEdiblePrey) with a one-kill-per-Feed cap; chunk-6 biomass rule (whole/too-weak kill returns mass; partial bite abstract). Day-1 soak: all 17 species alive + breeding, natural deaths only. 20/20 ecology tests on main. |
+| lifecycle-rb | chunk 9 completion: StepLifecycle index cadence | MERGED (9ae6691) | Separate call counter; auto-merged with ecology cleanly, re-validated. |
+| faunapred | (superseded — folded into cs3-6) | DISCARDED | Branch abandoned; its chunks 5+6 were hand-ported onto the diet base to avoid the git text-conflict silently dropping logic. |
 | cs7-8,10-12 | steering/metabolism/lifecycle cadence + accounting queue | QUEUED | — |
+| budget-followup | graceful budget refusal in Introduction.cs | QUEUED | CreateFounder still throws at a spent budget; one-line fix owed. |
+| visual-review | day/night lighting + silt bed on screen | QUEUED | Both boot-clean; no windowed photo review yet (needs GPU, no contention). |
+
+HARD NUMBER (chunk 0 baseline, 1-day soak, default preset): fauna.behaviour mean 0.003 ms, max 0.9 ms;
+fauna.metabolism mean 0.004 ms. Combined fauna sim cost is sub-millisecond per tick. Measured proof that
+A-perf-1 holds: coarsening fauna cannot meaningfully relieve the render-coupled sim backlog. The day/night
+and ecology chunks stand as FEATURES (robustness, a visible clock), not as a performance fix. The backlog
+lives in Sys.aquatic (320 ms worst) and the render spikes + the WallBudgetMs x frame-rate coupling.
+
+KEY ECOLOGY FIX (2026-09-29): the dominant failure was NOT basal rate or diet — it was predation over-harvest.
+A predator could kill one whole prey per named diet entry per pass. Fixing the kill rate (not the intake) is
+what made small fauna survive. Lesson for future tuning: measure death CAUSES before tuning energy budgets.
+
+KNOWN GAP: the 17 per-species `EachSpeciesSurvivesFeedsReproducesInheritsAndRenders` lifecycle tests exceed a
+single tool window (>10 min each batch) and were NOT run to completion. The day-1 high-scenario soak and the
+20-test ecology/determinism surface are the evidence in their place. Run them overnight before trusting the
+full suite green.
 
 HARD NUMBER (chunk 0 baseline, 1-day soak, default preset): fauna.behaviour mean 0.003 ms, max 0.9 ms;
 fauna.metabolism mean 0.004 ms. Combined fauna sim cost is sub-millisecond on a typical tick. This is
