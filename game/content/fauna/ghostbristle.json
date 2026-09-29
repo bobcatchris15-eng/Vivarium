@@ -2,6 +2,7 @@
   "id": "ghostbristle",
   "name": "Ghostbristle",
   "medium": "terrestrial",
+  "guild": "terrestrial_grazer_detritivore",
   "role": "Fast litter-dwelling detritivore of cool sheltered ground.",
   "description": "A pale flattened runner with three long sensory tail filaments that slips through shaded litter and under woody debris.",
   "habitat": {

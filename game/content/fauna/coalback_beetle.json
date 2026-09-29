@@ -2,6 +2,7 @@
   "id": "coalback_beetle",
   "name": "Coalback beetle",
   "medium": "terrestrial",
+  "guild": "terrestrial_grazer_detritivore",
   "role": "Dry-ground detritivore and opportunistic grazer.",
   "description": "A matte charcoal beetle-like scavenger with ridged wing cases, most active across dry litter and exposed soil.",
   "habitat": {

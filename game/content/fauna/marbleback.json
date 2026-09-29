@@ -2,6 +2,7 @@
   "id": "marbleback",
   "name": "Marbleback",
   "medium": "terrestrial",
+  "guild": "terrestrial_grazer_detritivore",
   "role": "Armoured terrestrial detritivore of humid litter and rotting vegetation.",
   "description": "Overlapping stone-patterned plates protect a many-legged litter grazer that curls tightly when disturbed.",
   "habitat": {

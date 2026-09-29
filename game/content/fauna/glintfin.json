@@ -2,6 +2,7 @@
   "id": "glintfin",
   "name": "Glintfin",
   "medium": "aquatic",
+  "guild": "aquatic_grazer_detritivore",
   "role": "Small schooling plankton feeder of open water.",
   "description": "A narrow silver-blue swimmer with a reflective lateral flash; groups hold loose schools over the deeper pond.",
   "habitat": {

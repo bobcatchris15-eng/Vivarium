@@ -2,6 +2,7 @@
   "id": "loamthread",
   "name": "Loamthread",
   "medium": "terrestrial",
+  "guild": "terrestrial_grazer_detritivore",
   "role": "Subsurface-leaning soil detritivore and nutrient recycler.",
   "description": "A flexible ringed burrower that tracks damp mineral soil and periodically surfaces beneath litter, accelerating dead-matter turnover.",
   "habitat": {

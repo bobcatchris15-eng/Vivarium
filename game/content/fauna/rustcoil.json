@@ -2,6 +2,7 @@
   "id": "rustcoil",
   "name": "Rustcoil",
   "medium": "terrestrial",
+  "guild": "terrestrial_grazer_detritivore",
   "role": "Large many-segmented litter shredder and fungal detritivore.",
   "description": "Copper-ringed body segments advance in slow waves through damp litter, reducing coarse dead material to fine organic fragments.",
   "habitat": {

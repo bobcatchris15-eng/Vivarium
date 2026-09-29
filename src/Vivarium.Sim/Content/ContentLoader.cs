@@ -580,10 +580,18 @@ public static class ContentLoader
 
     private static FaunaSpeciesDef ParseFauna(JNode n)
     {
-        n.RejectUnknown("id", "name", "medium", "role", "description", "habitat", "movement", "diet", "metabolism", "lifecycle", "reproduction", "body", "genetics", "visual", "behaviors", "schooling");
+        n.RejectUnknown("id", "name", "medium", "guild", "role", "description", "habitat", "movement", "diet", "metabolism", "lifecycle", "reproduction", "body", "genetics", "visual", "behaviors", "schooling");
         const double D = SimUnits.Day, H = SimUnits.Hour;
         string medium = n.Str("medium");
         if (medium is not ("terrestrial" or "aquatic")) n["medium"].Error("expected terrestrial | aquatic");
+        var guildExpected = string.Join(" | ", EcologyGuildIds.All.Select(EcologyGuildIds.Id));
+        var guild = EcologyGuild.TerrestrialGrazerDetritivore;
+        if (n.Has("guild"))
+        {
+            var guildId = n.Str("guild");
+            if (!EcologyGuildIds.TryParse(guildId, out guild)) n["guild"].Error($"unknown guild '{guildId}' (expected {guildExpected})");
+        }
+        else n["guild"].Error($"guild is required (expected {guildExpected})");
         var h = n.Req("habitat"); h.RejectUnknown("moisture", "substrates", "minWaterDepth", "maxWaterDepth", "minSuitability");
         var m = n.Req("movement"); m.RejectUnknown("speedPerHour", "turnRatePerMinute", "wander", "habitatSeek", "senseRadius");
         var me = n.Req("metabolism"); me.RejectUnknown("basalPerHour", "maxEnergy", "initialEnergy", "hungerThreshold", "wasteFraction");
@@ -648,7 +656,7 @@ public static class ContentLoader
         }
         var def = new FaunaSpeciesDef
         {
-            Id = n.Str("id"), Name = n.Str("name"), Medium = medium == "aquatic" ? Medium.Aquatic : Medium.Terrestrial,
+            Id = n.Str("id"), Name = n.Str("name"), Medium = medium == "aquatic" ? Medium.Aquatic : Medium.Terrestrial, Guild = guild,
             Role = n.Str("role", ""), Description = n.Str("description", ""), SourceFile = n.File,
             Moisture = ParsePref(h, "moisture"), SubstrateAffinity = ParseAffinity(h, "substrates"),
             MinWaterDepth = h.Num("minWaterDepth", 0, 0, 2), MaxWaterDepth = h.Num("maxWaterDepth", min: 0, max: 5), MinSuitability = h.Num("minSuitability", 0.1, 0, 1),

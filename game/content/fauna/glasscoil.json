@@ -2,6 +2,7 @@
   "id": "glasscoil",
   "name": "Glasscoil",
   "medium": "aquatic",
+  "guild": "aquatic_grazer_detritivore",
   "role": "Slow submerged-surface grazer of biofilm and fine detritus.",
   "description": "A clear amber spiral shell rides above a dark muscular foot that rasps algae-like films from stones, wood and flooded stems.",
   "habitat": {

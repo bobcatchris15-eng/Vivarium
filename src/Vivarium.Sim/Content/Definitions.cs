@@ -419,6 +419,43 @@ public sealed class SchoolingParams
 
 public enum Medium { Terrestrial, Aquatic }
 
+/// <summary>Ecology guild: the feeding strategy a species occupies, independent of its per-species tuning. Metadata only.</summary>
+public enum EcologyGuild : byte
+{
+    TerrestrialGrazerDetritivore = 0,
+    AquaticGrazerDetritivore = 1,
+    FlyingGrazerScavenger = 2,
+    Predator = 3,
+}
+
+public static class EcologyGuildIds
+{
+    public static readonly EcologyGuild[] All =
+    {
+        EcologyGuild.TerrestrialGrazerDetritivore,
+        EcologyGuild.AquaticGrazerDetritivore,
+        EcologyGuild.FlyingGrazerScavenger,
+        EcologyGuild.Predator,
+    };
+
+    public static string Id(EcologyGuild g) => g switch
+    {
+        EcologyGuild.TerrestrialGrazerDetritivore => "terrestrial_grazer_detritivore",
+        EcologyGuild.AquaticGrazerDetritivore => "aquatic_grazer_detritivore",
+        EcologyGuild.FlyingGrazerScavenger => "flying_grazer_scavenger",
+        EcologyGuild.Predator => "predator",
+        _ => throw new ArgumentOutOfRangeException(nameof(g)),
+    };
+
+    public static bool TryParse(string id, out EcologyGuild g)
+    {
+        foreach (var candidate in All)
+            if (Id(candidate) == id) { g = candidate; return true; }
+        g = default;
+        return false;
+    }
+}
+
 /// <summary>
 /// Render-only locomotion families. The simulation remains authoritative for position and behaviour; these
 /// describe how a body should visibly realize that motion. Numeric values are passed directly to the fauna shader.
@@ -471,6 +508,7 @@ public sealed class FaunaSpeciesDef
     public string Id { get; init; } = "";
     public string Name { get; init; } = "";
     public Medium Medium { get; init; }
+    public EcologyGuild Guild { get; init; }
     public string Role { get; init; } = "";
     public string Description { get; init; } = "";
     public string SourceFile { get; init; } = "";
