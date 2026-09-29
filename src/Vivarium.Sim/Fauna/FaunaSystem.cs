@@ -34,6 +34,10 @@ public sealed class FaunaSystem
     /// <summary>Behaviour steps between spatial-index rebuilds. A rebuild refills every bucket, so running it each
     /// step made behaviour cost O(fauna) per pass even when nothing had changed bucket.</summary>
     private const int IndexRebuildPeriod = 4;
+    /// <summary>Fraction of the appetite a feeding attempt must have met from the preferred diet before the guild
+    /// fallback diet is consulted. Low enough that a merely reduced meal keeps an animal on its own diet, high
+    /// enough that a genuinely absent resource is caught within the same attempt.</summary>
+    private const double FallbackTriggerFraction = 0.25;
     /// <summary>Behaviour steps since the last rebuild. Not serialized: a fresh counter after a load only means
     /// the first behaviour step refills an index that the loader already built incrementally anyway.</summary>
     private int _behaviourStepsSinceIndexRebuild;
@@ -359,32 +363,48 @@ public sealed class FaunaSystem
         int cell = _w.Grid.NearestDomainCell(p);
         if (cell < 0) return;
         double room = sp.MaxEnergy - f.Energy;
-        double consumed = 0;
+        double consumed = 0, appetite = 0;
         foreach (var d in sp.Diet)
         {
             if (room <= 1e-12) break;
-            double want = Math.Min(d.RatePerSecond * ph.MassScale * dt, room / Math.Max(d.Efficiency, 1e-9));
-            double got;
-            if (d.Resource == "biofilm")
-                got = Coverage.Aquatic.AquaticBiofilm.GrazeCell(_w.Coverage.AlgaeBed, _w.Fields.Biofilm, cell, want);
-            else if (d.Resource.StartsWith("flora:", StringComparison.Ordinal)) got = GrazeFlora(p, d.Resource[6..], want);
-            else if (d.Resource.StartsWith("fauna:", StringComparison.Ordinal)) got = GrazeFauna(f, sp, d.Resource[6..], want);
-            else if (d.Resource == "detritus")
-            {
-                got = _w.Litter.TakeDetritus(cell, want);
-            }
-            else
-            {
-                var field = _w.Fields.Resource(d.Resource);
-                if (field == null) continue;
-                got = field.Take(cell, want);
-            }
+            double rate = d.RatePerSecond * ph.MassScale * dt;
+            appetite += rate;
+            double want = Math.Min(rate, room / Math.Max(d.Efficiency, 1e-9));
+            double got = TakeResource(f, sp, p, cell, d.Resource, want);
             if (got <= 0) continue;
             consumed += got;
             f.Energy += got * d.Efficiency;
             room = sp.MaxEnergy - f.Energy;
         }
+        // The preferred diet has had its turn. Only if it could not even be partly satisfied does the animal fall
+        // back on its guild's resource, so a species' own preferences keep full priority and the fallback only ever
+        // sees an empty or near-empty pool of that resource. Predators have no fallback and are unaffected.
+        if (room > 1e-12 && consumed < appetite * FallbackTriggerFraction)
+        {
+            var fb = EcologyGuildFallbacks.Fallback(sp.Guild);
+            if (fb != null)
+            {
+                double want = Math.Min(fb.RatePerSecond * ph.MassScale * dt, room / Math.Max(fb.Efficiency, 1e-9));
+                double got = TakeResource(f, sp, p, cell, fb.Resource, want);
+                if (got > 0) { consumed += got; f.Energy += got * fb.Efficiency; }
+            }
+        }
         if (consumed > 0) _w.Ecology.AddWasteNutrients(p, consumed * sp.WasteFraction);
+    }
+
+    /// <summary>
+    /// Resource dispatch shared by the preferred diet and the guild fallback, so a fallback meal is removed from
+    /// exactly the same pool a diet entry would use, at exactly the same efficiency model.
+    /// </summary>
+    private double TakeResource(FaunaIndividual f, FaunaSpeciesDef sp, Vec2 p, int cell, string resource, double want)
+    {
+        if (resource == "biofilm")
+            return Coverage.Aquatic.AquaticBiofilm.GrazeCell(_w.Coverage.AlgaeBed, _w.Fields.Biofilm, cell, want);
+        if (resource.StartsWith("flora:", StringComparison.Ordinal)) return GrazeFlora(p, resource[6..], want);
+        if (resource.StartsWith("fauna:", StringComparison.Ordinal)) return GrazeFauna(f, sp, resource[6..], want);
+        if (resource == "detritus") return _w.Litter.TakeDetritus(cell, want);
+        var field = _w.Fields.Resource(resource);
+        return field == null ? 0 : field.Take(cell, want);
     }
 
     private double GrazeFlora(Vec2 p, string archetype, double want)
