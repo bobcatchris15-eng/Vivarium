@@ -2,6 +2,7 @@
   "id": "dewmantle",
   "name": "Dewmantle",
   "medium": "terrestrial",
+  "guild": "terrestrial_grazer_detritivore",
   "role": "Moisture-bound soft-bodied grazer of fungi, tender growth and decaying plant matter.",
   "description": "A broad velvet-skinned crawler with translucent sensory crowns; it emerges into saturated litter and retreats rapidly from drying ground.",
   "habitat": {

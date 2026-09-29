@@ -2,6 +2,7 @@
   "id": "emberglass_swimmer",
   "name": "Emberglass swimmer",
   "medium": "aquatic",
+  "guild": "aquatic_grazer_detritivore",
   "role": "Small aquatic grazer of biofilm and suspended detritus.",
   "description": "A nearly transparent red-veined crustacean-like swimmer that combs submerged surfaces and filters loose organic particles.",
   "habitat": {

@@ -2,6 +2,7 @@
   "id": "siltshield",
   "name": "Siltshield",
   "medium": "aquatic",
+  "guild": "aquatic_grazer_detritivore",
   "role": "Benthic temporary-water omnivore and detritivore.",
   "description": "A broad flexible dorsal shield covers a many-segmented swimmer that churns soft sediment and grazes whatever the disturbance exposes.",
   "habitat": {

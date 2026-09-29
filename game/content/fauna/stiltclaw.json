@@ -2,6 +2,7 @@
   "id": "stiltclaw",
   "name": "Stiltclaw",
   "medium": "terrestrial",
+  "guild": "predator",
   "role": "Long-legged surface predator of minute litter and flying arthropods.",
   "description": "A compact copper body rides on eight filamentous legs, stepping over moss and litter while probing for moving prey.",
   "habitat": {

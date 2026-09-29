@@ -2,6 +2,7 @@
   "id": "prismhopper",
   "name": "Prismhopper",
   "medium": "terrestrial",
+  "guild": "terrestrial_grazer_detritivore",
   "role": "Minute terrestrial grazer of microbial films, fungal growth and fine detritus.",
   "description": "A translucent many-segmented litter grazer whose iridescent flank scales flash as it launches from disturbance.",
   "habitat": {
