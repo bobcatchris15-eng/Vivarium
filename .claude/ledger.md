@@ -197,15 +197,29 @@ Tasks
 | cs3-6 | forgiving diets + capped generic predation | MERGED (8a55d00) | Fixed an over-harvest: a predator with 3-4 named `fauna:` diet entries killed 3-4 whole prey PER feeding pass, wiping small fauna (prismhopper died 74x in one bio-day). Named prey is now preference-only; all kills flow through one capped generic path (IsEdiblePrey) with a one-kill-per-Feed cap; chunk-6 biomass rule (whole/too-weak kill returns mass; partial bite abstract). Day-1 soak: all 17 species alive + breeding, natural deaths only. 20/20 ecology tests on main. |
 | lifecycle-rb | chunk 9 completion: StepLifecycle index cadence | MERGED (9ae6691) | Separate call counter; auto-merged with ecology cleanly, re-validated. |
 | faunapred | (superseded — folded into cs3-6) | DISCARDED | Branch abandoned; its chunks 5+6 were hand-ported onto the diet base to avoid the git text-conflict silently dropping logic. |
-| cs7-8,10-12 | steering/metabolism/lifecycle cadence + accounting queue | QUEUED | — |
+| cs7-8 | coarser steering + cached intent | MERGED (e61e7e0) | FaunaBehaviour 2->4. Renderer already derives behaviourInterval from the constant, so no renderer change needed. Locomotion slices <=20s with per-slice passability so swept distance is cadence-independent. Intent refresh is a pure function of the animal's own step count + id; intent fields persisted so save/load digests match. |
+| cs10 | coarsen metabolism | MERGED (3bfd0f7) | FaunaMetabolism 3->6; disturbance stress now time-weighted (integral of DisturbedUntil inside the window), exactly invariant under chopping. Feeding stays one pass so predation kills don't multiply. |
+| cs11 | coarsen lifecycle onto bio-time | MERGED (43cb396) | FaunaLifecycle 30->120; ageing/maturity/mortality/cooldowns all on the bio axis; MaxLocalDensity got a per-birth re-test. |
+| plasmodium | decouple cadence from fauna metabolism | MERGED (d3a13a7) | coverage.plasmodium was on Cadence.FaunaMetabolism; coarsening to 6 doubled its step to 60s, which its dt clamp [0.1,5.0] truncates — would have starved slime diffusion to ~8%. Gave it Cadence.Plasmodium=3. |
+| beforeafter | paired perf measurement of coarsening | OPEN | Need populated-world before (c886997) vs after. Not done — soaks exceed tool window; do it overnight or with a longer budget. |
 | budget-followup | graceful budget refusal in Introduction.cs | QUEUED | CreateFounder still throws at a spent budget; one-line fix owed. |
-| visual-review | day/night lighting + silt bed on screen | QUEUED | Both boot-clean; no windowed photo review yet (needs GPU, no contention). |
+| visual-review | day/night lighting + silt bed on screen | QUEUED | Both boot-clean; no windowed photo review yet. |
 
-HARD NUMBER (chunk 0 baseline, 1-day soak, default preset): fauna.behaviour mean 0.003 ms, max 0.9 ms;
-fauna.metabolism mean 0.004 ms. Combined fauna sim cost is sub-millisecond per tick. Measured proof that
-A-perf-1 holds: coarsening fauna cannot meaningfully relieve the render-coupled sim backlog. The day/night
-and ecology chunks stand as FEATURES (robustness, a visible clock), not as a performance fix. The backlog
-lives in Sys.aquatic (320 ms worst) and the render spikes + the WallBudgetMs x frame-rate coupling.
+HARD NUMBER — CORRECTED (2026-09-29, second pass). The earlier "0.003 ms/tick, fauna is not a
+bottleneck" figure was measured on `--scenario none`, an EMPTY world. It was a null measurement and the
+conclusion drawn from it (that coarsening fauna cannot help the backlog) is NOT established. Real populated
+numbers (1-day soak, --scenario high, ~400-900 animals, Debug, this box):
+
+                       pre-coarsening claim (void)   measured on populated world
+  fauna.behaviour       0.003 ms mean (empty world)   11.9 ms mean, 24.2 max (high) / 7.5 mean (default)
+  fauna.metabolism      0.004 ms mean (empty world)   6.6 ms mean, 12.3 max (high)  / 4.5 mean (default)
+  fauna.lifecycle       (never worst-5)              0.95 ms mean, 2.3 max
+
+So fauna is NOT free after all: at high density behaviour+metabolism are ~18 ms of Debug time. The
+chunks 7-11 coarsening (cadence 4/6/120, cached intent, dt-correct metabolism) targets exactly this, but
+its actual win is UNMEASURED — a clean paired before/after on a populated world is owed. A worktree at
+c886997 (pre-coarsening) exists for that. Until then do not claim a perf win; the ecology/robustness
+value of chunks 3-6 stands on its own.
 
 KEY ECOLOGY FIX (2026-09-29): the dominant failure was NOT basal rate or diet — it was predation over-harvest.
 A predator could kill one whole prey per named diet entry per pass. Fixing the kill rate (not the intake) is
