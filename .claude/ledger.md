@@ -185,10 +185,22 @@ Open design forks (human must answer; chunk 13 acceptance is not writable withou
 - Does the day/night cycle scale with the speed multiplier (1x = 20 min, 8x = 2.5 min) or hold 20 real
   minutes at every speed?
 - Is it driven by physical `SimSeconds` (deterministic, tick-derived) or by real wall-clock?
-
 Tasks
 | id | outcome | status | last |
 |----|---------|--------|------|
+| daynight | chunk 13: presentation day/night clock + lighting | MERGED (76eb40a) | 15 min day / 5 min night, wall-clock, pause+speed-immune, never serialised; build clean, 11/11 on main. NOT yet seen on screen (needs windowed GPU check). |
+| guilds | chunk 2: EcologyGuild enum + Guild field, 17 species tagged | MERGED (cfa6d8a) | ContentLoader is STRICT (rejects unknown fields) — needed the field before tags would load. `validate`: 40 flora / 17 fauna / 9 presets. Metadata only, no sim branches on it yet. |
+| siltbed | waterway beds render as silt, not green saturated soil | WORKTREE (unvalidated) | sub_tex.g carries submerged mask (OpenWaterDepth > 4mm); needs build + visual check. RENDER-ONLY per user. |
+| faunabase | chunk 0: CLI low/med/high/none fauna scenarios | WORKTREE (partial) | soak/schedule work and print fauna scheduler lines; scenario flags unrun (subagent denied dotnet). Parent to finish. |
+| cs1 | chunk 1: whole-vivarium fauna budget | QUEUED | next |
+| cs3-6 | forgiving diets, guild fallbacks, generic prey | QUEUED | after cs1 |
+| cs7-12 | steering/metabolism/lifecycle cadence + accounting queue | QUEUED | — |
+
+Tooling constraint (2026-09-29): the subagent `bash` allowlist DENIES `dotnet` and `godot`. Clankers can
+write + self-review by reading but CANNOT build or test. The parent must run every gate. This caught a real
+break: a Clanker claimed ContentLoader "ignores unknown fields" (it does not — it is strict) and 17 files
+failed to load until the Guild field landed. Do not accept a Clanker PASS without a parent-run gate.
+
 
 Unverified assumptions
 - A-perf-1: coarsening fauna is expected to relieve the sim backlog. NOT established — fauna is ~56ms of a
