@@ -92,6 +92,12 @@ void fragment() {
     ) * 2.0 - 1.0;
     vec2 gravel_uv = (world_pos.xz + gravel_warp * 0.13 - field_rect.xy) / field_rect.zw;
     vec2 sub = vec2(texture(sub_tex, gravel_uv).r, smooth_field(sub_tex, fuv).g);
+    // Submerged waterway bed (sub.g). IslandRenderer writes it from the simulation's standing-water depth, not
+    // from moisture, so a merely damp cell keeps its moss and only a real waterway bed turns to silt. The mask
+    // arrives C1-smoothed over the 25 cm sub grid and is broken up with the same world-space noise the gravel
+    // edge uses, so the shoreline is a soft irregular gradient rather than a step at a cell boundary.
+    float silt_edge = (vnoise(world_pos.xz * 4.7 + vec2(21.3, 5.9)) - 0.5) * 0.34;
+    float wSilt = smoothstep(0.10, 0.74, sub.g + silt_edge);
     f.g = texture(field_tex, fuv).g;              // the substrate code (overlay only) must not be smoothed
     float moisture = f.r, light = f.a;
     float code = floor(f.g * 4.0 + 0.5);         // overlay only: 0 soil, 1 gravel, 2 rock, 3 wood, 4 water
@@ -104,12 +110,15 @@ void fragment() {
     vec3 wn = normalize(mix(normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz), relief_wn, relief_mix));
 
     // weights first, then sample only the layers that actually show here (big saving on an iGPU)
-    float wDamp = smoothstep(0.38, 0.82, moisture + (macro - 0.5) * 0.18);
+    // Silt is deposited sediment, not soaked forest earth: the damp and moss layers are cut back under water so
+    // a saturated channel cannot drift back to wet green. The mask alone decides this — moisture would do it
+    // everywhere that is merely damp.
+    float wDamp = smoothstep(0.38, 0.82, moisture + (macro - 0.5) * 0.18) * (1.0 - wSilt);
     float stored_litter = smooth_field(litter_tex, fuv).r;
     float ambient_cover = smooth_field(ambient_tex, fuv).r;
     float wLeaf = stored_litter * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
     float wMoss = smoothstep(0.48, 0.83, moisture) * smoothstep(0.20, 0.53, light)
-        * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8));
+        * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8)) * (1.0 - wSilt);
     float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
     float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
 
@@ -172,6 +181,17 @@ void fragment() {
         float w = hblend(wGrav, dot(g.rgb, vec3(0.33)) * 2.0);
         col = mix(col, g.rgb, w); rough = mix(rough, g.a, w); tn = normalize(mix(tn, gn, w));
     }
+    if (wSilt > 0.01) {
+        // Silt: fine pale sediment settled out of the water. None of the scans (soil, damp earth, moss, leaf
+        // litter) is what a stream bed actually looks like, so the bed is repainted rather than tinted. A little
+        // of its own broad value variation is kept so the channel still reads as a surface, and the fine normal
+        // is flattened: settled silt is smooth and matte, not the pebbled relief of a soil scan.
+        float silt_grain = fbm(world_pos.xz * 5.3 + vec2(5.1, 31.7));
+        vec3 silt_col = vec3(0.42, 0.38, 0.31) * mix(0.86, 1.12, silt_grain);
+        col = mix(col, silt_col, wSilt);
+        rough = mix(rough, 0.96, wSilt);
+        tn = normalize(mix(tn, vec3(0.0, 0.0, 1.0), wSilt * 0.6));
+    }
 
     // world-space normal: geometry normal perturbed by the blended detail (uv = world xz; GL green = -z)
     vec3 detail = normalize(wn + vec3(tn.x, 0.0, -tn.y) * 0.9);
@@ -181,7 +201,7 @@ void fragment() {
     // AmbientGroundCoverRenderer; this prevents the same field from turning back into brown dirt when geometry culls.
     float ambient_micro = 0.76 + 0.24 * fbm(world_pos.xz * 7.5 + vec2(19.1, 4.7));
     float ambient_weight = smoothstep(0.035, 0.72, ambient_cover) * 0.72 * ambient_micro
-        * (1.0 - wGrav) * (1.0 - wLeaf * 0.55);
+        * (1.0 - wGrav) * (1.0 - wLeaf * 0.55) * (1.0 - wSilt);
     vec3 ambient_dry = vec3(0.22, 0.35, 0.09);
     vec3 ambient_mesic = vec3(0.075, 0.29, 0.065);
     vec3 ambient_shade = vec3(0.045, 0.205, 0.105);
@@ -194,8 +214,11 @@ void fragment() {
     // moisture ramp: dry ground is paler and dustier, damp ground darkens gradually, saturated ground glosses
     float dryness = smoothstep(0.42, 0.18, moisture);
     col = mix(col, mix(vec3(dot(col, vec3(0.3, 0.59, 0.11))), col, 0.7) * 1.18, dryness);
-    col *= mix(1.0, 0.72, smoothstep(0.3, 0.75, moisture) * (1.0 - wMoss * 0.5));
-    float wet = smoothstep(0.7, 1.0, moisture);
+    // Silt is matte. The bed under real water has already been repainted, so the soak darkening and the wet
+    // gloss are faded out there and survive only at the shoreline, where they still darken the wet margin.
+    float silt_clear = 1.0 - wSilt;
+    col *= mix(1.0, 0.72, smoothstep(0.3, 0.75, moisture) * (1.0 - wMoss * 0.5) * silt_clear);
+    float wet = smoothstep(0.7, 1.0, moisture) * silt_clear;
     col *= mix(1.0, 0.8, wet * (1.0 - wMoss * 0.6));
     rough = mix(rough, 0.38, wet * 0.7);
     detail = normalize(mix(detail, wn, wet * 0.35));
