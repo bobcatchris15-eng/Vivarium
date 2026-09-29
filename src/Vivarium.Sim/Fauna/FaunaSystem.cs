@@ -35,6 +35,12 @@ public sealed class FaunaSystem
     public FaunaSystem(VivariumWorld w) { _w = w; }
     private ContentLibrary C => _w.Content;
 
+    /// <summary>
+    /// True when the whole-vivarium fauna budget is already spent, regardless of species mix. The world budget
+    /// is separate from the per-species safety cap: the cap throttles one species, this bounds the vivarium.
+    /// </summary>
+    public bool AtFaunaBudget => _w.Fauna.Count >= _w.Descriptor.FaunaBudget;
+
     // Genomes are immutable, so phenotypes are cached by genome id (derived data, never saved).
     private readonly Dictionary<EntityId, Phenotype> _phenotypes = new();
 
@@ -461,13 +467,14 @@ public sealed class FaunaSystem
             for (int i = 0; i < clutch; i++)
             {
                 if (_w.Fauna.CountOf(sp.Id) >= sp.PopulationCap) break;
+                if (AtFaunaBudget) break;
                 CreateOffspring(sp, a, b != null && _w.Fauna.Get(b.Id) != null ? b : null);
             }
             a.Energy = Math.Max(0.01, a.Energy);
         }
     }
 
-    /// <summary>Reproduction eligibility from age, energy, habitat, cooldown, crowding and the safety cap.</summary>
+    /// <summary>Reproduction eligibility from age, energy, habitat, cooldown, the species safety cap, the world budget and crowding.</summary>
     public bool CanReproduce(FaunaIndividual f, FaunaSpeciesDef sp, double now, out string reason)
     {
         if (f.Grabbed) { reason = "held"; return false; }
@@ -477,6 +484,7 @@ public sealed class FaunaSystem
         var s = Suitability(sp, f.PositionXZ);
         if (s.HardRefused || s.Score < sp.MinSuitability) { reason = "poor habitat"; return false; }
         if (_w.Fauna.CountOf(sp.Id) >= sp.PopulationCap) { reason = "population safety cap"; return false; }
+        if (AtFaunaBudget) { reason = "world fauna budget"; return false; }
         _w.Fauna.Neighbours(f.PositionXZ, sp.SenseRadius, _nb);
         int local = _nb.Count(o => o.SpeciesId == sp.Id);
         if (local > sp.MaxLocalDensity) { reason = "too crowded"; return false; }
@@ -523,9 +531,22 @@ public sealed class FaunaSystem
         return child;
     }
 
+    /// <summary>
+    /// Introduction eligibility against the world budget, for the deliberate reintroduction tool. The per-species
+    /// safety cap is checked by the caller that owns the introduction report; this covers the whole-vivarium bound.
+    /// </summary>
+    public bool CanIntroduce(FaunaSpeciesDef sp, out string reason)
+    {
+        if (AtFaunaBudget) { reason = $"{sp.Name} cannot be introduced: world fauna budget reached ({_w.Descriptor.FaunaBudget})"; return false; }
+        reason = "eligible";
+        return true;
+    }
+
     /// <summary>Creates a founder individual (starter population, reintroduction, introduction tool).</summary>
     public FaunaIndividual CreateFounder(FaunaSpeciesDef sp, Vec2 pos, double? ageFraction = null)
     {
+        // Refuse before any id is allocated, so a rejected introduction cannot perturb the deterministic id stream.
+        if (!CanIntroduce(sp, out var why)) throw new InvalidOperationException(why);
         var id = _w.Ids.Next(EntityKind.Fauna);
         var gid = _w.Ids.Next(EntityKind.Genome);
         var genome = Inheritance.CreateFounder(sp, C.Genetics, gid, _w.Seed);
