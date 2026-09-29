@@ -1,18 +1,31 @@
+using System.Diagnostics;
 using Godot;
 using Vivarium.Game.App;
+using Vivarium.Sim.Time;
 
 namespace Vivarium.Game.Render;
 
 /// <summary>
 /// Daylight calibrated for natural tissue and soil reflectance. Quality tiers change render cost only.
+///
+/// The sun, sky dome, ground dome, fill light and ambient term are driven per frame from
+/// <see cref="DayNightClock"/>, a PRESENTATION-ONLY wall-clock cycle (15 real minutes of day, 5 of night).
+/// The keyframe table below is anchored on the calibrated daytime look, so midday reproduces the values
+/// that were tuned for tissue/soil reflectance and only the night segment deviates. The clock is never
+/// consulted by the simulation, is not saved, and registers no scheduler cadence.
 /// </summary>
 public partial class EnvironmentRig : Node3D
 {
     public WorldEnvironment WorldEnv { get; private set; } = null!;
     public DirectionalLight3D Sun { get; private set; } = null!;
     public Environment Env { get; private set; } = null!;
+    /// <summary>Presentation day/night clock driving the lighting. Read the rig, never the simulation.</summary>
+    public DayNightClock Clock { get; private set; } = null!;
     private ColorRect _underwaterRect = null!;
     private ShaderMaterial _underwaterMat = null!;
+    private ProceduralSkyMaterial _sky = null!;
+    private DirectionalLight3D _fill = null!;
+    private readonly Stopwatch _monotonic = new();
     private float _underwater;       // 0..1 blend
     private float _underwaterTarget;
     public int Quality { get; private set; } = -1;
@@ -23,9 +36,68 @@ public partial class EnvironmentRig : Node3D
     private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
     private const float UnderwaterFogDensity = 0.18f;
 
+    /// <summary>Azimuth at the start of the cycle, matching the calibrated daytime sun heading.</summary>
+    private const float SunAzimuthStart = -35f;
+    /// <summary>Degrees the sun heading advances over one full cycle.</summary>
+    private const float SunAzimuthSweep = 360f;
+
+    /// <summary>One lighting sample: everything the day/night cycle is allowed to move.</summary>
+    private readonly struct SkyKey
+    {
+        public readonly float F;                 // cycle second at which this sample is exact
+        public readonly float Pitch;             // sun X rotation, degrees; negative puts the sun above the horizon
+        public readonly float SunEnergy;
+        public readonly float FillEnergy;
+        public readonly float AmbientEnergy;
+        public readonly float AmbientSkyContribution;
+        public readonly float FogEnergy;
+        public readonly Color SunColor;
+        public readonly Color SkyTop;
+        public readonly Color SkyHorizon;
+        public readonly Color GroundBottom;
+        public readonly Color GroundHorizon;
+
+        public SkyKey(float f, float pitch, float sunEnergy, float fillEnergy, float ambientEnergy,
+            float ambientSkyContribution, float fogEnergy, Color sunColor, Color skyTop, Color skyHorizon,
+            Color groundBottom, Color groundHorizon)
+        {
+            F = f; Pitch = pitch; SunEnergy = sunEnergy; FillEnergy = fillEnergy;
+            AmbientEnergy = ambientEnergy; AmbientSkyContribution = ambientSkyContribution; FogEnergy = fogEnergy;
+            SunColor = sunColor; SkyTop = skyTop; SkyHorizon = skyHorizon;
+            GroundBottom = groundBottom; GroundHorizon = groundHorizon;
+        }
+    }
+
+    /// <summary>
+    /// Cycle keyframes, in seconds from the start of the cycle. The first three samples are the calibrated
+    /// daytime look; the remaining seven carry the sun down through dusk into night and back up through dawn,
+    /// so the cycle closes seamlessly on the first sample.
+    /// </summary>
+    private static readonly SkyKey[] Keys =
+    {
+        //  sec   pitch  sun    fill   amb    ambSky fog    sun colour         sky top           sky horizon        ground bottom      ground horizon
+        new(0.0000f, -52f, 1.26f, 0.22f, 0.49f, 0.55f, 1.00f, new Color(1.00f, 0.95f, 0.87f), new Color(0.30f, 0.44f, 0.57f), new Color(0.65f, 0.73f, 0.76f), new Color(0.43f, 0.48f, 0.47f), new Color(0.65f, 0.70f, 0.68f)),
+        new(60.0f, -60f, 1.30f, 0.22f, 0.50f, 0.55f, 1.00f, new Color(1.00f, 0.97f, 0.92f), new Color(0.29f, 0.43f, 0.58f), new Color(0.64f, 0.73f, 0.77f), new Color(0.43f, 0.48f, 0.47f), new Color(0.65f, 0.70f, 0.68f)),
+        new(150.0f, -50f, 1.24f, 0.22f, 0.49f, 0.55f, 1.00f, new Color(1.00f, 0.95f, 0.88f), new Color(0.30f, 0.44f, 0.57f), new Color(0.65f, 0.73f, 0.76f), new Color(0.43f, 0.48f, 0.47f), new Color(0.65f, 0.70f, 0.68f)),
+        // Dusk: the sun rakes down and the palette turns warm. This is the last 240 s of the day segment.
+        new(300.0f, -28f, 0.92f, 0.18f, 0.41f, 0.55f, 0.92f, new Color(1.00f, 0.86f, 0.66f), new Color(0.32f, 0.38f, 0.48f), new Color(0.70f, 0.66f, 0.60f), new Color(0.40f, 0.42f, 0.42f), new Color(0.62f, 0.62f, 0.60f)),
+        new(450.0f, -9f, 0.46f, 0.12f, 0.28f, 0.50f, 0.72f, new Color(1.00f, 0.64f, 0.40f), new Color(0.24f, 0.24f, 0.36f), new Color(0.62f, 0.44f, 0.38f), new Color(0.30f, 0.30f, 0.34f), new Color(0.48f, 0.38f, 0.36f)),
+        new(540.0f, -2f, 0.14f, 0.07f, 0.17f, 0.46f, 0.48f, new Color(0.96f, 0.50f, 0.32f), new Color(0.14f, 0.15f, 0.26f), new Color(0.40f, 0.26f, 0.30f), new Color(0.16f, 0.15f, 0.19f), new Color(0.34f, 0.28f, 0.28f)),
+        // Night: the first 240 s of the night segment, then deep night.
+        new(660.0f, -10f, 0.030f, 0.030f, 0.070f, 0.40f, 0.22f, new Color(0.44f, 0.54f, 0.80f), new Color(0.030f, 0.038f, 0.075f), new Color(0.062f, 0.072f, 0.120f), new Color(0.020f, 0.024f, 0.040f), new Color(0.050f, 0.056f, 0.090f)),
+        new(900.0f, -22f, 0.014f, 0.022f, 0.048f, 0.40f, 0.14f, new Color(0.40f, 0.50f, 0.82f), new Color(0.016f, 0.021f, 0.050f), new Color(0.034f, 0.040f, 0.078f), new Color(0.012f, 0.015f, 0.030f), new Color(0.032f, 0.038f, 0.070f)),
+        // Dawn: the last 60 s of the night segment, then it wraps back to the calibrated daytime sample.
+        new(1140.0f, -12f, 0.022f, 0.026f, 0.075f, 0.42f, 0.20f, new Color(0.46f, 0.55f, 0.84f), new Color(0.032f, 0.040f, 0.082f), new Color(0.085f, 0.090f, 0.155f), new Color(0.018f, 0.022f, 0.038f), new Color(0.060f, 0.065f, 0.105f)),
+        new(1170.0f, -4f, 0.22f, 0.09f, 0.20f, 0.50f, 0.55f, new Color(1.00f, 0.72f, 0.50f), new Color(0.19f, 0.21f, 0.34f), new Color(0.55f, 0.40f, 0.38f), new Color(0.22f, 0.20f, 0.22f), new Color(0.40f, 0.32f, 0.32f)),
+    };
+
     public override void _Ready()
     {
-        var sky = new ProceduralSkyMaterial
+        // PRESENTATION clock: a monotonic wall-clock source, injected. Wall-driven means it is not
+        // reproducible from a save, so it is never serialized and never reaches the scheduler.
+        Clock = new DayNightClock(() => _monotonic.Elapsed.TotalSeconds);
+
+        _sky = new ProceduralSkyMaterial
         {
             SkyTopColor = new Color(0.30f, 0.44f, 0.57f),
             SkyHorizonColor = new Color(0.65f, 0.73f, 0.76f),
@@ -36,7 +108,7 @@ public partial class EnvironmentRig : Node3D
         Env = new Environment
         {
             BackgroundMode = Environment.BGMode.Sky,
-            Sky = new Sky { SkyMaterial = sky },
+            Sky = new Sky { SkyMaterial = _sky },
             AmbientLightSource = Environment.AmbientSource.Sky,
             AmbientLightColor = new Color(0.83f, 0.86f, 0.86f),
             AmbientLightSkyContribution = 0.55f,
@@ -80,9 +152,9 @@ public partial class EnvironmentRig : Node3D
         };
         Sun.RotationDegrees = new Vector3(-52, -35, 0);
         AddChild(Sun);
-        var fill = new DirectionalLight3D { LightColor = new Color(0.81f, 0.87f, 0.93f), LightEnergy = 0.22f, ShadowEnabled = false };
-        fill.RotationDegrees = new Vector3(-20, 150, 0);
-        AddChild(fill);
+        _fill = new DirectionalLight3D { LightColor = new Color(0.81f, 0.87f, 0.93f), LightEnergy = 0.22f, ShadowEnabled = false };
+        _fill.RotationDegrees = new Vector3(-20, 150, 0);
+        AddChild(_fill);
 
         // underwater screen treatment (subtle; keeps fauna inspectable)
         var layer = new CanvasLayer { Layer = -1 };
@@ -91,6 +163,8 @@ public partial class EnvironmentRig : Node3D
         _underwaterRect = new ColorRect { MouseFilter = Control.MouseFilterEnum.Ignore, Material = _underwaterMat, Visible = false };
         _underwaterRect.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_underwaterRect);
+
+        ApplyDayNight();
     }
 
     public void ApplyQuality(int tier)
@@ -128,9 +202,46 @@ public partial class EnvironmentRig : Node3D
     public void SetUnderwater(bool under) => _underwaterTarget = under ? 1 : 0;
     public bool UnderwaterVisual => _underwater > 0.5f;
 
+    /// <summary>
+    /// Resample the lighting table at the clock's current position and push it to the scene graph. Pure
+    /// struct reads and property writes, a short linear scan and one float lerp chain per field: no heap
+    /// allocation, so this is safe to run every frame.
+    /// </summary>
+    private void ApplyDayNight()
+    {
+        double t = Clock.Seconds;
+        int n = Keys.Length;
+        int i = n - 2;
+        for (int k = 0; k < n - 1; k++) if (t < Keys[k + 1].F) { i = k; break; }
+        var a = Keys[i];
+        // The final segment closes the loop: the last sample blends into the first one across the wrap.
+        bool wrap = i == n - 2;
+        var b = wrap ? Keys[0] : Keys[i + 1];
+        float tEnd = wrap ? (float)DayNightClock.CycleSeconds : Keys[i + 1].F;
+        float span = tEnd - a.F;
+        float w = span > 0f ? Mathf.Clamp((float)((t - a.F) / span), 0f, 1f) : 0f;
+
+        Sun.RotationDegrees = new Vector3(Mathf.Lerp(a.Pitch, b.Pitch, w), SunAzimuth(t), 0f);
+        Sun.LightColor = a.SunColor.Lerp(b.SunColor, w);
+        Sun.LightEnergy = Mathf.Lerp(a.SunEnergy, b.SunEnergy, w);
+        _fill.LightEnergy = Mathf.Lerp(a.FillEnergy, b.FillEnergy, w);
+        _sky.SkyTopColor = a.SkyTop.Lerp(b.SkyTop, w);
+        _sky.SkyHorizonColor = a.SkyHorizon.Lerp(b.SkyHorizon, w);
+        _sky.GroundBottomColor = a.GroundBottom.Lerp(b.GroundBottom, w);
+        _sky.GroundHorizonColor = a.GroundHorizon.Lerp(b.GroundHorizon, w);
+        Env.AmbientLightEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w);
+        Env.AmbientLightSkyContribution = Mathf.Lerp(a.AmbientSkyContribution, b.AmbientSkyContribution, w);
+        Env.FogLightEnergy = Mathf.Lerp(a.FogEnergy, b.FogEnergy, w);
+    }
+
+    /// <summary>Sun heading sweeps a full turn per cycle, starting at the calibrated daytime heading.</summary>
+    private float SunAzimuth(double seconds) =>
+        Mathf.PosMod(SunAzimuthStart + SunAzimuthSweep * (float)(seconds / DayNightClock.CycleSeconds), 360f);
+
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("Environment");
+        ApplyDayNight();
         // quick crossfade so the medium change is visible but not jarring
         _underwater = Mathf.MoveToward(_underwater, _underwaterTarget, (float)delta * 5f);
         _underwaterRect.Visible = _underwater > 0.01f;
