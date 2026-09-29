@@ -6,6 +6,7 @@ using Vivarium.Sim.World;
 
 // Vivarium developer CLI: headless world runs for tuning, soak and diagnostics.
 //   dotnet run --project src/Vivarium.Cli -- soak [--days N] [--preset id] [--seed N] [--report-days N] [--save-days 7,30,90 --save-dir DIR]
+//                    [--scenario default|none|low|medium|high]   (deterministic fauna load; default = preset starters)
 //   dotnet run --project src/Vivarium.Cli -- schedule
 //   dotnet run --project src/Vivarium.Cli -- validate
 
@@ -64,12 +65,21 @@ switch (cmd)
     {
         var d = content.PresetOrThrow(Opt("preset", "default"));
         if (Opt("seed", "") is { Length: > 0 } s) d.Seed = ulong.Parse(s);
+        if (!FaunaScenario.TryParse(Opt("scenario", "default"), out var scenario))
+        {
+            Console.Error.WriteLine($"unknown --scenario; expected one of {string.Join("|", FaunaScenario.Names)}");
+            return 1;
+        }
         double days = double.Parse(Opt("days", "28"));
         double report = double.Parse(Opt("report-days", "2"));
         var sw = Stopwatch.StartNew();
         var w = VivariumWorld.Create(content, d);
-        Console.WriteLine($"created in {sw.ElapsedMilliseconds} ms: props {w.Props.Count}, flora {w.Flora.Count}, fauna {w.Fauna.Count}, wet {EcosystemStatistics.Compute(w).WetFraction:P1}");
+        // Snapshot the creation report before the scenario touches fauna, so this line keeps describing creation.
+        string created = $"created in {sw.ElapsedMilliseconds} ms: props {w.Props.Count}, flora {w.Flora.Count}, fauna {w.Fauna.Count}, wet {EcosystemStatistics.Compute(w).WetFraction:P1}";
+        ApplyFaunaScenario(w, scenario);
+        Console.WriteLine(created);
         Print(w);
+        PrintFaunaScenario(w, scenario);
         long ticksPerReport = (long)(report * 86400 / 10);
         var saveDays = new Queue<double>(Opt("save-days", "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(double.Parse).OrderBy(x => x));
         string saveDir = Opt("save-dir", Path.Combine(root, "build", "aged"));
@@ -95,7 +105,7 @@ switch (cmd)
             if (inv.Count > 0) { Console.WriteLine("INVARIANT FAILURES:\n  " + string.Join("\n  ", inv.Take(10))); return 2; }
         }
         Console.WriteLine($"total {sw.Elapsed.TotalSeconds:0.0} s wall for {days} sim days");
-        foreach (var sys in w.Scheduler.Systems) Console.WriteLine($"  {sys.Name,-20} runs {sys.Runs,7}  total {sys.TotalMs,9:0} ms  mean {sys.TotalMs / Math.Max(1, sys.Runs):0.000} ms  max {sys.MaxMs:0.0} ms");
+        PrintTiming(w);
         return 0;
     }
     case "water":
@@ -140,6 +150,86 @@ static void Print(VivariumWorld w)
     Console.WriteLine("  deaths: " + string.Join(" | ", causes));
 }
 
+// Scenario fauna is applied AFTER world creation. Terrain, water, props and flora are therefore identical to a
+// same-seed `--scenario default` run and only the animal count differs -- the measured delta is fauna load, not
+// world layout. Nothing here touches a Cadence, a simulation parameter or a scheduler registration.
+static void ApplyFaunaScenario(VivariumWorld w, FaunaScenario scenario)
+{
+    if (!scenario.Apply) return;                 // default: the preset's own starter fauna, untouched
+    w.Fauna.Clear();
+    if (scenario.Density <= 0) return;          // none: zero fauna, flora and water as created
+
+    // Seeded, independent, CLI-owned stream. It consumes nothing from the simulation's own streams
+    // (world.starters, fauna.founder, ...), so applying a scenario cannot perturb the world it measures.
+    var rng = Rng.Stream(w.Seed, "cli.soak.scenario");
+    const string densityStream = "cli.soak.scenario.density";
+    int speciesIndex = 0;
+    foreach (var entry in w.Descriptor.StarterFauna)
+    {
+        var sp = w.Content.FaunaById(entry.Species);
+        if (sp == null) continue;
+        // Per-species size is a function of (preset starter count, world seed, density) -- never a literal count.
+        int index = speciesIndex++;
+        double jitter = 0.8 + 0.4 * Rng.HashUnit(w.Seed, Hash.Fnv1a64(densityStream), (ulong)index);
+        int target = Math.Clamp((int)Math.Round(entry.Count * scenario.Density * jitter), 0, sp.PopulationCap);
+        if (target == 0) continue;
+
+        var sites = RankFaunaSites(w, sp, rng);
+        int placed = 0, group = 0;
+        while (placed < target && sites.Count > 0 && group <= target * 4)
+        {
+            var centre = sites[rng.NextInt(sites.Count)];
+            int n = Math.Min(sp.Behaviors.Contains("schooling") ? 8 : 4, target - placed);
+            for (int i = 0; i < n; i++)
+            {
+                var q = centre + new Vec2(rng.Range(-0.15, 0.15), rng.Range(-0.15, 0.15));
+                if (Introduction.FaunaPlacementProblem(w, sp, q) != null) q = centre;
+                w.FaunaSystem.CreateFounder(sp, q);
+                placed++;
+            }
+            group++;
+        }
+        if (placed < target)
+            Console.WriteLine($"  scenario: {sp.Id} placed {placed}/{target} (limited suitable habitat)");
+    }
+}
+
+/// <summary>Suitability-ranked placement sites for a species: best habitat first, seeded jitter on ties.</summary>
+static List<Vec2> RankFaunaSites(VivariumWorld w, FaunaSpeciesDef sp, Rng rng)
+{
+    var scored = new List<(Vec2 Pos, double Score, int Cell)>();
+    var cells = w.Grid.DomainCells;
+    for (int k = 0; k < cells.Length; k += 2)
+    {
+        int cell = cells[k];
+        var c = w.Grid.CellCenter(cell);
+        if (Introduction.FaunaPlacementProblem(w, sp, c) != null) continue;
+        var s = w.FaunaSystem.Suitability(sp, c);
+        if (s.HardRefused) continue;
+        scored.Add((c, s.Score + 0.5 * w.FaunaSystem.FoodAt(sp, c) + rng.NextDouble() * 0.15, cell));
+    }
+    scored.Sort((a, b) => a.Score != b.Score ? b.Score.CompareTo(a.Score) : a.Cell.CompareTo(b.Cell));
+    return scored.Take(Math.Max(8, scored.Count / 3)).Select(x => x.Pos).ToList();
+}
+
+/// <summary>Scenario identity plus the total and per-species fauna counts every scenario must report.</summary>
+static void PrintFaunaScenario(VivariumWorld w, FaunaScenario scenario)
+{
+    var s = EcosystemStatistics.Compute(w);
+    Console.WriteLine($"  scenario: {scenario.Name} (density {scenario.Density:0.00}, seed {w.Seed}, applied {(scenario.Apply ? "yes" : "no")})");
+    Console.WriteLine($"  fauna total: {s.FaunaTotal}");
+    Console.WriteLine("  fauna species: " + string.Join("  ", s.Fauna.Select(f => $"{f.Id}={f.Count}")));
+}
+
+/// <summary>Runs / total / mean / max ms for every registered scheduler system, plus a guard on the measured three.</summary>
+static void PrintTiming(VivariumWorld w)
+{
+    Console.WriteLine("--- scheduler timing: every registered system ---");
+    foreach (var sys in w.Scheduler.Systems) Console.WriteLine($"  {sys.Name,-20} runs {sys.Runs,7}  total {sys.TotalMs,9:0} ms  mean {sys.TotalMs / Math.Max(1, sys.Runs):0.000} ms  max {sys.MaxMs:0.0} ms");
+    foreach (var name in FaunaScenario.TimedSystems)
+        if (!w.Scheduler.Systems.Any(s => s.Name == name)) Console.WriteLine($"  WARNING: measured system '{name}' is not registered");
+}
+
 static string FindRepoRoot()
 {
     var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -150,4 +240,30 @@ static string FindRepoRoot()
 sealed class ConsoleSink : ILogSink
 {
     public void Write(in LogEntry e) => Console.Error.WriteLine(e.Format());
+}
+
+/// <summary>
+/// Deterministic fauna load for the soak baseline harness. Densities are multipliers on the world preset's own
+/// starter counts, so the harness stays honest as content data changes: no animal count is hardcoded, and
+/// <c>default</c> leaves the preset's starters exactly as they are.
+/// </summary>
+sealed record FaunaScenario(string Name, double Density, bool Apply)
+{
+    public static readonly string[] Names = { "default", "none", "low", "medium", "high" };
+
+    /// <summary>Systems this effort measures; asserted present in every scenario timing report.</summary>
+    public static readonly string[] TimedSystems = { "fauna.behaviour", "fauna.metabolism", "fauna.lifecycle" };
+
+    public static bool TryParse(string? raw, out FaunaScenario scenario)
+    {
+        switch ((raw ?? "default").Trim().ToLowerInvariant())
+        {
+            case "default": scenario = new("default", 1.0, false); return true;   // preset starters, untouched
+            case "none": scenario = new("none", 0.0, true); return true;
+            case "low": scenario = new("low", 0.2, true); return true;
+            case "medium": scenario = new("medium", 1.0, true); return true;
+            case "high": scenario = new("high", 3.0, true); return true;
+            default: scenario = new("default", 1.0, false); return false;
+        }
+    }
 }
