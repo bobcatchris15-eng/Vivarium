@@ -119,59 +119,124 @@ public partial class FloraRenderer : Node3D
         _build = BuildLayers(_w.Content.Flora.Where(sp => needed.Contains(sp.Id))).GetEnumerator();
     }
 
+    /// <summary>
+    /// Mesh tasks allowed in flight at once. Mesh generation is pure managed work, so it is free to overlap; the
+    /// cap keeps a load from stampeding every core on a machine that is already running the game.
+    /// </summary>
+    private const int MaxPendingVariantBuilds = 24;
+
+    private sealed class InflightBuild
+    {
+        public Task[] Tasks = Array.Empty<Task>();
+        /// <summary>Nodes attached for this species that no layer owns yet, so a rebuild can still free them.</summary>
+        public readonly List<Node> Nodes = new();
+        /// <summary>Main-thread work that turns the finished meshes into GPU resources and publishes the layer.</summary>
+        public Action Publish = null!;
+        public int Pending => Tasks.Count(t => !t.IsCompleted);
+    }
+
+    /// <summary>
+    /// Builds the geometry layer for every species the world needs, overlapping the mesh generation of several
+    /// species at a time. The work is already shaped as background tasks, but the old loop awaited one mesh before
+    /// starting the next, so a 40-species catalog took the SUM of every build and species surfaced one at a time in
+    /// catalog order. Now total time approaches the slowest single build. Material setup and every GPU resource
+    /// still happen on this thread, in catalog order, one completed species at a time.
+    /// </summary>
     private IEnumerable<bool> BuildLayers(IEnumerable<FloraSpeciesDef> species)
     {
-        foreach (var sp in species)
+        var queue = new Queue<FloraSpeciesDef>(species);
+        var inflight = new List<InflightBuild>();
+
+        while (queue.Count > 0 || inflight.Count > 0)
         {
-            GD.Print("FLORA_LAYER_BUILD_BEGIN " + sp.Id);
-            var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id);
-            var mat = Bridge.Shader("res://Shaders/flora.gdshader");
-            mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
-            mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
-            mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
-            if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
-            Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
-            var leafMat = profile?.LeafMaterial();
-            if (profile != null)
+            // Launch whole species while the in-flight budget allows, so their meshes build concurrently.
+            while (queue.Count > 0)
             {
-                Bridge.BindSurface(mat, "bark", profile.Bark);
-                mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0],profile.BarkTint[1],profile.BarkTint[2]));
-                leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
+                int pending = 0;
+                foreach (var b in inflight) pending += b.Pending;
+                if (pending >= MaxPendingVariantBuilds) break;
+                inflight.Add(StartSpeciesBuild(queue.Dequeue()));
             }
-            var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
-            ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
+
+            // Publish whatever finished. A species becomes drawable the moment its own meshes are done, rather
+            // than waiting behind everything ahead of it in the catalog.
+            for (int i = inflight.Count - 1; i >= 0; i--)
+            {
+                var b = inflight[i];
+                if (b.Pending > 0) continue;
+                b.Publish();
+                // The published layer now owns these nodes, exactly as the serial build transferred them.
+                foreach (var n in b.Nodes) _buildingNodes.Remove(n);
+                inflight.RemoveAt(i);
+            }
+
+            yield return true;
+        }
+    }
+
+    /// <summary>
+    /// Prepares one species on this thread (material, layer, seeds) and starts every variant mesh as a background
+    /// task. Returns immediately; the returned <see cref="InflightBuild.Publish"/> finishes it on this thread later.
+    /// </summary>
+    private InflightBuild StartSpeciesBuild(FloraSpeciesDef sp)
+    {
+        GD.Print("FLORA_LAYER_BUILD_BEGIN " + sp.Id);
+        var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id);
+        var mat = Bridge.Shader("res://Shaders/flora.gdshader");
+        mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
+        mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
+        mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
+        if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
+        Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
+        FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
+        var leafMat = profile?.LeafMaterial();
+        if (profile != null)
+        {
+            Bridge.BindSurface(mat, "bark", profile.Bark);
+            mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0], profile.BarkTint[1], profile.BarkTint[2]));
+            leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
+        }
+        var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
+        ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
+
+        var tasks = new List<Task<(MeshData Full, MeshData? Young, MeshData? Fruit)>>();
+        for (int v = 0; v < layer.Variants.Length; v++)
+        {
+            int morph = v % layer.MorphCount;
+            // Every species draws from cached geometric tiers (0 near .. 2 far), chosen per individual by
+            // projected screen size. Visual-profile species also switch their leaf tessellation tier.
+            int lod = v / layer.MorphCount;
+            int? tier = profile == null ? null : lod;
+            ulong seed = Rng.Mix(speciesSeed, (ulong)(morph + 1) * 0x9E3779B97F4A7C15UL);
+            // Calibration and parametric tessellation are pure managed work. Never block input/rendering on them.
+            tasks.Add(Task.Run(() =>
+            {
+                var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null);
+                MeshData? youngMesh = sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
+                    ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
+                    : null;
+                var fruitMesh = OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null);
+                return (Full: fullMesh, Young: youngMesh, Fruit: fruitMesh);
+            }));
+        }
+
+        var build = new InflightBuild { Tasks = tasks.Cast<Task>().ToArray() };
+        build.Publish = () =>
+        {
             for (int v = 0; v < layer.Variants.Length; v++)
             {
-                int morph = v % layer.MorphCount;
-                // Every species draws from cached geometric tiers (0 near .. 2 far), chosen per individual by
-                // projected screen size. Visual-profile species also switch their leaf tessellation tier.
-                int lod = v / layer.MorphCount;
-                int? tier = profile == null ? null : lod;
-                ulong seed = Rng.Mix(speciesSeed, (ulong)(morph + 1) * 0x9E3779B97F4A7C15UL);
-                // Calibration and parametric tessellation are pure managed work. Never block input/rendering on them.
-                var pending = Task.Run(() =>
-                {
-                    var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null);
-                    MeshData? youngMesh = sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
-                        ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
-                        : null;
-                    var fruitMesh = OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null);
-                    return (Full: fullMesh, Young: youngMesh, Fruit: fruitMesh);
-                });
-                do { yield return false; } while (!pending.IsCompleted);
-                var prepared = pending.GetAwaiter().GetResult();
+                var prepared = tasks[v].GetAwaiter().GetResult();
                 var full = prepared.Full;
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
                 bool castShadow = Quality >= 1 && canCastShadow;
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
-                AddChild(vl.Full); _buildingNodes.Add(vl.Full);
+                AddChild(vl.Full); build.Nodes.Add(vl.Full);
                 if (sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null)
                 {
                     var young = prepared.Young!;
                     vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", profile == null ? Bridge.ToArrayMesh(young, mat) : profile.Compile(young, mat, leafMat!), castShadow);
                     vl.JuvenileTris = young.TriangleCount;
-                    AddChild(vl.Juvenile); _buildingNodes.Add(vl.Juvenile);
+                    AddChild(vl.Juvenile); build.Nodes.Add(vl.Juvenile);
                 }
                 if (prepared.Fruit is { } fruit)
                 {
@@ -179,10 +244,9 @@ public partial class FloraRenderer : Node3D
                     if (sp.Reproduction == null) fruitMat.SetShaderParameter("surface_mode", 3);
                     vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", profile == null ? Bridge.ToArrayMesh(fruit, fruitMat) : profile.Compile(fruit, fruitMat, leafMat!), castShadow);
                     vl.FruitTris = fruit.TriangleCount;
-                    AddChild(vl.Fruit); _buildingNodes.Add(vl.Fruit);
+                    AddChild(vl.Fruit); build.Nodes.Add(vl.Fruit);
                 }
                 layer.Variants[v] = vl;
-                yield return true;
             }
             if (sp.CreepSpeed > 0 || sp.Climber != null)
             {
@@ -200,16 +264,15 @@ public partial class FloraRenderer : Node3D
                 Primitives.Tube(vein, vpath, vrad, 6, (i, v) => (col, 1, i, v, 0, 0));
                 layer.Veins = MakeMmi($"Flora_{sp.Id}_veins", Bridge.ToArrayMesh(vein, mat));
                 layer.VeinTris = vein.TriangleCount;
-                AddChild(layer.Veins); _buildingNodes.Add(layer.Veins);
+                AddChild(layer.Veins); build.Nodes.Add(layer.Veins);
             }
             // Refresh can yield while enumerating the dictionary; retire it before publishing a new layer.
             _refresh?.Dispose(); _refresh = null;
             _layers[sp.Id] = layer;
-            _buildingNodes.Clear();
             GD.Print("FLORA_LAYER_BUILD_END " + sp.Id + " loaded_species=" + _layers.Count);
             _accum = 999;
-            yield return true;
-        }
+        };
+        return build;
     }
 
 
