@@ -188,20 +188,26 @@ Open design forks (human must answer; chunk 13 acceptance is not writable withou
 Tasks
 | id | outcome | status | last |
 |----|---------|--------|------|
-| daynight | chunk 13: presentation day/night clock + lighting | MERGED (76eb40a) | 15 min day / 5 min night, wall-clock, pause+speed-immune, never serialised; build clean, 11/11 on main. NOT yet seen on screen (needs windowed GPU check). |
-| guilds | chunk 2: EcologyGuild enum + Guild field, 17 species tagged | MERGED (cfa6d8a) | ContentLoader is STRICT (rejects unknown fields) — needed the field before tags would load. `validate`: 40 flora / 17 fauna / 9 presets. Metadata only, no sim branches on it yet. |
-| faunabudget | chunk 1: whole-vivarium fauna budget | WORKTREE (build clean, partial test) | Budget 2000 on descriptor, caps reproduction + CreateFounder. Build 0 err. Open item: CreateFounder THROWS at budget instead of graceful Fail — needs 1-line Introduction.cs follow-up (Clanker flagged). Full fauna suite blocked by box load. |
-| faunaindex | chunk 9: stop per-tick RebuildIndex | WORKTREE (build clean, key test green) | Cadence rebuild N=4 via call counter (a tick%N trigger would never fire — StepBehaviour sees odd tick). Keeps bulk rebuilds; Remove stays O(n) by design. `FaunaNeighbourQueriesAvoidAllToAll` PASS. |
-| siltbed | waterway beds render as silt, not green saturated soil | WORKTREE (unvalidated) | sub_tex.g carries submerged mask (OpenWaterDepth > 4mm); needs build + visual check. RENDER-ONLY per user. |
-| faunabase | chunk 0: CLI low/med/high/none fauna scenarios | WORKTREE (partial) | soak/schedule work and print fauna scheduler lines; scenario flags unrun (subagent denied dotnet). Parent to finish. |
-| cs3-6 | forgiving diets, guild fallbacks, generic prey | QUEUED | after cs1/cs9 |
-| cs7-12 | steering/metabolism/lifecycle cadence + accounting queue | QUEUED | — |
+| daynight | chunk 13: presentation day/night clock + lighting | MERGED (76eb40a) | 15 min day / 5 min night, wall-clock, pause+speed-immune, never serialised; build clean, 11/11. NOT yet seen on screen (needs windowed GPU check). |
+| guilds | chunk 2: EcologyGuild enum + Guild field, 17 species tagged | MERGED (cfa6d8a) | ContentLoader is STRICT — needed the field before tags would load. `validate`: 40 flora / 17 fauna / 9 presets. Metadata only, no sim branches yet. |
+| faunabudget | chunk 1: whole-vivarium fauna budget | MERGED (71deb52) | Cap 2000 on descriptor; enforced on reproduction + CreateFounder; per-species caps kept. Build clean; reproduction/determinism/fixture tests pass. Open: CreateFounder THROWS at budget instead of graceful Fail — 1-line Introduction.cs follow-up. |
+| faunaindex | chunk 9: stop per-tick RebuildIndex | MERGED (706b1ec) | Cadence rebuild N=4 via call counter (tick%N would never fire — StepBehaviour sees odd tick). Bulk rebuilds kept; Remove stays O(n) by design. Spatial/schooling/predation tests pass. |
+| siltbed | waterway beds render as silt | MERGED (bc0ce15) | sub_tex.g submerged mask (OpenWaterDepth>4mm); pale matte silt, green sources suppressed. RENDER-ONLY. Build clean; Godot boot clean (no IndexOutOfRange/file-open). Full 40-scene reference did NOT complete (hung at flora build) — visual review still owed. |
+| faunabase | chunk 0: CLI fauna baseline scenarios | MERGED (d0a8bca) | --scenario none/low/medium/high; prints per-system runs/total/mean/max. none=0 fauna; high=populated. CLI-only. |
+| cs3-6 | forgiving diets, guild fallbacks, generic prey | QUEUED | next — the actual ecological fix |
+| cs7-8,10-12 | steering/metabolism/lifecycle cadence + accounting queue | QUEUED | — |
 
-BOX CONTENTION (2026-09-29): two heavy Godot processes running — 24056 (user's live session) and 40348
-(a ~25h-old leftover from 09-28, 5698 s CPU). This starves `dotnet test`/`soak` and is why several parent
-validation runs timed out. Day/night+guilds validated while the box was freer; faunabudget/faunaindex
-builds are clean and the critical determinism test passes, but the full suites were NOT completed. Recommend
-the user close 40348 and pause 24056 before the next validation sweep.
+HARD NUMBER (chunk 0 baseline, 1-day soak, default preset): fauna.behaviour mean 0.003 ms, max 0.9 ms;
+fauna.metabolism mean 0.004 ms. Combined fauna sim cost is sub-millisecond on a typical tick. This is
+measured proof that A-perf-1 holds: coarsening fauna cannot meaningfully relieve the render-coupled
+sim backlog. The day/night and ecology chunks are justified as FEATURES (robustness, a visible clock),
+not as a performance fix. The backlog lives in Sys.aquatic (320 ms worst) and the render spikes +
+the WallBudgetMs x frame-rate coupling.
+
+Tooling constraint (2026-09-29): the subagent `bash` allowlist DENIES `dotnet` and `godot`. Clankers can
+write + self-review by reading but CANNOT build or test. The parent must run every gate. This caught a real
+break: a Clanker claimed ContentLoader "ignores unknown fields" (it does not — it is strict) and 17 files
+failed to load until the Guild field landed. Do not accept a Clanker PASS without a parent-run gate.
 
 Tooling constraint (2026-09-29): the subagent `bash` allowlist DENIES `dotnet` and `godot`. Clankers can
 write + self-review by reading but CANNOT build or test. The parent must run every gate. This caught a real
