@@ -35,6 +35,18 @@ public sealed class FaunaIndividual
     public bool Grabbed { get; set; }
     public int Offspring { get; set; }
     public double LastSuitability { get; set; }
+    /// <summary>Behaviour steps this individual has run: its own steering-refresh clock. Deliberately per animal
+    /// rather than a shared tick, so whether one animal re-decides never depends on how many others were stepped
+    /// or in what order. Persisted, because a world resumed from a save must re-decide on exactly the steps an
+    /// uninterrupted run would.</summary>
+    public int IntentSteps { get; set; }
+    /// <summary>Heading chosen by the last intent refresh, meaningful only while <see cref="IntentActive"/>. Held
+    /// as a plain finite angle (not NaN) so it survives strict JSON number handling on save.</summary>
+    public double IntentHeading { get; set; }
+    /// <summary>True while <see cref="IntentHeading"/> holds a decision this animal has not yet revisited. False for
+    /// a newborn, for an animal teleported by the grab tool, and for a world loaded from a save written before the
+    /// intent cache existed — all of which must re-decide on their very next step.</summary>
+    public bool IntentActive { get; set; }
 
     [System.Text.Json.Serialization.JsonIgnore]
     public Vec3 Position { get => new(X, Y, Z); set { X = value.X; Y = value.Y; Z = value.Z; } }
