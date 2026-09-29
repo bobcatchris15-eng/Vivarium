@@ -30,14 +30,29 @@ public sealed class WorldDescriptor
     /// 1× speed (1440 / 168). Worlds saved before this setting existed also load with the default.
     /// </summary>
     public double BioAcceleration { get; set; } = DefaultBioAcceleration;
+    /// <summary>
+    /// Whole-vivarium budget: the maximum number of living animals across every species. Independent of the
+    /// per-species safety caps, so adding a species cannot multiply the total population. The default sits above
+    /// the sum of every current species cap (1592), so no shipped preset or save changes behaviour; lowering it
+    /// is how a preset expresses a smaller island. Worlds saved before this setting existed also load with the
+    /// default.
+    /// </summary>
+    public int FaunaBudget { get; set; } = DefaultFaunaBudget;
 
     public const double MinDiameter = 5, MaxDiameter = 10;
+    /// <summary>
+    /// Species-sum ceiling plus headroom: 1592 today (every shipped species at its own cap), rounded up so a
+    /// preset that never lowers this behaves exactly as it did before the budget existed.
+    /// </summary>
+    public const int DefaultFaunaBudget = 2000;
     /// <summary>Largest diameter accepted when loading a save written before the 12 m cap.</summary>
     public const double LegacyMaxDiameter = 20;
 
     /// <summary>Set by the save loader so older, larger worlds still validate; new worlds use <see cref="MaxDiameter"/>.</summary>
     [ThreadStatic] public static bool AllowLegacyDiameter;
     public const double DefaultBioAcceleration = 60.0 / 7, MinBioAcceleration = 1, MaxBioAcceleration = 30;
+    /// <summary>Ceiling on <see cref="FaunaBudget"/>; far above any real population, so the cap cannot be a denial trap.</summary>
+    public const int MaxFaunaBudget = 100_000;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
 
@@ -60,6 +75,7 @@ public sealed class WorldDescriptor
         if (!(Terrain.Bottom < Terrain.MinHeight - 0.5)) e.Add("terrain.bottom must be at least 0.5 m below terrain.minHeight");
         if (Terrain.Octaves is < 1 or > 8) e.Add("terrain.octaves must be within [1, 8]");
         if (!(BioAcceleration >= MinBioAcceleration && BioAcceleration <= MaxBioAcceleration)) e.Add($"bioAcceleration {BioAcceleration} must be within [{MinBioAcceleration}, {MaxBioAcceleration}]");
+        if (FaunaBudget < 0 || FaunaBudget > MaxFaunaBudget) e.Add($"faunaBudget {FaunaBudget} must be within [0, {MaxFaunaBudget}]");
         double r = Diameter / 2;
         if (!(Water.FlowRate > 0 && Water.FlowRate <= 0.24)) e.Add($"water.flowRate {Water.FlowRate} must be within (0, 0.24]");
         if (!(Water.FlowMemorySeconds >= 1 && Water.FlowMemorySeconds <= 600)) e.Add($"water.flowMemorySeconds {Water.FlowMemorySeconds} must be within [1, 600]");
