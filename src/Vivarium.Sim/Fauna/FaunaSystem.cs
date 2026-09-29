@@ -31,6 +31,12 @@ public sealed class FaunaSystem
     private readonly ulong _mortalityHash = Hash.Fnv1a64("fauna.mortality");
     private readonly Dictionary<EntityId, (string Cause, double Detritus)> _predationDeaths = new();
     public const string ReproStream = "fauna.reproduction";
+    /// <summary>Behaviour steps between spatial-index rebuilds. A rebuild refills every bucket, so running it each
+    /// step made behaviour cost O(fauna) per pass even when nothing had changed bucket.</summary>
+    private const int IndexRebuildPeriod = 4;
+    /// <summary>Behaviour steps since the last rebuild. Not serialized: a fresh counter after a load only means
+    /// the first behaviour step refills an index that the loader already built incrementally anyway.</summary>
+    private int _behaviourStepsSinceIndexRebuild;
 
     public FaunaSystem(VivariumWorld w) { _w = w; }
     private ContentLibrary C => _w.Content;
@@ -103,7 +109,12 @@ public sealed class FaunaSystem
     public void StepBehaviour(double dt)
     {
         var fauna = _w.Fauna;
-        fauna.RebuildIndex();
+        // Refill the spatial index on a slow cadence rather than every step. Membership stays exact regardless:
+        // Add inserts incrementally, and Remove/RemoveMany/Clear already rebuild. Only bucket *placement* can lag,
+        // and a lagging bucket can only drop a neighbour that has just crossed a bucket boundary, never admit a
+        // wrong one, because Query re-tests each candidate's live position. Bucket contents stay in ascending id
+        // order (Add enforces ascending ids), so query order is unchanged.
+        if (++_behaviourStepsSinceIndexRebuild >= IndexRebuildPeriod) { _behaviourStepsSinceIndexRebuild = 0; fauna.RebuildIndex(); }
         long tick = _w.Clock.Tick;
         double now = _w.Clock.SimSeconds;
         foreach (var f in fauna.Items)
