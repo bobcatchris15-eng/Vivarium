@@ -61,7 +61,11 @@ public sealed class VivariumWorld
         // last decision chose, so this cadence sets how often animals move, not how well they steer; the decision
         // fan-out is throttled again inside FaunaSystem.StepBehaviour. Movement cost per step is unchanged.
         public const int FaunaBehaviour = 4, FaunaMetabolism = 6, FaunaLifecycle = 120, Hydrology = 1,
-                         Environment = 30, Resources = 30, Flora = 60, GeneticsPrune = 8640;
+                         Environment = 30, Resources = 30, Flora = 60, GeneticsPrune = 8640,
+                         // The plasmodium runs on its own 30-sim-second cadence (D17), independent of fauna
+                         // metabolism. It clamps dt to [0.1, 5.0]s internally, so tying it to a fauna cadence
+                         // would silently starve its diffusion whenever fauna metabolism was coarsened.
+                         Plasmodium = 3;
     }
 
     private VivariumWorld(ContentLibrary content, WorldDescriptor descriptor)
@@ -161,7 +165,7 @@ public sealed class VivariumWorld
         Scheduler.Register("flora.ambient", Cadence.Flora, 74, Bio(AmbientGroundCover.Step), phase: 29);
         Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.StepMat), phase: 30);
         Scheduler.Register("coverage.lichen", Cadence.Flora, 76, Bio(CoverageSystem.StepLichen), phase: 31);
-        Scheduler.Register("coverage.plasmodium", Cadence.FaunaMetabolism, 77, Bio(CoverageSystem.StepPlasmodium), phase: 2);
+        Scheduler.Register("coverage.plasmodium", Cadence.Plasmodium, 77, Bio(CoverageSystem.StepPlasmodium), phase: 2);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);
     }
 
