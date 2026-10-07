@@ -289,3 +289,12 @@ Unverified assumptions
   mean/total data shows fauna dominating, or if the day/night cycle is wanted on its own player-visible merit
   (plausible — that argument does not depend on A-perf-1).
 
+
+---
+# CURRENT EFFORT: overnight lush-realism loop (2026-10-07)
+Branch: overnight/lush-2026-10-07 (from main 1a17b2c). User explicitly restarted photoreal work tonight ("iterate through this overnight") — supersedes the 09-29 retirement for this effort only.
+Targets: docs/reference-targets/real-0{1,2,3}.* (dense planted vivaria: layered overlapping leaves, moss on wood, dark backdrop, glossy veined leaves, hard grow-light). User's current capture: current-capture-2026-10-07.webp.
+Loop: judge(before vs refs) -> pick ONE top gap -> Clanker implements -> capture -> independent judge before/after vs refs -> KEEP (commit) or REVERT (git restore). Never merge to main; user reviews in morning.
+Gates per iteration: build passes; flora_visible>0; no IndexOutOfRange/"Unable to open file"; fps on judged scenes not >15% worse than before.
+| it | gap | verdict | commit | note |
+|----|-----|---------|--------|------|
