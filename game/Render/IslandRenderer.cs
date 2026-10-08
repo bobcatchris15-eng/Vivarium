@@ -20,7 +20,7 @@ public partial class IslandRenderer : Node3D
     private int[] _nearestDomain = System.Array.Empty<int>();
     private double _accum = 999;
     private byte[] _bytes = System.Array.Empty<byte>();
-    // material weights for blending (R = gravel, G = submerged waterway bed / silt), filtered smoothly;
+    // material weights for blending (R = gravel, G = groundwater bed / silt, B = dynamic surface water), filtered smoothly;
     // water itself is ignored so shorelines don't interpolate through fake gravel/rock bands
     private Image _subImage = null!;
     private ImageTexture _subTex = null!;
@@ -67,14 +67,15 @@ public partial class IslandRenderer : Node3D
         Bridge.BindSurface(_terrainMat, "gravel", Bridge.Surfaces.Gravel);
         var g = w.Grid;
         _terrainMat.SetShaderParameter("field_rect", new Vector4((float)g.OriginX, (float)g.OriginZ, (float)(g.Nx * g.CellSize), (float)(g.Nz * g.CellSize)));
+        _terrainMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
         _fieldImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.Rgba8);
         _fieldTex = ImageTexture.CreateFromImage(_fieldImage);
         _terrainMat.SetShaderParameter("field_tex", _fieldTex);
         _bytes = new byte[g.Nx * g.Nz * 4];
-        _subImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.Rg8);
+        _subImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.Rgba8);
         _subTex = ImageTexture.CreateFromImage(_subImage);
         _terrainMat.SetShaderParameter("sub_tex", _subTex);
-        _subBytes = new byte[g.Nx * g.Nz * 2];
+        _subBytes = new byte[g.Nx * g.Nz * 4];
         _litterImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.R8);
         _litterTex = ImageTexture.CreateFromImage(_litterImage);
         _terrainMat.SetShaderParameter("litter_tex", _litterTex);
@@ -125,10 +126,11 @@ public partial class IslandRenderer : Node3D
         // sculpting: follow the heightfield at up to ~12 rebuilds per second
         if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08) BuildMeshes();
         _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
+        _terrainMat.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
         bool propsDirty = _propsVersion != _w.Props.Version;
         if (!propsDirty && _accum < 1.5) return;
         _accum = 0;
-        UpdateFieldTexture(propsDirty);
+        UpdateFieldTexture(true);
     }
 
     private void UpdateCoverMask()
@@ -180,12 +182,13 @@ public partial class IslandRenderer : Node3D
             if (updateSubstrate)
             {
                 bool gravel = _w.Props.GravelAt(p) != null;
-                _subBytes[c * 2] = gravel ? (byte)255 : (byte)0;
-                // Green channel = submerged waterway bed, read by terrain.gdshader as the silt mask. Sourced from
-                // the simulation's own standing/flowing water depth, never from moisture, so a merely damp or
-                // rain-filmed cell keeps its green and only a real waterway bed deposits silt. Render-only: no
-                // substrate code, sim field or gameplay behaviour changes.
-                _subBytes[c * 2 + 1] = _w.Water.OpenWaterDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
+                int so = c * 4;
+                _subBytes[so] = gravel ? (byte)255 : (byte)0;
+                // Green channel = groundwater bed mask (WaterTableDepth > SiltMinDepthM)
+                // Blue channel = dynamic surface water (SurfaceWaterDepth > 0.0005)
+                _subBytes[so + 1] = _w.Water.WaterTableDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
+                _subBytes[so + 2] = _w.Water.SurfaceWaterDepth(d) > 0.0005 ? (byte)255 : (byte)0;
+                _subBytes[so + 3] = 0;
             }
         }
         _fieldImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _bytes);
@@ -198,7 +201,7 @@ public partial class IslandRenderer : Node3D
         if (updateSubstrate)
         {
             _propsVersion = _w.Props.Version;
-            _subImage.SetData(g.Nx, g.Nz, false, Image.Format.Rg8, _subBytes);
+            _subImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _subBytes);
             _subTex.Update(_subImage);
         }
     }

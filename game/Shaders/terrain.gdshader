@@ -12,6 +12,7 @@ uniform sampler2D litter_tex : filter_linear, repeat_disable;
 uniform sampler2D ambient_tex : filter_linear, repeat_disable;
 uniform sampler2D cover_tex : filter_linear, repeat_disable;   // moss/lichen colony occupancy (IslandRenderer)
 uniform vec4 field_rect;            // origin.x, origin.z, size.x, size.z
+uniform float water_table = 0.0;
 uniform int overlay_mode = 0;       // 0 none, 1 moisture, 2 nutrients, 3 light, 4 substrate
 uniform float overlay_strength = 0.85;
 
@@ -109,13 +110,16 @@ void fragment() {
         vnoise(world_pos.xz * 2.1 + vec2(4.3, 29.7))
     ) * 2.0 - 1.0;
     vec2 gravel_uv = (world_pos.xz + gravel_warp * 0.13 - field_rect.xy) / field_rect.zw;
-    vec2 sub = vec2(texture(sub_tex, gravel_uv).r, smooth_field(sub_tex, fuv).g);
-    // Submerged waterway bed (sub.g). IslandRenderer writes it from the simulation's standing-water depth, not
+    vec4 sub_smooth = smooth_field(sub_tex, fuv);
+    vec3 sub = vec3(texture(sub_tex, gravel_uv).r, sub_smooth.g, sub_smooth.b);
+    // Groundwater submergence is strictly clamped to world_pos.y < water_table
+    float gw_sub = (world_pos.y < water_table) ? sub.g : 0.0;
+    // Submerged waterway bed (gw_sub). IslandRenderer writes it from the simulation's standing-water depth, not
     // from moisture, so a merely damp cell keeps its moss and only a real waterway bed turns to silt. The mask
     // arrives C1-smoothed over the 25 cm sub grid and is broken up with the same world-space noise the gravel
     // edge uses, so the shoreline is a soft irregular gradient rather than a step at a cell boundary.
     float silt_edge = (vnoise(world_pos.xz * 4.7 + vec2(21.3, 5.9)) - 0.5) * 0.34;
-    float wSilt = smoothstep(0.10, 0.74, sub.g + silt_edge);
+    float wSilt = (gw_sub > 0.0) ? smoothstep(0.10, 0.74, gw_sub + silt_edge) : 0.0;
     f.g = texture(field_tex, fuv).g;              // the substrate code (overlay only) must not be smoothed
     float moisture = f.r, light = f.a;
     float code = floor(f.g * 4.0 + 0.5);         // overlay only: 0 soil, 1 gravel, 2 rock, 3 wood, 4 water
@@ -274,21 +278,28 @@ void fragment() {
     col *= mix(1.0, 0.72, smoothstep(0.3, 0.75, moisture) * (1.0 - wMoss * 0.5) * silt_clear);
     float soil_wet = smoothstep(0.7, 1.0, moisture) * silt_clear;
 
-    // Enhance shoreline transition using standing water depth (sub.g):
-    // Within a few cm of the water margin (sub.g > 0.001 or transition edge),
-    // apply wet darkening to ALBEDO and increase gloss (lower ROUGHNESS, higher SPECULAR).
-    float shore_wet = smoothstep(0.001, 0.06, sub.g + silt_edge * 0.1) * silt_clear;
+    // Enhance shoreline transition using standing water depth:
+    // Shoreline wetness (shore_wet) at groundwater margin is constrained to within 2 cm of water_table elevation
+    // (world_pos.y - water_table < 0.02) rather than bleeding up steep bank slopes. Dynamic surface water (sub.b > 0)
+    // applies wet darkening when water flows over soil.
+    float gw_shore_wet = (sub.g > 0.0 && world_pos.y - water_table < 0.02) ? smoothstep(0.001, 0.06, sub.g + silt_edge * 0.1) : 0.0;
+    float surf_shore_wet = (sub.b > 0.0) ? smoothstep(0.001, 0.06, sub.b + silt_edge * 0.1) : 0.0;
+    float shore_wet = max(gw_shore_wet, surf_shore_wet) * silt_clear;
     float total_wet = clamp(max(soil_wet, shore_wet), 0.0, 1.0);
 
     col *= mix(1.0, 0.72, total_wet * (1.0 - wMoss * 0.6));
     rough = mix(rough, 0.20, total_wet * 0.85);
     detail = normalize(mix(detail, wn, total_wet * 0.45));
 
-    // Animated procedural caustics on submerged waterway bed (sub.g > 0.005)
-    float submerged = smoothstep(0.005, 0.06, sub.g);
-    float caustic_depth = exp(-sub.g * 1.5);
+    // Animated procedural caustics on submerged waterway bed:
+    // Caustics (caustic_pattern, caustic_mask, caustic_light, EMISSION) MUST NOT appear above water_table when only groundwater is present.
+    // Only dynamic surface water (sub.b > 0) or points below water_table (world_pos.y < water_table) can show submerged caustics.
+    bool can_caustic = (world_pos.y < water_table) || (sub.b > 0.0);
+    float caustic_water = (world_pos.y < water_table) ? max(sub.g, sub.b) : sub.b;
+    float submerged = (can_caustic && caustic_water > 0.005) ? smoothstep(0.005, 0.06, caustic_water) : 0.0;
+    float caustic_depth = exp(-caustic_water * 1.5);
     float caustic_mask = submerged * caustic_depth;
-    float caustics = caustic_pattern(world_pos.xz, TIME);
+    float caustics = (caustic_mask > 0.0) ? caustic_pattern(world_pos.xz, TIME) : 0.0;
     vec3 caustic_light = vec3(0.24, 0.32, 0.26) * caustics * caustic_mask;
     col += caustic_light * 0.65;
 
