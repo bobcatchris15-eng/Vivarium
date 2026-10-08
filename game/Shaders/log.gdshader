@@ -20,22 +20,6 @@ void vertex() { obj_pos = VERTEX; }
 
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
-// Cushion-moss clumps: 3x3 cellular search. Returns (dome height 0..1, offset-to-centre xy, cell id).
-vec4 clumps(vec2 p) {
-    vec2 ip = floor(p), fp = fract(p);
-    float best = 8.0; vec2 bo = vec2(0.0); float id = 0.0;
-    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-        vec2 g = vec2(float(i), float(j));
-        float h = hash21(ip + g);
-        vec2 o = g + vec2(h, fract(h * 37.13)) * 0.8 + 0.1 - fp;
-        float r = 0.55 + 0.35 * fract(h * 91.7);          // clump radius varies per cell
-        float d = length(o) / r;
-        if (d < best) { best = d; bo = o / r; id = h; }
-    }
-    float dome = sqrt(max(0.0, 1.0 - best * best));
-    return vec4(dome, bo, id);
-}
-
 void fragment() {
     vec3 vcol = srgb_to_linear(COLOR.rgb);
     float cap = UV2.y;
@@ -66,8 +50,9 @@ void fragment() {
         cover *= smoothstep(0.15, 0.45, n1 * 0.7 + 0.35);
         // cushion clumps (~2 cm) with a finer sub-clump layer; uv is in half-metres
         vec2 cp = uv * 26.0 + vec2(n1 * 1.3, n2 * 0.9);
-        vec4 cl = clumps(cp);
-        vec4 cl2 = clumps(cp * 2.7 + 3.1);
+        float speck;
+        vec4 cl = moss_clumps(cp, speck);
+        vec4 cl2 = moss_cells(cp * 2.7 + 3.1, 0.55, 0.35);
         float h = cl.x * (0.75 + 0.25 * cl2.x);
         // ragged edge: coverage breaks at clump granularity instead of a smooth felt boundary
         float mossy = clamp(max(vmoss, cover * 0.95), 0.0, 1.0);
@@ -84,7 +69,8 @@ void fragment() {
         vec3 mtint = mix(base, tipc, smoothstep(0.55, 0.98, h) * (0.35 + 0.4 * fib));
         float ao = mix(0.22, 1.0, smoothstep(0.0, 0.6, h)) * (0.85 + 0.15 * cl2.x);
         vec3 mcol = moss.rgb * mtint * ao * (0.8 + 0.35 * fib);
-        mcol = mix(vec3(lum(mcol)), mcol, 0.78);                      // muted, not felt-green
+        mcol = mix(vec3(lum(mcol)), mcol, 0.78);
+        mcol = mix(mcol, vec3(0.62, 0.55, 0.22) * (0.8 + 0.4 * fib), speck * 0.8);   // sporophyte / strand tips                      // muted, not felt-green
         mcol = mix(mcol * 0.5, mcol, smoothstep(0.0, 0.6, mossy));   // thin edges read as dark damp fuzz
         col = mix(col, mcol, smoothstep(0.08, 0.5, mossy));
         float rough = mix(bark.a, max(moss.a, 0.85), mossy);

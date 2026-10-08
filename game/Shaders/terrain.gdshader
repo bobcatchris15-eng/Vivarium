@@ -214,6 +214,29 @@ void fragment() {
     col = mix(col, ambient_col, ambient_weight);
     rough = mix(rough, 0.9, ambient_weight * 0.45);
 
+    // Ground cushion moss on bare gravel/soil: creeps in where it is moist, shaded or already vegetated, and
+    // hugs gravel margins; dry exposed gravel stays clear. Same cushion logic as the log moss (surface.gdshaderinc).
+    float bare = max(wGrav, (1.0 - wMoss) * (1.0 - ambient_weight) * (1.0 - wLeaf * 0.7));
+    float gedge = wGrav * (1.0 - wGrav) * 4.0;
+    float favour = moisture * 0.7 + (1.0 - light) * 0.55 + ambient_cover * 0.5 + gedge * 0.6 - 0.40;
+    float patchn = vnoise(world_pos.xz * 1.7 + vec2(3.3, 9.1)) * 0.65 + vnoise(world_pos.xz * 4.9 + 1.2) * 0.35;
+    float gm = smoothstep(0.0, 0.35, favour + (patchn - 0.5) * 0.6) * bare * (1.0 - wSilt);
+    if (gm > 0.02) {
+        float speck;
+        vec4 cl = moss_clumps(world_pos.xz * 38.0, speck);
+        float cover = clamp(gm + (cl.x - 0.5) * 0.8 * (1.0 - gm * gm), 0.0, 1.0);
+        float fib = vnoise(world_pos.xz * vec2(160.0, 60.0));
+        vec3 base = mix(vec3(0.075, 0.13, 0.04), vec3(0.13, 0.19, 0.06), cl.w) * mix(0.85, 1.12, patchn);
+        vec3 mc = mix(base, vec3(0.30, 0.34, 0.12), smoothstep(0.6, 0.98, cl.x) * (0.3 + 0.4 * fib));
+        mc *= mix(0.3, 1.0, smoothstep(0.0, 0.55, cl.x)) * (0.8 + 0.35 * fib);
+        mc = mix(mc, vec3(0.42, 0.36, 0.13), speck * 0.75);
+        float a = smoothstep(0.12, 0.55, cover);
+        col = mix(col, mc, a);
+        rough = mix(rough, 0.92, a);
+        vec3 dn = normalize(vec3(cl.y, 0.6 * max(cl.x, 0.25), cl.z));
+        detail = normalize(mix(detail, normalize(wn + vec3(dn.x, 0.0, dn.z) * 0.8), a));
+    }
+
     // moisture ramp: dry ground is paler and dustier, damp ground darkens gradually, saturated ground glosses
     float dryness = smoothstep(0.42, 0.18, moisture);
     col = mix(col, mix(vec3(dot(col, vec3(0.3, 0.59, 0.11))), col, 0.7) * 1.18, dryness);
