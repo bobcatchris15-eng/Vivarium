@@ -4030,25 +4030,41 @@ public static partial class OrganismMeshes
         if (seed % 3 != 0)
         {
             var stalkBase = motherCenter + new Vec3(rng.Range(-0.04, 0.04), 0.06, rng.Range(-0.04, 0.04));
-            double stalkH = rng.Range(1.85, 2.50); // reaches ~14-17 cm in world space
+            double stalkH = rng.Range(1.45, 2.00); // reaches ~11-14 cm in world space
             double leanX = rng.Range(-0.18, 0.18);
             double leanZ = rng.Range(-0.18, 0.18);
             var stalkMid = stalkBase + new Vec3(leanX * 0.4, stalkH * 0.52, leanZ * 0.4);
             var stalkTop = stalkBase + new Vec3(leanX, stalkH, leanZ);
 
-            var stalkColBase = Primitives.Mix(c1, new[] { 0.35, 0.52, 0.40 }, 0.4);
-            var stalkColTop = Primitives.Mix(c2, new[] { 0.82, 0.45, 0.38 }, 0.35);
+            // Muted wine/red-brown scape (Echeveria/Sedum-like), green at the base; never saturated red.
+            var stalkColBase = Primitives.Mix(c1, new[] { 0.30, 0.40, 0.26 }, 0.5);
+            var stalkColTop = Primitives.Mix(c2, new[] { 0.36, 0.20, 0.16 }, 0.65);
 
-            // Fleshy arching flower stalk
-            Primitives.Tube(m, new[] { stalkBase, stalkMid, stalkTop }, new[] { 0.038, 0.026, 0.018 }, 4,
-                (st, u) => (Primitives.Mix(stalkColBase, stalkColTop, st), 1.0, st, u, 0, 0));
+            // Slender, gently arching then nodding flower stalk (multi-point so it reads curved, not a rod).
+            const int stalkPts = 8;
+            var stalkPath = new Vec3[stalkPts];
+            var stalkRad = new double[stalkPts];
+            for (int i = 0; i < stalkPts; i++)
+            {
+                double t = (double)i / (stalkPts - 1);
+                var q = stalkBase * (1 - t) * (1 - t) + stalkMid * 2 * (1 - t) * t + stalkTop * t * t;
+                // Bow sideways along the lean and nod the head over slightly.
+                double bow = Math.Sin(t * Math.PI) * 0.10 + t * t * t * 0.14;
+                q += new Vec3(Math.Sign(leanX + 1e-6) * bow, -t * t * t * 0.10, Math.Sign(leanZ + 1e-6) * bow * 0.6);
+                stalkPath[i] = q;
+                stalkRad[i] = MathD.Lerp(0.024, 0.010, t);
+            }
+            stalkTop = stalkPath[stalkPts - 1];
+            Primitives.Tube(m, stalkPath, stalkRad, 5,
+                (st, u) => (Primitives.Mix(stalkColBase, stalkColTop, Math.Min(1.0, st * 1.3)), 1.0, st, u, 0, 0));
 
             // Alternate fleshy clasping scale bracts along the stalk
             int bractCount = 7 + rng.NextInt(4);
             for (int b = 0; b < bractCount; b++)
             {
                 double tBract = 0.20 + (double)b / bractCount * 0.65;
-                var pBract = stalkBase * (1 - tBract) * (1 - tBract) + stalkMid * 2 * (1 - tBract) * tBract + stalkTop * tBract * tBract;
+                double fb = tBract * (stalkPts - 1); int ib = Math.Min(stalkPts - 2, (int)fb);
+                var pBract = stalkPath[ib] + (stalkPath[ib + 1] - stalkPath[ib]) * (fb - ib);
                 double bAzimuth = b * 2.4 + seed * 0.1;
                 var bDir = (new Vec3(Math.Cos(bAzimuth), 0.3, Math.Sin(bAzimuth))).Normalized();
                 var bUp = new Vec3(0, 1, 0);
@@ -4080,7 +4096,7 @@ public static partial class OrganismMeshes
                 if (fUp.LengthSq < 1e-4) fUp = Vec3.Up;
                 var fSide = fDir.Cross(fUp).Normalized();
 
-                double flowerRadius = rng.Range(0.07, 0.10);
+                double flowerRadius = rng.Range(0.10, 0.14);
 
                 // Central stamen disc
                 Primitives.Ellipsoid(m, flowerPos, new Vec3(0.016, 0.016, 0.016), 4, 6,

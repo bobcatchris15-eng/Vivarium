@@ -184,10 +184,10 @@ void fragment() {
             c = mix(c, pigment, 0.77);
             float leaf_age = fract(inst.w * 7.31 + floor(along * 0.0) + UV2.x * 0.37 + inst.x * 3.7);
             // Strap/reed blades age toward a fresher chlorophyll green, not yellow-khaki.
-            vec3 aged_gain = leaf_type == 5 ? vec3(1.10, 1.42, 0.86) : vec3(1.45, 1.38, 0.82);
+            vec3 aged_gain = leaf_type == 5 ? vec3(1.10, 1.42, 0.86) : vec3(1.22, 1.42, 0.84);
             c = mix(c * vec3(0.78, 0.82, 0.80), c * aged_gain, smoothstep(0.25, 0.95, leaf_age));
             c *= (0.91 + 0.12 * cells + 0.035 * micro + 0.08 * venation) * (1.0 - edge * 0.11);
-            c = mix(c, c * vec3(1.11, 1.04, 0.78), age * (leaf_type == 5 ? 0.05 : 0.16));
+            c = mix(c, c * vec3(1.11, 1.04, 0.78), age * (leaf_type == 5 ? 0.05 : 0.08));
             // Tall strap blades rise toward the grow light: brighter, fresher distal blade.
             if (leaf_type == 5) c *= vec3(0.96, 1.0, 0.92) + vec3(0.18, 0.34, 0.12) * smoothstep(0.15, 0.85, along);
             float stripe = 0.5;
@@ -285,6 +285,6 @@ void fragment() {
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
     SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.5, 0.72, cuticle_sheen)) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? (leaf_type == 5 ? c * vec3(0.95, 1.55, 0.55) * leaf_transmission * 2.4 : c * vec3(1.30, 1.35, 0.60) * leaf_transmission * 1.4) : c * 0.025)) : c * (surface_mode == 3 ? 0.2 : 0.07);
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? (leaf_type == 5 ? c * vec3(0.95, 1.55, 0.55) * leaf_transmission * 2.4 : c * vec3(1.00, 1.50, 0.58) * leaf_transmission * 1.6) : c * 0.025)) : c * (surface_mode == 3 ? 0.2 : 0.07);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

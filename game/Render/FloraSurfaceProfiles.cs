@@ -55,7 +55,7 @@ internal static class FloraSurfaceProfiles
     // Values are linear-light reflectance targets, not the intentionally vivid simulation palette.
     private static LeafSurface Leaf(string id) => id switch
     {
-        "embercrown" => new(new(.055f, .13f, .032f), new(.14f, .17f, .07f), 0, .42f, .40f, .24f),
+        "embercrown" => new(new(.055f, .15f, .032f), new(.09f, .19f, .055f), 0, .42f, .40f, .24f),
         "lanternbrush" => new(new(.055f, .13f, .11f), new(.15f, .20f, .14f), 0, .54f, .31f, .25f),
         "shadebell" => new(new(.025f, .095f, .048f), new(.12f, .16f, .09f), 0, .55f, .32f, .22f),
         "clinglace" => new(new(.035f, .13f, .045f), new(.11f, .17f, .08f), 3, .42f, .37f, .23f),
@@ -65,7 +65,7 @@ internal static class FloraSurfaceProfiles
         "frosttussock" => new(new(.115f, .16f, .145f), new(.17f, .19f, .16f), 5, .22f, .24f, .22f),
         "glassrush" => new(new(.065f, .20f, .05f), new(.09f, .21f, .065f), 5, .10f, .38f, .20f),
         "ringreed" => new(new(.045f, .17f, .06f), new(.075f, .19f, .07f), 5, .12f, .27f, .22f),
-        "brooklace" => new(new(.035f, .16f, .038f), new(.10f, .18f, .06f), 0, .62f, .42f, .28f),
+        "brooklace" => new(new(.035f, .17f, .038f), new(.07f, .20f, .05f), 0, .62f, .42f, .28f),
         "fenbead" => new(new(.09f, .17f, .065f), new(.17f, .19f, .10f), 4, .18f, .55f, .16f),
         "mirrorleaf" => new(new(.045f, .12f, .042f), new(.13f, .16f, .07f), 3, .75f, .25f, .20f),
         "glassfinger" => new(new(.10f, .17f, .12f), new(.17f, .20f, .15f), 4, .10f, .58f, .14f),
@@ -73,15 +73,15 @@ internal static class FloraSurfaceProfiles
         "mooncoin" => new(new(.11f, .16f, .11f), new(.22f, .23f, .18f), 3, .54f, .43f, .24f),
         "coinrunner" => new(new(.05f, .19f, .047f), new(.13f, .20f, .08f), 0, .61f, .36f, .28f),
         "trifold" => new(new(.07f, .17f, .052f), new(.15f, .20f, .085f), 0, .51f, .29f, .30f),
-        "prismstar" => new(new(.055f, .17f, .055f), new(.13f, .20f, .09f), 0, .59f, .27f, .32f),
-        "streamribbon" => new(new(.045f, .16f, .055f), new(.12f, .22f, .09f), 0, .45f, .38f, .48f),
+        "prismstar" => new(new(.055f, .18f, .05f), new(.085f, .21f, .065f), 0, .59f, .27f, .32f),
+        "streamribbon" => new(new(.045f, .17f, .05f), new(.08f, .22f, .065f), 0, .45f, .38f, .48f),
         "fencomb" => new(new(.055f, .14f, .06f), new(.13f, .18f, .085f), 1, .30f, .32f, .42f),
         "veilblade" => new(new(.05f, .20f, .055f), new(.075f, .22f, .06f), 5, .18f, .30f, .34f),
         "kinkcane" => new(new(.055f, .21f, .04f), new(.08f, .23f, .055f), 5, .20f, .30f, .32f),
-        "hookthicket" => new(new(.045f, .14f, .032f), new(.15f, .20f, .095f), 0, .50f, .23f, .25f),
+        "hookthicket" => new(new(.045f, .175f, .035f), new(.075f, .21f, .05f), 0, .50f, .26f, .34f),
         "blue_sundew" => new(new(.055f, .20f, .23f), new(.10f, .23f, .27f), 0, .22f, .48f, .28f),
-        "snaptrap" => new(new(.065f, .19f, .045f), new(.13f, .22f, .085f), 0, .35f, .32f, .22f),
-        _ => new(new(.07f, .16f, .055f), new(.14f, .19f, .09f), 0, .45f, .30f, .25f),
+        "snaptrap" => new(new(.06f, .20f, .042f), new(.09f, .22f, .06f), 0, .35f, .32f, .22f),
+        _ => new(new(.06f, .17f, .05f), new(.09f, .20f, .06f), 0, .45f, .30f, .28f),
     };
 
     // Broad pigment and cuticle patterns are separate from the shared leaf silhouette.
