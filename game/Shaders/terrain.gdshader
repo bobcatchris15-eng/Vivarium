@@ -226,15 +226,22 @@ void fragment() {
         vec4 cl = moss_clumps(world_pos.xz * 38.0, speck);
         float cover = clamp(gm + (cl.x - 0.5) * 0.8 * (1.0 - gm * gm), 0.0, 1.0);
         float fib = vnoise(world_pos.xz * vec2(160.0, 60.0));
-        vec3 base = mix(vec3(0.075, 0.13, 0.04), vec3(0.13, 0.19, 0.06), cl.w) * mix(0.85, 1.12, patchn);
-        vec3 mc = mix(base, vec3(0.30, 0.34, 0.12), smoothstep(0.6, 0.98, cl.x) * (0.3 + 0.4 * fib));
-        mc *= mix(0.3, 1.0, smoothstep(0.0, 0.55, cl.x)) * (0.8 + 0.35 * fib);
-        mc = mix(mc, vec3(0.42, 0.36, 0.13), speck * 0.75);
+        // Fine fuzz: two high-frequency octaves (~2-5 mm grain) so a close view reads as countless shoots,
+        // not smooth cobbles; it also breaks the cell seams so neighbouring cushions merge.
+        float fz1 = vnoise(world_pos.xz * 420.0 + vec2(cl.w * 17.0));
+        float fz2 = vnoise(world_pos.xz * 190.0 + 4.1);
+        float fuzz = fz1 * 0.55 + fz2 * 0.45;
+        float h = clamp(cl.x + (fuzz - 0.5) * 0.45, 0.0, 1.0);
+        vec3 base = mix(vec3(0.07, 0.135, 0.035), vec3(0.12, 0.20, 0.05), cl.w) * mix(0.85, 1.12, patchn);
+        vec3 mc = mix(base, vec3(0.24, 0.33, 0.09), smoothstep(0.45, 0.95, h) * (0.35 + 0.5 * fib));
+        mc *= mix(0.55, 1.0, smoothstep(0.0, 0.5, h)) * (0.62 + 0.6 * fuzz);
+        mc = mix(mc, vec3(0.42, 0.36, 0.13), speck * 0.6);
         float a = smoothstep(0.12, 0.55, cover);
         col = mix(col, mc, a);
-        rough = mix(rough, 0.92, a);
-        vec3 dn = normalize(vec3(cl.y, 0.6 * max(cl.x, 0.25), cl.z));
-        detail = normalize(mix(detail, normalize(wn + vec3(dn.x, 0.0, dn.z) * 0.8), a));
+        rough = mix(rough, 0.95, a);
+        vec2 fg = vec2(vnoise(world_pos.xz * 300.0 + 2.7), vnoise(world_pos.xz * 300.0 + 8.3)) - 0.5;
+        vec3 dn = normalize(vec3(cl.y * 0.5 + fg.x * 0.9, 0.6 * max(cl.x, 0.25), cl.z * 0.5 + fg.y * 0.9));
+        detail = normalize(mix(detail, normalize(wn + vec3(dn.x, 0.0, dn.z) * 0.7), a));
     }
 
     // moisture ramp: dry ground is paler and dustier, damp ground darkens gradually, saturated ground glosses
