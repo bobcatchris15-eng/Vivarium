@@ -1,0 +1,23 @@
+{
+  "real-01.png": {
+    "lum_mean": 0.2669,
+    "lum_p05": 0.0078,
+    "lum_p95": 0.7883,
+    "lum_clip_black": 6.1039,
+    "lum_clip_white": 0.002
+  },
+  "real-02.webp": {
+    "lum_mean": 0.4238,
+    "lum_p05": 0.0714,
+    "lum_p95": 0.908,
+    "lum_clip_black": 0.0825,
+    "lum_clip_white": 0.0868
+  },
+  "real-03.webp": {
+    "lum_mean": 0.3713,
+    "lum_p05": 0.0647,
+    "lum_p95": 0.8358,
+    "lum_clip_black": 0.2599,
+    "lum_clip_white": 0.0356
+  }
+}

@@ -79,6 +79,8 @@ public partial class SmokeRunner
             }
             string scopes = FrameProfiler.TakeReport();
             await Screenshot(s.Name);
+            using Image? img = GetViewport().GetTexture()?.GetImage();
+            var lum = img != null ? ComputeLuminance(img) : default;
             times.Sort();
             double mean = times.Average();
             rows.Add(new Dictionary<string, object>
@@ -95,6 +97,11 @@ public partial class SmokeRunner
                 ["coverage_tiles"] = Session.Coverage.TileCount, ["coverage_instances"] = Session.Coverage.InstanceCount,
                 ["coverage_triangles_built"] = Session.Coverage.TrianglesBuilt,
                 ["slowest_scopes"] = scopes,
+                ["lum_mean"] = lum.Mean,
+                ["lum_p05"] = lum.P05,
+                ["lum_p95"] = lum.P95,
+                ["lum_clip_black"] = lum.ClipBlack,
+                ["lum_clip_white"] = lum.ClipWhite,
             });
             Log.Info(LogCategory.Perf, $"ref {s.Name}: fps {1000.0 / mean:0.0} p95 {times[(int)(times.Count * 0.95)]:0.0}ms draws {draws} prims {prims}");
         }
@@ -415,5 +422,66 @@ public partial class SmokeRunner
             sz += (gz + 0.5) * CoverageSpec.CellSize;
         }
         return (new Vec2(sx / bestCount, sz / bestCount), bestCount);
+    }
+
+    private readonly record struct LuminanceMetrics(
+        double Mean,
+        double P05,
+        double P95,
+        double ClipBlack,
+        double ClipWhite);
+
+    private static LuminanceMetrics ComputeLuminance(Image img)
+    {
+        if (img.GetFormat() != Image.Format.Rgb8)
+        {
+            img.Convert(Image.Format.Rgb8);
+        }
+        byte[] data = img.GetData();
+        int totalPixels = data.Length / 3;
+        if (totalPixels == 0) return default;
+
+        double[] lums = new double[totalPixels];
+        double sum = 0.0;
+        int blackCount = 0;
+        int whiteCount = 0;
+
+        for (int i = 0; i < totalPixels; i++)
+        {
+            int offset = i * 3;
+            double r = data[offset] / 255.0;
+            double g = data[offset + 1] / 255.0;
+            double b = data[offset + 2] / 255.0;
+            double l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            lums[i] = l;
+            sum += l;
+            if (l < 0.01) blackCount++;
+            if (l > 0.99) whiteCount++;
+        }
+
+        Array.Sort(lums);
+        double mean = sum / totalPixels;
+        double p05 = Percentile(lums, 0.05);
+        double p95 = Percentile(lums, 0.95);
+        double clipBlack = (double)blackCount * 100.0 / totalPixels;
+        double clipWhite = (double)whiteCount * 100.0 / totalPixels;
+
+        return new LuminanceMetrics(
+            Math.Round(mean, 4),
+            Math.Round(p05, 4),
+            Math.Round(p95, 4),
+            Math.Round(clipBlack, 4),
+            Math.Round(clipWhite, 4));
+    }
+
+    private static double Percentile(double[] sorted, double p)
+    {
+        if (sorted.Length == 0) return 0.0;
+        if (sorted.Length == 1) return sorted[0];
+        double idx = (sorted.Length - 1) * p;
+        int lower = (int)idx;
+        int upper = Math.Min(lower + 1, sorted.Length - 1);
+        double frac = idx - lower;
+        return sorted[lower] + frac * (sorted[upper] - sorted[lower]);
     }
 }
