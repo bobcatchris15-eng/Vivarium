@@ -199,40 +199,73 @@ public static class WaterMesh
                 for (int si = 0; si < nx; si++)
                 {
                     double qx0 = x0 + si * sub, qz0 = z0 + sj * sub;
-                    var square = new[]
-                    {
-                        new Vec2(qx0, qz0), new Vec2(qx0 + sub, qz0),
-                        new Vec2(qx0 + sub, qz0 + sub), new Vec2(qx0, qz0 + sub)
-                    };
-                    bool anyAbove = false, allOk = true;
-                    foreach (var q in square)
-                    {
-                        double sq = Surface(q, out bool ok);
-                        allOk &= ok;
-                        if (ok && sq > hf.Height(q) + 0.00002) anyAbove = true;
-                    }
-                    if (!allOk || !anyAbove) continue;
+                    var a = new Vec2(qx0, qz0);
+                    var b = new Vec2(qx0 + sub, qz0);
+                    var c = new Vec2(qx0 + sub, qz0 + sub);
+                    var d = new Vec2(qx0, qz0 + sub);
 
-                    bool needsClip = g.IsBoundaryCell[idx] || square.Any(q => dom.SignedDistance(q) > 0);
-                    var poly = needsClip ? dom.ClipPolygon(square) : square.ToList();
-                    if (poly.Count < 3) continue;
+                    bool needsClip = g.IsBoundaryCell[idx] ||
+                        dom.SignedDistance(a) > 0 || dom.SignedDistance(b) > 0 ||
+                        dom.SignedDistance(c) > 0 || dom.SignedDistance(d) > 0;
 
-                    var ids = new int[poly.Count];
-                    for (int k = 0; k < poly.Count; k++)
-                    {
-                        double sk = Surface(poly[k], out _);
-                        double depthFactor = MathD.Clamp01((sk - hf.Height(poly[k])) / 0.15);
-                        var fl = Flow(poly[k]);
-                        ids[k] = mesh.AddVertex(
-                            new Vec3(poly[k].X, sk, poly[k].Z), Vec3.Up,
-                            0.2, 0.55, 0.7, depthFactor, poly[k].X, poly[k].Z, fl.X, fl.Z);
-                    }
-                    for (int k = 1; k + 1 < poly.Count; k++) mesh.AddTriangle(ids[0], ids[k], ids[k + 1]);
-
-                    if (needsClip) AddCutFaces(mesh, dom, hf, poly, q => Surface(q, out _), 0.15);
+                    Emit(new[] { a, b, c }, needsClip);
+                    Emit(new[] { a, c, d }, needsClip);
                 }
         }
         return mesh;
+
+        void Emit(Vec2[] triangle, bool needsClip)
+        {
+            var polygon = needsClip ? dom.ClipPolygon(triangle) : triangle.ToList();
+            if (polygon.Count < 3) return;
+
+            var poly = new List<Vec2>();
+            for (int k = 0; k < polygon.Count; k++)
+            {
+                var a = polygon[k];
+                var b = polygon[(k + 1) % polygon.Count];
+
+                double sa = Surface(a, out bool oka);
+                double ha = oka ? (hf.Height(a) - sa) : 1.0;
+
+                double sb = Surface(b, out bool okb);
+                double hb = okb ? (hf.Height(b) - sb) : 1.0;
+
+                if (ha < 0) poly.Add(a);
+
+                if ((ha < 0) != (hb < 0))
+                {
+                    double lo = 0, hi = 1;
+                    for (int n = 0; n < 24; n++)
+                    {
+                        double t = (lo + hi) * 0.5;
+                        var q = a + (b - a) * t;
+                        double sq = Surface(q, out bool okq);
+                        double hq = okq ? (hf.Height(q) - sq) : 1.0;
+                        if ((hq < 0) == (ha < 0)) lo = t; else hi = t;
+                    }
+                    poly.Add(a + (b - a) * ((lo + hi) * 0.5));
+                }
+            }
+
+            if (poly.Count < 3) return;
+
+            var ids = new int[poly.Count];
+            for (int k = 0; k < poly.Count; k++)
+            {
+                double sk = Surface(poly[k], out _);
+                double hk = hf.Height(poly[k]);
+                if (sk < hk) sk = hk;
+                double depthFactor = (sk <= hk) ? 0.0 : MathD.Clamp01((sk - hk) / 0.15);
+                var fl = Flow(poly[k]);
+                ids[k] = mesh.AddVertex(
+                    new Vec3(poly[k].X, sk, poly[k].Z), Vec3.Up,
+                    0.2, 0.55, 0.7, depthFactor, poly[k].X, poly[k].Z, fl.X, fl.Z);
+            }
+            for (int k = 1; k + 1 < poly.Count; k++) mesh.AddTriangle(ids[0], ids[k], ids[k + 1]);
+
+            if (needsClip) AddCutFaces(mesh, dom, hf, poly, q => Surface(q, out _), 0.15);
+        }
     }
 
     private static void ExtendBoundarySquare(

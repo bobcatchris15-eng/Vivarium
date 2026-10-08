@@ -100,7 +100,7 @@ void fragment() {
     float view_cos = max(abs(dot(normalize(NORMAL), normalize(-VERTEX))), 0.25);
     float optical_depth = candidate_water_depth / view_cos;
     if (scene_depth_straight < surf_depth || scene_depth_straight > surf_depth + 20.0) {
-        optical_depth = max(depthf * 0.25, 0.05);
+        optical_depth = (depthf <= 0.005) ? 0.0 : max(depthf * 0.25, 0.05);
     }
 
     vec3 transmit = exp(-absorption * optical_depth);
@@ -122,10 +122,10 @@ void fragment() {
     float contact_depth = scene_depth_straight - surf_depth;
     float contact_optical_depth = contact_depth / view_cos;
     float meniscus_line = 0.0;
-    if (cutface < 0.5 && underwater < 0.5 && contact_depth > 0.0002 && contact_depth < 10.0) {
-        meniscus_line = 1.0 - smoothstep(0.0005, meniscus_threshold, contact_optical_depth);
+    if (cutface < 0.5 && underwater < 0.5 && contact_depth >= 0.001 && contact_depth < 10.0 && depthf > 0.005) {
+        meniscus_line = 1.0 - smoothstep(0.001, meniscus_threshold, contact_optical_depth);
     }
-    float total_foam = clamp(foam_mask + meniscus_line * 0.85, 0.0, 1.0);
+    float total_foam = (depthf <= 0.005 || contact_depth < 0.001) ? 0.0 : clamp(foam_mask + meniscus_line * 0.85, 0.0, 1.0);
 
     // View vectors and world-space reflection for backdrop and overhead grow light
     vec3 view_dir = normalize(-VERTEX);
@@ -151,11 +151,12 @@ void fragment() {
 
     // Glints survive steep angles (camera looking down at 30-50 deg in water_margin and cutaway_pond)
     float glint_angle = mix(0.20, 1.0, fresnel);
-    vec3 glints = (grow_light_color * panel_spec * 1.1 + grow_light_color * sparkle * 2.4) * glint_angle * (1.0 - cutface) * (1.0 - underwater);
+    float bank_edge_fade = smoothstep(0.005, 0.02, depthf) * smoothstep(0.0, 0.005, contact_depth);
+    vec3 glints = (grow_light_color * panel_spec * 1.1 + grow_light_color * sparkle * 2.4) * glint_angle * (1.0 - cutface) * (1.0 - underwater) * bank_edge_fade;
 
     // 1. Real ALBEDO: small base albedo with subtle tint, receiving real scene diffuse lighting, with foam and meniscus
     vec3 surf_albedo = mix(water_albedo, foam_color, total_foam * 0.75);
-    ALBEDO = cutface > 0.5 ? vec3(0.0) : surf_albedo;
+    ALBEDO = (cutface > 0.5 || underwater > 0.5) ? vec3(0.0) : surf_albedo;
 
     // 2. Modulate ROUGHNESS and SPECULAR from ripple slope/normal variation for Godot PBR highlights
     float base_roughness = mix(0.035, 0.14, slope_var);
@@ -166,7 +167,7 @@ void fragment() {
 
     // 3, 4, 5. Shading and emission: transmitted bed + subtle backdrop + grow-light glints + contact highlight
     if (cutface > 0.5) {
-        float meniscus = 1.0 - smoothstep(0.0, 0.006, UV.y);
+        float meniscus = (depthf <= 0.005) ? 0.0 : (1.0 - smoothstep(0.0, 0.006, UV.y));
         EMISSION = mix(behind, vec3(0.90, 0.96, 1.0), meniscus * 0.5);
         ALPHA = 1.0;
     } else if (underwater > 0.5) {
@@ -175,7 +176,7 @@ void fragment() {
     } else {
         vec3 backdrop = mix(backdrop_low, backdrop_high, smoothstep(-0.1, 0.7, world_refl.y));
         vec3 surface_refl = backdrop * fresnel * 0.4;
-        vec3 contact_highlight = foam_color * meniscus_line * 0.65;
+        vec3 contact_highlight = (contact_depth < 0.001 || depthf <= 0.005) ? vec3(0.0) : (foam_color * meniscus_line * 0.65);
         EMISSION = transmitted * (1.0 - fresnel * 0.65) + surface_refl + glints + contact_highlight;
         ALPHA = max(smoothstep(0.0, 0.015, thickness_straight), meniscus_line * 0.95);
     }
