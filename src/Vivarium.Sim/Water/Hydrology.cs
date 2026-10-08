@@ -58,6 +58,8 @@ public sealed class Hydrology
     private readonly double[] _edgeFlowE, _edgeFlowW, _edgeFlowN, _edgeFlowS;
     private readonly double[] _edgeHeight; // virtual exterior surface for boundary cells
     private readonly int[] _nE, _nW, _nN, _nS; // neighbour cell index or -1 when outside the domain
+    private readonly int[] _boundaryCells;
+    private bool _hadBoundaryFlow;
 
     public double CellArea => Grid.CellSize * Grid.CellSize;
     /// <summary>Signed discharge through each cell's east face (+X), mÂ³/s. Authoritative surface-water momentum.</summary>
@@ -75,6 +77,7 @@ public sealed class Hydrology
         _edgeFlowE = new double[n]; _edgeFlowW = new double[n]; _edgeFlowN = new double[n]; _edgeFlowS = new double[n];
         _edgeHeight = new double[n];
         _nE = new int[n]; _nW = new int[n]; _nN = new int[n]; _nS = new int[n];
+        var bCells = new List<int>();
         foreach (int idx in grid.DomainCells)
         {
             int ci = idx % grid.Nx, cj = idx / grid.Nx;
@@ -82,7 +85,9 @@ public sealed class Hydrology
             _nW[idx] = grid.InDomain(ci - 1, cj) ? idx - 1 : -1;
             _nN[idx] = grid.InDomain(ci, cj + 1) ? idx + grid.Nx : -1;
             _nS[idx] = grid.InDomain(ci, cj - 1) ? idx - grid.Nx : -1;
+            if (grid.IsBoundaryCell[idx]) bCells.Add(idx);
         }
+        _boundaryCells = bCells.ToArray();
         RefreshBed(hf);
     }
 
@@ -243,157 +248,277 @@ public sealed class Hydrology
     public void Step(double dt)
     {
         if (!double.IsFinite(dt) || dt <= 0) return;
+
+        double totalDischarge = 0;
+        int springCount = Springs.Count;
+        for (int i = 0; i < springCount; i++)
+        {
+            double d = Springs[i].Discharge;
+            if (d > 0) totalDischarge += d;
+        }
+        double sourceRise = totalDischarge / CellArea;
+
+        var domainCells = Grid.DomainCells;
+        int cellCount = domainCells.Length;
+
+        double maxDepth = 0;
+        for (int i = 0; i < cellCount; i++)
+        {
+            double d = Depth[domainCells[i]];
+            if (d > maxDepth) maxDepth = d;
+        }
+
         double remaining = dt;
         while (remaining > 1e-9)
         {
-            double wave = 0;
-            foreach (int c in Grid.DomainCells)
+            double h = Math.Min(remaining, 5.0);
+            double effectiveDepth = maxDepth > 1e-7 ? maxDepth : 0.0;
+            double predictedWaveSq = 9.81 * (effectiveDepth + sourceRise * h);
+            if (predictedWaveSq > 0)
             {
-                double depth = Depth[c];
-                if (depth <= 1e-7) continue;
-                wave = Math.Max(wave, Math.Sqrt(9.81 * depth));
+                double predictedWave = Math.Sqrt(predictedWaveSq);
+                h = Math.Min(h, 0.45 * Grid.CellSize / predictedWave);
             }
-            double h = Math.Min(remaining, 5);
-            double sourceRise = Springs.Sum(s => Math.Max(0, s.Discharge)) / CellArea;
-            double predictedWave = Math.Sqrt(wave * wave + 9.81 * sourceRise * h);
-            if (predictedWave > 0) h = Math.Min(h, 0.45 * Grid.CellSize / predictedWave);
-            SubStep(h);
+            maxDepth = SubStep(h);
             remaining -= h;
         }
+
+        UpdateFlowVectors();
         InvalidateWaterDistance();
     }
 
-    private void SubStep(double dt)
+    private double SubStep(double dt)
     {
         double area = CellArea;
+        double invArea = 1.0 / area;
+        var domainCells = Grid.DomainCells;
+        int cellCount = domainCells.Length;
+
         // 1. sources: springs inject dynamic surface water.
-        foreach (var sp in Springs)
+        int springCount = Springs.Count;
+        for (int i = 0; i < springCount; i++)
         {
+            var sp = Springs[i];
             int c = Grid.NearestDomainCell(sp.Position);
             if (c < 0) continue;
             double vol = sp.Discharge * dt;
-            Depth[c] += vol / area;
+            Depth[c] += vol * invArea;
             Budget.SpringInflow += vol;
         }
 
         // 2. losses from dynamic surface water only. Groundwater is a separate implicit reservoir.
         double evap = Config.Evaporation / SimUnits.Day * dt, infil = Config.Infiltration / SimUnits.Day * dt;
-        foreach (int idx in Grid.DomainCells)
+        double totalLoss = evap + infil;
+        if (totalLoss > 0)
         {
-            if (Depth[idx] <= 0) continue;
-            double loss = Math.Min(Depth[idx], evap + infil);
-            double le = loss * (evap / Math.Max(evap + infil, 1e-18));
-            Budget.Evaporation += le * area;
-            Budget.Infiltration += (loss - le) * area;
-            Depth[idx] -= loss;
+            double evapRatio = evap / Math.Max(totalLoss, 1e-18);
+            for (int i = 0; i < cellCount; i++)
+            {
+                int idx = domainCells[i];
+                double d = Depth[idx];
+                if (d <= 0) continue;
+                double loss = Math.Min(d, totalLoss);
+                double le = loss * evapRatio;
+                Budget.Evaporation += le * area;
+                Budget.Infiltration += (loss - le) * area;
+                Depth[idx] = d - loss;
+            }
+        }
+
+        if (_hadBoundaryFlow)
+        {
+            for (int b = 0; b < _boundaryCells.Length; b++)
+            {
+                int bIdx = _boundaryCells[b];
+                _edgeFlowE[bIdx] = _edgeFlowW[bIdx] = _edgeFlowN[bIdx] = _edgeFlowS[bIdx] = 0;
+            }
+            _hadBoundaryFlow = false;
         }
 
         // 3. Advance shared-face momentum from gravity and bed friction. A higher bank remains a physical sill.
-        // Continuity below transfers the exact same volume between cells; outgoing volume is positivity-limited.
-        foreach (int idx in Grid.DomainCells)
+        double width = Grid.CellSize;
+        double invWidth = 1.0 / width;
+        double gravDtOverWidth = 9.81 * dt * invWidth;
+        double manningDtConst = 9.81 * dt * (Manning * Manning) * invWidth;
+
+        for (int i = 0; i < cellCount; i++)
         {
+            int idx = domainCells[i];
             int e = _nE[idx], n = _nN[idx];
-            _faceE[idx] = e >= 0 ? FaceDischarge(idx, e, _faceE[idx], dt) : 0;
-            _faceN[idx] = n >= 0 ? FaceDischarge(idx, n, _faceN[idx], dt) : 0;
+            double dIdx = Depth[idx];
+
+            if (e >= 0)
+            {
+                double prevE = _faceE[idx];
+                if (dIdx <= 1e-9 && Depth[e] <= 1e-9 && (prevE > -1e-9 && prevE < 1e-9))
+                    _faceE[idx] = 0;
+                else
+                    _faceE[idx] = FaceDischarge(idx, e, prevE, width, invWidth, gravDtOverWidth, manningDtConst);
+            }
+            else
+            {
+                _faceE[idx] = 0;
+            }
+
+            if (n >= 0)
+            {
+                double prevN = _faceN[idx];
+                if (dIdx <= 1e-9 && Depth[n] <= 1e-9 && (prevN > -1e-9 && prevN < 1e-9))
+                    _faceN[idx] = 0;
+                else
+                    _faceN[idx] = FaceDischarge(idx, n, prevN, width, invWidth, gravDtOverWidth, manningDtConst);
+            }
+            else
+            {
+                _faceN[idx] = 0;
+            }
+
             _deltaVolume[idx] = 0;
             _outScale[idx] = 1;
-            _edgeFlowE[idx] = _edgeFlowW[idx] = _edgeFlowN[idx] = _edgeFlowS[idx] = 0;
         }
 
         // Boundary discharge is stateless: the specimen can drain out, but the virtual exterior never injects water.
-        foreach (int idx in Grid.DomainCells)
+        for (int b = 0; b < _boundaryCells.Length; b++)
         {
-            if (!Grid.IsBoundaryCell[idx] || Depth[idx] <= 0) continue;
-            double surface = HydraulicBed(idx) + Depth[idx];
+            int idx = _boundaryCells[b];
+            if (Depth[idx] <= 0) continue;
+            double surface = Bed[idx] + Depth[idx];
             double target = BoundaryDischarge(idx, surface, dt);
-            int i = idx % Grid.Nx, j = idx / Grid.Nx;
-            if (_nE[idx] < 0) _edgeFlowE[idx] = target;
-            if (_nW[idx] < 0) _edgeFlowW[idx] = target;
-            if (_nN[idx] < 0) _edgeFlowN[idx] = target;
-            if (_nS[idx] < 0) _edgeFlowS[idx] = target;
+            if (target > 0)
+            {
+                _hadBoundaryFlow = true;
+                if (_nE[idx] < 0) _edgeFlowE[idx] = target;
+                if (_nW[idx] < 0) _edgeFlowW[idx] = target;
+                if (_nN[idx] < 0) _edgeFlowN[idx] = target;
+                if (_nS[idx] < 0) _edgeFlowS[idx] = target;
+            }
         }
 
         // 4. Per-cell outflow limiter. Every internal face has exactly one upstream cell according to its sign.
-        foreach (int idx in Grid.DomainCells)
+        bool hasBoundary = _hadBoundaryFlow;
+        for (int i = 0; i < cellCount; i++)
         {
-            double outgoing = _edgeFlowE[idx] + _edgeFlowW[idx] + _edgeFlowN[idx] + _edgeFlowS[idx];
+            int idx = domainCells[i];
+            if (Depth[idx] <= 1e-9) continue;
+
+            double outgoing = 0;
+            if (hasBoundary)
+                outgoing = _edgeFlowE[idx] + _edgeFlowW[idx] + _edgeFlowN[idx] + _edgeFlowS[idx];
+
             int e = _nE[idx], w = _nW[idx], n = _nN[idx], so = _nS[idx];
             if (e >= 0 && _faceE[idx] > 0) outgoing += _faceE[idx];
             if (w >= 0 && _faceE[w] < 0) outgoing += -_faceE[w];
             if (n >= 0 && _faceN[idx] > 0) outgoing += _faceN[idx];
             if (so >= 0 && _faceN[so] < 0) outgoing += -_faceN[so];
+
             double requested = outgoing * dt;
             double available = Depth[idx] * area;
             if (requested > available && requested > 0) _outScale[idx] = available / requested;
         }
 
         // Scale each shared face by its upstream cell, then transfer the exact same volume out/in.
-        foreach (int idx in Grid.DomainCells)
+        for (int i = 0; i < cellCount; i++)
         {
+            int idx = domainCells[i];
             int e = _nE[idx], n = _nN[idx];
             if (e >= 0)
             {
                 double q = _faceE[idx];
-                q *= q >= 0 ? _outScale[idx] : _outScale[e];
-                _faceE[idx] = q;
-                double vol = q * dt;
-                _deltaVolume[idx] -= vol;
-                _deltaVolume[e] += vol;
+                if (q != 0)
+                {
+                    q *= q > 0 ? _outScale[idx] : _outScale[e];
+                    _faceE[idx] = q;
+                    double vol = q * dt;
+                    _deltaVolume[idx] -= vol;
+                    _deltaVolume[e] += vol;
+                }
             }
             if (n >= 0)
             {
                 double q = _faceN[idx];
-                q *= q >= 0 ? _outScale[idx] : _outScale[n];
-                _faceN[idx] = q;
-                double vol = q * dt;
-                _deltaVolume[idx] -= vol;
-                _deltaVolume[n] += vol;
+                if (q != 0)
+                {
+                    q *= q > 0 ? _outScale[idx] : _outScale[n];
+                    _faceN[idx] = q;
+                    double vol = q * dt;
+                    _deltaVolume[idx] -= vol;
+                    _deltaVolume[n] += vol;
+                }
             }
         }
 
-        foreach (int idx in Grid.DomainCells)
+        if (hasBoundary)
         {
-            double exteriorRate = (_edgeFlowE[idx] + _edgeFlowW[idx] + _edgeFlowN[idx] + _edgeFlowS[idx]) * _outScale[idx];
-            if (exteriorRate > 0)
+            for (int b = 0; b < _boundaryCells.Length; b++)
             {
-                double vol = exteriorRate * dt;
-                _deltaVolume[idx] -= vol;
-                Budget.BoundaryOutflow += vol;
+                int idx = _boundaryCells[b];
+                double exteriorRate = (_edgeFlowE[idx] + _edgeFlowW[idx] + _edgeFlowN[idx] + _edgeFlowS[idx]) * _outScale[idx];
+                if (exteriorRate > 0)
+                {
+                    double vol = exteriorRate * dt;
+                    _deltaVolume[idx] -= vol;
+                    Budget.BoundaryOutflow += vol;
+                }
             }
         }
 
-        // 5. Commit depths and expose cell-centred flow for rendering/ecology.
-        foreach (int idx in Grid.DomainCells)
+        // 5. Commit depths and compute maxDepth for next substep CFL.
+        double maxDepth = 0;
+        for (int i = 0; i < cellCount; i++)
         {
-            Depth[idx] = Math.Max(0, Depth[idx] + _deltaVolume[idx] / area);
+            int idx = domainCells[i];
+            double dv = _deltaVolume[idx];
+            double d = Depth[idx];
+            if (dv != 0)
+            {
+                d = Math.Max(0.0, d + dv * invArea);
+                Depth[idx] = d;
+            }
+            if (d > maxDepth) maxDepth = d;
+        }
+
+        return maxDepth;
+    }
+
+    private void UpdateFlowVectors()
+    {
+        var domainCells = Grid.DomainCells;
+        int cellCount = domainCells.Length;
+        for (int i = 0; i < cellCount; i++)
+        {
+            int idx = domainCells[i];
             int w = _nW[idx], so = _nS[idx];
-            double east = _nE[idx] >= 0 ? _faceE[idx] : _edgeFlowE[idx] * _outScale[idx];
-            double west = w >= 0 ? _faceE[w] : -_edgeFlowW[idx] * _outScale[idx];
-            double north = _nN[idx] >= 0 ? _faceN[idx] : _edgeFlowN[idx] * _outScale[idx];
-            double south = so >= 0 ? _faceN[so] : -_edgeFlowS[idx] * _outScale[idx];
+            double scale = _outScale[idx];
+            double east = _nE[idx] >= 0 ? _faceE[idx] : _edgeFlowE[idx] * scale;
+            double west = w >= 0 ? _faceE[w] : -_edgeFlowW[idx] * scale;
+            double north = _nN[idx] >= 0 ? _faceN[idx] : _edgeFlowN[idx] * scale;
+            double south = so >= 0 ? _faceN[so] : -_edgeFlowS[idx] * scale;
             FlowX[idx] = 0.5 * (east + west);
             FlowZ[idx] = 0.5 * (north + south);
         }
-
-
     }
 
     // Soil moisture remains a field; it never creates a visible water plane or deletes flowing volume.
     private const double Manning = 0.05;
 
     /// <summary>Local-inertial shallow-water momentum on a shared face, in m3/s. Previous momentum survives level equality.</summary>
-    private double FaceDischarge(int a, int b, double previous, double dt)
+    private double FaceDischarge(int a, int b, double previous, double width, double invWidth, double gravDtOverWidth, double manningDtConst)
     {
-        if (Depth[a] <= 1e-9 && Depth[b] <= 1e-9 && Math.Abs(previous) <= 1e-9) return 0;
+        if (Depth[a] <= 1e-9 && Depth[b] <= 1e-9 && (previous > -1e-9 && previous < 1e-9)) return 0;
         double sa = Bed[a] + Depth[a], sb = Bed[b] + Depth[b];
-        double hf = Math.Max(sa,sb) - Math.Max(Bed[a],Bed[b]);
-        if(hf <= 1e-7) return 0;
-        double width=Grid.CellSize, q=previous/width;
-        double hfCbrt = Math.Cbrt(hf);
-        double friction=1+9.81*dt*Manning*Manning*Math.Abs(q)/(hf * hf * hfCbrt);
-        double next=(q-9.81*hf*dt*(sb-sa)/width)/friction;
-        if((next>0&&Depth[a]<=1e-9)||(next<0&&Depth[b]<=1e-9))return 0;
-        return next*width;
+        double hf = Math.Max(sa, sb) - Math.Max(Bed[a], Bed[b]);
+        if (hf <= 1e-7) return 0;
+        double q = previous * invWidth;
+        double absPrev = Math.Abs(previous);
+        double friction = 1.0;
+        if (absPrev > 1e-15)
+        {
+            double hfCbrt = Math.Cbrt(hf);
+            friction = 1.0 + manningDtConst * absPrev / (hf * hf * hfCbrt);
+        }
+        double next = (q - gravDtOverWidth * hf * (sb - sa)) / friction;
+        if ((next > 0 && Depth[a] <= 1e-9) || (next < 0 && Depth[b] <= 1e-9)) return 0;
+        return next * width;
     }
     private double BoundaryDischarge(int idx, double surface, double dt)
     {
