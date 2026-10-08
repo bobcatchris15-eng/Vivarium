@@ -1,5 +1,7 @@
 # Plan: light level, water, canopy shape
 
+**Status: plan only — not approved for implementation (user, 2026-10-08).** Keep this document current as findings come in; start work only on an explicit go-ahead.
+
 Follows the overnight loop on `overnight/lush-2026-10-07` (see `.claude/ledger.md`, bottom section). Targets are the photos in `docs/reference-targets/`. Every step uses the same harness: build both projects, capture twice, compare the judge sheet against the references, and gate on a mean of at least 45 fps for every judge scene.
 
 Order: **light → water → canopy.** Light comes first because water and foliage are both judged under it. Retuning it afterwards would invalidate their tuning.
