@@ -279,11 +279,12 @@ void fragment() {
     float soil_wet = smoothstep(0.7, 1.0, moisture) * silt_clear;
 
     // Enhance shoreline transition using standing water depth:
-    // Shoreline wetness (shore_wet) at groundwater margin is constrained to within 2 cm of water_table elevation
-    // (world_pos.y - water_table < 0.02) rather than bleeding up steep bank slopes. Dynamic surface water (sub.b > 0)
-    // applies wet darkening when water flows over soil.
-    float gw_shore_wet = (sub.g > 0.0 && world_pos.y - water_table < 0.02) ? smoothstep(0.001, 0.06, sub.g + silt_edge * 0.1) : 0.0;
-    float surf_shore_wet = (sub.b > 0.0) ? smoothstep(0.001, 0.06, sub.b + silt_edge * 0.1) : 0.0;
+    float surf_y = (sub.b > 0.0) ? (water_table + (sub.b * 255.0 - 1.0) / 100.0) : water_table;
+    float water_surface = (sub.b > 0.0) ? max(water_table, surf_y) : water_table;
+    float water_depth = max(0.0, water_surface - world_pos.y);
+
+    float gw_shore_wet = (sub.g > 0.0 && world_pos.y < water_table + 0.02) ? smoothstep(0.001, 0.02, water_table + 0.02 - world_pos.y) : 0.0;
+    float surf_shore_wet = (sub.b > 0.0 && world_pos.y < surf_y + 0.02) ? smoothstep(0.001, 0.02, surf_y + 0.02 - world_pos.y) : 0.0;
     float shore_wet = max(gw_shore_wet, surf_shore_wet) * silt_clear;
     float total_wet = clamp(max(soil_wet, shore_wet), 0.0, 1.0);
 
@@ -292,16 +293,22 @@ void fragment() {
     detail = normalize(mix(detail, wn, total_wet * 0.45));
 
     // Animated procedural caustics on submerged waterway bed:
-    // Caustics (caustic_pattern, caustic_mask, caustic_light, EMISSION) MUST NOT appear above water_table when only groundwater is present.
-    // Only dynamic surface water (sub.b > 0) or points below water_table (world_pos.y < water_table) can show submerged caustics.
-    bool can_caustic = (world_pos.y < water_table) || (sub.b > 0.0);
-    float caustic_water = (world_pos.y < water_table) ? max(sub.g, sub.b) : sub.b;
-    float submerged = (can_caustic && caustic_water > 0.005) ? smoothstep(0.005, 0.06, caustic_water) : 0.0;
-    float caustic_depth = exp(-caustic_water * 1.5);
-    float caustic_mask = submerged * caustic_depth;
-    float caustics = (caustic_mask > 0.0) ? caustic_pattern(world_pos.xz, TIME) : 0.0;
-    vec3 caustic_light = vec3(0.24, 0.32, 0.26) * caustics * caustic_mask;
-    col += caustic_light * 0.65;
+    float caustic_mask = 0.0;
+    vec3 caustic_light = vec3(0.0);
+    EMISSION = vec3(0.0);
+    if ((world_pos.y < water_surface) && (water_depth > 0.005)) {
+        float submerged = smoothstep(0.005, 0.06, water_depth);
+        float caustic_depth = exp(-water_depth * 1.5);
+        caustic_mask = submerged * caustic_depth;
+        float caustics = caustic_pattern(world_pos.xz, TIME);
+        caustic_light = vec3(0.24, 0.32, 0.26) * caustics * caustic_mask;
+        col += caustic_light * 0.65;
+        EMISSION = caustic_light * 0.35;
+    }
+    if (world_pos.y >= water_surface) {
+        caustic_mask = 0.0;
+        EMISSION = vec3(0.0);
+    }
 
     if (overlay_mode == 1) col = mix(col, ramp(moisture), overlay_strength);
     else if (overlay_mode == 2) col = mix(col, ramp(f.b), overlay_strength);
@@ -313,6 +320,5 @@ void fragment() {
     ALBEDO = col;
     ROUGHNESS = rough;
     SPECULAR = mix(0.35, 0.75, total_wet);
-    EMISSION = caustic_light * 0.35;
     NORMAL = normalize((VIEW_MATRIX * vec4(detail, 0.0)).xyz);
 }

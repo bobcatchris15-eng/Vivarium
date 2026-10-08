@@ -1,3 +1,4 @@
+using System;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
@@ -184,10 +185,17 @@ public partial class IslandRenderer : Node3D
                 bool gravel = _w.Props.GravelAt(p) != null;
                 int so = c * 4;
                 _subBytes[so] = gravel ? (byte)255 : (byte)0;
-                // Green channel = groundwater bed mask (WaterTableDepth > SiltMinDepthM)
-                // Blue channel = dynamic surface water (SurfaceWaterDepth > 0.0005)
                 _subBytes[so + 1] = _w.Water.WaterTableDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
-                _subBytes[so + 2] = _w.Water.SurfaceWaterDepth(d) > 0.0005 ? (byte)255 : (byte)0;
+                if (_w.Water.SurfaceWaterDepth(d) > 0.0005)
+                {
+                    double surf = _w.Water.HydraulicBed(d) + _w.Water.Depth[d];
+                    double surfAboveTable = Math.Max(0.0, surf - _w.Water.WaterTable);
+                    _subBytes[so + 2] = (byte)Math.Clamp((int)Math.Round(surfAboveTable * 100.0 + 1.0), 1, 255);
+                }
+                else
+                {
+                    _subBytes[so + 2] = 0;
+                }
                 _subBytes[so + 3] = 0;
             }
         }
@@ -205,4 +213,9 @@ public partial class IslandRenderer : Node3D
             _subTex.Update(_subImage);
         }
     }
+}
+
+file static class HydrologyExtensions
+{
+    public static double HydraulicBed(this Vivarium.Sim.Water.Hydrology water, int idx) => water.Bed[idx];
 }
