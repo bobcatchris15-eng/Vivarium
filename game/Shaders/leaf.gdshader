@@ -101,7 +101,7 @@ void fragment() {
     ALBEDO+=ALBEDO*.6*pow(1.-ndv,3.)*topf;
     SPECULAR=volumetric ? .5 : .55;
     // Thicker midrib/veins transmit less; never bake the direction of illumination into color.
-    BACKLIGHT=color*vec3(1.2,1.3,.6)*transmission*1.3*physical.g*(1.-anatomy.g*.65)*(1.25-.5*physical.b);
+    BACKLIGHT=color*vec3(1.0,1.5,.58)*transmission*1.5*physical.g*(1.-anatomy.g*.65)*(1.25-.5*physical.b);
     AO=1.-canopy_occlusion*(1.-clamp(position_local.y,0.,1.));
     AO_LIGHT_AFFECT=.2;
     if (UV2.y < .5) { ALBEDO=srgb_to_linear(COLOR.rgb); BACKLIGHT=vec3(0.); }

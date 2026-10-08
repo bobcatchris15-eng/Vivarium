@@ -56,8 +56,8 @@ internal static class FloraSurfaceProfiles
     private static LeafSurface Leaf(string id) => id switch
     {
         "embercrown" => new(new(.055f, .15f, .032f), new(.09f, .19f, .055f), 0, .42f, .40f, .24f),
-        "lanternbrush" => new(new(.055f, .13f, .11f), new(.15f, .20f, .14f), 0, .54f, .31f, .25f),
-        "shadebell" => new(new(.025f, .095f, .048f), new(.12f, .16f, .09f), 0, .55f, .32f, .22f),
+        "lanternbrush" => new(new(.055f, .13f, .11f), new(.09f, .20f, .12f), 0, .54f, .31f, .25f),
+        "shadebell" => new(new(.025f, .095f, .048f), new(.075f, .175f, .09f), 0, .55f, .32f, .22f),
         "clinglace" => new(new(.035f, .13f, .045f), new(.11f, .17f, .08f), 3, .42f, .37f, .23f),
         "spiralvine" => new(new(.055f, .16f, .052f), new(.17f, .21f, .085f), 3, .52f, .48f, .28f),
         "fenhook" => new(new(.065f, .16f, .11f), new(.13f, .20f, .13f), 4, .20f, .47f, .17f),
