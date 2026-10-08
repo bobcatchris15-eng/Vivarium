@@ -31,8 +31,16 @@ public partial class EnvironmentRig : Node3D
     public int Quality { get; private set; } = -1;
 
     // Pale warm-grey/green humid haze — reads as damp terrarium air, not smoke or mist.
-    private static readonly Color HazeFogColor = new(0.72f, 0.75f, 0.71f);
-    private const float HazeFogDensity = 0.006f;
+    private static readonly Color HazeFogColor = new(0.050f, 0.044f, 0.036f);
+    private const float HazeFogDensity = 0.022f;
+
+    // Vivarium grade applied on top of the day/night keys (scaled, not replaced): dark enclosure
+    // backdrop instead of sky, steep cool-white grow light, weak fill/ambient so undersides go dark.
+    private static readonly Color BackdropTop = new(0.030f, 0.025f, 0.020f);
+    private static readonly Color BackdropHorizon = new(0.060f, 0.048f, 0.036f);
+    private static readonly Color GrowLightTint = new(0.95f, 0.98f, 1.00f);
+    private const float GrowSunGain = 1.40f, GrowFillGain = 0.35f, GrowAmbientGain = 0.55f, GrowAmbientSky = 0.25f;
+    private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
     private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
     private const float UnderwaterFogDensity = 0.18f;
 
@@ -113,7 +121,7 @@ public partial class EnvironmentRig : Node3D
             BackgroundMode = Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = _sky },
             AmbientLightSource = Environment.AmbientSource.Sky,
-            AmbientLightColor = new Color(0.83f, 0.86f, 0.86f),
+            AmbientLightColor = new Color(0.62f, 0.60f, 0.55f),
             AmbientLightSkyContribution = 0.55f,
             AmbientLightEnergy = 0.49f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
@@ -135,7 +143,7 @@ public partial class EnvironmentRig : Node3D
             FogSunScatter = 0.35f,
             FogSkyAffect = 0.1f,
             FogAerialPerspective = 0.12f,
-            SsaoRadius = 0.32f, SsaoIntensity = 0.56f, SsaoPower = 1.05f,
+            SsaoRadius = 0.32f, SsaoIntensity = 0.85f, SsaoPower = 1.05f,
         };
         WorldEnv = new WorldEnvironment { Environment = Env };
         AddChild(WorldEnv);
@@ -224,16 +232,20 @@ public partial class EnvironmentRig : Node3D
         float span = tEnd - a.F;
         float w = span > 0f ? Mathf.Clamp((float)((t - a.F) / span), 0f, 1f) : 0f;
 
-        Sun.RotationDegrees = new Vector3(Mathf.Lerp(a.Pitch, b.Pitch, w), SunAzimuth(t), 0f);
-        Sun.LightColor = a.SunColor.Lerp(b.SunColor, w);
-        Sun.LightEnergy = Mathf.Lerp(a.SunEnergy, b.SunEnergy, w);
-        _fill.LightEnergy = Mathf.Lerp(a.FillEnergy, b.FillEnergy, w);
-        _sky.SkyTopColor = a.SkyTop.Lerp(b.SkyTop, w);
-        _sky.SkyHorizonColor = a.SkyHorizon.Lerp(b.SkyHorizon, w);
-        _sky.GroundBottomColor = a.GroundBottom.Lerp(b.GroundBottom, w);
-        _sky.GroundHorizonColor = a.GroundHorizon.Lerp(b.GroundHorizon, w);
-        Env.AmbientLightEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w);
-        Env.AmbientLightSkyContribution = Mathf.Lerp(a.AmbientSkyContribution, b.AmbientSkyContribution, w);
+        float pitch = Mathf.Max(Mathf.Lerp(a.Pitch, b.Pitch, w) * GrowPitchGain, GrowPitchMax);
+        Sun.RotationDegrees = new Vector3(pitch, SunAzimuth(t), 0f);
+        Sun.LightColor = a.SunColor.Lerp(b.SunColor, w).Lerp(GrowLightTint, 0.6f);
+        float sunE = Mathf.Lerp(a.SunEnergy, b.SunEnergy, w);
+        Sun.LightEnergy = sunE * GrowSunGain;
+        _fill.LightEnergy = Mathf.Lerp(a.FillEnergy, b.FillEnergy, w) * GrowFillGain;
+        // Enclosure backdrop: dark wood/rock brown, dimmed further as the keys go to night.
+        float lum = Mathf.Clamp(sunE / KeyDaySunEnergy, 0.15f, 1f);
+        _sky.SkyTopColor = BackdropTop * lum;
+        _sky.SkyHorizonColor = BackdropHorizon * lum;
+        _sky.GroundBottomColor = BackdropTop * lum;
+        _sky.GroundHorizonColor = BackdropHorizon * lum;
+        Env.AmbientLightEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w) * GrowAmbientGain;
+        Env.AmbientLightSkyContribution = Mathf.Lerp(a.AmbientSkyContribution, b.AmbientSkyContribution, w) * GrowAmbientSky / 0.55f;
         Env.FogLightEnergy = Mathf.Lerp(a.FogEnergy, b.FogEnergy, w);
     }
 
