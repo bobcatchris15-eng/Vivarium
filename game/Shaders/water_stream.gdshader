@@ -20,6 +20,7 @@ uniform vec3 foam_color : source_color = vec3(0.92, 0.96, 0.98);
 uniform float refraction = 0.003;
 uniform float flow_speed_mult = 3.5;
 uniform float underwater = 0.0;
+uniform float meniscus_threshold = 0.008;
 
 varying float depthf;
 varying vec2 flow;
@@ -117,6 +118,15 @@ void fragment() {
     float foam_noise = sin(u_along * 38.0 - t * 7.5) * cos(u_across * 24.0 + sin(u_along * 14.0));
     float foam_mask = smoothstep(0.35, 0.80, foam_noise * 0.5 + 0.5 + (h - 0.5) * 0.4) * fast_flow;
 
+    // Thin meniscus / contact highlight line where water intersects scene geometry (stems, rocks, terrain)
+    float contact_depth = scene_depth_straight - surf_depth;
+    float contact_optical_depth = contact_depth / view_cos;
+    float meniscus_line = 0.0;
+    if (cutface < 0.5 && underwater < 0.5 && contact_depth > 0.0002 && contact_depth < 10.0) {
+        meniscus_line = 1.0 - smoothstep(0.0005, meniscus_threshold, contact_optical_depth);
+    }
+    float total_foam = clamp(foam_mask + meniscus_line * 0.85, 0.0, 1.0);
+
     // View vectors and world-space reflection for backdrop and overhead grow light
     vec3 view_dir = normalize(-VERTEX);
     float ndotv = clamp(dot(normalize(NORMAL), view_dir), 0.0, 1.0);
@@ -143,18 +153,18 @@ void fragment() {
     float glint_angle = mix(0.20, 1.0, fresnel);
     vec3 glints = (grow_light_color * panel_spec * 1.1 + grow_light_color * sparkle * 2.4) * glint_angle * (1.0 - cutface) * (1.0 - underwater);
 
-    // 1. Real ALBEDO: small base albedo with subtle tint, receiving real scene diffuse lighting, with foam
-    vec3 surf_albedo = mix(water_albedo, foam_color, foam_mask * 0.75);
+    // 1. Real ALBEDO: small base albedo with subtle tint, receiving real scene diffuse lighting, with foam and meniscus
+    vec3 surf_albedo = mix(water_albedo, foam_color, total_foam * 0.75);
     ALBEDO = cutface > 0.5 ? vec3(0.0) : surf_albedo;
 
     // 2. Modulate ROUGHNESS and SPECULAR from ripple slope/normal variation for Godot PBR highlights
     float base_roughness = mix(0.035, 0.14, slope_var);
-    ROUGHNESS = cutface > 0.5 ? 0.0 : mix(base_roughness, 0.35, foam_mask);
+    ROUGHNESS = cutface > 0.5 ? 0.0 : mix(base_roughness, 0.25, total_foam);
     float base_specular = mix(0.50, 0.85, slope_var);
-    SPECULAR = cutface > 0.5 ? 0.20 : mix(base_specular, 0.25, foam_mask * 0.6);
+    SPECULAR = cutface > 0.5 ? 0.20 : mix(base_specular, 0.95, meniscus_line);
     METALLIC = 0.0;
 
-    // 3, 4, 5. Shading and emission: transmitted bed + subtle backdrop + grow-light glints
+    // 3, 4, 5. Shading and emission: transmitted bed + subtle backdrop + grow-light glints + contact highlight
     if (cutface > 0.5) {
         float meniscus = 1.0 - smoothstep(0.0, 0.006, UV.y);
         EMISSION = mix(behind, vec3(0.90, 0.96, 1.0), meniscus * 0.5);
@@ -165,7 +175,8 @@ void fragment() {
     } else {
         vec3 backdrop = mix(backdrop_low, backdrop_high, smoothstep(-0.1, 0.7, world_refl.y));
         vec3 surface_refl = backdrop * fresnel * 0.4;
-        EMISSION = transmitted * (1.0 - fresnel * 0.65) + surface_refl + glints;
-        ALPHA = smoothstep(0.0, 0.015, thickness_straight);
+        vec3 contact_highlight = foam_color * meniscus_line * 0.65;
+        EMISSION = transmitted * (1.0 - fresnel * 0.65) + surface_refl + glints + contact_highlight;
+        ALPHA = max(smoothstep(0.0, 0.015, thickness_straight), meniscus_line * 0.95);
     }
 }

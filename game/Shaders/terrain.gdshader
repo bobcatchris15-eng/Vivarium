@@ -57,6 +57,23 @@ vec4 smooth_field(sampler2D tex, vec2 uv) {
     return texture(tex, (i + f - 0.5) / res);
 }
 
+// Dual animated wave interference network for submerged bed caustics
+float caustic_pattern(vec2 pos, float t) {
+    vec2 p1 = pos * 14.0 + vec2(t * 0.70, t * 0.45);
+    p1 += vec2(sin(p1.y * 1.35 + t * 0.85), cos(p1.x * 1.35 - t * 0.75)) * 0.45;
+    float w1 = sin(p1.x * 2.2 + p1.y * 1.2);
+    float w2 = cos(p1.y * 2.2 - p1.x * 1.1);
+    float c1 = pow(clamp(1.0 - abs(w1 * w2), 0.0, 1.0), 3.5);
+
+    vec2 p2 = vec2(pos.x * 0.707 - pos.y * 0.707, pos.x * 0.707 + pos.y * 0.707) * 17.0 + vec2(-t * 0.60, t * 0.65);
+    p2 += vec2(cos(p2.y * 1.25 - t * 0.80), sin(p2.x * 1.25 + t * 0.90)) * 0.45;
+    float w3 = sin(p2.x * 2.0 - p2.y * 1.3);
+    float w4 = cos(p2.y * 2.1 + p2.x * 1.2);
+    float c2 = pow(clamp(1.0 - abs(w3 * w4), 0.0, 1.0), 3.5);
+
+    return clamp((c1 + c2) * 0.45 + (c1 * c2) * 1.4, 0.0, 2.0);
+}
+
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
@@ -255,10 +272,25 @@ void fragment() {
     // gloss are faded out there and survive only at the shoreline, where they still darken the wet margin.
     float silt_clear = 1.0 - wSilt;
     col *= mix(1.0, 0.72, smoothstep(0.3, 0.75, moisture) * (1.0 - wMoss * 0.5) * silt_clear);
-    float wet = smoothstep(0.7, 1.0, moisture) * silt_clear;
-    col *= mix(1.0, 0.8, wet * (1.0 - wMoss * 0.6));
-    rough = mix(rough, 0.38, wet * 0.7);
-    detail = normalize(mix(detail, wn, wet * 0.35));
+    float soil_wet = smoothstep(0.7, 1.0, moisture) * silt_clear;
+
+    // Enhance shoreline transition using standing water depth (sub.g):
+    // Within a few cm of the water margin (sub.g > 0.001 or transition edge),
+    // apply wet darkening to ALBEDO and increase gloss (lower ROUGHNESS, higher SPECULAR).
+    float shore_wet = smoothstep(0.001, 0.06, sub.g + silt_edge * 0.1) * silt_clear;
+    float total_wet = clamp(max(soil_wet, shore_wet), 0.0, 1.0);
+
+    col *= mix(1.0, 0.72, total_wet * (1.0 - wMoss * 0.6));
+    rough = mix(rough, 0.20, total_wet * 0.85);
+    detail = normalize(mix(detail, wn, total_wet * 0.45));
+
+    // Animated procedural caustics on submerged waterway bed (sub.g > 0.005)
+    float submerged = smoothstep(0.005, 0.06, sub.g);
+    float caustic_depth = exp(-sub.g * 1.5);
+    float caustic_mask = submerged * caustic_depth;
+    float caustics = caustic_pattern(world_pos.xz, TIME);
+    vec3 caustic_light = vec3(0.24, 0.32, 0.26) * caustics * caustic_mask;
+    col += caustic_light * 0.65;
 
     if (overlay_mode == 1) col = mix(col, ramp(moisture), overlay_strength);
     else if (overlay_mode == 2) col = mix(col, ramp(f.b), overlay_strength);
@@ -269,6 +301,7 @@ void fragment() {
     AO_LIGHT_AFFECT = 0.25;
     ALBEDO = col;
     ROUGHNESS = rough;
-    SPECULAR = mix(0.35, 0.6, wet);
+    SPECULAR = mix(0.35, 0.75, total_wet);
+    EMISSION = caustic_light * 0.35;
     NORMAL = normalize((VIEW_MATRIX * vec4(detail, 0.0)).xyz);
 }
