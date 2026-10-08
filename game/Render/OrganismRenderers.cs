@@ -460,17 +460,10 @@ public partial class FloraRenderer : Node3D
             // field: they lean slightly toward the more open side, while dry/unhealthy specimens lose some turgor
             // in a stable individual direction. This makes variation read as growth history rather than seed noise.
             var yawBasis = new Basis(Vector3.Up, yaw);
-            if (sp.Colony != null || sp.Archetype is "moss" or "lichen" or "slime_mold")
-            {
-                yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
-            }
-            else if (sp.Shape == "hookthicket_brake")
-            {
-                // Mature runner tips are authored at ground level; retain their ground plane
-                // rather than lifting one side of the arch with the generic light-seeking tilt.
-                yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
-            }
-            else if (sp.Archetype == "plant" && sp.Shape != "vine" && sp.Shape != "floatleaf")
+            bool isUpright = sp.Woody != null || sp.IsTree
+                || sp.Shape is "kinkcane_brake" or "veilblade_curtain" or "reed" or "ribbonweed" or "milfoil";
+
+            if (isUpright)
             {
                 var fp = f.Position;
                 double e = Math.Max(_w.Grid.CellSize * 0.55, Math.Min(0.35, Math.Max(r, 0.05)));
@@ -486,6 +479,20 @@ public partial class FloraRenderer : Node3D
                     1f,
                     (float)(gz * 0.62 + Math.Sin(stressAngle) * stress * 0.15)).Normalized();
                 yawBasis = SurfaceFrame.TiltTo(growUp) * yawBasis;
+                h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
+                r *= 1.0 + stress * 0.035;
+            }
+            else if (sp.Shape != "vine" && sp.Shape != "floatleaf")
+            {
+                // Ground-hugging flora, rosettes, creepers, and mats conform to the local terrain slope
+                // so runners and radiating leaves drape along the soil instead of slicing into uphill slopes or hovering downhill.
+                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                yawBasis = SurfaceFrame.TiltTo(norm) * yawBasis;
+                float lift = (float)Math.Min(0.006, 0.002 + h * 0.04);
+                pos += norm * lift;
+                var fp = f.Position;
+                double moisture = _w.Fields.Moisture.Sample(fp);
+                double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
                 h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
                 r *= 1.0 + stress * 0.035;
             }
@@ -538,19 +545,19 @@ public partial class FloraRenderer : Node3D
                 r *= 0.72 + 0.58 * swell;
                 h *= 0.52 + 1.05 * swell;
             }
-            var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+            var t = new Transform3D(yawBasis.ScaledLocal(new Vector3((float)r, (float)h, (float)r)), pos);
             if (sp.Shape == "bracket" && Anchor(new Vector2(pos.X, pos.Z), 0.35) is { } ba)
             {
                 // shelves grow out of the trunk's side
                 var at = ba.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.08f, 0);
-                t = new Transform3D(Bridge.Yaw(ba.Outward).Scaled(new Vector3((float)r, (float)(h * 2.5), (float)r)), at - new Vector3(0, (float)h, 0));
+                t = new Transform3D(Bridge.Yaw(ba.Outward).ScaledLocal(new Vector3((float)r, (float)(h * 2.5), (float)r)), at - new Vector3(0, (float)h, 0));
             }
             else if (sp.Shape == "glass_antlers" && Anchor(new Vector2(pos.X, pos.Z), 0.22, new HashSet<string>(StringComparer.Ordinal) { "log" }) is { } ga)
             {
                 // Glass Antlers are authored upright from their attachment foot. Plant them directly on the
                 // cylindrical log surface, with a slight outward yaw so branches don't disappear into the wood.
                 var at = ga.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.05f, 0);
-                t = new Transform3D(Bridge.Yaw(ga.Outward).Scaled(new Vector3((float)r, (float)(h * 1.35), (float)r)), at);
+                t = new Transform3D(Bridge.Yaw(ga.Outward).ScaledLocal(new Vector3((float)r, (float)(h * 1.35), (float)r)), at);
             }
             float wobble = 0;
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2);
@@ -583,16 +590,29 @@ public partial class FloraRenderer : Node3D
             var pos = new Vector3((float)dead.X, (float)_w.GroundHeight(dead.Position), (float)dead.Z);
             if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
 
-            float lean = dead.Stage switch
+            bool isUpright = sp.Woody != null || sp.IsTree
+                || sp.Shape is "kinkcane_brake" or "veilblade_curtain" or "reed" or "ribbonweed" or "milfoil";
+
+            Basis basis;
+            if (!isUpright)
             {
-                DeadPlantStage.StandingDead => 0.05f + 0.10f * (float)dead.StageProgress,
-                DeadPlantStage.Collapsing => Mathf.Lerp(0.15f, 1.38f, (float)dead.StageProgress),
-                DeadPlantStage.Fallen => 1.42f,
-                _ => 1.47f,
-            };
-            var basis = new Basis(Vector3.Up, (float)dead.CollapseHeading) * new Basis(Vector3.Forward, lean);
+                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                basis = SurfaceFrame.TiltTo(norm) * new Basis(Vector3.Up, (float)dead.CollapseHeading);
+                pos += norm * 0.003f;
+            }
+            else
+            {
+                float lean = dead.Stage switch
+                {
+                    DeadPlantStage.StandingDead => 0.05f + 0.10f * (float)dead.StageProgress,
+                    DeadPlantStage.Collapsing => Mathf.Lerp(0.15f, 1.38f, (float)dead.StageProgress),
+                    DeadPlantStage.Fallen => 1.42f,
+                    _ => 1.47f,
+                };
+                basis = new Basis(Vector3.Up, (float)dead.CollapseHeading) * new Basis(Vector3.Forward, lean);
+            }
             if (dead.Stage >= DeadPlantStage.Fallen) h *= 0.92;
-            var t = new Transform3D(basis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+            var t = new Transform3D(basis.ScaledLocal(new Vector3((float)r, (float)h, (float)r)), pos);
 
             int cell = _w.Grid.NearestDomainCell(dead.Position);
             double moisture = cell >= 0 ? _w.Fields.Moisture.Values[cell] : 0.5;
