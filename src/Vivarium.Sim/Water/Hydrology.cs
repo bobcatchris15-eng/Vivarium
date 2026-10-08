@@ -232,12 +232,20 @@ public sealed class Hydrology
     public void Step(double dt)
     {
         if (!double.IsFinite(dt) || dt <= 0) return;
-        int subSteps = Config.SubSteps > 0 ? Config.SubSteps : 4;
-        if (subSteps > 8) subSteps = 8;
         double remaining = dt;
-        for (int stepsRemaining = subSteps; stepsRemaining > 0 && remaining > 1e-9; stepsRemaining--)
+        while (remaining > 1e-9)
         {
-            double h = Math.Min(remaining, remaining / stepsRemaining);
+            double wave = 0;
+            foreach (int c in Grid.DomainCells)
+            {
+                double depth = Depth[c];
+                if (depth <= 1e-7) continue;
+                wave = Math.Max(wave, Math.Sqrt(9.81 * depth));
+            }
+            double h = Math.Min(remaining, 5);
+            double sourceRise = Springs.Sum(s => Math.Max(0, s.Discharge)) / CellArea;
+            double predictedWave = Math.Sqrt(wave * wave + 9.81 * sourceRise * h);
+            if (predictedWave > 0) h = Math.Min(h, 0.45 * Grid.CellSize / predictedWave);
             SubStep(h);
             remaining -= h;
         }
@@ -365,11 +373,13 @@ public sealed class Hydrology
     /// <summary>Local-inertial shallow-water momentum on a shared face, in m3/s. Previous momentum survives level equality.</summary>
     private double FaceDischarge(int a, int b, double previous, double dt)
     {
+        if (Depth[a] <= 1e-9 && Depth[b] <= 1e-9 && Math.Abs(previous) <= 1e-9) return 0;
         double sa = Bed[a] + Depth[a], sb = Bed[b] + Depth[b];
         double hf = Math.Max(sa,sb) - Math.Max(Bed[a],Bed[b]);
         if(hf <= 1e-7) return 0;
         double width=Grid.CellSize, q=previous/width;
-        double friction=1+9.81*dt*Manning*Manning*Math.Abs(q)/Math.Pow(hf,7.0/3.0);
+        double hfCbrt = Math.Cbrt(hf);
+        double friction=1+9.81*dt*Manning*Manning*Math.Abs(q)/(hf * hf * hfCbrt);
         double next=(q-9.81*hf*dt*(sb-sa)/width)/friction;
         if((next>0&&Depth[a]<=1e-9)||(next<0&&Depth[b]<=1e-9))return 0;
         return next*width;
@@ -379,7 +389,7 @@ public sealed class Hydrology
         double head = surface-_edgeHeight[idx], hf = Depth[idx];
         if(head <= 0 || hf <= 1e-7) return 0;
         // Free discharge over the specimen cut, with bed friction and no exterior inflow.
-        double q = Math.Min(hf*Math.Sqrt(9.81*hf), Math.Pow(hf,5.0/3.0)*Math.Sqrt(head/Grid.CellSize)/Manning);
+        double q = Math.Min(hf*Math.Sqrt(9.81*hf), hf * Math.Cbrt(hf * hf)*Math.Sqrt(head/Grid.CellSize)/Manning);
         return q*Grid.CellSize;
     }
 

@@ -25,7 +25,7 @@ public static class WaterMesh
         w.Terrain.Snapshot());
 
     public static MeshData Build(VivariumWorld w, WaterMeshSnapshot? snapshot = null) =>
-        BuildSet(w, snapshot).SurfaceMesh;
+        BuildSurfaceWater(w, snapshot);
 
     public static WaterMeshSet BuildSet(VivariumWorld w, WaterMeshSnapshot? snapshot = null) =>
         Combine(w, snapshot);
@@ -45,10 +45,25 @@ public static class WaterMesh
         foreach (int cell in w.Grid.DomainCells)
         {
             int i = cell % w.Grid.Nx, j = cell / w.Grid.Nx;
-            double x0 = w.Grid.OriginX + i * w.Grid.CellSize;
-            double z0 = w.Grid.OriginZ + j * w.Grid.CellSize;
-            double x1 = x0 + w.Grid.CellSize, z1 = z0 + w.Grid.CellSize;
+            double cx0 = w.Grid.OriginX + i * w.Grid.CellSize;
+            double cz0 = w.Grid.OriginZ + j * w.Grid.CellSize;
+            double cx1 = cx0 + w.Grid.CellSize, cz1 = cz0 + w.Grid.CellSize;
+            if (w.Water.Bed[cell] > level &&
+                terrain.Height(new Vec2(cx0, cz0)) > level &&
+                terrain.Height(new Vec2(cx1, cz0)) > level &&
+                terrain.Height(new Vec2(cx0, cz1)) > level &&
+                terrain.Height(new Vec2(cx1, cz1)) > level)
+            {
+                if (!w.Grid.IsBoundaryCell[cell]) continue;
+            }
+            double x0 = cx0, z0 = cz0, x1 = cx1, z1 = cz1;
             ExtendBoundarySquare(w.Grid, cell, i, j, ref x0, ref z0, ref x1, ref z1);
+            if (terrain.Height(new Vec2(x0, z0)) > level &&
+                terrain.Height(new Vec2(x1, z0)) > level &&
+                terrain.Height(new Vec2(x0, z1)) > level &&
+                terrain.Height(new Vec2(x1, z1)) > level &&
+                w.Water.Bed[cell] > level)
+                continue;
             for (double z = z0; z < z1 - 1e-9; z += step)
                 for (double x = x0; x < x1 - 1e-9; x += step)
                 {
