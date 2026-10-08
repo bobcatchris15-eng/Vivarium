@@ -89,12 +89,12 @@ The it04 leaf-form tweaks (size jitter, cupping, droop) barely registered becaus
 
 **Approach: add a few new plant forms rather than tune the existing ones.** All of this is in the existing geometry pipeline (`src/Vivarium.Sim/Geometry/OrganismMeshes.cs`, the form kernel, `FloraVisualProfile`), which already supports per-species form, LODs and variants.
 
-1. **Large broadleaf aroid form (highest impact).**
+1. **Large Large broadleaf form (highest impact).**
    - Heart- or arrow-shaped blades with a real outline (sampled curve, not a polygon fan).
    - Midrib fold, wavy margin, petiole kink, and blades held at varied angles.
    - 4–9 leaves per plant at very different sizes, from new small leaves to big old ones, so leaves overlap.
    - Assign it to 2–3 existing understory species whose content descriptions fit (shadebell, embercrown and lanternbrush are candidates) and give their leaves the it08 veins and variegation.
-2. **Fern frond form.** Pinnate fronds: rachis curve plus paired pinnae, with fiddlehead tips on young fronds (the veilfern / Veilfern-type species). Fronds give the fine-textured contrast that every reference photo has.
+2. **Pinnate frond form.** Pinnate fronds: rachis curve plus paired pinnae, with fiddlehead tips on young fronds (the veilfern / Veilfern-type species). Fronds give the fine-textured contrast that every reference photo has.
 3. **Epiphytes and hangers.**
    - Let existing climbers (Clinglace, Spiralvine, Fenhook) render trailing segments that hang off logs and rocks, not only climb.
    - Add a rosette-epiphyte form (bromeliad or tillandsia shape) that places on log tops.
@@ -125,15 +125,38 @@ The it04 leaf-form tweaks (size jitter, cupping, droop) barely registered becaus
 | Water rebuild (refraction, absorption, glints) | 2 | light |
 | Shoreline and caustics | 1 | water rebuild |
 | Fix or triage the 12 FormTests | 1 | — (can run in parallel with light/water) |
-| Broadleaf aroid form | 2 | FormTests |
-| Fern frond form | 1 | FormTests |
+| Large broadleaf form | 2 | FormTests |
+| Pinnate frond form | 1 | FormTests |
 | Epiphytes and hangers | 1–2 | broadleaf form |
 | Layering review (sim/preset decision) | 1 + your call | forms |
 
 Total is roughly 12–14 iterations at the overnight pace, so about two nights. The FormTests triage can run in its own worktree alongside the light and water work, because it touches different files.
 
-## Decisions needed from you before starting
+## Decisions (user, 2026-10-08)
 
-1. **Commit `5013da7`** (standing-dead plants fade from green): keep or revert.
-2. **Auto-exposure:** acceptable in the game if it behaves, or should exposure stay fixed?
-3. **Canopy realism vs. invented species:** should the new forms look like real terrarium plants (philodendron, fern, bromeliad), or stay recognisably the game's invented species with realistic construction?
+1. **Dead-plant decay: KEEP `5013da7`.** Standing-dead plants fade from green to straw over the standing-dead stage. The rule: decay should be realistic, if simplified. Implications:
+   - Treat this as the start of a visual decay path, not a one-off. A later pass could add, still render-side and keyed to `StageProgress`:
+     - leaf droop and curl as plants dry
+     - edge browning before the whole leaf turns
+     - leaves thinning out or dropping before the plant collapses into litter
+   - Keep it simple: a few stages driven by existing sim state, with no new sim rules for appearance.
+2. **Auto-exposure: ACCEPTED.** This means the camera's exposure adapting to scene brightness, like a real camera or the eye. Godot does this with `CameraAttributesPractical` auto-exposure.
+   - Section 1 step 3 changes from "try it, maybe fall back" to "use it". Fixed exposure stays only as a fallback if it visibly pumps or hunts in motion.
+   - Still required: reference mode must pin exposure, or step enough frames to settle, so captures stay deterministic.
+   - Give it tight min/max limits and a slow adaptation speed, so walking from canopy shade to a lit clearing eases rather than flashes.
+3. **Canopy forms: FICTIONAL SPECIES, REALISTIC CONSTRUCTION.** New forms keep the game's invented species identities; they are not copies of real philodendrons, ferns or bromeliads. They borrow how real plants are built, not what specific species look like. Implications for section 3:
+   - Rename the work items by construction, not by real taxon:
+     - "large broadleaf" (not "aroid")
+     - "pinnate frond" (not "fern")
+     - "epiphytic rosette" (not "bromeliad")
+   - **Borrow construction rules from real plants:**
+     - petiole-to-blade junction and outline curves
+     - midrib and vein hierarchy
+     - leaf size following age, with new leaves small and pale and old leaves large and dark
+     - phyllotaxis (leaf arrangement around the stem)
+     - how fronds unroll
+   - **Keep invented the parts that give each species its identity:** leaf outline family, colour and variegation scheme, proportions, and odd features such as glass-like or lantern-like parts where the content descriptions call for them.
+   - **Practical rule:** no per-species photo referencing. Each form is a parameterised generator (outline family, lobing, margin, vein style, droop, size curve), and species pick parameters from their content JSON or `FloraVisualProfile`. Realism comes from the generator, not from matching a real plant.
+   - The acceptance check changes from "looks like the reference plant" to: reads as a plausible real plant at a glance, and stays distinguishable from the other species in the same frame.
+
+No decisions are outstanding. The plan is still on hold until you give the go-ahead (see Status at the top).
