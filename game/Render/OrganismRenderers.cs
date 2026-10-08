@@ -620,7 +620,10 @@ public partial class FloraRenderer : Node3D
             float litterInfluence = (float)(post?.LitterColorInfluence ?? 0.7);
             var tint = deadColor.Lerp(localLitter, (float)(litterBlend * litterInfluence));
             ulong hash = Rng.Mix(dead.Id.Value, 0xD34DUL);
-            var custom = new Color((hash % 1000) / 1000f, 0f, 0f, ((hash >> 12) % 1000) / 1000f);
+            // Freshly killed standing plants keep chlorophyll for a while: leaf pigment drains over the
+            // standing-dead stage instead of snapping straight to straw (shader fades by inst.y).
+            float residualGreen = dead.Stage == DeadPlantStage.StandingDead ? 0.34f * (float)(1.0 - dead.StageProgress) : 0f;
+            var custom = new Color((hash % 1000) / 1000f, residualGreen, 0f, ((hash >> 12) % 1000) / 1000f);
             var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
             int deadTier = VisualTier(dead.Id, pos, (float)h, (float)r);
