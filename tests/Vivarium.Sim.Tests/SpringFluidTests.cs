@@ -12,8 +12,8 @@ public class SpringFluidTests
         var w=TestUtil.FlatWorld(3,d=>d.Water.WaterTable=1);
         w.Water.Step(60);
         Assert.Equal(0,w.Water.Volume());
-        Assert.False(w.Water.IsWet(Vec2.Zero));
-        Assert.True(double.IsNaN(w.Water.SurfaceAt(Vec2.Zero)));
+        Assert.False(w.Water.HasSurfaceWater(Vec2.Zero));
+        Assert.Equal(0.0, w.Water.SurfaceWaterDepth(Vec2.Zero));
         Assert.Equal(0,WaterMesh.Build(w).TriangleCount);
     }
     [Fact]
