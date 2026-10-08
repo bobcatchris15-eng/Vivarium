@@ -169,11 +169,11 @@ public sealed class Hydrology
     {
         int c = Grid.CellAt(p);
         if (c < 0 || !Grid.InDomain(c) || !IsWet(c)) return double.NaN;
-        return Math.Max(HydraulicBed(c) + Depth[c], IsWaterTable(c) ? WaterTable : double.NegativeInfinity);
+        return HydraulicBed(c) + Depth[c];
     }
 
     /// <summary>Open water present in stored fluid depth.</summary>
-    public bool IsWet(int idx) => Grid.InDomain(idx) && (HasSurfaceWater(idx) || IsWaterTable(idx));
+    public bool IsWet(int idx) => Grid.InDomain(idx) && HasSurfaceWater(idx);
     public bool IsWet(Vec2 p)
     {
         int c = Grid.CellAt(p);
@@ -232,23 +232,12 @@ public sealed class Hydrology
     public void Step(double dt)
     {
         if (!double.IsFinite(dt) || dt <= 0) return;
+        int subSteps = Config.SubSteps > 0 ? Config.SubSteps : 4;
+        if (subSteps > 8) subSteps = 8;
         double remaining = dt;
-        while (remaining > 1e-9)
+        for (int stepsRemaining = subSteps; stepsRemaining > 0 && remaining > 1e-9; stepsRemaining--)
         {
-            double wave = 0;
-            foreach(int c in Grid.DomainCells)
-            {
-                double depth = Depth[c];
-                if(depth <= 1e-7) continue;
-                // Local-inertial equations omit advective acceleration: gravity-wave speed sets CFL.
-                // Including q/h here makes vanishingly thin wet fronts stall whole-world simulation.
-                wave = Math.Max(wave,Math.Sqrt(9.81*depth));
-            }
-            double h = Math.Min(remaining, 5);
-            // Bound the water a source can add during this step too, including initially dry cells.
-            double sourceRise=Springs.Sum(s=>Math.Max(0,s.Discharge))/CellArea;
-            double predictedWave=Math.Sqrt(wave*wave+9.81*sourceRise*h);
-            if(predictedWave>0) h=Math.Min(h,.45*Grid.CellSize/predictedWave);
+            double h = Math.Min(remaining, remaining / stepsRemaining);
             SubStep(h);
             remaining -= h;
         }
