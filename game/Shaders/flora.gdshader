@@ -175,9 +175,12 @@ void fragment() {
             float edge = smoothstep(0.36, 0.50, abs(across));
             float age = smoothstep(0.73, 1.0, along) * (0.25 + 0.75 * vnoise(vec2(inst.w * 9.0, along * 5.0)));
             c = mix(c, pigment, 0.77);
+            float leaf_age = fract(inst.w * 7.31 + floor(along * 0.0) + UV2.x * 0.37 + inst.x * 3.7);
+            c = mix(c * vec3(0.78, 0.82, 0.80), c * vec3(1.45, 1.38, 0.82), smoothstep(0.25, 0.95, leaf_age));
             c *= (0.91 + 0.12 * cells + 0.035 * micro + 0.08 * venation) * (1.0 - edge * 0.11);
             c = mix(c, c * vec3(1.11, 1.04, 0.78), age * 0.16);
             float stripe = 0.5;
+            if (leaf_pattern == 0) c = mix(c, c * vec3(1.35, 1.40, 1.10), clamp(mid * 0.7 + branch * 0.3, 0.0, 1.0) * (1.0 - face) * 0.35);
             // Each tissue family carries a different visible pigment pattern. Keep
             // the markings broad enough to survive the game's normal camera distance.
             if (leaf_pattern == 3) {
@@ -207,7 +210,7 @@ void fragment() {
             vec3 leaf_n = normalize(vec3(-dFdx(ridge) * 0.8, -dFdy(ridge) * 0.8, 1.0));
             n = surface_normal(wn, world_pos, UV, leaf_n);
             float family_rough = leaf_type == 1 ? 0.78 : leaf_type == 2 ? 0.74 : leaf_type == 3 ? 0.52 : leaf_type == 4 ? 0.46 : leaf_type == 5 ? 0.68 : 0.61;
-            rough = clamp(family_rough - cuticle_sheen * 0.13 + (cells - 0.5) * 0.13 + edge * 0.05 + face * 0.06, 0.38, 0.9);
+            rough = clamp(family_rough - 0.12 - cuticle_sheen * 0.22 + (cells - 0.5) * 0.13 + edge * 0.05 + face * 0.10, 0.24, 0.9);
             if (leaf_pattern == 3) rough = clamp(rough - 0.18 * (1.0 - face), 0.28, 0.82);
             else if (leaf_pattern == 4) rough = clamp(rough - 0.09 + (cells - 0.5) * 0.08, 0.34, 0.82);
             else if (leaf_pattern == 5) rough = clamp(rough + 0.10, 0.58, 0.96);
@@ -236,12 +239,13 @@ void fragment() {
             rough = leaf_type == 4 ? 0.52 : leaf_type == 5 ? 0.66 : 0.72;
         }
     }
-    float health = clamp(inst.y, 0.0, 1.0);
-    vec3 faded = mix(vec3(dot(c, vec3(0.33))), vec3(0.62, 0.55, 0.32), 0.5);
-    ALBEDO = mix(faded, c, 0.35 + 0.65 * health);
+    // Stress fades to a luminance-matched olive-brown; only genuinely failing tissue reads as straw.
+    float health = smoothstep(0.0, 0.45, clamp(inst.y, 0.0, 1.0));
+    vec3 faded = vec3(dot(c, vec3(0.33))) * vec3(1.25, 1.05, 0.55);
+    ALBEDO = mix(faded, c, 0.30 + 0.70 * health);
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
-    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.32, 0.48, cuticle_sheen)) : surface_mode == 4 ? 0.52 : 0.24;
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? c * vec3(1.08, 1.04, 0.72) * leaf_transmission : c * 0.025)) : c * (surface_mode == 3 ? 0.12 : 0.07);
+    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.45, 0.65, cuticle_sheen)) : surface_mode == 4 ? 0.52 : 0.24;
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? c * vec3(1.30, 1.35, 0.60) * leaf_transmission * 1.4 : c * 0.025)) : c * (surface_mode == 3 ? 0.12 : 0.07);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

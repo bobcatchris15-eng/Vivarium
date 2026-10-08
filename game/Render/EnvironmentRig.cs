@@ -39,7 +39,7 @@ public partial class EnvironmentRig : Node3D
     private static readonly Color BackdropTop = new(0.030f, 0.025f, 0.020f);
     private static readonly Color BackdropHorizon = new(0.060f, 0.048f, 0.036f);
     private static readonly Color GrowLightTint = new(0.95f, 0.98f, 1.00f);
-    private const float GrowSunGain = 1.40f, GrowFillGain = 0.35f, GrowAmbientGain = 0.55f, GrowAmbientSky = 0.25f;
+    private const float GrowSunGain = 1.40f, GrowFillGain = 0.60f, GrowAmbientGain = 0.80f, GrowAmbientSky = 0.25f;
     private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
     private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
     private const float UnderwaterFogDensity = 0.18f;
@@ -121,7 +121,7 @@ public partial class EnvironmentRig : Node3D
             BackgroundMode = Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = _sky },
             AmbientLightSource = Environment.AmbientSource.Sky,
-            AmbientLightColor = new Color(0.62f, 0.60f, 0.55f),
+            AmbientLightColor = new Color(0.46f, 0.60f, 0.38f),
             AmbientLightSkyContribution = 0.55f,
             AmbientLightEnergy = 0.49f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
@@ -163,7 +163,7 @@ public partial class EnvironmentRig : Node3D
         };
         Sun.RotationDegrees = new Vector3(-52, -35, 0);
         AddChild(Sun);
-        _fill = new DirectionalLight3D { LightColor = new Color(0.81f, 0.87f, 0.93f), LightEnergy = 0.22f, ShadowEnabled = false };
+        _fill = new DirectionalLight3D { LightColor = new Color(0.70f, 0.88f, 0.62f), LightEnergy = 0.22f, ShadowEnabled = false };
         _fill.RotationDegrees = new Vector3(-20, 150, 0);
         AddChild(_fill);
 

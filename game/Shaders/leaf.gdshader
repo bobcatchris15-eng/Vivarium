@@ -9,7 +9,7 @@ uniform sampler2D vein_normal : hint_normal, filter_linear_mipmap_anisotropic, r
 uniform sampler2D vein_mask : filter_linear_mipmap_anisotropic, repeat_disable;
 uniform vec3 top_pigment = vec3(.045,.14,.045);
 uniform vec3 back_pigment = vec3(.14,.20,.09);
-uniform float leaf_roughness = .65;
+uniform float leaf_roughness = .45;
 uniform float back_roughness = .84;
 uniform float transmission = .28;
 uniform float normal_strength = .45;
@@ -86,11 +86,12 @@ void fragment() {
     // Godot's cull_disabled shader already flips the interpolated normal on back faces.
     vec3 mapped=detail_normal(wn,UV,slopes);
     NORMAL=normalize((VIEW_MATRIX*vec4(mapped,0.)).xyz);
-    ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.,.9,.65),color,.35+.65*plant.y);
-    ROUGHNESS=clamp(mix(leaf_roughness,back_roughness,side)+(physical.r-.5)*.13-anatomy.r*.025,.3,.98);
-    SPECULAR=volumetric ? .42 : .3;
+    color*=mix(.8,1.35,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(1.,.8,fract(seed*5.3)));
+    ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,.3+.7*smoothstep(0.,.45,plant.y));
+    ROUGHNESS=clamp(mix(leaf_roughness,back_roughness,side)+(physical.r-.5)*.13-anatomy.r*.025,.22,.98);
+    SPECULAR=volumetric ? .5 : .45;
     // Thicker midrib/veins transmit less; never bake the direction of illumination into color.
-    BACKLIGHT=color*transmission*physical.g*(1.-anatomy.g*.65)*(1.25-.5*physical.b);
+    BACKLIGHT=color*vec3(1.2,1.3,.6)*transmission*1.3*physical.g*(1.-anatomy.g*.65)*(1.25-.5*physical.b);
     AO=1.-canopy_occlusion*(1.-clamp(position_local.y,0.,1.));
     AO_LIGHT_AFFECT=.2;
     if (UV2.y < .5) { ALBEDO=srgb_to_linear(COLOR.rgb); BACKLIGHT=vec3(0.); }
