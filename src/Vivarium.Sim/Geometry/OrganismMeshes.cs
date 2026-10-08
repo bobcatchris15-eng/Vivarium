@@ -2844,138 +2844,38 @@ public static partial class OrganismMeshes
         }
     }
 
-    /// <summary>Arching pinnate fronds with fan leaflets, plus one unrolling fiddlehead.</summary>
+    /// <summary>Arching pinnate fronds with natural fountain arch, paired pinnae, and unrolling fiddleheads.</summary>
     private static void Fern(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
-        var stalk = new[] { 0.22, 0.27, 0.15 };
-        var sorus = new[] { 0.32, 0.19, 0.08 };
+        int crownCount = juvenile ? 4 + rng.NextInt(2) : 8 + rng.NextInt(3);
+        int pairs = juvenile ? 8 + rng.NextInt(3) : 12 + rng.NextInt(3);
+        double frondLen = juvenile ? rng.Range(0.50, 0.65) : rng.Range(1.05, 1.30);
+        double arch = rng.Range(1.05, 1.25);
+        double taper = rng.Range(0.70, 0.85);
+        double pinnaLen = rng.Range(0.20, 0.25);
+        double pinnaWid = rng.Range(0.038, 0.046);
+        double camber = rng.Range(0.10, 0.16);
+        double tilt = rng.Range(0.18, 0.28);
+        double subOpposite = rng.Range(0.25, 0.45);
+        double fiddlehead = juvenile ? rng.Range(0.70, 0.90) : 0.0;
 
-        // Lady-fern-like crown: each arching frond has paired pinnae, and every pinna
-        // carries smaller pinnules. The repeated subdivisions read as a fern at game scale.
-        if (!juvenile)
-        {
-            int fronds = 6 + rng.NextInt(3);
-            for (int k = 0; k < fronds; k++)
-            {
-                double ang = 2 * Math.PI * k / fronds + rng.Range(-0.19, 0.19);
-                var rachis = new AxisParams(Length: rng.Range(1.27, 1.48),
-                    BaseAngle: rng.Range(0.18, 0.32), BaseAzimuth: ang,
-                    Droop: rng.Range(-1.35, -1.12), WobbleAmplitude: 0.01,
-                    WobbleFrequency: 1.1, Segments: 16);
-                ulong rachisSeed = Rng.Mix(seed, (ulong)(k * 301 + 13));
-                var frames = Axis.Build(rachis, rachisSeed);
-                SoftTube.Build(m, new SoftTubeParams(rachis, BaseRadius: 0.011, TipRadius: 0.002, Segments: 4),
-                    rachisSeed, (i, v) => (stalk, 1, i, v, 0, 0));
-                int pairs = 11 + rng.NextInt(3);
-                for (int i = 0; i < pairs; i++)
-                {
-                    foreach (double sgn in new[] { -1.0, 1.0 })
-                    {
-                        double t = 0.14 + (i + (sgn > 0 ? 0.24 : 0.0)) * 0.066;
-                        if (t > 0.94) continue;
-                        var frame = Axis.Sample(frames, t);
-                        double envelope = Math.Pow(Math.Sin(Math.PI * t), 0.75);
-                        double length = rng.Range(0.25, 0.31) * envelope;
-                        var outward = (frame.Side * sgn + frame.Tangent * 0.17).Normalized();
-                        var root = frame.Point;
-                        var tip = root + outward * length + new Vec3(0, -0.016 * t, 0);
-                        var mid = Vec3.Lerp(root, tip, 0.53) + new Vec3(0, 0.008, 0);
-                        var green = Primitives.Mix(c1, c2, 0.18 + 0.45 * t);
-                        Primitives.Tube(m, new[] { root, mid, tip },
-                            new[] { 0.004, 0.003, 0.0007 }, 3,
-                            (j, v) => (Primitives.Scale(green, 0.78), 1, j, v, 0, 0));
+        var p = new PinnateFrondParams(
+            CrownCount: crownCount,
+            PinnaePairs: pairs,
+            FrondLength: frondLen,
+            RachisRadius: juvenile ? 0.008 : 0.011,
+            ArchCurve: arch,
+            Taper: taper,
+            PinnaLength: pinnaLen,
+            PinnaWidth: pinnaWid,
+            Camber: camber,
+            TiltAngle: tilt,
+            SubOpposite: subOpposite,
+            FiddleheadProgress: fiddlehead,
+            DetailLevel: m.FloraDetailLevel ?? 0
+        );
 
-                        // Secondary division: narrow, staggered pinnules on both sides
-                        // of the pinna rachis, with a smaller terminal pinnule.
-                        int divisions = 4;
-                        for (int j = 0; j < divisions; j++)
-                        {
-                            double u = 0.17 + j * 0.19;
-                            double leafLength = length * (0.31 - j * 0.028);
-                            foreach (double side in new[] { -1.0, 1.0 })
-                            {
-                                var attach = Vec3.Lerp(root, tip, u + (side > 0 ? 0.035 : 0));
-                                var along = (frame.Tangent * side + outward * 0.24).Normalized();
-                                var leafTip = attach + along * leafLength;
-                                var leafCol = Primitives.Mix(green, c2, rng.Range(0.0, 0.25));
-                                double halfWidth = leafLength * rng.Range(0.23, 0.29);
-                                var bladeNormal = along.Cross(outward).Normalized();
-                                var bladeAxis = leafTip - attach;
-                                var rim = new List<Vec3>
-                                {
-                                    attach,
-                                    attach + bladeAxis * 0.36 + outward * halfWidth,
-                                    leafTip,
-                                    attach + bladeAxis * 0.36 - outward * halfWidth,
-                                    attach
-                                };
-                                Primitives.Fan(m, attach + bladeAxis * 0.48 + bladeNormal * 0.003,
-                                    rim, bladeNormal, Primitives.Scale(leafCol, 0.83), leafCol);
-
-                                // Sori are the rust-brown spore-bearing clusters on the
-                                // underside of developed pinnules, paired along the midrib.
-                                if (i > 2 && j < 3 && (k + i + j) % 2 == 0)
-                                {
-                                    var normal = along.Cross(outward).Normalized();
-                                    if (normal.Y > 0) normal = -normal;
-                                    foreach (double row in new[] { 0.42, 0.67 })
-                                    {
-                                        var dot = Vec3.Lerp(attach, leafTip, row) + normal * 0.004;
-                                        // A flat four-triangle sorus sits on the underside of the blade.
-                                        // Its paired spots remain visible in a close underside view.
-                                        int center = m.AddVertex(dot, normal, sorus, 1, 0.5, 0.5);
-                                        int a = m.AddVertex(dot + along * 0.008, normal, sorus, 1, 1, 0.5);
-                                        int b = m.AddVertex(dot + outward * 0.006, normal, sorus, 1, 0.5, 1);
-                                        int c = m.AddVertex(dot - along * 0.008, normal, sorus, 1, 0, 0.5);
-                                        int d = m.AddVertex(dot - outward * 0.006, normal, sorus, 1, 0.5, 0);
-                                        Primitives.TriangleFacing(m, center, a, b, normal);
-                                        Primitives.TriangleFacing(m, center, b, c, normal);
-                                        Primitives.TriangleFacing(m, center, c, d, normal);
-                                        Primitives.TriangleFacing(m, center, d, a, normal);
-                                    }
-                                }
-                            }
-                        }
-                        var terminal = tip + outward * (length * 0.08);
-                        Primitives.CurvedLeaf(m, tip - outward * (length * 0.16), terminal,
-                            frame.Tangent, length * 0.045, Primitives.Scale(green, 0.8), green,
-                            camber: 0.003, longitudinal: 3);
-                    }
-                }
-            }
-        }
-
-        // Croziers emerge first as compact curled fists. A mature crown still has
-        // a few newly unfurling fronds among its open ones.
-        int fists = juvenile ? 3 + rng.NextInt(2) : 1 + rng.NextInt(2);
-        for (int k = 0; k < fists; k++)
-        {
-            double ang = 2 * Math.PI * k / fists + rng.Range(-0.2, 0.2);
-            double radius = juvenile ? rng.Range(0.035, 0.09) : rng.Range(0.02, 0.06);
-            double height = juvenile ? rng.Range(0.42, 0.75) : rng.Range(0.52, 0.76);
-            var baseP = new Vec3(Math.Cos(ang) * radius, 0, Math.Sin(ang) * radius);
-            var radial = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
-            var center = baseP + new Vec3(0, height, 0);
-            var path = new List<Vec3>
-            {
-                baseP,
-                baseP + new Vec3(0, height * 0.64, 0),
-                center + new Vec3(0, -0.075, 0)
-            };
-            var widths = new List<double> { 0.012, 0.015, 0.019 };
-            for (int j = 0; j <= 28; j++)
-            {
-                double u = j / 28.0;
-                double theta = -Math.PI / 2 + u * Math.PI * 2.25;
-                double coilRadius = 0.075 * (1 - u * 0.67);
-                path.Add(center + radial * (Math.Cos(theta) * coilRadius)
-                    + new Vec3(0, Math.Sin(theta) * coilRadius, 0));
-                widths.Add(0.018 * (1 - u * 0.48));
-            }
-            Primitives.Tube(m, path, widths, 5,
-                (j, v) => (Primitives.Mix(stalk, c2, j / (double)(path.Count - 1)), 1, j, v, 0, 0));
-
-        }
+        PinnateFrond.Build(m, p, seed, c1, c2);
     }
     private static void ClinglaceNode(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool attached)
     {

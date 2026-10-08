@@ -711,5 +711,130 @@ public class FormTests
             Assert.True(mesh.LeafSpans.Count >= 7, $"{id} should have recorded leaf blades");
         }
     }
+
+    [Fact]
+    public void PinnateFrondFormHasRealisticConstructionAndFiddleheads()
+    {
+        var p = new PinnateFrondParams(
+            CrownCount: 8,
+            PinnaePairs: 12,
+            FrondLength: 1.0,
+            ArchCurve: 1.15,
+            Taper: 0.75,
+            Camber: 0.12,
+            TiltAngle: 0.22);
+
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var mesh = new MeshData();
+            int tris = PinnateFrond.Build(mesh, p, seed, Green, LightGreen);
+            Assert.Equal(tris, mesh.TriangleCount);
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+
+            // Triangle budget check
+            Assert.InRange(mesh.TriangleCount, 2500, 16000);
+
+            // Bounds check: grounded and reaches canopy height with non-zero height span
+            var bounds = mesh.Bounds();
+            Assert.InRange(bounds.Min.Y, -0.005, 0.005);
+            Assert.True(bounds.Max.Y > 0.55, $"Pinnate frond should reach arching height, got {bounds.Max.Y}");
+            double heightSpan = bounds.Max.Y - bounds.Min.Y;
+            Assert.True(heightSpan > 0.55, $"Height span must be substantial: {heightSpan}");
+
+            // Blade vertices and leaf recording
+            Assert.True(mesh.UV2.Count(v => v == 1f) > 500, "Must have substantial blade vertices");
+            Assert.True(mesh.LeafSpans.Count >= 20, "Crown should record numerous pinnae leaflets");
+        }
+
+        // Determinism check
+        var m1 = new MeshData();
+        var m2 = new MeshData();
+        PinnateFrond.Build(m1, p, 42, Green, LightGreen);
+        PinnateFrond.Build(m2, p, 42, Green, LightGreen);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+
+        // Single emergent frond exhibiting circinate vernation (coiled fiddlehead spiral tip)
+        var mFiddle = new MeshData();
+        var pFiddle = p with { CrownCount = 1, FiddleheadProgress = 1.0 };
+        PinnateFrond.Build(mFiddle, pFiddle, 42, Green, LightGreen);
+        AssertAllFinite(mFiddle);
+        AssertNoZeroAreaTriangles(mFiddle);
+        var fBounds = mFiddle.Bounds();
+        Assert.InRange(fBounds.Min.Y, -0.005, 0.005);
+        Assert.True(fBounds.Max.Y - fBounds.Min.Y > 0.35, "Coiled fiddlehead must have non-zero height span");
+        Assert.InRange(mFiddle.TriangleCount, 150, 1500);
+
+        // Single mature unrolled frond
+        var mMature = new MeshData();
+        var pMature = p with { CrownCount = 1, FiddleheadProgress = 0.0 };
+        PinnateFrond.Build(mMature, pMature, 42, Green, LightGreen);
+        AssertAllFinite(mMature);
+        AssertNoZeroAreaTriangles(mMature);
+        var matBounds = mMature.Bounds();
+        Assert.True(matBounds.Max.Y - matBounds.Min.Y > 0.55, "Mature frond fountain arch must have substantial height span");
+        Assert.InRange(mMature.TriangleCount, 400, 2500);
+
+        // Parameter sweep: pinnae pairs, arch curve, and taper all produce valid geometry
+        foreach (int pairs in new[] { 8, 16 })
+        {
+            var mVar = new MeshData();
+            PinnateFrond.Build(mVar, p with { PinnaePairs = pairs }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+            Assert.InRange(mVar.TriangleCount, 1500, 20000);
+        }
+
+        foreach (double arch in new[] { 0.8, 1.35 })
+        {
+            var mVar = new MeshData();
+            PinnateFrond.Build(mVar, p with { ArchCurve = arch }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+        }
+
+        foreach (double taper in new[] { 0.5, 1.1 })
+        {
+            var mVar = new MeshData();
+            PinnateFrond.Build(mVar, p with { Taper = taper }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+        }
+    }
+
+    [Theory]
+    [InlineData("veilfern", "veilfern", false)]
+    [InlineData("veilfern", "veilfern", true)]
+    [InlineData("veilfern", "fern", false)]
+    [InlineData("veilfern", "fern", true)]
+    [InlineData("maidenhair_fern", "veilfern", false)]
+    public void VeilfernSpeciesIsFiniteNonDegenerateAndWithinBudget(string id, string shape, bool juvenile)
+    {
+        var sp = new FloraSpeciesDef { Id = id, Shape = shape, Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var mesh = OrganismMeshes.Flora(sp, seed, juvenile: juvenile);
+            var mesh2 = OrganismMeshes.Flora(sp, seed, juvenile: juvenile);
+            Assert.Equal(mesh.DigestHex(), mesh2.DigestHex());
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+
+            int minTris = juvenile ? 1000 : 4000;
+            int maxTris = juvenile ? 10000 : 30000;
+            Assert.InRange(mesh.TriangleCount, minTris, maxTris);
+
+            var bounds = mesh.Bounds();
+            Assert.InRange(bounds.Min.Y, -0.005, 0.005);
+            double heightSpan = bounds.Max.Y - bounds.Min.Y;
+            double minHeight = juvenile ? 0.30 : 0.55;
+            Assert.True(heightSpan > minHeight, $"{id} ({shape}, juvenile={juvenile}) height span should be > {minHeight}, got {heightSpan}");
+
+            if (!juvenile)
+            {
+                Assert.True(mesh.UV2.Count(v => v == 1f) > 500, "Veilfern must have substantial kernel blade surface");
+                Assert.True(mesh.LeafSpans.Count >= 20, "Veilfern must record leaf spans for pinnae");
+            }
+        }
+    }
 }
 
