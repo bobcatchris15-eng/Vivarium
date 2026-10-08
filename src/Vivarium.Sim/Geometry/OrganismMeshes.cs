@@ -5261,14 +5261,119 @@ public static partial class OrganismMeshes
         return Vec3.Lerp(path[i], path[i + 1], f - i);
     }
 
-    private static void EmbercrownBroadleaf(MeshData m, Vec3 root, Vec3 dir, double length,
-        double[] c1, double[] c2, ulong seed, double age = 0.5)
+    internal static void RecordLeafSpan(this MeshData m, int vertex, int index, Vec3 attachment, double length, bool volumetric = false)
     {
-        ulong leafSeed = Rng.Mix(seed, (ulong)(m.Leaves.Count * 179 + 13));
-        double width = length * 0.52;
-        Broadleaf.BuildLeaf(m, root, dir, length, width, BroadleafOutline.Sagittate, leafSeed,
-            c1, c2, age: age, camber: 0.22, midribFold: 0.16, wavyMargin: 0.045, wavyFrequency: 6.0,
-            tipCurl: 0.18, petioleLength: length * 0.20, petioleRadius: 0.005, petioleKink: 0.32);
+        if (m.LeafSpans.Count == 0 || m.LeafSpans[^1].FirstVertex != vertex)
+            m.RecordLeaf(vertex, index, attachment, length, volumetric);
+    }
+
+    internal static void RecordLeafSpan(this MeshData m, int vertex)
+    {
+        if (m.VertexCount > vertex && (m.LeafSpans.Count == 0 || m.LeafSpans[^1].FirstVertex != vertex))
+            m.LeafSpans.Add((vertex, m.VertexCount - vertex));
+    }
+
+    private static void EmbercrownLeaflet(MeshData m, Vec3 root, Vec3 lDir, Vec3 lSide, Vec3 lNorm,
+        double len, double width, double[] c1, double[] c2, Rng rng)
+    {
+        var v0 = root;
+        var v1 = root + lDir * (len * 0.36) - lSide * (width * 0.5) + lNorm * (len * 0.04);
+        var v2 = root + lDir * (len * 0.48) - lNorm * (len * 0.015);
+        var v3 = root + lDir * (len * 0.36) + lSide * (width * 0.5) + lNorm * (len * 0.04);
+        var v4 = root + lDir * len - lNorm * (len * 0.035);
+
+        var colTop = Primitives.Mix(c1, c2, rng.Range(0.08, 0.24));
+        var colUnder = Primitives.Mix(Primitives.Scale(c2, 0.82), new[] { 0.42, 0.52, 0.32 }, 0.45);
+        int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
+
+        void LeafFace(Vec3 a, Vec3 b, Vec3 c, double[] col, Vec3 upTarget, int faceIdx)
+        {
+            var norm = (b - a).Cross(c - a).Normalized();
+            if (norm.Dot(upTarget) < 0)
+            {
+                var tmp = b; b = c; c = tmp;
+                norm = -norm;
+            }
+            int Vertex(Vec3 p) => m.AddVertex(p, norm, col, 1.0,
+                (p - root).Dot(lDir) / len,
+                0.5 + (p - root).Dot(lSide) / width, faceIdx, 1);
+            int ia = Vertex(a), ib = Vertex(b), ic = Vertex(c);
+            Primitives.TriangleFacing(m, ia, ib, ic, norm);
+        }
+
+        if (m.FloraDetailLevel is 1 or 2)
+        {
+            LeafFace(v0, v1, v4, colTop, lNorm, 0);
+            LeafFace(v0, v4, v3, colTop, lNorm, 0);
+            m.RecordLeafSpan(leafVertex, leafIndex, root, len);
+            return;
+        }
+
+        // Upper face (UV2.y = 1.0, normal towards +lNorm)
+        LeafFace(v0, v1, v2, colTop, lNorm, 0);
+        LeafFace(v0, v2, v3, colTop, lNorm, 0);
+        LeafFace(v2, v1, v4, colTop, lNorm, 0);
+        LeafFace(v2, v4, v3, colTop, lNorm, 0);
+
+        if (!m.FloraDetailLevel.HasValue)
+        {
+            LeafFace(v0, v1, v2, colUnder, -lNorm, 1);
+            LeafFace(v0, v2, v3, colUnder, -lNorm, 1);
+            LeafFace(v2, v1, v4, colUnder, -lNorm, 1);
+            LeafFace(v2, v4, v3, colUnder, -lNorm, 1);
+        }
+        m.RecordLeafSpan(leafVertex, leafIndex, root, len);
+    }
+
+    private static void EmbercrownCompoundLeaf(MeshData m, Vec3 root, Vec3 dir, double length,
+        double[] c1, double[] c2, Rng rng)
+    {
+        // 1. Rachis curve: arches horizontally with a graceful vault, leveling off and weeping at tip
+        var p0 = root;
+        var p1 = root + dir * (length * 0.30) + Vec3.Up * 0.038;
+        var p2 = root + dir * (length * 0.65) - Vec3.Up * 0.018;
+        var p3 = root + dir * length - Vec3.Up * 0.080;
+
+        var rachisPath = new[] { p0, p1, p2, p3 };
+        var rachisRadii = new[] { 0.0042, 0.0034, 0.0024, 0.0014 };
+        var petioleCol = Primitives.Mix(WoodyBarkLight, c1, 0.45);
+        Primitives.Tube(m, rachisPath, rachisRadii, 5, (i, v) => (petioleCol, 1, i / 3.0, v, 0, 0));
+
+        // 2. Dense leaflet pairs along rachis: 11 pairs closely spaced along the stem
+        int pairs = 11;
+        for (int j = 0; j < pairs; j++)
+        {
+            double t = 0.12 + 0.82 * j / (pairs - 1);
+            double t1 = 1.0 - t;
+            var pos = p0 * (t1 * t1 * t1) + p1 * (3 * t1 * t1 * t) + p2 * (3 * t1 * t * t) + p3 * (t * t * t);
+            var d = (p1 - p0) * (3 * t1 * t1) + (p2 - p1) * (6 * t1 * t) + (p3 - p2) * (3 * t * t);
+            var fwd = d.Normalized();
+            var up = Vec3.Up;
+            var side = fwd.Cross(up).Normalized();
+            var rachisNorm = side.Cross(fwd).Normalized();
+
+            // Broad, dense leaflets that overlap their neighbors
+            double span = length * (0.28 + 0.18 * Math.Sin(Math.PI * (t - 0.06) / 0.90));
+            double width = span * 0.48;
+
+            foreach (double sgn in new[] { -1.0, 1.0 })
+            {
+                var lDir = (side * sgn * 0.84 + fwd * 0.48 + rachisNorm * 0.18).Normalized();
+                var lSide = lDir.Cross(rachisNorm).Normalized();
+                var lNorm = lSide.Cross(lDir).Normalized();
+
+                EmbercrownLeaflet(m, pos, lDir, lSide, lNorm, span, width, c1, c2, rng);
+            }
+        }
+
+        // Terminal leaflet at tip
+        var termD = (p3 - p2).Normalized();
+        var termSide = termD.Cross(Vec3.Up).Normalized();
+        if (termSide.LengthSq < 1e-6) termSide = new Vec3(1, 0, 0);
+        var termNorm = termSide.Cross(termD).Normalized();
+        double termSpan = length * 0.28;
+        double termWidth = termSpan * 0.48;
+        EmbercrownLeaflet(m, p3, termD, termSide, termNorm, termSpan, termWidth, c1, c2, rng);
     }
 
     private static void EmbercrownBerry(MeshData m, Vec3 center, double r, Rng rng)
@@ -5373,12 +5478,12 @@ public static partial class OrganismMeshes
                 Primitives.Tube(m, new[] { root, mid, top }, new[] { 0.016, 0.012, 0.008 }, 5,
                     (i, v) => (barkCol, 1, i / 2.0, v, 2, 0));
 
-                // 5 dense juvenile broadleaves
+                // 5 dense juvenile compound leaves
                 for (int l = 0; l < 5; l++)
                 {
                     double la = a + (l - 2.0) * 0.75 + rng.Range(-0.12, 0.12);
                     var lDir = (new Vec3(Math.Cos(la), 0.12, Math.Sin(la))).Normalized();
-                    EmbercrownBroadleaf(m, top, lDir, rng.Range(0.24, 0.30), c1, c2, seed, age: 0.35);
+                    EmbercrownCompoundLeaf(m, top, lDir, rng.Range(0.26, 0.34), c1, c2, rng);
                 }
                 EmbercrownBerrySpike(m, top, 0.09, rng);
             }
@@ -5409,25 +5514,25 @@ public static partial class OrganismMeshes
         int outerCount = 6;
         double phase = rng.Range(0, Math.PI * 2);
 
-        // Helper to add a rich, dense two-tier umbrella of broadleaves at cane top
+        // Helper to add a rich, dense two-tier umbrella of compound leaves at cane top
         void AddApexUmbrella(Vec3 caneTop, double baseAngle)
         {
-            // Upper tier: 6 spreading horizontal broadleaves
+            // Upper tier: 6 spreading horizontal compound leaves
             int upperCount = 6;
             for (int l = 0; l < upperCount; l++)
             {
                 double la = baseAngle + l * (Math.PI * 2.0 / upperCount) + rng.Range(-0.10, 0.10);
                 var lDir = new Vec3(Math.Cos(la), rng.Range(-0.04, 0.03), Math.Sin(la)).Normalized();
-                EmbercrownBroadleaf(m, caneTop - Vec3.Up * 0.012, lDir, rng.Range(0.38, 0.46), c1, c2, seed, age: 0.40);
+                EmbercrownCompoundLeaf(m, caneTop - Vec3.Up * 0.012, lDir, rng.Range(0.42, 0.52), c1, c2, rng);
             }
 
-            // Lower tier: 5 slightly shorter descending/weeping broadleaves staggered between upper leaves
+            // Lower tier: 5 slightly shorter descending/weeping compound leaves staggered between upper leaves
             int lowerCount = 5;
             for (int l = 0; l < lowerCount; l++)
             {
                 double la = baseAngle + (l + 0.5) * (Math.PI * 2.0 / lowerCount) + rng.Range(-0.12, 0.12);
                 var lDir = (new Vec3(Math.Cos(la) * 0.85, -0.22, Math.Sin(la) * 0.85)).Normalized();
-                EmbercrownBroadleaf(m, caneTop - Vec3.Up * 0.035, lDir, rng.Range(0.30, 0.38), c1, c2, seed, age: 0.85);
+                EmbercrownCompoundLeaf(m, caneTop - Vec3.Up * 0.035, lDir, rng.Range(0.35, 0.44), c1, c2, rng);
             }
         }
 
@@ -5448,7 +5553,7 @@ public static partial class OrganismMeshes
                 var mPos = Vec3.Lerp(cMid1, cMid2, (mt - 0.35) / 0.35);
                 double ma = phase + mLeaf * 2.1;
                 var mDir = (new Vec3(Math.Cos(ma), rng.Range(-0.06, 0.04), Math.Sin(ma))).Normalized();
-                EmbercrownBroadleaf(m, mPos, mDir, rng.Range(0.28, 0.36), c1, c2, seed, age: 0.70);
+                EmbercrownCompoundLeaf(m, mPos, mDir, rng.Range(0.32, 0.42), c1, c2, rng);
             }
 
             // Dense two-tier umbrella whorl at cane top
@@ -5480,7 +5585,7 @@ public static partial class OrganismMeshes
                 new[] { 0.028, 0.024, 0.020, 0.016, 0.011 }, 6,
                 (i, v) => (barkCol, 1, i / 4.0, v, 2, 0));
 
-            // Mid-cane foliage: 4 alternate broadleaves along upright cane section (clothes the stem in lush green)
+            // Mid-cane foliage: 4 alternate compound leaves along upright cane section (clothes the stem in lush green)
             for (int mid = 0; mid < 4; mid++)
             {
                 double midT = 0.32 + mid * 0.16;
@@ -5489,10 +5594,10 @@ public static partial class OrganismMeshes
                     : Vec3.Lerp(s3, s4, (midT - 0.50) / 0.32);
                 double midAngle = ang + (mid % 2 == 0 ? 0.70 : -0.70) + rng.Range(-0.10, 0.10);
                 var midDir = (new Vec3(Math.Cos(midAngle), rng.Range(-0.08, 0.04), Math.Sin(midAngle))).Normalized();
-                EmbercrownBroadleaf(m, midPos, midDir, rng.Range(0.28, 0.36), c1, c2, seed, age: 0.70);
+                EmbercrownCompoundLeaf(m, midPos, midDir, rng.Range(0.32, 0.42), c1, c2, rng);
             }
 
-            // Top of cane: dense two-tier umbrella of long broadleaves underneath
+            // Top of cane: dense two-tier umbrella of long compound leaves underneath
             AddApexUmbrella(s4, ang);
 
             // Top of cane: bright red berry cluster spike going straight up
@@ -5528,36 +5633,47 @@ public static partial class OrganismMeshes
             Primitives.Tube(m, path, new[] { 0.044, 0.041, 0.034, 0.027, 0.015, 0.009, 0.0035 }, 7,
                 (i, v) => (Primitives.Mix(oldBark, youngBark, i / 6.0), 1, i / 6.0, v, 2, 0));
 
-            // The outer section of each shoot carries age-graded broadleaves with vein variegation
-            int shootLeaves = 6;
-            for (int j = 0; j < shootLeaves; j++)
+            // The outer section of each shoot becomes a long compound leaf carrying close-set opposing leaflets
+            int leafletPairs = 20;
+            for (int j = 0; j < leafletPairs; j++)
             {
-                double t = 0.64 + j * 0.052 + rng.Range(-0.008, 0.008);
+                double t = Math.Clamp(0.45 + (double)j / (leafletPairs - 1) * 0.53 + rng.Range(-0.003, 0.003), 0.45, 0.98);
                 double segment = t * (path.Length - 1);
                 int index = Math.Min(path.Length - 2, (int)segment);
                 var p = path[index] + (path[index + 1] - path[index]) * (segment - index);
                 var stemDir = (path[index + 1] - path[index]).Normalized();
-                double sign = j % 2 == 0 ? -1.0 : 1.0;
-                var outDir = (tangent * sign * rng.Range(0.78, 0.95)
-                    + stemDir * rng.Range(0.32, 0.48)
-                    + new Vec3(0, rng.Range(0.06, 0.16), 0)).Normalized();
-
-                double age = 1.0 - (double)j / shootLeaves;
-                double len = rng.Range(0.24, 0.34) * MathD.Lerp(0.70, 1.15, age);
-                double width = len * 0.54;
-                ulong leafSeed = (ulong)(k * 997 + j * 73 + 11);
-
-                Broadleaf.BuildLeaf(m, p, outDir, len, width, BroadleafOutline.Hastate, leafSeed,
-                    Primitives.Mix(c1, c2, 0.15), vein, age: age, camber: 0.18, midribFold: 0.14,
-                    wavyMargin: 0.04, wavyFrequency: 5.0, tipCurl: 0.12, petioleLength: len * 0.18,
-                    petioleRadius: 0.0035, petioleKink: 0.28);
+                for (int n = 0; n < 2; n++)
+                {
+                    double sign = n == 0 ? -1.0 : 1.0;
+                    var outDir = (tangent * sign * rng.Range(0.82, 0.96)
+                        + stemDir * rng.Range(0.28, 0.45)
+                        + new Vec3(0, rng.Range(0.04, 0.14), 0)).Normalized();
+                    double petioleLength = rng.Range(0.014, 0.028);
+                    var bladeRoot = p + outDir * petioleLength;
+                    double fullness = 0.60 + 0.40 * Math.Sin(Math.PI * (j + 0.5) / leafletPairs);
+                    double len = rng.Range(0.32, 0.44) * fullness;
+                    var bladeTip = bladeRoot + outDir * len + new Vec3(0, rng.Range(-0.008, 0.014), 0);
+                    var side = Vec3.Up.Cross(outDir).Normalized();
+                    Primitives.Tube(m, new[] { p, bladeRoot }, new[] { 0.0028, 0.0015 }, 6,
+                        (i, v) => (youngBark, 1, i, v, 2, 0));
+                    int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
+                    Primitives.CurvedLeaf(m, bladeRoot, bladeTip, side, len * rng.Range(0.18, 0.25),
+                        Primitives.Mix(c1, c2, 0.18), Primitives.Mix(c1, c2, rng.Range(0.48, 0.72)),
+                        camber: len * rng.Range(0.045, 0.085), longitudinal: 4, asymmetry: rng.Range(-0.12, 0.12));
+                    m.RecordLeafSpan(leafVertex, leafIndex, bladeRoot, len);
+                    if (!m.FloraDetailLevel.HasValue)
+                        Primitives.Tube(m, new[] { bladeRoot + new Vec3(0, 0.001, 0), bladeRoot + (bladeTip - bladeRoot) * 0.55 + new Vec3(0, len * 0.025, 0) },
+                            new[] { 0.0018, 0.0006 }, 6, (i, v) => (vein, 1, i, v, 0, 0));
+                }
             }
             var terminalDir = (path[6] - path[5]).Normalized();
-            ulong termSeed = (ulong)(k * 997 + 91);
-            Broadleaf.BuildLeaf(m, path[6], terminalDir, 0.20, 0.11, BroadleafOutline.Hastate, termSeed,
-                Primitives.Mix(c1, c2, 0.15), vein, age: 0.15, camber: 0.15, midribFold: 0.12,
-                wavyMargin: 0.03, wavyFrequency: 5.0, tipCurl: 0.10, petioleLength: 0.025,
-                petioleRadius: 0.003, petioleKink: 0.22);
+            var termSide = Vec3.Up.Cross(terminalDir).Normalized();
+            double termLen = 0.26;
+            var termTip = path[6] + terminalDir * termLen;
+            int termVertex = m.VertexCount, termIndex = m.Indices.Count;
+            Primitives.CurvedLeaf(m, path[6], termTip, termSide, 0.045,
+                Primitives.Mix(c1, c2, 0.18), Primitives.Mix(c1, c2, 0.60), camber: 0.015, longitudinal: 4);
+            m.RecordLeafSpan(termVertex, termIndex, path[6], termLen);
 
             if (k > 0 && k % 2 == 0)
             {
