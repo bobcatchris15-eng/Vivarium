@@ -5722,6 +5722,8 @@ public static partial class OrganismMeshes
         var bellStripeCol = Primitives.Mix(c2, new[] { 0.85, 0.48, 0.44 }, 0.65);
         var pedicelCol = new[] { 0.58, 0.24, 0.22 };
 
+        int detail = m.FloraDetailLevel ?? 0;
+
         // Helper for building a dense terminal whorl / rosette of broad obovate leaves (two tiers of leaves)
         void ShadebellLeafWhorl(Vec3 tipPos, Vec3 outwardDir, double whorlRadius, bool hasFlowerCluster)
         {
@@ -5731,7 +5733,9 @@ public static partial class OrganismMeshes
             if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
 
             // Tier 1: Outer large broadleaves (10 leaves, age-graded mature leaves with drooping petioles)
-            int outerCount = juvenile ? 8 : 10;
+            int outerCount = juvenile
+                ? (detail >= 2 ? 6 : (detail == 1 ? 7 : 8))
+                : (detail >= 2 ? 6 : (detail == 1 ? 8 : 10));
             for (int li = 0; li < outerCount; li++)
             {
                 double leafAngle = li * (Math.PI * 2 / outerCount) + rng.Range(-0.08, 0.08);
@@ -5747,7 +5751,8 @@ public static partial class OrganismMeshes
             }
 
             // Tier 2: Inner overlapping rosette leaves (5 leaves) filling the center with younger foliage
-            if (!juvenile)
+            // Pruned for distant LOD tiers to reduce build time and polygon density
+            if (!juvenile && detail == 0)
             {
                 int innerCount = 5;
                 for (int li = 0; li < innerCount; li++)
@@ -5766,10 +5771,11 @@ public static partial class OrganismMeshes
             }
 
             // Hanging nodding campanulate bell flower raceme beneath the foliage whorl
-            if (hasFlowerCluster)
+            // Pruned completely at LOD 2; simplified at LOD 1 (fewer bells, low-poly cups, simplified pedicel tubes)
+            if (hasFlowerCluster && detail < 2)
             {
                 var racemeBase = tipPos - Vec3.Up * 0.02;
-                int bellCount = juvenile ? 4 : 7;
+                int bellCount = detail == 0 ? (juvenile ? 4 : 7) : (juvenile ? 2 : 3);
                 double racemeLen = 0.13 * (juvenile ? 0.6 : 1.0);
 
                 var rPts = new Vec3[bellCount + 1];
@@ -5782,7 +5788,8 @@ public static partial class OrganismMeshes
                     rPts[bi] = racemeBase - Vec3.Up * (racemeLen * bt) + fwd * (racemeLen * 0.22 * bt);
                     rRadii[bi] = 0.0035 * (1.0 - 0.60 * bt);
                 }
-                Primitives.Tube(m, rPts, rRadii, 6, (i, v) => (pedicelCol, 1.0, i / (double)bellCount, v, 0, 0));
+                int rSides = detail == 0 ? 6 : 3;
+                Primitives.Tube(m, rPts, rRadii, rSides, (i, v) => (pedicelCol, 1.0, i / (double)bellCount, v, 0, 0));
 
                 for (int bi = 1; bi <= bellCount; bi++)
                 {
@@ -5792,13 +5799,23 @@ public static partial class OrganismMeshes
                     var pedEnd = pedStart + bSide * 0.038 - Vec3.Up * 0.028;
 
                     // Delicate curved pedicel
-                    Primitives.Tube(m, new[] { pedStart, (pedStart + pedEnd) * 0.5 + bSide * 0.008, pedEnd },
-                        new[] { 0.0022, 0.0018, 0.0014 }, 6,
-                        (i, v) => (pedicelCol, 1.0, i / 2.0, v, 0, 0));
+                    if (detail == 0)
+                    {
+                        Primitives.Tube(m, new[] { pedStart, (pedStart + pedEnd) * 0.5 + bSide * 0.008, pedEnd },
+                            new[] { 0.0022, 0.0018, 0.0014 }, 6,
+                            (i, v) => (pedicelCol, 1.0, i / 2.0, v, 0, 0));
+                    }
+                    else
+                    {
+                        Primitives.Tube(m, new[] { pedStart, pedEnd },
+                            new[] { 0.0020, 0.0014 }, 3,
+                            (i, v) => (pedicelCol, 1.0, i / 1.0, v, 0, 0));
+                    }
 
                     // Nodding campanulate bell blossom (hollow cup with flared scalloped rim)
                     int bellStart = m.VertexCount;
-                    const int bRings = 4, bSides = 10;
+                    int bRings = detail == 0 ? 4 : 2;
+                    int bSides = detail == 0 ? 10 : 5;
                     double bellH = 0.044;
                     double bellR = 0.024;
 
@@ -5849,7 +5866,7 @@ public static partial class OrganismMeshes
             var c2pt = radial * (caneReach * 0.75) + new Vec3(0, caneH * 0.68, 0);
             var cTop = radial * caneReach + new Vec3(0, caneH, 0);
 
-            Wood(m, new[] { c0, c1pt, c2pt, cTop }, new[] { 0.038, 0.026, 0.016, 0.009 }, 6);
+            Wood(m, new[] { c0, c1pt, c2pt, cTop }, new[] { 0.038, 0.026, 0.016, 0.009 }, detail == 0 ? 6 : (detail == 1 ? 4 : 3));
 
             // 3 horizontal tiered branch shelves per cane
             int tiers = juvenile ? 2 : 3;
@@ -5883,7 +5900,7 @@ public static partial class OrganismMeshes
                 var cRadial = new Vec3(Math.Cos(cAng), 0, Math.Sin(cAng)) * 0.18;
                 var cTop = cRadial + new Vec3(0, totalH * 1.0, 0);
                 var cMid = cRadial * 0.5 + new Vec3(0, totalH * 0.55, 0);
-                WoodyCurve(m, new Vec3(0, 0, 0), cMid, cTop, 0.022, 4);
+                WoodyCurve(m, new Vec3(0, 0, 0), cMid, cTop, 0.022, detail == 0 ? 4 : 3);
                 ShadebellLeafWhorl(cTop, new Vec3(Math.Cos(cAng), 0, Math.Sin(cAng)), 0.30, true);
             }
         }

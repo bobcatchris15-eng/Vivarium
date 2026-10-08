@@ -123,10 +123,14 @@ public static class Broadleaf
             if (bladeFwd.LengthSq < 1e-6) bladeFwd = pDir;
 
             int pSides = detail == 0 ? 5 : (detail == 1 ? 4 : 3);
-            var pPath = new[] { p0, p1, p2, junctionPos };
-            var pRadii = new[] { petioleRadius * 1.15, petioleRadius * 1.05, petioleRadius * 0.95, petioleRadius * 0.85 };
+            var pPath = detail >= 2
+                ? new[] { p0, junctionPos }
+                : new[] { p0, p1, p2, junctionPos };
+            var pRadii = detail >= 2
+                ? new[] { petioleRadius * 1.15, petioleRadius * 0.85 }
+                : new[] { petioleRadius * 1.15, petioleRadius * 1.05, petioleRadius * 0.95, petioleRadius * 0.85 };
             var pCol = Primitives.Mix(new[] { 0.28, 0.24, 0.18 }, c1, 0.40 + 0.30 * age);
-            Primitives.Tube(m, pPath, pRadii, pSides, (i, v) => (pCol, 1.0, i / 3.0, v, 0, 0));
+            Primitives.Tube(m, pPath, pRadii, pSides, (i, v) => (pCol, 1.0, i / (double)(pPath.Length - 1), v, 0, 0));
         }
 
         // 2. Leaf blade coordinate basis
@@ -157,20 +161,57 @@ public static class Broadleaf
             return pMidrib + lateral + crown;
         }
 
-        // Normal evaluator via finite differences
-        Vec3 SurfaceNormal(double t, double x)
-        {
-            const double dt = 0.002, dx = 0.004;
-            var tT = SurfacePos(Math.Min(1.0, t + dt), x) - SurfacePos(Math.Max(0.0, t - dt), x);
-            var tX = SurfacePos(t, Math.Min(1.0, x + dx)) - SurfacePos(t, Math.Max(-1.0, x - dx));
-            var n = tT.Cross(tX).Normalized();
-            if (n.LengthSq < 1e-6 || n.Dot(normal0) < 0) n = normal0;
-            return n;
-        }
-
         // 3. Grid discretization: spend budget on outline & silhouette with minimal interior subdivision
         int rows = detail == 0 ? 4 : (detail == 1 ? 3 : 2);
         int cols = detail == 0 ? 3 : 2;
+
+        var rootPos = SurfacePos(0.0, 0.0);
+        var tipPos = SurfacePos(1.0, 0.0);
+
+        int midRows = rows - 1;
+        var grid = new Vec3[midRows, cols + 1];
+        for (int r = 1; r < rows; r++)
+        {
+            double t = (double)r / rows;
+            for (int c = 0; c <= cols; c++)
+            {
+                double x = (double)c / cols * 2.0 - 1.0;
+                grid[r - 1, c] = SurfacePos(t, x);
+            }
+        }
+
+        // Tangents and normals computed directly from grid differences to avoid 4x redundant evaluation of surface formula
+        var gridNormals = new Vec3[midRows, cols + 1];
+        for (int ri = 0; ri < midRows; ri++)
+        {
+            for (int c = 0; c <= cols; c++)
+            {
+                Vec3 tT = midRows > 1
+                    ? (ri == 0 ? grid[1, c] - rootPos : (ri == midRows - 1 ? tipPos - grid[ri - 1, c] : grid[ri + 1, c] - grid[ri - 1, c]))
+                    : (tipPos - rootPos);
+
+                Vec3 tX = cols > 1
+                    ? (c == 0 ? grid[ri, 1] - grid[ri, 0] : (c == cols ? grid[ri, cols] - grid[ri, cols - 1] : grid[ri, c + 1] - grid[ri, c - 1]))
+                    : side;
+
+                if (tX.LengthSq < 1e-8) tX = side;
+                if (tT.LengthSq < 1e-8) tT = fwd;
+
+                var n = tX.Cross(tT).Normalized();
+                if (n.LengthSq < 1e-6 || n.Dot(normal0) < 0) n = normal0;
+                gridNormals[ri, c] = n;
+            }
+        }
+
+        var rootTT = midRows > 0 ? grid[0, cols / 2] - rootPos : tipPos - rootPos;
+        if (rootTT.LengthSq < 1e-8) rootTT = fwd;
+        var rootNorm = side.Cross(rootTT).Normalized();
+        if (rootNorm.LengthSq < 1e-6 || rootNorm.Dot(normal0) < 0) rootNorm = normal0;
+
+        var tipTT = midRows > 0 ? tipPos - grid[midRows - 1, cols / 2] : tipPos - rootPos;
+        if (tipTT.LengthSq < 1e-8) tipTT = fwd;
+        var tipNorm = side.Cross(tipTT).Normalized();
+        if (tipNorm.LengthSq < 1e-6 || tipNorm.Dot(normal0) < 0) tipNorm = normal0;
 
         // Color & age tinting: younger leaves paler/greener/fresher, older leaves deeper/darker
         var youngBase = Primitives.Mix(c2, new[] { 0.65, 0.82, 0.35 }, 0.40);
@@ -193,10 +234,9 @@ public static class Broadleaf
             double u2 = face; // 0 = upper face, 1 = lower face
 
             // Root vertex at station 0
-            var rootPos = SurfacePos(0.0, 0.0);
-            var rootNorm = SurfaceNormal(0.0, 0.0) * faceSign;
+            var rootNormFace = rootNorm * faceSign;
             var rootColor = face == 0 ? baseCol : underCol;
-            int rootIdx = m.AddVertex(rootPos, rootNorm, rootColor, 1.0, 0.0, 0.5, u2, 1.0);
+            int rootIdx = m.AddVertex(rootPos, rootNormFace, rootColor, 1.0, 0.0, 0.5, u2, 1.0);
 
             // Middle rows
             int[] rowStarts = new int[rows - 1];
@@ -208,8 +248,8 @@ public static class Broadleaf
                 for (int c = 0; c <= cols; c++)
                 {
                     double x = (double)c / cols * 2.0 - 1.0;
-                    var pos = SurfacePos(t, x);
-                    var norm = SurfaceNormal(t, x) * faceSign;
+                    var pos = grid[r - 1, c];
+                    var norm = gridNormals[r - 1, c] * faceSign;
                     var cGrad = Primitives.Mix(baseCol, tipCol, t);
                     // Midrib vein subtle highlight
                     if (Math.Abs(x) < 0.15)
@@ -221,10 +261,9 @@ public static class Broadleaf
             }
 
             // Tip vertex at station rows
-            var tipPos = SurfacePos(1.0, 0.0);
-            var tipNorm = SurfaceNormal(1.0, 0.0) * faceSign;
+            var tipNormFace = tipNorm * faceSign;
             var tipColor = face == 0 ? tipCol : underCol;
-            int tipIdx = m.AddVertex(tipPos, tipNorm, tipColor, 1.0, 1.0, 0.5, u2, 1.0);
+            int tipIdx = m.AddVertex(tipPos, tipNormFace, tipColor, 1.0, 1.0, 0.5, u2, 1.0);
 
             // Triangulation: root fan
             int firstRowStart = rowStarts[0];
