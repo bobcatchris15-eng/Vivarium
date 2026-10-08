@@ -23,6 +23,8 @@ uniform float cuticle_sheen = 0.3;
 uniform float leaf_transmission = 0.25;
 uniform int leaf_pattern = 0;
 uniform bool pitcher_tissue = false;
+// 0 none, 1 pale veins, 2 silver-patterned, 3 red-purple underside (+ flushed margins).
+uniform int leaf_variegation = 0;
 uniform bool single_leaf_sheets = false;
 uniform sampler2D leaf_scan_col : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler2D leaf_scan_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -207,18 +209,40 @@ void fragment() {
                 c *= 0.90 + 0.14 * cells + 0.10 * branch;
                 c = mix(c, c * vec3(1.06, 1.13, 0.95), edge * 0.22);
             }
+            // Every broad/strap blade: pale raised midrib and secondary veins on the upper face, fresher
+            // saturated young leaves, and a lift so shaded foliage still reads as leaf rather than silhouette.
+            float midrib = 1.0 - smoothstep(0.010, 0.034 + fwidth(across), abs(across));
+            float top_face = 1.0 - face;
+            c = mix(c, c * vec3(1.55, 1.58, 1.18) + vec3(0.010, 0.014, 0.006), midrib * top_face * 0.6);
+            c = mix(c, c * vec3(1.22, 1.26, 1.08), branch * top_face * (leaf_pattern == 5 ? 0.12 : 0.32));
+            float young = smoothstep(0.6, 0.95, leaf_age);
+            c = mix(c, c * vec3(1.02, 1.28, 0.80), young * 0.45);
+            c *= mix(1.3, 1.0, smoothstep(0.015, 0.07, lum(c)));
+            if (leaf_variegation == 1) {
+                float pv = clamp(midrib * 0.9 + branch * 0.75, 0.0, 1.0);
+                c = mix(c, vec3(lum(c)) * vec3(2.5, 2.8, 2.2) + vec3(0.03, 0.04, 0.03), pv * top_face * 0.65);
+            } else if (leaf_variegation == 2) {
+                float sv = smoothstep(0.42, 0.62, vnoise(vec2(along * 6.0, across * 8.0) + inst.w * 5.0));
+                sv *= smoothstep(0.44, 0.22, abs(across)) * (1.0 - midrib) * (1.0 - branch * 0.7);
+                c = mix(c, vec3(0.30, 0.34, 0.32), sv * top_face * 0.62);
+            } else if (leaf_variegation == 3) {
+                c = mix(c, vec3(0.20, 0.025, 0.07) * (0.8 + 0.4 * cells), face * 0.85);
+                c = mix(c, c * vec3(1.9, 0.6, 0.85), edge * top_face * 0.45);
+            }
             float ridge = venation * (leaf_type == 1 || leaf_type == 4 ? 0.11 : 0.32);
             if (leaf_pattern == 3) ridge = venation * 0.50;
             else if (leaf_pattern == 4) ridge = venation * 0.06;
             else if (leaf_pattern == 5) ridge = venation * 0.08 + (stripe - 0.5) * 0.10;
             else if (leaf_pattern == 6) ridge = venation * 0.24 + branch * 0.10;
+            ridge -= midrib * 0.10; // shallow midrib groove
             vec3 leaf_n = normalize(vec3(-dFdx(ridge) * 0.8, -dFdy(ridge) * 0.8, 1.0));
             n = surface_normal(wn, world_pos, UV, leaf_n);
             float family_rough = leaf_type == 1 ? 0.78 : leaf_type == 2 ? 0.74 : leaf_type == 3 ? 0.52 : leaf_type == 4 ? 0.46 : leaf_type == 5 ? 0.68 : 0.61;
             rough = clamp(family_rough - 0.12 - cuticle_sheen * 0.22 + (cells - 0.5) * 0.13 + edge * 0.05 + face * 0.10, 0.24, 0.9);
             if (leaf_pattern == 3) rough = clamp(rough - 0.18 * (1.0 - face), 0.28, 0.82);
             else if (leaf_pattern == 4) rough = clamp(rough - 0.09 + (cells - 0.5) * 0.08, 0.34, 0.82);
-            else if (leaf_pattern == 5) rough = clamp(rough + 0.10, 0.58, 0.96);
+            else if (leaf_pattern == 5) rough = clamp(rough - 0.04, 0.34, 0.9);
+            rough = clamp(rough - 0.10 * top_face, 0.22, 0.95); // waxy upper cuticle
             if (leaf_scan_blend > 0.0) {
                 vec2 atlas_axis = leaf_scan_swap ? vec2(UV.y, UV.x) : UV;
                 vec2 scan_uv = leaf_scan_rect.xy + atlas_axis * leaf_scan_rect.zw;
@@ -244,13 +268,18 @@ void fragment() {
             rough = leaf_type == 4 ? 0.52 : leaf_type == 5 ? 0.66 : 0.72;
         }
     }
+    if (surface_mode == 2 && UV2.y > 0.5 && UV2.x < 1.5) {
+        // Fresnel sheen of the cuticle at grazing angles.
+        float ndv = clamp(abs(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos))), 0.0, 1.0);
+        c += c * 0.6 * pow(1.0 - ndv, 3.0) + vec3(0.010, 0.012, 0.010) * pow(1.0 - ndv, 4.0);
+    }
     // Stress fades to a luminance-matched olive-brown; only genuinely failing tissue reads as straw.
     float health = smoothstep(0.0, 0.45, clamp(inst.y, 0.0, 1.0));
     vec3 faded = vec3(dot(c, vec3(0.33))) * vec3(1.25, 1.05, 0.55);
     ALBEDO = mix(faded, c, 0.30 + 0.70 * health);
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
-    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.45, 0.65, cuticle_sheen)) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
+    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.5, 0.72, cuticle_sheen)) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
     BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? c * vec3(1.30, 1.35, 0.60) * leaf_transmission * 1.4 : c * 0.025)) : c * (surface_mode == 3 ? 0.2 : 0.07);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

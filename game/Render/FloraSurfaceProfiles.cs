@@ -19,6 +19,7 @@ internal static class FloraSurfaceProfiles
         material.SetShaderParameter("cuticle_sheen", leaf.Sheen);
         material.SetShaderParameter("leaf_transmission", leaf.Transmission);
         material.SetShaderParameter("leaf_pattern", LeafPattern(species.Id));
+        material.SetShaderParameter("leaf_variegation", Variegation(species.Id));
         material.SetShaderParameter("pitcher_tissue", species.Id == "pitcher_plant");
         material.SetShaderParameter("single_leaf_sheets", species.Id is "pitcher_plant" or "blue_sundew"
             or "snaptrap" or "veilblade" or "hookthicket" or "kinkcane");
@@ -92,6 +93,16 @@ internal static class FloraSurfaceProfiles
         "fenhook" or "glassfinger" or "sunstone_rosette" or "mooncoin" => 4,
         "glassrush" or "ringreed" or "frosttussock" or "streamribbon" or "veilblade" or "kinkcane" => 5,
         "veilfern" => 6,
+        _ => 0,
+    };
+
+    // Leaf colour patterning, matched to each species' description: 0 none, 1 pale veins,
+    // 2 silver-patterned, 3 red-purple underside. Most species stay plain green.
+    public static int Variegation(string id) => id switch
+    {
+        "mirrorleaf" or "trifold" => 1,
+        "mooncoin" => 2,
+        "lanternbrush" or "snaptrap" => 3,
         _ => 0,
     };
 

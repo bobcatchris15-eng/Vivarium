@@ -19,6 +19,7 @@ uniform float plant_stiffness = 7.;
 uniform float tissue_scale = 1.6;
 uniform float canopy_occlusion = .15;
 uniform bool volumetric = false;
+uniform int leaf_variegation = 0;
 uniform float review_time = -1.;
 varying vec4 plant;
 varying vec4 blade;
@@ -76,6 +77,13 @@ void fragment() {
     vec4 anatomy = texture(vein_mask,UV);
     color *= 1.+(blade.z-.5)*.08+(plant.x-.5)*.05;
     color = mix(color,color*vec3(1.15,1.18,1.03),anatomy.r*vein_strength);
+    float topf = 1. - side;
+    // Pale midrib/veins and young-leaf freshness; lift very dark tissue so it reads as leaf.
+    color = mix(color, color*vec3(1.5,1.55,1.15)+vec3(.008,.012,.005), anatomy.r*topf*.55);
+    color *= mix(1.3, 1., smoothstep(.015,.07,dot(color,vec3(.2126,.7152,.0722))));
+    if (leaf_variegation == 1) color = mix(color, vec3(dot(color,vec3(.33)))*vec3(2.5,2.8,2.2)+.03, anatomy.r*topf*.6);
+    else if (leaf_variegation == 2) color = mix(color, vec3(.30,.34,.32), smoothstep(.45,.65,texture(tissue_physical,vec3(tissue_uv*.5,layer)).b)*(1.-anatomy.r)*topf*.55);
+    else if (leaf_variegation == 3) color = mix(color, vec3(.20,.025,.07)*(.8+.4*photograph.g), side*.85);
     if (volumetric) color = mix(color,srgb_to_linear(COLOR.rgb),smoothstep(.64,.99,UV.x)*.72);
     vec4 physical = mix(texture(tissue_physical,vec3(tissue_uv,layer)),texture(tissue_physical,vec3(tissue_uv,second)),blend);
     vec3 micro = mix(texture(tissue_normal,vec3(tissue_uv,layer)),texture(tissue_normal,vec3(tissue_uv,second)),blend).xyz*2.-1.;
@@ -88,8 +96,10 @@ void fragment() {
     NORMAL=normalize((VIEW_MATRIX*vec4(mapped,0.)).xyz);
     color*=mix(.8,1.35,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(1.,.8,fract(seed*5.3)));
     ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,.3+.7*smoothstep(0.,.45,plant.y));
-    ROUGHNESS=clamp(mix(leaf_roughness,back_roughness,side)+(physical.r-.5)*.13-anatomy.r*.025,.22,.98);
-    SPECULAR=volumetric ? .5 : .45;
+    ROUGHNESS=clamp(mix(leaf_roughness-.1,back_roughness,side)+(physical.r-.5)*.13-anatomy.r*.025,.2,.98);
+    float ndv=clamp(abs(dot(wn,normalize(CAMERA_POSITION_WORLD-position_world))),0.,1.);
+    ALBEDO+=ALBEDO*.6*pow(1.-ndv,3.)*topf;
+    SPECULAR=volumetric ? .5 : .55;
     // Thicker midrib/veins transmit less; never bake the direction of illumination into color.
     BACKLIGHT=color*vec3(1.2,1.3,.6)*transmission*1.3*physical.g*(1.-anatomy.g*.65)*(1.25-.5*physical.b);
     AO=1.-canopy_occlusion*(1.-clamp(position_local.y,0.,1.));
