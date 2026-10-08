@@ -59,7 +59,7 @@ void fragment() {
     float rootOrganic = 0.88 + 0.12 * vnoise(vec2(along * 0.8, depth * 4.0) + 9.0);
     col = mix(srgb_to_linear(rim_color) * rootOrganic, col, smoothstep(0.0, 0.038, depth));
     ALBEDO = col;
-    EMISSION = vec3(0.0);
+    EMISSION = col * 0.16;   // minimum ambient: cutaway faces sit outside the grow light and went near-black on the dark backdrop
     ROUGHNESS = clamp(t.a, 0.6, 1.0);
     SPECULAR = 0.25;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);

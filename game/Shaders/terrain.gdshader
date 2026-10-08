@@ -10,6 +10,7 @@ uniform sampler2D field_tex : filter_linear, repeat_disable;
 uniform sampler2D sub_tex : filter_linear, repeat_disable;
 uniform sampler2D litter_tex : filter_linear, repeat_disable;
 uniform sampler2D ambient_tex : filter_linear, repeat_disable;
+uniform sampler2D cover_tex : filter_linear, repeat_disable;   // moss/lichen colony occupancy (IslandRenderer)
 uniform vec4 field_rect;            // origin.x, origin.z, size.x, size.z
 uniform int overlay_mode = 0;       // 0 none, 1 moisture, 2 nutrients, 3 light, 4 substrate
 uniform float overlay_strength = 0.85;
@@ -116,9 +117,11 @@ void fragment() {
     float wDamp = smoothstep(0.38, 0.82, moisture + (macro - 0.5) * 0.18) * (1.0 - wSilt);
     float stored_litter = smooth_field(litter_tex, fuv).r;
     float ambient_cover = smooth_field(ambient_tex, fuv).r;
+    float colony = smooth_field(cover_tex, fuv).r;
     float wLeaf = stored_litter * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
     float wMoss = smoothstep(0.48, 0.83, moisture) * smoothstep(0.20, 0.53, light)
-        * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8)) * (1.0 - wSilt);
+        * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8)) * (1.0 - wSilt)
+        * (1.0 - 0.75 * smoothstep(0.04, 0.45, colony));
     float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
     float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
 
@@ -220,7 +223,8 @@ void fragment() {
     float gedge = wGrav * (1.0 - wGrav) * 4.0;
     float favour = moisture * 0.7 + (1.0 - light) * 0.55 + ambient_cover * 0.5 + gedge * 0.6 - 0.40;
     float patchn = vnoise(world_pos.xz * 1.7 + vec2(3.3, 9.1)) * 0.65 + vnoise(world_pos.xz * 4.9 + 1.2) * 0.35;
-    float gm = smoothstep(0.0, 0.35, favour + (patchn - 0.5) * 0.6) * bare * (1.0 - wSilt);
+    float gm = smoothstep(0.0, 0.35, favour + (patchn - 0.5) * 0.6) * bare * (1.0 - wSilt)
+        * (1.0 - smoothstep(0.04, 0.45, colony));   // bare ground around real colonies so they read as distinct patches
     if (gm > 0.02) {
         float speck;
         vec4 cl = moss_clumps(world_pos.xz * 38.0, speck);

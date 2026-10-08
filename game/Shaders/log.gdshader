@@ -15,8 +15,12 @@ uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform float bark_tile_metres = 0.5;
 
 varying vec3 obj_pos;
+varying vec3 wld_pos;
+// Coverage-colony mask from IslandRenderer: procedural moss steps aside where a real moss/lichen colony lives.
+uniform sampler2D cover_tex : filter_linear, repeat_disable;
+uniform vec4 field_rect = vec4(0.0, 0.0, 1.0, 1.0);
 
-void vertex() { obj_pos = VERTEX; }
+void vertex() { obj_pos = VERTEX; wld_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
@@ -55,7 +59,8 @@ void fragment() {
         vec4 cl2 = moss_cells(cp * 2.7 + 3.1, 0.55, 0.35);
         float h = cl.x * (0.75 + 0.25 * cl2.x);
         // ragged edge: coverage breaks at clump granularity instead of a smooth felt boundary
-        float mossy = clamp(max(vmoss, cover * 0.95), 0.0, 1.0);
+        float colony = texture(cover_tex, (wld_pos.xz - field_rect.xy) / field_rect.zw).r;
+        float mossy = clamp(max(vmoss, cover * 0.95) * (1.0 - smoothstep(0.05, 0.5, colony)), 0.0, 1.0);
         mossy = clamp(mossy + (h - 0.55) * 0.7 * (1.0 - mossy * mossy) - (1.0 - h) * 0.25 * mossy * (1.0 - mossy), 0.0, 1.0);
         // damp, darker bark where moss does not reach
         vec3 barkTint = mix(vcol, vec3(0.2, 0.14, 0.09), 0.55 + 0.45 * vmoss) * 0.72;
@@ -79,6 +84,7 @@ void fragment() {
         mn = normalize(vec3(mn.xy * 0.6 + dn.xy, dn.z));
         tn = normalize(mix(tn, mn, mossy));
         ALBEDO = col;
+        EMISSION = col * 0.025;   // small ambient floor so shaded log undersides (sparse_dry) do not crush to black
         ROUGHNESS = rough;
         SPECULAR = 0.3;
         // bark mesh has no tangents: build them from the log axis (+X in object space)

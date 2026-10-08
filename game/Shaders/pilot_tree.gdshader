@@ -60,6 +60,7 @@ void fragment() {
         ROUGHNESS = mix(0.72, max(0.78, texture(bark_rgh, grain).r), wood);
         SPECULAR = mix(0.26, 0.18, wood);
         BACKLIGHT = tissue * (1.0 - wood) * 0.12;
+        EMISSION = ALBEDO * 0.05 * wood;   // ambient floor: shaded trunk faces (sparse_dry, mixed_depth) crushed to black
 
         // Derivative tangent frame follows the cylindrical mesh UVs on trunk, branches and buttresses.
         vec3 dpdx = dFdx(VERTEX), dpdy = dFdy(VERTEX);

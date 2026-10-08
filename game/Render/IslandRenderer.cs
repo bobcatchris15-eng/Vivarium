@@ -32,6 +32,15 @@ public partial class IslandRenderer : Node3D
     private Image _ambientImage = null!;
     private ImageTexture _ambientTex = null!;
     private byte[] _ambientBytes = System.Array.Empty<byte>();
+    // Coverage-colony mask (Mat + Crust occupancy per field cell). terrain.gdshader and log.gdshader suppress their
+    // procedural moss under/around real colonies so the species patches keep their own identity.
+    private Image _coverImage = null!;
+    private ImageTexture _coverTex = null!;
+    private byte[] _coverBytes = System.Array.Empty<byte>();
+    private int[] _coverCount = System.Array.Empty<int>();
+    private Vector4 _fieldRect;
+    /// <summary>Other materials (log bark) that read cover_tex/field_rect; refreshed with the field textures.</summary>
+    public static readonly System.Collections.Generic.List<ShaderMaterial> CoverMaskConsumers = new();
     public int OverlayMode { get; set; }
     private ShaderMaterial _strataMat = null!;
     private MeshInstance3D _top = null!, _walls = null!;
@@ -74,6 +83,12 @@ public partial class IslandRenderer : Node3D
         _ambientTex = ImageTexture.CreateFromImage(_ambientImage);
         _terrainMat.SetShaderParameter("ambient_tex", _ambientTex);
         _ambientBytes = new byte[g.Count];
+        _coverImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.R8);
+        _coverTex = ImageTexture.CreateFromImage(_coverImage);
+        _terrainMat.SetShaderParameter("cover_tex", _coverTex);
+        _coverBytes = new byte[g.Count];
+        _coverCount = new int[g.Count];
+        _fieldRect = new Vector4((float)g.OriginX, (float)g.OriginZ, (float)(g.Nx * g.CellSize), (float)(g.Nz * g.CellSize));
         _nearestDomain = new int[g.Count];
         for (int c = 0; c < g.Count; c++) _nearestDomain[c] = g.InDomain(c) ? c : g.NearestDomainCell(g.CellCenter(c));
 
@@ -116,6 +131,34 @@ public partial class IslandRenderer : Node3D
         UpdateFieldTexture(propsDirty);
     }
 
+    private void UpdateCoverMask()
+    {
+        var g = _w.Grid;
+        System.Array.Clear(_coverCount);
+        const double cs = Vivarium.Sim.Coverage.CoverageSpec.CellSize;
+        foreach (var layer in new[] { _w.Coverage.Mat, _w.Coverage.Crust })
+            foreach (var t in layer.Tiles)
+            {
+                int gx0 = t.Ti * Vivarium.Sim.Coverage.CoverageSpec.TileEdge, gz0 = t.Tj * Vivarium.Sim.Coverage.CoverageSpec.TileEdge;
+                for (int k = 0; k < t.Occ.Length; k++)
+                {
+                    if (t.Occ[k] == 0) continue;
+                    int lx = k % Vivarium.Sim.Coverage.CoverageSpec.TileEdge, lz = k / Vivarium.Sim.Coverage.CoverageSpec.TileEdge;
+                    int c = g.CellAt(new Vivarium.Sim.Core.Vec2((gx0 + lx + 0.5) * cs, (gz0 + lz + 0.5) * cs));
+                    if (c >= 0) _coverCount[c]++;
+                }
+            }
+        // ~40 occupied 2 cm cells (a quarter of a 25 cm field cell) saturates the mask
+        for (int c = 0; c < g.Count; c++) _coverBytes[c] = (byte)System.Math.Min(255, _coverCount[c] * 255 / 40);
+        _coverImage.SetData(g.Nx, g.Nz, false, Image.Format.R8, _coverBytes);
+        _coverTex.Update(_coverImage);
+        foreach (var m in CoverMaskConsumers)
+        {
+            m.SetShaderParameter("cover_tex", _coverTex);
+            m.SetShaderParameter("field_rect", _fieldRect);
+        }
+    }
+
     private void UpdateFieldTexture(bool updateSubstrate = true)
     {
         var g = _w.Grid; var f = _w.Fields;
@@ -151,6 +194,7 @@ public partial class IslandRenderer : Node3D
         _litterTex.Update(_litterImage);
         _ambientImage.SetData(g.Nx, g.Nz, false, Image.Format.R8, _ambientBytes);
         _ambientTex.Update(_ambientImage);
+        UpdateCoverMask();
         if (updateSubstrate)
         {
             _propsVersion = _w.Props.Version;
