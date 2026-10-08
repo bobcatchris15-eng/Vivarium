@@ -105,8 +105,22 @@ public static partial class OrganismMeshes
             case "vine_fenhook": case "fenhook": Fenhook(m, rng, seed, c1, c2, juvenile); break;
             case "mushroom_cluster": Mushrooms(m, rng, seed, c1, c2, juvenile); break;
             case "bracket": Bracket(m, rng, c1, c2); break;
-            case "plasmodium": Plasmodium(m, rng, c1, c2); break;
-            case "succulent": Succulent(m, rng, seed, c1, c2, juvenile); break;
+            case "epiphytic_rosette":
+            case "epiphyte":
+            case "rosette":
+            case "bromeliad":
+            case "tillandsia":
+            case "succulent_perch":
+            case "perched_rosette":
+            case "perched_epiphyte":
+                EpiphyticRosetteMesh(m, rng, seed, c1, c2, juvenile);
+                break;
+            case "succulent":
+                if (sp.Id.Contains("epiphyte") || sp.Id.Contains("perch"))
+                    EpiphyticRosetteMesh(m, rng, seed, c1, c2, juvenile);
+                else
+                    Succulent(m, rng, seed, c1, c2, juvenile);
+                break;
             case "tussock": Tussock(m, rng, seed, c1, c2, juvenile); break;
             case "kinkcane_brake": Kinkcane(m, rng, c1, c2, sp.Height / Math.Max(0.01, sp.RadiusAtMax)); break;
             case "veilblade_curtain": Veilblade(m, rng, c1, c2); break;
@@ -2927,6 +2941,30 @@ public static partial class OrganismMeshes
                     (i, v) => (petioleCol, 1.0, i, v, 0, 0));
                 IvyLeaf(petEnd, (new Vec3(0, 0.65, 0) + lDir * 0.35).Normalized(), new Vec3(0, 0, 1), 1.05);
             }
+
+            // Trailing pendulous tendril draping downward under gravity off host surface
+            var p0 = new Vec3(0, 0, 0.008);
+            var p1 = p0 + new Vec3(rng.Range(-0.010, 0.010), -0.048, 0.007);
+            var p2 = p1 + new Vec3(rng.Range(-0.012, 0.012), -0.052, 0.005);
+            var p3 = p2 + new Vec3(rng.Range(-0.008, 0.008), -0.046, 0.002);
+
+            Primitives.Tube(m, new[] { p0, p1, p2, p3 }, new[] { 0.0026, 0.0020, 0.0015, 0.0010 }, 5,
+                (i, v) => (stemCol, 1.0, i / 3.0, v, 0, 0));
+
+            // Small distally-spaced leaves and holdfasts along trailing stem
+            Primitives.Tube(m, new[] { p1, p1 - new Vec3(0, 0.004, 0.010) }, new[] { 0.0015, 0.0008 }, 4,
+                (i, v) => (rootletCol, 1.0, i, v, 0, 0));
+            var pet1 = p1 + new Vec3(0.012, -0.014, 0.005);
+            Primitives.Tube(m, new[] { p1, pet1 }, new[] { 0.0018, 0.0012 }, 4, (i, v) => (petioleCol, 1.0, i, v, 0, 0));
+            IvyLeaf(pet1, new Vec3(0.35, -0.90, 0.20).Normalized(), new Vec3(0, 0, 1), 0.65);
+
+            var pet2 = p2 + new Vec3(-0.010, -0.014, 0.004);
+            Primitives.Tube(m, new[] { p2, pet2 }, new[] { 0.0016, 0.0010 }, 4, (i, v) => (petioleCol, 1.0, i, v, 0, 0));
+            IvyLeaf(pet2, new Vec3(-0.30, -0.92, 0.18).Normalized(), new Vec3(0, 0, 1), 0.50);
+
+            var pet3 = p3 + new Vec3(0.004, -0.012, 0.003);
+            Primitives.Tube(m, new[] { p3, pet3 }, new[] { 0.0013, 0.0008 }, 4, (i, v) => (petioleCol, 1.0, i, v, 0, 0));
+            IvyLeaf(pet3, new Vec3(0.08, -0.98, 0.12).Normalized(), new Vec3(0, 0, 1), 0.38);
         }
         else
         {
@@ -2982,6 +3020,27 @@ public static partial class OrganismMeshes
 
         // Opposite pair of lanceolate leaves
         PairedLeaves(Vec3.Zero, new Vec3(0, 1, 0), attached ? new Vec3(0, 0, 1) : Vec3.Up, attached ? 1.05 : 0.85);
+
+        if (attached)
+        {
+            // Trailing pendulous twining tendril draping downward under gravity off host
+            var p0 = new Vec3(0, 0, 0.009);
+            var p1 = p0 + new Vec3(0.016 * Math.Sin(1.6), -0.052, 0.008);
+            var p2 = p1 + new Vec3(0.020 * Math.Sin(3.8), -0.055, 0.006);
+            var p3 = p2 + new Vec3(0.015 * Math.Sin(5.8), -0.048, 0.004);
+
+            Primitives.Tube(m, new[] { p0, p1, p2, p3 }, new[] { 0.0026, 0.0020, 0.0015, 0.0010 }, 5,
+                (i, v) => (stemCol, 1.0, i / 3.0, v, 0, 0));
+
+            // Small distally-spaced opposite leaf pairs along hanging tendril
+            PairedLeaves(p1, (p2 - p0).Normalized(), new Vec3(0, 0, 1), 0.62);
+            PairedLeaves(p2, (p3 - p1).Normalized(), new Vec3(0, 0, 1), 0.48);
+
+            // Terminal holdfast tendril curl
+            var curlTip = p3 + new Vec3(0.008, -0.016, -0.006);
+            Primitives.Tube(m, new[] { p3, curlTip }, new[] { 0.0010, 0.0005 }, 4,
+                (i, v) => (collarCol, 1.0, i, v, 0, 0));
+        }
     }
 
     private static void FenhookNode(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool attached)
@@ -3018,6 +3077,52 @@ public static partial class OrganismMeshes
 
             for (int v = bladeStart; v < m.VertexCount; v++)
                 if (m.UV2[v * 2] > 0.5f) m.SetColor(v, leafUnderCol[0], leafUnderCol[1], leafUnderCol[2], 1.0);
+        }
+
+        if (attached)
+        {
+            // Trailing pendulous stem draping downward under gravity off host
+            var p0 = new Vec3(0, 0, 0.008);
+            var p1 = p0 + new Vec3(rng.Range(-0.010, 0.010), -0.052, 0.009);
+            var p2 = p1 + new Vec3(rng.Range(-0.012, 0.012), -0.055, 0.007);
+            var p3 = p2 + new Vec3(rng.Range(-0.008, 0.008), -0.046, 0.004);
+
+            Primitives.Tube(m, new[] { p0, p1, p2, p3 }, new[] { 0.0028, 0.0022, 0.0016, 0.0011 }, 6,
+                (i, v) => (stemCol, 1.0, i / 3.0, v, 0.0, 0.0));
+
+            // Recurved holdfast hooks along hanging stem
+            foreach (var hPos in new[] { p1, p2 })
+            {
+                var hDir = new Vec3(rng.Range(-0.004, 0.004), 0.004, -0.008);
+                Primitives.Tube(m, new[] { hPos, hPos + hDir }, new[] { 0.0014, 0.0006 }, 4,
+                    (i, v) => (hookCol, 1.0, i, v, 0, 0));
+            }
+
+            // Distally-spaced small starry whorls
+            void DistalWhorl(Vec3 pos, Vec3 fwd, double scale)
+            {
+                int wLeaves = 5;
+                double wLen = scale * rng.Range(0.045, 0.065);
+                double wWid = wLen * 0.18;
+                var side = fwd.Cross(new Vec3(0, 0, 1)).Normalized();
+                if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
+
+                for (int w = 0; w < wLeaves; w++)
+                {
+                    double a = w * (Math.PI * 2 / wLeaves);
+                    var lDir = (side * Math.Cos(a) + new Vec3(0, 0, 1) * (Math.Sin(a) * 0.7) - fwd * 0.25).Normalized();
+                    var lSide = lDir.Cross(fwd).Normalized();
+                    int bStart = m.VertexCount;
+                    FoliageBlade.Build(m, pos, pos + lDir * wLen, lSide, wWid,
+                        Primitives.Scale(bladeCol, 0.80), bladeCol,
+                        camber: 0.10, curl: 0.12, shoulder: 0.80, segments: 2);
+                    for (int v = bStart; v < m.VertexCount; v++)
+                        if (m.UV2[v * 2] > 0.5f) m.SetColor(v, leafUnderCol[0], leafUnderCol[1], leafUnderCol[2], 1.0);
+                }
+            }
+
+            DistalWhorl(p1, (p2 - p0).Normalized(), 0.60);
+            DistalWhorl(p2, (p3 - p1).Normalized(), 0.45);
         }
     }
 
@@ -3195,6 +3300,34 @@ public static partial class OrganismMeshes
                         GrowShoot(nextY, nextTh + branchSide * 0.22, 4, 1, curR * 0.75);
                     }
 
+                    // Trailing pendulous streamers draping downward under gravity off host bark
+                    if (order == 0 && (node == 3 || node == 5))
+                    {
+                        var hangStart = p1;
+                        double hangDrop = rng.Range(0.18, 0.28);
+                        var hDir = (norm * 0.50 + side * (node == 3 ? 0.35 : -0.35)).Normalized();
+                        var hp0 = hangStart;
+                        var hp1 = hangStart + hDir * 0.025 - Vec3.Up * (hangDrop * 0.33);
+                        var hp2 = hp1 + hDir * 0.018 - Vec3.Up * (hangDrop * 0.38) + side * rng.Range(-0.012, 0.012);
+                        var hp3 = hp2 + hDir * 0.010 - Vec3.Up * (hangDrop * 0.29) + side * rng.Range(-0.008, 0.008);
+
+                        Wood(m, new[] { hp0, hp1, hp2, hp3 }, new[] { curR * 0.70, curR * 0.55, curR * 0.42, curR * 0.30 }, 5);
+
+                        // Holdfast rootlets on hanging shoot
+                        Primitives.Tube(m, new[] { hp1, hp1 - norm * 0.010 }, new[] { 0.0016, 0.0008 }, 4,
+                            (ri, rv) => (rootletCol, 1.0, ri, rv, 0, 0));
+
+                        // Small distally-spaced ivy leaves along downward-trailing streamer
+                        var hlDir1 = (side * 0.65 - Vec3.Up * 0.75).Normalized();
+                        IvyLeaf(hp1 + hlDir1 * 0.014, hlDir1, norm, 0.68);
+
+                        var hlDir2 = (-side * 0.60 - Vec3.Up * 0.80).Normalized();
+                        IvyLeaf(hp2 + hlDir2 * 0.012, hlDir2, norm, 0.54);
+
+                        var hlDir3 = (norm * 0.20 - Vec3.Up * 0.95).Normalized();
+                        IvyLeaf(hp3 + hlDir3 * 0.010, hlDir3, norm, 0.42);
+                    }
+
                     y = nextY;
                     th = nextTh;
                     curR *= 0.90;
@@ -3365,6 +3498,32 @@ public static partial class OrganismMeshes
                         Wood(m, secPath, secRadii, 6);
                         PairedLeaves(secPath[1], (secPath[2] - secPath[0]).Normalized(), HostNormal(secTh + 0.3), 0.90, 0.6);
                         PairedLeaves(secPath[2], (secPath[3] - secPath[1]).Normalized(), HostNormal(secTh + 0.6), 0.85, 0.7);
+                    }
+
+                    // Trailing pendulous twining cord draping downward under gravity off host
+                    if (i == 4 || i == 6)
+                    {
+                        var hangStart = p1;
+                        double hangDrop = rng.Range(0.20, 0.28);
+                        var hNorm = n1;
+                        var hSide = (p1 - p0).Cross(n1).Normalized();
+                        var sp0 = hangStart;
+                        var sp1 = hangStart + hNorm * 0.026 - Vec3.Up * (hangDrop * 0.35) + hSide * 0.016;
+                        var sp2 = sp1 + hNorm * 0.020 - Vec3.Up * (hangDrop * 0.38) - hSide * 0.014;
+                        var sp3 = sp2 + hNorm * 0.012 - Vec3.Up * (hangDrop * 0.27) + hSide * 0.010;
+
+                        var hPts = new[] { sp0, sp1, sp2, sp3 };
+                        var hRads = new[] { arcRadii[3] * 0.65, arcRadii[3] * 0.50, arcRadii[3] * 0.38, arcRadii[3] * 0.25 };
+                        Wood(m, hPts, hRads, 5);
+
+                        // Small distally-spaced opposite leaf pairs along hanging twiner
+                        PairedLeaves(sp1, (sp2 - sp0).Normalized(), hNorm, 0.68, (double)i / nodes);
+                        PairedLeaves(sp2, (sp3 - sp1).Normalized(), hNorm, 0.52, (double)(i + 1) / nodes);
+
+                        // Terminal holdfast tendril curl at tip of hanging cord
+                        var curlEnd = sp3 + (hNorm * 0.28 - Vec3.Up * 0.72).Normalized() * 0.016;
+                        Primitives.Tube(m, new[] { sp3, curlEnd }, new[] { 0.0012, 0.0006 }, 4,
+                            (cu, cv) => (collarCol, 1.0, cu, cv, 0, 0));
                     }
 
                     // Upper crown searching tendril whips
@@ -4151,6 +4310,30 @@ public static partial class OrganismMeshes
             Primitives.TriangleFacing(m, k0, k1, l0, nBotL);
             Primitives.TriangleFacing(m, k1, l1, l0, nBotL);
         }
+    }
+
+    /// <summary>
+    /// Epiphytic Rosette: Spiraling vase-like crown with curving, tapering leaves flaring outward
+    /// and arching gently downward (Tillandsia / Bromeliad architectural style) perched on logs or rocks.
+    /// </summary>
+    public static void EpiphyticRosetteMesh(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
+    {
+        var p = new EpiphyticRosetteParams(
+            LeafCount: juvenile ? 12 : 20,
+            FlareRadius: juvenile ? 0.24 : 0.36,
+            LeafCurvature: 0.90,
+            Drape: juvenile ? 0.55 : 0.95,
+            InnerCupDepth: juvenile ? 0.06 : 0.12,
+            CrownHeight: juvenile ? 0.18 : 0.28,
+            LeafWidth: juvenile ? 0.035 : 0.048,
+            Camber: 0.12,
+            MidribFold: 0.10,
+            TipCurl: 0.10,
+            Variegation: (seed % 3 == 0) ? RosetteVariegation.MarginStripe : (seed % 3 == 1) ? RosetteVariegation.CenterStripe : RosetteVariegation.Banded,
+            VariegationStrength: 0.38,
+            DetailLevel: m.FloraDetailLevel ?? 0
+        );
+        EpiphyticRosette.Build(m, p, seed, c1, c2);
     }
 
 

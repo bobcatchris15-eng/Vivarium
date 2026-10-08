@@ -836,5 +836,155 @@ public class FormTests
             }
         }
     }
+
+    [Fact]
+    public void EpiphyticRosetteFormHasRealisticVaseCrownAndCurvedLeaves()
+    {
+        var p = new EpiphyticRosetteParams(
+            LeafCount: 18,
+            FlareRadius: 0.35,
+            LeafCurvature: 0.85,
+            Drape: 0.85,
+            InnerCupDepth: 0.12,
+            CrownHeight: 0.28,
+            LeafWidth: 0.045,
+            Camber: 0.12,
+            MidribFold: 0.10,
+            TipCurl: 0.10);
+
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var mesh = new MeshData();
+            int tris = EpiphyticRosette.Build(mesh, p, seed, Green, LightGreen);
+            Assert.Equal(tris, mesh.TriangleCount);
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+
+            // Triangle budget check
+            Assert.InRange(mesh.TriangleCount, 300, 3000);
+
+            // Bounds check: upright vase crown height and downward-trailing leaf tips
+            var bounds = mesh.Bounds();
+            Assert.True(bounds.Max.Y > 0.22, $"Vase crown must reach upright height > 0.22, got {bounds.Max.Y}");
+            Assert.True(bounds.Min.Y < 0.05, $"Outer leaves must arch downward, got {bounds.Min.Y}");
+
+            // Downward-trailing leaf coordinates below origin anchor
+            bool hasDownwardTrailingCoords = false;
+            for (int i = 0; i < mesh.VertexCount; i++)
+            {
+                if (mesh.Position(i).Y < 0.0)
+                {
+                    hasDownwardTrailingCoords = true;
+                    break;
+                }
+            }
+            Assert.True(hasDownwardTrailingCoords, "Outer curved leaves must trail downward below origin anchor");
+
+            // Leaf spans recording
+            Assert.True(mesh.LeafSpans.Count >= p.LeafCount, "Rosette must record leaf spans for foliage animation");
+        }
+
+        // Determinism check
+        var m1 = new MeshData();
+        var m2 = new MeshData();
+        EpiphyticRosette.Build(m1, p, 42, Green, LightGreen);
+        EpiphyticRosette.Build(m2, p, 42, Green, LightGreen);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+
+        // Parameter sweep: leaf count, flare radius, leaf curvature/drape, inner-cup depth, variegation
+        foreach (int count in new[] { 10, 24 })
+        {
+            var mVar = new MeshData();
+            EpiphyticRosette.Build(mVar, p with { LeafCount = count }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+        }
+
+        foreach (double radius in new[] { 0.22, 0.48 })
+        {
+            var mVar = new MeshData();
+            EpiphyticRosette.Build(mVar, p with { FlareRadius = radius }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+        }
+
+        foreach (double curvature in new[] { 0.40, 1.20 })
+        {
+            var mVar = new MeshData();
+            EpiphyticRosette.Build(mVar, p with { LeafCurvature = curvature, Drape = curvature }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+        }
+
+        foreach (double cupDepth in new[] { 0.04, 0.22 })
+        {
+            var mVar = new MeshData();
+            EpiphyticRosette.Build(mVar, p with { InnerCupDepth = cupDepth }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+        }
+
+        foreach (var variegation in new[] { RosetteVariegation.None, RosetteVariegation.MarginStripe, RosetteVariegation.CenterStripe, RosetteVariegation.Banded })
+        {
+            var mVar = new MeshData();
+            EpiphyticRosette.Build(mVar, p with { Variegation = variegation }, 42, Green, LightGreen);
+            AssertAllFinite(mVar);
+            AssertNoZeroAreaTriangles(mVar);
+        }
+
+        // Wiring via OrganismMeshes.Flora
+        var sp = new FloraSpeciesDef { Id = "epiphytic_bromeliad", Shape = "epiphytic_rosette", Color = Green, Color2 = LightGreen };
+        var mFlora = OrganismMeshes.Flora(sp, 7);
+        AssertAllFinite(mFlora);
+        AssertNoZeroAreaTriangles(mFlora);
+        Assert.InRange(mFlora.TriangleCount, 300, 4000);
+    }
+
+    [Theory]
+    [InlineData("clinglace")]
+    [InlineData("spiralvine")]
+    [InlineData("fenhook")]
+    public void ClimbersGenerateTrailingHangingSegments(string id)
+    {
+        var sp = new FloraSpeciesDef { Id = id, Shape = "vine", Color = Green, Color2 = LightGreen };
+
+        for (ulong seed = 1; seed <= 3; seed++)
+        {
+            // 1. Attached modular climber node: must generate downward-trailing hanging stems/tendrils (-Y direction)
+            var nodeMesh = OrganismMeshes.ClimberNode(sp, seed, attached: true);
+            AssertAllFinite(nodeMesh);
+            AssertNoZeroAreaTriangles(nodeMesh);
+
+            var bounds = nodeMesh.Bounds();
+            Assert.True(bounds.Min.Y < -0.05, $"{id} attached node must generate downward-trailing segment with Min.Y < -0.05, got {bounds.Min.Y}");
+
+            // Verify downward-trailing leaf or stem coordinates
+            bool hasDownwardCoords = false;
+            for (int i = 0; i < nodeMesh.VertexCount; i++)
+            {
+                if (nodeMesh.Position(i).Y < -0.05)
+                {
+                    hasDownwardCoords = true;
+                    break;
+                }
+            }
+            Assert.True(hasDownwardCoords, $"{id} attached node must contain downward-trailing coordinates below -0.05");
+
+            // Compare to unattached ground runner node (which stays near/above substrate)
+            var groundMesh = OrganismMeshes.ClimberNode(sp, seed, attached: false);
+            AssertAllFinite(groundMesh);
+            AssertNoZeroAreaTriangles(groundMesh);
+            Assert.True(bounds.Min.Y < groundMesh.Bounds().Min.Y, $"{id} attached node Min.Y ({bounds.Min.Y}) should reach lower than ground node Min.Y ({groundMesh.Bounds().Min.Y})");
+
+            // 2. Whole-organism mature climber
+            var floraMesh = OrganismMeshes.Flora(sp, seed, juvenile: false);
+            var floraMesh2 = OrganismMeshes.Flora(sp, seed, juvenile: false);
+            Assert.Equal(floraMesh.DigestHex(), floraMesh2.DigestHex());
+            AssertAllFinite(floraMesh);
+            AssertNoZeroAreaTriangles(floraMesh);
+            Assert.InRange(floraMesh.TriangleCount, 3000, 25000);
+        }
+    }
 }
+
 
