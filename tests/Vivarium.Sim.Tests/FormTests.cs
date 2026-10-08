@@ -630,4 +630,86 @@ public class FormTests
             }
         }
     }
+
+    [Fact]
+    public void BroadleafFormHasRealisticConstructionAndOverlappingLeaves()
+    {
+        var p = new BroadleafParams(
+            Outline: BroadleafOutline.Cordate,
+            LeafCount: 7,
+            StemHeight: 0.7,
+            MinLeafLength: 0.20,
+            MaxLeafLength: 0.50);
+
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var mesh = new MeshData();
+            int tris = Broadleaf.Build(mesh, p, seed, Green, LightGreen);
+            Assert.Equal(tris, mesh.TriangleCount);
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+
+            // Triangle budget check
+            Assert.InRange(mesh.TriangleCount, 200, 1500);
+
+            // Bounds check: grounded and reaches canopy height
+            var bounds = mesh.Bounds();
+            Assert.InRange(bounds.Min.Y, -0.05, 0.05);
+            Assert.True(bounds.Max.Y > 0.65, $"Broadleaf stem and foliage should reach near stem height, got {bounds.Max.Y}");
+
+            // Overlapping foliage at multiple heights:
+            // Leaf blade vertices span substantial vertical range
+            var bladeVerts = Enumerable.Range(0, mesh.VertexCount)
+                .Where(i => mesh.UV2[i * 2 + 1] > 0.5f)
+                .Select(i => mesh.Position(i).Y)
+                .ToArray();
+            Assert.True(bladeVerts.Length > 0);
+            double minLeafY = bladeVerts.Min();
+            double maxLeafY = bladeVerts.Max();
+            Assert.True(maxLeafY - minLeafY > 0.40, $"Blade vertices should span across substantial vertical range: {maxLeafY - minLeafY}");
+
+            // Leaves are recorded
+            Assert.True(mesh.LeafSpans.Count >= 7, "Must contain at least 7 leaves");
+        }
+
+        // Deterministic check
+        var m1 = new MeshData();
+        var m2 = new MeshData();
+        Broadleaf.Build(m1, p, 42, Green, LightGreen);
+        Broadleaf.Build(m2, p, 42, Green, LightGreen);
+        Assert.Equal(m1.DigestHex(), m2.DigestHex());
+
+        // Validate all outline profiles produce valid finite, non-degenerate meshes within budget
+        foreach (var outline in new[] { BroadleafOutline.Sagittate, BroadleafOutline.Hastate, BroadleafOutline.Ovate, BroadleafOutline.Lanceolate })
+        {
+            var mOutline = new MeshData();
+            Broadleaf.Build(mOutline, p with { Outline = outline }, 42, Green, LightGreen);
+            AssertAllFinite(mOutline);
+            AssertNoZeroAreaTriangles(mOutline);
+            Assert.InRange(mOutline.TriangleCount, 200, 1500);
+        }
+    }
+
+    [Theory]
+    [InlineData("shadebell", "shrub_shadebell")]
+    [InlineData("embercrown", "shrub_embercrown")]
+    [InlineData("lanternbrush", "shrub_lanternbrush")]
+    public void BroadleafUnderstorySpeciesAreFiniteNonDegenerateAndWithinBudget(string id, string shape)
+    {
+        var sp = new FloraSpeciesDef { Id = id, Shape = shape, Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 3; seed++)
+        {
+            var mesh = OrganismMeshes.Flora(sp, seed);
+            var mesh2 = OrganismMeshes.Flora(sp, seed);
+            Assert.Equal(mesh.DigestHex(), mesh2.DigestHex());
+            AssertAllFinite(mesh);
+            AssertNoZeroAreaTriangles(mesh);
+            Assert.InRange(mesh.TriangleCount, 500, 50000);
+            var bounds = mesh.Bounds();
+            Assert.InRange(bounds.Min.Y, -0.05, 0.05);
+            Assert.True(bounds.Max.Y > 0.60, $"Understory shrub {id} should reach mature height, got {bounds.Max.Y}");
+            Assert.True(mesh.LeafSpans.Count >= 7, $"{id} should have recorded leaf blades");
+        }
+    }
 }
+
