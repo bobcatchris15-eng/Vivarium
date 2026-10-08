@@ -41,7 +41,7 @@ public partial class EnvironmentRig : Node3D
     private static readonly Color GrowLightTint = new(0.95f, 0.98f, 1.00f);
     private const float GrowSunGain = 1.40f, GrowFillGain = 0.60f, GrowAmbientGain = 0.80f, GrowAmbientSky = 0.25f;
     private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
-    private static readonly Color UnderwaterFogColor = new(0.32f, 0.62f, 0.66f);
+    private static readonly Color UnderwaterFogColor = new(0.12f, 0.20f, 0.14f);
     private const float UnderwaterFogDensity = 0.18f;
 
     /// <summary>Azimuth at the start of the cycle, matching the calibrated daytime sun heading.</summary>

@@ -3,7 +3,7 @@
 shader_type canvas_item;
 
 uniform float strength : hint_range(0.0, 1.0) = 0.0;
-uniform vec3 tint : source_color = vec3(0.35, 0.75, 0.8);
+uniform vec3 tint : source_color = vec3(0.42, 0.70, 0.50);
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }

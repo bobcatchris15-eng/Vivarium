@@ -7,8 +7,12 @@ render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_burley, specula
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap, repeat_disable;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable;
-uniform vec3 absorption = vec3(0.35, 0.15, 0.08);   // per metre: clear mountain brook
-uniform vec3 deep_tint : source_color = vec3(0.08, 0.25, 0.28);
+// Vivarium pond water: clear in the shallows, tannin/green-stained in depth (absorbs red+blue first).
+uniform vec3 absorption = vec3(1.5, 0.7, 1.9);     // per unit normalized depth
+uniform vec3 deep_tint : source_color = vec3(0.045, 0.075, 0.040);
+// Reflection of the dark enclosure backdrop (no sky in a vivarium): darkens grazing water instead of milking it.
+uniform vec3 backdrop_low : source_color = vec3(0.020, 0.022, 0.018);
+uniform vec3 backdrop_high : source_color = vec3(0.070, 0.075, 0.065);
 uniform vec3 foam_color : source_color = vec3(0.92, 0.96, 0.98);
 uniform float refraction = 0.003;
 uniform float flow_speed_mult = 3.5;
@@ -75,8 +79,10 @@ void fragment() {
 
     // Crisp bed visibility through shallow running water
     float optical_depth = depthf * 0.15;
+    float tannin_depth = smoothstep(0.0, 1.0, depthf) * 0.45 + min(base_thickness, 0.6) * 0.2;
     vec3 behind = textureLod(screen_tex, ruv, 0.0).rgb;
-    vec3 transmit = exp(-absorption * optical_depth);
+    vec3 transmit = exp(-absorption * tannin_depth);
+    if (cutface > 0.5 || underwater > 0.5) transmit = vec3(1.0);
     vec3 scene = mix(deep_tint, behind, transmit);
 
     // Surface foam and aeration on fast-flowing sections
@@ -92,14 +98,15 @@ void fragment() {
         float ndotv = clamp(dot(normalize(NORMAL), view_dir), 0.0, 1.0);
         float fresnel = 0.02 + 0.98 * pow(1.0 - ndotv, 5.0);
         vec3 reflected = (INV_VIEW_MATRIX * vec4(reflect(-view_dir, normalize(NORMAL)), 0.0)).xyz;
-        vec3 sky = mix(vec3(0.50, 0.65, 0.76), vec3(0.85, 0.92, 0.98), smoothstep(-0.1, 0.8, reflected.y));
-        scene = mix(scene, sky, fresnel * 0.75);
+        vec3 sky = mix(backdrop_low, backdrop_high, smoothstep(-0.1, 0.8, reflected.y));
+        scene = mix(scene, sky, fresnel * 0.55);
     }
 
     ALBEDO = vec3(0.0);
     EMISSION = scene;
     ALPHA = cutface > 0.5 ? 1.0 : smoothstep(0.0, 0.015, base_thickness);
-    ROUGHNESS = cutface > 0.5 ? 0.0 : mix(0.12, 0.25, foam_mask);
+    // Glints come from the real grow light via the lit specular term (ALBEDO is black, so only spec is lit).
+    ROUGHNESS = cutface > 0.5 ? 0.0 : mix(0.09, 0.25, foam_mask);
     METALLIC = 0.0;
-    SPECULAR = cutface > 0.5 ? 0.15 : 0.55;
+    SPECULAR = cutface > 0.5 ? 0.15 : 0.75;
 }
