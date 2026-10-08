@@ -50,17 +50,18 @@ public static partial class OrganismMeshes
                 // tint (lilac/violet) so the plant no longer reads as a flat lilac star.
                 var leafBase = new[] { 0.14, 0.42, 0.10 };
                 var leafTip = new[] { 0.32, 0.62, 0.22 };
-                int nLeaves = 5 + rng.NextInt(3); // 5..7 irregular leaves; low detail retains 72 triangles per blade
+                int nLeaves = 6 + rng.NextInt(3); // 6..8 irregular leaves; low detail retains 72 triangles per blade
                 for (int k = 0; k < nLeaves; k++)
                 {
                     double ang = rng.Range(0, 2 * Math.PI); // fully irregular, not evenly spaced -> leaves overlap
-                    double len = rng.Range(0.55, 1.0);       // unequal lengths
+                    double len = Math.Min(1.0, 0.66 * rng.Range(0.6, 1.5)); // per-leaf size jitter ~0.6..1.5x
                     var leafAxis = new AxisParams(Length: len, BaseAngle: rng.Range(0.5, 0.95), BaseAzimuth: ang,
                         Droop: rng.Range(0.7, 1.4), WobbleAmplitude: 0.015, WobbleFrequency: 1.1, Segments: 5);
                     ulong lSeed = Rng.Mix(seed, (ulong)(k * 401 + 3));
                     var bp = new LeafBladeParams(
                         Midrib: leafAxis, Profile: BladeProfile.Lanceolate, HalfWidth: rng.Range(0.08, 0.13),
-                        Camber: rng.Range(0.05, 0.1), MidribFold: rng.Range(0.04, 0.09),
+                        Camber: rng.Range(0.08, 0.14), MidribFold: rng.Range(0.08, 0.15),
+                        Cup: rng.Range(0.04, 0.09), TipCurl: rng.Range(0.05, 0.14),
                         Asymmetry: rng.Range(-0.12, 0.12), MidribThickness: 0.003, DetailLevel: 0);
                     LeafBlade.Build(m, bp, lSeed, leafBase, leafTip);
                 }
@@ -2734,9 +2735,9 @@ public static partial class OrganismMeshes
             Primitives.Tube(m, new[] { baseP, midP, tipP }, new[] { 0.007, 0.0055, 0.004 }, 4, (i, v) => (wiryStemCol, 1, i, v, 0, 0));
 
             var leafNorm = (Vec3.Up * 0.92 + dir * rng.Range(0.10, 0.28)).Normalized();
-            double leafR = rng.Range(0.13, 0.18);
+            double leafR = 0.15 * rng.Range(0.6, 1.5); // per-leaf size jitter so coins overlap at varied scales
             ulong lSeed = Rng.Mix(seed, (ulong)(c * 211 + 19));
-            PeltateSaucerLeaf(m, tipP, leafNorm, leafR, leafR * 0.16, c1, c2, lSeed);
+            PeltateSaucerLeaf(m, tipP, leafNorm, leafR, leafR * rng.Range(0.16, 0.30), c1, c2, lSeed);
         }
 
         // 2. Wiry Stolon Network
@@ -2787,7 +2788,7 @@ public static partial class OrganismMeshes
 
                     Primitives.Tube(m, new[] { nodePos, pMid, pTip }, new[] { 0.006, 0.0045, 0.0035 }, 4, (i, v) => (Primitives.Mix(wiryStemCol, stemTip, t), 1, i, v, 0, 0));
 
-                    double leafR = MathD.Lerp(0.17, 0.085, t) * rng.Range(0.9, 1.1);
+                    double leafR = MathD.Lerp(0.17, 0.085, t) * rng.Range(0.65, 1.45);
                     var leafNorm = (Vec3.Up * 0.92 + lat * rng.Range(0.08, 0.28)).Normalized();
                     ulong lSeed = Rng.Mix(seed, (ulong)(k * 701 + s * 41 + p * 11 + 7));
                     PeltateSaucerLeaf(m, pTip, leafNorm, leafR, leafR * 0.16, c1, c2, lSeed);
@@ -5611,10 +5612,10 @@ public static partial class OrganismMeshes
             for (int li = 0; li < outerCount; li++)
             {
                 double leafAngle = li * (Math.PI * 2 / outerCount) + rng.Range(-0.08, 0.08);
-                var lDir = (side * Math.Cos(leafAngle) + fwd * Math.Sin(leafAngle) * 0.80 - up * 0.08).Normalized();
+                var lDir = (side * Math.Cos(leafAngle) + fwd * Math.Sin(leafAngle) * 0.80 - up * rng.Range(0.10, 0.28)).Normalized(); // droop
                 var lSide = lDir.Cross(up).Normalized();
 
-                double lLen = whorlRadius * rng.Range(0.92, 1.18);
+                double lLen = whorlRadius * rng.Range(0.65, 1.40); // per-leaf size jitter
                 double lWidth = lLen * 0.55;
 
                 var pStart = tipPos;
@@ -5624,7 +5625,7 @@ public static partial class OrganismMeshes
 
                 int bladeStart = m.VertexCount;
                 FoliageBlade.Build(m, pEnd, pEnd + lDir * lLen, lSide, lWidth * 0.5,
-                    Primitives.Scale(c1, 0.82), c1, camber: 0.18, curl: 0.14, shoulder: 0.65, segments: 3);
+                    Primitives.Scale(c1, 0.82), c1, camber: 0.30, curl: 0.24, shoulder: 0.65, segments: 3);
 
                 for (int v = bladeStart; v < m.VertexCount; v++)
                 {
@@ -5643,7 +5644,7 @@ public static partial class OrganismMeshes
                     var lDir = (side * Math.Cos(leafAngle) + fwd * Math.Sin(leafAngle) * 0.75 + up * 0.05).Normalized();
                     var lSide = lDir.Cross(up).Normalized();
 
-                    double lLen = whorlRadius * 0.65 * rng.Range(0.90, 1.10);
+                    double lLen = whorlRadius * 0.65 * rng.Range(0.65, 1.45);
                     double lWidth = lLen * 0.58;
 
                     var pStart = tipPos + up * 0.012;
@@ -5651,7 +5652,7 @@ public static partial class OrganismMeshes
 
                     int bladeStart = m.VertexCount;
                     FoliageBlade.Build(m, pEnd, pEnd + lDir * lLen, lSide, lWidth * 0.5,
-                        Primitives.Scale(c1, 0.88), c1, camber: 0.15, curl: 0.10, shoulder: 0.65, segments: 3);
+                        Primitives.Scale(c1, 0.88), c1, camber: 0.26, curl: 0.20, shoulder: 0.65, segments: 3);
 
                     for (int v = bladeStart; v < m.VertexCount; v++)
                     {

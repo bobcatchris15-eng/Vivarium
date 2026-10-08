@@ -100,7 +100,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
             if (!g.InDomain(i, j)) continue;
             int idx = g.Index(i, j);
             double cover = _w.AmbientGroundCover.Cover[idx];
-            if (cover < 0.035) continue;
+            if (cover < 0.02) continue;
             var center = g.CellCenter(idx);
             float distFade = 1;
             if (haveCam)
@@ -113,7 +113,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
             }
 
             var (moisture, light) = NeighbourCharacter(i, j);
-            double broadleaf = MathD.Clamp(0.08 + (1 - light) * 0.30 + moisture * 0.14, 0.05, 0.46);
+            double broadleaf = MathD.Clamp(0.22 + (1 - light) * 0.34 + moisture * 0.18, 0.18, 0.68);
             var dry = new Color(0.47f, 0.53f, 0.20f);
             var mesic = new Color(0.22f, 0.47f, 0.17f);
             var shade = new Color(0.13f, 0.34f, 0.21f);
@@ -121,7 +121,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
             baseCol = baseCol.Lerp(shade, (float)MathD.Clamp01((0.58 - light) / 0.5));
 
             rng.Seed = Rng.Mix(_w.Seed, (ulong)idx + 0xA6B13UL);
-            int count = Math.Clamp((int)Math.Round((6.0 + cover * 8.0) * Quality * distFade), 3, Quality >= 2 ? 24 : 15);
+            int count = Math.Clamp((int)Math.Round((10.0 + cover * 14.0) * Quality * distFade), 4, Quality >= 2 ? 40 : 24);
             for (int k = 0; k < count; k++)
             {
                 double jx = (rng.Next01() + rng.Next01() - 1) * g.CellSize * 0.54;
@@ -131,7 +131,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
 
                 bool isLeaf = rng.Next01() < broadleaf;
                 float yaw = (float)(rng.Next01() * Math.PI * 2);
-                float scale = (float)((0.58 + rng.Next01() * 0.38) * (0.86 + cover * 0.18));
+                float scale = (float)((0.58 + rng.Next01() * 0.38) * (0.86 + cover * 0.18)) * (isLeaf ? (float)(0.8 + rng.Next01() * 0.9) : 1f);
                 float heightScale = isLeaf
                     ? scale * (float)(0.70 + 0.16 * moisture)
                     : scale * (float)(0.72 + 0.22 * light);
@@ -192,22 +192,32 @@ public partial class AmbientGroundCoverRenderer : Node3D
 
     private static ArrayMesh BuildBroadleaf(Material mat)
     {
+        // Low rosette of 5 overlapping leaves of varied size: each blade is folded along its midrib (raised midrib,
+        // edges lifted = cupped) and droops toward the tip so the cover reads as leafy, not as flat cards.
         var m = new MeshData();
         var white = new[] { 1.0, 1.0, 1.0 };
-        var crown = new Vec3(0, 0.008, 0);
-        for (int k = 0; k < 3; k++)
+        var crown = new Vec3(0, 0.004, 0);
+        double[] sizes = { 1.0, 0.72, 1.25, 0.85, 0.6 };
+        for (int k = 0; k < 5; k++)
         {
-            double a = 0.4 + k * Math.PI * 2 / 3;
-            var dir = new Vec3(Math.Cos(a), 0.08, Math.Sin(a)).Normalized();
+            double a = 0.4 + k * 2.399963229728653;
+            double sz = sizes[k];
+            var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
             var side = new Vec3(-Math.Sin(a), 0, Math.Cos(a));
-            var tip = crown + dir * 0.0085;
-            var baseMid = crown + dir * 0.0015;
-            double hw = 0.0036;
-            var n = dir.Cross(side).Normalized();
-            int i0 = m.AddVertex(baseMid - side * hw, n, white);
-            int i1 = m.AddVertex(baseMid + side * hw, n, white);
-            int i2 = m.AddVertex(tip, n, white);
-            m.AddTriangle(i0, i1, i2);
+            double len = 0.011 * sz, hw = 0.0042 * sz;
+            var b0 = crown + dir * (0.001 * sz);
+            var mid = crown + dir * (len * 0.5) + new Vec3(0, 0.0032 * sz, 0);   // midrib arches up
+            var tip = crown + dir * len + new Vec3(0, 0.0004 * sz, 0);          // then droops at the tip
+            var el = crown + dir * (len * 0.48) - side * hw + new Vec3(0, 0.0042 * sz, 0); // edges curl up (cup)
+            var er = crown + dir * (len * 0.48) + side * hw + new Vec3(0, 0.0042 * sz, 0);
+            void Tri(Vec3 p0, Vec3 p1, Vec3 p2)
+            {
+                var n = (p1 - p0).Cross(p2 - p0).Normalized();
+                if (n.Y < 0) { n = -n; (p1, p2) = (p2, p1); }
+                int i0 = m.AddVertex(p0, n, white), i1 = m.AddVertex(p1, n, white), i2 = m.AddVertex(p2, n, white);
+                m.AddTriangle(i0, i1, i2);
+            }
+            Tri(b0, mid, el); Tri(b0, er, mid); Tri(el, mid, tip); Tri(mid, er, tip);
         }
         return Bridge.ToArrayMesh(m, mat);
     }
