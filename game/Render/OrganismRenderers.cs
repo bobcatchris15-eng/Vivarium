@@ -159,7 +159,8 @@ public partial class FloraRenderer : Node3D
             }
 
             // Publish whatever finished. A species becomes drawable the moment its own meshes are done, rather
-            // than waiting behind everything ahead of it in the catalog.
+            // than waiting behind everything ahead of it in the catalog. Throttle to at most one species per frame
+            // to eliminate main-thread hitches.
             for (int i = inflight.Count - 1; i >= 0; i--)
             {
                 var b = inflight[i];
@@ -168,6 +169,7 @@ public partial class FloraRenderer : Node3D
                 // The published layer now owns these nodes, exactly as the serial build transferred them.
                 foreach (var n in b.Nodes) _buildingNodes.Remove(n);
                 inflight.RemoveAt(i);
+                break;
             }
 
             yield return true;

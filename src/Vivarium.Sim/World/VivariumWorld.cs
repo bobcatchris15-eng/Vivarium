@@ -157,7 +157,7 @@ public sealed class VivariumWorld
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 20);
-        Scheduler.Register("ecology.litter", Cadence.Resources, 66, Bio(dt => { PilotTree?.DepositLitter(this, dt); Litter.Step(dt); }), phase: 20);
+        Scheduler.Register("ecology.litter", Cadence.Resources, 66, Bio(dt => { PilotTree?.DepositLitter(this, dt); Litter.Step(dt); }), phase: 22);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
         Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
         Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
@@ -165,7 +165,7 @@ public sealed class VivariumWorld
         Scheduler.Register("flora.ambient", Cadence.Flora, 74, Bio(AmbientGroundCover.Step), phase: 29);
         Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.StepMat), phase: 30);
         Scheduler.Register("coverage.lichen", Cadence.Flora, 76, Bio(CoverageSystem.StepLichen), phase: 31);
-        Scheduler.Register("coverage.plasmodium", Cadence.Plasmodium, 77, Bio(CoverageSystem.StepPlasmodium), phase: 2);
+        Scheduler.Register("coverage.plasmodium", Cadence.Plasmodium, 77, Bio(CoverageSystem.StepPlasmodium), phase: 33);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);
     }
 
