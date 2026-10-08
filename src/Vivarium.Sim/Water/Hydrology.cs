@@ -52,6 +52,7 @@ public sealed class Hydrology
     public WaterBudget Budget { get; set; } = new();
 
     // Signed internal face discharge (mÂ³/s): +E and +N. West/south faces are the neighbour's east/north face.
+    private Heightfield _terrain;
     private readonly double[] _faceE, _faceN;
     private readonly double[] _deltaVolume, _outScale;
     private readonly double[] _edgeFlowE, _edgeFlowW, _edgeFlowN, _edgeFlowS;
@@ -66,7 +67,7 @@ public sealed class Hydrology
 
     public Hydrology(GridSpec grid, WaterConfig config, Heightfield hf)
     {
-        Grid = grid; Config = config;
+        Grid = grid; Config = config; _terrain = hf;
         int n = grid.Count;
         Depth = new double[n]; Bed = new double[n]; FlowX = new double[n]; FlowZ = new double[n];
         _faceE = new double[n]; _faceN = new double[n];
@@ -91,6 +92,7 @@ public sealed class Hydrology
     /// <summary>Re-derives bed heights and the exterior boundary level after the terrain changes.</summary>
     public void RefreshBed(Heightfield hf)
     {
+        _terrain = hf;
         var grid = Grid; var config = Config;
         foreach (int idx in grid.DomainCells)
         {
@@ -152,24 +154,33 @@ public sealed class Hydrology
     /// <summary>Dynamic surface-water depth only; groundwater is excluded.</summary>
     public double DepthAt(Vec2 p) { int c = Grid.CellAt(p); return c >= 0 && Grid.InDomain(c) ? Depth[c] : 0; }
     public double SurfaceWaterDepth(int idx) => Grid.InDomain(idx) ? Depth[idx] : 0;
-    public double SurfaceWaterDepth(Vec2 p) => DepthAt(p);
+    public double SurfaceWaterDepth(Vec2 p)
+    {
+        int c = Grid.CellAt(p);
+        if (c < 0 || !Grid.InDomain(c) || Depth[c] <= 0) return 0;
+        return Math.Max(0.0, (HydraulicBed(c) + Depth[c]) - _terrain.Height(p));
+    }
     public bool HasSurfaceWater(int idx) => Grid.InDomain(idx) && Depth[idx] >= 0.00005;
-    public bool HasSurfaceWater(Vec2 p) => DepthAt(p) >= 0.00005;
+    public bool HasSurfaceWater(Vec2 p) => SurfaceWaterDepth(p) >= 0.00005;
 
     /// <summary>Actual mobile fluid depth.</summary>
     public double OpenWaterDepth(int idx) => Grid.InDomain(idx) ? Math.Max(Depth[idx], WaterTableDepth(idx)) : 0;
-    public double OpenWaterDepth(Vec2 p)
-    {
-        int c = Grid.CellAt(p);
-        return c >= 0 && Grid.InDomain(c) ? OpenWaterDepth(c) : 0;
-    }
+    public double OpenWaterDepth(Vec2 p) => Math.Max(SurfaceWaterDepth(p), WaterTableDepth(p));
 
     /// <summary>Fluid surface elevation, or NaN in dry cells.</summary>
     public double SurfaceAt(Vec2 p)
     {
         int c = Grid.CellAt(p);
-        if (c < 0 || !Grid.InDomain(c) || !IsWet(c)) return double.NaN;
-        return HydraulicBed(c) + Depth[c];
+        if (c < 0 || !Grid.InDomain(c) || !IsWet(p)) return double.NaN;
+        bool isTable = IsWaterTable(p);
+        bool hasDepth = Depth[c] > 0;
+        if (isTable && hasDepth)
+            return Math.Max(WaterTable, HydraulicBed(c) + Depth[c]);
+        if (isTable)
+            return WaterTable;
+        if (hasDepth)
+            return HydraulicBed(c) + Depth[c];
+        return double.NaN;
     }
 
     /// <summary>Open water present in stored fluid depth.</summary>
@@ -177,7 +188,7 @@ public sealed class Hydrology
     public bool IsWet(Vec2 p)
     {
         int c = Grid.CellAt(p);
-        return c >= 0 && IsWet(c);
+        return c >= 0 && Grid.InDomain(c) && (SurfaceWaterDepth(p) > 0.0005 || IsWaterTable(p));
     }
 
     /// <summary>True if the cell or position is part of the hydrostatic water table (ground below water table).</summary>
@@ -185,7 +196,7 @@ public sealed class Hydrology
     public bool IsWaterTable(Vec2 p)
     {
         int c = Grid.CellAt(p);
-        return c >= 0 && Grid.InDomain(c) && Bed[c] < WaterTable;
+        return c >= 0 && Grid.InDomain(c) && _terrain.Height(p) < WaterTable;
     }
 
     /// <summary>Depth of the hydrostatic water table above the terrain bed (0 if ground is above the water table).</summary>
@@ -193,7 +204,7 @@ public sealed class Hydrology
     public double WaterTableDepth(Vec2 p)
     {
         int c = Grid.CellAt(p);
-        return c >= 0 && Grid.InDomain(c) ? Math.Max(0.0, WaterTable - Bed[c]) : 0;
+        return c >= 0 && Grid.InDomain(c) ? Math.Max(0.0, WaterTable - _terrain.Height(p)) : 0;
     }
 
     /// <summary>Derived convenience classification: dynamic surface water with a measurable current.</summary>

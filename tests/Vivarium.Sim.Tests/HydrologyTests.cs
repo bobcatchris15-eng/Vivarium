@@ -1,4 +1,4 @@
-﻿using Vivarium.Sim.Content;
+using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Geometry;
 using Vivarium.Sim.World;
@@ -39,8 +39,10 @@ public class HydrologyTests
     {
         var w=TestUtil.FlatWorld(3,d=>{d.Water.WaterTable=1;d.Terrain.Features.Add(new TerrainFeature{Type="basin",X=0,Z=0,Radius=2.5,Amount=.8});});
         Assert.True(w.Water.WaterTableDepth(Vec2.Zero)>0);
-        Assert.False(w.Water.IsWet(Vec2.Zero));
-        Assert.True(double.IsNaN(w.Water.SurfaceAt(Vec2.Zero)));
+        Assert.False(w.Water.HasSurfaceWater(Vec2.Zero));
+        Assert.Equal(0.0, w.Water.SurfaceWaterDepth(Vec2.Zero));
+        Assert.True(w.Water.IsWet(Vec2.Zero));
+        Assert.Equal(1.0, w.Water.SurfaceAt(Vec2.Zero), 8);
         var digest=w.Water.DigestHex();
         Assert.Equal(0,WaterMesh.Build(w).TriangleCount);
         Assert.Equal(digest,w.Water.DigestHex());
@@ -96,7 +98,7 @@ public class HydrologyTests
         foreach (int c in loaded.Grid.DomainCells.Where(loaded.Water.IsWaterTable))
             Assert.Equal(0.0, loaded.Water.SurfaceWaterDepth(c), 12);
         Assert.True(loaded.Water.IsWaterTable(Vec2.Zero));
-        Assert.True(double.IsNaN(loaded.Water.SurfaceAt(Vec2.Zero)));
+        Assert.Equal(loaded.Water.WaterTable, loaded.Water.SurfaceAt(Vec2.Zero), 8);
     }
 
     [Fact] // t-053
@@ -348,7 +350,7 @@ public class HydrologyTests
             {
                 if (!w.Grid.InDomain(ci + di, cj + dj)) continue;
                 int k = w.Grid.Index(ci + di, cj + dj);
-                if (w.Water.IsWet(k)) { var ws = w.Water.SurfaceAt(w.Grid.CellCenter(k)); if (!double.IsNaN(ws)) top = Math.Max(top, ws); }
+                if (w.Water.IsWet(k)) { var ws = w.Water.SurfaceAt(w.Grid.CellCenter(k)); if (double.IsNaN(ws)) ws = w.Water.Bed[k] + w.Water.Depth[k]; if (!double.IsNaN(ws)) top = Math.Max(top, ws); }
             }
             Assert.True(p.Y <= top + 1e-6, $"surface at {p} is above the nearby water level {top:0.000}");
         }
@@ -369,7 +371,7 @@ public class HydrologyTests
     public void SubmergedFloraUsesActualFluidDepth()
     {
         var w=TestUtil.FlatWorld();
-        TestUtil.Flood(w,Vec2.Zero,1,.1);
+        TestUtil.Flood(w,Vec2.Zero,1,.12);
         var s=w.FloraSystem.Suitability(w.Content.FloraOrThrow("streamribbon"),Vec2.Zero);
         Assert.DoesNotContain("standing water",s.RefusalReason);
         Assert.DoesNotContain("submerged",s.RefusalReason);
@@ -403,6 +405,34 @@ public class HydrologyTests
         TestUtil.Flood(w,Vec2.Zero,1,.1);
         var set=WaterMesh.BuildSet(w);
         Assert.Equal(set.SurfaceMesh.DigestHex(),WaterMesh.Build(w).DigestHex());
+    }
+
+    [Fact]
+    public void PointQueriesOnBankAboveWaterTableAreDryAndZeroDepth()
+    {
+        var w = TestUtil.FlatWorld(7, d =>
+        {
+            d.Water.WaterTable = 0.2;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.6 });
+        });
+        Vec2 p = Vec2.Zero;
+        bool found = false;
+        for (double x = 0.0; x <= 2.5; x += 0.02)
+        {
+            var testP = new Vec2(x, 0);
+            if (w.Terrain.Height(testP) >= w.Water.WaterTable)
+            {
+                p = testP;
+                found = true;
+                break;
+            }
+        }
+        Assert.True(found, "sloping bank point above water table should exist");
+        Assert.True(w.Terrain.Height(p) >= w.Water.WaterTable);
+        Assert.Equal(0.0, w.Water.WaterTableDepth(p));
+        Assert.False(w.Water.IsWaterTable(p));
+        Assert.Equal(0.0, w.Water.OpenWaterDepth(p));
+        Assert.False(w.Water.IsWet(p));
     }
 }
 
