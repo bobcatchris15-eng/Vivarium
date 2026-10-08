@@ -41,12 +41,25 @@ void fragment() {
         vec3 tn = unpack_normal(texture(bark_nrm, uv).rgb);
         float avg = max(lum(textureLod(bark_col, vec2(0.5), 10.0).rgb), 0.02);
         // decay tint from the vertex colour (fresh / weathered / rotting), keeping the scan's detail
-        float mossy = clamp((vcol.g - vcol.r) * 6.0, 0.0, 1.0);
-        vec3 barkTint = mix(vcol, vec3(0.2, 0.14, 0.09), mossy);
+        float vmoss = clamp((vcol.g - vcol.r) * 6.0, 0.0, 1.0);
+        // sheltered damp-forest moss: upper faces, broken up by two noise octaves, creeping down the sides
+        float up = wn.y;
+        float n1 = vnoise(obj_pos.xz * 3.1 + obj_pos.y * 1.7);
+        float n2 = vnoise(obj_pos.xz * 11.0 - obj_pos.y * 5.0);
+        float cover = smoothstep(-0.25 + n1 * 0.5, 0.45 + n1 * 0.3, up + (n2 - 0.5) * 0.35);
+        cover *= smoothstep(0.15, 0.45, n1 * 0.7 + 0.35);
+        float mossy = clamp(max(vmoss, cover * 0.95), 0.0, 1.0);
+        // damp, darker bark where moss does not reach
+        vec3 barkTint = mix(vcol, vec3(0.2, 0.14, 0.09), 0.55 + 0.45 * vmoss) * 0.72;
         vec3 col = barkTint * (bark.rgb / avg) * 0.95;
         vec3 mn;
         vec4 moss = sample_untiled(moss_col, moss_nrm, moss_rgh, uv * 2.0 + 5.0, mn);
-        col = mix(col, moss.rgb, mossy);
+        // fibrous variation: yellow-green tips, deep green hollows, per-clump hue drift
+        float fib = vnoise(uv * vec2(40.0, 9.0));
+        vec3 mtint = mix(vec3(0.55, 0.75, 0.35), vec3(1.05, 1.08, 0.55), n2) * (0.75 + 0.5 * fib);
+        vec3 mcol = moss.rgb * mtint;
+        mcol = mix(mcol * 0.55, mcol, smoothstep(0.0, 0.6, mossy));   // thin edges read as dark damp fuzz
+        col = mix(col, mcol, smoothstep(0.05, 0.6, mossy));
         float rough = mix(bark.a, moss.a, mossy);
         tn = normalize(mix(tn, mn, mossy));
         ALBEDO = col;
