@@ -31,12 +31,12 @@ public sealed class AquaticSystem : IAquaticEnv
     {
         double dtDays = bioSeconds / AquaticConst.SecondsPerDay;
         double flowDays = physicalSeconds / AquaticConst.SecondsPerDay;
-        int pad = FlowHalo(physicalSeconds);
-        var algaeArea = OccupiedBounds(pad, _w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat);
+        var (pad, wet) = FlowHaloAndWetBounds(physicalSeconds);
+        var algaeArea = Clip(OccupiedBounds(pad, _w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat), OccupiedBounds(0, _w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat), wet);
         if (algaeArea is { } a)
             AlgaeRules.Step(_w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat, this,
                 new AlgaeBedParams(), new AlgaeFloatParams(), a, dtDays, _step, _w.Seed, flowDays);
-        var duckweedArea = OccupiedBounds(pad, _w.Coverage.SurfaceFloat);
+        var duckweedArea = Clip(OccupiedBounds(pad, _w.Coverage.SurfaceFloat), OccupiedBounds(0, _w.Coverage.SurfaceFloat), wet);
         if (duckweedArea is { } d)
             SurfaceFloatRules.Step(_w.Coverage.SurfaceFloat, this, new DuckweedParams(), d, dtDays, _step, _w.Seed, flowDays);
         _step++;
@@ -45,19 +45,43 @@ public sealed class AquaticSystem : IAquaticEnv
 
     public void ProjectBiofilm() => AquaticBiofilm.Project(_w.Coverage.AlgaeBed, _w.Fields.Biofilm, _w.Water);
 
-    private int FlowHalo(double physicalSeconds)
+    private (int Pad, GridBounds? Wet) FlowHaloAndWetBounds(double physicalSeconds)
     {
         double maxSpeed = 0;
+        int minX = int.MaxValue, minZ = int.MaxValue, maxX = int.MinValue, maxZ = int.MinValue;
+        double half = _w.Grid.CellSize * 0.5;
         foreach (int cell in _w.Grid.DomainCells)
         {
             if (!_w.Water.IsWet(cell)) continue;
             double speed = Math.Sqrt(_w.Water.FlowX[cell] * _w.Water.FlowX[cell] + _w.Water.FlowZ[cell] * _w.Water.FlowZ[cell]);
             maxSpeed = Math.Max(maxSpeed, speed);
+            // Fine cells whose centre falls in this coarse cell's square; one cell of slack for edge rounding.
+            var c = _w.Grid.CellCenter(cell);
+            var (x0, z0) = CoverageSpec.CellOf(new Vec2(c.X - half, c.Z - half));
+            var (x1, z1) = CoverageSpec.CellOf(new Vec2(c.X + half, c.Z + half));
+            minX = Math.Min(minX, x0 - 1); minZ = Math.Min(minZ, z0 - 1);
+            maxX = Math.Max(maxX, x1 + 1); maxZ = Math.Max(maxZ, z1 + 1);
         }
         // An upwind step can advance at most one fine cell per CFL substep. One extra cell keeps occupied
         // biomass away from the artificial rectangular boundary, so no transport is clipped there.
-        return Math.Clamp((int)Math.Ceiling(maxSpeed * physicalSeconds /
+        int pad = Math.Clamp((int)Math.Ceiling(maxSpeed * physicalSeconds /
             (AquaticConst.CflSafety * CoverageSpec.CellSize)) + 1, 1, AquaticConst.MaxSubsteps + 1);
+        return (pad, minX == int.MaxValue ? null : new GridBounds(minX, minZ, maxX, maxZ));
+    }
+
+    /// <summary>
+    /// Clips the padded step rectangle to the hull of the unpadded occupied cells and every wet fine cell.
+    /// Exact, not an approximation: a cell outside that hull holds no biomass (growth skips it) and is dry, so
+    /// advection treats it as blocked: it exchanges no flux and is never written back. Without this, a fast
+    /// flow pads the rectangle by up to MaxSubsteps cells per side, and advection then sweeps tens of millions
+    /// of dry cells for thousands of substeps (minutes per call).
+    /// </summary>
+    private static GridBounds? Clip(GridBounds? padded, GridBounds? occupied, GridBounds? wet)
+    {
+        if (padded is not { } p || occupied is not { } o) return padded;
+        int hx0 = o.MinGx, hz0 = o.MinGz, hx1 = o.MaxGx, hz1 = o.MaxGz;
+        if (wet is { } w) { hx0 = Math.Min(hx0, w.MinGx); hz0 = Math.Min(hz0, w.MinGz); hx1 = Math.Max(hx1, w.MaxGx); hz1 = Math.Max(hz1, w.MaxGz); }
+        return new GridBounds(Math.Max(p.MinGx, hx0), Math.Max(p.MinGz, hz0), Math.Min(p.MaxGx, hx1), Math.Min(p.MaxGz, hz1));
     }
 
     private static GridBounds? OccupiedBounds(int pad, params CoverageLayer[] layers)

@@ -298,3 +298,5 @@ Loop: judge(before vs refs) -> pick ONE top gap -> Clanker implements -> capture
 Gates per iteration: build passes; flora_visible>0; no IndexOutOfRange/"Unable to open file"; fps on judged scenes not >15% worse than before.
 | it | gap | verdict | commit | note |
 |----|-----|---------|--------|------|
+| 0 | baseline capture | BLOCKED | - | reference capture >60 min (spec ~5): per-species flora mesh build ~10 min each (ringreed, rain_jelly, snaptrap, shadebell). Fix first. Provisional judge set: macro_flora, dense_colony, mixed_depth, log_contact, rock_contact, colony_edge, species_mirrorleaf, species_shadebell_close |
+| 1 | capture speed | KEEP | (this) | root: AquaticSystem.FlowHalo padded advection rect by ~4097 dry cells once pond flows (~bio-day 1.8); Step up to 341s. Clipped to occupied hull + gather advection; digest bit-identical. Capture 294s. GOTCHA: Vivarium.sln excludes game/Vivarium.csproj — build both or Godot runs stale Sim dll. 19 pre-existing test fails (12 Form, 5 Hydrology, SpringFluid, Coverage save/load). |

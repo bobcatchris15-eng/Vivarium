@@ -35,8 +35,13 @@ public partial class SmokeRunner
         long startTick = W.Clock.Tick;
         while (W.Clock.BioDays < ReferenceBioDays && W.Clock.Tick - startTick < 2_000_000)
         {
+            ulong s0 = Time.GetTicksUsec();
             W.Step(200);
+            ulong s1 = Time.GetTicksUsec();
             await Frames(1);
+            ulong s2 = Time.GetTicksUsec();
+            if (s2 - s0 > 2_000_000)
+                GD.Print($"REFERENCE_WARMUP_SLOW day={W.Clock.BioDays:0.00} step_ms={(s1 - s0) / 1000} frame_ms={(s2 - s1) / 1000}");
         }
         _facts["preset_bio_days"] = Math.Round(W.Clock.BioDays, 3);
         _facts["ticks"] = W.Clock.Tick;
