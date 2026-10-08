@@ -23,12 +23,50 @@ public partial class SmokeRunner
 {
     /// <summary>Biological days simulated before photographing (enough for colonies, slime networks and fungi to form).</summary>
     public const double ReferenceBioDays = 6;
-    private const int SettleFrames = 30, MeasureFrames = 90;
+    private const int SettleFrames = 45, MeasureFrames = 90;
+
+    /// <summary>
+    /// When true, locks exposure to a fixed sensitivity during reference capture instead of settling auto-exposure.
+    /// Default false: auto-exposure is enabled and settled deterministically per scene.
+    /// </summary>
+    private const bool FixedExposureOverride = false;
+
+    private async Task SettleExposureAsync(int frames = SettleFrames)
+    {
+        var camAttr = Session.EnvRig.CameraAttributes;
+        if (camAttr == null || !camAttr.AutoExposureEnabled)
+        {
+            await Frames(frames);
+            return;
+        }
+
+        // Fast-settle auto-exposure to eliminate inter-scene history hysteresis,
+        // then settle at normal adaptation speed for smooth, deterministic convergence.
+        float origSpeed = camAttr.AutoExposureSpeed;
+        try
+        {
+            camAttr.AutoExposureSpeed = 16.0f;
+            int fastFrames = Math.Min(frames / 2, 25);
+            await Frames(fastFrames);
+            camAttr.AutoExposureSpeed = origSpeed;
+            await Frames(Math.Max(frames - fastFrames, 1));
+        }
+        finally
+        {
+            camAttr.AutoExposureSpeed = origSpeed;
+        }
+    }
 
     private record RefScene(string Name, string Category, Vector3 Eye, Vector3 Target);
 
     private async Task ReferenceAsync()
     {
+        if (FixedExposureOverride && Session.EnvRig.CameraAttributes is { } refAttr)
+        {
+            refAttr.AutoExposureEnabled = false;
+            refAttr.ExposureSensitivity = 100.0f;
+        }
+
         var cam = Session.CameraRig;
         W.Clock.Paused = true;
         // deterministic warm-up: step whole ticks, yielding so the window stays responsive
@@ -63,7 +101,7 @@ public partial class SmokeRunner
         foreach (var s in scenes)
         {
             cam.LookAtPoint(s.Eye, s.Target);
-            await Frames(SettleFrames);
+            await SettleExposureAsync(SettleFrames);
             FrameProfiler.TakeReport(); // reset worst-scope window
             var times = new List<double>(MeasureFrames);
             long draws = 0, prims = 0, objs = 0;
@@ -114,6 +152,12 @@ public partial class SmokeRunner
 
     private async Task SpeciesWorldAsync()
     {
+        if (FixedExposureOverride && Session.EnvRig.CameraAttributes is { } refAttr)
+        {
+            refAttr.AutoExposureEnabled = false;
+            refAttr.ExposureSensitivity = 100.0f;
+        }
+
         W.Clock.Paused = true;
         var sp = W.Content.FloraOrThrow(SpeciesId);
         if (sp.IsCoverageSpecies)
@@ -130,18 +174,18 @@ public partial class SmokeRunner
             Session.Ui.Visible = false;
             GetWindow().Size = new Vector2I(1600, 900);
             Session.CameraRig.LookAtPoint(patchView.Eye, patchView.Target);
-            await Frames(30);
+            await SettleExposureAsync(30);
             await Screenshot(patchView.Name);
             if (SpeciesId == "bogglass_moss")
             {
                 Session.CameraRig.LookAtPoint(patchTarget + new Vector3(-0.19f, 0.13f, -0.15f), patchTarget);
-                await Frames(12);
+                await SettleExposureAsync(20);
                 await Screenshot("species_" + SpeciesId + "_side");
             }
             else if (SpeciesId == "ambervein")
             {
                 Session.CameraRig.LookAtPoint(patchTarget + new Vector3(-0.12f, 0.08f, -0.10f), patchTarget);
-                await Frames(12);
+                await SettleExposureAsync(20);
                 await Screenshot("species_" + SpeciesId + "_close");
             }
             _facts["species"] = SpeciesId;
@@ -186,47 +230,50 @@ public partial class SmokeRunner
         Session.CameraRig.LookAtPoint(view.Eye, view.Target);
         // Flora refreshes on a time budget; a frame count can finish before the next refresh at high FPS.
         await Seconds(1);
+        await SettleExposureAsync(30);
         await Screenshot(view.Name);
         if (SpeciesId == "glassfinger")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(.20f,.19f,.24f), target);
             await Seconds(1);
+            await SettleExposureAsync(20);
             await Screenshot("species_glassfinger_close");
         }
         else if (SpeciesId == "embercrown")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(1.3f, 0.55f, 1.4f), target);
-            await Frames(12);
+            await SettleExposureAsync(20);
             await Screenshot("species_embercrown_close");
         }
         else if (SpeciesId == "dewbonnet")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(0.18f, 0.12f, 0.22f), target);
-            await Frames(12);
+            await SettleExposureAsync(20);
             await Screenshot("species_dewbonnet_close");
         }
         else if (SpeciesId == "sunstone_rosette")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(0.20f, 0.14f, 0.22f), target);
-            await Frames(12);
+            await SettleExposureAsync(20);
             await Screenshot("species_sunstone_rosette_close");
         }
         else if (SpeciesId is "streamribbon" or "fencomb")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(0.35f, 0.30f, 0.35f), target + new Vector3(0, 0.12f, 0));
-            await Frames(12);
+            await SettleExposureAsync(20);
             await Screenshot("species_" + SpeciesId + "_close");
         }
         else if (SpeciesId == "shadebell")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(1.2f, 0.45f, 1.3f), target);
-            await Frames(12);
+            await SettleExposureAsync(20);
             await Screenshot("species_shadebell_close");
         }
         else if (SpeciesId == "lanternbrush")
         {
             Session.CameraRig.LookAtPoint(target + new Vector3(1.3f, 0.55f, 1.4f), target);
             await Seconds(1);
+            await SettleExposureAsync(30);
             await Screenshot("species_lanternbrush_close");
         }
         _facts["species"] = SpeciesId;

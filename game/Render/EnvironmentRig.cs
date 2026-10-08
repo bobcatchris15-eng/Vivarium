@@ -19,6 +19,7 @@ public partial class EnvironmentRig : Node3D
     public WorldEnvironment WorldEnv { get; private set; } = null!;
     public DirectionalLight3D Sun { get; private set; } = null!;
     public Environment Env { get; private set; } = null!;
+    public CameraAttributesPractical CameraAttributes { get; private set; } = null!;
     /// <summary>Presentation day/night clock driving the lighting. Read the rig, never the simulation.</summary>
     public DayNightClock Clock { get; private set; } = null!;
     private ColorRect _underwaterRect = null!;
@@ -35,11 +36,12 @@ public partial class EnvironmentRig : Node3D
     private const float HazeFogDensity = 0.022f;
 
     // Vivarium grade applied on top of the day/night keys (scaled, not replaced): dark enclosure
-    // backdrop instead of sky, steep cool-white grow light, weak fill/ambient so undersides go dark.
+    // backdrop instead of sky, steep cool-white grow light, soft top fill, green/warm ambient bounce.
     private static readonly Color BackdropTop = new(0.030f, 0.025f, 0.020f);
     private static readonly Color BackdropHorizon = new(0.060f, 0.048f, 0.036f);
     private static readonly Color GrowLightTint = new(0.95f, 0.98f, 1.00f);
-    private const float GrowSunGain = 1.40f, GrowFillGain = 0.60f, GrowAmbientGain = 0.80f, GrowAmbientSky = 0.25f;
+    private static readonly Color AmbientBounceColor = new(0.44f, 0.54f, 0.34f);
+    private const float GrowSunGain = 1.38f, GrowFillGain = 0.48f, GrowAmbientGain = 0.95f, GrowAmbientSky = 0.08f;
     private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
     private static readonly Color UnderwaterFogColor = new(0.12f, 0.20f, 0.14f);
     private const float UnderwaterFogDensity = 0.18f;
@@ -116,14 +118,24 @@ public partial class EnvironmentRig : Node3D
             GroundHorizonColor = new Color(0.65f, 0.70f, 0.68f),
             SunAngleMax = 30, SunCurve = 0.12f,
         };
+        CameraAttributes = new CameraAttributesPractical
+        {
+            AutoExposureEnabled = true,
+            AutoExposureMinSensitivity = 70.0f,
+            AutoExposureMaxSensitivity = 210.0f,
+            AutoExposureSpeed = 0.6f,
+            AutoExposureScale = 0.40f,
+            ExposureMultiplier = 1.0f,
+            ExposureSensitivity = 100.0f,
+        };
         Env = new Environment
         {
             BackgroundMode = Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = _sky },
             AmbientLightSource = Environment.AmbientSource.Sky,
-            AmbientLightColor = new Color(0.46f, 0.60f, 0.38f),
-            AmbientLightSkyContribution = 0.55f,
-            AmbientLightEnergy = 0.49f,
+            AmbientLightColor = AmbientBounceColor,
+            AmbientLightSkyContribution = 0.08f,
+            AmbientLightEnergy = 0.48f,
             ReflectedLightSource = Environment.ReflectionSource.Sky,
             TonemapMode = Environment.ToneMapper.Agx,
             TonemapExposure = 0.92f,
@@ -145,7 +157,11 @@ public partial class EnvironmentRig : Node3D
             FogAerialPerspective = 0.12f,
             SsaoRadius = 0.32f, SsaoIntensity = 0.85f, SsaoPower = 1.05f,
         };
-        WorldEnv = new WorldEnvironment { Environment = Env };
+        WorldEnv = new WorldEnvironment
+        {
+            Environment = Env,
+            CameraAttributes = CameraAttributes,
+        };
         AddChild(WorldEnv);
 
         Sun = new DirectionalLight3D
@@ -163,8 +179,13 @@ public partial class EnvironmentRig : Node3D
         };
         Sun.RotationDegrees = new Vector3(-52, -35, 0);
         AddChild(Sun);
-        _fill = new DirectionalLight3D { LightColor = new Color(0.70f, 0.88f, 0.62f), LightEnergy = 0.22f, ShadowEnabled = false };
-        _fill.RotationDegrees = new Vector3(-20, 150, 0);
+        _fill = new DirectionalLight3D
+        {
+            LightColor = GrowLightTint,
+            LightEnergy = 0.11f,
+            ShadowEnabled = false,
+        };
+        _fill.RotationDegrees = new Vector3(-76, 105, 0);
         AddChild(_fill);
 
         // underwater screen treatment (subtle; keeps fauna inspectable)
@@ -233,17 +254,29 @@ public partial class EnvironmentRig : Node3D
         float w = span > 0f ? Mathf.Clamp((float)((t - a.F) / span), 0f, 1f) : 0f;
 
         float pitch = Mathf.Max(Mathf.Lerp(a.Pitch, b.Pitch, w) * GrowPitchGain, GrowPitchMax);
-        Sun.RotationDegrees = new Vector3(pitch, SunAzimuth(t), 0f);
-        Sun.LightColor = a.SunColor.Lerp(b.SunColor, w).Lerp(GrowLightTint, 0.6f);
+        float az = SunAzimuth(t);
+        Sun.RotationDegrees = new Vector3(pitch, az, 0f);
+        Color sunCol = a.SunColor.Lerp(b.SunColor, w).Lerp(GrowLightTint, 0.65f);
+        Sun.LightColor = sunCol;
         float sunE = Mathf.Lerp(a.SunEnergy, b.SunEnergy, w);
         Sun.LightEnergy = sunE * GrowSunGain;
+
+        // Fill directional light: soft area-like top fill at low energy, matching color family
+        _fill.RotationDegrees = new Vector3(-76f, az + 140f, 0f);
+        _fill.LightColor = sunCol;
         _fill.LightEnergy = Mathf.Lerp(a.FillEnergy, b.FillEnergy, w) * GrowFillGain;
+
         // Enclosure backdrop: dark wood/rock brown, dimmed further as the keys go to night.
         float lum = Mathf.Clamp(sunE / KeyDaySunEnergy, 0.15f, 1f);
         _sky.SkyTopColor = BackdropTop * lum;
         _sky.SkyHorizonColor = BackdropHorizon * lum;
         _sky.GroundBottomColor = BackdropTop * lum;
         _sky.GroundHorizonColor = BackdropHorizon * lum;
+
+        // Ambient bounce light: green/warm-tinted ambient bounce so shaded understory/strata/trunks
+        // do not crush to pitch black.
+        Color ambientTint = AmbientBounceColor.Lerp(a.SunColor.Lerp(b.SunColor, w), 0.20f);
+        Env.AmbientLightColor = ambientTint;
         Env.AmbientLightEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w) * GrowAmbientGain;
         Env.AmbientLightSkyContribution = Mathf.Lerp(a.AmbientSkyContribution, b.AmbientSkyContribution, w) * GrowAmbientSky / 0.55f;
         Env.FogLightEnergy = Mathf.Lerp(a.FogEnergy, b.FogEnergy, w);

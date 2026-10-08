@@ -84,7 +84,6 @@ void fragment() {
         mn = normalize(vec3(mn.xy * 0.6 + dn.xy, dn.z));
         tn = normalize(mix(tn, mn, mossy));
         ALBEDO = col;
-        EMISSION = col * 0.025;   // small ambient floor so shaded log undersides (sparse_dry) do not crush to black
         ROUGHNESS = rough;
         SPECULAR = 0.3;
         // bark mesh has no tangents: build them from the log axis (+X in object space)
