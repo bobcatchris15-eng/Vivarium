@@ -183,9 +183,13 @@ void fragment() {
             float age = smoothstep(0.73, 1.0, along) * (0.25 + 0.75 * vnoise(vec2(inst.w * 9.0, along * 5.0)));
             c = mix(c, pigment, 0.77);
             float leaf_age = fract(inst.w * 7.31 + floor(along * 0.0) + UV2.x * 0.37 + inst.x * 3.7);
-            c = mix(c * vec3(0.78, 0.82, 0.80), c * vec3(1.45, 1.38, 0.82), smoothstep(0.25, 0.95, leaf_age));
+            // Strap/reed blades age toward a fresher chlorophyll green, not yellow-khaki.
+            vec3 aged_gain = leaf_type == 5 ? vec3(1.10, 1.42, 0.86) : vec3(1.45, 1.38, 0.82);
+            c = mix(c * vec3(0.78, 0.82, 0.80), c * aged_gain, smoothstep(0.25, 0.95, leaf_age));
             c *= (0.91 + 0.12 * cells + 0.035 * micro + 0.08 * venation) * (1.0 - edge * 0.11);
-            c = mix(c, c * vec3(1.11, 1.04, 0.78), age * 0.16);
+            c = mix(c, c * vec3(1.11, 1.04, 0.78), age * (leaf_type == 5 ? 0.05 : 0.16));
+            // Tall strap blades rise toward the grow light: brighter, fresher distal blade.
+            if (leaf_type == 5) c *= vec3(0.96, 1.0, 0.92) + vec3(0.18, 0.34, 0.12) * smoothstep(0.15, 0.85, along);
             float stripe = 0.5;
             if (leaf_pattern == 0) c = mix(c, c * vec3(1.35, 1.40, 1.10), clamp(mid * 0.7 + branch * 0.3, 0.0, 1.0) * (1.0 - face) * 0.35);
             // Each tissue family carries a different visible pigment pattern. Keep
@@ -274,12 +278,13 @@ void fragment() {
         c += c * 0.6 * pow(1.0 - ndv, 3.0) + vec3(0.010, 0.012, 0.010) * pow(1.0 - ndv, 4.0);
     }
     // Stress fades to a luminance-matched olive-brown; only genuinely failing tissue reads as straw.
-    float health = smoothstep(0.0, 0.45, clamp(inst.y, 0.0, 1.0));
+    // Only genuinely failing tissue fades; mid-health foliage keeps its full pigment.
+    float health = smoothstep(0.0, 0.28, clamp(inst.y, 0.0, 1.0));
     vec3 faded = vec3(dot(c, vec3(0.33))) * vec3(1.25, 1.05, 0.55);
     ALBEDO = mix(faded, c, 0.30 + 0.70 * health);
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
     SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.5, 0.72, cuticle_sheen)) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? c * vec3(1.30, 1.35, 0.60) * leaf_transmission * 1.4 : c * 0.025)) : c * (surface_mode == 3 ? 0.2 : 0.07);
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? (leaf_type == 5 ? c * vec3(0.95, 1.55, 0.55) * leaf_transmission * 2.4 : c * vec3(1.30, 1.35, 0.60) * leaf_transmission * 1.4) : c * 0.025)) : c * (surface_mode == 3 ? 0.2 : 0.07);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }
