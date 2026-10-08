@@ -20,6 +20,22 @@ void vertex() { obj_pos = VERTEX; }
 
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
+// Cushion-moss clumps: 3x3 cellular search. Returns (dome height 0..1, offset-to-centre xy, cell id).
+vec4 clumps(vec2 p) {
+    vec2 ip = floor(p), fp = fract(p);
+    float best = 8.0; vec2 bo = vec2(0.0); float id = 0.0;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec2 g = vec2(float(i), float(j));
+        float h = hash21(ip + g);
+        vec2 o = g + vec2(h, fract(h * 37.13)) * 0.8 + 0.1 - fp;
+        float r = 0.55 + 0.35 * fract(h * 91.7);          // clump radius varies per cell
+        float d = length(o) / r;
+        if (d < best) { best = d; bo = o / r; id = h; }
+    }
+    float dome = sqrt(max(0.0, 1.0 - best * best));
+    return vec4(dome, bo, id);
+}
+
 void fragment() {
     vec3 vcol = srgb_to_linear(COLOR.rgb);
     float cap = UV2.y;
@@ -48,19 +64,33 @@ void fragment() {
         float n2 = vnoise(obj_pos.xz * 11.0 - obj_pos.y * 5.0);
         float cover = smoothstep(-0.25 + n1 * 0.5, 0.45 + n1 * 0.3, up + (n2 - 0.5) * 0.35);
         cover *= smoothstep(0.15, 0.45, n1 * 0.7 + 0.35);
+        // cushion clumps (~2 cm) with a finer sub-clump layer; uv is in half-metres
+        vec2 cp = uv * 26.0 + vec2(n1 * 1.3, n2 * 0.9);
+        vec4 cl = clumps(cp);
+        vec4 cl2 = clumps(cp * 2.7 + 3.1);
+        float h = cl.x * (0.75 + 0.25 * cl2.x);
+        // ragged edge: coverage breaks at clump granularity instead of a smooth felt boundary
         float mossy = clamp(max(vmoss, cover * 0.95), 0.0, 1.0);
+        mossy = clamp(mossy + (h - 0.55) * 0.7 * (1.0 - mossy * mossy) - (1.0 - h) * 0.25 * mossy * (1.0 - mossy), 0.0, 1.0);
         // damp, darker bark where moss does not reach
         vec3 barkTint = mix(vcol, vec3(0.2, 0.14, 0.09), 0.55 + 0.45 * vmoss) * 0.72;
         vec3 col = barkTint * (bark.rgb / avg) * 0.95;
         vec3 mn;
         vec4 moss = sample_untiled(moss_col, moss_nrm, moss_rgh, uv * 2.0 + 5.0, mn);
-        // fibrous variation: yellow-green tips, deep green hollows, per-clump hue drift
-        float fib = vnoise(uv * vec2(40.0, 9.0));
-        vec3 mtint = mix(vec3(0.55, 0.75, 0.35), vec3(1.05, 1.08, 0.55), n2) * (0.75 + 0.5 * fib);
-        vec3 mcol = moss.rgb * mtint;
-        mcol = mix(mcol * 0.55, mcol, smoothstep(0.0, 0.6, mossy));   // thin edges read as dark damp fuzz
-        col = mix(col, mcol, smoothstep(0.05, 0.6, mossy));
-        float rough = mix(bark.a, moss.a, mossy);
+        // per-clump hue drift (olive to deep green), yellowed light-catching tips, near-black crevices
+        float fib = vnoise(uv * vec2(55.0, 14.0));
+        vec3 base = mix(vec3(0.34, 0.46, 0.20), vec3(0.50, 0.58, 0.24), cl.w) * mix(0.85, 1.1, n2);
+        vec3 tipc = vec3(0.78, 0.82, 0.38);
+        vec3 mtint = mix(base, tipc, smoothstep(0.55, 0.98, h) * (0.35 + 0.4 * fib));
+        float ao = mix(0.22, 1.0, smoothstep(0.0, 0.6, h)) * (0.85 + 0.15 * cl2.x);
+        vec3 mcol = moss.rgb * mtint * ao * (0.8 + 0.35 * fib);
+        mcol = mix(vec3(lum(mcol)), mcol, 0.78);                      // muted, not felt-green
+        mcol = mix(mcol * 0.5, mcol, smoothstep(0.0, 0.6, mossy));   // thin edges read as dark damp fuzz
+        col = mix(col, mcol, smoothstep(0.08, 0.5, mossy));
+        float rough = mix(bark.a, max(moss.a, 0.85), mossy);
+        // dome normal per clump (tangent space: x around, y along)
+        vec3 dn = normalize(vec3(cl.y, cl.z, 0.0) * 0.9 + vec3(cl2.y, cl2.z, 0.0) * 0.35 + vec3(0.0, 0.0, max(cl.x, 0.25)));
+        mn = normalize(vec3(mn.xy * 0.6 + dn.xy, dn.z));
         tn = normalize(mix(tn, mn, mossy));
         ALBEDO = col;
         ROUGHNESS = rough;

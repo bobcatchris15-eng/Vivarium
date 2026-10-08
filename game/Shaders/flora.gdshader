@@ -125,7 +125,12 @@ void fragment() {
         c *= mix(vec3(1.0), vec3(0.76, 0.71, 0.62), cap_top * 0.82);
         c *= 1.0 - cap_top * 0.12 * smoothstep(0.70, 1.0, UV.y);
         n = normalize(wn + vec3(dFdx(flesh), 0.0, dFdy(flesh)) * colony_relief * 0.35);
-        rough = UV2.x > 0.5 ? 0.93 : mix(0.68, 0.83, flesh);
+        rough = UV2.x > 0.5 ? 0.93 : mix(0.80, 0.95, flesh);
+        // velvety bloom: fine fibrous speckle and a soft grazing-angle sheen instead of a plastic highlight
+        float fuzz = vnoise(obj_pos.xy * 140.0 + obj_pos.zy * 97.0 + inst.w * 5.0);
+        c *= 0.9 + 0.14 * fuzz;
+        float ndv = clamp(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos)), 0.0, 1.0);
+        c *= 1.0 + 0.22 * pow(1.0 - ndv, 2.0);
     } else if (surface_mode == 4) {
         // slime mold: glossy, translucent yellow protoplasm with a slow streaming pulse along the veins
         float pulse = 0.5 + 0.5 * sin(TIME * 1.6 - length(obj_pos.xz) * 9.0 + inst.w * 20.0);
@@ -245,7 +250,7 @@ void fragment() {
     ALBEDO = mix(faded, c, 0.30 + 0.70 * health);
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
-    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.45, 0.65, cuticle_sheen)) : surface_mode == 4 ? 0.52 : 0.24;
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? c * vec3(1.30, 1.35, 0.60) * leaf_transmission * 1.4 : c * 0.025)) : c * (surface_mode == 3 ? 0.12 : 0.07);
+    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.45, 0.65, cuticle_sheen)) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? c * vec3(1.30, 1.35, 0.60) * leaf_transmission * 1.4 : c * 0.025)) : c * (surface_mode == 3 ? 0.2 : 0.07);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

@@ -4312,8 +4312,10 @@ public static partial class OrganismMeshes
 
     private static void GlassAntlers(MeshData m, Rng rng, double[] c1, double[] c2)
     {
-        var baseCol=Primitives.Mix(c1,new[]{0.78,0.84,0.86},0.45);
-        var tipCol=Primitives.Mix(c2,new[]{0.92,0.94,0.98},0.62);
+        // Species colours drive the gradient directly: dirty, wood-stained foot -> c1 body -> paler c2 tips.
+        var footCol=Primitives.Mix(c1,new[]{0.26,0.19,0.12},0.6);
+        var baseCol=c1;
+        var tipCol=c2;
         int trunks=4+rng.NextInt(3);
         for(int k=0;k<trunks;k++)
         {
@@ -4321,7 +4323,7 @@ public static partial class OrganismMeshes
             var root=new Vec3(Math.Cos(a)*rng.Range(0.04,0.28),0,Math.Sin(a)*rng.Range(0.04,0.28));
             var mid=root+new Vec3(rng.Range(-0.10,0.10),rng.Range(0.36,0.52),rng.Range(-0.10,0.10));
             var fork=mid+new Vec3(rng.Range(-0.08,0.08),rng.Range(0.20,0.30),rng.Range(-0.08,0.08));
-            Primitives.Tube(m,new[]{root,mid,fork},new[]{0.065,0.045,0.030},6,(i,v)=>(Primitives.Mix(baseCol,tipCol,i/2.0),0.82,i,v,0,0));
+            Primitives.Tube(m,new[]{root,mid,fork},new[]{0.065,0.045,0.030},6,(i,v)=>(i==0?footCol:Primitives.Mix(baseCol,tipCol,(i-1)*0.35),0.82,i,v,0,0));
             for(int b=-1;b<=1;b+=2)
             {
                 var radial=new Vec3(Math.Cos(a+b*0.85),0,Math.Sin(a+b*0.85));
