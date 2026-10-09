@@ -125,7 +125,11 @@ public partial class IslandRenderer : Node3D
         _accum += delta;
         _sinceMeshBuild += delta;
         // sculpting: follow the heightfield at up to ~12 rebuilds per second
-        if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08) BuildMeshes();
+        if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08)
+        {
+            BuildMeshes();
+            UpdateFieldTexture(true);
+        }
         _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
         _terrainMat.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
         bool propsDirty = _propsVersion != _w.Props.Version;
@@ -166,6 +170,16 @@ public partial class IslandRenderer : Node3D
     {
         var g = _w.Grid; var f = _w.Fields;
         double nmax = _w.Content.Ecology.NutrientMax;
+        var trees = new System.Collections.Generic.List<(Vivarium.Sim.Core.Vec2 Pos, double Radius)>();
+        if (updateSubstrate)
+        {
+            foreach (var plant in _w.Flora.Items)
+            {
+                var sp = _w.Content.FloraOrThrow(plant.SpeciesId);
+                if (sp.Shape == "tree" || sp.Tags.Contains("tree") || sp.Tags.Contains("woody"))
+                    trees.Add((plant.Position, Math.Max(0.20, plant.Radius(sp) * 0.40)));
+            }
+        }
         for (int c = 0; c < g.Count; c++)
         {
             int d = _nearestDomain[c];
@@ -182,9 +196,10 @@ public partial class IslandRenderer : Node3D
             _ambientBytes[c] = (byte)(Mathf.Clamp((float)_w.AmbientGroundCover.Cover[d], 0, 1) * 255);
             if (updateSubstrate)
             {
-                bool gravel = _w.Props.GravelAt(p) != null;
+                bool gravel = _w.Props.GravelAt(p) != null || _w.SubstrateAtCell(p) == Substrate.Gravel;
+                bool rock = _w.SubstrateAtCell(p) == Substrate.Rock;
                 int so = c * 4;
-                _subBytes[so] = gravel ? (byte)255 : (byte)0;
+                _subBytes[so] = (gravel || rock) ? (byte)255 : (byte)0;
                 _subBytes[so + 1] = _w.Water.WaterTableDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
                 if (_w.Water.SurfaceWaterDepth(d) > 0.0005)
                 {
@@ -196,7 +211,30 @@ public partial class IslandRenderer : Node3D
                 {
                     _subBytes[so + 2] = 0;
                 }
-                _subBytes[so + 3] = 0;
+
+                // Physical ground contact mask (root collars, nurse logs, boulders)
+                double contact = 0;
+                for (int ti = 0; ti < trees.Count; ti++)
+                {
+                    double dTr = Vivarium.Sim.Core.Vec2.Distance(p, trees[ti].Pos);
+                    double rTr = trees[ti].Radius * 2.2;
+                    if (dTr < rTr) contact = Math.Max(contact, 1.0 - dTr / rTr);
+                }
+                for (int li = 0; li < _w.Props.Logs.Count; li++)
+                {
+                    var log = _w.Props.Logs[li];
+                    double dLog = log.AxisDistance(p);
+                    double rLog = log.Radius + 0.14;
+                    if (dLog < rLog) contact = Math.Max(contact, 1.0 - Math.Max(0, dLog - log.Radius) / 0.14);
+                }
+                for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
+                {
+                    var rk = _w.Props.Rocks[ri];
+                    double dRk = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position);
+                    double rRk = rk.FootprintRadius + 0.12;
+                    if (dRk < rRk) contact = Math.Max(contact, 1.0 - Math.Max(0, dRk - rk.FootprintRadius) / 0.12);
+                }
+                _subBytes[so + 3] = (byte)Math.Clamp((int)Math.Round(contact * 255.0), 0, 255);
             }
         }
         _fieldImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _bytes);

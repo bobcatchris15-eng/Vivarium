@@ -79,16 +79,22 @@ void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
     // fine geometric relief: real displacement (not just a normal map) so the soil reads as lumpy ground
-    // rather than a flat painted plane. Gated off gravel/rock/wood/water by the substrate code.
+    // rather than a flat painted plane. Continuous transitions across rock/gravel and mounds subtly at root contacts.
     vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
-    float code = floor(texture(field_tex, fuv).g * 4.0 + 0.5);
-    float soilMask = 1.0 - step(0.5, code);   // 1 on soil (code 0), 0 elsewhere
+    vec4 sub_samp = texture(sub_tex, fuv);
+    float rock_weight = sub_samp.r;
+    float contact = sub_samp.a;
+    float soilMask = clamp(1.0 - rock_weight, 0.0, 1.0);
     float eps = 0.3;
     float h0 = mix(vnoise(world_pos.xz * soil_relief_freq), vnoise(world_pos.xz * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
     float h1 = mix(vnoise((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq), vnoise((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
     float h2 = mix(vnoise((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq), vnoise((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
     float amp = soil_relief_amp * soilMask;
-    VERTEX += NORMAL * (h0 * amp);
+
+    // Root collar and rock contact embedding: gentle soil mounding (15-25 mm) against tree buttress / boulders
+    float contact_mound = contact * 0.020 * soilMask;
+
+    VERTEX += NORMAL * (h0 * amp + contact_mound);
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
     vec3 grad = vec3(eps, (h1 - h0) * amp, 0.0);
@@ -111,7 +117,14 @@ void fragment() {
     ) * 2.0 - 1.0;
     vec2 gravel_uv = (world_pos.xz + gravel_warp * 0.13 - field_rect.xy) / field_rect.zw;
     vec4 sub_smooth = smooth_field(sub_tex, fuv);
-    vec3 sub = vec3(texture(sub_tex, gravel_uv).r, sub_smooth.g, sub_smooth.b);
+    vec4 sub = vec4(texture(sub_tex, gravel_uv).r, sub_smooth.g, sub_smooth.b, sub_smooth.a);
+    float contact_mask = sub.a;
+
+    // Shoreline & standing water depth
+    float surf_y = (sub.b > 0.0) ? (water_table + (sub.b * 255.0 - 1.0) / 100.0) : water_table;
+    float water_surface = (sub.b > 0.0) ? max(water_table, surf_y) : water_table;
+    float water_depth = max(0.0, water_surface - world_pos.y);
+
     // Groundwater submergence is strictly clamped to world_pos.y < water_table
     float gw_sub = (world_pos.y < water_table) ? sub.g : 0.0;
     // Submerged waterway bed (gw_sub). IslandRenderer writes it from the simulation's standing-water depth, not
@@ -128,8 +141,16 @@ void fragment() {
     // The broad field changes scale subtly rather than repeating one 56 cm square across the island.
     vec2 drift = vec2(vnoise(world_pos.xz * 0.72 + vec2(6.2, 1.7)),
                       vnoise(world_pos.xz * 0.72 + vec2(23.7, 14.2))) - 0.5;
-    vec2 uv = world_pos.xz / (tile_metres * mix(0.84, 1.24, macro)) + drift * 0.36;
+    float tile_scale = tile_metres * mix(0.84, 1.24, macro);
+    vec2 uv = world_pos.xz / tile_scale + drift * 0.36;
     vec3 wn = normalize(mix(normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz), relief_wn, relief_mix));
+
+    // Slope-adaptive triplanar blending across slopes:
+    // Flattish terrain (wn.y close to 1) evaluates top projection; steep banks/cliffs blend side projections.
+    vec3 tri_blend = pow(abs(wn), vec3(4.0));
+    tri_blend /= max(tri_blend.x + tri_blend.y + tri_blend.z, 0.0001);
+    vec2 uv_x = vec2(world_pos.z, world_pos.y) / tile_scale + drift * 0.36;
+    vec2 uv_z = vec2(world_pos.x, world_pos.y) / tile_scale + drift * 0.36;
 
     // weights first, then sample only the layers that actually show here (big saving on an iGPU)
     // Silt is deposited sediment, not soaked forest earth: the damp and moss layers are cut back under water so
@@ -139,7 +160,8 @@ void fragment() {
     float stored_litter = smooth_field(litter_tex, fuv).r;
     float ambient_cover = smooth_field(ambient_tex, fuv).r;
     float colony = smooth_field(cover_tex, fuv).r;
-    float wLeaf = stored_litter * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
+    // Litter collects preferentially in sheltered contact zones (root collars, logs, rocks)
+    float wLeaf = (stored_litter * (1.0 + contact_mask * 0.45)) * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
     float wMoss = smoothstep(0.48, 0.83, moisture) * smoothstep(0.20, 0.53, light)
         * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8)) * (1.0 - wSilt)
         * (1.0 - 0.75 * smoothstep(0.04, 0.45, colony));
@@ -148,6 +170,18 @@ void fragment() {
 
     vec3 tn;
     vec4 soil = sample_untiled(soil_col, soil_nrm, soil_rgh, uv, tn);
+    vec3 world_pert = vec3(tn.x, 0.0, -tn.y);
+
+    if (tri_blend.y < 0.95) {
+        vec3 tn_x, tn_z;
+        vec4 soil_x = sample_untiled(soil_col, soil_nrm, soil_rgh, uv_x, tn_x);
+        vec4 soil_z = sample_untiled(soil_col, soil_nrm, soil_rgh, uv_z, tn_z);
+        soil = soil * tri_blend.y + soil_x * tri_blend.x + soil_z * tri_blend.z;
+        vec3 pert_x = vec3(0.0, tn_x.y, -tn_x.x);
+        vec3 pert_z = vec3(-tn_z.x, tn_z.y, 0.0);
+        world_pert = world_pert * tri_blend.y + pert_x * tri_blend.x + pert_z * tri_blend.z;
+    }
+
     // the scan is a warm red-brown: pull it toward a darker umber forest soil (a cool multiplier here reads mauve)
     vec3 col = mix(vec3(dot(soil.rgb, vec3(0.3, 0.59, 0.11))), soil.rgb, 0.7) * vec3(0.84, 0.79, 0.72);
     float rough = soil.a;
@@ -167,22 +201,34 @@ void fragment() {
         col *= mix(0.90, 1.06, clump) * mix(1.0, 0.92, cav * relief_mix);
         col = mix(col, col * vec3(1.06, 0.98, 0.9), smoothstep(0.55, 0.8, vnoise(world_pos.xz * 3.1 + 5.0)) * 0.6);   // drier crusted patches
         vec3 cn = normalize(vec3(-(sx - s0) * 0.9, 0.012, -(sz - s0) * 0.9));   // world normal of the clump field
-        tn = normalize(mix(tn, vec3(cn.x, -cn.z, cn.y), 0.28 * relief_mix));
+        world_pert = mix(world_pert, vec3(cn.x, 0.0, -cn.z), 0.28 * relief_mix);
         rough = mix(rough, 0.95, clump * 0.3);
     }
     if (wDamp > 0.01) {
         vec2 du = uv * 1.15 + 3.1;
         vec3 n2 = unpack_normal(texture(damp_nrm, du).rgb);
         vec4 d = vec4(texture(damp_col, du).rgb, texture(damp_rgh, du).r);
+        if (tri_blend.y < 0.95) {
+            vec2 du_x = uv_x * 1.15 + 3.1;
+            vec2 du_z = uv_z * 1.15 + 3.1;
+            vec4 d_x = vec4(texture(damp_col, du_x).rgb, texture(damp_rgh, du_x).r);
+            vec4 d_z = vec4(texture(damp_col, du_z).rgb, texture(damp_rgh, du_z).r);
+            d = d * tri_blend.y + d_x * tri_blend.x + d_z * tri_blend.z;
+            vec3 n2_x = unpack_normal(texture(damp_nrm, du_x).rgb);
+            vec3 n2_z = unpack_normal(texture(damp_nrm, du_z).rgb);
+            n2 = normalize(n2 * tri_blend.y + n2_x * tri_blend.x + n2_z * tri_blend.z);
+        }
         float w = mix(wDamp, hblend(wDamp, dot(d.rgb, vec3(0.33)) * 2.0), 0.35);   // soft: moisture creeps, it has no edge
-        col = mix(col, d.rgb, w); rough = mix(rough, d.a, w); tn = normalize(mix(tn, n2, w));
+        col = mix(col, d.rgb, w); rough = mix(rough, d.a, w);
+        world_pert = mix(world_pert, vec3(n2.x, 0.0, -n2.y), w);
     }
     if (wLeaf > 0.01) {
         vec2 lu = uv * 1.3 + 1.7;
         vec3 ln = unpack_normal(texture(leaf_nrm, lu).rgb);
         vec4 l = vec4(texture(leaf_col, lu).rgb, texture(leaf_rgh, lu).r);
         float w = hblend(wLeaf, dot(l.rgb, vec3(0.33)) * 2.0);
-        col = mix(col, l.rgb, w); rough = mix(rough, l.a, w); tn = normalize(mix(tn, ln, w));
+        col = mix(col, l.rgb, w); rough = mix(rough, l.a, w);
+        world_pert = mix(world_pert, vec3(ln.x, 0.0, -ln.y), w);
     }
     if (wMoss > 0.01) {
         vec2 mu = uv * 2.4 + 7.3;
@@ -195,33 +241,54 @@ void fragment() {
         vec3 rhizoid_col = mix(col * 0.78, natural_moss, smoothstep(0.08, 0.45, w));
         col = mix(col, rhizoid_col, w * 0.75);
         rough = mix(rough, m.a, w * 0.7);
-        tn = normalize(mix(tn, mn, w));
+        world_pert = mix(world_pert, vec3(mn.x, 0.0, -mn.y), w);
     }
     if (wGrav > 0.01) {
         vec2 gu = uv * 2.4;
         vec3 gn = unpack_normal(texture(gravel_nrm, gu).rgb);
         vec4 g = vec4(texture(gravel_col, gu).rgb, texture(gravel_rgh, gu).r);
+        if (tri_blend.y < 0.95) {
+            vec2 gu_x = uv_x * 2.4;
+            vec2 gu_z = uv_z * 2.4;
+            vec4 g_x = vec4(texture(gravel_col, gu_x).rgb, texture(gravel_rgh, gu_x).r);
+            vec4 g_z = vec4(texture(gravel_col, gu_z).rgb, texture(gravel_rgh, gu_z).r);
+            g = g * tri_blend.y + g_x * tri_blend.x + g_z * tri_blend.z;
+            vec3 gn_x = unpack_normal(texture(gravel_nrm, gu_x).rgb);
+            vec3 gn_z = unpack_normal(texture(gravel_nrm, gu_z).rgb);
+            gn = normalize(gn * tri_blend.y + gn_x * tri_blend.x + gn_z * tri_blend.z);
+        }
         g.rgb = mix(vec3(dot(g.rgb, vec3(0.3, 0.59, 0.11))), g.rgb, 0.45) * vec3(1.03, 1.0, 0.95);   // desaturate, warm slightly
-        float w = hblend(wGrav, dot(g.rgb, vec3(0.33)) * 2.0);
-        col = mix(col, g.rgb, w); rough = mix(rough, g.a, w); tn = normalize(mix(tn, gn, w));
+        // Height-aware displacement blend for rock/soil transition per Section 6: pebbles emerge from soil, soil in hollows
+        float stone_h = dot(g.rgb, vec3(0.33)) * 1.4;
+        float soil_h = dot(soil.rgb, vec3(0.33));
+        float w = clamp(((wGrav * 1.4 + stone_h * 0.35 - soil_h * 0.25) - 0.15) / 0.70, 0.0, 1.0);
+        col = mix(col, g.rgb, w); rough = mix(rough, g.a, w);
+        world_pert = mix(world_pert, vec3(gn.x, 0.0, -gn.y), w);
     }
     if (wSilt > 0.01) {
-        // Silt: fine pale sediment settled out of the water. None of the scans (soil, damp earth, moss, leaf
-        // litter) is what a stream bed actually looks like, so the bed is repainted rather than tinted. A little
-        // of its own broad value variation is kept so the channel still reads as a surface, and the fine normal
-        // is flattened: settled silt is smooth and matte, not the pebbled relief of a soil scan.
+        // Riparian alluvial silt: fine-grained mineral sediment with gentle flow micro-ripples and sleek wet sheen.
+        // Distinct from porous crumbly organic damp earth (which has coarse aggregate relief and clods).
         float silt_grain = fbm(world_pos.xz * 5.3 + vec2(5.1, 31.7));
-        // Dark, muddy brown: wet organic sediment. These are LINEAR albedo values under an Agx tonemapper, which
-        // lifts shadows, so they sit far lower than the sRGB brown they read as (roughly sRGB 0.30/0.25/0.21).
-        // Warm-biased so it still separates from the surrounding damp soil.
-        vec3 silt_col = vec3(0.070, 0.049, 0.034) * mix(0.78, 1.22, silt_grain);
+        float silt_ripple = sin(world_pos.x * 24.0 + world_pos.z * 12.0 + silt_grain * 2.5) * 0.5 + 0.5;
+
+        // Pale alluvial silt when dry/shallow bank, darkening to sleek alluvial mud when submerged
+        vec3 silt_bank = vec3(0.088, 0.072, 0.054) * mix(0.85, 1.15, silt_grain);
+        vec3 silt_mud = vec3(0.048, 0.038, 0.029) * mix(0.82, 1.18, silt_grain + silt_ripple * 0.15);
+        vec3 silt_col = mix(silt_bank, silt_mud, smoothstep(0.0, 0.02, water_depth));
+
+        // Sleek wet sheen per measurements.md (saturated shoreline mud roughness 0.12 - 0.28)
+        float silt_rough = mix(0.72, 0.22, smoothstep(0.0, 0.025, water_depth));
+
         col = mix(col, silt_col, wSilt);
-        rough = mix(rough, 0.96, wSilt);
-        tn = normalize(mix(tn, vec3(0.0, 0.0, 1.0), wSilt * 0.6));
+        rough = mix(rough, silt_rough, wSilt);
+
+        // Smooth flow micro-ripple normal (replaces coarse soil crumbs with alluvial ripple)
+        vec3 ripple_pert = vec3(cos(world_pos.x * 24.0) * 0.06, 0.0, sin(world_pos.z * 12.0) * 0.06);
+        world_pert = mix(world_pert, ripple_pert, wSilt * 0.85);
     }
 
-    // world-space normal: geometry normal perturbed by the blended detail (uv = world xz; GL green = -z)
-    vec3 detail = normalize(wn + vec3(tn.x, 0.0, -tn.y) * 0.9);
+    // world-space normal: geometry normal perturbed by the blended detail (GL green = -z)
+    vec3 detail = normalize(wn + world_pert * 0.9);
 
 
     // Anonymous low vegetation reads as a soft green underlayer at distance. Close-up silhouette comes from
@@ -279,10 +346,6 @@ void fragment() {
     float soil_wet = smoothstep(0.7, 1.0, moisture) * silt_clear;
 
     // Enhance shoreline transition using standing water depth:
-    float surf_y = (sub.b > 0.0) ? (water_table + (sub.b * 255.0 - 1.0) / 100.0) : water_table;
-    float water_surface = (sub.b > 0.0) ? max(water_table, surf_y) : water_table;
-    float water_depth = max(0.0, water_surface - world_pos.y);
-
     float gw_shore_wet = (sub.g > 0.0 && world_pos.y < water_table + 0.02) ? smoothstep(0.001, 0.02, water_table + 0.02 - world_pos.y) : 0.0;
     float surf_shore_wet = (sub.b > 0.0 && world_pos.y < surf_y + 0.02) ? smoothstep(0.001, 0.02, surf_y + 0.02 - world_pos.y) : 0.0;
     float shore_wet = max(gw_shore_wet, surf_shore_wet) * silt_clear;
@@ -310,12 +373,24 @@ void fragment() {
         EMISSION = vec3(0.0);
     }
 
+    // Local ground contact mask (root collars, nurse logs, boulders):
+    // Organic humus enrichment and cavity occlusion WITHOUT dark spray-paint halos
+    if (contact_mask > 0.01) {
+        // Natural rich organic humus accumulation: slight warmth and subtle deepening, never black paint
+        vec3 humus_enrich = vec3(0.88, 0.85, 0.80);
+        col = mix(col, col * humus_enrich, contact_mask * 0.35);
+        // Compacted damp contact under root flare / logs
+        rough = mix(rough, 0.76, contact_mask * 0.28);
+    }
+
     if (overlay_mode == 1) col = mix(col, ramp(moisture), overlay_strength);
     else if (overlay_mode == 2) col = mix(col, ramp(f.b), overlay_strength);
     else if (overlay_mode == 3) col = mix(col, ramp(light), overlay_strength);
     else if (overlay_mode == 4) col = mix(col, vec3(code == 0.0 ? 0.55 : 0.0, code == 1.0 ? 0.8 : (code == 0.0 ? 0.35 : 0.0), code >= 2.0 ? 0.3 + 0.2 * code : 0.1), overlay_strength);
-    // Preserve pore shadows even when the wet surface catches the sky.
-    AO = mix(0.82, 1.0, smoothstep(0.12, 0.6, dot(soil.rgb, vec3(0.333))));
+    // Preserve pore shadows even when the wet surface catches the sky. Contact mask deepens cavity occlusion.
+    float base_ao = mix(0.82, 1.0, smoothstep(0.12, 0.6, dot(soil.rgb, vec3(0.333))));
+    float contact_ao = mix(1.0, 0.58, contact_mask);
+    AO = min(base_ao, contact_ao);
     AO_LIGHT_AFFECT = 0.25;
     ALBEDO = col;
     ROUGHNESS = rough;
