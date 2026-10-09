@@ -20,6 +20,18 @@ vec3 pack_normal(vec3 n) { n = normalize(n); return vec3(n.xy * 0.5 + 0.5, 1.0);
 // Rotates a uv by an angle (used to break up texture repetition).
 vec2 rot2(vec2 uv, float a) { float c = cos(a), s = sin(a); return vec2(c * uv.x - s * uv.y, s * uv.x + c * uv.y); }
 
+// Screen-space cotangent frame normal mapping (OpenGL/Godot convention: +Y up in texture -> -V in UV).
+// detail is the tangent-space normal (detail.z pointing outward along geom_normal).
+vec3 cotangent_normal(vec3 geom_normal, vec3 p_world, vec2 uv, vec3 detail) {
+    vec3 px = dFdx(p_world), py = dFdy(p_world);
+    vec2 ux = dFdx(uv), uy = dFdy(uv);
+    vec3 r1 = cross(py, geom_normal), r2 = cross(geom_normal, px);
+    vec3 t = r1 * ux.x + r2 * uy.x;
+    vec3 b = r1 * ux.y + r2 * uy.y;
+    float inv = inversesqrt(max(max(dot(t, t), dot(b, b)), 1e-12));
+    return normalize(geom_normal * detail.z + (t * detail.x - b * detail.y) * inv);
+}
+
 // Anti-tiling: two lookups at different scales/rotations mixed by low-frequency noise.
 // Returns albedo (linear), roughness in .a; the matching normal is written to n_out (tangent space).
 vec4 sample_untiled(sampler2D col, sampler2D nrm, sampler2D rgh, vec2 uv, out vec3 n_out) {

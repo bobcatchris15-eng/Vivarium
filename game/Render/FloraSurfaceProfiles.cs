@@ -13,16 +13,23 @@ internal static class FloraSurfaceProfiles
     {
         var leaf = Leaf(species.Id);
         material.SetShaderParameter("leaf_top", leaf.Top);
+        material.SetShaderParameter("top_pigment", leaf.Top);
         material.SetShaderParameter("leaf_back", leaf.Back);
+        material.SetShaderParameter("back_pigment", leaf.Back);
         material.SetShaderParameter("leaf_type", leaf.Type);
         material.SetShaderParameter("vein_strength", leaf.Veins);
         material.SetShaderParameter("cuticle_sheen", leaf.Sheen);
+        material.SetShaderParameter("leaf_roughness", Mathf.Clamp(0.55f - leaf.Sheen * 0.25f, 0.20f, 0.85f));
+        material.SetShaderParameter("back_roughness", 0.82f);
         material.SetShaderParameter("leaf_transmission", leaf.Transmission);
+        material.SetShaderParameter("transmission", leaf.Transmission);
         material.SetShaderParameter("leaf_pattern", LeafPattern(species.Id));
         material.SetShaderParameter("leaf_variegation", Variegation(species.Id));
         material.SetShaderParameter("pitcher_tissue", species.Id == "pitcher_plant");
         material.SetShaderParameter("single_leaf_sheets", species.Id is "pitcher_plant" or "blue_sundew"
-            or "snaptrap" or "veilblade" or "hookthicket" or "kinkcane");
+            or "snaptrap" or "veilblade" or "hookthicket" or "kinkcane"
+            or "veilfern" or "streamribbon" or "ringreed" or "frosttussock"
+            or "glassrush" or "coinrunner" or "trifold" or "prismstar" or "fencomb");
         if (photographedLeaves && Scan(species.Id) is { } scan)
         {
             material.SetShaderParameter("leaf_scan_col", GD.Load<Texture2D>($"res://Textures/Leaves/{scan.Asset}_2K-JPG_Color.jpg"));

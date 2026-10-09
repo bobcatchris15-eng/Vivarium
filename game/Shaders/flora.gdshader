@@ -46,19 +46,16 @@ uniform sampler2D bark_col : source_color, filter_linear_mipmap_anisotropic, rep
 uniform sampler2D bark_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 
+uniform vec3 top_pigment = vec3(-1.0);
+uniform vec3 back_pigment = vec3(-1.0);
+uniform float transmission = -1.0;
 uniform sampler2D ground_tex : filter_linear, repeat_disable;
 uniform vec4 ground_rect = vec4(0.0);
 uniform float ground_conform = 0.0;
 
 // Derivative frame follows each branch/leaf's authored UVs, including curved attachments.
 vec3 surface_normal(vec3 base, vec3 p, vec2 uv, vec3 detail) {
-    vec3 px = dFdx(p), py = dFdy(p);
-    vec2 ux = dFdx(uv), uy = dFdy(uv);
-    vec3 r1 = cross(py, base), r2 = cross(base, px);
-    vec3 t = r1 * ux.x + r2 * uy.x;
-    vec3 b = r1 * ux.y + r2 * uy.y;
-    float inv = inversesqrt(max(max(dot(t,t), dot(b,b)), 1e-12));
-    return normalize(base * detail.z + (t * detail.x - b * detail.y) * inv);
+    return cotangent_normal(base, p, uv, detail);
 }
 
 varying vec4 inst;
@@ -70,9 +67,12 @@ void vertex() {
     inst = INSTANCE_CUSTOM;
     obj_pos = VERTEX;
     float h = max(VERTEX.y, 0.0);
+    bool is_leaf = UV2.y > 0.5 && UV2.x < 1.5;
+    bool is_woody = surface_mode == 2 && UV2.x > 1.5;
+
     // Migrated blades encode base-to-tip position in UV.x. Keep attachments fixed and
     // bend the distal blade with smooth, seed-stable variation rather than vertex noise.
-    if (deform_leaf_tips && UV2.y > 0.5) {
+    if (deform_leaf_tips && is_leaf) {
         float tip = smoothstep(0.08, 0.92, UV.x);
         float above_base = smoothstep(0.0, 0.12, h);
         float weight = tip * tip * above_base;
@@ -82,10 +82,27 @@ void vertex() {
         VERTEX.xz *= vec2(spread, 2.0 - spread);
         VERTEX.xz += vec2(bend_x, bend_z) * weight * 0.028;
     }
-    float phase = clock * 1.3 + inst.w * 6.2831;
-    float amount = (0.012 * sway + inst.z * 0.15) / stiffness;
-    VERTEX.x += sin(phase) * h * h * amount * 3.0 + sin(clock * 18.0 + inst.w * 40.0) * inst.z * h * 0.2;
-    VERTEX.z += cos(phase * 0.8) * h * h * amount * 2.0;
+
+    // Hierarchical branch sway: bounded cantilever curvature preserving shadow bounds
+    float h_bend = (h * h) / (1.0 + 0.35 * h);
+    float eff_stiffness = is_woody ? max(stiffness * 2.0, 1.4) : max(stiffness, 0.5);
+    float amount = (0.010 * sway + inst.z * 0.12) / eff_stiffness;
+    float branch_phase = clock * 1.25 + inst.w * 6.2831;
+    vec2 branch_sway = clamp(vec2(sin(branch_phase) * 2.2, cos(branch_phase * 0.85) * 1.6) * amount * h_bend, vec2(-0.35), vec2(0.35));
+    VERTEX.xz += branch_sway;
+
+    // High-frequency leaf flutter for distal blades (never woody trunks)
+    if (is_leaf) {
+        float tip = smoothstep(0.1, 0.9, UV.x);
+        float flutter = sin(clock * 4.5 + inst.w * 25.0 + UV.x * 6.0) * (0.008 * tip);
+        VERTEX.y += flutter;
+    }
+
+    // Rotate normal with stem deflection
+    float d_bend = amount * 2.0 * h / (1.0 + 0.35 * h);
+    vec2 dw = vec2(sin(branch_phase) * 2.2, cos(branch_phase * 0.85) * 1.6) * d_bend;
+    NORMAL = normalize(vec3(NORMAL.x - dw.x * NORMAL.y, NORMAL.y + dw.x * NORMAL.x + dw.y * NORMAL.z, NORMAL.z - dw.y * NORMAL.y));
+
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
     if (ground_rect.z > 0.0) {
@@ -104,6 +121,10 @@ void vertex() {
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 void fragment() {
+    // Double-sided normal handling: invert backface normal so undersides do not render dark or inverted.
+    if (!FRONT_FACING) {
+        NORMAL = -NORMAL;
+    }
     vec3 c = srgb_to_linear(COLOR.rgb) * (1.0 + (inst.x - 0.5) * 0.3);
     vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
     vec3 n = wn;
@@ -186,8 +207,10 @@ void fragment() {
             rough = 0.19;
         } else if (UV2.y > 0.5) {
             float along = UV.x, across = UV.y - 0.5;
-            float face = single_leaf_sheets ? float(!FRONT_FACING) : step(0.5, UV2.x);
-            vec3 pigment = mix(leaf_top, leaf_back, face);
+            float face = (!FRONT_FACING || (UV2.x > 0.5 && UV2.x < 1.5)) ? 1.0 : 0.0;
+            vec3 actual_leaf_top = top_pigment.r >= 0.0 ? top_pigment : leaf_top;
+            vec3 actual_leaf_back = back_pigment.r >= 0.0 ? back_pigment : leaf_back;
+            vec3 pigment = mix(actual_leaf_top, actual_leaf_back, face);
             float cells = vnoise(vec2(along * 24.0, across * 31.0) + inst.w * 13.0);
             float micro = vnoise(vec2(along * 91.0, across * 105.0) + inst.w * 27.0);
             float mid = 1.0 - smoothstep(0.006, 0.026 + fwidth(across), abs(across));
@@ -258,11 +281,10 @@ void fragment() {
             vec3 leaf_n = normalize(vec3(-dFdx(ridge) * 0.8, -dFdy(ridge) * 0.8, 1.0));
             n = surface_normal(wn, world_pos, UV, leaf_n);
             float family_rough = leaf_type == 1 ? 0.78 : leaf_type == 2 ? 0.74 : leaf_type == 3 ? 0.52 : leaf_type == 4 ? 0.46 : leaf_type == 5 ? 0.68 : 0.61;
-            rough = clamp(family_rough - 0.12 - cuticle_sheen * 0.22 + (cells - 0.5) * 0.13 + edge * 0.05 + face * 0.10, 0.24, 0.9);
-            if (leaf_pattern == 3) rough = clamp(rough - 0.18 * (1.0 - face), 0.28, 0.82);
-            else if (leaf_pattern == 4) rough = clamp(rough - 0.09 + (cells - 0.5) * 0.08, 0.34, 0.82);
-            else if (leaf_pattern == 5) rough = clamp(rough - 0.04, 0.34, 0.9);
-            rough = clamp(rough - 0.10 * top_face, 0.22, 0.95); // waxy upper cuticle
+            rough = clamp(family_rough - 0.10 - cuticle_sheen * 0.20 * top_face + (cells - 0.5) * 0.12 + face * 0.16, 0.22, 0.95);
+            if (leaf_pattern == 3) rough = clamp(rough - 0.18 * top_face, 0.24, 0.85);
+            else if (leaf_pattern == 4) rough = clamp(rough - 0.08 + (cells - 0.5) * 0.08, 0.32, 0.85);
+            else if (leaf_pattern == 5) rough = clamp(rough - 0.04, 0.32, 0.92);
             if (leaf_scan_blend > 0.0) {
                 vec2 atlas_axis = leaf_scan_swap ? vec2(UV.y, UV.x) : UV;
                 vec2 scan_uv = leaf_scan_rect.xy + atlas_axis * leaf_scan_rect.zw;
@@ -270,7 +292,7 @@ void fragment() {
                 // The back has its own tissue pigment; carry over photographed
                 // fine variation without painting a green top onto the underside.
                 float scan_value = clamp(lum(scan_col) / 0.12, 0.65, 1.35);
-                vec3 scanned = mix(scan_col, leaf_back * scan_value, face);
+                vec3 scanned = mix(scan_col, actual_leaf_back * scan_value, face);
                 c = mix(c, scanned, leaf_scan_blend);
                 if (leaf_pattern == 4)
                     c = mix(c, srgb_to_linear(COLOR.rgb), smoothstep(0.68, 0.96, along) * 0.72);
@@ -278,7 +300,7 @@ void fragment() {
                 n = surface_normal(wn, world_pos, scan_uv,
                     normalize(vec3(scan_n.xy * leaf_scan_normal, scan_n.z)));
                 rough = clamp(mix(rough, texture(leaf_scan_rgh, scan_uv).r,
-                    leaf_scan_blend * 0.8) + face * 0.08, 0.30, 0.98);
+                    leaf_scan_blend * 0.8) + face * 0.12, 0.28, 0.98);
             }
         } else if (UV2.x > 0.5) {
             // Glossy fruit / berries
@@ -288,11 +310,6 @@ void fragment() {
             rough = leaf_type == 4 ? 0.52 : leaf_type == 5 ? 0.66 : 0.72;
         }
     }
-    if (surface_mode == 2 && UV2.y > 0.5 && UV2.x < 1.5) {
-        // Fresnel sheen of the cuticle at grazing angles.
-        float ndv = clamp(abs(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos))), 0.0, 1.0);
-        c += c * 0.6 * pow(1.0 - ndv, 3.0) + vec3(0.010, 0.012, 0.010) * pow(1.0 - ndv, 4.0);
-    }
     // Stress fades to a luminance-matched olive-brown; only genuinely failing tissue reads as straw.
     // Only genuinely failing tissue fades; mid-health foliage keeps its full pigment.
     float health = smoothstep(0.0, 0.28, clamp(inst.y, 0.0, 1.0));
@@ -300,7 +317,14 @@ void fragment() {
     ALBEDO = mix(faded, c, 0.30 + 0.70 * health);
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
-    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.22 : mix(0.5, 0.72, cuticle_sheen)) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? (leaf_type == 5 ? c * vec3(0.95, 1.55, 0.55) * leaf_transmission * 2.4 : c * vec3(1.00, 1.50, 0.58) * leaf_transmission * 1.6) : c * 0.025)) : c * (surface_mode == 3 ? 0.2 : 0.07);
+    float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
+    float leaf_spec = mix(0.35, mix(0.48, 0.68, cuticle_sheen), top_side);
+    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.20 : leaf_spec) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
+    float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
+    float trans_clamped = clamp(actual_leaf_trans, 0.0, 0.5);
+    vec3 transmit_tint = leaf_type == 5 ? vec3(0.92, 1.35, 0.45) : vec3(0.95, 1.30, 0.50);
+    float vein_occlusion = UV2.y > 0.5 ? clamp(1.0 - (1.0 - smoothstep(0.010, 0.034 + fwidth(UV.y - 0.5), abs(UV.y - 0.5))) * 0.60, 0.4, 1.0) : 1.0;
+    vec3 leaf_backlight = c * transmit_tint * trans_clamped * vein_occlusion;
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }
