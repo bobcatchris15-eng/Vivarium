@@ -649,22 +649,28 @@ Tests: fresh offline-compatible checkout builds/runs without Blender, export boo
 
 ```text
 P00 -> P01 -> P02 -> P03 -> G0
-                   |
-            +------+--------+
-            |               |
-          P04 -> P04R -> P05 -> P06   P10
-            |               |
-       P07 / P08 / P09     P11 -> P12 -> P13 -> P14
-            |               |
-           G1               G2
-            \               /
-             +-----+-------+
-                   |
-           P15 -> P16 -> P17 -> P18 -> P19 -> P20 -> G3
-                   |
-           P21R -> P21 -> P22 -> P23 -> P24 -> P25 -> P26 -> G4
-                   |
-               P27 -> P28 -> P29 -> P30 -> G5
+                         |
+                         v
+                   P04 -> P04R  [research dossiers]
+                          | \
+                          |  \-> P10R -> P10 -> P11 -> P12 -> P13 -> P14 -> G2
+                          |
+                          v
+                    P05 -> P06
+                          |
+                          v
+                   P07 / P08 / P09 -> G1
+                          |
+                          +-------------+
+                                        |
+                             G1 + G2 -> P15 -> P16 -> P17 -> P18 -> P19 -> P20 -> G3
+                                                                    |
+                                                          G3 -> P21R -> P21 -> P22 -> P23
+                                                                                -> P24 -> P25 -> P26 -> G4
+                                                                                                   |
+                                                                                                   v
+                                                                                          P27 -> P28 -> P29
+                                                                                                      -> P30 -> G5
 ```
 
 Phase D profiling P15 can start immediately after G0. Phase E sampling design P21 can also begin early as a standalone prototype, but **integration of new batches, materials and scatter must wait for compatible visual data contracts**. Pilot art P07/P08/P09 can proceed in separate files/worktrees; shader/material edits P10–P14 need one coordinated owner because they share bindings.
