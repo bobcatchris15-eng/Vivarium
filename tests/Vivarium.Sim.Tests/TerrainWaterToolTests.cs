@@ -1,4 +1,5 @@
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry;
 using Vivarium.Sim.Persistence;
 using Vivarium.Sim.Tools;
 using Vivarium.Sim.World;
@@ -8,6 +9,7 @@ namespace Vivarium.Sim.Tests;
 [Trait("Suite", "Tools")]
 public class TerrainWaterToolTests
 {
+
     [Fact]
     public void RaiseAndLowerChangeGroundUnderTheBrushOnlyAndRespectLimits()
     {
@@ -171,5 +173,67 @@ public class TerrainWaterToolTests
         Assert.Equal(hFarBefore, w.Terrain.Height(far), 9);
     }
 
+    [Fact]
+    public void SpringVentPropAddedOnPlacementAndRemovedOnToggleOff()
+    {
+        var w = TestUtil.FlatWorld();
+        var t = new ToolActions(w);
+        var p = new Vec2(0.5, 0.5);
+
+        Assert.Empty(w.Props.Props);
+
+        var res = t.ToggleSpring(p);
+        Assert.True(res.Ok, res.Message);
+
+        // Verify SpringVent prop is added
+        var vent = Assert.Single(w.Props.Props);
+        Assert.Equal(PropKind.SpringVent, vent.Kind);
+        Assert.Equal(p.X, vent.X, 6);
+        Assert.Equal(p.Z, vent.Z, 6);
+        Assert.Equal(w.Terrain.Height(p), vent.Y, 6);
+
+        // Verify SpringVent prop is also accessible via Items and Find
+        Assert.Single(w.Props.Items);
+        Assert.Same(vent, w.Props.Find(vent.Id));
+
+        // Toggling off cleans up the associated SpringVent prop
+        var removeRes = t.ToggleSpring(p);
+        Assert.True(removeRes.Ok, removeRes.Message);
+        Assert.Empty(w.Props.Props);
+        Assert.Empty(w.Props.Items);
+        Assert.Null(w.Props.Find(vent.Id));
+    }
+
+    [Fact]
+    public void PropMeshesBuildGeneratesSpringVentGeometry()
+    {
+        var mesh = PropMeshes.Build(PropKind.SpringVent, 12345);
+        Assert.NotNull(mesh);
+        Assert.True(mesh.VertexCount > 0);
+        Assert.True(mesh.TriangleCount > 0);
+
+        // Check outer radius is ~0.08m to 0.12m
+        double maxRadius = 0;
+        bool hasSunkenCenter = false;
+
+        for (int i = 0; i < mesh.VertexCount; i++)
+        {
+            float vx = mesh.Positions[i * 3];
+            float vy = mesh.Positions[i * 3 + 1];
+            float vz = mesh.Positions[i * 3 + 2];
+            double r = Math.Sqrt(vx * vx + vz * vz);
+            if (r > maxRadius) maxRadius = r;
+            if (r < 0.01 && vy < -0.02f) hasSunkenCenter = true;
+        }
+
+        Assert.InRange(maxRadius, 0.08, 0.12);
+        Assert.True(hasSunkenCenter, "Expected sunken dark center aperture");
+
+        // Overload using Prop instance
+        var prop = new Prop { Kind = PropKind.SpringVent, VariantSeed = 12345 };
+        var meshFromProp = PropMeshes.Build(prop);
+        Assert.Equal(mesh.VertexCount, meshFromProp.VertexCount);
+        Assert.Equal(mesh.TriangleCount, meshFromProp.TriangleCount);
+    }
 }
 

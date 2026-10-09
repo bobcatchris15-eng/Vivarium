@@ -247,6 +247,10 @@ public sealed class ToolActions
         if (SpringNear(p) is { } existing)
         {
             _w.Water.Springs.Remove(existing);
+            while (_w.Props.Props.FirstOrDefault(pr => pr.Kind == PropKind.SpringVent && Vec2.Distance(pr.Position, existing.Position) <= 0.35) is { } vent)
+            {
+                _w.Props.Remove(vent);
+            }
             return ToolResult.Success("removed the spring", existing.Id);
         }
         var problem = PreviewSpring(p);
@@ -255,6 +259,17 @@ public sealed class ToolActions
         _w.Water.Springs.Add(sp);
         TerrainEditing.CarveSpringHole(_w.Terrain, p);
         _w.Water.RefreshBed(_w.Terrain);
+        double bedHeight = _w.Terrain.Height(p);
+        var ventProp = new Prop
+        {
+            Id = _w.Ids.Next(EntityKind.Rock),
+            Kind = PropKind.SpringVent,
+            X = p.X,
+            Z = p.Z,
+            Y = bedHeight,
+            VariantSeed = (ulong)sp.Id.Value,
+        };
+        _w.Props.Add(ventProp);
         return ToolResult.Success("a new spring bubbles up", sp.Id);
     }
 

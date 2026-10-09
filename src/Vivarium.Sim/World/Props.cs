@@ -1,7 +1,38 @@
+using System.Collections;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 
 namespace Vivarium.Sim.World;
+
+public enum PropKind
+{
+    SpringVent,
+}
+
+/// <summary>Generic prop instance (spring vents, apertures, etc.).</summary>
+public sealed class Prop
+{
+    public EntityId Id { get; set; }
+    public PropKind Kind { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Z { get; set; }
+    public double RotationY { get; set; }
+    public ulong VariantSeed { get; set; }
+    public List<string> HabitatTags { get; set; } = new();
+    public double Radius { get; set; } = 0.10;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Vec2 Position => new(X, Z);
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Vec3 Position3D => new(X, Y, Z);
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double FootprintRadius => Radius;
+
+    public bool Covers(Vec2 p) => Vec2.Distance(p, Position) <= (Radius > 0 ? Radius : 0.10);
+}
 
 /// <summary>Persistent rock instance. Visual form is derived from VariantSeed by the mesh builder; never stored.</summary>
 public sealed class Rock
@@ -128,20 +159,56 @@ public sealed class PropSet
     public List<Rock> Rocks { get; set; } = new();
     public List<LogProp> Logs { get; set; } = new();
     public List<GravelPatch> Gravel { get; set; } = new();
+    public List<Prop> Props { get; set; } = new();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<Prop> Items => Props;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<Prop> Vents => Props;
 
     /// <summary>Change counter for derived caches (light field, renderers). Not authoritative state.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public int Version { get; private set; }
     public void Touch() => Version++;
 
-    public int Count => Rocks.Count + Logs.Count + Gravel.Count;
+    public int Count => Rocks.Count + Logs.Count + Gravel.Count + Props.Count;
+
+    public void Add(Prop prop)
+    {
+        Props.Add(prop);
+        Touch();
+    }
+
+    public bool Remove(Prop prop)
+    {
+        bool removed = Props.Remove(prop);
+        if (removed) Touch();
+        return removed;
+    }
+
+    public bool Remove(EntityId id)
+    {
+        int idx = Props.FindIndex(p => p.Id == id);
+        if (idx >= 0)
+        {
+            Props.RemoveAt(idx);
+            Touch();
+            return true;
+        }
+        return false;
+    }
 
     public Rock? RockAt(Vec2 p) { foreach (var r in Rocks) if (r.Covers(p)) return r; return null; }
     public LogProp? LogAt(Vec2 p) { foreach (var l in Logs) if (l.Covers(p)) return l; return null; }
     public GravelPatch? GravelAt(Vec2 p) { foreach (var g in Gravel) if (g.Covers(p)) return g; return null; }
+    public Prop? PropAt(Vec2 p) { foreach (var pr in Props) if (pr.Covers(p)) return pr; return null; }
 
     public object? Find(EntityId id) =>
-        (object?)Rocks.FirstOrDefault(r => r.Id == id) ?? (object?)Logs.FirstOrDefault(l => l.Id == id) ?? Gravel.FirstOrDefault(g => g.Id == id);
+        (object?)Rocks.FirstOrDefault(r => r.Id == id) 
+        ?? (object?)Logs.FirstOrDefault(l => l.Id == id) 
+        ?? (object?)Gravel.FirstOrDefault(g => g.Id == id)
+        ?? Props.FirstOrDefault(p => p.Id == id);
 
     /// <summary>Highest prop surface at p (NaN if none).</summary>
     public double PropTopAt(Vec2 p)
@@ -152,7 +219,7 @@ public sealed class PropSet
         return best;
     }
 
-    /// <summary>Distance from p to the nearest prop of a feature class ("log", "rock", "gravel").</summary>
+    /// <summary>Distance from p to the nearest prop of a feature class ("log", "rock", "gravel", "vent").</summary>
     public double DistanceToFeature(Vec2 p, string feature)
     {
         double best = double.PositiveInfinity;
@@ -161,6 +228,7 @@ public sealed class PropSet
             case "rock": foreach (var r in Rocks) best = Math.Min(best, Math.Max(0, Vec2.Distance(p, r.Position) - r.FootprintRadius)); break;
             case "log": foreach (var l in Logs) best = Math.Min(best, Math.Max(0, l.AxisDistance(p) - l.Radius)); break;
             case "gravel": foreach (var g in Gravel) best = Math.Min(best, Math.Max(0, Vec2.Distance(p, g.Position) - g.Radius)); break;
+            case "vent": case "spring_vent": foreach (var pr in Props) if (pr.Kind == PropKind.SpringVent) best = Math.Min(best, Math.Max(0, Vec2.Distance(p, pr.Position) - pr.Radius)); break;
         }
         return best;
     }
@@ -170,5 +238,6 @@ public sealed class PropSet
         foreach (var r in Rocks) if (r.Covers(p)) foreach (var t in r.HabitatTags) yield return t;
         foreach (var l in Logs) if (l.Covers(p)) foreach (var t in l.HabitatTags) yield return t;
         foreach (var g in Gravel) if (g.Covers(p)) yield return "gravel";
+        foreach (var pr in Props) if (pr.Covers(p)) foreach (var t in pr.HabitatTags) yield return t;
     }
 }
