@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Living landscape report v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "provenance",
+    "world",
+    "scenario",
+    "render_settings",
+    "cpu_timing",
+    "gpu_timing",
+    "frame_times",
+    "counters",
+    "digest_before",
+    "digest_after",
+    "render_only_digest_before",
+    "render_only_digest_after",
+    "artifacts",
+    "warnings",
+    "executing_code",
+    "invariants"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "source_revision",
+        "source_tree_sha256",
+        "engine_version",
+        "executable_sha256",
+        "gpu",
+        "driver",
+        "cpu",
+        "ram_bytes",
+        "os",
+        "display_scaling",
+        "isolation_confirmed",
+        "started_utc",
+        "preset",
+        "startup_kind"
+      ]
+    },
+    "world": {
+      "type": "object"
+    },
+    "scenario": {
+      "type": "object"
+    },
+    "render_settings": {
+      "type": "object"
+    },
+    "cpu_timing": {
+      "type": "array"
+    },
+    "gpu_timing": {
+      "type": [
+        "null",
+        "object"
+      ]
+    },
+    "frame_times": {
+      "type": "object",
+      "required": [
+        "samples_ms",
+        "windows",
+        "p50_ms",
+        "p95_ms",
+        "p99_ms",
+        "p999_ms",
+        "worst_ms"
+      ]
+    },
+    "counters": {
+      "type": "object",
+      "required": [
+        "memory",
+        "samples",
+        "unsupported"
+      ]
+    },
+    "digest_before": {
+      "type": "string"
+    },
+    "digest_after": {
+      "type": "string"
+    },
+    "render_only_digest_before": {
+      "type": "string"
+    },
+    "render_only_digest_after": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "array"
+    },
+    "warnings": {
+      "type": "array"
+    },
+    "executing_code": {
+      "type": "object",
+      "required": [
+        "game_assembly",
+        "game_assembly_sha256",
+        "sim_assembly_sha256"
+      ]
+    },
+    "invariants": {
+      "type": "object",
+      "required": [
+        "reload_digest",
+        "replay_expected_digest",
+        "replay_actual_digest",
+        "ticks"
+      ]
+    }
+  }
+}

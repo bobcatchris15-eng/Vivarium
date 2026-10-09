@@ -14,6 +14,13 @@ param(
     [string]$Filter = "*"
 )
 $ErrorActionPreference = "Stop"
+# New reports have stricter matching/gates; legacy September reports keep their old reader.
+if ((Test-Path (Join-Path $Before 'render_report.json')) -or (Test-Path (Join-Path $After 'render_report.json'))) {
+    New-Item -ItemType Directory -Force $Out | Out-Null
+    & python (Join-Path $PSScriptRoot 'visuals/validate-report.py') (Join-Path $Before 'render_report.json') --compare (Join-Path $After 'render_report.json') --html (Join-Path $Out 'index.html')
+    if ($LASTEXITCODE -ne 0) { throw 'Living-landscape comparison rejected; inspect validation errors.' }
+    return
+}
 $Before = (Resolve-Path $Before).Path
 $After = (Resolve-Path $After).Path
 New-Item -ItemType Directory -Force $Out | Out-Null

@@ -29,6 +29,8 @@ public partial class EnvironmentRig : Node3D
     private float _underwater;       // 0..1 blend
     private float _underwaterTarget;
     public int Quality { get; private set; } = -1;
+    /// <summary>Opt-in diagnostic presentation phase; null keeps the normal wall clock. Never serialized.</summary>
+    public double? BenchmarkLightSeconds { get; set; }
 
     // Pale warm-grey/green humid haze — reads as damp terrarium air, not smoke or mist.
     private static readonly Color HazeFogColor = new(0.72f, 0.75f, 0.71f);
@@ -98,7 +100,7 @@ public partial class EnvironmentRig : Node3D
         // The stopwatch MUST be started here: a Stopwatch that was never started reports Elapsed == 0
         // forever, which pins the whole cycle to its first keyframe (flat midday, sun energy 1.26).
         _monotonic.Start();
-        Clock = new DayNightClock(() => _monotonic.Elapsed.TotalSeconds);
+        Clock = new DayNightClock(() => BenchmarkLightSeconds ?? _monotonic.Elapsed.TotalSeconds);
 
         _sky = new ProceduralSkyMaterial
         {

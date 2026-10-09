@@ -56,7 +56,7 @@ public partial class SmokeRunner : Node
                 case Mode.Smoke: await SmokeAsync(); break;
                 case Mode.Reload: await ReloadAsync(); break;
                 case Mode.Render: await RenderAsync(); break;
-                case Mode.Perf: await PerfAsync(); break;
+                case Mode.Perf: if (System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null) await LandscapeAsync(); else await PerfAsync(); break;
                 case Mode.Reference: await ReferenceAsync(); break;
                 case Mode.SpeciesWorld: await SpeciesWorldAsync(); break;
             }

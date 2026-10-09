@@ -102,7 +102,7 @@ public partial class Main : Node3D
             else if (mode != SmokeRunner.Mode.Reload)
             {
                 var world = Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default"));
-                if (mode == SmokeRunner.Mode.Perf && System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_FREEZE") == "1") world.Clock.Paused = true;
+                if (mode == SmokeRunner.Mode.Perf && (System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_FREEZE") == "1" || System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null)) world.Clock.Paused = true;
                 Session.StartWorld(world);
             }
             return;

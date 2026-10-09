@@ -122,7 +122,13 @@ public static class Bridge
         return m;
     }
 
-    public static string UserPath(string rel) => ProjectSettings.GlobalizePath("user://" + rel);
+    public static string UserPath(string rel)
+    {
+        // Scripted landscape captures must not touch player preferences, logs or saved worlds.
+        string? isolated = System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null
+            ? System.Environment.GetEnvironmentVariable("VIVARIUM_BENCHMARK_USER_DIR") : null;
+        return isolated != null ? System.IO.Path.Combine(isolated, rel) : ProjectSettings.GlobalizePath("user://" + rel);
+    }
 }
 
 /// <summary>Non-simulation user preferences, persisted to user://settings.json.</summary>
