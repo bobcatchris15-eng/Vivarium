@@ -21,6 +21,9 @@ uniform float canopy_occlusion = .15;
 uniform bool volumetric = false;
 uniform int leaf_variegation = 0;
 uniform float review_time = -1.;
+uniform sampler2D ground_tex : filter_linear, repeat_disable;
+uniform vec4 ground_rect = vec4(0.0);
+uniform float ground_conform = 0.0;
 varying vec4 plant;
 varying vec4 blade;
 varying vec3 position_world;
@@ -50,6 +53,18 @@ void vertex() {
     }
     position_local = VERTEX;
     position_world = (MODEL_MATRIX*vec4(VERTEX,1.)).xyz;
+
+    if (ground_rect.z > 0.0) {
+        vec3 root_wp = MODEL_MATRIX[3].xyz;
+        vec2 guv = clamp((position_world.xz - ground_rect.xy) / ground_rect.zw, vec2(0.0), vec2(1.0));
+        float gy = textureLod(ground_tex, guv, 0.0).r;
+        float delta_g = gy - root_wp.y;
+        float target_y = position_world.y + delta_g * ground_conform;
+        target_y = max(target_y, gy + 0.003);
+        position_world.y = target_y;
+        float scale_y = max(length(MODEL_MATRIX[1].xyz), 0.001);
+        VERTEX.y = (position_world.y - root_wp.y) / scale_y;
+    }
 }
 vec3 detail_normal(vec3 base, vec2 uv, vec3 detail) {
     vec3 p = position_world;

@@ -46,6 +46,10 @@ uniform sampler2D bark_col : source_color, filter_linear_mipmap_anisotropic, rep
 uniform sampler2D bark_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 
+uniform sampler2D ground_tex : filter_linear, repeat_disable;
+uniform vec4 ground_rect = vec4(0.0);
+uniform float ground_conform = 0.0;
+
 // Derivative frame follows each branch/leaf's authored UVs, including curved attachments.
 vec3 surface_normal(vec3 base, vec3 p, vec2 uv, vec3 detail) {
     vec3 px = dFdx(p), py = dFdy(p);
@@ -83,6 +87,18 @@ void vertex() {
     VERTEX.x += sin(phase) * h * h * amount * 3.0 + sin(clock * 18.0 + inst.w * 40.0) * inst.z * h * 0.2;
     VERTEX.z += cos(phase * 0.8) * h * h * amount * 2.0;
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+
+    if (ground_rect.z > 0.0) {
+        vec3 root_wp = MODEL_MATRIX[3].xyz;
+        vec2 guv = clamp((world_pos.xz - ground_rect.xy) / ground_rect.zw, vec2(0.0), vec2(1.0));
+        float gy = textureLod(ground_tex, guv, 0.0).r;
+        float delta_g = gy - root_wp.y;
+        float target_y = world_pos.y + delta_g * ground_conform;
+        target_y = max(target_y, gy + 0.003);
+        world_pos.y = target_y;
+        float scale_y = max(length(MODEL_MATRIX[1].xyz), 0.001);
+        VERTEX.y = (world_pos.y - root_wp.y) / scale_y;
+    }
 }
 
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
