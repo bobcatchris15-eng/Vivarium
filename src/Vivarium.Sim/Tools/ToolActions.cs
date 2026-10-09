@@ -229,6 +229,8 @@ public sealed class ToolActions
         return v > 0 ? ToolResult.Success($"soaked up {v * 1000:0.0} L") : ToolResult.Fail("no surface water here");
     }
 
+    public double ClampSpringDischarge(double rate) => MathD.Clamp(rate, 0.0002, 0.005);
+
     /// <summary>The spring within <paramref name="reach"/> of p, if any.</summary>
     public Water.Spring? SpringNear(Vec2 p, double reach = 0.35) =>
         _w.Water.Springs.Where(s => Vec2.Distance(s.Position, p) <= reach).OrderBy(s => Vec2.Distance(s.Position, p)).ThenBy(s => s.Id.Value).FirstOrDefault();
@@ -255,7 +257,8 @@ public sealed class ToolActions
         }
         var problem = PreviewSpring(p);
         if (problem != null) return ToolResult.Fail($"Can't add a spring: {problem}");
-        var sp = new Water.Spring { Id = _w.Ids.Next(EntityKind.Spring), X = p.X, Z = p.Z, Discharge = discharge ?? Cfg.SpringDischarge };
+        double rate = discharge ?? (Cfg.SpringDischarge > 0 ? Cfg.SpringDischarge : 0.001);
+        var sp = new Water.Spring { Id = _w.Ids.Next(EntityKind.Spring), X = p.X, Z = p.Z, Discharge = rate };
         _w.Water.Springs.Add(sp);
         TerrainEditing.CarveSpringHole(_w.Terrain, p);
         _w.Water.RefreshBed(_w.Terrain);
