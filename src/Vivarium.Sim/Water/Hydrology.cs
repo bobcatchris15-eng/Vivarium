@@ -270,6 +270,19 @@ public sealed class Hydrology
 
         var domainCells = Grid.DomainCells;
         int cellCount = domainCells.Length;
+        double waterTable = WaterTable;
+        double area = CellArea;
+
+        for (int i = 0; i < cellCount; i++)
+        {
+            int idx = domainCells[i];
+            double d = Depth[idx];
+            if (d > 0 && (Bed[idx] <= waterTable || Bed[idx] + d <= waterTable))
+            {
+                Budget.GroundwaterRecharge += d * area;
+                Depth[idx] = 0.0;
+            }
+        }
 
         double maxDepth = 0;
         for (int i = 0; i < cellCount; i++)
@@ -317,6 +330,7 @@ public sealed class Hydrology
     {
         double area = CellArea;
         double invArea = 1.0 / area;
+        double waterTable = WaterTable;
         var domainCells = Grid.DomainCells;
         int cellCount = domainCells.Length;
 
@@ -330,6 +344,17 @@ public sealed class Hydrology
             double vol = sp.Discharge * dt;
             Depth[c] += vol * invArea;
             Budget.SpringInflow += vol;
+        }
+
+        for (int i = 0; i < cellCount; i++)
+        {
+            int idx = domainCells[i];
+            double d = Depth[idx];
+            if (d > 0 && (Bed[idx] <= waterTable || Bed[idx] + d <= waterTable))
+            {
+                Budget.GroundwaterRecharge += d * area;
+                Depth[idx] = 0.0;
+            }
         }
 
         // 2. losses from dynamic surface water only. Groundwater is a separate implicit reservoir.
@@ -585,6 +610,14 @@ public sealed class Hydrology
                 d = Math.Max(0.0, d + dv * invArea);
                 Depth[idx] = d;
             }
+
+            if (d > 0 && (Bed[idx] <= waterTable || Bed[idx] + d <= waterTable))
+            {
+                Budget.GroundwaterRecharge += d * area;
+                Depth[idx] = 0.0;
+                d = 0.0;
+            }
+
             if (d > maxDepth) maxDepth = d;
         }
 

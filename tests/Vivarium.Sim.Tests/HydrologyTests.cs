@@ -63,7 +63,7 @@ public class HydrologyTests
     [Fact]
     public void SaturatedSoilNeverDeletesFlowingWater()
     {
-        var w=TestUtil.FlatWorld(31,d=>d.Water.WaterTable=1);
+        var w=TestUtil.FlatWorld(31,d=>d.Water.WaterTable=0.4);
         w.Water.AddWater(Vec2.Zero,.3,.01);
         w.Water.Step(30);
         Assert.Equal(.01,w.Water.Volume()+w.Water.Budget.BoundaryOutflow,9);
@@ -506,6 +506,44 @@ public class HydrologyTests
         wSoil.Water.CoupleMoisture(wSoil.Fields.Moisture, wSoil.Content.Ecology, 1800, wSoil.Fields.Scratch);
         double moistureAfter = wSoil.Fields.Moisture.Values[centerCell];
         Assert.True(moistureAfter > moistureBefore, $"soil moisture should increase: {moistureAfter} > {moistureBefore}");
+    }
+
+    [Fact]
+    public void DynamicSurfaceWaterReachingOrBelowWaterTableDrainsIntoGroundwaterRecharge()
+    {
+        var w = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.WaterTable = 0.4;
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.0, Amount = 0.3 });
+        });
+        int basinCell = w.Grid.CellAt(Vec2.Zero);
+        Assert.True(w.Water.Bed[basinCell] <= w.Water.WaterTable, "basin cell must be at or below water table");
+
+        // 1. Initial dynamic depth directly on cell at or below water table drains immediately
+        w.Water.Depth[basinCell] = 0.05;
+        double expectedRecharge = 0.05 * w.Water.CellArea;
+        w.Water.Advance(1.0);
+        Assert.Equal(0.0, w.Water.Depth[basinCell]);
+        Assert.Equal(expectedRecharge, w.Water.Budget.GroundwaterRecharge, 6);
+
+        // 2. Dynamic surface water placed on high ground flowing into the basin is absorbed
+        int rimCell = w.Grid.CellAt(new Vec2(1.5, 0));
+        Assert.True(w.Water.Bed[rimCell] > w.Water.WaterTable, "rim cell must be above water table");
+        w.Water.Depth[rimCell] = 0.05;
+        double addedVol = 0.05 * w.Water.CellArea;
+        double initialRecharge = w.Water.Budget.GroundwaterRecharge;
+
+        for (int i = 0; i < 40; i++)
+        {
+            w.Water.Step(1.0);
+        }
+
+        // Dynamic surface water reaching the basin is absorbed into GroundwaterRecharge with Depth = 0
+        Assert.Equal(0.0, w.Water.Depth[basinCell]);
+        Assert.True(w.Water.Budget.GroundwaterRecharge > initialRecharge, "water flowing into water table basin must recharge groundwater");
+        Assert.Equal(expectedRecharge + addedVol, w.Water.Volume() + w.Water.Budget.BoundaryOutflow + w.Water.Budget.GroundwaterRecharge, 8);
     }
 }
 
