@@ -70,7 +70,8 @@ public static class EpiphyticRosette
         double variegationStrength,
         double[]? variegationColor = null,
         double[]? undersideColor = null,
-        int? detailOverride = null)
+        int? detailOverride = null,
+        ulong parentPartId = 0)
     {
         int startTris = m.TriangleCount;
         double bladeLength = (p3 - p0).Length;
@@ -243,6 +244,16 @@ public static class EpiphyticRosette
         }
 
         m.RecordLeaf(leafVertex, leafIndex, p0, bladeLength);
+
+        ulong partId = Rng.Mix(seed, (ulong)(rankU * 10000 + 1));
+        var surfNorm = SurfaceNormal(0.0, 0.0);
+        var surfTan = (p1 - p0).Normalized();
+        var leafFrame = FloraAttachmentFrame.Create(p0, surfNorm, surfTan);
+        var bMin = new Vec3(Math.Min(p0.X, p3.X) - bladeWidth * 0.5, Math.Min(p0.Y, p3.Y), Math.Min(p0.Z, p3.Z) - bladeWidth * 0.5);
+        var bMax = new Vec3(Math.Max(p0.X, p3.X) + bladeWidth * 0.5, Math.Max(p0.Y, p3.Y), Math.Max(p0.Z, p3.Z) + bladeWidth * 0.5);
+        FloraVisualCompiler.RecordPart(m, new FloraPartMetadata(
+            partId, parentPartId, FloraTissueSlot.Foliage, leafFrame, bladeLength, bladeWidth * 0.5, 0.45, 0, (bMin, bMax)));
+
         return m.TriangleCount - startTris;
     }
 
@@ -258,6 +269,11 @@ public static class EpiphyticRosette
 
         int leafCount = Math.Clamp(p.LeafCount, 8, 32);
         double baseAzimuth = rng.Range(0.0, Math.PI * 2.0);
+
+        ulong crownId = Rng.Mix(seed, Hash.Fnv1a64("rosette.crown"));
+        var crownFrame = FloraAttachmentFrame.Create(p.Origin, Vec3.Up, new Vec3(1, 0, 0));
+        FloraVisualCompiler.RecordPart(m, new FloraPartMetadata(
+            crownId, 0, FloraTissueSlot.Stem, crownFrame, p.CrownHeight, p.FlareRadius, 0.15, 0, (p.Origin, p.Origin + Vec3.Up * p.CrownHeight)));
 
         // 1. Basal holdfast rootlets anchoring the epiphyte to the host surface
         int roots = detail == 2 ? 3 : 5;
@@ -342,7 +358,8 @@ public static class EpiphyticRosette
                 variegation: p.Variegation,
                 variegationStrength: p.VariegationStrength,
                 variegationColor: p.VariegationColor,
-                detailOverride: detail);
+                detailOverride: detail,
+                parentPartId: crownId);
         }
 
         return m.TriangleCount - startTris;

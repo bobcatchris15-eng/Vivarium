@@ -99,7 +99,8 @@ public static class Broadleaf
         double petioleKink = 0.35,
         double asymmetry = 0.0,
         double[]? undersideColor = null,
-        int? detailOverride = null)
+        int? detailOverride = null,
+        ulong parentPartId = 0)
     {
         int startTris = m.TriangleCount;
         if (bladeLength <= 1e-6 || bladeWidth <= 1e-6) return 0;
@@ -301,6 +302,14 @@ public static class Broadleaf
         }
 
         m.RecordLeaf(leafVertex, leafIndex, attachPos, bladeLength);
+
+        ulong partId = Rng.Mix(seed, Hash.Fnv1a64("form.broadleaf.blade"));
+        var leafFrame = FloraAttachmentFrame.Create(junctionPos, normal0, fwd);
+        var bMin = new Vec3(Math.Min(rootPos.X, tipPos.X) - bladeWidth * 0.5, Math.Min(rootPos.Y, tipPos.Y), Math.Min(rootPos.Z, tipPos.Z) - bladeWidth * 0.5);
+        var bMax = new Vec3(Math.Max(rootPos.X, tipPos.X) + bladeWidth * 0.5, Math.Max(rootPos.Y, tipPos.Y), Math.Max(rootPos.Z, tipPos.Z) + bladeWidth * 0.5);
+        FloraVisualCompiler.RecordPart(m, new FloraPartMetadata(
+            partId, parentPartId, FloraTissueSlot.Foliage, leafFrame, bladeLength, bladeWidth * 0.5, 0.65, 0, (bMin, bMax)));
+
         return m.TriangleCount - startTris;
     }
 
@@ -320,7 +329,7 @@ public static class Broadleaf
         var rng = Rng.Keyed(seed, "form.broadleaf", 0);
         int detail = m.FloraDetailLevel ?? p.DetailLevel;
 
-        // 1. Central woody stalk
+        // 1. Central woody stalk with root collar flare at base
         double stemH = p.StemHeight;
         double stemR = p.StemRadius;
         double swayX = rng.Range(-0.025, 0.025);
@@ -333,9 +342,14 @@ public static class Broadleaf
 
         int stemSides = detail == 0 ? 6 : (detail == 1 ? 4 : 3);
         var stemPath = new[] { s0, s1, s2, s3 };
-        var stemRadii = new[] { stemR, stemR * 0.85, stemR * 0.65, stemR * 0.40 };
+        var stemRadii = new[] { stemR * 1.45, stemR * 0.85, stemR * 0.65, stemR * 0.40 };
         var barkCol = Primitives.Mix(new[] { 0.24, 0.20, 0.16 }, c1, 0.30);
         Primitives.Tube(m, stemPath, stemRadii, stemSides, (i, v) => (barkCol, 1.0, i / 3.0, v, 0, 0));
+
+        ulong stalkId = Rng.Mix(seed, Hash.Fnv1a64("form.broadleaf.stalk"));
+        var stalkFrame = FloraAttachmentFrame.Create(p.Origin, Vec3.Up, new Vec3(1, 0, 0));
+        FloraVisualCompiler.RecordPart(m, new FloraPartMetadata(
+            stalkId, 0, FloraTissueSlot.Wood, stalkFrame, stemH, stemR, 0.20, 0, (s0, s3)));
 
         // 2. Phyllotaxis leaf arrangement (4-9 leaves)
         int leafCount = Math.Clamp(p.LeafCount, 4, 9);
@@ -373,7 +387,7 @@ public static class Broadleaf
             BuildLeaf(m, attachPos, petioleDir, bladeLen, bladeWid, p.Outline, leafSeed, c1, c2,
                 age: age, camber: p.Camber, midribFold: p.MidribFold, wavyMargin: p.WavyMargin,
                 wavyFrequency: p.WavyFrequency, tipCurl: curl, petioleLength: pLen,
-                petioleRadius: pRad, petioleKink: pKink, detailOverride: detail);
+                petioleRadius: pRad, petioleKink: pKink, detailOverride: detail, parentPartId: stalkId);
         }
 
         return m.TriangleCount - startTris;

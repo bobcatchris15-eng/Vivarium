@@ -17,7 +17,10 @@ public readonly record struct PinnateFrondParams(
     double FiddleheadProgress = 0.0,    // 0 = mature open frond, 1 = tightly coiled crozier
     double TipCurl = 0.12,              // Mature tip droop / curl
     Vec3 Origin = default,              // Plant root anchor
-    int DetailLevel = 0                 // Visual detail level (0 = full, 1 = mid, 2 = low)
+    int DetailLevel = 0,                // Visual detail level (0 = full, 1 = mid, 2 = low)
+    double StipeFlex = 0.85,            // Elastic flex of wiry stipe
+    bool Compound = true,               // Compound pinnate frond with capillary petiolules
+    double PetioluleLength = 0.005      // Capillary petiolule attachment stalk length
 );
 
 public static class PinnateFrond
@@ -52,7 +55,11 @@ public static class PinnateFrond
         double[] colBase,
         double[] colTip,
         double[]? undersideColor = null,
-        int? detailOverride = null)
+        int? detailOverride = null,
+        ulong seed = 1,
+        ulong parentPartId = 0,
+        double petioluleLength = 0.004,
+        double flex = 0.65)
     {
         int startTris = m.TriangleCount;
         if (length <= 1e-6 || width <= 1e-6) return 0;
@@ -63,15 +70,24 @@ public static class PinnateFrond
         var side = norm0.Cross(dir).Normalized();
         if (side.LengthSq < 1e-6) side = dir.Cross(Vec3.Up).Normalized();
 
+        Vec3 bladeAttach = attachPos;
+        if (petioluleLength > 1e-5)
+        {
+            bladeAttach = attachPos + dir * petioluleLength;
+            var stalkCol = Primitives.Mix(new[] { 0.12, 0.09, 0.08 }, colBase, 0.25);
+            Primitives.Tube(m, new[] { attachPos, bladeAttach }, new[] { 0.0018, 0.0012 }, 3, (i, v) => (stalkCol, 1.0, i, v, 0, 0));
+        }
+
         Vec3 SurfacePos(double mu, double x)
         {
             mu = MathD.Clamp01(mu);
             x = Math.Clamp(x, -1.0, 1.0);
-            double wEnv = width * Math.Pow(Math.Max(0.0, Math.Sin(Math.PI * Math.Pow(mu, 0.55))), 0.65) * (1.0 - 0.45 * mu);
-            var lateral = side * (x * wEnv);
+            double wEnv = width * Math.Pow(Math.Max(0.0, Math.Sin(Math.PI * Math.Pow(mu, 0.45))), 0.60) * (1.0 - 0.35 * mu);
+            double marginLobe = 1.0 + 0.10 * Math.Sin(mu * 16.0) * (x * x);
+            var lateral = side * (x * wEnv * marginLobe);
             double camberZ = camber * width * (1.0 - x * x) * Math.Sin(Math.PI * Math.Pow(mu, 0.50));
             double droopY = droop * (mu * mu);
-            return attachPos + dir * (mu * length) + lateral + norm0 * camberZ - Vec3.Up * droopY;
+            return bladeAttach + dir * (mu * length) + lateral + norm0 * camberZ - Vec3.Up * droopY;
         }
 
         Vec3 SurfaceNorm(double mu, double x)
@@ -151,7 +167,19 @@ public static class PinnateFrond
             Primitives.TriangleFacing(m, lastRow + 1, tipIdx, lastRow + 2, m.NormalAt(lastRow + 1));
         }
 
-        m.RecordLeaf(leafVertex, leafIndex, attachPos, length);
+        m.RecordLeaf(leafVertex, leafIndex, bladeAttach, length);
+
+        ulong partId = Rng.Mix(seed, Hash.Fnv1a64("form.pinnate.pinna"));
+        var pinnaFrame = FloraAttachmentFrame.Create(attachPos, norm0, dir);
+        var bMin = new Vec3(Math.Min(attachPos.X, bladeAttach.X + dir.X * length) - width * 0.5,
+                            Math.Min(attachPos.Y, bladeAttach.Y + dir.Y * length - droop),
+                            Math.Min(attachPos.Z, bladeAttach.Z + dir.Z * length) - width * 0.5);
+        var bMax = new Vec3(Math.Max(attachPos.X, bladeAttach.X + dir.X * length) + width * 0.5,
+                            Math.Max(attachPos.Y, bladeAttach.Y + dir.Y * length + camber * width),
+                            Math.Max(attachPos.Z, bladeAttach.Z + dir.Z * length) + width * 0.5);
+        FloraVisualCompiler.RecordPart(m, new FloraPartMetadata(
+            partId, parentPartId, FloraTissueSlot.Foliage, pinnaFrame, length, width * 0.5, flex, 0, (bMin, bMax)));
+
         return m.TriangleCount - startTris;
     }
 
@@ -171,7 +199,8 @@ public static class PinnateFrond
         double[] c1,
         double[] c2,
         double age = 1.0,
-        int? detailOverride = null)
+        int? detailOverride = null,
+        ulong parentPartId = 0)
     {
         int startTris = m.TriangleCount;
         int detail = detailOverride ?? m.FloraDetailLevel ?? 0;
@@ -205,6 +234,15 @@ public static class PinnateFrond
             P1 = P0 + U * (length * 0.40) + H * (unrollLen * 0.05 * Math.Sin(effPitch));
             P2 = P0 + U * (length * 0.75) + H * (unrollLen * 0.12 * Math.Sin(effPitch));
             P3 = P0 + U * (length * (0.65 + 0.30 * unroll)) + H * (unrollLen * 0.20 * Math.Sin(effPitch));
+        }
+
+        // Basal chaffy scales (ramenta) at stipe base
+        var scaleCol = new[] { 0.56, 0.38, 0.22 };
+        for (int sc = 0; sc < 3; sc++)
+        {
+            double scAng = azimuth + (sc - 1) * 0.7;
+            var scDir = new Vec3(Math.Cos(scAng), 0.35, Math.Sin(scAng)).Normalized();
+            Primitives.Tube(m, new[] { P0, P0 + scDir * (length * 0.025) }, new[] { 0.0035, 0.0015 }, 3, (st, u) => (scaleCol, 1.0, st, u, 0, 0));
         }
 
         // 1. Rachis Path Construction
@@ -252,8 +290,13 @@ public static class PinnateFrond
         }
 
         int tubeSides = detail == 0 ? 6 : (detail == 1 ? 4 : 3);
-        var stalkCol = Primitives.Mix(new[] { 0.20, 0.25, 0.14 }, c1, 0.35 + 0.30 * age);
+        var stalkCol = Primitives.Mix(new[] { 0.12, 0.09, 0.08 }, c1, 0.30 + 0.25 * age);
         Primitives.Tube(m, path, radii, tubeSides, (i, v) => (stalkCol, 1.0, (double)i / (path.Count - 1), v, 0, 0));
+
+        ulong frondPartId = Rng.Mix(seed, Hash.Fnv1a64("form.pinnate.frond"));
+        var frondFrame = FloraAttachmentFrame.Create(attachPos, T0, H);
+        FloraVisualCompiler.RecordPart(m, new FloraPartMetadata(
+            frondPartId, parentPartId, FloraTissueSlot.Stem, frondFrame, length, p.RachisRadius, p.StipeFlex, 0, (P0, P3)));
 
         // 2. Pinnae Leaflets along the Rachis
         double maxT = isMature ? 0.96 : Math.Min(0.96, unroll * 1.05);
@@ -299,8 +342,10 @@ public static class PinnateFrond
                     var pinnaTip = Primitives.Mix(c2, new[] { 0.72, 0.88, 0.38 }, 0.40);
                     if (age < 0.7) pinnaBase = Primitives.Mix(pinnaBase, c2, 0.35);
 
+                    ulong pSeed = Rng.Mix(frondPartId, (ulong)(i * 97 + (sideSgn > 0 ? 1 : 2)));
                     BuildPinna(m, attach, dir, norm, pinnaL, pinnaW, p.Camber, 0.05 * pinnaL,
-                        pinnaBase, pinnaTip, detailOverride: detail);
+                        pinnaBase, pinnaTip, detailOverride: detail, seed: pSeed, parentPartId: frondPartId,
+                        petioluleLength: p.PetioluleLength, flex: 0.65);
                 }
             }
 
@@ -312,8 +357,10 @@ public static class PinnateFrond
                 var termN = (U - termT * U.Dot(termT)).Normalized();
                 var termBase = Primitives.Mix(c1, c2, 0.80);
                 var termTip = Primitives.Mix(c2, new[] { 0.72, 0.88, 0.38 }, 0.45);
+                ulong termSeed = Rng.Mix(frondPartId, 9999);
                 BuildPinna(m, termP, termT, termN, p.PinnaLength * 0.32, p.PinnaWidth * 0.32,
-                    p.Camber, 0.02, termBase, termTip, detailOverride: detail);
+                    p.Camber, 0.02, termBase, termTip, detailOverride: detail, seed: termSeed,
+                    parentPartId: frondPartId, petioluleLength: p.PetioluleLength * 0.5, flex: 0.65);
             }
         }
 
@@ -332,12 +379,19 @@ public static class PinnateFrond
 
         int count = Math.Clamp(p.CrownCount, 1, 16);
 
+        ulong caudexId = Rng.Mix(seed, Hash.Fnv1a64("form.pinnate.caudex"));
+        var caudexFrame = FloraAttachmentFrame.Create(p.Origin, Vec3.Up, new Vec3(1, 0, 0));
+        FloraVisualCompiler.RecordPart(m, new FloraPartMetadata(
+            caudexId, 0, FloraTissueSlot.Wood, caudexFrame, 0.025, 0.028, 0.10, 0,
+            (p.Origin - new Vec3(0.028, 0, 0.028), p.Origin + new Vec3(0.028, 0.025, 0.028))));
+
         if (count == 1)
         {
             // Single frond requested: respects FiddleheadProgress directly
             double az = rng.Range(0, 2 * Math.PI);
             double pitch = p.FiddleheadProgress > 0.5 ? 0.12 : 0.48;
-            BuildFrond(m, p.Origin, az, pitch, p.FrondLength, p.FiddleheadProgress, p, seed, c1, c2, detailOverride: detail);
+            BuildFrond(m, p.Origin, az, pitch, p.FrondLength, p.FiddleheadProgress, p, seed, c1, c2,
+                detailOverride: detail, parentPartId: caudexId);
             return m.TriangleCount - startTris;
         }
 
@@ -361,7 +415,8 @@ public static class PinnateFrond
             double fProg = p.FiddleheadProgress > 0.0 ? p.FiddleheadProgress : 0.0;
             ulong frondSeed = Rng.Mix(seed, (ulong)(k * 619 + 7));
 
-            BuildFrond(m, attach, azimuth, pitch, len, fProg, p, frondSeed, c1, c2, age: 1.0, detailOverride: detail);
+            BuildFrond(m, attach, azimuth, pitch, len, fProg, p, frondSeed, c1, c2, age: 1.0,
+                detailOverride: detail, parentPartId: caudexId);
         }
 
         // 2. Emerging young fiddleheads in the center
@@ -378,7 +433,8 @@ public static class PinnateFrond
             double fProg = p.FiddleheadProgress > 0.0 ? Math.Max(stagedF, p.FiddleheadProgress) : stagedF;
 
             ulong frondSeed = Rng.Mix(seed, (ulong)((matureCount + k) * 619 + 7));
-            BuildFrond(m, attach, azimuth, pitch, len, fProg, p, frondSeed, c1, c2, age: 0.40, detailOverride: detail);
+            BuildFrond(m, attach, azimuth, pitch, len, fProg, p, frondSeed, c1, c2, age: 0.40,
+                detailOverride: detail, parentPartId: caudexId);
         }
 
         // 3. Basal rhizome / caudex
