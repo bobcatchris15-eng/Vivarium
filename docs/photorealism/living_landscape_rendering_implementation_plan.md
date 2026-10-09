@@ -112,6 +112,81 @@ Add tests for:
 
 ## 2. Asset pipeline: botanically convincing assets that remain procedural
 
+### 2.0 Reference-driven reconstruction — mandatory research and asset production
+
+**Blocking rule: no research dossier, no new mesh or material; no reference-to-render comparison, no approval.** For **every named flora species, fungus, moss/lichen, representative groundcover, and significant terrain/organic material**, an agent must first find real-life analogues and sufficiently detailed real photographs/scans, then derive and construct the plant's mesh, UVs, normal maps, physical material maps and shading parameters **against the evidence**. Do not treat vague style boards or generated concept art as evidence of real anatomy or physical surfaces. The fictional species may be exaggerated or hybridized intentionally, but the particular departures from nature must be written down.
+
+#### 2.0.1 Identify and research physical analogues
+
+1. Look up **at least two independent living analogues when possible** for each fictional organism: the primary analogue for overall architecture, and secondary analogues for unusual leaves, branching, roots, fruiting, fungi, biomechanics, and habitat. Source plant/fungus names, classification and dimensions from a botanical reference, not merely an image-search label. Keep species-specific, previously approved Vivarium shape directions authoritative.
+2. Research more than a hero portrait. Locate reference images of **whole organism and habitat; multiple orthogonal/oblique silhouette views; base, roots, branch forks and leaf/stem attachment; macro upper and lower leaf surfaces; veins, margins, cuticle or hairs; juvenile, mature and senescent forms; fruiting; environmental contact; wet vs dry; front/side/backlit response**. Fungi require caps, gills or pores, mycelial/substrate relation and age changes; mosses and lichens require colony edges, individual shoots and growth on soil/rock/wood.
+3. For each material (mineral soil, humus, wet silt, leaf litter, moss, bark, stone, gravel, rotting log, streambank), find **in-situ images** alongside isolated high-resolution material scans: how it lies against neighboring surfaces matters as much as its raw texture. Reference actual physical roughness/relief scales in millimetres/centimetres.
+4. Seek genuinely high-resolution originals: target **3,000+ pixels on the long edge** for geometry evidence and **native 4K+ source captures or complete PBR scan sets** where appropriate for texture reconstruction; high resolution is not a guarantee of accuracy. Do not upscale low-resolution images and claim newly recovered leaf pores or bark ridges. If rare structures lack sufficient images, mark their dimensions and surface detail as *inferred*, not measured. Target ~8–12 **distinct useful** views per important asset where available; never pad with duplicates.
+5. Prefer documented sources: [Kew Plants of the World Online](https://powo.science.kew.org/) and botanical gardens/herbaria, natural-history museums, university extension publications and morphology papers for anatomy; [iNaturalist](https://www.inaturalist.org/) and [Wikimedia Commons](https://commons.wikimedia.org/) for varied living specimens and habitats; [Poly Haven](https://polyhaven.com/) and [ambientCG](https://ambientcg.com/) for licensed high-resolution PBR surfaces and scans; original lawful photographs, photogrammetry or controlled macro capture when needed.
+6. Track **rights per photograph or scan**, not per website. iNaturalist media are often CC BY-NC or all-rights-reserved; Kew photo rights differ by image. Study-only links can establish anatomical facts, but unlicensed images must not be downloaded into the committed repo, embedded in redistribution, copied into generated texture maps, or passed off as freely reusable. Prefer CC0/compatible sources or own captures when baking photo-derived textures. Distinguish permission to *look at* an image from permission to *redistribute or derive* texture assets. Store the true source URL, creator, original resolution, access date, media license, and license/attribution obligations.
+
+**Research failure is an explicit asset blocker** when no reliable source exists for the claimed feature. The agent should instead present the gap and a cautious approximated design, seek alternative taxa, or request a real sample/photographic capture. It must not invent confident biological measurements from a single ambiguous photograph.
+
+#### 2.0.2 Durable per-asset reference dossiers
+
+Use the companion template **`docs/photorealism/reference_dossier_template.md`**. Each asset gets a folder under **`docs/photorealism/references/<asset-id>/`**, including:
+- **`reference.md`**: fictional target/specimen role, primary and secondary real-life analogues (with Latin names when identifiable), source list, high-resolution image view inventory, morphological findings, intentional fictional deviations, confidence and missing evidence.
+- **`source_manifest.json`**: each reference's URL, author, content ID, access date, native resolution, scale evidence, true item-level license, use category (*study only*, *permitted derivative*, *redistributable*), attribution and optional SHA-256 of lawfully captured originals. The game's release never bundles the full reference library.
+- **`measurements.md`**: observed/estimated height, width, canopy density/shape, root flare, branch order/angles/ratios, phyllotaxis, petiole and blade outline/camber/curl, vein branching, bark ridge height/wavelength, texture real-world repeat size, seasonal/lifecycle characteristics and natural population variation; units and confidence required.
+- **`reference_board.md`**: labeled multiview/source comparisons (or deep links for unlicensed images), scale annotations, specimen anatomy sketches, upper/underside microtexture, wet/dry, light response, habitat floor and contact. Each major modeling decision cites image IDs.
+- **`asset_manifest.json`**: authored source meshes/scripts, deterministic seed, geometry/visual recipe version, source-to-UV/material relationship, output mesh variants, normals/tangents convention, texture-map lineage and import/compression settings.
+- **`review.md`**: annotated **source vs clay mesh vs textured specimen vs integrated environment** review, defects and corrections, mesh/material metrics, reference coverage matrix, final yes/no status.
+
+A generic "this looks like a fern" paragraph, a short low-res search result or a single unsourced generated image is **insufficient**. Agents may use unlicensed images as external visual references where lawful, but never assume their copyrights permit making derivative textures. Nonredistributable reference boards should use links and written annotations rather than committing source files/thumbnails.
+
+#### 2.0.3 Build the actual model from the documented anatomy
+
+Every modeling task must follow:
+1. **Reference decomposition:** identify physical organs and parts, branch levels, basal crown/root system, petioles, blade geometry, attachment frames and natural grouping from multiple specimens. Produce orthographic/proportion sketches and a hierarchy diagram.
+2. **Parametric geometry specification:** fill species recipe with real/inferred scale ratios, growth-axis ordering, taper, asymmetry, curvature distributions, branching rhythm, leaf density and age-dependent morphology; distinguish fixed anatomical constraints from deterministic natural variation.
+3. **Source mesh construction:** use Blender offline or existing procedural C# geometries, whichever produces better fidelity, including splines, swept tubes, volumetric leaf blades or thin cambered sheets, natural branch/root junctions, realistic underside anatomy, serration, scars, fruit or reproductive details where applicable. Use **licensed** photogrammetry/3D scans as direct geometry or high-poly reference when useful.
+4. **Runtime mesh preparation:** preserve correct metres, UV island orientation, physically scaled texels, clean winding, normals and tangents, stable material/part IDs and animation anchors. Bake high-poly surface detail onto reasonable production meshes. Avoid coincident front/back sheet duplication and internal unseen triangles; never remove important silhouette geometry just to get FPS.
+5. **Multi-view fitting:** render a clay silhouette/wireframe against at least front/side/top or usable reference perspectives with matching scale; compare leaf/stem count, ratio, crown voids, root collars, branch-angle distribution, and density. Correct anatomical mismatch before shading.
+6. **Lifecycle and integration:** compare seedling/adult/old/dead and bent/animated examples with reference, habitat and contact. Preserve simulation-defined age/growth and all approved fiction-specific species signatures. Never substitute a generic bush mesh for a named plant without explicit approval.
+
+Deliver repeatable generators, source model, production mesh and automatic validations (finite normal/tangent, consistent winding, nondegenerate geometry, stable attachments and budget). Geometry tests should assert documented ratios where source data supports measurement; uncertainty must be shown honestly.
+
+#### 2.0.4 Produce full physically informed texture and surface-map sets
+
+**Do not merely select a photo color and procedurally bump it until it seems detailed.** Source material channels independently and create appropriate maps per plant part/surface. Required when physically relevant:
+
+| Channel | Reconstruction method and reference check |
+|---|---|
+| **Albedo / base color** | Extract from licensed evenly illuminated/cross-polarized captures or author from real pigment references. Remove photographed cast shadows, shiny highlights and color-balance bias. Distinguish leaf top/back, stem/wood, live/dead and wet/dry state; validate under neutral illumination. |
+| **Tangent-space normal** | Bake from actual high-resolution geometry, photometric stereo, measured surface relief or anatomically guided procedural microgeometry. **A single RGB photo cannot uniquely reveal surface normals.** Color-to-normal may be an approximation only, labeled and validated against grazing-light photos. Explicitly check Godot/OpenGL tangent handedness and Y-green convention. |
+| **Height / displacement / relief** | Derive physical ridge depth/pores/midribs/bark crevices from scans or measured/inferred geometry; record real mm/metre scale, use geometric displacement when it changes silhouettes, otherwise bake. |
+| **Roughness / specular response** | Infer from multiple light conditions and known tissue/stone/wetness properties, not albedo brightness. Avoid plastic wet leaves, metallic moss, mirror-smooth mud and uniform roughness. |
+| **AO / cavity mask** | Bake from actual small-scale branch, lamina, rhizoid and bark geometry as restrained local cavity data. Do not bake a directional key light or permanently paint black shade onto albedo; avoid AO double-counting with runtime effects. |
+| **Thickness / transmission / subsurface or backlight response** | Compare backlit leaf tissue including the thicker midrib/veins, front/back pigmentation, fine stems and young/dead tissues. A cheap BACKLIGHT implementation is an approximation, not measured volumetric scattering. |
+| **Opacity / cutout (if applicable)** | Derive true margins, holes and perforations from source, but prefer modeled macro-visible outlines and opaque thin sheets over unnecessary alpha overdraw. |
+| **Packed physical maps, emission and variations** | Document channels and colorspace, stable per-leaf variation, mip filtering, compression and real-world tiling; emission only for deliberately luminous fictional structures, never a substitute for good lighting. |
+
+Keep **source masters at genuine high resolution**, then bake/compress/mipmap for the GTX 1080; maintain existing **1K, four-variant leaf arrays** until 2K or higher gives demonstrable macro benefit at acceptable VRAM and frame times. A 4K reference photo does not imply a 4K runtime texture. Prevent seams, repeating motifs, tangent flips and mip shimmering. Distinguish **measured**, **photographically reconstructed**, **artistically inferred**, and **stylized-fictional** material values in the manifest.
+
+Deliver a **per-channel inspection sheet** (albedo only, normal response, roughness, AO, height and transmission/thickness) plus final PBR captures under neutral, grazing, shaded, backlit, dry/wet and day/night conditions. Demonstrate the compressed runtime asset matches the high-res master within the visual target. **The maps must be produced and checked against real-life references**, not just against one another.
+
+#### 2.0.5 Real capture protocol if public references are inadequate
+
+Design optional lawful specimen capture: multiple orbit/macro views including underside and contact surface, a ruler or known scale, color/white-balance chart, diffuse light, cross-polarized albedo if possible, grazing-light images or photometric stereo, wet/dry versions, several plants/stages, and photogrammetry/scan source to bake physically grounded details. Track acquisition rights and avoid collecting protected material improperly. Agents do not pretend they captured or measured specimens they never accessed. Use estimates with written confidence when measurements cannot be acquired.
+
+#### 2.0.6 Required reference-aligned comparison and acceptance
+
+Each completed asset must have a generated **four-way comparison** with common scale and camera whenever possible:
+1. **Real-world sources**: full organism, habitat, closeups and underside/lighting evidence, annotated with source and rights.
+2. **Clay and geometry views**: silhouette/turntable, wireframe, root/branch/leaf topology, normal/UV overlays and growth-state variants.
+3. **Material breakdown**: base color, normals, height, roughness, AO, transmission and final lit render from consistent viewpoints; call out approximations.
+4. **In-Vivarium views**: extreme macro, normal interaction, whole-island composition, foliage over soil/rocks/water, wind and growth/death, day/night. Include moving-camera clips to reveal texture swimming, instancing repetition, LOD popping or detached shadowing.
+
+A designated reviewer compares **anatomy/shape, material microstructure, upper/underside color, scale, growth stages, habitat grounding and lighting** to the real-world analogue, plus intentional fictional deviations. Record *pass / revise / insufficient evidence* for each; no agent may approve a plant based only on a handsome rendered screenshot. A high-res source can reveal that a leaf isn't actually glossy or symmetric; modify the recipe/model accordingly.
+
+**Mandatory deliverables per asset:** provenanced multi-source dossier, schematic/measurements, source-and-runtime meshes, UV/tangent conventions, PBR map masters and baked runtime versions, source-to-output manifest, reference-aligned comparison gallery, structured visual evaluation, determinism tests and target GPU benchmarks. This same gate applies to anonymous ground detail, terrain textures and fungi/colonial organisms with appropriate modifications.
+
+
 ### 2.1 Preserve procedural identity, upgrade the representation
 
 Do not interpret "asset pipeline" as replacing every generated plant with one static glTF. Build **parameterized botanical assemblies** with a reusable deterministic geometry source, plus optional offline-baked variants.
@@ -428,6 +503,11 @@ Files: `game/Render/FloraVisualProfile.cs`, `game/content/visuals/flora/*.json`,
 Work: recipeVersion, architecture/deformation/material/provenance section, compatibility with current 4 profiles and fallback.  
 Tests: valid/unmigrated/invalid IDs, range checks, no world-save schema change.
 
+**P04R — Reference reconnaissance and approval (new, blocking)**  
+Files: `docs/photorealism/references/<asset-id>/` and `docs/photorealism/reference_dossier_template.md` (new).  
+Work: source independent botanical analogues and high-resolution multi-view, macro, underside, contact and wet/dry references for the three pilots, establish actual dimensions or confidence-labeled estimates, record photo/scan rights, prepare anatomy sketches and reference-to-model/map criteria.  
+Tests: manifest validator rejects missing licenses/source IDs, nonexistent or low-quality key views without acknowledged gaps, and absent reference comparison criteria. **No P07–P09 mesh or texture building before that pilot's dossier is reviewed.**  
+
 **P05 — Stable part and attachment representation**  
 Files: `src/Vivarium.Sim/Geometry/OrganismMeshes.cs`, `Geometry/Form/*`, `FloraVisualCompiler.cs`, tests.  
 Work: explicit part IDs, parent/root frames, attachment normals, tissue slot, flex, bounding volumes, material identity. Keep original `CUSTOM0/1` conventions; add any sidecar metadata safely.  
@@ -440,19 +520,24 @@ Tests: clean source->generated hash reproducibility; CI manifest verification, o
 
 **P07 — Pilot A: Ironlace geometry and rooting**  
 Files: `OrganismMeshes.*` and/or authored asset, recipe, `FloraVisualTests.cs`, reference images.  
-Work: root flare, irregular bole, branch order, branchlet and leaf orientation, juvenile/mature/dead comparison.  
-Acceptance: improved photographic silhouette at macro and overview without anatomy or growth regression; benchmarked.
+Work: reconstruct root flare, irregular bole, branch order, branchlet and leaf orientation, high-resolution-source-based texture and normal/roughness/thickness maps, juvenile/mature/dead appearance **against the approved Ironlace reference dossier**.  
+Acceptance: reference-vs-clay mesh, multi-view silhouette, separate PBR channels and final lit captures; improved photographic silhouette at macro and overview without anatomy or growth regression; benchmarked.
 
 **P08 — Pilot B: understory specimen**  
-Work: Veilfern or Lanternbrush, correct compound leaves/petioles, varying foliage density, readable backlight and self-occlusion; preserve approved form.  
+Work: after sourcing living high-resolution fern/understory analogues, compound leaf and attachment views, reconstruct Veilfern or Lanternbrush anatomy and separate upper/under material maps, varying foliage density, readable backlight and self-occlusion; preserve approved form.  
 Acceptance: independent material slots/stiffness and stable attachment through wind; documented matched image.
 
 **P09 — Pilot C: groundcover specimen**  
-Work: Coinrunner or Trifold, distinct stolons, clustered nonuniform leaves, slope/root attachments, local scatter cache in dense cover.  
+Work: source in-situ clover/creeper macro, stolon, leaf-underface and rooting references; reconstruct Coinrunner or Trifold geometry, physically informed maps, distinct stolons, clustered nonuniform leaves, slope/root attachments, local scatter cache in dense cover.  
 Acceptance: recognizable under normal camera distance, not a repeated tuft stamp; separate habitat source.  
-**G1:** three visual families implemented with before/after images, deterministic bake hashes and GPU/CPU measurements. Nonpilot species unchanged unless a shared bug fix is demonstrated.
+**G1:** three visual families implemented **from approved high-resolution real-life specimen dossiers**, with traceable source-to-anatomy, source-to-mesh and source-to-base-color/normal/roughness/thickness maps, licensed or originally authored inputs, multiview source/render comparison galleries, deterministic bake hashes and GPU/CPU measurements. An attractive standalone render without these comparisons is **not a pass**. Nonpilot species unchanged unless a shared bug fix is demonstrated.
 
 ### Phase C — lighting and materials
+
+**P10R — Build-and-verify high-resolution reference-to-PBR workflow (new)**  
+Files: `game/App/LeafMaterialBaker.cs` and new source/derived texture manifests and comparison renderer.  
+Work: implement `2.0.4` for one real-reference leaf top/underside, one bark and one wet/soil/moss material: evidence-derived albedo, true scan/geometry normals or labeled approximations, physical roughness and height, cavity and leaf thickness/transmission as relevant; bake high-quality masters into compressed runtime arrays.  
+Tests: compare source vs swatch/mesh under grazing, backlight and wet/dry; map validation, normal handedness, licensed-source lineage, channel/color-space correctness and 1K-vs-2K visual/perf results.  
 
 **P10 — Material coordinate and color-space audit**  
 Files: `leaf.gdshader`, `flora.gdshader`, `surface.gdshaderinc`, `FloraSurfaceProfiles.cs`, `LeafMaterialBaker.cs`.  
@@ -508,6 +593,11 @@ Tests: animated comparisons at all projected-size thresholds; no visible simplif
 
 ### Phase E — physical terrain/plant integration
 
+**P21R — Real-world ground, contact and wetland references (new)**  
+Files: `docs/photorealism/references/` dossiers for humus, mineral soil, moss, lichen, roots, rock, dead wood, leaf litter and water margin.  
+Work: find in-situ high-resolution wet/dry, macro and midscale photographs **plus usable full-PBR scans** with measured physical texture sizes; document real contact patterns and which elements need 3D geometry rather than just albedo/normal.  
+Tests: full material-channel and contact gallery derived from each relevant dossier, with valid source rights and actual scale.  
+
 **P21 — Shared render-only terrain sampling**  
 Files: `IslandRenderer.cs`, `SoilDetailRenderer.cs`, `AmbientGroundCoverRenderer.cs`, new sampling helper if useful.  
 Work: height/slope/curvature/wetness/cover/litter/water query, world-space coordinates, stable cached field versions.  
@@ -533,12 +623,12 @@ Tests: low-angle macro, close camera and wet/dry scene; no tile seams, strange r
 **P26 — Sculpt and shore reattachment**  
 Work: region-limited terrain edit invalidation, stable sampled scatter keys, rooted object reposition, waterline/coast material update.  
 Tests: repeated brush over dense planting for 10 minutes, no random reseeding, no floating plants, no large upload stall.  
-**G4:** cohesive whole-island and macro floor visual review across seasons/lifecycle and waterlines; perf on worst terrain interactions.
+**G4:** cohesive whole-island and macro-floor **comparisons to real high-resolution in-situ soil, rock, root, leaf litter, moss, fungi and wetland references**, with separated normal/roughness/height/contact reconstruction and licensed source manifests, across lifecycle and waterlines; perf on worst terrain interactions.
 
 ### Phase F — integrate all species and ship with evidence
 
 **P27 — Guild conversion matrix**  
-Work: convert remaining species in batches by shared anatomy (woody, fern, grass/herb, creeping, aquatic, fungi, climbers, carnivorous, pilot trees). Preserve individual approved forms. Each species has recipe/schema/tests/photo references/material front/back/life-stage/perf record.  
+Work: **research and approve a real-world, high-resolution multiview/macro reference dossier for every remaining named species first**; reconstruct source-based anatomical meshes, base color, normals/height, roughness, AO, thickness/transmission and other relevant physical maps with documented deviations. Then convert remaining species in batches by shared anatomy (woody, fern, grass/herb, creeping, aquatic, fungi, climbers, carnivorous, pilot trees). Preserve individual approved forms. Each species has recipe/schema/tests/source-to-geometry/source-to-material-maps comparisons, front/back/life-stage/habitat/perf record.  
 Acceptance: no anonymous generic-plant fallback for a named, explicitly modeled species unless it was already an intentional accepted behavior.
 
 **P28 — Whole-world coherency and growth transitions**  
@@ -553,7 +643,7 @@ Acceptance: all gates from §1.2, after-versus-before visual artifacts and accep
 Files: `docs/photorealism/README.md`, `README.md`, `THIRD_PARTY_NOTICES.md`, build/export scripts, schema/manifest.  
 Work: retire flags/workarounds only after comparative tests, update authoring and asset regeneration guide, asset provenance, LOD restrictions, quality tiers, offline package and smoke suite.  
 Tests: fresh offline-compatible checkout builds/runs without Blender, export boots/shaders compile, save/reload digest is stable.  
-**G5:** final acceptance review, tagged baseline, visual and perf reports, reproducible assets. Do not mark complete if 30 FPS fails or if reference photos are less believable.
+**G5:** final acceptance review, tagged baseline, visual and perf reports, reproducible assets, and **auditable real-reference-to-geometry-and-PBR-map lineage for every converted organism or environmental material**. Do not mark complete if reference dossiers or multi-view comparisons are missing, the 30 FPS gate fails, or generated assets are less convincing than their biological analogues.
 
 ### Dependency ordering
 
@@ -562,7 +652,7 @@ P00 -> P01 -> P02 -> P03 -> G0
                    |
             +------+--------+
             |               |
-          P04 -> P05 -> P06   P10
+          P04 -> P04R -> P05 -> P06   P10
             |               |
        P07 / P08 / P09     P11 -> P12 -> P13 -> P14
             |               |
@@ -572,7 +662,7 @@ P00 -> P01 -> P02 -> P03 -> G0
                    |
            P15 -> P16 -> P17 -> P18 -> P19 -> P20 -> G3
                    |
-           P21 -> P22 -> P23 -> P24 -> P25 -> P26 -> G4
+           P21R -> P21 -> P22 -> P23 -> P24 -> P25 -> P26 -> G4
                    |
                P27 -> P28 -> P29 -> P30 -> G5
 ```
@@ -583,13 +673,16 @@ Phase D profiling P15 can start immediately after G0. Phase E sampling design P2
 
 ## 7. Concrete per-task handoff and agent operating protocol
 
-For every P-task, the implementing agent must provide a task packet before making edits:
+Every **geometry, texture, normal-map, material and terrain-detail** task must begin with its approved real-life reference dossier and end with side-by-side evidence. For every P-task, the implementing agent must provide a task packet before making edits:
 
 ```text
 ID/title:
 Baseline commit SHA:
 Owned paths / forbidden paths:
 Observed current implementation:
+Reference dossier/source IDs, real specimen analogues, native image resolutions and licenses:
+Measured/estimated anatomy and material parameters, confidence and fictional exceptions:
+Required geometry, UVs, texture maps, real physical scales:
 Intended behavior (visually and mechanically):
 Inputs from authoritative sim:
 Outputs to visual renderer / caches:
@@ -598,6 +691,7 @@ Implementation steps (max 3–6 small modifications):
 Unit/static tests:
 GPU capture / performance scenarios:
 Reference views and expected differences:
+Reference-aligned mesh/wireframe and PBR-channel comparisons, gaps and review result:
 Rollback switch or revert boundary:
 Known uncertainty / experiment before assuming:
 Completion artifacts and comparison links:
@@ -610,7 +704,7 @@ Standard task completion:
 2. Write expected state transitions and invalidation scope in plain language before coding.
 3. Change only owned files or coordinate explicit shared-file lock with other agents.
 4. Build; run scoped xUnit and Godot boot/render smoke; use the existing `scripts/verify.ps1` entrypoint and the new P03 benchmark.
-5. Capture before/after same-seed fixed views, including at least one moving camera and one real growth/event transition; report **actual** timings, not selected successes.
+5. Capture **reference specimen vs gray mesh vs source-based PBR channel maps vs shaded rendering** under matched scale/view/light where possible; also capture before/after same-seed fixed views, at least one moving camera and one real growth/event transition; report **actual** timings, not selected successes.
 6. Compare digest, geometry/material validation, FPS percentile gates, recurring hitches, VRAM and memory trends.
 7. Record what was tried, what failed, photos and reports, and any visual limitations.
 8. Commit with task ID and precise description; keep rollback possible. Merge only after tests and the applicable gate.
@@ -682,7 +776,7 @@ The final build:
 
 ### Minimal first agent assignment
 
-**Implement P00–P03 only.** The immediate goal is a credible, automated, fixed-scene performance/visual baseline on the actual machine, including honest failure results. Once G0 reports real bottlenecks, assign **P04–P09** to one material/geometry owner with separate pilot recipe workers. Do not start an expensive GI system or write a bespoke GPU renderer before the profiling and pilot gates justify either.
+**Implement P00–P03 only.** The immediate goal is a credible fixed-scene baseline on the actual machine, including honest failures. Once G0 reports bottlenecks, assign **P04 and P04R to obtain real-world specimen dossiers before P07–P09 produce meshes**. Run P10R before committing major PBR revisions and P21R before terrain/contact redesign. Do not start expensive GI or bespoke GPU code before the evidence and profiling gates justify either.
 
 ---
 
@@ -699,6 +793,11 @@ Project:
 - [Coarse fauna ecology/perf plan — distinct subsystem](../fauna_coarse_ecology_performance_plan.md)
 
 Technical:
+- [Kew Plants of the World Online](https://powo.science.kew.org/) — source real-world botanical anatomy, check rights per image.
+- [iNaturalist photo license guidance](https://help.inaturalist.org/en/support/solutions/articles/151000169918) — per-image rights may restrict derivative uses.
+- [Wikimedia Commons](https://commons.wikimedia.org/) — file-level licenses and original-resolution media.
+- [Poly Haven](https://polyhaven.com/) and [PBR texture standards](https://docs.polyhaven.com/en/technical-standards/textures) — CC0 high-resolution physical materials.
+- [ambientCG](https://ambientcg.com/) — CC0 PBR materials in multiple resolutions.
 - [Godot 4.7 spatial shader reference: BACKLIGHT, transmission, double-sided surfaces](https://docs.godotengine.org/en/4.7/tutorials/shaders/shader_reference/spatial_shader.html).
 - [Godot MultiMesh documentation and culling tradeoffs](https://docs.godotengine.org/en/stable/classes/class_multimesh.html).
 - [Godot Forward+ renderers and feature availability](https://docs.godotengine.org/en/stable/tutorials/rendering/renderers.html).
