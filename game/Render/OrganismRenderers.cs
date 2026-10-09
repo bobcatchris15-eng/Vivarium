@@ -71,10 +71,7 @@ public partial class FloraRenderer : Node3D
     private readonly List<FloraSnapshotItem> _snapshot = new();
     private readonly List<DeadFloraSnapshotItem> _deadSnapshot = new();
     private readonly List<EntityId> _expired = new();
-    private Image? _groundImage;
-    private ImageTexture? _groundTex;
-    private Vector4 _groundRect;
-    private int _groundVersion = -1;
+    private int _terrainVersion = -1;
     private int _quality = 1;
     public Camera3D? Camera { get; set; }
     public int Quality
@@ -111,7 +108,7 @@ public partial class FloraRenderer : Node3D
         Visible_ = 0; TrianglesDrawn = 0;
         PopulationReady = false;
         _w = w;
-        UpdateGroundTexture();
+        _terrainVersion = _w.Terrain.Version;
         DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
         bool legacy = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1";
         if (!ReferenceEquals(_builtContent, w.Content) || _builtLegacy != legacy)
@@ -218,14 +215,12 @@ public partial class FloraRenderer : Node3D
         if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
         Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
         FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
-        BindGroundParameters(mat, sp);
         var leafMat = profile?.LeafMaterial();
         if (profile != null)
         {
             Bridge.BindSurface(mat, "bark", profile.Bark);
             mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0], profile.BarkTint[1], profile.BarkTint[2]));
             leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
-            BindGroundParameters(leafMat!, sp);
         }
         var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
         ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
@@ -331,9 +326,9 @@ public partial class FloraRenderer : Node3D
         using var prof = FrameProfiler.Measure("Flora");
         _clock += delta;
         if (_w == null) return;
-        if (_w.Terrain.Version != _groundVersion)
+        if (_w.Terrain.Version != _terrainVersion)
         {
-            UpdateGroundTexture();
+            _terrainVersion = _w.Terrain.Version;
             DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
         }
         RequestMissingLayers();
@@ -355,79 +350,17 @@ public partial class FloraRenderer : Node3D
         } while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < RefreshBudgetMs);
     }
 
-    private void UpdateGroundTexture()
-    {
-        if (_w == null) return;
-        var hf = _w.Terrain;
-        const int sub = 2;
-        int nx = (hf.Nx - 1) * sub + 1;
-        int nz = (hf.Nz - 1) * sub + 1;
-        double step = hf.Step / sub;
-        double ox = hf.OriginX;
-        double oz = hf.OriginZ;
-        double sizeX = (nx - 1) * step;
-        double sizeZ = (nz - 1) * step;
-        _groundRect = new Vector4((float)ox, (float)oz, (float)sizeX, (float)sizeZ);
-
-        float[] heights = new float[nx * nz];
-        for (int j = 0; j < nz; j++)
-        {
-            double z = oz + j * step;
-            int row = j * nx;
-            for (int i = 0; i < nx; i++)
-            {
-                double x = ox + i * step;
-                heights[row + i] = (float)_w.GroundHeight(new Vivarium.Sim.Core.Vec2(x, z));
-            }
-        }
-        byte[] bytes = new byte[nx * nz * sizeof(float)];
-        Buffer.BlockCopy(heights, 0, bytes, 0, bytes.Length);
-
-        if (_groundImage == null || _groundImage.GetWidth() != nx || _groundImage.GetHeight() != nz)
-        {
-            _groundImage = Image.CreateEmpty(nx, nz, false, Image.Format.Rf);
-            _groundImage.SetData(nx, nz, false, Image.Format.Rf, bytes);
-            _groundTex = ImageTexture.CreateFromImage(_groundImage);
-        }
-        else
-        {
-            _groundImage.SetData(nx, nz, false, Image.Format.Rf, bytes);
-            _groundTex!.Update(_groundImage);
-        }
-        _groundVersion = hf.Version;
-    }
-
-    private void BindGroundParameters(ShaderMaterial m, FloraSpeciesDef sp)
-    {
-        if (_groundTex != null)
-        {
-            m.SetShaderParameter("ground_tex", _groundTex);
-            m.SetShaderParameter("ground_rect", _groundRect);
-            m.SetShaderParameter("ground_conform", GroundConformFor(sp));
-        }
-    }
-
-    private static float GroundConformFor(FloraSpeciesDef sp)
-    {
-        if (sp.Climber != null || sp.Shape is "vine" or "floatleaf") return 0.0f;
-        if (sp.Woody != null || sp.IsTree) return 0.0f;
-        if (sp.Shape is "reed" or "kinkcane_brake" or "veilblade_curtain" or "ribbonweed" or "milfoil") return 0.0f;
-
-        if (sp.Tags.Contains("groundcover")
-            || sp.Shape is "creeper" or "iceplant" or "snaptrap_rosette" or "roundleaf"
-            or "trifoliate" or "sundew_mat" or "succulent" or "carpet" or "cushion"
-            or "crust" or "foliose" or "plasmodium" or "hookthicket_brake")
-        {
-            return 1.0f;
-        }
-
-        if (sp.Shape is "carrion_bell" or "pitcher_rosette" or "herb" or "cap" or "rosette")
-        {
-            return 0.75f;
-        }
-
-        return 0.25f;
-    }
+    private static bool IsUpright(FloraSpeciesDef sp) =>
+        sp.Woody != null || sp.IsTree
+        || sp.Shape.StartsWith("shrub_")
+        || sp.Shape is "kinkcane_brake" or "veilblade_curtain" or "reed" or "ribbonweed" or "milfoil"
+        || sp.Shape.EndsWith("_brake") || sp.Shape.EndsWith("_curtain")
+        || sp.Shape == "fern" || sp.Shape == "veilfern"
+        || sp.Shape == "tussock"
+        || sp.Shape == "pitcher_rosette"
+        || sp.Shape == "carrion_bell"
+        || sp.Shape == "herb"
+        || sp.Shape is "mushroom_cluster" or "cap";
 
     public override void _ExitTree()
     {
@@ -625,9 +558,7 @@ public partial class FloraRenderer : Node3D
             // field: they lean slightly toward the more open side, while dry/unhealthy specimens lose some turgor
             // in a stable individual direction. This makes variation read as growth history rather than seed noise.
             var yawBasis = new Basis(Vector3.Up, yaw);
-            bool isUpright = sp.Woody != null || sp.IsTree
-                || sp.Shape is "kinkcane_brake" or "veilblade_curtain" or "reed" or "ribbonweed" or "milfoil"
-                || sp.Shape is "carrion_bell" or "pitcher_rosette" or "herb";
+            bool isUpright = IsUpright(sp);
 
             if (isUpright)
             {
@@ -650,10 +581,10 @@ public partial class FloraRenderer : Node3D
             }
             else if (sp.Shape != "vine" && sp.Shape != "floatleaf")
             {
-                // Ground-hugging flora, rosettes, creepers, and mats maintain vertical gravitropism (Vector3.Up basis)
-                // while the vertex shader drapes runners along slopes and enforces ground mesh collision.
+                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                yawBasis = SurfaceFrame.TiltTo(norm) * yawBasis;
                 float lift = (float)Math.Min(0.006, 0.002 + h * 0.04);
-                pos += new Vector3(0, lift, 0);
+                pos += norm * lift;
                 var fp = f.Position;
                 double moisture = _w.Fields.Moisture.Sample(fp);
                 double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
@@ -754,15 +685,14 @@ public partial class FloraRenderer : Node3D
             var pos = new Vector3((float)dead.X, (float)_w.GroundHeight(dead.Position), (float)dead.Z);
             if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
 
-            bool isUpright = sp.Woody != null || sp.IsTree
-                || sp.Shape is "kinkcane_brake" or "veilblade_curtain" or "reed" or "ribbonweed" or "milfoil"
-                || sp.Shape is "carrion_bell" or "pitcher_rosette" or "herb";
+            bool isUpright = IsUpright(sp);
 
             Basis basis;
             if (!isUpright)
             {
-                basis = new Basis(Vector3.Up, (float)dead.CollapseHeading);
-                pos += new Vector3(0, 0.003f, 0);
+                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                basis = SurfaceFrame.TiltTo(norm) * new Basis(Vector3.Up, (float)dead.CollapseHeading);
+                pos += norm * 0.003f;
             }
             else
             {
