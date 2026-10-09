@@ -434,6 +434,79 @@ public class HydrologyTests
         Assert.Equal(0.0, w.Water.OpenWaterDepth(p));
         Assert.False(w.Water.IsWet(p));
     }
+
+    [Fact]
+    public void SubstrateInfiltrationRatesMatchRockGravelSoilAndFeedsMoisture()
+    {
+        var wRock = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        int centerCell = wRock.Grid.CellAt(Vec2.Zero);
+        wRock.Water.Depth[centerCell] = 0.05;
+        wRock.Water.Advance(1.0, _ => Substrate.Rock);
+        Assert.Equal(0.0, wRock.Water.Budget.Infiltration);
+
+        var wSoil = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wSoil.Water.Depth[centerCell] = 0.05;
+        wSoil.Water.Advance(1.0, _ => Substrate.Soil);
+        double soilInfil = wSoil.Water.Budget.Infiltration;
+        Assert.True(soilInfil > 0);
+
+        var wGravel = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wGravel.Water.Depth[centerCell] = 0.05;
+        wGravel.Water.Advance(1.0, _ => Substrate.Gravel);
+        double gravelInfil = wGravel.Water.Budget.Infiltration;
+        Assert.Equal(4.0 * soilInfil, gravelInfil, 6);
+
+        // Fallback with no substrate supplied gives 1.0x (Soil) rate
+        var wFallback = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wFallback.Water.Depth[centerCell] = 0.05;
+        wFallback.Water.Advance(1.0);
+        Assert.Equal(soilInfil, wFallback.Water.Budget.Infiltration, 6);
+
+        // Array parameter with Substrate[]
+        var wArray = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wArray.Water.Depth[centerCell] = 0.05;
+        var subArray = new Substrate[wArray.Grid.Count];
+        Array.Fill(subArray, Substrate.Gravel);
+        wArray.Water.Advance(1.0, subArray);
+        Assert.Equal(gravelInfil, wArray.Water.Budget.Infiltration, 6);
+
+        // Substrates property querying on Advance
+        var wProp = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wProp.Water.Depth[centerCell] = 0.05;
+        wProp.Water.Substrates = subArray;
+        wProp.Water.Advance(1.0);
+        Assert.Equal(gravelInfil, wProp.Water.Budget.Infiltration, 6);
+
+        // Soil leaching feeds CoupleMoisture
+        double moistureBefore = wSoil.Fields.Moisture.Values[centerCell];
+        wSoil.Water.CoupleMoisture(wSoil.Fields.Moisture, wSoil.Content.Ecology, 1800, wSoil.Fields.Scratch);
+        double moistureAfter = wSoil.Fields.Moisture.Values[centerCell];
+        Assert.True(moistureAfter > moistureBefore, $"soil moisture should increase: {moistureAfter} > {moistureBefore}");
+    }
 }
 
 public class HydrologyBankContainmentTests

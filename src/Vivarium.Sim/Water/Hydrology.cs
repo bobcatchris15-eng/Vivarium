@@ -245,7 +245,17 @@ public sealed class Hydrology
     /// <summary>Groundwater is implicit, so initialization no longer materializes it into dynamic surface storage.</summary>
     public void InitializeFromWaterTable() => InvalidateWaterDistance();
 
-    public void Step(double dt)
+    public Substrate[]? Substrates { get; set; }
+    public Func<int, Substrate>? SubstrateProvider { get; set; }
+
+    public void Advance(double dt, Substrate[]? substrates = null) => AdvanceCore(dt, substrates ?? Substrates, SubstrateProvider);
+    public void Advance(double dt, Func<int, Substrate> substrateProvider) => AdvanceCore(dt, Substrates, substrateProvider);
+
+    public void Step(double dt) => Advance(dt);
+    public void Step(double dt, Substrate[]? substrates) => Advance(dt, substrates);
+    public void Step(double dt, Func<int, Substrate> substrateProvider) => Advance(dt, substrateProvider);
+
+    private void AdvanceCore(double dt, Substrate[]? substrates, Func<int, Substrate>? substrateProvider)
     {
         if (!double.IsFinite(dt) || dt <= 0) return;
 
@@ -285,7 +295,7 @@ public sealed class Hydrology
                 double predictedWave = Math.Sqrt(predictedWaveSq);
                 h = Math.Min(h, 0.45 * Grid.CellSize / predictedWave);
             }
-            maxDepth = SubStep(h);
+            maxDepth = SubStep(h, substrates, substrateProvider);
             remaining -= h;
         }
 
@@ -303,7 +313,7 @@ public sealed class Hydrology
         _hadBoundaryFlow = false;
     }
 
-    private double SubStep(double dt)
+    private double SubStep(double dt, Substrate[]? substrates, Func<int, Substrate>? substrateProvider)
     {
         double area = CellArea;
         double invArea = 1.0 / area;
@@ -323,21 +333,114 @@ public sealed class Hydrology
         }
 
         // 2. losses from dynamic surface water only. Groundwater is a separate implicit reservoir.
-        double evap = Config.Evaporation / SimUnits.Day * dt, infil = Config.Infiltration / SimUnits.Day * dt;
-        double totalLoss = evap + infil;
-        if (totalLoss > 0)
+        double evap = Config.Evaporation / SimUnits.Day * dt;
+        double baseInfil = Config.Infiltration / SimUnits.Day * dt;
+        double infilRock = 0.0;
+        double infilSoil = baseInfil;
+        double infilGravel = 4.0 * baseInfil;
+
+        double lossRock = evap + infilRock;
+        double lossSoil = evap + infilSoil;
+        double lossGravel = evap + infilGravel;
+
+        double evapRatioRock = lossRock > 0 ? evap / lossRock : 0.0;
+        double evapRatioSoil = lossSoil > 0 ? evap / lossSoil : 0.0;
+        double evapRatioGravel = lossGravel > 0 ? evap / lossGravel : 0.0;
+
+        if (substrates != null)
         {
-            double evapRatio = evap / Math.Max(totalLoss, 1e-18);
-            for (int i = 0; i < cellCount; i++)
+            if (lossRock > 0 || lossSoil > 0 || lossGravel > 0)
             {
-                int idx = domainCells[i];
-                double d = Depth[idx];
-                if (d <= 0) continue;
-                double loss = Math.Min(d, totalLoss);
-                double le = loss * evapRatio;
-                Budget.Evaporation += le * area;
-                Budget.Infiltration += (loss - le) * area;
-                Depth[idx] = d - loss;
+                int subLen = substrates.Length;
+                bool matchCellCount = subLen == cellCount && subLen < Grid.Count;
+                for (int i = 0; i < cellCount; i++)
+                {
+                    int idx = domainCells[i];
+                    double d = Depth[idx];
+                    if (d <= 0) continue;
+                    Substrate sub;
+                    if (matchCellCount)
+                        sub = substrates[i];
+                    else if ((uint)idx < (uint)subLen)
+                        sub = substrates[idx];
+                    else
+                        sub = Substrate.Soil;
+
+                    double cellLoss, evapRatio;
+                    switch (sub)
+                    {
+                        case Substrate.Rock:
+                            cellLoss = lossRock;
+                            evapRatio = evapRatioRock;
+                            break;
+                        case Substrate.Gravel:
+                            cellLoss = lossGravel;
+                            evapRatio = evapRatioGravel;
+                            break;
+                        default:
+                            cellLoss = lossSoil;
+                            evapRatio = evapRatioSoil;
+                            break;
+                    }
+                    if (cellLoss <= 0) continue;
+                    double loss = Math.Min(d, cellLoss);
+                    double le = loss * evapRatio;
+                    Budget.Evaporation += le * area;
+                    Budget.Infiltration += (loss - le) * area;
+                    Depth[idx] = d - loss;
+                }
+            }
+        }
+        else if (substrateProvider != null)
+        {
+            if (lossRock > 0 || lossSoil > 0 || lossGravel > 0)
+            {
+                for (int i = 0; i < cellCount; i++)
+                {
+                    int idx = domainCells[i];
+                    double d = Depth[idx];
+                    if (d <= 0) continue;
+                    Substrate sub = substrateProvider(idx);
+                    double cellLoss, evapRatio;
+                    switch (sub)
+                    {
+                        case Substrate.Rock:
+                            cellLoss = lossRock;
+                            evapRatio = evapRatioRock;
+                            break;
+                        case Substrate.Gravel:
+                            cellLoss = lossGravel;
+                            evapRatio = evapRatioGravel;
+                            break;
+                        default:
+                            cellLoss = lossSoil;
+                            evapRatio = evapRatioSoil;
+                            break;
+                    }
+                    if (cellLoss <= 0) continue;
+                    double loss = Math.Min(d, cellLoss);
+                    double le = loss * evapRatio;
+                    Budget.Evaporation += le * area;
+                    Budget.Infiltration += (loss - le) * area;
+                    Depth[idx] = d - loss;
+                }
+            }
+        }
+        else
+        {
+            if (lossSoil > 0)
+            {
+                for (int i = 0; i < cellCount; i++)
+                {
+                    int idx = domainCells[i];
+                    double d = Depth[idx];
+                    if (d <= 0) continue;
+                    double loss = Math.Min(d, lossSoil);
+                    double le = loss * evapRatioSoil;
+                    Budget.Evaporation += le * area;
+                    Budget.Infiltration += (loss - le) * area;
+                    Depth[idx] = d - loss;
+                }
             }
         }
 
