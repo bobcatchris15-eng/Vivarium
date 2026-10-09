@@ -55,7 +55,7 @@ public sealed class FaunaSystem
     /// refreshes an animal just steers toward the heading it last chose. Anything that must react promptly refreshes
     /// on every step regardless: a disturbed animal, one stranded by flooding or drying, and one sitting in habitat
     /// below its species' tolerance.</summary>
-    private const int IntentRefreshPeriod = 2;
+    private const int IntentRefreshPeriod = 6;
     /// <summary>Longest simulated interval an animal may cross before its destination is re-tested for passability.
     /// Pinned rather than derived from <c>Cadence.FaunaBehaviour</c> on purpose: raising the cadence then re-decides
     /// steering less often without ever letting one step carry an animal across a whole habitat boundary between
