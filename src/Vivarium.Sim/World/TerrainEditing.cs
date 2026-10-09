@@ -66,6 +66,42 @@ public static class TerrainEditing
         return changed;
     }
 
+    /// <summary>
+    /// Carves a smooth radial depression into the heightfield around <paramref name="pos"/>
+    /// using a cosine falloff: z_new(r) = z(r) - depth * cos^2(pi * r / (2 * radius)) for r &lt; radius.
+    /// </summary>
+    public static int CarveSpringHole(Heightfield hf, Vec2 pos, double radius = 0.20, double depth = 0.08)
+    {
+        if (radius <= 0 || depth <= 0) return 0;
+        hf.BeginEdit();
+        int i0 = Math.Max(0, (int)Math.Floor((pos.X - radius - hf.OriginX) / hf.Step));
+        int i1 = Math.Min(hf.Nx - 1, (int)Math.Ceiling((pos.X + radius - hf.OriginX) / hf.Step));
+        int j0 = Math.Max(0, (int)Math.Floor((pos.Z - radius - hf.OriginZ) / hf.Step));
+        int j1 = Math.Min(hf.Nz - 1, (int)Math.Ceiling((pos.Z + radius - hf.OriginZ) / hf.Step));
+        if (i0 > i1 || j0 > j1) return 0;
+
+        int changed = 0;
+        for (int j = j0; j <= j1; j++)
+        {
+            for (int i = i0; i <= i1; i++)
+            {
+                double dist = Vec2.Distance(hf.VertexPos(i, j), pos);
+                if (dist >= radius) continue;
+                double cos = Math.Cos(Math.PI * dist / (2.0 * radius));
+                double fall = cos * cos;
+                int k = hf.VertexIndex(i, j);
+                double h = hf.H[k];
+                double next = MathD.Clamp(h - depth * fall, hf.MinHeight, hf.MaxHeight);
+                if (next == h) continue;
+                hf.H[k] = next;
+                changed++;
+            }
+        }
+        if (changed > 0)
+            hf.Touch();
+        return changed;
+    }
+
     private static double Average3x3(Heightfield hf, double[] h, int i, int j)
     {
         double sum = 0; int n = 0;

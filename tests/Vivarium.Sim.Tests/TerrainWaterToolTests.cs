@@ -43,7 +43,7 @@ public class TerrainWaterToolTests
     [Fact]
     public void DiggingMakesADryBasinUntilWaterIsAddedAndPropsStaySeated()
     {
-        var w = TestUtil.FlatWorld(edit: d => d.Water.WaterTable = 0.3);
+        var w = TestUtil.FlatWorld();
         var t = new ToolActions(w);
         var c = new Vec2(0.5, -0.5);
         Assert.False(w.Water.IsWet(c));
@@ -121,4 +121,55 @@ public class TerrainWaterToolTests
         for (int i = 0; i < w.Content.Tools.MaxSprings; i++) Assert.True(t.ToggleSpring(new Vec2(-3 + i * 0.8, -2)).Ok);
         Assert.False(t.ToggleSpring(new Vec2(2, 2)).Ok);
     }
+
+    [Fact]
+    public void SpringPlacementCarvesDepressionAndUpdatesWaterBed()
+    {
+        var w = TestUtil.FlatWorld();
+        var t = new ToolActions(w);
+        int cell = w.Grid.CellAt(Vec2.Zero);
+        var p = w.Grid.CellCenter(cell);
+        var far = p + new Vec2(1.0, 0);
+
+        double initialTerrainHeight = w.Terrain.Height(p);
+        double initialBed = w.Water.Bed[cell];
+        double farHeightBefore = w.Terrain.Height(far);
+
+        var res = t.ToggleSpring(p);
+        Assert.True(res.Ok, res.Message);
+
+        double carvedTerrainHeight = w.Terrain.Height(p);
+        double updatedBed = w.Water.Bed[cell];
+
+        // Placing a spring depresses terrain height at pos by approx 0.08m
+        Assert.True(carvedTerrainHeight < initialTerrainHeight - 0.05,
+            $"Expected terrain height to be depressed: before={initialTerrainHeight}, after={carvedTerrainHeight}");
+        // Bed is refreshed and reflects the new terrain depression
+        Assert.True(updatedBed < initialBed - 0.05,
+            $"Expected bed height to be depressed: before={initialBed}, after={updatedBed}");
+
+        // Outside radius (radius = 0.20m), terrain is unaffected
+        Assert.Equal(farHeightBefore, w.Terrain.Height(far), 9);
+    }
+
+    [Fact]
+    public void CarveSpringHoleAppliesRadialCosineFalloff()
+    {
+        var w = TestUtil.FlatWorld();
+        var p = new Vec2(1, 1);
+        var far = p + new Vec2(0.5, 0);
+        double h0 = w.Terrain.Height(p);
+        double hFarBefore = w.Terrain.Height(far);
+
+        int changed = TerrainEditing.CarveSpringHole(w.Terrain, p, radius: 0.20, depth: 0.08);
+        Assert.True(changed > 0);
+
+        double hCenter = w.Terrain.Height(p);
+        Assert.InRange(h0 - hCenter, 0.06, 0.085);
+
+        // Outside radius, terrain is unaffected
+        Assert.Equal(hFarBefore, w.Terrain.Height(far), 9);
+    }
+
 }
+

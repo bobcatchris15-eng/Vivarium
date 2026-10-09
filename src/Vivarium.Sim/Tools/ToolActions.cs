@@ -242,7 +242,7 @@ public sealed class ToolActions
     }
 
     /// <summary>Adds a spring at p, or removes the one already there.</summary>
-    public ToolResult ToggleSpring(Vec2 p)
+    public ToolResult ToggleSpring(Vec2 p, double? discharge = null)
     {
         if (SpringNear(p) is { } existing)
         {
@@ -251,8 +251,10 @@ public sealed class ToolActions
         }
         var problem = PreviewSpring(p);
         if (problem != null) return ToolResult.Fail($"Can't add a spring: {problem}");
-        var sp = new Water.Spring { Id = _w.Ids.Next(EntityKind.Spring), X = p.X, Z = p.Z, Discharge = Cfg.SpringDischarge };
+        var sp = new Water.Spring { Id = _w.Ids.Next(EntityKind.Spring), X = p.X, Z = p.Z, Discharge = discharge ?? Cfg.SpringDischarge };
         _w.Water.Springs.Add(sp);
+        TerrainEditing.CarveSpringHole(_w.Terrain, p);
+        _w.Water.RefreshBed(_w.Terrain);
         return ToolResult.Success("a new spring bubbles up", sp.Id);
     }
 
