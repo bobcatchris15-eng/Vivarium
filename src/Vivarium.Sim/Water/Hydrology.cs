@@ -268,6 +268,12 @@ public sealed class Hydrology
             if (d > maxDepth) maxDepth = d;
         }
 
+        if (maxDepth <= 1e-9 && totalDischarge <= 1e-9)
+        {
+            if (_hadBoundaryFlow) ClearBoundaryFlows();
+            return;
+        }
+
         double remaining = dt;
         while (remaining > 1e-9)
         {
@@ -285,6 +291,16 @@ public sealed class Hydrology
 
         UpdateFlowVectors();
         InvalidateWaterDistance();
+    }
+
+    private void ClearBoundaryFlows()
+    {
+        for (int b = 0; b < _boundaryCells.Length; b++)
+        {
+            int bIdx = _boundaryCells[b];
+            _edgeFlowE[bIdx] = _edgeFlowW[bIdx] = _edgeFlowN[bIdx] = _edgeFlowS[bIdx] = 0;
+        }
+        _hadBoundaryFlow = false;
     }
 
     private double SubStep(double dt)
@@ -325,15 +341,7 @@ public sealed class Hydrology
             }
         }
 
-        if (_hadBoundaryFlow)
-        {
-            for (int b = 0; b < _boundaryCells.Length; b++)
-            {
-                int bIdx = _boundaryCells[b];
-                _edgeFlowE[bIdx] = _edgeFlowW[bIdx] = _edgeFlowN[bIdx] = _edgeFlowS[bIdx] = 0;
-            }
-            _hadBoundaryFlow = false;
-        }
+        if (_hadBoundaryFlow) ClearBoundaryFlows();
 
         // 3. Advance shared-face momentum from gravity and bed friction. A higher bank remains a physical sill.
         double width = Grid.CellSize;

@@ -60,7 +60,7 @@ public sealed class VivariumWorld
         // Behaviour is the only fauna system that re-decides steering. Locomotion integrates from the heading the
         // last decision chose, so this cadence sets how often animals move, not how well they steer; the decision
         // fan-out is throttled again inside FaunaSystem.StepBehaviour. Movement cost per step is unchanged.
-        public const int FaunaBehaviour = 4, FaunaMetabolism = 6, FaunaLifecycle = 120, Hydrology = 1,
+        public const int FaunaBehaviour = 4, FaunaMetabolism = 6, FaunaLifecycle = 120, Hydrology = 2,
                          Environment = 30, Resources = 30, Flora = 60, GeneticsPrune = 8640,
                          // The plasmodium runs on its own 30-sim-second cadence (D17), independent of fauna
                          // metabolism. It clamps dt to [0.1, 5.0]s internally, so tying it to a fauna cadence
