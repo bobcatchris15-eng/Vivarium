@@ -66,6 +66,7 @@ public sealed class VivariumWorld
                          // metabolism. It clamps dt to [0.1, 5.0]s internally, so tying it to a fauna cadence
                          // would silently starve its diffusion whenever fauna metabolism was coarsened.
                          Plasmodium = 3;
+        public const int Litter = 360;
     }
 
     private VivariumWorld(ContentLibrary content, WorldDescriptor descriptor)
@@ -157,7 +158,7 @@ public sealed class VivariumWorld
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 20);
-        Scheduler.Register("ecology.litter", Cadence.Resources, 66, Bio(dt => { PilotTree?.DepositLitter(this, dt); Litter.Step(dt); }), phase: 22);
+        Scheduler.Register("ecology.litter", Cadence.Litter, 66, Bio(dt => { PilotTree?.DepositLitter(this, dt); Litter.Step(dt); }), phase: 22);
         Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
         Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
         Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
