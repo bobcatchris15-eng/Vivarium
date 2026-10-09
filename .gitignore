@@ -16,3 +16,7 @@ TestResults/
 .claude/worktrees/
 .clanker/
 .statefulclanker/
+
+# Python diagnostic caches
+__pycache__/
+*.py[cod]

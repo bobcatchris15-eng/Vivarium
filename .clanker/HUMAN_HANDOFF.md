@@ -1,20 +1,12 @@
-# Human handoff — photoreal overhaul
+# Current human handoff — living landscape rendering
 
-## Autonomous goal
-Complete the entire Vivarium photoreal visual overhaul described in the user's 18-campaign brief and the attached master plan, including implementation, visual critique, performance work, integration, and verification.
+User request 2026-10-08: "Alright, look at the docs. Clank em up."
+Authoritative plan: docs/photorealism/living_landscape_rendering_implementation_plan.md; asset evidence contract: docs/photorealism/reference_dossier_template.md.
 
-## Actual user direction
-- 2026-09-25: Claude had been running the attached plan; user asked to locate its stopping point.
-- 2026-09-25: User asked to pick up and to think about token efficiency.
-- 2026-09-25: User corrected the scope explicitly: “I wanted you to complete the plan in its entirety. The entire visual overhaul.”
+Execute first increment P00–P03 only. G0 requires real target-machine fixed-scene baseline, honest failures and measured bottlenecks. Later asset/shader/render ownership tasks remain dependency-gated; real reference dossiers block mesh/material production. Human aesthetic review is still required for later visual acceptance.
 
-## Constraints from the approved plan
-- Photoreal miniature-world result; user makes final visual judgment.
-- At least 30 FPS on the Radeon 860M in populated play; no organism billboard/blob LOD.
-- Simulation remains authoritative; renderer derives appearance without changing simulation state.
-- Breaking changes permitted. Validate through reference captures, performance probes, tests, and visual critique.
+Current source baseline: c71ebe8. Implementation owner: isolated .clanker/wt/landscape-baseline. Independent validator: .clanker/wt/landscape-review. No pushes or release publication. Main's existing 17 fluid-related/ledger modified or untracked files are protected by .clanker/history/2026-10-08-landscape-upgrade/main-local-file-hashes.json. Never stage/checkpoint all of main.
 
-## Interpretation and current evidence
-- Complete S1 through S7, not merely Campaign 0 or one checkpoint. Follow dependencies in `.claude/ledger.md` and `docs/overhaul/`.
-- Main at `8f2546d`; `task/gma` at `e9a5a9f`; `task/gmb` at `f56a578`. Baseline and harness are done. S1 and S2 growth integration are partial. Many later stages remain.
-- Preserve accepted work in commits. Use small scoped work units and independent review before merging.
+All GPU tests must run alone. No 30-FPS, full-suite, memory-soak or visual-success claim exists. G0 is unpassed. Reference plan requests complete frame times, per-second FPS, process/VRAM trends, CPU/GPU timing distinction, source/hardware/settings provenance, deterministic scene queries and digest invariants.
+
+Historical Pilot Tree handoffs/checkpoints remain in .clanker/history/2026-10-08-landscape-upgrade/. They do not replace this goal. Read .clanker/current-work.md and .clanker/tasks/landscape-baseline/task-state.json on resume, then command-backed receipt from isolated worker. Independent findings must be resolved or explicitly carried forward.
