@@ -1,3 +1,4 @@
+using System;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Content;
@@ -20,7 +21,7 @@ public partial class IslandRenderer : Node3D
     private int[] _nearestDomain = System.Array.Empty<int>();
     private double _accum = 999;
     private byte[] _bytes = System.Array.Empty<byte>();
-    // material weights for blending (R = gravel, G = submerged waterway bed / silt), filtered smoothly;
+    // material weights for blending (R = gravel, G = groundwater bed / silt, B = dynamic surface water), filtered smoothly;
     // water itself is ignored so shorelines don't interpolate through fake gravel/rock bands
     private Image _subImage = null!;
     private ImageTexture _subTex = null!;
@@ -32,6 +33,15 @@ public partial class IslandRenderer : Node3D
     private Image _ambientImage = null!;
     private ImageTexture _ambientTex = null!;
     private byte[] _ambientBytes = System.Array.Empty<byte>();
+    // Coverage-colony mask (Mat + Crust occupancy per field cell). terrain.gdshader and log.gdshader suppress their
+    // procedural moss under/around real colonies so the species patches keep their own identity.
+    private Image _coverImage = null!;
+    private ImageTexture _coverTex = null!;
+    private byte[] _coverBytes = System.Array.Empty<byte>();
+    private int[] _coverCount = System.Array.Empty<int>();
+    private Vector4 _fieldRect;
+    /// <summary>Other materials (log bark) that read cover_tex/field_rect; refreshed with the field textures.</summary>
+    public static readonly System.Collections.Generic.List<ShaderMaterial> CoverMaskConsumers = new();
     public int OverlayMode { get; set; }
     private ShaderMaterial _strataMat = null!;
     private MeshInstance3D _top = null!, _walls = null!;
@@ -58,14 +68,15 @@ public partial class IslandRenderer : Node3D
         Bridge.BindSurface(_terrainMat, "gravel", Bridge.Surfaces.Gravel);
         var g = w.Grid;
         _terrainMat.SetShaderParameter("field_rect", new Vector4((float)g.OriginX, (float)g.OriginZ, (float)(g.Nx * g.CellSize), (float)(g.Nz * g.CellSize)));
+        _terrainMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
         _fieldImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.Rgba8);
         _fieldTex = ImageTexture.CreateFromImage(_fieldImage);
         _terrainMat.SetShaderParameter("field_tex", _fieldTex);
         _bytes = new byte[g.Nx * g.Nz * 4];
-        _subImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.Rg8);
+        _subImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.Rgba8);
         _subTex = ImageTexture.CreateFromImage(_subImage);
         _terrainMat.SetShaderParameter("sub_tex", _subTex);
-        _subBytes = new byte[g.Nx * g.Nz * 2];
+        _subBytes = new byte[g.Nx * g.Nz * 4];
         _litterImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.R8);
         _litterTex = ImageTexture.CreateFromImage(_litterImage);
         _terrainMat.SetShaderParameter("litter_tex", _litterTex);
@@ -74,6 +85,12 @@ public partial class IslandRenderer : Node3D
         _ambientTex = ImageTexture.CreateFromImage(_ambientImage);
         _terrainMat.SetShaderParameter("ambient_tex", _ambientTex);
         _ambientBytes = new byte[g.Count];
+        _coverImage = Image.CreateEmpty(g.Nx, g.Nz, false, Image.Format.R8);
+        _coverTex = ImageTexture.CreateFromImage(_coverImage);
+        _terrainMat.SetShaderParameter("cover_tex", _coverTex);
+        _coverBytes = new byte[g.Count];
+        _coverCount = new int[g.Count];
+        _fieldRect = new Vector4((float)g.OriginX, (float)g.OriginZ, (float)(g.Nx * g.CellSize), (float)(g.Nz * g.CellSize));
         _nearestDomain = new int[g.Count];
         for (int c = 0; c < g.Count; c++) _nearestDomain[c] = g.InDomain(c) ? c : g.NearestDomainCell(g.CellCenter(c));
 
@@ -108,18 +125,61 @@ public partial class IslandRenderer : Node3D
         _accum += delta;
         _sinceMeshBuild += delta;
         // sculpting: follow the heightfield at up to ~12 rebuilds per second
-        if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08) BuildMeshes();
+        if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08)
+        {
+            BuildMeshes();
+            UpdateFieldTexture(true);
+        }
         _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
+        _terrainMat.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
         bool propsDirty = _propsVersion != _w.Props.Version;
         if (!propsDirty && _accum < 1.5) return;
         _accum = 0;
-        UpdateFieldTexture(propsDirty);
+        UpdateFieldTexture(true);
+    }
+
+    private void UpdateCoverMask()
+    {
+        var g = _w.Grid;
+        System.Array.Clear(_coverCount);
+        const double cs = Vivarium.Sim.Coverage.CoverageSpec.CellSize;
+        foreach (var layer in new[] { _w.Coverage.Mat, _w.Coverage.Crust })
+            foreach (var t in layer.Tiles)
+            {
+                int gx0 = t.Ti * Vivarium.Sim.Coverage.CoverageSpec.TileEdge, gz0 = t.Tj * Vivarium.Sim.Coverage.CoverageSpec.TileEdge;
+                for (int k = 0; k < t.Occ.Length; k++)
+                {
+                    if (t.Occ[k] == 0) continue;
+                    int lx = k % Vivarium.Sim.Coverage.CoverageSpec.TileEdge, lz = k / Vivarium.Sim.Coverage.CoverageSpec.TileEdge;
+                    int c = g.CellAt(new Vivarium.Sim.Core.Vec2((gx0 + lx + 0.5) * cs, (gz0 + lz + 0.5) * cs));
+                    if (c >= 0) _coverCount[c]++;
+                }
+            }
+        // ~40 occupied 2 cm cells (a quarter of a 25 cm field cell) saturates the mask
+        for (int c = 0; c < g.Count; c++) _coverBytes[c] = (byte)System.Math.Min(255, _coverCount[c] * 255 / 40);
+        _coverImage.SetData(g.Nx, g.Nz, false, Image.Format.R8, _coverBytes);
+        _coverTex.Update(_coverImage);
+        foreach (var m in CoverMaskConsumers)
+        {
+            m.SetShaderParameter("cover_tex", _coverTex);
+            m.SetShaderParameter("field_rect", _fieldRect);
+        }
     }
 
     private void UpdateFieldTexture(bool updateSubstrate = true)
     {
         var g = _w.Grid; var f = _w.Fields;
         double nmax = _w.Content.Ecology.NutrientMax;
+        var trees = new System.Collections.Generic.List<(Vivarium.Sim.Core.Vec2 Pos, double Radius)>();
+        if (updateSubstrate)
+        {
+            foreach (var plant in _w.Flora.Items)
+            {
+                var sp = _w.Content.FloraOrThrow(plant.SpeciesId);
+                if (sp.Shape == "tree" || sp.Tags.Contains("tree") || sp.Tags.Contains("woody"))
+                    trees.Add((plant.Position, Math.Max(0.20, plant.Radius(sp) * 0.40)));
+            }
+        }
         for (int c = 0; c < g.Count; c++)
         {
             int d = _nearestDomain[c];
@@ -136,13 +196,45 @@ public partial class IslandRenderer : Node3D
             _ambientBytes[c] = (byte)(Mathf.Clamp((float)_w.AmbientGroundCover.Cover[d], 0, 1) * 255);
             if (updateSubstrate)
             {
-                bool gravel = _w.Props.GravelAt(p) != null;
-                _subBytes[c * 2] = gravel ? (byte)255 : (byte)0;
-                // Green channel = submerged waterway bed, read by terrain.gdshader as the silt mask. Sourced from
-                // the simulation's own standing/flowing water depth, never from moisture, so a merely damp or
-                // rain-filmed cell keeps its green and only a real waterway bed deposits silt. Render-only: no
-                // substrate code, sim field or gameplay behaviour changes.
-                _subBytes[c * 2 + 1] = _w.Water.OpenWaterDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
+                bool gravel = _w.Props.GravelAt(p) != null || _w.SubstrateAtCell(p) == Substrate.Gravel;
+                bool rock = _w.SubstrateAtCell(p) == Substrate.Rock;
+                int so = c * 4;
+                _subBytes[so] = (gravel || rock) ? (byte)255 : (byte)0;
+                _subBytes[so + 1] = _w.Water.WaterTableDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
+                if (_w.Water.SurfaceWaterDepth(d) > 0.0005)
+                {
+                    double surf = _w.Water.HydraulicBed(d) + _w.Water.Depth[d];
+                    double surfAboveTable = Math.Max(0.0, surf - _w.Water.WaterTable);
+                    _subBytes[so + 2] = (byte)Math.Clamp((int)Math.Round(surfAboveTable * 100.0 + 1.0), 1, 255);
+                }
+                else
+                {
+                    _subBytes[so + 2] = 0;
+                }
+
+                // Physical ground contact mask (root collars, nurse logs, boulders)
+                double contact = 0;
+                for (int ti = 0; ti < trees.Count; ti++)
+                {
+                    double dTr = Vivarium.Sim.Core.Vec2.Distance(p, trees[ti].Pos);
+                    double rTr = trees[ti].Radius * 2.2;
+                    if (dTr < rTr) contact = Math.Max(contact, 1.0 - dTr / rTr);
+                }
+                for (int li = 0; li < _w.Props.Logs.Count; li++)
+                {
+                    var log = _w.Props.Logs[li];
+                    double dLog = log.AxisDistance(p);
+                    double rLog = log.Radius + 0.14;
+                    if (dLog < rLog) contact = Math.Max(contact, 1.0 - Math.Max(0, dLog - log.Radius) / 0.14);
+                }
+                for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
+                {
+                    var rk = _w.Props.Rocks[ri];
+                    double dRk = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position);
+                    double rRk = rk.FootprintRadius + 0.12;
+                    if (dRk < rRk) contact = Math.Max(contact, 1.0 - Math.Max(0, dRk - rk.FootprintRadius) / 0.12);
+                }
+                _subBytes[so + 3] = (byte)Math.Clamp((int)Math.Round(contact * 255.0), 0, 255);
             }
         }
         _fieldImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _bytes);
@@ -151,11 +243,17 @@ public partial class IslandRenderer : Node3D
         _litterTex.Update(_litterImage);
         _ambientImage.SetData(g.Nx, g.Nz, false, Image.Format.R8, _ambientBytes);
         _ambientTex.Update(_ambientImage);
+        UpdateCoverMask();
         if (updateSubstrate)
         {
             _propsVersion = _w.Props.Version;
-            _subImage.SetData(g.Nx, g.Nz, false, Image.Format.Rg8, _subBytes);
+            _subImage.SetData(g.Nx, g.Nz, false, Image.Format.Rgba8, _subBytes);
             _subTex.Update(_subImage);
         }
     }
+}
+
+file static class HydrologyExtensions
+{
+    public static double HydraulicBed(this Vivarium.Sim.Water.Hydrology water, int idx) => water.Bed[idx];
 }

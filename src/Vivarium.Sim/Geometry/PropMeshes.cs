@@ -535,4 +535,114 @@ public static class PropMeshes
         return list;
     }
 
+    /// <summary>
+    /// Dark rocky spring orifice aperture: a ring/collar of dark stone facets around a sunken dark center aperture.
+    /// Outer radius ~0.08m to 0.12m, with a sunken conduit center.
+    /// </summary>
+    public static MeshData SpringVent(ulong variantSeed = 0)
+    {
+        var rng = Rng.Keyed(variantSeed, "prop.spring_vent", 0);
+        var m = new MeshData();
+
+        // Dark basalt/slate palette
+        var stonePalette = new[] { 0.20, 0.20, 0.21 };
+        var sunkenPalette = new[] { 0.04, 0.04, 0.05 };
+
+        const int sides = 10;
+        double phase = rng.Range(0, Math.PI * 2);
+
+        // Ring dimensions (m)
+        // Outer collar radius ~0.08m to 0.12m
+        double[] outerRadii = new double[sides];
+        double[] crestRadii = new double[sides];
+        double[] innerRadii = new double[sides];
+        double[] angles = new double[sides];
+
+        for (int s = 0; s < sides; s++)
+        {
+            angles[s] = phase + 2 * Math.PI * (s + rng.Range(-0.08, 0.08)) / sides;
+            outerRadii[s] = rng.Range(0.088, 0.112);
+            crestRadii[s] = rng.Range(0.050, 0.065);
+            innerRadii[s] = rng.Range(0.028, 0.038);
+        }
+
+        var outerRing = new Vec3[sides];
+        var crestRing = new Vec3[sides];
+        var innerRing = new Vec3[sides];
+
+        for (int s = 0; s < sides; s++)
+        {
+            double a = angles[s];
+            double ca = Math.Cos(a);
+            double sa = Math.Sin(a);
+
+            // Outer base sits slightly in terrain
+            double yOuter = rng.Range(-0.008, 0.002);
+            outerRing[s] = new Vec3(ca * outerRadii[s], yOuter, sa * outerRadii[s]);
+
+            // Raised collar crest lip
+            double yCrest = rng.Range(0.012, 0.022);
+            crestRing[s] = new Vec3(ca * crestRadii[s], yCrest, sa * crestRadii[s]);
+
+            // Inner rim starts dropping into hole
+            double yInner = rng.Range(-0.010, -0.004);
+            innerRing[s] = new Vec3(ca * innerRadii[s], yInner, sa * innerRadii[s]);
+        }
+
+        // Sunken dark center aperture point
+        double yCenter = rng.Range(-0.040, -0.032);
+        var centerPos = new Vec3(0, yCenter, 0);
+
+        void Face(Vec3 a, Vec3 b, Vec3 c, Vec3 outward, double[] baseCol, double shade)
+        {
+            var rawCross = (b - a).Cross(c - a).Normalized();
+            var n = rawCross.Dot(outward) >= 0 ? rawCross : rawCross * -1;
+            var col = Primitives.Scale(baseCol, shade);
+            int start = m.AddVertex(a, n, col, 1, a.X, a.Z, 0, 0);
+            m.AddVertex(b, n, col, 1, b.X, b.Z, 0, 0);
+            m.AddVertex(c, n, col, 1, c.Z, c.Z, 0, 0);
+            Primitives.TriangleFacing(m, start, start + 1, start + 2, outward);
+        }
+
+        for (int s = 0; s < sides; s++)
+        {
+            int next = (s + 1) % sides;
+
+            // 1. Outer collar facets (outer to crest)
+            var o0 = outerRing[s]; var o1 = outerRing[next];
+            var c0 = crestRing[s]; var c1 = crestRing[next];
+            var outwardCollar = new Vec3(o0.X + o1.X + c0.X + c1.X, 1.0, o0.Z + o1.Z + c0.Z + c1.Z);
+            double shadeCollar = rng.Range(0.85, 1.15);
+            Face(o0, o1, c1, outwardCollar, stonePalette, shadeCollar);
+            Face(o0, c1, c0, outwardCollar, stonePalette, shadeCollar * rng.Range(0.95, 1.05));
+
+            // 2. Collar crest to inner rim (crest to inner)
+            var i0 = innerRing[s]; var i1 = innerRing[next];
+            var inwardSlope = new Vec3(0, 1.0, 0);
+            double shadeInnerSlope = rng.Range(0.65, 0.85);
+            Face(c0, c1, i1, inwardSlope, stonePalette, shadeInnerSlope);
+            Face(c0, i1, i0, inwardSlope, stonePalette, shadeInnerSlope * rng.Range(0.95, 1.05));
+
+            // 3. Sunken dark center aperture cone (inner rim to center point)
+            var inwardCenter = new Vec3(0, 1.0, 0);
+            double shadeAperture = rng.Range(0.80, 1.00);
+            Face(i0, i1, centerPos, inwardCenter, sunkenPalette, shadeAperture);
+
+            // 4. Base skirt underneath facing downward
+            var bottomCenter = new Vec3(0, -0.015, 0);
+            Face(bottomCenter, o1, o0, new Vec3(0, -1.0, 0), stonePalette, 0.50);
+        }
+
+        return m;
+    }
+
+    /// <summary>Build procedural geometry for a prop kind.</summary>
+    public static MeshData Build(PropKind kind, ulong seed = 0) => kind switch
+    {
+        PropKind.SpringVent => SpringVent(seed),
+        _ => new MeshData()
+    };
+
+    /// <summary>Build procedural geometry for a prop instance.</summary>
+    public static MeshData Build(Prop prop) => Build(prop.Kind, prop.VariantSeed);
 }

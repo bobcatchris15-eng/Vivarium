@@ -75,7 +75,7 @@ public static class SurfaceFloatRules
     /// mass-conserving, sub-stepped to satisfy CFL. Returns the substep count used.</summary>
     // Reused across calls (single-threaded, one call completes before the next starts) so a dense advection
     // buffer isn't freshly allocated and GC'd on every tick — these dominate large-pond frame time otherwise.
-    [ThreadStatic] private static double[]? _rho, _vx, _vz, _next;
+    [ThreadStatic] private static double[]? _rho, _vx, _vz, _next, _fx, _fz, _amtX, _amtZ;
     [ThreadStatic] private static bool[]? _blocked;
 
     private static T[] Rent<T>(ref T[]? buf, int n)
@@ -132,37 +132,53 @@ public static class SurfaceFloatRules
             : 1;
         double subDt = dtSeconds / substeps;
 
+        // Face velocities are constant across substeps: precompute them once, with NaN marking a closed face
+        // (either side blocked, or on the domain edge). fx[a] is the face between cell a and its +x neighbour,
+        // fz[a] the face between cell a and its +z neighbour.
+        var fx = Rent(ref _fx, n);
+        var fz = Rent(ref _fz, n);
+        for (int j = 0; j < h; j++)
+        {
+            int row = j * w;
+            for (int i = 0; i < w; i++)
+            {
+                int a = row + i;
+                fx[a] = i + 1 < w && !blocked[a] && !blocked[a + 1] ? 0.5 * (vx[a] + vx[a + 1]) : double.NaN;
+                fz[a] = j + 1 < h && !blocked[a] && !blocked[a + w] ? 0.5 * (vz[a] + vz[a + w]) : double.NaN;
+            }
+        }
+
+        // Gather form of the former scatter loops (all x faces row-major, then all z faces, then the clamp).
+        // Per cell it applies the same operations in the same order: += the -x face, -= the +x face, += the -z
+        // face, -= the +z face, clamp. Results are bit-identical, without a full copy-in/copy-out per substep.
+        var amtX = Rent(ref _amtX, n);
+        var amtZ = Rent(ref _amtZ, n);
         var next = Rent(ref _next, n);
         for (int s = 0; s < substeps; s++)
         {
-            Array.Copy(rho, next, n);
-
-            // faces along x
-            for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
-            for (int gx = d.MinGx; gx < d.MaxGx; gx++)
+            for (int a = 0; a < n; a++)
             {
-                int a = d.Index(gx, gz), b = d.Index(gx + 1, gz);
-                if (blocked[a] || blocked[b]) continue;
-                double u = 0.5 * (vx[a] + vx[b]);
-                double flux = u >= 0 ? rho[a] * u : rho[b] * u;
-                double amt = flux * subDt / cell;
-                next[a] -= amt; next[b] += amt;
+                double u = fx[a];
+                if (!double.IsNaN(u)) amtX[a] = (u >= 0 ? rho[a] * u : rho[a + 1] * u) * subDt / cell;
+                u = fz[a];
+                if (!double.IsNaN(u)) amtZ[a] = (u >= 0 ? rho[a] * u : rho[a + w] * u) * subDt / cell;
             }
 
-            // faces along z
-            for (int gz = d.MinGz; gz < d.MaxGz; gz++)
-            for (int gx = d.MinGx; gx <= d.MaxGx; gx++)
+            for (int j = 0; j < h; j++)
             {
-                int a = d.Index(gx, gz), b = d.Index(gx, gz + 1);
-                if (blocked[a] || blocked[b]) continue;
-                double u = 0.5 * (vz[a] + vz[b]);
-                double flux = u >= 0 ? rho[a] * u : rho[b] * u;
-                double amt = flux * subDt / cell;
-                next[a] -= amt; next[b] += amt;
+                int row = j * w;
+                for (int i = 0; i < w; i++)
+                {
+                    int a = row + i;
+                    double v = rho[a];
+                    if (i > 0 && !double.IsNaN(fx[a - 1])) v += amtX[a - 1];
+                    if (!double.IsNaN(fx[a])) v -= amtX[a];
+                    if (j > 0 && !double.IsNaN(fz[a - w])) v += amtZ[a - w];
+                    if (!double.IsNaN(fz[a])) v -= amtZ[a];
+                    next[a] = v < 0 ? 0 : v; // numerical guard only; CFL keeps this a no-op in practice
+                }
             }
-
-            for (int i = 0; i < n; i++) if (next[i] < 0) next[i] = 0; // numerical guard only; CFL keeps this a no-op in practice
-            Array.Copy(next, rho, n);
+            (rho, next) = (next, rho);
         }
 
         CoverageTile? writeTile = null; int wTi = int.MinValue, wTj = int.MinValue;

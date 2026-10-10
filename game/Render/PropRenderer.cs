@@ -35,6 +35,7 @@ public partial class PropRenderer : Node3D
             _logMat = Bridge.Shader("res://Shaders/log.gdshader");
             Bridge.BindSurface(_logMat, "bark", Bridge.Surfaces.Bark);
             Bridge.BindSurface(_logMat, "moss", Bridge.Surfaces.Moss);
+            if (!IslandRenderer.CoverMaskConsumers.Contains(_logMat)) IslandRenderer.CoverMaskConsumers.Add(_logMat);
         }
         if (_pebbles.Length == 0)
         {

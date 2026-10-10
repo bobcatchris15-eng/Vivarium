@@ -71,7 +71,7 @@ public static class CgSolver
 
         for (int it = 0; it < Iterations; it++)
         {
-            if (rsOld < 1e-24) break;
+            if (rsOld < 1e-12) break;
             MatVecInto(d, ad);
             double denom = Dot(d, ad);
             double alpha = denom > 1e-300 ? rsOld / denom : 0;

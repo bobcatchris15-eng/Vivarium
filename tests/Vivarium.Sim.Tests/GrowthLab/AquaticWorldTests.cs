@@ -11,8 +11,8 @@ public class AquaticWorldTests
     public void FlowAdvectionUsesPhysicalSecondsRegardlessOfBioAcceleration()
     {
         var w = TestUtil.DefaultWorld(populate: false);
-        int cell = w.Grid.DomainCells.First(c => w.Water.Depth[c] > 0.1 &&
-            w.Water.IsWet(w.Grid.CellAt(w.Grid.CellCenter(c) + new Vivarium.Sim.Core.Vec2(0.1, 0))));
+        int cell = w.Grid.DomainCells.First(w.Water.IsWaterTable);
+        TestUtil.Flood(w, w.Grid.CellCenter(cell), 1.0, 0.2);
         foreach (int c in w.Grid.DomainCells) { w.Water.FlowX[c] = 0.001; w.Water.FlowZ[c] = 0; w.Fields.Light[c] = 0; w.Fields.Nutrients[c] = 0; }
         var (gx, gz) = CoverageSpec.CellOf(w.Grid.CellCenter(cell));
         float[] Run(double bioSeconds)

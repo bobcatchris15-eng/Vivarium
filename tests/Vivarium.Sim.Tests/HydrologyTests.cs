@@ -1,4 +1,4 @@
-﻿using Vivarium.Sim.Content;
+using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Geometry;
 using Vivarium.Sim.World;
@@ -39,8 +39,10 @@ public class HydrologyTests
     {
         var w=TestUtil.FlatWorld(3,d=>{d.Water.WaterTable=1;d.Terrain.Features.Add(new TerrainFeature{Type="basin",X=0,Z=0,Radius=2.5,Amount=.8});});
         Assert.True(w.Water.WaterTableDepth(Vec2.Zero)>0);
-        Assert.False(w.Water.IsWet(Vec2.Zero));
-        Assert.True(double.IsNaN(w.Water.SurfaceAt(Vec2.Zero)));
+        Assert.False(w.Water.HasSurfaceWater(Vec2.Zero));
+        Assert.Equal(0.0, w.Water.SurfaceWaterDepth(Vec2.Zero));
+        Assert.True(w.Water.IsWet(Vec2.Zero));
+        Assert.Equal(1.0, w.Water.SurfaceAt(Vec2.Zero), 8);
         var digest=w.Water.DigestHex();
         Assert.Equal(0,WaterMesh.Build(w).TriangleCount);
         Assert.Equal(digest,w.Water.DigestHex());
@@ -61,7 +63,7 @@ public class HydrologyTests
     [Fact]
     public void SaturatedSoilNeverDeletesFlowingWater()
     {
-        var w=TestUtil.FlatWorld(31,d=>d.Water.WaterTable=1);
+        var w=TestUtil.FlatWorld(31,d=>d.Water.WaterTable=0.4);
         w.Water.AddWater(Vec2.Zero,.3,.01);
         w.Water.Step(30);
         Assert.Equal(.01,w.Water.Volume()+w.Water.Budget.BoundaryOutflow,9);
@@ -96,7 +98,7 @@ public class HydrologyTests
         foreach (int c in loaded.Grid.DomainCells.Where(loaded.Water.IsWaterTable))
             Assert.Equal(0.0, loaded.Water.SurfaceWaterDepth(c), 12);
         Assert.True(loaded.Water.IsWaterTable(Vec2.Zero));
-        Assert.True(double.IsNaN(loaded.Water.SurfaceAt(Vec2.Zero)));
+        Assert.Equal(loaded.Water.WaterTable, loaded.Water.SurfaceAt(Vec2.Zero), 8);
     }
 
     [Fact] // t-053
@@ -348,7 +350,7 @@ public class HydrologyTests
             {
                 if (!w.Grid.InDomain(ci + di, cj + dj)) continue;
                 int k = w.Grid.Index(ci + di, cj + dj);
-                if (w.Water.IsWet(k)) { var ws = w.Water.SurfaceAt(w.Grid.CellCenter(k)); if (!double.IsNaN(ws)) top = Math.Max(top, ws); }
+                if (w.Water.IsWet(k)) { var ws = w.Water.SurfaceAt(w.Grid.CellCenter(k)); if (double.IsNaN(ws)) ws = w.Water.Bed[k] + w.Water.Depth[k]; if (!double.IsNaN(ws)) top = Math.Max(top, ws); }
             }
             Assert.True(p.Y <= top + 1e-6, $"surface at {p} is above the nearby water level {top:0.000}");
         }
@@ -369,7 +371,7 @@ public class HydrologyTests
     public void SubmergedFloraUsesActualFluidDepth()
     {
         var w=TestUtil.FlatWorld();
-        TestUtil.Flood(w,Vec2.Zero,1,.1);
+        TestUtil.Flood(w,Vec2.Zero,1,.12);
         var s=w.FloraSystem.Suitability(w.Content.FloraOrThrow("streamribbon"),Vec2.Zero);
         Assert.DoesNotContain("standing water",s.RefusalReason);
         Assert.DoesNotContain("submerged",s.RefusalReason);
@@ -403,6 +405,145 @@ public class HydrologyTests
         TestUtil.Flood(w,Vec2.Zero,1,.1);
         var set=WaterMesh.BuildSet(w);
         Assert.Equal(set.SurfaceMesh.DigestHex(),WaterMesh.Build(w).DigestHex());
+    }
+
+    [Fact]
+    public void PointQueriesOnBankAboveWaterTableAreDryAndZeroDepth()
+    {
+        var w = TestUtil.FlatWorld(7, d =>
+        {
+            d.Water.WaterTable = 0.2;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.5, Amount = 0.6 });
+        });
+        Vec2 p = Vec2.Zero;
+        bool found = false;
+        for (double x = 0.0; x <= 2.5; x += 0.02)
+        {
+            var testP = new Vec2(x, 0);
+            if (w.Terrain.Height(testP) >= w.Water.WaterTable)
+            {
+                p = testP;
+                found = true;
+                break;
+            }
+        }
+        Assert.True(found, "sloping bank point above water table should exist");
+        Assert.True(w.Terrain.Height(p) >= w.Water.WaterTable);
+        Assert.Equal(0.0, w.Water.WaterTableDepth(p));
+        Assert.False(w.Water.IsWaterTable(p));
+        Assert.Equal(0.0, w.Water.OpenWaterDepth(p));
+        Assert.False(w.Water.IsWet(p));
+    }
+
+    [Fact]
+    public void SubstrateInfiltrationRatesMatchRockGravelSoilAndFeedsMoisture()
+    {
+        var wRock = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        int centerCell = wRock.Grid.CellAt(Vec2.Zero);
+        wRock.Water.Depth[centerCell] = 0.05;
+        wRock.Water.Advance(1.0, _ => Substrate.Rock);
+        Assert.Equal(0.0, wRock.Water.Budget.Infiltration);
+
+        var wSoil = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wSoil.Water.Depth[centerCell] = 0.05;
+        wSoil.Water.Advance(1.0, _ => Substrate.Soil);
+        double soilInfil = wSoil.Water.Budget.Infiltration;
+        Assert.True(soilInfil > 0);
+
+        var wGravel = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wGravel.Water.Depth[centerCell] = 0.05;
+        wGravel.Water.Advance(1.0, _ => Substrate.Gravel);
+        double gravelInfil = wGravel.Water.Budget.Infiltration;
+        Assert.Equal(4.0 * soilInfil, gravelInfil, 6);
+
+        // Fallback with no substrate supplied gives 1.0x (Soil) rate
+        var wFallback = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wFallback.Water.Depth[centerCell] = 0.05;
+        wFallback.Water.Advance(1.0);
+        Assert.Equal(soilInfil, wFallback.Water.Budget.Infiltration, 6);
+
+        // Array parameter with Substrate[]
+        var wArray = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wArray.Water.Depth[centerCell] = 0.05;
+        var subArray = new Substrate[wArray.Grid.Count];
+        Array.Fill(subArray, Substrate.Gravel);
+        wArray.Water.Advance(1.0, subArray);
+        Assert.Equal(gravelInfil, wArray.Water.Budget.Infiltration, 6);
+
+        // Substrates property querying on Advance
+        var wProp = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0.02;
+        });
+        wProp.Water.Depth[centerCell] = 0.05;
+        wProp.Water.Substrates = subArray;
+        wProp.Water.Advance(1.0);
+        Assert.Equal(gravelInfil, wProp.Water.Budget.Infiltration, 6);
+
+        // Soil leaching feeds CoupleMoisture
+        double moistureBefore = wSoil.Fields.Moisture.Values[centerCell];
+        wSoil.Water.CoupleMoisture(wSoil.Fields.Moisture, wSoil.Content.Ecology, 1800, wSoil.Fields.Scratch);
+        double moistureAfter = wSoil.Fields.Moisture.Values[centerCell];
+        Assert.True(moistureAfter > moistureBefore, $"soil moisture should increase: {moistureAfter} > {moistureBefore}");
+    }
+
+    [Fact]
+    public void DynamicSurfaceWaterReachingOrBelowWaterTableDrainsIntoGroundwaterRecharge()
+    {
+        var w = TestUtil.FlatWorld(1, d =>
+        {
+            d.Water.WaterTable = 0.4;
+            d.Water.Evaporation = 0;
+            d.Water.Infiltration = 0;
+            d.Terrain.Features.Add(new TerrainFeature { Type = "basin", X = 0, Z = 0, Radius = 2.0, Amount = 0.3 });
+        });
+        int basinCell = w.Grid.CellAt(Vec2.Zero);
+        Assert.True(w.Water.Bed[basinCell] <= w.Water.WaterTable, "basin cell must be at or below water table");
+
+        // 1. Initial dynamic depth directly on cell at or below water table drains immediately
+        w.Water.Depth[basinCell] = 0.05;
+        double expectedRecharge = 0.05 * w.Water.CellArea;
+        w.Water.Advance(1.0);
+        Assert.Equal(0.0, w.Water.Depth[basinCell]);
+        Assert.Equal(expectedRecharge, w.Water.Budget.GroundwaterRecharge, 6);
+
+        // 2. Dynamic surface water placed on high ground flowing into the basin is absorbed
+        int rimCell = w.Grid.CellAt(new Vec2(1.5, 0));
+        Assert.True(w.Water.Bed[rimCell] > w.Water.WaterTable, "rim cell must be above water table");
+        w.Water.Depth[rimCell] = 0.05;
+        double addedVol = 0.05 * w.Water.CellArea;
+        double initialRecharge = w.Water.Budget.GroundwaterRecharge;
+
+        for (int i = 0; i < 40; i++)
+        {
+            w.Water.Step(1.0);
+        }
+
+        // Dynamic surface water reaching the basin is absorbed into GroundwaterRecharge with Depth = 0
+        Assert.Equal(0.0, w.Water.Depth[basinCell]);
+        Assert.True(w.Water.Budget.GroundwaterRecharge > initialRecharge, "water flowing into water table basin must recharge groundwater");
+        Assert.Equal(expectedRecharge + addedVol, w.Water.Volume() + w.Water.Budget.BoundaryOutflow + w.Water.Budget.GroundwaterRecharge, 8);
     }
 }
 

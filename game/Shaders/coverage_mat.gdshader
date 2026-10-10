@@ -96,8 +96,14 @@ void fragment() {
 
     vec3 n = normalize(wn + bump * 0.5);
 
+    // Colony identity under the dark grow-light rig: lift and saturate slightly so moss/lichen patches stand out
+    // from the procedural ground/log moss (which is also suppressed under colonies via cover_tex).
+    if (sundew_surface < 0.5) {
+        float cl = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        c = clamp(mix(vec3(cl), c, 1.18) * (u_pattern < 0.5 ? 1.22 : 1.30), vec3(0.0), vec3(1.0));
+    }
     ALBEDO = c;
-    ROUGHNESS = rough;
-    SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : 0.15;
+    ROUGHNESS = sundew_surface > 0.5 ? rough : rough * 0.88;
+    SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : 0.28;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

@@ -21,6 +21,8 @@ public partial class SoilDetailRenderer : Node3D
     private double _accum = 999;
     private int _terrainVersion = int.MinValue;
     private long _litterRevision = -1;
+    private long _lastLocalLitterDigest = -1;
+    private int _lastQuality = -1;
     public Camera3D? Camera { get; set; }
     /// <summary>0 disables the layer entirely (lowest quality tier); 1 normal density; 2 dense/close-up.</summary>
     public int Quality { get; set; } = 1;
@@ -33,6 +35,9 @@ public partial class SoilDetailRenderer : Node3D
     // which are big enough to read, go out to the full radius.
     private const float CrumbRadius = 2.5f, ClodRadius = 4.5f;
     private Vector3 _lastCam = new(float.MaxValue, 0, 0);
+
+    private readonly List<Transform3D> _crumbXf = new(), _clodXf = new(), _twigXf = new(), _flakeXf = new(), _fruitXf = new(), _bladeXf = new(), _stalkXf = new();
+    private readonly List<Color> _crumbCol = new(), _clodCol = new(), _twigCol = new(), _flakeCol = new(), _fruitCol = new(), _bladeCol = new(), _stalkCol = new();
 
     public void Build(VivariumWorld w)
     {
@@ -66,6 +71,8 @@ public partial class SoilDetailRenderer : Node3D
         _accum = 999;
         _terrainVersion = int.MinValue;
         _litterRevision = -1;
+        _lastLocalLitterDigest = -1;
+        _lastQuality = -1;
     }
 
     public override void _Process(double delta)
@@ -77,17 +84,52 @@ public partial class SoilDetailRenderer : Node3D
         if (!enabled) { _accum = 999; return; }
         _accum += delta;
         if (_accum < 1.0) return;
-        // rebuild only when the view has moved enough to matter, the ground changed, or occasionally for moisture drift
-        // (a blind rebuild every 0.75 s was a periodic multi-millisecond hitch)
+
         Vector3 cam = Camera?.GlobalPosition ?? Vector3.Zero;
-        bool moved = cam.DistanceSquaredTo(_lastCam) > 2.5f * 2.5f;
-        bool litterChanged = _litterRevision != _w.Litter.Revision;
-        if (!moved && _terrainVersion == _w.Terrain.Version && (!litterChanged || _accum < 5.0)) return;
+        bool moved = cam.DistanceSquaredTo(_lastCam) > 2.0f * 2.0f;
+        bool terrainChanged = _terrainVersion != _w.Terrain.Version;
+        bool qualityChanged = _lastQuality != Quality;
+
+        if (!moved && !terrainChanged && !qualityChanged)
+        {
+            if (_litterRevision == _w.Litter.Revision) return;
+            long localDigest = ComputeLocalLitterDigest(cam);
+            if (localDigest == _lastLocalLitterDigest)
+            {
+                _litterRevision = _w.Litter.Revision;
+                return;
+            }
+        }
+
         _accum = 0;
         _lastCam = cam;
         _terrainVersion = _w.Terrain.Version;
         _litterRevision = _w.Litter.Revision;
+        _lastQuality = Quality;
+        _lastLocalLitterDigest = ComputeLocalLitterDigest(cam);
         Refresh();
+    }
+
+    private long ComputeLocalLitterDigest(Vector3 cam)
+    {
+        var g = _w.Grid;
+        int i0 = Mathf.Max(0, (int)((cam.X - CullRadius - g.OriginX) / g.CellSize));
+        int i1 = Mathf.Min(g.Nx - 1, (int)((cam.X + CullRadius - g.OriginX) / g.CellSize));
+        int j0 = Mathf.Max(0, (int)((cam.Z - CullRadius - g.OriginZ) / g.CellSize));
+        int j1 = Mathf.Min(g.Nz - 1, (int)((cam.Z + CullRadius - g.OriginZ) / g.CellSize));
+        int stride = Quality >= 2 ? 1 : 2;
+        long hash = 17;
+        for (int j = j0 - j0 % stride; j <= j1; j += stride)
+        for (int i = i0 - i0 % stride; i <= i1; i += stride)
+        {
+            if (!g.InDomain(i, j)) continue;
+            int idx = g.Index(i, j);
+            long f = (long)(_w.Litter.FineMass[idx] * 1000.0);
+            long c = (long)(_w.Litter.CoarseMass[idx] * 1000.0);
+            long fr = (long)(_w.Litter.FruitMass[idx] * 1000.0);
+            hash = hash * 31 + idx * 7 + f * 13 + c * 19 + fr * 23;
+        }
+        return hash;
     }
 
     private void Refresh()
@@ -96,13 +138,13 @@ public partial class SoilDetailRenderer : Node3D
         Vector3 camPos = Camera?.GlobalPosition ?? Vector3.Zero;
         bool haveCam = Camera != null;
         float r2 = CullRadius * CullRadius;
-        var crumbXf = new List<Transform3D>(); var crumbCol = new List<Color>();
-        var clodXf = new List<Transform3D>(); var clodCol = new List<Color>();
-        var twigXf = new List<Transform3D>(); var twigCol = new List<Color>();
-        var flakeXf = new List<Transform3D>(); var flakeCol = new List<Color>();
-        var fruitXf = new List<Transform3D>(); var fruitCol = new List<Color>();
-        var bladeXf = new List<Transform3D>(); var bladeCol = new List<Color>();
-        var stalkXf = new List<Transform3D>(); var stalkCol = new List<Color>();
+        _crumbXf.Clear(); _crumbCol.Clear();
+        _clodXf.Clear(); _clodCol.Clear();
+        _twigXf.Clear(); _twigCol.Clear();
+        _flakeXf.Clear(); _flakeCol.Clear();
+        _fruitXf.Clear(); _fruitCol.Clear();
+        _bladeXf.Clear(); _bladeCol.Clear();
+        _stalkXf.Clear(); _stalkCol.Clear();
 
         var nearRocks = new List<Vivarium.Sim.World.Rock>();
         var nearLogs = new List<Vivarium.Sim.World.LogProp>();
@@ -127,7 +169,7 @@ public partial class SoilDetailRenderer : Node3D
 
         // Render-only filler deliberately avoids named flora. It can borrow a little colour/silhouette character
         // from the nearest plant outside that exclusion halo, but it never participates in simulation or competition.
-        var nearFlora = new List<(Vivarium.Sim.Core.Vec2 P, double Exclusion, Color Tint, bool BladeBias)>();
+        var nearFlora = new List<(Vivarium.Sim.Core.Vec2 P, double Exclusion, Color Tint, bool BladeBias, bool IsWoody, double CollarRadius)>();
         foreach (var plant in _w.Flora.Items)
         {
             var sp = _w.Content.FloraOrThrow(plant.SpeciesId);
@@ -135,7 +177,9 @@ public partial class SoilDetailRenderer : Node3D
             {
                 var tint = new Color((float)sp.Color[0], (float)sp.Color[1], (float)sp.Color[2]);
                 bool bladeBias = sp.Shape is "reed" or "tussock" or "veilblade_curtain" or "kinkcane_brake" || sp.Tags.Contains("grass");
-                nearFlora.Add((plant.Position, Math.Max(0.13, plant.Radius(sp) + 0.075), tint, bladeBias));
+                bool isWoody = sp.Shape == "tree" || sp.Tags.Contains("tree") || sp.Tags.Contains("woody");
+                double collarR = Math.Max(0.18, plant.Radius(sp) * 0.35);
+                nearFlora.Add((plant.Position, Math.Max(0.13, plant.Radius(sp) + 0.075), tint, bladeBias, isWoody, collarR));
             }
         }
 
@@ -195,12 +239,9 @@ public partial class SoilDetailRenderer : Node3D
             double patch = 0.65 + 0.35 * rng.Randf();
             double deposition = Math.Clamp((0.62 - Math.Min(slope, 1.0) * 0.28 + hollow + shelter * 0.24) * patch, 0.12, 1.25);
 
-            // Mineral dressing follows moisture. Organic detail is proportional to stored litter; terrain
+            // Mineral dressing follows moisture and exposed soil (computed below after flora/cover checks).
+            // Organic detail is proportional to stored litter; terrain
             // shelter only affects its arrangement, never creates leaves or twigs without deposited matter.
-            int crumbCount = Mathf.RoundToInt((moisture > 0.55 ? 0 : rng.RandiRange(1, 5) * Quality * deposition)
-                * Mathf.Clamp(1f - (d - CrumbRadius * 0.6f) / (CrumbRadius * 0.4f), 0f, 1f));
-            int clodCount = Mathf.RoundToInt((moisture > 0.3 ? rng.RandiRange(1, 3) : (rng.Randf() < 0.35 ? 1 : 0))
-                * deposition * Mathf.Clamp(1f - (d - ClodRadius * 0.6f) / (ClodRadius * 0.4f), 0f, 1f));
             // Normal quality visits every second cell. Include its whole block so a deposit in an
             // unvisited cell still produces visible pieces and the two tiers show the same history.
             double fineMass = 0, coarseMass = 0, fruitMass = 0;
@@ -238,14 +279,24 @@ public partial class SoilDetailRenderer : Node3D
 
             // Ambient vegetation is strongest on ordinary moist exposed soil, but remains intentionally visually
             // subordinate. It is geometry, not a green terrain wash: many short blades plus sparse seed stalks.
+            // If the cell already carries ambient ground cover (AmbientGroundCoverRenderer), suppress filler blades
+            // here to eliminate double-filling and avoid competing geometry batches.
+            double ambientCover = _w.AmbientGroundCover.Cover[idx];
             double nearest = double.PositiveInfinity;
             Color neighbourTint = new Color(0.30f, 0.48f, 0.20f);
             bool neighbourBladeBias = false;
             bool excludedByNamedPlant = false;
+            double rootCollarShelter = 0;
             for (int pi = 0; pi < nearFlora.Count; pi++)
             {
                 double fd = Vivarium.Sim.Core.Vec2.Distance(p, nearFlora[pi].P);
                 if (fd < nearFlora[pi].Exclusion) { excludedByNamedPlant = true; break; }
+                if (nearFlora[pi].IsWoody)
+                {
+                    if (fd < nearFlora[pi].CollarRadius) { excludedByNamedPlant = true; break; }
+                    double collarDist = Math.Max(0, fd - nearFlora[pi].CollarRadius);
+                    if (collarDist < 0.6) rootCollarShelter = Math.Max(rootCollarShelter, Math.Exp(-collarDist / 0.32));
+                }
                 if (fd < nearest)
                 {
                     nearest = fd;
@@ -253,15 +304,29 @@ public partial class SoilDetailRenderer : Node3D
                     neighbourBladeBias = nearFlora[pi].BladeBias;
                 }
             }
-            if (!excludedByNamedPlant && slope < 0.72 && moisture > 0.16 && moisture < 0.94)
+
+            // Tree root collar flutes shelter litter accumulation on the ground
+            deposition = Math.Clamp(deposition + rootCollarShelter * 0.28, 0.12, 1.50);
+
+            // Mineral crumbs and clods belong on exposed soil; heavy turf and thick litter mat hide crumb microrelief
+            double exposedSoil = Math.Clamp(1.0 - ambientCover * 1.4 - fineCover * 0.6, 0.0, 1.0);
+            int crumbCount = Mathf.RoundToInt((moisture > 0.55 ? 0 : rng.RandiRange(1, 5) * Quality * deposition)
+                * Mathf.Clamp(1f - (d - CrumbRadius * 0.6f) / (CrumbRadius * 0.4f), 0f, 1f) * (float)exposedSoil);
+            int clodCount = Mathf.RoundToInt((moisture > 0.3 ? rng.RandiRange(1, 3) : (rng.Randf() < 0.35 ? 1 : 0))
+                * deposition * Mathf.Clamp(1f - (d - ClodRadius * 0.6f) / (ClodRadius * 0.4f), 0f, 1f) * (float)exposedSoil);
+
+            // Ambient vegetation filler: only appears on exposed bare soil where ambientCover is absent (< 0.12).
+            // Where AmbientGroundCoverRenderer is active, it handles grass/broadleaf instances completely.
+            if (!excludedByNamedPlant && slope < 0.72 && moisture > 0.16 && moisture < 0.94 && ambientCover < 0.12)
             {
                 double light = _w.FloraSystem.EffectiveLightCell(idx);
                 double moistureFit = MathD.Clamp01(1.0 - Math.Abs(moisture - 0.55) / 0.48);
                 double lightFit = 0.35 + 0.65 * MathD.Clamp01(light / 0.72);
                 double litterPenalty = 1.0 - 0.45 * MathD.Clamp01(fineCover);
-                double filler = moistureFit * lightFit * litterPenalty * distFade;
-                int bladeCount = Mathf.Clamp(Mathf.RoundToInt((Quality >= 2 ? 7 : 11) * filler), 0, Quality >= 2 ? 9 : 13);
-                int stalkCount = filler > 0.32 && rng.Randf() < (neighbourBladeBias ? 0.30f : 0.18f) ? 1 : 0;
+                double bareWeight = 1.0 - ambientCover / 0.12;
+                double filler = moistureFit * lightFit * litterPenalty * distFade * bareWeight;
+                int bladeCount = Mathf.Clamp(Mathf.RoundToInt((Quality >= 2 ? 5 : 8) * filler), 0, Quality >= 2 ? 7 : 10);
+                int stalkCount = filler > 0.35 && rng.Randf() < (neighbourBladeBias ? 0.25f : 0.14f) ? 1 : 0;
                 var baseGreen = new Color(
                     (float)Mathf.Lerp(0.24, 0.34, moisture),
                     (float)Mathf.Lerp(0.38, 0.58, moisture),
@@ -269,25 +334,25 @@ public partial class SoilDetailRenderer : Node3D
                 if (nearest < 1.1)
                     baseGreen = baseGreen.Lerp(neighbourTint, (float)(0.12 + 0.16 * (1.0 - nearest / 1.1)));
                 for (int k = 0; k < bladeCount; k++)
-                    Place(bladeXf, bladeCol, g, p, ref rng, baseGreen, 0.72f, 1.38f, DetailKind.Blade, cellTilt, nearRocks, nearLogs, nearGravel);
+                    Place(_bladeXf, _bladeCol, g, p, ref rng, baseGreen, 0.72f, 1.38f, DetailKind.Blade, cellTilt, nearRocks, nearLogs, nearGravel);
                 for (int k = 0; k < stalkCount; k++)
-                    Place(stalkXf, stalkCol, g, p, ref rng, baseGreen.Lerp(new Color(0.62f, 0.56f, 0.30f), 0.30f), 0.78f, 1.28f, DetailKind.Stalk, cellTilt, nearRocks, nearLogs, nearGravel);
+                    Place(_stalkXf, _stalkCol, g, p, ref rng, baseGreen.Lerp(new Color(0.62f, 0.56f, 0.30f), 0.30f), 0.78f, 1.28f, DetailKind.Stalk, cellTilt, nearRocks, nearLogs, nearGravel);
             }
 
-            for (int k = 0; k < crumbCount; k++) Place(crumbXf, crumbCol, g, p, ref rng, soilTint, 0.7f, 1.3f, DetailKind.Crumb, cellTilt, nearRocks, nearLogs, nearGravel);
-            for (int k = 0; k < clodCount; k++) Place(clodXf, clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f, DetailKind.Clod, cellTilt, nearRocks, nearLogs, nearGravel);
-            for (int k = 0; k < twigCount; k++) Place(twigXf, twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f, DetailKind.Twig, cellTilt, nearRocks, nearLogs, nearGravel);
-            for (int k = 0; k < flakeCount; k++) Place(flakeXf, flakeCol, g, p, ref rng, litterTint, 0.7f, 1.3f, DetailKind.Flake, cellTilt, nearRocks, nearLogs, nearGravel);
-            for (int k = 0; k < fruitCount; k++) Place(fruitXf, fruitCol, g, p, ref rng, fruitTint, 0.75f, 1.45f, DetailKind.Fruit, cellTilt, nearRocks, nearLogs, nearGravel);
+            for (int k = 0; k < crumbCount; k++) Place(_crumbXf, _crumbCol, g, p, ref rng, soilTint, 0.7f, 1.3f, DetailKind.Crumb, cellTilt, nearRocks, nearLogs, nearGravel);
+            for (int k = 0; k < clodCount; k++) Place(_clodXf, _clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f, DetailKind.Clod, cellTilt, nearRocks, nearLogs, nearGravel);
+            for (int k = 0; k < twigCount; k++) Place(_twigXf, _twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f, DetailKind.Twig, cellTilt, nearRocks, nearLogs, nearGravel);
+            for (int k = 0; k < flakeCount; k++) Place(_flakeXf, _flakeCol, g, p, ref rng, litterTint, 0.7f, 1.3f, DetailKind.Flake, cellTilt, nearRocks, nearLogs, nearGravel);
+            for (int k = 0; k < fruitCount; k++) Place(_fruitXf, _fruitCol, g, p, ref rng, fruitTint, 0.75f, 1.45f, DetailKind.Fruit, cellTilt, nearRocks, nearLogs, nearGravel);
         }
 
-        SetInstances(_crumbs, crumbXf, crumbCol);
-        SetInstances(_clods, clodXf, clodCol);
-        SetInstances(_twigs, twigXf, twigCol);
-        SetInstances(_flakes, flakeXf, flakeCol);
-        SetInstances(_fruit, fruitXf, fruitCol);
-        SetInstances(_blades, bladeXf, bladeCol);
-        SetInstances(_stalks, stalkXf, stalkCol);
+        SetInstances(_crumbs, _crumbXf, _crumbCol);
+        SetInstances(_clods, _clodXf, _clodCol);
+        SetInstances(_twigs, _twigXf, _twigCol);
+        SetInstances(_flakes, _flakeXf, _flakeCol);
+        SetInstances(_fruit, _fruitXf, _fruitCol);
+        SetInstances(_blades, _bladeXf, _bladeCol);
+        SetInstances(_stalks, _stalkXf, _stalkCol);
     }
 
     private enum DetailKind { Crumb, Clod, Twig, Flake, Fruit, Blade, Stalk }
@@ -364,16 +429,28 @@ public partial class SoilDetailRenderer : Node3D
         if (mm.InstanceCount != n) mm.InstanceCount = n;
         mm.VisibleInstanceCount = n;
         if (n == 0) return;
-        if (!_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 16) _buffers[mm] = buf = new float[n * 16];
+        bool resized = !_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 16;
+        if (resized) _buffers[mm] = buf = new float[n * 16];
+        bool changed = resized;
         for (int i = 0; i < n; i++)
         {
             var t = xf[i]; var c = col[i]; int o = i * 16;
-            buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
-            buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
-            buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
-            buf[o + 12] = c.R; buf[o + 13] = c.G; buf[o + 14] = c.B; buf[o + 15] = 1f;
+            if (buf![o + 0] != t.Basis.X.X || buf[o + 1] != t.Basis.Y.X || buf[o + 2] != t.Basis.Z.X || buf[o + 3] != t.Origin.X ||
+                buf[o + 4] != t.Basis.X.Y || buf[o + 5] != t.Basis.Y.Y || buf[o + 6] != t.Basis.Z.Y || buf[o + 7] != t.Origin.Y ||
+                buf[o + 8] != t.Basis.X.Z || buf[o + 9] != t.Basis.Y.Z || buf[o + 10] != t.Basis.Z.Z || buf[o + 11] != t.Origin.Z ||
+                buf[o + 12] != c.R || buf[o + 13] != c.G || buf[o + 14] != c.B)
+            {
+                changed = true;
+                buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
+                buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
+                buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
+                buf[o + 12] = c.R; buf[o + 13] = c.G; buf[o + 14] = c.B; buf[o + 15] = 1f;
+            }
         }
-        mm.Buffer = buf;
+        if (changed || mm.Buffer == null || mm.Buffer.Length != n * 16)
+        {
+            mm.Buffer = buf;
+        }
     }
 
     /// <summary>

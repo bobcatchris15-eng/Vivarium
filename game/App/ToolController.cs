@@ -26,6 +26,7 @@ public partial class ToolController : Node
     public double GravelRadius { get; set; } = 0.6;
     public double SculptRadius { get; set; } = 0.6;
     public double WaterRadius { get; set; } = 0.4;
+    public double SpringDischarge { get; set; } = 0.001;
     // a brush stroke (sculpt/pour/drain) runs from the click until the button is released
     private bool _stroke, _strokeSculpted;
     private string? _strokeError;
@@ -54,6 +55,7 @@ public partial class ToolController : Node
         _w = w;
         Held = EntityId.None; MovingProp = EntityId.None;
         Select(WorldHit.None);
+        if (w.Content.Tools.SpringDischarge > 0) SpringDischarge = w.Content.Tools.SpringDischarge;
     }
 
     public void SetTool(ToolKind k)
@@ -279,6 +281,7 @@ public partial class ToolController : Node
             case ToolKind.PlaceGravel: GravelRadius = Actions!.ClampGravelRadius(GravelRadius * f); break;
             case ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth: SculptRadius = Actions!.ClampSculptRadius(SculptRadius * f); break;
             case ToolKind.PourWater or ToolKind.DrainWater: WaterRadius = Actions!.ClampWaterRadius(WaterRadius * f); break;
+            case ToolKind.Spring: SpringDischarge = Actions!.ClampSpringDischarge(SpringDischarge * f); break;
         }
         ToolChanged?.Invoke(Current);
     }
@@ -352,7 +355,7 @@ public partial class ToolController : Node
             }
             case ToolKind.Spring:
                 if (!hit.IsHit) return null;
-                r = t.ToggleSpring(p);
+                r = t.ToggleSpring(p, SpringDischarge);
                 break;
             case ToolKind.MoveProp:
                 if (MovingProp.IsNone)

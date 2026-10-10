@@ -36,6 +36,25 @@ public partial class FloraRenderer : Node3D
     private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
+    public RenderDirtyRegions DirtyRegions { get; } = new(tileSize: 2.0f);
+    public RenderSnapshot? CurrentSnapshot { get; private set; }
+    private readonly struct PlantStateRecord
+    {
+        public readonly Vector3 Position;
+        public readonly float Radius;
+        public readonly float Height;
+        public readonly float Health;
+        public readonly bool Fruiting;
+        public readonly FloraStage Stage;
+        public readonly PlantReproductiveStage ReproStage;
+
+        public PlantStateRecord(Vector3 pos, float r, float h, float health, bool fruiting, FloraStage stage, PlantReproductiveStage repro)
+        {
+            Position = pos; Radius = r; Height = h; Health = health; Fruiting = fruiting; Stage = stage; ReproStage = repro;
+        }
+    }
+    private readonly Dictionary<EntityId, PlantStateRecord> _prevPlantStates = new();
+    private readonly HashSet<EntityId> _currentPlantIds = new();
     private double _accum = 999;
     private double _clock;
     // Keep the currently drawn buffers intact while preparing the next population snapshot. Each unit of
@@ -49,9 +68,10 @@ public partial class FloraRenderer : Node3D
     /// <summary>All currently present species are built and one complete instance refresh has been uploaded.</summary>
     public bool PopulationReady { get; private set; }
     public int LoadedSpeciesCount => _layers.Count;
-    private readonly List<FloraIndividual> _snapshot = new();
-    private readonly List<DeadPlant> _deadSnapshot = new();
+    private readonly List<FloraSnapshotItem> _snapshot = new();
+    private readonly List<DeadFloraSnapshotItem> _deadSnapshot = new();
     private readonly List<EntityId> _expired = new();
+    private int _terrainVersion = -1;
     private int _quality = 1;
     public Camera3D? Camera { get; set; }
     public int Quality
@@ -82,11 +102,14 @@ public partial class FloraRenderer : Node3D
         foreach (var node in _buildingNodes) node.QueueFree();
         _buildingNodes.Clear();
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
-        _buffers.Clear(); _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear();
+        _pooledBuffers.Clear(); _prevPlantStates.Clear(); DirtyRegions.Clear();
+        _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear();
         _visualTiers.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
         PopulationReady = false;
         _w = w;
+        _terrainVersion = _w.Terrain.Version;
+        DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
         bool legacy = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1";
         if (!ReferenceEquals(_builtContent, w.Content) || _builtLegacy != legacy)
         {
@@ -99,11 +122,12 @@ public partial class FloraRenderer : Node3D
         {
             foreach (var variant in layer.Variants)
             {
+                variant.Full.Multimesh.VisibleInstanceCount = 0;
                 variant.Full.Multimesh.InstanceCount = 0;
-                if (variant.Fruit != null) variant.Fruit.Multimesh.InstanceCount = 0;
-                if (variant.Juvenile != null) variant.Juvenile.Multimesh.InstanceCount = 0;
+                if (variant.Fruit != null) { variant.Fruit.Multimesh.VisibleInstanceCount = 0; variant.Fruit.Multimesh.InstanceCount = 0; }
+                if (variant.Juvenile != null) { variant.Juvenile.Multimesh.VisibleInstanceCount = 0; variant.Juvenile.Multimesh.InstanceCount = 0; }
             }
-            if (layer.Veins != null) layer.Veins.Multimesh.InstanceCount = 0;
+            if (layer.Veins != null) { layer.Veins.Multimesh.VisibleInstanceCount = 0; layer.Veins.Multimesh.InstanceCount = 0; }
         }
         RequestMissingLayers();
         _accum = 999;
@@ -159,7 +183,8 @@ public partial class FloraRenderer : Node3D
             }
 
             // Publish whatever finished. A species becomes drawable the moment its own meshes are done, rather
-            // than waiting behind everything ahead of it in the catalog.
+            // than waiting behind everything ahead of it in the catalog. Throttle to at most one species per frame
+            // to eliminate main-thread hitches.
             for (int i = inflight.Count - 1; i >= 0; i--)
             {
                 var b = inflight[i];
@@ -168,6 +193,7 @@ public partial class FloraRenderer : Node3D
                 // The published layer now owns these nodes, exactly as the serial build transferred them.
                 foreach (var n in b.Nodes) _buildingNodes.Remove(n);
                 inflight.RemoveAt(i);
+                break;
             }
 
             yield return true;
@@ -285,13 +311,26 @@ public partial class FloraRenderer : Node3D
         Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = mesh, InstanceCount = 0 },
     };
 
-    public void Wobble(IEnumerable<EntityId> ids) { foreach (var id in ids) _wobbleStart[id] = _clock; }
+    public void Wobble(IEnumerable<EntityId> ids)
+    {
+        foreach (var id in ids)
+        {
+            _wobbleStart[id] = _clock;
+            if (CurrentSnapshot != null && CurrentSnapshot.TryGetFlora(id, out var f))
+                DirtyRegions.MarkPoint(new Vector3((float)f.X, 0, (float)f.Z), 0.5f, DirtyReason.FloraAttributes, CurrentSnapshot.Version, _clock);
+        }
+    }
 
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("Flora");
         _clock += delta;
         if (_w == null) return;
+        if (_w.Terrain.Version != _terrainVersion)
+        {
+            _terrainVersion = _w.Terrain.Version;
+            DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
+        }
         RequestMissingLayers();
         if (_build != null && !_build.MoveNext()) { _build.Dispose(); _build = null; }
         _accum += delta;
@@ -311,11 +350,24 @@ public partial class FloraRenderer : Node3D
         } while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < RefreshBudgetMs);
     }
 
+    private static bool IsUpright(FloraSpeciesDef sp) =>
+        sp.Woody != null || sp.IsTree
+        || sp.Shape.StartsWith("shrub_")
+        || sp.Shape is "kinkcane_brake" or "veilblade_curtain" or "reed" or "ribbonweed" or "milfoil"
+        || sp.Shape.EndsWith("_brake") || sp.Shape.EndsWith("_curtain")
+        || sp.Shape == "fern" || sp.Shape == "veilfern"
+        || sp.Shape == "tussock"
+        || sp.Shape == "pitcher_rosette"
+        || sp.Shape == "carrion_bell"
+        || sp.Shape == "herb"
+        || sp.Shape is "mushroom_cluster" or "cap";
+
     public override void _ExitTree()
     {
         _build?.Dispose(); _build = null;
         _refresh?.Dispose(); _refresh = null;
-        _buffers.Clear(); _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
+        _pooledBuffers.Clear(); _prevPlantStates.Clear(); DirtyRegions.Clear();
+        _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
     }
 
     private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _juvenile = new(), _veins = new();
@@ -402,10 +454,14 @@ public partial class FloraRenderer : Node3D
 
     private IEnumerable<bool> Refresh()
     {
-        // The authoritative list may change between frames. Copy references once rather than keeping a
-        // population enumerator alive, and check membership before preparing each individual.
-        _snapshot.Clear(); _snapshot.AddRange(_w.Flora.Items);
-        _deadSnapshot.Clear(); _deadSnapshot.AddRange(_w.DeadFlora.Items);
+        // Capture an immutable, versioned presentation snapshot so background build tasks
+        // and presentation iterations do not race mutable simulation state.
+        var snapshot = RenderSnapshot.Capture(_w);
+        CurrentSnapshot = snapshot;
+        _snapshot.Clear();
+        _snapshot.AddRange(snapshot.Flora);
+        _deadSnapshot.Clear();
+        _deadSnapshot.AddRange(snapshot.DeadFlora);
         var planes = Camera?.GetFrustum(); // one native array per refresh, never one per plant
         Plane[]? frustum = planes == null ? null : new Plane[planes.Count];
         if (planes != null) planes.CopyTo(frustum!, 0); // plane tests below stay entirely in managed code
@@ -413,6 +469,50 @@ public partial class FloraRenderer : Node3D
         foreach (var (id, start) in _wobbleStart)
             if (_clock - start >= 1.2 || _w.Flora.Get(id) == null) _expired.Add(id);
         foreach (var id in _expired) _wobbleStart.Remove(id);
+
+        // Spatial dirty tracking with latest-wins coalescing across living plants
+        _currentPlantIds.Clear();
+        foreach (var f in _snapshot)
+        {
+            _currentPlantIds.Add(f.Id);
+            var sp = _w.Content.FloraOrThrow(f.SpeciesId);
+            var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
+            double r = f.Radius(sp);
+            double h = sp.Colony != null
+                ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
+                : sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
+            var stage = f.Stage(sp);
+
+            if (!_prevPlantStates.TryGetValue(f.Id, out var prev))
+            {
+                DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraPopulation, snapshot.Version, _clock);
+            }
+            else
+            {
+                if (prev.Stage != stage || prev.Fruiting != f.Fruiting || prev.ReproStage != f.ReproductiveStage)
+                    DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraGeometry, snapshot.Version, _clock);
+                if (pos.DistanceSquaredTo(prev.Position) > 1e-4f || Math.Abs(r - prev.Radius) > 1e-3f || Math.Abs(h - prev.Height) > 1e-3f)
+                    DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraTransform, snapshot.Version, _clock);
+                if (Math.Abs((float)f.Health - prev.Health) > 1e-3f)
+                    DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraAttributes, snapshot.Version, _clock);
+            }
+            _prevPlantStates[f.Id] = new PlantStateRecord(pos, (float)r, (float)h, (float)f.Health, f.Fruiting, stage, f.ReproductiveStage);
+        }
+
+        if (_prevPlantStates.Count > _currentPlantIds.Count)
+        {
+            var removed = new List<EntityId>();
+            foreach (var (id, state) in _prevPlantStates)
+            {
+                if (!_currentPlantIds.Contains(id))
+                {
+                    DirtyRegions.MarkPoint(state.Position, state.Radius, DirtyReason.FloraPopulation, snapshot.Version, _clock);
+                    removed.Add(id);
+                }
+            }
+            foreach (var id in removed) _prevPlantStates.Remove(id);
+        }
+
         foreach (var k in _layers.Keys)
             for (int v = 0; v < _layers[k].Variants.Length; v++)
             {
@@ -426,7 +526,7 @@ public partial class FloraRenderer : Node3D
         foreach (var f in _snapshot)
         {
             yield return false;
-            if (_w.Flora.Get(f.Id) != f) continue;
+            if (_w.Flora.Get(f.Id) == null) continue;
             var sp = _w.Content.FloraOrThrow(f.SpeciesId);
             if (!_layers.ContainsKey(sp.Id)) continue;
             double r = f.Radius(sp);
@@ -458,17 +558,9 @@ public partial class FloraRenderer : Node3D
             // field: they lean slightly toward the more open side, while dry/unhealthy specimens lose some turgor
             // in a stable individual direction. This makes variation read as growth history rather than seed noise.
             var yawBasis = new Basis(Vector3.Up, yaw);
-            if (sp.Colony != null || sp.Archetype is "moss" or "lichen" or "slime_mold")
-            {
-                yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
-            }
-            else if (sp.Shape == "hookthicket_brake")
-            {
-                // Mature runner tips are authored at ground level; retain their ground plane
-                // rather than lifting one side of the arch with the generic light-seeking tilt.
-                yawBasis = SurfaceFrame.TiltTo(SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Max(r, 0.03))) * yawBasis;
-            }
-            else if (sp.Archetype == "plant" && sp.Shape != "vine" && sp.Shape != "floatleaf")
+            bool isUpright = IsUpright(sp);
+
+            if (isUpright)
             {
                 var fp = f.Position;
                 double e = Math.Max(_w.Grid.CellSize * 0.55, Math.Min(0.35, Math.Max(r, 0.05)));
@@ -487,10 +579,22 @@ public partial class FloraRenderer : Node3D
                 h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
                 r *= 1.0 + stress * 0.035;
             }
+            else if (sp.Shape != "vine" && sp.Shape != "floatleaf")
+            {
+                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                yawBasis = SurfaceFrame.TiltTo(norm) * yawBasis;
+                float lift = (float)Math.Min(0.006, 0.002 + h * 0.04);
+                pos += norm * lift;
+                var fp = f.Position;
+                double moisture = _w.Fields.Moisture.Sample(fp);
+                double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
+                h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
+                r *= 1.0 + stress * 0.035;
+            }
             if (sp.Climber != null && f.ClimberSegments is { Count: > 1 } segs)
             {
                 // Multi-segment climber: each node is rendered at its exact 3D position and orientation
-                var cTint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
+                var cTint = f.Tint;
                 int cTier = VisualTier(f.Id, pos, (float)Math.Max(h, 0.3), (float)Math.Max(r, 0.3));
                 int cVariant = (int)((hash >> 8) % (ulong)_layers[sp.Id].MorphCount) + cTier * _layers[sp.Id].MorphCount;
                 for (int s = 0; s < segs.Count; s++)
@@ -536,24 +640,24 @@ public partial class FloraRenderer : Node3D
                 r *= 0.72 + 0.58 * swell;
                 h *= 0.52 + 1.05 * swell;
             }
-            var t = new Transform3D(yawBasis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+            var t = new Transform3D(yawBasis.ScaledLocal(new Vector3((float)r, (float)h, (float)r)), pos);
             if (sp.Shape == "bracket" && Anchor(new Vector2(pos.X, pos.Z), 0.35) is { } ba)
             {
                 // shelves grow out of the trunk's side
                 var at = ba.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.08f, 0);
-                t = new Transform3D(Bridge.Yaw(ba.Outward).Scaled(new Vector3((float)r, (float)(h * 2.5), (float)r)), at - new Vector3(0, (float)h, 0));
+                t = new Transform3D(Bridge.Yaw(ba.Outward).ScaledLocal(new Vector3((float)r, (float)(h * 2.5), (float)r)), at - new Vector3(0, (float)h, 0));
             }
             else if (sp.Shape == "glass_antlers" && Anchor(new Vector2(pos.X, pos.Z), 0.22, new HashSet<string>(StringComparer.Ordinal) { "log" }) is { } ga)
             {
                 // Glass Antlers are authored upright from their attachment foot. Plant them directly on the
                 // cylindrical log surface, with a slight outward yaw so branches don't disappear into the wood.
                 var at = ga.Surface + new Vector3(0, (float)(((hash >> 20) % 100) / 100.0 - 0.5) * 0.05f, 0);
-                t = new Transform3D(Bridge.Yaw(ga.Outward).Scaled(new Vector3((float)r, (float)(h * 1.35), (float)r)), at);
+                t = new Transform3D(Bridge.Yaw(ga.Outward).ScaledLocal(new Vector3((float)r, (float)(h * 1.35), (float)r)), at);
             }
             float wobble = 0;
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2);
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
-            var tint = new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f);
+            var tint = f.Tint;
             var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
             int lodTier = VisualTier(f.Id, pos, (float)h, (float)r);
@@ -572,7 +676,7 @@ public partial class FloraRenderer : Node3D
         foreach (var dead in _deadSnapshot)
         {
             yield return false;
-            if (_w.DeadFlora.Get(dead.Id) != dead) continue;
+            if (_w.DeadFlora.Get(dead.Id) == null) continue;
             var sp = _w.Content.FloraOrThrow(dead.SpeciesId);
             if (!_layers.ContainsKey(sp.Id)) continue;
             double remain = Math.Sqrt(dead.RemainingFraction);
@@ -581,16 +685,28 @@ public partial class FloraRenderer : Node3D
             var pos = new Vector3((float)dead.X, (float)_w.GroundHeight(dead.Position), (float)dead.Z);
             if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
 
-            float lean = dead.Stage switch
+            bool isUpright = IsUpright(sp);
+
+            Basis basis;
+            if (!isUpright)
             {
-                DeadPlantStage.StandingDead => 0.05f + 0.10f * (float)dead.StageProgress,
-                DeadPlantStage.Collapsing => Mathf.Lerp(0.15f, 1.38f, (float)dead.StageProgress),
-                DeadPlantStage.Fallen => 1.42f,
-                _ => 1.47f,
-            };
-            var basis = new Basis(Vector3.Up, (float)dead.CollapseHeading) * new Basis(Vector3.Forward, lean);
+                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                basis = SurfaceFrame.TiltTo(norm) * new Basis(Vector3.Up, (float)dead.CollapseHeading);
+                pos += norm * 0.003f;
+            }
+            else
+            {
+                float lean = dead.Stage switch
+                {
+                    DeadPlantStage.StandingDead => 0.05f + 0.10f * (float)dead.StageProgress,
+                    DeadPlantStage.Collapsing => Mathf.Lerp(0.15f, 1.38f, (float)dead.StageProgress),
+                    DeadPlantStage.Fallen => 1.42f,
+                    _ => 1.47f,
+                };
+                basis = new Basis(Vector3.Up, (float)dead.CollapseHeading) * new Basis(Vector3.Forward, lean);
+            }
             if (dead.Stage >= DeadPlantStage.Fallen) h *= 0.92;
-            var t = new Transform3D(basis.Scaled(new Vector3((float)r, (float)h, (float)r)), pos);
+            var t = new Transform3D(basis.ScaledLocal(new Vector3((float)r, (float)h, (float)r)), pos);
 
             int cell = _w.Grid.NearestDomainCell(dead.Position);
             double moisture = cell >= 0 ? _w.Fields.Moisture.Values[cell] : 0.5;
@@ -620,7 +736,10 @@ public partial class FloraRenderer : Node3D
             float litterInfluence = (float)(post?.LitterColorInfluence ?? 0.7);
             var tint = deadColor.Lerp(localLitter, (float)(litterBlend * litterInfluence));
             ulong hash = Rng.Mix(dead.Id.Value, 0xD34DUL);
-            var custom = new Color((hash % 1000) / 1000f, 0f, 0f, ((hash >> 12) % 1000) / 1000f);
+            // Freshly killed standing plants keep chlorophyll for a while: leaf pigment drains over the
+            // standing-dead stage instead of snapping straight to straw (shader fades by inst.y).
+            float residualGreen = dead.Stage == DeadPlantStage.StandingDead ? 0.34f * (float)(1.0 - dead.StageProgress) : 0f;
+            var custom = new Color((hash % 1000) / 1000f, residualGreen, 0f, ((hash >> 12) % 1000) / 1000f);
             var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
             int deadTier = VisualTier(dead.Id, pos, (float)h, (float)r);
@@ -638,7 +757,7 @@ public partial class FloraRenderer : Node3D
             foreach (var f in _snapshot)
             {
                 yield return false;
-                if (_w.Flora.Get(f.Id) != f) continue;
+                if (_w.Flora.Get(f.Id) == null) continue;
                 if (f.SpeciesId != id) continue;
                 var vsp = _w.Content.FloraOrThrow(id);
 
@@ -664,14 +783,14 @@ public partial class FloraRenderer : Node3D
                         cZAxis = cZAxis.Normalized() * cThick;
                         var cYAxis = cZAxis.Cross(cXAxis).Normalized() * cThick;
                         list.T.Add(new Transform3D(new Basis(cXAxis, cYAxis, cZAxis), pA));
-                        list.Tint.Add(new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f));
+                        list.Tint.Add(f.Tint);
                         ulong sHash = Rng.Mix(f.Id.Value, (ulong)s);
                         list.C.Add(new Color((sHash % 1000) / 1000f, (float)(seg.Senescent ? f.Health * 0.4 : f.Health), 0, ((sHash >> 12) % 1000) / 1000f));
                     }
                     continue;
                 }
 
-                if (f.ParentId.IsNone || _w.Flora.Get(f.ParentId) is not { } parent) continue;
+                if (f.ParentId.IsNone || (CurrentSnapshot?.TryGetFlora(f.ParentId, out var parent) != true && (_w.Flora.Get(f.ParentId) is not { } wParent || (parent = new FloraSnapshotItem(wParent)).Id.IsNone))) continue;
                 var a = new Vector3((float)parent.X, (float)_w.GroundHeight(parent.Position) + 0.004f, (float)parent.Z);
                 var b = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position) + 0.004f, (float)f.Z);
                 var d = b - a;
@@ -680,13 +799,13 @@ public partial class FloraRenderer : Node3D
                 float thick = vsp.Climber != null ? 0.0025f + 0.0045f * frac : 0.004f + 0.009f * frac;
                 var xAxis = d; var zAxis = xAxis.Cross(Vector3.Up).Normalized() * thick; var yAxis = zAxis.Cross(xAxis).Normalized() * thick * 0.45f;
                 list.T.Add(new Transform3D(new Basis(xAxis, yAxis, zAxis), a));
-                list.Tint.Add(new Color((float)f.Tint[0], (float)f.Tint[1], (float)f.Tint[2], 1f));
+                list.Tint.Add(f.Tint);
                 ulong hash = Rng.Mix(f.Id.Value, 0xF10);
                 list.C.Add(new Color((hash % 1000) / 1000f, (float)Math.Min(f.Health, parent.Health), 0, ((hash >> 12) % 1000) / 1000f));
             }
             yield return true;
             Fill(layer.Veins.Multimesh, list);
-            triangles += (long)list.T.Count * layer.VeinTris;
+            triangles += (long)layer.Veins.Multimesh.VisibleInstanceCount * layer.VeinTris;
         }
         foreach (var (id, layer) in _layers)
             for (int v = 0; v < layer.Variants.Length; v++)
@@ -698,14 +817,13 @@ public partial class FloraRenderer : Node3D
                 Fill(vl.Full.Multimesh, Get(_full, mk));
                 if (vl.Fruit != null) Fill(vl.Fruit.Multimesh, Get(_fruit, mk));
                 if (vl.Juvenile != null) Fill(vl.Juvenile.Multimesh, Get(_juvenile, mk));
-                triangles += (long)vl.Full.Multimesh.InstanceCount * vl.FullTris
-                    + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.InstanceCount * vl.FruitTris : 0)
-                    + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.InstanceCount * vl.JuvenileTris : 0);
+                triangles += (long)vl.Full.Multimesh.VisibleInstanceCount * vl.FullTris
+                    + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.VisibleInstanceCount * vl.FruitTris : 0)
+                    + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.VisibleInstanceCount * vl.JuvenileTris : 0);
             }
         Visible_ = visible; TrianglesDrawn = triangles;
         PopulationReady = _build == null && _w.Flora.Items.All(f => _layers.ContainsKey(f.SpeciesId))
             && _w.DeadFlora.Items.All(f => _layers.ContainsKey(f.SpeciesId));
-        _snapshot.Clear();
         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
     }
 
@@ -753,28 +871,64 @@ public partial class FloraRenderer : Node3D
     }
 
     /// <summary>Uploads all instances in one packed buffer (12 transform + 4 instance-colour tint + 4 custom floats
-    /// each) instead of two engine calls per instance, which caused frame hitches once the island filled with plants.</summary>
-    // Per-renderer ownership is essential: a static dictionary kept the meshes and buffers of every
-    // replaced world alive after their nodes were freed.
-    private readonly Dictionary<MultiMesh, float[]> _buffers = new();
+    /// each) instead of two engine calls per instance, using pooled capacity-cached buffers to avoid reallocating
+    /// MultiMesh instance memory on every count change.</summary>
+    private sealed class PooledMultiMeshBuffer
+    {
+        public float[] Buffer = Array.Empty<float>();
+        public int Capacity;
+        public int VisibleCount;
+
+        public void EnsureCapacity(MultiMesh mm, int needed)
+        {
+            if (mm.InstanceCount < needed)
+            {
+                int newCap = Math.Max(needed + needed / 2 + 8, mm.InstanceCount * 2);
+                mm.InstanceCount = newCap;
+                Capacity = newCap;
+                Buffer = new float[newCap * 20];
+            }
+            else if (Buffer.Length < mm.InstanceCount * 20)
+            {
+                Buffer = new float[mm.InstanceCount * 20];
+                Capacity = mm.InstanceCount;
+            }
+        }
+
+        public void Upload(MultiMesh mm, int count)
+        {
+            VisibleCount = count;
+            mm.VisibleInstanceCount = count;
+            if (count > 0)
+            {
+                mm.Buffer = Buffer;
+            }
+        }
+    }
+
+    private readonly Dictionary<MultiMesh, PooledMultiMeshBuffer> _pooledBuffers = new();
 
     private void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> Tint, List<Color> C) data)
     {
         int n = data.T.Count;
-        if (mm.InstanceCount != n) mm.InstanceCount = n;
-        if (n == 0) return;
-        // reuse the buffer while the count is unchanged (the usual case): large per-rebuild arrays triggered full GCs
-        if (!_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 20) _buffers[mm] = buf = new float[n * 20];
-        for (int i = 0; i < n; i++)
+        if (!_pooledBuffers.TryGetValue(mm, out var pb))
+            _pooledBuffers[mm] = pb = new PooledMultiMeshBuffer();
+
+        pb.EnsureCapacity(mm, n);
+        if (n > 0)
         {
-            var t = data.T[i]; var tint = data.Tint[i]; var c = data.C[i]; int o = i * 20;
-            buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
-            buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
-            buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
-            buf[o + 12] = tint.R; buf[o + 13] = tint.G; buf[o + 14] = tint.B; buf[o + 15] = tint.A;
-            buf[o + 16] = c.R; buf[o + 17] = c.G; buf[o + 18] = c.B; buf[o + 19] = c.A;
+            var buf = pb.Buffer;
+            for (int i = 0; i < n; i++)
+            {
+                var t = data.T[i]; var tint = data.Tint[i]; var c = data.C[i]; int o = i * 20;
+                buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
+                buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
+                buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
+                buf[o + 12] = tint.R; buf[o + 13] = tint.G; buf[o + 14] = tint.B; buf[o + 15] = tint.A;
+                buf[o + 16] = c.R; buf[o + 17] = c.G; buf[o + 18] = c.B; buf[o + 19] = c.A;
+            }
         }
-        mm.Buffer = buf;
+        pb.Upload(mm, n);
     }
 }
 

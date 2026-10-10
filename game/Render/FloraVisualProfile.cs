@@ -61,6 +61,7 @@ public sealed class FloraVisualProfile
         mat.SetShaderParameter("tissue_scale", TissueScale);
         mat.SetShaderParameter("canopy_occlusion", CanopyOcclusion);
         mat.SetShaderParameter("volumetric", Volumetric);
+        mat.SetShaderParameter("leaf_variegation", FloraSurfaceProfiles.Variegation(Species));
         return mat;
     }
 
