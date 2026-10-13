@@ -187,7 +187,7 @@ public partial class FaunaPreview : Node3D
         stage.AddChild(new EnvironmentRig());
         var renderer = new FaunaRenderer { ProcessMode = ProcessModeEnum.Disabled };
         stage.AddChild(renderer); renderer.Build(world);
-        if (sp.Model is "isopod" or "silverfish" or "salamander" or "slug")
+        if (sp.Model is "isopod" or "silverfish" or "salamander" or "slug" or "worm")
         {
             // Even Relief=0 has a sampled support profile. A flat preview
             // plane hid the moving animal as its real resting height declined.
@@ -210,7 +210,7 @@ public partial class FaunaPreview : Node3D
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.32f, 0.31f, 0.27f), Roughness = 1 } });
         for (int i = -40; i <= 40; i++) stage.AddChild(new MeshInstance3D {
             Mesh = new BoxMesh { Size = new Vector3(length * 0.01f, 0.0003f, length * 2) },
-            Position = new Vector3(i * length * 0.25f, (sp.Model is "isopod" or "silverfish" or "salamander" or "slug") ? (float)world.FaunaSystem.RestingY(sp,new Vec2(i*length*.25,0))+.0002f : -0.0015f, 0),
+            Position = new Vector3(i * length * 0.25f, (sp.Model is "isopod" or "silverfish" or "salamander" or "slug" or "worm") ? (float)world.FaunaSystem.RestingY(sp,new Vec2(i*length*.25,0))+.0002f : -0.0015f, 0),
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.43f, 0.41f, 0.35f), Roughness = 1 } });
         var bounds = OrganismMeshes.Fauna(sp).Bounds();
         float framing = (float)Math.Max(1.55, Math.Max(bounds.Max.X - bounds.Min.X, bounds.Max.Z - bounds.Min.Z) * 1.35);
@@ -239,7 +239,7 @@ public partial class FaunaPreview : Node3D
         }
         File.WriteAllText(Path.Combine(dir, "live-motion.json"), System.Text.Json.JsonSerializer.Serialize(new {
             fps = 30, bodyLength = length, cyclesPerBody = sp.Animation.CyclesPerBody,
-            input = "FaunaSystem + Scheduler + FaunaRenderer", visibleSupport = (sp.Model is "isopod" or "silverfish" or "salamander" or "slug") ? "64x64 mesh sampled from actual resting support; flat-plane mismatch corrected" : "flat preview plane", slowFrames = 90, fastFrames = 90, stoppedFrames = 60, trace }));
+            input = "FaunaSystem + Scheduler + FaunaRenderer", visibleSupport = (sp.Model is "isopod" or "silverfish" or "salamander" or "slug" or "worm") ? "64x64 mesh sampled from actual resting support; flat-plane mismatch corrected" : "flat preview plane", slowFrames = 90, fastFrames = 90, stoppedFrames = 60, trace }));
         stage.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }

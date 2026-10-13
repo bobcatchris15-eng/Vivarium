@@ -1,7 +1,7 @@
 {
   "status": "active",
   "current_guardian": "boa",
-  "current_step": "Solo porcupine/dewmantle complete; next boa and a different fauna. Scoped publication requires remote hash verification.",
+  "current_step": "Boa/loamthread selective integration validated; scoped publication receipt records the remote hash.",
   "completed": [
     "Preserved root v4 and isolated v5 candidates",
     "Created coati v6: curved tail, dense directional coat, mobile ear rims",
@@ -45,7 +45,8 @@
     "Solo coati v10 fuller anatomy/shortened muzzle, denser coat/PBR roughness and body/tail behavior authored; native studio/transition/contact/populated reviewed. Marbleback continuous shells, fourteen articulated legs and rounded curled pose captured;22 focused tests pass.",
     "Solo monitorv15:45mm head/neck lift, fuller throat/hip revision,2048 anatomical pigment/PBR,16-tail spans and world-axis behavior; native full/contact/populated complete. Ghostbristle continuous segmented body/curved sensory appendages and cuticle; native preview/live/speed,23 focused tests pass.",
     "Solo pangolinv15 rounded denser scales/PBR/head coverage, fuller haunches, connected axial/hip hierarchy and60fps four-beat gait; actual Godot full/contact/populated reviewed. Rainspine continuous envelope/soft limbs/attached pads; native preview/live/speed and24focused tests pass.",
-    "Solo porcupinev7/dewmantlev4: native body/face/transition/contact/populated review, studio/live/speed fauna;27 focused anatomy/gait/guardian/save migration tests pass in isolated candidate checkout."
+    "Solo porcupinev7/dewmantlev4: native body/face/transition/contact/populated review, studio/live/speed fauna;27 focused anatomy/gait/guardian/save migration tests pass in isolated candidate checkout.",
+    "Boa solo v8 selectively integrates incoming silhouette into the detailed rig/PBR candidate; loamthread continuous supported skin. Native studio/contact complete; 28 focused isolated tests pass."
   ],
   "evidence": [
     "build/guardian-review/coati-cinematic-v6",
@@ -82,7 +83,11 @@
     "build/guardian-review/porcupine-solo-v7-populated-20261013",
     "build/fauna-review/dewmantle-solo-v4-20261013",
     "build/fauna-review/dewmantle-solo-v4-live-20261013",
-    "build/fauna-review/dewmantle-solo-v4-speed-20261013"
+    "build/fauna-review/dewmantle-solo-v4-speed-20261013",
+    "build/guardian-review/boa-selective-v8-studio-20261013",
+    "build/guardian-review/boa-selective-v8-populated-20261013",
+    "build/fauna-review/loamthread-selective-v1-20261013",
+    "build/fauna-review/loamthread-selective-v1-live-20261013"
   ],
   "open_gaps": [
     "Coati first pass is improved, not accepted as near-photoreal; fine coat/clump density, eye/cheek shape and cinematic shading remain artistic review gaps",
@@ -116,16 +121,16 @@
     "Slug mantle pattern still reads as procedural patches; lacks exact deforming sole collision over uneven terrain. Source animation stops travel while idle sensory phase continues. No performance acceptance."
   ],
   "automation": "ACTIVE three-hour heartbeat, solo rotating animals; configured chat High effort retained; compact durable restart handoff saved.",
-  "updated_at": "2026-10-13T16:34:12.824741+00:00",
+  "updated_at": "2026-10-13T21:44:06.182143+00:00",
   "live_game_observation": "OriginalPID10632 absent at2026-10-12T21:28Z; no termination/restart issued duringthispass; leaveabsent.",
   "additional_scope": "One smaller fauna alongside each guardian wake; choose another species next. Flora catalog stays recorded, without claiming it was improved.",
-  "wake_started_at": "2026-10-13T16:05:51.242Z",
-  "wake_deadline_utc": "2026-10-13T16:50:51.242Z",
+  "wake_started_at": "2026-10-13T21:14:00Z",
+  "wake_deadline_utc": "2026-10-13T21:59:00Z",
   "plateau_assessment": "Concrete improvements remain; no plateau or near-photoreal acceptance.",
-  "next_step": "Read boa receipt and real boa videos; suggested loamthread worm companion. Advance to hoatzin afterward.",
-  "wake_result": "Substantive native candidate improvement; near-photoreal and natural motion OPEN.",
+  "next_step": "Hoatzin: selectively borrow verified crop/envelope details into detailed candidate; choose an unrevised smaller fauna.",
+  "wake_result": "Boa selective anatomy/material and loamthread continuous skin; studio completed, populated status in receipt; near-photoreal and natural motion remain open.",
   "active_workers": [],
-  "next_guardian": "boa",
+  "next_guardian": "hoatzin",
   "guardian_cycle": [
     "coati",
     "monitor",
@@ -135,9 +140,9 @@
     "hoatzin"
   ],
   "solo_work": true,
-  "completed_guardian_this_wake": "porcupine",
-  "completed_small_fauna_this_wake": "dewmantle",
-  "wake_finished_at": "2026-10-13T16:34:12.824741+00:00",
+  "completed_guardian_this_wake": "boa",
+  "completed_small_fauna_this_wake": "loamthread",
+  "wake_finished_at": "2026-10-13T21:44:06.182156+00:00",
   "publication_policy": "At each wake end, commit scoped guardian/fauna changes and necessary integration, push to origin/main, and verify the exact remote hash. Preserve unrelated dirty work and the existing index; no force push. Reserve validation/publication/handoff time within the45minute wake. Record publication failures and retained candidates. No installs, purchases or live-game restart.",
   "publication_authorized_at": "2026-10-13",
   "publication_receipt": ".clanker/tasks/guardian-cinematic-pass/publication-receipt.json",
@@ -146,6 +151,8 @@
     "marbleback",
     "ghostbristle",
     "rainspine",
-    "dewmantle"
-  ]
+    "dewmantle",
+    "loamthread"
+  ],
+  "selective_mesh_policy": "Port specific visually better incoming mesh details into existing detailed candidates; preserve topology/maps/rig/contact and compare native captures."
 }

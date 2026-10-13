@@ -169,6 +169,15 @@ public partial class GuardianReview : Node3D
                 }
                 records.Add(new { def.Id, travelled, activity = g.Activity.ToString(), position = g.Position,
                     insideTrunk = world.PilotTree!.BlocksTrunk(g.PositionXZ, 0.35) });
+                // Run the populated production scene in a separate process via
+                // --guardian-populated. This keeps studio/contact evidence
+                // independently complete when the legacy final scene fails.
+                if (Main.UserArgs.Contains("--guardian-studio-only"))
+                {
+                    stage.QueueFree();
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    continue;
+                }
                 floor.Visible = false;
                 renderer.ReviewSupportPlaneHeight = null;
                 lighting.QueueFree();

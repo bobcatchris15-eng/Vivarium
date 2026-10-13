@@ -724,10 +724,12 @@ void fragment() {
             else if (choice == 5.0) skin = vec3(0.55, 0.36, 0.25);
             float annulus = pow(0.5 + 0.5 * cos((0.51 - p.x) / 1.02 * 6.2831853 * 60.0), 6.0);
             float dorsal = smoothstep(0.035, 0.070, p.y);
-            col = skin * mix(1.12, 0.72, dorsal) * (0.93 + 0.14 * grain - annulus * 0.19);
-            if (region > 4.5 && region < 5.5) col = mix(skin * 1.28, vec3(0.48, 0.32, 0.21), 0.35);
+            col = skin * mix(1.08, 0.80, dorsal) * (0.97 + 0.06 * grain - annulus * 0.065);
+            float axial = 1.0 - body_uv.x;
+            float collar = smoothstep(0.18, 0.22, axial) * (1.0 - smoothstep(0.32, 0.36, axial));
+            col = mix(col, mix(skin * 1.16, vec3(0.48, 0.32, 0.21), 0.25), collar);
             rough = mix(0.28, 0.40, grain);
-            relief = grain * 0.0001 - annulus * 0.00015;
+            relief = grain * 0.000025 - annulus * 0.00004 * (1.0 - collar);
         } else if (anim_family == 4) {
             skin = vec3(0.17, 0.055, 0.020); marking = vec3(0.56, 0.19, 0.035);
             if (choice == 1.0) { skin = vec3(0.040, 0.036, 0.029); marking = vec3(0.48, 0.33, 0.090); }
@@ -807,7 +809,7 @@ void fragment() {
         }
         col = hue_rotate(col, genes.x * 0.35);
         // Interpolated sole/mantle labels pass through region2. Only sensory geometry is an eye.
-        eye = region > 1.5 && region < 2.5 && (anim_body_style != 4 || anim_role > 2.5);
+        eye = anim_body_style != 5 && region > 1.5 && region < 2.5 && (anim_body_style != 4 || anim_role > 2.5);
         if (eye) col = vec3(0.008, 0.011, 0.008);
         else if (region > 6.5 && region < 7.5) { col *= 0.25; rough = 0.53; }
         else {

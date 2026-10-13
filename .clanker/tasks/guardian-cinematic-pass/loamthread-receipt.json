@@ -1,0 +1,26 @@
+{
+  "fauna": "loamthread",
+  "candidate": "v1-continuous-skin",
+  "source_sha256": {
+    "game/Shaders/fauna.gdshader": "d2c0aa1ad11a6fbec334808d22e2501566a6a0e519cc5a113bcd9edd47375908",
+    "src/Vivarium.Sim/Geometry/OrganismMeshes.cs": "578c6d26356e54018d3834290ca31f60f37c8c2a2bb34e946d8c3c4ca242f9a2",
+    "src/Vivarium.Sim/Geometry/FaunaWormMeshes.cs": "57282eb22639bea3256673c82d2df92417ab048d6c002a5caafa51389c8bab32",
+    "tests/Vivarium.Sim.Tests/WormAnatomyTests.cs": "6302962eca2db59819d6869cb3b99c016a1d0728165902466279183472126a3c"
+  },
+  "changes": [
+    "Continuous annular skin, softer clitellum, gradual taper and shared belly support plane.",
+    "Restrained damp-skin relief/annular contrast; collar shaded from axial UV without false eye regions.",
+    "Native live preview renders actual sampled support; existing distance-driven peristaltic timing retained."
+  ],
+  "native_preview": "build/fauna-review/loamthread-selective-v1-20261013",
+  "native_live": "build/fauna-review/loamthread-selective-v1-live-20261013",
+  "slow_travel_m": 0.044566415508588864,
+  "fast_travel_m": 0.3606192401622603,
+  "stopped_travel_m": 0.0,
+  "live_frames": 240,
+  "tests": "28 focused tests, including finite/noncollapsed/outward supported worm geometry across four morphology seeds.",
+  "gaps": [
+    "Terminal rounding still blunt; exact deforming sole contact/vegetation collision and nonprocedural pigment remain open.",
+    "Actual source video playback unavailable; no new measured motion timing or near-photoreal/performance acceptance."
+  ]
+}

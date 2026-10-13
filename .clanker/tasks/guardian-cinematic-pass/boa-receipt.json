@@ -1,98 +1,78 @@
 {
   "guardian": "boa",
-  "version": 6,
-  "asset_sha256": "47e62a251ed3dbc6b698812cf2e3dba8b3c1871d56a4e7617841906eb48591cc",
+  "candidate": "solo-v8-selective-details",
+  "sha256": "ad23d6b5af04f73a3ad61cb239c5d050863043f72ba8c102ce39a3e18e4080b2",
   "changes": [
-    "Profile-centered 33-joint continuous body with actual terminal endpoint and authored axial ground/lateral radii.",
-    "Reworked muzzle/skull/mandible, recessed eyes and heat pits, Head-parented forked tongue, separate dorsal/ventral PBR maps.",
-    "Ground and rendered shrub constraints now apply throughout the boa body, retaining authored head lift.",
-    "Apply the final fitted pose after the final solver iteration; cache evaluated body/head diagnostics inside SkeletonModifier processing."
+    "Selective cervical constriction, narrower taller trunk and fuller anterior muzzle/head roof within the existing detailed v6 rig.",
+    "Retained 33 body joints, independent head/jaw/tongue, micro-scales, heat pits, facial UVs and six embedded PBR maps.",
+    "Deeper green dorsal colour, less pale dorsal markings and restrained cream ventrum; motion timing unchanged.",
+    "Updated lateral contact radii; other five active GLBs restored exactly to their prior detailed hashes."
   ],
-  "structural_audit": "E:\\Vivarium\\.clanker\\tasks\\guardian-cinematic-pass\\boa-structural-v6.json",
-  "structural_result": "44669 triangles,37 joints,5 clips,6 embedded images; zero structural failures/warnings. This is not visual acceptance.",
+  "native_studio": "build/guardian-review/boa-selective-v8-studio-20261013",
+  "studio_complete": true,
+  "populated": "build/guardian-review/boa-selective-v8-populated-20261013",
+  "populated_complete": true,
   "forced_contact": {
-    "maxLength": 0.00037904084,
-    "maxPenetration": 0.012326002,
-    "maxBend": 0.29653305,
-    "maxDisplacement": 0.22749014,
+    "maxLength": 0.0003921613,
+    "maxPenetration": 0.01106739,
+    "maxBend": 0.24513143,
+    "maxDisplacement": 0.21404469,
     "maxFootPenetration": 0,
     "maxSkinFootPenetration": 0,
-    "maxSkinBodyPenetration": 0.0009338856,
-    "maxSkinTailPenetration": 0.0009338856,
+    "maxSkinBodyPenetration": 0.00078213215,
+    "maxSkinTailPenetration": 0.00078213215,
     "skinRestReconstructionError": 8.40589e-05,
-    "recoveredBend": 4.8533286e-05,
+    "recoveredBend": 4.4561926e-05,
     "renderedGround": "same sampled height function as contact constraints",
     "shrub": "lanternbrush",
     "shrubPhases": "0-44 chest brush;45-89 tail segment interior;90-149 released",
     "contactScope": "bone capsules/sole proxies and rendered shrub AABBs; not exact deformed mesh collision"
   },
-  "continuous_body": {
-    "frames": 150,
-    "sample_count": 132,
-    "minimum_clearance_m": -0.0009338856,
-    "head_minimum_clearance_m": 0.038138688,
-    "head_maximum_clearance_m": 0.090667546,
-    "scope": "Rest-selected deformed skin vertices sampled during modifier processing; not exhaustive triangles/self-collision."
+  "structural_audit": ".clanker/tasks/guardian-cinematic-pass/boa-selective-structural-v8.json",
+  "structural_result": {
+    "triangles": 44669,
+    "skin_joint_counts": [
+      37
+    ],
+    "image_count": 6,
+    "failures": [],
+    "warnings": []
   },
-  "evidence": [
-    "build/guardian-review/boa-cinematic-v6-20261013",
-    "build/guardian-review/boa-contact-v6-finalpose-20261013",
-    ".clanker/tasks/guardian-boa-cinematic/v6-authoring",
-    "build/guardian-review/boa-populated-v6-finalpose-20261013",
-    "build\\guardian-review\\boa-populated-v6-trunk-support-20261013",
-    "build/guardian-review/boa-cinematic-v6-20261013/canopy_serpent/slither-native-v6.gif"
+  "source_sha256": {
+    "scripts/guardians/boa_solo_authoring.py": "6dc037dbf778b6646ffe690ebecc65fe6f2e9191f25a29719d1f026bd20e4a68",
+    "scripts/guardians/generate_serpent.py": "29f772d65039dd9eebdecf54e351ef46103b99563269c8aadfe8182d79d55a3d",
+    "game/App/GuardianReview.cs": "e74d29958f6db1079c330fb562f53f51443671a73888cb6b89a36f983114fb34",
+    "game/App/FaunaPreview.cs": "f4e840a18e82ab9ecdb44eb585dd9932bc9295e9ef0e35f4899650382253acb7",
+    "game/Render/GuardianRenderer.cs": "ebad6c9cafcf93d2ed40bcc7715c4cbb60385b3f4e48f70f3eb0d006288f9bc7",
+    "game/Shaders/fauna.gdshader": "d2c0aa1ad11a6fbec334808d22e2501566a6a0e519cc5a113bcd9edd47375908",
+    "src/Vivarium.Sim/Geometry/OrganismMeshes.cs": "578c6d26356e54018d3834290ca31f60f37c8c2a2bb34e946d8c3c4ca242f9a2",
+    "src/Vivarium.Sim/Geometry/FaunaWormMeshes.cs": "57282eb22639bea3256673c82d2df92417ab048d6c002a5caafa51389c8bab32",
+    "tests/Vivarium.Sim.Tests/WormAnatomyTests.cs": "6302962eca2db59819d6869cb3b99c016a1d0728165902466279183472126a3c"
+  },
+  "evidence_scope": "Linear-skinned sampled vertices/capsules and rendered shrub AABBs; excludes triangle interiors/individual leaves or branches.",
+  "failed_experiments": [
+    "Incoming body chain lacks runtime Body aliases; native contact invalid.",
+    "Incoming all-species and detailed v7 final legacy scene crashed in native viewport readback; retained, not completed evidence.",
+    "Source video browser attachment failed, Edge unavailable and browser transport closed; no actual video/timing observation claimed."
   ],
-  "earlier_failure": "First full native review saved all pose/face/transition captures but failed the body-contact gate because it sampled animated poses after Godot had discarded modifier poses. Failure is retained. Corrected modifier-time measurement passes the contact fixture. Full native pose sweep has not been repeated after that runtime correction.",
-  "visual_review": "Native body remains pale mint; abrupt posterior mandible/neck transition and uneven body silhouette are rejected for the cinematic target. Body/Head ground contact measurements alone do not establish natural motion.",
-  "visual_acceptance": "OPEN",
-  "limitations": [
-    "Skin correction finalization can reintroduce woody or curvature residuals; exact woody skin clearance not measured.",
-    "Axial skin sample selection does not guarantee rolling, every triangle, or self-contact.",
-    "TailGroundCorrections lacks the same lifetime/finite exception reporting used by Evaluate; bounded robustness fix still pending.",
-    "Actual leaf/branch collision is approximated by rendered instance bounds/core.",
-    "Near-photoreal surface response, eye integration, connected neck masses, native continuous motion and target frame-time acceptance remain open.",
-    "Populated3.179m rerouting,1.722rad bend deviation and.559m root correction remain unacceptable for natural continuous motion; head clearance reaches.167m during contact."
+  "open_gaps": [
+    "Posterior mandibular/neck join and overly smooth surface still need anatomical/surfacing refinement.",
+    "Near-photoreal, natural populated motion, exhaustive collision and performance acceptance remain open."
   ],
-  "updated_at": "2026-10-13T02:14:04.085076+00:00",
-  "populated_initial_failure": {
+  "populated_metrics": {
     "frames": 180,
-    "maxima": {
-      "tailLengthError": 0.05143535,
-      "tailPenetration": 0.0061857104,
-      "skinTailPenetration": 0.005441785,
-      "tailBendDeviation": 1.5874684,
-      "tailDeflection": 4.7963843,
-      "BodyTrunkCorrection": 0.77343166,
-      "shrubContacts": 19
-    },
-    "minimum_axial_clearance_m": -0.005441785,
-    "minimum_head_clearance_m": -11.768861,
-    "result": "FAILED contact gate; failure and all12native captures preserved. Traced11.77m head discrepancy to vertical-trunk roof support query; axial/length/bend residuals are separate real motion gaps."
-  },
-  "trunk_support_fix": "Continuous grounded body points below the trunk roof use terrain under vertical trunk footprint; lateral trunk collision remains active, real root shelves and roof support retained. Build zero warnings/errors. Populated rerun contact gate passes.",
-  "populated_trunk_support_rerun": {
-    "metrics": {
-      "tailLengthError": 0.0022516474,
-      "tailPenetration": 0.019483209,
-      "skinTailPenetration": 0.0026631355,
-      "tailBendDeviation": 1.7224776,
-      "tailDeflection": 3.1787348,
-      "BodyTrunkCorrection": 0.5585313,
-      "shrubContacts": 19,
-      "frames": 180,
-      "minimum_axial_clearance_m": -0.0026631355,
-      "minimum_head_clearance_m": -0.00072717667,
-      "maximum_head_clearance_m": 0.16728681,
-      "all_sampler_valid": true,
-      "loaded_flora_species": 28,
-      "fauna": 134
-    },
-    "native_result": "180-frame contact gate PASSED; completion marker and empty stderr.12 actual Godot populated images. Natural motion/near-photoreal acceptance OPEN.",
-    "provenance": "E:\\Vivarium\\build\\guardian-review\\boa-populated-v6-trunk-support-20261013\\capture-provenance.json"
-  },
-  "validation": {
-    "build": "zero warnings/errors",
-    "simulation_tests": "6 passed; build/guardian-review/cinematic-tests/guardian-wake-20261013.trx",
-    "note": "Simulation tests do not validate visual/contact solver acceptance; actual Godot receipts provide scoped contact evidence."
+    "loaded_flora_species": 28,
+    "world_fauna": 134,
+    "body_skin_peak_penetration_m": 0.001989007,
+    "head_skin_peak_penetration_m": 0,
+    "tail_skin_peak_penetration_m": 0.001989007,
+    "tailPenetration": 0.017566621,
+    "tailLengthError": 0.0030336678,
+    "tailDeflection": 3.0022588,
+    "tailBendDeviation": 1.6363906,
+    "BodyTrunkCorrection": 0.5628567,
+    "shrubBend": 0.26455268,
+    "skin_sampler_valid": true,
+    "scope": "Modifier-time samples; large detour and bend metrics remain natural-motion gaps despite contact gate passing."
   }
 }
