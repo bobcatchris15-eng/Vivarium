@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Vivarium.Sim.World;
@@ -25,6 +25,8 @@ public sealed class WorldDescriptor
     public string PilotTreeId { get; set; } = "random";
     /// <summary>-1 selects a seeded corner; 0..5 selects an exact hexagon vertex. Edge anchors are not allowed.</summary>
     public int PilotTreeCorner { get; set; } = -1;
+    /// <summary>auto | none | a GuardianCatalog id. Resolved to the tree guardian or specific archetype.</summary>
+    public string GuardianId { get; set; } = "auto";
     /// <summary>
     /// Biological seconds per physical simulated second. The default makes one real minute one biological day at
     /// 1× speed (1440 / 168). Worlds saved before this setting existed also load with the default.

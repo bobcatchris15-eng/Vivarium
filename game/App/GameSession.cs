@@ -37,6 +37,7 @@ public partial class GameSession : Node3D
     public CoverageRenderer Coverage { get; private set; } = null!;
     public FloraRenderer Flora { get; private set; } = null!;
     public FaunaRenderer Fauna { get; private set; } = null!;
+    public GuardianRenderer Guardian { get; private set; } = null!;
     public OverlayRenderer Overlay { get; private set; } = null!;
     public ToolController Tools { get; private set; } = null!;
     public UiRoot Ui { get; private set; } = null!;
@@ -70,6 +71,7 @@ public partial class GameSession : Node3D
         Coverage = new CoverageRenderer { Name = "Coverage" }; AddChild(Coverage);
         Flora = new FloraRenderer { Name = "FloraRenderer" }; AddChild(Flora);
         Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
+        Guardian = new GuardianRenderer { Name = "GuardianRenderer", Vegetation = Flora }; AddChild(Guardian);
         Overlay = new OverlayRenderer { Name = "Overlay" }; AddChild(Overlay);
         Tools = new ToolController { Name = "ToolController" }; AddChild(Tools);
         Tools.Session = this;
@@ -85,7 +87,7 @@ public partial class GameSession : Node3D
     {
         Settings.Clamp();
         EnvRig.ApplyQuality(Settings.Quality);
-        Flora.Quality = Fauna.Quality = Settings.Quality;
+        Flora.Quality = Fauna.Quality = Guardian.Quality = Settings.Quality;
         SoilDetail.Quality = Settings.Quality;
         AmbientGround.Quality = Settings.Quality;
         Coverage.Quality = Settings.Quality;
@@ -98,7 +100,27 @@ public partial class GameSession : Node3D
 
     // ------------------------------------------------------------------ world lifecycle
 
+    public bool LoadingWorld { get; private set; }
     public void StartWorld(VivariumWorld world, string? saveName = null)
+    {
+        foreach (var _ in StartWorldStages(world, saveName)) { }
+    }
+    public async System.Threading.Tasks.Task StartWorldAsync(VivariumWorld world, string? saveName, Action<string> progress)
+    {
+        LoadingWorld = true;
+        bool blocked = CameraRig.KeyboardBlocked;
+        CameraRig.KeyboardBlocked = true; Tools.SetProcess(false);
+        try
+        {
+            foreach (var stage in StartWorldStages(world, saveName))
+            {
+                progress(stage);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+        }
+        finally { LoadingWorld = false; CameraRig.KeyboardBlocked = blocked; Tools.SetProcess(true); }
+    }
+    private IEnumerable<string> StartWorldStages(VivariumWorld world, string? saveName)
     {
         var startup = System.Diagnostics.Stopwatch.StartNew();
         void Stage(string name, Action build)
@@ -114,19 +136,31 @@ public partial class GameSession : Node3D
         world.CoverageSystem.AsyncMode = true;
         CurrentSaveName = saveName;
         Stage("Island", () => Island.Build(world));
+        yield return "Island";
         Stage("Water", () => Water.Build(world));
+        yield return "Water";
         Stage("Props", () => Props.Build(world));
+        yield return "Props";
         Stage("PilotTree", () => PilotTree.Build(world));
+        yield return "PilotTree";
         SoilDetail.Camera = CameraRig.Cam;
         Stage("SoilDetail", () => SoilDetail.Build(world));
+        yield return "SoilDetail";
         AmbientGround.Camera = CameraRig.Cam;
         Stage("AmbientGround", () => AmbientGround.Build(world));
+        yield return "AmbientGround";
         Coverage.Camera = CameraRig.Cam;
         Stage("Coverage", () => Coverage.Build(world));
-        Flora.Camera = Fauna.Camera = CameraRig.Cam;
+        yield return "Coverage";
+        Flora.Camera = Fauna.Camera = Guardian.Camera = CameraRig.Cam;
         Stage("Flora", () => Flora.Build(world));
+        yield return "Flora";
         Stage("Fauna", () => Fauna.Build(world));
+        yield return "Fauna";
+        Stage("Guardian", () => Guardian.Build(world));
+        yield return "Guardian";
         Stage("Overlay", () => Overlay.Bind(world));
+        yield return "Overlay";
         CameraRig.World = world;
         CameraRig.ResetView();
         Tools.Bind(world);
@@ -140,6 +174,7 @@ public partial class GameSession : Node3D
         world.Scheduler.SystemTimed += (sys, ms) => FrameProfiler.Record("Sys." + sys.Name, ms);
         Log.Info(LogCategory.App, $"World started: '{world.Descriptor.Name}' seed {world.Seed}, day {world.Clock.BioDays:0.0}.");
         Stage("WorldChanged", () => WorldChanged?.Invoke());
+        yield return "WorldChanged";
     }
 
     private void OnAutosaved(SaveResult r)
@@ -190,7 +225,7 @@ public partial class GameSession : Node3D
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("Session");
-        if (Host == null) return;
+        if (Host == null || LoadingWorld) return;
         using (FrameProfiler.Measure("Session.Advance")) Host.Advance(delta);
         using (FrameProfiler.Measure("Session.Autosave")) Autosave?.Tick(Host.World, delta);
         var w = Host.World;

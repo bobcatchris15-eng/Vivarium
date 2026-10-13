@@ -1,0 +1,65 @@
+{
+  "guardian": "coati",
+  "candidate": "solo v10",
+  "sha256": "fa2559a9f667e8035571c8d38b44c21754a6bc58369bfd2a9e632d3148fd7c54",
+  "bytes": 32020904,
+  "triangles": 288060,
+  "joints": 33,
+  "native_studio": "E:\\Vivarium\\build\\guardian-review\\coati-cinematic-v10-20261013",
+  "native_populated": "E:\\Vivarium\\build\\guardian-review\\coati-populated-integrated-final-20261013",
+  "contact_summary": {
+    "maxLength": 6.4074993e-07,
+    "maxPenetration": 3.8981438e-05,
+    "maxBend": 0.30145025,
+    "maxDisplacement": 0.18782865,
+    "maxFootPenetration": 0,
+    "maxSkinFootPenetration": 0,
+    "maxSkinBodyPenetration": 0,
+    "maxSkinTailPenetration": 0,
+    "skinRestReconstructionError": 5.8452704e-05,
+    "recoveredBend": 1.7247321e-05,
+    "renderedGround": "same sampled height function as contact constraints",
+    "shrub": "lanternbrush",
+    "shrubPhases": "0-44 chest brush;45-89 tail segment interior;90-149 released",
+    "contactScope": "bone capsules/sole proxies and rendered shrub AABBs; not exact deformed mesh collision"
+  },
+  "populated_frames": 180,
+  "populated_maxima_m_or_rad": {
+    "skinFootPenetration": 0.006374061,
+    "skinBodyPenetration": 0.0,
+    "skinTailPenetration": 0.0,
+    "footReachError": 0.14575458,
+    "stanceFootGap": 0.008102477,
+    "footRetargetDistance": 0.12693188,
+    "stanceFootTravel": 0.26553234,
+    "tailLengthError": 2.4735928e-06,
+    "BodyTrunkCorrection": 0.7861147,
+    "tailDeflection": 0.18207894,
+    "tailBendDeviation": 0.5477448
+  },
+  "structural": "E:\\Vivarium\\.clanker\\tasks\\guardian-coati-solo\\structural-v10.json",
+  "source_authoring": "E:\\Vivarium\\.clanker\\tasks\\guardian-coati-solo\\v10-authoring\\coati",
+  "visual_acceptance": "OPEN",
+  "reference": "https://commons.wikimedia.org/wiki/File:White-nosed_Coati_Walking_Away.webm",
+  "reference_observations": "Actual playback reviewed: posture curl/pause, planted alternating legs while departing, full thorax/haunches and close coat; reference tail is not permanently held in the authored high arch. Quantitative gait speed not inferred.",
+  "changes": [
+    "Fuller torso/haunches; shortened distal muzzle; lowered connected tissue and rig by12 percent above ankle region",
+    "Rounder ear cups,36016 skinned fur fibers, quieter mask/limb/tail palette and embedded roughness map",
+    "World-axis tail sway/rest relaxation; four-beat walk body counterrotation and held idle gaze",
+    "Coati-only reachable foothold search, vertical trunk side support distinction, corrected123.096mm source tail leaf length",
+    "Measured foot retarget and stance travel to expose remaining sliding; no natural-motion claim"
+  ],
+  "gaps": [
+    "Fur still reads as micrograin in these views; improve groom clustering, face/paw anatomy and lighting response.",
+    "Rest crouch/tail posture remains stylized; review lower relaxed tail and connected trunk silhouette again.",
+    "Root reach, stance sliding and body rerouting remain unresolved; use exact populated maxima.",
+    "Contact excludes fine fur and samples bounded evaluated skin vertices plus bone proxies/shrub bounds; no per-triangle/per-leaf acceptance.",
+    "No broad GPU/LOD acceptance for the denser asset."
+  ],
+  "previous_receipt": "E:\\Vivarium\\.clanker\\tasks\\guardian-coati-solo\\before\\coati-receipt.json",
+  "failed_experiments": [
+    "coati-populated-v9-20261013 has completion marker but nonempty shader-error stderr; invalid visual acceptance. Isopod fragment block was accidentally inserted in vertex scope and corrected before final captures.",
+    "Initial isopod anatomy test failed inherited neutral support; corrected whole-mesh origin while retaining attachment offsets. Failed TRX retained.",
+    "First curled isopod plates protruded; replaced flat tangent plates with two-axis ellipsoidal strips and re-reviewed native."
+  ]
+}

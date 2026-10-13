@@ -1,0 +1,39 @@
+{
+  "source": {
+    "scripts/guardians/generate_porcupine.py": "0fc5d4000242e931bc29aab880de690b78e77d1e1de60ed60b1d569501d7f367",
+    "scripts/guardians/porcupine_solo_authoring.py": "d69369eed9e5e120b928c106827a4bf61b6caf1270f5c090fd6b573bc9e65e6a",
+    "game/Render/GuardianRenderer.cs": "0a5504aa1f9754a8364924c2e53796c2865e296fc9cd543453f329d9434ec9ef",
+    "src/Vivarium.Sim/Geometry/FaunaSlugMeshes.cs": "8b12f06d168ccc298136fdb9cd2f3492469cc0feebfcb2e84d0ee1c57c59d259",
+    "tests/Vivarium.Sim.Tests/SlugAnatomyTests.cs": "7aff7289f08cb89d6fc39873dff66144986f8361b52389c07067d9994926e3b3",
+    "game/App/FaunaPreview.cs": "834f7efd09f298c7f1c9f291a4bd038f229e81951b1c042ed74d43883581bb66",
+    "src/Vivarium.Sim/Geometry/OrganismMeshes.cs": "2bacfda6905725195783650882657b16894293aac51e0a171945f86baf472f7e",
+    "game/Shaders/fauna.gdshader": "45c26730c3344d15986d6006db9ad0d52fa61e1b8b51073b0dccd057302d3478"
+  },
+  "assets": {
+    "game\\assets\\guardians\\armored_forest\\guardian.glb": {
+      "sha256": "285f7e7f39fe031ee35a9c38a1d1665496f4d4b0c0b9b2adac10bfc66b80d4bb",
+      "bytes": 28877244
+    },
+    "game\\assets\\guardians\\canopy_serpent\\guardian.glb": {
+      "sha256": "47e62a251ed3dbc6b698812cf2e3dba8b3c1871d56a4e7617841906eb48591cc",
+      "bytes": 14725836
+    },
+    "game\\assets\\guardians\\crested_canopy\\guardian.glb": {
+      "sha256": "d79bb927c84c0ab3839cc78d9a77f2f83c6400d36b14e33ad35e238421a6f73e",
+      "bytes": 7774268
+    },
+    "game\\assets\\guardians\\great_ground\\guardian.glb": {
+      "sha256": "dd0ac3bfd263383cd1dba816fa3293c7956665a44993e9cfb0ba51bb91d32dd5",
+      "bytes": 30752016
+    },
+    "game\\assets\\guardians\\quilled_arboreal\\guardian.glb": {
+      "sha256": "70151cb0b2445ae9700587d34f373808252bcbee8e86067998b4859653e94683",
+      "bytes": 12925888
+    },
+    "game\\assets\\guardians\\woodland_omnivore\\guardian.glb": {
+      "sha256": "fa2559a9f667e8035571c8d38b44c21754a6bc58369bfd2a9e632d3148fd7c54",
+      "bytes": 32020904
+    }
+  },
+  "isolated_shader": "c2112678f8c3b6fbcd80edc45b5fe7615ca92c8ab426c4ee7736e3b06c43363a"
+}

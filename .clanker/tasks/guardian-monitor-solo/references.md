@@ -1,0 +1,4 @@
+# Monitor and ghostbristle video review
+Monitor: https://commons.wikimedia.org/wiki/File:Monitor_Lizard_roaming_in_Sungei_Buloh.webm (AnishSheela, CC BY4.0). Native browser playback and 0:13 frame reviewed. Broad neck/head held clear of floor; crouched splayed legs and long planted claws; restrained dark brown charcoal scales with small warm buff spots. Tail partially cropped: no quantified tail claim.
+Silverfish: https://depositphotos.com/video/silverfish-lepisma-saccharina-73790177.html (ludovikus1). Public watermarked preview playback reviewed; no purchase/download/media asset use. Broad thorax tapering to fine abdomen; curved antennae and three terminal filaments; short legs; soft silvery overlapping cuticle. Motion remains qualitative rather than quantified from limited preview.
+Material production skill available; three referenced blender-production-router documents missing after filesystem search. Main material guidance applied; no dependency installed.

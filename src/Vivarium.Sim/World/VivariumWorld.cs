@@ -7,6 +7,7 @@ using Vivarium.Sim.Fauna;
 using Vivarium.Sim.Fields;
 using Vivarium.Sim.Flora;
 using Vivarium.Sim.Genetics;
+using Vivarium.Sim.Guardians;
 using Vivarium.Sim.Time;
 using Vivarium.Sim.Water;
 
@@ -35,6 +36,9 @@ public sealed class VivariumWorld
     public SeedBank SeedBank { get; }
     public AmbientGroundCoverSystem AmbientGroundCover { get; }
     public FaunaPopulation Fauna { get; }
+    /// <summary>The island's unique persistent guardian animal (null if no Pilot Tree or disabled).</summary>
+    public GuardianIndividual? Guardian { get; set; }
+    public GuardianSystem GuardianSystem { get; }
     /// <summary>Fine coverage rasters (moss/lichen/slime), empty by default. See docs/overhaul/growth_models.md.</summary>
     public CoverageWorld Coverage { get; }
     public GenomeBank Genomes { get; } = new();
@@ -101,6 +105,7 @@ public sealed class VivariumWorld
         Ecology = new EcologySystem(this);
         CoverageSystem = new CoverageSystem(this);
         AquaticSystem = new AquaticSystem(this);
+        GuardianSystem = new GuardianSystem(this);
         RegisterSystems();
     }
 
@@ -134,9 +139,10 @@ public sealed class VivariumWorld
         {
             w.CoverageSystem.SeedInitial();
             Populate.Starters(w);
+            w.GuardianSystem.InitializeGuardian();
         }
         w.AmbientGroundCover.InitializeFromHabitat();
-        Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna.");
+        Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna, guardian={(w.Guardian != null ? w.Guardian.ArchetypeId : "none")}.");
         return w;
     }
 
@@ -146,7 +152,9 @@ public sealed class VivariumWorld
         // physical systems get simulated seconds; biological ones get the (faster) biological seconds
         Action<double> Bio(Action<double> step) => dt => step(dt * Clock.BioAcceleration);
         Scheduler.Register("fauna.behaviour", Cadence.FaunaBehaviour, 10, FaunaSystem.StepBehaviour);
+        Scheduler.Register("guardian.behaviour", Cadence.FaunaBehaviour, 12, GuardianSystem.StepBehaviour, phase: 2);
         Scheduler.Register("fauna.metabolism", Cadence.FaunaMetabolism, 20, Bio(FaunaSystem.StepMetabolism), phase: 1);
+        Scheduler.Register("guardian.metabolism", Cadence.FaunaMetabolism, 22, Bio(GuardianSystem.StepMetabolism), phase: 3);
         Scheduler.Register("fauna.lifecycle", Cadence.FaunaLifecycle, 30, Bio(FaunaSystem.StepLifecycle), phase: 7);
         Scheduler.Register("hydrology", Cadence.Hydrology, 40, Water.Step, phase: 2);
         Scheduler.Register("environment", Cadence.Environment, 50, dt =>

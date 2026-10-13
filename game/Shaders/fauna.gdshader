@@ -372,7 +372,22 @@ void vertex() {
         NORMAL = rotate_z(NORMAL, flight_pitch);
     }
 
-    if (anim_body_style == 4 || (anim_body_style == 12 && anim_role < 3.5)) {
+    if (anim_body_style == 4) {
+        // Small pedal contractions hold the wide sole against its support.
+        // The mantle remains a soft mass rather than inflating each stride.
+        float x = CUSTOM0.a > 0.5 ? attach.x : VERTEX.x;
+        float p = theta - (x + 0.5) * TAU_ * anim_phase_spread;
+        float foot = 1.0 - smoothstep(0.006, 0.042, VERTEX.y);
+        float active = speed01 * anim_amplitude * anim_body_wave;
+        VERTEX.x += cos(p) * 0.007 * active * foot;
+        float radial = 1.0 - sin(p) * 0.028 * active * foot;
+        VERTEX.z *= radial;
+        VERTEX.y += sin(p) * 0.002 * active * (1.0-foot);
+        NORMAL = normalize(NORMAL / vec3(1.0, 1.0, radial));
+    }
+
+
+    if (anim_body_style == 12 && anim_role < 3.5) {
         // Compression travels through the muscular foot; scale about ground level to hold the sole down.
         float x = CUSTOM0.a > 0.5 ? attach.x : VERTEX.x;
         float p = theta - (x + 0.5) * TAU_ * anim_phase_spread;
@@ -490,6 +505,60 @@ void fragment() {
     float rough = mix(0.62, 0.42, carapace) + 0.18 * micro + 0.25 * dullPatch - 0.15 * wear * carapace;
     rough = mix(rough, 0.3, wet * 0.6);
     if (region > 2.5) rough += 0.1;          // bellies, legs and joints are duller
+    if (anim_body_style == 6) {
+        // Matte charcoal elytra, worn high ribs and dull joint cuticle.
+        // Object-space detail preserves its scale across different UV regions.
+        vec3 p = skin_position;
+        float grain = skin_noise(p * 170.0 + vec3(seed));
+        float dust = smoothstep(0.48, 0.74, skin_noise(p * 19.0 + vec3(seed * 0.31)));
+        col = mix(base, vec3(0.095, 0.085, 0.072), 0.72) * mix(0.84, 1.16, grain);
+        col = mix(col, vec3(0.13, 0.105, 0.072), dust * 0.18);
+        rough = mix(0.65, 0.79, grain) + dust * 0.05;
+        if (region > 2.5) { col *= 0.78; rough = mix(0.65, 0.82, grain); }
+        if (eye) { col = vec3(0.008, 0.011, 0.010); rough = 0.16; }
+        else {
+            float relief = grain * 0.00020;
+            vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
+            vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
+            float det = dot(dx, rx);
+            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
+            NORMAL = normalize(NORMAL - gradient);
+        }
+    }
+    if (anim_body_style == 7) {
+        // Fine overlapping silvery scales: dielectric cuticle with subdued pigment.
+        vec3 p=skin_position;
+        float grain=skin_noise(p*210.0+vec3(seed*.31));
+        float tarnish=skin_noise(p*27.0+vec3(seed*.51));
+        float seams=smoothstep(.38,.49,abs(fract(p.x*27.0+p.z*.9)-.5));
+        col=mix(vec3(.29,.30,.29),base*.74,tarnish)*mix(.94,1.06,grain);
+        col*=1.0-.07*seams;
+        col=mix(col,vec3(.55,.58,.60),fres*.17);
+        rough=mix(.43,.61,grain)+seams*.06;
+        if(region>2.5){col*=.71;rough+=.12;}
+        if(eye){col=vec3(.012,.014,.012);rough=.17;}
+    }
+    if (anim_body_style == 8) {
+        // Dry mineral mottling over continuous cuticle arches. Anatomical
+        // region1 is the shell; the ventral membrane and joints stay duller.
+        vec3 p = skin_position;
+        vec3 offset = vec3(seed * 0.19, seed * 0.37, seed * 0.61);
+        float grain = skin_noise(p * 185.0 + offset);
+        float patch = smoothstep(0.46, 0.68, skin_noise(p * 24.0 + offset));
+        vec3 shell = mix(base * 0.72, ornament_color * 0.80, patch * 0.44);
+        col = shell * mix(0.91, 1.09, grain);
+        rough = mix(0.57, 0.73, grain);
+        if (region > 2.5) { col = shell * 0.68; rough = mix(0.72, 0.86, grain); }
+        if (eye) col = vec3(0.007, 0.008, 0.009);
+        else {
+            float relief = grain * 0.00014;
+            vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
+            vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
+            float det = dot(dx, rx);
+            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
+            NORMAL = normalize(NORMAL - gradient);
+        }
+    }
     if (anim_body_style == 2) {
         vec3 p = skin_position;
         float identity = hash(genes.xy * 39.1 + genes.z * 117.3);
@@ -548,7 +617,7 @@ void fragment() {
         else if (palette == 3.0) { skin = vec3(0.025, 0.018, 0.030); marking = vec3(0.81, 0.12, 0.020); }
         else if (palette == 4.0) { skin = vec3(0.055, 0.16, 0.11); marking = vec3(0.45, 0.63, 0.21); }
         else if (palette == 5.0) { skin = vec3(0.12, 0.034, 0.20); marking = vec3(0.47, 0.20, 0.57); }
-        else if (palette == 6.0) { skin = vec3(0.48, 0.41, 0.25); marking = vec3(0.055, 0.036, 0.020); }
+        else if (palette == 6.0) { skin = vec3(0.16, 0.21, 0.12); marking = vec3(0.055, 0.036, 0.020); }
         else if (palette == 7.0) { skin = vec3(0.016, 0.017, 0.020); marking = vec3(0.65, 0.66, 0.52); }
         skin = hue_rotate(skin, genes.x * 0.6);
         marking = hue_rotate(marking, genes.x * 0.3);
@@ -559,7 +628,7 @@ void fragment() {
         float warp = skin_noise(p * 8.0 + offset) - 0.5;
         float pattern = floor(hash(genes.zy * 99.7 + 3.4) * 5.0);
         float mask = 0.0;
-        if (pattern == 0.0) mask = smoothstep(0.54, 0.64, skin_noise(p * mix(28.0, 65.0, density) + offset));
+        if (pattern == 0.0) mask = smoothstep(0.54, 0.64, skin_noise(p * mix(17.0, 35.0, density) + offset));
         else if (pattern == 1.0) {
             float stripe = abs(p.z + warp * 0.017);
             mask = 1.0 - smoothstep(0.023, 0.043, stripe);
@@ -578,7 +647,7 @@ void fragment() {
         float folds = pow(abs(sin(p.x * 140.0)), 14.0) * smoothstep(0.047, 0.086, abs(p.z))
             * smoothstep(-0.28, -0.20, p.x) * (1.0 - smoothstep(0.15, 0.23, p.x));
         col *= 1.0 - folds * 0.09;
-        rough = mix(0.30, 0.46, grain);
+        rough = mix(0.35, 0.54, grain) - smoothstep(.30,.43,p.x)*.035;
         eye = (region > 1.5 && region < 2.5) || (region > 4.5 && region < 6.5);
         if (eye) {
             col = vec3(0.007, 0.011, 0.010);
@@ -638,16 +707,16 @@ void fragment() {
             else if (choice == 3.0) { skin = vec3(0.070, 0.065, 0.046); marking = vec3(0.37, 0.31, 0.17); }
             else if (choice == 4.0) skin = vec3(0.39, 0.11, 0.045);
             else if (choice == 5.0) skin = vec3(0.54, 0.46, 0.33);
-            float leopard = smoothstep(0.53, 0.65, skin_noise(p * mix(28.0, 60.0, density) + offset));
+            float leopard = smoothstep(0.40, 0.72, skin_noise(p * mix(20.0, 38.0, density) + offset));
             float stripe = smoothstep(0.80, 0.95, abs(sin(p.z * 75.0 + coarse * 1.7)));
             mask = variant == 0.0 ? leopard : variant == 1.0 ? stripe : variant == 2.0 ? mask : leopard * 0.20;
-            col = mix(skin, marking, mask * mix(0.50, 0.95, contrast));
+            col = mix(skin, marking, mask * mix(0.28, 0.62, contrast));
             float sole = 1.0 - smoothstep(0.025, 0.060, p.y);
             col = mix(col, skin * 0.7 + vec3(0.08, 0.07, 0.045), sole);
             float folds = pow(abs(sin(p.z * 230.0 + coarse * 4.0)), 10.0) * (region < 1.5 ? 1.0 : 0.3);
             col *= 0.92 + grain * 0.16 - folds * 0.075;
-            rough = mix(0.30, 0.46, grain);
-            relief = grain * 0.00055 + pores * 0.00008 - folds * 0.0003;
+            rough = mix(0.29, 0.43, grain);
+            relief = pow(grain, 3.0) * 0.000045 + pores * 0.000008 - folds * 0.00002;
         } else if (anim_body_style == 5) {
             skin = mix(vec3(0.22, 0.055, 0.035), vec3(0.52, 0.23, 0.16), identity);
             if (choice == 0.0) skin = vec3(0.35, 0.20, 0.12);
@@ -737,7 +806,8 @@ void fragment() {
             }
         }
         col = hue_rotate(col, genes.x * 0.35);
-        eye = region > 1.5 && region < 2.5;
+        // Interpolated sole/mantle labels pass through region2. Only sensory geometry is an eye.
+        eye = region > 1.5 && region < 2.5 && (anim_body_style != 4 || anim_role > 2.5);
         if (eye) col = vec3(0.008, 0.011, 0.008);
         else if (region > 6.5 && region < 7.5) { col *= 0.25; rough = 0.53; }
         else {
@@ -751,7 +821,7 @@ void fragment() {
     ALBEDO = col;
     ROUGHNESS = eye ? 0.08 : clamp(rough, 0.25, 0.95);
     SPECULAR = eye ? 0.5 : anim_body_style == 1 ? 0.42 : mix(0.3, 0.45, max(carapace, wet));
-    CLEARCOAT = eye ? 0.0 : carapace * (1.0 - dullPatch) * 0.6;
+    CLEARCOAT = eye ? 0.0 : anim_body_style == 6 ? 0.025 : carapace * (1.0 - dullPatch) * 0.6;
     CLEARCOAT_ROUGHNESS = mix(0.35, 0.7, micro);
     RIM = anim_body_style == 1 || anim_body_style == 2 || detailed ? 0.025 : mix(0.08, 0.2, wet);
     RIM_TINT = 0.6;

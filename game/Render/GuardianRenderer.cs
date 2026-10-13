@@ -1,0 +1,481 @@
+using System;
+using Godot;
+using Vivarium.Game.App;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Guardians;
+using Vivarium.Sim.World;
+
+namespace Vivarium.Game.Render;
+
+/// <summary>
+/// Controls the visual representation, skeletal animation blending,
+/// and terrain contact of the island's unique Guardian Animal.
+/// Loads the high-fidelity GLB asset from res://assets/guardians/{archetype}/guardian.glb.
+/// </summary>
+public partial class GuardianRenderer : Node3D
+{
+    private VivariumWorld? _w;
+    private Node3D? _instance;
+    private AnimationPlayer? _animPlayer;
+    private Skeleton3D? _skeleton;
+    private GuardianDef? _def;
+
+    // Motion smoothing
+    private Vector3 _prevPos;
+    private Vector3 _curPos;
+    private Vector3 _shownPos;
+    private float _prevHeading;
+    private float _curHeading;
+    private float _shownHeading;
+    private double _prevT;
+    private double _curT;
+    private string _currentAnim = "";
+    private float _groundOffset;
+
+    public Camera3D? Camera { get; set; }
+    public int Quality { get; set; } = 1;
+    public bool Drawn { get; private set; }
+    public bool OffScreen { get; private set; }
+    public Vector3 DisplayPosition => GlobalPosition;
+    public FloraRenderer? Vegetation { get; set; }
+    public GuardianAppendageModifier? AppendageContact { get; private set; }
+    public GuardianVegetationContact? ShrubContact { get; private set; }
+    public GuardianTerrainLegModifier? LegContact { get; private set; }
+    public GuardianSkinContact? SkinContact { get; private set; }
+    public float BodyTrunkCorrection { get; private set; }
+    /// <summary>Diagnostic studio support only; null uses production terrain/root contact.</summary>
+    public float? ReviewSupportPlaneHeight { get; set; }
+    public Func<Vector3, float>? ReviewGroundSample { get; set; }
+    public bool UseLocalFootholds => _def?.Archetype is "woodland_omnivore" or "armored_forest" or "quilled_arboreal";
+    public bool FootTargetAllowed(Vector3 point) => _w?.PilotTree?.BlocksTrunk(new Vec2(point.X, point.Z)) != true;
+    public float SupportHeight(Vector3 point)
+    {
+        if (ReviewGroundSample != null) return ReviewGroundSample(point);
+        if (ReviewSupportPlaneHeight.HasValue) return ReviewSupportPlaneHeight.Value;
+        if (_w == null) return point.Y;
+        var xz = new Vec2(point.X, point.Z);
+        // A ground-following boa that brushes a vertical trunk must resolve
+        // its side, not acquire the tree roof as an instantaneous support target.
+        // Preserve real root shelves and support on top of the trunk.
+        if ((AppendageContact?.ContinuousGroundedBody == true || UseLocalFootholds || _def?.Archetype == "great_ground") && _w.PilotTree is { } tree &&
+            tree.BlocksTrunk(xz) && point.Y < tree.BaseHeight + tree.Def.TrunkHeight - .05)
+            return (float)_w.SurfaceHeight(xz);
+        return (float)_w.GroundHeight(xz);
+    }
+
+    public void Build(VivariumWorld w)
+    {
+        _w = w;
+        if (_instance != null)
+        {
+            RemoveChild(_instance);
+            _instance.QueueFree();
+            _instance = null;
+            _animPlayer = null;
+            _skeleton = null;
+            AppendageContact = null;
+            LegContact = null;
+            if (ShrubContact != null) { ShrubContact.QueueFree(); ShrubContact = null; }
+        }
+
+        if (w.Guardian == null) return;
+
+        _def = GuardianCatalog.Find(w.Guardian.ArchetypeId);
+        if (_def == null) return;
+
+        string glbPath = $"res://assets/guardians/{_def.Archetype}/guardian.glb";
+        if (ResourceLoader.Exists(glbPath))
+        {
+            try
+            {
+                var scene = GD.Load<PackedScene>(glbPath);
+                if (scene != null)
+                {
+                    _instance = scene.Instantiate<Node3D>();
+                    AddChild(_instance);
+
+                    _animPlayer = _instance.GetNodeOrNull<AnimationPlayer>("AnimationPlayer")
+                        ?? _instance.FindChild("AnimationPlayer", recursive: true, owned: false) as AnimationPlayer;
+                    _skeleton = _instance.GetNodeOrNull<Skeleton3D>("Skeleton3D")
+                        ?? _instance.FindChild("Skeleton3D", recursive: true, owned: false) as Skeleton3D;
+
+                    Log.Info(LogCategory.App, $"GuardianRenderer: Loaded GLB for '{_def.Name}' from {glbPath} (AnimPlayer={_animPlayer != null}, Skeleton={_skeleton != null})");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(LogCategory.App, $"GuardianRenderer: Failed loading {glbPath}: {ex.Message}");
+            }
+        }
+
+        if (_instance == null)
+        {
+            // Fallback placeholder representation if GLB asset is unavailable
+            _instance = CreateFallbackMesh(_def);
+            AddChild(_instance);
+            Log.Info(LogCategory.App, $"GuardianRenderer: Created fallback procedural representation for '{_def.Name}'");
+        }
+
+        // These assets were authored Y-up inside Blender's Z-up scene. glTF
+        // export maps their authored up axis to -Z; restore Y-up at the boundary.
+        if (_animPlayer != null)
+        {
+            foreach (string name in _animPlayer.GetAnimationList())
+                if (name != "RESET") _animPlayer.GetAnimation(name).LoopMode = Animation.LoopModeEnum.Linear;
+            if (_animPlayer.HasAnimation("idle")) { _animPlayer.Play("idle"); _animPlayer.Advance(0); }
+        }
+        if (_skeleton != null)
+            _instance.Basis = new Basis(Vector3.Right, Mathf.Pi / 2) * _instance.Basis;
+        float scale = (float)(_def.VisualScale * w.Guardian.Scale);
+        _instance.Scale *= scale;
+        ApplySurfaceMaterials(_instance);
+        _groundOffset = Math.Max(0, -LowestPoint(_instance, Transform3D.Identity));
+        _instance.Position += Vector3.Up * _groundOffset;
+
+        // Enable and review each species as its cinematic pass is completed.
+        if (_skeleton != null && _def.Archetype is "woodland_omnivore" or "great_ground" or "armored_forest" or "quilled_arboreal" or "canopy_serpent" or "crested_canopy")
+        {
+            ShrubContact = new GuardianVegetationContact { Name = "GuardianShrubContact", Flora = Vegetation };
+            AddChild(ShrubContact);
+            AppendageContact = new GuardianAppendageModifier { Name = "GuardianTailContact", World = w,
+                Renderer = this, Vegetation = ShrubContact };
+            if (_def.Archetype == "woodland_omnivore")
+                AppendageContact.TipSegmentLength = .123096f; // Revised source leaf, Y compressed by.88.
+            if (_def.Archetype == "great_ground")
+            { AppendageContact.RootRadius = .0855f; AppendageContact.TipRadius = .001f;
+                // Sixteen deformation spans follow the authored compressed tail profile.
+                AppendageContact.TipSegmentLength = 0.09206878f;
+                AppendageContact.LateralRadii = new[] { 0.0855000f, 0.0798462f, 0.0742300f, 0.0686538f, 0.0631203f, 0.0576329f, 0.0521951f, 0.0468116f, 0.0414876f, 0.0362300f, 0.0310471f, 0.0259503f, 0.0209551f, 0.0160844f, 0.0113764f, 0.0069077f, 0.0010000f };
+                AppendageContact.GroundRadii = new[] { 0.1425000f, 0.1330770f, 0.1237166f, 0.1144229f, 0.1052005f, 0.0960548f, 0.0869919f, 0.0780193f, 0.0691460f, 0.0603833f, 0.0517452f, 0.0432506f, 0.0349252f, 0.0268074f, 0.0189606f, 0.0115128f, 0.0010000f }; }
+            if (_def.Archetype == "quilled_arboreal")
+            {
+                AppendageContact.RootRadius = .059f; AppendageContact.TipRadius = .007684f;
+                AppendageContact.TipSegmentLength = .078447425f;
+                AppendageContact.BodyBrushRadius = .24f;
+            }
+            if (_def.Archetype == "armored_forest")
+            {
+                AppendageContact.FirstTailIndex = 0; AppendageContact.RootRadius = .133f; AppendageContact.TipRadius = .005f; AppendageContact.TipSegmentLength = .05096f;
+                AppendageContact.BodyBrushRadius = .22f;
+                // Flattened armored tail: broad in plan, thinner underneath.
+                // Profile cross-sections plus7mm cover allowance, not width spheres.
+                AppendageContact.GroundRadii = new[] { .0963f, .0818f, .0685f, .0554f, .0479f, .0409f, .0303f, .0175f, .010f };
+            }
+            if (_def.Archetype == "crested_canopy")
+            {
+                // Four authored feather-fan joints, including the true leaf.
+                AppendageContact.FirstTailIndex = 0;
+                AppendageContact.RootRadius = .045f; AppendageContact.TipRadius = .014f;
+                AppendageContact.TipSegmentLength = .1308625f;
+                AppendageContact.BodyBrushRadius = .18f;
+                AppendageContact.LateralRadii = new[] { .045f, .08f, .12f, .14f, .14f };
+                AppendageContact.GroundRadii = new[] { .018f, .014f, .010f, .006f, .004f };
+            }
+            bool continuousBody = _def.Archetype == "canopy_serpent";
+            if (continuousBody) ConfigureBoaContact(AppendageContact);
+            else
+            {
+                LegContact = new GuardianTerrainLegModifier { Name = "GuardianFootContact", Renderer = this };
+                _skeleton.AddChild(LegContact);
+            }
+            _skeleton.AddChild(AppendageContact);
+            SkinContact = new GuardianSkinContact(_instance, _skeleton, continuousBody: continuousBody, chainPrefix: continuousBody ? "Body" : "Tail", biped: _def.Archetype == "crested_canopy");
+            GD.Print("GUARDIAN_SKIN_CONTACT " + _def.Archetype + " valid=" + SkinContact.Valid + " " + SkinContact.Diagnostic);
+        }
+
+        // Initialize motion track
+        var startPos = Bridge.V(w.Guardian.Position);
+        _prevPos = _curPos = _shownPos = startPos;
+        _prevHeading = _curHeading = _shownHeading = (float)w.Guardian.Heading;
+        _curT = w.Clock.SimSeconds;
+        _prevT = _curT - VivariumWorld.Cadence.FaunaBehaviour * Vivarium.Sim.Time.SimClock.FixedStepSeconds;
+        _currentAnim = "";
+    }
+
+    private static void ConfigureBoaContact(GuardianAppendageModifier contact)
+    {
+        // Profile-centered v6 rig; exact33stations plus the true terminal leaf.
+        contact.ContinuousGroundedBody = true; contact.ChainPrefix = "Body";
+        contact.ChainIndexFormat = "D2"; contact.FirstTailIndex = 0;
+        contact.TipSegmentLength = 0.006000212394f;
+        contact.RootRadius = 0.04936650024f; contact.TipRadius = .003f;
+        contact.BodyBrushRadius = .105f;
+        contact.LateralRadii = new[] { 0.0493665f, 0.056845771f, 0.062133901f, 0.071623397f, 0.07844818f, 0.080651615f, 0.08618881f, 0.091637061f, 0.093550987f, 0.095610532f, 0.098991592f, 0.10161024f, 0.10189265f, 0.10135679f, 0.10062489f, 0.10002501f, 0.099644782f, 0.095957963f, 0.090215463f, 0.085722497f, 0.083960933f, 0.077739494f, 0.070932451f, 0.068314422f, 0.060163642f, 0.052457418f, 0.048115885f, 0.037392565f, 0.031775032f, 0.024120211f, 0.016024171f, 0.010457511f, 0.0031784688f, 0.003f };
+        contact.GroundRadii = new[] { 0.0144f, 0.040244081f, 0.056619353f, 0.063017101f, 0.067618318f, 0.069380629f, 0.073860392f, 0.078268196f, 0.079802466f, 0.081052143f, 0.08310368f, 0.084692605f, 0.084807928f, 0.084157641f, 0.083269439f, 0.082541466f, 0.082203829f, 0.079860239f, 0.076209919f, 0.073353888f, 0.071948366f, 0.066243917f, 0.060002527f, 0.057679457f, 0.051085223f, 0.044850648f, 0.041338213f, 0.032662715f, 0.028115153f, 0.0215093f, 0.014522689f, 0.01001142f, 0.0041224488f, 0.00408f };
+    }
+
+    private static void ApplySurfaceMaterials(Node node)
+    {
+        if (node is MeshInstance3D mesh && mesh.Mesh != null)
+        {
+            for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
+            {
+                if (mesh.GetActiveMaterial(i) is not StandardMaterial3D source) continue;
+                var material = (StandardMaterial3D)source.Duplicate();
+                material.VertexColorUseAsAlbedo = true;
+                if (source.ResourceName == "CoatiFineFur")
+                {
+                    // Grazing response of a matte fibrous coat, kept subtle in
+                    // the neutral studio rather than painted into the albedo.
+                    material.RimEnabled = true; material.Rim = .12f; material.RimTint = .9f;
+                }
+                // Preserve the authored PBR response, including eye gloss, coat,
+                // roughness textures and scale normals. A blanket roughness floor
+                // erased the distinction between fur, keratin and reptile skin.
+                mesh.SetSurfaceOverrideMaterial(i, material);
+            }
+        }
+        foreach (var child in node.GetChildren()) ApplySurfaceMaterials(child);
+    }
+
+    private static float LowestPoint(Node3D node, Transform3D parent)
+    {
+        var transform = parent * node.Transform;
+        float lowest = float.PositiveInfinity;
+        if (node is MeshInstance3D mesh && mesh.Mesh != null)
+        {
+            var box = mesh.Mesh.GetAabb();
+            for (int i = 0; i < 8; i++) lowest = Math.Min(lowest, (transform * box.GetEndpoint(i)).Y);
+        }
+        foreach (var child in node.GetChildren())
+            if (child is Node3D spatial) lowest = Math.Min(lowest, LowestPoint(spatial, transform));
+        return float.IsFinite(lowest) ? lowest : 0;
+    }
+
+    private static Node3D CreateFallbackMesh(GuardianDef def)
+    {
+        var root = new Node3D { Name = "GuardianFallback" };
+        var mi = new MeshInstance3D { Name = "BodyMesh" };
+
+        var box = new BoxMesh
+        {
+            Size = new Vector3(
+                (float)(0.35 * def.VisualScale),
+                (float)(0.25 * def.VisualScale),
+                (float)(0.90 * def.VisualScale)
+            )
+        };
+        var mat = new StandardMaterial3D
+        {
+            AlbedoColor = Bridge.C(new[] { def.BaseColor.X, def.BaseColor.Y, def.BaseColor.Z }),
+            Roughness = 0.6f
+        };
+        mi.Mesh = box;
+        mi.MaterialOverride = mat;
+        root.AddChild(mi);
+        return root;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_w == null || _w.Guardian == null || _instance == null) return;
+
+        var g = _w.Guardian;
+        var targetPos = Bridge.V(g.Position);
+        double now = _w.Clock.SimSeconds;
+
+        // Position & heading tracking
+        if (now > _curT && (_curPos.DistanceSquaredTo(targetPos) > 1e-6 || Math.Abs(_curHeading - g.Heading) > 1e-5))
+        {
+            _prevPos = _curPos;
+            _prevHeading = _curHeading;
+            _prevT = _curT;
+            _curPos = targetPos;
+            _curHeading = (float)g.Heading;
+            _curT = now;
+        }
+
+        double span = Math.Max(1e-4, _curT - _prevT);
+        double renderTime = now + _w.Scheduler.TickFraction * Vivarium.Sim.Time.SimClock.FixedStepSeconds
+            - VivariumWorld.Cadence.FaunaBehaviour * Vivarium.Sim.Time.SimClock.FixedStepSeconds;
+        float alpha = (float)Math.Clamp((renderTime - _prevT) / span, 0.0, 1.0);
+
+        _shownPos = _prevPos.Lerp(_curPos, alpha);
+        _shownHeading = Mathf.LerpAngle(_prevHeading, _curHeading, alpha);
+
+        // Frustum culling (disabled in headless mode where Camera projection is uninitialized)
+        if (Camera != null && DisplayServer.GetName() != "headless")
+        {
+            var planes = Camera.GetFrustum();
+            bool outside = false;
+            foreach (var plane in planes)
+            {
+                if (plane.DistanceTo(_shownPos) > 1.5f)
+                {
+                    outside = true;
+                    break;
+                }
+            }
+
+            if (outside)
+            {
+                _instance.Visible = false;
+                OffScreen = true;
+                Drawn = false;
+                return;
+            }
+        }
+
+        _instance.Visible = true;
+        Drawn = true;
+        OffScreen = false;
+
+        // Apply spatial transform
+        // Orientation: Godot yaw is negated sim heading
+        Basis rot = Bridge.Yaw(_shownHeading + Math.PI / 2);
+
+        // Terrain normal tilt
+        var p = new Vec2(_shownPos.X, _shownPos.Z);
+        // Root shelves are part of the support surface, rather than bare terrain.
+        const double sample = 0.18;
+        var normal = new Vector3(
+            (float)(_w.GroundHeight(p - new Vec2(sample, 0)) - _w.GroundHeight(p + new Vec2(sample, 0))),
+            (float)(2 * sample),
+            (float)(_w.GroundHeight(p - new Vec2(0, sample)) - _w.GroundHeight(p + new Vec2(0, sample)))).Normalized();
+        normal = Vector3.Up.Lerp(normal, 0.45f).Normalized();
+        if (ReviewSupportPlaneHeight.HasValue) normal = Vector3.Up;
+        _shownPos.Y = SupportHeight(_shownPos);
+        if (normal.Y > 0.4f && normal.LengthSquared() > 0.01f)
+        {
+            Vector3 forward = -rot.Z;
+            Vector3 up = normal.Normalized();
+            Vector3 alignedForward = forward - up * forward.Dot(up);
+            if (alignedForward.LengthSquared() > 1e-4f)
+            {
+                alignedForward = alignedForward.Normalized();
+                Vector3 alignedRight = alignedForward.Cross(up);
+                if (alignedRight.LengthSquared() > 1e-4f)
+                {
+                    alignedRight = alignedRight.Normalized();
+                    rot = new Basis(alignedRight, up, -alignedForward);
+                }
+            }
+        }
+
+        GlobalTransform = new Transform3D(rot, _shownPos);
+        BodyTrunkCorrection = 0;
+        if (AppendageContact != null && _skeleton != null && !ReviewSupportPlaneHeight.HasValue && ReviewGroundSample == null && _w.PilotTree != null)
+        {
+            // The old center-only .35 m simulation margin can put the long
+            // muzzle into a trunk. Resolve the rendered body footprint too.
+            for (int iteration = 0; iteration < 8; iteration++)
+            {
+                Vector3 correction = Vector3.Zero;
+                foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Snout", "Body", "Body0", "Body1", "Body2", "Body3" })
+                {
+                    int bone = _skeleton.FindBone(name); if (bone < 0) continue;
+                    var body = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(bone).Origin;
+                    if (name == "Snout" || (name == "Head" && _def?.Archetype == "great_ground"))
+                        body += (_skeleton.GlobalBasis * _skeleton.GetBoneGlobalPose(bone).Basis.Y).Normalized()
+                            * (name == "Snout" ? .245153f : .380526f) * _skeleton.GlobalBasis.Scale.X;
+                    float radius = (name == "Snout" ? .04f : name == "Head" ? .09f : .14f) * _skeleton.GlobalBasis.Scale.X;
+                    var hit = _w.PilotTree.Penetration(new Vec3(body.X, body.Y, body.Z), radius);
+                    var push = ShrubContact == null ? Vector3.Zero : ShrubContact.Resolve(body, radius, true) - body;
+                    if (hit.Depth > 0 && hit.Normal.Y < .5f) push += Bridge.V(hit.Normal) * (float)hit.Depth;
+                    if (push.LengthSquared() > correction.LengthSquared()) correction = push;
+                }
+                // A pinned appendage cannot escape a woody core by bending
+                // distal joints. Include its attachment in root avoidance so
+                // contact does not stretch the first segment against the tree.
+                int attachment = _skeleton.FindBone(AppendageContact.ChainPrefix + AppendageContact.FirstTailIndex.ToString(AppendageContact.ChainIndexFormat));
+                if (attachment >= 0)
+                {
+                    var point = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(attachment).Origin;
+                    float radius = AppendageContact.RootRadius * _skeleton.GlobalBasis.Scale.X;
+                    var hit = _w.PilotTree.Penetration(new Vec3(point.X, point.Y, point.Z), radius);
+                    var push = ShrubContact == null ? Vector3.Zero : ShrubContact.Resolve(point, radius, true) - point;
+                    if (hit.Depth > 0 && hit.Normal.Y < .5f) push += Bridge.V(hit.Normal) * (float)hit.Depth;
+                    if (push.LengthSquared() > correction.LengthSquared()) correction = push;
+                }
+                // Wide paws and curved claws can cross a trunk while the
+                // ankle and torso centers remain outside. Include evaluated
+                // contact vertices before solving reachable ground targets.
+                if (SkinContact?.Valid == true)
+                    foreach (string region in new[] { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Head" })
+                    {
+                        var skinSample = SkinContact.Evaluate(region, SupportHeight);
+                        if (!skinSample.Valid) continue;
+                        var point = skinSample.LowestPoint;
+                        var hit = _w.PilotTree.Penetration(new Vec3(point.X, point.Y, point.Z), .025f);
+                        if (hit.Depth > 0 && hit.Normal.Y < .5f)
+                        {
+                            var push = Bridge.V(hit.Normal) * ((float)hit.Depth + .005f);
+                            if (push.LengthSquared() > correction.LengthSquared()) correction = push;
+                        }
+                    }
+                if (correction.LengthSquared() < 1e-8f) break;
+                GlobalPosition += correction;
+                GlobalPosition = new Vector3(GlobalPosition.X, SupportHeight(GlobalPosition), GlobalPosition.Z);
+                // Avoidance can move the body onto a different root shelf.
+                // Re-sample its tilt there before fitting short limbs, rather
+                // than retaining the normal at the simulation position.
+                GlobalBasis = TerrainBasis(GlobalPosition, Bridge.Yaw(_shownHeading + Math.PI / 2));
+                BodyTrunkCorrection += correction.Length();
+            }
+        }
+        if (ShrubContact != null) { ShrubContact.Focus = GlobalPosition; ShrubContact.Flora = Vegetation; }
+
+        // Sample the animated feet against the same root/prop support as the sim.
+        // A single height at the pelvis lets feet disappear on uneven buttresses.
+        if (_skeleton != null && LegContact == null)
+        {
+            float lift = 0;
+            for (int bone = 0; bone < _skeleton.GetBoneCount(); bone++)
+            {
+                string name = _skeleton.GetBoneName(bone);
+                if (!(name.Contains("Hand") || name.Contains("Foot"))) continue;
+                var rest = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalRest(bone).Origin;
+                var foot = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(bone).Origin;
+                // The ankle-to-sole distance is measured in the neutral mesh pose.
+                foot.Y -= Math.Max(0, rest.Y - GlobalPosition.Y);
+                var xz = new Vec2(foot.X, foot.Z);
+                if (_w.PilotTree?.BlocksTrunk(xz) == true) continue;
+                lift = Math.Max(lift, SupportHeight(foot) - foot.Y);
+            }
+            GlobalPosition += Vector3.Up * Math.Min(lift, 0.4f);
+        }
+
+        // Manage animation state
+        UpdateAnimationState(g);
+    }
+
+    private Basis TerrainBasis(Vector3 point, Basis yaw)
+    {
+        if (_w == null || ReviewSupportPlaneHeight.HasValue) return yaw;
+        const float sample = .18f;
+        var normal = new Vector3(SupportHeight(point - Vector3.Right * sample) - SupportHeight(point + Vector3.Right * sample),
+            2 * sample, SupportHeight(point - Vector3.Back * sample) - SupportHeight(point + Vector3.Back * sample)).Normalized();
+        var up = Vector3.Up.Lerp(normal, .45f).Normalized();
+        if (up.Y <= .4f || up.LengthSquared() < .01f) return yaw;
+        var forward = -yaw.Z; forward -= up * forward.Dot(up);
+        if (forward.LengthSquared() < 1e-4f) return yaw;
+        forward = forward.Normalized(); var right = forward.Cross(up).Normalized();
+        return new Basis(right, up, -forward);
+    }
+
+    private void UpdateAnimationState(GuardianIndividual g)
+    {
+        if (_animPlayer == null) return;
+
+        string targetAnim = g.Activity switch
+        {
+            GuardianActivity.Rest => "rest",
+            GuardianActivity.Feed => "feed",
+            GuardianActivity.Forage or GuardianActivity.Explore or
+            GuardianActivity.Climb or GuardianActivity.Retreat or GuardianActivity.ReturnHome => "walk",
+            _ => "idle"
+        };
+
+        if (targetAnim == "walk" && g.Locomotion == LocomotionMode.Serpentine && _animPlayer.HasAnimation("slither"))
+            targetAnim = "slither";
+        if (!_animPlayer.HasAnimation(targetAnim)) targetAnim = "idle";
+        float strideScale = targetAnim is "walk" or "slither" ? (float)(1 / Math.Max(0.1, g.Scale)) : 1;
+        _animPlayer.SpeedScale = _w!.Clock.Paused ? 0 : (float)_w.Clock.SpeedMultiplier
+            * (g.Activity == GuardianActivity.Retreat ? 1.8f : 1.0f) * strideScale;
+        if (targetAnim != _currentAnim && _animPlayer.HasAnimation(targetAnim))
+        {
+            _animPlayer.Play(targetAnim, customBlend: 0.25);
+            _currentAnim = targetAnim;
+        }
+    }
+}

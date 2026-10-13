@@ -1,0 +1,297 @@
+{
+  "guardian": "monitor",
+  "candidate": "solo-v15",
+  "sha256": "dd0ac3bfd263383cd1dba816fa3293c7956665a44993e9cfb0ba51bb91d32dd5",
+  "updated_at": "2026-10-13T09:23:46.130455+00:00",
+  "solo": true,
+  "authoring": "scripts/guardians/monitor_cinematic_authoring.py",
+  "source_hashes": "final-source-and-asset-hashes.json in guardian-monitor-solo",
+  "structural": {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\great_ground\\guardian.glb",
+    "bytes": 30752016,
+    "triangles": 270596,
+    "skin_joint_counts": [
+      40
+    ],
+    "primitives": [
+      {
+        "mesh": "monitor_iris_curved_-1",
+        "vertices": 866,
+        "triangles": 1632,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_claw_Foot_L0",
+        "vertices": 700,
+        "triangles": 1200,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_ear_opening_-1",
+        "vertices": 1308,
+        "triangles": 2432,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_aural_cup_-1",
+        "vertices": 3541,
+        "triangles": 6416,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_body",
+        "vertices": 28940,
+        "triangles": 47336,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "COLOR_1",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_shallow_dermal_scutes",
+        "vertices": 154920,
+        "triangles": 206560,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_forked_tongue",
+        "vertices": 75,
+        "triangles": 124,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_eye_-1",
+        "vertices": 2574,
+        "triangles": 4896,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "AmberIris",
+        "roughness": 0.2199999988079071,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "Keratin",
+        "roughness": 0.4000000059604645,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "LipCrease",
+        "roughness": 0.6800000071525574,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "monitor_PBR",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "MonitorAnatomicalPigmentPBR",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "MonitorDermalScutes",
+        "roughness": 0.6600000262260437,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "MonitorTongue",
+        "roughness": 0.36000001430511475,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "WetCornea",
+        "roughness": 0.11999999731779099,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      }
+    ],
+    "animations": [
+      {
+        "name": "feed",
+        "duration": 3.0000000782310963,
+        "channels": 120
+      },
+      {
+        "name": "idle",
+        "duration": 2.5000000782310963,
+        "channels": 120
+      },
+      {
+        "name": "rest",
+        "duration": 2.5000000782310963,
+        "channels": 120
+      },
+      {
+        "name": "walk",
+        "duration": 1.33333333209157,
+        "channels": 120
+      }
+    ],
+    "image_count": 4,
+    "failures": [],
+    "warnings": [],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  },
+  "contact_metrics": {
+    "maxLength": 0.000661239,
+    "maxPenetration": 0.011514783,
+    "maxBend": 0.38,
+    "maxDisplacement": 0.21132988,
+    "maxFootPenetration": 0.010076225,
+    "maxSkinFootPenetration": 0,
+    "maxSkinBodyPenetration": 0,
+    "maxSkinTailPenetration": 0,
+    "skinRestReconstructionError": 0.0001474516,
+    "recoveredBend": 3.9721872e-05,
+    "renderedGround": "same sampled height function as contact constraints",
+    "shrub": "lanternbrush",
+    "shrubPhases": "0-44 chest brush;45-89 tail segment interior;90-149 released",
+    "contactScope": "bone capsules/sole proxies and rendered shrub AABBs; not exact deformed mesh collision"
+  },
+  "contact_bend_deviation_peak": 0.5673909,
+  "populated_metrics": {
+    "skinFootPenetration": 0,
+    "skinBodyPenetration": 0,
+    "skinTailPenetration": 0,
+    "tailLengthError": 0.00405585,
+    "tailDeflection": 1.0960027,
+    "tailBendDeviation": 1.0150334,
+    "footReachError": 0.013605299,
+    "BodyTrunkCorrection": 0.9568732,
+    "stanceFootTravel": 0.48482236,
+    "stanceFootGap": 0.0038550496,
+    "tailPenetration": 0.017018199,
+    "shrubContacts": 18,
+    "shrubBend": 0.38
+  },
+  "evidence": [
+    "build\\guardian-review\\monitor-cinematic-v15-final-20261013",
+    "build\\guardian-review\\monitor-populated-v15-final-20261013",
+    "build\\fauna-review\\ghostbristle-solo-v2-final-20261013",
+    "build\\fauna-review\\ghostbristle-solo-live-v2-20261013",
+    "build\\fauna-review\\ghostbristle-solo-speed-v2-20261013"
+  ],
+  "review_scope": "Actual Godot:48 whole-body and48 face poses;252 production transition frames;150 contact frames;180 populated frames with29 flora species/134 world fauna. Exact native runtime/asset/assembly hashes are frozen in each capture-provenance.json.",
+  "changes": [
+    "Raised skull/neck bind geometry45mm, fuller throat and smoother hip shelf; orbital/aural rim reduction.",
+    "Baked2048 anatomical pigment map in unique body UVs,8pixel padding; independent scale normal/roughness, reduced pale scutes.",
+    "World-space body/tail bends, held gaze and asymmetric tongue flick, corrected feeding/jaw axes; four authored clips.",
+    "Sixteen tail spans, half per-joint angular amplitude, matching compressed cross-section radii and92.0688mm true leaf.",
+    "Monitor trunk-side support ignores tree roof below trunk top, removing14.051m toe target failure."
+  ],
+  "remaining_gaps": [
+    "Near-photoreal acceptance remains OPEN. Shoulder/hip mass joins, dark specular response and proud orbital rim/green closed-lid appearance need further artistic work.",
+    "Populated natural movement OPEN: root correction 0.956873m, tail detour 1.096003m, bend deviation 1.015033rad, foot reach 0.013605m, stance travel 0.484822m per modifier step. This is not automatically camera-frame displacement.",
+    "Tail proxy penetration in contact fixture 0.011515m, despite zero sampled skin penetration; populated tail length residual 0.004056m increased over v14.",
+    "Sparse evaluated skin samples, capsule proxies and shrub AABBs do not establish triangle-interior or individual branch/leaf collision. No broad performance acceptance.",
+    "Ghostbristle has no exact per-foot uneven-ground collision; live slow90-frame startup is stationary, so only scripted slow-speed poses establish that gait. Additional cuticle/antenna behavior work remains."
+  ],
+  "failed_experiments": [
+    "v11 populated:14.051405m evaluated foot penetration from trunk roof support; exact failed output retained.",
+    "v11 pale scutes rejected; v12 smaller/darker relief.",
+    "Local-axis feeding direction corrected in v13.",
+    "Blurred vertex pigment replaced by actual UV bitmap in v14.",
+    "v15 reduces tail detour vs v14, but proxy-ground/length residuals worsen; retained with explicit gaps, no natural-motion acceptance."
+  ],
+  "acceptance": "Substantive native art improvement; contact sample gate passes. Near-photoreal and natural movement OPEN.",
+  "next_guardian": "pangolin",
+  "companion": "ghostbristle"
+}

@@ -1,0 +1,52 @@
+{
+  "guardian": "hoatzin",
+  "candidate": "v8",
+  "sha256": "d79bb927c84c0ab3839cc78d9a77f2f83c6400d36b14e33ad35e238421a6f73e",
+  "bytes": 7774268,
+  "native_studio": "E:\\Vivarium\\build\\guardian-review\\hoatzin-cinematic-v8-20261012",
+  "native_populated": "E:\\Vivarium\\build\\guardian-review\\hoatzin-populated-v8-20261012",
+  "contact_summary": {
+    "maxLength": 2.3841858e-07,
+    "maxPenetration": 0.00018143654,
+    "maxBend": 0.3792326,
+    "maxDisplacement": 0.09687803,
+    "maxFootPenetration": 0.004011333,
+    "maxSkinFootPenetration": 0,
+    "maxSkinBodyPenetration": 0,
+    "maxSkinTailPenetration": 0,
+    "skinRestReconstructionError": 1.3607711e-05,
+    "recoveredBend": 6.894113e-05,
+    "renderedGround": "same sampled height function as contact constraints",
+    "shrub": "lanternbrush",
+    "shrubPhases": "0-44 chest brush;45-89 tail segment interior;90-149 released",
+    "contactScope": "bone capsules/sole proxies and rendered shrub AABBs; not exact deformed mesh collision"
+  },
+  "populated_frames": 180,
+  "populated_maxima_m_or_rad": {
+    "skinFootPenetration": 0.0,
+    "skinBodyPenetration": 0.0,
+    "skinTailPenetration": 0.0,
+    "footReachError": 0.20941757,
+    "stanceFootGap": 0.031493127,
+    "tailLengthError": 2.3841858e-07,
+    "tailDeflection": 0.17457941,
+    "tailBendDeviation": 0.35926968,
+    "BodyTrunkCorrection": 0.008757003
+  },
+  "structural": "E:\\Vivarium\\.clanker\\tasks\\guardian-hoatzin-solo\\structural-v8.json",
+  "tests": "build/guardian-review/hoatzin-solo-tests/hoatzin-beetle-solo.trx",
+  "tests_passed": 21,
+  "visual_acceptance": "OPEN",
+  "gaps": [
+    "Feather layers still read as plates at close range; reduce repetitive borders and refine vane overlap, softer breast transitions and exposed shoulder crescent.",
+    "Long diagonal neck and head/crest proportions need a further video-guided silhouette pass.",
+    "Uneven-root foot reach and stance gap remain unresolved; zero sampled penetration does not establish grounded natural gait.",
+    "Rest eyes remain open; no eyelid blink/closure animation yet.",
+    "No per-leaf/per-triangle collision or broad GPU performance acceptance."
+  ],
+  "references": [
+    "https://macaulaylibrary.org/asset/466832581",
+    "https://macaulaylibrary.org/asset/201793671"
+  ],
+  "observations": "Actual native source playback: broader round-ended dark coverts, narrow pale borders, irregular backswept crest, head/neck reach and body weight shift. Repeated slow motion is not a measured walking speed."
+}

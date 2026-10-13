@@ -39,6 +39,8 @@ public partial class Main : Node3D
             return;
         }
 
+        if (ArgAfter("--guardian-review") is { } guardianDir)
+        { AddChild(new GuardianReview { Content = content, OutDir = guardianDir }); return; }
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
         if (UserArgs.Contains("--spring-fluid-preview"))
         {

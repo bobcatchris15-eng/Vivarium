@@ -8,6 +8,7 @@ using Vivarium.Sim.Ecology;
 using Vivarium.Sim.Fauna;
 using Vivarium.Sim.Flora;
 using Vivarium.Sim.Genetics;
+using Vivarium.Sim.Guardians;
 using Vivarium.Sim.Water;
 using Vivarium.Sim.World;
 
@@ -99,6 +100,7 @@ public sealed class FloraPayload { public List<FloraIndividual> Items { get; set
 public sealed class DeadFloraPayload { public List<DeadPlant> Items { get; set; } = new(); }
 public sealed class SeedBankPayload { public List<SeedLot> Lots { get; set; } = new(); }
 public sealed class FaunaPayload { public List<FaunaIndividual> Items { get; set; } = new(); }
+public sealed class GuardianPayload { public GuardianIndividual? Individual { get; set; } }
 public sealed class GeneticsPayload
 {
     public List<Genome> Genomes { get; set; } = new();
@@ -111,7 +113,7 @@ public sealed class GeneticsPayload
 /// </summary>
 public static class WorldSerializer
 {
-    public static readonly string[] PayloadOrder = { "world", "fields", "water", "litter", "coverage", "flora", "dead_flora", "seed_bank", "fauna", "genetics" };
+    public static readonly string[] PayloadOrder = { "world", "fields", "water", "litter", "coverage", "flora", "dead_flora", "seed_bank", "fauna", "genetics", "guardian" };
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -183,6 +185,7 @@ public static class WorldSerializer
         p["seed_bank"] = Bytes(new SeedBankPayload { Lots = w.SeedBank.Lots });
         p["fauna"] = Bytes(new FaunaPayload { Items = w.Fauna.Items });
         p["genetics"] = Bytes(new GeneticsPayload { Genomes = w.Genomes.Ordered().ToList(), Lineage = w.Lineage.Ordered().ToList() });
+        p["guardian"] = Bytes(new GuardianPayload { Individual = w.Guardian });
         return p;
     }
 
@@ -225,7 +228,12 @@ public static class WorldSerializer
     private static VivariumWorld DeserializeCore(ContentLibrary content, IReadOnlyDictionary<string, byte[]> payloads, out int droppedRemoved)
     {
         foreach (var name in PayloadOrder)
+        {
+            if (name == "guardian") continue;
             if (!payloads.ContainsKey(name)) throw new InvalidDataException($"save is missing the '{name}' payload");
+        }
+
+
         var wp = Read<WorldPayload>(payloads, "world");
         // Direct deserialization of a pre-Pilot payload must not invent a new tree on an existing world.
         using (var oldWorld = JsonDocument.Parse(payloads["world"]))
@@ -327,6 +335,16 @@ public static class WorldSerializer
         var gp = Read<GeneticsPayload>(payloads, "genetics");
         foreach (var g in gp.Genomes) w.Genomes.Add(g);
         foreach (var r in gp.Lineage) if (!Removed(r.SpeciesId)) w.Lineage.Add(r);
+        if (payloads.TryGetValue("guardian", out var guardianBytes))
+        {
+            var gPayload = Read<GuardianPayload>(payloads, "guardian");
+            w.Guardian = gPayload.Individual;
+            w.GuardianSystem.RefreshDefinition();
+        }
+        else if (w.PilotTree != null && w.Descriptor.GuardianId != "none")
+        {
+            w.GuardianSystem.InitializeGuardian();
+        }
         droppedRemoved = dropped;
         if (dropped > 0)
             Log.Warn(LogCategory.Persistence, $"Save migration dropped {dropped} entr{(dropped == 1 ? "y" : "ies")} of removed flora species ({string.Join(", ", RemovedFloraSpecies.OrderBy(s => s, StringComparer.Ordinal))}).");
@@ -386,6 +404,14 @@ public static class WorldSerializer
         }
         foreach (var r in w.Lineage.Ordered())
             if (!w.Genomes.Contains(r.GenomeId)) errors.Add($"lineage record {r.Id} references missing genome {r.GenomeId}");
+        if (w.Guardian != null)
+        {
+            Id(w.Guardian.Id, "guardian");
+            var def = GuardianCatalog.Find(w.Guardian.ArchetypeId);
+            if (def == null) errors.Add($"guardian {w.Guardian.Id} references unknown archetype '{w.Guardian.ArchetypeId}'");
+            if (!w.Guardian.Position.IsFinite || !w.Domain.Contains(w.Guardian.PositionXZ)) errors.Add($"guardian {w.Guardian.Id} has invalid position");
+            if (!double.IsFinite(w.Guardian.Energy) || w.Guardian.Energy < 0) errors.Add($"guardian {w.Guardian.Id} has invalid energy");
+        }
         if (errors.Count > 0)
             throw new InvalidDataException($"save failed validation ({errors.Count} problem(s)): " + string.Join("; ", errors.Take(8)));
     }

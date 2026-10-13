@@ -1,0 +1,9 @@
+# Solo porcupine / dewmantle video observations, October13
+
+Public browser playback reviewed; no reference media downloaded or reused in assets.
+
+* NPS/Crystal Lewis, [Porcupine Walking](https://www.nps.gov/media/video/view.htm?id=A2AD1810-2A99-485F-B3BE-F0B7D2C2FB3F),66seconds. Reviewed playback through53seconds. Rounded low body, short apparent legs beneath the coat, gradual weight transfer, quills following a continuous coat silhouette. This is North American footage used qualitatively for mass and support; it does not measure the arboreal guardian's taxonomy or exact stride timing.
+* Smithsonian National Zoo, [Quilliam Enjoys a Snack](https://www.si.edu/object/prehensile-tailed-porcupine-quilliam-enjoys-snack:yt_q4t9_y3f7jo),40seconds. Played the clip, reviewed multiple feeding/face views. Fuller cheek envelope, fleshy rhinarium, dense short crown quills, contrasting light/distal bands, grasping forefeet, torso moves as one mass. Juvenile feeding footage does not establish an adult ground gait.
+* Pavlo Chemist, [Arion rufus creeping](https://commons.wikimedia.org/wiki/File:Muelheim_an_der_Ruhr_-_Arion_rufus_-_creeping.webm),7.8seconds,CC BY-SA4.0. Commons player failed; original media played directly in browser. Start and end views show gradual head advancement over granular ground with independently spreading ocular tentacles, broad low foot and continuous tapered body. Mantle surface is damp and tuberculate. Motion timing and per-sole waves are qualitative, not calibrated measurements.
+
+Art choices: fuller cheeks, denser direction-following undercoat, variable-length quill/coat silhouette and stronger keratin bands; restrained torso/tail motion and higher-frequency bake. Slug replaces intersecting body ellipsoids with continuous mantle/foot and head envelope, four curved independently attached sensory stems and subtler pedal waves. Accurate taxonomy is secondary to coherent cinematic anatomy and motion.

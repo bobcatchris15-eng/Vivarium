@@ -146,10 +146,26 @@ public partial class FaunaPreview : Node3D
                 await CaptureFrameAsync(dir, $"{prefix}-{frame:000}.png", 1);
             }
         }
+        int curledPoses = 0;
+        if (!SpeedReview && OrganismMeshes.FaunaCurled(sp, seed) is { } curled)
+        {
+            var still = (ShaderMaterial)mat.Duplicate();
+            still.SetShaderParameter("anim_idle_motion", 0f);
+            still.SetShaderParameter("anim_amplitude", 0f);
+            still.SetShaderParameter("anim_body_wave", 0f);
+            mm.Mesh = Bridge.ToArrayMesh(curled, still, signedVertexData: true);
+            mm.SetInstanceTransform(0, Transform3D.Identity);
+            mm.SetInstanceCustomData(0,new Color(FaunaBodyProfiles.PackHue(sp,0,0),.5f,.5f,16000));
+            foreach (var offset in new[] { new Vector3(.65f,1.1f,1.5f),new Vector3(.65f,1.1f,-1.5f),new Vector3(1.5f,.5f,0),new Vector3(0,1.8f,.01f) })
+            {
+                camera.Position=offset;camera.LookAt(new Vector3(0,.18f,0));
+                await CaptureFrameAsync(dir,$"curled-{curledPoses++:00}.png",3);
+            }
+        }
         File.WriteAllText(Path.Combine(dir, "preview.json"), System.Text.Json.JsonSerializer.Serialize(new {
             species = sp.Id, distanceDriven = true, fps = 30, bodyLengthsPerSecond = SpeedReview ? new[] { 0.2, 0.8 } : new[] { 0.6 },
             stopAtFrame = SpeedReview ? 45 : -1, travelFrames = sp.Model == "toad" && !SpeedReview ? 120 : 60,
-            idleFrames = sp.Model is "toad" or "salamander" && !SpeedReview ? 90 : 0, appearanceSamples = !SpeedReview ? sp.Model == "salamander" ? 12 : 6 : 0,
+            idleFrames = sp.Model is "toad" or "salamander" && !SpeedReview ? 90 : 0, appearanceSamples = !SpeedReview ? sp.Model == "salamander" ? 12 : 6 : 0, curledPoses,
             cyclesPerBody = a.CyclesPerBody, halfStroke = FaunaGait.HalfStroke(a),
             evidence = "Scripted mesh/material review; production interpolation checked separately with --fauna-motion-check" }));
         stage.QueueFree();
@@ -171,11 +187,30 @@ public partial class FaunaPreview : Node3D
         stage.AddChild(new EnvironmentRig());
         var renderer = new FaunaRenderer { ProcessMode = ProcessModeEnum.Disabled };
         stage.AddChild(renderer); renderer.Build(world);
-        stage.AddChild(new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(4, 4) }, Position = new Vector3(0, -0.002f, 0),
+        if (sp.Model is "isopod" or "silverfish" or "salamander" or "slug")
+        {
+            // Even Relief=0 has a sampled support profile. A flat preview
+            // plane hid the moving animal as its real resting height declined.
+            var support = new MeshData();const int divisions=64;const double extent=.5;
+            for(int z=0;z<=divisions;z++)for(int x=0;x<=divisions;x++)
+            {
+                double px=-extent+2*extent*x/divisions,pz=-extent+2*extent*z/divisions;
+                double py=world.FaunaSystem.RestingY(sp,new Vec2(px,pz))-.0001;
+                support.AddVertex(new Vec3(px,py,pz),Vec3.Up,new[]{1.0,1.0,1.0},1,(double)x/divisions,(double)z/divisions);
+            }
+            for(int z=0;z<divisions;z++)for(int x=0;x<divisions;x++)
+            {
+                int a=z*(divisions+1)+x,b=a+divisions+1;
+                support.Indices.AddRange(new[]{a,b+1,a+1,a,b,b+1});
+            }
+            support.RecomputeNormals();
+            stage.AddChild(new MeshInstance3D { Mesh=Bridge.ToArrayMesh(support,new StandardMaterial3D { AlbedoColor=new Color(.32f,.31f,.27f),Roughness=1,CullMode=BaseMaterial3D.CullModeEnum.Disabled }) });
+        }
+        else stage.AddChild(new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(4, 4) }, Position = new Vector3(0, -0.002f, 0),
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.32f, 0.31f, 0.27f), Roughness = 1 } });
         for (int i = -40; i <= 40; i++) stage.AddChild(new MeshInstance3D {
             Mesh = new BoxMesh { Size = new Vector3(length * 0.01f, 0.0003f, length * 2) },
-            Position = new Vector3(i * length * 0.25f, -0.0015f, 0),
+            Position = new Vector3(i * length * 0.25f, (sp.Model is "isopod" or "silverfish" or "salamander" or "slug") ? (float)world.FaunaSystem.RestingY(sp,new Vec2(i*length*.25,0))+.0002f : -0.0015f, 0),
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.43f, 0.41f, 0.35f), Roughness = 1 } });
         var bounds = OrganismMeshes.Fauna(sp).Bounds();
         float framing = (float)Math.Max(1.55, Math.Max(bounds.Max.X - bounds.Min.X, bounds.Max.Z - bounds.Min.Z) * 1.35);
@@ -204,7 +239,7 @@ public partial class FaunaPreview : Node3D
         }
         File.WriteAllText(Path.Combine(dir, "live-motion.json"), System.Text.Json.JsonSerializer.Serialize(new {
             fps = 30, bodyLength = length, cyclesPerBody = sp.Animation.CyclesPerBody,
-            input = "FaunaSystem + Scheduler + FaunaRenderer", slowFrames = 90, fastFrames = 90, stoppedFrames = 60, trace }));
+            input = "FaunaSystem + Scheduler + FaunaRenderer", visibleSupport = (sp.Model is "isopod" or "silverfish" or "salamander" or "slug") ? "64x64 mesh sampled from actual resting support; flat-plane mismatch corrected" : "flat preview plane", slowFrames = 90, fastFrames = 90, stoppedFrames = 60, trace }));
         stage.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }

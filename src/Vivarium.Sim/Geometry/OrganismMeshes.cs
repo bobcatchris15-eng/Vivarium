@@ -6276,15 +6276,15 @@ public static partial class OrganismMeshes
             case "minnow": Minnow(m); break;
             case "isopod":
             case "pill_bug":
-                Isopod(m);
+                CinematicIsopod(m);
                 break;
-            case "beetle": Beetle(m); break;
-            case "silverfish": Silverfish(m); break;
-            case "slug": Slug(m); break;
+            case "beetle": CinematicBeetle(m); break;
+            case "silverfish": CinematicSilverfish(m); break;
+            case "slug": CinematicSlug(m); break;
             case "millipede": Millipede(m); break;
             case "moth": Moth(m); break;
             case "toad": Toad(m, visualSeed); break;
-            case "salamander": Salamander(m); break;
+            case "salamander": CinematicSalamander(m); break;
             case "worm": Worm(m); break;
             case "harvestman": Harvestman(m); break;
             case "aquatic_larva": AquaticLarva(m); break;
@@ -6303,6 +6303,13 @@ public static partial class OrganismMeshes
         if (model is not ("isopod" or "pill_bug")) return null;
         var m = new MeshData();
         const double cy = 0.22, ringR = 0.175;
+
+        if (model == "isopod")
+        {
+            CinematicIsopodCurled(m);
+            if (visualSeed != 0) ApplyFaunaMorph(m, model, visualSeed);
+            return m;
+        }
 
         // Ventral sphere: inner sphere representing the tightly curled belly
         BodySegment(m, new Vec3(0, cy, 0), new Vec3(0.185, 0.185, 0.195), 4, 7, (a, b) => Region(0.5, b, 3));
@@ -6420,6 +6427,15 @@ public static partial class OrganismMeshes
             m.Positions[i * 3] = (float)outP.X;
             m.Positions[i * 3 + 1] = (float)outP.Y;
             m.Positions[i * 3 + 2] = (float)outP.Z;
+        }
+        if (model is "isopod" or "silverfish" or "salamander" or "slug")
+        {
+            // Inherited arch/leg proportions can lower the terminal claws
+            // beneath the neutral support plane. Translate the whole mesh;
+            // root-relative offsets remain valid for every attached joint.
+            double lift = .002 - m.Bounds().Min.Y;
+            if (Math.Abs(lift) > 1e-8)
+                for (int i = 0; i < m.VertexCount; i++) m.Positions[i * 3 + 1] += (float)lift;
         }
         m.RecomputeNormals();
     }

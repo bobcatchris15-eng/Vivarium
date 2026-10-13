@@ -1,0 +1,300 @@
+{
+  "guardian": "pangolin",
+  "candidate": "solo-v15",
+  "asset_sha256": "285f7e7f39fe031ee35a9c38a1d1665496f4d4b0c0b9b2adac10bfc66b80d4bb",
+  "updated_at": "2026-10-13T12:34:17.946992+00:00",
+  "solo": true,
+  "source": "scripts/guardians/pangolin_solo_authoring.py",
+  "animation_patch": "guardian-pangolin-solo/patch-tongue-v15.py applied to preservedv14 blend; full generator reproduces same final callback",
+  "structural": {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\armored_forest\\guardian.glb",
+    "bytes": 28877244,
+    "triangles": 389260,
+    "skin_joint_counts": [
+      32
+    ],
+    "primitives": [
+      {
+        "mesh": "ClosedOverlappingArmor",
+        "vertices": 174420,
+        "triangles": 344964,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 2504,
+        "triangles": 4584,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 1170,
+        "triangles": 2080,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 1618,
+        "triangles": 3072,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 654,
+        "triangles": 1248,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 364,
+        "triangles": 664,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 27,
+        "triangles": 44,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PangolinContinuousSkin",
+        "vertices": 16304,
+        "triangles": 32604,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "AmberKeratin",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "PangolinSkin",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "DarkClaw",
+        "roughness": 0.47999998927116394,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "GlossEye",
+        "roughness": 0.1599999964237213,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "WarmIris",
+        "roughness": 0.3499999940395355,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "Mouth",
+        "roughness": 0.7200000286102295,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "Tongue",
+        "roughness": 0.5,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      }
+    ],
+    "animations": [
+      {
+        "name": "idle",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      },
+      {
+        "name": "walk",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      },
+      {
+        "name": "feed",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      },
+      {
+        "name": "rest",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      }
+    ],
+    "image_count": 6,
+    "failures": [],
+    "warnings": [],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  },
+  "authoring_contact": {
+    "sampled_half_frames": 241,
+    "max_joint_gap_m": 0,
+    "max_segment_length_error_m": 1.3708325630190643e-07,
+    "max_virtual_world_planted_paw_drift_m": 0.00073488914777503,
+    "max_virtual_world_planted_sole_drift_m": 0.0007349967258625,
+    "planted_sole_y_range_m": [
+      0.005336454603821039,
+      0.006180880591273308
+    ],
+    "max_paw_orientation_error_degrees": 0.055952909680744456,
+    "planted_paw_origin_y_range_m": [
+      0.05296969413757324,
+      0.05373220890760422
+    ],
+    "source_forward_speed_mps": 0.2,
+    "retreat_required_playback_multiplier": 1.8,
+    "hierarchy": "Root -> axial chain -> Upper -> Lower -> Foot, connected joints",
+    "pass": true
+  },
+  "contact_metrics": {
+    "maxLength": 8.046627e-06,
+    "maxPenetration": 0,
+    "maxBend": 0.3659989,
+    "maxDisplacement": 0.2094842,
+    "maxFootPenetration": 0.004864037,
+    "maxSkinFootPenetration": 0,
+    "maxSkinBodyPenetration": 0,
+    "maxSkinTailPenetration": 0,
+    "skinRestReconstructionError": 7.5743024e-05,
+    "recoveredBend": 4.074002e-05,
+    "renderedGround": "same sampled height function as contact constraints",
+    "shrub": "lanternbrush",
+    "shrubPhases": "0-44 chest brush;45-89 tail segment interior;90-149 released",
+    "contactScope": "bone capsules/sole proxies and rendered shrub AABBs; not exact deformed mesh collision"
+  },
+  "populated_metrics": {
+    "skinFootPenetration": 0.0044543147,
+    "skinBodyPenetration": 0,
+    "skinTailPenetration": 0,
+    "tailLengthError": 0.0005271286,
+    "tailDeflection": 1.0414675,
+    "tailBendDeviation": 1.1286863,
+    "footReachError": 0.044453204,
+    "footRetargetDistance": 0.14029312,
+    "BodyTrunkCorrection": 0.31106868,
+    "stanceFootTravel": 0.41038653,
+    "stanceFootGap": 0.004021734
+  },
+  "loaded_flora": 28,
+  "world_fauna": 134,
+  "evidence": [
+    "build\\guardian-review\\pangolin-cinematic-solo-v15-final-20261013",
+    "build\\guardian-review\\pangolin-populated-solo-v15-final-20261013",
+    "build\\fauna-review\\rainspine-solo-v2-final-20261013",
+    "build\\fauna-review\\rainspine-solo-live-v2-20261013",
+    "build\\fauna-review\\rainspine-solo-speed-v2-20261013"
+  ],
+  "changes": [
+    "Fuller haunches;14percent shorter distal muzzle; connected axial/neck/head/tail and hip hierarchy.",
+    "Rounded pointed closed shields, denser staggered overlap, smaller limb plates and forehead coverage;2048 sixteen-variant keratin atlas with striae/worn borders and independent roughness; consistent skin colour handling and restrained normal strength.",
+    "Four-beat68percent stance walk at.20m/s; gentle connected torso bend and supported lower rest; tongue follows head and hides in nonfeeding poses.60fps bake passes unchanged orientation gate.",
+    "Pangolin nearby reachable footholds and trunk-side support enabled; natural gait still OPEN."
+  ],
+  "failed_experiments": [
+    "v9/v10 authoring:0.227degree interpolated paw orientation exceeded unchanged.1degree limit;60fps bake reduces to.055953degree.",
+    "v11 tile-like free borders rejected;v12 rounded tip/striae/wear revision.",
+    "v13/v14 collapsed tongue still visible as pink skin speck;v15 shrinks transverse dimensions in hidden phase, native rest confirmed.",
+    "Rainspinev1 pad had role0 and stayed behind moving leg;v2 role1.25 shares root/phase.",
+    "Animation patch first load lacked animation_data after clearing; failed log retained, corrected by recreating it."
+  ],
+  "remaining_gaps": [
+    "Near-photoreal acceptance OPEN: scale rows still regular, skin/claws/eyelid folds need further surfacing and silhouette work; no broad performance gate for389260triangles.",
+    "Populated natural gait OPEN: skin foot peak0.004454m, reach0.044453m, root correction0.311069m, stance travel0.410387m per modifier step, tail detour1.041467m/bend1.128686rad. Terrain/shrub contact passing does not establish natural movement.",
+    "Sparse evaluated skin samples/capsules and actual shrub AABBs exclude exact triangle interiors/individual branches and leaves. Populated camera still has foliage occlusion.",
+    "Rainspine continuous anatomy and pad attachment improve the candidate, but exact per-foot terrain contact, skin response/colour variation and performance remain OPEN."
+  ],
+  "acceptance": "Substantive native candidate improvement; near-photoreal and natural motion OPEN.",
+  "next_guardian": "porcupine",
+  "companion": "rainspine"
+}
