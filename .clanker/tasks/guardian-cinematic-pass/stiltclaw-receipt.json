@@ -1,0 +1,29 @@
+{
+  "fauna": "stiltclaw",
+  "candidate": "solo-v3",
+  "changes": [
+    "Continuous fused oval with smaller ocularium and recessed eyes; eight thinner curved rooted limbs and fine tarsi.",
+    "Attached pedipalps/chelicerae and restrained cuticle/leg band relief; own oval normals fixed through morphology.",
+    "Seed-zero and four inherited morphs share visible support plane; live preview uses sampled rendered terrain."
+  ],
+  "source_sha256": {
+    "game/Shaders/fauna.gdshader": "35f1da9a7fceb56ab2d88ca2f0573bc6f91eb8499d0a42b810c45911394543e0",
+    "src/Vivarium.Sim/Geometry/OrganismMeshes.cs": "f45c0a9c9e5d3dc508a1d7f9a3507d8c89ec51e1500264784bf61d5351c1b8c1",
+    "src/Vivarium.Sim/Geometry/FaunaHarvestmanMeshes.cs": "781b04d9fb5fe5e9071fe3ffb8a8a617d4ad12ce76a2918940bcfd293053058a",
+    "tests/Vivarium.Sim.Tests/HarvestmanAnatomyTests.cs": "29e49c87a62c0069f35986b9314bd5545f91bf805df9b1967fe27af90c863409"
+  },
+  "native": [
+    "build/fauna-review/stiltclaw-solo-v3-20261013",
+    "build/fauna-review/stiltclaw-solo-v3-live-20261013",
+    "build/fauna-review/stiltclaw-solo-v3-speed-20261013"
+  ],
+  "live_frames": 240,
+  "slow_travel_m": 0.0,
+  "fast_travel_m": 0.1784490072619644,
+  "stopped_travel_m": 0.0,
+  "tests": "Eight distinct walking roots, finite noncollapsed outward skin and supported minima across4morph seeds;29focused tests pass.",
+  "gaps": [
+    "Individual foot/vegetation collision and multi-joint leg IK remain open; fine sensory behavior and surface variation need more work.",
+    "Harvestman source video displays black frames after opening; thumbnail anatomy only. Timing unchanged; no measured gait or photoreal/performance acceptance."
+  ]
+}

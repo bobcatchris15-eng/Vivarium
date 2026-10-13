@@ -1,0 +1,9 @@
+# Source review, 2026-10-13
+
+Actual browser playback recovered after resetting the stale browser session.
+
+- https://macaulaylibrary.org/asset/466832581 — Josep del Hoyo, 2022-04-03. Reviewed native playback of the perched bird/back and departure clip. Rounded dark coverts overlap in broad layers; pale margins are narrow, broken and subdued. The crest has distinct irregular swept shafts. The page explicitly labels repeated slow motion; no cadence/speed was measured from it.
+- https://macaulaylibrary.org/asset/201793671 — Ken Simonite, 2014-10-29. Reviewed native playback and sought the displayed15second feeding section. The bird extends its head/neck almost horizontally into leaves while the substantial chest/torso remains braced. Small hooked bill, blue facial skin/red iris, streaked slender neck and large buff/rufous breast contrast with dark wing coverts. Media offsets are review positions, not biological timing measurements.
+- https://commons.wikimedia.org/wiki/File:Leiobunum_rotundum_-_2014-07-27.webm — Pristurus, 2014-07-27, CC BY-SA3.0. Commons player reports unable to play. The original media opens and its playback clock advances, but displayed frames become black. Only the page's visible video thumbnail supports anatomy observations: compact fused oval, long slender femora, sharp elevated knees and fine curved distal tarsi around a leaf. Feeding is described by the author; no observed locomotion/cadence claim. Existing harvestman motion timing retained.
+
+No media downloaded or incorporated into game assets. The blink/closed-rest envelope is an artist-authored behavior addition, not measured species timing. Existing walk/feed/idle/rest durations and four-joint tail motion retained. Incoming381bb7ab crop/neck silhouette was compared against native detailedv8; borrow restrained anterior crop mass and neck separation, preserving the detailed rig, maps and feather layers.

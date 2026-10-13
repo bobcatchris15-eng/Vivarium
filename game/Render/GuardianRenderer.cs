@@ -46,7 +46,7 @@ public partial class GuardianRenderer : Node3D
     /// <summary>Diagnostic studio support only; null uses production terrain/root contact.</summary>
     public float? ReviewSupportPlaneHeight { get; set; }
     public Func<Vector3, float>? ReviewGroundSample { get; set; }
-    public bool UseLocalFootholds => _def?.Archetype is "woodland_omnivore" or "armored_forest" or "quilled_arboreal";
+    public bool UseLocalFootholds => _def?.Archetype is "woodland_omnivore" or "armored_forest" or "quilled_arboreal" or "crested_canopy";
     public bool FootTargetAllowed(Vector3 point) => _w?.PilotTree?.BlocksTrunk(new Vec2(point.X, point.Z)) != true;
     public float SupportHeight(Vector3 point)
     {

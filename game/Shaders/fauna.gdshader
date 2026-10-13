@@ -693,12 +693,12 @@ void fragment() {
             col = mix(skin, marking, mask * mix(0.45, 0.9, contrast));
             if (region > 3.5 && region < 4.5) {
                 float bands = smoothstep(0.78, 0.96, abs(sin(body_uv.x * 38.0 + seed)));
-                col = mix(skin * 0.75, marking, bands * 0.45);
-                rough = 0.65;
-            } else rough = mix(0.58, 0.78, grain);
+                col = mix(skin * 0.82, marking, bands * 0.20);
+                rough = 0.58;
+            } else rough = mix(0.48, 0.64, grain);
             float sutures = pow(abs(sin(p.x * 95.0)), 28.0) * (1.0 - smoothstep(-0.025, 0.07, p.x));
-            col *= 1.0 - sutures * 0.12;
-            relief -= sutures * 0.00020;
+            col *= 1.0 - sutures * 0.05;
+            relief = grain * 0.000025 + pores * 0.00001 - sutures * 0.000045;
         } else if (anim_body_style == 4) {
             // Mantle granules and elongated flank folds, with natural leopard/banded/plain morphs.
             skin = vec3(0.32, 0.34, 0.12); marking = vec3(0.045, 0.041, 0.023);

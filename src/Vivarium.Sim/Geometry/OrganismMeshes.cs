@@ -6286,7 +6286,7 @@ public static partial class OrganismMeshes
             case "toad": Toad(m, visualSeed); break;
             case "salamander": CinematicSalamander(m); break;
             case "worm": CinematicWorm(m); break;
-            case "harvestman": Harvestman(m); break;
+            case "harvestman": CinematicHarvestman(m); break;
             case "aquatic_larva": AquaticLarva(m); break;
             case "snail": Snail(m); break;
             case "midge": Midge(m); break;
@@ -6428,7 +6428,7 @@ public static partial class OrganismMeshes
             m.Positions[i * 3 + 1] = (float)outP.Y;
             m.Positions[i * 3 + 2] = (float)outP.Z;
         }
-        if (model is "isopod" or "silverfish" or "salamander" or "slug" or "worm")
+        if (model is "isopod" or "silverfish" or "salamander" or "slug" or "worm" or "harvestman")
         {
             // Inherited arch/leg proportions can lower the terminal claws
             // beneath the neutral support plane. Translate the whole mesh;

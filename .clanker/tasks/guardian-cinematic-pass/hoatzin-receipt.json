@@ -1,52 +1,86 @@
 {
   "guardian": "hoatzin",
-  "candidate": "v8",
-  "sha256": "d79bb927c84c0ab3839cc78d9a77f2f83c6400d36b14e33ad35e238421a6f73e",
-  "bytes": 7774268,
-  "native_studio": "E:\\Vivarium\\build\\guardian-review\\hoatzin-cinematic-v8-20261012",
-  "native_populated": "E:\\Vivarium\\build\\guardian-review\\hoatzin-populated-v8-20261012",
+  "candidate": "solo-v14-selective-selected",
+  "sha256": "99226c9e719385755a3c733a40a2111833b88bef8d084ff146b55690660a9a16",
+  "changes": [
+    "Restrained anterior crop and narrower curved neck selectively integrated into existing detailed candidate.",
+    "Rounded finer vane outlines, subdued broken margins, projected breast/shoulder coverts preserve thin closed layers and reduce exposed core.",
+    "Four conforming hinged eyelids add idle blink and closed rest; shared facial UVs remove radial pore bands.",
+    "Existing walk/feed durations, skeletal contract, four tail joints, eleven embedded maps and physical facial details retained.",
+    "Hoatzin uses local foothold/trunk-roof handling; wider foothold search rejected because it did not improve peak reach."
+  ],
+  "source_sha256": {
+    "scripts/guardians/hoatzin_solo_authoring.py": "8cb159746c6ef509e1154e9e8eede457d2d1c4bb51f55852a68c5093c89c3487",
+    "scripts/guardians/generate_hoatzin.py": "d2f7bee9d356b5993a0d92a85006938e7ef22dd2b3e05e6b0f7fe1a7a8100e39",
+    "game/Render/GuardianRenderer.cs": "1e1f3a0bfaa6a4550111f15fe1a9c7f79f1e4f629bdd755b2160510453f83d82",
+    "game/App/GuardianReview.cs": "e74d29958f6db1079c330fb562f53f51443671a73888cb6b89a36f983114fb34",
+    "game/App/FaunaPreview.cs": "bfafa63dc7fe514a046f5d74653bc5915aad96cfba7ff30c4908e62cc0a114f1",
+    "game/Shaders/fauna.gdshader": "35f1da9a7fceb56ab2d88ca2f0573bc6f91eb8499d0a42b810c45911394543e0",
+    "src/Vivarium.Sim/Geometry/OrganismMeshes.cs": "f45c0a9c9e5d3dc508a1d7f9a3507d8c89ec51e1500264784bf61d5351c1b8c1",
+    "src/Vivarium.Sim/Geometry/FaunaHarvestmanMeshes.cs": "781b04d9fb5fe5e9071fe3ffb8a8a617d4ad12ce76a2918940bcfd293053058a",
+    "tests/Vivarium.Sim.Tests/HarvestmanAnatomyTests.cs": "29e49c87a62c0069f35986b9314bd5545f91bf805df9b1967fe27af90c863409"
+  },
+  "native_studio": "build/guardian-review/hoatzin-selective-v14-selected-studio-20261013",
+  "native_populated": "build/guardian-review/hoatzin-selective-v14-selected-populated-20261013",
+  "native_complete": true,
   "contact_summary": {
     "maxLength": 2.3841858e-07,
-    "maxPenetration": 0.00018143654,
-    "maxBend": 0.3792326,
-    "maxDisplacement": 0.09687803,
+    "maxPenetration": 0.00017929077,
+    "maxBend": 0.37692386,
+    "maxDisplacement": 0.09688453,
     "maxFootPenetration": 0.004011333,
     "maxSkinFootPenetration": 0,
     "maxSkinBodyPenetration": 0,
     "maxSkinTailPenetration": 0,
-    "skinRestReconstructionError": 1.3607711e-05,
-    "recoveredBend": 6.894113e-05,
+    "skinRestReconstructionError": 1.383846e-05,
+    "recoveredBend": 6.725598e-05,
     "renderedGround": "same sampled height function as contact constraints",
     "shrub": "lanternbrush",
     "shrubPhases": "0-44 chest brush;45-89 tail segment interior;90-149 released",
     "contactScope": "bone capsules/sole proxies and rendered shrub AABBs; not exact deformed mesh collision"
   },
-  "populated_frames": 180,
   "populated_maxima_m_or_rad": {
-    "skinFootPenetration": 0.0,
-    "skinBodyPenetration": 0.0,
-    "skinTailPenetration": 0.0,
-    "footReachError": 0.20941757,
-    "stanceFootGap": 0.031493127,
+    "skinFootPenetration": 0,
+    "skinBodyPenetration": 0,
+    "skinTailPenetration": 0,
+    "footReachError": 0.21851113,
+    "footRetargetDistance": 0.13361247,
+    "stanceFootTravel": 0.12617996,
+    "stanceFootGap": 0.030179918,
     "tailLengthError": 2.3841858e-07,
-    "tailDeflection": 0.17457941,
-    "tailBendDeviation": 0.35926968,
-    "BodyTrunkCorrection": 0.008757003
+    "tailDeflection": 0.1685334,
+    "tailBendDeviation": 0.15264007,
+    "BodyTrunkCorrection": 0,
+    "frames": 180,
+    "loaded_flora_species": 28,
+    "fauna": 134,
+    "skin_sampler_valid": true
   },
-  "structural": "E:\\Vivarium\\.clanker\\tasks\\guardian-hoatzin-solo\\structural-v8.json",
-  "tests": "build/guardian-review/hoatzin-solo-tests/hoatzin-beetle-solo.trx",
-  "tests_passed": 21,
+  "structural": ".clanker/tasks/guardian-hoatzin-solo/selective-wake-20261013/structural-v14.json",
+  "structural_result": {
+    "triangles": 317740,
+    "skin_joint_counts": [
+      25
+    ],
+    "image_count": 11,
+    "failures": [],
+    "warnings": []
+  },
+  "tests_passed": 29,
+  "references": ".clanker/tasks/guardian-hoatzin-solo/selective-wake-20261013/references.md",
   "visual_acceptance": "OPEN",
   "gaps": [
-    "Feather layers still read as plates at close range; reduce repetitive borders and refine vane overlap, softer breast transitions and exposed shoulder crescent.",
-    "Long diagonal neck and head/crest proportions need a further video-guided silhouette pass.",
-    "Uneven-root foot reach and stance gap remain unresolved; zero sampled penetration does not establish grounded natural gait.",
-    "Rest eyes remain open; no eyelid blink/closure animation yet.",
-    "No per-leaf/per-triangle collision or broad GPU performance acceptance."
+    "Close feather edges still read as plates; residual crop transition/exposed core and dark surface require more surfacing work.",
+    "Foot reach/retarget/stance gap remain open; zero sampled penetration is not grounded natural gait acceptance.",
+    "Closed lids now cover iris but lid/face contour and plumage clumping remain artistic gaps.",
+    "Sparse vertices/capsules/shrub AABBs exclude triangle interiors and individual leaves/branches; no broad performance acceptance."
   ],
-  "references": [
-    "https://macaulaylibrary.org/asset/466832581",
-    "https://macaulaylibrary.org/asset/201793671"
-  ],
-  "observations": "Actual native source playback: broader round-ended dark coverts, narrow pale borders, irregular backswept crest, head/neck reach and body weight shift. Repeated slow motion is not a measured walking speed."
+  "failed_experiments": [
+    "v9 upper-left/lower-right lid winding corrected before native selection.",
+    "v10 native exposed anterior crop; v11 projection layers initially coincident, v12 restores thickness.",
+    "v10 native radial UV/center-height ring on closed lid; v13 flattens dome, v14 shares facial chart.",
+    "v14 wider foothold radii retained219mm peak reach; removed extra search rather than claiming improvement.",
+    "v15 full anterior buff rings created an artificial gold neck collar in native closeups. Rejected and preserved; selected v14 rerun with final runtime.",
+    "Stiltclaw v1 seed-zero neutral floor mismatch; v2 recomputed legacy oval normals inward; v3 corrects only own oval winding."
+  ]
 }
