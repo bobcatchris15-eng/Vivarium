@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Vivarium.Game</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\Vivarium.Sim\Vivarium.Sim.csproj" />

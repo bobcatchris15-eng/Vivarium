@@ -20,7 +20,8 @@ public static class FoliageBlade
         if (side.LengthSq < 1e-8) side = forward.Cross(new Vec3(1, 0, 0));
         side = Axis.RotateAround(side.Normalized(), forward, roll);
         var up = side.Cross(forward).Normalized();
-        int n = m.FloraDetailLevel switch { 1 => Math.Max(2, segments - 1), 2 => 2, _ => Math.Clamp(segments, 2, 6) };
+        int n = m.FloraDetailLevel switch { 1 => Math.Max(2, segments - 1), 2 => 2, _ => Math.Clamp(segments + 2, 4, 8) };
+        if (m.Lod is { } lod) n = lod.Segments(n, 3);
         int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
 
         Vec3 At(double t, double x)

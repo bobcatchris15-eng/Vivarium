@@ -3,7 +3,7 @@ using Vivarium.Sim.World;
 namespace Vivarium.Sim.Water;
 
 public readonly record struct FluidParticle(Vec3 Position, Vec3 Velocity, double Volume, ulong Source);
-public sealed record FluidState(FluidParticle[] Particles, Dictionary<ulong,double> SourceRemainders, double Time, double Remainder);
+public sealed record FluidState(FluidParticle[] Particles, Dictionary<ulong,double> SourceRemainders, double Time, double Remainder, Dictionary<ulong,long>? EmissionPhases=null);
 
 /// <summary>Position-based incompressible fluid: free 3D motion, volume-weighted pressure and solid contacts.</summary>
 public sealed class ParticleFluid
@@ -152,7 +152,10 @@ public sealed class ParticleFluid
         {
             var f=_particles[i];
             if(!_domain.Contains(f.Position.XZ)){budget.BoundaryOutflow+=f.Volume;_particles.RemoveAt(i);continue;}
-            if(f.Position.Y<_ground(f.Position.XZ)-.2){throw new InvalidOperationException("Fluid passed through ground");}
+            // A parcel this far under the ground means the solver lost contact (a steep cell, a terrain edit, a
+            // particle spawned inside a prop). Retire it rather than throwing: this drives a real-time visual, and
+            // a decorative system must never take the frame down with it.
+            if(f.Position.Y<_ground(f.Position.XZ)-.2){budget.Infiltration+=f.Volume;_particles.RemoveAt(i);continue;}
             double exposedArea=Math.Pow(f.Volume,2.0/3.0);
             double ev=Math.Min(f.Volume,evaporation*dt*exposedArea);
             double inf=f.Position.Y<_ground(f.Position.XZ)+Radius(f.Volume)*1.8?Math.Min(f.Volume-ev,infiltration*dt*exposedArea):0;
@@ -195,6 +198,19 @@ public sealed class ParticleFluid
         }
         Version++;return removed;
     }
+    /// <summary>
+    /// Retires every parcel the predicate accepts. Callers use this to hand water over to whatever owns it
+    /// downstream (standing water, drainage) without having to reimplement the storage.
+    /// </summary>
+    public int RemoveWhere(Func<FluidParticle, bool> shouldRemove)
+    {
+        int removed = 0;
+        for(int i=_particles.Count-1;i>=0;i--)
+            if(shouldRemove(_particles[i])){_particles.RemoveAt(i);removed++;}
+        if(removed>0)Version++;
+        return removed;
+    }
+
     public FluidState Export()=>new(_particles.ToArray(),new(_sourceRemainders),Time,Remainder);
     public void Restore(FluidState state)
     {

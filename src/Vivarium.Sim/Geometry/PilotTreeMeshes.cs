@@ -418,23 +418,11 @@ public static class PilotTreeMeshes
         {
             var axis=(tip-baseP).Normalized();var side=axis.Cross(Vec3.Up).Normalized();
             if(side.LengthSq<.1)side=new Vec3(1,0,0);
-            var normal=side.Cross(axis).Normalized();if(normal.Y<0)normal=-normal;
-            var mid=new Vec3[segments+1];var left=new Vec3[segments+1];var right=new Vec3[segments+1];
-            for(int i=0;i<=segments;i++)
-            {
-                double t=i/(double)segments;
-                double w=width*Math.Pow(Math.Sin(Math.PI*t),.8)+width*.016;
-                mid[i]=Vec3.Lerp(baseP,tip,t)+normal*width*.18*Math.Sin(t*Math.PI);
-                left[i]=mid[i]-side*w-normal*w*.12;
-                right[i]=mid[i]+side*w*(.9+.12*Math.Sin(t*8+phase))-normal*w*.12;
-            }
-            for(int i=0;i<segments;i++)
-            {
-                Quad(left[i],mid[i],mid[i+1],left[i+1],color,0,normal);
-                Quad(mid[i],right[i],right[i+1],mid[i+1],Primitives.Scale(color,.93),0,normal);
-                Quad(left[i+1],mid[i+1]-normal*.002,mid[i]-normal*.002,left[i],Primitives.Scale(color,.74),0,-normal);
-                Quad(mid[i+1]-normal*.002,right[i+1],right[i],mid[i]-normal*.002,Primitives.Scale(color,.74),0,-normal);
-            }
+            int start=m.VertexCount;
+            Primitives.CurvedLeaf(m,baseP,tip,side,width,color,Primitives.Scale(color,.88),
+                camber:width*.18,longitudinal:Math.Max(6,segments),asymmetry:Math.Sin(phase+baseP.X)*.08);
+            // Pilot tree material distinguishes foliage through COLOR.a rather than flora UV2.
+            for(int i=start;i<m.VertexCount;i++) m.Colors[i*4+3]=0;
         }
 
         public void Cycad()

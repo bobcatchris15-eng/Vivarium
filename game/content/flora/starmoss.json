@@ -1,0 +1,85 @@
+{
+  "id": "starmoss",
+  "name": "Starmoss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Bioluminescent low moss cushion for cool, moist ground.",
+  "description": "Dense emerald cushions hold tiny green points of light close to the soil.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.8,
+      "rock": 0.2
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.28,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.3,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0.025,
+    "minSuitability": 0.18,
+    "minWaterDepth": 0
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.2,
+    "maturityDays": 10,
+    "lifespanDays": 360,
+    "nutrientPerBiomass": 0.25,
+    "radiusAtMax": 0.16,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.25,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.03,
+  "grazingValue": 0.35,
+  "visual": {
+    "shape": "carpet",
+    "color": [
+      0.18,
+      0.39,
+      0.24
+    ],
+    "color2": [
+      0.48,
+      0.72,
+      0.36
+    ],
+    "colorVariance": 0.06,
+    "height": 0.025,
+    "bioluminescenceColor": [
+      0.64,
+      1.0,
+      0.38
+    ],
+    "bioluminescenceStrength": 1.1
+  },
+  "tags": [
+    "moss",
+    "bioluminescent"
+  ]
+}

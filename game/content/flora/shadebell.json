@@ -99,7 +99,7 @@
     "seedFraction": 0.17,
     "viability": 0.64,
     "dormancyDays": 14,
-    "dispersalRadius": 0.55,
+    "dispersalRadius": 0.85,
     "fruitColor": [
       0.3,
       0.16,

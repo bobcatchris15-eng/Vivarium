@@ -1,0 +1,97 @@
+{
+  "id": "siltstars",
+  "name": "Siltstars",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Fully aquatic, bottom-anchored luminous low carpet that spreads over submerged soil.",
+  "description": "Tiny blue-green rosettes form a close ground-hugging carpet on pond floors at any water depth.",
+  "habitat": {
+    "substrates": {
+      "soil": 0.36,
+      "gravel": 0.5,
+      "water": 1.0
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.12
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "minWaterDepth": 0.005,
+    "hardMinMoisture": 0.72,
+    "minSuitability": 0.15,
+    "unlimitedWaterDepth": true,
+    "hardMaxMoisture": 1
+  },
+  "growth": {
+    "ratePerDay": 0.18,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.12,
+    "declinePerDay": 0.12,
+    "maturityDays": 5,
+    "lifespanDays": 200,
+    "nutrientPerBiomass": 0.22,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.025
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.32,
+    "propagules": 4,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.12,
+    "crowdingLimit": 6,
+    "sensitivity": 0.3
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.3,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.7,
+  "grazingValue": 0.3,
+  "visual": {
+    "shape": "carpet",
+    "color": [
+      0.12,
+      0.33,
+      0.39
+    ],
+    "color2": [
+      0.28,
+      0.72,
+      0.78
+    ],
+    "colorVariance": 0.05,
+    "height": 0.012,
+    "bioluminescenceColor": [
+      0.3,
+      0.78,
+      1.0
+    ],
+    "bioluminescenceStrength": 1.65
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "submerged",
+    "bottom_anchored",
+    "bioluminescent"
+  ]
+}

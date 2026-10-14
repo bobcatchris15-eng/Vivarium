@@ -291,7 +291,12 @@ public static partial class OrganismMeshes
         int first = m.VertexCount;
         Primitives.Tube(m, path, radii, 24, (i, v) => (Body, 0, i / (double)samples, v, 5, 4), new Vec3(0, 0, 1));
         // Tube cross-section is slightly compressed into a ramshorn-like disc.
-        for (int i = first; i < m.VertexCount; i++) m.Positions[i * 3 + 2] *= 0.85f;
+        for (int i = first; i < m.VertexCount; i++)
+        {
+            m.Positions[i * 3 + 2] *= 0.85f;
+            var n = new Vec3(m.Normals[i*3],m.Normals[i*3+1],m.Normals[i*3+2]/0.85).Normalized();
+            m.Normals[i*3]=(float)n.X;m.Normals[i*3+1]=(float)n.Y;m.Normals[i*3+2]=(float)n.Z;
+        }
         var aperture = path[^1];
         BodySegment(m, aperture, new Vec3(0.040, 0.040, 0.044), 12, 18,
             (a, b) => (Body, 0, a, b, 7, 4));

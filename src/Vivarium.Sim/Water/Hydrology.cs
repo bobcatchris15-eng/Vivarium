@@ -39,6 +39,8 @@ public sealed class WaterBudget
 /// </summary>
 public sealed class Hydrology
 {
+    /// <summary>When attached by the game, these arrays are ecology samples only. 3D liquid owns volume.</summary>
+    public SurfaceLiquid? Liquid {get;internal set;}
     public GridSpec Grid { get; }
     public WaterConfig Config { get; }
     /// <summary>Dynamic surface-water depth per cell (m), â‰¥ 0. Groundwater is never stored here.</summary>
@@ -60,6 +62,26 @@ public sealed class Hydrology
     private readonly int[] _nE, _nW, _nN, _nS; // neighbour cell index or -1 when outside the domain
     private readonly int[] _boundaryCells;
     private bool _hadBoundaryFlow;
+    private readonly bool[] _activeMask;
+    private readonly int[] _activeCells;
+    private readonly int[] _domainOrdinal;
+    private int SelectActiveCells()
+    {
+        Array.Clear(_activeMask);
+        foreach (int cell in Grid.DomainCells)
+        {
+            if (Depth[cell] <= 0 && _faceE[cell] == 0 && _faceN[cell] == 0) continue;
+            _activeMask[cell] = true;
+            if (_nE[cell] >= 0) _activeMask[_nE[cell]] = true;
+            if (_nW[cell] >= 0) _activeMask[_nW[cell]] = true;
+            if (_nN[cell] >= 0) _activeMask[_nN[cell]] = true;
+            if (_nS[cell] >= 0) _activeMask[_nS[cell]] = true;
+        }
+        int count = 0;
+        // Keep the original domain order, preserving transfer and budget accumulation order.
+        foreach (int cell in Grid.DomainCells) if (_activeMask[cell]) _activeCells[count++] = cell;
+        return count;
+    }
 
     public double CellArea => Grid.CellSize * Grid.CellSize;
     /// <summary>Signed discharge through each cell's east face (+X), mÂ³/s. Authoritative surface-water momentum.</summary>
@@ -71,6 +93,9 @@ public sealed class Hydrology
     {
         Grid = grid; Config = config; _terrain = hf;
         int n = grid.Count;
+        _activeMask = new bool[n]; _activeCells = new int[n];
+        _domainOrdinal = new int[n];
+        for (int i = 0; i < grid.DomainCells.Length; i++) _domainOrdinal[grid.DomainCells[i]] = i;
         Depth = new double[n]; Bed = new double[n]; FlowX = new double[n]; FlowZ = new double[n];
         _faceE = new double[n]; _faceN = new double[n];
         _deltaVolume = new double[n]; _outScale = new double[n];
@@ -117,6 +142,7 @@ public sealed class Hydrology
     /// <summary>Pours <paramref name="volume"/> mÂ³ over a disc (smooth falloff). Returns the volume added.</summary>
     public double AddWater(Vec2 centre, double radius, double volume)
     {
+        if(Liquid!=null)return Liquid.Add(centre,radius,volume);
         var cells = WeightsInDisc(centre, radius, out double total);
         if (total <= 0 || volume <= 0) return 0;
         foreach (var (c, wgt) in cells) Depth[c] += volume * wgt / total / CellArea;
@@ -128,6 +154,7 @@ public sealed class Hydrology
     /// <summary>Soaks up to <paramref name="volume"/> mÂ³ of surface water from a disc. Returns the volume removed.</summary>
     public double RemoveWater(Vec2 centre, double radius, double volume)
     {
+        if(Liquid!=null)return Liquid.Remove(centre,radius,volume);
         var cells = WeightsInDisc(centre, radius, out double total);
         if (total <= 0 || volume <= 0) return 0;
         double removed = 0;
@@ -157,10 +184,11 @@ public sealed class Hydrology
     }
 
     /// <summary>Dynamic surface-water depth only; groundwater is excluded.</summary>
-    public double DepthAt(Vec2 p) { int c = Grid.CellAt(p); return c >= 0 && Grid.InDomain(c) ? Depth[c] : 0; }
+    public double DepthAt(Vec2 p) { if(Liquid!=null)return Liquid.DepthAt(p);int c = Grid.CellAt(p); return c >= 0 && Grid.InDomain(c) ? Depth[c] : 0; }
     public double SurfaceWaterDepth(int idx) => Grid.InDomain(idx) ? Depth[idx] : 0;
     public double SurfaceWaterDepth(Vec2 p)
     {
+        if(Liquid!=null)return Liquid.DepthAt(p);
         int c = Grid.CellAt(p);
         if (c < 0 || !Grid.InDomain(c) || Depth[c] <= 0) return 0;
         return Math.Max(0.0, (HydraulicBed(c) + Depth[c]) - _terrain.Height(p));
@@ -175,6 +203,7 @@ public sealed class Hydrology
     /// <summary>Fluid surface elevation, or NaN in dry cells.</summary>
     public double SurfaceAt(Vec2 p)
     {
+        if(Liquid!=null){double surface=Liquid.SurfaceAt(p);return IsWaterTable(p)?Math.Max(WaterTable,double.IsNaN(surface)?WaterTable:surface):surface;}
         int c = Grid.CellAt(p);
         if (c < 0 || !Grid.InDomain(c) || !IsWet(p)) return double.NaN;
         bool isTable = IsWaterTable(p);
@@ -239,7 +268,7 @@ public sealed class Hydrology
     }
 
     /// <summary>Dynamic surface-water volume only. The implicit groundwater reservoir is intentionally not counted.</summary>
-    public double Volume() { double v = 0; foreach (int idx in Grid.DomainCells) v += Depth[idx]; return v * CellArea; }
+    public double Volume() { if(Liquid!=null)return Liquid.Volume;double v = 0; foreach (int idx in Grid.DomainCells) v += Depth[idx]; return v * CellArea; }
     public double SurfaceVolume() => Volume();
 
     /// <summary>Groundwater is implicit, so initialization no longer materializes it into dynamic surface storage.</summary>
@@ -251,12 +280,13 @@ public sealed class Hydrology
     public void Advance(double dt, Substrate[]? substrates = null) => AdvanceCore(dt, substrates ?? Substrates, SubstrateProvider);
     public void Advance(double dt, Func<int, Substrate> substrateProvider) => AdvanceCore(dt, Substrates, substrateProvider);
 
-    public void Step(double dt) => Advance(dt);
-    public void Step(double dt, Substrate[]? substrates) => Advance(dt, substrates);
-    public void Step(double dt, Func<int, Substrate> substrateProvider) => Advance(dt, substrateProvider);
+    public void Step(double dt) {if(Liquid==null)Advance(dt);}
+    public void Step(double dt, Substrate[]? substrates) {if(Liquid==null)Advance(dt, substrates);}
+    public void Step(double dt, Func<int, Substrate> substrateProvider) {if(Liquid==null)Advance(dt, substrateProvider);}
 
     private void AdvanceCore(double dt, Substrate[]? substrates, Func<int, Substrate>? substrateProvider)
     {
+        if (Liquid != null) return;
         if (!double.IsFinite(dt) || dt <= 0) return;
 
         double totalDischarge = 0;
@@ -346,6 +376,9 @@ public sealed class Hydrology
             Budget.SpringInflow += vol;
         }
 
+        cellCount = SelectActiveCells();
+        domainCells = _activeCells;
+
         for (int i = 0; i < cellCount; i++)
         {
             int idx = domainCells[i];
@@ -377,7 +410,7 @@ public sealed class Hydrology
             if (lossRock > 0 || lossSoil > 0 || lossGravel > 0)
             {
                 int subLen = substrates.Length;
-                bool matchCellCount = subLen == cellCount && subLen < Grid.Count;
+                bool matchCellCount = subLen == Grid.DomainCells.Length && subLen < Grid.Count;
                 for (int i = 0; i < cellCount; i++)
                 {
                     int idx = domainCells[i];
@@ -385,7 +418,7 @@ public sealed class Hydrology
                     if (d <= 0) continue;
                     Substrate sub;
                     if (matchCellCount)
-                        sub = substrates[i];
+                        sub = substrates[_domainOrdinal[idx]];
                     else if ((uint)idx < (uint)subLen)
                         sub = substrates[idx];
                     else
@@ -739,6 +772,17 @@ public sealed class Hydrology
         double SurfaceHydration(double depth) =>
             depth <= 0 ? 0 : MathD.Clamp01(1 - Math.Exp(-depth / depthScale));
 
+        // Soil only couples on the environment cadence. Evaluate water hydration once per cell,
+        // and the fixed neighbour kernel once per pass, instead of repeating exp/sqrt 24 times per cell.
+        foreach (int idx in Grid.DomainCells) scratch[idx] = SurfaceHydration(Depth[idx]);
+        var neighbourWeight = new double[25];
+        for (int dj = -2; dj <= 2; dj++)
+            for (int di = -2; di <= 2; di++)
+            {
+                double distance = Grid.CellSize * Math.Sqrt(di * di + dj * dj);
+                neighbourWeight[(dj + 2) * 5 + di + 2] = Math.Exp(-distance / (capRange * 2.5));
+            }
+
         foreach (int idx in Grid.DomainCells)
         {
             double m = moisture.Values[idx];
@@ -751,7 +795,7 @@ public sealed class Hydrology
                 : Math.Max(eco.MoistureDryBaseline, 0.85 * capillary * capillary);
 
             // Surface water is deliberately saturating: a deeper pool matters, but cannot make soil > fully wet.
-            double localTarget = 0.98 * SurfaceHydration(Depth[idx]);
+            double localTarget = 0.98 * scratch[idx];
 
             // Immediate neighbours contribute according to their actual dynamic water amount. Longer-range
             // smoothing remains the job of the soil-moisture diffusion field rather than a water-distance binary.
@@ -764,10 +808,9 @@ public sealed class Hydrology
                     int ii = i + di, jj = j + dj;
                     if (!Grid.InDomain(ii, jj)) continue;
                     int n = Grid.Index(ii, jj);
-                    double h = SurfaceHydration(Depth[n]);
+                    double h = scratch[n];
                     if (h <= 0) continue;
-                    double distance = Grid.CellSize * Math.Sqrt(di * di + dj * dj);
-                    neighbourTarget = Math.Max(neighbourTarget, 0.98 * h * Math.Exp(-distance / (capRange * 2.5)));
+                    neighbourTarget = Math.Max(neighbourTarget, 0.98 * h * neighbourWeight[(dj + 2) * 5 + di + 2]);
                 }
 
             double target = MathD.Clamp01(Math.Max(groundwaterTarget, Math.Max(localTarget, neighbourTarget)));
@@ -789,6 +832,14 @@ public sealed class Hydrology
         using var d = new DigestBuilder();
         foreach (int idx in Grid.DomainCells) d.Add(Depth[idx]).Add(_faceE[idx]).Add(_faceN[idx]);
         foreach (var s in Springs) d.Add(s.Id.Value).Add(s.X).Add(s.Z).Add(s.Discharge);
+        if(Liquid!=null)
+        {
+            var state=Liquid.CaptureState();d.Add(state.Time).Add(state.Remainder);
+            foreach(var p in state.Particles)d.Add(p.Position.X).Add(p.Position.Y).Add(p.Position.Z)
+                .Add(p.Velocity.X).Add(p.Velocity.Y).Add(p.Velocity.Z).Add(p.Volume).Add(p.Source);
+            foreach(var pair in state.SourceRemainders.OrderBy(p=>p.Key))d.Add(pair.Key).Add(pair.Value);
+            if(state.EmissionPhases!=null)foreach(var pair in state.EmissionPhases.OrderBy(p=>p.Key))d.Add(pair.Key).Add(pair.Value);
+        }
         d.Add(Budget.SpringInflow).Add(Budget.GroundwaterInflow).Add(Budget.GroundwaterRecharge).Add(Budget.Evaporation).Add(Budget.Infiltration).Add(Budget.BoundaryOutflow).Add(Budget.ToolInflow).Add(Budget.ToolRemoval);
         return d.Hex();
     }

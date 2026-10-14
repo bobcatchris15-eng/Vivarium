@@ -127,6 +127,12 @@ public static class SurfaceFloatRules
             }
         }
 
+        // Substeps are a pure stability requirement and are NOT capped to a slice budget here: taking more
+        // substeps than the caller's halo can cover is only wasteful, whereas taking FEWER makes amt exceed rho
+        // and lets the next[i] < 0 guard below destroy mass at the domain edge. AquaticSystem.Step guarantees the
+        // production path is bounded by sizing each slice from the global wet-domain max speed, which upper-bounds
+        // the max speed of any slice's own domain; a direct caller with a too-small domain still gets correct,
+        // conservative-in-the-limit behaviour rather than a silent clamp.
         int substeps = maxSpeed > 1e-9
             ? Math.Clamp((int)Math.Ceiling(maxSpeed * dtSeconds / (AquaticConst.CflSafety * cell)), 1, AquaticConst.MaxSubsteps)
             : 1;

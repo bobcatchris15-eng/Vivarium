@@ -24,7 +24,8 @@ public static partial class OrganismMeshes
         switch (sp.Shape)
         {
             case "carpet":
-                if (sp.Id == "floodlace_moss") Floodlace(m, rng, seed, c1, c2);
+                if (sp.Id == "siltstars") Siltstars(m, rng, seed, c1, c2);
+                else if (sp.Id == "floodlace_moss") Floodlace(m, rng, seed, c1, c2);
                 else if (sp.Id == "velvetweave_moss") Velvetweave(m, rng, seed, c1, c2);
                 else CarpetDefault(m, rng, seed, c1, c2);
                 break;
@@ -103,7 +104,7 @@ public static partial class OrganismMeshes
             case "vine_clinglace": case "clinglace": Clinglace(m, rng, seed, c1, c2, juvenile); break;
             case "vine_spiralvine": case "spiralvine": Spiralvine(m, rng, seed, c1, c2, juvenile); break;
             case "vine_fenhook": case "fenhook": Fenhook(m, rng, seed, c1, c2, juvenile); break;
-            case "mushroom_cluster": Mushrooms(m, rng, seed, c1, c2, juvenile); break;
+            case "mushroom_cluster": Mushrooms(m, rng, seed, c1, c2, juvenile, sp.Id=="ghostbonnet"); break;
             case "bracket": Bracket(m, rng, c1, c2); break;
             case "epiphytic_rosette":
             case "epiphyte":
@@ -122,6 +123,7 @@ public static partial class OrganismMeshes
                     Succulent(m, rng, seed, c1, c2, juvenile);
                 break;
             case "tussock": Tussock(m, rng, seed, c1, c2, juvenile); break;
+            case "pampas": Pampas(m, rng, seed, c1, c2, juvenile, lod); break;
             case "kinkcane_brake": Kinkcane(m, rng, c1, c2, sp.Height / Math.Max(0.01, sp.RadiusAtMax)); break;
             case "veilblade_curtain": Veilblade(m, rng, c1, c2); break;
             case "hookthicket_brake": Hookthicket(m, rng, c1, c2, juvenile); break;
@@ -137,6 +139,7 @@ public static partial class OrganismMeshes
                 break;
             case "shrub_embercrown": ShrubEmbercrown(m, rng, seed, c1, c2, juvenile); break;
             case "shrub_lanternbrush": ShrubLanternbrush(m, rng, c1, c2); break;
+            case "shrub_glowbriar": ShrubGlowbriar(m, rng, seed, c1, c2, juvenile); break;
             case "shrub_shadebell": ShrubShadebell(m, rng, seed, c1, c2, juvenile); break;
             case "ribbonweed": case "streamribbon": Streamribbon(m, rng, seed, c1, c2, juvenile); break;
             case "milfoil": case "fencomb": Fencomb(m, rng, seed, c1, c2, juvenile); break;
@@ -629,7 +632,7 @@ public static partial class OrganismMeshes
             var bronze = new[] { 0.55, 0.44, 0.27 };
             var dusk = new[] { 0.55, 0.50, 0.48 };
             Primitives.Tube(m, podPath, podRadii, 9,
-                (i, v) => (Primitives.Mix(bronze, dusk, i >= 5 ? 0.62 : 0.18 + 0.08 * Math.Sin(v * Math.PI * 10)), 1, i / 6.0, v, 0, 0));
+                (i, v) => (Primitives.Mix(bronze, dusk, i >= 5 ? 0.62 : 0.18 + 0.08 * Math.Sin(v * Math.PI * 10)), 1, i / 6.0, v, 1.4, 1.0));
         }
     }
 
@@ -3811,7 +3814,7 @@ public static partial class OrganismMeshes
     /// - Substrate mycelial felt pad and radiating hyphal cords anchoring the colony into organic litter.
     /// - Authored in unit-normalized bounds [0..1] for height and radius.
     /// </summary>
-    private static void Mushrooms(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
+    private static void Mushrooms(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile, bool wholeBonnets=false)
     {
         var stemCol = new[] { 0.88, 0.85, 0.79 };
         var stemBaseCol = new[] { 0.65, 0.58, 0.50 };
@@ -3839,8 +3842,12 @@ public static partial class OrganismMeshes
 
         // 2. Troop of multi-age fruiting bodies (densely packed 34-42 bonnets)
         int n = juvenile ? (16 + rng.NextInt(6)) : (36 + rng.NextInt(8));
+        // Luminous bonnets keep complete cap/gill/stipe groups. Reduce the troop and radial
+        // detail together; loose-part culling otherwise leaves glowing stalks with no caps.
+        if(wholeBonnets)n=Math.Max(3,(int)Math.Round(n*(m.Lod?.LeafFraction??1)));
         for (int k = 0; k < n; k++)
         {
+            int bonnetStart=m.VertexCount;
             int clusterIdx = k % 4;
             double clAng = clusterIdx * (Math.PI * 2 / 4);
             var clCenter = new Vec3(Math.Cos(clAng) * (0.22 * scale), 0, Math.Sin(clAng) * (0.22 * scale));
@@ -3879,7 +3886,8 @@ public static partial class OrganismMeshes
 
             // Cap geometry with conical umbo and radial sulcate fluting
             int start = m.VertexCount;
-            const int around = 24, rings = 5;
+            int around=wholeBonnets?Math.Max(8,(int)Math.Round(24*(m.Lod?.Radial??1))):24;
+            int rings=wholeBonnets?Math.Max(3,(int)Math.Round(5*(m.Lod?.Radial??1))):5;
             double phase = rng.Range(0, 2 * Math.PI);
             double asym = rng.Range(0.04, 0.09);
 
@@ -3950,6 +3958,7 @@ public static partial class OrganismMeshes
                 Primitives.TriangleFacing(m, a, c, a + 1, -Vec3.Up);
                 Primitives.TriangleFacing(m, a + 1, c, c + 1, -Vec3.Up);
             }
+            if(wholeBonnets)m.EssentialSpans.Add((bonnetStart,m.VertexCount-bonnetStart));
         }
     }
 
@@ -5602,53 +5611,9 @@ public static partial class OrganismMeshes
     private static void EmbercrownLeaflet(MeshData m, Vec3 root, Vec3 lDir, Vec3 lSide, Vec3 lNorm,
         double len, double width, double[] c1, double[] c2, Rng rng)
     {
-        var v0 = root;
-        var v1 = root + lDir * (len * 0.36) - lSide * (width * 0.5) + lNorm * (len * 0.04);
-        var v2 = root + lDir * (len * 0.48) - lNorm * (len * 0.015);
-        var v3 = root + lDir * (len * 0.36) + lSide * (width * 0.5) + lNorm * (len * 0.04);
-        var v4 = root + lDir * len - lNorm * (len * 0.035);
-
-        var colTop = Primitives.Mix(c1, c2, rng.Range(0.08, 0.24));
-        var colUnder = Primitives.Mix(Primitives.Scale(c2, 0.82), new[] { 0.42, 0.52, 0.32 }, 0.45);
-        int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
-
-        void LeafFace(Vec3 a, Vec3 b, Vec3 c, double[] col, Vec3 upTarget, int faceIdx)
-        {
-            var norm = (b - a).Cross(c - a).Normalized();
-            if (norm.Dot(upTarget) < 0)
-            {
-                var tmp = b; b = c; c = tmp;
-                norm = -norm;
-            }
-            int Vertex(Vec3 p) => m.AddVertex(p, norm, col, 1.0,
-                (p - root).Dot(lDir) / len,
-                0.5 + (p - root).Dot(lSide) / width, faceIdx, 1);
-            int ia = Vertex(a), ib = Vertex(b), ic = Vertex(c);
-            Primitives.TriangleFacing(m, ia, ib, ic, norm);
-        }
-
-        if (m.FloraDetailLevel is 1 or 2)
-        {
-            LeafFace(v0, v1, v4, colTop, lNorm, 0);
-            LeafFace(v0, v4, v3, colTop, lNorm, 0);
-            m.RecordLeafSpan(leafVertex, leafIndex, root, len);
-            return;
-        }
-
-        // Upper face (UV2.y = 1.0, normal towards +lNorm)
-        LeafFace(v0, v1, v2, colTop, lNorm, 0);
-        LeafFace(v0, v2, v3, colTop, lNorm, 0);
-        LeafFace(v2, v1, v4, colTop, lNorm, 0);
-        LeafFace(v2, v4, v3, colTop, lNorm, 0);
-
-        if (!m.FloraDetailLevel.HasValue)
-        {
-            LeafFace(v0, v1, v2, colUnder, -lNorm, 1);
-            LeafFace(v0, v2, v3, colUnder, -lNorm, 1);
-            LeafFace(v2, v1, v4, colUnder, -lNorm, 1);
-            LeafFace(v2, v4, v3, colUnder, -lNorm, 1);
-        }
-        m.RecordLeafSpan(leafVertex, leafIndex, root, len);
+        var top = Primitives.Mix(c1, c2, rng.Range(0.08, 0.24));
+        Primitives.CurvedLeaf(m, root, root + lDir * len - lNorm * (len * 0.035), lSide, width * 0.48,
+            top, Primitives.Mix(top, c2, 0.25), camber: len * 0.06, longitudinal: 7, asymmetry: rng.Range(-0.09, 0.09));
     }
 
     private static void EmbercrownCompoundLeaf(MeshData m, Vec3 root, Vec3 dir, double length,
@@ -6059,9 +6024,8 @@ public static partial class OrganismMeshes
             if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
 
             // Tier 1: Outer large broadleaves (10 leaves, age-graded mature leaves with drooping petioles)
-            int outerCount = juvenile
-                ? (detail >= 2 ? 6 : (detail == 1 ? 7 : 8))
-                : (detail >= 2 ? 6 : (detail == 1 ? 8 : 10));
+            // Preserve the same attachments and RNG stream across material detail tiers.
+            int outerCount = juvenile ? 8 : 10;
             for (int li = 0; li < outerCount; li++)
             {
                 double leafAngle = li * (Math.PI * 2 / outerCount) + rng.Range(-0.08, 0.08);
@@ -6070,15 +6034,15 @@ public static partial class OrganismMeshes
                 double lWidth = lLen * 0.58;
                 ulong leafSeed = Rng.Mix(seed, (ulong)(li * 317 + 5));
 
-                Broadleaf.BuildLeaf(m, tipPos, lDir, lLen, lWidth, BroadleafOutline.Cordate, leafSeed,
-                    c1, c2, age: 0.85, camber: 0.26, midribFold: 0.14, wavyMargin: 0.035, wavyFrequency: 5.0,
+                Broadleaf.BuildLeaf(m, tipPos, lDir, lLen, lWidth, BroadleafOutline.Ovate, leafSeed,
+                    c1, c2, age: 0.85, camber: 0.13, midribFold: 0.045, wavyMargin: 0.035, wavyFrequency: 5.0,
                     tipCurl: 0.20, petioleLength: lLen * 0.16, petioleRadius: 0.0045, petioleKink: 0.28,
                     undersideColor: colUnder);
             }
 
             // Tier 2: Inner overlapping rosette leaves (5 leaves) filling the center with younger foliage
             // Pruned for distant LOD tiers to reduce build time and polygon density
-            if (!juvenile && detail == 0)
+            if (!juvenile)
             {
                 int innerCount = 5;
                 for (int li = 0; li < innerCount; li++)
@@ -6089,8 +6053,8 @@ public static partial class OrganismMeshes
                     double lWidth = lLen * 0.60;
                     ulong leafSeed = Rng.Mix(seed, (ulong)(li * 523 + 47));
 
-                    Broadleaf.BuildLeaf(m, tipPos + up * 0.012, lDir, lLen, lWidth, BroadleafOutline.Cordate, leafSeed,
-                        c1, c2, age: 0.25, camber: 0.22, midribFold: 0.12, wavyMargin: 0.025, wavyFrequency: 5.0,
+                    Broadleaf.BuildLeaf(m, tipPos + up * 0.012, lDir, lLen, lWidth, BroadleafOutline.Ovate, leafSeed,
+                        c1, c2, age: 0.25, camber: 0.16, midribFold: 0.055, wavyMargin: 0.025, wavyFrequency: 5.0,
                         tipCurl: 0.12, petioleLength: lLen * 0.14, petioleRadius: 0.0035, petioleKink: 0.20,
                         undersideColor: colUnder);
                 }

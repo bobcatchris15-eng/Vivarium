@@ -11,6 +11,8 @@ internal static class FloraSurfaceProfiles
 
     public static void Bind(ShaderMaterial material, FloraSpeciesDef species, bool photographedLeaves = true)
     {
+        if (species.Id == "plumegrass")
+            material.SetShaderParameter("pampas_plume_color", new Vector3(0.84f, 0.76f, 0.59f));
         var leaf = Leaf(species.Id);
         material.SetShaderParameter("leaf_top", leaf.Top);
         material.SetShaderParameter("top_pigment", leaf.Top);
@@ -19,7 +21,7 @@ internal static class FloraSurfaceProfiles
         material.SetShaderParameter("leaf_type", leaf.Type);
         material.SetShaderParameter("vein_strength", leaf.Veins);
         material.SetShaderParameter("cuticle_sheen", leaf.Sheen);
-        material.SetShaderParameter("leaf_roughness", Mathf.Clamp(0.55f - leaf.Sheen * 0.25f, 0.20f, 0.85f));
+        material.SetShaderParameter("leaf_roughness", Mathf.Clamp(0.70f - leaf.Sheen * 0.18f, 0.20f, 0.85f));
         material.SetShaderParameter("back_roughness", 0.82f);
         material.SetShaderParameter("leaf_transmission", leaf.Transmission);
         material.SetShaderParameter("transmission", leaf.Transmission);

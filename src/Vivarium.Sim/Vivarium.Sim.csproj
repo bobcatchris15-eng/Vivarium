@@ -7,6 +7,8 @@
     <RootNamespace>Vivarium.Sim</RootNamespace>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The editor runs this assembly too; density/contact loops need optimized code in both builds. -->
+    <Optimize>true</Optimize>
   </PropertyGroup>
 
 </Project>

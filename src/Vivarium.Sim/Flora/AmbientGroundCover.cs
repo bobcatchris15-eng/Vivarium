@@ -28,12 +28,15 @@ public sealed class AmbientGroundCoverSystem
         Revision++;
     }
 
-    public void Step(double dt)
+    public void Step(double dt) { foreach (var _ in StepBatches(dt)) { } }
+    public IEnumerable<bool> StepBatches(double dt)
     {
-        if (!(dt > 0) || !double.IsFinite(dt)) return;
+        if (!(dt > 0) || !double.IsFinite(dt)) yield break;
         bool changed = false;
+        int processed = 0;
         foreach (int idx in _w.Grid.DomainCells)
         {
+            if ((processed++ & 15) == 0) yield return true;
             double target = TargetAt(idx);
             double before = Cover[idx];
             // Named plants and flooding clear anonymous filler quickly; vacant ground greens over more slowly.

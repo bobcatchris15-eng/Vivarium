@@ -18,6 +18,7 @@ public partial class SoilDetailRenderer : Node3D
     private VivariumWorld _w = null!;
     private MultiMesh _crumbs = null!, _clods = null!, _twigs = null!, _flakes = null!, _fruit = null!, _blades = null!, _stalks = null!;
     private MultiMeshInstance3D _crumbMmi = null!, _clodMmi = null!, _twigMmi = null!, _flakeMmi = null!, _fruitMmi = null!, _bladeMmi = null!, _stalkMmi = null!;
+    private IEnumerator<bool>? _refresh;
     private double _accum = 999;
     private int _terrainVersion = int.MinValue;
     private long _litterRevision = -1;
@@ -41,6 +42,7 @@ public partial class SoilDetailRenderer : Node3D
 
     public void Build(VivariumWorld w)
     {
+        _refresh?.Dispose(); _refresh = null;
         _w = w;
         _buffers.Clear();
         foreach (var c in GetChildren()) c.QueueFree();
@@ -81,7 +83,12 @@ public partial class SoilDetailRenderer : Node3D
         if (_w == null) return;
         bool enabled = Quality > 0;
         _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = _fruitMmi.Visible = _bladeMmi.Visible = _stalkMmi.Visible = enabled;
-        if (!enabled) { _accum = 999; return; }
+        if (!enabled) { _refresh?.Dispose(); _refresh = null; _accum = 999; return; }
+        if (_refresh != null)
+        {
+            ContinueRefresh();
+            return;
+        }
         _accum += delta;
         if (_accum < 1.0) return;
 
@@ -107,7 +114,8 @@ public partial class SoilDetailRenderer : Node3D
         _litterRevision = _w.Litter.Revision;
         _lastQuality = Quality;
         _lastLocalLitterDigest = ComputeLocalLitterDigest(cam);
-        Refresh();
+        _refresh = Refresh().GetEnumerator();
+        ContinueRefresh();
     }
 
     private long ComputeLocalLitterDigest(Vector3 cam)
@@ -132,7 +140,18 @@ public partial class SoilDetailRenderer : Node3D
         return hash;
     }
 
-    private void Refresh()
+    private void ContinueRefresh()
+    {
+        long begin = System.Diagnostics.Stopwatch.GetTimestamp();
+        do
+        {
+            if (_refresh!.MoveNext()) continue;
+            _refresh.Dispose(); _refresh = null;
+            break;
+        } while (System.Diagnostics.Stopwatch.GetElapsedTime(begin).TotalMilliseconds < 2);
+    }
+
+    private IEnumerable<bool> Refresh()
     {
         var g = _w.Grid; var f = _w.Fields;
         Vector3 camPos = Camera?.GlobalPosition ?? Vector3.Zero;
@@ -183,6 +202,21 @@ public partial class SoilDetailRenderer : Node3D
             }
         }
 
+        // Conservative cell lists preserve original plant order and all exclusion/shelter checks.
+        // A cell only needs plants whose halo can reach its centre (or tint within 1.1 m).
+        var plantsByCell = new Dictionary<int, List<int>>();
+        for (int pi = 0; pi < nearFlora.Count; pi++)
+        {
+            var plant = nearFlora[pi];
+            double halo = Math.Max(1.1, Math.Max(plant.Exclusion, plant.IsWoody ? plant.CollarRadius + 0.6 : 0));
+            foreach (int cell in g.CellsInRadius(plant.P, halo + g.CellSize * 1.5))
+            {
+                if (!plantsByCell.TryGetValue(cell, out var candidates)) plantsByCell[cell] = candidates = new List<int>();
+                candidates.Add(pi);
+            }
+            if ((pi & 15) == 0) yield return true;
+        }
+
         // step over a fine lattice near the camera: this layer only needs to exist within CullRadius, so the
         // scan cost stays bounded regardless of world size.
         int stride = Quality >= 2 ? 1 : 2;
@@ -194,9 +228,11 @@ public partial class SoilDetailRenderer : Node3D
             i0 = Mathf.Max(0, (int)((camPos.X - CullRadius - g.OriginX) / g.CellSize)); i1 = Mathf.Min(g.Nx - 1, (int)((camPos.X + CullRadius - g.OriginX) / g.CellSize));
             j0 = Mathf.Max(0, (int)((camPos.Z - CullRadius - g.OriginZ) / g.CellSize)); j1 = Mathf.Min(g.Nz - 1, (int)((camPos.Z + CullRadius - g.OriginZ) / g.CellSize));
         }
+        int processed = 0;
         for (int j = j0 - j0 % stride; j <= j1; j += stride)
         for (int i = i0 - i0 % stride; i <= i1; i += stride)
         {
+            if ((processed++ & 7) == 0) yield return true;
             if (!g.InDomain(i, j)) continue;
             int idx = g.Index(i, j);
             if ((Substrate)f.BaseSubstrate[idx] != Substrate.Soil) continue;
@@ -287,7 +323,8 @@ public partial class SoilDetailRenderer : Node3D
             bool neighbourBladeBias = false;
             bool excludedByNamedPlant = false;
             double rootCollarShelter = 0;
-            for (int pi = 0; pi < nearFlora.Count; pi++)
+            if (plantsByCell.TryGetValue(idx, out var localPlants))
+            foreach (int pi in localPlants)
             {
                 double fd = Vivarium.Sim.Core.Vec2.Distance(p, nearFlora[pi].P);
                 if (fd < nearFlora[pi].Exclusion) { excludedByNamedPlant = true; break; }
@@ -346,12 +383,19 @@ public partial class SoilDetailRenderer : Node3D
             for (int k = 0; k < fruitCount; k++) Place(_fruitXf, _fruitCol, g, p, ref rng, fruitTint, 0.75f, 1.45f, DetailKind.Fruit, cellTilt, nearRocks, nearLogs, nearGravel);
         }
 
+        yield return true;
         SetInstances(_crumbs, _crumbXf, _crumbCol);
+        yield return true;
         SetInstances(_clods, _clodXf, _clodCol);
+        yield return true;
         SetInstances(_twigs, _twigXf, _twigCol);
+        yield return true;
         SetInstances(_flakes, _flakeXf, _flakeCol);
+        yield return true;
         SetInstances(_fruit, _fruitXf, _fruitCol);
+        yield return true;
         SetInstances(_blades, _bladeXf, _bladeCol);
+        yield return true;
         SetInstances(_stalks, _stalkXf, _stalkCol);
     }
 

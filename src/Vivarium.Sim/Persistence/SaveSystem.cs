@@ -78,6 +78,7 @@ public static class SaveSystem
     /// <summary>Captures an in-memory snapshot (fast, main thread). Writing it can happen elsewhere.</summary>
     public static (SaveManifest Manifest, SortedDictionary<string, byte[]> Payloads) Snapshot(VivariumWorld w, DateTime? createdUtc = null)
     {
+        w.Scheduler.CompletePendingTick();
         var payloads = WorldSerializer.Serialize(w);
         var m = new SaveManifest
         {

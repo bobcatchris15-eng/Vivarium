@@ -206,6 +206,8 @@ public sealed class FloraSpeciesDef
     public Pref Light { get; init; }
     public Pref Nutrients { get; init; }
     public double MaxWaterDepth { get; init; }
+    /// <summary>When true, habitat accepts any depth above MinWaterDepth without a maximum-depth ceiling.</summary>
+    public bool UnlimitedWaterDepth { get; init; }
     public double HardMinMoisture { get; init; }
     /// <summary>Hard upper moisture ceiling (off-prop): refused above this even at high score elsewhere. Default 1 = no ceiling.</summary>
     public double HardMaxMoisture { get; init; } = 1.0;
@@ -260,6 +262,10 @@ public sealed class FloraSpeciesDef
     public double[] Color2 { get; init; } = { 0.3, 0.6, 0.2 };
     public double ColorVariance { get; init; }
     public double Height { get; init; }
+    /// <summary>RGB color of emitted light; black disables the visual emission.</summary>
+    public double[] BioluminescenceColor { get; init; } = { 0, 0, 0 };
+    /// <summary>Emission intensity in the content scale [0, 8]; zero disables bioluminescence.</summary>
+    public double BioluminescenceStrength { get; init; }
     public List<string> Tags { get; init; } = new();
 
     /// <summary>Tree/shrub structural metadata; null for ordinary flora.</summary>
@@ -703,3 +709,4 @@ public sealed class ToolConfig
     public double SpringDischarge { get; init; }
     public int MaxSprings { get; init; }
 }
+

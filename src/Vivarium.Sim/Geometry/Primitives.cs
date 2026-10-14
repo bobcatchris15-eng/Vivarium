@@ -200,15 +200,20 @@ public static class Primitives
         var normal = dir.Cross(side).Normalized();
         longitudinal = m.FloraDetailLevel switch { 1 => Math.Max(3,longitudinal-1), 2 => 2, _ => Math.Max(3,longitudinal) };
         if (m.Lod is { } lod) longitudinal = lod.Segments(longitudinal);
-        const int across = 2; // left / midrib / right
+        int across = m.FloraDetailLevel is 1 or 2 || m.Lod is { Blade: < 0.5 } ? 2 : 4; // curved blade cross-section
         int leafVertex=m.VertexCount,leafIndex=m.Indices.Count;
 
         Vec3 At(double t, double x)
         {
+            if (t <= 0) return root;
+            if (t >= 1) return tip;
             double envelope = Math.Pow(Math.Max(0, Math.Sin(Math.PI * t)), 0.62);
             double width = halfWidth * envelope * (1.0 + asymmetry * x * (0.25 + 0.75 * t));
             double crown = camber * Math.Sin(Math.PI * t) * (1.0 - 0.42 * x * x);
             double sweep = asymmetry * halfWidth * 0.18 * Math.Sin(Math.PI * t) * t;
+            double identity = root.X * 13.17 + root.Y * 7.31 + tip.Z * 19.43;
+            width *= 1 + 0.025 * Math.Sin(identity + t * 4.3) * x * Math.Sin(Math.PI * t);
+            crown += halfWidth * 0.035 * Math.Sin(identity + t * 5.1 + x) * x * x * Math.Sin(Math.PI * t);
             return root + axis * t + side * (width * x + sweep) + normal * crown;
         }
 
@@ -222,7 +227,7 @@ public static class Primitives
                 double dt = 1.0 / longitudinal;
                 for (int j = 0; j <= across; j++)
                 {
-                    double x = j - 1.0;
+                    double x = j / (double)across * 2 - 1.0;
                     var p = At(t, x);
                     var ahead = At(Math.Min(1, t + dt), x) - At(Math.Max(0, t - dt), x);
                     var cross = At(t, Math.Min(1, x + 0.5)) - At(t, Math.Max(-1, x - 0.5));
@@ -230,7 +235,7 @@ public static class Primitives
                     if (n.LengthSq < 1e-8) n = faceN;
                     if (n.Dot(faceN) < 0) n = -n;
                     var col = Mix(rootCol, tipCol, t);
-                    m.AddVertex(p, n, col, 1, t, (x + 1) * 0.5, face, 1);
+                    m.AddVertex(p, n, col, 1, t, i == 0 || i == longitudinal ? 0.5 : (x + 1) * 0.5, face, 1);
                 }
             }
             int row = across + 1;
@@ -238,8 +243,8 @@ public static class Primitives
                 for (int j = 0; j < across; j++)
                 {
                     int a = start + i * row + j, b = a + row;
-                    TriangleFacing(m, a, b, a + 1, faceN);
-                    TriangleFacing(m, a + 1, b, b + 1, faceN);
+                    TriangleFacing(m, a, b, a + 1, m.NormalAt(a));
+                    TriangleFacing(m, a + 1, b, b + 1, m.NormalAt(a+1));
                 }
         }
         m.RecordLeaf(leafVertex,leafIndex,root,length);
@@ -263,6 +268,7 @@ public static class Primitives
     public static void TriangleFacing(MeshData m, int a, int b, int c, Vec3 visibleNormal)
     {
         var rh = (m.Position(b) - m.Position(a)).Cross(m.Position(c) - m.Position(a));
+        if (rh.LengthSq < 1e-26) return; // Collapsed blade tips are fans, not zero-area faces.
         if (rh.Dot(visibleNormal) < 0) m.AddTriangle(a, b, c); else m.AddTriangle(a, c, b);
     }
 

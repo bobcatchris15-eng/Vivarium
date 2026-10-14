@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
@@ -13,6 +13,7 @@ using Vivarium.Sim.World;
 var argList = args.ToList();
 string cmd = argList.Count > 0 ? argList[0] : "soak";
 string Opt(string name, string def) { int i = argList.IndexOf("--" + name); return i >= 0 && i + 1 < argList.Count ? argList[i + 1] : def; }
+long OptInt(string name, long def) { int i = argList.IndexOf("--" + name); return i >= 0 && i + 1 < argList.Count && long.TryParse(argList[i + 1], out var v) ? v : def; }
 
 Log.AddSink(new ConsoleSink());
 Log.MinimumLevel = LogLevel.Warning;
@@ -105,6 +106,35 @@ switch (cmd)
             if (inv.Count > 0) { Console.WriteLine("INVARIANT FAILURES:\n  " + string.Join("\n  ", inv.Take(10))); return 2; }
         }
         Console.WriteLine($"total {sw.Elapsed.TotalSeconds:0.0} s wall for {days} sim days");
+        PrintTiming(w);
+        return 0;
+    }
+    // Performance gate for the aquatic advection fault (Intent PERF-1..6). Bounded by TICKS, not bio-days:
+    // the fault's cost is superlinear in time, so a bio-day-bounded run is not a usable gate. The default
+    // 2160 ticks is the measured pre-fix failure point (bio-day 2.14, aquatic max 131140 ms).
+    case "bench":
+    {
+        var d = content.PresetOrThrow(Opt("preset", "default"));
+        if (Opt("seed", "") is { Length: > 0 } s2) d.Seed = ulong.Parse(s2);
+        long ticks = long.Parse(Opt("ticks", "2160"));
+        var sw = Stopwatch.StartNew();
+        var w = VivariumWorld.Create(content, d);
+        Console.WriteLine($"bench preset={Opt("preset", "default")} seed={w.Seed} ticks={ticks} create={sw.ElapsedMilliseconds}ms");
+        int report = (int)OptInt("report-every", ticks / 4);
+        long done = 0;
+        while (done < ticks)
+        {
+            int n = (int)Math.Min(report, ticks - done);
+            var t0 = sw.Elapsed;
+            w.Step(n);
+            done += n;
+            // The aquatic step is the one whose cost depends on hydrology state rather than on population, so
+            // print the slice count and the per-phase breakdown alongside the per-tick cost.
+            var aq = w.Scheduler.Systems.FirstOrDefault(s => s.Name == "aquatic");
+            Console.WriteLine($"  tick {done,6}  day {w.Clock.BioDays,6:0.00}  {(sw.Elapsed - t0).TotalMilliseconds / n * 1000,9:0} us/tick" +
+                $"  aquatic last {aq?.LastMs ?? 0,8:0.0}ms max {aq?.MaxMs ?? 0,8:0.0}ms");
+        }
+        Console.WriteLine($"total {sw.Elapsed.TotalSeconds:0.0} s wall");
         PrintTiming(w);
         return 0;
     }

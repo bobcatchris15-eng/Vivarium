@@ -10,8 +10,8 @@ uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable
 // Low base albedo with subtle natural freshwater tint
 uniform vec3 water_albedo : source_color = vec3(0.018, 0.035, 0.025);
 // Vivarium pond water: clear in the shallows, tannin/green-stained in depth (absorbs red+blue first).
-uniform vec3 absorption = vec3(1.5, 0.7, 1.9);     // per unit depth
-uniform vec3 deep_tint : source_color = vec3(0.045, 0.075, 0.040);
+uniform vec3 absorption = vec3(2.2, 0.8, 1.65);     // per unit depth
+uniform vec3 deep_tint : source_color = vec3(0.045, 0.085, 0.065);
 // Reflection of the dark enclosure backdrop (no sky in a vivarium): darkens grazing water instead of milking it.
 uniform vec3 backdrop_low : source_color = vec3(0.020, 0.022, 0.018);
 uniform vec3 backdrop_high : source_color = vec3(0.070, 0.075, 0.065);
@@ -29,7 +29,7 @@ varying float cutface;
 void vertex() {
     depthf = COLOR.a;
     flow = UV2;
-    cutface = step(abs(NORMAL.y), 0.5);
+    cutface = step(0.5, COLOR.r);
 }
 
 float linear_depth(vec2 uv, mat4 inv_proj) {
@@ -69,7 +69,10 @@ void fragment() {
         slope = vec2(h - hx, h - hz) / e * amp * 0.045;
         vec3 wn = normalize(vec3(slope.x, 1.0, slope.y));
         if (underwater > 0.5) wn = -wn;
-        NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
+        // Preserve the reconstructed channel slope instead of flattening it to world-up.
+        vec3 base_normal = normalize(NORMAL) * (underwater > 0.5 ? -1.0 : 1.0);
+        vec3 ripple_delta = (VIEW_MATRIX * vec4(vec3(slope.x, 0.0, slope.y), 0.0)).xyz;
+        NORMAL = normalize(base_normal + ripple_delta);
     }
 
     float surf_depth = -VERTEX.z;
@@ -109,23 +112,26 @@ void fragment() {
     }
 
     vec3 behind = textureLod(screen_tex, ruv, 0.0).rgb;
-    vec3 transmitted = behind * transmit;
+    // A little freshwater green-blue tint, increasing with actual depth.
+    float tint_weight = mix(0.08, 0.24, smoothstep(0.0, 0.08, depthf * 0.15));
+    vec3 transmitted = behind * transmit * mix(vec3(1.0), vec3(0.70, 0.91, 0.82), tint_weight)
+        + deep_tint * (vec3(1.0) - transmit);
 
     // Surface foam and aeration on fast currents
     float u_along = dot(UV, fdir);
     float u_across = dot(UV, sdir);
     float fast_flow = smoothstep(0.35, 1.4, speed) * smoothstep(0.008, 0.04, optical_depth);
     float foam_noise = sin(u_along * 38.0 - t * 7.5) * cos(u_across * 24.0 + sin(u_along * 14.0));
-    float foam_mask = smoothstep(0.35, 0.80, foam_noise * 0.5 + 0.5 + (h - 0.5) * 0.4) * fast_flow;
+    float foam_mask = smoothstep(0.90, 0.99, foam_noise * 0.5 + 0.5) * fast_flow * 0.12;
 
     // Thin meniscus / contact highlight line where water intersects scene geometry (stems, rocks, terrain)
     float contact_depth = scene_depth_straight - surf_depth;
     float contact_optical_depth = contact_depth / view_cos;
     float meniscus_line = 0.0;
-    if (cutface < 0.5 && underwater < 0.5 && contact_depth >= 0.001 && contact_depth < 10.0 && depthf > 0.005) {
+    if (cutface < 0.5 && underwater < 0.5 && contact_depth >= 0.001 && contact_depth < 10.0 && depthf > 0.04) {
         meniscus_line = 1.0 - smoothstep(0.001, meniscus_threshold, contact_optical_depth);
     }
-    float total_foam = (depthf <= 0.005 || contact_depth < 0.001) ? 0.0 : clamp(foam_mask + meniscus_line * 0.85, 0.0, 1.0);
+    float total_foam = (depthf <= 0.005 || contact_depth < 0.001) ? 0.0 : clamp(foam_mask + meniscus_line * 0.25, 0.0, 1.0);
 
     // View vectors and world-space reflection for backdrop and overhead grow light
     vec3 view_dir = normalize(-VERTEX);
@@ -141,8 +147,8 @@ void fragment() {
     float slope_var = clamp(slope_mag * 12.0, 0.0, 1.0);
 
     // Overhead LED grow-light panel reflection and facet sparkle glints
-    float bar1 = exp(-pow(world_refl.z * 2.2, 2.0)) * smoothstep(0.40, 0.85, world_refl.y);
-    float bar2 = exp(-pow((world_refl.z - 0.28) * 2.8, 2.0)) * smoothstep(0.50, 0.90, world_refl.y);
+    float bar1 = exp(-pow(world_refl.z * 12.0, 2.0)) * smoothstep(0.40, 0.85, world_refl.y);
+    float bar2 = exp(-pow((world_refl.z - 0.28) * 14.0, 2.0)) * smoothstep(0.50, 0.90, world_refl.y);
     float panel_spec = max(bar1, bar2 * 0.7);
 
     float sparkle_wave = sin(dot(UV, fdir) * 85.0 - t * 12.0 + sin(dot(UV, sdir) * 45.0) * 2.0);
@@ -152,7 +158,7 @@ void fragment() {
     // Glints survive steep angles (camera looking down at 30-50 deg in water_margin and cutaway_pond)
     float glint_angle = mix(0.20, 1.0, fresnel);
     float bank_edge_fade = smoothstep(0.005, 0.02, depthf) * smoothstep(0.0, 0.005, contact_depth);
-    vec3 glints = (grow_light_color * panel_spec * 1.1 + grow_light_color * sparkle * 2.4) * glint_angle * (1.0 - cutface) * (1.0 - underwater) * bank_edge_fade;
+    vec3 glints = (grow_light_color * panel_spec * 0.025 + grow_light_color * sparkle * 0.12) * glint_angle * (1.0 - cutface) * (1.0 - underwater) * bank_edge_fade;
 
     // 1. Real ALBEDO: small base albedo with subtle tint, receiving real scene diffuse lighting, with foam and meniscus
     vec3 surf_albedo = mix(water_albedo, foam_color, total_foam * 0.75);
@@ -161,7 +167,7 @@ void fragment() {
     // 2. Modulate ROUGHNESS and SPECULAR from ripple slope/normal variation for Godot PBR highlights
     float base_roughness = mix(0.035, 0.14, slope_var);
     ROUGHNESS = cutface > 0.5 ? 0.0 : mix(base_roughness, 0.25, total_foam);
-    float base_specular = mix(0.50, 0.85, slope_var);
+    float base_specular = mix(0.25, 0.45, slope_var);
     SPECULAR = cutface > 0.5 ? 0.20 : mix(base_specular, 0.95, meniscus_line);
     METALLIC = 0.0;
 
@@ -176,7 +182,7 @@ void fragment() {
     } else {
         vec3 backdrop = mix(backdrop_low, backdrop_high, smoothstep(-0.1, 0.7, world_refl.y));
         vec3 surface_refl = backdrop * fresnel * 0.4;
-        vec3 contact_highlight = (contact_depth < 0.001 || depthf <= 0.005) ? vec3(0.0) : (foam_color * meniscus_line * 0.65);
+        vec3 contact_highlight = (contact_depth < 0.001 || depthf <= 0.005) ? vec3(0.0) : (foam_color * meniscus_line * 0.15);
         EMISSION = transmitted * (1.0 - fresnel * 0.65) + surface_refl + glints + contact_highlight;
         ALPHA = max(smoothstep(0.0, 0.015, thickness_straight), meniscus_line * 0.95);
     }

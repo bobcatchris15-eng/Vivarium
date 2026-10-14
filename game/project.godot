@@ -35,4 +35,5 @@ project/assembly_name="Vivarium"
 [rendering]
 
 anti_aliasing/quality/msaa_3d=1
+limits/cluster_builder/max_clustered_elements=4096
 environment/defaults/default_clear_color=Color(0.55, 0.72, 0.86, 1)

@@ -87,13 +87,16 @@ public sealed class LitterSystem
     /// Baseline microbial mineralization of the visible detritus pools. Decay removes litter directly and
     /// releases its nutrient yield to soil; there is no hidden intermediate detritus reservoir.
     /// </summary>
-    public void Step(double dt)
+    public void Step(double dt) { foreach (var _ in StepBatches(dt)) { } }
+    public IEnumerable<bool> StepBatches(double dt)
     {
-        if (!(dt > 0) || !double.IsFinite(dt)) return;
+        if (!(dt > 0) || !double.IsFinite(dt)) yield break;
         MigrateLegacyDetritus();
         bool changed = false;
+        int processed = 0;
         foreach (int idx in _world.Grid.DomainCells)
         {
+            if ((processed++ & 15) == 0) yield return true;
             double fine = FineMass[idx], coarse = CoarseMass[idx], fruit = FruitMass[idx];
             if (fine <= 0 && coarse <= 0 && fruit <= 0) continue;
             double moisture = _world.Fields.Moisture.Values[idx];

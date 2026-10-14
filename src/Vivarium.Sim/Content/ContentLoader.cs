@@ -284,7 +284,7 @@ public static class ContentLoader
         if (!FloraPlacementGroups.TryParse(placementGroupId, out var placementGroup))
             n["placementGroup"].Error("expected moss_lichen | terrestrial | waterside_aquatic | decomposer | woody");
         var h = n.Req("habitat");
-        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "minWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
+        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "minWaterDepth", "unlimitedWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
         string feeds = h.Str("feeds", "nutrients");
         if (feeds is not ("nutrients" or "detritus")) h["feeds"].Error("expected nutrients | detritus");
         string reqFeature = ""; double reqRadius = 0;
@@ -308,7 +308,7 @@ public static class ContentLoader
         var c = n.Req("competition");
         c.RejectUnknown("radius", "crowdingLimit", "sensitivity");
         var v = n.Req("visual");
-        v.RejectUnknown("shape", "color", "color2", "colorVariance", "height");
+        v.RejectUnknown("shape", "color", "color2", "colorVariance", "height", "bioluminescenceColor", "bioluminescenceStrength");
         var prox = new List<ProximityRule>();
         foreach (var p in n.Items("proximity", required: false))
         {
@@ -548,6 +548,7 @@ public static class ContentLoader
             RefuseTags = new HashSet<string>(h.StrList("refuseTags"), StringComparer.Ordinal),
             Moisture = ParsePref(h, "moisture"), Light = ParsePref(h, "light"), Nutrients = ParsePref(h, "nutrients"),
             MaxWaterDepth = h.Num("maxWaterDepth", 0, 0, 5), MinWaterDepth = h.Num("minWaterDepth", 0, 0, 5),
+            UnlimitedWaterDepth = h.Bool("unlimitedWaterDepth", false),
             HardMinMoisture = h.Num("hardMinMoisture", 0, 0, 1), HardMaxMoisture = h.Num("hardMaxMoisture", 1.0, 0, 1), MinSuitability = h.Num("minSuitability", 0.15, 0, 1),
             GrowthRate = ratePerDayRaw / D, MaxBiomass = g.Num("maxBiomass", min: 0.001, max: 100), InitialBiomass = g.Num("initialBiomass", min: 0.0001, max: 100),
             DeclineRate = g.Num("declinePerDay", min: 0, max: 20) / D, MaturityAge = g.Num("maturityDays", min: 0.1, max: 3650) * D, Lifespan = g.Num("lifespanDays", min: 1, max: 36500) * D,
@@ -557,6 +558,8 @@ public static class ContentLoader
             CompetitionRadius = c.Num("radius", min: 0.01, max: 3), CrowdingLimit = c.Num("crowdingLimit", min: 0.01, max: 100), CompetitionSensitivity = c.Num("sensitivity", 1, 0, 10),
             Proximity = prox, LitterFraction = n.Num("litterFraction", 0.8, 0, 1), SheddingRate = n.Num("sheddingPerDay", 0.035, 0, 0.5) / D, GrazingValue = n.Num("grazingValue", 0, 0, 1),
             Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 8),
+            BioluminescenceColor = v.Color("bioluminescenceColor", new[] { 0.0, 0.0, 0.0 }),
+            BioluminescenceStrength = v.Num("bioluminescenceStrength", 0, 0, 8),
             Tags = n.StrList("tags"),
             Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,
             CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,
@@ -569,7 +572,7 @@ public static class ContentLoader
             PostLife = postLife,
             Decomposition = decomposition,
         };
-        if (def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
+        if (!def.UnlimitedWaterDepth && def.MinWaterDepth > 0 && def.MinWaterDepth > def.MaxWaterDepth) h["minWaterDepth"].Error("minWaterDepth exceeds maxWaterDepth");
         if (def.InitialBiomass > def.MaxBiomass) g["initialBiomass"].Error("initialBiomass exceeds maxBiomass");
         if (def.MaturityAge >= def.Lifespan) g["maturityDays"].Error("maturityDays must be shorter than lifespanDays");
         if (def.SubstrateAffinity.Count == 0) h["substrates"].Error("at least one substrate affinity is required");
@@ -863,3 +866,4 @@ public static class ContentLoader
         if (genetics.Get("size") == null) errors.Add("genetics", "$.traits", "trait 'size' must be defined");
     }
 }
+

@@ -5,6 +5,7 @@ bin/
 obj/
 build/
 out/
+artifacts/
 *.user
 .vs/
 # godot

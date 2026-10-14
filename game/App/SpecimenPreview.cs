@@ -146,7 +146,7 @@ public partial class SpecimenPreview : Node3D
             camera.LookAt(target);
             if (Reverse) { var offset=camera.Position-target; camera.Position=target+new Vector3(-offset.X,offset.Y,-offset.Z); camera.LookAt(target); }
 
-            for (int i = 0; i < 12; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (int i = 0; i < 90; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             Directory.CreateDirectory(OutDir);
             string path = Path.GetFullPath(Path.Combine(OutDir, SpeciesId + (Juvenile ? "-juvenile" : Underside ? "-underside" : "-mature") + ".png"));

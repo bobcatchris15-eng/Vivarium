@@ -19,7 +19,7 @@ public partial class Main : Node3D
     public static string[] UserArgs = Array.Empty<string>();
     public GameSession? Session { get; private set; }
 
-    public override void _Ready()
+    public override async void _Ready()
     {
         UserArgs = OS.GetCmdlineUserArgs();
         // a display piece must not stutter: avoid blocking full garbage collections during steady running
@@ -42,6 +42,18 @@ public partial class Main : Node3D
         if (ArgAfter("--guardian-review") is { } guardianDir)
         { AddChild(new GuardianReview { Content = content, OutDir = guardianDir }); return; }
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (ArgAfter("--material-port-review") is { } materialDir)
+        { AddChild(new MaterialPortReview { Content = content, OutDir = materialDir,
+            BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"),
+            RenderDocCapture = UserArgs.Contains("--renderdoc-capture"), MotionSequence = UserArgs.Contains("--motion-sequence") }); return; }
+        if(ArgAfter("--liquid-review") is {} liquidDir)
+        {AddChild(new LiquidReview{Content=content,OutDir=liquidDir,SavePath=ArgAfter("--save"),Live=UserArgs.Contains("--live"),Motion=UserArgs.Contains("--motion"),Pool=UserArgs.Contains("--pool"),Erosion=UserArgs.Contains("--erosion")});return;}
+        if(ArgAfter("--night-lighting-review") is {} lightDir)
+        {AddChild(new NightLightingReview{Content=content,OutDir=lightDir});return;}
+        if (ArgAfter("--night-flora-review") is { } nightFloraDir)
+        {
+            AddChild(new NightFloraReview { Content = content, OutDir = nightFloraDir }); return;
+        }
         if (UserArgs.Contains("--spring-fluid-preview"))
         {
             AddChild(new SpringFluidPreview {Content=content, OutDir=ArgAfter("--output") ?? "build/spring-fluid-preview"});
@@ -68,6 +80,14 @@ public partial class Main : Node3D
                 LiveMotion = UserArgs.Contains("--live-motion") });
             return;
         }
+        if (ArgAfter("--botanical-audit") is { } auditDir)
+        {
+            AddChild(new BotanicalReview {Content=content,OutDir=auditDir,AllSpecies=true});return;
+        }
+        if (ArgAfter("--botanical-review") is { } reviewDir)
+        {
+            AddChild(new BotanicalReview {Content=content,OutDir=reviewDir});return;
+        }
         if (ArgAfter("--specimen") is { } specimenId)
         {
             AddChild(new SpecimenPreview
@@ -88,37 +108,112 @@ public partial class Main : Node3D
             return;
         }
         var settings = UserSettings.Load();
-        string? testDir = ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference") ?? (UserArgs.Contains("--species-view") ? ArgAfter("--output") ?? "build/specimens/world" : null);
+        string? testDir = ArgAfter("--world-review") ?? ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference") ?? (UserArgs.Contains("--species-view") ? ArgAfter("--output") ?? "build/specimens/world" : null);
+        if (UserArgs.Contains("--soak")) { settings.Transient = true; settings.AutosaveEnabled = true; settings.AutosaveMinutes = 5; settings.ShowHelpOnStart = false; }
+        if (UserArgs.Contains("--diagnostics-check")) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
         if (testDir != null) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
 
         Session = new GameSession { Name = "Session" };
         AddChild(Session);
         Session.Initialize(content, settings);
+        if (testDir == null)
+        {
+            Session.Diagnostics = new LiveDiagnostics { Name = "LiveDiagnostics", Session = Session,
+                AutoStart = UserArgs.Contains("--diagnostics") || UserArgs.Contains("--diagnostics-check") || UserArgs.Contains("--soak"),
+                RequestedDirectory = ArgAfter("--diagnostics") ?? (ArgAfter("--soak") is { } soakOutput ? Path.Combine(soakOutput, "diagnostics") : null), CheckMode = UserArgs.Contains("--diagnostics-check") };
+            AddChild(Session.Diagnostics);
+        }
 
         if (testDir != null)
         {
-            var mode = UserArgs.Contains("--species-view") ? SmokeRunner.Mode.SpeciesWorld : UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
+            var mode = UserArgs.Contains("--world-review") ? SmokeRunner.Mode.WorldReview : UserArgs.Contains("--species-view") ? SmokeRunner.Mode.SpeciesWorld : UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
             var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode, SpeciesId = ArgAfter("--species-view") ?? "" };
             AddChild(runner);
             if (ArgAfter("--load") is { } loadPath && File.Exists(loadPath)) Session.LoadFrom(loadPath);
             else if (mode != SmokeRunner.Mode.Reload)
             {
                 var world = Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default"));
+                if (mode == SmokeRunner.Mode.WorldReview) world.Clock.Paused = true;
                 if (mode == SmokeRunner.Mode.Perf && (System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_FREEZE") == "1" || System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null)) world.Clock.Paused = true;
                 Session.StartWorld(world);
             }
             return;
         }
 
-        // persistent world: continue the autosave when there is one
-        if (File.Exists(Session.AutosavePath))
+        // Paint feedback before disk/decompression/baseline reconstruction starts.
+        var loadingLayer = new CanvasLayer { Layer = 100 };
+        var loadingPanel = new ColorRect { Color = new Color(.035f,.055f,.045f,.96f), MouseFilter = Control.MouseFilterEnum.Stop };
+        loadingPanel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        var loadingText = new Label { Text = "Opening your island...", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        loadingText.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        loadingText.AddThemeFontSizeOverride("font_size", 24);
+        var progressBar = new ProgressBar { MaxValue = 12, ShowPercentage = false };
+        progressBar.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.Center);
+        progressBar.OffsetLeft = -220; progressBar.OffsetRight = 220; progressBar.OffsetTop = 45; progressBar.OffsetBottom = 57;
+        loadingPanel.AddChild(loadingText); loadingPanel.AddChild(progressBar);
+        loadingLayer.AddChild(loadingPanel); AddChild(loadingLayer);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        try
         {
-            var r = Session.LoadFrom(Session.AutosavePath);
-            if (r.Ok) { Session.Ui.Toast($"Welcome back — day {r.World!.Clock.BioDays:0.0} of your vivarium", false); return; }
-            Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + r.Message);
-            Session.Ui.Toast("Your last autosave could not be loaded (" + r.Message + "); growing a fresh vivarium.", true);
+            if (ArgAfter("--loading-preview") is { } previewDirectory)
+            {
+                Directory.CreateDirectory(previewDirectory);
+                GetViewport().GetTexture().GetImage().SavePng(Path.Combine(previewDirectory,"loading.png"));
+            }
+            string autosave = ArgAfter("--load") ?? Session.AutosavePath;
+            LoadResult? restored = null;
+            if ((!UserArgs.Contains("--diagnostics-check") && !UserArgs.Contains("--soak") || ArgAfter("--load") != null) && File.Exists(autosave))
+                restored = await System.Threading.Tasks.Task.Run(() => SaveSystem.Load(content, autosave));
+            VivariumWorld world;
+            string? saveName = null;
+            if (restored is { Ok: true, World: not null }) { world = restored.World; saveName = Path.GetFileNameWithoutExtension(autosave); }
+            else
+            {
+                if (restored != null) Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + restored.Message);
+                loadingText.Text = "Growing a new island...";
+                var descriptor = content.PresetOrThrow(ArgAfter("--preset") ?? "default").Clone();
+                if (UserArgs.Contains("--soak"))
+                {
+                    descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var soakSeed) ? soakSeed : 804584441UL;
+                    descriptor.Name += " - bounded-work soak";
+                }
+                world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, descriptor,warmupSurfaceWater:false));
+            }
+            await Session.StartWorldAsync(world, saveName, stage => {
+                progressBar.Value++;
+                loadingText.Text = world.Descriptor.Name + "\nPreparing your island - " + stage;
+            });
+            if (ArgAfter("--loading-preview") is { } completedDirectory)
+                GetViewport().GetTexture().GetImage().SavePng(Path.Combine(completedDirectory,"preparing.png"));
+            if (ArgAfter("--soak") is { } soakDirectory)
+            {
+                Directory.CreateDirectory(soakDirectory);
+                if (world.Flora.Count == 0 || world.Fauna.Count == 0 || world.Water.Springs.Count == 0)
+                    throw new InvalidOperationException("Soak requires seeded flora, fauna and a spring.");
+                world.Clock.Paused = false;
+                world.Clock.SetSpeedIndex(Vivarium.Sim.Time.SimClock.DefaultSpeedIndex);
+                var saved = SaveSystem.Save(world, Path.Combine(soakDirectory, "initial.vivsave"));
+                if (!saved.Ok) throw new InvalidOperationException(saved.Message);
+                File.WriteAllText(Path.Combine(soakDirectory, "launch.json"), System.Text.Json.JsonSerializer.Serialize(new {
+                    started_utc = DateTime.UtcNow, process_id = System.Environment.ProcessId,
+                    world = world.Descriptor.Name, seed = world.Seed, flora = world.Flora.Count, fauna = world.Fauna.Count,
+                    springs = world.Water.Springs.Select(s => new { s.X, s.Z, litres_per_hour = s.Discharge * 3600000 }),
+                    autosave = Session.AutosavePath, diagnostics = Session.Diagnostics?.OutputDirectory,
+                    settings_transient = settings.Transient, speed = world.Clock.SpeedMultiplier
+                }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                GD.Print("SOAK_READY " + soakDirectory);
+            }
+            Session.Ui.Toast($"Island ready   day {world.Clock.BioDays:0.0}. Plant detail continues loading in the background.", false);
         }
-        Session.StartWorld(Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default")));
+        catch (Exception ex) { Log.Error(LogCategory.App, "Island loading failed", ex); ShowFatal("Island loading failed: " + ex.Message); }
+        finally { loadingLayer.QueueFree(); }
+        if (ArgAfter("--loading-preview") is { } readyDirectory)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().GetTexture().GetImage().SavePng(Path.Combine(readyDirectory,"ready.png"));
+        }
     }
 
     public static string? ArgAfter(string flag)
@@ -202,7 +297,7 @@ public static class BootTest
         int code = 0;
         try
         {
-            var w = VivariumWorld.Create(content, content.PresetOrThrow("default"));
+            var w = VivariumWorld.Create(content, content.PresetOrThrow("default"),warmupSurfaceWater:false);
             var sim = new Vivarium.Sim.Time.SimHost(w);
             for (int i = 0; i < 120; i++) sim.Advance(1 / 60.0);
             var problems = w.CheckInvariants();

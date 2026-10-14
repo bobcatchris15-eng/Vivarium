@@ -24,7 +24,7 @@ namespace Vivarium.Game.App;
 /// </summary>
 public partial class SmokeRunner : Node
 {
-    public enum Mode { Smoke, Reload, Render, Perf, Reference, SpeciesWorld }
+    public enum Mode { Smoke, Reload, Render, Perf, Reference, SpeciesWorld, WorldReview }
     public GameSession Session { get; set; } = null!;
     public string OutDir { get; set; } = "";
     public Mode RunMode { get; set; }
@@ -56,6 +56,7 @@ public partial class SmokeRunner : Node
                 case Mode.Smoke: await SmokeAsync(); break;
                 case Mode.Reload: await ReloadAsync(); break;
                 case Mode.Render: await RenderAsync(); break;
+                case Mode.WorldReview: await WorldReviewAsync(); break;
                 case Mode.Perf: if (System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null) await LandscapeAsync(); else await PerfAsync(); break;
                 case Mode.Reference: await ReferenceAsync(); break;
                 case Mode.SpeciesWorld: await SpeciesWorldAsync(); break;
@@ -74,7 +75,7 @@ public partial class SmokeRunner : Node
             ["mode"] = RunMode.ToString(), ["version"] = AppVersion.Application, ["ok"] = ok && code == 0,
             ["checks"] = _checks, ["facts"] = _facts, ["exported"] = OS.HasFeature("template"),
         };
-        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", Mode.Reference => "reference_report.json", Mode.SpeciesWorld => "species_world_report.json", _ => "render_report.json" };
+        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", Mode.Reference => "reference_report.json", Mode.SpeciesWorld => "species_world_report.json", Mode.WorldReview => "world_review_result.json", _ => "render_report.json" };
         File.WriteAllText(Path.Combine(OutDir, name), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print($"VIVARIUM_{RunMode.ToString().ToUpperInvariant()}_{(code == 0 ? "OK" : "FAILED")} checks={_checks.Count} failed={_checks.Count(c => !(bool)c["ok"])}");
         foreach (var c in _checks.Where(c => !(bool)c["ok"])) GD.PrintErr($"  FAILED: {c["name"]}: {c["detail"]}");
@@ -365,7 +366,10 @@ public partial class SmokeRunner : Node
         // VIVARIUM_PERF_LOW=1: a slow orbit at critter height over the ground, where close-up detail layers cost most
         bool low = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_LOW") == "1";
         bool sculpt = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SCULPT") == "1";
-        int durationMs = int.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SECONDS"), out var secs) ? secs * 1000 : 90_000;
+        // 90 s reaches only bio-day 1.5 at 1x (168 sim-s per real-s), which is before the cost of any
+        // state-dependent system rises. 600 s is the shortest window that crosses into the regime a real
+        // session spends most of its life in. VIVARIUM_PERF_SECONDS still overrides for longer runs.
+        int durationMs = int.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SECONDS"), out var secs) ? secs * 1000 : 600_000;
         while (Time.GetTicksMsec() - start < (ulong)durationMs)
         {
             float t = (Time.GetTicksMsec() - start) / 1000f;

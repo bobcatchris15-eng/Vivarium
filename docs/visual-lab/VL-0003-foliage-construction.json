@@ -1,0 +1,42 @@
+{
+  "id": "VL-0003-foliage-construction",
+  "created_utc": "2026-10-14T15:32:33.264276+00:00",
+  "stage": "complete",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0003-foliage-construction",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T15:32:48.494329+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T15:34:05.921147+00:00"
+    },
+    {
+      "command": "authored",
+      "at": "2026-10-14T15:35:19.822919+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T15:35:48.658386+00:00"
+    },
+    {
+      "command": "blind",
+      "at": "2026-10-14T15:35:53.234170+00:00"
+    },
+    {
+      "command": "critiqued",
+      "at": "2026-10-14T15:45:00.204336+00:00"
+    },
+    {
+      "command": "compare",
+      "at": "2026-10-14T15:45:01.421513+00:00"
+    },
+    {
+      "command": "decision",
+      "at": "2026-10-14T15:46:24.500189+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T15:46:24.500201+00:00",
+  "author_identity": "construction-hypotheses-v3"
+}

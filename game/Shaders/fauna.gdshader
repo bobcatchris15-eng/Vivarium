@@ -386,16 +386,19 @@ void vertex() {
         NORMAL = normalize(NORMAL / vec3(1.0, 1.0, radial));
     }
 
-
     if (anim_body_style == 12 && anim_role < 3.5) {
-        // Compression travels through the muscular foot; scale about ground level to hold the sole down.
+        // Narrow pedal contractions travel tail-to-head; the sole remains on the surface.
+        // The shell has role 4 and is excluded from all muscular deformation.
         float x = CUSTOM0.a > 0.5 ? attach.x : VERTEX.x;
-        float p = theta - (x + 0.5) * TAU_ * anim_phase_spread;
-        float radial = 1.0 + sin(p) * anim_body_wave * 0.12 * pose;
-        VERTEX.x += cos(p) * anim_body_wave * 0.025 * pose;
-        VERTEX.y *= radial;
-        VERTEX.z *= radial;
-        NORMAL = normalize(NORMAL / vec3(1.0, radial, radial));
+        float pedal = theta - (x + 0.5) * TAU_ * 2.5;
+        float contraction = pow(0.5 + 0.5 * sin(pedal), 3.0);
+        float foot = (1.0 - smoothstep(0.04, 0.10, VERTEX.y)) * float(anim_role < 0.5);
+        float active = speed01 * anim_amplitude;
+        VERTEX.x += cos(pedal) * 0.009 * anim_body_wave * active * foot;
+        float lateral = 1.0 - contraction * 0.055 * anim_body_wave * active * foot;
+        VERTEX.z *= lateral;
+        VERTEX.y += contraction * 0.004 * active * foot * smoothstep(0.001, 0.018, VERTEX.y);
+        NORMAL = normalize(NORMAL / vec3(1.0, 1.0, lateral));
     }
 
     if ((anim_body_style == 9 || anim_body_style == 10 || anim_body_style == 16) && anim_role < 3.5) {
@@ -455,7 +458,7 @@ void vertex() {
     }
     if (anim_body_style == 12 && anim_role > 3.5) {
         // Shell rides as a rigid mass above the rippling foot, without squash/stretch.
-        VERTEX.y += sin(theta) * anim_bob * 0.12 * pose;
+        VERTEX.y += sin(theta * 0.5) * anim_bob * 0.025 * speed01;
     }
 }
 
@@ -762,21 +765,21 @@ void fragment() {
             if (region > 3.5 && region < 4.5) col = mix(skin, vec3(0.47, 0.38, 0.21), 0.5) * (0.8 + grain * 0.2);
             rough = mix(0.35, 0.55, grain);
         } else if (anim_body_style == 12) {
-            skin = mix(vec3(0.075, 0.057, 0.035), vec3(0.31, 0.25, 0.15), identity);
+            skin = mix(vec3(0.075, 0.057, 0.035), vec3(0.12, 0.096, 0.060), identity);
             col = skin * (0.9 + grain * 0.18);
             rough = mix(0.28, 0.43, grain);
             if (region > 4.5 && region < 5.5) {
                 vec3 shell = vec3(0.40, 0.23, 0.063), band = vec3(0.075, 0.032, 0.012);
                 if (choice == 1.0) shell = vec3(0.62, 0.48, 0.24);
-                else if (choice == 2.0) { shell = vec3(0.15, 0.19, 0.14); band = vec3(0.044, 0.075, 0.043); }
+                else if (choice == 2.0) { shell = vec3(0.34, 0.21, 0.075); band = vec3(0.16, 0.082, 0.021); }
                 else if (choice == 3.0) shell = vec3(0.32, 0.082, 0.032);
                 else if (choice == 4.0) { shell = vec3(0.16, 0.13, 0.098); band = vec3(0.45, 0.36, 0.17); }
                 else if (choice == 5.0) { shell = vec3(0.49, 0.43, 0.34); band = vec3(0.21, 0.16, 0.12); }
                 float bands = smoothstep(0.60, 0.84, abs(sin(body_uv.y * 6.2831853 * 3.0 + coarse * 0.4)));
                 float growth = pow(abs(sin(body_uv.x * 740.0 + coarse)), 16.0);
                 mask = variant == 0.0 ? bands : variant == 1.0 ? mask : variant == 2.0 ? max(bands, mask * 0.5) : mask * 0.25;
-                col = mix(shell, band, mask * mix(0.5, 1.0, contrast)) * (0.93 + grain * 0.14 - growth * 0.10);
-                rough = mix(0.34, 0.53, grain);
+                col = mix(shell, band, mask * mix(0.18, 0.40, contrast)) * (0.93 + grain * 0.14 - growth * 0.10);
+                rough = mix(0.22, 0.32, grain);
                 relief = grain * 0.00012 - growth * 0.00012;
             }
         } else if (anim_body_style == 13) {

@@ -227,7 +227,7 @@ public partial class CoverageRenderer : Node3D
         }
 
         InitSpecies();
-        SyncTiles(immediate: true);
+        SyncTiles(immediate: false);
     }
 
     public override void _Process(double delta)
@@ -414,7 +414,11 @@ public partial class CoverageRenderer : Node3D
             {
                 continue;
             }
-            _inFlight[key] = Task.Run(() => BuildTileMesh(layer, tile));
+            _inFlight[key] = Task.Run<MeshData?>(() => {
+                var mesh = BuildTileMesh(layer,tile);
+                if (mesh != null) Bridge.PrepareMeshUpload(mesh);
+                return mesh;
+            });
             slots--;
         }
 

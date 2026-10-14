@@ -72,7 +72,7 @@ public class FloraVisualTests
             {
                 int a=m.Indices[t],b=m.Indices[t+1],c=m.Indices[t+2];
                 var winding=(m.Position(b)-m.Position(a)).Cross(m.Position(c)-m.Position(a));
-                Assert.True(winding.Dot(m.NormalAt(a))<0); // Godot's authored upper face is clockwise.
+                Assert.True(winding.Dot(m.NormalAt(a))<0,$"leaf={leaf.Identity} triangle={t/3} area={winding.Length:R} dot={winding.Dot(m.NormalAt(a)):R} vertices={a},{b},{c}"); // Godot's authored upper face is clockwise.
             }
             foreach(var group in Enumerable.Range(leaf.FirstVertex,leaf.VertexCount).GroupBy(m.Position))
             {

@@ -147,8 +147,10 @@ public static class Broadleaf
         {
             var (env, lobeBack) = SampleOutline(outline, t, x, bladeLength);
             double phase = wavyPhase + t * wavyFrequency * Math.PI * 2.0;
+            double organic = Math.Sin(Math.PI * t);
+            double skew = asymmetry + 0.035 * Math.Sin(wavyPhase);
             double marginMod = 1.0 + wavyMargin * 0.35 * Math.Cos(phase) * (x * x) * Math.Sin(Math.PI * t);
-            double hw = (bladeWidth * 0.5) * env * marginMod * (1.0 + asymmetry * x);
+            double hw = (bladeWidth * 0.5) * env * marginMod * (1.0 + skew * x);
             var lateral = side * (x * hw);
 
             double droop = tipCurl * bladeLength * (t * t * 0.75 + 0.25 * t * t * t);
@@ -159,12 +161,14 @@ public static class Broadleaf
             double zWave = wavyMargin * (bladeWidth * 0.5) * Math.Sin(phase) * (x * x) * Math.Sin(Math.PI * t);
             var crown = normal0 * (zCamber + zFold + zWave);
 
-            return pMidrib + lateral + crown;
+            return pMidrib + lateral + crown + side * (bladeWidth * 0.025 * Math.Sin(wavyPhase + t * 2.0) * organic)
+                + normal0 * (bladeWidth * 0.018 * Math.Sin(phase * 0.45 + x * 1.7) * organic * x * x);
         }
 
         // 3. Grid discretization: spend budget on outline & silhouette with minimal interior subdivision
-        int rows = detail == 0 ? 4 : (detail == 1 ? 3 : 2);
-        int cols = detail == 0 ? 3 : 2;
+        int rows = detail == 0 ? 9 : (detail == 1 ? 6 : 3);
+        if (m.Lod is { } lod) rows = lod.Segments(rows, detail == 0 ? 4 : 3);
+        int cols = detail == 0 && (m.Lod?.Blade ?? 1) >= .55 ? 4 : 2;
 
         var rootPos = SurfacePos(0.0, 0.0);
         var tipPos = SurfacePos(1.0, 0.0);

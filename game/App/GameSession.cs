@@ -30,6 +30,7 @@ public partial class GameSession : Node3D
     public CameraRig CameraRig { get; private set; } = null!;
     public IslandRenderer Island { get; private set; } = null!;
     public WaterRenderer Water { get; private set; } = null!;
+    public WaterSurfaceRenderer WaterFluid { get; private set; } = null!;
     public PropRenderer Props { get; private set; } = null!;
     public PilotTreeRenderer PilotTree { get; private set; } = null!;
     public SoilDetailRenderer SoilDetail { get; private set; } = null!;
@@ -42,8 +43,9 @@ public partial class GameSession : Node3D
     public ToolController Tools { get; private set; } = null!;
     public UiRoot Ui { get; private set; } = null!;
 
+    public LiveDiagnostics? Diagnostics { get; set; }
     public AutosaveController? Autosave { get; private set; }
-    public string SavesDir => Bridge.UserPath("saves");
+    public string SavesDir => Main.ArgAfter("--soak") is { } soak ? Path.Combine(soak, "saves") : Bridge.UserPath("saves");
     public string AutosavePath => Path.Combine(SavesDir, "autosave" + SaveSystem.Extension);
     public DateTime? LastAutosaveUtc { get; private set; }
     public string? CurrentSaveName { get; set; }
@@ -64,6 +66,7 @@ public partial class GameSession : Node3D
         CameraRig.MediumChanged += under => { EnvRig.SetUnderwater(under); Water.SetUnderwater(under); };
         Island = new IslandRenderer { Name = "Island" }; AddChild(Island);
         Water = new WaterRenderer { Name = "WaterRenderer" }; AddChild(Water);
+        WaterFluid = new WaterSurfaceRenderer { Name = "WaterSurfaceRenderer" }; AddChild(WaterFluid);
         Props = new PropRenderer { Name = "PropRenderer" }; AddChild(Props);
         PilotTree = new PilotTreeRenderer { Name = "PilotTreeRenderer" }; AddChild(PilotTree);
         SoilDetail = new SoilDetailRenderer { Name = "SoilDetail" }; AddChild(SoilDetail);
@@ -132,13 +135,15 @@ public partial class GameSession : Node3D
         }
         if (Host == null) Host = new SimHost(world); else Host.Swap(world);
         // Leave room for camera and rendering after every fixed simulation tick.
-        world.Scheduler.WallBudgetMs = 4;
+        world.Scheduler.WallBudgetMs = 6;
         world.CoverageSystem.AsyncMode = true;
         CurrentSaveName = saveName;
         Stage("Island", () => Island.Build(world));
         yield return "Island";
         Stage("Water", () => Water.Build(world));
         yield return "Water";
+        Stage("WaterFluid", () => {world.Liquid.Enable();world.Liquid.AsyncMode=true;WaterFluid.Bind(world);});
+        yield return "WaterFluid";
         Stage("Props", () => Props.Build(world));
         yield return "Props";
         Stage("PilotTree", () => PilotTree.Build(world));
@@ -186,7 +191,7 @@ public partial class GameSession : Node3D
     public VivariumWorld CreateWorld(WorldDescriptor d)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var w = VivariumWorld.Create(Content, d);
+        var w = VivariumWorld.Create(Content, d, warmupSurfaceWater:false);
         Log.Info(LogCategory.World, $"World generated in {sw.ElapsedMilliseconds} ms.");
         return w;
     }
@@ -227,6 +232,7 @@ public partial class GameSession : Node3D
         using var prof = FrameProfiler.Measure("Session");
         if (Host == null || LoadingWorld) return;
         using (FrameProfiler.Measure("Session.Advance")) Host.Advance(delta);
+        using (FrameProfiler.Measure("Session.Liquid")) Host.World.Liquid.Advance(delta);
         using (FrameProfiler.Measure("Session.Autosave")) Autosave?.Tick(Host.World, delta);
         var w = Host.World;
         if (w.Clock.BioDays - _lastHistoryDay >= 1.0 / 24 || _lastHistoryDay < 0)
@@ -241,6 +247,7 @@ public partial class GameSession : Node3D
     {
         if (what == NotificationWMCloseRequest || what == NotificationPredelete)
         {
+            try { World?.Liquid.CompletePending(); } catch { }
             try { World?.CoverageSystem.WaitPending(); } catch { }
             try { Autosave?.Flush(TimeSpan.FromSeconds(5)); } catch { }
         }

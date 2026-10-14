@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Godot;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Fauna;
@@ -26,7 +27,22 @@ public partial class ToolController : Node
     public double GravelRadius { get; set; } = 0.6;
     public double SculptRadius { get; set; } = 0.6;
     public double WaterRadius { get; set; } = 0.4;
-    public double SpringDischarge { get; set; } = 0.001;
+    public double SpringDischarge { get; private set; } = ToolActions.DefaultSpringDischarge;
+    public EntityId SelectedSpring { get; private set; } = EntityId.None;
+    public void SetSpringFlow(double rate)
+    {
+        if (Actions == null) return;
+        SpringDischarge = Actions.ClampSpringDischarge(rate);
+        if (!SelectedSpring.IsNone) Actions.SetSpringDischarge(SelectedSpring, SpringDischarge);
+        ToolChanged?.Invoke(Current);
+    }
+    public void RemoveSpring()
+    {
+        var spring = _w?.Water.Springs.FirstOrDefault(s => s.Id == SelectedSpring);
+        if (spring != null && Actions != null) Feedback(Actions.ToggleSpring(spring.Position));
+        SelectedSpring = EntityId.None;
+        ToolChanged?.Invoke(Current);
+    }
     // a brush stroke (sculpt/pour/drain) runs from the click until the button is released
     private bool _stroke, _strokeSculpted;
     private string? _strokeError;
@@ -53,9 +69,10 @@ public partial class ToolController : Node
     public void Bind(VivariumWorld w)
     {
         _w = w;
-        Held = EntityId.None; MovingProp = EntityId.None;
+        Held = EntityId.None; MovingProp = EntityId.None; SelectedSpring = EntityId.None;
         Select(WorldHit.None);
-        if (w.Content.Tools.SpringDischarge > 0) SpringDischarge = w.Content.Tools.SpringDischarge;
+        SpringDischarge = Actions!.ClampSpringDischarge(w.Content.Tools.SpringDischarge > 0
+            ? w.Content.Tools.SpringDischarge : ToolActions.DefaultSpringDischarge);
     }
 
     public void SetTool(ToolKind k)
@@ -281,7 +298,7 @@ public partial class ToolController : Node
             case ToolKind.PlaceGravel: GravelRadius = Actions!.ClampGravelRadius(GravelRadius * f); break;
             case ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth: SculptRadius = Actions!.ClampSculptRadius(SculptRadius * f); break;
             case ToolKind.PourWater or ToolKind.DrainWater: WaterRadius = Actions!.ClampWaterRadius(WaterRadius * f); break;
-            case ToolKind.Spring: SpringDischarge = Actions!.ClampSpringDischarge(SpringDischarge * f); break;
+            case ToolKind.Spring: SetSpringFlow(SpringDischarge * f); break;
         }
         ToolChanged?.Invoke(Current);
     }
@@ -355,7 +372,18 @@ public partial class ToolController : Node
             }
             case ToolKind.Spring:
                 if (!hit.IsHit) return null;
-                r = t.ToggleSpring(p, SpringDischarge);
+                if (t.SpringNear(p) is { } spring)
+                {
+                    SelectedSpring = spring.Id;
+                    SpringDischarge = t.ClampSpringDischarge(spring.Discharge);
+                    r = ToolResult.Success($"spring flow {spring.Discharge * 3600000:0} L/hour — adjust the slider", spring.Id);
+                }
+                else
+                {
+                    r = t.ToggleSpring(p, SpringDischarge);
+                    if (r.Value.Ok && t.SpringNear(p) is { } placed) SelectedSpring = placed.Id;
+                }
+                ToolChanged?.Invoke(Current);
                 break;
             case ToolKind.MoveProp:
                 if (MovingProp.IsNone)

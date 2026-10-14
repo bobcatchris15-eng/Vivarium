@@ -25,6 +25,10 @@ uniform float canopy_occlusion = .15;
 uniform bool volumetric = false;
 uniform int leaf_variegation = 0;
 uniform float review_time = -1.;
+uniform vec3 bioluminescence_color = vec3(0.0);
+uniform float bioluminescence_strength = 0.0;
+uniform float night_factor = 0.0;
+uniform int emission_mask_mode = 0;
 varying vec4 plant;
 varying vec4 blade;
 varying vec3 position_world;
@@ -100,7 +104,7 @@ void fragment() {
     color = mix(color,color*vec3(1.15,1.18,1.03),anatomy.r*vein_strength);
     float topf = 1. - side;
     // Pale midrib/veins and young-leaf freshness; lift very dark tissue so it reads as leaf.
-    color = mix(color, color*vec3(1.5,1.55,1.15)+vec3(.008,.012,.005), anatomy.r*topf*.55);
+    color = mix(color, color*vec3(1.5,1.55,1.15)+vec3(.008,.012,.005), anatomy.r*topf*.25);
     color *= mix(1.3, 1., smoothstep(.015,.07,dot(color,vec3(.2126,.7152,.0722))));
     if (leaf_variegation == 1) color = mix(color, vec3(dot(color,vec3(.33)))*vec3(2.5,2.8,2.2)+.03, anatomy.r*topf*.6);
     else if (leaf_variegation == 2) color = mix(color, vec3(.30,.34,.32), smoothstep(.45,.65,texture(tissue_physical,vec3(tissue_uv*.5,layer)).b)*(1.-anatomy.r)*topf*.55);
@@ -114,12 +118,12 @@ void fragment() {
     vec3 wn = normalize((INV_VIEW_MATRIX*vec4(NORMAL,0.)).xyz);
     vec3 mapped=detail_normal(wn,UV,slopes);
     NORMAL=normalize((VIEW_MATRIX*vec4(mapped,0.)).xyz);
-    color*=mix(.8,1.35,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(1.,.8,fract(seed*5.3)));
+    color*=mix(.88,1.14,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(1.,.8,fract(seed*5.3)));
     ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,.3+.7*smoothstep(0.,.45,plant.y));
     // Species-specific cuticular gloss on adaxial face; rougher, paler abaxial face
     float wax = cuticle_sheen * topf;
-    ROUGHNESS=clamp(mix(leaf_roughness - wax * 0.16, back_roughness, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02, 0.20, 0.96);
-    SPECULAR=volumetric ? .45 : mix(0.35, mix(0.50, 0.68, cuticle_sheen), topf);
+    ROUGHNESS=clamp(mix(leaf_roughness - wax * 0.08, back_roughness, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02, 0.20, 0.96);
+    SPECULAR=volumetric ? .45 : mix(0.35, mix(0.38, 0.50, cuticle_sheen), topf);
     // Physically bounded transmission through chlorophyll, attenuated by vein thickness
     vec3 transmit_filter = vec3(0.92, 1.30, 0.50);
     float vein_thickness = clamp(anatomy.g * 0.75 + anatomy.r * 0.25, 0.0, 1.0);
@@ -128,4 +132,19 @@ void fragment() {
     AO=1.-canopy_occlusion*(1.-clamp(position_local.y,0.,1.));
     AO_LIGHT_AFFECT=.2;
     if (UV2.y < .5) { ALBEDO=srgb_to_linear(COLOR.rgb); BACKLIGHT=vec3(0.); }
+    float marked_nodule = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
+    float gill_mask = step(0.5, UV2.x) * (1.0 - step(1.5, UV2.x));
+    float seed_head_mask = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x));
+    float center_stripe = (1.0 - smoothstep(0.16, 0.25, abs(UV.y - 0.5))) * step(0.5, UV2.y);
+    float edge_distance = min(min(UV.x, 1.0 - UV.x), 0.5 - abs(UV.y - 0.5));
+    float edge_strip = (1.0 - smoothstep(0.025, 0.075, edge_distance)) * step(0.5, UV2.y);
+    float night_mask = 0.0;
+    if (emission_mask_mode == 1) night_mask = 1.0;
+    else if (emission_mask_mode == 2) night_mask = marked_nodule;
+    else if (emission_mask_mode == 3) night_mask = gill_mask * float(FRONT_FACING);
+    else if (emission_mask_mode == 4) night_mask = seed_head_mask;
+    else if (emission_mask_mode == 5) night_mask = center_stripe;
+    else if (emission_mask_mode == 6) night_mask = edge_strip;
+    else night_mask = smoothstep(0.45, 0.60, UV2.y);
+    EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
 }

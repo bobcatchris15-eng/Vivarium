@@ -58,6 +58,14 @@ public sealed class VivariumWorld
     public CoverageSystem CoverageSystem { get; }
     public AquaticSystem AquaticSystem { get; }
 
+    /// <summary>
+    /// Legacy tracer API retained for old fixture tools. The game does not advance or render this system.
+    /// <see cref="Liquid"/> owns all dynamic game water; the water-table pond is hydrostatic.
+    /// </summary>
+    public Water.SpringFluidSystem SpringFluid { get; }
+    /// <summary>Authoritative game liquid; persisted 3D water, independent of ecology calendar acceleration.</summary>
+    public SurfaceLiquid Liquid {get;}
+
     /// <summary>Tick cadences (10 s ticks). Documented in docs/architecture/architecture.md.</summary>
     public static class Cadence
     {
@@ -106,6 +114,8 @@ public sealed class VivariumWorld
         CoverageSystem = new CoverageSystem(this);
         AquaticSystem = new AquaticSystem(this);
         GuardianSystem = new GuardianSystem(this);
+        SpringFluid = new Water.SpringFluidSystem(this);
+        Liquid = new SurfaceLiquid(this);
         RegisterSystems();
     }
 
@@ -116,7 +126,7 @@ public sealed class VivariumWorld
     public static VivariumWorld CreateBaseline(ContentLibrary content, WorldDescriptor d) => new(content, d);
 
     /// <summary>Creates a complete new world: baseline, springs, props, initial fields, water, starter flora and fauna.</summary>
-    public static VivariumWorld Create(ContentLibrary content, WorldDescriptor d, bool populate = true)
+    public static VivariumWorld Create(ContentLibrary content, WorldDescriptor d, bool populate = true, bool warmupSurfaceWater = true)
     {
         var w = new VivariumWorld(content, d);
         foreach (var s in w.Descriptor.Water.Springs)
@@ -129,7 +139,7 @@ public sealed class VivariumWorld
         w.Fields.RecomputeLight(w.Terrain, w.Props, w.PilotTree);
         w.Water.InitializeFromWaterTable();
         // A short physical warmup establishes spring runoff without inventing a water-table plane.
-        for (int i = 0; i < 10; i++) w.Water.Step(30);
+        if(warmupSurfaceWater)for (int i = 0; i < 10; i++) w.Water.Step(30);
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
         w.PilotTree?.CoupleHabitat(w, SimUnits.Day);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
@@ -165,17 +175,26 @@ public sealed class VivariumWorld
             if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props, PilotTree);
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
-        Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 20);
-        Scheduler.Register("ecology.litter", Cadence.Litter, 66, Bio(dt => { PilotTree?.DepositLitter(this, dt); Litter.Step(dt); }), phase: 22);
-        Scheduler.Register("flora", Cadence.Flora, 70, Bio(FloraSystem.Step), phase: 29);
+        // Keep expensive passes on separate ticks; intervals and elapsed time are unchanged.
+        Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 21);
+        Scheduler.RegisterBatched("ecology.litter", Cadence.Litter, 66, LitterBatches, phase: 17);
+        Scheduler.RegisterBatched("flora", Cadence.Flora, 70, dt => FloraSystem.StepBatches(dt * Clock.BioAcceleration), phase: 29);
         Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);
         Scheduler.Register("flora.reproduction", Cadence.Flora, 72, Bio(ReproductionSystem.Step), phase: 29);
         Scheduler.Register("flora.seedbank", Cadence.Flora, 73, Bio(SeedBank.Step), phase: 29);
-        Scheduler.Register("flora.ambient", Cadence.Flora, 74, Bio(AmbientGroundCover.Step), phase: 29);
+        Scheduler.RegisterBatched("flora.ambient", Cadence.Flora, 74, dt => AmbientGroundCover.StepBatches(dt * Clock.BioAcceleration), phase: 35);
         Scheduler.Register("coverage", Cadence.Flora, 75, Bio(CoverageSystem.StepMat), phase: 30);
         Scheduler.Register("coverage.lichen", Cadence.Flora, 76, Bio(CoverageSystem.StepLichen), phase: 31);
         Scheduler.Register("coverage.plasmodium", Cadence.Plasmodium, 77, Bio(CoverageSystem.StepPlasmodium), phase: 33);
         Scheduler.Register("genetics.prune", Cadence.GeneticsPrune, 90, _ => FaunaSystem.PruneGenetics(), phase: 4321);
+    }
+
+    private IEnumerable<bool> LitterBatches(double dt)
+    {
+        double bio = dt * Clock.BioAcceleration;
+        PilotTree?.DepositLitter(this, bio);
+        yield return true;
+        foreach (var batch in Litter.StepBatches(bio)) yield return batch;
     }
 
     // ------------------------------------------------------------------ queries

@@ -14,6 +14,27 @@ public static class AquaticConst
 
     /// <summary>Hard cap on substeps per call, so a runaway/garbage velocity cannot make a step unbounded.</summary>
     public const int MaxSubsteps = 4096;
+
+    /// <summary>
+    /// Per-slice CFL substep budget. One upwind substep moves a cell at most <see cref="CflSafety"/> cells, so a
+    /// slice whose advection is capped here displaces biomass by at most <c>SliceSubsteps*CflSafety</c> cells --
+    /// that is the only reach the dense advection buffer has to cover.
+    /// </summary>
+    /// <remarks>
+    /// The caller runs a step as many slices as the true per-tick displacement requires, each with a fresh
+    /// occupied-bounds halo of <see cref="SliceHalo"/>. Drift rate is therefore unchanged, but the dense buffer is
+    /// bounded by the OCCUPIED area rather than by how far the fastest water anywhere in the domain can carry mass
+    /// in one tick. Sizing the halo from the whole tick's displacement (the previous behaviour) made the buffer
+    /// area quadratic in flow speed and the total cost cubic: on the 8 m default preset a 9.6 mm/s current asked
+    /// for 580 cells of padding, an 11.6 m halo on an 8 m island, and 5.5 billion element-touches per step.
+    /// </remarks>
+    public const int SliceSubsteps = 32;
+
+    /// <summary>Cells of padding the dense advection buffer needs for one <see cref="SliceSubsteps"/> slice.</summary>
+    public static int SliceHalo => (int)Math.Ceiling(SliceSubsteps * CflSafety) + 1;
+
+    /// <summary>Absolute cap on slices per step, so a garbage velocity cannot make one step unbounded.</summary>
+    public const int MaxSlices = 4096;
 }
 
 /// <summary>Inclusive rectangular domain of global coverage cells (gx, gz), the coordinate space the lab

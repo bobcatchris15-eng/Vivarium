@@ -1,0 +1,95 @@
+{
+  "id": "tidebell",
+  "name": "Tidebell",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Bioluminescent emergent herb of shallow pond shelves.",
+  "description": "Paired waxy leaves and warm bell-shaped blooms rise just above the waterline.",
+  "habitat": {
+    "substrates": {
+      "soil": 0.8,
+      "gravel": 0.65,
+      "water": 0.75
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.12
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.18,
+    "minWaterDepth": 0.005,
+    "hardMinMoisture": 0.62,
+    "minSuitability": 0.15,
+    "hardMaxMoisture": 1
+  },
+  "growth": {
+    "ratePerDay": 0.2,
+    "maxBiomass": 1.1,
+    "initialBiomass": 0.055,
+    "declinePerDay": 0.2,
+    "maturityDays": 8,
+    "lifespanDays": 160,
+    "nutrientPerBiomass": 0.22,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.48,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.12,
+    "crowdingLimit": 6,
+    "sensitivity": 0.3
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.3,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.7,
+  "grazingValue": 0.3,
+  "visual": {
+    "shape": "pairedleaf",
+    "color": [
+      0.22,
+      0.39,
+      0.34
+    ],
+    "color2": [
+      0.72,
+      0.65,
+      0.34
+    ],
+    "colorVariance": 0.05,
+    "height": 0.42,
+    "bioluminescenceColor": [
+      1.0,
+      0.62,
+      0.25
+    ],
+    "bioluminescenceStrength": 1.8
+  },
+  "tags": [
+    "plant",
+    "riparian",
+    "emergent",
+    "bioluminescent"
+  ]
+}

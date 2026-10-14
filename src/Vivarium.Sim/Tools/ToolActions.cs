@@ -39,11 +39,17 @@ public sealed class ToolActions
     private readonly VivariumWorld _w;
     public ToolActions(VivariumWorld w) { _w = w; }
     private ToolConfig Cfg => _w.Content.Tools;
+    private ToolResult AtTickBoundary(Func<ToolResult> action)
+    {
+        _w.Scheduler.CompletePendingTick();
+        return action();
+    }
 
     // ------------------------------------------------------------------ grab / release critter
 
     public ToolResult Grab(EntityId faunaId)
     {
+        _w.Scheduler.CompletePendingTick();
         var f = _w.Fauna.Get(faunaId);
         if (f == null) return ToolResult.Fail("that critter is gone");
         if (f.Grabbed) return ToolResult.Fail("already held");
@@ -54,6 +60,7 @@ public sealed class ToolActions
     /// <summary>Moves a held critter (display position while carried). Stays within the island footprint.</summary>
     public ToolResult MoveHeld(EntityId faunaId, Vec3 p)
     {
+        _w.Scheduler.CompletePendingTick();
         var f = _w.Fauna.Get(faunaId);
         if (f == null || !f.Grabbed) return ToolResult.Fail("not holding that critter");
         if (!p.IsFinite) return ToolResult.Fail("invalid position");
@@ -72,6 +79,7 @@ public sealed class ToolActions
     /// <summary>Releases at p if the habitat is valid; otherwise the critter stays held and the reason is returned.</summary>
     public ToolResult Release(EntityId faunaId, Vec2 p)
     {
+        _w.Scheduler.CompletePendingTick();
         var f = _w.Fauna.Get(faunaId);
         if (f == null) return ToolResult.Fail("that critter is gone");
         if (!f.Grabbed) return ToolResult.Fail("not holding that critter");
@@ -86,6 +94,7 @@ public sealed class ToolActions
     /// <summary>Puts a held critter back where it was picked up (always valid).</summary>
     public ToolResult ReturnHeld(EntityId faunaId, Vec3 origin)
     {
+        _w.Scheduler.CompletePendingTick();
         var f = _w.Fauna.Get(faunaId);
         if (f == null) return ToolResult.Fail("that critter is gone");
         f.Position = origin; f.Grabbed = false;
@@ -96,6 +105,7 @@ public sealed class ToolActions
 
     public ToolResult RemovePlant(EntityId floraId)
     {
+        _w.Scheduler.CompletePendingTick();
         var f = _w.Flora.Get(floraId);
         if (f == null) return ToolResult.Fail("nothing to remove");
         var name = _w.Content.FloraOrThrow(f.SpeciesId).Name;
@@ -109,6 +119,7 @@ public sealed class ToolActions
     /// pointed at a flora individual.</summary>
     public ToolResult RemoveCoverage(Vec2 p)
     {
+        _w.Scheduler.CompletePendingTick();
         int cleared = _w.CoverageSystem.ClearDisc(p, RemoveCoverageRadius);
         return cleared > 0 ? ToolResult.Success("cleared moss/lichen") : ToolResult.Fail("nothing to remove");
     }
@@ -120,6 +131,7 @@ public sealed class ToolActions
     /// <summary>Adds nutrients inside the circular footprint only (smooth falloff to the rim). Returns amount added.</summary>
     public ToolResult ApplyNutrients(Vec2 centre, double radius, double? amount = null)
     {
+        _w.Scheduler.CompletePendingTick();
         if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
         radius = ClampNutrientRadius(radius);
         double a = amount ?? Cfg.NutrientAmount;
@@ -138,6 +150,7 @@ public sealed class ToolActions
 
     public PokeResult Poke(PokeAction a)
     {
+        _w.Scheduler.CompletePendingTick();
         var res = new PokeResult { Point = a.Point };
         double strength = MathD.Clamp(a.Strength, 0, 3);
         double radius = Cfg.PokeRadius * Math.Max(0.5, strength);
@@ -180,11 +193,11 @@ public sealed class ToolActions
     public string? PreviewLog(Vec2 p, double heading, double length, double radius) => _w.Placement.ValidateLog(p, heading, ClampLogLength(length), ClampLogRadius(radius));
     public string? PreviewGravel(Vec2 p, double radius) => _w.Placement.ValidateGravel(p, ClampGravelRadius(radius));
 
-    public ToolResult PlaceRock(Vec2 p, double scale, double rotation, ulong variantSeed) => Wrap(_w.Placement.PlaceRock(p, ClampRockScale(scale), rotation, variantSeed), "rock");
-    public ToolResult PlaceLog(Vec2 p, double heading, double length, double radius, int decay, ulong seed) => Wrap(_w.Placement.PlaceLog(p, heading, ClampLogLength(length), ClampLogRadius(radius), decay, seed), "log");
-    public ToolResult PlaceGravel(Vec2 p, double radius, ulong seed) => Wrap(_w.Placement.PlaceGravel(p, ClampGravelRadius(radius), seed), "gravel");
-    public ToolResult MoveProp(EntityId id, Vec2 p) => Wrap(_w.Placement.Move(id, p), "prop");
-    public ToolResult RemoveProp(EntityId id) => Wrap(_w.Placement.Remove(id), "prop");
+    public ToolResult PlaceRock(Vec2 p, double scale, double rotation, ulong variantSeed) => AtTickBoundary(() => Wrap(_w.Placement.PlaceRock(p, ClampRockScale(scale), rotation, variantSeed), "rock"));
+    public ToolResult PlaceLog(Vec2 p, double heading, double length, double radius, int decay, ulong seed) => AtTickBoundary(() => Wrap(_w.Placement.PlaceLog(p, heading, ClampLogLength(length), ClampLogRadius(radius), decay, seed), "log"));
+    public ToolResult PlaceGravel(Vec2 p, double radius, ulong seed) => AtTickBoundary(() => Wrap(_w.Placement.PlaceGravel(p, ClampGravelRadius(radius), seed), "gravel"));
+    public ToolResult MoveProp(EntityId id, Vec2 p) => AtTickBoundary(() => Wrap(_w.Placement.Move(id, p), "prop"));
+    public ToolResult RemoveProp(EntityId id) => AtTickBoundary(() => Wrap(_w.Placement.Remove(id), "prop"));
 
     private ToolResult Wrap(PlacementResult r, string what)
     {
@@ -199,6 +212,7 @@ public sealed class ToolActions
     /// <summary>One sculpt dab lasting <paramref name="seconds"/> of brushing (the client calls this repeatedly while held).</summary>
     public ToolResult Sculpt(Vec2 centre, double radius, SculptMode mode, double seconds)
     {
+        _w.Scheduler.CompletePendingTick();
         if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
         radius = ClampSculptRadius(radius);
         seconds = MathD.Clamp(seconds, 0, 0.5);
@@ -209,7 +223,7 @@ public sealed class ToolActions
     }
 
     /// <summary>Call when a sculpt stroke ends so derived fields (light) are fresh before anything reads them.</summary>
-    public void EndSculptStroke() => _w.Fields.RecomputeLight(_w.Terrain, _w.Props);
+    public void EndSculptStroke() { _w.Scheduler.CompletePendingTick(); _w.Fields.RecomputeLight(_w.Terrain, _w.Props); }
 
     // ------------------------------------------------------------------ water
 
@@ -217,6 +231,7 @@ public sealed class ToolActions
 
     public ToolResult PourWater(Vec2 centre, double radius, double seconds)
     {
+        _w.Scheduler.CompletePendingTick();
         if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
         double v = _w.Water.AddWater(centre, ClampWaterRadius(radius), Cfg.PourRate * MathD.Clamp(seconds, 0, 0.5));
         return v > 0 ? ToolResult.Success($"poured {v * 1000:0.0} L") : ToolResult.Fail("nothing poured");
@@ -224,12 +239,26 @@ public sealed class ToolActions
 
     public ToolResult DrainWater(Vec2 centre, double radius, double seconds)
     {
+        _w.Scheduler.CompletePendingTick();
         if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
         double v = _w.Water.RemoveWater(centre, ClampWaterRadius(radius), Cfg.DrainRate * MathD.Clamp(seconds, 0, 0.5));
         return v > 0 ? ToolResult.Success($"soaked up {v * 1000:0.0} L") : ToolResult.Fail("no surface water here");
     }
 
-    public double ClampSpringDischarge(double rate) => MathD.Clamp(rate, 0.0002, 0.005);
+    public const double MinSpringDischarge = 5.0 / 3600000.0; // 5 L/hour
+    public const double MaxSpringDischarge = 2000.0 / 3600000.0; // 2000 L/hour
+    public const double DefaultSpringDischarge = 50.0 / 3600000.0;
+    public double ClampSpringDischarge(double rate) => double.IsFinite(rate)
+        ? MathD.Clamp(rate, MinSpringDischarge, MaxSpringDischarge) : DefaultSpringDischarge;
+
+    public ToolResult SetSpringDischarge(EntityId id, double rate)
+    {
+        _w.Scheduler.CompletePendingTick();
+        var spring = _w.Water.Springs.FirstOrDefault(s => s.Id == id);
+        if (spring == null) return ToolResult.Fail("spring no longer exists");
+        spring.Discharge = ClampSpringDischarge(rate);
+        return ToolResult.Success($"spring flow {spring.Discharge * 3600000:0} L/hour", id);
+    }
 
     /// <summary>The spring within <paramref name="reach"/> of p, if any.</summary>
     public Water.Spring? SpringNear(Vec2 p, double reach = 0.35) =>
@@ -246,6 +275,7 @@ public sealed class ToolActions
     /// <summary>Adds a spring at p, or removes the one already there.</summary>
     public ToolResult ToggleSpring(Vec2 p, double? discharge = null)
     {
+        _w.Scheduler.CompletePendingTick();
         if (SpringNear(p) is { } existing)
         {
             _w.Water.Springs.Remove(existing);
@@ -257,7 +287,7 @@ public sealed class ToolActions
         }
         var problem = PreviewSpring(p);
         if (problem != null) return ToolResult.Fail($"Can't add a spring: {problem}");
-        double rate = discharge ?? (Cfg.SpringDischarge > 0 ? Cfg.SpringDischarge : 0.001);
+        double rate = ClampSpringDischarge(discharge ?? (Cfg.SpringDischarge > 0 ? Cfg.SpringDischarge : DefaultSpringDischarge));
         var sp = new Water.Spring { Id = _w.Ids.Next(EntityKind.Spring), X = p.X, Z = p.Z, Discharge = rate };
         _w.Water.Springs.Add(sp);
         TerrainEditing.CarveSpringHole(_w.Terrain, p);
@@ -281,6 +311,7 @@ public sealed class ToolActions
     /// <summary>Sets how much faster biology runs than locomotion (saved with the world).</summary>
     public ToolResult SetBioAcceleration(double factor)
     {
+        _w.Scheduler.CompletePendingTick();
         if (!double.IsFinite(factor)) return ToolResult.Fail("invalid growth speed");
         factor = MathD.Clamp(factor, WorldDescriptor.MinBioAcceleration, WorldDescriptor.MaxBioAcceleration);
         _w.Descriptor.BioAcceleration = factor;
@@ -292,6 +323,7 @@ public sealed class ToolActions
 
     public ToolResult IntroduceFlora(string speciesId, Vec2 p)
     {
+        _w.Scheduler.CompletePendingTick();
         var r = Introduction.IntroduceFlora(_w, speciesId, p);
         return r.Ok ? new ToolResult(true, r.Message, r.Created) : ToolResult.Fail(r.Message);
     }
@@ -307,6 +339,7 @@ public sealed class ToolActions
 
     public ToolResult IntroduceFauna(string speciesId, Vec2 p, int? count = null)
     {
+        _w.Scheduler.CompletePendingTick();
         var r = Introduction.IntroduceFauna(_w, speciesId, p, count ?? Cfg.IntroduceFaunaCount);
         return r.Ok ? new ToolResult(true, r.Message, r.Created) : ToolResult.Fail(r.Message);
     }

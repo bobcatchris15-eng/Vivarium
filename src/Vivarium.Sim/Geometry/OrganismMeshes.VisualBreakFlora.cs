@@ -478,7 +478,7 @@ public static partial class OrganismMeshes
     public const int FloraLodTiers = 3;
     /// <summary>Hard cap on the top tier of every species.</summary>
     public const int FloraTopTriangleCap = 10000;
-    public const double FloraMidRatio = 0.35, FloraLowRatio = 0.12;
+    public const double FloraMidRatio = 0.35, FloraLowRatio = 0.08;
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int), double> LodScaleCache = new();
 
@@ -563,11 +563,12 @@ public static partial class OrganismMeshes
         var idx = src.Indices;
         // owner: -2 structural tube, >= 0 candidate part, -1 unassigned
         var owner = new int[nv];
+        var essential = new bool[nv];
         Array.Fill(owner, -1);
         foreach (var st in src.Structural)
             for (int v = st.FirstVertex; v < st.FirstVertex + st.VertexCount && v < nv; v++) owner[v] = -2;
         foreach (var span in src.EssentialSpans)
-            for (int v = span.FirstVertex; v < span.FirstVertex + span.VertexCount && v < nv; v++) owner[v] = -2;
+            for (int v = span.FirstVertex; v < span.FirstVertex + span.VertexCount && v < nv; v++) {owner[v] = -2;essential[v]=true;}
         int parts = 0;
         foreach (var ls in src.LeafSpans)
         {
@@ -611,6 +612,7 @@ public static partial class OrganismMeshes
         if (maxTube < 0.03) minor = Math.Max(minor, maxTube * 0.6);
         foreach (var st in src.Structural)
         {
+            if(essential[st.FirstVertex])continue;
             int end = st.FirstVertex + st.VertexCount;
             int p;
             if (st.Radius < petiole && end < nv && owner[end] >= 0) p = owner[end];

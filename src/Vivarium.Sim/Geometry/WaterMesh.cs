@@ -10,14 +10,32 @@ namespace Vivarium.Sim.Geometry;
 /// </summary>
 public sealed record WaterMeshSet(MeshData SurfaceMesh);
 
+/// <summary>
+/// Whether the shallow-water FIELD's dynamic surface is drawn. Default OFF (Intent WATER-6).
+/// </summary>
+/// <remarks>
+/// Spring-fed runoff is now presented by <c>SpringFluidSystem</c> as an actual droplet stream with a reconstructed
+/// surface, and the two together looked wrong: the field's thin-sheet solver renders sub-centimetre films as
+/// hard-edged grey polygons with visible stair-stepping, which sat right beside the stream and read as broken
+/// geometry. Standing water is unaffected -- the water-table plane, which is what fills the ponds, creeks,
+/// shoreline lake and bayou, is built separately and always drawn.
+///
+/// A flag rather than a deletion, so the field surface can be switched back on for debugging and because several
+/// water-geometry tests still exercise this builder.
+/// </remarks>
+public static class WaterSurfacePolicy
+{
+    public static bool RenderDynamicSurface { get; set; } = false;
+}
+
 /// <summary>Immutable inputs captured on the game thread for background water geometry.</summary>
 public sealed record WaterMeshSnapshot(
     double[] Depth, double[] Bed, double[] FlowX, double[] FlowZ, Heightfield Terrain);
 
 public static class WaterMesh
 {
-    public const int Subdivisions = 2;
-    public const int RingCells = 0;
+    public const int Subdivisions = 6;
+    public const int RingCells = 1;
 
     public static WaterMeshSnapshot Capture(VivariumWorld w) => new(
         (double[])w.Water.Depth.Clone(), (double[])w.Water.Bed.Clone(),
@@ -32,7 +50,9 @@ public static class WaterMesh
 
     private static WaterMeshSet Combine(VivariumWorld w, WaterMeshSnapshot? snapshot)
     {
-        var mesh = BuildSurfaceWater(w, snapshot);
+        // The field's dynamic runoff sheet is suppressed by default; the water table below is what remains, and
+        // it is what fills standing water. See WaterSurfacePolicy.
+        var mesh = WaterSurfacePolicy.RenderDynamicSurface ? BuildSurfaceWater(w, snapshot) : new MeshData();
         mesh.Append(BuildWaterTable(w, snapshot?.Terrain ?? w.Terrain));
         return new(mesh);
     }
@@ -169,10 +189,31 @@ public static class WaterMesh
             return ok ? sum / wsum : 0;
         }
 
+        // Reconstruct a continuous wet footprint from cell centres, including dry neighbours.
+        // Never end the visible shoreline on a solver cell edge.
+        double Coverage(Vec2 p)
+        {
+            double x=(p.X-g.OriginX)/cs-0.5,z=(p.Z-g.OriginZ)/cs-0.5;
+            int i=(int)Math.Floor(x),j=(int)Math.Floor(z);
+            double u=MathD.Clamp01(x-i),v=MathD.Clamp01(z-j);
+            u=u*u*(3-2*u); v=v*v*(3-2*v);
+            double d=0;
+            for(int dz=0;dz<=1;dz++)for(int dx=0;dx<=1;dx++)
+                if(g.InDomain(i+dx,j+dz))
+                    d+=depth[g.Index(i+dx,j+dz)]*(dx==0?1-u:u)*(dz==0?1-v:v);
+            return d;
+        }
         double Surface(Vec2 p, out bool ok)
         {
             double s = Bilinear(level, p, out ok);
-            return ok ? s : hf.Height(p);
+            return ok ? Math.Min(s, hf.Height(p) + Coverage(p)) : hf.Height(p);
+        }
+        Vec3 SurfaceNormal(Vec2 p)
+        {
+            const double e=0.005;
+            double dx=Surface(p+new Vec2(e,0),out _)-Surface(p-new Vec2(e,0),out _);
+            double dz=Surface(p+new Vec2(0,e),out _)-Surface(p-new Vec2(0,e),out _);
+            return new Vec3(-dx/(2*e),1,-dz/(2*e)).Normalized();
         }
         Vec2 Flow(Vec2 p) => new(Bilinear(cfx, p, out _), Bilinear(cfz, p, out _));
 
@@ -226,10 +267,10 @@ public static class WaterMesh
                 var b = polygon[(k + 1) % polygon.Count];
 
                 double sa = Surface(a, out bool oka);
-                double ha = oka ? (hf.Height(a) - sa) : 1.0;
+                double ha = oka ? Math.Max(hf.Height(a) - sa, 0.0001 - Coverage(a)) : 1.0;
 
                 double sb = Surface(b, out bool okb);
-                double hb = okb ? (hf.Height(b) - sb) : 1.0;
+                double hb = okb ? Math.Max(hf.Height(b) - sb, 0.0001 - Coverage(b)) : 1.0;
 
                 if (ha < 0) poly.Add(a);
 
@@ -241,7 +282,7 @@ public static class WaterMesh
                         double t = (lo + hi) * 0.5;
                         var q = a + (b - a) * t;
                         double sq = Surface(q, out bool okq);
-                        double hq = okq ? (hf.Height(q) - sq) : 1.0;
+                        double hq = okq ? Math.Max(hf.Height(q) - sq, 0.0001 - Coverage(q)) : 1.0;
                         if ((hq < 0) == (ha < 0)) lo = t; else hi = t;
                     }
                     poly.Add(a + (b - a) * ((lo + hi) * 0.5));
@@ -259,7 +300,7 @@ public static class WaterMesh
                 double depthFactor = (sk <= hk) ? 0.0 : MathD.Clamp01((sk - hk) / 0.15);
                 var fl = Flow(poly[k]);
                 ids[k] = mesh.AddVertex(
-                    new Vec3(poly[k].X, sk, poly[k].Z), Vec3.Up,
+                    new Vec3(poly[k].X, sk, poly[k].Z), SurfaceNormal(poly[k]),
                     0.2, 0.55, 0.7, depthFactor, poly[k].X, poly[k].Z, fl.X, fl.Z);
             }
             for (int k = 1; k + 1 < poly.Count; k++) mesh.AddTriangle(ids[0], ids[k], ids[k + 1]);
@@ -298,10 +339,10 @@ public static class WaterMesh
             var n = new Vec3(n2.X, 0, n2.Z);
             double dfa = MathD.Clamp01((sa - ba) / depthScale);
             double dfb = MathD.Clamp01((sb - bb) / depthScale);
-            int ta = mesh.AddVertex(new Vec3(a.X, sa, a.Z), n, 0.2, 0.55, 0.7, dfa, a.X, 0, 0, 0);
-            int tb = mesh.AddVertex(new Vec3(b.X, sb, b.Z), n, 0.2, 0.55, 0.7, dfb, b.X, 0, 0, 0);
-            int la = mesh.AddVertex(new Vec3(a.X, ba, a.Z), n, 0.2, 0.55, 0.7, dfa, a.X, sa - ba, 0, 0);
-            int lb = mesh.AddVertex(new Vec3(b.X, bb, b.Z), n, 0.2, 0.55, 0.7, dfb, b.X, sb - bb, 0, 0);
+            int ta = mesh.AddVertex(new Vec3(a.X, sa, a.Z), n, 0.9, 0.55, 0.7, dfa, a.X, 0, 0, 0);
+            int tb = mesh.AddVertex(new Vec3(b.X, sb, b.Z), n, 0.9, 0.55, 0.7, dfb, b.X, 0, 0, 0);
+            int la = mesh.AddVertex(new Vec3(a.X, ba, a.Z), n, 0.9, 0.55, 0.7, dfa, a.X, sa - ba, 0, 0);
+            int lb = mesh.AddVertex(new Vec3(b.X, bb, b.Z), n, 0.9, 0.55, 0.7, dfb, b.X, sb - bb, 0, 0);
             mesh.AddTriangle(ta, la, lb);
             mesh.AddTriangle(ta, lb, tb);
         }

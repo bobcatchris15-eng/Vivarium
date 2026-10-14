@@ -42,8 +42,8 @@ public partial class EnvironmentRig : Node3D
     private static readonly Color BackdropTop = new(0.030f, 0.025f, 0.020f);
     private static readonly Color BackdropHorizon = new(0.060f, 0.048f, 0.036f);
     private static readonly Color GrowLightTint = new(0.95f, 0.98f, 1.00f);
-    private static readonly Color AmbientBounceColor = new(0.44f, 0.54f, 0.34f);
-    private const float GrowSunGain = 1.38f, GrowFillGain = 0.48f, GrowAmbientGain = 0.95f, GrowAmbientSky = 0.08f;
+    private static readonly Color AmbientBounceColor = new(0.61f, 0.66f, 0.57f);
+    private const float GrowSunGain = 1.08f, GrowFillGain = 0.48f, GrowAmbientGain = 0.95f, GrowAmbientSky = 0.20f;
     private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
     private static readonly Color UnderwaterFogColor = new(0.12f, 0.20f, 0.14f);
     private const float UnderwaterFogDensity = 0.18f;
@@ -124,9 +124,9 @@ public partial class EnvironmentRig : Node3D
         {
             AutoExposureEnabled = true,
             AutoExposureMinSensitivity = 70.0f,
-            AutoExposureMaxSensitivity = 210.0f,
+            AutoExposureMaxSensitivity = 125.0f,
             AutoExposureSpeed = 0.6f,
-            AutoExposureScale = 0.40f,
+            AutoExposureScale = 0.16f,
             ExposureMultiplier = 1.0f,
             ExposureSensitivity = 100.0f,
         };
@@ -199,6 +199,7 @@ public partial class EnvironmentRig : Node3D
         layer.AddChild(_underwaterRect);
 
         ApplyDayNight();
+        NightFloraMaterials.SetNightFactor(NightFloraMaterials.NightFactorAtSeconds(Clock.Seconds));
     }
 
     public void ApplyQuality(int tier)
@@ -292,6 +293,7 @@ public partial class EnvironmentRig : Node3D
     {
         using var prof = FrameProfiler.Measure("Environment");
         ApplyDayNight();
+        NightFloraMaterials.SetNightFactor(NightFloraMaterials.NightFactorAtSeconds(Clock.Seconds));
         // quick crossfade so the medium change is visible but not jarring
         _underwater = Mathf.MoveToward(_underwater, _underwaterTarget, (float)delta * 5f);
         _underwaterRect.Visible = _underwater > 0.01f;

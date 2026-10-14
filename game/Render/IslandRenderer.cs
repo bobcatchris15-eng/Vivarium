@@ -48,6 +48,21 @@ public partial class IslandRenderer : Node3D
     private int _terrainVersion;
     private int _propsVersion = int.MinValue;
     private double _sinceMeshBuild;
+    private byte[] _cachedSubstrate = Array.Empty<byte>();
+    private int _materialTerrainVersion = -1, _materialPropsVersion = -1;
+    private void CacheSubstrate()
+    {
+        if (_cachedSubstrate.Length == _w.Grid.Count && _materialTerrainVersion == _w.Terrain.Version && _materialPropsVersion == _w.Props.Version) return;
+        _cachedSubstrate = new byte[_w.Grid.Count];
+        foreach (int c in _w.Grid.DomainCells)
+        {
+            var p = _w.Grid.CellCenter(c);
+            _cachedSubstrate[c] = (byte)(_w.PilotTree?.BlocksDisc(p) == true ? Substrate.Wood
+                : _w.Props.RockAt(p) != null ? Substrate.Rock : _w.Props.LogAt(p) != null ? Substrate.Wood
+                : _w.Props.GravelAt(p) != null ? Substrate.Gravel : (Substrate)_w.Fields.BaseSubstrate[c]);
+        }
+        _materialTerrainVersion = _w.Terrain.Version; _materialPropsVersion = _w.Props.Version;
+    }
     public int TriangleCount { get; private set; }
 
     /// <summary>Depth (m) of standing water above which a cell is a waterway bed rather than merely damp soil.
@@ -58,6 +73,7 @@ public partial class IslandRenderer : Node3D
     public void Build(VivariumWorld w)
     {
         _w = w;
+        _materialTerrainVersion = _materialPropsVersion = -1;
         foreach (var c in GetChildren()) c.QueueFree();
 
         _terrainMat = Bridge.Shader("res://Shaders/terrain.gdshader");
@@ -168,6 +184,7 @@ public partial class IslandRenderer : Node3D
 
     private void UpdateFieldTexture(bool updateSubstrate = true)
     {
+        CacheSubstrate();
         var g = _w.Grid; var f = _w.Fields;
         double nmax = _w.Content.Ecology.NutrientMax;
         var trees = new System.Collections.Generic.List<(Vivarium.Sim.Core.Vec2 Pos, double Radius)>();
@@ -185,7 +202,8 @@ public partial class IslandRenderer : Node3D
             int d = _nearestDomain[c];
             if (d < 0) continue;
             var p = g.CellCenter(d);
-            byte code = (byte)_w.SubstrateAtCell(p);
+            byte code = _cachedSubstrate[d];
+            if (code != (byte)Substrate.Rock && code != (byte)Substrate.Wood && _w.Water.IsWet(d)) code = (byte)Substrate.Water;
             if (code == (byte)Substrate.Wood) code = (byte)Substrate.Soil; // logs are drawn as meshes
             int o = c * 4;
             _bytes[o] = (byte)(Mathf.Clamp((float)f.Moisture.Values[d], 0, 1) * 255);
@@ -196,21 +214,14 @@ public partial class IslandRenderer : Node3D
             _ambientBytes[c] = (byte)(Mathf.Clamp((float)_w.AmbientGroundCover.Cover[d], 0, 1) * 255);
             if (updateSubstrate)
             {
-                bool gravel = _w.Props.GravelAt(p) != null || _w.SubstrateAtCell(p) == Substrate.Gravel;
-                bool rock = _w.SubstrateAtCell(p) == Substrate.Rock;
+                bool gravel = _w.Props.GravelAt(p) != null || code == (byte)Substrate.Gravel;
+                bool rock = code == (byte)Substrate.Rock;
                 int so = c * 4;
                 _subBytes[so] = (gravel || rock) ? (byte)255 : (byte)0;
                 _subBytes[so + 1] = _w.Water.WaterTableDepth(d) > SiltMinDepthM ? (byte)255 : (byte)0;
-                if (_w.Water.SurfaceWaterDepth(d) > 0.0005)
-                {
-                    double surf = _w.Water.HydraulicBed(d) + _w.Water.Depth[d];
-                    double surfAboveTable = Math.Max(0.0, surf - _w.Water.WaterTable);
-                    _subBytes[so + 2] = (byte)Math.Clamp((int)Math.Round(surfAboveTable * 100.0 + 1.0), 1, 255);
-                }
-                else
-                {
-                    _subBytes[so + 2] = 0;
-                }
+                // Dynamic water is a separate 3D liquid surface. A coarse ecology depth must never
+                // become a second painted water level, submerged-ground mask, or fake caustic sheet.
+                _subBytes[so + 2] = 0;
 
                 // Physical ground contact mask (root collars, nurse logs, boulders)
                 double contact = 0;

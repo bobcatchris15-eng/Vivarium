@@ -123,6 +123,12 @@ public sealed class FaunaSystem
         if (sp.Medium == Medium.Aquatic)
         {
             double bed = _w.Terrain.Height(p), depth = _w.Water.OpenWaterDepth(p);
+            if (sp.Model == "snail")
+            {
+                double ground = _w.GroundHeight(p);
+                // Glasscoil is a submerged-surface grazer, never a water-column swimmer.
+                return ground < bed + depth - sp.MinWaterDepth * 0.25 ? ground : bed;
+            }
             double margin = Math.Min(0.01, depth * 0.25);
             return bed + margin + MathD.Clamp01(columnFraction) * Math.Max(0, depth - 2 * margin);
         }
@@ -262,7 +268,7 @@ public sealed class FaunaSystem
             var clamped = _w.Domain.ClampInside(f.PositionXZ, 0.04);
             f.X = clamped.X; f.Z = clamped.Z;
 
-            if (sp.Medium == Medium.Aquatic)
+            if (sp.Medium == Medium.Aquatic && sp.Model != "snail")
             {
                 double pitchNoise = Rng.HashUnit(_w.Seed, _wanderHash, f.Id.Value, (ulong)tick ^ 0x5151UL) * 2 - 1;
                 f.Pitch = MathD.Clamp(f.Pitch + pitchNoise * 0.08, 0.05, 0.95);

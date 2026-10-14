@@ -43,7 +43,11 @@ public sealed class FieldsPayload
 
 public sealed class WaterPayload
 {
-    /// <summary>2 = dynamic surface depth + persisted face momentum. Null identifies pre-split saves.</summary>
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public SurfaceErosionState? Erosion {get;set;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public FluidState? Liquid {get;set;}
+    /// <summary>3 = authoritative 3D liquid; 2 = legacy dynamic depth and face momentum. Null identifies pre-split saves.</summary>
     public int? FormatVersion { get; set; }
     public string Depth { get; set; } = "";
     public string? FaceFlowEast { get; set; }
@@ -126,6 +130,7 @@ public static class WorldSerializer
 
     public static SortedDictionary<string, byte[]> Serialize(VivariumWorld w)
     {
+        w.Liquid.CompletePending();
         var p = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         p["world"] = Bytes(new WorldPayload
         {
@@ -153,7 +158,8 @@ public static class WorldSerializer
         }
         p["water"] = Bytes(new WaterPayload
         {
-            FormatVersion = 2,
+            FormatVersion = w.Liquid.Enabled?3:2, Liquid=w.Liquid.Enabled?w.Liquid.CaptureState():null,
+            Erosion=w.Liquid.Erosion.Capture(),
             Depth = Pack(depth), FaceFlowEast = Pack(flowE), FaceFlowNorth = Pack(flowN), Budget = w.Water.Budget
         });
         p["litter"] = Bytes(new LitterPayload
@@ -271,7 +277,7 @@ public static class WorldSerializer
         double[]? flowE = wa.FaceFlowEast != null ? Unpack(wa.FaceFlowEast, "water east-face flow") : null;
         double[]? flowN = wa.FaceFlowNorth != null ? Unpack(wa.FaceFlowNorth, "water north-face flow") : null;
         bool legacyCombinedDepth = wa.FormatVersion == null && flowE == null && flowN == null;
-        if (wa.FormatVersion is > 2) throw new InvalidDataException($"water payload format {wa.FormatVersion} is newer than this build supports");
+        if (wa.FormatVersion is > 3) throw new InvalidDataException($"water payload format {wa.FormatVersion} is newer than this build supports");
         if (flowE != null && flowE.Length != depth.Length) throw new InvalidDataException("water east-face flow grid mismatch");
         if (flowN != null && flowN.Length != depth.Length) throw new InvalidDataException("water north-face flow grid mismatch");
         for (int k = 0; k < depth.Length; k++)
@@ -293,6 +299,8 @@ public static class WorldSerializer
             }
         }
         w.Water.Budget = wa.Budget ?? new WaterBudget();
+        if(wa.Liquid!=null)w.Liquid.Enable(wa.Liquid);
+        if(wa.Erosion!=null)w.Liquid.Erosion.Restore(wa.Erosion);
 
         var litter = Read<LitterPayload>(payloads, "litter");
         if (litter.CellCount != w.Grid.DomainCells.Length) throw new InvalidDataException("litter grid mismatch");

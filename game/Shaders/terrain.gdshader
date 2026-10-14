@@ -78,8 +78,8 @@ float caustic_pattern(vec2 pos, float t) {
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
-    // fine geometric relief: real displacement (not just a normal map) so the soil reads as lumpy ground
-    // rather than a flat painted plane. Continuous transitions across rock/gravel and mounds subtly at root contacts.
+    // Microrelief belongs in shading. The visible bed must stay on the authoritative terrain
+    // triangles: decorative displacement can bury a shallow stream or conceal a small eroded channel.
     vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
     vec4 sub_samp = texture(sub_tex, fuv);
     float rock_weight = sub_samp.r;
@@ -90,12 +90,6 @@ void vertex() {
     float h1 = mix(vnoise((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq), vnoise((world_pos.xz + vec2(eps, 0.0)) * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
     float h2 = mix(vnoise((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq), vnoise((world_pos.xz + vec2(0.0, eps)) * soil_relief_freq * 2.03 + 4.7), 0.28) - 0.5;
     float amp = soil_relief_amp * soilMask;
-
-    // Root collar and rock contact embedding: gentle soil mounding (15-25 mm) against tree buttress / boulders
-    float contact_mound = contact * 0.020 * soilMask;
-
-    VERTEX += NORMAL * (h0 * amp + contact_mound);
-    world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
     vec3 grad = vec3(eps, (h1 - h0) * amp, 0.0);
     vec3 grad2 = vec3(0.0, (h2 - h0) * amp, eps);

@@ -35,6 +35,11 @@ public sealed class AutosaveController
         if (!Enabled) return false;
         _elapsed += Math.Max(0, realSeconds);
         if (_elapsed < IntervalSeconds) return false;
+        if (w.Scheduler.HasPendingTick)
+        {
+            w.Scheduler.YieldAtTickBoundary = true;
+            return false;
+        }
         return TryStart(w);
     }
 

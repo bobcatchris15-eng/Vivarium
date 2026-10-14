@@ -1,0 +1,30 @@
+{
+  "id": "VL-0004-bed-caustics",
+  "created_utc": "2026-10-14T15:49:52.902351+00:00",
+  "stage": "critique",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0004-bed-caustics",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T15:50:04.427250+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T15:51:57.829392+00:00"
+    },
+    {
+      "command": "authored",
+      "at": "2026-10-14T15:52:14.704441+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T15:53:33.823783+00:00"
+    },
+    {
+      "command": "blind",
+      "at": "2026-10-14T15:54:22.988877+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T15:54:22.988892+00:00",
+  "author_identity": "root-bed-ablation"
+}

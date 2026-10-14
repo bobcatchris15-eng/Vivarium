@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "mission_status": "active",
+  "accepted_baseline": null,
+  "experiments": [
+    {
+      "id": "VL-0000-upload-review",
+      "parent": null,
+      "decision": "rejected-wholesale-replacement",
+      "problem": "Uploaded shader and renderer proposals needed compatibility and visible evaluation",
+      "evidence": "artifacts/shader-review-20261013/review.md",
+      "reason": "114 C# substitution errors; shared include broke log shader; species, motion, emission and field contracts removed",
+      "lesson": "Port independent material ideas while retaining existing contracts; shader sophistication does not establish visible improvement"
+    },
+    {
+      "id": "VL-0001-material-port",
+      "parent": "VL-0000-upload-review",
+      "decision": "revise",
+      "hypothesis": "Reoriented vein/tissue relief, bounded cuticle coat and porous soil wetness improve surface response without geometry or state changes",
+      "alternative": "Keep baseline surface response and prioritize weak geometry/silhouette instead if blinded criticism finds gloss unconvincing",
+      "affected": [
+        "game/Shaders/leaf.gdshader",
+        "game/Shaders/terrain.gdshader"
+      ],
+      "evidence": "build/visual-lab/experiments/VL-0001-material-port",
+      "technical_evidence": "build, boot, shader loading, source contracts and unchanged fixture world digest",
+      "missing": [
+        "candidate motion comparison",
+        "isolated performance gates",
+        "mature/full reference route"
+      ],
+      "next": "Prioritize foliage construction over additional material polish",
+      "reason": "Independent blind review found no reliable terrain improvement and uncertain leaf sheen; exact dirty baseline restored"
+    },
+    {
+      "id": "VL-0002-leaf-margin-v2",
+      "parent": "VL-0001-material-port",
+      "decision": "revise",
+      "problem": "Flat angular foliage silhouettes",
+      "hypothesis": "Reallocate equal triangle budget to longitudinal sampling and analytical surface normals",
+      "evidence": "build/visual-lab/experiments/VL-0002-leaf-margin-v2",
+      "reason": "Independent critic found no reliable preference in any of 18 pairs; restored exact pre-experiment source",
+      "lesson": "Lower geometric chord error is not proof of improved visible anatomy",
+      "next": "Test placement/construction or authored asset alternatives"
+    },
+    {
+      "id": "VL-0003-foliage-construction",
+      "parent": "VL-0002-leaf-margin-v2",
+      "decision": "revise",
+      "problem": "Repeated flat terminal foliage fans observed in stills and independent motion inspection",
+      "hypothesis": "Stagger terminal leaf orientation and scale with equal topology and preserved RNG/attachment contracts",
+      "alternative": "Blender-authored tapering branch module and explicit insertion anatomy",
+      "evidence": "build/visual-lab/experiments/VL-0003-foliage-construction",
+      "stage": "complete; exact source baseline restored",
+      "missing": [
+        "actual playback/stability acceptance",
+        "isolated performance gates",
+        "generalization in whole world"
+      ],
+      "reason": "Still preferences baseline4/candidate1/no preference13; independent orbit-frame critique prefers candidate for separation, without stability preference. Mixed tradeoff, no acceptance.",
+      "technical_evidence": "24 geometry contract cases and 20 FloraVisual/OrganicVisual tests pass; game build zero warnings/errors",
+      "next": "Finish motion diagnostic and record rejection; investigate node-based branch module",
+      "lesson": "Separate individual leaves while preserving canopy volume; changing terminal radial parameters alone does not resolve insertion anatomy."
+    },
+    {
+      "id": "VL-0004-bed-caustics",
+      "parent": "VL-0003-foliage-construction",
+      "decision": "pending",
+      "problem": "Whole-world critic observed dominant repeating bright water lattice",
+      "hypothesis": "Submerged bed additive/emissive caustics contribute artificial glow; ablation isolates their effect",
+      "alternative": "The pattern is dominated by water normal/refraction or underwater overlay rather than bed shading; test those only if bed ablation leaves it intact",
+      "evidence": "build/visual-lab/experiments/VL-0004-bed-caustics",
+      "stage": "55 matched before/after pairs captured; source restored; blinded critique pending",
+      "missing": [
+        "ablation result",
+        "independent critique",
+        "functional replay repair",
+        "motion/performance acceptance"
+      ],
+      "diagnostic_result": "Zeroing only submerged-bed caustic_light removes dominant luminous water lattice in directly inspected ground view. Water becomes very dark; final response unresolved.",
+      "matched_provenance": "seed/tick/counts/worlddigest/resolution/quality/light/allcamera poses match; exact global shader TIME at pause unmeasured"
+    }
+  ],
+  "next_experiment": "VL-0004-bed-caustics",
+  "scheduler": {
+    "id": "vivarium-visual-evolution",
+    "status": "registered-active",
+    "cadence": "hourly",
+    "scheduled_execution_verified": false
+  },
+  "whole_world_diagnostic": {
+    "evidence": "build/visual-lab/world-diagnostics/initial-baseline-20261014",
+    "exit_code": 1,
+    "initial_seed": 20260923,
+    "tick_before": 0,
+    "tick_after": 0,
+    "flora": 96,
+    "fauna": 134,
+    "mean_fps_diagnostic": 55.05,
+    "p99_ms": 38.567,
+    "accepted": false,
+    "failures": [
+      "isolation unconfirmed",
+      "p99 and low1second/hitch gates",
+      "same-tick replay mismatch",
+      "missing regimes/soak"
+    ]
+  },
+  "functional_defects": [
+    {
+      "id": "plasmodium-state-not-persisted",
+      "evidence": "build/visual-lab/workers/replay-diagnosis",
+      "observation": "CPU-only current-format reload has matching digest yet loses520 colony cells; tick3 coverage/litter divergence",
+      "repair": "Persist authoritative future-affecting colony state; copied candidate under investigation",
+      "gate": "same-tick replay remains failing"
+    }
+  ]
+}

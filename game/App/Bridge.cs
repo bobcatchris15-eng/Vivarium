@@ -36,11 +36,10 @@ public static class Bridge
     /// </summary>
     public static Basis Yaw(double simAngle) => new(Vector3.Up, (float)-simAngle);
 
-    public static ArrayMesh ToArrayMesh(MeshData m, Material? material = null, ArrayMesh? reuse = null, bool signedVertexData = false)
+    private sealed record PackedMesh(Vector3[] Vertices, Vector3[] Normals, Color[] Colors, Vector2[] UV, Vector2[] UV2);
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MeshData, PackedMesh> PreparedMeshes = new();
+    private static PackedMesh PackMesh(MeshData m)
     {
-        var mesh = reuse ?? new ArrayMesh();
-        mesh.ClearSurfaces();
-        if (m.VertexCount == 0 || m.Indices.Count == 0) return mesh;
         int n = m.VertexCount;
         var verts = new Vector3[n]; var norms = new Vector3[n]; var cols = new Color[n]; var uv = new Vector2[n]; var uv2 = new Vector2[n];
         for (int i = 0; i < n; i++)
@@ -51,6 +50,19 @@ public static class Bridge
             uv[i] = new Vector2(m.UV[i * 2], m.UV[i * 2 + 1]);
             uv2[i] = new Vector2(m.UV2[i * 2], m.UV2[i * 2 + 1]);
         }
+        return new(verts,norms,cols,uv,uv2);
+    }
+    /// <summary>Copies immutable completed geometry into upload arrays; no Godot API or objects, safe on workers.</summary>
+    public static void PrepareMeshUpload(MeshData m) => PreparedMeshes.GetValue(m, PackMesh);
+
+    public static ArrayMesh ToArrayMesh(MeshData m, Material? material = null, ArrayMesh? reuse = null, bool signedVertexData = false, bool generateLods = false)
+    {
+        var mesh = reuse ?? new ArrayMesh();
+        mesh.ClearSurfaces();
+        if (m.VertexCount == 0 || m.Indices.Count == 0) return mesh;
+        int n = m.VertexCount;
+        var packed = PreparedMeshes.TryGetValue(m,out var prepared) ? prepared : PackMesh(m);
+        var verts=packed.Vertices; var norms=packed.Normals; var cols=packed.Colors; var uv=packed.UV; var uv2=packed.UV2;
         using var arrays = new Godot.Collections.Array();   // release the native array now, not at GC finalization
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = verts;
@@ -71,7 +83,15 @@ public static class Bridge
             flags |= (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift);
         if (m.Custom1.Count == n * 4)
             flags |= (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom1Shift);
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
+        if (generateLods && m.TriangleCount > 256)
+        {
+            using var importer = new ImporterMesh();
+            importer.AddSurface(Mesh.PrimitiveType.Triangles, arrays, flags: (ulong)flags);
+            using var boneTransforms = new Godot.Collections.Array();
+            importer.GenerateLods(60f, 0f, boneTransforms);
+            mesh = importer.GetMesh(mesh);
+        }
+        else mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         if (material != null) mesh.SurfaceSetMaterial(0, material);
         return mesh;
     }

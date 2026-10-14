@@ -30,7 +30,7 @@ public static class FrameProfiler
     /// <summary>CPU wall-time maxima, overlapping scopes; never GPU time.</summary>
     public static Dictionary<string, double> TakeStructuredReport()
     {
-        var result = new Dictionary<string, double>(_max); _max.Clear(); return result;
+        lock (_lock) { var result = new Dictionary<string, double>(_max); _max.Clear(); return result; }
     }
 
     public static Scope Measure(string name) => new(name);

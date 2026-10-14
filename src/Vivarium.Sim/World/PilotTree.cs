@@ -56,8 +56,35 @@ public sealed class PilotTreeState
     public double BaseHeight { get; }
     public HexDomain Domain => _domain;
     public IReadOnlyList<PilotRootPath> Roots { get; private set; }
+    private readonly RootSegment[] _segments;
+    private readonly record struct RootSegment(PilotRootSample A, PilotRootSample B, Vec2 Delta, double LengthSq,
+        double MinX, double MaxX, double MinZ, double MaxZ, double MaxWidth)
+    {
+        public double BoundsDistanceSq(Vec2 p)
+        {
+            double x = Math.Max(Math.Max(MinX-p.X, p.X-MaxX), 0);
+            double z = Math.Max(Math.Max(MinZ-p.Z, p.Z-MaxZ), 0);
+            return x*x+z*z;
+        }
+    }
     private readonly HexDomain _domain;
     private readonly Heightfield _terrain;
+    private Vivarium.Sim.Fields.GridSpec? _habitatGrid;
+    private IReadOnlyList<PilotRootPath>? _habitatRoots;
+    private double[] _moistureInfluence = Array.Empty<double>(), _litterBias = Array.Empty<double>();
+    private void CacheHabitat(Vivarium.Sim.Fields.GridSpec grid)
+    {
+        if (ReferenceEquals(grid, _habitatGrid) && ReferenceEquals(Roots, _habitatRoots)) return;
+        _habitatGrid = grid; _habitatRoots = Roots;
+        _moistureInfluence = new double[grid.Count]; _litterBias = new double[grid.Count];
+        foreach (int cell in grid.DomainCells)
+        {
+            var p = grid.CellCenter(cell);
+            double canopy = CanopyInfluence(p), root = RootDensity(p);
+            _moistureInfluence[cell] = canopy * Def.MoistureRetention - root * Def.RootCompetition * 0.45;
+            _litterBias[cell] = canopy * (0.75 + 0.25 * root);
+        }
+    }
 
     private PilotTreeState(PilotTreeDef def, int corner, ulong seed, HexDomain domain, Heightfield terrain)
     {
@@ -99,6 +126,11 @@ public sealed class PilotTreeState
             paths.Add(new(branch, false));
         }
         Roots = Array.AsReadOnly(paths.ToArray());
+        _segments = paths.SelectMany(path => Enumerable.Range(1, path.Samples.Count-1).Select(k => {
+            var a=path.Samples[k-1]; var b=path.Samples[k]; var d=b.Position-a.Position;
+            return new RootSegment(a,b,d,d.LengthSq,Math.Min(a.Position.X,b.Position.X),Math.Max(a.Position.X,b.Position.X),
+                Math.Min(a.Position.Z,b.Position.Z),Math.Max(a.Position.Z,b.Position.Z),Math.Max(a.Width,b.Width));
+        })).ToArray();
     }
 
     public static PilotTreeState? Generate(WorldDescriptor descriptor, HexDomain domain, Heightfield terrain)
@@ -118,12 +150,13 @@ public sealed class PilotTreeState
     private (double Distance, double Width, double Height) NearestRoot(Vec2 p)
     {
         double bestRatio = double.PositiveInfinity, bestD = double.PositiveInfinity, bestW = 0, bestH = 0;
-        foreach (var path in Roots)
-            for (int k = 1; k < path.Samples.Count; k++)
+        foreach (var segment in _segments)
             {
-                var a = path.Samples[k - 1]; var b = path.Samples[k];
-                var ab = b.Position - a.Position;
-                double t = ab.LengthSq > 1e-12 ? MathD.Clamp01((p - a.Position).Dot(ab) / ab.LengthSq) : 0;
+                // A segment cannot improve the width-normalized nearest distance outside this bound.
+                double limit = bestRatio * Math.Max(segment.MaxWidth, 0.001);
+                if (segment.BoundsDistanceSq(p) > limit*limit) continue;
+                var a = segment.A; var b = segment.B; var ab = segment.Delta;
+                double t = segment.LengthSq > 1e-12 ? MathD.Clamp01((p - a.Position).Dot(ab) / segment.LengthSq) : 0;
                 double d = Vec2.Distance(p, a.Position + ab * t);
                 double width = MathD.Lerp(a.Width, b.Width, t), height = MathD.Lerp(a.Height, b.Height, t);
                 double ratio = d / Math.Max(width, 0.001);
@@ -164,22 +197,22 @@ public sealed class PilotTreeState
     }
 
     /// <summary>Absolute woody top; NaN outside roots/trunk. GroundY follows terrain edits without stacked offsets.</summary>
-    public double RootSurfaceHeight(Vec2 p)
+    public double RootSurfaceHeight(Vec2 p, Heightfield? terrain = null)
     {
         if (BlocksTrunk(p)) return BaseHeight + Def.TrunkHeight;
         double rise = RootRise(p);
-        return rise <= 0 ? double.NaN : _terrain.Height(p) + rise;
+        return rise <= 0 ? double.NaN : (terrain ?? _terrain).Height(p) + rise;
     }
 
     private double RootRise(Vec2 p, double radius = 0)
     {
         double top = 0;
-        foreach (var path in Roots)
-            for (int k = 1; k < path.Samples.Count; k++)
+        foreach (var segment in _segments)
             {
-                var a = path.Samples[k - 1]; var b = path.Samples[k];
-                var ab = b.Position - a.Position;
-                double t = ab.LengthSq > 1e-12 ? MathD.Clamp01((p - a.Position).Dot(ab) / ab.LengthSq) : 0;
+                double limit = segment.MaxWidth + radius;
+                if (segment.BoundsDistanceSq(p) >= limit*limit) continue;
+                var a = segment.A; var b = segment.B; var ab = segment.Delta;
+                double t = segment.LengthSq > 1e-12 ? MathD.Clamp01((p - a.Position).Dot(ab) / segment.LengthSq) : 0;
                 double width = MathD.Lerp(a.Width, b.Width, t) + radius;
                 double d = Vec2.Distance(p, a.Position + ab * t);
                 if (d >= width) continue;
@@ -260,11 +293,12 @@ public sealed class PilotTreeState
 
     public void CoupleHabitat(VivariumWorld world, double dt)
     {
+        CacheHabitat(world.Grid);
         double relax = 1 - Math.Exp(-dt / (3 * SimUnits.Hour));
         foreach (int idx in world.Grid.DomainCells)
         {
             var p = world.Grid.CellCenter(idx);
-            double influence = MoistureInfluence(p);
+            double influence = _moistureInfluence[idx];
             double baseline = world.Content.Ecology.MoistureDryBaseline;
             double target = MathD.Clamp01(baseline + influence);
             // Only retention raises dry cells; competition lowers raised woody ridges, never standing water.
@@ -279,10 +313,11 @@ public sealed class PilotTreeState
 
     public void DepositLitter(VivariumWorld world, double biologicalSeconds)
     {
+        CacheHabitat(world.Grid);
         foreach (int idx in world.Grid.DomainCells)
         {
             var p = world.Grid.CellCenter(idx);
-            double bias = CanopyInfluence(p) * (0.75 + 0.25 * RootDensity(p));
+            double bias = _litterBias[idx];
             double mass = Def.LitterPerDay * bias * world.Grid.CellSize * world.Grid.CellSize * biologicalSeconds / SimUnits.Day;
             // Bounded source reservoir prevents immortality becoming unbounded litter accumulation.
             double capacity = world.Content.Ecology.DetritusMax * 1.5;

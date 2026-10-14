@@ -26,6 +26,10 @@ public partial class UiRoot : Control
     private RichTextLabel _probe = null!;
     public Windows Windows { get; private set; } = null!;
     private double _refresh;
+    private VBoxContainer _springControls = null!;
+    private HSlider _springFlow = null!;
+    private Label _springFlowLabel = null!;
+    private Button _removeSpring = null!;
 
     public override void _Ready()
     {
@@ -66,7 +70,14 @@ public partial class UiRoot : Control
         _toolChip.Name = "ToolChip";
         _toolInfo = UiKit.Label("", 12, UiKit.Muted); _toolInfo.Name = "ToolInfo";
         var chip = new GlassPanel(12, 6) { Name = "ToolChipPanel", Corner = 12 };
-        chip.AddChild(UiKit.Column(_toolChip, _toolInfo));
+        _springFlowLabel = UiKit.Label("", 13);
+        _springFlow = UiKit.Slider("SpringFlowSlider", 5, 2000, 5, 50,
+            value => Session.Tools.SetSpringFlow(value / 3600000.0));
+        _springFlow.CustomMinimumSize = new Vector2(280, 28);
+        _springFlow.TooltipText = "Spring flow in litres per hour. Click a spring to adjust it.";
+        _removeSpring = UiKit.Button("RemoveSpringButton", "Remove this spring", () => Session.Tools.RemoveSpring());
+        _springControls = UiKit.Column(_springFlowLabel, _springFlow, _removeSpring);
+        chip.AddChild(UiKit.Column(_toolChip, _toolInfo, _springControls));
         chip.SetAnchorsPreset(LayoutPreset.TopLeft);
         chip.OffsetLeft = 10; chip.OffsetTop = TopBarHeight + 8;
         AddChild(chip);
@@ -129,6 +140,13 @@ public partial class UiRoot : Control
             ToolKind.IntroduceFauna => " · " + (Session.Content.FaunaById(t.FaunaSpecies ?? "")?.Name ?? "pick an animal"),
             _ => "",
         };
+        if (_springControls != null)
+        {
+            _springControls.Visible = k == ToolKind.Spring;
+            _springFlow.SetValueNoSignal(t.SpringDischarge * 3600000);
+            _springFlowLabel.Text = $"{(t.SelectedSpring.IsNone ? "New spring" : "Selected spring")} · {t.SpringDischarge * 3600000:0} L/hour";
+            _removeSpring.Visible = !t.SelectedSpring.IsNone;
+        }
         _toolChip.Text = $"{RadialMenu.GlyphOf(k)}  {RadialMenu.NameOf(k)}{species}";
         _toolInfo.Text = (k switch
         {
@@ -141,7 +159,7 @@ public partial class UiRoot : Control
             ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth => $"hold to sculpt · radius {t.SculptRadius:0.00} m  ·  [ ] resize, G next",
             ToolKind.PourWater => $"hold to pour · radius {t.WaterRadius:0.00} m  ·  [ ] resize, H next",
             ToolKind.DrainWater => $"hold to soak up · radius {t.WaterRadius:0.00} m  ·  H next",
-            ToolKind.Spring => "click to add a spring, click one to remove it  ·  H next",
+            ToolKind.Spring => "click to add or select a spring  ·  [ ] flow  ·  H next",
             _ => "",
         } + (k == ToolKind.Select ? "" : "\n") + "right-click for the tool wheel").Trim();
     }
@@ -175,6 +193,7 @@ public partial class UiRoot : Control
             case Key.Period: Session.Host?.Clock.Faster(); break;
             case Key.F1: Windows.Toggle("Help"); break;
             case Key.F3: Windows.Toggle("Debug"); break;
+            case Key.D when k.CtrlPressed && k.ShiftPressed: Session.Diagnostics?.Toggle(); break;
             case Key.C: Windows.Toggle("Catalog"); break;
             case Key.T: Windows.Toggle("Stats"); break;
             case Key.S when k.CtrlPressed: Windows.QuickSave(); break;

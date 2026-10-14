@@ -167,7 +167,7 @@ public sealed class FloraSystem
             if (sp.RefuseTags.Contains(tag)) return FloraSuitability.Refused($"{sp.Name} refuses '{tag}' habitat", sub);
         double depth = _w.Water.OpenWaterDepth(p);
         bool onProp = sub is Substrate.Rock or Substrate.Wood && (!double.IsNaN(_w.Props.PropTopAt(p)) || _w.PilotTree?.BlocksDisc(p) == true);
-        if (!onProp && depth > sp.MaxWaterDepth + 1e-9) return FloraSuitability.Refused($"submerged ({depth * 100:0.#} cm, tolerates {sp.MaxWaterDepth * 100:0.#} cm)", sub);
+        if (!sp.UnlimitedWaterDepth && !onProp && depth > sp.MaxWaterDepth + 1e-9) return FloraSuitability.Refused($"submerged ({depth * 100:0.#} cm, tolerates {sp.MaxWaterDepth * 100:0.#} cm)", sub);
         if (sp.MinWaterDepth > 0 && depth < sp.MinWaterDepth - 1e-9) return FloraSuitability.Refused($"needs standing water ({depth * 100:0.#} cm < {sp.MinWaterDepth * 100:0.#} cm)", sub);
         double moisture = _w.Fields.Moisture.Sample(p);
         if (moisture < sp.HardMinMoisture) return FloraSuitability.Refused($"too dry (moisture {moisture:0.00} < {sp.HardMinMoisture:0.00})", sub);
@@ -275,7 +275,10 @@ public sealed class FloraSystem
     private readonly List<FloraIndividual> _nbColony = new();
     private int _colonialTotal;
 
-    public void Step(double dt)
+    public void Step(double dt) { foreach (var _ in StepBatches(dt)) { } }
+
+    /// <summary>Same ordered ecology update, with render opportunities between small batches.</summary>
+    public IEnumerable<bool> StepBatches(double dt)
     {
         var births = new List<(FloraSpeciesDef Sp, Vec2 P)>();
         _buds.Clear();
@@ -288,6 +291,7 @@ public sealed class FloraSystem
         _colonialTotal = 0;
         foreach (var f in _w.Flora.Items)
         {
+            yield return true;
             var sp0 = C.FloraOrThrow(f.SpeciesId);
             if (sp0.Climber != null)
                 _climberNodeCounts[f.SpeciesId] = _climberNodeCounts.GetValueOrDefault(f.SpeciesId) + 1;
@@ -298,6 +302,7 @@ public sealed class FloraSystem
         }
         foreach (var f in _w.Flora.Items)
         {
+            yield return true;
             var sp = C.FloraOrThrow(f.SpeciesId);
             var p = f.Position;
             f.Age += dt;
@@ -402,9 +407,10 @@ public sealed class FloraSystem
             }
         }
 
-        foreach (var (f, cause) in deaths) Kill(f, cause);
+        foreach (var (f, cause) in deaths) { yield return true; Kill(f, cause); }
         foreach (var (sp, q) in births)
         {
+            yield return true;
             if (!CanEstablish(sp, q, out _)) continue; // re-check against same-step recruits
             var nf = Establish(sp, q, "propagation");
             if (sp.Colony != null) FoundColony(nf, sp);
@@ -413,6 +419,7 @@ public sealed class FloraSystem
         SporeRain(dt);
         foreach (var (sp, q, parent, biomass) in _buds)
         {
+            yield return true;
             if (!CanEstablish(sp, q, out _)) { if (_w.Flora.Get(parent) is { } back) back.Biomass += biomass; continue; }
             var nf = Establish(sp, q, "growth front", biomass);
             nf.ParentId = parent;
@@ -421,6 +428,7 @@ public sealed class FloraSystem
         }
         foreach (var (sp, q, parent, biomass, unsupportedLength) in _climberBuds)
         {
+            yield return true;
             if (!CanEstablish(sp, q, out _))
             {
                 if (_w.Flora.Get(parent) is { } back) back.Biomass += biomass;
@@ -439,6 +447,7 @@ public sealed class FloraSystem
         }
         foreach (var (sp, q, root, ringDist) in _colonyBuds)
         {
+            yield return true;
             if (_colonialTotal >= GlobalColonialCellBudget) break;
             if (_colonySize.GetValueOrDefault(root) >= ColonyCellCap) continue;
             if (!CanEstablish(sp, q, out _)) continue;
@@ -1276,3 +1285,4 @@ public sealed class FloraSystem
         return true;
     }
 }
+

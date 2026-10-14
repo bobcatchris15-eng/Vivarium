@@ -15,6 +15,11 @@ uniform float stiffness = 1.0;
 uniform int surface_mode = 2;
 uniform bool deform_leaf_tips = false;
 uniform float review_time = -1.0;
+uniform vec3 bioluminescence_color = vec3(0.0);
+uniform float bioluminescence_strength = 0.0;
+uniform float night_factor = 0.0;
+uniform int emission_mask_mode = 0; // 0 foliage organs, 1 exposed body surface
+uniform vec3 pampas_plume_color = vec3(0.82, 0.73, 0.54);
 uniform vec3 leaf_top = vec3(0.07, 0.16, 0.055);
 uniform vec3 leaf_back = vec3(0.14, 0.19, 0.09);
 uniform int leaf_type = 0;
@@ -288,6 +293,15 @@ void fragment() {
                 rough = clamp(mix(rough, texture(leaf_scan_rgh, scan_uv).r,
                     leaf_scan_blend * 0.8) + face * 0.12, 0.28, 0.98);
             }
+            // Authored pampas rachillae use a dedicated organ marker so scanned leaf palettes cannot turn
+            // their pale, dry plume tissue green. Glowbriar nodules retain their own mint vertex pigment.
+            if (UV2.x > 1.20 && UV2.x < 1.30) {
+                c = srgb_to_linear(pampas_plume_color);
+                rough = 0.88;
+            } else if (UV2.x > 1.30 && UV2.x < 1.50) {
+                c = srgb_to_linear(COLOR.rgb);
+                rough = 0.42;
+            }
         } else if (UV2.x > 0.5) {
             // Glossy fruit / berries
             rough = 0.22;
@@ -304,7 +318,7 @@ void fragment() {
     ROUGHNESS = rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
     float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
-    float leaf_spec = mix(0.35, mix(0.48, 0.68, cuticle_sheen), top_side);
+    float leaf_spec = mix(0.35, mix(0.38, 0.50, cuticle_sheen), top_side);
     SPECULAR = surface_mode == 2 ? (woody_surface ? 0.20 : leaf_spec) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
     float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
     float trans_clamped = clamp(actual_leaf_trans, 0.0, 0.5);
@@ -312,5 +326,20 @@ void fragment() {
     float vein_occlusion = UV2.y > 0.5 ? clamp(1.0 - (1.0 - smoothstep(0.010, 0.034 + fwidth(UV.y - 0.5), abs(UV.y - 0.5))) * 0.60, 0.4, 1.0) : 1.0;
     vec3 leaf_backlight = c * transmit_tint * trans_clamped * vein_occlusion;
     BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    float marked_nodule = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
+    float gill_mask = step(0.5, UV2.x) * (1.0 - step(1.5, UV2.x));
+    float seed_head_mask = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x));
+    float center_stripe = (1.0 - smoothstep(0.16, 0.25, abs(UV.y - 0.5))) * step(0.5, UV2.y);
+    float edge_distance = min(min(UV.x, 1.0 - UV.x), 0.5 - abs(UV.y - 0.5));
+    float edge_strip = (1.0 - smoothstep(0.025, 0.075, edge_distance)) * step(0.5, UV2.y);
+    float night_mask = 0.0;
+    if (emission_mask_mode == 1) night_mask = 1.0;
+    else if (emission_mask_mode == 2) night_mask = marked_nodule;
+    else if (emission_mask_mode == 3) night_mask = gill_mask * float(FRONT_FACING);
+    else if (emission_mask_mode == 4) night_mask = seed_head_mask;
+    else if (emission_mask_mode == 5) night_mask = center_stripe;
+    else if (emission_mask_mode == 6) night_mask = edge_strip;
+    else night_mask = smoothstep(0.45, 0.60, UV2.y);
+    EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

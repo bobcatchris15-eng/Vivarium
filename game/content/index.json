@@ -46,7 +46,15 @@
     "flora/snaptrap.json",
     "flora/rain_jelly.json",
     "flora/carrion_bell.json",
-    "flora/glass_antlers.json"
+    "flora/glass_antlers.json",
+    "flora/plumegrass.json",
+    "flora/glowbriar.json",
+    "flora/lanternsedge.json",
+    "flora/tidebell.json",
+    "flora/siltstars.json",
+    "flora/ghostbonnet.json",
+    "flora/starmoss.json",
+    "flora/moonfern.json"
   ],
   "fauna": [
     "fauna/prismhopper.json",

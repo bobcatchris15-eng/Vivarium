@@ -422,6 +422,9 @@ public partial class Windows : Control
         var hydro = new CheckBox { Name = "HydroDebugCheck", Text = "Hydrology: depth dots, flow arrows, springs" };
         hydro.Toggled += b => Session.Overlay.HydrologyDebug = b;
         body.AddChild(hydro);
+        var recording = UiKit.Button("DiagnosticRecordingButton", "Start / stop recording (Ctrl+Shift+D)", () => Session.Diagnostics?.Toggle());
+        body.AddChild(recording);
+        body.AddChild(UiKit.Label("Recording keeps the scene running. Saved to user data / diagnostics.", 13, UiKit.Muted, wrap: true));
         _debugInfo = UiKit.Rich("DebugInfo");
         body.AddChild(_debugInfo);
     }
@@ -460,10 +463,10 @@ public partial class Windows : Control
             "  [b]6[/b] Rock · [b]7[/b] Log (R rotates) · [b]8[/b] Gravel — [b][ ][/b] or Ctrl+wheel resize\n" +
             "  [b]9[/b] Add flora · [b]0[/b] Add fauna — pick the species in the wheel's outer ring or the catalog\n" +
             "  [b]G[/b] Terrain — raise, lower, smooth (hold and drag). Dig below the water line and a pond fills in.\n" +
-            "  [b]H[/b] Water — pour, soak up (hold), or click to add / remove a spring. Springs feed flowing water; pools fill and overflow with the terrain.\n" +
+            "  [b]H[/b] Water — pour, soak up (hold), or click to add / select a spring. Use the flow slider or [ / ] to adjust its rate; the Remove button deletes it. Springs feed flowing water; pools fill and overflow with the terrain.\n" +
             "  The cursor ring turns [color=#4f7]green[/color] where an action is valid and [color=#f66]red[/color] where it isn't.\n" +
             "  Selected rocks, logs and gravel can be moved or removed from the inspector (Delete key).\n\n" +
-            "[b]Panels[/b]   [b]C[/b] species catalog · [b]T[/b] statistics · [b]Ctrl+S[/b] quick save · [b]F3[/b] debug overlays · [b]F1[/b] help · [b]Tab[/b] hide UI\n\n" +
+            "[b]Panels[/b]   [b]C[/b] species catalog · [b]T[/b] statistics · [b]Ctrl+S[/b] quick save · [b]F3[/b] debug overlays · [b]Ctrl+Shift+D[/b] start/stop diagnostic recording · [b]F1[/b] help · [b]Tab[/b] hide UI\n\n" +
             "Nothing can be lost for good: if a species dies out, reintroduce it from the catalog.";
         body.AddChild(t);
     }

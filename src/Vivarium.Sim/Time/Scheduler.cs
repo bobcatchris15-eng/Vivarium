@@ -14,6 +14,7 @@ public sealed class SimSystem
     /// <summary>Execution order within a tick (ascending; ties broken by name).</summary>
     public int Order { get; }
     public Action<double> Run { get; }
+    internal Func<double, IEnumerable<bool>>? Batches { get; set; }
 
     // diagnostics (non-authoritative)
     public long Runs { get; internal set; }
@@ -76,22 +77,69 @@ public sealed class Scheduler
     /// <summary>Names of systems that run on a given tick, in execution order.</summary>
     public IEnumerable<string> SystemsDueAt(long tick) => _systems.Where(s => s.DueAt(tick)).Select(s => s.Name);
 
-    /// <summary>Executes exactly one fixed tick.</summary>
-    public void StepTick()
+    private IEnumerator<bool>? _pendingTick;
+    public bool HasPendingTick => _pendingTick != null;
+    public bool YieldAtTickBoundary { get; set; }
+
+    /// <summary>Registers ordered resumable work. No other system runs until all its batches finish.</summary>
+    public SimSystem RegisterBatched(string name, int cadence, int order, Func<double, IEnumerable<bool>> batches, int phase = 0)
+    {
+        var system = Register(name, cadence, order, dt => { foreach (var _ in batches(dt)) { } }, phase);
+        system.Batches = batches;
+        return system;
+    }
+
+    private IEnumerable<bool> TickBatches()
     {
         long next = Clock.Tick + 1;
         foreach (var s in _systems)
         {
             if (!s.DueAt(next)) continue;
-            long t0 = Stopwatch.GetTimestamp();
-            s.Run(s.Dt);
-            double ms = Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
-            s.Runs++; s.TotalMs += ms; s.LastMs = ms; if (ms > s.MaxMs) s.MaxMs = ms;
-            SystemTimed?.Invoke(s, ms);
+            double total = 0;
+            if (s.Batches is { } batches)
+            {
+                using var work = batches(s.Dt).GetEnumerator();
+                while (true)
+                {
+                    long begin = Stopwatch.GetTimestamp();
+                    bool more = work.MoveNext();
+                    double ms = Stopwatch.GetElapsedTime(begin).TotalMilliseconds;
+                    total += ms;
+                    SystemTimed?.Invoke(s, ms);
+                    if (!more) break;
+                    yield return true;
+                }
+            }
+            else
+            {
+                long begin = Stopwatch.GetTimestamp();
+                s.Run(s.Dt);
+                total = Stopwatch.GetElapsedTime(begin).TotalMilliseconds;
+                SystemTimed?.Invoke(s, total);
+            }
+            s.Runs++; s.TotalMs += total; s.LastMs = total; s.MaxMs = Math.Max(s.MaxMs, total);
+            yield return true;
         }
         Clock.Tick = next;
         Clock.BioSeconds += SimClock.FixedStepSeconds * Clock.BioAcceleration;
         AfterTick?.Invoke(next);
+    }
+
+    /// <summary>Finish an already-started tick before saving or an external world edit.</summary>
+    public void CompletePendingTick()
+    {
+        if (_pendingTick == null) return;
+        while (_pendingTick.MoveNext()) { }
+        _pendingTick.Dispose(); _pendingTick = null;
+        YieldAtTickBoundary = false;
+        Backlog = Math.Max(0, Backlog - SimClock.FixedStepSeconds);
+    }
+
+    /// <summary>Executes exactly one fixed tick, or finishes the current partially processed tick.</summary>
+    public void StepTick()
+    {
+        if (HasPendingTick) { CompletePendingTick(); return; }
+        foreach (var _ in TickBatches()) { }
     }
 
     public void StepTicks(long n) { for (long i = 0; i < n; i++) StepTick(); }
@@ -115,9 +163,14 @@ public sealed class Scheduler
         int ticks = 0;
         while (Backlog >= SimClock.FixedStepSeconds && ticks < MaxTicksPerAdvance)
         {
-            StepTick();
-            Backlog -= SimClock.FixedStepSeconds;
-            ticks++;
+            _pendingTick ??= TickBatches().GetEnumerator();
+            if (!_pendingTick.MoveNext())
+            {
+                _pendingTick.Dispose(); _pendingTick = null;
+                Backlog -= SimClock.FixedStepSeconds;
+                ticks++;
+                if (YieldAtTickBoundary) { YieldAtTickBoundary = false; break; }
+            }
             if (WallBudgetMs > 0 && Stopwatch.GetElapsedTime(t0).TotalMilliseconds > WallBudgetMs) break;
         }
         TicksLastAdvance = ticks;
@@ -134,7 +187,7 @@ public sealed class Scheduler
     private long _lastBacklogWarn;   // 0 = process start, so the first warning is not suppressed
 
     /// <summary>Explicitly discard backlog (e.g. after pausing). Never called implicitly.</summary>
-    public void ClearBacklog() => Backlog = 0;
+    public void ClearBacklog() { CompletePendingTick(); Backlog = 0; }
 
     /// <summary>Fraction of the next tick accumulated (render interpolation hint).</summary>
     public double TickFraction => MathD.Clamp01(Backlog / SimClock.FixedStepSeconds);
