@@ -31,19 +31,16 @@ public class SpringFlowControlTests
     }
 
     [Fact]
-    public void IncreasingDischargeProducesMoreVisibleRunoffWithoutChangingWaterBudget()
+    public void IncreasingDischargeAddsConservedProductionWater()
     {
-        int Run(double rate)
+        double Run(double rate)
         {
-            var w=TestUtil.FlatWorld();
-            w.Water.Springs.Add(new Spring {Id=w.Ids.Next(EntityKind.Spring),X=0,Z=0,Discharge=rate});
-            string before=w.Water.DigestHex();
-            for(int i=0;i<20;i++)w.SpringFluid.Advance(SpringFluidSystem.FixedStep);
-            Assert.Equal(before,w.Water.DigestHex());
-            return w.SpringFluid.Count;
+            var w=TestUtil.FlatWorld();w.Water.Springs.Add(new Spring{Id=w.Ids.Next(EntityKind.Spring),X=0,Z=0,Discharge=rate});
+            w.Liquid.Dynamics.Advance(1,w.Water.Springs,w.Water.Budget);
+            Assert.Equal(rate,w.Water.Budget.SpringInflow,10);
+            return w.Liquid.Dynamics.Volume;
         }
-        int low=Run(ToolActions.DefaultSpringDischarge), high=Run(500.0/3600000);
-        Assert.True(low>0);
-        Assert.True(high>low*2,$"low={low}, high={high}");
+        double low=Run(ToolActions.DefaultSpringDischarge),high=Run(500.0/3600000);
+        Assert.True(low>0);Assert.True(high>low*2);
     }
 }

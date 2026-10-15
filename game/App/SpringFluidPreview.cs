@@ -38,7 +38,7 @@ public partial class SpringFluidPreview : Node3D
 
             var spring = w.Water.Springs[0];
             var src = new Vec2(spring.X, spring.Z);
-            GD.Print($"SPRING source=({src.X:0.000},{src.Z:0.000}) ground={w.GroundHeight(src):0.000} discharge_L_hour={spring.Discharge*3600000:0} parcel_ml={LiquidDynamics.ParcelVolume*1000000:0}");
+            GD.Print($"SPRING source=({src.X:0.000},{src.Z:0.000}) ground={w.GroundHeight(src):0.000} discharge_L_hour={spring.Discharge*3600000:0} parcel_ml={SurfaceFluidDynamics.ParcelVolume*1000000:0}");
 
             async Task Shot(string name)
             {

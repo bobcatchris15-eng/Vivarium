@@ -32,7 +32,7 @@ reference to Godot at all.
 | `World` | hex domain, descriptor, heightfield, strata, base substrate, props | content | generation, prop placement API |
 | `Time` | clock (tick count, scale, speed, pause), scheduler, catch-up budget | — | SimHost |
 | `Fields` | scalar/categorical grids: light, nutrients, moisture, detritus, biofilm, plankton | domain | owning systems |
-| `Water` | water table, springs, surface depth, outflow tally | terrain, props | hydrology system |
+| `Water` | preserved water table; one conserved mobile-fluid owner, springs, volume transfers and pending physical input | immutable terrain/prop/root boundaries | `SurfaceLiquid` / `SurfaceFluidDynamics`; derived ecology samples only |
 | `Flora` | flora individuals/colonies, spatial index | fields, substrate, water | flora system, tools |
 | `Fauna` | fauna individuals, spatial index | fields, water, terrain | fauna systems, tools |
 | `Genetics` | genome bank, lineage book, phenotype mapping | species defs | offspring pipeline |
@@ -84,3 +84,6 @@ validates it, and only then hands it back to be swapped in. Migrations are an or
 ## Locations
 - Content: `res://content` (read-only, inside the pck).
 - User data: `%APPDATA%\Vivarium\` (Godot `user://` with a custom user dir), holding `saves/`, `logs/`, and `settings.json`.
+
+
+Mobile surface water uses the production owner documented in [surface-water-replacement.md](../surface-water-replacement.md). The ecology scheduler does not advance another water solver. `SimHost` passes physical time to the bounded fluid job queue. Supported control-volume state and volume-carrying ballistic parcels exchange water conservatively; the GPU renders interpolated state through persistent geometry. Groundwater/pond presentation remains separate and unchanged. Saves contain fluid state and queued input history, not render meshes.

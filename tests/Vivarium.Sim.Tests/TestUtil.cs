@@ -86,6 +86,11 @@ public static class TestUtil
     /// <summary>Floods a disc to the given depth (fixture ponds).</summary>
     public static void Flood(VivariumWorld w, Vec2 centre, double radius, double depth)
     {
-        foreach (int c in w.Grid.CellsInRadius(centre, radius)) w.Water.Depth[c] = depth;
+        var state=w.Liquid.CaptureState();double step=state.Spacing;
+        var cells=state.Cells.Where(c=>(new Vec2((c.X+.5)*step,(c.Z+.5)*step)-centre).Length>radius).ToList();
+        for(int z=(int)Math.Floor((centre.Z-radius)/step);z<=(int)Math.Floor((centre.Z+radius)/step);z++)
+        for(int x=(int)Math.Floor((centre.X-radius)/step);x<=(int)Math.Floor((centre.X+radius)/step);x++)
+        {var p=new Vec2((x+.5)*step,(z+.5)*step);if((p-centre).Length<=radius&&w.Domain.Contains(p))cells.Add(new(x,z,depth*step*step,0,0));}
+        w.Liquid.Restore(state with{Cells=cells.OrderBy(c=>c.Z).ThenBy(c=>c.X).ToArray()});
     }
 }

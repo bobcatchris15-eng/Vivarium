@@ -198,7 +198,7 @@ public class PerfTests
         var timer = new SubsystemTimer(); timer.Attach(a.Scheduler);
         a.Step(600); b.Step(600);
         timer.Measure("persistence", () => SaveSystem.Snapshot(a));
-        timer.Measure("rendering-support", () => Geometry.WaterMesh.Build(a));
+        timer.Measure("rendering-support", () => Geometry.WaterMesh.BuildWaterTable(a,a.Terrain));
         var names = timer.Entries.Select(e => e.Name).ToHashSet();
         foreach (var n in new[] { "hydrology", "flora", "fauna", "ecology", "persistence", "rendering-support" }) Assert.Contains(n, names);
         Assert.Contains("hydrology", timer.Report());

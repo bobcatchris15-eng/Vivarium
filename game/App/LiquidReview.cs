@@ -92,9 +92,8 @@ public partial class LiquidReview : Node3D
                     var captured=GetViewport().GetTexture().GetImage();string output=Path.GetFullPath(Path.Combine(OutDir,$"live-{++shot:000}."+(Motion?"jpg":"png")));
                     encoding=Task.Run(()=>{if(Motion)captured.SaveJpg(output,.92f);else captured.SavePng(output);captured.Dispose();});
                     if(shot%20==0){GD.Print($"LIQUID_LIVE t={timer.Elapsed.TotalSeconds:F1} fluid_time={w.Liquid.PresentationTime-startTime:F2} fps={(Engine.GetFramesDrawn()-firstFrame)/timer.Elapsed.TotalSeconds:F1} particles={w.Liquid.Particles.Count} job_ms={w.Liquid.LastJobMilliseconds:F1}");
-                        var timings=w.Liquid.LastStepProfile;
-                        liveRecords.Add(new{wall=timer.Elapsed.TotalSeconds,fluid=w.Liquid.PresentationTime-startTime,fps=(Engine.GetFramesDrawn()-firstFrame)/timer.Elapsed.TotalSeconds,particles=w.Liquid.Particles.Count,jobMs=w.Liquid.LastJobMilliseconds,neighbourPairs=timings.NeighbourPairs,
-                            contactMs=timings.Contact,neighbourMs=timings.Neighbours,constraintMs=timings.Constraints,viscosityMs=timings.Viscosity,sinkMs=timings.Sinks});}
+
+                        liveRecords.Add(new{wall=timer.Elapsed.TotalSeconds,fluid=w.Liquid.PresentationTime-startTime,fps=(Engine.GetFramesDrawn()-firstFrame)/timer.Elapsed.TotalSeconds,particles=w.Liquid.Particles.Count,jobMs=w.Liquid.LastJobMilliseconds});}
                 }
                 w.Clock.Paused=true;w.Liquid.CompletePending();
                 if(encoding!=null)await encoding;
@@ -112,8 +111,8 @@ public partial class LiquidReview : Node3D
             double[] original=w.Terrain.H.ToArray();
             for(int step=0;step<=(Erosion?72000:Pool?3600:1800);step++)
             {
-                if(step>0){if(Erosion){w.Clock.Paused=false;w.Liquid.Advance(LiquidDynamics.StepSeconds);w.Clock.Paused=true;}
-                    else w.Liquid.Dynamics.Advance(LiquidDynamics.StepSeconds,w.Water.Springs,w.Water.Budget);}
+                if(step>0){if(Erosion){w.Clock.Paused=false;w.Liquid.Advance(SurfaceFluidDynamics.StepSeconds);w.Clock.Paused=true;}
+                    else {w.Clock.Paused=false;w.Liquid.Advance(SurfaceFluidDynamics.StepSeconds);w.Clock.Paused=true;}}
                 // Give geometry workers and the production scene regular frames; physics never competes with
                 // a second world clock, and the player's active game/save is untouched.
                 if(step%(Erosion?60:3)==0)await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame);

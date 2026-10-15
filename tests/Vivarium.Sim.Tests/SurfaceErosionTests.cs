@@ -12,7 +12,7 @@ public class SurfaceErosionTests
         w.Terrain.BeginEdit();Array.Fill(w.Terrain.H,.3);w.Terrain.Touch();w.Water.RefreshBed(w.Terrain);
         Array.Fill(w.Fields.BaseSubstrate.Values,(byte)Substrate.Soil);return w;}
     private static FluidParticle Contact(VivariumWorld w,Vec2 p,Vec3 velocity,double height=0)
-        =>new(Vec3.FromXZ(p,w.Terrain.Height(p)+LiquidDynamics.Radius(LiquidDynamics.ParcelVolume)+height),velocity,LiquidDynamics.ParcelVolume,123);
+        =>new(Vec3.FromXZ(p,w.Terrain.Height(p)+SurfaceFluidDynamics.Radius(SurfaceFluidDynamics.ParcelVolume)+height),velocity,SurfaceFluidDynamics.ParcelVolume,123);
     [Fact] public void QuietPoolsAirborneJetsAndDryGroundCannotErode()
     {
         var w=World();double[] before=(double[])w.Terrain.H.Clone();

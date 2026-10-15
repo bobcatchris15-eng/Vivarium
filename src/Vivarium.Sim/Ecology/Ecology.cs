@@ -81,7 +81,7 @@ public sealed class EcologySystem
             if (wet)
             {
                 double nutr = f.Nutrients.Values[idx] / eco.NutrientMax;
-                double depthFactor = MathD.Clamp01(_w.Water.Depth[idx] / 0.15);
+                double depthFactor = MathD.Clamp01(_w.Water.OpenWaterDepth(idx) / 0.15);
                 Grow(f.Plankton, f.Nutrients, idx, eco.PlanktonGrowth * depthFactor * (0.2 + 0.8 * nutr), eco.PlanktonCapacity * depthFactor, eco.PlanktonNutrientUse, dt);
             }
             else

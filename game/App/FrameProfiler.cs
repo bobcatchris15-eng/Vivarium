@@ -33,6 +33,11 @@ public static class FrameProfiler
         lock (_lock) { var result = new Dictionary<string, double>(_max); _max.Clear(); return result; }
     }
 
+    public static Dictionary<string,double> MeanDurations()
+    {
+        lock(_lock)return _accum.ToDictionary(p=>p.Key,p=>p.Value/System.Math.Max(1,_count[p.Key]));
+    }
+
     public static Scope Measure(string name) => new(name);
 
     public static void Record(string name, double ms) => RecordDuration(name, ms);

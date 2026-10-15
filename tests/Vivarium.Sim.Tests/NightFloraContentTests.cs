@@ -47,7 +47,7 @@ public sealed class NightFloraContentTests
     {
         var world = TestUtil.FlatWorld(seed: 413);
         TestUtil.Condition(world, 0.92, 0.95, 0.55);
-        foreach (int cell in world.Grid.DomainCells) world.Water.Depth[cell] = 7.0;
+        world.Water.Config.WaterTable=world.Terrain.Height(Vec2.Zero)+7.0; // Deep standing pond, not a mutable derived mobile-depth sample.
 
         var species = Sp("siltstars");
         Assert.True(species.UnlimitedWaterDepth);

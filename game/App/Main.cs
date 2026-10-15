@@ -46,6 +46,8 @@ public partial class Main : Node3D
         { AddChild(new MaterialPortReview { Content = content, OutDir = materialDir,
             BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"),
             RenderDocCapture = UserArgs.Contains("--renderdoc-capture"), MotionSequence = UserArgs.Contains("--motion-sequence") }); return; }
+        if(ArgAfter("--surface-fluid-review") is {} fluidReviewDir)
+        {AddChild(new SurfaceFluidReview{Content=content,OutDir=fluidReviewDir,Scenario=ArgAfter("--scenario")??"A",BenchmarkView=ArgAfter("--fluid-view")??"oblique",Video=UserArgs.Contains("--fluid-video"),Motion=UserArgs.Contains("--motion"),Benchmark=UserArgs.Contains("--benchmark"),SavePath=ArgAfter("--save"),PresetId=ArgAfter("--fluid-preset"),DisableMobileDrawing=UserArgs.Contains("--fluid-drawing-off"),DurationSeconds=double.TryParse(ArgAfter("--fluid-duration"),out var fluidDuration)?fluidDuration:0});return;}
         if(ArgAfter("--liquid-review") is {} liquidDir)
         {AddChild(new LiquidReview{Content=content,OutDir=liquidDir,SavePath=ArgAfter("--save"),Live=UserArgs.Contains("--live"),Motion=UserArgs.Contains("--motion"),Pool=UserArgs.Contains("--pool"),Erosion=UserArgs.Contains("--erosion")});return;}
         if(ArgAfter("--night-lighting-review") is {} lightDir)

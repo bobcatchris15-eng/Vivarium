@@ -62,7 +62,7 @@ public sealed class VivariumWorld
     /// Legacy tracer API retained for old fixture tools. The game does not advance or render this system.
     /// <see cref="Liquid"/> owns all dynamic game water; the water-table pond is hydrostatic.
     /// </summary>
-    public Water.SpringFluidSystem SpringFluid { get; }
+
     /// <summary>Authoritative game liquid; persisted 3D water, independent of ecology calendar acceleration.</summary>
     public SurfaceLiquid Liquid {get;}
 
@@ -114,7 +114,7 @@ public sealed class VivariumWorld
         CoverageSystem = new CoverageSystem(this);
         AquaticSystem = new AquaticSystem(this);
         GuardianSystem = new GuardianSystem(this);
-        SpringFluid = new Water.SpringFluidSystem(this);
+
         Liquid = new SurfaceLiquid(this);
         RegisterSystems();
     }
@@ -139,7 +139,8 @@ public sealed class VivariumWorld
         w.Fields.RecomputeLight(w.Terrain, w.Props, w.PilotTree);
         w.Water.InitializeFromWaterTable();
         // A short physical warmup establishes spring runoff without inventing a water-table plane.
-        if(warmupSurfaceWater)for (int i = 0; i < 10; i++) w.Water.Step(30);
+        w.Liquid.Enable();
+        if(warmupSurfaceWater&&w.Water.Springs.Count>0)w.Liquid.AdvancePhysical(5);
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
         w.PilotTree?.CoupleHabitat(w, SimUnits.Day);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
@@ -166,7 +167,7 @@ public sealed class VivariumWorld
         Scheduler.Register("fauna.metabolism", Cadence.FaunaMetabolism, 20, Bio(FaunaSystem.StepMetabolism), phase: 1);
         Scheduler.Register("guardian.metabolism", Cadence.FaunaMetabolism, 22, Bio(GuardianSystem.StepMetabolism), phase: 3);
         Scheduler.Register("fauna.lifecycle", Cadence.FaunaLifecycle, 30, Bio(FaunaSystem.StepLifecycle), phase: 7);
-        Scheduler.Register("hydrology", Cadence.Hydrology, 40, Water.Step, phase: 2);
+        Scheduler.Register("hydrology", Cadence.Hydrology, 40, _ => { }, phase: 2);
         Scheduler.Register("environment", Cadence.Environment, 50, dt =>
         {
             Water.CoupleMoisture(Fields.Moisture, eco, dt, Fields.Scratch);
@@ -257,7 +258,7 @@ public sealed class VivariumWorld
         return (Substrate)Fields.BaseSubstrate[c];
     }
 
-    public void OnPropsChanged() { /* light recomputes lazily on the next environment tick (LightStale) */ }
+    public void OnPropsChanged() { Liquid.OnSolidGeometryChanged(); /* light recomputes lazily */ }
 
     /// <summary>Forces derived caches up to date (used after tool actions so probes read fresh values).</summary>
     public void RefreshDerived() { if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props, PilotTree); }

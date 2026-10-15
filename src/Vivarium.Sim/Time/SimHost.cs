@@ -17,7 +17,7 @@ public sealed class SimHost
     /// <summary>Replace the running world (after a successful staged load / new world).</summary>
     public void Swap(VivariumWorld world) { World = world; Tools = new Tools.ToolActions(world); }
 
-    public int Advance(double realSeconds) { FramesAdvanced++; return World.Scheduler.Advance(realSeconds); }
+    public int Advance(double realSeconds) { FramesAdvanced++; int ticks=World.Scheduler.Advance(realSeconds); World.Liquid.Advance(realSeconds); return ticks; }
 
     public SimClock Clock => World.Clock;
     public void TogglePause() => World.Clock.Paused = !World.Clock.Paused;

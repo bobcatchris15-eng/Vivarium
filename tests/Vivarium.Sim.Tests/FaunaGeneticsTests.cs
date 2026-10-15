@@ -33,7 +33,7 @@ public static class FaunaFixtures
     public static readonly Vec2 Pond = new(-2, 0);
     public static readonly Vec2 Land = new(2, 0.5);
 
-    public static void HoldWater(VivariumWorld w) { foreach (int c in w.Grid.CellsInRadius(Pond, 1.5)) w.Water.Depth[c] = Math.Max(w.Water.Depth[c], 0.2); }
+    public static void HoldWater(VivariumWorld w) => TestUtil.Flood(w,Pond,1.5,.2);
 }
 
 [Trait("Suite", "Fauna")]

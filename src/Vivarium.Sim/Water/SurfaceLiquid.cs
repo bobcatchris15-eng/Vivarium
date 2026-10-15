@@ -1,154 +1,191 @@
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Persistence;
-using System.Text.Json;
 using Vivarium.Sim.World;
+using System.Text.Json;
+
 namespace Vivarium.Sim.Water;
 
-/// <summary>Game water owner. Ecology receives derived samples; rendering receives only 3D parcels.</summary>
+/// <summary>Single production owner of mobile water, jobs, published queries and geometry boundaries.</summary>
 public sealed class SurfaceLiquid
 {
     private readonly VivariumWorld _w;
-    private readonly Dictionary<(int,int),double> _ground=new();
-    private readonly Dictionary<(int,int),List<FluidParticle>> _columns=new();
-    private int _terrain=-1,_props=-1;
-    private long _indexed=-1;
-    private long _publishedVersion;
-    private FluidState? _published;
-    private Task<(FluidState State,WaterBudget Delta,double Ms,LiquidStepProfile Profile)>? _job;
-    public double LastJobMilliseconds {get;private set;}
-    public LiquidStepProfile LastStepProfile {get;private set;}
-    private double _queuedSeconds;
-    private double _erosionTime;
-    private sealed record SolidGeometry(Heightfield Terrain,PropSet Props,PilotTreeState? PilotTree,int TerrainVersion,int PropVersion);
-    private SolidGeometry? _geometry;
-    public bool AsyncMode {get;set;}
-    public long Version=>AsyncMode?_publishedVersion:Dynamics.Version;
-    public double PresentationTime=>AsyncMode?(_published?.Time??0):Dynamics.Time;
-    public LiquidDynamics Dynamics {get;}
-    public SurfaceErosion Erosion {get;}
-    public bool Enabled {get;private set;}
-    public IReadOnlyList<FluidParticle> Particles=>AsyncMode?(_published?.Particles??Array.Empty<FluidParticle>()):Dynamics.Particles;
-    public double Volume=>AsyncMode&&_published!=null?_published.Particles.Sum(p=>p.Volume)+_published.SourceRemainders.Values.Sum():Dynamics.Volume;
-    public SurfaceLiquid(VivariumWorld w){_w=w;Dynamics=new(w.Domain,Ground,GroundSample);Erosion=new(w);}
-    public void Enable(FluidState? saved=null)
+    private Task<(SurfaceFluidSnapshot Snapshot, WaterBudget Budget, double Ms)>? _job;
+    private SurfaceFluidSnapshot _snapshot = new(0, 0, SurfaceFluidDynamics.DefaultSpacing, [], []);
+    private Dictionary<(int, int), SurfaceFluidSample> _samples = new();
+    private IReadOnlyList<FluidParticle> _contacts = [];
+    private double _queuedSeconds, _erosionTime;
+    private readonly LinkedList<FluidInputBatch> _inputs = new();
+    private Heightfield? _solidTerrain;
+    private PropSet? _solidProps;
+    private PilotTreeState? _solidTree;
+    private int _terrain = -1, _props = -1;
+    public SurfaceFluidDynamics Dynamics { get; }
+    public SurfaceErosion Erosion { get; }
+    public bool Enabled { get; private set; }
+    public bool AsyncMode { get; set; }
+    public long Version => _snapshot.Version;
+    public double PresentationTime => _snapshot.Time;
+    public double BacklogSeconds => _queuedSeconds + Dynamics.Remainder;
+    public double LastJobMilliseconds { get; private set; }
+    public long PublishedAllocatedBytes { get; private set; }
+    public double Volume => _snapshot.Cells.Sum(c => c.Volume) + _snapshot.Airborne.Sum(c => c.Volume) + _publishedFractions;
+    private double _publishedFractions;
+    /// <summary>Derived contact samples for erosion/diagnostics, not another volume authority.</summary>
+    public IReadOnlyList<FluidParticle> Particles => _contacts;
+    public SurfaceLiquid(VivariumWorld world)
+    { _w = world; Dynamics = new(world.Domain, Ground); Dynamics.InfiltrationFactor = p => _solidProps?.RockAt(p) != null || _solidProps?.LogAt(p) != null ? 0 : _solidProps?.GravelAt(p) != null ? .25 : 1; Erosion = new(world); }
+    private double Ground(Vec2 p)
     {
-        if(Enabled)return;
-        if(saved!=null)Dynamics.Restore(saved);
-        else foreach(int c in _w.Grid.DomainCells)
-        {
-            double volume=_w.Water.Depth[c]*_w.Water.CellArea;
-            if(volume>0){var p=_w.Grid.CellCenter(c);Dynamics.Add(Vec3.FromXZ(p,Ground(p)+LiquidDynamics.Radius(LiquidDynamics.ParcelVolume)),Vec3.Zero,volume);}
-        }
-        Enabled=true;Dynamics.WaterTable=_w.Water.WaterTable;_w.Water.Liquid=this;
-        _published=Dynamics.Export();_publishedVersion++;_erosionTime=Dynamics.Time;
-        SampleEcology();
+        if (_solidTerrain == null) return _w.GroundHeight(p);
+        double h = _solidTerrain.Height(p), top = _solidProps?.PropTopAt(p) ?? double.NaN;
+        if (!double.IsNaN(top)) h = Math.Max(h, top);
+        double root = _solidTree?.RootSurfaceHeight(p, _solidTerrain) ?? double.NaN;
+        if (!double.IsNaN(root)) h = Math.Max(h, root); return h;
     }
+    public void Enable(FluidState? legacy = null)
+    {
+        if (Enabled) return; CaptureGeometry();
+        if (legacy != null) { Dynamics.RestoreLegacy(legacy); Dynamics.ResolveLegacyFractions(_w.Water.Springs, legacy.Particles); }
+        else foreach (int c in _w.Grid.DomainCells)
+            {
+                double volume = _w.Water.Depth[c] * _w.Water.CellArea; if (volume <= 0) continue;
+                var position = _w.Grid.CellCenter(c); double section = Math.Max(1e-12, _w.Water.Depth[c] * _w.Grid.CellSize);
+                double east = (_w.Water.FaceFlowEast[c] + (c % _w.Grid.Nx > 0 ? _w.Water.FaceFlowEast[c - 1] : 0)) * .5;
+                double north = (_w.Water.FaceFlowNorth[c] + (c >= _w.Grid.Nx ? _w.Water.FaceFlowNorth[c - _w.Grid.Nx] : 0)) * .5;
+                Dynamics.ImportLegacySquare(position - new Vec2(_w.Grid.CellSize * .5, _w.Grid.CellSize * .5), _w.Grid.CellSize, volume, new(east / section, north / section));
+            }
+        Enabled = true; Dynamics.WaterTable = _w.Water.WaterTable; _w.Water.Liquid = this; Publish();
+    }
+    public void Restore(SurfaceFluidState saved)
+    {
+        CompletePending(); CaptureGeometry(); Dynamics.Restore(saved); Enabled = true; _w.Water.Liquid = this; Dynamics.WaterTable = _w.Water.WaterTable; _erosionTime = saved.Time;
+        _inputs.Clear(); _queuedSeconds = 0; foreach (var input in saved.PendingInputs ?? []) { if (!double.IsFinite(input.Seconds) || input.Seconds < 0) throw new InvalidDataException("Invalid pending liquid input"); _inputs.AddLast(input); _queuedSeconds += input.Seconds; }
+        Publish();
+    }
+    private void CaptureGeometry()
+    {
+        if (_terrain == _w.Terrain.Version && _props == _w.Props.Version) return;
+        // Jobs own a stable solid snapshot. Invalidation happens only after the prior job has joined.
+        _solidTerrain = _w.Terrain.Snapshot();
+        if (_props != _w.Props.Version) _solidProps = JsonSerializer.Deserialize<PropSet>(JsonSerializer.Serialize(_w.Props, WorldSerializer.Json), WorldSerializer.Json)!;
+        _solidTree = _w.PilotTree; _terrain = _w.Terrain.Version; _props = _w.Props.Version; Dynamics.OnGeometryChanged();
+    }
+    public void OnTerrainChanged(Vec2? minimum = null, Vec2? maximum = null)
+    { CompletePending(); CaptureGeometry(); Publish(); }
+    public void OnSolidGeometryChanged(Vec2? minimum = null, Vec2? maximum = null) => OnTerrainChanged(minimum, maximum);
     public void Advance(double realSeconds)
     {
-        if(!Enabled)return;
-        if(_job?.IsCompleted==true)CompletePending();
-        if(_w.Clock.Paused)return;
-        Dynamics.WaterTable=_w.Water.WaterTable;
-        // Fluid has its own persisted physical clock. 168x biological/calendar acceleration must not
-        // turn a faucet into a high speed spray. User speed controls still apply; pause stops all inflow.
-        if(!AsyncMode)
+        if (!Enabled) return;
+        if (!double.IsFinite(realSeconds) || realSeconds < 0) throw new ArgumentException("Invalid mobile-water frame duration");
+        if (_job?.IsCompleted == true) CompletePending();
+        if (_w.Clock.Paused) return;
+        double addedSeconds = realSeconds * _w.Clock.SpeedMultiplier;
+        if (addedSeconds > 0)
         {
-            double remaining=realSeconds*_w.Clock.SpeedMultiplier;
-            if(!double.IsFinite(remaining)||remaining<=0)return;
-            while(remaining>1e-12)
-            {double slice=Math.Min(remaining,8*LiquidDynamics.StepSeconds);remaining-=slice;
-                Dynamics.Advance(slice,_w.Water.Springs,_w.Water.Budget,
-                    _w.Water.Config.Evaporation/SimUnits.Day,_w.Water.Config.Infiltration/SimUnits.Day);
-                ObserveErosion(Dynamics.Particles,Dynamics.Time);}
-            SampleEcology();return;
+            var sources = _w.Water.Springs.Select(s => new Spring { Id = s.Id, X = s.X, Z = s.Z, Discharge = s.Discharge }).ToArray();
+            var input = new FluidInputBatch(addedSeconds, sources, _w.Water.Config.Evaporation / SimUnits.Day, _w.Water.Config.Infiltration / SimUnits.Day, _w.Water.WaterTable);
+            var last = _inputs.Last;
+            if (last != null && last.Value.Evaporation == input.Evaporation && last.Value.Infiltration == input.Infiltration && last.Value.WaterTable == input.WaterTable &&
+                last.Value.Springs.Length == sources.Length && last.Value.Springs.Zip(sources).All(p => p.First.Id == p.Second.Id && p.First.X == p.Second.X && p.First.Z == p.Second.Z && p.First.Discharge == p.Second.Discharge))
+                last.Value = last.Value with { Seconds = last.Value.Seconds + addedSeconds };
+            else _inputs.AddLast(input);
+            _queuedSeconds += addedSeconds;
         }
-        _queuedSeconds+=realSeconds*_w.Clock.SpeedMultiplier;
-        if(_job!=null||_queuedSeconds+1e-12<LiquidDynamics.StepSeconds)return;
-        CaptureSolidGeometry();
-        // A little headroom amortizes the frame-boundary publication delay when the solver is
-        // catching up. Typical jobs still consume just the currently queued fixed steps.
-        double seconds=Math.Min(_queuedSeconds,8*LiquidDynamics.StepSeconds);_queuedSeconds-=seconds;
-        var sources=_w.Water.Springs.Select(s=>new Spring{Id=s.Id,X=s.X,Z=s.Z,Discharge=s.Discharge}).ToArray();
-        double evaporation=_w.Water.Config.Evaporation/SimUnits.Day,infiltration=_w.Water.Config.Infiltration/SimUnits.Day;
-        _job=Task.Run(()=>{var timer=System.Diagnostics.Stopwatch.StartNew();var budget=new WaterBudget();Dynamics.Advance(seconds,sources,budget,evaporation,infiltration);return(Dynamics.Export(),budget,timer.Elapsed.TotalMilliseconds,Dynamics.LastStepProfile);});
+        if (_job != null || _queuedSeconds + Dynamics.Remainder < SurfaceFluidDynamics.StepSeconds) return;
+        CaptureGeometry();
+        if (_inputs.First == null) return;
+        // Split on physical-step boundaries, integrating every rate-change interval exactly.
+        // A sub-step source edit cannot retroactively replace the preceding interval's input.
+        var batches = new List<FluidInputBatch>();
+        while (batches.Count < 16 && _queuedSeconds + 1e-12 >= SurfaceFluidDynamics.StepSeconds)
+        {
+            double remaining = SurfaceFluidDynamics.StepSeconds, evaporation = 0, infiltration = 0, table = _w.Water.WaterTable;
+            var integrated = new Dictionary<(ulong Id, double X, double Z), double>();
+            while (remaining > 1e-12 && _inputs.First != null)
+            {
+                var input = _inputs.First.Value; double used = Math.Min(input.Seconds, remaining); remaining -= used; _queuedSeconds = Math.Max(0, _queuedSeconds - used);
+                foreach (var source in input.Springs) { var key = (source.Id.Value, source.X, source.Z); integrated[key] = integrated.GetValueOrDefault(key) + source.Discharge * used; }
+                evaporation += input.Evaporation * used; infiltration += input.Infiltration * used; table = input.WaterTable;
+                if (input.Seconds <= used + 1e-12) _inputs.RemoveFirst(); else _inputs.First.Value = input with { Seconds = input.Seconds - used };
+            }
+            var sources = integrated.Select(p => new Spring { Id = new EntityId(p.Key.Id), X = p.Key.X, Z = p.Key.Z, Discharge = p.Value / SurfaceFluidDynamics.StepSeconds }).ToArray();
+            batches.Add(new(SurfaceFluidDynamics.StepSeconds, sources, evaporation / SurfaceFluidDynamics.StepSeconds, infiltration / SurfaceFluidDynamics.StepSeconds, table));
+        }
+        if (batches.Count == 0) return;
+        (SurfaceFluidSnapshot Snapshot, WaterBudget Budget, double Ms) Run()
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew(); var budget = new WaterBudget();
+            foreach (var batch in batches) { Dynamics.WaterTable = batch.WaterTable; Dynamics.Advance(batch.Seconds, batch.Springs, budget, batch.Evaporation, batch.Infiltration, 1); }
+            return (Dynamics.CaptureRenderState(), budget, timer.Elapsed.TotalMilliseconds);
+        }
+        if (!AsyncMode) { var result = Run(); LastJobMilliseconds = result.Ms; ApplyBudget(result.Budget); Publish(result.Snapshot); ObserveErosion(); return; }
+        _job = Task.Run(Run);
     }
-    private void CaptureSolidGeometry()
-    {
-        if(_geometry!=null&&_geometry.TerrainVersion==_w.Terrain.Version&&_geometry.PropVersion==_w.Props.Version)return;
-        var props=_geometry?.PropVersion==_w.Props.Version?_geometry.Props:
-            JsonSerializer.Deserialize<PropSet>(JsonSerializer.Serialize(_w.Props,WorldSerializer.Json),WorldSerializer.Json)!;
-        var terrain=_w.Terrain.Snapshot();
-        _geometry=new(terrain,props,_w.PilotTree,_w.Terrain.Version,_w.Props.Version);
-    }
+
+    public void AdvancePhysical(double seconds)
+    { CompletePending(); CaptureGeometry(); Dynamics.WaterTable = _w.Water.WaterTable; Dynamics.Advance(seconds, _w.Water.Springs, _w.Water.Budget, _w.Water.Config.Evaporation / SimUnits.Day, _w.Water.Config.Infiltration / SimUnits.Day); Publish(); ObserveErosion(); }
     public void CompletePending()
     {
-        if(_job==null)return;var result=_job.GetAwaiter().GetResult();_job=null;
-        _published=result.State;_publishedVersion++;
-        LastJobMilliseconds=result.Ms;
-        LastStepProfile=result.Profile;
-        var b=_w.Water.Budget;var d=result.Delta;
-        b.SpringInflow+=d.SpringInflow;b.GroundwaterRecharge+=d.GroundwaterRecharge;b.BoundaryOutflow+=d.BoundaryOutflow;
-        b.Evaporation+=d.Evaporation;b.Infiltration+=d.Infiltration;
-        ObserveErosion(result.State.Particles,result.State.Time);SampleEcology();
+        if (_job == null) return; var result = _job.GetAwaiter().GetResult(); _job = null;
+        LastJobMilliseconds = result.Ms; ApplyBudget(result.Budget); Publish(result.Snapshot); ObserveErosion();
     }
-    private void ObserveErosion(IReadOnlyList<FluidParticle> particles,double time)
-    {double elapsed=Math.Max(0,time-_erosionTime);_erosionTime=time;Erosion.Advance(particles,elapsed);}
-    public FluidState CaptureState()
+    private void ApplyBudget(WaterBudget delta)
     {
-        CompletePending();var state=Dynamics.Export();return state with {Remainder=state.Remainder+_queuedSeconds};
+        var b = _w.Water.Budget; b.SpringInflow += delta.SpringInflow; b.GroundwaterRecharge += delta.GroundwaterRecharge;
+        b.BoundaryOutflow += delta.BoundaryOutflow; b.Evaporation += delta.Evaporation; b.Infiltration += delta.Infiltration;
     }
-    private double Ground(Vec2 p)=>GroundSample(p).Height;
-    private LiquidGroundSample GroundSample(Vec2 p)
+    private void ObserveErosion()
+    { double elapsed = Math.Max(0, _snapshot.Time - _erosionTime); _erosionTime = _snapshot.Time; Erosion.Advance(_contacts, elapsed); }
+    private void Publish(SurfaceFluidSnapshot? snapshot = null)
     {
-        var geometry=AsyncMode?_geometry:null;
-        int terrainVersion=geometry?.TerrainVersion??_w.Terrain.Version,propsVersion=geometry?.PropVersion??_w.Props.Version;
-        if(_terrain!=terrainVersion||_props!=propsVersion)
-        {_ground.Clear();_terrain=terrainVersion;_props=propsVersion;}
-        // Cache solid geometry at 12.5 mm, not water. Resolve small basin lips as well as the finer
-        // parcels; nothing from this cache reaches the renderer.
-        const double step=.0125;int x=(int)Math.Floor(p.X/step),z=(int)Math.Floor(p.Z/step);
-        double u=p.X/step-x,v=p.Z/step-z;
-        double At(int a,int b)
-        {var key=(a,b);if(!_ground.TryGetValue(key,out var h))
-            {var q=new Vec2(a*step,b*step);
-                if(geometry==null)h=_w.GroundHeight(q);
-                else{h=geometry.Terrain.Height(q);double top=geometry.Props.PropTopAt(q),root=geometry.PilotTree?.RootSurfaceHeight(q,geometry.Terrain)??double.NaN;
-                    if(!double.IsNaN(top))h=Math.Max(h,top);if(!double.IsNaN(root))h=Math.Max(h,root);}
-                _ground[key]=h;}return h;}
-        double a=At(x,z),b=At(x+1,z),c=At(x,z+1),d=At(x+1,z+1);
-        return new((a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v,
-            ((b-a)*(1-v)+(d-c)*v)/step,((c-a)*(1-u)+(d-b)*u)/step);
+        long allocationStart = GC.GetAllocatedBytesForCurrentThread();
+        _snapshot = snapshot ?? Dynamics.CaptureRenderState(); _publishedFractions = Dynamics.FractionalVolume;
+        double spacing = _snapshot.Spacing;
+        _samples = _snapshot.Cells.ToDictionary(c => ((int)Math.Floor(c.Position.X / spacing), (int)Math.Floor(c.Position.Z / spacing)));
+        _contacts = _snapshot.Cells.Select(c => new FluidParticle(Vec3.FromXZ(c.Position, Ground(c.Position) + SurfaceFluidDynamics.Radius(c.Volume)), Vec3.FromXZ(c.Velocity, 0), c.Volume, 0)).Concat(_snapshot.Airborne).ToArray();
+        var h = _w.Water; Array.Clear(h.Depth); Array.Clear(h.FlowX); Array.Clear(h.FlowZ); Array.Clear(h.FaceFlowEast); Array.Clear(h.FaceFlowNorth);
+        foreach (var sample in _snapshot.Cells)
+        {
+            int c = _w.Grid.CellAt(sample.Position); if (c < 0 || !_w.Grid.InDomain(c)) continue;
+            h.Depth[c] += sample.Volume / h.CellArea; h.FlowX[c] += sample.Velocity.X * sample.Volume / h.Grid.CellSize; h.FlowZ[c] += sample.Velocity.Z * sample.Volume / h.Grid.CellSize;
+        }
+        // Airborne fluid is not an aquatic habitat or a saturated-ground measurement.
+        h.InvalidateWaterDistance(); PublishedAllocatedBytes += GC.GetAllocatedBytesForCurrentThread() - allocationStart;
     }
-    private void Index()
-    {
-        if(_indexed==Version)return;_columns.Clear();
-        foreach(var p in Particles){var key=((int)Math.Floor(p.Position.X/.05),(int)Math.Floor(p.Position.Z/.05));if(!_columns.TryGetValue(key,out var list))_columns[key]=list=new();list.Add(p);}
-        _indexed=Version;
-    }
+    public SurfaceFluidState CaptureState()
+    { CompletePending(); return Dynamics.Export() with { PendingInputs = _inputs.Count == 0 ? null : _inputs.ToArray() }; }
+    public SurfaceFluidSnapshot CaptureRenderState() => _snapshot;
     public double SurfaceAt(Vec2 p)
     {
-        Index();int x=(int)Math.Floor(p.X/.05),z=(int)Math.Floor(p.Z/.05);double top=double.NegativeInfinity;
-        for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++)
-        {if(!_columns.TryGetValue((x+dx,z+dz),out var list))continue;
-            foreach(var f in list){double r=1.3*Math.Cbrt(f.Volume),d2=(f.Position.XZ-p).LengthSq;if(d2>=r*r)continue;
-                double surface=f.Position.Y+LiquidDynamics.Radius(f.Volume)*Math.Sqrt(1-d2/(r*r));top=Math.Max(top,surface);}}
-        return double.IsNegativeInfinity(top)?double.NaN:top;
+        if(!_w.Domain.Contains(p))return double.NaN;
+        double spacing=_snapshot.Spacing,gx=p.X/spacing-.5,gz=p.Z/spacing-.5;
+        int x=(int)Math.Floor(gx),z=(int)Math.Floor(gz);double fx=gx-x,fz=gz-z;
+        bool hasAnchor=_samples.TryGetValue(((int)Math.Floor(p.X/spacing),(int)Math.Floor(p.Z/spacing)),out var anchor)&&anchor.Depth>1e-8;
+        double anchorHead=anchor.Head+anchor.SlopeX*(p.X-anchor.Position.X)+anchor.SlopeZ*(p.Z-anchor.Position.Z);
+        double sum=0,weight=0,coverage=0;
+        // The same support-aware bilinear reconstruction used by surface_fluid.gdshader.
+        // Camera, habitat and contact queries must not invent a different water boundary.
+        for(int dz=0;dz<2;dz++)for(int dx=0;dx<2;dx++)
+        {
+            if(!_samples.TryGetValue((x+dx,z+dz),out var sample)||sample.Depth<=1e-8)continue;
+            double head=sample.Head+sample.SlopeX*(p.X-sample.Position.X)+sample.SlopeZ*(p.Z-sample.Position.Z);
+            if(hasAnchor&&Math.Abs(head-anchorHead)>spacing)continue;
+            double w=(dx==0?1-fx:fx)*(dz==0?1-fz:fz);coverage+=w;
+            w*=Math.Clamp(sample.Depth/.001,.001,1);sum+=head*w;weight+=w;
+        }
+        if(weight<=1e-6)return double.NaN;
+        double ground=_w.GroundHeight(p);if(ground<_w.Water.WaterTable)return double.NaN;
+        double surface=ground+(sum/weight-ground)*coverage;
+        return surface>ground+1e-7?surface:double.NaN;
     }
-    public double DepthAt(Vec2 p){double surface=SurfaceAt(p);return double.IsNaN(surface)?0:Math.Max(0,surface-_w.Terrain.Height(p));}
-    public double Add(Vec2 p,double radius,double volume)
-    {if(volume<=0||!_w.Domain.Contains(p))return 0;CompletePending();CaptureSolidGeometry();Dynamics.Add(Vec3.FromXZ(p,Ground(p)+.04),Vec3.Zero,volume);_w.Water.Budget.ToolInflow+=volume;_published=Dynamics.Export();_publishedVersion++;SampleEcology();return volume;}
-    public double Remove(Vec2 p,double radius,double volume)
-    {CompletePending();double removed=Dynamics.Remove(p,radius,volume);_w.Water.Budget.ToolRemoval+=removed;_published=Dynamics.Export();_publishedVersion++;SampleEcology();return removed;}
-    private void SampleEcology()
-    {
-        var h=_w.Water;Array.Clear(h.Depth);Array.Clear(h.FlowX);Array.Clear(h.FlowZ);
-        Array.Clear(h.FaceFlowEast);Array.Clear(h.FaceFlowNorth);
-        foreach(var f in Particles){int c=_w.Grid.CellAt(f.Position.XZ);if(c<0||!_w.Grid.InDomain(c))continue;
-            h.Depth[c]+=f.Volume/h.CellArea;
-            // Legacy habitat queries expect discharge (m3/s), i.e. velocity times the
-            // cell's wetted cross-section, rather than velocity times cell volume.
-            h.FlowX[c]+=f.Velocity.X*f.Volume/h.Grid.CellSize;h.FlowZ[c]+=f.Velocity.Z*f.Volume/h.Grid.CellSize;}
-        h.InvalidateWaterDistance();
-    }
+    public double DepthAt(Vec2 p) { double head = SurfaceAt(p); return double.IsNaN(head) ? 0 : Math.Max(0, head - _w.GroundHeight(p)); }
+    public Vec2 VelocityAt(Vec2 p)
+    { double s = _snapshot.Spacing; return _samples.TryGetValue(((int)Math.Floor(p.X / s), (int)Math.Floor(p.Z / s)), out var sample) ? sample.Velocity : Vec2.Zero; }
+    public double WettedContactAt(Vec2 p) => Math.Clamp(DepthAt(p) / .002, 0, 1);
+    public double BuoyancyAt(Vec3 p, double height) { double surface = SurfaceAt(p.XZ); return double.IsNaN(surface) ? 0 : Math.Clamp((surface - p.Y) / Math.Max(1e-8, height), 0, 1); }
+    public double Add(Vec2 p, double radius, double volume)
+    { CompletePending(); CaptureGeometry(); double added = Dynamics.AddWater(p, radius, volume); _w.Water.Budget.ToolInflow += added; Publish(); return added; }
+    public double Remove(Vec2 p, double radius, double volume)
+    { CompletePending(); double removed = Dynamics.Remove(p, radius, volume); _w.Water.Budget.ToolRemoval += removed; Publish(); return removed; }
 }

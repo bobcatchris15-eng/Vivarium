@@ -54,6 +54,7 @@ public static class TerrainEditing
         hf.Touch();
         w.Water.RefreshBed(hf);
         w.Placement.Reseat(centre, radius);
+        w.Liquid.OnTerrainChanged(centre-new Vec2(radius,radius),centre+new Vec2(radius,radius));
         w.Fields.MarkLightStale();
         // sculpting disturbs the ground: crusts and stable-soil classification reset under the brush (§2)
         CoverageEnvironment.StabilityOf(w).Reset(centre, radius, w.Clock.SimSeconds);

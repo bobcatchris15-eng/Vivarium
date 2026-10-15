@@ -12,6 +12,7 @@ public sealed record SurfaceErosionState(SortedDictionary<int,double> Cut,
 /// These vertex budgets describe solid terrain, never a second water representation.</summary>
 public sealed class SurfaceErosion
 {
+    public bool Enabled {get;set;}=true;
     public const double MaximumCut=.03;
     public const double MaximumRate=.00012; // 7.2 mm per physical minute, at full exposure.
     public const double MinimumSpeed=.12;
@@ -25,8 +26,7 @@ public sealed class SurfaceErosion
     public double DeepestCut=>_cut.Count==0?0:_cut.Values.Max();
     public int WornVertices=>_cut.Count;
     public SurfaceErosion(VivariumWorld world)=>_w=world;
-    public SurfaceErosionState? Capture()=>_cut.Count==0&&_pending.Count==0&&_exposure.Count==0?null:
-        new(new(_cut),new(_pending),_seconds,RemovedVolume,new(_exposure));
+    public SurfaceErosionState? Capture()=>_cut.Count==0&&_pending.Count==0&&_exposure.Count==0&&_seconds==0?null:new(new(_cut),new(_pending),_seconds,RemovedVolume,new(_exposure));
     public void Restore(SurfaceErosionState state)
     {
         if(!double.IsFinite(state.Seconds)||state.Seconds<0||state.Seconds>=EditInterval+1e-8||
@@ -50,7 +50,7 @@ public sealed class SurfaceErosion
     /// Fine removed soil is counted as washed-away sediment; this approximation has no deposition solver.</summary>
     public int Advance(IReadOnlyList<FluidParticle> particles,double seconds)
     {
-        if(!double.IsFinite(seconds)||seconds<=0)return 0;
+        if(!Enabled||!double.IsFinite(seconds)||seconds<=0)return 0;
         // The owner publishes at most eight fixed steps. Bound long direct calls using the same
         // exposure snapshot without letting their rate exceed the per-second ceiling.
         int changed=0;
@@ -60,10 +60,11 @@ public sealed class SurfaceErosion
             var hf=_w.Terrain;var work=new Dictionary<int,double>();
             foreach(var particle in particles)
             {
+                if(particle.Volume<=1e-12)continue; // Sub-nanolitre numerical tails cannot scour soil.
                 var p=particle.Position.XZ;if(!_w.Domain.Contains(p))continue;
                 double bed=hf.Height(p);var normal=hf.Normal(p);
                 double separation=(particle.Position.Y-bed)*normal.Y;
-                if(separation>LiquidDynamics.Radius(particle.Volume)+.005||separation<-.003)continue;
+                if(separation>SurfaceFluidDynamics.Radius(particle.Volume)+.005||separation<-.003)continue;
                 var tangent=particle.Velocity-normal*particle.Velocity.Dot(normal);
                 double speed2=tangent.LengthSq;if(speed2<=MinimumSpeed*MinimumSpeed||SoilFactor(p)==0)continue;
                 double exposure=particle.Volume*Math.Min(4,(speed2-MinimumSpeed*MinimumSpeed)/(.45*.45));

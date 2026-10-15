@@ -252,7 +252,7 @@ public class CameraMediumTests
     public void WaterMediumTransitionsOncePerCrossingWithHysteresis()
     {
         var w = TestUtil.DefaultWorld(populate: false);
-        int wet = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
+        int wet = w.Grid.DomainCells.OrderByDescending(c => w.Water.OpenWaterDepth(c)).First();
         var p = w.Grid.CellCenter(wet);
         double surface = w.Water.SurfaceAt(p);
         var tracker = new WaterMediumTracker();

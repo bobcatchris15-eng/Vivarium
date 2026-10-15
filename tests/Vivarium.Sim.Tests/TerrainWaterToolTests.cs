@@ -113,7 +113,7 @@ public class TerrainWaterToolTests
         Assert.True(add.Ok);
         Assert.Single(w.Water.Springs);
         double before = w.Water.Budget.SpringInflow;
-        w.Step(360);
+        w.Liquid.AdvancePhysical(.5);
         Assert.True(w.Water.Budget.SpringInflow > before);
         string path = Path.Combine(TestUtil.TempDir(), "spring" + SaveSystem.Extension);
         Assert.True(SaveSystem.Save(w, path).Ok);

@@ -120,7 +120,7 @@ public class EcologyTests
         var w = TestUtil.DefaultWorld();
         foreach (var f in w.Fauna.Items.Where(x => x.SpeciesId == "siltshield").ToList()) w.FaunaSystem.Kill(f, "extinction test");
         Assert.Equal(0, w.Fauna.CountOf("siltshield"));
-        int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
+        int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.OpenWaterDepth(c)).First();
         var r = Introduction.IntroduceFauna(w, "siltshield", w.Grid.CellCenter(pond), 5);
         Assert.True(r.Ok, r.Message);
         Assert.Equal(5, w.Fauna.CountOf("siltshield"));
@@ -135,7 +135,7 @@ public class EcologyTests
     public void IntroductionRefusesGracefullyAtTheWorldFaunaBudget()
     {
         var w = TestUtil.DefaultWorld();
-        int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
+        int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.OpenWaterDepth(c)).First();
         var at = w.Grid.CellCenter(pond);
 
         // At the budget the tool must REFUSE with a readable reason, never throw out of CreateFounder.

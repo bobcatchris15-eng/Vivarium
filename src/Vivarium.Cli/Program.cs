@@ -157,7 +157,7 @@ switch (cmd)
             for (int i = 0; i < g.Nx; i++)
             {
                 int c = g.Index(i, j);
-                sb.Append(!g.InDomain(c) ? ' ' : w.Water.Depth[c] > 0.1 ? '#' : w.Water.IsWet(c) ? '~' : w.Water.Bed[c] < 0.1 ? '.' : '-');
+                sb.Append(!g.InDomain(c) ? ' ' : w.Water.OpenWaterDepth(c) > 0.1 ? '#' : w.Water.IsWet(c) ? '~' : w.Water.Bed[c] < 0.1 ? '.' : '-');
             }
             Console.WriteLine(sb);
         }

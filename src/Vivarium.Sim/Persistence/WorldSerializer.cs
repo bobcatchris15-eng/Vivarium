@@ -47,6 +47,8 @@ public sealed class WaterPayload
     public SurfaceErosionState? Erosion {get;set;}
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
     public FluidState? Liquid {get;set;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public SurfaceFluidState? Fluid {get;set;}
     /// <summary>3 = authoritative 3D liquid; 2 = legacy dynamic depth and face momentum. Null identifies pre-split saves.</summary>
     public int? FormatVersion { get; set; }
     public string Depth { get; set; } = "";
@@ -158,7 +160,7 @@ public static class WorldSerializer
         }
         p["water"] = Bytes(new WaterPayload
         {
-            FormatVersion = w.Liquid.Enabled?3:2, Liquid=w.Liquid.Enabled?w.Liquid.CaptureState():null,
+            FormatVersion = w.Liquid.Enabled?4:2, Fluid=w.Liquid.Enabled?w.Liquid.CaptureState():null,
             Erosion=w.Liquid.Erosion.Capture(),
             Depth = Pack(depth), FaceFlowEast = Pack(flowE), FaceFlowNorth = Pack(flowN), Budget = w.Water.Budget
         });
@@ -277,7 +279,7 @@ public static class WorldSerializer
         double[]? flowE = wa.FaceFlowEast != null ? Unpack(wa.FaceFlowEast, "water east-face flow") : null;
         double[]? flowN = wa.FaceFlowNorth != null ? Unpack(wa.FaceFlowNorth, "water north-face flow") : null;
         bool legacyCombinedDepth = wa.FormatVersion == null && flowE == null && flowN == null;
-        if (wa.FormatVersion is > 3) throw new InvalidDataException($"water payload format {wa.FormatVersion} is newer than this build supports");
+        if (wa.FormatVersion is > 4) throw new InvalidDataException($"water payload format {wa.FormatVersion} is newer than this build supports");
         if (flowE != null && flowE.Length != depth.Length) throw new InvalidDataException("water east-face flow grid mismatch");
         if (flowN != null && flowN.Length != depth.Length) throw new InvalidDataException("water north-face flow grid mismatch");
         for (int k = 0; k < depth.Length; k++)
@@ -286,7 +288,7 @@ public static class WorldSerializer
             int c = w.Grid.DomainCells[k];
             // Before the split, Depth included the hydrostatic table itself. In the new model groundwater is
             // implicit and surface water vanishes into it, so exposed-groundwater cells migrate to zero dynamic depth.
-            w.Water.Depth[c] = legacyCombinedDepth && w.Water.IsWaterTable(c) ? 0 : depth[k];
+            w.Water.Depth[c] = legacyCombinedDepth ? Math.Max(0,depth[k]-w.Water.WaterTableDepth(c)) : depth[k];
             if (flowE != null)
             {
                 if (!double.IsFinite(flowE[k])) throw new InvalidDataException($"water east-face flow {k} is invalid ({flowE[k]})");
@@ -299,7 +301,8 @@ public static class WorldSerializer
             }
         }
         w.Water.Budget = wa.Budget ?? new WaterBudget();
-        if(wa.Liquid!=null)w.Liquid.Enable(wa.Liquid);
+        if(wa.Fluid!=null)w.Liquid.Restore(wa.Fluid);
+        else w.Liquid.Enable(wa.Liquid);
         if(wa.Erosion!=null)w.Liquid.Erosion.Restore(wa.Erosion);
 
         var litter = Read<LitterPayload>(payloads, "litter");

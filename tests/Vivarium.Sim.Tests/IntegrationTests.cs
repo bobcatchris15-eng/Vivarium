@@ -24,7 +24,7 @@ public class IntegrationTests
         var cells = w.Grid.DomainCells.Select(c => (P: w.Grid.CellCenter(c), C: c)).ToList();
         Assert.Contains(cells, x => !w.Water.IsWet(x.C) && w.Fields.Moisture[x.C] < 0.35);            // dry
         Assert.Contains(cells, x => !w.Water.IsWet(x.C) && w.Fields.Moisture[x.C] > 0.75);            // moist bank
-        Assert.True(cells.Count(x => w.Water.Depth[x.C] > 0.1) > 50, "aquatic habitat");              // pond
+        Assert.True(cells.Count(x => w.Water.OpenWaterDepth(x.C) > 0.1) > 50, "aquatic habitat");              // pond
         Assert.NotEmpty(w.Props.Rocks); Assert.NotEmpty(w.Props.Logs); Assert.NotEmpty(w.Props.Gravel);
         Assert.NotEmpty(w.Water.Springs);
         Assert.True(w.Water.FlowX.Any(v => Math.Abs(v) > 1e-7), "a stream flows from the spring");
@@ -118,12 +118,12 @@ public class IntegrationTests
     public void UnderwaterObservationPathWorks()
     {
         var w = TestUtil.DefaultWorld();
-        int deepCell = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
+        int deepCell = w.Grid.DomainCells.OrderByDescending(c => w.Water.OpenWaterDepth(c)).First();
         var deep = w.Grid.CellCenter(deepCell);
         var edge = w.Domain.NearestBoundaryPoint(deep);
         var n = w.Domain.BoundaryNormal(edge);
         // exterior cutaway: water geometry ends on the cut plane
-        var water = WaterMesh.Build(w);
+        var water = WaterMesh.BuildWaterTable(w,w.Terrain);
         Assert.True(Enumerable.Range(0, water.VertexCount).All(i => w.Domain.SignedDistance(water.Position(i).XZ) <= 2e-6));
         var tracker = new WaterMediumTracker();
         double surf = w.Water.SurfaceAt(deep);
@@ -165,7 +165,7 @@ public class IntegrationTests
         Expect(() => Assert.True(t.PlaceRock(spot, 0.2, 0, 9).Ok), "world");
         var mossSpot = w.Grid.DomainCells.Select(c => w.Grid.CellCenter(c)).First(p => t.PreviewFlora("coinrunner", p) == null);
         Expect(() => Assert.True(t.IntroduceFlora("coinrunner", mossSpot).Ok), "flora", "world");
-        int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
+        int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.OpenWaterDepth(c)).First();
         Expect(() => Assert.True(t.IntroduceFauna("glintfin", w.Grid.CellCenter(pond), 3).Ok), "fauna", "genetics", "world");
         w.Step(8640);                                                                        // ecosystem continues
         Assert.Empty(w.CheckInvariants());
@@ -210,24 +210,29 @@ public class IntegrationTests
     {
         string Run(double[] frames, bool heavyObservation)
         {
-            var w = TestUtil.DefaultWorld();
+            // Hold the ecology comparison at identical integer ticks with standing water.
+            // Mobile water has a separate physical clock: equal wall-time cadence is
+            // exercised by SurfaceFluidReplacementTests.EqualPhysicalTimeAcrossRenderCadences.
+            var descriptor=TestUtil.Default;descriptor.BioAcceleration=1;descriptor.Water.Springs.Clear();
+            var w=VivariumWorld.Create(TestUtil.Content,descriptor,warmupSurfaceWater:false);
             w.Scheduler.MaxTicksPerAdvance = int.MaxValue; w.Scheduler.WallBudgetMs = 0;
             var host = new SimHost(w);
             var tracker = new WaterMediumTracker();
-            int i = 0;
-            while (w.Clock.Tick < 3000)
+            int i = 0;double elapsed=0;w.Clock.BaseRate=0;
+            while(elapsed<2-1e-12)
             {
-                host.Advance(frames[i++ % frames.Length]);
+                double seconds=Math.Min(frames[i++%frames.Length],2-elapsed);host.Advance(seconds);elapsed+=seconds;
                 if (heavyObservation)
                 {
                     // everything a client does between frames: camera, picking, meshes, stats, counters
                     var eye = new Vec3(Math.Sin(i) * 6, 2 + Math.Cos(i * 0.3), Math.Cos(i) * 6);
                     tracker.Update(w, eye);
                     Selection.Raycast(w, eye, -eye, includeWater: true);
-                    if (i % 7 == 0) { WaterMesh.Build(w); EcosystemStatistics.Compute(w); Diagnostics.Counters.Collect(w); }
+                    if (i % 7 == 0) { WaterMesh.BuildWaterTable(w,w.Terrain); EcosystemStatistics.Compute(w); Diagnostics.Counters.Collect(w); }
                     if (i % 50 == 0) { TerrainMesh.BuildTop(w); foreach (var f in w.Fauna.Items) w.FaunaSystem.PhenotypeOf(f); }
                 }
             }
+            for(int drain=0;drain<20;drain++)w.Liquid.Advance(0);
             w.Scheduler.RunUntilTick(3100);
             return TestUtil.Digest(w);
         }
@@ -252,7 +257,7 @@ public class IntegrationTests
             var st = w.Fauna.Items.FirstOrDefault(f => f.SpeciesId == "prismhopper") ?? w.Fauna.Items.First();
             t.Poke(new PokeAction(st.Position, new Vec3(0, -1, 0), 1, WorldHit.None));
             t.RemovePlant(w.Flora.Items[3].Id);
-            int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.Depth[c]).First();
+            int pond = w.Grid.DomainCells.OrderByDescending(c => w.Water.OpenWaterDepth(c)).First();
             t.IntroduceFauna("emberglass_swimmer", w.Grid.CellCenter(pond), 3);
             w.Step(8640);
             return TestUtil.Digest(w);

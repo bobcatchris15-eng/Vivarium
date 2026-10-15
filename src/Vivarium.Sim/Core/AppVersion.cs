@@ -10,8 +10,8 @@ public static class AppVersion
     public const string ProductName = "Vivarium";
     public const string Application = "0.1.2";
 
-    /// <summary>Schema 3 adds authoritative corner Pilot Tree context; schema 2 migrates without adding a tree.</summary>
-    public const int SaveSchema = 3;
+    /// <summary>Schema 4 replaces mobile water with conservative fine cells/airborne state; prior worlds migrate in staging.</summary>
+    public const int SaveSchema = 4;
 
     public static string Describe() => $"{ProductName} {Application} (save schema {SaveSchema})";
 }

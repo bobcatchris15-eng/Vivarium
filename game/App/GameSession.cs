@@ -227,12 +227,21 @@ public partial class GameSession : Node3D
 
     // ------------------------------------------------------------------ frame
 
+    private ulong _lastWallMicroseconds;
+    private bool _previousFramePaused=true;
     public override void _Process(double delta)
     {
+        // Godot may cap process delta after a long frame. Physical input must retain
+        // the actual elapsed time rather than silently losing it during a render hitch.
+        ulong now=Godot.Time.GetTicksUsec();
+        double elapsed=_lastWallMicroseconds==0?delta:(now-_lastWallMicroseconds)/1_000_000.0;
+        _lastWallMicroseconds=now;
         using var prof = FrameProfiler.Measure("Session");
         if (Host == null || LoadingWorld) return;
-        using (FrameProfiler.Measure("Session.Advance")) Host.Advance(delta);
-        using (FrameProfiler.Measure("Session.Liquid")) Host.World.Liquid.Advance(delta);
+        if(_previousFramePaused)elapsed=0;
+        _previousFramePaused=Host.Clock.Paused;
+        using (FrameProfiler.Measure("Session.Advance")) Host.Advance(elapsed);
+
         using (FrameProfiler.Measure("Session.Autosave")) Autosave?.Tick(Host.World, delta);
         var w = Host.World;
         if (w.Clock.BioDays - _lastHistoryDay >= 1.0 / 24 || _lastHistoryDay < 0)

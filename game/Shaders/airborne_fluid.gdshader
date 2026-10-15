@@ -1,11 +1,12 @@
 // Reconstructed three dimensional liquid. Normals and shape come from the simulated fluid.
 // No fake wave displacement, turbulent foam, ground-depth field, or wetness texture.
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_always, cull_back, diffuse_burley, specular_schlick_ggx;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap, repeat_disable;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable;
+uniform float interpolation_seconds;
 varying float local_thickness;
-void vertex(){local_thickness=COLOR.a;}
+void vertex(){local_thickness=INSTANCE_CUSTOM.a;VERTEX+=(inverse(MODEL_MATRIX)*vec4(INSTANCE_CUSTOM.xyz*interpolation_seconds,0.0)).xyz;}
 float scene_depth(vec2 uv,mat4 inverse_projection){vec4 v=inverse_projection*vec4(uv*2.0-1.0,texture(depth_tex,uv).r,1.0);return -v.z/v.w;}
 void fragment(){
     vec3 n=normalize(NORMAL),view=normalize(-VERTEX);
@@ -21,7 +22,7 @@ void fragment(){
     vec3 wv=(INV_VIEW_MATRIX*vec4(view,0.0)).xyz;
     vec3 reflected=reflect(-wv,wn);
     float panel=exp(-pow(reflected.z*12.0,2.0))*smoothstep(.45,.85,reflected.y);
-    vec3 reflection=mix(vec3(.035,.04,.037),vec3(.22,.25,.24),smoothstep(-.1,.8,reflected.y))+vec3(.65)*panel;
+    vec3 reflection=mix(vec3(.020,.022,.018),vec3(.070,.075,.065),smoothstep(-.1,.8,reflected.y))+vec3(.025)*panel;
     ALBEDO=vec3(.012,.020,.016);
     METALLIC=0.0;ROUGHNESS=.055;SPECULAR=.5;
     EMISSION=mix(transmitted,reflection,fresnel);

@@ -71,7 +71,8 @@ public static class SaveSystem
     private const string ManifestEntry = "manifest.json";
 
     /// <summary>Test hook: invoked after the temp file is written and before it replaces the target.</summary>
-    public static Action<string>? FaultInjectionBeforeCommit { get; set; }
+    private static readonly System.Threading.AsyncLocal<Action<string>?> WriteFault = new();
+    public static Action<string>? FaultInjectionBeforeCommit { get => WriteFault.Value; set => WriteFault.Value = value; }
 
     private static readonly JsonSerializerOptions ManifestJson = new() { WriteIndented = true };
 
@@ -211,7 +212,7 @@ public static class SaveSystem
         if (compat is SaveCompatibility.UnsupportedNewer or SaveCompatibility.UnsupportedOlder) return LoadResult.Fail(Describe(m.FormatVersion), compat, m);
 
         var payloads = a.Payloads;
-        if (compat == SaveCompatibility.Current)
+        if (m.Payloads.Count > 0)
         {
             foreach (var info in m.Payloads)
             {
@@ -219,7 +220,7 @@ public static class SaveSystem
                 if (Digest.Sha256Hex(bytes) != info.Sha256) return LoadResult.Fail($"payload '{info.Name}' is corrupt (checksum mismatch)", compat, m);
             }
         }
-        else
+        if (compat != SaveCompatibility.Current)
         {
             try
             {
@@ -264,6 +265,7 @@ public static class SaveMigrations
 
     private static readonly SortedDictionary<int, (string Name, Step Apply)> Steps = new()
     {
+        [3] = ("v3 to v4: conservative mobile liquid; import legacy volume/momentum on staged load", p => { }),
         [2] = ("v2→v3: retain existing worlds without a Pilot Tree", p =>
         {
             var descriptor = p["world"]["Descriptor"]!.AsObject();
