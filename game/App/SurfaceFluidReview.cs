@@ -77,6 +77,11 @@ public partial class SurfaceFluidReview : Node3D
         if(cacheError.HasValue&&(!float.IsFinite(cacheError.Value)||cacheError.Value>1e-6f))throw new Exception("Guardian pose cache differs from original skinning");
         var b = _w.Water.Budget; double input = b.SpringInflow + b.ToolInflow, output = b.GroundwaterRecharge + b.BoundaryOutflow + b.ToolRemoval + b.Evaporation + b.Infiltration;
         var snapshot = _w.Liquid.CaptureRenderState();
+        if(Scenario=="H"&&stage=="t45")
+        {
+            var source=_w.Water.Springs.First().Position;
+            File.WriteAllText(Path.Combine(OutDir,"supported-samples.json"),JsonSerializer.Serialize(snapshot.Cells.Where(c=>(c.Position-source).Length<.6).Select(c=>new{x=c.Position.X,z=c.Position.Z,bed=_w.GroundHeight(c.Position),head=c.Head,depth=c.Depth,slopeX=c.SlopeX,slopeZ=c.SlopeZ,volume=c.Volume,vx=c.Velocity.X,vz=c.Velocity.Z})));
+        }
         if(Scenario=="D"&&stage=="t45")File.WriteAllText(Path.Combine(OutDir,"ledge-samples.json"),JsonSerializer.Serialize(snapshot.Cells.Where(c=>c.Position.X>.18&&c.Position.X<.30&&Math.Abs(c.Position.Z)<.16).Select(c=>new{x=c.Position.X,z=c.Position.Z,bed=_w.GroundHeight(c.Position),head=c.Head,depth=c.Depth,slope=c.SlopeX,volume=c.Volume})));
         double ledgeSurface=Scenario=="D"?_w.Liquid.SurfaceAt(new(.2501,0)):double.NaN;
         if(Scenario=="D"&&stage=="t45"&&double.IsFinite(ledgeSurface)&&ledgeSurface>-.025)

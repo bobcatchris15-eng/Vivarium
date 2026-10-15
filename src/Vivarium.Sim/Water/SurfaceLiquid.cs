@@ -13,6 +13,7 @@ public sealed class SurfaceLiquid
     private Task<(SurfaceFluidSnapshot Snapshot, WaterBudget Budget, double Ms)>? _job;
     private SurfaceFluidSnapshot _snapshot = new(0, 0, SurfaceFluidDynamics.DefaultSpacing, [], []);
     private readonly Dictionary<(int, int), SurfaceFluidSample> _samples = new();
+    private readonly Dictionary<(int, int), double> _sampleSupport = new();
     private IReadOnlyList<FluidParticle> _contacts = [];
     private double _queuedSeconds, _erosionTime;
     private readonly LinkedList<FluidInputBatch> _inputs = new();
@@ -145,11 +146,13 @@ public sealed class SurfaceLiquid
         // Private main-thread query index can retain its capacity. Published state and
         // contact arrays remain immutable for callers holding the preceding snapshot.
         _samples.Clear();_samples.EnsureCapacity(_snapshot.Cells.Length);
+        _sampleSupport.Clear();_sampleSupport.EnsureCapacity(_snapshot.Cells.Length);
         var contacts=new FluidParticle[_snapshot.Cells.Length+_snapshot.Airborne.Length];int contactIndex=0;
         foreach(var c in _snapshot.Cells)
         {
-            _samples.Add(((int)Math.Floor(c.Position.X/spacing),(int)Math.Floor(c.Position.Z/spacing)),c);
-            contacts[contactIndex++]=new(Vec3.FromXZ(c.Position,Ground(c.Position)+SurfaceFluidDynamics.Radius(c.Volume)),Vec3.FromXZ(c.Velocity,0),c.Volume,0);
+            var key=((int)Math.Floor(c.Position.X/spacing),(int)Math.Floor(c.Position.Z/spacing));
+            double support=Ground(c.Position);_samples.Add(key,c);_sampleSupport.Add(key,support);
+            contacts[contactIndex++]=new(Vec3.FromXZ(c.Position,support+SurfaceFluidDynamics.Radius(c.Volume)),Vec3.FromXZ(c.Velocity,0),c.Volume,0);
         }
         _snapshot.Airborne.CopyTo(contacts,contactIndex);_contacts=contacts;
         var h = _w.Water; Array.Clear(h.Depth); Array.Clear(h.FlowX); Array.Clear(h.FlowZ); Array.Clear(h.FaceFlowEast); Array.Clear(h.FaceFlowNorth);
@@ -168,27 +171,30 @@ public sealed class SurfaceLiquid
     {
         if(!_w.Domain.Contains(p))return double.NaN;
         double spacing=_snapshot.Spacing,gx=p.X/spacing-.5,gz=p.Z/spacing-.5;
-        int x=(int)Math.Floor(gx),z=(int)Math.Floor(gz);double fx=gx-x,fz=gz-z;
-        bool hasAnchor=_samples.TryGetValue(((int)Math.Floor(p.X/spacing),(int)Math.Floor(p.Z/spacing)),out var anchor)&&anchor.Depth>1e-8;
-        double anchorHead=anchor.Head+anchor.SlopeX*(p.X-anchor.Position.X)+anchor.SlopeZ*(p.Z-anchor.Position.Z);
-        double ground=double.NaN;
-        double sum=0,weight=0,coverage=0;
-        // The same support-aware bilinear reconstruction used by surface_fluid.gdshader.
-        // Camera, habitat and contact queries must not invent a different water boundary.
-        for(int dz=0;dz<2;dz++)for(int dx=0;dx<2;dx++)
+        int x=(int)Math.Floor(gx+.5),z=(int)Math.Floor(gz+.5);
+        double ground=double.NaN,depth=0,headSum=0,weight=0,lowest=double.PositiveInfinity,highest=double.NegativeInfinity,maxSlope=0,maxSpeed=0;
+        // Match the GPU's nonnegative quadratic B-spline of conserved column depths.
+        static double Kernel(double distance){double a=Math.Abs(distance);return a<.5?.75-a*a:a<1.5?.5*(1.5-a)*(1.5-a):0;}
+        for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++)
         {
+            double w=Kernel(gx-x-dx)*Kernel(gz-z-dz);if(w<=0)continue;
             if(!_samples.TryGetValue((x+dx,z+dz),out var sample)||sample.Depth<=1e-8)continue;
-            double head=sample.Head+sample.SlopeX*(p.X-sample.Position.X)+sample.SlopeZ*(p.Z-sample.Position.Z);
-            if(hasAnchor&&Math.Abs(head-anchorHead)>spacing)continue;
-            if(!hasAnchor)
-            {if(double.IsNaN(ground))ground=_w.GroundHeight(p);if(head>ground+Math.Max(spacing*.1,sample.Depth*2))continue;}
-            double w=(dx==0?1-fx:fx)*(dz==0?1-fz:fz);coverage+=w;
-            w*=Math.Clamp(sample.Depth/.001,.001,1);sum+=head*w;weight+=w;
+            if(double.IsNaN(ground))ground=_w.GroundHeight(p);
+            double support=_sampleSupport[(x+dx,z+dz)];
+            if(support-ground>spacing*1.2&&sample.Head-ground>spacing*1.2)
+            {
+                double quarter=_w.GroundHeight(sample.Position+(p-sample.Position)*.25);
+                if(support+4*(quarter-support)-ground>spacing*1.2)continue;
+            }
+            depth+=sample.Depth*w;headSum+=sample.Head*w;weight+=w;
+            lowest=Math.Min(lowest,sample.Head);highest=Math.Max(highest,sample.Head);
+            maxSpeed=Math.Max(maxSpeed,sample.Velocity.Length);
+            maxSlope=Math.Max(maxSlope,Math.Sqrt(sample.SlopeX*sample.SlopeX+sample.SlopeZ*sample.SlopeZ));
         }
-        if(weight<=1e-6)return double.NaN;
-        if(double.IsNaN(ground))ground=_w.GroundHeight(p);if(ground<_w.Water.WaterTable)return double.NaN;
-        double surface=ground+(sum/weight-ground)*coverage;
-        return surface>ground+1e-7?surface:double.NaN;
+        if(depth<=0||weight<=1e-6||ground<_w.Water.WaterTable)return double.NaN;
+        bool ownerWet=_samples.TryGetValue((x,z),out var owner)&&owner.Depth>1e-8;
+        if(ownerWet&&highest-lowest<=1e-6&&maxSlope<=1e-6&&maxSpeed<=1e-4)depth=Math.Max(0,headSum/weight-ground);
+        return depth>1e-7?ground+depth:double.NaN;
     }
     public double DepthAt(Vec2 p) { double head = SurfaceAt(p); return double.IsNaN(head) ? 0 : Math.Max(0, head - _w.GroundHeight(p)); }
     public Vec2 VelocityAt(Vec2 p)

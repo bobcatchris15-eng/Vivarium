@@ -8,7 +8,8 @@ param(
     [double]$DurationSeconds = 0,
     [ValidateSet('oblique','macro','ground','pond')][string]$View = 'oblique',
     [int]$TimeoutSeconds = 900,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$DisableMobileDrawing
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
@@ -29,6 +30,7 @@ if ($DurationSeconds -gt 0) { $arguments += @('--fluid-duration', $DurationSecon
 if ($Mode -eq 'Motion') { $arguments += '--motion' }
 if ($Mode -eq 'Benchmark') { $arguments += '--benchmark' }
 if ($Mode -eq 'Video') { $arguments += '--fluid-video' }
+if ($DisableMobileDrawing) { $arguments += '--fluid-drawing-off' }
 $stdout = Join-Path $OutputDirectory 'stdout.log'
 $stderr = Join-Path $OutputDirectory 'stderr.log'
 $process = Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr

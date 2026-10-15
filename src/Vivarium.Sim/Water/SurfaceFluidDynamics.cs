@@ -37,7 +37,7 @@ public sealed class SurfaceFluidDynamics
     private readonly Dictionary<ulong, double> _pending = new();
     private readonly Func<Vec2, double> _ground;
     private readonly HexDomain _domain;
-    private readonly List<((int, int) A, (int, int) B, double Volume, bool East, double Speed, bool Falling, double Width)> _transfers = new();
+    private readonly List<((int, int) A, (int, int) B, double Volume, bool East, double Speed, bool Falling, double Width, double LipBed, double LipHead, double IncomingSlope)> _transfers = new();
     private readonly Dictionary<(int, int), double> _out = new();
     private readonly Dictionary<(int, int), double> _scale = new();
     private readonly HashSet<(int, int)> _dirty = new();
@@ -360,23 +360,37 @@ public sealed class SurfaceFluidDynamics
             if (q == 0) continue; var from = q > 0 ? key : other; var to = q > 0 ? other : key; var donor = q > 0 ? a : b; var receiver = q > 0 ? b : a;
             if (donor.Volume <= 0) continue;
             double amount = Math.Abs(q) * dt, speed = depth > 0 ? Math.Abs(q) / (Spacing * depth) : 0;
-            bool falling = receiver.Ground[4] < donor.Ground[4] - Spacing * 1.2 && receiver.Head < donor.Head - Spacing * 1.2;
-            _transfers.Add((from, to, amount, east, q > 0 ? speed : -speed, falling, FaceWidth(a, east, head))); _out[from] = _out.GetValueOrDefault(from) + amount;
+            bool falling = false;double lipBed=0,lipHead=0,incomingSlope=0;
+            if(receiver.Ground[4]<donor.Ground[4]-Spacing*1.2&&receiver.Head<donor.Head-Spacing*1.2)
+            {
+                var direction=east?new Vec2(Math.Sign(q),0):new Vec2(0,Math.Sign(q));
+                var face=(Center(from)+Center(to))*.5;
+                // A continuous incline still supports liquid, however steep it is.
+                // Only a departure below the incoming solid tangent is an unsupported lip.
+                double upstream=_ground(face-direction*(Spacing*.25));
+                incomingSlope=(upstream-donor.Ground[4])/(Spacing*.25);
+                lipBed=donor.Ground[4]+incomingSlope*Spacing*.5;
+                lipHead=donor.Head+(east?donor.SlopeX:donor.SlopeZ)*Math.Sign(q)*Spacing*.5;
+                falling=lipBed+incomingSlope*Spacing*.5-receiver.Ground[4]>Spacing*1.2;
+            }
+            _transfers.Add((from, to, amount, east, q > 0 ? speed : -speed, falling, FaceWidth(a, east, head),lipBed,lipHead,incomingSlope)); _out[from] = _out.GetValueOrDefault(from) + amount;
         }
         foreach (var (key, outflow) in _out) _scale[key] = Math.Min(1, Get(key).Volume / outflow);
-        foreach (var (from, to, requested, east, speed, falling, width) in _transfers)
+        foreach (var (from, to, requested, east, speed, falling, width,lipBed,lipHead,incomingSlope) in _transfers)
         {
             var a = Get(from); var b = Get(to); double amount = requested * _scale[from]; a.Volume -= amount;
+            if(amount<=0)continue;
             if (!_domain.Contains(Center(to))) { budget.BoundaryOutflow += amount; continue; }
             double floor = _ground(Center(to));
             if (!falling && floor < WaterTable) { budget.GroundwaterRecharge += amount; continue; }
             if (falling)
             {
                 var at = (Center(from) + Center(to)) * .5; double r = Radius(amount);
-                // Downstream face start; horizontal velocity and elevation are physically retained.
+                // Launch from the local lip, retaining the incoming terrain tangent.
+                // Cell-center elevation and horizontal-only velocity lift slope flow away from support.
                 at += east ? new Vec2(Math.Sign(speed) * Spacing * .06, 0) : new Vec2(0, Math.Sign(speed) * Spacing * .06);
-                _air.Add(new(Vec3.FromXZ(at, Math.Max(a.Head - r, a.Ground[4] + r)),
-                    east ? new Vec3(speed, 0, 0) : new Vec3(0, 0, speed), amount, 0, Math.Max(1e-6, width),
+                _air.Add(new(Vec3.FromXZ(at, Math.Max(lipHead - r, lipBed + r)),
+                    east ? new Vec3(speed, Math.Abs(speed)*incomingSlope, 0) : new Vec3(0, Math.Abs(speed)*incomingSlope, speed), amount, 0, Math.Max(1e-6, width),
                     east ? new Vec3(0, 0, 1) : new Vec3(1, 0, 0),
                     ((ulong)(from.Item1 + 1048576) << 21) | (uint)(from.Item2 + 1048576) | (east ? 1UL << 63 : 1UL << 62)));
             }

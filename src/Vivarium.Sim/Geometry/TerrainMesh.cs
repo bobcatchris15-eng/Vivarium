@@ -10,10 +10,9 @@ namespace Vivarium.Sim.Geometry;
 public static class TerrainMesh
 {
     /// <summary>
-    /// Render-only top surface at twice the authoritative grid resolution. Heights use a bounded Catmull-Rom
-    /// reconstruction blended toward the authoritative triangle surface, so grazing silhouettes are smooth while
-    /// picking/camera collision remain within a few centimetres. Fine-cell diagonals alternate deterministically
-    /// instead of exposing one island-wide triangulation pattern. Boundary triangles are clipped exactly to the hex.
+    /// Subdivided authoritative terrain triangles. Geometry must match the fluid support exactly:
+    /// millimetre films cannot tolerate centimetre smoothing offsets or different diagonals.
+    /// Smooth normals soften lighting without moving the contact surface.
     /// </summary>
     public static TopMesh BuildTop(VivariumWorld w)
     {
@@ -47,55 +46,15 @@ public static class TerrainMesh
                 var p01 = Pos(i, j + 1); var p11 = Pos(i + 1, j + 1);
                 int k00 = j * nx + i, k10 = k00 + 1, k01 = k00 + nx, k11 = k01 + 1;
 
-                // Break up the diagonal field without moving shared vertices. This leaves no coherent diagonal
-                // for the eye to follow across a low-angle view.
-                bool flip = (Rng.Mix(w.Seed, (ulong)(1 + k00)) & 1UL) != 0;
-                if (!flip)
-                {
-                    AddClipped(dom, mesh, Vertex, new[] { p00, p10, p11 }, new[] { k00, k10, k11 });
-                    AddClipped(dom, mesh, Vertex, new[] { p00, p11, p01 }, new[] { k00, k11, k01 });
-                }
-                else
-                {
-                    AddClipped(dom, mesh, Vertex, new[] { p00, p10, p01 }, new[] { k00, k10, k01 });
-                    AddClipped(dom, mesh, Vertex, new[] { p10, p11, p01 }, new[] { k10, k11, k01 });
-                }
+                // Preserve the parent's (00,11) diagonal, including in every subdivision.
+                AddClipped(dom, mesh, Vertex, new[] { p00, p10, p11 }, new[] { k00, k10, k11 });
+                AddClipped(dom, mesh, Vertex, new[] { p00, p11, p01 }, new[] { k00, k11, k01 });
             }
         return new TopMesh(mesh, xz);
     }
 
-    private static double Catmull(double a, double b, double c, double d, double t)
-    {
-        double t2 = t * t, t3 = t2 * t;
-        return 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2
-            + (-a + 3 * b - 3 * c + d) * t3);
-    }
-
-    /// <summary>
-    /// Smooth visual height reconstructed from the authoritative vertex samples. The result is clamped to stay
-    /// within 3.5 cm of the collision surface, preventing the prettier render mesh from lying about interactions.
-    /// </summary>
-    public static double RenderHeight(Heightfield hf, Vec2 p)
-    {
-        double fx = (p.X - hf.OriginX) / hf.Step, fz = (p.Z - hf.OriginZ) / hf.Step;
-        int i = Math.Clamp((int)Math.Floor(fx), 0, hf.Nx - 2);
-        int j = Math.Clamp((int)Math.Floor(fz), 0, hf.Nz - 2);
-        double u = MathD.Clamp01(fx - i), v = MathD.Clamp01(fz - j);
-
-        double Row(int jj)
-        {
-            double a = hf.Vertex(i - 1, jj), b = hf.Vertex(i, jj);
-            double c = hf.Vertex(i + 1, jj), d = hf.Vertex(i + 2, jj);
-            return Catmull(a, b, c, d, u);
-        }
-
-        double cubic = Catmull(Row(j - 1), Row(j), Row(j + 1), Row(j + 2), v);
-        double authoritative = hf.Height(p);
-        double smooth = MathD.Lerp(authoritative, cubic, 0.72);
-        return MathD.Clamp(smooth,
-            Math.Max(hf.MinHeight, authoritative - 0.035),
-            Math.Min(hf.MaxHeight, authoritative + 0.035));
-    }
+    /// <summary>The visible bed and fluid/collision support share one elevation.</summary>
+    public static double RenderHeight(Heightfield hf, Vec2 p) => hf.Height(p);
 
     public static Vec3 RenderNormal(Heightfield hf, Vec2 p)
     {

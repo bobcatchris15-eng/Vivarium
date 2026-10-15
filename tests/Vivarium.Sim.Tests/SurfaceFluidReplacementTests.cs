@@ -14,6 +14,104 @@ public class SurfaceFluidReplacementTests
     private static Spring Source(double q = .0001) => new() { Id = new(101), X = 0, Z = 0, Discharge = q };
     private static void Balance(SurfaceFluidDynamics f, WaterBudget b, double initial = 0)
     { Assert.InRange(f.Volume + b.GroundwaterRecharge + b.BoundaryOutflow + b.Evaporation + b.Infiltration + b.ToolRemoval - b.ToolInflow - b.SpringInflow - initial, -2e-10, 2e-10); Assert.All(f.Export().Cells, c => Assert.True(c.Volume >= 0 && double.IsFinite(c.Volume))); }
+    [Theory][InlineData(false)][InlineData(true)]
+    public void VisibleTerrainTrianglesMatchFluidSupportBetweenVertices(bool sculpt)
+    {
+        var w=TestUtil.FlatWorld(edit:d=>d.Diameter=5);var hf=w.Terrain;
+        if(sculpt)
+        {
+            hf.BeginEdit();
+            for(int j=0;j<hf.Nz;j++)for(int i=0;i<hf.Nx;i++)
+            {var p=hf.VertexPos(i,j);hf.H[hf.VertexIndex(i,j)]=.4+.08*Math.Sin(p.X*17)*Math.Cos(p.Z*13);}
+            hf.Touch();w.Liquid.OnTerrainChanged();
+        }
+        var mesh=TerrainMesh.BuildTop(w).Mesh;double maximum=0;
+        for(int k=0;k<mesh.Indices.Count;k+=3)
+        {
+            var a=mesh.Position(mesh.Indices[k]);var b=mesh.Position(mesh.Indices[k+1]);var c=mesh.Position(mesh.Indices[k+2]);
+            foreach(var weights in new[]{new Vec3(1.0/3,1.0/3,1.0/3),new Vec3(.1,.3,.6),new Vec3(.6,.3,.1)})
+            {var p=a*weights.X+b*weights.Y+c*weights.Z;maximum=Math.Max(maximum,Math.Abs(p.Y-w.GroundHeight(p.XZ)));}
+        }
+        Assert.True(maximum<2e-6,$"Visible bed differs from fluid support by {maximum*1000:F3} mm");
+    }
+    [Fact]
+    public void DryPartOfNeighboringCellCannotCancelAWettedColumn()
+    {
+        var w=TestUtil.FlatWorld();w.Terrain.BeginEdit();Array.Fill(w.Terrain.H,.5);w.Terrain.Touch();w.Liquid.OnTerrainChanged();
+        const double spacing=.025;
+        // The second cell holds a small wedge at its far edge. Its dry plane
+        // extends below the first cell's film at the shared boundary.
+        w.Liquid.Restore(new([new(0,0,.001*spacing*spacing,0,0),new(1,0,1e-7,0,0,1,0)],[],0,0,spacing,new()));
+        double volume=w.Liquid.Volume;
+        foreach(double x in new[]{.0125,.02,.0249,.0251})
+        {
+            double surface=w.Liquid.SurfaceAt(new(x,.0125));
+            Assert.True(double.IsFinite(surface)&&surface>.5001,$"Wet film disappeared at x={x}: {surface}");
+            Assert.InRange(surface,.5,.501001);
+        }
+        Assert.Equal(volume,w.Liquid.Volume);
+    }
+    [Theory][InlineData(.2)][InlineData(1.5)]
+    public void ThinFilmFollowsTerrainBendWithoutRaisedOrBuriedInterpolatedWedges(double bedSlope)
+    {
+        var w=TestUtil.FlatWorld();var hf=w.Terrain;hf.BeginEdit();
+        for(int j=0;j<hf.Nz;j++)for(int i=0;i<hf.Nx;i++)hf.H[hf.VertexIndex(i,j)]=.5+bedSlope*Math.Min(.5,Math.Abs(hf.VertexPos(i,j).X));
+        hf.Touch();w.Liquid.OnTerrainChanged();const double spacing=.025,depth=.001;
+        var film=new List<SurfaceFluidCell>();
+        for(int z=-2;z<=2;z++)for(int x=-3;x<=2;x++)film.Add(new(x,z,depth*spacing*spacing,0,0,x<0?-bedSlope:bedSlope,0));
+        w.Liquid.Restore(new(film.ToArray(),[],0,0,spacing,new()));
+        for(int i=0;i<=50;i++)
+        {
+            var p=new Vec2(-.0125+i*.0005,.0125);double actual=w.Liquid.SurfaceAt(p)-w.GroundHeight(p);
+            Assert.True(double.IsFinite(actual)&&Math.Abs(actual-depth)<1e-8,$"Film depth at {p.X}: {actual}");
+        }
+    }
+    [Fact]
+    public void MovingSurfaceDepthKernelIntegratesToConservedCellVolume()
+    {
+        var w=TestUtil.FlatWorld();w.Terrain.BeginEdit();Array.Fill(w.Terrain.H,.5);w.Terrain.Touch();w.Liquid.OnTerrainChanged();
+        const double spacing=.025;
+        w.Liquid.Restore(new([new(0,0,8e-7,0,0,.01,0),new(1,0,2e-7,0,0,.01,0)],[],0,0,spacing,new()));
+        double integral=0,step=spacing/100;
+        for(int z=-100;z<200;z++)for(int x=-100;x<300;x++)
+            integral+=w.Liquid.DepthAt(new((x+.5)*step,(z+.5)*step))*step*step;
+        Assert.InRange(Math.Abs(integral-w.Liquid.Volume),0,2e-10);
+    }
+    [Fact]
+    public void RestingSupportedPoolKeepsOneLevelOverSlopingBed()
+    {
+        var w=TestUtil.FlatWorld();var hf=w.Terrain;hf.BeginEdit();
+        for(int j=0;j<hf.Nz;j++)for(int i=0;i<hf.Nx;i++)hf.H[hf.VertexIndex(i,j)]=.5+.05*hf.VertexPos(i,j).X;
+        hf.Touch();w.Liquid.OnTerrainChanged();const double spacing=.025,head=.52;
+        var cells=Enumerable.Range(-2,4).Select(x=>new SurfaceFluidCell(x,0,(head-(.5+.05*(x+.5)*spacing))*spacing*spacing,0,0)).ToArray();
+        w.Liquid.Restore(new(cells,[],0,0,spacing,new()));
+        for(int i=0;i<=50;i++)Assert.Equal(head,w.Liquid.SurfaceAt(new(-.0375+i*.0015,.0125)),10);
+        // A moving cell exactly outside this point's kernel has zero influence,
+        // including on the resting-pool decision (matching the GPU).
+        w.Liquid.Restore(new(cells.Append(new(2,0,1e-7,1e-6,0,.1,0,1e-5,0)).ToArray(),[],0,0,spacing,new()));
+        Assert.Equal(head,w.Liquid.SurfaceAt(new(.025,.0125)),10);
+    }
+    [Fact]
+    public void IsolatedMovingVolumeCannotBeMistakenForARestingPoolPlate()
+    {
+        var w=TestUtil.FlatWorld();var hf=w.Terrain;hf.BeginEdit();
+        for(int j=0;j<hf.Nz;j++)for(int i=0;i<hf.Nx;i++)hf.H[hf.VertexIndex(i,j)]=.5-.5*hf.VertexPos(i,j).X;
+        hf.Touch();w.Liquid.OnTerrainChanged();const double spacing=.025,volume=1e-7;
+        w.Liquid.Restore(new([new(0,0,volume,1e-6,0,0,0,1e-5,0)],[],0,0,spacing,new()));
+        var p=new Vec2(.0125,.0125);double depth=w.Liquid.SurfaceAt(p)-w.GroundHeight(p);
+        Assert.Equal(volume/(spacing*spacing)*.75*.75,depth,10);
+    }
+    [Fact]
+    public void StationarySubcellWedgeCannotExtendItsPoolLevelIntoEmptyDownhillCells()
+    {
+        var w=TestUtil.FlatWorld();var hf=w.Terrain;hf.BeginEdit();
+        for(int j=0;j<hf.Nz;j++)for(int i=0;i<hf.Nx;i++)hf.H[hf.VertexIndex(i,j)]=.5-.5*hf.VertexPos(i,j).X;
+        hf.Touch();w.Liquid.OnTerrainChanged();const double spacing=.025,volume=1e-8;
+        w.Liquid.Restore(new([new(0,0,volume,0,0)],[],0,0,spacing,new()));
+        for(int i=0;i<=40;i++)
+            Assert.InRange(w.Liquid.DepthAt(new(.025+i*.001,.0125)),0,volume/(spacing*spacing));
+        Assert.Equal(volume,w.Liquid.Volume);
+    }
     [Fact]
     public void WetDryFrontVelocityUsesSolvedFaceSectionAndSurvivesReload()
     {
@@ -25,6 +123,23 @@ public class SurfaceFluidReplacementTests
         var reloaded=Fluid(Bed);reloaded.Restore(fluid.Export());
         Assert.Equal(before.Cells,reloaded.CaptureRenderState().Cells);
         Balance(fluid,budget);
+    }
+    [Theory][InlineData(1.5,0)][InlineData(-1.5,0)][InlineData(0,1.5)][InlineData(0,-1.5)]
+    public void ContinuousSteepGroundDoesNotLaunchWaterIntoAir(double slopeX,double slopeZ)
+    {
+        var fluid=Fluid(p=>.2-slopeX*p.X-slopeZ*p.Z);var budget=new WaterBudget();
+        for(int i=0;i<60;i++)
+        {fluid.Advance(SurfaceFluidDynamics.StepSeconds,[Source(.00002)],budget);Assert.Empty(fluid.Airborne);}
+        Balance(fluid,budget);
+        Assert.Contains(fluid.CaptureRenderState().Cells,c=>c.Position.X*slopeX+c.Position.Z*slopeZ>.1&&c.Volume>1e-10);
+    }
+    [Fact]
+    public void AbruptUnsupportedLipStillEmitsConservedFallingWater()
+    {
+        var fluid=Fluid(p=>p.X<.10?.2:0);var budget=new WaterBudget();bool falling=false;
+        for(int i=0;i<120;i++)
+        {fluid.Advance(SurfaceFluidDynamics.StepSeconds,[Source(.0001)],budget);falling|=fluid.Airborne.Any(p=>p.Stream!=0&&p.Position.X>=.1&&p.Position.Y>.1);}
+        Assert.True(falling,"Actual unsupported lip must retain free flight");Balance(fluid,budget);
     }
 
     [Theory][InlineData(1e-12)][InlineData(1e-9)][InlineData(1e-6)]

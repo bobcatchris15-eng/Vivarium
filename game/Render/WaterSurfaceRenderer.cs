@@ -58,7 +58,8 @@ public partial class WaterSurfaceRenderer : Node3D
     private Tile MakeTile((int X, int Z) key, double spacing)
     {
         var t = new Tile(); t.Material = Bridge.Shader("res://Shaders/surface_fluid.gdshader"); t.Material.SetShaderParameter("debug_surface", System.Environment.GetEnvironmentVariable("VIVARIUM_FLUID_DIAGNOSTIC") == "1");
-        t.PreviousSupport = Texture(t.Support, TexSize); t.CurrentSupport = Texture(t.Support, TexSize); t.Previous = Texture(t.Values, TexSize); t.Current = Texture(t.Values, TexSize); t.Ground = Texture(new float[(TileCells * Subdivisions + 1) * (TileCells * Subdivisions + 1) * 4], TileCells * Subdivisions + 1);
+        int groundSize=(TileCells+2)*Subdivisions+1;
+        t.PreviousSupport = Texture(t.Support, TexSize); t.CurrentSupport = Texture(t.Support, TexSize); t.Previous = Texture(t.Values, TexSize); t.Current = Texture(t.Values, TexSize); t.Ground = Texture(new float[groundSize*groundSize*4], groundSize);
         t.Node = new()
         {
             Name = $"LiquidTile_{key.X}_{key.Z}",
@@ -103,10 +104,12 @@ public partial class WaterSurfaceRenderer : Node3D
                 Update(t.Current, t.Values, TexSize, t.UploadBytes); Update(t.CurrentSupport, t.Support, TexSize, t.UploadBytes);
                 if (t.Terrain != _w.Terrain.Version || t.Props != _w.Props.Version)
                 {
-                    int n = TileCells * Subdivisions + 1; var solid = new float[n * n * 4];
+                    // A full cell halo supports reconstruction from neighboring cells
+                    // at tile edges; clamping their bed to the tile creates raised seams.
+                    int n = (TileCells+2) * Subdivisions + 1; var solid = new float[n * n * 4];
                     for (int z = 0; z < n; z++) for (int x = 0; x < n; x++)
                         {
-                            var p = new Vec2((key.Item1 * TileCells + (double)x / Subdivisions) * snapshot.Spacing, (key.Item2 * TileCells + (double)z / Subdivisions) * snapshot.Spacing); int k = (z * n + x) * 4;
+                            var p = new Vec2((key.Item1 * TileCells - 1 + (double)x / Subdivisions) * snapshot.Spacing, (key.Item2 * TileCells - 1 + (double)z / Subdivisions) * snapshot.Spacing); int k = (z * n + x) * 4;
                             solid[k] = (float)_w.GroundHeight(p); solid[k + 1] = (float)_w.Terrain.Height(p); solid[k + 2] = _w.Domain.Contains(p) ? 1 : 0;
                         }
                     Update(t.Ground, solid, n); t.Terrain = _w.Terrain.Version; t.Props = _w.Props.Version;
