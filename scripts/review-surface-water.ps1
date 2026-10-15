@@ -4,6 +4,7 @@ param(
     [ValidateSet('Static','Motion','Video','Benchmark')][string]$Mode = 'Static',
     [string]$OutputDirectory,
     [string]$Preset,
+    [string]$SavePath,
     [double]$DurationSeconds = 0,
     [ValidateSet('oblique','macro','ground','pond')][string]$View = 'oblique',
     [int]$TimeoutSeconds = 900,
@@ -23,6 +24,7 @@ $exe = Join-Path $repo 'tools/godot/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-
 $arguments = @('--path', ('"' + (Join-Path $repo 'game') + '"'), '--', '--surface-fluid-review', ('"' + $OutputDirectory + '"'), '--scenario', $Scenario)
 $arguments += @('--fluid-view', $View)
 if ($Preset) { $arguments += @('--fluid-preset', $Preset) }
+if ($SavePath) { $arguments += @('--save', ('"' + [IO.Path]::GetFullPath($SavePath) + '"')) }
 if ($DurationSeconds -gt 0) { $arguments += @('--fluid-duration', $DurationSeconds.ToString([Globalization.CultureInfo]::InvariantCulture)) }
 if ($Mode -eq 'Motion') { $arguments += '--motion' }
 if ($Mode -eq 'Benchmark') { $arguments += '--benchmark' }

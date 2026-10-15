@@ -57,6 +57,8 @@ public sealed class PilotTreeState
     public HexDomain Domain => _domain;
     public IReadOnlyList<PilotRootPath> Roots { get; private set; }
     private readonly RootSegment[] _segments;
+    private const double RootQueryCell=.5;
+    private readonly Dictionary<(int,int),RootSegment[]> _rootQueryCells=new();
     private readonly record struct RootSegment(PilotRootSample A, PilotRootSample B, Vec2 Delta, double LengthSq,
         double MinX, double MaxX, double MinZ, double MaxZ, double MaxWidth)
     {
@@ -131,6 +133,18 @@ public sealed class PilotTreeState
             return new RootSegment(a,b,d,d.LengthSq,Math.Min(a.Position.X,b.Position.X),Math.Max(a.Position.X,b.Position.X),
                 Math.Min(a.Position.Z,b.Position.Z),Math.Max(a.Position.Z,b.Position.Z),Math.Max(a.Width,b.Width));
         })).ToArray();
+        // Root form is immutable. Index its conservative footprint, not sampled
+        // heights, so terrain edits retain the exact current support calculation.
+        var cells=new Dictionary<(int,int),List<RootSegment>>();
+        foreach(var segment in _segments)
+        {
+            double width=segment.MaxWidth+1e-9;
+            int x0=(int)Math.Floor((segment.MinX-width)/RootQueryCell),x1=(int)Math.Floor((segment.MaxX+width)/RootQueryCell);
+            int z0=(int)Math.Floor((segment.MinZ-width)/RootQueryCell),z1=(int)Math.Floor((segment.MaxZ+width)/RootQueryCell);
+            for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)
+            {var key=(x,z);if(!cells.TryGetValue(key,out var list))cells[key]=list=new();list.Add(segment);}
+        }
+        foreach(var (key,list) in cells)_rootQueryCells[key]=list.ToArray();
     }
 
     public static PilotTreeState? Generate(WorldDescriptor descriptor, HexDomain domain, Heightfield terrain)
@@ -206,8 +220,14 @@ public sealed class PilotTreeState
 
     private double RootRise(Vec2 p, double radius = 0)
     {
+        var segments=_segments;
+        if(radius==0)
+        {
+            var key=((int)Math.Floor(p.X/RootQueryCell),(int)Math.Floor(p.Z/RootQueryCell));
+            if(!_rootQueryCells.TryGetValue(key,out segments))return 0;
+        }
         double top = 0;
-        foreach (var segment in _segments)
+        foreach (var segment in segments)
             {
                 double limit = segment.MaxWidth + radius;
                 if (segment.BoundsDistanceSq(p) >= limit*limit) continue;

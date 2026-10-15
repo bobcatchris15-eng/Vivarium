@@ -37,12 +37,22 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     public int ContinuousHeadSampleCount { get; private set; }
     private int[] _bones = Array.Empty<int>();
     private Vector3[] _points = Array.Empty<Vector3>(), _velocity = Array.Empty<Vector3>();
+    private Vector3[] _iterationStart=Array.Empty<Vector3>(),_fixedPointReference=Array.Empty<Vector3>();
+    public long ExactIterationsSkipped {get;private set;}
+    public int FixedPointAuditBudget {get;set;}
+    public int FixedPointAudits {get;private set;}
+    public float MaximumFixedPointAuditError {get;private set;}
+    private readonly Dictionary<(float X,float Z,bool BelowTrunk),float> _supportSamples=new();
+    public int GroundCacheAuditBudget {get;set;}
+    public int GroundCacheSamplesAudited {get;private set;}
+    public float MaximumGroundCacheAuditError {get;private set;}
     private Vector3 _lastRoot;
     private bool _initialized;
     private float _scale = 1;
     public void ResetContact() => _initialized = false;
     public override void _ProcessModificationWithDelta(double delta)
     {
+        using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian.Appendage");
         var skeleton = GetSkeleton();
         if (skeleton == null || World == null || Renderer == null) return;
         if (_bones.Length == 0)
@@ -50,9 +60,10 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             var bones = new List<int>();
             for (int i = FirstTailIndex; i <= 32; i++) { int b = skeleton.FindBone(ChainPrefix + i.ToString(ChainIndexFormat)); if (b < 0) break; bones.Add(b); }
             _bones = bones.ToArray();
-            _points = new Vector3[_bones.Length + 1]; _velocity = new Vector3[_points.Length];
+            _points = new Vector3[_bones.Length + 1]; _velocity = new Vector3[_points.Length];_iterationStart=new Vector3[_points.Length];_fixedPointReference=new Vector3[_points.Length];
         }
         if (_bones.Length < 2) return;
+        _supportSamples.Clear();
         var transform = skeleton.GlobalTransform;
         _scale = transform.Basis.Scale.X;
         var inverse = transform.AffineInverse();
@@ -65,6 +76,17 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         var lengths = new float[_bones.Length];
         for (int i = 0; i < lengths.Length; i++) lengths[i] = Math.Max(.001f, goals[i].DistanceTo(goals[i + 1]));
         var authoredGoals = (Vector3[])goals.Clone();
+        // Authored angles and station radii are constant throughout all contact
+        // iterations of this call. Keep exactly the original arithmetic/order.
+        var minimumChords=new float[lengths.Length];
+        for(int i=1;i<lengths.Length;i++)
+        {
+            var a=(authoredGoals[i]-authoredGoals[i-1]).Normalized();
+            var b=(authoredGoals[i+1]-authoredGoals[i]).Normalized();
+            float restAngle=MathF.Acos(Math.Clamp(a.Dot(b),-1,1));
+            float allowed=Math.Min(MathF.PI-.05f,restAngle+.60f);
+            minimumChords[i]=MathF.Sqrt(lengths[i-1]*lengths[i-1]+lengths[i]*lengths[i]+2*lengths[i-1]*lengths[i]*MathF.Cos(allowed));
+        }
         if (ContinuousGroundedBody)
         {
             var bodyUp = Renderer.GlobalBasis.Y.Normalized();
@@ -99,9 +121,10 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                 _velocity[i] *= MathF.Exp(-11 * h);
                 _points[i] += _velocity[i] * h;
             }
+            bool auditingFixedPoint=false;
             for (int iteration = 0; iteration < 32; iteration++)
             {
-                _points[0] = goals[0];
+                _points[0] = goals[0];Array.Copy(_points,_iterationStart,_points.Length);
                 for (int i = 0; i < lengths.Length; i++)
                 {
                     var d = _points[i + 1] - _points[i]; float length = d.Length();
@@ -115,12 +138,7 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                 // centerline, allowing contact bends rather than sharp hinges.
                 for (int i = 1; i < lengths.Length; i++)
                 {
-                    var a = (authoredGoals[i] - authoredGoals[i - 1]).Normalized();
-                    var b = (authoredGoals[i + 1] - authoredGoals[i]).Normalized();
-                    float restAngle = MathF.Acos(Math.Clamp(a.Dot(b), -1, 1));
-                    float allowed = Math.Min(MathF.PI - .05f, restAngle + .60f);
-                    float minimumChord = MathF.Sqrt(lengths[i - 1] * lengths[i - 1] + lengths[i] * lengths[i] +
-                        2 * lengths[i - 1] * lengths[i] * MathF.Cos(allowed));
+                    float minimumChord = minimumChords[i];
                     var chord = _points[i + 1] - _points[i - 1]; float length = chord.Length();
                     if (length >= minimumChord || length < 1e-6f) continue;
                     var correction = chord / length * ((minimumChord - length) * .85f);
@@ -161,6 +179,21 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                         if (i > 0) _points[i] += correction * (leftWeight / denominator);
                         _points[i + 1] += correction * (t / denominator);
                     }
+                // This iteration is a deterministic map while goals, terrain and
+                // plant bounds are unchanged inside the call. Exact equality means
+                // every remaining iteration would repeat the same result and targets.
+                bool fixedPoint=true;
+                for(int i=0;i<_points.Length;i++)if(_points[i]!=_iterationStart[i]){fixedPoint=false;break;}
+                if(fixedPoint&&!auditingFixedPoint)
+                {
+                    if(FixedPointAuditBudget>0){FixedPointAuditBudget--;Array.Copy(_points,_fixedPointReference,_points.Length);auditingFixedPoint=true;}
+                    else{ExactIterationsSkipped+=31-iteration;break;}
+                }
+            }
+            if(auditingFixedPoint)
+            {
+                FixedPointAudits++;
+                for(int i=0;i<_points.Length;i++)MaximumFixedPointAuditError=Math.Max(MaximumFixedPointAuditError,_points[i].DistanceTo(_fixedPointReference[i]));
             }
         }
         // Fit the actual lowest skin/armor samples as well as centerline
@@ -272,7 +305,23 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Body", "Body0", "Body1", "Body2", "Body3" })
         { int bone = skeleton.FindBone(name); if (bone >= 0) Vegetation?.Resolve(transform * skeleton.GetBoneGlobalPose(bone).Origin, (name == "Head" ? .075f : BodyBrushRadius) * _scale, false); }
     }
-    private float Ground(Vector3 point) => Renderer.SupportHeight(point);
+    private float Ground(Vector3 point)
+    {
+        // In production support depends on XZ and one trunk-roof branch. Terrain,
+        // props and renderer mode cannot change inside this synchronous modifier call.
+        // Review callbacks may be arbitrary functions of XYZ and deliberately bypass it.
+        if(Renderer.ReviewGroundSample!=null)return Renderer.SupportHeight(point);
+        bool below=World.PilotTree is {} tree&&point.Y<tree.BaseHeight+tree.Def.TrunkHeight-.05;
+        var key=(point.X,point.Z,below);
+        if(!_supportSamples.TryGetValue(key,out float height))
+        {height=Renderer.SupportHeight(point);_supportSamples.Add(key,height);}
+        else if(GroundCacheAuditBudget>0)
+        {
+            GroundCacheAuditBudget--;GroundCacheSamplesAudited++;
+            MaximumGroundCacheAuditError=Math.Max(MaximumGroundCacheAuditError,Math.Abs(height-Renderer.SupportHeight(point)));
+        }
+        return height;
+    }
     private float Radius(float index, int count) => LateralRadii.Length > 0 ? ProfileRadius(LateralRadii, index, count)
         : Mathf.Lerp(RootRadius, TipRadius, Math.Clamp(index / (count - 1), 0, 1)) * _scale;
     private float ProfileRadius(float[] profile, float index, int count)

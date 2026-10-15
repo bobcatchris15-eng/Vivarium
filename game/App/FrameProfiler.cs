@@ -38,6 +38,11 @@ public static class FrameProfiler
         lock(_lock)return _accum.ToDictionary(p=>p.Key,p=>p.Value/System.Math.Max(1,_count[p.Key]));
     }
 
+    public static Dictionary<string,double> PerFrameDurations(int frames)
+    {
+        lock(_lock)return _accum.ToDictionary(p=>p.Key,p=>p.Value/System.Math.Max(1,frames));
+    }
+
     public static Scope Measure(string name) => new(name);
 
     public static void Record(string name, double ms) => RecordDuration(name, ms);

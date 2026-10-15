@@ -14,15 +14,15 @@ void fragment(){
     float fresnel=.0204+.9796*pow(1.0-cosine,5.0);
     float gap=max(scene_depth(SCREEN_UV,INV_PROJECTION_MATRIX)+VERTEX.z,0.0);
     float thickness=min(gap,local_thickness/max(cosine,.25));
-    vec2 offset=n.xy*.004*smoothstep(.001,.012,gap);
+    vec2 offset=n.xy*.009*smoothstep(.0001,.006,gap);
     vec2 uv=clamp(SCREEN_UV+offset,vec2(.002),vec2(.998));
     if(scene_depth(uv,INV_PROJECTION_MATRIX)<-VERTEX.z)uv=SCREEN_UV;
     vec3 transmitted=textureLod(screen_tex,uv,0.0).rgb*exp(-vec3(.8,.22,.45)*thickness);
     vec3 wn=(INV_VIEW_MATRIX*vec4(n,0.0)).xyz;
     vec3 wv=(INV_VIEW_MATRIX*vec4(view,0.0)).xyz;
     vec3 reflected=reflect(-wv,wn);
-    float panel=exp(-pow(reflected.z*12.0,2.0))*smoothstep(.45,.85,reflected.y);
-    vec3 reflection=mix(vec3(.020,.022,.018),vec3(.070,.075,.065),smoothstep(-.1,.8,reflected.y))+vec3(.025)*panel;
+    float panel=exp(-pow(reflected.z*5.0,2.0))*smoothstep(.45,.85,reflected.y);
+    vec3 reflection=mix(vec3(.055,.070,.064),vec3(.24,.29,.27),smoothstep(-.1,.8,reflected.y))+vec3(2.2,2.3,2.15)*panel;
     ALBEDO=vec3(.012,.020,.016);
     METALLIC=0.0;ROUGHNESS=.055;SPECULAR=.5;
     EMISSION=mix(transmitted,reflection,fresnel);

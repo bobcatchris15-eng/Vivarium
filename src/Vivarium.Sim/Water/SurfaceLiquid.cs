@@ -12,7 +12,7 @@ public sealed class SurfaceLiquid
     private readonly VivariumWorld _w;
     private Task<(SurfaceFluidSnapshot Snapshot, WaterBudget Budget, double Ms)>? _job;
     private SurfaceFluidSnapshot _snapshot = new(0, 0, SurfaceFluidDynamics.DefaultSpacing, [], []);
-    private Dictionary<(int, int), SurfaceFluidSample> _samples = new();
+    private readonly Dictionary<(int, int), SurfaceFluidSample> _samples = new();
     private IReadOnlyList<FluidParticle> _contacts = [];
     private double _queuedSeconds, _erosionTime;
     private readonly LinkedList<FluidInputBatch> _inputs = new();
@@ -142,8 +142,16 @@ public sealed class SurfaceLiquid
         long allocationStart = GC.GetAllocatedBytesForCurrentThread();
         _snapshot = snapshot ?? Dynamics.CaptureRenderState(); _publishedFractions = Dynamics.FractionalVolume;
         double spacing = _snapshot.Spacing;
-        _samples = _snapshot.Cells.ToDictionary(c => ((int)Math.Floor(c.Position.X / spacing), (int)Math.Floor(c.Position.Z / spacing)));
-        _contacts = _snapshot.Cells.Select(c => new FluidParticle(Vec3.FromXZ(c.Position, Ground(c.Position) + SurfaceFluidDynamics.Radius(c.Volume)), Vec3.FromXZ(c.Velocity, 0), c.Volume, 0)).Concat(_snapshot.Airborne).ToArray();
+        // Private main-thread query index can retain its capacity. Published state and
+        // contact arrays remain immutable for callers holding the preceding snapshot.
+        _samples.Clear();_samples.EnsureCapacity(_snapshot.Cells.Length);
+        var contacts=new FluidParticle[_snapshot.Cells.Length+_snapshot.Airborne.Length];int contactIndex=0;
+        foreach(var c in _snapshot.Cells)
+        {
+            _samples.Add(((int)Math.Floor(c.Position.X/spacing),(int)Math.Floor(c.Position.Z/spacing)),c);
+            contacts[contactIndex++]=new(Vec3.FromXZ(c.Position,Ground(c.Position)+SurfaceFluidDynamics.Radius(c.Volume)),Vec3.FromXZ(c.Velocity,0),c.Volume,0);
+        }
+        _snapshot.Airborne.CopyTo(contacts,contactIndex);_contacts=contacts;
         var h = _w.Water; Array.Clear(h.Depth); Array.Clear(h.FlowX); Array.Clear(h.FlowZ); Array.Clear(h.FaceFlowEast); Array.Clear(h.FaceFlowNorth);
         foreach (var sample in _snapshot.Cells)
         {
@@ -163,6 +171,7 @@ public sealed class SurfaceLiquid
         int x=(int)Math.Floor(gx),z=(int)Math.Floor(gz);double fx=gx-x,fz=gz-z;
         bool hasAnchor=_samples.TryGetValue(((int)Math.Floor(p.X/spacing),(int)Math.Floor(p.Z/spacing)),out var anchor)&&anchor.Depth>1e-8;
         double anchorHead=anchor.Head+anchor.SlopeX*(p.X-anchor.Position.X)+anchor.SlopeZ*(p.Z-anchor.Position.Z);
+        double ground=double.NaN;
         double sum=0,weight=0,coverage=0;
         // The same support-aware bilinear reconstruction used by surface_fluid.gdshader.
         // Camera, habitat and contact queries must not invent a different water boundary.
@@ -171,11 +180,13 @@ public sealed class SurfaceLiquid
             if(!_samples.TryGetValue((x+dx,z+dz),out var sample)||sample.Depth<=1e-8)continue;
             double head=sample.Head+sample.SlopeX*(p.X-sample.Position.X)+sample.SlopeZ*(p.Z-sample.Position.Z);
             if(hasAnchor&&Math.Abs(head-anchorHead)>spacing)continue;
+            if(!hasAnchor)
+            {if(double.IsNaN(ground))ground=_w.GroundHeight(p);if(head>ground+Math.Max(spacing*.1,sample.Depth*2))continue;}
             double w=(dx==0?1-fx:fx)*(dz==0?1-fz:fz);coverage+=w;
             w*=Math.Clamp(sample.Depth/.001,.001,1);sum+=head*w;weight+=w;
         }
         if(weight<=1e-6)return double.NaN;
-        double ground=_w.GroundHeight(p);if(ground<_w.Water.WaterTable)return double.NaN;
+        if(double.IsNaN(ground))ground=_w.GroundHeight(p);if(ground<_w.Water.WaterTable)return double.NaN;
         double surface=ground+(sum/weight-ground)*coverage;
         return surface>ground+1e-7?surface:double.NaN;
     }

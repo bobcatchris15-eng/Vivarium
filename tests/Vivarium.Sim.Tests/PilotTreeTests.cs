@@ -161,4 +161,37 @@ public class PilotTreeTests
             Assert.Equal(Vivarium.Sim.Content.WoodyLayer.Shrub,w.Content.FloraOrThrow(id).Woody!.Layer);
         Assert.DoesNotContain(w.Content.Flora,sp=>sp.Woody?.Layer==Vivarium.Sim.Content.WoodyLayer.Tree);
     }
+    [Theory][MemberData(nameof(FormsAndCorners))]
+    public void RootSurfaceIndexMatchesFullGeometryScanBeforeAndAfterEdits(string id,int corner)
+    {
+        var w=World(id,corner);var tree=w.PilotTree!;
+        double Reference(Vec2 p)
+        {
+            if(tree.BlocksTrunk(p))return tree.BaseHeight+tree.Def.TrunkHeight;
+            double rise=0;
+            foreach(var path in tree.Roots)for(int segment=1;segment<path.Samples.Count;segment++)
+            {
+                var a=path.Samples[segment-1];var b=path.Samples[segment];var delta=b.Position-a.Position;
+                double t=delta.LengthSq>1e-12?MathD.Clamp01((p-a.Position).Dot(delta)/delta.LengthSq):0;
+                double width=MathD.Lerp(a.Width,b.Width,t),distance=Vec2.Distance(p,a.Position+delta*t);
+                if(distance>=width)continue;
+                rise=Math.Max(rise,MathD.Lerp(a.Height,b.Height,t)*Math.Sqrt(Math.Max(0,1-distance*distance/(width*width))));
+            }
+            return rise<=0?double.NaN:w.Terrain.Height(p)+rise;
+        }
+        void Check(Vec2 p)
+        {
+            double expected=Reference(p),actual=tree.RootSurfaceHeight(p);
+            if(double.IsNaN(expected))Assert.True(double.IsNaN(actual));else Assert.Equal(expected,actual);
+        }
+        foreach(var path in tree.Roots)foreach(var sample in path.Samples)
+        {
+            foreach(double offset in new[]{-.999*sample.Width,0,.999*sample.Width,1.001*sample.Width})Check(sample.Position+new Vec2(offset,0));
+            double boundary=Math.Round(sample.Position.X/.5)*.5;
+            Check(new(boundary-1e-10,sample.Position.Z));Check(new(boundary+1e-10,sample.Position.Z));
+        }
+        TerrainEditing.Sculpt(w,tree.Roots[0].Samples[5].Position,.2,.08,SculptMode.Lower);
+        foreach(var path in tree.Roots)foreach(var sample in path.Samples)Check(sample.Position);
+    }
+
 }

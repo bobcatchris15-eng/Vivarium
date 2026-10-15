@@ -4,7 +4,7 @@ using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Water;
 
-public readonly record struct SurfaceFluidCell(int X, int Z, double Volume, double EastFlux, double NorthFlux, double SlopeX = 0, double SlopeZ = 0);
+public readonly record struct SurfaceFluidCell(int X, int Z, double Volume, double EastFlux, double NorthFlux, double SlopeX = 0, double SlopeZ = 0, double EastSection = 0, double NorthSection = 0);
 public sealed record FluidInputBatch(double Seconds, Spring[] Springs, double Evaporation, double Infiltration, double WaterTable);
 public sealed record SurfaceFluidState(SurfaceFluidCell[] Cells, FluidParticle[] Airborne,
     double Time, double Remainder, double Spacing, Dictionary<ulong, double> SourceRemainders, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FluidInputBatch[]? PendingInputs = null);
@@ -27,10 +27,10 @@ public sealed class SurfaceFluidDynamics
     private const double Gravity = 9.81, Manning = .028;
     private sealed class Cell
     {
-        public double Volume, East, North, Head, Minimum, Mean;
+        public double Volume, East, North, EastSection, NorthSection, Head, Minimum, Mean;
         public readonly double[] Ground = new double[9], Support = new double[9];
         public double SupportMinimum, SupportMaximum;
-        public double VelocityX, VelocityZ, SlopeX, SlopeZ;
+        public double SlopeX, SlopeZ;
     }
     private readonly Dictionary<(int X, int Z), Cell> _cells = new();
     private readonly List<FluidParticle> _air = new();
@@ -353,7 +353,10 @@ public sealed class SurfaceFluidDynamics
                 // CFL-bounded face speed; accumulated time is never skipped.
                 double maximum = section * Spacing / (dt * 2); q = Math.Clamp(q, -maximum, maximum);
             }
-            if (east) a.East = q; else a.North = q;
+            // Retain the actual wetted section used by this face solve. After the
+            // transfer, a nearly empty donor is not the cross-section of that discharge.
+            if (east) { a.East = q; a.EastSection = Spacing * depth; }
+            else { a.North = q; a.NorthSection = Spacing * depth; }
             if (q == 0) continue; var from = q > 0 ? key : other; var to = q > 0 ? other : key; var donor = q > 0 ? a : b; var receiver = q > 0 ? b : a;
             if (donor.Volume <= 0) continue;
             double amount = Math.Abs(q) * dt, speed = depth > 0 ? Math.Abs(q) / (Spacing * depth) : 0;
@@ -402,31 +405,31 @@ public sealed class SurfaceFluidDynamics
             c.Head = Head(c, c.Volume);
         }
         _dirty.Clear();
-        foreach (var key in wet)
-        {
-            var c = Get(key); double section = Spacing * Math.Max(1e-8, c.Volume / (Spacing * Spacing));
-            c.VelocityX = (c.East + Get((key.X - 1, key.Z)).East) / (2 * section);
-            c.VelocityZ = (c.North + Get((key.X, key.Z - 1)).North) / (2 * section);
-        }
         // Prune dry cache periodically; no water is discarded to satisfy a work budget.
         if ((long)Math.Round(Time / StepSeconds) % 240 == 0) foreach (var key in _cells.Where(k => k.Value.Volume == 0 && Math.Abs(k.Value.East) + Math.Abs(k.Value.North) < 1e-14).Select(k => k.Key).ToArray()) _cells.Remove(key);
         Version++;
     }
     private Vec2 Current((int X, int Z) key, Cell c)
     {
-        double section = Spacing * Math.Max(1e-8, c.Volume / (Spacing * Spacing));
-        double west = _cells.TryGetValue((key.X - 1, key.Z), out var w) ? w.East : 0;
-        double south = _cells.TryGetValue((key.X, key.Z - 1), out var s) ? s.North : 0;
-        return new((c.East + west) / (2 * section), (c.North + south) / (2 * section));
+        _cells.TryGetValue((key.X - 1, key.Z), out var west);
+        _cells.TryGetValue((key.X, key.Z - 1), out var south);
+        // Area-weighted interpolation from the staggered faces. Using the remaining
+        // cell volume here creates arbitrarily large apparent currents at wet/dry fronts.
+        double xArea=c.EastSection+(west?.EastSection??0), zArea=c.NorthSection+(south?.NorthSection??0);
+        return new(xArea>1e-16?(c.East+(west?.East??0))/xArea:0,
+            zArea>1e-16?(c.North+(south?.North??0))/zArea:0);
     }
     public SurfaceFluidSnapshot CaptureRenderState()
     {
-        var cells = _cells.Where(k => k.Value.Volume > 0).OrderBy(k => k.Key.Z).ThenBy(k => k.Key.X).Select(k =>
-            new SurfaceFluidSample(Center(k.Key), k.Value.Head, k.Value.Volume / (Spacing * Spacing), Current(k.Key, k.Value), k.Value.Volume, k.Value.SlopeX, k.Value.SlopeZ)).ToArray();
+        int count=0;foreach(var c in _cells.Values)if(c.Volume>0)count++;
+        var cells=new SurfaceFluidSample[count];int index=0;
+        foreach(var (key,c) in _cells)if(c.Volume>0)
+            cells[index++]=new(Center(key),c.Head,c.Volume/(Spacing*Spacing),Current(key,c),c.Volume,c.SlopeX,c.SlopeZ);
+        Array.Sort(cells,static(a,b)=>{int z=a.Position.Z.CompareTo(b.Position.Z);return z!=0?z:a.Position.X.CompareTo(b.Position.X);});
         return new(Version, Time, Spacing, cells, _air.ToArray());
     }
-    public SurfaceFluidState Export() => new(_cells.Where(k => k.Value.Volume > 0 || k.Value.East != 0 || k.Value.North != 0).OrderBy(k => k.Key.Z).ThenBy(k => k.Key.X)
-        .Select(k => new SurfaceFluidCell(k.Key.X, k.Key.Z, k.Value.Volume, k.Value.East, k.Value.North, k.Value.SlopeX, k.Value.SlopeZ)).ToArray(), _air.ToArray(), Time, Remainder, Spacing, new(_pending));
+    public SurfaceFluidState Export() => new(_cells.Where(k => k.Value.Volume > 0 || k.Value.East != 0 || k.Value.North != 0 || k.Value.EastSection > 0 || k.Value.NorthSection > 0).OrderBy(k => k.Key.Z).ThenBy(k => k.Key.X)
+        .Select(k => new SurfaceFluidCell(k.Key.X, k.Key.Z, k.Value.Volume, k.Value.East, k.Value.North, k.Value.SlopeX, k.Value.SlopeZ, k.Value.EastSection, k.Value.NorthSection)).ToArray(), _air.ToArray(), Time, Remainder, Spacing, new(_pending));
     public void Restore(SurfaceFluidState state)
     {
         if (!double.IsFinite(state.Time) || state.Time < 0 || !double.IsFinite(state.Remainder) || state.Remainder < 0 ||
@@ -434,10 +437,9 @@ public sealed class SurfaceFluidDynamics
         _cells.Clear(); _air.Clear(); _pending.Clear(); _dirty.Clear(); Spacing = state.Spacing;
         foreach (var saved in state.Cells)
         {
-            if (!double.IsFinite(saved.Volume) || saved.Volume < 0 || !double.IsFinite(saved.EastFlux) || !double.IsFinite(saved.NorthFlux) || !double.IsFinite(saved.SlopeX) || !double.IsFinite(saved.SlopeZ) ||
+            if (!double.IsFinite(saved.Volume) || saved.Volume < 0 || !double.IsFinite(saved.EastFlux) || !double.IsFinite(saved.NorthFlux) || !double.IsFinite(saved.SlopeX) || !double.IsFinite(saved.SlopeZ) || !double.IsFinite(saved.EastSection) || saved.EastSection < 0 || !double.IsFinite(saved.NorthSection) || saved.NorthSection < 0 ||
                 Math.Abs((double)saved.X * Spacing) > _domain.Radius + 1 || Math.Abs((double)saved.Z * Spacing) > _domain.Radius + 1 || _cells.ContainsKey((saved.X, saved.Z))) throw new InvalidDataException("Invalid or duplicate surface-fluid cell");
-            var c = Get((saved.X, saved.Z)); c.Volume = saved.Volume; c.East = saved.EastFlux; c.North = saved.NorthFlux; c.SlopeX = saved.SlopeX; c.SlopeZ = saved.SlopeZ; ReconstructSupport(c); c.Head = Head(c, c.Volume); _dirty.Add((saved.X, saved.Z)); if (!double.IsFinite(c.Head)) throw new InvalidDataException("Invalid fluid free surface");
-            c.VelocityX = c.East / (Spacing * Math.Max(1e-8, c.Volume / (Spacing * Spacing))); c.VelocityZ = c.North / (Spacing * Math.Max(1e-8, c.Volume / (Spacing * Spacing)));
+            var c = Get((saved.X, saved.Z)); c.Volume = saved.Volume; c.East = saved.EastFlux; c.North = saved.NorthFlux; c.SlopeX = saved.SlopeX; c.SlopeZ = saved.SlopeZ; c.EastSection = saved.EastSection; c.NorthSection = saved.NorthSection; ReconstructSupport(c); c.Head = Head(c, c.Volume); _dirty.Add((saved.X, saved.Z)); if (!double.IsFinite(c.Head)) throw new InvalidDataException("Invalid fluid free surface");
         }
         foreach (var p in state.Airborne) { if (!p.Position.IsFinite || !p.Velocity.IsFinite || !double.IsFinite(p.Volume) || p.Volume <= 0 || !double.IsFinite(p.Width) || p.Width < 0 || !p.WidthAxis.IsFinite) throw new InvalidDataException("Invalid airborne liquid"); _air.Add(p); }
         foreach (var (key, v) in state.SourceRemainders) { if (!double.IsFinite(v) || v < 0) throw new InvalidDataException("Invalid source remainder"); _pending.Add(key, v); }

@@ -32,7 +32,19 @@ public partial class SurfaceFluidReview : Node3D
     public override void _Ready() => _ = Run();
     private async Task Frame(int count = 1) { for (int i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
     private async Task Shot(string name)
-    { await Frame(4); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw); using var im = GetViewport().GetTexture().GetImage(); im.SavePng(Path.GetFullPath(Path.Combine(OutDir, name + ".png"))); }
+    {
+        await Frame(4); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw); using var im = GetViewport().GetTexture().GetImage(); im.SavePng(Path.GetFullPath(Path.Combine(OutDir, name + ".png")));
+        if(Scenario=="D"&&name=="45-ground")
+        {
+            var points=new List<object>();var camera=GetViewport().GetCamera3D();
+            foreach(double x in new[]{.20,.225,.24,.25,.275,.30,.35})foreach(double z in new[]{-.08,0,.08})
+            {
+                var p=new Vec2(x,z);double y=_w.Liquid.SurfaceAt(p);if(!double.IsFinite(y))continue;
+                var pixel=camera.UnprojectPosition(new((float)x,(float)y,(float)z));points.Add(new{x,y,z,pixelX=pixel.X,pixelY=pixel.Y});
+            }
+            File.WriteAllText(Path.Combine(OutDir,"projected-water-points.json"),JsonSerializer.Serialize(points));
+        }
+    }
     private void Camera(string view)
     {
         if (Scenario == "H" && view == "oblique") { float r = (float)_w.Domain.Radius; _session.CameraRig.LookAtPoint(new(.55f * r, (float)_w.Terrain.H.Max() + r * .8f, .9f * r), new(0, .25f, 0)); return; }
@@ -53,10 +65,25 @@ public partial class SurfaceFluidReview : Node3D
     }
     private void Record(string stage)
     {
+        var shrubs=_session.Guardian.ShrubContact;
+        if(shrubs?.MaximumDrawFrameAuditError>0)throw new Exception("Guardian frame cache changed native draw data");
+        float? spatialError=shrubs?.AuditSpatialQueries();
+        if(spatialError.HasValue&&(!float.IsFinite(spatialError.Value)||spatialError.Value>0))throw new Exception("Guardian contact broadphase differs from full scan");
+        var appendage=_session.Guardian.AppendageContact;
+        if(appendage?.MaximumGroundCacheAuditError>0)throw new Exception("Guardian support cache differs from original height query");
+        if(appendage?.MaximumFixedPointAuditError>0)throw new Exception("Guardian exact fixed-point audit failed");
+        var skin=_session.Guardian.SkinContact;
+        float? cacheError=skin?.Valid==true?skin.AuditPoseCache():null;
+        if(cacheError.HasValue&&(!float.IsFinite(cacheError.Value)||cacheError.Value>1e-6f))throw new Exception("Guardian pose cache differs from original skinning");
         var b = _w.Water.Budget; double input = b.SpringInflow + b.ToolInflow, output = b.GroundwaterRecharge + b.BoundaryOutflow + b.ToolRemoval + b.Evaporation + b.Infiltration;
         var snapshot = _w.Liquid.CaptureRenderState();
+        if(Scenario=="D"&&stage=="t45")File.WriteAllText(Path.Combine(OutDir,"ledge-samples.json"),JsonSerializer.Serialize(snapshot.Cells.Where(c=>c.Position.X>.18&&c.Position.X<.30&&Math.Abs(c.Position.Z)<.16).Select(c=>new{x=c.Position.X,z=c.Position.Z,bed=_w.GroundHeight(c.Position),head=c.Head,depth=c.Depth,slope=c.SlopeX,volume=c.Volume})));
+        double ledgeSurface=Scenario=="D"?_w.Liquid.SurfaceAt(new(.2501,0)):double.NaN;
+        if(Scenario=="D"&&stage=="t45"&&double.IsFinite(ledgeSurface)&&ledgeSurface>-.025)
+            throw new Exception("Supported surface bridges the unsupported waterfall ledge");
         _records.Add(new
         {
+            ledgeSurface=double.IsFinite(ledgeSurface)?(double?)ledgeSurface:null,groundCacheSamples=appendage?.GroundCacheSamplesAudited,groundCacheError=appendage?.MaximumGroundCacheAuditError,drawFrameAudits=shrubs?.DrawFrameAudits,drawFrameError=shrubs?.MaximumDrawFrameAuditError,spatialError=spatialError,spatialAuditCases=shrubs?.SpatialAuditCases,spatialContactCases=shrubs?.SpatialAuditContactCases,spatialQueries=shrubs?.SpatialQueries,spatialCandidates=shrubs?.SpatialCandidates,skinCacheError=cacheError,skinSamplesAudited=skin?.LastAuditSampleCount,appendageSkipped=appendage?.ExactIterationsSkipped,fixedPointAudits=appendage?.FixedPointAudits,fixedPointError=appendage?.MaximumFixedPointAuditError,
             stage,
             time = snapshot.Time,
             volume = _w.Liquid.Volume,
@@ -71,6 +98,9 @@ public partial class SurfaceFluidReview : Node3D
             fauna = _w.Fauna.Count,
             bioDays = _w.Clock.BioDays,
             maxDepth = snapshot.Cells.Length == 0 ? 0 : snapshot.Cells.Max(c => c.Depth),
+            volumeWeightedSpeed = snapshot.Cells.Sum(c=>c.Volume*c.Velocity.Length)/Math.Max(1e-30,snapshot.Cells.Sum(c=>c.Volume)),
+            maxSurfaceSpeed = snapshot.Cells.Length==0?0:snapshot.Cells.Max(c=>c.Velocity.Length),
+            coherentSegments = _session.WaterFluid.AirborneSegments,
             backlog = _w.Liquid.BacklogSeconds,
             triangles = _session.WaterFluid.TrianglesBuilt,
             uploadMs = _session.WaterFluid.LastUploadMilliseconds,
@@ -120,10 +150,12 @@ public partial class SurfaceFluidReview : Node3D
             }
             if (Scenario != "H") { Array.Clear(_w.AmbientGroundCover.Cover); Array.Fill(_w.Fields.Moisture.Values, .05); Array.Fill(_w.Fields.Light.Values, 1.0); _w.Liquid.Erosion.Enabled = false; }
             _w.Clock.Paused = true; _session = new(); AddChild(_session);
-            _session.Initialize(Content, new UserSettings { Transient = true, AutosaveEnabled = false, ShowHelpOnStart = false, Quality = 1 }); _session.StartWorld(_w);
+            _session.Initialize(Content, new UserSettings { Transient = true, AutosaveEnabled = false, ShowHelpOnStart = false, Quality = 1 }); _session.StartWorld(_w);if(_session.Guardian.AppendageContact is {} initialAppendage){initialAppendage.FixedPointAuditBudget=8;initialAppendage.GroundCacheAuditBudget=128;}if(_session.Guardian.ShrubContact is {} initialShrubs)initialShrubs.DrawFrameAuditBudget=8;
             _session.Ui.Visible = false; _session.Overlay.Visible = false; _session.Tools.SetProcess(false); _session.CameraRig.KeyboardBlocked = true; _session.CameraRig.SetProcessUnhandledInput(false);
             if (Scenario != "H") { _session.AmbientGround.Visible = false; _session.SoilDetail.Visible = false; _session.Coverage.Visible = false; }
             _session.EnvRig.BenchmarkLightSeconds = 60; _w.Liquid.AsyncMode = false; Camera("oblique"); await Frame(30);
+            var contactProof=Vivarium.Game.Render.GuardianVegetationContact.RunBroadphaseSelfTest(this);
+            File.WriteAllText(Path.Combine(OutDir,"guardian-contact-selftest.json"),JsonSerializer.Serialize(new{cases=contactProof.Cases,contactCases=contactProof.Contacts,drawAudits=contactProof.DrawAudits,error=contactProof.Error}));
             var pondBefore = Vivarium.Sim.Geometry.WaterMesh.BuildWaterTable(_w, _w.Terrain).DigestHex();
             await Shot("00-initial"); Record("initial");
             var physics = System.Diagnostics.Stopwatch.StartNew();
@@ -145,7 +177,7 @@ public partial class SurfaceFluidReview : Node3D
             var reload = SaveSystem.Load(Content, save); if (!reload.Ok) throw new Exception(reload.Message);
             if (Scenario != "H") reload.World!.Liquid.Erosion.Enabled = false;
             if (WorldSerializer.Digest(_w) != WorldSerializer.Digest(reload.World!)) throw new Exception("Save digest mismatch");
-            _session.StartWorld(reload.World!); _w = reload.World!; if (Scenario != "H") { Array.Fill(_w.Fields.Light.Values, 1.0); Array.Fill(_w.Fields.Moisture.Values, .05); _session.Island.Build(_w); }
+            _session.StartWorld(reload.World!);if(_session.Guardian.AppendageContact is {} reloadedAppendage){reloadedAppendage.FixedPointAuditBudget=8;reloadedAppendage.GroundCacheAuditBudget=128;}if(_session.Guardian.ShrubContact is {} reloadedShrubs)reloadedShrubs.DrawFrameAuditBudget=8; _w = reload.World!; if (Scenario != "H") { Array.Fill(_w.Fields.Light.Values, 1.0); Array.Fill(_w.Fields.Moisture.Values, .05); _session.Island.Build(_w); }
             _w.Clock.Paused = true; Camera("oblique"); await Shot("46-reloaded"); Record("reload");
             if (Motion || Benchmark || Video)
             {
@@ -157,6 +189,13 @@ public partial class SurfaceFluidReview : Node3D
 
                 if (DisableMobileDrawing) { _session.WaterFluid.Visible = false; _session.WaterFluid.SetProcess(false); }
                 Camera(Scenario == "D" ? "ground" : BenchmarkView);
+                if(_session.Guardian.ShrubContact is {} warmShrubs)warmShrubs.DrawFrameAuditBudget=8;
+                if(_session.Guardian.AppendageContact is {} warmAppendage){warmAppendage.FixedPointAuditBudget=8;warmAppendage.GroundCacheAuditBudget=128;}
+                // Warm real animation/contact and asset pipelines before measurement.
+                // All fluid input during warmup remains accounted in the same owner.
+                _w.Clock.Paused=false;if(Scenario!="H")_w.Clock.BaseRate=0;_w.Liquid.AsyncMode=true;
+                await ToSignal(GetTree().CreateTimer(2.0),SceneTreeTimer.SignalName.Timeout);
+                _w.Clock.Paused=true;_w.Liquid.CompletePending();Record("warmup");
                 System.Diagnostics.Process? recorder = null; Task<string>? recorderLog = null;
                 double duration = DurationSeconds > 0 ? DurationSeconds : Scenario == "H" ? 90 : 15;
                 if (Video)
@@ -220,10 +259,12 @@ public partial class SurfaceFluidReview : Node3D
                     rendererBytes = _session.WaterFluid.AllocatedBytes - rendererAllocated,
                     processMemory = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64,
                     work,
+                    cpuPerFrame=FrameProfiler.PerFrameDurations(frames.Count),
                     cpuMean = FrameProfiler.MeanDurations(),
                     cpu = FrameProfiler.TakeStructuredReport()
                 }, new JsonSerializerOptions { WriteIndented = true })); Record("motion");
             }
+            var finalSave=SaveSystem.Save(_w,Path.Combine(OutDir,"review-after.vivsave"));if(!finalSave.Ok)throw new Exception(finalSave.Message);
             File.WriteAllText(Path.Combine(OutDir, "physical.json"), JsonSerializer.Serialize(new { Scenario, physicsWall, pondBefore, records = _records }, new JsonSerializerOptions { WriteIndented = true }));
             GD.Print("SURFACE_FLUID_REVIEW_OK scenario=" + Scenario + " out=" + OutDir); GetTree().Quit();
         }

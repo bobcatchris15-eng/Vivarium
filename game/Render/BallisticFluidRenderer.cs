@@ -13,7 +13,7 @@ public partial class BallisticFluidRenderer : Node3D
     private MultiMeshInstance3D _sheets = null!, _drops = null!;
     private ShaderMaterial _material = null!, _dropMaterial = null!;
     private ImageTexture? _positions, _widths, _normals, _velocities;
-    private readonly record struct Ring(Vector3 Position, Vector3 Velocity, Vector3 WidthAxis, Vector3 Normal, float WidthRadius, float Thickness);
+    private readonly record struct Ring(Vector3 Position, Vector3 Velocity, Vector3 WidthAxis, Vector3 Normal, float WidthRadius, float Thickness, float ShapePower);
     public int BrickCount { get; private set; }
     public int KernelCount { get; private set; }
     public override void _Ready()
@@ -48,6 +48,7 @@ public partial class BallisticFluidRenderer : Node3D
         if (texture != null && texture.GetWidth() == width && texture.GetHeight() == height) { texture.Update(image); return texture; }
         texture?.Dispose(); return ImageTexture.CreateFromImage(image);
     }
+    public void SetTime(float seconds) => _material.SetShaderParameter("fluid_time", seconds);
     public void SetInterpolation(float seconds) { _material.SetShaderParameter("interpolation_seconds", seconds); _dropMaterial.SetShaderParameter("interpolation_seconds", seconds); }
     private static IEnumerable<FluidParticle[]> ConnectedRuns(IEnumerable<FluidParticle> group)
     {
@@ -66,8 +67,18 @@ public partial class BallisticFluidRenderer : Node3D
         foreach (var p in visible) if (p.Stream == 0 || p.Width <= 0) compact.Add(p);
         foreach (var parcels in visible.Where(p => p.Stream != 0 && p.Width > 0).GroupBy(p => p.Stream).OrderBy(p => p.Key).SelectMany(ConnectedRuns))
         {
-            double extent = parcels.Length > 1 ? (parcels[0].Position - parcels[^1].Position).Length : 0;
-            if (parcels.Length < 4 || extent < parcels.Max(p => p.Width) * 3) { compact.AddRange(parcels); continue; }
+            // A short connected run is still an emitted face of liquid. Turning it into
+            // independent drops breaks a continuous trickle at every ledge and at startup.
+            // Only isolated trajectory samples lack evidence for a connecting sheet.
+            if (parcels.Length < 2) { compact.AddRange(parcels); continue; }
+            var spans=new double[parcels.Length];var volumes=new double[parcels.Length];
+            for(int i=0;i<parcels.Length;i++)
+            {
+                double before=i>0?(parcels[i].Position-parcels[i-1].Position).Length:parcels[i].Velocity.Length*SurfaceFluidDynamics.StepSeconds;
+                double after=i+1<parcels.Length?(parcels[i].Position-parcels[i+1].Position).Length:before;
+                spans[i]=Math.Max(.0001,(before+after)*.5);volumes[i]=parcels[i].Volume;
+            }
+            var surfaceVolumes=FluidCrossSection.ReconstructTubeVolumes(volumes,spans);
             int previous = -1;
             for (int i = 0; i < parcels.Length; i++)
             {
@@ -81,13 +92,16 @@ public partial class BallisticFluidRenderer : Node3D
                 bool hasBefore = i > 0 && before <= Math.Max(.006f, velocity.Length() * (float)SurfaceFluidDynamics.StepSeconds * 3);
                 bool hasAfter = i + 1 < parcels.Length && after <= Math.Max(.006f, velocity.Length() * (float)SurfaceFluidDynamics.StepSeconds * 3);
                 if (!hasBefore && !hasAfter) { compact.Add(p); previous = -1; continue; }
-                float thickness = (float)(p.Volume / (3.7081493546 * width * length));
+                // A micrometre-thin face cannot remain a full-width rigid rectangle
+                // throughout a fall. Capillary edge retraction forms a rounded filament.
+                var section=FluidCrossSection.Reconstruct(surfaceVolumes[i],spans[i],p.Width,Math.Max(0,-p.Velocity.Y/9.81));
+                width=(float)section.WidthRadius;float thickness=(float)section.ThicknessRadius;float shapePower=(float)section.ShapePower;
                 bool continuous = previous >= 0 && before <= Math.Max(.006f, velocity.Length() * (float)SurfaceFluidDynamics.StepSeconds * 3);
                 if (!continuous)
-                { previous = rings.Count; rings.Add(new(at - tangent * length * .5f, Vector3.Zero, axis, normal, width, thickness)); }
-                int current = rings.Count; rings.Add(new(at, velocity, axis, normal, width, thickness)); segments.Add((previous, current)); previous = current;
+                { previous = rings.Count; rings.Add(new(at - tangent * length * .5f, velocity, axis, normal, width, thickness, shapePower)); }
+                int current = rings.Count; rings.Add(new(at, velocity, axis, normal, width, thickness, shapePower)); segments.Add((previous, current)); previous = current;
                 bool last = i + 1 == parcels.Length || after > Math.Max(.006f, velocity.Length() * (float)SurfaceFluidDynamics.StepSeconds * 3);
-                if (last) { int end = rings.Count; rings.Add(new(at + tangent * length * .5f, velocity, axis, normal, width, thickness)); segments.Add((previous, end)); previous = -1; }
+                if (last) { int end = rings.Count; rings.Add(new(at + tangent * length * .5f, velocity, axis, normal, width, thickness, shapePower)); segments.Add((previous, end)); previous = -1; }
             }
         }
         KernelCount = visible.Length; BrickCount = segments.Count; var mm = _sheets.Multimesh; mm.InstanceCount = segments.Count;
@@ -98,7 +112,7 @@ public partial class BallisticFluidRenderer : Node3D
             {
                 var r = rings[i]; int k = i * 4; positions[k] = r.Position.X; positions[k + 1] = r.Position.Y; positions[k + 2] = r.Position.Z; positions[k + 3] = r.WidthRadius;
                 widths[k] = r.WidthAxis.X; widths[k + 1] = r.WidthAxis.Y; widths[k + 2] = r.WidthAxis.Z; widths[k + 3] = r.Thickness;
-                normals[k] = r.Normal.X; normals[k + 1] = r.Normal.Y; normals[k + 2] = r.Normal.Z; normals[k + 3] = r.Velocity.Y; velocities[k] = r.Velocity.X; velocities[k + 1] = r.Velocity.Y; velocities[k + 2] = r.Velocity.Z;
+                normals[k] = r.Normal.X; normals[k + 1] = r.Normal.Y; normals[k + 2] = r.Normal.Z; normals[k + 3] = r.ShapePower; velocities[k] = r.Velocity.X; velocities[k + 1] = r.Velocity.Y; velocities[k + 2] = r.Velocity.Z;
             }
             _positions = Upload(_positions, positions, width, height); _widths = Upload(_widths, widths, width, height); _normals = Upload(_normals, normals, width, height); _velocities = Upload(_velocities, velocities, width, height);
             _material.SetShaderParameter("rings", _positions); _material.SetShaderParameter("widths", _widths); _material.SetShaderParameter("normals", _normals); _material.SetShaderParameter("velocities", _velocities);

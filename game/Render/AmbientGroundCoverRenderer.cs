@@ -67,6 +67,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var timing=Vivarium.Game.App.FrameProfiler.Measure("AmbientGround");
         if (_w == null) return;
         bool enabled = Quality > 0;
         _bladeMmi.Visible = _leafMmi.Visible = enabled;

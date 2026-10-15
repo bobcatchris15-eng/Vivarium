@@ -15,6 +15,48 @@ public class SurfaceFluidReplacementTests
     private static void Balance(SurfaceFluidDynamics f, WaterBudget b, double initial = 0)
     { Assert.InRange(f.Volume + b.GroundwaterRecharge + b.BoundaryOutflow + b.Evaporation + b.Infiltration + b.ToolRemoval - b.ToolInflow - b.SpringInflow - initial, -2e-10, 2e-10); Assert.All(f.Export().Cells, c => Assert.True(c.Volume >= 0 && double.IsFinite(c.Volume))); }
     [Fact]
+    public void WetDryFrontVelocityUsesSolvedFaceSectionAndSurvivesReload()
+    {
+        double Bed(Vec2 p)=>.12-.3*p.X+.8*p.Z*p.Z+.007*Math.Sin(p.X*20)*Math.Cos(p.Z*15);
+        var fluid=Fluid(Bed);var budget=new WaterBudget();fluid.Advance(5,[Source(.00002)],budget);
+        var before=fluid.CaptureRenderState();
+        Assert.All(before.Cells,c=>Assert.InRange(c.Velocity.Length,0,4));
+        Assert.True(before.Cells.Sum(c=>c.Volume*c.Velocity.Length)/before.Cells.Sum(c=>c.Volume)>.01);
+        var reloaded=Fluid(Bed);reloaded.Restore(fluid.Export());
+        Assert.Equal(before.Cells,reloaded.CaptureRenderState().Cells);
+        Balance(fluid,budget);
+    }
+
+    [Theory][InlineData(1e-12)][InlineData(1e-9)][InlineData(1e-6)]
+    public void UnsupportedThinSheetRetractsWithoutChangingItsVolume(double volume)
+    {
+        const double length=.025,aperture=.025;
+        var initial=FluidCrossSection.Reconstruct(volume,length,aperture,0);
+        var fallen=FluidCrossSection.Reconstruct(volume,length,aperture,.25);
+        double roundRadius=Math.Sqrt(volume/(Math.PI*length));
+        Assert.Equal(Math.Max(roundRadius,aperture*.5),initial.WidthRadius,12);
+        Assert.Equal(roundRadius,fallen.WidthRadius,12);Assert.Equal(roundRadius,fallen.ThicknessRadius,12);
+        foreach(double age in new[]{0,.0001,.001,.01,.1,.25})
+        {
+            var section=FluidCrossSection.Reconstruct(volume,length,aperture,age);
+            double areaFactor=section.ShapePower==1?Math.PI:3.7081493546;
+            Assert.InRange(Math.Abs(areaFactor*section.WidthRadius*section.ThicknessRadius*length-volume),0,volume*1e-12);
+        }
+    }
+
+    [Fact]
+    public void ConnectedSurfaceKernelSmoothsParcelBulgesAndConservesIntegratedVolume()
+    {
+        double[] volumes=[1e-9,1e-6,1e-9,5e-8],lengths=[.01,.02,.03,.01];
+        var smooth=FluidCrossSection.ReconstructTubeVolumes(volumes,lengths);
+        Assert.InRange(Math.Abs(volumes.Sum()-smooth.Sum()),0,volumes.Sum()*1e-12);Assert.All(smooth,v=>Assert.True(v>0));
+        Assert.True(smooth.Select((v,i)=>v/lengths[i]).Max()<volumes.Select((v,i)=>v/lengths[i]).Max());
+        double[] steady=lengths.Select(l=>l*.0002).ToArray();
+        var preserved=FluidCrossSection.ReconstructTubeVolumes(steady,lengths);
+        for(int i=0;i<steady.Length;i++)Assert.InRange(Math.Abs(steady[i]-preserved[i]),0,steady[i]*1e-12);
+    }
+
+    [Fact]
     public void FractionalDischargeAndRestingWaterNeverExpire()
     {
         var f = Fluid(_ => 0); var b = new WaterBudget(); f.Advance(2, [Source(1e-9)], b); Balance(f, b); Assert.InRange(f.Volume, 1.99999e-9, 2.00001e-9);

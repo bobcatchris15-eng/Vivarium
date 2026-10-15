@@ -17,6 +17,12 @@ public sealed class GuardianSkinContact
     public const int MaximumSourceVertices = 1_000_000;
     private const float WeightThreshold = .6f;
     private readonly Skeleton3D _skeleton;
+    private Transform3D[] _restPoses=Array.Empty<Transform3D>(),_currentPoses=Array.Empty<Transform3D>();
+    private bool[] _restLoaded=Array.Empty<bool>();
+    private int[] _poseStamp=Array.Empty<int>();
+    private int _evaluation;
+    private Transform3D _restWorld,_evaluationWorld;
+    public int LastAuditSampleCount {get;private set;}
     private readonly bool _continuousBody;
     private readonly string _chainPrefix;
     private readonly Dictionary<string, List<Sample>> _samples = new();
@@ -60,7 +66,8 @@ public sealed class GuardianSkinContact
         {
             if (!float.IsFinite(restToleranceMeters) || restToleranceMeters <= 0)
                 throw new InvalidOperationException("Invalid rest reconstruction tolerance");
-            RequireTransform(skeleton.GlobalTransform, "skeleton world");
+            _restWorld=skeleton.GlobalTransform;RequireTransform(_restWorld,"skeleton world");
+            int bones=skeleton.GetBoneCount();_restPoses=new Transform3D[bones];_currentPoses=new Transform3D[bones];_restLoaded=new bool[bones];_poseStamp=new int[bones];
             var candidates = new Dictionary<string, List<Sample>>();
             foreach (string region in Regions) candidates[region] = new List<Sample>();
             int surfaceCount = 0;
@@ -231,28 +238,65 @@ public sealed class GuardianSkinContact
         return result;
     }
 
-    private Vector3 EvaluateVertex(Sample sample, bool rest)
+    private void BeginEvaluation()
     {
-        var local = Vector3.Zero;
-        for (int i = 0; i < sample.Weights.Length; i++)
+        if(_skeleton.GetBoneCount()!=_currentPoses.Length)throw new InvalidOperationException("Skeleton changed; recreate contact sampler");
+        if(_evaluation==int.MaxValue){Array.Clear(_poseStamp);_evaluation=0;}
+        _evaluation++;_evaluationWorld=_skeleton.GlobalTransform;RequireTransform(_evaluationWorld,"current skeleton world");
+    }
+    private Transform3D BonePose(int bone,bool rest)
+    {
+        if(rest)
         {
-            if (sample.Weights[i] == 0) continue;
-            var pose = rest ? _skeleton.GetBoneGlobalRest(sample.Bones[i]) : _skeleton.GetBoneGlobalPose(sample.Bones[i]);
-            if (!rest) RequireTransform(pose, $"current bone {sample.Bones[i]}");
-            local += (pose * sample.InverseBinds[i] * sample.Vertex) * sample.Weights[i];
+            if(!_restLoaded[bone]){_restPoses[bone]=_skeleton.GetBoneGlobalRest(bone);_restLoaded[bone]=true;}
+            return _restPoses[bone];
         }
-        return _skeleton.GlobalTransform * local;
+        if(_poseStamp[bone]!=_evaluation)
+        {
+            var pose=_skeleton.GetBoneGlobalPose(bone);RequireTransform(pose,$"current bone {bone}");
+            _currentPoses[bone]=pose;_poseStamp[bone]=_evaluation;
+        }
+        return _currentPoses[bone];
+    }
+    private Vector3 EvaluateVertex(Sample sample,bool rest)
+    {
+        var local=Vector3.Zero;
+        for(int i=0;i<sample.Weights.Length;i++)
+        {
+            if(sample.Weights[i]==0)continue;
+            local+=(BonePose(sample.Bones[i],rest)*sample.InverseBinds[i]*sample.Vertex)*sample.Weights[i];
+        }
+        return (rest?_restWorld:_evaluationWorld)*local;
+    }
+    /// <summary>Compare cached and original skinning at the current, already-modified pose.
+    /// This diagnostic reads the actual rig and vertices without changing animation or contact.</summary>
+    public float AuditPoseCache()
+    {
+        if(!Valid)return float.NaN;
+        BeginEvaluation();float error=0;LastAuditSampleCount=0;
+        foreach(var samples in _samples.Values)foreach(var sample in samples)
+        {
+            var reference=Vector3.Zero;
+            for(int i=0;i<sample.Weights.Length;i++)if(sample.Weights[i]>0)
+                reference+=(_skeleton.GetBoneGlobalPose(sample.Bones[i])*sample.InverseBinds[i]*sample.Vertex)*sample.Weights[i];
+            reference=_skeleton.GlobalTransform*reference;
+            error=Math.Max(error,reference.DistanceTo(EvaluateVertex(sample,false)));LastAuditSampleCount++;
+        }
+        return error;
     }
 
     public Clearance Evaluate(string region, Func<Vector3, float> supportHeight)
     {
+        using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian.SkinContact");
         region = CanonicalRegion(region);
         if (!Valid || !_samples.TryGetValue(region, out var samples) || samples.Count == 0)
             return new Clearance(region, false, 0, float.NaN, Vector3.Zero);
         try
         {
             if (!GodotObject.IsInstanceValid(_skeleton)) throw new InvalidOperationException("Cached skeleton freed; recreate sampler");
-            RequireTransform(_skeleton.GlobalTransform, "current skeleton world");
+            // A fit may change bones between calls. Cache only within this evaluation,
+            // never across fit iterations or frames; the sampled geometry is identical.
+            BeginEvaluation();
             foreach (var mesh in _meshes) if (!GodotObject.IsInstanceValid(mesh)) throw new InvalidOperationException("Cached mesh freed; recreate sampler");
             float minimum = float.PositiveInfinity; var lowest = Vector3.Zero;
             foreach (var sample in samples)
@@ -269,6 +313,7 @@ public sealed class GuardianSkinContact
     {
         var result = new Dictionary<int, float>();
         if (!Valid || !_samples.TryGetValue("Tail", out var samples)) return result;
+        BeginEvaluation();
         foreach (var sample in samples)
         {
             var point = EvaluateVertex(sample, false);

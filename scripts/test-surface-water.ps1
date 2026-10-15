@@ -5,7 +5,7 @@ $repo = Split-Path $PSScriptRoot -Parent
 $out = Join-Path $repo "build/surface-water-replacement/tests-$(Get-Date -Format yyyyMMdd-HHmmss)"
 if (Test-Path $out) { throw "Evidence directory exists: $out" }
 New-Item -ItemType Directory -Path $out | Out-Null
-$filter = '(Suite=Hydrology|Suite=Persistence|Suite=Tools|Suite=Camera|Suite=Integration|FullyQualifiedName~SurfaceFluidReplacement|FullyQualifiedName~SurfaceErosion|FullyQualifiedName~NightFlora)&Speed!=Slow'
+$filter = '(Suite=Hydrology|Suite=Persistence|Suite=Tools|Suite=Camera|Suite=Integration|FullyQualifiedName~SurfaceFluidReplacement|FullyQualifiedName~SurfaceErosion|FullyQualifiedName~NightFlora|FullyQualifiedName~RootSurfaceIndex)&Speed!=Slow'
 if ($ExcludeKnownBaselineFailures) {
     $known = @('StarterPopulationsAreCompleteAndValid','DefaultPresetExposesEveryHabitat','EveryToolChangesOnlyItsIntendedState')
     Write-Host "Explicitly excluding independently reproduced baseline failures: $($known -join ', ')" -ForegroundColor Yellow

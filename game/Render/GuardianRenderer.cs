@@ -268,6 +268,7 @@ public partial class GuardianRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian");
         if (_w == null || _w.Guardian == null || _instance == null) return;
 
         var g = _w.Guardian;

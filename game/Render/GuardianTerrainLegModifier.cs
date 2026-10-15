@@ -29,6 +29,7 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
     }
     public override void _ProcessModificationWithDelta(double delta)
     {
+        using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian.Legs");
         var skeleton = GetSkeleton();
         if (skeleton == null || Renderer == null) return;
         var transform = skeleton.GlobalTransform; var inverse = transform.AffineInverse();

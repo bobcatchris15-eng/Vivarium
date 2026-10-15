@@ -33,6 +33,7 @@ public partial class PilotTreeRenderer : Node3D
 
     public override void _Process(double delta)
     {
+        using var timing=Vivarium.Game.App.FrameProfiler.Measure("PilotTree");
         if (_world == null || Tree == null) return;
         _sinceRefresh += delta;
         if (_world.Terrain.Version == _terrainVersion || _sinceRefresh < 0.25) return;

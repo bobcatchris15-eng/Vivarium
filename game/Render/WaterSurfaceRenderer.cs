@@ -11,7 +11,7 @@ namespace Vivarium.Game.Render;
 /// <summary>Persistent GPU-displaced tiles interpolate immutable conserved-volume snapshots.</summary>
 public partial class WaterSurfaceRenderer : Node3D
 {
-    private const int TileCells = 16, TexSize = 18, Subdivisions = 4;
+    private const int TileCells = 16, TexSize = 18, Subdivisions = 6;
     private sealed class Tile
     {
         public MeshInstance3D Node = null!; public ShaderMaterial Material = null!;
@@ -20,6 +20,8 @@ public partial class WaterSurfaceRenderer : Node3D
         public float[] Values = new float[TexSize * TexSize * 4]; public float[] Support = new float[TexSize * TexSize * 4]; public int Terrain = -1, Props = -1;
     }
     private readonly Dictionary<(int, int), Tile> _tiles = new();
+    private readonly Dictionary<(int,int),SurfaceFluidSample> _cells=new();
+    private readonly HashSet<(int,int)> _active=new();
     private VivariumWorld? _w;
     private ArrayMesh _topology = null!;
     private BallisticFluidRenderer _air = null!;
@@ -28,6 +30,7 @@ public partial class WaterSurfaceRenderer : Node3D
     private SurfaceFluidSnapshot? _snapshot;
     public int TrianglesBuilt { get; private set; }
     public long SurfaceUpdates { get; private set; }
+    public int AirborneSegments => _air.BrickCount;
     public int GridCells => _snapshot?.Cells.Length ?? 0;
     public double LastUploadMilliseconds { get; private set; }
     public long AllocatedBytes { get; private set; }
@@ -77,8 +80,9 @@ public partial class WaterSurfaceRenderer : Node3D
         {
             long allocationStart = GC.GetAllocatedBytesForCurrentThread(); var watch = System.Diagnostics.Stopwatch.StartNew();
             _blendSeconds = Math.Clamp(_elapsed, 1.0 / 120, .15); _elapsed = 0; _snapshot = snapshot; _version = snapshot.Version;
-            var cells = snapshot.Cells.ToDictionary(s => ((int)Math.Floor(s.Position.X / snapshot.Spacing), (int)Math.Floor(s.Position.Z / snapshot.Spacing)));
-            var active = new HashSet<(int, int)>();
+            var cells=_cells;cells.Clear();cells.EnsureCapacity(snapshot.Cells.Length);
+            foreach(var c in snapshot.Cells)cells.Add(((int)Math.Floor(c.Position.X/snapshot.Spacing),(int)Math.Floor(c.Position.Z/snapshot.Spacing)),c);
+            var active=_active;active.Clear();
             foreach (var c in cells.Keys) for (int z = -1; z <= 1; z++) for (int x = -1; x <= 1; x++) active.Add((FloorDiv(c.Item1 + x, TileCells), FloorDiv(c.Item2 + z, TileCells)));
             foreach (var key in active) if (!_tiles.ContainsKey(key)) _tiles[key] = MakeTile(key, snapshot.Spacing);
             foreach (var (key, t) in _tiles)
@@ -115,8 +119,16 @@ public partial class WaterSurfaceRenderer : Node3D
         }
 
         _air.SetInterpolation(_w.Clock.Paused ? 0f : (float)Math.Min(_elapsed, .016667));
+        float opticalTime = (float)((_snapshot?.Time ?? 0) + (_w.Clock.Paused ? 0 : Math.Min(_elapsed, _blendSeconds)));
+        _air.SetTime(opticalTime);
         float blend = (float)Math.Clamp(_elapsed / _blendSeconds, 0, 1);
-        foreach (var t in _tiles.Values) if (t.Node.Visible) t.Material.SetShaderParameter("state_blend", blend);
+        foreach (var t in _tiles.Values) if (t.Node.Visible)
+        {
+            t.Material.SetShaderParameter("state_blend", blend);
+            // Optical motion runs every displayed frame, rather than stopping between
+            // asynchronous physical snapshots. It uses physical seconds and freezes on pause.
+            t.Material.SetShaderParameter("fluid_time", opticalTime);
+        }
     }
     private void UpdateAir(SurfaceFluidSnapshot snapshot) => _air.UpdateFluid(snapshot);
 }
