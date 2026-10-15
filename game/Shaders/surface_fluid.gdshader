@@ -13,6 +13,7 @@ uniform float pond_level;
 uniform float state_blend=1.0;
 uniform float fluid_time;
 uniform bool debug_surface=false;
+#include "res://Shaders/mobile_water_optics.gdshaderinc"
 varying vec2 local_uv;
 varying vec3 world_position;
 vec4 ground(vec2 uv){
@@ -33,7 +34,8 @@ vec4 read_state(ivec2 p){
 float column_kernel(float distance){
     float a=abs(distance);return a<.5?.75-a*a:(a<1.5?.5*(1.5-a)*(1.5-a):0.0);
 }
-vec4 fluid(vec2 uv){
+vec4 fluid(vec2 uv,out float tint_depth){
+    tint_depth=0.0;
     vec2 grid=uv*16.0+vec2(.5);ivec2 base=ivec2(floor(grid+vec2(.5)));
     float bed_height=ground(uv).x,depth=0.0,head_sum=0.0,weight=0.0;
     float lowest=1e20,highest=-1e20,max_slope=0.0,max_speed=0.0;vec2 momentum=vec2(0.0);
@@ -57,6 +59,10 @@ vec4 fluid(vec2 uv){
         max_speed=max(max_speed,length(v.zw));
         vec2 slope=mix(texelFetch(previous_support,key,0).xy,texelFetch(current_support,key,0).xy,state_blend);
         max_slope=max(max_slope,length(slope));
+        // Color follows local liquid contact, rather than painting the dry uphill
+        // side of a deep pool when the continuous depth kernel crosses a ledge.
+        float column_head=v.x+dot(slope,(grid-vec2(key))*tile_size/16.0);
+        tint_depth+=v.y*w*smoothstep(-.006,.001,column_head-bed_height);
     }
     if(depth<=0.0||weight<=.000001)return vec4(bed_height,0.0,0.0,0.0);
     vec2 velocity=momentum/depth;
@@ -68,13 +74,14 @@ vec4 fluid(vec2 uv){
     return vec4(bed_height+depth,depth,velocity);
 }
 void vertex(){
-    local_uv=UV;vec4 water=fluid(UV);vec4 bed=ground(UV);
+    local_uv=UV;float unused_tint;vec4 water=fluid(UV,unused_tint);vec4 bed=ground(UV);
     VERTEX.xz*=tile_size;VERTEX.y=max(water.x,bed.x+.00005);
     world_position=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;
 }
 float scene_depth(vec2 uv,mat4 inverse_projection){vec4 p=inverse_projection*vec4(uv*2.0-1.0,texture(depth_tex,uv).r,1.0);return -p.z/p.w;}
 void fragment(){
-    vec4 water=fluid(local_uv);vec4 bed=ground(local_uv);
+    float tint_depth;vec4 water=fluid(local_uv,tint_depth);vec4 bed=ground(local_uv);
+    float tint_visibility=clamp(tint_depth/max(water.y,.00000001),0.0,1.0);
     // Subdivided support geometry must stay within 2 mm of the reconstructed
     // surface; otherwise a stretched triangle can masquerade as a vertical flap.
     if(abs(world_position.y-water.x)>.002)discard;
@@ -94,23 +101,19 @@ void fragment(){
     vec2 q0=position-water.zw*(phase0*.6),q1=position-water.zw*(phase1*.6);
     vec2 r0=vec2(cos(q0.x*95.0+sin(q0.y*65.0)),sin(q0.y*85.0+sin(q0.x*55.0)));
     vec2 r1=vec2(cos(q1.x*95.0+sin(q1.y*65.0)),sin(q1.y*85.0+sin(q1.x*55.0)));
-    vec2 ripple=mix(r1,r0,1.0-abs(phase0*2.0-1.0))*.14;
+    vec2 ripple=mix(r1,r0,1.0-abs(phase0*2.0-1.0))*.045;
     wn=normalize(wn+vec3(ripple.x,0.0,ripple.y)*activity);
     vec3 n=normalize((VIEW_MATRIX*vec4(wn,0.0)).xyz),view=normalize(-VERTEX);
     NORMAL=n;float cosine=clamp(dot(n,view),0.0,1.0);
     float fresnel=.0204+.9796*pow(1.0-cosine,5.0);
     float gap=max(scene_depth(SCREEN_UV,INV_PROJECTION_MATRIX)+VERTEX.z,0.0);
     float thickness=min(gap,max(.0003,water.x-bed.y)/max(cosine,.2));
-    vec2 uv=clamp(SCREEN_UV+n.xy*.009*smoothstep(.0001,.006,gap),vec2(.002),vec2(.998));
+    vec2 uv=clamp(SCREEN_UV+n.xy*.0035*smoothstep(.0001,.006,gap),vec2(.002),vec2(.998));
     if(scene_depth(uv,INV_PROJECTION_MATRIX)<-VERTEX.z)uv=SCREEN_UV;
-    vec3 transmission=textureLod(screen_tex,uv,0.0).rgb*exp(-vec3(.8,.22,.45)*thickness);
-    vec3 reflection=mix(vec3(.055,.070,.064),vec3(.24,.29,.27),smoothstep(-.1,.8,reflect(-normalize((INV_VIEW_MATRIX*vec4(view,0.0)).xyz),wn).y));
-    ALBEDO=vec3(.015,.022,.019);METALLIC=0.0;ROUGHNESS=.085;SPECULAR=.5;
+    vec3 transmission=mobile_transmission(textureLod(screen_tex,uv,0.0).rgb,thickness,tint_visibility);
+    ALBEDO=mobile_water_tint*.025*tint_visibility;METALLIC=0.0;ROUGHNESS=mobile_roughness;SPECULAR=.5;
     vec3 reflected=reflect(-normalize((INV_VIEW_MATRIX*vec4(view,0.0)).xyz),wn);
-    float panel=exp(-pow(reflected.z*5.0,2.0))*smoothstep(.40,.85,reflected.y);
-    float edge=(1.0-smoothstep(.0005,.003,gap))*smoothstep(.00005,.0005,water.x-bed.x);
-    // Match the preserved pond material's dark enclosure and overhead grow-light response.
-    EMISSION=transmission*(1.0-fresnel)+reflection*fresnel+vec3(2.2,2.3,2.15)*panel*fresnel+vec3(.025)*edge;
+    EMISSION=mobile_surface_color(transmission,reflected,fresnel,tint_visibility);
     if(debug_surface){ALBEDO=vec3(0.0);EMISSION=vec3(.0,.5,.9);}
     ALPHA=smoothstep(.000001,.000008,water.x-bed.x);
 }

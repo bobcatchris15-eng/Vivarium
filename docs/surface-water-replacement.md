@@ -1,6 +1,15 @@
 # Surface-water replacement
 
-Status: continuing after the user rejected `H-cohesive-motion` for separating and flying pieces. The previous numerical/performance pass was not visual acceptance. The current iteration replaces the supported presentation reconstruction, aligns visible terrain with fluid support and fixes false slope detachment. Current-format save/load remains covered; backward compatibility is out of scope. Current captures and executed checks are recorded below; artistic approval remains open.
+Status: the continuity checkpoint is committed as `4c8b5c12`. The current material pass adds the user's requested blue-green tint and subtle surface reflections to mobile water, with no foam or aeration work. Current-format save/load remains covered; backward compatibility is out of scope. Artistic assessment remains reviewable in native motion.
+
+## Blue-green mobile-water material pass
+
+`game/Shaders/mobile_water_optics.gdshaderinc` centralizes the look shared by supported films, falling sheets and droplets. Defaults are `mobile_water_tint = (.10,.46,.50)`, `mobile_tint_strength = .13`, `mobile_reflection_strength = .035` and `mobile_roughness = .20`. A restrained colored albedo complements tinted transmission; the body tint increases gradually with optical depth. The overhead reflection is softer and dimmer, normal ripple amplitude falls from .14/.12 to .045, and refraction offset falls from .009 to .0035. There is no foam, aeration, extra particle emission or displacement.
+
+Supported body color and absorption fade with the locally reconstructed liquid column. This avoids coloring the exposed uphill/cliff side of an interpolated pool footprint. The added `tint_depth` output affects material color only: positions, reconstructed height/depth, coverage, clipping and volume are unchanged. `teal-optics-source.json` records canonical geometry/depth instruction comparisons against the shader baseline, all equal; the C# physics and water ownership are untouched. The existing standing-water shader and renderer remain protected.
+
+The first .26 tint candidate was too pale/opaque. The initial .13 pass exposed an unwanted blue wash on the waterfall wall, so body-color contact weighting was added. Those intermediate captures remain diagnostic. The selected captures are `H-teal-contact-final` (15 seconds, 450 native 1600x900 frames at 30 FPS), `D-teal-contact-final` (12 seconds, 360 frames) and `E-teal-contact-final` (pond handoff). Native shader compilation, conservation and current-format save/reload checks pass. The 60-second uncaptured wide-view spotcheck `H-teal-wide-60s` passes at **52.96 FPS / p99 30.58 ms**, with 60.000 physical seconds over 60.004 wall seconds and 2.88 ms final backlog. The worst frame is 187.44 ms, retaining the existing rare-hitch limitation. The maximum conservation residual across the selected native/capture/spotcheck runs is 6.61e-15 m3. `teal-optics-preservation.json` verifies the reviewed shader hashes, unchanged C# physics/binaries, original save, standing-water renderer and all unrelated user edits. This material-only iteration does not claim a new five-minute soak or a fresh 133-test physics run.
+
 
 ## Follow-up: supported flow breaking into plates
 

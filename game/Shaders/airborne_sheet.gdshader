@@ -5,6 +5,7 @@ render_mode blend_mix, depth_draw_always, cull_back, diffuse_burley, specular_sc
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap, repeat_disable;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable;
 uniform float interpolation_seconds;
+#include "res://Shaders/mobile_water_optics.gdshaderinc"
 uniform float fluid_time;
 uniform bool debug_surface=false;
 uniform sampler2D rings : filter_nearest,repeat_disable;
@@ -42,24 +43,22 @@ void fragment(){
     float phase0=fract(fluid_time/.6),phase1=fract(phase0+.5);
     vec3 q0=liquid_position-liquid_velocity*(phase0*.6),q1=liquid_position-liquid_velocity*(phase1*.6);
     float ripple=mix(cos(q1.y*110.0+sin(q1.x*90.0)),cos(q0.y*110.0+sin(q0.x*90.0)),1.0-abs(phase0*2.0-1.0));
-    n=normalize(n+tangent*ripple*.12*smoothstep(.02,.4,length(liquid_velocity)));
+    n=normalize(n+tangent*ripple*.045*smoothstep(.02,.4,length(liquid_velocity)));
     if(dot(n,view)<0.0)n=-n;
     float cosine=clamp(dot(n,view),0.0,1.0);
     float fresnel=.0204+.9796*pow(1.0-cosine,5.0);
     float gap=max(scene_depth(SCREEN_UV,INV_PROJECTION_MATRIX)+VERTEX.z,0.0);
     float thickness=min(gap,local_thickness/max(cosine,.25));
-    vec2 offset=n.xy*.009*smoothstep(.0001,.006,gap);
+    vec2 offset=n.xy*.0035*smoothstep(.0001,.006,gap);
     vec2 uv=clamp(SCREEN_UV+offset,vec2(.002),vec2(.998));
     if(scene_depth(uv,INV_PROJECTION_MATRIX)<-VERTEX.z)uv=SCREEN_UV;
-    vec3 transmitted=textureLod(screen_tex,uv,0.0).rgb*exp(-vec3(.8,.22,.45)*thickness);
+    vec3 transmitted=mobile_transmission(textureLod(screen_tex,uv,0.0).rgb,thickness,1.0);
     vec3 wn=(INV_VIEW_MATRIX*vec4(n,0.0)).xyz;
     vec3 wv=(INV_VIEW_MATRIX*vec4(view,0.0)).xyz;
     vec3 reflected=reflect(-wv,wn);
-    float panel=exp(-pow(reflected.z*5.0,2.0))*smoothstep(.45,.85,reflected.y);
-    vec3 reflection=mix(vec3(.055,.070,.064),vec3(.24,.29,.27),smoothstep(-.1,.8,reflected.y))+vec3(2.2,2.3,2.15)*panel;
-    ALBEDO=vec3(.012,.020,.016);
-    METALLIC=0.0;ROUGHNESS=.055;SPECULAR=.5;
-    EMISSION=mix(transmitted,reflection,fresnel);
+    ALBEDO=mobile_water_tint*.025;
+    METALLIC=0.0;ROUGHNESS=mobile_roughness;SPECULAR=.5;
+    EMISSION=mobile_surface_color(transmitted,reflected,fresnel,1.0);
     ALPHA=1.0;
     if(debug_surface){ALBEDO=vec3(0.0);EMISSION=vec3(.9,.05,.0);}
 }
