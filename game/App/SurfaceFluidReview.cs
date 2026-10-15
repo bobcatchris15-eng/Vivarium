@@ -47,6 +47,21 @@ public partial class SurfaceFluidReview : Node3D
     }
     private void Camera(string view)
     {
+        _session.CameraRig.Cam.Fov = 62;
+        if (Scenario == "H" && PresetId != null && view == "plan")
+        {
+            // A low, wide perspective view can inspect the map below the old-growth crown.
+            // Keep the production perspective water optics; do not hide the tree or its shadows.
+            float r = (float)_w.Domain.Radius;
+            _session.CameraRig.Cam.Fov = 120;
+            _session.CameraRig.LookAtPoint(new(0,(float)_w.Terrain.H.Max()+Math.Min(r*.7f,2.7f),.001f),new(0,.1f,0)); return;
+        }
+        if (Scenario == "H" && PresetId != null && view == "oblique")
+        {
+            float r = (float)_w.Domain.Radius;
+            var direction = _w.PilotTree == null ? new Vec2(.55,.9).Normalized() : -_w.PilotTree.Anchor.Normalized();
+            _session.CameraRig.LookAtPoint(new((float)direction.X*r, (float)_w.Terrain.H.Max()+r*1.8f, (float)direction.Z*r),new(0,.15f,0)); return;
+        }
         if (Scenario == "H" && view == "oblique") { float r = (float)_w.Domain.Radius; _session.CameraRig.LookAtPoint(new(.55f * r, (float)_w.Terrain.H.Max() + r * .8f, .9f * r), new(0, .25f, 0)); return; }
         if (Scenario == "H")
         {
@@ -123,8 +138,8 @@ public partial class SurfaceFluidReview : Node3D
             else if (PresetId != null)
             {
                 _w = VivariumWorld.Create(Content, Content.PresetOrThrow(PresetId), true); _w.Step(2400);
-                var source = _w.Water.Springs.FirstOrDefault();
-                if (source != null) _w.Water.Springs.Add(new Spring { Id = _w.Ids.Next(EntityKind.Spring), X = source.X + .2, Z = source.Z + .2, Discharge = source.Discharge * .75 });
+                // Preset review uses exactly its authored springs and untouched terrain.
+                // Synthetic fixtures below retain their multi-source and sculpt stress cases.
             }
             else
             {
@@ -164,18 +179,22 @@ public partial class SurfaceFluidReview : Node3D
             var pondBefore = Vivarium.Sim.Geometry.WaterMesh.BuildWaterTable(_w, _w.Terrain).DigestHex();
             await Shot("00-initial"); Record("initial");
             var physics = System.Diagnostics.Stopwatch.StartNew();
-            foreach (int target in new[] { 2, 8, 25, 45 })
+            foreach (int target in PresetId == null ? new[] { 2, 8, 25, 45 } : new[] { 2, 15, 60, 100 })
             {
                 while (_w.Liquid.PresentationTime < target - 1e-8)
-                { _w.Liquid.AdvancePhysical(SurfaceFluidDynamics.StepSeconds); if ((int)Math.Round(_w.Liquid.PresentationTime * 120) % 30 == 0) await Frame(); }
+                {
+                    if (PresetId != null) { _w.Liquid.AdvancePhysical(Math.Min(.5, target-_w.Liquid.PresentationTime)); await Frame(); }
+                    else { _w.Liquid.AdvancePhysical(SurfaceFluidDynamics.StepSeconds); if ((int)Math.Round(_w.Liquid.PresentationTime * 120) % 30 == 0) await Frame(); }
+                }
                 Camera("oblique"); await Shot($"{target:00}-oblique"); Record($"t{target}");
                 if (target == 8 && Scenario == "C" && _w.Props.Rocks.Count > 0) { _w.Placement.Remove(_w.Props.Rocks[0].Id); _w.Liquid.OnSolidGeometryChanged(); _session.Props.Build(_w); }
                 if (target == 8 && Scenario == "F")
                 { TerrainEditing.Sculpt(_w, new(.20, 0), .13, .11, SculptMode.Raise); _w.Liquid.OnTerrainChanged(); _session.Island.Build(_w); }
-                if (target == 25 && (Scenario == "F" || Scenario == "H"))
+                if (target == 25 && PresetId == null && SavePath == null && (Scenario == "F" || Scenario == "H"))
                 { TerrainEditing.Sculpt(_w, Scenario == "H" ? _w.Water.Springs.First().Position + new Vivarium.Sim.Core.Vec2(.2, 0) : new(.20, 0), .13, Scenario == "H" ? .015 : .18, SculptMode.Lower); _w.Liquid.OnTerrainChanged(); _session.Island.Build(_w); }
             }
             double physicsWall = physics.Elapsed.TotalSeconds;
+            if (PresetId != null) { Camera("plan"); await Shot("100-under-canopy"); }
             if (Scenario != "F" && Scenario != "H" && pondBefore != Vivarium.Sim.Geometry.WaterMesh.BuildWaterTable(_w, _w.Terrain).DigestHex()) throw new Exception("Standing-pond geometry regression");
             foreach (string view in new[] { "macro", "ground", "pond" }) { Camera(view); await Shot("45-" + view); }
             string save = Path.Combine(OutDir, "review.vivsave"); var result = SaveSystem.Save(_w, save); if (!result.Ok) throw new Exception(result.Message);

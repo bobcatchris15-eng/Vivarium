@@ -155,7 +155,42 @@ public sealed class PilotTreeState
         var def = descriptor.PilotTreeId == "random" ? PilotTreeCatalog.All[seededForm]
             : PilotTreeCatalog.Find(descriptor.PilotTreeId) ?? throw new ArgumentException("Unknown Pilot Tree: " + descriptor.PilotTreeId);
         int corner = descriptor.PilotTreeCorner < 0 ? seededCorner : descriptor.PilotTreeCorner;
-        var state = new PilotTreeState(def, corner, rng.NextULong(), domain, terrain);
+        ulong rootSeed = rng.NextULong();
+        var state = new PilotTreeState(def, corner, rootSeed, domain, terrain);
+        // Keep seeded selection when possible; only automatic placement moves away from
+        // an authored drainage route. Explicit player/save corners remain authoritative.
+        var channels = descriptor.Terrain.Features.Where(f => f.Type == "channel" && f.BedHeight.HasValue).ToArray();
+        if (descriptor.PilotTreeCorner < 0 && channels.Length > 0)
+        {
+            double ClearanceCost(PilotTreeState candidate)
+            {
+                double cost = 0;
+                foreach (var f in channels)
+                {
+                    var a = new Vec2(f.X, f.Z); var ab = new Vec2(f.ToX, f.ToZ) - a;
+                    int count = Math.Max(1, (int)Math.Ceiling(ab.Length / .10));
+                    var across = new Vec2(-ab.Z, ab.X).Normalized();
+                    for (int i = 0; i <= count; i++)
+                    foreach (double offset in new[] { -f.Width, 0, f.Width })
+                    {
+                        var p = a + ab * ((double)i / count) + across * offset;
+                        if (!domain.Contains(p)) continue;
+                        var root = candidate.NearestRoot(p);
+                        double extent = Math.Max(.08, root.Width * 1.7) + terrain.Step;
+                        if (root.Distance < extent) cost += (1 - root.Distance / extent) * root.Height;
+                    }
+                }
+                return cost;
+            }
+            double best = ClearanceCost(state);
+            for (int i = 1; i < 6 && best > 1e-10; i++)
+            {
+                var candidate = new PilotTreeState(def, (corner + i) % 6, rootSeed, domain, terrain);
+                double cost = ClearanceCost(candidate);
+                if (cost < best) { best = cost; state = candidate; }
+            }
+            corner = state.Corner;
+        }
         descriptor.PilotTreeId = def.Id;
         descriptor.PilotTreeCorner = corner;
         return state;

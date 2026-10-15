@@ -64,6 +64,19 @@ public sealed class WorldDescriptor
 
     public WorldDescriptor Clone() => FromJson(ToJson());
 
+    /// <summary>Resize map geometry while preserving elevations and channel proportions.</summary>
+    public void ResizeFootprint(double diameter)
+    {
+        if (!double.IsFinite(diameter) || diameter < MinDiameter || diameter > MaxDiameter)
+            throw new ArgumentOutOfRangeException(nameof(diameter));
+        double scale = diameter / Diameter;
+        Diameter = diameter;
+        Terrain.SlopeX /= scale; Terrain.SlopeZ /= scale;
+        foreach (var f in Terrain.Features)
+        { f.X *= scale; f.Z *= scale; f.ToX *= scale; f.ToZ *= scale; f.Radius *= scale; f.Width = Math.Max(CellSize * .9, f.Width * scale); }
+        foreach (var spring in Water.Springs) { spring.X *= scale; spring.Z *= scale; }
+    }
+
     /// <summary>Returns problems that make the descriptor unusable (empty when valid).</summary>
     public List<string> Validate()
     {
@@ -76,6 +89,8 @@ public sealed class WorldDescriptor
         if (!(Terrain.MaxHeight > Terrain.MinHeight)) e.Add("terrain.maxHeight must exceed terrain.minHeight");
         if (!(Terrain.Bottom < Terrain.MinHeight - 0.5)) e.Add("terrain.bottom must be at least 0.5 m below terrain.minHeight");
         if (Terrain.Octaves is < 1 or > 8) e.Add("terrain.octaves must be within [1, 8]");
+        if (!(Terrain.SlopeX >= -2 && Terrain.SlopeX <= 2)) e.Add($"terrain.slopeX {Terrain.SlopeX} must be within [-2, 2]");
+        if (!(Terrain.SlopeZ >= -2 && Terrain.SlopeZ <= 2)) e.Add($"terrain.slopeZ {Terrain.SlopeZ} must be within [-2, 2]");
         if (!(BioAcceleration >= MinBioAcceleration && BioAcceleration <= MaxBioAcceleration)) e.Add($"bioAcceleration {BioAcceleration} must be within [{MinBioAcceleration}, {MaxBioAcceleration}]");
         if (FaunaBudget < 0 || FaunaBudget > MaxFaunaBudget) e.Add($"faunaBudget {FaunaBudget} must be within [0, {MaxFaunaBudget}]");
         double r = Diameter / 2;
@@ -87,7 +102,16 @@ public sealed class WorldDescriptor
         foreach (var s in Water.Springs)
             if (s.X * s.X + s.Z * s.Z > r * r) e.Add($"spring at ({s.X},{s.Z}) lies outside the island");
         foreach (var f in Terrain.Features)
+        {
             if (f.Type is not ("basin" or "hill" or "channel" or "ridge")) e.Add($"terrain feature type '{f.Type}' is unknown");
+            if (f.BedHeight.HasValue)
+            {
+                if (f.Type is not ("channel" or "basin")) e.Add("bedHeight is only supported for channels and basins");
+                if (!double.IsFinite(f.BedHeight.Value) || f.BedHeight < Terrain.MinHeight || f.BedHeight > Terrain.MaxHeight) e.Add("bedHeight must lie within terrain height limits");
+            }
+            if (f.ToBedHeight.HasValue && (!f.BedHeight.HasValue || f.Type != "channel" || !double.IsFinite(f.ToBedHeight.Value) || f.ToBedHeight < Terrain.MinHeight || f.ToBedHeight > f.BedHeight))
+                e.Add("toBedHeight requires a channel bedHeight and must be finite, downhill and within terrain height limits");
+        }
         return e;
     }
 }
@@ -96,6 +120,10 @@ public sealed class TerrainProfile
 {
     public double BaseHeight { get; set; } = 0.6;
     public double Relief { get; set; } = 0.5;
+    /// <summary>Linear elevation change in metres per metre of world X (negative = east side lower).</summary>
+    public double SlopeX { get; set; } = 0.0;
+    /// <summary>Linear elevation change in metres per metre of world Z (negative = south side lower).</summary>
+    public double SlopeZ { get; set; } = 0.0;
     public double NoiseScale { get; set; } = 0.18;
     public int Octaves { get; set; } = 4;
     public double MinHeight { get; set; } = -0.8;
@@ -105,6 +133,21 @@ public sealed class TerrainProfile
     /// <summary>Fraction of rock-classified base substrate on steep/exposed ground (0..1).</summary>
     public double RockExposure { get; set; } = 0.12;
     public List<TerrainFeature> Features { get; set; } = new();
+
+    /// <summary>Adjust relief without letting authored floors escape the terrain's height limits.</summary>
+    public void ScaleRelief(double multiplier)
+    {
+        if (!double.IsFinite(multiplier) || multiplier < 0) throw new ArgumentOutOfRangeException(nameof(multiplier));
+        Relief *= multiplier;
+        double scale = Math.Sqrt(multiplier);
+        SlopeX *= scale; SlopeZ *= scale;
+        foreach (var feature in Features)
+        {
+            feature.Amount *= scale;
+            if (feature.BedHeight is double bed) feature.BedHeight = Math.Clamp(BaseHeight + (bed-BaseHeight)*scale,MinHeight,MaxHeight);
+            if (feature.ToBedHeight is double endBed) feature.ToBedHeight = Math.Clamp(BaseHeight + (endBed-BaseHeight)*scale,MinHeight,MaxHeight);
+        }
+    }
 }
 
 public sealed class TerrainFeature
@@ -118,6 +161,12 @@ public sealed class TerrainFeature
     public double Radius { get; set; } = 2;
     public double Amount { get; set; } = 0.5;
     public double Width { get; set; } = 0.6;
+    /// <summary>When true the feature has near-vertical sides instead of a smooth blend.</summary>
+    public bool Sharp { get; set; } = false;
+    /// <summary>Optional absolute channel or basin floor. Overlapping cuts take the lower floor, never add depths.</summary>
+    public double? BedHeight { get; set; }
+    /// <summary>Downstream floor at (ToX,ToZ). Absent means a level basin/channel.</summary>
+    public double? ToBedHeight { get; set; }
 }
 
 public sealed class WaterConfig

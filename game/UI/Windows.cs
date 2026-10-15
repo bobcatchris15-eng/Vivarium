@@ -342,12 +342,10 @@ public partial class Windows : Control
         if (ulong.TryParse(_seed.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seed)) d.Seed = seed;
         else d.Seed = Hash.Fnv1a64(_seed.Text.Trim());           // any text works as a seed
         double scale = _diameter.Value / d.Diameter;
-        d.Diameter = _diameter.Value;
-        foreach (var f in d.Terrain.Features) { f.X *= scale; f.Z *= scale; f.ToX *= scale; f.ToZ *= scale; f.Radius *= scale; }
-        foreach (var s in d.Water.Springs) { s.X *= scale; s.Z *= scale; s.Discharge *= _springFlow.Value; }
+        d.ResizeFootprint(_diameter.Value);
+        foreach (var s in d.Water.Springs) s.Discharge *= _springFlow.Value;
         if (_springFlow.Value < 0.05) d.Water.Springs.Clear();
-        d.Terrain.Relief *= _relief.Value;
-        foreach (var f in d.Terrain.Features) f.Amount *= Math.Sqrt(_relief.Value);
+        d.Terrain.ScaleRelief(_relief.Value);
         double areaScale = scale * scale;
         foreach (var s in d.StarterFlora) s.Count = Math.Max(1, (int)Math.Round(s.Count * areaScale));
         foreach (var s in d.StarterFauna) s.Count = Math.Max(1, (int)Math.Round(s.Count * areaScale));

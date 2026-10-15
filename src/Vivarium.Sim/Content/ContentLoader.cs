@@ -727,7 +727,7 @@ public static class ContentLoader
     {
         n.RejectUnknown("id", "name", "seed", "diameter", "cellSize", "terrain", "water", "placement", "starterFlora", "starterFauna");
         var t = n.Req("terrain");
-        t.RejectUnknown("baseHeight", "relief", "noiseScale", "octaves", "minHeight", "maxHeight", "bottom", "rockExposure", "features");
+        t.RejectUnknown("baseHeight", "relief", "slopeX", "slopeZ", "noiseScale", "octaves", "minHeight", "maxHeight", "bottom", "rockExposure", "features");
         var w = n.Req("water");
         w.RejectUnknown("waterTable", "springs", "flowRate", "flowMemorySeconds", "flowResponseSeconds", "streamVelocityThreshold", "evaporationPerDay", "infiltrationPerDay", "wetDepth", "boundaryDrop", "subSteps");
         var p = n.Req("placement");
@@ -740,18 +740,20 @@ public static class ContentLoader
             CellSize = n.Num("cellSize", 0.25, 0.1, 1.0),
             Terrain = new TerrainProfile
             {
-                BaseHeight = t.Num("baseHeight", min: -2, max: 3), Relief = t.Num("relief", min: 0, max: 3), NoiseScale = t.Num("noiseScale", min: 0.01, max: 2),
+                BaseHeight = t.Num("baseHeight", min: -2, max: 3), Relief = t.Num("relief", min: 0, max: 3), SlopeX = t.Num("slopeX", 0, min: -2, max: 2), SlopeZ = t.Num("slopeZ", 0, min: -2, max: 2), NoiseScale = t.Num("noiseScale", min: 0.01, max: 2),
                 Octaves = t.Int("octaves", min: 1, max: 8), MinHeight = t.Num("minHeight", min: -3, max: 3), MaxHeight = t.Num("maxHeight", min: -2, max: 5),
                 Bottom = t.Num("bottom", min: -10, max: 0), RockExposure = t.Num("rockExposure", 0.12, 0, 1),
                 Features = t.Items("features", required: false).Select(f =>
                 {
-                    f.RejectUnknown("type", "x", "z", "toX", "toZ", "radius", "amount", "width");
+                    f.RejectUnknown("type", "x", "z", "toX", "toZ", "radius", "amount", "width", "sharp", "bedHeight", "toBedHeight");
                     string type = f.Str("type");
                     if (type is not ("basin" or "hill" or "channel" or "ridge")) f["type"].Error("expected basin | hill | channel | ridge");
                     return new TerrainFeature
                     {
                         Type = type, X = f.Num("x", min: -10, max: 10), Z = f.Num("z", min: -10, max: 10), ToX = f.Num("toX", 0, -10, 10), ToZ = f.Num("toZ", 0, -10, 10),
-                        Radius = f.Num("radius", 2, 0.1, 10), Amount = f.Num("amount", min: -3, max: 3), Width = f.Num("width", 0.6, 0.05, 5),
+                        Radius = f.Num("radius", 2, 0.1, 10), Amount = f.Num("amount", min: -3, max: 3), Width = f.Num("width", 0.6, 0.05, 5), Sharp = f.Bool("sharp", false),
+                        BedHeight = f.Has("bedHeight") ? f.Num("bedHeight", min: -3, max: 5) : null,
+                        ToBedHeight = f.Has("toBedHeight") ? f.Num("toBedHeight", min: -3, max: 5) : null,
                     };
                 }).ToList(),
             },

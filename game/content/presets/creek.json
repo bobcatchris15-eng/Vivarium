@@ -5,63 +5,132 @@
   "diameter": 8,
   "cellSize": 0.25,
   "terrain": {
-    "baseHeight": 0.65,
-    "relief": 0.58,
-    "noiseScale": 0.26,
-    "octaves": 5,
-    "minHeight": -0.6,
-    "maxHeight": 2.5,
+    "baseHeight": 0.2,
+    "relief": 0.04,
+    "noiseScale": 0.18,
+    "octaves": 3,
+    "minHeight": -0.65,
+    "maxHeight": 1.3,
     "bottom": -2.6,
-    "rockExposure": 0.28,
+    "rockExposure": 0.18,
     "features": [
       {
         "type": "hill",
-        "x": -2.4,
-        "z": -2.0,
-        "radius": 1.827,
-        "amount": 1.1
+        "x": -2.56,
+        "z": 1.6,
+        "radius": 1.68,
+        "amount": 0.07
       },
       {
         "type": "hill",
-        "x": 2.173,
-        "z": -1.14,
-        "radius": 2.0,
-        "amount": 0.8
-      },
-      {
-        "type": "channel",
-        "x": -2.513,
-        "z": -2.06,
-        "toX": -0.46,
-        "toZ": -0.227,
-        "width": 0.467,
-        "amount": 0.45
-      },
-      {
-        "type": "channel",
-        "x": -0.46,
-        "z": -0.227,
-        "toX": 4.113,
-        "toZ": 3.66,
-        "width": 0.567,
-        "amount": 0.48
+        "x": 2.12,
+        "z": -1.96,
+        "radius": 1.8,
+        "amount": 0.09
       },
       {
         "type": "basin",
-        "x": -0.34,
-        "z": -0.173,
-        "radius": 0.86,
-        "amount": 0.35
+        "x": 1.36,
+        "z": 2.6,
+        "radius": 0.96,
+        "amount": 0.13,
+        "bedHeight": -0.09
+      },
+      {
+        "type": "channel",
+        "x": -2.48,
+        "z": -2.08,
+        "toX": -1.32,
+        "toZ": -1.68,
+        "width": 0.255,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": 0.16844,
+        "toBedHeight": 0.14116
+      },
+      {
+        "type": "channel",
+        "x": -1.32,
+        "z": -1.68,
+        "toX": -1.8,
+        "toZ": -0.48,
+        "width": 0.2798,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": 0.14116,
+        "toBedHeight": 0.091
+      },
+      {
+        "type": "channel",
+        "x": -1.8,
+        "z": -0.48,
+        "toX": -0.32,
+        "toZ": 0.12,
+        "width": 0.2437,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": 0.091,
+        "toBedHeight": 0.05216
+      },
+      {
+        "type": "channel",
+        "x": -0.32,
+        "z": 0.12,
+        "toX": 1.2,
+        "toZ": 0.4,
+        "width": 0.2353,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": 0.05216,
+        "toBedHeight": 0.0274
+      },
+      {
+        "type": "channel",
+        "x": 1.2,
+        "z": 0.4,
+        "toX": 1.52,
+        "toZ": 1.2,
+        "width": 0.2752,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": 0.0274,
+        "toBedHeight": -0.01116
+      },
+      {
+        "type": "channel",
+        "x": 1.52,
+        "z": 1.2,
+        "toX": 0.32,
+        "toZ": 1.96,
+        "width": 0.2655,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.01116,
+        "toBedHeight": -0.03576
+      },
+      {
+        "type": "channel",
+        "x": 0.32,
+        "z": 1.96,
+        "toX": 1.36,
+        "toZ": 2.6,
+        "width": 0.23,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.03576,
+        "toBedHeight": -0.07288
       }
-    ]
+    ],
+    "slopeX": -0.008,
+    "slopeZ": -0.045
   },
   "water": {
-    "waterTable": -0.4,
+    "waterTable": 0,
     "springs": [
       {
-        "x": -2.227,
-        "z": -1.827,
-        "dischargePerHour": 0.12
+        "x": -2.48,
+        "z": -2.08,
+        "dischargePerHour": 0.48
       }
     ],
     "flowRate": 0.22,

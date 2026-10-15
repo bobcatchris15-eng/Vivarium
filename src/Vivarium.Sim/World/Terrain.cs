@@ -53,19 +53,20 @@ public sealed class Heightfield
     /// <summary>Procedural height at (x,z) before triangulation: fBm relief + profile features, clamped to limits.</summary>
     public static double RawHeight(ulong seed, TerrainProfile t, double x, double z, HexDomain domain)
     {
-        double h = t.BaseHeight + t.Relief * Noise.Fbm(seed, x * t.NoiseScale, z * t.NoiseScale, t.Octaves);
+        double h = t.BaseHeight + t.SlopeX * x + t.SlopeZ * z + t.Relief * Noise.Fbm(seed, x * t.NoiseScale, z * t.NoiseScale, t.Octaves);
         // fine micro-relief keeps close-up ground organic
         h += 0.04 * Noise.Fbm(Rng.Mix(seed, 77), x * 1.7, z * 1.7, 2);
         var p = new Vec2(x, z);
         foreach (var f in t.Features)
         {
+            if (f.BedHeight.HasValue) continue;
             switch (f.Type)
             {
                 case "hill":
                 case "basin":
                 {
                     double dd = Vec2.Distance(p, new Vec2(f.X, f.Z)) / f.Radius;
-                    if (dd < 1) { double w = (1 - dd * dd); w *= w; h += (f.Type == "hill" ? 1 : -1) * Math.Abs(f.Amount) * w; }
+                    if (dd < 1) { double w = f.Sharp ? 1 : (1 - dd * dd); if (!f.Sharp) w *= w; h += (f.Type == "hill" ? 1 : -1) * Math.Abs(f.Amount) * w; }
                     break;
                 }
                 case "channel":
@@ -74,10 +75,33 @@ public sealed class Heightfield
                     Vec2 a = new(f.X, f.Z), b = new(f.ToX, f.ToZ), ab = b - a;
                     double tt = ab.LengthSq > 1e-12 ? MathD.Clamp01((p - a).Dot(ab) / ab.LengthSq) : 0;
                     double dd = Vec2.Distance(p, a + ab * tt) / f.Width;
-                    if (dd < 1) { double w = 0.5 + 0.5 * Math.Cos(Math.PI * dd); h += (f.Type == "ridge" ? 1 : -1) * Math.Abs(f.Amount) * w; }
+                    if (dd < 1) { double w = f.Sharp ? 1 : 0.5 + 0.5 * Math.Cos(Math.PI * dd); h += (f.Type == "ridge" ? 1 : -1) * Math.Abs(f.Amount) * w; }
                     break;
                 }
             }
+        }
+        // Graded cuts use the same uncut bank height, so intersections cannot double-excavate.
+        // Sharp channels retain readable banks; the vertex grid turns their edge into a narrow bank face.
+        double bank = h;
+        foreach (var f in t.Features)
+        {
+            if (f.BedHeight is not double floor) continue;
+            double dd;
+            if (f.Type == "channel")
+            {
+                Vec2 a = new(f.X, f.Z), ab = new Vec2(f.ToX, f.ToZ) - a;
+                double along = ab.LengthSq > 1e-12 ? (p - a).Dot(ab) / ab.LengthSq : 0;
+                dd = Vec2.Distance(p, a + ab * MathD.Clamp01(along)) / f.Width;
+                // Extrapolate the grade through the rounded end caps instead of making flat traps at joins.
+                floor += ((f.ToBedHeight ?? floor) - floor) * along;
+            }
+            else if (f.Type == "basin") dd = Vec2.Distance(p, new Vec2(f.X, f.Z)) / f.Radius;
+            else continue;
+            if (dd >= 1) continue;
+            double shape = f.Type == "basin" ? Math.Abs(f.Amount) * dd * dd : .008 * dd * dd;
+            double shoulder = MathD.Clamp01((dd - .35) / .65);
+            double blend = f.Sharp ? 1 : 1 - shoulder * shoulder * (3 - 2 * shoulder);
+            h = Math.Min(h, bank + (floor + shape - bank) * blend);
         }
         // soft clamp: compress smoothly within 15 cm of the limits, then hard-clamp
         double lo = t.MinHeight, hi = t.MaxHeight, band = Math.Min(0.15, (hi - lo) / 4);
