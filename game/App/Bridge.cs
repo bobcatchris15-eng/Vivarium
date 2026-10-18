@@ -99,7 +99,22 @@ public static class Bridge
     public static ShaderMaterial Shader(string path)
     {
         var sh = GD.Load<Shader>(path) ?? throw new InvalidOperationException($"missing shader {path}");
-        return new ShaderMaterial { Shader = sh };
+        var material = new ShaderMaterial { Shader = sh };
+        // Experiment control: same geometry and shader code; turn off the
+        // post-2026-10-18 scattering/anisotropy candidate to measure its cost.
+        // Never changes ecological simulation, save files or permanent settings.
+        if (System.Environment.GetEnvironmentVariable("VIVARIUM_FOLIAGE_PERF_BASELINE") == "1")
+        {
+            if (path.EndsWith("/leaf.gdshader") || path.EndsWith("/flora.gdshader") ||
+                path.EndsWith("/ground_cover.gdshader"))
+            {
+                material.SetShaderParameter("tissue_phase_scatter", 0f);
+                material.SetShaderParameter("tissue_fiber_anisotropy", 0f);
+                if (path.EndsWith("/leaf.gdshader"))
+                    material.SetShaderParameter("canopy_occlusion", .15f);
+            }
+        }
+        return material;
     }
 
     /// <summary>

@@ -116,6 +116,9 @@ void vertex() {
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 void fragment() {
+    tissue_fiber_view = vec3(1.0, 0.0, 0.0);
+    tissue_fiber_mask = 0.0;
+    tissue_phase_mask = surface_mode == 2 && UV2.y > .5 && UV2.x < 1.2 ? 1.0 : 0.0;
     // Double-sided normal handling: invert backface normal so undersides do not render dark or inverted.
     if (!FRONT_FACING) {
         NORMAL = -NORMAL;
@@ -367,6 +370,21 @@ void fragment() {
     else night_mask = smoothstep(0.45, 0.60, UV2.y);
     EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+    // Fiber axis for real leaf blades only. Reeds, stems, berries and
+    // underside organ tags retain isotropic cuticle reflectance.
+    if (surface_mode == 2 && UV2.y > .5 && UV2.x < 1.2 && FRONT_FACING) {
+        vec2 ux = dFdx(UV), uy = dFdy(UV);
+        vec3 px = dFdx(world_pos), py = dFdy(world_pos);
+        float det = ux.x * uy.y - uy.x * ux.y;
+        vec3 fiber_world = (px * uy.y - py * ux.y) /
+            (abs(det) > 1e-7 ? det : 1.0);
+        vec3 fiber_view = (VIEW_MATRIX * vec4(fiber_world, 0.0)).xyz;
+        float fiber_len = length(fiber_view);
+        if (fiber_len > 1e-5 && abs(det) > 1e-7) {
+            tissue_fiber_view = fiber_view / fiber_len;
+            tissue_fiber_mask = 1.0;
+        }
+    }
     if (surface_mode == 2 && !woody_surface && UV2.y > .5 && UV2.x < 1.2) {
         vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
         float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);

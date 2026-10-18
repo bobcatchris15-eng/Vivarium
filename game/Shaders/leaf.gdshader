@@ -25,7 +25,9 @@ uniform float vein_strength = .4;
 uniform float wind_strength = .018;
 uniform float plant_stiffness = 7.;
 uniform float tissue_scale = 1.6;
-uniform float canopy_occlusion = .15;
+uniform float canopy_occlusion = .55;
+// Shoot-level chlorophyll mottling; separate from unrelated UV texture noise.
+uniform float leaf_pigment_mottle = 0.0;
 uniform bool volumetric = false;
 uniform int leaf_variegation = 0;
 uniform float review_time = -1.;
@@ -83,6 +85,7 @@ vec3 detail_normal(vec3 base, vec2 uv, vec3 detail) {
     return cotangent_normal(base, position_world, uv, detail);
 }
 void fragment() {
+    tissue_phase_mask = UV2.y > 0.5 ? 1.0 : 0.0;
     // Invert backface normal so undersides do not render dark or inverted.
     if (!FRONT_FACING) {
         NORMAL = -NORMAL;
@@ -105,6 +108,16 @@ void fragment() {
     // Photo variation plus stable organ-specific pigment clouding: avoid paint-flat laminae.
     vec3 color = pigment*mix(vec3(1.),photograph,.92);
     color *= leaf_mesophyll_pattern(UV,seed);
+    // Two spectral bands covary spatially, as they do under varying chlorophyll
+    // density. Coherent over the blade, seed-stable, no screen-space flicker.
+    if (leaf_pigment_mottle > 0.001) {
+        float chlorophyll = vnoise(UV * vec2(7.1, 10.8) +
+            vec2(seed * 16.31, seed * 25.77));
+        float mottle = (chlorophyll - .5) * leaf_pigment_mottle;
+        color *= clamp(vec3(1.0 - .42*mottle,
+                            1.0 + .32*mottle,
+                            1.0 - .58*mottle), vec3(.10), vec3(2.30));
+    }
     color *= mix(1.0,.94,smoothstep(.36,.50,abs(UV.y-.5)));
     vec4 anatomy = texture(vein_mask,UV);
     color *= 1.+(blade.z-.5)*.08+(plant.x-.5)*.05;
@@ -136,6 +149,17 @@ void fragment() {
     vec3 wn = normalize((INV_VIEW_MATRIX*vec4(NORMAL,0.)).xyz);
     vec3 mapped=detail_normal(wn,UV,slopes);
     NORMAL=normalize((VIEW_MATRIX*vec4(mapped,0.)).xyz);
+    // Reconstruct plant-fiber orientation from true mesh UV derivatives,
+    // not from the camera plane; rotate into the custom light's view frame.
+    vec2 ux = dFdx(UV), uy = dFdy(UV);
+    vec3 px = dFdx(position_world), py = dFdy(position_world);
+    float det = ux.x * uy.y - uy.x * ux.y;
+    vec3 fiber_world = (px * uy.y - py * ux.y) /
+        (abs(det) > 1e-7 ? det : 1.0);
+    vec3 fiber_view = (VIEW_MATRIX * vec4(fiber_world, 0.0)).xyz;
+    float fiber_len = length(fiber_view);
+    tissue_fiber_view = fiber_len > 1e-5 ? fiber_view / fiber_len : vec3(1.0, 0.0, 0.0);
+    tissue_fiber_mask = fiber_len > 1e-5 && abs(det) > 1e-7 ? (1.0 - side) : 0.0;
     color *= mix(.93,1.07,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(.95,1.03,fract(seed*3.7)));
     ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,.3+.7*smoothstep(0.,.45,plant.y));
     // Species-specific cuticular gloss on adaxial face; rougher, paler abaxial face

@@ -26,6 +26,9 @@ void vertex() {
 }
 
 void fragment() {
+    tissue_fiber_view = vec3(1.0, 0.0, 0.0);
+    tissue_fiber_mask = 0.0;
+    tissue_phase_mask = 1.0 - clamp(old_stem, 0.0, 1.0);
     if (!FRONT_FACING) NORMAL = -NORMAL;
     float across = abs(UV.x - .5);
     float midrib = 1.0 - smoothstep(.018, .07, across);
