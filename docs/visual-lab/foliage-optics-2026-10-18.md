@@ -40,3 +40,48 @@ Visual author inspection: changes remain subtle in real captured side-by-side fr
 
 ## Reproducibility of published branch
 A clean detached checkout of the published branch rebuilt using dotnet restore + build with zero errors or warnings after removing the optional, uncommitted BranchModuleLoader mesh-review dependency. This verifies standalone C# compilation, not a fresh import/render acceptance of the clean checkout.
+
+## Continuation: isolated clean-checkout directional-tissue experiment
+
+This follow-up was performed in a **new, detached** worktree `E:\Vivarium-FoliageLab` at committed base `9cc87a3e`. The original main, ecology, and existing optics worktrees had extensive live uncommitted changes and were **not** reset or edited. All experimental captures are local and ignored by Git.
+
+### Independent-run dependency fixed
+
+The previously published branch compiled cleanly but crashed before rendering: `EnvironmentRig` requested `res://Shaders/canopy_sky.gdshader`, whose file and `forest_canopy_radiance.gdshaderinc` were absent from the Git branch and only present as original-worktree changes. Their existing source was included in this experimental follow-up so a clean checkout can import and render. This is a reproducibility fix, not evidence of improved plant appearance.
+
+### New lighting hypothesis and implementation
+
+Earlier `BACKLIGHT` values carried several multiplicative attenuations and were ineffective when measured under the fixture's ambiguous "backlit" sun angle. We introduced `leaf_direct_light.gdshaderinc` into the dedicated leaf, legacy flora, and ambient ground-cover shaders, implementing a **custom Godot Forward+ per-light** surface response:
+
+- Lambert-style reflected lamina term, spectrally selective Beer-Lambert thin-tissue transmission against illumination from the far side of the viewed leaf, plus a roughness-dependent GGX cuticle reflection.
+- The existing material's `BACKLIGHT` is interpreted as the transmitted-tissue input and adjusted to the diffuse irradiance convention in Godot's custom `light()`.
+- A shared spectral leaf function now produces a meaningful backlighting signal with vein/thickness attenuation and leaf-family controls; this remains an artist-calibrated model, **not a measured biophysical fit**.
+- Diagnostic controls separately isolate direct reflection, direct transmission, and specular lighting, and display albedo, normal orientation, roughness, transmission, and venation.
+
+The new `light()` applies to all three material families and therefore also changes some other surface/organ lighting in those materials. It requires a gameplay visual review, especially foliage in shade and non-leaf surfaces, before promotion.
+
+### Reproducible GPU evidence
+
+Godot 4.7.1 Mono / Vulkan Forward+ on the GTX 1080, after a fresh Godot asset import and `.NET 8` restore/build:
+
+- `build/foliage-diagnostics/candidate06/`: 44 real material-review PNGs, runtime reported `MATERIAL_PORT_REVIEW_OK` with **no shader compilation errors**. This is the first valid custom-light candidate. Earlier `candidate02` through `candidate04` produced rejected errors or failed fixture setup; `candidate05` erroneously darkened leaves by applying albedo twice and was rejected.
+- `build/foliage-diagnostics/direct-light-rig02/`: ambient disabled, source positioned behind the viewed leaf cluster. Isolated **transmission-only foliage was visibly green**, while reflection-only leaves were nearly unilluminated. This proves the custom directional transmission term is engaged in the actual renderer. The former nominal 135-degree "backlight" was a poor directional test for the viewed leaves.
+- `build/foliage-diagnostics/material-light-rig03/`: texture/material instrument captures distinguish reflected color, normal, roughness, transmission, vein-mask; reveals that much of the plant remains flat-looking in normal views.
+- `build/foliage-diagnostics/world-v6/`: actual full-world review, 57 PNGs, `VIVARIUM_WORLDREVIEW_OK checks=2 failed=0` and no shader compile errors.
+- `build/foliage-diagnostics/final-direct-audit/`: final isolated audit with production shadebell triangles and shader modes.
+
+The leaf winding audit had to use **Godot's clockwise front-face convention**, not right-hand cross-product orientation. After correcting the diagnostic to interpret the authored winding, the shadebell audit reported **5,344 triangles, zero reversed, zero perpendicular, zero degenerates, mean visible-normal dot +0.997**. Do not reverse plant normals based on right-hand triangle cross alone.
+
+Comparison caution: `candidate06` full-resolution mean absolute differences versus the committed fixture baseline, including black backdrop, were shadebell front 0.285/255, shadebell backlit 0.334/255, legacy ringreed backlit 0.044/255, integrated day 0.514/255, and integrated night 0.052/255. These tiny whole-image deltas are not acceptance measurements, but they reinforce what the matched visible side-by-side renders show: **ordinary gameplay views remain insufficiently different and insufficiently lifelike**. The direct-transmission test is a working mechanism, **not** a satisfactory environmental/material overhaul.
+
+### Validation
+
+- Clean standalone `dotnet build game/Vivarium.csproj --no-restore`: success, zero warnings/errors.
+- Visual-Lab Python tests `11 passed`.
+- Focused xUnit material/geometry-relevant selection: **66 passed, 4 failed** (embercrown and shadebell triangle/form budgets, isopod articulated plates, creeper triangle budget), matching the previous handoff; no claimed green suite.
+- No isolated GPU frame-rate certification: other Godot sessions were present during some work. The 30-FPS floor remains unverified.
+- Do **not** merge into `main` or classify this as a photographic-realism acceptance.
+
+### Remaining decisive work
+
+The direct-light diagnostic is now useful for proving what a foliage optical effect contributes instead of relying on full-screen pixel deltas. The largest unresolved deficiency is **indirect spatially varied illumination of overlapping laminae and correctly differentiated material response at gameplay distance**. Next investigate directional skylight/bounce, light-to-leaf shadowing in dense canopy, actual normal/cuticle lobe response at grazing sunlight, and controls for preserving unrelated non-leaf materials. Evaluate reference-matched renders; replace this custom approximation if the measured visual quality is not competitive. Capture a proper isolated GTX 1080 benchmark before any merge.

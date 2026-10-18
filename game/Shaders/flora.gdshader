@@ -10,6 +10,7 @@ render_mode diffuse_burley, cull_disabled;
 
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/living_leaf_optics.gdshaderinc"
+#include "res://Shaders/leaf_direct_light.gdshaderinc"
 
 uniform float sway = 1.0;
 uniform float stiffness = 1.0;
@@ -332,7 +333,7 @@ void fragment() {
     float tissue_depth = leaf_type == 4 ? 2.10 : leaf_type == 3 ? 1.25 :
        leaf_type == 5 ? .56 : leaf_type == 2 ? .43 : .82;
     vec3 leaf_backlight=leaf_through(c,trans_clamped,vein_mass,tissue_depth,1.-top_side);
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight*.72 : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
     if (surface_mode == 2 && !woody_surface && UV2.y > .5) {
         SSS_TRANSMITTANCE_COLOR=vec4(clamp(leaf_backlight/max(c.g*.36,.015),vec3(0.),vec3(1.)),1.);
         SSS_TRANSMITTANCE_DEPTH=mix(.60,.18,vein_mass);

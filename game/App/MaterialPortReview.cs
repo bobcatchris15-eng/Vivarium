@@ -109,6 +109,29 @@ public partial class MaterialPortReview : Node3D
                 NightFloraMaterials.Bind(leaf, sp);
                 ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + id), 0x9E3779B97F4A7C15UL);
                 var source = OrganismMeshes.FloraTier(sp, seed, 0, tieredSource: true);
+                if (id == "shadebell" &&
+                    System.Environment.GetEnvironmentVariable("VIVARIUM_LEAF_LIGHT_DIAGNOSTICS") == "1")
+                {
+                    var blades = FloraVisualCompiler.Split(source).Leaf;
+                    int tris = 0, backward = 0, perpendicular = 0, degenerate = 0;
+                    double meanFacing = 0;
+                    for (int f = 0; f < blades.Indices.Count; f += 3)
+                    {
+                        int ai = blades.Indices[f], bi = blades.Indices[f + 1], ci = blades.Indices[f + 2];
+                        var geo = (blades.Position(bi) - blades.Position(ai))
+                            .Cross(blades.Position(ci) - blades.Position(ai));
+                        if (geo.LengthSq < 1e-12) { degenerate++; continue; }
+                        var n = (blades.NormalAt(ai) + blades.NormalAt(bi) +
+                            blades.NormalAt(ci)).Normalized();
+                        // Godot uses clockwise front faces: inverse RH cross is the visible side.
+                        double dot = -geo.Normalized().Dot(n);
+                        meanFacing += dot;
+                        if (dot < -0.05) backward++;
+                        if (Math.Abs(dot) < 0.35) perpendicular++;
+                        tris++;
+                    }
+                    GD.Print($"LEAF_NORMAL_AUDIT triangles={tris} backward={backward} perpendicular={perpendicular} degenerate={degenerate} meanDot={(tris > 0 ? meanFacing / tris : 0):F3}");
+                }
                 var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
                     UseColors = true, UseCustomData = true, Mesh = profile.Compile(source, stem, leaf), InstanceCount = 1 };
                 mm.SetInstanceTransform(0, new Transform3D(Basis.Identity.Scaled(new Vector3((float)sp.RadiusAtMax,
@@ -128,6 +151,35 @@ public partial class MaterialPortReview : Node3D
                 _camera.Position = target + new Vector3(.85f, .55f, 1).Normalized() * size * 1.8f; _camera.LookAt(target);
                 await Pair(id + "-front", leaf, oldLeaf, newLeaf);
                 Lighting(backlit: true); await Pair(id + "-backlit", leaf, oldLeaf, newLeaf);
+                // A radiometrically meaningful diagnostic: with ambient disabled, each
+                // capture isolates a term of the production leaf light() function.
+                if (id == "shadebell" &&
+                    System.Environment.GetEnvironmentVariable("VIVARIUM_LEAF_LIGHT_DIAGNOSTICS") == "1")
+                {
+                    Lighting(backlit: true);
+                    // Force the directional source BEHIND the measured leaf
+                    // cluster relative to the viewing ray. The prior 135 degree
+                    // rotation was not guaranteed to illuminate leaf undersides.
+                    var cameraRay = (_camera.Position - target).Normalized();
+                    _rig.Sun.LookAt(_rig.Sun.GlobalPosition + cameraRay, Vector3.Up);
+                    _rig.Env.AmbientLightEnergy = 0f;
+                    _rig.Sun.LightEnergy = 2f;
+                    foreach (var (mode, label) in new[] {
+                        (0, "composite"), (1, "reflect"), (2, "transmit"), (3, "cuticle") })
+                    {
+                        leaf.SetShaderParameter("tissue_light_diagnostic", mode);
+                        await Capture("shadebell-direct-" + label);
+                    }
+                    leaf.SetShaderParameter("tissue_light_diagnostic", 0);
+                    foreach (var (mode, label) in new[] {
+                        (1, "reflectance"), (2, "world-normal"), (3, "roughness"),
+                        (4, "transmittance"), (5, "vein-mask") })
+                    {
+                        leaf.SetShaderParameter("tissue_material_diagnostic", mode);
+                        await Capture("shadebell-property-" + label);
+                    }
+                    leaf.SetShaderParameter("tissue_material_diagnostic", 0);
+                }
                 Lighting(); _camera.Position = target + new Vector3(.85f, -.38f, 1).Normalized() * size * 1.8f; _camera.LookAt(target);
                 await Pair(id + "-underside", leaf, oldLeaf, newLeaf);
                 _camera.Position = target + new Vector3(.85f, .55f, 1).Normalized() * size * 1.8f; _camera.LookAt(target);

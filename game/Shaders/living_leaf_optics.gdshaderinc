@@ -10,11 +10,16 @@ vec3 leaf_pigment(vec3 vertex_tissue, vec3 species_pigment, float maturity, floa
 // Directional illumination is handled by Godot's BACKLIGHT. Here we model the
 // spectral absorbance and tissue thickness (thicker veins block more light).
 vec3 leaf_through(vec3 reflectance,float transparency,float vein,float thickness,float underside) {
- float depth=clamp(thickness+clamp(vein,0.,1.)*.92,.25,2.7);
- vec3 transmittance=exp(-depth*vec3(1.35,.42,2.40));
- vec3 scatter=vec3(reflectance.g*.67, reflectance.g*1.14, reflectance.g*.25);
- return mix(reflectance,scatter,.70)*transmittance
-    *clamp(transparency,0.,.55)*mix(1.24,1.02,clamp(underside,0.,1.));
+ float depth=clamp(thickness*.65+clamp(vein,0.,1.)*1.15,.20,2.9);
+ // Beer-Lambert attenuation, normalized to the green-band response.
+ // The artist's transmission parameter controls an actual fraction of
+ // incoming direct irradiance, rather than multiplying already-dark tissue.
+ vec3 absorption=exp(-depth*vec3(1.75,.58,2.85));
+ vec3 spectral=absorption/max(absorption.g,.015);
+ float openness=clamp(transparency,0.,.55)*2.60;
+ float vein_occlusion=exp(-clamp(vein,0.,1.)*1.20);
+ return max(reflectance,vec3(0.)) * spectral * openness *
+        vein_occlusion * mix(1.12,.98,clamp(underside,0.,1.));
 }
 // Chloroplast domains, not random bright-green pixels. Individual blades
 // use the same seed for broad and fine pigment variation.

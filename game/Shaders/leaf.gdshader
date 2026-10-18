@@ -3,6 +3,7 @@ shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/living_leaf_optics.gdshaderinc"
+#include "res://Shaders/leaf_direct_light.gdshaderinc"
 uniform sampler2DArray tissue_color : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2DArray tissue_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2DArray tissue_physical : filter_linear_mipmap_anisotropic, repeat_enable;
@@ -136,7 +137,7 @@ void fragment() {
     float vein_thickness = clamp(anatomy.g * 0.75 + anatomy.r * 0.25, 0.0, 1.0);
     vec3 through=leaf_through(color, actual_trans, vein_thickness,
         mix(.62, 1.35, physical.b), side) * mix(.65, 1., physical.g);
-    BACKLIGHT=through*.72;
+    BACKLIGHT=through;
     SSS_TRANSMITTANCE_COLOR=vec4(clamp(through/max(color.g*.36,.015),vec3(0.),vec3(1.)),1.);
     SSS_TRANSMITTANCE_DEPTH=mix(.58,.20,vein_thickness)*mix(1.1,.85,physical.b);
     SSS_TRANSMITTANCE_BOOST=.12;
@@ -158,4 +159,17 @@ void fragment() {
     else if (emission_mask_mode == 6) night_mask = edge_strip;
     else night_mask = smoothstep(0.45, 0.60, UV2.y);
     EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
+    // Emission-only instrument readouts; never used in the production mode.
+    if (tissue_material_diagnostic != 0) {
+        vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        vec3 display = tissue_material_diagnostic == 1 ? ALBEDO :
+            tissue_material_diagnostic == 2 ? world_normal * .5 + .5 :
+            tissue_material_diagnostic == 3 ? vec3(ROUGHNESS) :
+            tissue_material_diagnostic == 4 ? through :
+            vec3(anatomy.r);
+        ALBEDO = vec3(0.0);
+        BACKLIGHT = vec3(0.0);
+        SPECULAR = 0.0;
+        EMISSION = display;
+    }
 }
