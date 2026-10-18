@@ -19,6 +19,8 @@ uniform float leaf_transmission = .28;
 uniform float transmission = -1.0;
 uniform float cuticle_sheen = .35;
 uniform float normal_strength = .45;
+// Production lamina curvature, selected after 0x/2x/6x/12x stress captures.
+uniform float lamina_curl_strength = 1.5;
 uniform float vein_strength = .4;
 uniform float wind_strength = .018;
 uniform float plant_stiffness = 7.;
@@ -119,7 +121,18 @@ void fragment() {
     vec3 micro = unpack_normal(mix(texture(tissue_normal,vec3(tissue_uv,layer)).rgb,texture(tissue_normal,vec3(tissue_uv,second)).rgb,blend));
     vec3 veins = unpack_normal(texture(vein_normal,UV).rgb);
     // Add slopes, retaining both tissue relief and structural veins.
-    vec3 slopes = normalize(vec3(micro.xy*normal_strength + veins.xy*vein_strength,1.));
+    // Physically directional blade curl: midrib-to-margin roll and longitudinal
+    // pitch, coherent across each blade. Exaggeration is intentional at >1.
+    float transverse = UV.y - .5;
+    float edge_roll = sign(transverse) * smoothstep(.07,.46,abs(transverse));
+    float leaf_span = smoothstep(.03,.23,UV.x) * (1.0 - smoothstep(.87,.99,UV.x));
+    float individual_roll = mix(-1.,1.,step(.5,fract(seed*13.71)));
+    vec2 lamina_slope = vec2(
+        cos(UV.x * 3.14159265) * .34 * leaf_span,
+        edge_roll * sin(UV.x*3.14159265) * leaf_span * individual_roll * .85);
+    vec3 slopes = normalize(vec3(
+        micro.xy*normal_strength + veins.xy*vein_strength
+        + lamina_curl_strength * lamina_slope, 1.));
     vec3 wn = normalize((INV_VIEW_MATRIX*vec4(NORMAL,0.)).xyz);
     vec3 mapped=detail_normal(wn,UV,slopes);
     NORMAL=normalize((VIEW_MATRIX*vec4(mapped,0.)).xyz);

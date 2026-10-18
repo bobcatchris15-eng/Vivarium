@@ -2,7 +2,9 @@
 // This replaces the ineffective low-energy BACKLIGHT approximation with an
 // explicitly controllable diffuse reflection / transmission / cuticle model.
 // BACKLIGHT is an *energy term* produced by leaf_through, not emission.
-uniform float tissue_direct_transmission = 1.0;
+uniform float tissue_direct_transmission = 1.9;
+// Diagnostic gain; default leaves all existing direct cuticle optics intact.
+uniform float tissue_specular_stress = 1.0;
 uniform int tissue_material_diagnostic = 0;
 uniform int tissue_light_diagnostic = 0; // 0 composite, 1 reflected, 2 transmitted, 3 specular
 
@@ -40,6 +42,6 @@ void light() {
     float fresnel = f0 + (1.0 - f0) * pow(1.0 - vh, 5.0);
     float specular = distribution * geometry * fresnel / max(4.0 * nv, 0.01);
     if (tissue_light_diagnostic == 1) specular = 0.0;
-    SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * specular * SPECULAR_AMOUNT;
+    SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * specular * SPECULAR_AMOUNT * tissue_specular_stress;
     }
 }

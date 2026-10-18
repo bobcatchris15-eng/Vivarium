@@ -27,6 +27,8 @@ uniform vec3 leaf_back = vec3(0.14, 0.19, 0.09);
 uniform int leaf_type = 0;
 uniform float vein_strength = 0.5;
 uniform float cuticle_sheen = 0.3;
+// Normal-only lamina roll: stress-tested separately from silhouettes.
+uniform float lamina_curl_strength = 1.3;
 uniform float leaf_transmission = 0.25;
 uniform int leaf_pattern = 0;
 uniform bool pitcher_tissue = false;
@@ -275,7 +277,17 @@ void fragment() {
             else if (leaf_pattern == 6) ridge = venation * 0.24 + branch * 0.10;
             ridge -= midrib * 0.10; // shallow midrib groove
             vec2 uv_slope = leaf_uv_gradient(ridge, UV);
-            vec3 leaf_n = normalize(vec3(-uv_slope * .055, 1.0));
+            float longitudinal = smoothstep(.03,.24,along) *
+                (1.0 - smoothstep(.86,.99,along));
+            float transverse = sign(across) * smoothstep(.06,.44,abs(across));
+            float curl_identity = fract(inst.w * 15.71 + inst.x * 3.1);
+            float roll_sign = curl_identity < .5 ? -1.0 : 1.0;
+            vec2 lamina_curve = vec2(
+                cos(along * 3.14159265) * .32 * longitudinal,
+                transverse * sin(along * 3.14159265) *
+                longitudinal * roll_sign * (leaf_pattern == 5 ? .52 : .79));
+            vec3 leaf_n = normalize(vec3(
+                -uv_slope * .055 + lamina_curl_strength * lamina_curve, 1.0));
             n = surface_normal(wn, world_pos, UV, leaf_n);
             float family_rough = leaf_type == 1 ? 0.78 : leaf_type == 2 ? 0.74 : leaf_type == 3 ? 0.52 : leaf_type == 4 ? 0.46 : leaf_type == 5 ? 0.68 : 0.61;
             rough = clamp(family_rough - 0.10 - cuticle_sheen * 0.20 * top_face + (cells - 0.5) * 0.12 + face * 0.16, 0.22, 0.95);
