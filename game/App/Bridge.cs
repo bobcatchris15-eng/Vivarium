@@ -114,6 +114,24 @@ public static class Bridge
                     material.SetShaderParameter("canopy_occlusion", .15f);
             }
         }
+        // Repeatable baseline and 4x optical stress tests without altering ecology.
+        if (path.EndsWith("/flora.gdshader") &&
+            float.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_MOSS_AGGREGATE"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var mossGain))
+            material.SetShaderParameter("u_moss_aggregate", Math.Clamp(mossGain, 0f, 4f));
+        if (path.EndsWith("/flora.gdshader") || path.EndsWith("/pilot_tree.gdshader"))
+        {
+            if (float.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_BARK_FISSURES"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var barkGain))
+                material.SetShaderParameter("u_bark_fissures", Math.Clamp(barkGain, 0f, 4f));
+            if (path.EndsWith("/flora.gdshader") &&
+                float.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_LIVING_STEM"),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var stemGain))
+                material.SetShaderParameter("u_living_stem", Math.Clamp(stemGain, 0f, 4f));
+        }
         return material;
     }
 

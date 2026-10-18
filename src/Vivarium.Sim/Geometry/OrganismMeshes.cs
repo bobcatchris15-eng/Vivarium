@@ -1444,7 +1444,9 @@ public static partial class OrganismMeshes
         var capsuleCol = new[] { 0.74, 0.48, 0.16 };
         var calyptraCol = new[] { 0.45, 0.22, 0.10 };
 
-        // 1. Multi-lobed compound dome: 5 overlapping pillow lobes
+        // Establishment points grow and merge into a compound cushion; the
+        // old hand-arranged five-lobe dome is available only for A/B testing.
+        bool clonal = Environment.GetEnvironmentVariable("VIVARIUM_MOSS_CLONAL_SURFACE") != "0";
         var lobeCenters = new (double x, double z, double r, double h)[]
         {
             (0.0, 0.0, 0.85, 0.68),
@@ -1453,7 +1455,10 @@ public static partial class OrganismMeshes
             (0.15, -0.38, 0.50, 0.52),
             (-0.35, -0.22, 0.48, 0.50)
         };
-
+        if (clonal)
+            MossClonalMat(m, seed, matBaseCol, matCrownCol, heightScale: .68);
+        else
+        {
         int rings = LodCount(m, 18, 5, radial: false);
         int segs = LodCount(m, 36, 8, radial: true);
         int startVert = m.VertexCount;
@@ -1516,6 +1521,8 @@ public static partial class OrganismMeshes
         }
         m.RecomputeNormals();
 
+        }
+
         // 2. Silvery hyaline awns (pearly hair points) bristling across the crown
         int awnCount = 130 + rng.NextInt(30);
         for (int i = 0; i < awnCount; i++)
@@ -1534,6 +1541,7 @@ public static partial class OrganismMeshes
                 double d = Math.Sqrt(dx * dx + dz * dz);
                 if (d < lr) h = Math.Max(h, lh * Math.Cos(d / lr * Math.PI * 0.5));
             }
+            if (clonal) h = MossClonalHeight(px, pz, seed, .68);
             if (h < 0.20) continue;
 
             var baseP = new Vec3(px, h, pz);
@@ -1562,6 +1570,7 @@ public static partial class OrganismMeshes
                 double d = Math.Sqrt(dx * dx + dz * dz);
                 if (d < lr) h = Math.Max(h, lh * Math.Cos(d / lr * Math.PI * 0.5));
             }
+            if (clonal) h = MossClonalHeight(px, pz, seed, .68);
             if (h < 0.25) continue;
 
             var baseP = new Vec3(px, h, pz);
@@ -1600,6 +1609,11 @@ public static partial class OrganismMeshes
         var setaCol = new[] { 0.48, 0.22, 0.14 };
         var capsuleCol = new[] { 0.40, 0.32, 0.16 };
 
+        bool clonal = Environment.GetEnvironmentVariable("VIVARIUM_MOSS_CLONAL_SURFACE") != "0";
+        if (clonal)
+            MossClonalMat(m, seed, matCol, c1, heightScale: .055);
+        else
+        {
         // 1. Thin undulating base mat hugging the floor
         int matStart = m.VertexCount;
         Primitives.Ellipsoid(m, new Vec3(0, 0.02, 0), new Vec3(0.96, 0.08, 0.96), 6, 28,
@@ -1615,6 +1629,8 @@ public static partial class OrganismMeshes
             m.Positions[i * 3 + 1] = (float)Math.Max(0.002, p.Y * 0.4);
         }
         m.RecomputeNormals();
+
+        }
 
         // 2. Creeping runner stems (pleurocarpous prostrate axes)
         int runnerCount = 8 + rng.NextInt(3);
@@ -1715,7 +1731,10 @@ public static partial class OrganismMeshes
         var urnCol = new[] { 0.52, 0.44, 0.18 };
         var lidCol = new[] { 0.62, 0.28, 0.12 };
 
-        // 1. Gently undulating micro-turf dome
+        bool clonal = Environment.GetEnvironmentVariable("VIVARIUM_MOSS_CLONAL_SURFACE") != "0";
+        // 1. Replace the full smooth disk with the true clonal union when enabled.
+        if (!clonal)
+        {
         int rings = LodCount(m, 16, 5, radial: false);
         int segs = LodCount(m, 32, 8, radial: true);
         int startVert = m.VertexCount;
@@ -1731,7 +1750,8 @@ public static partial class OrganismMeshes
                 double px = Math.Cos(th) * rad;
                 double pz = Math.Sin(th) * rad;
 
-                double domeH = 0.32 * Math.Cos(f * Math.PI * 0.5);
+                double domeH = clonal ? MossClonalHeight(px, pz, seed) :
+                    0.32 * Math.Cos(f * Math.PI * 0.5);
                 double microWobble = 0.025 * Noise.Gradient(ns, px * 8.0, pz * 8.0);
                 double h = Math.Max(0.005, domeH + microWobble);
                 if (r == rings) h = 0.005;
@@ -1755,6 +1775,13 @@ public static partial class OrganismMeshes
             }
         }
         m.RecomputeNormals();
+        }
+        else
+        {
+            MossClonalMat(m, seed, turfBaseCol, turfCrownCol);
+            if (Environment.GetEnvironmentVariable("VIVARIUM_MOSS_CLONAL_SHOOTS") == "1")
+                MossClonalLeaflets(m, seed, turfBaseCol, turfCrownCol);
+        }
 
         // 2. Micro-turf erect shoot needle tips (giving dense velvety texture)
         int shootCount = 150 + rng.NextInt(35);
@@ -1764,7 +1791,10 @@ public static partial class OrganismMeshes
             double dist = Math.Sqrt(rng.NextDouble()) * 0.88;
             double px = Math.Cos(ang) * dist;
             double pz = Math.Sin(ang) * dist;
-            double domeH = 0.32 * Math.Cos(dist / 0.94 * Math.PI * 0.5);
+            double coverage = clonal ? MossClonalCoverage(px,pz,seed) : 1.0;
+            if (clonal && coverage < .07) continue;
+            double domeH = clonal ? MossClonalHeight(px, pz, seed) :
+                0.32 * Math.Cos(dist / 0.94 * Math.PI * 0.5);
             if (domeH < 0.05) continue;
 
             var b = new Vec3(px, domeH, pz);
@@ -1781,7 +1811,10 @@ public static partial class OrganismMeshes
             double dist = Math.Sqrt(rng.NextDouble()) * 0.72;
             double px = Math.Cos(ang) * dist;
             double pz = Math.Sin(ang) * dist;
-            double domeH = 0.32 * Math.Cos(dist / 0.94 * Math.PI * 0.5);
+            double coverage = clonal ? MossClonalCoverage(px,pz,seed) : 1.0;
+            if (clonal && coverage < .17) continue;
+            double domeH = clonal ? MossClonalHeight(px, pz, seed) :
+                0.32 * Math.Cos(dist / 0.94 * Math.PI * 0.5);
             if (domeH < 0.10) continue;
 
             var baseP = new Vec3(px, domeH, pz);
@@ -1813,6 +1846,10 @@ public static partial class OrganismMeshes
     private static void CarpetDefault(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
     {
         var matCol = Primitives.Scale(c1, 0.7);
+        if (Environment.GetEnvironmentVariable("VIVARIUM_MOSS_CLONAL_SURFACE") != "0")
+            MossClonalMat(m, seed, matCol, c1, heightScale: .10);
+        else
+        {
         int matStart = m.VertexCount;
         Primitives.Ellipsoid(m, new Vec3(0, 0.05, 0), new Vec3(1.0, 0.25, 1.0), 6, 28, (a, b) => (matCol, 1, a, b, 0, 0));
         ulong rim = Rng.Mix(seed, 0xC4A9);
@@ -1827,6 +1864,7 @@ public static partial class OrganismMeshes
             m.Positions[i * 3 + 1] = (float)(p.Y - 0.08 * edge * edge);
         }
         m.RecomputeNormals();
+        }
         for (int k = 0; k < 70; k++)
         {
             double ang = rng.Range(0, 2 * Math.PI), r = Math.Sqrt(rng.NextDouble()) * 0.92;
@@ -1854,6 +1892,11 @@ public static partial class OrganismMeshes
         var pseudopodiumCol = new[] { 0.82, 0.85, 0.65 };
         var capsuleCol = new[] { 0.16, 0.10, 0.08 };
 
+        bool clonal = Environment.GetEnvironmentVariable("VIVARIUM_MOSS_CLONAL_SURFACE") != "0";
+        if (clonal)
+            MossClonalMat(m, seed, hummockCol, branchSpreadCol, heightScale: .115);
+        else
+        {
         // 1. Peat hummock base
         int hummockStart = m.VertexCount;
         Primitives.Ellipsoid(m, new Vec3(0, 0.04, 0), new Vec3(0.92, 0.20, 0.92), 6, 28,
@@ -1869,6 +1912,8 @@ public static partial class OrganismMeshes
             m.Positions[i * 3 + 1] = (float)Math.Max(0.005, p.Y * 0.7);
         }
         m.RecomputeNormals();
+
+        }
 
         // 2. Upright Sphagnum shoots with fascicles and capitula
         int shootCount = 42 + rng.NextInt(8);

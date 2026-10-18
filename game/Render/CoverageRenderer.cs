@@ -99,6 +99,7 @@ public partial class CoverageRenderer : Node3D
         public readonly float[,] CellFront = new float[CoverageSpec.TileEdge, CoverageSpec.TileEdge];
         public readonly int[,] CornerIdx = new int[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
         public readonly float[,] CornerThickness = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
+        public readonly float[,] CornerMaxHeight = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
         public readonly Color[,] CornerColor = new Color[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
         public readonly float[,] CornerAlpha = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
         public readonly float[,] CornerVeinW = new float[CoverageSpec.TileEdge + 1, CoverageSpec.TileEdge + 1];
@@ -203,6 +204,11 @@ public partial class CoverageRenderer : Node3D
 
         _matMaterial = Bridge.Shader("res://Shaders/coverage_mat.gdshader");
         _matMaterial.SetShaderParameter("u_pattern", 0.0f); // fibrous moss micro-detail
+        if (float.TryParse(System.Environment.GetEnvironmentVariable("VIVARIUM_MOSS_AGGREGATE"),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var mossGain))
+            _matMaterial.SetShaderParameter("u_moss_aggregate", Math.Clamp(mossGain, 0f, 4f));
+        _matMaterial.SetShaderParameter("u_moss_colony_nuclei", (float)MossMicroGrowthStrength);
         Bridge.BindSurface(_matMaterial, "moss", Bridge.Surfaces.Moss);
         _crustMaterial = Bridge.Shader("res://Shaders/coverage_mat.gdshader");
         _crustMaterial.SetShaderParameter("u_pattern", 1.0f); // cracked/areolate lichen micro-detail
@@ -600,9 +606,21 @@ public partial class CoverageRenderer : Node3D
             float cap = (float)((1 - d2) * (1 - d2));
             pillow += cap;
         }
-        float height = Math.Clamp((float)maxHeight, 0.014f, 0.028f);
+        float height = Math.Max(0f, (float)maxHeight);
         float mergedPillows = 1f - MathF.Exp(-pillow * 0.9f);
         return alpha * height * (0.3f + mergedPillows * 0.7f);
+    }
+
+    private static float MatSurfaceLift(double wx, double wz, float alpha, float thickness, double maxHeight)
+    {
+        // D2E already supplies the colony-scale dome. Modulate that volume with pillows, rather
+        // than adding a second layer whose old 14 mm minimum inflated even 3 mm carpet species.
+        if (alpha <= 0 || maxHeight <= 0) return 0;
+        float a = Math.Clamp(alpha, 0f, 1f);
+        float edge = a * a * (3f - 2f * a);
+        float pillow = SurfaceRelief(CoverageLayerId.Mat, wx, wz, 1f, maxHeight) / (float)maxHeight;
+        float boundedThickness = Math.Clamp(thickness, 0f, (float)maxHeight * edge);
+        return boundedThickness * (0.70f + 0.30f * pillow);
     }
 
     private MeshData BuildTileMesh(CoverageLayer layer, CoverageTile t)
@@ -623,6 +641,7 @@ public partial class CoverageRenderer : Node3D
         const int edge = CoverageSpec.TileEdge;
         const double cs = CoverageSpec.CellSize;
         float baseOffset = layer.Id == CoverageLayerId.Crust ? 0.002f : layer.Id == CoverageLayerId.Plasmodium ? 0.0038f : 0.0035f;
+        int mossGrowthStrength = layer.Id == CoverageLayerId.Mat ? MossMicroGrowthStrength : 0;
 
         // 1. Compute per-cell thickness and vertex color
         for (int lz = 0; lz < edge; lz++)
@@ -727,6 +746,7 @@ public partial class CoverageRenderer : Node3D
             s.CornerIdx[cx, cz] = -1;
             int occCount = 0;
             float sumTh = 0f;
+            float sumMaxHeight = 0f;
             float sumR = 0f, sumG = 0f, sumB = 0f;
             float sumVeinW = 0f, sumFront = 0f;
 
@@ -741,6 +761,8 @@ public partial class CoverageRenderer : Node3D
                     {
                         occCount++;
                         sumTh += s.CellThickness[nlx, nlz];
+                        if (layer.Id == CoverageLayerId.Mat)
+                            sumMaxHeight += (float)GetSpecies(layer.Id, t.Occ[nlz * edge + nlx]).MaxHeightM;
                         var c = s.CellColor[nlx, nlz];
                         sumR += c.R; sumG += c.G; sumB += c.B;
                         sumVeinW += s.CellVeinW[nlx, nlz];
@@ -771,6 +793,7 @@ public partial class CoverageRenderer : Node3D
                         }
                         float nth = ComputeThickness(nsp, layer.Id, nb, nw, nd2e, nflags);
                         sumTh += nth;
+                        if (layer.Id == CoverageLayerId.Mat) sumMaxHeight += (float)nsp.MaxHeightM;
                         sumR += nsp.Color1.R; sumG += nsp.Color1.G; sumB += nsp.Color1.B;
                         sumVeinW += nw / 255f;
                         sumFront += (nflags & (byte)CoverageFlags.Front) != 0 ? 1f : 0f;
@@ -781,6 +804,7 @@ public partial class CoverageRenderer : Node3D
             if (occCount == 0)
             {
                 s.CornerThickness[cx, cz] = 0f;
+                s.CornerMaxHeight[cx, cz] = 0f;
                 s.CornerColor[cx, cz] = Colors.Black;
                 s.CornerAlpha[cx, cz] = 0f;
                 s.CornerVeinW[cx, cz] = 0f;
@@ -802,6 +826,7 @@ public partial class CoverageRenderer : Node3D
                 // Smooth rounded edge falloff for corner thickness
                 float falloff = alpha * alpha * (3f - 2f * alpha);
                 s.CornerThickness[cx, cz] = (sumTh * inv) * falloff;
+                s.CornerMaxHeight[cx, cz] = sumMaxHeight * inv;
                 s.CornerColor[cx, cz] = avgCol;
                 s.CornerVeinW[cx, cz] = sumVeinW * inv;
                 s.CornerFront[cx, cz] = sumFront * inv;
@@ -881,26 +906,89 @@ public partial class CoverageRenderer : Node3D
             float th = s.CornerThickness[cx, cz];
             byte occ = layer.GetOcc(t.Ti * edge + cx, t.Tj * edge + cz);
             var sp = GetSpecies(layer.Id, occ);
-            float relief = SurfaceRelief(layer.Id, wx, wz, s.CornerAlpha[cx, cz], sp.MaxHeightM);
-            Vec3 p = new Vec3(wx, gy, wz) + gn * (baseOffset + th + relief);
+            float alpha = s.CornerAlpha[cx, cz];
+            float relief = layer.Id == CoverageLayerId.Mat ? 0f : SurfaceRelief(layer.Id, wx, wz, alpha, sp.MaxHeightM);
+            float lift = baseOffset + th + relief;
+            float colonization = 0f;
+            if (layer.Id == CoverageLayerId.Mat)
+            {
+                float edgeWeight = alpha * alpha * (3f - 2f * alpha);
+                float matLift = MatSurfaceLift(wx, wz, alpha, th, s.CornerMaxHeight[cx, cz]);
+                lift = baseOffset * edgeWeight + matLift;
+                if (mossGrowthStrength > 0)
+                {
+                    colonization = MossColonizationField(layer, wx, wz);
+                    float strength = mossGrowthStrength >= 4 ? 1f : .48f;
+                    lift = baseOffset * edgeWeight +
+                        matLift * Mathf.Lerp(1f, .18f + .82f * colonization, strength);
+                }
+            }
+            Vec3 p = new Vec3(wx, gy, wz) + gn * lift;
             Color c = s.CornerColor[cx, cz];
-            double u2 = layer.Id == CoverageLayerId.Plasmodium ? s.CornerVeinW[cx, cz] : cx / (double)edge;
+            double u2 = layer.Id == CoverageLayerId.Plasmodium ? s.CornerVeinW[cx, cz] :
+                layer.Id == CoverageLayerId.Mat && mossGrowthStrength > 0
+                    ? colonization : cx / (double)edge;
             double v2 = layer.Id == CoverageLayerId.Plasmodium ? s.CornerFront[cx, cz] : cz / (double)edge;
             idx = md.AddVertex(p, gn, c.R, c.G, c.B, s.CornerAlpha[cx, cz] * SlopeFade(gn), wx, wz, u2, v2);
             s.CornerIdx[cx, cz] = idx;
             return idx;
         }
 
-        void AddSurfaceTriangle(int a, int b, int c)
+        // Rock facets can be steep yet perfectly supported. Refine only moss near rocks
+        // instead of dropping whole 3 cm spans and leaving coarse triangular teeth.
+        var edgeMidpoints = new Dictionary<(int, int), int>();
+        Vec2 SurfacePoint(int v) => new(md.UV[v * 2], md.UV[v * 2 + 1]);
+        double SurfaceLift(int v)
         {
-            // GroundHeight can jump from soil to the top of a log or rock within one fine
-            // cell. Joining those samples creates a tall, stretched curtain of moss.
-            double ya = md.Position(a).Y, yb = md.Position(b).Y, yc = md.Position(c).Y;
-            if (Math.Max(ya, Math.Max(yb, yc)) - Math.Min(ya, Math.Min(yb, yc)) > 0.03)
-                return;
-            md.AddTriangle(a, b, c);
+            var uv = SurfacePoint(v);
+            return (md.Position(v) - Vec3.FromXZ(uv, TileGroundHeight(uv))).Length;
         }
-
+        int SurfaceMidpoint(int a, int b)
+        {
+            var key = a < b ? (a, b) : (b, a);
+            if (edgeMidpoints.TryGetValue(key, out int old)) return old;
+            var uv = (SurfacePoint(a) + SurfacePoint(b)) * .5;
+            double ground = TileGroundHeight(uv);
+            var normal = TileGroundNormal(uv.X, uv.Z, ground);
+            var p = Vec3.FromXZ(uv, ground) + normal * ((SurfaceLift(a) + SurfaceLift(b)) * .5);
+            int vertex = md.AddVertex(p, normal,
+                (md.Colors[a*4]+md.Colors[b*4])*.5, (md.Colors[a*4+1]+md.Colors[b*4+1])*.5,
+                (md.Colors[a*4+2]+md.Colors[b*4+2])*.5, (md.Colors[a*4+3]+md.Colors[b*4+3])*.5,
+                uv.X, uv.Z, (md.UV2[a*2]+md.UV2[b*2])*.5, (md.UV2[a*2+1]+md.UV2[b*2+1])*.5);
+            edgeMidpoints[key] = vertex;
+            return vertex;
+        }
+        double SupportPlaneError(int a, int b, int c)
+        {
+            var pa = SurfacePoint(a); var pb = SurfacePoint(b); var pc = SurfacePoint(c);
+            double ha = TileGroundHeight(pa), hb = TileGroundHeight(pb), hc = TileGroundHeight(pc);
+            double error = Math.Abs((ha+hb+hc)/3 - TileGroundHeight((pa+pb+pc)/3));
+            error = Math.Max(error, Math.Abs((ha+hb)*.5 - TileGroundHeight((pa+pb)*.5)));
+            error = Math.Max(error, Math.Abs((hb+hc)*.5 - TileGroundHeight((pb+pc)*.5)));
+            return Math.Max(error, Math.Abs((ha+hc)*.5 - TileGroundHeight((pa+pc)*.5)));
+        }
+        void AddSurfaceTriangle(int a, int b, int c, int depth = 0)
+        {
+            if ((layer.Id == CoverageLayerId.Mat || layer.Id == CoverageLayerId.Crust) && localRocks != null)
+            {
+                double error = SupportPlaneError(a, b, c);
+                if (error > .0015 && depth < 4)
+                {
+                    int ab = SurfaceMidpoint(a,b), bc = SurfaceMidpoint(b,c), ca = SurfaceMidpoint(c,a);
+                    AddSurfaceTriangle(a,ab,ca,depth+1); AddSurfaceTriangle(ab,b,bc,depth+1);
+                    AddSurfaceTriangle(ca,bc,c,depth+1); AddSurfaceTriangle(ab,bc,ca,depth+1);
+                    return;
+                }
+                if (error > .002) return;
+            }
+            else
+            {
+                // Preserve the older policy for terrain/log-only tiles and other layers.
+                double ya = md.Position(a).Y, yb = md.Position(b).Y, yc = md.Position(c).Y;
+                if (Math.Max(ya, Math.Max(yb, yc)) - Math.Min(ya, Math.Min(yb, yc)) > .03) return;
+            }
+            md.AddTriangle(a,b,c);
+        }
         for (int lz = 0; lz < edge; lz++)
         for (int lx = 0; lx < edge; lx++)
         {
@@ -921,6 +1009,11 @@ public partial class CoverageRenderer : Node3D
         if (md.TriangleCount > 0)
         {
             md.RecomputeNormals();
+            // RecomputeNormals uses RH cross products; Godot expects clockwise front faces.
+            // Retain the outward draped normals and change only the moss sheet's index winding.
+            if (layer.Id == CoverageLayerId.Mat)
+                for (int i = 0; i < md.Indices.Count; i += 3)
+                    (md.Indices[i + 1], md.Indices[i + 2]) = (md.Indices[i + 2], md.Indices[i + 1]);
         }
 
         // Append procedural 3D flora structures (setae, capsules, fronds, podetia, ruffles, apothecia)
@@ -939,10 +1032,28 @@ public partial class CoverageRenderer : Node3D
             double gy = TileGroundHeight(new Vec2(wx, wz));
             Vec3 normal = TileGroundNormal(wx, wz, gy);
             if (normal.Y < 0.45) continue;
-            double relief = SurfaceRelief(layer.Id, wx, wz, 1f, sp.MaxHeightM);
-            var foot = new Vec3(wx, gy + baseOffset + s.CellThickness[lx, lz] + relief - 0.002, wz);
+            double relief = layer.Id == CoverageLayerId.Mat ? 0 : SurfaceRelief(layer.Id, wx, wz, 1f, sp.MaxHeightM);
+            var foot = layer.Id == CoverageLayerId.Mat
+                ? new Vec3(wx, gy, wz) + normal * (baseOffset + MatSurfaceLift(wx, wz, 1f, s.CellThickness[lx, lz], sp.MaxHeightM) - 0.002)
+                : new Vec3(wx, gy + baseOffset + s.CellThickness[lx, lz] + relief - 0.002, wz);
             float vigour = Math.Clamp(t.B[lz * edge + lx] * 3f, 0.72f, 1f);
             Color shootColor = sp.Color1.Lerp(s.CellColor[lx, lz], 0.35f);
+
+            // An occupied coverage cell is a potential moss establishment point.
+            // As living biomass fills in, its seed-stable leaflets reach neighboring
+            // nuclei and merge into a canopy; dead cells leave visible openings.
+            if (mossGrowthStrength >= 4)
+            {
+                float biomass = t.B[lz * edge + lx];
+                int strength = mossGrowthStrength;
+                bool rim = (t.Flags[lz * edge + lx] & (byte)CoverageFlags.Rim) != 0;
+                // Sparse established sites create nonuniform patches, not green noise
+                // sprayed on every cell. The strong fixture raises only density.
+                int threshold = strength >= 4 ? 224 : 112;
+                if ((hash >> 24) < threshold)
+                    AppendMossGrowthNucleus(md, foot, normal, s.CellColor[lx, lz],
+                        sp.Color2, hash, biomass, sp.MaxHeightM, rim, strength);
+            }
 
             switch (sp.FloraType)
             {

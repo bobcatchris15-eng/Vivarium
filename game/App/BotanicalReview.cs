@@ -42,6 +42,9 @@ public partial class BotanicalReview : Node3D
             AddChild(new MeshInstance3D {Mesh=new PlaneMesh {Size=new Vector2(18f,18f)},MaterialOverride=groundMat});
             string[] roster={"shadebell","lanternbrush","embercrown","veilfern","ringreed","mooncoin","sunstone_rosette","pitcher_plant","trifold","veilblade","glassfinger","mirrorleaf"};
             if(AllSpecies) roster=Content.Flora.Select(s=>s.Id).ToArray();
+            if (System.Environment.GetEnvironmentVariable("VIVARIUM_SURFACE_REVIEW") == "1")
+                roster = new[] { "velvetweave_moss", "pearl_cushion_moss",
+                    "floodlace_moss", "bogglass_moss", "ruffle_lichen", "embercrust_lichen" };
             var audit=new System.Collections.Generic.List<object>();
             var holders=new System.Collections.Generic.List<(string Id,Node3D Node,float Height)>();
             for(int index=0;index<roster.Length;index++)

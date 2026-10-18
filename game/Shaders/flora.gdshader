@@ -9,6 +9,8 @@ shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/bark_fissure.gdshaderinc"
+#include "res://Shaders/moss_aggregate.gdshaderinc"
 #include "res://Shaders/living_leaf_optics.gdshaderinc"
 #include "res://Shaders/leaf_direct_light.gdshaderinc"
 
@@ -47,6 +49,9 @@ uniform float bark_repeats_per_metre = 2.2;
 uniform float bark_weathering = 0.3;
 uniform vec3 bark_tint = vec3(0.7, 0.67, 0.61);
 uniform float colony_relief = 0.4;
+uniform float u_moss_aggregate = 0.75;
+uniform float u_bark_fissures = 0.65;
+uniform float u_living_stem = 0.80;
 uniform sampler2D moss_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -135,6 +140,13 @@ void fragment() {
         // keep the scan's natural greens and browns, steered toward the species colour
         c = mix(c * (0.65 + 0.35 * m.rgb / avg), m.rgb * lum(c) / avg, 0.34);
         n = normalize(wn + vec3(tn.x, 0.0, -tn.y) * colony_relief);
+        vec3 porous, porous_n;
+        float porous_occ;
+        moss_aggregate(c, wn, CAMERA_POSITION_WORLD - world_pos,
+            world_pos.xz, 1.0 - smoothstep(.55, 1.04, length(obj_pos.xz)),
+            u_moss_aggregate, porous, porous_n, porous_occ);
+        c = porous * porous_occ;
+        n = normalize(mix(n, porous_n, .58 * clamp(u_moss_aggregate, 0.0, 1.0)));
         rough = clamp(m.a, 0.76, 0.98);
         // mats thin out and darken toward their rim so they settle into the soil instead of reading as a plate
         float rimd = length(obj_pos.xz);
@@ -185,8 +197,13 @@ void fragment() {
             c = bark * bark_tint;
             c *= mix(1.0 - bark_weathering * 0.26, 1.0 + bark_weathering * 0.09, exposure);
             vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
-            n = surface_normal(wn, world_pos, buv, normalize(vec3(bn.xy * 0.9, bn.z)));
-            rough = clamp(texture(bark_rgh, buv).r + bark_weathering * 0.07, 0.7, 0.98);
+            vec3 cork, cork_normal;
+            float cork_ao;
+            bark_fissure(c, bn, buv, u_bark_fissures, cork, cork_normal, cork_ao);
+            c = cork * cork_ao;
+            n = surface_normal(wn, world_pos, buv, cork_normal);
+            rough = clamp(texture(bark_rgh, buv).r + bark_weathering * 0.07
+                + u_bark_fissures * .035, 0.7, 0.99);
         } else if (pitcher_tissue && UV2.y < -1.5 && UV2.y > -3.5) {
             // Trap walls and hoods carry ochre/green/brown living tissue, distinct from the flower.
             // Original procedural pigment follows organ UVs; it is stable while the plant sways.
@@ -327,8 +344,20 @@ void fragment() {
             // Glossy fruit / berries
             rough = 0.22;
         } else {
-            // Petioles and young stems stay opaque and waxy, without leaf veins.
+            // Living epidermis, not mature cork. Longitudinal ridges follow the
+            // shaft, narrow transverse node scars mark growth interruptions.
+            vec2 fiber_uv = vec2(UV.y * 22.0, UV.x * 2.4 + inst.w * 6.0);
+            float rib = vnoise(fiber_uv * vec2(1.0, .55));
+            float node = 1.0 - smoothstep(.04, .13 + fwidth(UV.x * 2.4),
+                abs(fract(UV.x * 2.4 + inst.w * .31) - .5));
+            float living_strength = clamp(u_living_stem, 0.0, 1.0);
+            c *= mix(1.0, .83 + .24 * rib - .12 * node, living_strength);
+            vec3 shaft_normal = surface_normal(wn, world_pos, UV,
+                normalize(vec3((rib - .5) * u_living_stem * .42,
+                    node * u_living_stem * .26, 1.0)));
+            n = normalize(mix(n, shaft_normal, living_strength * .68));
             rough = leaf_type == 4 ? 0.52 : leaf_type == 5 ? 0.66 : 0.72;
+            rough = clamp(rough + .10 * node * living_strength, .30, .92);
         }
     }
     // Stress fades to a luminance-matched olive-brown; only genuinely failing tissue reads as straw.

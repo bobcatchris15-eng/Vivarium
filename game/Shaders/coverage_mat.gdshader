@@ -8,8 +8,11 @@ shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/moss_aggregate.gdshaderinc"
 
 uniform float u_pattern = 0.0;
+uniform float u_moss_colony_nuclei = 0.0;
+uniform float u_moss_aggregate = 0.75;
 uniform sampler2D moss_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -59,7 +62,7 @@ void fragment() {
             world_pos / 0.24, wn, 5.0, scan_n);
         float scan_avg = max(dot(textureLod(moss_col, vec2(0.5), 10.0).rgb,
             vec3(0.2126, 0.7152, 0.0722)), 0.05);
-        c *= mix(vec3(1.0), clamp(scan.rgb / scan_avg, vec3(0.25), vec3(1.7)), 0.78);
+        c *= mix(vec3(1.0), clamp(vec3(dot(scan.rgb, vec3(0.2126, 0.7152, 0.0722)) / scan_avg), vec3(0.25), vec3(1.7)), 0.78);
         // Moss: layered fibrous/leaflet micro-detail at ~1-3mm scale with directional grain per clump,
         // plus tip brightening so individual shoots read instead of a flat stippled paint.
         vec2 pg = vec2(dot(wp, grainDir), dot(wp, grainOrth));
@@ -68,7 +71,14 @@ void fragment() {
         float stipple = hash21(floor(wp * 140.0));
         float tips = smoothstep(0.62, 0.92, fbm(pg * vec2(6.0, 50.0) + 5.1));
         c *= 0.82 + 0.16 * fibers + 0.14 * leaflets + 0.08 * (stipple - 0.5);
-        c = mix(c, c * 1.35 + vec3(0.03, 0.05, 0.0), tips * 0.5);
+        // Recessed shoots stay olive; thin growing tips catch chartreuse light without
+        // an additive pigment floor that makes shaded moss look self-lit.
+        c *= mix(vec3(0.91, 0.94, 0.77), vec3(1.08, 1.12, 0.88), tips);
+        // Centimetre-scale tuft cavities break up the continuous carpet's diffuse field.
+        float tuft_speck;
+        vec4 tuft = moss_clumps(wp * 45.0, tuft_speck);
+        float tuft_height = clamp(tuft.x, 0.0, 1.0);
+        c *= mix(vec3(0.56, 0.58, 0.43), vec3(1.04, 1.02, 0.88), smoothstep(0.05, 0.85, tuft_height));
 
         float e = 0.01;
         float h = fibers + leaflets * 0.6;
@@ -76,11 +86,35 @@ void fragment() {
         vec2 pgz = vec2(dot(wp + vec2(0.0, e), grainDir), dot(wp + vec2(0.0, e), grainOrth));
         float dx = (fbm(pgx * vec2(3.0, 26.0)) + fbm(pgx * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
         float dz = (fbm(pgz * vec2(3.0, 26.0)) + fbm(pgz * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
-        bump = vec3(-dx, 0.0, -dz) * 1.2 + (scan_n - wn) * 0.65;
+        bump = vec3(-dx, 0.0, -dz) * 1.2 + (scan_n - wn) * 0.65 + vec3(tuft.y, 0.0, tuft.z) * 0.32;
 
+        // A current-state kernel field: isolated growing points expand into
+        // neighboring points while dark protonema persists in the valleys.
+        if (u_moss_colony_nuclei > 0.01) {
+            float crown = clamp(UV2.x, 0.0, 1.0);
+            float strength = u_moss_colony_nuclei >= 4.0 ? 1.0 : 0.45;
+            c *= mix(vec3(1.0),
+                mix(vec3(0.32, 0.36, 0.31), vec3(1.13, 1.12, 0.96),
+                    smoothstep(0.09, 0.88, crown)), strength);
+        }
+
+        // Aggregate a broad distribution of microscopic gametophore normals.
+        // This keeps the same subpixel appearance without sparkling geometry.
+        vec3 porous, porous_n;
+        float porous_occ;
+        moss_aggregate(c, wn, CAMERA_POSITION_WORLD - world_pos, wp,
+            smoothstep(.20, .78, COLOR.a), u_moss_aggregate,
+            porous, porous_n, porous_occ);
+        c = porous;
+        bump += (porous_n - wn) * 0.38;
         // Crevice AO: darken low-fibre troughs between shoot clusters.
-        ao = mix(0.72, 1.0, smoothstep(-0.1, 0.5, fibers));
-        rough = mix(0.96, scan.a, 0.55);
+        ao = mix(0.72, 1.0, smoothstep(-0.1, 0.5, fibers)) * mix(0.65, 1.0, smoothstep(0.0, 0.65, tuft_height));
+        ao *= porous_occ;
+        rough = clamp(mix(0.96, scan.a, 0.55), 0.80, 0.97);
+        // Light-dependent fibre scattering only: ordinary moss has no green emission.
+        BACKLIGHT = base * vec3(0.075, 0.11, 0.025) * (0.35 + 0.65 * tips) * coverMask;
+        RIM = 0.065 * tips * coverMask;
+        RIM_TINT = 0.75;
     } else {
         // A scanned-style lichen thallus replaces the synthetic dark squiggles. Its light curled
         // lobes and granular troughs are recoloured by the species, over the folded sheet mesh.
@@ -100,10 +134,12 @@ void fragment() {
     // from the procedural ground/log moss (which is also suppressed under colonies via cover_tex).
     if (sundew_surface < 0.5) {
         float cl = dot(c, vec3(0.2126, 0.7152, 0.0722));
-        c = clamp(mix(vec3(cl), c, 1.18) * (u_pattern < 0.5 ? 1.22 : 1.30), vec3(0.0), vec3(1.0));
+        c = u_pattern < 0.5
+            ? clamp(mix(vec3(cl), c, 0.88), vec3(0.0), vec3(1.0))
+            : clamp(mix(vec3(cl), c, 1.18) * 1.30, vec3(0.0), vec3(1.0));
     }
     ALBEDO = c;
-    ROUGHNESS = sundew_surface > 0.5 ? rough : rough * 0.88;
-    SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : 0.28;
+    ROUGHNESS = sundew_surface > 0.5 || u_pattern < 0.5 ? rough : rough * 0.88;
+    SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : (u_pattern < 0.5 ? 0.22 : 0.28);
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }

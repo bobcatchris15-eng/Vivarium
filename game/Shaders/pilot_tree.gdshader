@@ -2,10 +2,12 @@ shader_type spatial;
 render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/bark_fissure.gdshaderinc"
 uniform sampler2D bark_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float hex_apothem = 6.92820323;
+uniform float u_bark_fissures = 0.65;
 
 varying float underside;
 varying vec3 object_position;
@@ -56,7 +58,12 @@ void fragment() {
         float average = max(dot(textureLod(bark_col, vec2(0.5), 10.0).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.025);
         float micro = vnoise(object_position.xz * 31.0 + object_position.y * 7.0);
         vec3 bark = tissue * clamp(scan / average, vec3(0.36), vec3(1.65));
-        ALBEDO = mix(tissue * (0.92 + micro * 0.14), bark, wood);
+        vec3 bark_optical, bark_optical_normal;
+        float bark_ao;
+        bark_fissure(bark, unpack_normal(texture(bark_nrm, grain).rgb),
+            grain, u_bark_fissures, bark_optical, bark_optical_normal, bark_ao);
+        ALBEDO = mix(tissue * (0.92 + micro * 0.14),
+            bark_optical * bark_ao, wood);
         ROUGHNESS = mix(0.72, max(0.78, texture(bark_rgh, grain).r), wood);
         SPECULAR = mix(0.26, 0.18, wood);
         BACKLIGHT = tissue * (1.0 - wood) * 0.12;
@@ -68,8 +75,9 @@ void fragment() {
         if (length(tangent) > 0.00001 && wood > 0.5) {
             tangent = normalize(tangent - NORMAL * dot(NORMAL, tangent));
             vec3 bitangent = normalize(cross(NORMAL, tangent));
-            vec3 bump = unpack_normal(texture(bark_nrm, grain).rgb);
-            NORMAL = normalize(tangent * bump.x * 0.65 + bitangent * bump.y * 0.65 + NORMAL * bump.z);
+            NORMAL = normalize(tangent * bark_optical_normal.x * 0.65 +
+                bitangent * bark_optical_normal.y * 0.65 +
+                NORMAL * bark_optical_normal.z);
         }
     }
 }
