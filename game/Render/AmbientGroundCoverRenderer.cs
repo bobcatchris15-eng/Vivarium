@@ -33,15 +33,8 @@ public partial class AmbientGroundCoverRenderer : Node3D
         _buffers.Clear();
         foreach (var c in GetChildren()) c.QueueFree();
 
-        var mat = new StandardMaterial3D
-        {
-            VertexColorUseAsAlbedo = true,
-            VertexColorIsSrgb = true,
-            Roughness = 0.92f,
-            Metallic = 0,
-            AlbedoColor = Colors.White,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        };
+        // Same optical rules for ephemeral ground vegetation and persistent organisms.
+        var mat = Bridge.Shader("res://Shaders/ground_cover.gdshader");
         _blade = NewMultiMesh(BuildBlade(mat));
         _leaf = NewMultiMesh(BuildBroadleaf(mat));
         _bladeMmi = new MultiMeshInstance3D { Name = "AmbientBlades", Multimesh = _blade, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };

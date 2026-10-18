@@ -22,6 +22,7 @@ public partial class MaterialPortReview : Node3D
     public string OutDir { get; set; } = "";
     public string BaselineDir { get; set; } = "";
     public bool GeometryOnly { get; set; }
+    public string FloraModulePath { get; set; } = "";
     public bool RenderDocCapture { get; set; }
     public bool MotionSequence { get; set; }
     private bool _renderDocCompleted;
@@ -80,6 +81,19 @@ public partial class MaterialPortReview : Node3D
         try
         {
             Directory.CreateDirectory(OutDir);
+            if (!string.IsNullOrWhiteSpace(FloraModulePath)) {
+                string payload = Path.GetFullPath(FloraModulePath);
+                FloraVisualProfile.ReviewMeshTransform = (id, original) => {
+                    if (id != "shadebell") return original;
+                    var imported = Vivarium.VisualLab.BranchModuleLoader.Load(payload);
+                    imported.FloraVisualSeed = original.FloraVisualSeed;
+                    for (int i = 0; i < imported.Leaves.Count; i++)
+                        imported.Leaves[i] = imported.Leaves[i] with { Identity = Rng.Mix(imported.Leaves[i].Identity, original.FloraVisualSeed) };
+                    return imported;
+                };
+                _receipts.Add(new { authoredMeshPayload = payload, payloadSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(payload))), scope = "vegetative Shadebell candidate; no flowers or LOD acceptance" });
+            }
+
             GetWindow().Size = new Vector2I(1600, 900);
             _rig = new EnvironmentRig { BenchmarkLightSeconds = 450 }; AddChild(_rig);
             await Frames(2); _rig.SetProcess(false); _rig.ApplyQuality(2);
@@ -91,6 +105,7 @@ public partial class MaterialPortReview : Node3D
             _rig.Env.AmbientLightColor = new Color(.72f, .79f, .85f);
             _camera = new Camera3D { Current = true, Fov = 42, Near = .01f, Far = 40 }; AddChild(_camera);
             var oldLeaf = Baseline("leaf.gdshader"); var newLeaf = GD.Load<Shader>("res://Shaders/leaf.gdshader");
+            var oldFlora = Baseline("flora.gdshader"); var newFlora = GD.Load<Shader>("res://Shaders/flora.gdshader");
             foreach (string id in new[] { "shadebell", "lanternbrush", "embercrown" })
             {
                 Lighting();
@@ -110,7 +125,15 @@ public partial class MaterialPortReview : Node3D
                     (float)sp.Height, (float)sp.RadiusAtMax)), Vector3.Zero));
                 mm.SetInstanceColor(0, Colors.White); mm.SetInstanceCustomData(0, new Color(.5f, 1f, 0f, .5f));
                 var specimen = new MultiMeshInstance3D { Multimesh = mm }; AddChild(specimen);
-                var bounds = specimen.GetAabb(); var target = bounds.GetCenter();
+
+                // Match cameras to the unchanged source when review geometry is substituted.
+                var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+                var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+                for (int v = 0; v < source.VertexCount; v++) {
+                    var point = Bridge.V(source.Position(v)) * new Vector3((float)sp.RadiusAtMax, (float)sp.Height, (float)sp.RadiusAtMax);
+                    minimum = minimum.Min(point); maximum = maximum.Max(point);
+                }
+                var bounds = new Aabb(minimum, maximum-minimum); var target = bounds.GetCenter();
                 float size = Math.Max(.2f, Math.Max(bounds.Size.X, Math.Max(bounds.Size.Y, bounds.Size.Z)));
                 _camera.Position = target + new Vector3(.85f, .55f, 1).Normalized() * size * 1.8f; _camera.LookAt(target);
                 await Pair(id + "-front", leaf, oldLeaf, newLeaf);
@@ -128,6 +151,34 @@ public partial class MaterialPortReview : Node3D
                     leaf.SetShaderParameter("bioluminescence_strength", .12f); leaf.SetShaderParameter("night_factor", 1f);
                     await Pair(id + "-emission-sentinel", leaf, oldLeaf, newLeaf);
                 }
+                specimen.QueueFree(); await Frames(2);
+            }
+            // Test the dominant legacy shader on actual procedural plants, not only specialty tissue.
+            foreach (string id in new[] { "ringreed", "brooklace" })
+            {
+                Lighting();
+                var sp = Content.FloraOrThrow(id);
+                var mat = Bridge.Shader("res://Shaders/flora.gdshader");
+                mat.SetShaderParameter("surface_mode", 2);
+                mat.SetShaderParameter("sway", 0f);
+                mat.SetShaderParameter("review_time", 0f);
+                FloraSurfaceProfiles.Bind(mat, sp);
+                ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + id), 0x9E3779B97F4A7C15UL);
+                var source = OrganismMeshes.FloraTier(sp, seed, 0);
+                var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                    UseColors = true, UseCustomData = true, Mesh = Bridge.ToArrayMesh(source, mat), InstanceCount = 1 };
+                mm.SetInstanceTransform(0, new Transform3D(Basis.Identity.Scaled(new Vector3(
+                    (float)sp.RadiusAtMax, (float)sp.Height, (float)sp.RadiusAtMax)), Vector3.Zero));
+                mm.SetInstanceColor(0, Colors.White);
+                mm.SetInstanceCustomData(0, new Color(.52f, 1f, 0f, .41f));
+                var specimen = new MultiMeshInstance3D { Multimesh = mm }; AddChild(specimen);
+                float size = Math.Max(.25f, (float)sp.Height);
+                var target = new Vector3(0f, (float)sp.Height * .5f, 0f);
+                _camera.Position = target + new Vector3(.85f, .55f, 1f).Normalized() * size * 2.5f;
+                _camera.LookAt(target);
+                await Pair(id + "-legacy-front", mat, oldFlora, newFlora);
+                Lighting(backlit: true);
+                await Pair(id + "-legacy-backlit", mat, oldFlora, newFlora);
                 specimen.QueueFree(); await Frames(2);
             }
             Lighting();
@@ -162,7 +213,8 @@ public partial class MaterialPortReview : Node3D
             // Integrated fixture uses the ordinary FloraRenderer over authoritative individuals,
             // sharing this IslandRenderer, with no ecology advancement.
             foreach (var entry in new[] { ("shadebell", -.7, .2), ("lanternbrush", .7, .25),
-                ("embercrown", .1, -.8), ("glowbriar", .5, .8) })
+                ("embercrown", .1, -.8), ("glowbriar", .5, .8),
+                ("ringreed", -.35, -.55), ("brooklace", -.6, .72) })
             {
                 var sp = Content.FloraOrThrow(entry.Item1);
                 var plant = world.FloraSystem.Establish(sp, new Vec2(entry.Item2, entry.Item3), "material-review", sp.MaxBiomass);
@@ -183,7 +235,10 @@ public partial class MaterialPortReview : Node3D
             }
             Collect(flora);
             var leaves = materials.Values.Where(m => m.Shader.ResourcePath == "res://Shaders/leaf.gdshader").ToArray();
-            if (leaves.Length == 0) throw new InvalidOperationException("Integrated fixture has no photographed leaf material");
+            var legacyLeaves = materials.Values.Where(m => m.Shader.ResourcePath == "res://Shaders/flora.gdshader"
+                && m.GetShaderParameter("surface_mode").AsInt32() == 2).ToArray();
+            if (leaves.Length == 0 || legacyLeaves.Length == 0)
+                throw new InvalidOperationException("Integrated fixture missing a foliage material family");
             foreach (var mat in materials.Values) mat.SetShaderParameter("review_time", 0f);
             digest = WorldSerializer.Digest(world);
             foreach (bool night in new[] { false, true })
@@ -191,10 +246,14 @@ public partial class MaterialPortReview : Node3D
                 Lighting(night); NightFloraMaterials.SetNightFactor(night ? 1f : 0f);
                 string name = "integrated-" + (night ? "night" : "day");
                 if (!GeometryOnly) {
-                    terrain.Shader = oldTerrain; foreach (var mat in leaves) mat.Shader = oldLeaf;
+                    terrain.Shader = oldTerrain;
+                    foreach (var mat in leaves) mat.Shader = oldLeaf;
+                    foreach (var mat in legacyLeaves) mat.Shader = oldFlora;
                     await Capture(name + "-before");
                 }
-                terrain.Shader = newTerrain; foreach (var mat in leaves) mat.Shader = newLeaf;
+                terrain.Shader = newTerrain;
+                foreach (var mat in leaves) mat.Shader = newLeaf;
+                foreach (var mat in legacyLeaves) mat.Shader = newFlora;
                 await Capture(GeometryOnly ? name : name + "-after");
                 if (MotionSequence && !night)
                 {

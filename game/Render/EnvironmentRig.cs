@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Time;
+using Vivarium.Sim.World;
 
 namespace Vivarium.Game.Render;
 
@@ -24,7 +25,11 @@ public partial class EnvironmentRig : Node3D
     public DayNightClock Clock { get; private set; } = null!;
     private ColorRect _underwaterRect = null!;
     private ShaderMaterial _underwaterMat = null!;
-    private ProceduralSkyMaterial _sky = null!;
+    private ShaderMaterial _sky = null!;
+    private FogVolume? _habitatMist;
+    private int _skyPhase = -1;
+    public float CanopyEnergy { get; private set; } = 1;
+    public Vector3 CanopyLightDirection { get; private set; } = new(.4f, .8f, -.3f);
     private DirectionalLight3D _fill = null!;
     private readonly Stopwatch _monotonic = new();
     private float _underwater;       // 0..1 blend
@@ -39,11 +44,9 @@ public partial class EnvironmentRig : Node3D
 
     // Vivarium grade applied on top of the day/night keys (scaled, not replaced): dark enclosure
     // backdrop instead of sky, steep cool-white grow light, soft top fill, green/warm ambient bounce.
-    private static readonly Color BackdropTop = new(0.030f, 0.025f, 0.020f);
-    private static readonly Color BackdropHorizon = new(0.060f, 0.048f, 0.036f);
     private static readonly Color GrowLightTint = new(0.95f, 0.98f, 1.00f);
-    private static readonly Color AmbientBounceColor = new(0.61f, 0.66f, 0.57f);
-    private const float GrowSunGain = 1.08f, GrowFillGain = 0.48f, GrowAmbientGain = 0.95f, GrowAmbientSky = 0.20f;
+    private static readonly Color AmbientBounceColor = new(0.69f, 0.71f, 0.67f);
+    private const float GrowSunGain = 0.92f, GrowFillGain = 0.68f, GrowAmbientGain = 1.26f, GrowAmbientSky = 0.20f;
     private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
     private static readonly Color UnderwaterFogColor = new(0.12f, 0.20f, 0.14f);
     private const float UnderwaterFogDensity = 0.18f;
@@ -112,14 +115,7 @@ public partial class EnvironmentRig : Node3D
         _monotonic.Start();
         Clock = new DayNightClock(() => BenchmarkLightSeconds ?? _monotonic.Elapsed.TotalSeconds);
 
-        _sky = new ProceduralSkyMaterial
-        {
-            SkyTopColor = new Color(0.30f, 0.44f, 0.57f),
-            SkyHorizonColor = new Color(0.65f, 0.73f, 0.76f),
-            GroundBottomColor = new Color(0.43f, 0.48f, 0.47f),
-            GroundHorizonColor = new Color(0.65f, 0.70f, 0.68f),
-            SunAngleMax = 30, SunCurve = 0.12f,
-        };
+        _sky = Bridge.Shader("res://Shaders/canopy_sky.gdshader");
         CameraAttributes = new CameraAttributesPractical
         {
             AutoExposureEnabled = true,
@@ -133,7 +129,7 @@ public partial class EnvironmentRig : Node3D
         Env = new Environment
         {
             BackgroundMode = Environment.BGMode.Sky,
-            Sky = new Sky { SkyMaterial = _sky },
+            Sky = new Sky { SkyMaterial = _sky, ProcessMode = Sky.ProcessModeEnum.Incremental },
             AmbientLightSource = Environment.AmbientSource.Sky,
             AmbientLightColor = AmbientBounceColor,
             AmbientLightSkyContribution = 0.08f,
@@ -150,14 +146,17 @@ public partial class EnvironmentRig : Node3D
             // Humid-air haze: gentle aerial perspective, not a fog wall. Kept very low density so
             // organisms at normal interaction distance (0.3-3 m) stay crisp; only the far ~15 m
             // island edge softens. Underwater blends on top of this in _Process, never replaces it.
-            FogEnabled = true,
+            FogEnabled = false,
             FogLightColor = HazeFogColor,
             FogLightEnergy = 1.0f,
             FogDensity = HazeFogDensity,
             FogSunScatter = 0.35f,
             FogSkyAffect = 0.1f,
             FogAerialPerspective = 0.12f,
-            SsaoRadius = 0.32f, SsaoIntensity = 0.85f, SsaoPower = 1.05f,
+            SsaoRadius = 0.20f, SsaoIntensity = 0.53f, SsaoPower = 0.95f,
+            SsilRadius = 1.1f, SsilIntensity = 0.65f,
+            VolumetricFogDensity = 0f,
+            VolumetricFogLength = 18f,
         };
         WorldEnv = new WorldEnvironment
         {
@@ -211,6 +210,7 @@ public partial class EnvironmentRig : Node3D
             case 0:
                 Sun.ShadowEnabled = false;
                 Env.SsaoEnabled = false; Env.GlowEnabled = false;
+                Env.SsilEnabled = false; Env.VolumetricFogEnabled = false;
                 vp.Msaa3D = Viewport.Msaa.Disabled; vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
                 vp.Scaling3DScale = 0.75f;
                 break;
@@ -219,6 +219,8 @@ public partial class EnvironmentRig : Node3D
                 RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
                 // Contact AO at the default tier too; radius/intensity above already tuned cheap.
                 Env.SsaoEnabled = true; Env.GlowEnabled = false;
+                Env.SsilEnabled = false; Env.VolumetricFogEnabled = false;
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftMedium);
                 vp.Msaa3D = Viewport.Msaa.Disabled; vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Fxaa;
                 vp.Scaling3DScale = 1.0f;
                 Sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits;
@@ -227,6 +229,8 @@ public partial class EnvironmentRig : Node3D
                 Sun.ShadowEnabled = true;
                 RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
                 Env.SsaoEnabled = true; Env.GlowEnabled = false;
+                Env.SsilEnabled = true; Env.VolumetricFogEnabled = true;
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftHigh);
                 vp.Msaa3D = Viewport.Msaa.Msaa4X; vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
                 Sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
                 vp.Scaling3DScale = 1.0f;
@@ -236,6 +240,25 @@ public partial class EnvironmentRig : Node3D
 
     public void SetUnderwater(bool under) => _underwaterTarget = under ? 1 : 0;
     public bool UnderwaterVisual => _underwater > 0.5f;
+
+    public void ConfigureHabitat(VivariumWorld world)
+    {
+        if (_habitatMist == null)
+        {
+            _habitatMist = new FogVolume
+            {
+                Name = "BoundedHabitatMist", Shape = RenderingServer.FogVolumeShape.Cylinder,
+                Material = new FogMaterial { Density = .008f, Albedo = new Color(.62f, .69f, .58f), EdgeFade = 3f },
+            };
+            AddChild(_habitatMist);
+        }
+        // The cylinder fits INSIDE the inscribed circle of the hexagon, leaving a clear
+        // perimeter. No atmosphere exists beyond the floating slice or in the void.
+        float diameter = (float)world.Domain.Apothem * 1.78f;
+        float ground = (float)world.Terrain.Height(Vivarium.Sim.Core.Vec2.Zero);
+        _habitatMist.Size = new Vector3(diameter, 1.8f, diameter);
+        _habitatMist.Position = new Vector3(0, ground + .8f, 0);
+    }
 
     /// <summary>
     /// Resample the lighting table at the clock's current position and push it to the scene graph. Pure
@@ -269,19 +292,24 @@ public partial class EnvironmentRig : Node3D
         _fill.LightColor = sunCol;
         _fill.LightEnergy = Mathf.Lerp(a.FillEnergy, b.FillEnergy, w) * GrowFillGain;
 
-        // Enclosure backdrop: dark wood/rock brown, dimmed further as the keys go to night.
-        float lum = Mathf.Clamp(sunE / KeyDaySunEnergy, 0.15f, 1f);
-        _sky.SkyTopColor = BackdropTop * lum;
-        _sky.SkyHorizonColor = BackdropHorizon * lum;
-        _sky.GroundBottomColor = BackdropTop * lum;
-        _sky.GroundHorizonColor = BackdropHorizon * lum;
+        // Throttle radiance-map invalidation. Direct light still follows the smooth clock;
+        // the slowly changing canopy cubemap updates only once every four seconds.
+        int skyPhase = (int)(t / 4);
+        if (_skyPhase != skyPhase)
+        {
+            _skyPhase = skyPhase;
+            CanopyEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w) / .5f;
+            CanopyLightDirection = Sun.GlobalBasis.Z;
+            _sky.SetShaderParameter("sky_energy", CanopyEnergy);
+            _sky.SetShaderParameter("light_direction", CanopyLightDirection);
+        }
 
         // Ambient bounce light: green/warm-tinted ambient bounce so shaded understory/strata/trunks
         // do not crush to pitch black.
         Color ambientTint = AmbientBounceColor.Lerp(a.SunColor.Lerp(b.SunColor, w), 0.20f);
         Env.AmbientLightColor = ambientTint;
         Env.AmbientLightEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w) * GrowAmbientGain;
-        Env.AmbientLightSkyContribution = Mathf.Lerp(a.AmbientSkyContribution, b.AmbientSkyContribution, w) * GrowAmbientSky / 0.55f;
+        Env.AmbientLightSkyContribution = 0.85f;
         Env.FogLightEnergy = Mathf.Lerp(a.FogEnergy, b.FogEnergy, w);
     }
 
@@ -298,11 +326,13 @@ public partial class EnvironmentRig : Node3D
         _underwater = Mathf.MoveToward(_underwater, _underwaterTarget, (float)delta * 5f);
         _underwaterRect.Visible = _underwater > 0.01f;
         _underwaterMat.SetShaderParameter("strength", _underwater * 0.85f);
-        // Blend, never overwrite: humid-air haze stays the floor, underwater fog rides on top.
-        Env.FogEnabled = true;
-        Env.FogLightColor = HazeFogColor.Lerp(UnderwaterFogColor, _underwater);
-        Env.FogDensity = Mathf.Lerp(HazeFogDensity, UnderwaterFogDensity, _underwater);
-        Env.FogSkyAffect = Mathf.Lerp(0.1f, 1.0f, _underwater);
+        // Above water, only the bounded volume contributes atmosphere. The sky's camera
+        // branch is black with disable_fog, including when the view is underwater.
+        Env.FogEnabled = _underwater > .001f;
+        Env.FogLightColor = UnderwaterFogColor;
+        Env.FogDensity = UnderwaterFogDensity * _underwater;
+        Env.FogSkyAffect = 0f;
+        Env.VolumetricFogDensity = 0f;
         Env.AdjustmentSaturation = Mathf.Lerp(0.97f, 0.94f, _underwater);
     }
 }

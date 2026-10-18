@@ -9,6 +9,7 @@ shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/living_leaf_optics.gdshaderinc"
 
 uniform float sway = 1.0;
 uniform float stiffness = 1.0;
@@ -211,15 +212,18 @@ void fragment() {
             float venation = (mid * 0.65 + branch * 0.35) * vein_strength;
             float edge = smoothstep(0.36, 0.50, abs(across));
             float age = smoothstep(0.73, 1.0, along) * (0.25 + 0.75 * vnoise(vec2(inst.w * 9.0, along * 5.0)));
-            c = mix(c, pigment, 0.77);
+            c = leaf_pigment(c, pigment,
+                fract(inst.w * 7.31 + UV2.x * .37 + inst.x * 3.7),
+                inst.w * 11.13 + UV2.x * 5.27);
             float leaf_age = fract(inst.w * 7.31 + floor(along * 0.0) + UV2.x * 0.37 + inst.x * 3.7);
-            // Strap/reed blades age toward a fresher chlorophyll green, not yellow-khaki.
-            vec3 aged_gain = leaf_type == 5 ? vec3(1.10, 1.42, 0.86) : vec3(1.22, 1.42, 0.84);
-            c = mix(c * vec3(0.78, 0.82, 0.80), c * aged_gain, smoothstep(0.25, 0.95, leaf_age));
-            c *= (0.91 + 0.12 * cells + 0.035 * micro + 0.08 * venation) * (1.0 - edge * 0.11);
+            // Preserve developmental change without a cumulative fluorescent green boost.
+            c = mix(c * vec3(.96,1.01,1.00),
+                    c * vec3(1.06,.98,.88),smoothstep(.25,.95,leaf_age));
+            c *= leaf_mesophyll_pattern(vec2(along,across+.5),inst.w*13.7);
+            c *= (0.94 + 0.09 * cells + 0.023 * micro + 0.04 * venation) * (1.0 - edge * .07);
             c = mix(c, c * vec3(1.11, 1.04, 0.78), age * (leaf_type == 5 ? 0.05 : 0.08));
-            // Tall strap blades rise toward the grow light: brighter, fresher distal blade.
-            if (leaf_type == 5) c *= vec3(0.96, 1.0, 0.92) + vec3(0.18, 0.34, 0.12) * smoothstep(0.15, 0.85, along);
+            // Distal blade pigment shift, not a baked-in directional light highlight.
+            if (leaf_type == 5) c *= mix(.97,1.04,smoothstep(.15,.85,along));
             float stripe = 0.5;
             if (leaf_pattern == 0) c = mix(c, c * vec3(1.35, 1.40, 1.10), clamp(mid * 0.7 + branch * 0.3, 0.0, 1.0) * (1.0 - face) * 0.35);
             // Each tissue family carries a different visible pigment pattern. Keep
@@ -247,11 +251,11 @@ void fragment() {
             // saturated young leaves, and a lift so shaded foliage still reads as leaf rather than silhouette.
             float midrib = 1.0 - smoothstep(0.010, 0.034 + fwidth(across), abs(across));
             float top_face = 1.0 - face;
-            c = mix(c, c * vec3(1.55, 1.58, 1.18) + vec3(0.010, 0.014, 0.006), midrib * top_face * 0.6);
-            c = mix(c, c * vec3(1.22, 1.26, 1.08), branch * top_face * (leaf_pattern == 5 ? 0.12 : 0.32));
+            c = mix(c, c * vec3(1.19,1.24,1.13) + vec3(.002,.003,.001),midrib * top_face * .42);
+            c = mix(c, c * vec3(1.09,1.12,1.04),branch * top_face * (leaf_pattern == 5 ? .08 : .26));
             float young = smoothstep(0.6, 0.95, leaf_age);
-            c = mix(c, c * vec3(1.02, 1.28, 0.80), young * 0.45);
-            c *= mix(1.3, 1.0, smoothstep(0.015, 0.07, lum(c)));
+            c = mix(c, c * vec3(.99,1.08,.96),young * .3);
+            c *= mix(1.07, 1.0, smoothstep(0.015, 0.07, lum(c)));
             if (leaf_variegation == 1) {
                 float pv = clamp(midrib * 0.9 + branch * 0.75, 0.0, 1.0);
                 c = mix(c, vec3(lum(c)) * vec3(2.5, 2.8, 2.2) + vec3(0.03, 0.04, 0.03), pv * top_face * 0.65);
@@ -269,7 +273,8 @@ void fragment() {
             else if (leaf_pattern == 5) ridge = venation * 0.08 + (stripe - 0.5) * 0.10;
             else if (leaf_pattern == 6) ridge = venation * 0.24 + branch * 0.10;
             ridge -= midrib * 0.10; // shallow midrib groove
-            vec3 leaf_n = normalize(vec3(-dFdx(ridge) * 0.8, -dFdy(ridge) * 0.8, 1.0));
+            vec2 uv_slope = leaf_uv_gradient(ridge, UV);
+            vec3 leaf_n = normalize(vec3(-uv_slope * .055, 1.0));
             n = surface_normal(wn, world_pos, UV, leaf_n);
             float family_rough = leaf_type == 1 ? 0.78 : leaf_type == 2 ? 0.74 : leaf_type == 3 ? 0.52 : leaf_type == 4 ? 0.46 : leaf_type == 5 ? 0.68 : 0.61;
             rough = clamp(family_rough - 0.10 - cuticle_sheen * 0.20 * top_face + (cells - 0.5) * 0.12 + face * 0.16, 0.22, 0.95);
@@ -322,10 +327,17 @@ void fragment() {
     SPECULAR = surface_mode == 2 ? (woody_surface ? 0.20 : leaf_spec) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
     float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
     float trans_clamped = clamp(actual_leaf_trans, 0.0, 0.5);
-    vec3 transmit_tint = leaf_type == 5 ? vec3(0.92, 1.35, 0.45) : vec3(0.95, 1.30, 0.50);
-    float vein_occlusion = UV2.y > 0.5 ? clamp(1.0 - (1.0 - smoothstep(0.010, 0.034 + fwidth(UV.y - 0.5), abs(UV.y - 0.5))) * 0.60, 0.4, 1.0) : 1.0;
-    vec3 leaf_backlight = c * transmit_tint * trans_clamped * vein_occlusion;
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    float vein_mass = UV2.y > .5 ?
+      (1. - smoothstep(.010,.034+fwidth(UV.y-.5),abs(UV.y-.5))) : 0.;
+    float tissue_depth = leaf_type == 4 ? 2.10 : leaf_type == 3 ? 1.25 :
+       leaf_type == 5 ? .56 : leaf_type == 2 ? .43 : .82;
+    vec3 leaf_backlight=leaf_through(c,trans_clamped,vein_mass,tissue_depth,1.-top_side);
+    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight*.72 : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    if (surface_mode == 2 && !woody_surface && UV2.y > .5) {
+        SSS_TRANSMITTANCE_COLOR=vec4(clamp(leaf_backlight/max(c.g*.36,.015),vec3(0.),vec3(1.)),1.);
+        SSS_TRANSMITTANCE_DEPTH=mix(.60,.18,vein_mass);
+        SSS_TRANSMITTANCE_BOOST=.12;
+    }
     float marked_nodule = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
     float gill_mask = step(0.5, UV2.x) * (1.0 - step(1.5, UV2.x));
     float seed_head_mask = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x));
@@ -342,4 +354,9 @@ void fragment() {
     else night_mask = smoothstep(0.45, 0.60, UV2.y);
     EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+    if (surface_mode == 2 && !woody_surface && UV2.y > .5 && UV2.x < 1.2) {
+        vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
+        float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
+        ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), .35, 1.0);
+    }
 }

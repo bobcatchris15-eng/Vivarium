@@ -2,6 +2,7 @@
 shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/living_leaf_optics.gdshaderinc"
 uniform sampler2DArray tissue_color : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2DArray tissue_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2DArray tissue_physical : filter_linear_mipmap_anisotropic, repeat_enable;
@@ -98,13 +99,16 @@ void fragment() {
     vec3 actual_back = back_pigment.r >= 0.0 ? back_pigment : leaf_back;
     float actual_trans = transmission >= 0.0 ? transmission : leaf_transmission;
     vec3 pigment = mix(actual_top, actual_back, side);
-    vec3 color = pigment*mix(vec3(1.),photograph,.72);
+    // Photo variation plus stable organ-specific pigment clouding: avoid paint-flat laminae.
+    vec3 color = pigment*mix(vec3(1.),photograph,.92);
+    color *= leaf_mesophyll_pattern(UV,seed);
+    color *= mix(1.0,.94,smoothstep(.36,.50,abs(UV.y-.5)));
     vec4 anatomy = texture(vein_mask,UV);
     color *= 1.+(blade.z-.5)*.08+(plant.x-.5)*.05;
     color = mix(color,color*vec3(1.15,1.18,1.03),anatomy.r*vein_strength);
     float topf = 1. - side;
     // Pale midrib/veins and young-leaf freshness; lift very dark tissue so it reads as leaf.
-    color = mix(color, color*vec3(1.5,1.55,1.15)+vec3(.008,.012,.005), anatomy.r*topf*.25);
+    color = mix(color, color*vec3(1.5,1.55,1.15)+vec3(.008,.012,.005), anatomy.r*topf*.08);
     color *= mix(1.3, 1., smoothstep(.015,.07,dot(color,vec3(.2126,.7152,.0722))));
     if (leaf_variegation == 1) color = mix(color, vec3(dot(color,vec3(.33)))*vec3(2.5,2.8,2.2)+.03, anatomy.r*topf*.6);
     else if (leaf_variegation == 2) color = mix(color, vec3(.30,.34,.32), smoothstep(.45,.65,texture(tissue_physical,vec3(tissue_uv*.5,layer)).b)*(1.-anatomy.r)*topf*.55);
@@ -118,17 +122,24 @@ void fragment() {
     vec3 wn = normalize((INV_VIEW_MATRIX*vec4(NORMAL,0.)).xyz);
     vec3 mapped=detail_normal(wn,UV,slopes);
     NORMAL=normalize((VIEW_MATRIX*vec4(mapped,0.)).xyz);
-    color*=mix(.88,1.14,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(1.,.8,fract(seed*5.3)));
+    color *= mix(.93,1.07,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(.95,1.03,fract(seed*3.7)));
     ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,.3+.7*smoothstep(0.,.45,plant.y));
     // Species-specific cuticular gloss on adaxial face; rougher, paler abaxial face
     float wax = cuticle_sheen * topf;
     ROUGHNESS=clamp(mix(leaf_roughness - wax * 0.08, back_roughness, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02, 0.20, 0.96);
+    // Filter unresolved normal detail into the specular lobe instead of allowing
+    // subpixel veins/folds to flash white as the camera or blade moves.
+    vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
+    float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
+    ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), .35, 1.0);
     SPECULAR=volumetric ? .45 : mix(0.35, mix(0.38, 0.50, cuticle_sheen), topf);
-    // Physically bounded transmission through chlorophyll, attenuated by vein thickness
-    vec3 transmit_filter = vec3(0.92, 1.30, 0.50);
     float vein_thickness = clamp(anatomy.g * 0.75 + anatomy.r * 0.25, 0.0, 1.0);
-    float trans_amount = clamp(actual_trans, 0.0, 0.5);
-    BACKLIGHT=color * transmit_filter * trans_amount * physical.g * (1.0 - vein_thickness * 0.65) * (1.2 - 0.4 * physical.b);
+    vec3 through=leaf_through(color, actual_trans, vein_thickness,
+        mix(.62, 1.35, physical.b), side) * mix(.65, 1., physical.g);
+    BACKLIGHT=through*.72;
+    SSS_TRANSMITTANCE_COLOR=vec4(clamp(through/max(color.g*.36,.015),vec3(0.),vec3(1.)),1.);
+    SSS_TRANSMITTANCE_DEPTH=mix(.58,.20,vein_thickness)*mix(1.1,.85,physical.b);
+    SSS_TRANSMITTANCE_BOOST=.12;
     AO=1.-canopy_occlusion*(1.-clamp(position_local.y,0.,1.));
     AO_LIGHT_AFFECT=.2;
     if (UV2.y < .5) { ALBEDO=srgb_to_linear(COLOR.rgb); BACKLIGHT=vec3(0.); }
