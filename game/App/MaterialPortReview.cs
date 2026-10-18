@@ -81,18 +81,8 @@ public partial class MaterialPortReview : Node3D
         try
         {
             Directory.CreateDirectory(OutDir);
-            if (!string.IsNullOrWhiteSpace(FloraModulePath)) {
-                string payload = Path.GetFullPath(FloraModulePath);
-                FloraVisualProfile.ReviewMeshTransform = (id, original) => {
-                    if (id != "shadebell") return original;
-                    var imported = Vivarium.VisualLab.BranchModuleLoader.Load(payload);
-                    imported.FloraVisualSeed = original.FloraVisualSeed;
-                    for (int i = 0; i < imported.Leaves.Count; i++)
-                        imported.Leaves[i] = imported.Leaves[i] with { Identity = Rng.Mix(imported.Leaves[i].Identity, original.FloraVisualSeed) };
-                    return imported;
-                };
-                _receipts.Add(new { authoredMeshPayload = payload, payloadSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(payload))), scope = "vegetative Shadebell candidate; no flowers or LOD acceptance" });
-            }
+            if (!string.IsNullOrWhiteSpace(FloraModulePath))
+                throw new NotSupportedException("Authored branch-module review is maintained separately.");
 
             GetWindow().Size = new Vector2I(1600, 900);
             _rig = new EnvironmentRig { BenchmarkLightSeconds = 450 }; AddChild(_rig);

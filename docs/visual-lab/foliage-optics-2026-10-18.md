@@ -28,7 +28,7 @@ Visual author inspection: changes remain subtle in real captured side-by-side fr
 - `dotnet build game/Vivarium.csproj --no-restore` passed, zero warnings/errors.
 - Godot 4.7.1 Forward+ `MATERIAL_PORT_REVIEW_OK`, `VIVARIUM_WORLDREVIEW_OK checks=2 failed=0` after shader fix.
 - Visual Lab Python safety tests: 11 passing.
-- Full sim xUnit suite exposed numerous unrelated coverage/flora/terrain failures in copied source, so it is **not green**. Limit tests to relevant geometry/ambient coverage subsets.
+- The complete sim xUnit suite exposed numerous coverage/flora/terrain failures in copied source, so it is **not green**. Focused FloraVisualTests/AmbientGroundCoverTests/FormTests: 66 passed, 4 failed (geometry and budget expectations).
 - No isolated frame-rate acceptance: unrelated Godot sessions occupied the GTX 1080 and the benchmark requires strict isolation. No motion/photographic acceptance or mature-world acceptance.
 - Baseline vs candidate comparisons of single plant and integrated scene show too little visible difference; additional experiments should target interaction of direct light, indirect bounce and leaf tissue in a fuller canopy, not simply more noise in pigments.
 
@@ -37,3 +37,6 @@ Visual author inspection: changes remain subtle in real captured side-by-side fr
 2. Quantify per-leaf shading variance and color distribution relative to non-watermarked woodland reference photos using matched exposures.
 3. Test local indirect lighting or directional wrap separately from global exposure/SSAO. Keep rock/soil contrast stable.
 4. Verify quality tiers and test isolated FPS on target hardware before merging into main.
+
+## Reproducibility of published branch
+A clean detached checkout of the published branch rebuilt using dotnet restore + build with zero errors or warnings after removing the optional, uncommitted BranchModuleLoader mesh-review dependency. This verifies standalone C# compilation, not a fresh import/render acceptance of the clean checkout.
