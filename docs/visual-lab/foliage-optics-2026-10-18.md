@@ -85,3 +85,5 @@ Comparison caution: `candidate06` full-resolution mean absolute differences vers
 ### Remaining decisive work
 
 The direct-light diagnostic is now useful for proving what a foliage optical effect contributes instead of relying on full-screen pixel deltas. The largest unresolved deficiency is **indirect spatially varied illumination of overlapping laminae and correctly differentiated material response at gameplay distance**. Next investigate directional skylight/bounce, light-to-leaf shadowing in dense canopy, actual normal/cuticle lobe response at grazing sunlight, and controls for preserving unrelated non-leaf materials. Evaluate reference-matched renders; replace this custom approximation if the measured visual quality is not competitive. Capture a proper isolated GTX 1080 benchmark before any merge.
+
+Visual proof: [actual GTX 1080 comparison and isolated lighting montage](foliage-optics-review-2026-10-18.jpg). This annotated image deliberately includes the still-unsatisfactory gameplay scene and is not an acceptance artifact.
