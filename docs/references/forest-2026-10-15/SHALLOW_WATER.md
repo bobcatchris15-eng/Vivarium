@@ -1,0 +1,9 @@
+# Shallow receiver substrate transition - 2026-10-16
+
+The creek and bayou join diagnostics separated normals, transmission, reflection and Fresnel at matched cameras. Both optical paths share the same include and upward normal frame. Transmission-only exposed an abrupt darker sediment boundary. Normal settling and water-only radiance compression trials did not materially fix it and were discarded without ROOT changes.
+
+`terrain.gdshader` previously enabled groundwater silt with a cell mask and a binary `world_pos.y < water_table` test. Silt now ramps over actual 2-30 mm standing depth. The bank substrate remains visible through shallow water and gradually yields to alluvial sediment. Submerged humus roughness rises to at least 0.78 with depth, and its specular is reduced alongside sediment so the bed does not supply a second mirror under the interface. Shoreline geometry, hydrostatic elevation, terrain support, fluid state and water optical shaders remain unchanged.
+
+Matched creek water_join and bayou side/top views show a much softer material transition with submerged bank detail. Actual flowing highlights remain visible. This resolves a material-boundary contributor; it is not proof of every surface/table join. The deeper pool remains gray and the near-shore exposed substrate still has excessive silver wet sheen. The shallow bank texture can look too green in places; do not call this final water realism.
+
+Candidate native creek/bayou forced builds and source guards passed, canonical ecology/100s water stayed exact, and creek 102s continuation stayed exact. Four candidate empty-void full frames are exact black. ROOT replay verification is recorded in build/forest-reference-20261015/water-silt-transition-20261016/final-validation.json when complete. Performance is deferred and unmeasured.

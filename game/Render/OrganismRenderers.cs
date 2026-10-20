@@ -71,8 +71,24 @@ public partial class FloraRenderer : Node3D
     private double _clock;
     // Keep the currently drawn buffers intact while preparing the next population snapshot. Each unit of
     // work is one individual or one upload, so camera input never waits for an entire flora rebuild.
-    private const double RefreshBudgetMs = 2.0;
+    private const double RefreshBudgetMs = 4.0;
     private IEnumerator<bool>? _refresh;
+    // Every iterator MoveNext() is synchronous: the 2ms/4ms budgets can only
+    // check after it returns. Track individual oversized steps separately so
+    // a 650ms hitch cannot hide behind the declared per-frame budget.
+    private double _peakMissingMs, _peakBuildStepMs, _peakRefreshStepMs;
+    private double _peakSpeciesStartMs, _peakSnapshotMs;
+    private string _slowestSpecies = "";
+    public string TakeRefreshDiagnostics()
+    {
+        var result = $"missing={_peakMissingMs:0.0}ms buildStep={_peakBuildStepMs:0.0}ms " +
+            $"speciesStart={_peakSpeciesStartMs:0.0}ms({ _slowestSpecies }) " +
+            $"refreshStep={_peakRefreshStepMs:0.0}ms snapshot={_peakSnapshotMs:0.0}ms";
+        _peakMissingMs = _peakBuildStepMs = _peakRefreshStepMs = 0;
+        _peakSpeciesStartMs = _peakSnapshotMs = 0;
+        _slowestSpecies = "";
+        return result;
+    }
     private IEnumerator<bool>? _build;
     private ContentLibrary? _builtContent;
     private bool _builtLegacy;
@@ -83,13 +99,15 @@ public partial class FloraRenderer : Node3D
     /// <summary>All currently present species are built and one complete instance refresh has been uploaded.</summary>
     public bool PopulationReady { get; private set; }
     public int LoadedSpeciesCount => _layers.Count;
+    public bool HasLegacyLayer(string speciesId) => _layers.ContainsKey(speciesId);
     private readonly List<FloraSnapshotItem> _snapshot = new();
     private readonly List<DeadFloraSnapshotItem> _deadSnapshot = new();
+    private double _hardwareWaitStartClock;
     private readonly List<EntityId> _expired = new();
     private int _terrainVersion = -1;
     private int _quality = 1;
     public Camera3D? Camera { get; set; }
-    public int Quality
+public int Quality
     {
         get => _quality;
         set
@@ -125,6 +143,7 @@ public partial class FloraRenderer : Node3D
         Visible_ = 0; TrianglesDrawn = 0;
         PopulationReady = false;
         _w = w;
+        _hardwareWaitStartClock = _clock;
         _terrainVersion = _w.Terrain.Version;
         DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
         bool legacy = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1";
@@ -153,8 +172,19 @@ public partial class FloraRenderer : Node3D
     private void RequestMissingLayers()
     {
         if (_build != null) return;
-        var needed = _w.Flora.Items.Select(p => p.SpeciesId).Concat(_w.DeadFlora.Items.Select(p => p.SpeciesId))
-            .Where(id => !_layers.ContainsKey(id)).ToHashSet(StringComparer.Ordinal);
+        // The authored hardware renderer is already authoritative for living
+        // vascular organs. Their former photographed meshes are a *fallback*,
+        // not a required second set of huge synchronous GPU uploads.
+        // Still build legacy geometry for corpses and special/non-authored
+        // species, or if source import fails / startup remains stalled.
+        var deadSpecies = _w.DeadFlora.Items.Select(p => p.SpeciesId)
+            .ToHashSet(StringComparer.Ordinal);
+        bool hardwareTimedOut = _clock - _hardwareWaitStartClock > 30.0;
+        var needed = _w.Flora.Items.Select(p => p.SpeciesId)
+            .Concat(deadSpecies)
+            .Where(id => !_layers.ContainsKey(id) &&
+                true)
+            .ToHashSet(StringComparer.Ordinal);
         if (needed.Count == 0) return;
         PopulationReady = false;
         var cameraPosition = Camera?.GlobalPosition ?? Vector3.Zero;
@@ -234,6 +264,7 @@ public partial class FloraRenderer : Node3D
     /// </summary>
     private InflightBuild StartSpeciesBuild(FloraSpeciesDef sp)
     {
+        long speciesStarted=Stopwatch.GetTimestamp();
         GD.Print("FLORA_LAYER_BUILD_BEGIN " + sp.Id);
         var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id);
         var mat = Bridge.Shader("res://Shaders/flora.gdshader");
@@ -268,7 +299,7 @@ public partial class FloraRenderer : Node3D
             tasks.Add(Task.Run(() =>
             {
                 var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null);
-                MeshData? youngMesh = sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
+                MeshData? youngMesh = sp.Shape.StartsWith("microcanopy_", StringComparison.Ordinal) || sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
                     ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
                     : null;
                 var fruitMesh = OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null);
@@ -285,25 +316,38 @@ public partial class FloraRenderer : Node3D
                 var full = prepared.Full;
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
                 bool castShadow = Quality >= 1 && canCastShadow;
+                long uploadStart=Stopwatch.GetTimestamp();
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full); build.Nodes.Add(vl.Full);
+                double fullMs=Stopwatch.GetElapsedTime(uploadStart).TotalMilliseconds;
+                if(fullMs>25)
+                    GD.Print($"FLORA_PUBLISH_SLOW species={sp.Id} variant={v} organ=full " +
+                        $"ms={fullMs:0.0} verts={full.VertexCount} tris={full.TriangleCount} profile={profile!=null}");
                 yield return true;
-                if (sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null)
+                if (sp.Shape.StartsWith("microcanopy_", StringComparison.Ordinal) || sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null)
                 {
                     var young = prepared.Young!;
+                    uploadStart=Stopwatch.GetTimestamp();
                     vl.Juvenile = MakeMmi($"Flora_{sp.Id}_{v}_juvenile", profile == null ? Bridge.ToArrayMesh(young, mat) : profile.Compile(young, mat, leafMat!), castShadow);
                     vl.JuvenileTris = young.TriangleCount;
                     AddChild(vl.Juvenile); build.Nodes.Add(vl.Juvenile);
+                    double juvenileMs=Stopwatch.GetElapsedTime(uploadStart).TotalMilliseconds;
+                    if(juvenileMs>25)
+                        GD.Print($"FLORA_PUBLISH_SLOW species={sp.Id} variant={v} organ=young ms={juvenileMs:0.0} verts={young.VertexCount}");
                     yield return true;
                 }
                 if (prepared.Fruit is { } fruit)
                 {
+                    uploadStart=Stopwatch.GetTimestamp();
                     var fruitMat = (ShaderMaterial)mat.Duplicate();
                     NightFloraMaterials.Bind(fruitMat, sp);
                     if (sp.Reproduction == null) fruitMat.SetShaderParameter("surface_mode", 3);
                     vl.Fruit = MakeMmi($"Flora_{sp.Id}_{v}_fruit", profile == null ? Bridge.ToArrayMesh(fruit, fruitMat) : profile.Compile(fruit, fruitMat, leafMat!), castShadow);
                     vl.FruitTris = fruit.TriangleCount;
                     AddChild(vl.Fruit); build.Nodes.Add(vl.Fruit);
+                    double fruitMs=Stopwatch.GetElapsedTime(uploadStart).TotalMilliseconds;
+                    if(fruitMs>25)
+                        GD.Print($"FLORA_PUBLISH_SLOW species={sp.Id} variant={v} organ=fruit ms={fruitMs:0.0} verts={fruit.VertexCount}");
                     yield return true;
                 }
                 layer.Variants[v] = vl;
@@ -333,6 +377,12 @@ public partial class FloraRenderer : Node3D
             _accum = 999;
         }
         build.Publish = PublishLayer;
+        double speciesStartMs=Stopwatch.GetElapsedTime(speciesStarted).TotalMilliseconds;
+        if(speciesStartMs>_peakSpeciesStartMs)
+        {
+            _peakSpeciesStartMs=speciesStartMs;
+            _slowestSpecies=sp.Id;
+        }
         return build;
     }
 
@@ -366,13 +416,20 @@ public partial class FloraRenderer : Node3D
             _terrainVersion = _w.Terrain.Version;
             DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
         }
+        long missingStart = Stopwatch.GetTimestamp();
         RequestMissingLayers();
+        _peakMissingMs = Math.Max(_peakMissingMs,
+            Stopwatch.GetElapsedTime(missingStart).TotalMilliseconds);
         if (_build != null)
         {
             long buildStarted = Stopwatch.GetTimestamp();
             for (int step = 0; step < 4 && _build != null; step++)
             {
-                if (!_build.MoveNext()) { _build.Dispose(); _build = null; break; }
+                long stepStarted = Stopwatch.GetTimestamp();
+                bool advanced = _build.MoveNext();
+                _peakBuildStepMs = Math.Max(_peakBuildStepMs,
+                    Stopwatch.GetElapsedTime(stepStarted).TotalMilliseconds);
+                if (!advanced) { _build.Dispose(); _build = null; break; }
                 if (Stopwatch.GetElapsedTime(buildStarted).TotalMilliseconds >= 2) break;
             }
         }
@@ -380,14 +437,17 @@ public partial class FloraRenderer : Node3D
         bool wobbling = _wobbleStart.Count > 0;
         if (_refresh == null)
         {
-            if (_accum < (wobbling ? 0.05 : 0.4)) return;
-            _accum = 0;
+            if (_accum < (wobbling ? 0.05 : 1.0)) return;            _accum = 0;
             _refresh = Refresh().GetEnumerator();
         }
         long started = Stopwatch.GetTimestamp();
         do
         {
-            if (_refresh.MoveNext()) continue;
+            long stepStarted = Stopwatch.GetTimestamp();
+            bool advanced = _refresh.MoveNext();
+            _peakRefreshStepMs = Math.Max(_peakRefreshStepMs,
+                Stopwatch.GetElapsedTime(stepStarted).TotalMilliseconds);
+            if (advanced) continue;
             _refresh.Dispose(); _refresh = null;
             break;
         } while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < RefreshBudgetMs);
@@ -500,7 +560,10 @@ public partial class FloraRenderer : Node3D
         // Capture an immutable, versioned presentation snapshot so background build tasks
         // and presentation iterations do not race mutable simulation state.
         CaptureDetailCamera();
+        long snapshotStarted=Stopwatch.GetTimestamp();
         var snapshot = RenderSnapshot.Capture(_w);
+        _peakSnapshotMs=Math.Max(_peakSnapshotMs,
+            Stopwatch.GetElapsedTime(snapshotStarted).TotalMilliseconds);
         CurrentSnapshot = snapshot;
         _snapshot.Clear();
         _snapshot.AddRange(snapshot.Flora);
@@ -572,7 +635,7 @@ public partial class FloraRenderer : Node3D
             yield return false;
             if (_w.Flora.Get(f.Id) == null) continue;
             var sp = _w.Content.FloraOrThrow(f.SpeciesId);
-            if (!_layers.ContainsKey(sp.Id)) continue;
+if (!_layers.ContainsKey(sp.Id)) continue;
             double r = f.Radius(sp);
             double h = sp.Colony != null
                 ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
@@ -869,14 +932,16 @@ public partial class FloraRenderer : Node3D
                     + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.VisibleInstanceCount * vl.JuvenileTris : 0);
             }
         Visible_ = visible; TrianglesDrawn = triangles;
-        PopulationReady = _build == null && _w.Flora.Items.All(f => _layers.ContainsKey(f.SpeciesId))
-            && _w.DeadFlora.Items.All(f => _layers.ContainsKey(f.SpeciesId));
+        PopulationReady = _build == null &&
+            _w.Flora.Items.All(f => _layers.ContainsKey(f.SpeciesId)) &&
+            _w.DeadFlora.Items.All(f => _layers.ContainsKey(f.SpeciesId));
         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
         UpdateLuminousLights();
     }
 
     private void UpdateLuminousLights()
     {
+        using var lightsProfile=FrameProfiler.Measure("Flora.Lights");
         if(Camera==null)return;
         var planes=Camera.GetFrustum();var frustum=new Plane[planes.Count];
         for(int i=0;i<planes.Count;i++)frustum[i]=planes[i];
@@ -976,6 +1041,7 @@ public partial class FloraRenderer : Node3D
         public float[] Buffer = Array.Empty<float>();
         public int Capacity;
         public int VisibleCount;
+        public long UploadRevision;
 
         public void EnsureCapacity(MultiMesh mm, int needed)
         {
@@ -995,6 +1061,8 @@ public partial class FloraRenderer : Node3D
 
         public void Upload(MultiMesh mm, int count)
         {
+            using var uploadProfile=FrameProfiler.Measure("Flora.BufferUpload");
+            UploadRevision++;
             VisibleCount = count;
             mm.VisibleInstanceCount = count;
             if (count > 0)
@@ -1008,6 +1076,7 @@ public partial class FloraRenderer : Node3D
 
     private void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> Tint, List<Color> C) data)
     {
+        using var fillProfile=FrameProfiler.Measure("Flora.Fill");
         int n = data.T.Count;
         if (!_pooledBuffers.TryGetValue(mm, out var pb))
             _pooledBuffers[mm] = pb = new PooledMultiMeshBuffer();
@@ -1079,6 +1148,11 @@ public partial class FaunaRenderer : Node3D
     public int Drawn { get; private set; }
     public int OffScreen { get; private set; }
     public long TrianglesDrawn { get; private set; }
+    /// <summary>Total reserved GPU instances across actually used morphs.
+    /// Previously each of eight variants reserved every animal in its species.</summary>
+    public int ReservedGpuInstanceSlots => _layers.Values.Sum(layer =>
+        layer.Variants.Sum(v => v.High.Multimesh.InstanceCount +
+            (v.Curled?.Multimesh.InstanceCount ?? 0)));
 
     public void Build(VivariumWorld w)
     {
@@ -1091,6 +1165,14 @@ public partial class FaunaRenderer : Node3D
             hiMat.SetShaderParameter("base_color", Bridge.C(sp.BaseColor));
             hiMat.SetShaderParameter("ornament_color", Bridge.C(sp.OrnamentColor));
             FaunaBodyProfiles.Bind(hiMat, sp);
+            // These profiles require verified geometry/region semantics. Keep
+            // every other species on the existing material, including Rainspine.
+            hiMat.SetShaderParameter("surface_family", sp.Id switch
+            {
+                "ghostbristle" or "marbleback" => 1,
+                "moonveil" => 2,
+                _ => 0,
+            });
             var still = (ShaderMaterial)hiMat.Duplicate();
             still.SetShaderParameter("anim_amplitude", 0.0f);
             var layer = new Layer { Animation = sp.Animation };
@@ -1153,18 +1235,13 @@ public partial class FaunaRenderer : Node3D
         Plane[]? frustum = planes == null ? null : new Plane[planes.Count];
         if (planes != null) planes.CopyTo(frustum!, 0);
         Drawn = OffScreen = 0; TrianglesDrawn = 0;
-        // Each species has a small bank of full-detail morphs. Capacity is deliberately conservative so hash
-        // imbalance cannot overflow a variant buffer; populations are small enough that this is cheap memory.
-        foreach (var (id, layer) in _layers)
-        {
-            int n = _w.Fauna.CountOf(id);
+        // Reset counts but retain the previous GPU capacities. Only populate
+        // an actual morph variant when one visible animal needs it; allocating
+        // the whole species population into ALL variants (and curled variants)
+        // was an O(variants * species population) GPU bandwidth tax.
+        foreach (var layer in _layers.Values)
             foreach (var vl in layer.Variants)
-            {
                 vl.HighCount = vl.CurledCount = 0;
-                vl.HighBuf = Ensure(vl.High.Multimesh, vl.HighBuf, n);
-                if (vl.Curled != null) vl.CurledBuf = Ensure(vl.Curled.Multimesh, vl.CurledBuf, n);
-            }
-        }
         var seen = new HashSet<EntityId>();
         foreach (var f in _w.Fauna.Items)
         {
@@ -1290,6 +1367,15 @@ public partial class FaunaRenderer : Node3D
             bool curled = vl.Curled != null && _w.FaunaSystem.IsCurled(f);
             int i = curled ? vl.CurledCount++ : vl.HighCount++;
             var buf = curled ? vl.CurledBuf : vl.HighBuf;
+            if((i+1)*16>buf.Length)
+            {
+                // Rare geometric growth. Preserve transforms written earlier
+                // in this same frame instead of replacing the buffer.
+                buf=Ensure(curled ? vl.Curled!.Multimesh : vl.High.Multimesh,
+                    buf,i+1);
+                if(curled)vl.CurledBuf=buf;
+                else vl.HighBuf=buf;
+            }
             int o = i * 16;
             buf[o + 0] = basis.X.X; buf[o + 1] = basis.Y.X; buf[o + 2] = basis.Z.X; buf[o + 3] = d.Pos.X;
             buf[o + 4] = basis.X.Y; buf[o + 5] = basis.Y.Y; buf[o + 6] = basis.Z.Y; buf[o + 7] = d.Pos.Y;
@@ -1322,8 +1408,11 @@ public partial class FaunaRenderer : Node3D
     private static float[] Ensure(MultiMesh mm, float[] buf, int needed)
     {
         if (mm.InstanceCount >= needed && buf.Length == mm.InstanceCount * 16) return buf;
-        mm.InstanceCount = needed + needed / 2 + 8;
-        return new float[mm.InstanceCount * 16];
+        int capacity=Math.Max(Math.Max(needed+needed/2+8,16),mm.InstanceCount*2);
+        var larger=new float[capacity*16];
+        Array.Copy(buf,larger,Math.Min(buf.Length,larger.Length));
+        mm.InstanceCount=capacity;
+        return larger;
     }
 
     private static void Upload(MultiMesh mm, float[] buf, int count)

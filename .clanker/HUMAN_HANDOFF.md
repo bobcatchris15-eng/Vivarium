@@ -1,3 +1,7 @@
+# Active session handoff - 2026-10-16
+
+Continuation transferred to chat 01a14732-1ac2-7611-adf1-efedac78f4c3. Canonical current task: docs/references/forest-2026-10-15/NEXT_WAKE.md and .clanker/tasks/forest-reference-20261015/task-state.json. Hourly vivarium-visual-evolution reminder verified ACTIVE in this chat. Environment iteration closed; actual coati nasal-to-food measurement is next. Historical handoff below is preserved, not the active work order.
+
 # Surface fluid handoff
 
 Plan: docs/particle-surface-water-replacement-plan.md. User explicitly allows particles, vector methods or other representations; acceptance is real visible fluid behavior. Three built-in gpt-6-luna workers dispatched: solver medium, audit low, tests low, in isolated exact dirty worktrees. Dispatch records under tasks/surface-fluid-*/dispatch.json. All dependent integration/persistence/render/runtime stages remain pending. No integrated fix or actual fluid acceptance. Preserve live main and active world. Original hashes verified unchanged, excluding coordinator-authored plan update. Continue by consuming receipts, reviewing candidate and tests, revising architecture choice, then sequence W3-W7. Do not infer background continuation beyond actual worker status.

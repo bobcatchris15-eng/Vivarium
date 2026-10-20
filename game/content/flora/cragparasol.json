@@ -1,0 +1,141 @@
+﻿{
+    "id":  "cragparasol",
+    "name":  "Cragparasol",
+    "archetype":  "plant",
+    "placementGroup":  "woody",
+    "role":  "Dry-soil twisted microcanopy with airy exposed branches and leathery terminal rosettes.",
+    "description":  "Crooked bare trunks branch outward to wide, asymmetrical terminal clusters of tough tapered leaves, forming small resilient umbrellas above gravel and rocky soil.",
+    "habitat":  {
+                    "substrates":  {
+                                       "soil":  1,
+                                       "gravel":  0.88,
+                                       "rock":  0.51
+                                   },
+                    "refuseSubstrates":  [
+                                             "water",
+                                             "wood"
+                                         ],
+                    "refuseTags":  [
+
+                                   ],
+                    "moisture":  {
+                                     "optimum":  0.29,
+                                     "tolerance":  0.31
+                                 },
+                    "light":  {
+                                  "optimum":  0.79,
+                                  "tolerance":  0.37
+                              },
+                    "nutrients":  {
+                                      "optimum":  0.32,
+                                      "tolerance":  0.44
+                                  },
+                    "oxygen":  {
+                                   "optimum":  0.6,
+                                   "tolerance":  0.34
+                               },
+                    "topsoilDepth":  {
+                                         "optimum":  0.48,
+                                         "tolerance":  0.32
+                                     },
+                    "maxWaterDepth":  0,
+                    "hardMinMoisture":  0.02,
+                    "hardMaxMoisture":  0.77,
+                    "minSuitability":  0.16
+                },
+    "growth":  {
+                   "ratePerDay":  0.064,
+                   "maxBiomass":  6.4,
+                   "initialBiomass":  0.1,
+                   "declinePerDay":  0.065,
+                   "maturityDays":  38,
+                   "lifespanDays":  900,
+                   "nutrientPerBiomass":  0.24,
+                   "radiusAtMax":  1.11,
+                   "minRadius":  0.085
+               },
+    "spread":  {
+                   "intervalDays":  19,
+                   "radius":  1.5,
+                   "propagules":  1,
+                   "minBiomassFraction":  0.66
+               },
+    "competition":  {
+                        "radius":  0.67,
+                        "crowdingLimit":  4.3,
+                        "sensitivity":  0.38
+                    },
+    "proximity":  [
+
+                  ],
+    "litterFraction":  0.84,
+    "sheddingPerDay":  0.012,
+    "grazingValue":  0,
+    "woody":  {
+                  "layer":  "shrub",
+                  "canopyRadius":  1.17,
+                  "shadeOpacity":  0.28,
+                  "minSpacing":  0.63
+              },
+    "visual":  {
+                   "shape":  "microcanopy_cragparasol",
+                   "color":  [
+                                 0.3,
+                                 0.39,
+                                 0.17
+                             ],
+                   "color2":  [
+                                  0.55,
+                                  0.52,
+                                  0.29
+                              ],
+                   "colorVariance":  0.095,
+                   "height":  1.76
+               },
+    "tags":  [
+                 "plant",
+                 "woody",
+                 "understory",
+                 "microcanopy",
+                 "dry",
+                 "rocky"
+             ],
+    "reproduction":  {
+                         "form":  "berry",
+                         "dispersal":  "wind",
+                         "reservePerDay":  0.016,
+                         "pulseThreshold":  0.06,
+                         "maxAttachedMass":  0.14,
+                         "developmentDays":  10,
+                         "ripeDays":  18,
+                         "cooldownDays":  24,
+                         "seedFraction":  0.16,
+                         "viability":  0.6,
+                         "dormancyDays":  12,
+                         "dispersalRadius":  1.4,
+                         "fruitColor":  [
+                                            0.72,
+                                            0.08,
+                                            0.05
+                                        ],
+                         "displaySize":  0.025,
+                         "foodValue":  1.4
+                     },
+    "postLife":  {
+                     "standingDays":  55,
+                     "collapseDays":  7,
+                     "fallenDays":  145,
+                     "advancedDays":  24,
+                     "coarseFraction":  0.5,
+                     "decayHalfLifeMultiplier":  1.45,
+                     "standingRetention":  0.88,
+                     "deadColor":  [
+                                       0.47,
+                                       0.34,
+                                       0.23
+                                   ],
+                     "litterColorInfluence":  0.62,
+                     "dryBleach":  0.22,
+                     "wetDarken":  0.12
+                 }
+}

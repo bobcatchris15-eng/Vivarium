@@ -63,10 +63,21 @@ public sealed class LifecycleController
     public void Step(CoverageLayer layer, PlasmodiumColony colony, Network? network, IPlasmodiumEnvironment env,
         long step, double dt)
     {
+        // Build occupancy groups in one deterministic pass. Scanning the
+        // entire sheet once *per organism* is O(organisms * occupied cells)
+        // and becomes costly after fragmentation/merging, without changing
+        // a single biological rule. Preserve CellId enumeration order.
+        var cellsByOrganism = new Dictionary<int, List<(int gx, int gz)>>();
+        foreach (var (cell, ownerId) in colony.CellId)
+        {
+            if (!cellsByOrganism.TryGetValue(ownerId, out var group))
+                cellsByOrganism.Add(ownerId, group = new List<(int gx, int gz)>());
+            group.Add(cell);
+        }
         foreach (var org in colony.Organisms.Values.ToList())
         {
-            var cells = CellsOf(colony, org.Id);
-            if (cells.Count == 0) continue;
+            if (!cellsByOrganism.TryGetValue(org.Id, out var cells) || cells.Count == 0)
+                continue;
 
             org.TimeInState += dt;
 
@@ -97,6 +108,15 @@ public sealed class LifecycleController
                     break;
 
                 case PlasmodiumState.Migrating:
+                    // Migration searches for new food. If the advancing front
+                    // reaches accessible detritus, resume feeding rather than
+                    // fruiting on a timer despite the habitat recovering.
+                    if (HasAccessibleFood(env, cells))
+                    {
+                        org.TimeStarving = 0;
+                        org.EnterState(PlasmodiumState.Foraging);
+                        break;
+                    }
                     if (org.TimeInState >= _prm.TMig)
                     {
                         org.EnterState(PlasmodiumState.Fruiting);
@@ -138,9 +158,11 @@ public sealed class LifecycleController
 
     private void UpdateStarveTimer(Plasmodium org, IPlasmodiumEnvironment env, List<(int gx, int gz)> cells, double dt)
     {
-        double meanDetritus = MeanDetritus(env, cells);
-        if (meanDetritus < _prm.StarveDetritusThreshold) org.TimeStarving += dt;
-        else org.TimeStarving = 0;
+        // A large, extended plasmodium can have an exhausted rear but a
+        // well-fed leading edge. Averaging food over its *entire* area makes
+        // that viable front invisible and forces spurious whole-body fruiting.
+        if (HasAccessibleFood(env, cells)) org.TimeStarving = 0;
+        else org.TimeStarving += dt;
     }
 
     private static double MeanMoisture(IPlasmodiumEnvironment env, List<(int gx, int gz)> cells)
@@ -150,11 +172,26 @@ public sealed class LifecycleController
         return cells.Count == 0 ? 0 : sum / cells.Count;
     }
 
-    private static double MeanDetritus(IPlasmodiumEnvironment env, List<(int gx, int gz)> cells)
+    private bool HasAccessibleFood(IPlasmodiumEnvironment env, List<(int gx, int gz)> cells)
     {
-        double sum = 0;
-        foreach (var (gx, gz) in cells) sum += env.Detritus(gx, gz);
-        return cells.Count == 0 ? 0 : sum / cells.Count;
+        if (cells.Count == 0) return false;
+        double minimum = _prm.StarveDetritusThreshold;
+        // Test occupied cells first; this is usually enough when food is
+        // available and avoids scanning the entire external neighborhood.
+        foreach (var (x, z) in cells)
+            if (env.Moisture(x, z) >= _prm.WMin && env.Detritus(x, z) >= minimum) return true;
+        // The growth front can reach food just outside the occupied sheet.
+        // Querying a one-cell (2 cm) fringe is cheap and deterministic.
+        foreach (var (x, z) in cells)
+        {
+            if (env.Moisture(x, z) < _prm.WMin) continue;
+            if (Accessible(x + 1, z) || Accessible(x - 1, z) ||
+                Accessible(x, z + 1) || Accessible(x, z - 1)) return true;
+        }
+        return false;
+
+        bool Accessible(int x, int z) =>
+            env.Moisture(x, z) >= _prm.WMin && env.Detritus(x, z) >= minimum;
     }
 
     private static List<(int gx, int gz)> CellsOf(PlasmodiumColony colony, int id)

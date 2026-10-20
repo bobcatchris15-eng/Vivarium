@@ -21,34 +21,75 @@ public partial class GuardianReview : Node3D
     {
         try
         {
-            GetWindow().Size = new Vector2I(1100, 760);
+            GetWindow().Size = Main.UserArgs.Contains("--guardian-feeding-motion") ? new Vector2I(800, 552) : new Vector2I(1100, 760);
             Engine.MaxFps = 30;
             Directory.CreateDirectory(OutDir);
+            if (Main.UserArgs.Contains("--guardian-surface-contact-review"))
+            {
+                var proof = await GuardianPlantSurfaceReview.Run(this, OutDir);
+                File.WriteAllText(Path.Combine(OutDir, "plant-surface-proof.json"), JsonSerializer.Serialize(proof, new JsonSerializerOptions { WriteIndented = true }));
+                GD.Print("GUARDIAN_SURFACE_CONTACT_OK");
+                GetTree().Quit(); return;
+            }
             if (Main.UserArgs.Contains("--guardian-populated")) { await RunPopulated(); GetTree().Quit(); return; }
             var records = new List<object>();
+            bool materialReview = Main.UserArgs.Contains("--guardian-material-review");
             foreach (var def in GuardianCatalog.All)
             {
                 string? species = Main.ArgAfter("--guardian-species");
-                if (species != null && species != def.Id && species != def.Archetype) continue;
+                if (species != null && !species.Split(',').Any(id => id == def.Id || id == def.Archetype)) continue;
                 var descriptor = Content.PresetOrThrow("default").Clone();
                 descriptor.PilotTreeId = def.AssociatedPilotTreeId;
                 descriptor.GuardianId = def.Id;
                 var world = VivariumWorld.Create(Content, descriptor);
                 world.Clock.Paused = true;
                 var stage = new Node3D(); AddChild(stage);
-                var lighting = new EnvironmentRig { BenchmarkLightSeconds = 0 };
+                var lighting = new EnvironmentRig { BenchmarkLightSeconds = materialReview ? 60 : 0 };
                 stage.AddChild(lighting);
                 lighting.ApplyQuality(2);
                 // Neutral studio illumination reveals surface defects that the
                 // enclosure grade can hide. Restore production lighting for live review.
-                lighting.ProcessMode = ProcessModeEnum.Disabled;
-                lighting.Env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-                lighting.Env.AmbientLightColor = Colors.White;
-                lighting.Env.AmbientLightEnergy = 0.65f;
-                lighting.Env.FogEnabled = false;
-                lighting.Sun.RotationDegrees = new Vector3(-40, -35, 0);
-                lighting.Sun.LightEnergy = 1.3f;
+                if (materialReview)
+                {
+                    // Opt-in material A/B uses production canopy irradiance and fixed exposure.
+                    // The ordinary anatomical review retains its neutral studio illumination.
+                    lighting._Process(0);
+                    lighting.CameraAttributes.AutoExposureEnabled = false;
+                }
+                else
+                {
+                    lighting.ProcessMode = ProcessModeEnum.Disabled;
+                    lighting.Env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+                    lighting.Env.AmbientLightColor = Colors.White;
+                    lighting.Env.AmbientLightEnergy = 0.65f;
+                    lighting.Env.FogEnabled = false;
+                    lighting.Sun.RotationDegrees = new Vector3(-40, -35, 0);
+                    lighting.Sun.LightEnergy = 1.3f;
+                }
                 var renderer = new GuardianRenderer(); stage.AddChild(renderer); renderer.Build(world);
+                if (materialReview)
+                {
+                    var surfaces = DescendantMeshes(renderer).SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(i =>
+                    {
+                        var material = mesh.GetActiveMaterial(i) as StandardMaterial3D;
+                        if (Main.UserArgs.Contains("--guardian-material-positive-control") && material?.ResourceName == "AmberKeratin")
+                            material.AlbedoColor = Colors.Red;
+                        var bounds = mesh.GlobalTransform * mesh.Mesh.GetAabb();
+                        return new { rest_bounds_size = new[] { bounds.Size.X, bounds.Size.Y, bounds.Size.Z }, mesh = mesh.Name.ToString(), surface = i, name = material?.ResourceName,
+                            roughness = material?.Roughness, coat = material?.ClearcoatEnabled, rim = material?.RimEnabled,
+                            rim_strength = material?.Rim, albedo_texture = material?.AlbedoTexture?.ResourcePath,
+                            shading = material?.ShadingMode.ToString(), specular = material?.MetallicSpecular,
+                            specular_mode = material?.SpecularMode.ToString(),
+                            roughness_texture = material?.RoughnessTexture?.ResourcePath };
+                    })).ToArray();
+                    string auditDir = Path.Combine(OutDir, def.Archetype); Directory.CreateDirectory(auditDir);
+                    File.WriteAllText(Path.Combine(auditDir, "materials.json"), JsonSerializer.Serialize(new
+                    {
+                        assembly = typeof(GuardianRenderer).Assembly.Location,
+                        module_id = typeof(GuardianRenderer).Module.ModuleVersionId,
+                        surfaces,
+                    }, new JsonSerializerOptions { WriteIndented=true }));
+                }
                 var g = world.Guardian!;
                 var start = g.Position;
                 var origin = Bridge.V(start);
@@ -136,8 +177,19 @@ public partial class GuardianReview : Node3D
                 {
                     var face = skeleton.GlobalTransform * skeleton.GetBoneGlobalPose(head).Origin;
                     float oldSize = camera.Size;
-                    camera.Size = def.Archetype == "crested_canopy" ? 0.55f : 0.8f;
-                    camera.Position = face + new Vector3(0.8f, 0.3f, 0.8f); camera.LookAt(face);
+                    if (def.Archetype == "quilled_arboreal")
+                    {
+                        var aim = face + new Vector3(0.02f, -0.02f, -0.08f);
+                        camera.Size = 0.25f;
+                        camera.Position = aim + new Vector3(0.32f, 0.12f, 0.32f);
+                        camera.LookAt(aim);
+                    }
+                    else
+                    {
+                        camera.Size = def.Archetype == "crested_canopy" ? 0.55f : 0.8f;
+                        camera.Position = face + new Vector3(0.8f, 0.3f, 0.8f);
+                        camera.LookAt(face);
+                    }
                     for (int frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     GetViewport().GetTexture().GetImage().SavePng(Path.Combine(dir, "face-detail.png"));
@@ -155,6 +207,25 @@ public partial class GuardianReview : Node3D
                     lighting.Sun.RotationDegrees = new Vector3(-50, -25, 0); lighting.Sun.LightEnergy = 1.3f;
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     GetViewport().GetTexture().GetImage().SavePng(Path.Combine(dir, "body-detail-neutral.png"));
+                    camera.Size = oldSize;
+                }
+                if (Main.UserArgs.Contains("--guardian-coat-detail") && skeleton != null && skeleton.FindBone("Chest") is int chest && chest >= 0)
+                {
+                    var point = skeleton.GlobalTransform * skeleton.GetBoneGlobalPose(chest).Origin;
+                    float oldSize = camera.Size;
+                    camera.Size = .24f;
+                    camera.Position = point + new Vector3(.6f, .18f, .3f); camera.LookAt(point);
+                    for (int light = 0; light < 2; light++)
+                    {
+                        lighting.Sun.RotationDegrees = light == 0 ? new Vector3(-50, -25, 0) : new Vector3(-12, 65, 0);
+                        lighting.Sun.LightEnergy = light == 0 ? 1.3f : .9f;
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        GetViewport().GetTexture().GetImage().SavePng(Path.Combine(dir, $"coat-detail-{light}.png"));
+                        foreach (var mesh in meshes) mesh.MaterialOverride = clay;
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        GetViewport().GetTexture().GetImage().SavePng(Path.Combine(dir, $"coat-detail-clay-{light}.png"));
+                        for (int i = 0; i < meshes.Length; i++) meshes[i].MaterialOverride = overrides[i];
+                    }
                     camera.Size = oldSize;
                 }
                 // Exercise the real decision and locomotion path, independent of renderer frame rate.
@@ -181,8 +252,13 @@ public partial class GuardianReview : Node3D
                 floor.Visible = false;
                 renderer.ReviewSupportPlaneHeight = null;
                 lighting.QueueFree();
-                var productionLighting = new EnvironmentRig { BenchmarkLightSeconds = 0 };
+                var productionLighting = new EnvironmentRig { BenchmarkLightSeconds = materialReview ? 60 : 0 };
                 stage.AddChild(productionLighting); productionLighting.ApplyQuality(2);
+                if (materialReview)
+                {
+                    productionLighting.ConfigureHabitat(world);
+                    productionLighting.CameraAttributes.AutoExposureEnabled = false;
+                }
                 camera.Size = 4.4f;
                 var island = new IslandRenderer(); stage.AddChild(island); island.Build(world);
                 var tree = new PilotTreeRenderer(); stage.AddChild(tree); tree.Build(world);
@@ -358,6 +434,15 @@ public partial class GuardianReview : Node3D
         string output = Path.Combine(dir, "transitions"); Directory.CreateDirectory(output);
         var samples = new List<object>();
         int phase = 0;
+        double presentationSeconds = 0;
+        var camera = renderer.Camera;
+        float oldSize = camera?.Size ?? 1;
+        var oldCameraTransform = camera?.GlobalTransform ?? Transform3D.Identity;
+        if (camera != null && Main.UserArgs.Contains("--guardian-transition-close"))
+        {
+            camera.Size = 1.05f;
+            camera.LookAt(renderer.GlobalPosition + Vector3.Up * .20f);
+        }
         foreach (var activity in new[] { GuardianActivity.Groom, GuardianActivity.Feed, GuardianActivity.Groom,
             GuardianActivity.Rest, GuardianActivity.Groom, GuardianActivity.Explore, GuardianActivity.Groom })
         {
@@ -366,6 +451,7 @@ public partial class GuardianReview : Node3D
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                presentationSeconds += GetProcessDeltaTime();
                 var bones = new List<object>();
                 if (skeleton != null)
                     for (int bone = 0; bone < skeleton.GetBoneCount(); bone++)
@@ -379,13 +465,14 @@ public partial class GuardianReview : Node3D
                     }
                 if (frame % 6 == 0)
                     GetViewport().GetTexture().GetImage().SavePng(Path.Combine(output, $"{phase}-{activity}-{frame:00}.png"));
-                samples.Add(new { phase, frame, activity = activity.ToString(), actualClip = player.CurrentAnimation.ToString(),
+                samples.Add(new { phase, frame, presentationSeconds, activity = activity.ToString(), actualClip = player.CurrentAnimation.ToString(),
                     actualTime = player.CurrentAnimationPosition, bones, determinant = renderer.GlobalBasis.Determinant() });
             }
             phase++;
         }
         File.WriteAllText(Path.Combine(output, "samples.json"), JsonSerializer.Serialize(samples,
             new JsonSerializerOptions { WriteIndented = true }));
+        if (camera != null) { camera.Size = oldSize; camera.GlobalTransform = oldCameraTransform; }
     }
 
     private async Task CaptureAnimationSweep(GuardianRenderer renderer, GuardianIndividual guardian, string dir)
@@ -461,7 +548,8 @@ public partial class GuardianReview : Node3D
     private async Task RunPopulated()
     {
         string? species = Main.ArgAfter("--guardian-species");
-        var definitions = species == null ? GuardianCatalog.All : GuardianCatalog.All.Where(d => d.Id == species || d.Archetype == species).ToArray();
+        var definitions = species == null ? GuardianCatalog.All : GuardianCatalog.All.Where(d => species.Split(',').Any(id => id == d.Id || id == d.Archetype)).ToArray();
+        if (!definitions.Any()) throw new ArgumentException("Guardian review matched no species: " + species);
         foreach (var def in definitions)
         {
             var descriptor = Content.PresetOrThrow("default").Clone();
@@ -488,10 +576,72 @@ public partial class GuardianReview : Node3D
             bool samplerValid = true;
             Vector3 reviewCameraOffset = Vector3.Zero;
             int reviewOcclusionScore = -1;
-            world.Clock.Paused = false;
-            for (int frame = 0; frame < 180; frame++)
+            int feedingCell = -1;
+            double? poseStandOff = double.TryParse(Main.ArgAfter("--guardian-feeding-pose-stand-off"),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double standOff)
+                ? Math.Clamp(standOff, .1, .6) : null;
+            Vivarium.Sim.Core.Vec3 poseFood = default, poseRoot = default;
+            if (Main.UserArgs.Contains("--guardian-feeding-review"))
             {
-                world.Scheduler.Advance(1.0 / 30);
+                double targetOffset = double.TryParse(Main.ArgAfter("--guardian-feeding-target-offset"),
+                    System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double offset)
+                    ? Math.Clamp(offset, -2, 2) : 0;
+                feedingCell = world.Grid.NearestDomainCell(new Vivarium.Sim.Core.Vec2(targetOffset, 0));
+                var target = world.Grid.CellCenter(feedingCell);
+                var g = world.Guardian!;
+                var start = new Vivarium.Sim.Core.Vec2(target.X - .35, target.Z);
+                g.Position = new(start.X, world.GroundHeight(start), start.Z);
+                g.TargetPosition = new(target.X, world.GroundHeight(target), target.Z);
+                g.Heading = 0; g.Activity = GuardianActivity.Forage; g.ActivityDuration = 100;
+                if (poseStandOff.HasValue)
+                {
+                    // Opt-in anatomical experiment only: pin a measured stand-off,
+                    // without changing the production simulation's reach or claiming feeding acceptance.
+                    poseFood = g.TargetPosition;
+                    var rootXZ = new Vivarium.Sim.Core.Vec2(target.X - poseStandOff.Value, target.Z);
+                    poseRoot = new(rootXZ.X, world.GroundHeight(rootXZ), rootXZ.Z);
+                    g.Position = poseRoot; g.Activity = GuardianActivity.Feed;
+                }
+                g.Energy = def.EnergyMax * .4;
+                world.Litter.FineMass[feedingCell] = world.Litter.CoarseMass[feedingCell] = 0;
+                world.Litter.FruitMass[feedingCell] = double.TryParse(Main.ArgAfter("--guardian-feeding-food"), out double food)
+                    ? Math.Clamp(food, .1, 10) : 1;
+                // Focused pose/food test only: clear obstructing rendered flora
+                // without deleting organisms or changing the ecological fixture.
+                var foodPoint = Bridge.V(g.TargetPosition);
+                foreach (var (draw, index) in session.Flora.GuardianContactInstances())
+                {
+                    var buffer = draw.Multimesh;
+                    if (buffer?.Mesh == null) continue;
+                    var transform = buffer.GetInstanceTransform(index);
+                    var bounds = (draw.GlobalTransform * transform) * buffer.Mesh.GetAabb();
+                    if (bounds.Grow(.65f).HasPoint(foodPoint))
+                        buffer.SetInstanceTransform(index, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), transform.Origin));
+                }
+                var fruit = new MeshInstance3D { Mesh = new SphereMesh { Radius = .018f, Height = .036f },
+                    Position = Bridge.V(g.TargetPosition) + Vector3.Up * .018f,
+                    MaterialOverride = new StandardMaterial3D { AlbedoColor = new(.6f, .22f, .05f), Roughness = .65f } };
+                session.AddChild(fruit);
+            }
+            world.Clock.Paused = false;
+            bool feedingMotion = feedingCell >= 0 && Main.UserArgs.Contains("--guardian-feeding-motion");
+            int frameCount = feedingCell >= 0 && int.TryParse(Main.ArgAfter("--guardian-feeding-frames"), out int requestedFrames)
+                ? Math.Clamp(requestedFrames, 180, 1800) : 180;
+            double presentationSeconds = 0;
+            for (int frame = 0; frame < frameCount; frame++)
+            {
+                // Long motion uses actual native frame delta, keeping animation,
+                // shader motion and scheduler advancement on the same clock.
+                // Ordinary fixed-frame comparisons retain their existing cadence.
+                double step = feedingMotion ? GetProcessDeltaTime() : 1.0 / 30;
+                presentationSeconds += step;
+                world.Scheduler.Advance(step);
+                if (feedingCell >= 0 && poseStandOff.HasValue)
+                {
+                    var guardian = world.Guardian!;
+                    guardian.Position = poseRoot; guardian.TargetPosition = poseFood;
+                    guardian.Heading = 0; guardian.Activity = GuardianActivity.Feed; guardian.ActivityDuration = 100;
+                }
                 var focus = session.Guardian.DisplayPosition + Vector3.Up * 0.45f;
                 var inward = new Vector3((float)world.PilotTree!.Anchor.X - focus.X, 0, (float)world.PilotTree.Anchor.Z - focus.Z).Normalized();
                 if (inward.LengthSquared() < .001f) inward = Vector3.Forward;
@@ -506,8 +656,34 @@ public partial class GuardianReview : Node3D
                         (reviewCameraOffset, reviewOcclusionScore) = FindReviewCamera(session, world, focus);
                     session.CameraRig.LookAtPoint(focus + reviewCameraOffset, focus);
                 }
+                if (feedingCell >= 0)
+                {
+                    focus = session.Guardian.DisplayPosition + Vector3.Up * .16f;
+                    var eye = focus + new Vector3(.7f, .45f, 1);
+                    if (feedingMotion)
+                    {
+                        // Focused motion evidence must keep the moving animal
+                        // visible after it leaves the initial cleared food patch.
+                        // Only this opt-in fixture hides line-of-sight occluders.
+                        foreach (var (draw, index) in session.Flora.GuardianContactInstances())
+                        {
+                            var buffer = draw.Multimesh;
+                            if (buffer?.Mesh == null) continue;
+                            var transform = buffer.GetInstanceTransform(index);
+                            if (Math.Abs(transform.Basis.Determinant()) < 1e-12f) continue;
+                            var bounds = ((draw.GlobalTransform * transform) * buffer.Mesh.GetAabb()).Grow(.25f);
+                            for (int sample = 0; sample <= 8; sample++)
+                                if (bounds.HasPoint(focus.Lerp(eye, sample / 8f)))
+                                {
+                                    buffer.SetInstanceTransform(index, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), transform.Origin));
+                                    break;
+                                }
+                        }
+                    }
+                    session.CameraRig.LookAtPoint(eye, focus);
+                }
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                if (frame % 15 == 0)
+                if (frame % 15 == 0 || feedingMotion && (frame % 3 == 0 || frame == frameCount - 1))
                 {
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     string file = Path.Combine(dir, $"populated-{frame:000}.png");
@@ -528,7 +704,19 @@ public partial class GuardianReview : Node3D
                 maximumLengthError = Math.Max(maximumLengthError, session.Guardian.AppendageContact?.MaximumLengthError ?? 0);
                 maximumTailPenetration = Math.Max(maximumTailPenetration, Math.Max(session.Guardian.AppendageContact?.MaximumGroundPenetration ?? 0,
                     session.Guardian.AppendageContact?.MaximumSkinTailPenetration ?? 0));
+                var nasal = feedingCell >= 0
+                    ? session.Guardian.SkinContact?.NasalDistance(Bridge.V(world.Guardian!.TargetPosition) + Vector3.Up * .018f)
+                    : null;
                 records.Add(new { frame, world.Clock.Tick, activity = world.Guardian!.Activity.ToString(),
+                        nasalPadValid = nasal?.Valid,
+                        poseOnlyStandOff = poseStandOff,
+                        nasalPadVertices = nasal?.SampleCount,
+                        nasalToFoodCenter = nasal?.Valid == true ? (float?)nasal.Value.Minimum : null,
+                        nasalNearestPoint = nasal?.Valid == true ? nasal.Value.LowestPoint.ToString() : null,
+                        presentationSeconds, world.Clock.BioSeconds, world.Clock.BioAcceleration,
+                        energy = world.Guardian.Energy, target = world.Guardian.TargetPosition,
+                        reviewFoodMass = feedingCell >= 0 ? (double?)world.Litter.FruitMass[feedingCell] : null,
+                        pendingSeeds = world.Guardian.PendingSeeds.Count,
                         position = world.Guardian.Position, shown = session.Guardian.DisplayPosition.ToString(),
                         loadedFloraSpecies = session.Flora.LoadedSpeciesCount, worldFauna = world.Fauna.Count,
                         reviewCameraOffset = reviewCameraOffset.ToString(), reviewOcclusionScore,

@@ -13,6 +13,7 @@ public enum LocomotionMode
 
 public enum GuardianActivity
 {
+    // Core locomotion & foraging
     Rest,
     Forage,
     Explore,
@@ -21,13 +22,33 @@ public enum GuardianActivity
     Feed,
     Groom,
     Retreat,
-    ReturnHome
+    ReturnHome,
+
+    // Core needs & rest cycle
+    Drink,
+    Sleep,
+    Settle,
+    Stretch,
+
+    // Comfort & thermoregulation
+    Bathe,
+    ShakeOff,
+    Bask,
+    Dig,
+
+    // Enrichment & social
+    Play,
+    ScentMark,
+    Alert,
+    Yawn
 }
 
 /// <summary>
 /// Immutable definition of a Guardian Animal archetype.
 /// Defines biological parameters, locomotion styles, dietary preferences, and Pilot Tree affinity.
 /// </summary>
+/// <param name="BaseMetabolismRate">Energy spent per visible second at default world speed
+/// and biological acceleration 1. Faster biology multiplies energy demand; digestion uses biological seconds.</param>
 public sealed record GuardianDef(
     string Id,
     string Name,
@@ -43,5 +64,11 @@ public sealed record GuardianDef(
     IReadOnlyList<string> PreferredDiets,
     Vec3 BaseColor,
     Vec3 SecondaryColor,
-    string Description
-);
+    string Description,
+    GuardianBehaviorProfile? BehaviorProfile = null
+)
+{
+    // Shared by presentation and travel so existing saves shrink without changing
+    // their persisted individual variation or doubling their apparent stride speed.
+    public const double BodySizeMultiplier = 0.5;
+}

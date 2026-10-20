@@ -11,6 +11,14 @@ public sealed class FloraSuitability
     public bool HardRefused { get; init; }
     public string RefusalReason { get; init; } = "";
     public double Score { get; init; }
+    public double GrowthScore { get; init; }
+    public double ReproductionScore { get; init; }
+    public double Oxygen { get; init; }
+    public double TopsoilDepth { get; init; }
+    public double OxygenFactor { get; init; }
+    public double TopsoilFactor { get; init; }
+    public double EstablishmentScore { get; init; }
+    public double SurvivalScore { get; init; }
     public Substrate Substrate { get; init; }
     public double SubstrateFactor { get; init; }
     public double MoistureFactor { get; init; }
@@ -156,7 +164,7 @@ public sealed class FloraSystem
         return MathD.Clamp01(light - Math.Min(shade, light));
     }
 
-    public FloraSuitability Suitability(FloraSpeciesDef sp, Vec2 p, EntityId self = default)
+    public FloraSuitability Suitability(FloraSpeciesDef sp, Vec2 p, EntityId self = default, bool potential = false, bool established = false)
     {
         if (!_w.Domain.ContainsDisc(p, 0.02)) return FloraSuitability.Refused("outside the island", Substrate.Soil);
         if (_w.PilotTree?.BlocksTrunk(p, 0.02) == true) return FloraSuitability.Refused("inside Pilot Tree trunk", Substrate.Wood);
@@ -170,37 +178,80 @@ public sealed class FloraSystem
         if (!sp.UnlimitedWaterDepth && !onProp && depth > sp.MaxWaterDepth + 1e-9) return FloraSuitability.Refused($"submerged ({depth * 100:0.#} cm, tolerates {sp.MaxWaterDepth * 100:0.#} cm)", sub);
         if (sp.MinWaterDepth > 0 && depth < sp.MinWaterDepth - 1e-9) return FloraSuitability.Refused($"needs standing water ({depth * 100:0.#} cm < {sp.MinWaterDepth * 100:0.#} cm)", sub);
         double moisture = _w.Fields.Moisture.Sample(p);
-        if (moisture < sp.HardMinMoisture) return FloraSuitability.Refused($"too dry (moisture {moisture:0.00} < {sp.HardMinMoisture:0.00})", sub);
-        if (!onProp && moisture > sp.HardMaxMoisture + 1e-9) return FloraSuitability.Refused($"too wet (moisture {moisture:0.00} > {sp.HardMaxMoisture:0.00})", sub);
+        if (!established && moisture < sp.HardMinMoisture) return FloraSuitability.Refused($"too dry (moisture {moisture:0.00} < {sp.HardMinMoisture:0.00})", sub);
+        if (!established && !onProp && moisture > sp.HardMaxMoisture + 1e-9) return FloraSuitability.Refused($"too wet (moisture {moisture:0.00} > {sp.HardMaxMoisture:0.00})", sub);
         if (sp.RequiresFeature.Length > 0 && DistanceToFeature(p, sp.RequiresFeature, sp.RequiresFeatureRadius) > sp.RequiresFeatureRadius)
             return FloraSuitability.Refused($"{sp.Name} needs a {sp.RequiresFeature} within {sp.RequiresFeatureRadius * 100:0} cm to climb", sub);
 
-        // species-relation refusals (e.g. crust lichen cannot establish under moss)
-        foreach (var rel in C.FloraInteractions.Relations)
+        // Direct neighbour exclusions are occupancy/competition constraints, not
+        // the physical potential niche. Keep them for establishment checks only.
+        if (!potential && !established)
         {
-            if (rel.Type != FloraRelationType.Refuse || rel.A != sp.Id) continue;
-            _w.Flora.Neighbours(p, rel.Radius, _nb);
-            foreach (var n in _nb)
-                if (n.Id != self && n.SpeciesId == rel.B) return FloraSuitability.Refused($"excluded by nearby {C.FloraOrThrow(rel.B).Name}: {rel.Reason}", sub);
+            foreach (var rel in C.FloraInteractions.Relations)
+            {
+                if (rel.Type != FloraRelationType.Refuse || rel.A != sp.Id) continue;
+                _w.Flora.Neighbours(p, rel.Radius, _nb);
+                foreach (var n in _nb)
+                    if (n.Id != self && n.SpeciesId == rel.B) return FloraSuitability.Refused($"excluded by nearby {C.FloraOrThrow(rel.B).Name}: {rel.Reason}", sub);
+            }
         }
 
         double light = EffectiveLight(p, self);
         // decomposers judge their food (dead matter) where plants judge soil nutrients
         double nutrients = sp.Decomposer ? MathD.Clamp01(SampleDetritusPlusLitter(p) / C.Ecology.DetritusMax) : _w.Fields.Nutrients.Sample(p) / C.Ecology.NutrientMax;
         double fs = sp.SubstrateAffinity.GetValueOrDefault(sub);
+        bool soilRooted = sub is Substrate.Soil or Substrate.Gravel or Substrate.Water;
+        double oxygen = 1, topsoil = 0, oxygenFactor = 1, depthFactor = 1;
+        if (soilRooted && (sp.Oxygen.HasValue || sp.TopsoilDepth.HasValue))
+        {
+            _w.RootZone.EnsureCurrent();
+            oxygen = _w.RootZone.OxygenAt(p, moisture);
+            topsoil = _w.RootZone.RetainedTopsoilDepth.Sample(p);
+            if (sp.Oxygen is { } o) oxygenFactor = o.Eval(oxygen);
+            if (sp.TopsoilDepth is { } d) depthFactor = d.Eval(topsoil);
+        }
         double fm = sp.Moisture.Eval(moisture), fl = sp.Light.Eval(light), fn = sp.Nutrients.Eval(nutrients);
-        double env = Math.Cbrt(fm * fl * fn);
-        double bonus = ProximityBonus(sp, p, self);
-        double score = MathD.Clamp01(fs * env * (1 + bonus));
+        double bonus = ProximityBonus(sp, p, self, physicalOnly: potential);
+        int dimensions = 3 + (soilRooted && sp.Oxygen.HasValue ? 1 : 0) +
+                         (soilRooted && sp.TopsoilDepth.HasValue ? 1 : 0);
+        double score = MathD.Clamp01(fs * Math.Pow(fm * fl * fn * oxygenFactor * depthFactor, 1.0 / dimensions) * (1 + bonus));
+
+        // Life stages share physical conditions, not a common suitability response.
+        // Zero-resource environments remain poor even for adults; broader tolerances
+        // only reduce sensitivity to distance from environmental optima.
+        double StageScore(double toleranceScale)
+        {
+            double factors = sp.Moisture.EvalStage(moisture, toleranceScale) *
+                             sp.Light.EvalStage(light, toleranceScale) *
+                             sp.Nutrients.EvalStage(nutrients, toleranceScale);
+            if (soilRooted && sp.Oxygen is { } ox) factors *= ox.EvalStage(oxygen, toleranceScale);
+            if (soilRooted && sp.TopsoilDepth is { } depthPref) factors *= depthPref.EvalStage(topsoil, toleranceScale);
+            return MathD.Clamp01(fs * Math.Pow(factors, 1.0 / dimensions) * (1 + bonus));
+        }
+        double survival = StageScore(sp.SurvivalToleranceScale);
+        double establishment = StageScore(sp.EstablishmentToleranceScale);
+        double reproduction = StageScore(sp.ReproductionToleranceScale);
         return new FloraSuitability
         {
-            Score = score, Substrate = sub, SubstrateFactor = fs, MoistureFactor = fm, LightFactor = fl, NutrientFactor = fn,
+            Score = score, GrowthScore = score, EstablishmentScore = establishment,
+            SurvivalScore = survival, ReproductionScore = reproduction,
+            Substrate = sub, SubstrateFactor = fs, MoistureFactor = fm, LightFactor = fl,
+            NutrientFactor = fn, OxygenFactor = oxygenFactor, TopsoilFactor = depthFactor,
+            Oxygen = oxygen, TopsoilDepth = topsoil,
             ProximityBonus = bonus, Moisture = moisture, Light = light, Nutrients = nutrients,
         };
     }
 
+    /// <summary>
+    /// Physical potential niche under current environmental conditions, without
+    /// direct neighbor exclusion or species-proximity bonuses. Biotic shade and
+    /// resource modification still count because they are part of the environment.
+    /// </summary>
+    public FloraSuitability PotentialSuitability(FloraSpeciesDef species, Vec2 position)
+        => Suitability(species, position, potential: true);
+
     /// <summary>Sum of configured beneficial-proximity bonuses active at p (capped at 0.5).</summary>
-    public double ProximityBonus(FloraSpeciesDef sp, Vec2 p, EntityId self = default)
+    public double ProximityBonus(FloraSpeciesDef sp, Vec2 p, EntityId self = default, bool physicalOnly = false)
     {
         double bonus = 0;
         foreach (var rule in sp.Proximity)
@@ -212,7 +263,7 @@ public sealed class FloraSystem
                     d = Math.Min(d, pilot.BlocksDisc(p, rule.Radius) ? 0 : double.PositiveInfinity);
                 if (d <= rule.Radius) bonus += rule.Bonus;
             }
-            else if (AnyFloraNear(p, rule.Target, rule.Radius, self)) bonus += rule.Bonus;
+            else if (!physicalOnly && AnyFloraNear(p, rule.Target, rule.Radius, self)) bonus += rule.Bonus;
         }
         foreach (var rel in C.FloraInteractions.Relations)
             if (rel.Type == FloraRelationType.Benefit && rel.A == sp.Id && AnyFloraNear(p, rel.B, rel.Radius, self)) bonus += rel.Bonus;
@@ -242,18 +293,46 @@ public sealed class FloraSystem
         return best;
     }
 
-    /// <summary>Weighted crowding at p: Σ competition weight × neighbour biomass fraction.</summary>
+    /// <summary>
+    /// Neighbor pressure from overlapping physical growing space and root
+    /// interception distance. Species IDs carry no competitive rank: the
+    /// neighbor's actual radius, biomass, distance and local space determine
+    /// the effect. Shared nutrients and light are competed for elsewhere.
+    /// </summary>
     public double Crowding(FloraSpeciesDef sp, Vec2 p, EntityId self)
     {
         _w.Flora.Neighbours(p, sp.CompetitionRadius, _nb);
+        var established = self.IsNone ? null : _w.Flora.Get(self);
+        double contenderRadius = established?.Radius(sp) ??
+            (sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) *
+             Math.Sqrt(MathD.Clamp01(sp.InitialBiomass / Math.Max(sp.MaxBiomass, 1e-9))));
         double crowd = 0;
         foreach (var n in _nb)
         {
             if (n.Id == self) continue;
             var nsp = C.FloraOrThrow(n.SpeciesId);
-            crowd += C.FloraInteractions.CompetitionWeight(sp.Id, n.SpeciesId) * n.BiomassFraction(nsp);
+            crowd += PhysicalSpacePressure(contenderRadius, n.Radius(nsp),
+                Vec2.Distance(p, n.Position), sp.CompetitionRadius, n.BiomassFraction(nsp));
         }
         return crowd;
+    }
+
+    /// <summary>
+    /// Cheap disc-footprint surrogate for shared rooting and surface space.
+    /// Resource catchments can compete without crown contact; direct overlap
+    /// carries stronger spatial exclusion. Geometry replaces pairwise species
+    /// competitive-strength weights.
+    /// </summary>
+    public static double PhysicalSpacePressure(double contenderRadius, double neighbourRadius,
+        double distance, double rootCompetitionRadius, double neighbourBiomassFraction)
+    {
+        double radii = Math.Max(1e-9, contenderRadius + neighbourRadius);
+        double contact = MathD.Clamp01(1 - distance / radii);
+        double rootContact = MathD.Clamp01(1 - distance / Math.Max(rootCompetitionRadius, 1e-9));
+        double areaA = contenderRadius * contenderRadius, areaB = neighbourRadius * neighbourRadius;
+        double neighbourShare = areaB / Math.Max(1e-12, areaA + areaB);
+        return MathD.Clamp01(neighbourBiomassFraction) *
+            (0.65 * contact + 0.35 * rootContact) * 2 * neighbourShare;
     }
 
     /// <summary>Per-colony cell cap (bounds instance count; roots beyond this stop budding). Kept low because
@@ -306,8 +385,9 @@ public sealed class FloraSystem
             var sp = C.FloraOrThrow(f.SpeciesId);
             var p = f.Position;
             f.Age += dt;
-            var suit = Suitability(sp, p, f.Id);
+            var suit = Suitability(sp, p, f.Id, established: true);
             f.LastSuitability = suit.Score;
+            f.LastReproductionSuitability = suit.ReproductionScore;
             double crowd = Crowding(sp, p, f.Id);
             double comp = 1 / (1 + sp.CompetitionSensitivity * crowd);
 
@@ -344,7 +424,7 @@ public sealed class FloraSystem
             }
             else
             {
-                double severity = suit.HardRefused ? 1 : 1 - suit.Score / Math.Max(sp.MinSuitability, 1e-6);
+                double severity = suit.HardRefused ? 1 : MathD.Clamp01(1 - suit.SurvivalScore / Math.Max(sp.MinSuitability, 1e-6));
                 f.Biomass *= Math.Exp(-sp.DeclineRate * severity * dt);
                 f.Health = Math.Max(0, f.Health - severity * dt / SimUnits.Day * (suit.HardRefused ? 1.0 : 0.35));
             }
@@ -368,7 +448,7 @@ public sealed class FloraSystem
                 continue;
             }
 
-            if (sp.CreepSpeed > 0 && Creep(f, sp, dt, births)) continue;
+            if (sp.Archetype != "slime_mold" && sp.CreepSpeed > 0 && Creep(f, sp, dt, births)) continue;
             if (sp.Climber is { } climber && ClimberStep(f, sp, climber, dt)) continue;
 
             if (sp.Colony is { } cd)
@@ -414,7 +494,6 @@ public sealed class FloraSystem
             if (!CanEstablish(sp, q, out _)) continue; // re-check against same-step recruits
             var nf = Establish(sp, q, "propagation");
             if (sp.Colony != null) FoundColony(nf, sp);
-            else if (sp.Archetype == "slime_mold") AssignSlimeTint(nf, 0);
         }
         SporeRain(dt);
         foreach (var (sp, q, parent, biomass) in _buds)
@@ -485,7 +564,7 @@ public sealed class FloraSystem
         foreach (var f in _w.Flora.Items) _sporeCounts[f.SpeciesId] = _sporeCounts.GetValueOrDefault(f.SpeciesId) + 1;
         foreach (var sp in C.Flora)
         {
-            if (sp.Archetype is not ("fungus" or "slime_mold")) continue;
+            if (sp.Archetype != "fungus") continue;   // slime_mold handled by Coverage plasmodium network
             // Some highly episodic or substrate-specific fungi are introduced as starters and then spread
             // locally. Excluding them from generic atmospheric spore rain prevents total spore pressure from
             // scaling linearly with every fungus definition added to the library.
@@ -507,7 +586,6 @@ public sealed class FloraSystem
             if (best.HasValue)
             {
                 var nf = Establish(sp, best.Value, "spores");
-                if (sp.Archetype == "slime_mold") AssignSlimeTint(nf, 0);
             }
         }
     }
@@ -1237,9 +1315,34 @@ public sealed class FloraSystem
                 return false;
             }
         }
+        // Creeping rooted carpets expand by filling real space, not by
+        // placing hundreds of overlapping full organism agents on the same
+        // square decimetre. Existing individuals remain unchanged; only a
+        // *new* propagule is refused when an established same-species crown
+        // already occupies its physical rooting site. This is local geometry,
+        // never a species-wide population cap or equilibrium enforcement.
+        if (sp.Archetype=="plant" &&
+            (sp.Tags.Contains("groundcover") || sp.Shape=="carpet"))
+        {
+            double initial = MathD.Clamp01(sp.InitialBiomass/Math.Max(sp.MaxBiomass,1e-9));
+            double seedlingRadius=sp.MinRadius+
+                (sp.RadiusAtMax-sp.MinRadius)*Math.Sqrt(initial);
+            _w.Flora.Neighbours(q,sp.RadiusAtMax+seedlingRadius,_nb);
+            foreach(var existing in _nb)
+            {
+                if(existing.SpeciesId!=sp.Id || existing.Health<=0.15)continue;
+                double occupiedRadius=Math.Min(sp.RadiusAtMax*1.18,
+                    existing.Radius(sp)*0.8+seedlingRadius*0.6);
+                if(Vec2.DistanceSq(q,existing.Position)<occupiedRadius*occupiedRadius)
+                {
+                    reason=$"propagule cannot root inside living {sp.Name} carpet";
+                    return false;
+                }
+            }
+        }
         var s = Suitability(sp, q);
         if (s.HardRefused) { reason = s.RefusalReason; return false; }
-        if (s.Score < sp.MinSuitability) { reason = $"habitat too poor ({s})"; return false; }
+        if (s.EstablishmentScore < sp.MinSuitability) { reason = $"establishment habitat too poor ({s})"; return false; }
         double crowd = Crowding(sp, q, EntityId.None);
         if (crowd >= sp.CrowdingLimit) { reason = $"too crowded ({crowd:0.00} ≥ {sp.CrowdingLimit:0.00})"; return false; }
         reason = "ok";

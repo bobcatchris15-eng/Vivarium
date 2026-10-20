@@ -1,0 +1,98 @@
+﻿{
+    "id":  "rainshield",
+    "name":  "Rainshield",
+    "archetype":  "plant",
+    "placementGroup":  "woody",
+    "role":  "Moist-soil broadleaf umbrella colony creating overlapping elevated leaf platforms around stream margins.",
+    "description":  "Many thick separate petioles lift near-orbicular, lightly cupped leaves to unequal heights, layering large round leaf surfaces above a mostly open patch of wet soil.",
+    "habitat":  {
+                    "substrates":  {
+                                       "soil":  1,
+                                       "gravel":  0.26
+                                   },
+                    "refuseSubstrates":  [
+                                             "rock",
+                                             "wood"
+                                         ],
+                    "refuseTags":  [
+
+                                   ],
+                    "moisture":  {
+                                     "optimum":  0.75,
+                                     "tolerance":  0.36
+                                 },
+                    "light":  {
+                                  "optimum":  0.52,
+                                  "tolerance":  0.32
+                              },
+                    "nutrients":  {
+                                      "optimum":  0.62,
+                                      "tolerance":  0.4
+                                  },
+                    "maxWaterDepth":  0,
+                    "hardMinMoisture":  0.3,
+                    "hardMaxMoisture":  1.0,
+                    "minSuitability":  0.15
+                },
+    "growth":  {
+                   "ratePerDay":  0.115,
+                   "maxBiomass":  6.0,
+                   "initialBiomass":  0.1,
+                   "declinePerDay":  0.065,
+                   "maturityDays":  24,
+                   "lifespanDays":  900,
+                   "nutrientPerBiomass":  0.24,
+                   "radiusAtMax":  1.1,
+                   "minRadius":  0.085
+               },
+    "spread":  {
+                   "intervalDays":  11,
+                   "radius":  1.02,
+                   "propagules":  2,
+                   "minBiomassFraction":  0.66
+               },
+    "competition":  {
+                        "radius":  0.53,
+                        "crowdingLimit":  4.7,
+                        "sensitivity":  0.37
+                    },
+    "proximity":  [
+                      {
+                          "target":  "feature:water",
+                          "radius":  1.6,
+                          "bonus":  0.19
+                      }
+                  ],
+    "litterFraction":  0.84,
+    "sheddingPerDay":  0.017,
+    "grazingValue":  0,
+    "woody":  {
+                  "layer":  "shrub",
+                  "canopyRadius":  1.13,
+                  "shadeOpacity":  0.39,
+                  "minSpacing":  0.46
+              },
+    "visual":  {
+                   "shape":  "microcanopy_rainshield",
+                   "color":  [
+                                 0.15,
+                                 0.39,
+                                 0.31
+                             ],
+                   "color2":  [
+                                  0.41,
+                                  0.64,
+                                  0.47
+                              ],
+                   "colorVariance":  0.095,
+                   "height":  1.55
+               },
+    "tags":  [
+                 "plant",
+                 "herbaceous",
+                 "broadleaf",
+                 "wetland",
+                 "microcanopy",
+                 "understory"
+             ]
+}

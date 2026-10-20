@@ -146,7 +146,8 @@ class Surface:
                 start=center(t)+n*.00012
                 end=center(end_t)+cross*(side*width*shape(t)*rng.uniform(1.05,1.48))+n*.00016
                 delta=end-start; edge=delta.cross(n).normalized(); half=rng.uniform(.00014,.00032)*(1-.55*t)
-                q=[self.vertex(pt,uv,weight(t if index<2 else end_t)) for index,(pt,uv) in enumerate([(start-edge*half,(.48,t)),(start+edge*half,(.52,t)),(end+edge*half*.16,(.52,end_t)),(end-edge*half*.16,(.48,end_t))])]
+                u_in = 0.50 + side * 0.04; u_out = 0.50 + side * 0.42
+                q=[self.vertex(pt,uv,weight(t if index<2 else end_t)) for index,(pt,uv) in enumerate([(start-edge*half,(u_in,t)),(start+edge*half,(u_in,t)),(end+edge*half*.16,(u_out,end_t)),(end-edge*half*.16,(u_out,end_t))])]
                 self.face(q,2);self.face(tuple(reversed(q)),2)
 
     def object(self,name,mats,rig):
@@ -311,8 +312,30 @@ def body_loft(surface,profile,mat,avian=False):
             row.append(surface.vertex((x,yy,z),(k/seg,j/(len(samples)-1)),weights))
         rows.append(row)
     for j in range(len(rows)-1):
-        for k in range(seg): surface.face((rows[j][k],rows[j+1][k],rows[j+1][k+1],rows[j][k+1]),mat)
-    surface.face(rows[0][:-1],mat); surface.face(tuple(reversed(rows[-1][:-1])),mat)
+        for k in range(seg):
+            face_mat = mat
+            if avian:
+                z_mid = samples[j][0]
+                a_mid = TAU * (k + 0.5) / seg
+                ca = math.cos(a_mid)
+                sa = abs(math.sin(a_mid))
+                if z_mid < -0.51:
+                    # Head & face: bare turquoise skin on lateral face, buff on ventral chin, rufous on dorsal crown
+                    if sa > 0.35 and ca > -0.70: face_mat = 4
+                    elif ca < -0.20: face_mat = 1
+                    else: face_mat = 2
+                elif z_mid < -0.22:
+                    # Neck: ventral throat is golden-buff bib, dorsal/lateral nape is streaked dark sepia
+                    face_mat = 1 if ca < -0.25 else 10
+                elif z_mid < -0.06:
+                    # Upper breast/crop: ventral crop is rich fiery chestnut; dorsal mantle is streaked
+                    face_mat = 8 if ca < 0.10 else 10
+                else:
+                    # Lower breast, belly, flanks, and lower torso: rich fiery chestnut
+                    face_mat = 8
+            surface.face((rows[j][k],rows[j+1][k],rows[j+1][k+1],rows[j][k+1]),face_mat)
+    front_cap_mat = 5 if avian else mat
+    surface.face(rows[0][:-1],front_cap_mat); surface.face(tuple(reversed(rows[-1][:-1])),mat)
     return samples
 
 def eyes(s,x,y,z,r,iris,black,skin,avian):
@@ -325,9 +348,10 @@ def eyes(s,x,y,z,r,iris,black,skin,avian):
 def limbs_mesh(s,limbs,bodymat,skinmat,clawmat,avian):
     for names,h,k,a,toe,side in limbs:
         upper,lower,foot=names
-        s.tube([h,h.lerp(k,.5),k],[.038 if avian else .057,.031 if avian else .049,.022 if avian else .033],bodymat,[upper,upper,{upper:.5,lower:.5}],16)
+        thigh_mat = 8 if avian else bodymat
+        s.tube([h,h.lerp(k,.5),k],[.038 if avian else .057,.031 if avian else .049,.022 if avian else .033],thigh_mat,[upper,upper,{upper:.5,lower:.5}],16)
         s.tube([k,k.lerp(a,.45),a],[.022 if avian else .033,.014 if avian else .025,.012 if avian else .022],skinmat,[lower,lower,{lower:.8,foot:.2}],14)
-        s.ellipsoid(k,(.023 if avian else .036,.024 if avian else .034,.025 if avian else .037),bodymat,{upper:.5,lower:.5},18,10)
+        s.ellipsoid(k,(.023 if avian else .036,.024 if avian else .034,.025 if avian else .037),thigh_mat,{upper:.5,lower:.5},18,10)
         s.ellipsoid(toe.lerp(a,.48),(.027 if avian else .046,.015,.033),skinmat,foot,20,10)
         count=3 if avian else 4
         for d in range(count):
@@ -342,6 +366,16 @@ def limbs_mesh(s,limbs,bodymat,skinmat,clawmat,avian):
             # Tarsal scutes modelled as narrow overlapping bands.
             for j in range(7):
                 p=k.lerp(a,.30+j*.085); s.ellipsoid(p,(.015,.004,.015),clawmat,lower,12,6)
+            # Dense fluffy chestnut crural plumage covering thigh down to knee:
+            crural_rng=random.Random(441 if side>0 else 442)
+            for r_idx in range(4):
+                t_bone=0.18+r_idx*0.22; p_mid=h.lerp(k,t_bone)
+                for f_idx in range(10):
+                    f_ang=TAU*f_idx/10+crural_rng.uniform(-0.15,0.15)
+                    f_norm=Vector((math.sin(f_ang),-0.25,math.cos(f_ang))).normalized()
+                    f_base=p_mid+Vector((math.sin(f_ang)*0.032,0,math.cos(f_ang)*0.030))
+                    f_tip=f_base+f_norm*crural_rng.uniform(0.024,0.034)+Vector((0,-0.014,0))
+                    s.feather(f_base,f_tip,crural_rng.uniform(0.010,0.015),8,upper,normal=f_norm,rows=4,arch=0.0015)
 
 def bird(s,m,limbs):
     profile=[(-.613,.525,.017,.014),(-.590,.526,.025,.022),(-.545,.533,.043,.041),(-.485,.523,.049,.044),(-.430,.489,.047,.041),(-.39,.452,.037,.047),(-.30,.395,.045,.063),(-.19,.286,.108,.128),(-.07,.275,.145,.143),(.10,.285,.153,.141),(.25,.285,.13,.113),(.36,.28,.05,.052)]
@@ -355,8 +389,6 @@ def bird(s,m,limbs):
     def face_x(y,z):
         cy,rx,ry=body_at(z)
         return rx*math.sqrt(max(.02,1-((y-cy)/ry)**2))
-    # Distinct buff crop and lower breast remain visible beneath coverts.
-    s.ellipsoid((0,.258,-.128),(.130,.120,.145),9,{'Body':.45,'Chest':.55},32,18)
     rnd=random.Random(713)
     # Short rounded contour feathers follow the sampled outer body rather than
     # a constant radius. Endpoints and arch sit outside the convex loft.
@@ -373,24 +405,31 @@ def bird(s,m,limbs):
             length=rnd.uniform(.042,.058) if z>-.25 else rnd.uniform(.026,.038)
             tip=surface_at(min(.36,z+length),angle+rnd.uniform(-.045,.045),.004)
             bone='Neck' if z<-.26 else ('Chest' if z<-.08 else 'Body')
-            mat=1 if b.y<.265 else (10 if rnd.random()<.45 else 0)
+            # Exact anatomical zoning matching Reference photos 1, 2, and 3:
+            cos_a = math.cos(angle)
+            if z < -.23:
+                # Neck: ventral throat (cos_a < -0.32) is warm golden-buff; sides and nape are stark white-and-black striped
+                mat = 1 if cos_a < -.32 else 10
+            elif z < -.16:
+                # Clavicle transition: throat bib blends into rich chestnut crop
+                if cos_a < -.30:
+                    mat = 1 if rnd.random() < (-z - .16) / .07 else 8
+                else:
+                    mat = 10 if cos_a > .15 else 8
+            else:
+                # Crop, breast, belly, and flanks: rich saturated fiery chestnut/rust; dorsal is coverts
+                mat = 8 if cos_a < .25 else 0
             s.feather(b,tip,rnd.uniform(.0045,.007) if z<-.25 else rnd.uniform(.010,.016),mat,bone,normal=normal,rows=4,arch=.0012)
-    # Breast feathers follow the outer union of crop and torso. A crop-only
-    # ellipse sinks into the wider torso near its rear and exposes jagged tips.
+    # Breast feathers follow the organic surface with gentle crop fullness.
     def breast_surface(z,angle,offset):
-        cy,rx,ry=body_at(z); sx=math.sin(angle); sy=math.cos(angle)
-        a=sx*sx/(rx*rx)+sy*sy/(ry*ry)
-        b=2*sy*(.258-cy)/(ry*ry); c=(.258-cy)**2/(ry*ry)-1
-        torso=max(0,(-b+math.sqrt(max(0,b*b-4*a*c)))/(2*a))
-        r=math.sqrt(max(0,1-((z+.128)/.145)**2))
-        crop=r/math.sqrt(sx*sx/(.130*.130)+sy*sy/(.120*.120))
-        radius=max(torso,crop)+offset
-        return Vector((sx*radius,.258+sy*radius,z))
+        cy,rx,ry=body_at(z)
+        sy=math.cos(angle)
+        crop_bulge=max(0.0,math.sin(max(0.0,min(math.pi,(z+0.28)/0.23*math.pi))))*max(0.0,-sy)*0.012
+        return surface_at(z,angle,offset+crop_bulge)
     def crop_project(p,t,layer):
-        # Every vane point follows the convex outer union, rather than cutting
-        # a straight chord through the newly fuller anterior crop.
-        angle=math.atan2(p.x,p.y-.258)
-        return breast_surface(p.z,angle,.0065+.0015*t+layer*.00006)
+        cy,rx,ry=body_at(p.z)
+        angle=math.atan2(p.x,p.y-cy)
+        return breast_surface(p.z,angle,.005+.0015*t+layer*.00006)
     for row in range(14):
         z=-.268+row*.026
         for k in range(26):
@@ -399,7 +438,11 @@ def bird(s,m,limbs):
             b=breast_surface(z,angle,.005)
             end_z=min(.10,z+rnd.uniform(.039,.056))
             tip=breast_surface(end_z,angle,.008)
-            s.feather(b,tip,rnd.uniform(.010,.016),1,{'Body':.45,'Chest':.55},normal=normal,rows=4,arch=.0015,project=crop_project)
+            # Smooth feathered blend from warm golden-buff bib (1) to fiery chestnut (8):
+            if z < -.23: mat = 1
+            elif z < -.17: mat = 1 if rnd.random() < (-z - .17)/.06 else 8
+            else: mat = 8
+            s.feather(b,tip,rnd.uniform(.010,.016),mat,{'Body':.45,'Chest':.55},normal=normal,rows=4,arch=.0015,project=crop_project)
     # Soft shoulder coverts bridge the exposed body/wing crescent, with shared
     # weights so the patch follows both the torso and a restrained wing hinge.
     for side,n in ((1,'L'),(-1,'R')):
@@ -416,80 +459,111 @@ def bird(s,m,limbs):
                     normal=(math.sin(angle),math.cos(angle),0),rows=5,arch=.001,project=shoulder_project)
     # Bare orbital skin is a conforming 0.35mm overlay on the actual skull,
     # with an eye opening. It has no separate ellipsoid/disc volume.
-    eye_y=.540; eye_z=-.542
+    eye_y=.540; eye_z=-.538
     for side in (-1,1):
         grid=[]; count=48
+        # Anatomical exposed face boundary around (eye_y, eye_z):
+        # Meets culmen/cere at anterior, stays above throat ruff, below forehead crest
+        boundary=[
+            (.000,.028),   # Posterior / temple (a=0)
+            (.010,.020),   # Upper-posterior
+            (.014,-.002),  # Dorsal / crown edge
+            (.011,-.020),  # Forehead edge
+            (-.002,-.028), # Lore / cere base
+            (-.015,-.024), # Gape / mouth corner
+            (-.024,.004),  # Suborbital cheek
+            (-.012,.022)   # Lower ear covert edge
+        ]
         for j in range(7):
             r=.34+j*(1-.34)/6; ring=[]
             for k in range(count+1):
                 a=TAU*k/count
-                # Anatomical exposed face boundary, extending toward bill/cere;
-                # inner contour is an independent eye aperture, not scaled disc.
-                boundary=[(.003,.025),(.013,.012),(.015,-.015),(.011,-.043),(-.003,-.061),(-.014,-.040),(-.020,-.012),(-.014,.017)]
                 sector=(a/TAU*8)%8; index=int(sector); q=sector-index
                 p0=boundary[(index-1)%8]; p1=boundary[index]; p2=boundary[(index+1)%8]; p3=boundary[(index+2)%8]
                 def margin(axis):
                     return .5*((2*p1[axis])+(-p0[axis]+p2[axis])*q+(2*p0[axis]-5*p1[axis]+4*p2[axis]-p3[axis])*q*q+(-p0[axis]+3*p1[axis]-3*p2[axis]+p3[axis])*q*q*q)
                 outer_y=margin(0); outer_z=margin(1)
                 blend=j/6
-                y=eye_y+math.sin(a)*.008*(1-blend)+outer_y*blend
-                z=eye_z+math.cos(a)*.0086*(1-blend)+outer_z*blend
+                y=eye_y+math.sin(a)*.009*(1-blend)+outer_y*blend
+                z=eye_z+math.cos(a)*.0095*(1-blend)+outer_z*blend
                 x=side*(face_x(y,z)+.0018)
-                ring.append(s.vertex((x,y,z),((z+.61)/.10,(y-.505)/.060),'Head'))
+                # Map directly into center of 1024x1024 orbital-skin texture
+                u=0.50+(z-eye_z)/0.062
+                v=0.50+(y-eye_y)/0.052
+                ring.append(s.vertex((x,y,z),(u,v),'Head'))
             grid.append(ring)
         for j in range(6):
             for k in range(count):
                 q=(grid[j][k],grid[j+1][k],grid[j+1][k+1],grid[j][k+1])
                 s.face(tuple(reversed(q)) if side==1 else q,4)
         x=face_x(eye_y,eye_z)
-        # The iris/pupil sit only 1-2mm above the skull, under the lids.
-        s.ellipsoid((side*(x+.0008),eye_y,eye_z),(.0013,.0066,.0070),6,'Head',28,16)
-        s.ellipsoid((side*(x+.0019),eye_y,eye_z-.0004),(.0005,.0034,.0035),7,'Head',24,14)
+        # Prominent ruby red iris dome, dark limbal ring, and glossy pupil matching Reference 1
+        s.ellipsoid((side*(x+.0008),eye_y,eye_z),(.0016,.0100,.0102),7,'Head',28,16)
+        s.ellipsoid((side*(x+.0012),eye_y,eye_z),(.0018,.0092,.0094),6,'Head',28,16)
+        s.ellipsoid((side*(x+.0026),eye_y,eye_z-.0002),(.0008,.0046,.0047),7,'Head',24,14)
         for upper in (True,False):
             pts=[]
             for k in range(17):
                 a=(0 if upper else math.pi)+math.pi*k/16
-                y=eye_y+math.sin(a)*(.008 if upper else .0076)
-                z=eye_z+math.cos(a)*.0086
-                pts.append((side*(face_x(y,z)+.0022),y,z))
-            s.tube(pts,[.00115 if upper else .0008]*len(pts),4,'Head',8)
+                y=eye_y+math.sin(a)*(.0095 if upper else .0092)
+                z=eye_z+math.cos(a)*.0100
+                pts.append((side*(face_x(y,z)+.0024),y,z))
+            s.tube(pts,[.0012 if upper else .0008]*len(pts),4,'Head',8)
 
     for side,n in ((1,'L'),(-1,'R')):
         for upper,label in ((True,'Upper'),(False,'Lower')):
             bone='Lid'+label+'_'+n; sign=1 if upper else -1; rings=[]
-            center=s.vertex((side*(face_x(eye_y,eye_z)+.00365),eye_y,eye_z),((eye_z+.61)/.10,(eye_y-.505)/.060),bone)
+            center=s.vertex((side*(face_x(eye_y,eye_z)+.0038),eye_y,eye_z),(0.5,0.5),bone)
             for j in range(1,9):
                 r=j/8;ring=[]
                 for k in range(33):
-                    a=math.pi*k/32;y=eye_y+sign*math.sin(a)*.0086*r;z=eye_z+math.cos(a)*.0098*r
-                    x=side*(face_x(y,z)+.0035+.00015*(1-r*r))
-                    # Share the facial UV chart. Radial UVs turned the pore
-                    # texture into circular bands on an otherwise closed lid.
-                    ring.append(s.vertex((x,y,z),((z+.61)/.10,(y-.505)/.060),bone))
+                    a=math.pi*k/32;y=eye_y+sign*math.sin(a)*.0098*r;z=eye_z+math.cos(a)*.0104*r
+                    x=side*(face_x(y,z)+.0036+.00015*(1-r*r))
+                    ring.append(s.vertex((x,y,z),(0.50+(z-eye_z)/0.054,0.50+(y-eye_y)/0.038),bone))
                 rings.append(ring)
             def lid_face(q): s.face(tuple(reversed(q)) if side*sign>0 else q,4)
             for k in range(32): lid_face((center,rings[0][k],rings[0][k+1]))
             for a,b in zip(rings,rings[1:]):
                 for k in range(32): lid_face((a[k],b[k],b[k+1],a[k+1]))
 
-    # Short, flattened bill: broad at attachment, tapering to a restrained hook.
-    s.tube([(0,.529,-.575),(0,.525,-.601),(0,.519,-.628),(0,.512,-.653)],[(.026,.013),(.023,.011),(.016,.007),(.0028,.0025)],5,'Head',28)
-    s.tube([(0,.512,-.579),(0,.511,-.603),(0,.509,-.636),(0,.509,-.648)],[(.023,.0045),(.020,.004),(.010,.0024),(.002,.0012)],5,'Jaw',24)
-    s.tube([(0,.516,-.579),(0,.515,-.610),(0,.510,-.646)],[(.021,.0008),(.017,.0008),(.002,.0004)],7,'Head',16)
-    for side in (-1,1): s.ellipsoid((side*.017,.534,-.603),(.0018,.0017,.0045),7,'Head',16,10)
+    # Stout, deep, raptorial-arched bill matching Reference 1:
+    s.tube([(0,.546,-.564),(0,.550,-.588),(0,.543,-.616),(0,.525,-.642),(0,.492,-.664)],
+           [(.019,.024),(.017,.022),(.014,.018),(.008,.012),(.0020,.0045)],5,'Head',28)
+    s.tube([(0,.518,-.570),(0,.513,-.604),(0,.507,-.632),(0,.500,-.652)],
+           [(.016,.013),(.012,.010),(.007,.006),(.002,.003)],5,'Jaw',24)
+    s.tube([(0,.516,-.572),(0,.514,-.608),(0,.508,-.644)],
+           [(.014,.002),(.010,.0015),(.002,.0005)],7,'Head',16)
+    for side in (-1,1):
+        s.ellipsoid((side*.014,.538,-.590),(.0016,.0020,.0050),7,'Head',16,10)
     rnd=random.Random(19)
-    # Splayed layered crest: varied curved shafts, narrow vanes and fine barbs.
+    # Magnificent radiating multi-layered crest of 88 lanceolate plumes matching Reference 1:
     crest_rng=random.Random(1919)
-    for i in range(21):
-        t=i/20; x=crest_rng.uniform(-.024,.024)
-        z=-.531+t*.068+crest_rng.uniform(-.006,.006); cy,rx,ry=body_at(z)
-        y=cy+ry*math.sqrt(max(.1,1-(x/rx)**2))-.0006
-        height=.074+.047*math.sin(t*math.pi)+crest_rng.uniform(-.015,.011)
-        spread=x*1.5+crest_rng.uniform(-.022,.022)
-        backsweep=.047+.052*t+crest_rng.uniform(-.011,.018)
-        tip=(spread,y+height,z+backsweep)
-        bend=(crest_rng.uniform(-.014,.014),crest_rng.uniform(.002,.011),crest_rng.uniform(-.021,-.007))
-        s.crest_feather((x,y,z),tip,crest_rng.uniform(.0028,.0048),bend,crest_rng.uniform(-1.3,1.3),401+i)
+    for i in range(88):
+        t=i/87.0
+        z_base=-.556+t*.098+crest_rng.uniform(-.003,.003); cy,rx,ry=body_at(z_base)
+        x_norm=crest_rng.uniform(-0.85,0.85)
+        x=x_norm*rx*0.48
+        y_rad=ry*math.sqrt(max(0.05,1.0-(x/max(0.01,rx))**2))
+        y_base=cy+y_rad-0.0005
+        crown_factor=math.sin(t*math.pi)**0.70
+        length=0.092+0.082*crown_factor+crest_rng.uniform(-0.008,0.015)
+        elev_angle=math.radians(70.0-48.0*t+crest_rng.uniform(-3.5,3.5))
+        dy=length*math.sin(elev_angle)
+        dz=length*math.cos(elev_angle)
+        splay=x*0.60+crest_rng.uniform(-0.005,0.005)
+        tip=(splay,y_base+dy,z_base+dz)
+        bend=(x*0.20+crest_rng.uniform(-0.004,0.004),crest_rng.uniform(0.012,0.026),crest_rng.uniform(-0.014,0.004))
+        width=crest_rng.uniform(0.0062,0.0090)*(0.85+0.35*crown_factor)
+        roll=crest_rng.uniform(-0.8,0.8)
+        s.crest_feather((x,y_base,z_base),tip,width,bend,roll,500+i)
+    # Soft downy rufous feathering at crown base:
+    s.ellipsoid((0,.538,-.510),(.026,.018,.042),2,'Head',20,10)
+    for cr in range(35):
+        t_cr=cr/34.0; z_cr=-.550+t_cr*.075+crest_rng.uniform(-.004,.004)
+        cy_cr,rx_cr,ry_cr=body_at(z_cr); a_cr=crest_rng.uniform(-0.85,0.85)
+        p_cr=Vector((math.sin(a_cr)*rx_cr*0.6,cy_cr+math.cos(a_cr)*ry_cr,z_cr))
+        tip_cr=p_cr+Vector((p_cr.x*0.2,0.018+crest_rng.uniform(0,0.012),0.014+crest_rng.uniform(0,0.012)))
+        s.feather(p_cr,tip_cr,crest_rng.uniform(0.006,0.010),2,'Head',normal=(0,1,0),rows=4,arch=0.001)
     # Preserve exact legacy RNG state for all non-crest geometry below.
     for _ in range(15*8): rnd.random()
     for side,n in ((1,'L'),(-1,'R')):
@@ -541,15 +615,18 @@ def bird(s,m,limbs):
             # Reserve a conservative exposed-face clearance envelope for roots,
             # tips and vane widths, not only the root center. Matched Head
             # weighting plus 1.8mm skin offset avoids native depth contention.
-            if abs(b.x)>.006 and min(b.z,tip.z)-.006<-.505 and max(b.z,tip.z)+.006>-.620 and min(b.y,tip.y)-.006<.567 and max(b.y,tip.y)+.006>.506: continue
+            if abs(b.x)>.005 and min(b.z,tip.z)-.004<-.506 and max(b.z,tip.z)+.004>-.572 and min(b.y,tip.y)-.004<.558 and max(b.y,tip.y)+.004>.514: continue
             normal=(math.sin(angle),math.cos(angle),0)
-            s.feather(b,tip,rnd.uniform(.0035,.0055),10 if rnd.random()<.28 else 0,'Head' if z<-.43 else 'Neck',normal=normal,rows=4,arch=.0008)
-    for i in range(11):
-        f=(i-5)/5; b=(f*.035,.286,.31); tip=(f*.14,.21-abs(f)*.01,.82-abs(f)*.08)
-        s.feather(b,tip,.026,0,'Tail',normal=(0,1,0),rows=12)
-        # Physical pale terminal band; mapped feather material gives barbs.
-        s.feather(Vector(b).lerp(Vector(tip),.87),tip,.024,3,'Tail',normal=(0,1,0),rows=3)
-    limbs_mesh(s,limbs,0,5,5,True)
+            mat = 1 if math.cos(angle) < -.25 else (2 if rnd.random() < .45 else 10)
+            s.feather(b,tip,rnd.uniform(.0035,.0055),mat,'Head' if z<-.43 else 'Neck',normal=normal,rows=4,arch=.0008)
+    # Broad graduated tail fan of 12 long rectrices with wide creamy terminal band
+    for i in range(12):
+        f=(i-5.5)/5.5
+        b=(f*.032,.284,.30)
+        tail_len = .85 - abs(f) * .09
+        tip=(f*.18,.20-abs(f)*.015, tail_len)
+        s.feather(b,tip,.040,3,'Tail',normal=(0,1,0),rows=12)
+    limbs_mesh(s,limbs,8,5,5,True)
 
 def porcupine(s,m,limbs):
     samples=body_loft(s,[(-.596,.273,.020,.012),(-.577,.270,.030,.021),(-.545,.267,.043,.036),(-.525,.270,.055,.052),(-.49,.274,.072,.067),(-.42,.292,.104,.098),(-.31,.32,.124,.126),(-.18,.33,.174,.168),(.00,.345,.194,.183),(.16,.323,.185,.165),(.29,.278,.139,.129),(.38,.25,.063,.062)],0)
@@ -828,20 +905,45 @@ def generate(species):
     bpy.ops.wm.read_factory_settings(use_empty=True); REPORT.mkdir(parents=True,exist_ok=True)
     out=ROOT/'game/assets/guardians'/species; out.mkdir(parents=True,exist_ok=True)
     avian=species=='crested_canopy'; texdir=out/'textures'; texdir.mkdir(exist_ok=True)
-    normal=texture('MicroSurface',texdir/'surface-normal.png','feather_normal' if avian else 'fur_normal',(.5,.5,1))
-    if avian:
-        colors=[(.12,.104,.085),(.30,.215,.115),(.27,.115,.033),(.48,.392,.255)]
-        imgs=[texture('Feather'+str(i),texdir/('feather-'+str(i)+'.png'),'feather',c) for i,c in enumerate(colors)]
-        down_normal=texture('UnderplumageNormal',texdir/'underplumage-normal.png','down_normal',(.5,.5,1))
-        dark_down=texture('DarkUnderplumage',texdir/'underplumage.png','down',(.073,.061,.051))
-        buff_down=texture('BuffUnderplumage',texdir/'breast-underplumage.png','down',(.255,.176,.09))
-        streak=texture('StreakedContour',texdir/'streaked-contour.png','streak',colors[0])
-        skin=texture('OrbitalSkin',texdir/'orbital-skin.png','skin',(.065,.265,.34))
-        skin_normal=texture('OrbitalPores',texdir/'orbital-normal.png','skin_normal',(.5,.5,1))
-        mats=[material('FlightChestnut',colors[0],.73,imgs[0],normal,.22),material('BuffCrop',colors[1],.88,imgs[1],normal,.22),material('RufousCrest',colors[2],.83,imgs[2],normal,.22),material('BuffStreak',colors[3],.86,imgs[3],normal,.22),material('BlueOrbitalSkin',(.020,.145,.222),.74,skin,skin_normal,.18),material('HornBillAndScutes',(.085,.071,.050),.49),material('RedIris',(.32,.035,.018),.14),material('WetPupilAndMouth',(.004,.006,.005),.085),material('DarkUnderplumage',(.073,.061,.051),.92,dark_down,down_normal,.13),material('BuffUnderplumage',(.255,.176,.09),.92,buff_down,down_normal,.13),material('StreakedContour',colors[0],.86,streak,normal,.18)]
-    else:
-        fur=texture('Underfur',texdir/'underfur.png','fur',(.14,.10,.063)); quill=texture('BandedQuill',texdir/'quill.png','quill',(.7,.7,.5))
-        mats=[material('DenseUnderfur',(.14,.10,.063),.88,fur,normal),material('BandedQuills',(.7,.6,.3),.42,quill),material('NoseEarsAndGripSkin',(.13,.090,.063),.65,normal=normal,normal_strength=.18),material('WetEyePupil',(.005,.006,.006),.075),material('ClawsNostrilsAndMouth',(.015,.012,.009),.46),material('WhiskersAndIncisors',(.68,.57,.37),.46),material('WetChestnutIris',(.025,.018,.012),.10)]
+    from hoatzin_textures import generate_all_textures
+    generate_all_textures(texdir)
+
+    def load_tex(fname, non_color=False):
+        p = texdir / fname
+        im = bpy.data.images.load(str(p.resolve()), check_existing=False)
+        im.name = p.stem
+        if non_color:
+            im.colorspace_settings.name = 'Non-Color'
+        im.pack()
+        return im
+
+    img_flight = load_tex('feather-0.png')
+    img_buff = load_tex('feather-1.png')
+    img_crest = load_tex('feather-2.png')
+    img_tail = load_tex('feather-3.png')
+    img_skin = load_tex('orbital-skin.png')
+    img_skin_normal = load_tex('orbital-normal.png', non_color=True)
+    img_streak = load_tex('streaked-contour.png')
+    img_dark_down = load_tex('underplumage.png')
+    img_dark_down_normal = load_tex('underplumage-normal.png', non_color=True)
+    img_buff_down = load_tex('breast-underplumage.png')
+    img_surface_normal = load_tex('surface-normal.png', non_color=True)
+    img_horn = load_tex('horn-bill.png')
+    img_iris = load_tex('red-iris.png')
+
+    mats = [
+        material('FlightChestnut', (.651, .231, .082), .58, img_flight, img_surface_normal, .35),
+        material('BuffCrop', (.863, .627, .322), .76, img_buff, img_surface_normal, .25),
+        material('RufousCrest', (.784, .392, .102), .50, img_crest, img_surface_normal, .40),
+        material('BuffStreak', (.910, .859, .749), .56, img_tail, img_surface_normal, .30),
+        material('BlueOrbitalSkin', (.180, .660, .780), .58, img_skin, img_skin_normal, .35),
+        material('HornBillAndScutes', (.110, .125, .141), .46, img_horn, img_surface_normal, .40),
+        material('RedIris', (.82, .07, .07), .06, img_iris, None, 0),
+        material('WetPupilAndMouth', (.005, .005, .006), .02),
+        material('DarkUnderplumage', (.612, .196, .063), .70, img_dark_down, img_dark_down_normal, .25),
+        material('BuffUnderplumage', (.863, .627, .322), .78, img_buff_down, img_dark_down_normal, .25),
+        material('StreakedContour', (.055, .043, .035), .60, img_streak, img_surface_normal, .35)
+    ]
     rig,limbs=rig_for(species); s=Surface()
     bird(s,mats,limbs) if avian else porcupine(s,mats,limbs)
     ob=s.object('HoatzinAnatomy' if avian else 'PorcupineAnatomy',mats,rig)

@@ -33,6 +33,8 @@ public sealed class FloraIndividual
     public double LifespanFactor { get; set; } = 1;
     /// <summary>Last evaluated habitat suitability (0..1), for inspection.</summary>
     public double LastSuitability { get; set; }
+    /// <summary>Habitat reproductive response recorded by flora update for the next reproduction tick.</summary>
+    public double LastReproductionSuitability { get; set; }
     /// <summary>Creeping organisms: biological seconds spent without enough food.</summary>
     public double StarvedFor { get; set; }
     /// <summary>Creeping organisms: stopped to fruit (release spores, then die back).</summary>
@@ -97,62 +99,98 @@ public sealed class ClimberSegment
     public bool Senescent { get; set; }
 }
 
-/// <summary>Uniform-grid bucket index for local flora queries (avoids whole-population scans).</summary>
-public sealed class SpatialBuckets<T> where T : class
+/// <summary>Uniform-grid (spatial hash) bucket index for local queries (avoids whole-population scans).</summary>
+public class SpatialGrid<T> where T : class
 {
     private readonly double _cell;
-    private readonly double _ox, _oz;
-    private readonly int _nx, _nz;
-    private readonly List<T>[] _buckets;
     private readonly Func<T, Vec2> _pos;
+    private readonly Dictionary<(int,int), List<T>> _buckets;
     public int Count { get; private set; }
 
-    public SpatialBuckets(double halfExtent, double cell, Func<T, Vec2> pos)
+    public SpatialGrid(double cell, Func<T, Vec2> pos)
     {
-        _cell = cell; _pos = pos;
-        _nx = _nz = Math.Max(1, (int)Math.Ceiling(2 * halfExtent / cell));
-        _ox = _oz = -_nx * cell / 2;
-        _buckets = new List<T>[_nx * _nz];
-        for (int i = 0; i < _buckets.Length; i++) _buckets[i] = new List<T>(4);
+        _cell = cell <= 0 ? 1 : cell; _pos = pos;
+        _buckets = new Dictionary<(int,int), List<T>>();
     }
 
-    private int Bucket(Vec2 p)
+    public SpatialGrid(double halfExtent, double cell, Func<T, Vec2> pos) : this(cell, pos) { }
+
+    public SpatialGrid(Func<T, Vec2> pos) : this(1.0, pos) { }
+
+    private (int,int) CellOf(Vec2 p) => ((int)Math.Floor(p.X / _cell), (int)Math.Floor(p.Z / _cell));
+
+    public void Clear() { _buckets.Clear(); Count = 0; }
+
+    public void Add(T item)
     {
-        int i = Math.Clamp((int)Math.Floor((p.X - _ox) / _cell), 0, _nx - 1);
-        int j = Math.Clamp((int)Math.Floor((p.Z - _oz) / _cell), 0, _nz - 1);
-        return j * _nx + i;
+        var c = CellOf(_pos(item));
+        if (!_buckets.TryGetValue(c, out var list)) { list = new List<T>(4); _buckets[c] = list; }
+        list.Add(item); Count++;
     }
 
-    public void Clear() { foreach (var b in _buckets) b.Clear(); Count = 0; }
-    public void Add(T item) { _buckets[Bucket(_pos(item))].Add(item); Count++; }
-    public bool Remove(T item, Vec2 at) { bool r = _buckets[Bucket(at)].Remove(item); if (r) Count--; return r; }
+    public bool Remove(T item) { return Remove(item, _pos(item)); }
 
-    /// <summary>Items within radius of p. Order: bucket scan order, then insertion order — deterministic for a
+    public bool Remove(T item, Vec2 at)
+    {
+        var c = CellOf(at);
+        if (!_buckets.TryGetValue(c, out var list)) return false;
+        bool r = list.Remove(item);
+        if (r) Count--;
+        if (list.Count == 0) _buckets.Remove(c);
+        return r;
+    }
+
+    /// <summary>Items within radius of p. Order: cell scan order, then insertion order - deterministic for a
     /// deterministic insertion sequence. Callers that need id order must sort.</summary>
     public void Query(Vec2 p, double radius, List<T> into)
     {
-        int i0 = Math.Clamp((int)Math.Floor((p.X - radius - _ox) / _cell), 0, _nx - 1);
-        int i1 = Math.Clamp((int)Math.Floor((p.X + radius - _ox) / _cell), 0, _nx - 1);
-        int j0 = Math.Clamp((int)Math.Floor((p.Z - radius - _oz) / _cell), 0, _nz - 1);
-        int j1 = Math.Clamp((int)Math.Floor((p.Z + radius - _oz) / _cell), 0, _nz - 1);
+        int i0 = (int)Math.Floor((p.X - radius) / _cell);
+        int i1 = (int)Math.Floor((p.X + radius) / _cell);
+        int j0 = (int)Math.Floor((p.Z - radius) / _cell);
+        int j1 = (int)Math.Floor((p.Z + radius) / _cell);
         double r2 = radius * radius;
         for (int j = j0; j <= j1; j++)
             for (int i = i0; i <= i1; i++)
-                foreach (var it in _buckets[j * _nx + i])
-                    if (Vec2.DistanceSq(_pos(it), p) <= r2) into.Add(it);
+                if (_buckets.TryGetValue((i,j), out var list))
+                    foreach (var it in list)
+                        if (Vec2.DistanceSq(_pos(it), p) <= r2) into.Add(it);
+    }
+
+    public List<T> Query(Vec2 p, double radius)
+    {
+        var into = new List<T>();
+        Query(p, radius, into);
+        return into;
+    }
+
+    public IEnumerable<T> ItemsNear(Vec2 p, double radius)
+    {
+        var into = new List<T>();
+        Query(p, radius, into);
+        return into;
     }
 
     /// <summary>Number of stored items examined by a query (for bounded-cost tests).</summary>
     public int CandidatesExamined(Vec2 p, double radius)
     {
         int n = 0;
-        int i0 = Math.Clamp((int)Math.Floor((p.X - radius - _ox) / _cell), 0, _nx - 1);
-        int i1 = Math.Clamp((int)Math.Floor((p.X + radius - _ox) / _cell), 0, _nx - 1);
-        int j0 = Math.Clamp((int)Math.Floor((p.Z - radius - _oz) / _cell), 0, _nz - 1);
-        int j1 = Math.Clamp((int)Math.Floor((p.Z + radius - _oz) / _cell), 0, _nz - 1);
-        for (int j = j0; j <= j1; j++) for (int i = i0; i <= i1; i++) n += _buckets[j * _nx + i].Count;
+        int i0 = (int)Math.Floor((p.X - radius) / _cell);
+        int i1 = (int)Math.Floor((p.X + radius) / _cell);
+        int j0 = (int)Math.Floor((p.Z - radius) / _cell);
+        int j1 = (int)Math.Floor((p.Z + radius) / _cell);
+        for (int j = j0; j <= j1; j++)
+            for (int i = i0; i <= i1; i++)
+                if (_buckets.TryGetValue((i,j), out var list)) n += list.Count;
         return n;
     }
+}
+
+/// <summary>Backwards-compatible alias for the earlier bounded-bucket index.</summary>
+public sealed class SpatialBuckets<T> : SpatialGrid<T> where T : class
+{
+    public SpatialBuckets(double halfExtent, double cell, Func<T, Vec2> pos) : base(halfExtent, cell, pos) { }
+    public SpatialBuckets(double cell, Func<T, Vec2> pos) : base(cell, pos) { }
+    public SpatialBuckets(Func<T, Vec2> pos) : base(pos) { }
 }
 
 /// <summary>Id-ordered flora population with a spatial index.</summary>
@@ -160,11 +198,12 @@ public sealed class FloraPopulation
 {
     public List<FloraIndividual> Items { get; } = new();
     private readonly Dictionary<EntityId, FloraIndividual> _byId = new();
-    public SpatialBuckets<FloraIndividual> Index { get; }
+    public SpatialGrid<FloraIndividual> Index { get; }
     /// <summary>Changes whenever membership changes (renderer hint; not authoritative).</summary>
     public int Version { get; private set; }
+    private int _indexedVersion;
 
-    public FloraPopulation(double halfExtent) { Index = new SpatialBuckets<FloraIndividual>(halfExtent, 0.5, f => f.Position); }
+    public FloraPopulation(double halfExtent) { Index = new SpatialBuckets<FloraIndividual>(halfExtent, 0.5, f => f.Position); _indexedVersion = Version; }
 
     public int Count => Items.Count;
     public FloraIndividual? Get(EntityId id) => _byId.GetValueOrDefault(id);
@@ -172,17 +211,17 @@ public sealed class FloraPopulation
     public void Add(FloraIndividual f)
     {
         if (Items.Count > 0 && Items[^1].Id.Value >= f.Id.Value) throw new InvalidOperationException("Flora must be added in ascending id order.");
-        Items.Add(f); _byId[f.Id] = f; Index.Add(f); Version++;
+        Items.Add(f); _byId[f.Id] = f; Index.Add(f); Version++; _indexedVersion = Version;
     }
 
     public bool Remove(EntityId id)
     {
         if (!_byId.Remove(id, out var f)) return false;
-        Items.Remove(f); Index.Remove(f, f.Position); Version++;
+        Items.Remove(f); Index.Remove(f, f.Position); Version++; _indexedVersion = Version;
         return true;
     }
 
-    public void Clear() { Items.Clear(); _byId.Clear(); Index.Clear(); Version++; }
+    public void Clear() { Items.Clear(); _byId.Clear(); Index.Clear(); Version++; _indexedVersion = Version; }
 
     /// <summary>Relocates an individual (creeping organisms) keeping the spatial index consistent.</summary>
     public void Move(FloraIndividual f, Vec2 to)
@@ -190,7 +229,19 @@ public sealed class FloraPopulation
         Index.Remove(f, f.Position);
         f.X = to.X; f.Z = to.Z;
         Index.Add(f);
+        _indexedVersion = Version;
     }
 
-    public void Neighbours(Vec2 p, double radius, List<FloraIndividual> into) { into.Clear(); Index.Query(p, radius, into); }
+    public void RebuildIndex() { Index.Clear(); foreach (var f in Items) Index.Add(f); _indexedVersion = Version; }
+
+    public void RebuildIfNeeded() { if (_indexedVersion != Version) RebuildIndex(); }
+
+    public void Neighbours(Vec2 p, double radius, List<FloraIndividual> into) { RebuildIfNeeded(); into.Clear(); Index.Query(p, radius, into); }
+    public void Query(Vec2 p, double radius, List<FloraIndividual> into) { Neighbours(p, radius, into); }
+
+    public List<FloraIndividual> ItemsNear(Vec2 p, double radius) { var list = new List<FloraIndividual>(); Neighbours(p, radius, list); return list; }
+
+    // Aliases for discoverability.
+    public SpatialGrid<FloraIndividual> SpatialGrid => Index;
+    public SpatialGrid<FloraIndividual> SpatialHash => Index;
 }

@@ -28,6 +28,9 @@ uniform float segment_rings = 0.0;   // body segments to mark as faint grooves a
 uniform float bloom = 0.5;      // waxy/dusty surface bloom: 1 = matte chalky cuticle, 0 = clean
 uniform float preview_time = -1.0; // deterministic respiration in capture tools; live uses TIME
 uniform float wet = 0.0;        // aquatic animals: a thin wet film keeps a soft sheen
+// Explicit opt-in: 1 dorsal arthropod cuticle, 2 Moonveil wing scales/thoracic pile.
+// Zero preserves every existing species material and all animation attributes.
+uniform int surface_family = 0;
 
 varying vec4 genes;
 varying float region;
@@ -831,4 +834,48 @@ void fragment() {
     RIM = anim_body_style == 1 || anim_body_style == 2 || detailed ? 0.025 : mix(0.08, 0.2, wet);
     RIM_TINT = 0.6;
     BACKLIGHT = vec3(translucency) * col;
+
+    if (surface_family == 1 && region > 0.5 && region < 1.5 && anim_role < 0.5) {
+        // Silverfish/isopod region 1 includes dorsal cuticle AND head. Their
+        // plate UV.x is a constant body station, so it is not a root-tip mask.
+        float grain = skin_noise(skin_position * 260.0 + vec3(seed * 0.31));
+        float ridge_phase = skin_position.z * 220.0 + sin(skin_position.x * 52.0) * 0.4;
+        float resolved = 1.0 - smoothstep(0.35, 1.2, fwidth(ridge_phase));
+        float ridge = (0.5 + 0.5 * sin(ridge_phase)) * resolved;
+        ALBEDO = col * mix(0.96, 1.02, grain);
+        ROUGHNESS = clamp(mix(0.33, 0.48, grain) + ridge * 0.025, 0.33, 0.51);
+        SPECULAR = 0.42;
+        CLEARCOAT = 0.18 * (1.0 - dullPatch * 0.5);
+        CLEARCOAT_ROUGHNESS = 0.26;
+        // Directional micro-relief produces restrained broken highlights,
+        // including on the head, without requiring missing mesh tangents.
+        float relief = grain * 0.000025 + ridge * 0.000035;
+        vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
+        vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
+        float det = dot(dx, rx);
+        vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
+        gradient *= min(1.0, 0.10 / max(length(gradient), 0.000001));
+        NORMAL = normalize(NORMAL - gradient);
+    }
+    if (surface_family == 2) {
+        bool wing = anim_role > 1.5 && anim_role < 2.5
+            && ((region > 4.5 && region < 5.5) || (region > 7.5 && region < 8.5));
+        bool pile = anim_role < 0.5 && region > 5.5 && region < 6.5;
+        if (wing || pile) {
+            // Verified Moth.Wing UV.x=f is radial root-to-rim; region-6 pile
+            // tubes use UV.x=i for their two endpoint rings (root=0, tip=1).
+            float tip = smoothstep(0.0, 1.0, clamp(body_uv.x, 0.0, 1.0));
+            float neutral = dot(col, vec3(0.2126, 0.7152, 0.0722));
+            ALBEDO = mix(col, vec3(neutral), tip * 0.15) * mix(0.65, 1.15, tip);
+            float ridge_phase = body_uv.y * 603.18579;
+            float resolved = 1.0 - smoothstep(0.35, 1.2, fwidth(ridge_phase));
+            float ridge = (0.5 + 0.5 * sin(ridge_phase)) * resolved;
+            ROUGHNESS = clamp(rough + ridge * 0.035, 0.72, 0.94);
+            SPECULAR = 0.30;
+            CLEARCOAT = 0.0;
+            // Lit grazing response only; no emission or global albedo lift.
+            RIM = pile ? 0.11 : 0.08;
+            RIM_TINT = 0.85;
+        }
+    }
 }

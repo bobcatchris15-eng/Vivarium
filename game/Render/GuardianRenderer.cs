@@ -27,6 +27,7 @@ public partial class GuardianRenderer : Node3D
     private float _prevHeading;
     private float _curHeading;
     private float _shownHeading;
+    private float _prevShownHeading;
     private double _prevT;
     private double _curT;
     private string _currentAnim = "";
@@ -42,6 +43,10 @@ public partial class GuardianRenderer : Node3D
     public GuardianVegetationContact? ShrubContact { get; private set; }
     public GuardianTerrainLegModifier? LegContact { get; private set; }
     public GuardianSkinContact? SkinContact { get; private set; }
+    public GuardianBreathingModifier? BreathingModifier { get; private set; }
+    public GuardianHeadTracker? HeadTracker { get; private set; }
+    public GuardianSecondaryMotion? SecondaryMotion { get; private set; }
+    public GuardianWaterContact? WaterContact { get; private set; }
     public float BodyTrunkCorrection { get; private set; }
     /// <summary>Diagnostic studio support only; null uses production terrain/root contact.</summary>
     public float? ReviewSupportPlaneHeight { get; set; }
@@ -75,7 +80,11 @@ public partial class GuardianRenderer : Node3D
             _skeleton = null;
             AppendageContact = null;
             LegContact = null;
+            BreathingModifier = null;
+            HeadTracker = null;
+            SecondaryMotion = null;
             if (ShrubContact != null) { ShrubContact.QueueFree(); ShrubContact = null; }
+            if (WaterContact != null) { WaterContact.QueueFree(); WaterContact = null; }
         }
 
         if (w.Guardian == null) return;
@@ -91,7 +100,20 @@ public partial class GuardianRenderer : Node3D
                 var scene = GD.Load<PackedScene>(glbPath);
                 if (scene != null)
                 {
-                    _instance = scene.Instantiate<Node3D>();
+                    if (_def.Archetype == "woodland_omnivore" && Array.IndexOf(Main.UserArgs, "--guardian-review") >= 0
+                        && Main.ArgAfter("--guardian-coati-model-candidate") is { } modelPath)
+                    {
+                        using var document = new GltfDocument();
+                        using var state = new GltfState();
+                        if (document.AppendFromFile(modelPath, state) != Error.Ok)
+                            throw new InvalidOperationException("Could not load coati model candidate: " + modelPath);
+                        _instance = document.GenerateScene(state) as Node3D
+                            ?? throw new InvalidOperationException("Coati model candidate is not spatial");
+                    }
+                    else _instance = scene.Instantiate<Node3D>();
+                    if (_def.Archetype == "woodland_omnivore" && Array.IndexOf(Main.UserArgs, "--guardian-review") >= 0
+                        && Main.ArgAfter("--guardian-coati-coat-candidate") is { } coatPath)
+                        LoadReviewCoat(_instance, coatPath);
                     AddChild(_instance);
 
                     _animPlayer = _instance.GetNodeOrNull<AnimationPlayer>("AnimationPlayer")
@@ -126,7 +148,7 @@ public partial class GuardianRenderer : Node3D
         }
         if (_skeleton != null)
             _instance.Basis = new Basis(Vector3.Right, Mathf.Pi / 2) * _instance.Basis;
-        float scale = (float)(_def.VisualScale * w.Guardian.Scale);
+        float scale = (float)(_def.VisualScale * w.Guardian.Scale * GuardianDef.BodySizeMultiplier);
         _instance.Scale *= scale;
         ApplySurfaceMaterials(_instance);
         _groundOffset = Math.Max(0, -LowestPoint(_instance, Transform3D.Identity));
@@ -155,11 +177,11 @@ public partial class GuardianRenderer : Node3D
             }
             if (_def.Archetype == "armored_forest")
             {
-                AppendageContact.FirstTailIndex = 0; AppendageContact.RootRadius = .133f; AppendageContact.TipRadius = .005f; AppendageContact.TipSegmentLength = .05096f;
+                AppendageContact.FirstTailIndex = 0; AppendageContact.RootRadius = .135f; AppendageContact.TipRadius = .008f; AppendageContact.TipSegmentLength = .060f;
                 AppendageContact.BodyBrushRadius = .22f;
                 // Flattened armored tail: broad in plan, thinner underneath.
-                // Profile cross-sections plus7mm cover allowance, not width spheres.
-                AppendageContact.GroundRadii = new[] { .0963f, .0818f, .0685f, .0554f, .0479f, .0409f, .0303f, .0175f, .010f };
+                // Profile cross-sections plus 7mm cover allowance, not width spheres.
+                AppendageContact.GroundRadii = new[] { .100f, .085f, .072f, .060f, .048f, .036f, .026f, .016f, .010f };
             }
             if (_def.Archetype == "crested_canopy")
             {
@@ -173,7 +195,8 @@ public partial class GuardianRenderer : Node3D
             }
             bool continuousBody = _def.Archetype == "canopy_serpent";
             if (continuousBody) ConfigureBoaContact(AppendageContact);
-            else
+            else if (!(Array.IndexOf(Main.UserArgs, "--guardian-review") >= 0
+                && Array.IndexOf(Main.UserArgs, "--guardian-model-no-contact") >= 0))
             {
                 LegContact = new GuardianTerrainLegModifier { Name = "GuardianFootContact", Renderer = this };
                 _skeleton.AddChild(LegContact);
@@ -183,13 +206,57 @@ public partial class GuardianRenderer : Node3D
             GD.Print("GUARDIAN_SKIN_CONTACT " + _def.Archetype + " valid=" + SkinContact.Valid + " " + SkinContact.Diagnostic);
         }
 
+        if (_skeleton != null)
+        {
+            BreathingModifier = new GuardianBreathingModifier { Name = "GuardianBreathingModifier" };
+            _skeleton.AddChild(BreathingModifier);
+
+            HeadTracker = new GuardianHeadTracker { Name = "GuardianHeadTracker" };
+            _skeleton.AddChild(HeadTracker);
+
+            SecondaryMotion = new GuardianSecondaryMotion { Name = "GuardianSecondaryMotion" };
+            _skeleton.AddChild(SecondaryMotion);
+        }
+
+        WaterContact = new GuardianWaterContact { Name = "GuardianWaterContact", Renderer = this, World = w };
+        AddChild(WaterContact);
+
         // Initialize motion track
         var startPos = Bridge.V(w.Guardian.Position);
         _prevPos = _curPos = _shownPos = startPos;
-        _prevHeading = _curHeading = _shownHeading = (float)w.Guardian.Heading;
+        _prevHeading = _curHeading = _shownHeading = _prevShownHeading = (float)w.Guardian.Heading;
         _curT = w.Clock.SimSeconds;
         _prevT = _curT - VivariumWorld.Cadence.FaunaBehaviour * Vivarium.Sim.Time.SimClock.FixedStepSeconds;
         _currentAnim = "";
+    }
+
+    // Review only: replace a single mesh resource while retaining the original
+    // imported scene, skeleton, skin binding, face and animation player.
+    private static void LoadReviewCoat(Node3D instance, string path)
+    {
+        using var document = new GltfDocument();
+        using var state = new GltfState();
+        if (document.AppendFromFile(path, state) != Error.Ok)
+            throw new InvalidOperationException("Could not load coat candidate: " + path);
+        var candidate = document.GenerateScene(state);
+        try
+        {
+            MeshInstance3D? FindFur(Node root)
+            {
+                if (root is MeshInstance3D mesh && mesh.Mesh != null)
+                    for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
+                        if (mesh.GetActiveMaterial(i)?.ResourceName == "CoatiFineFur") return mesh;
+                foreach (Node child in root.GetChildren())
+                    if (FindFur(child) is { } result) return result;
+                return null;
+            }
+            var target = FindFur(instance) ?? throw new InvalidOperationException("Original fur missing");
+            var source = FindFur(candidate) ?? throw new InvalidOperationException("Candidate fur missing");
+            if (source.Mesh.GetSurfaceCount() != target.Mesh.GetSurfaceCount())
+                throw new InvalidOperationException("Coat surface contract changed");
+            target.Mesh = source.Mesh;
+        }
+        finally { candidate.Free(); }
     }
 
     private static void ConfigureBoaContact(GuardianAppendageModifier contact)
@@ -213,11 +280,106 @@ public partial class GuardianRenderer : Node3D
                 if (mesh.GetActiveMaterial(i) is not StandardMaterial3D source) continue;
                 var material = (StandardMaterial3D)source.Duplicate();
                 material.VertexColorUseAsAlbedo = true;
-                if (source.ResourceName == "CoatiFineFur")
+                // Keep the imported pigment, normal maps and roughness texture
+                // channels. Profiles affect only named anatomical materials.
+                switch (source.ResourceName)
                 {
-                    // Grazing response of a matte fibrous coat, kept subtle in
-                    // the neutral studio rather than painted into the albedo.
-                    material.RimEnabled = true; material.Rim = .12f; material.RimTint = .9f;
+                    case "AmberKeratin":
+                        // Its atlas already supplies striae, root wear and
+                        // roughness variation. Roughness is a texture multiplier,
+                        // so gently scale the source factor rather than replace
+                        // the sampled .48-.83 range with one uniform value.
+                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0f, 1f);
+                        material.ClearcoatEnabled = true;
+                        material.Clearcoat = .28f; material.ClearcoatRoughness = .30f;
+                        material.RimEnabled = true; material.Rim = .35f; material.RimTint = .68f;
+                        break;
+                    case "PangolinSkin":
+                        material.Roughness = Math.Clamp(source.Roughness, 0.65f, 1.0f);
+                        material.RimEnabled = true; material.Rim = .08f; material.RimTint = .50f;
+                        break;
+                    case "DarkClaw":
+                        material.Roughness = Math.Clamp(source.Roughness * .75f, 0.20f, 0.70f);
+                        material.ClearcoatEnabled = true;
+                        material.Clearcoat = .35f; material.ClearcoatRoughness = .20f;
+                        break;
+                    case "DenseUnderfur":
+                        // Authored short ribbons already exist beneath quills.
+                        // Lit grazing response improves their separation; it
+                        // cannot fill a coverage gap or replace missing hairs.
+                        material.RimEnabled = true; material.Rim = .14f; material.RimTint = .65f;
+                        break;
+                    case "DarkUnderplumage":
+                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.30f, 0.75f);
+                        material.RimEnabled = true; material.Rim = .28f; material.RimTint = .70f;
+                        break;
+                    case "BlueOrbitalSkin":
+                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.25f, 0.65f);
+                        material.RimEnabled = true; material.Rim = .22f; material.RimTint = .35f;
+                        material.ClearcoatEnabled = true; material.Clearcoat = .24f; material.ClearcoatRoughness = .28f;
+                        break;
+                    case "RufousCrest":
+                        material.Roughness = Math.Clamp(source.Roughness * .80f, 0.15f, 0.65f);
+                        material.RimEnabled = true; material.Rim = .18f; material.RimTint = .35f;
+                        material.ClearcoatEnabled = true; material.Clearcoat = .20f; material.ClearcoatRoughness = .20f;
+                        break;
+                    case "RedIris":
+                        material.Roughness = .04f;
+                        material.ClearcoatEnabled = true; material.Clearcoat = 1.0f; material.ClearcoatRoughness = .01f;
+                        break;
+                    case "WetPupilAndMouth":
+                        material.Roughness = .02f;
+                        material.ClearcoatEnabled = true; material.Clearcoat = 1.0f; material.ClearcoatRoughness = .02f;
+                        break;
+                    case "HornBillAndScutes":
+                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.20f, 0.65f);
+                        material.ClearcoatEnabled = true; material.Clearcoat = .25f; material.ClearcoatRoughness = .25f;
+                        break;
+                    case "BuffCrop":
+                    case "BuffUnderplumage":
+                        material.Roughness = Math.Clamp(source.Roughness * .88f, 0.35f, 0.85f);
+                        material.RimEnabled = true; material.Rim = .25f; material.RimTint = .65f;
+                        break;
+                    case "StreakedContour":
+                        material.Roughness = Math.Clamp(source.Roughness * .90f, 0.25f, 0.75f);
+                        material.RimEnabled = true; material.Rim = .18f; material.RimTint = .50f;
+                        break;
+                    case "BuffStreak":
+                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.20f, 0.65f);
+                        material.RimEnabled = true; material.Rim = .25f; material.RimTint = .65f;
+                        break;
+                    case "FlightChestnut":
+                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.20f, 0.70f);
+                        material.ClearcoatEnabled = true; material.Clearcoat = .18f; material.ClearcoatRoughness = .35f;
+                        material.RimEnabled = true; material.Rim = .25f; material.RimTint = .70f;
+                        break;
+                    case "BandedQuills":
+                    case "BandedQuillsCrown":
+                    case "BandedQuillsFlank":
+                        // Keratin spines: smooth waxy sheen with crisp rim light to accentuate spiky canopy
+                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.28f, 0.60f);
+                        material.ClearcoatEnabled = true;
+                        material.Clearcoat = .35f; material.ClearcoatRoughness = .22f;
+                        material.RimEnabled = true; material.Rim = .35f; material.RimTint = .85f;
+                        break;
+                    case "NoseEarsAndGripSkin":
+                        // Fleshy rose-pink bulbous rhinarium with soft rim response
+                        material.Roughness = Math.Clamp(source.Roughness, 0.48f, 0.68f);
+                        material.RimEnabled = true; material.Rim = .22f; material.RimTint = .75f;
+                        break;
+                    case "PawAndGripSkin":
+                        // Dark charcoal leathery grasping skin on paws and tactile tail
+                        material.Roughness = 0.65f;
+                        material.RimEnabled = true; material.Rim = .10f; material.RimTint = .50f;
+                        break;
+                    case "WhiskersAndIncisors":
+                        material.Roughness = 0.18f;
+                        material.ClearcoatEnabled = true; material.Clearcoat = 0.50f; material.ClearcoatRoughness = 0.15f;
+                        break;
+                    case "ClawsNostrilsAndMouth":
+                        material.Roughness = 0.25f;
+                        material.ClearcoatEnabled = true; material.Clearcoat = 0.25f; material.ClearcoatRoughness = 0.30f;
+                        break;
                 }
                 // Preserve the authored PBR response, including eye gloss, coat,
                 // roughness textures and scale normals. A blanket roughness floor
@@ -436,8 +598,75 @@ public partial class GuardianRenderer : Node3D
             GlobalPosition += Vector3.Up * Math.Min(lift, 0.4f);
         }
 
+        // Update procedural modifiers
+        if (BreathingModifier != null)
+            BreathingModifier.Activity = g.Activity;
+
+        if (HeadTracker != null)
+        {
+            Vector3? targetLookPoint = ResolveInterestPoint(g);
+            bool fast = g.Activity == GuardianActivity.Retreat || (g.Activity is GuardianActivity.Forage or GuardianActivity.Explore && _curPos.DistanceTo(_prevPos) > 1.5f);
+            HeadTracker.SetTarget(targetLookPoint, g.Activity, fast);
+        }
+
+        float headingDelta = Mathf.AngleDifference(_prevShownHeading, _shownHeading);
+        float angularVelocity = delta > 1e-5 ? (float)(headingDelta / delta) : 0f;
+        _prevShownHeading = _shownHeading;
+        if (SecondaryMotion != null)
+            SecondaryMotion.AngularVelocity = angularVelocity;
+
+        WaterContact?.UpdateContact(delta);
+
         // Manage animation state
         UpdateAnimationState(g);
+    }
+
+    private Vector3? ResolveInterestPoint(GuardianIndividual g)
+    {
+        var pos = Bridge.V(g.Position);
+        var target = Bridge.V(g.TargetPosition);
+
+        if (g.Activity is GuardianActivity.Investigate or GuardianActivity.Alert)
+        {
+            if (target.DistanceSquaredTo(Vector3.Zero) > 1e-4f && target.DistanceSquaredTo(pos) > 0.01f)
+                return target;
+            return pos - GlobalBasis.Z.Normalized() * 2.0f;
+        }
+
+        if (g.Activity is GuardianActivity.Feed or GuardianActivity.Drink)
+        {
+            if (target.DistanceSquaredTo(Vector3.Zero) > 1e-4f)
+                return target;
+            return pos - GlobalBasis.Z.Normalized() * 0.5f;
+        }
+
+        if (g.Activity is GuardianActivity.Explore or GuardianActivity.Rest)
+        {
+            if (target.DistanceSquaredTo(Vector3.Zero) > 1e-4f && target.DistanceSquaredTo(pos) > 0.04f)
+                return target;
+        }
+
+        return null;
+    }
+
+    private string ResolvePlayAnim(GuardianIndividual g)
+    {
+        if (_animPlayer == null) return "idle";
+        foreach (string name in new[] { "play_object", "play_sprint", "play_roll", "play_flutter", "play_hang", "play_strike", "play" })
+        {
+            if (_animPlayer.HasAnimation(name)) return name;
+        }
+        return "idle";
+    }
+
+    private string ResolveInvestigateAnim(GuardianIndividual g)
+    {
+        if (_animPlayer == null) return "idle";
+        foreach (string name in new[] { "investigate_sniff", "investigate_tongue", "investigate_dig", "investigate_scan", "investigate_look", "investigate" })
+        {
+            if (_animPlayer.HasAnimation(name)) return name;
+        }
+        return "idle";
     }
 
     private Basis TerrainBasis(Vector3 point, Basis yaw)
@@ -458,24 +687,54 @@ public partial class GuardianRenderer : Node3D
     {
         if (_animPlayer == null) return;
 
+        bool HasAnim(string name) => _animPlayer.HasAnimation(name);
+
         string targetAnim = g.Activity switch
         {
             GuardianActivity.Rest => "rest",
+            GuardianActivity.Sleep => HasAnim("sleep") ? "sleep" : "rest",
+            GuardianActivity.Settle => HasAnim("settle") ? "settle" : "idle",
+            GuardianActivity.Stretch => HasAnim("stretch") ? "stretch" : "idle",
             GuardianActivity.Feed => "feed",
-            GuardianActivity.Forage or GuardianActivity.Explore or
-            GuardianActivity.Climb or GuardianActivity.Retreat or GuardianActivity.ReturnHome => "walk",
+            GuardianActivity.Drink => HasAnim("drink") ? "drink" : (HasAnim("feed") ? "feed" : "idle"),
+            GuardianActivity.Bathe => HasAnim("bathe") ? "bathe" : "idle",
+            GuardianActivity.ShakeOff => HasAnim("shake_off") ? "shake_off" : "idle",
+            GuardianActivity.Bask => HasAnim("bask") ? "bask" : "rest",
+            GuardianActivity.Dig => HasAnim("dig") ? "dig" : "feed",
+            GuardianActivity.Groom => HasAnim("groom_detail") ? "groom_detail" : (HasAnim("groom") ? "groom" : "idle"),
+            GuardianActivity.Yawn => HasAnim("yawn") ? "yawn" : "idle",
+            GuardianActivity.Play => ResolvePlayAnim(g),
+            GuardianActivity.Investigate => ResolveInvestigateAnim(g),
+            GuardianActivity.Alert => HasAnim("alert") ? "alert" : "idle",
+            GuardianActivity.ScentMark => HasAnim("scent_mark") ? "scent_mark" : "idle",
+            GuardianActivity.Forage or GuardianActivity.Explore or GuardianActivity.Climb or GuardianActivity.ReturnHome => "walk",
+            GuardianActivity.Retreat => HasAnim("run") ? "run" : "walk",
             _ => "idle"
         };
 
-        if (targetAnim == "walk" && g.Locomotion == LocomotionMode.Serpentine && _animPlayer.HasAnimation("slither"))
+        if (targetAnim == "walk" && g.Locomotion == LocomotionMode.Serpentine && HasAnim("slither"))
             targetAnim = "slither";
-        if (!_animPlayer.HasAnimation(targetAnim)) targetAnim = "idle";
+
+        if (!HasAnim(targetAnim)) targetAnim = "idle";
+
         float strideScale = targetAnim is "walk" or "slither" ? (float)(1 / Math.Max(0.1, g.Scale)) : 1;
-        _animPlayer.SpeedScale = _w!.Clock.Paused ? 0 : (float)_w.Clock.SpeedMultiplier
-            * (g.Activity == GuardianActivity.Retreat ? 1.8f : 1.0f) * strideScale;
-        if (targetAnim != _currentAnim && _animPlayer.HasAnimation(targetAnim))
+
+        float activitySpeed = g.Activity switch
         {
-            _animPlayer.Play(targetAnim, customBlend: 0.25);
+            GuardianActivity.Sleep => 0.4f,
+            GuardianActivity.Bask => 0.3f,
+            GuardianActivity.Settle => 0.7f,
+            GuardianActivity.Retreat => 1.8f,
+            GuardianActivity.Alert => 1.0f,
+            _ => 1.0f
+        };
+
+        _animPlayer.SpeedScale = _w!.Clock.Paused ? 0 : (float)_w.Clock.SpeedMultiplier * activitySpeed * strideScale;
+
+        if (targetAnim != _currentAnim && HasAnim(targetAnim))
+        {
+            float blend = targetAnim is "alert" or "shake_off" ? 0.1f : 0.35f;
+            _animPlayer.Play(targetAnim, customBlend: blend);
             _currentAnim = targetAnim;
         }
     }

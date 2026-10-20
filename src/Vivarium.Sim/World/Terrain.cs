@@ -91,9 +91,9 @@ public sealed class Heightfield
             {
                 Vec2 a = new(f.X, f.Z), ab = new Vec2(f.ToX, f.ToZ) - a;
                 double along = ab.LengthSq > 1e-12 ? (p - a).Dot(ab) / ab.LengthSq : 0;
-                dd = Vec2.Distance(p, a + ab * MathD.Clamp01(along)) / f.Width;
-                // Extrapolate the grade through the rounded end caps instead of making flat traps at joins.
-                floor += ((f.ToBedHeight ?? floor) - floor) * along;
+                double clampedAlong = MathD.Clamp01(along);
+                dd = Vec2.Distance(p, a + ab * clampedAlong) / f.Width;
+                floor += ((f.ToBedHeight ?? floor) - floor) * clampedAlong;
             }
             else if (f.Type == "basin") dd = Vec2.Distance(p, new Vec2(f.X, f.Z)) / f.Radius;
             else continue;

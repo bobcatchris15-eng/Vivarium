@@ -74,6 +74,88 @@ public class PilotTreeMeshTests
             }
     }
 
+    [Theory]
+    [InlineData("gloomspire")]
+    [InlineData("needlevault")]
+    public void OldGrowthRootAndTrunkSurviveAuthoredCrownCutover(string species)
+    {
+        var world=World(species);
+        var complete=PilotTreeMeshes.Build(world);
+        var structural=PilotTreeMeshes.Build(world,includeCrown:false);
+        Assert.True(structural.TriangleCount>1000);
+        Assert.True(complete.TriangleCount>structural.TriangleCount);
+        Assert.All(Enumerable.Range(0,structural.VertexCount),
+            i=>Assert.True(structural.Colors[i*4+3]>.9f,
+                "Only the authoritative woody trunk/roots remain"));
+        foreach(var root in world.PilotTree!.Roots.Where(p=>p.AlongSide))
+        {
+            var sample=root.Samples[root.Samples.Count/2];
+            var crest=Vec3.FromXZ(sample.Position,sample.GroundY+sample.Height);
+            Assert.Contains(Enumerable.Range(0,structural.VertexCount),
+                i=>(structural.Position(i)-crest).Length<1e-5);
+        }
+        Assert.Equal(structural.DigestHex(),
+            PilotTreeMeshes.Build(world,includeCrown:false).DigestHex());
+    }
+
+    [Fact]
+    public void DynamicRootMeshAndStaticTrunkRecombineToOriginalExactTree()
+    {
+        foreach (var def in PilotTreeCatalog.All)
+        {
+            var w=World(def.Id);
+            var source=PilotTreeMeshes.Build(w);
+            var roots=PilotTreeMeshes.BuildRoots(w);
+            var trunkAndCrown=PilotTreeMeshes.BuildTrunkAndCrown(w);
+            Assert.True(roots.TriangleCount>0);
+            Assert.True(trunkAndCrown.TriangleCount>0);
+            Assert.Equal(source.TriangleCount,
+                roots.TriangleCount+trunkAndCrown.TriangleCount);
+            var reconstructed=new MeshData();
+            reconstructed.Append(roots);
+            reconstructed.Append(trunkAndCrown);
+            Assert.Equal(source.DigestHex(),reconstructed.DigestHex());
+            var onlyTrunk=PilotTreeMeshes.BuildTrunkAndCrown(w,includeCrown:false);
+            Assert.True(onlyTrunk.TriangleCount<trunkAndCrown.TriangleCount);
+        }
+    }
+
+    [Theory]
+    [InlineData("gloomspire")]
+    [InlineData("needlevault")]
+    public void RootFootprintSignatureIgnoresRemoteTerrainButDetectsRootErosion(string species)
+    {
+        var w=World(species);
+        var terrain=w.Terrain;
+        ulong original=PilotTreeMeshes.RootGroundSignature(w);
+        Assert.Equal(original,PilotTreeMeshes.RootGroundSignature(w));
+        int version=terrain.Version;
+        terrain.BeginEdit();
+        // Central field is outside the corner/root perimeter. An unrelated
+        // global Terrain.Version bump cannot justify remeshing ancient roots.
+        int centerI=(int)Math.Round((0-terrain.OriginX)/terrain.Step);
+        int centerJ=(int)Math.Round((0-terrain.OriginZ)/terrain.Step);
+        for(int j=centerJ;j<=centerJ+1;j++)
+        for(int i=centerI;i<=centerI+1;i++)
+            terrain.H[terrain.VertexIndex(i,j)]+=.01;
+        terrain.Touch();
+        Assert.True(terrain.Version>version);
+        Assert.Equal(original,PilotTreeMeshes.RootGroundSignature(w));
+
+        // Edit the four terrain vertices interpolated under a real root crest.
+        var sample=w.PilotTree!.Roots.First().Samples[5];
+        var point=sample.Position;
+        int ix=(int)Math.Floor((point.X-terrain.OriginX)/terrain.Step);
+        int iz=(int)Math.Floor((point.Z-terrain.OriginZ)/terrain.Step);
+        string before=PilotTreeMeshes.BuildRoots(w).DigestHex();
+        for(int j=iz;j<=iz+1;j++)
+        for(int i=ix;i<=ix+1;i++)
+            terrain.H[terrain.VertexIndex(i,j)]+=.015;
+        terrain.Touch();
+        Assert.NotEqual(original,PilotTreeMeshes.RootGroundSignature(w));
+        Assert.NotEqual(before,PilotTreeMeshes.BuildRoots(w).DigestHex());
+    }
+
     [Fact]
     public void NoPilotTreeBuildsNoGeometry()
     {

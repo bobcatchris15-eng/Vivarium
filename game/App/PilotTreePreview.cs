@@ -60,8 +60,11 @@ public partial class PilotTreePreview : Node3D
                 if (tree.Def.Id != id || tree.Corner < 0 || tree.Corner >= 6 || world.Seed != 424242)
                     throw new InvalidOperationException("New world selection did not reach simulation");
                 var bounds = session.PilotTree.Tree!.Mesh.GetAabb();
-                Vector3 center = bounds.Position + bounds.Size * 0.5f;
-                float span = Math.Max(bounds.Size.Y, Math.Max(bounds.Size.X, bounds.Size.Z));
+                // A root/trunk-only mesh is narrower than the new GPU crown.
+                // Anchor the camera to the authoritative full pilot-tree world form.
+                Vector3 center = Bridge.V(tree.Anchor,tree.BaseHeight+tree.Def.TrunkHeight*.55);
+                float span = Math.Max((float)tree.Def.TrunkHeight,
+                    (float)tree.Def.CanopyRadius*2.0f);
                 var inward = new Vector3((float)-tree.CornerPoint.X, 0, (float)-tree.CornerPoint.Z).Normalized();
                 var sideways = inward.Cross(Vector3.Up).Normalized();
                 string dir = Path.Combine(OutDir, id);
@@ -89,6 +92,54 @@ public partial class PilotTreePreview : Node3D
                 await CaptureFrame(dir, backName);
                 captures.Add(new { id, view = "back-slice", file = Path.GetFullPath(Path.Combine(dir, backName)),
                     eye = new[] { backEye.X, backEye.Y, backEye.Z }, target = new[] { center.X, center.Y, center.Z } });
+                if(Main.UserArgs.Contains("--pilot-root-revision-test"))
+                {
+                    var terrain=world.Terrain;
+                    var renderer=session.PilotTree;
+                    var originalRootMesh=renderer.Roots!.Mesh;
+                    // Bridge.ToArrayMesh mutates an existing ArrayMesh in place:
+                    // native resource identity is NOT an indication of upload.
+                    using var beforeArrays=originalRootMesh.SurfaceGetArrays(0);
+                    var originalRootVertices=beforeArrays[(int)Mesh.ArrayType.Vertex]
+                        .AsVector3Array().ToArray();
+                    long startRebuilds=renderer.RootMeshRebuilds;
+                    long startSkips=renderer.UnchangedRootFootprints;
+                    terrain.BeginEdit();
+                    // Edited central interior, deliberately remote from the
+                    // ancient boundary roots. Native renderer must skip upload.
+                    int ci=(int)Math.Round((-terrain.OriginX)/terrain.Step);
+                    int cj=(int)Math.Round((-terrain.OriginZ)/terrain.Step);
+                    for(int j=cj;j<=cj+1;j++)
+                    for(int i=ci;i<=ci+1;i++)
+                        terrain.H[terrain.VertexIndex(i,j)]+=.01;
+                    terrain.Touch();
+                    renderer._Process(.3);
+                    if(renderer.RootMeshRebuilds!=startRebuilds ||
+                       renderer.UnchangedRootFootprints<=startSkips ||
+                       !ReferenceEquals(originalRootMesh,renderer.Roots.Mesh))
+                        throw new InvalidOperationException("Distant erosion rebuilt ancient roots");
+
+                    // Move ground directly underneath an actual crest; the
+                    // render mesh must change but static trunk remain unchanged.
+                    var rootSample=tree.Roots.First().Samples[5];
+                    int ri=(int)Math.Floor((rootSample.Position.X-terrain.OriginX)/terrain.Step);
+                    int rj=(int)Math.Floor((rootSample.Position.Z-terrain.OriginZ)/terrain.Step);
+                    var originalTrunk=renderer.Tree!.Mesh;
+                    for(int j=rj;j<=rj+1;j++)
+                    for(int i=ri;i<=ri+1;i++)
+                        terrain.H[terrain.VertexIndex(i,j)]+=.015;
+                    terrain.Touch();
+                    renderer._Process(.3);
+                    using var afterArrays=renderer.Roots.Mesh.SurfaceGetArrays(0);
+                    var movedVertices=afterArrays[(int)Mesh.ArrayType.Vertex]
+                        .AsVector3Array().ToArray();
+                    if(renderer.RootMeshRebuilds!=startRebuilds+1 ||
+                       originalRootVertices.SequenceEqual(movedVertices) ||
+                       !ReferenceEquals(originalTrunk,renderer.Tree.Mesh))
+                        throw new InvalidOperationException(
+                            $"Local erosion failed to update roots independently: builds={renderer.RootMeshRebuilds-startRebuilds}, geometryChanged={!originalRootVertices.SequenceEqual(movedVertices)}, trunkUnchanged={ReferenceEquals(originalTrunk,renderer.Tree.Mesh)}");
+                    GD.Print($"PILOT_ROOT_FOOTPRINT_VERIFIED species={id} local_rebuilds={renderer.RootMeshRebuilds-startRebuilds} distant_skips={renderer.UnchangedRootFootprints-startSkips}");
+                }
                 GD.Print("PILOT_TREE_SPECIES_OK " + id);
             }
             session.Ui.Visible = true;

@@ -42,11 +42,29 @@ public sealed class EnvironmentFields
         "detritus" => Detritus, "biofilm" => Biofilm, "plankton" => Plankton, "nutrients" => Nutrients, _ => null,
     };
 
-    /// <summary>Generates soil terrain. Rock substrate is supplied only by placed rock props.</summary>
-    public void GenerateBaseSubstrate(WorldDescriptor d, Heightfield hf)
+    /// <summary>
+    /// Generate substrate from actual terrain retention/exposure instead of
+    /// painting random rock cells. Thin drained ridges expose gravel or rock;
+    /// sheltered hollows retain soil. Placed props still take precedence.
+    /// </summary>
+    public void GenerateBaseSubstrate(WorldDescriptor d, Heightfield hf, RootZoneEnvironment? rootZone = null)
     {
+        rootZone?.EnsureCurrent();
+        double exposure = d.Terrain.RockExposure;
         foreach (int idx in Grid.DomainCells)
-            BaseSubstrate[idx] = (byte)Substrate.Soil;
+        {
+            Substrate substrate = Substrate.Soil;
+            if (exposure > 0 && rootZone != null)
+            {
+                double topsoil = rootZone.RetainedTopsoilDepth.Values[idx];
+                double drainage = rootZone.DrainagePotential.Values[idx];
+                if (topsoil < 0.10 + 0.15 * exposure && drainage >= 0.65)
+                    substrate = Substrate.Rock;
+                else if (topsoil < 0.18 + 0.25 * exposure && drainage >= 0.48)
+                    substrate = Substrate.Gravel;
+            }
+            BaseSubstrate[idx] = (byte)substrate;
+        }
     }
 
     public bool LightStale(PropSet props) => _lightPropsVersion != props.Version;
@@ -109,14 +127,39 @@ public sealed class EnvironmentFields
         });
     }
 
-    /// <summary>Nutrient relaxation toward baseline plus diffusion. Deterministic and bounded.</summary>
-    public void StepNutrients(EcologyConfig eco, double dt)
+    /// <summary>
+    /// Effective stored mineral nutrients from the maintained soil reservoir.
+    /// Soil depth provides storage; drainage exposes the reservoir to leaching.
+    /// This is the existing external baseline replenishment, not a new pulse.
+    /// </summary>
+    public static double MineralReservoirTarget(EcologyConfig eco, double topsoilDepth, double drainage)
     {
+        double retention = MathD.Clamp(0.45 + 0.68 * topsoilDepth / 0.65 -
+                                       0.16 * drainage, 0.18, 1.35);
+        return MathD.Clamp(eco.NutrientBaseline * retention, 0, eco.NutrientMax);
+    }
+
+    /// <summary>Initialize the physically retained pool before ecology starts.</summary>
+    public void InitializeMineralNutrients(EcologyConfig eco, RootZoneEnvironment rootZone)
+    {
+        rootZone.EnsureCurrent();
+        foreach (int idx in Grid.DomainCells)
+            Nutrients[idx] = MineralReservoirTarget(eco,
+                rootZone.RetainedTopsoilDepth.Values[idx], rootZone.DrainagePotential.Values[idx]);
+    }
+
+    /// <summary>Mineral replenishment and diffusion; local biological uptake remains authoritative.</summary>
+    public void StepNutrients(EcologyConfig eco, double dt, RootZoneEnvironment? rootZone = null)
+    {
+        rootZone?.EnsureCurrent();
         double relax = 1 - Math.Exp(-eco.NutrientRelax * dt);
         foreach (int idx in Grid.DomainCells)
         {
             double v = Nutrients.Values[idx];
-            Nutrients[idx] = v + (eco.NutrientBaseline - v) * relax;
+            double target = rootZone == null ? eco.NutrientBaseline :
+                MineralReservoirTarget(eco, rootZone.RetainedTopsoilDepth.Values[idx],
+                    rootZone.DrainagePotential.Values[idx]);
+            Nutrients[idx] = v + (target - v) * relax;
         }
         Nutrients.Diffuse(eco.NutrientDiffusion * dt, Scratch);
     }

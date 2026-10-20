@@ -5,153 +5,309 @@
   "diameter": 10,
   "cellSize": 0.25,
   "terrain": {
-    "baseHeight": 0.12,
-    "relief": 0.025,
+    "baseHeight": 0.18,
+    "relief": 0.075,
     "noiseScale": 0.18,
     "octaves": 3,
-    "minHeight": -0.65,
-    "maxHeight": 1.3,
-    "bottom": -2.6,
+    "minHeight": -0.9,
+    "maxHeight": 2.2,
+    "bottom": -3.2,
     "rockExposure": 0.035,
+    "slopeX": -0.004,
+    "slopeZ": -0.008,
     "features": [
-      {
-        "type": "basin",
-        "x": 0.15,
-        "z": 1.05,
-        "radius": 4.3,
-        "bedHeight": -0.05,
-        "amount": 0.012
-      },
-      {
-        "type": "basin",
-        "x": -1.75,
-        "z": -0.65,
-        "radius": 2.6,
-        "bedHeight": -0.032,
-        "amount": 0.012
-      },
-      {
-        "type": "basin",
-        "x": 2.0,
-        "z": -0.2,
-        "radius": 2.4,
-        "bedHeight": -0.025,
-        "amount": 0.01
-      },
       {
         "type": "hill",
         "x": -2.85,
         "z": 1.9,
         "radius": 2.4,
-        "amount": 0.065
+        "amount": 0.091
       },
       {
         "type": "hill",
         "x": 3.15,
         "z": 1.25,
         "radius": 2.0,
-        "amount": 0.05
+        "amount": 0.07
+      },
+      {
+        "type": "basin",
+        "x": 0.15,
+        "z": 1.05,
+        "radius": 3.9,
+        "amount": 0.012,
+        "bedHeight": -0.05
+      },
+      {
+        "type": "basin",
+        "x": -1.75,
+        "z": -0.65,
+        "radius": 2.5,
+        "amount": 0.012,
+        "bedHeight": -0.032
+      },
+      {
+        "type": "basin",
+        "x": 2.0,
+        "z": -0.2,
+        "radius": 2.3,
+        "amount": 0.01,
+        "bedHeight": -0.025
+      },
+      {
+        "type": "basin",
+        "x": 0.6,
+        "z": 3.6,
+        "radius": 2.6,
+        "amount": 0.014,
+        "bedHeight": -0.05
+      },
+      {
+        "type": "basin",
+        "x": -1.9,
+        "z": -1.0,
+        "radius": 0.6,
+        "amount": 0.08,
+        "bedHeight": -0.01
+      },
+      {
+        "type": "basin",
+        "x": -0.65,
+        "z": 0.15,
+        "radius": 0.65,
+        "amount": 0.08,
+        "bedHeight": -0.035
+      },
+      {
+        "type": "basin",
+        "x": 1.5,
+        "z": -0.85,
+        "radius": 0.6,
+        "amount": 0.08,
+        "bedHeight": -0.01
+      },
+      {
+        "type": "basin",
+        "x": 1.4,
+        "z": 0.1,
+        "radius": 0.6,
+        "amount": 0.08,
+        "bedHeight": -0.035
+      },
+      {
+        "type": "basin",
+        "x": 0.5,
+        "z": 2.2,
+        "radius": 0.65,
+        "amount": 0.08,
+        "bedHeight": -0.055
       },
       {
         "type": "channel",
         "x": -2.6,
         "z": -2.4,
-        "toX": -1.9,
-        "toZ": -1.0,
-        "width": 0.23,
+        "toX": -2.25,
+        "toZ": -1.7,
+        "width": 0.2,
         "amount": 0.145,
         "sharp": true,
-        "bedHeight": 0.0382,
-        "toBedHeight": 0.0046
+        "bedHeight": 0.12,
+        "toBedHeight": 0.06
+      },
+      {
+        "type": "channel",
+        "x": -2.25,
+        "z": -1.7,
+        "toX": -1.9,
+        "toZ": -1.0,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": 0.06,
+        "toBedHeight": -0.01
       },
       {
         "type": "channel",
         "x": -1.9,
         "z": -1.0,
-        "toX": -0.65,
-        "toZ": 0.15,
-        "width": 0.2524,
+        "toX": -1.3,
+        "toZ": -0.4,
+        "width": 0.2,
         "amount": 0.145,
         "sharp": true,
-        "bedHeight": 0.0046,
-        "toBedHeight": -0.0257
+        "bedHeight": -0.01,
+        "toBedHeight": -0.025
+      },
+      {
+        "type": "channel",
+        "x": -1.3,
+        "z": -0.4,
+        "toX": -0.65,
+        "toZ": 0.15,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.025,
+        "toBedHeight": -0.035
       },
       {
         "type": "channel",
         "x": -0.65,
         "z": 0.15,
-        "toX": 0.35,
-        "toZ": 1.0,
-        "width": 0.2198,
+        "toX": -0.15,
+        "toZ": 0.6,
+        "width": 0.2,
         "amount": 0.145,
         "sharp": true,
-        "bedHeight": -0.0257,
-        "toBedHeight": -0.0484
+        "bedHeight": -0.035,
+        "toBedHeight": -0.04
       },
       {
         "type": "channel",
-        "x": 0.35,
-        "z": 1.0,
-        "toX": 0.6,
-        "toZ": 2.4,
-        "width": 0.2122,
+        "x": -0.15,
+        "z": 0.6,
+        "toX": 0.2,
+        "toZ": 1.1,
+        "width": 0.2,
         "amount": 0.145,
         "sharp": true,
-        "bedHeight": -0.0484,
-        "toBedHeight": -0.0802
+        "bedHeight": -0.04,
+        "toBedHeight": -0.05
+      },
+      {
+        "type": "channel",
+        "x": 0.2,
+        "z": 1.1,
+        "toX": 0.4,
+        "toZ": 1.65,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.05,
+        "toBedHeight": -0.052
+      },
+      {
+        "type": "channel",
+        "x": 0.4,
+        "z": 1.65,
+        "toX": 0.5,
+        "toZ": 2.2,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.052,
+        "toBedHeight": -0.055
+      },
+      {
+        "type": "channel",
+        "x": 0.5,
+        "z": 2.2,
+        "toX": 0.55,
+        "toZ": 2.95,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.055,
+        "toBedHeight": -0.058
+      },
+      {
+        "type": "channel",
+        "x": 0.55,
+        "z": 2.95,
+        "toX": 0.65,
+        "toZ": 3.85,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.058,
+        "toBedHeight": -0.06
       },
       {
         "type": "channel",
         "x": 2.4,
         "z": -2.0,
-        "toX": 1.5,
-        "toZ": -0.85,
-        "width": 0.23,
+        "toX": 1.95,
+        "toZ": -1.4,
+        "width": 0.2,
         "amount": 0.145,
         "sharp": true,
-        "bedHeight": 0.0094,
-        "toBedHeight": -0.0123
+        "bedHeight": 0.1,
+        "toBedHeight": 0.05
+      },
+      {
+        "type": "channel",
+        "x": 1.95,
+        "z": -1.4,
+        "toX": 1.5,
+        "toZ": -0.85,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": 0.05,
+        "toBedHeight": -0.01
       },
       {
         "type": "channel",
         "x": 1.5,
         "z": -0.85,
-        "toX": 1.4,
-        "toZ": 0.1,
-        "width": 0.2524,
+        "toX": 1.45,
+        "toZ": -0.35,
+        "width": 0.2,
         "amount": 0.145,
         "sharp": true,
-        "bedHeight": -0.0123,
-        "toBedHeight": -0.0328
+        "bedHeight": -0.01,
+        "toBedHeight": -0.025
+      },
+      {
+        "type": "channel",
+        "x": 1.45,
+        "z": -0.35,
+        "toX": 1.4,
+        "toZ": 0.1,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.025,
+        "toBedHeight": -0.035
       },
       {
         "type": "channel",
         "x": 1.4,
         "z": 0.1,
-        "toX": 0.35,
-        "toZ": 1.0,
-        "width": 0.2198,
+        "toX": 0.85,
+        "toZ": 0.55,
+        "width": 0.2,
         "amount": 0.145,
         "sharp": true,
-        "bedHeight": -0.0328,
-        "toBedHeight": -0.0484
+        "bedHeight": -0.035,
+        "toBedHeight": -0.045
+      },
+      {
+        "type": "channel",
+        "x": 0.85,
+        "z": 0.55,
+        "toX": 0.2,
+        "toZ": 1.1,
+        "width": 0.2,
+        "amount": 0.145,
+        "sharp": true,
+        "bedHeight": -0.045,
+        "toBedHeight": -0.05
       }
-    ],
-    "slopeX": -0.004,
-    "slopeZ": -0.022
+    ]
   },
   "water": {
-    "waterTable": 0,
+    "waterTable": 0.0,
     "springs": [
       {
         "x": -2.6,
         "z": -2.4,
-        "dischargePerHour": 0.18
+        "dischargePerHour": 0.2277
       },
       {
         "x": 2.4,
         "z": -2.0,
-        "dischargePerHour": 0.18
+        "dischargePerHour": 0.2277
       }
     ],
     "flowRate": 0.16,
@@ -168,82 +324,107 @@
     "rocks": 3,
     "rockMinScale": 0.12,
     "rockMaxScale": 0.38,
-    "logs": 6,
+    "logs": 4,
     "logMinLength": 1.4,
     "logMaxLength": 2.6,
     "logMinRadius": 0.12,
     "logMaxRadius": 0.25,
-    "gravelPatches": 2,
+    "gravelPatches": 1,
     "gravelMinRadius": 0.3,
     "gravelMaxRadius": 0.7,
     "spacing": 0.35
   },
   "starterFlora": [
     {
+      "species": "vaultfern",
+      "count": 3
+    },
+    {
+      "species": "rainshield",
+      "count": 7
+    },
+    {
+      "species": "lacemantle",
+      "count": 3
+    },
+    {
       "species": "floodlace_moss",
-      "count": 10
+      "count": 20
     },
     {
       "species": "bogglass_moss",
-      "count": 10
+      "count": 20
     },
     {
       "species": "ringreed",
-      "count": 8
+      "count": 16
     },
     {
       "species": "glassrush",
-      "count": 7
+      "count": 14
     },
     {
       "species": "mooncoin",
-      "count": 7
+      "count": 14
     },
     {
       "species": "veilfern",
-      "count": 6
+      "count": 12
     },
     {
       "species": "dewbonnet",
-      "count": 6
+      "count": 12
     },
     {
       "species": "emberfan_fungus",
-      "count": 4
+      "count": 8
     },
     {
       "species": "ambervein",
-      "count": 4
+      "count": 8
+    },
+    {
+      "species": "shadebell",
+      "count": 8
+    },
+    {
+      "species": "moonfern",
+      "count": 12
+    },
+    {
+      "species": "rain_jelly",
+      "count": 8
     }
   ],
   "starterFauna": [
     {
       "species": "reedjaw",
-      "count": 6
+      "count": 3
     },
     {
       "species": "siltshield",
-      "count": 6
+      "count": 3
     },
     {
       "species": "glintfin",
-      "count": 7
+      "count": 4
     },
     {
       "species": "dewmantle",
-      "count": 6
+      "count": 3
     },
     {
       "species": "ghostbristle",
-      "count": 6
+      "count": 3
     },
     {
       "species": "glasscoil",
-      "count": 6
+      "count": 3
     },
     {
       "species": "stiltclaw",
-      "count": 4
+      "count": 3
     }
-  ]
+  ],
+  "faunaBudget": 430
 }

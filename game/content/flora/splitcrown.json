@@ -1,0 +1,117 @@
+﻿{
+    "id":  "splitcrown",
+    "name":  "Splitcrown",
+    "archetype":  "plant",
+    "placementGroup":  "woody",
+    "role":  "Forked miniature woodland tree carrying separated compound-leaf crowns above an open, traversable basal space.",
+    "description":  "Two or three slender forked trunks rise into asymmetric clusters of fine compound leaves. Unequal outward branches produce small overlapping forest ceilings without closing the understory into a wall.",
+    "habitat":  {
+                    "substrates":  {
+                                       "soil":  1,
+                                       "gravel":  0.16,
+                                       "rock":  0.05
+                                   },
+                    "refuseSubstrates":  [
+                                             "water",
+                                             "wood"
+                                         ],
+                    "refuseTags":  [
+
+                                   ],
+                    "moisture":  {
+                                     "optimum":  0.59,
+                                     "tolerance":  0.32
+                                 },
+                    "light":  {
+                                  "optimum":  0.55,
+                                  "tolerance":  0.32
+                              },
+                    "nutrients":  {
+                                      "optimum":  0.56,
+                                      "tolerance":  0.39
+                                  },
+                    "maxWaterDepth":  0,
+                    "hardMinMoisture":  0.12,
+                    "hardMaxMoisture":  1.0,
+                    "minSuitability":  0.18
+                },
+    "growth":  {
+                   "ratePerDay":  0.073,
+                   "maxBiomass":  8.0,
+                   "initialBiomass":  0.1,
+                   "declinePerDay":  0.065,
+                   "maturityDays":  40,
+                   "lifespanDays":  1300,
+                   "nutrientPerBiomass":  0.24,
+                   "radiusAtMax":  1.22,
+                   "minRadius":  0.085
+               },
+    "spread":  {
+                   "intervalDays":  20,
+                   "radius":  1.6,
+                   "propagules":  1,
+                   "minBiomassFraction":  0.66
+               },
+    "competition":  {
+                        "radius":  0.72,
+                        "crowdingLimit":  4.6,
+                        "sensitivity":  0.36
+                    },
+    "proximity":  [
+
+                  ],
+    "litterFraction":  0.84,
+    "sheddingPerDay":  0.012,
+    "grazingValue":  0,
+    "woody":  {
+                  "layer":  "shrub",
+                  "canopyRadius":  1.26,
+                  "shadeOpacity":  0.36,
+                  "minSpacing":  0.65
+              },
+    "visual":  {
+                   "shape":  "microcanopy_splitcrown",
+                   "color":  [
+                                 0.16,
+                                 0.34,
+                                 0.19
+                             ],
+                   "color2":  [
+                                  0.36,
+                                  0.52,
+                                  0.29
+                              ],
+                   "colorVariance":  0.095,
+                   "height":  2.55
+               },
+    "tags":  [
+                 "plant",
+                 "shrub",
+                 "woody",
+                 "understory",
+                 "microcanopy",
+                 "compound-leaf",
+                 "forest"
+             ],
+    "reproduction":  {
+                         "form":  "berry",
+                         "dispersal":  "animal",
+                         "reservePerDay":  0.011,
+                         "pulseThreshold":  0.055,
+                         "maxAttachedMass":  0.11,
+                         "developmentDays":  11,
+                         "ripeDays":  20,
+                         "cooldownDays":  24,
+                         "seedFraction":  0.17,
+                         "viability":  0.64,
+                         "dormancyDays":  14,
+                         "dispersalRadius":  1.4,
+                         "fruitColor":  [
+                                            0.3,
+                                            0.16,
+                                            0.55
+                                        ],
+                         "displaySize":  0.024,
+                         "foodValue":  1.2
+                     }
+}

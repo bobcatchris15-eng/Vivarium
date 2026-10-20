@@ -22,6 +22,7 @@ public partial class SpecimenPreview : Node3D
     public float Phase { get; set; } = -1;
     public bool Reverse { get; set; }
     public bool Legacy { get; set; }
+    public bool GameTier { get; set; }
     public bool Close { get; set; }
 
     public override void _Ready() => _ = CaptureAsync();
@@ -94,7 +95,10 @@ public partial class SpecimenPreview : Node3D
             var profile = Legacy ? null : FloraVisualProfile.Load(sp.Id);
             FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
             ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + sp.Id), 0x9E3779B97F4A7C15UL);
-            var mesh = sp.Id == "ringreed" ? OrganismMeshes.FloraTier(sp, seed, Detail, Juvenile)
+            // Optional screenshot of the exact budgeted mesh used by the in-game renderer,
+            // rather than the uncapped, raw per-species authored generator.
+            var mesh = GameTier || sp.Id == "ringreed"
+                ? OrganismMeshes.FloraTier(sp, seed, Detail, Juvenile, tieredSource: profile != null)
                 : OrganismMeshes.Flora(sp, seed, Juvenile, profile == null ? null : Detail);
             ShaderMaterial? leaf = profile?.LeafMaterial(animated: Phase >= 0);
             if (leaf != null) { leaf.SetShaderParameter("review_time",Phase); leaf.SetShaderParameter("plant_stiffness",sp.Woody != null ? 7f : 3f); }

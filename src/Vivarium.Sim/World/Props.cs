@@ -1,6 +1,7 @@
 using System.Collections;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry;
 
 namespace Vivarium.Sim.World;
 
@@ -65,22 +66,26 @@ public sealed class Rock
         return ex * ex + ez * ez <= 1;
     }
 
-    /// <summary>Approximate faceted rock crown at p, or NaN outside its visual footprint.</summary>
+    // Derived, private fields are deliberately absent from the serialized save schema.
+    private RockSurfaceProfile? _surfaceProfile;
+    private ulong _surfaceSeed;
+
+    /// <summary>Exact upper triangle surface at p, or NaN outside the visual footprint.</summary>
     public double TopAt(Vec2 p)
     {
         double r = FootprintRadius;
-        if (Math.Abs(p.X - X) > r || Math.Abs(p.Z - Z) > r) return double.NaN;
+        if (SizeX <= 0 || SizeY <= 0 || SizeZ <= 0 ||
+            Math.Abs(p.X - X) > r || Math.Abs(p.Z - Z) > r) return double.NaN;
         var d = (p - Position).Rotated(-RotationY);
-        double ex = d.X / SizeX, ez = d.Z / SizeZ;
-        double radius = Math.Sqrt(ex * ex + ez * ez);
-        if (radius >= 1) return double.NaN;
-        double height = radius < 0.45
-            ? MathD.Lerp(0.75, 0.56, radius / 0.45)
-            : radius < 0.8
-                ? MathD.Lerp(0.56, 0.25, (radius - 0.45) / 0.35)
-                : MathD.Lerp(0.25, -0.2, (radius - 0.8) / 0.2);
+        if (_surfaceProfile == null || _surfaceSeed != VariantSeed)
+        {
+            _surfaceProfile = RockSurfaceProfile.Create(VariantSeed);
+            _surfaceSeed = VariantSeed;
+        }
+        double height = _surfaceProfile.TopAt(d.X / SizeX, d.Z / SizeZ);
         return Y + SizeY * height;
     }
+
 }
 
 public sealed class LogProp

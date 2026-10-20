@@ -65,6 +65,8 @@ public sealed class VivariumWorld
 
     /// <summary>Authoritative game liquid; persisted 3D water, independent of ecology calendar acceleration.</summary>
     public SurfaceLiquid Liquid {get;}
+    /// <summary>Derived physical root-zone tendencies; never serialized as authoritative state.</summary>
+    public RootZoneEnvironment RootZone { get; }
 
     /// <summary>Tick cadences (10 s ticks). Documented in docs/architecture/architecture.md.</summary>
     public static class Cadence
@@ -94,8 +96,10 @@ public sealed class VivariumWorld
         PilotTree?.ShapeTerrain(Domain);
         Strata = new StrataModel(content.Strata);
         Fields = new EnvironmentFields(Grid, content.Ecology);
+        RootZone = new RootZoneEnvironment(Grid, Terrain);
+        Fields.InitializeMineralNutrients(content.Ecology, RootZone);
         Litter = new LitterSystem(this);
-        Fields.GenerateBaseSubstrate(Descriptor, Terrain);
+        Fields.GenerateBaseSubstrate(Descriptor, Terrain, RootZone);
         Water = new Hydrology(Grid, Descriptor.Water, Terrain);
         Flora = new FloraPopulation(Domain.Radius + 1);
         DeadFlora = new DeadPlantPopulation();
@@ -141,7 +145,7 @@ public sealed class VivariumWorld
         // A short physical warmup establishes spring runoff without inventing a water-table plane.
         w.Liquid.Enable();
         if(warmupSurfaceWater&&w.Water.Springs.Count>0)w.Liquid.AdvancePhysical(5);
-        for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch);
+        for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch, w.RootZone);
         w.PilotTree?.CoupleHabitat(w, SimUnits.Day);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
         w.PilotTree?.DepositLitter(w, SimUnits.Day * 5);
@@ -170,9 +174,9 @@ public sealed class VivariumWorld
         Scheduler.Register("hydrology", Cadence.Hydrology, 40, _ => { }, phase: 2);
         Scheduler.Register("environment", Cadence.Environment, 50, dt =>
         {
-            Water.CoupleMoisture(Fields.Moisture, eco, dt, Fields.Scratch);
+            Water.CoupleMoisture(Fields.Moisture, eco, dt, Fields.Scratch, RootZone);
             PilotTree?.CoupleHabitat(this, dt);
-            Fields.StepNutrients(eco, dt * Clock.BioAcceleration);
+            Fields.StepNutrients(eco, dt * Clock.BioAcceleration, RootZone);
             if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props, PilotTree);
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);

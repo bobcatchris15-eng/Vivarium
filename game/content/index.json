@@ -54,7 +54,12 @@
     "flora/siltstars.json",
     "flora/ghostbonnet.json",
     "flora/starmoss.json",
-    "flora/moonfern.json"
+    "flora/moonfern.json",
+    "flora/splitcrown.json",
+    "flora/vaultfern.json",
+    "flora/rainshield.json",
+    "flora/lacemantle.json",
+    "flora/cragparasol.json"
   ],
   "fauna": [
     "fauna/prismhopper.json",
@@ -84,6 +89,13 @@
     "presets/steep_rocky_slope.json",
     "presets/isolated_pond.json",
     "presets/oxbow_creek.json",
-    "presets/deep_inlet.json"
+    "presets/deep_inlet.json",
+    "presets/misty_cloud_forest.json",
+    "presets/arid_canyon.json",
+    "presets/cascading_falls.json",
+    "presets/peat_fen.json",
+    "presets/woodland_vernal_pools.json",
+    "presets/alpine_tundra.json",
+    "presets/estuary_delta.json"
   ]
 }

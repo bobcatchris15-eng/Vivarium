@@ -65,28 +65,138 @@
     {
       "id": "VL-0004-bed-caustics",
       "parent": "VL-0003-foliage-construction",
-      "decision": "pending",
+      "decision": "revise",
       "problem": "Whole-world critic observed dominant repeating bright water lattice",
       "hypothesis": "Submerged bed additive/emissive caustics contribute artificial glow; ablation isolates their effect",
       "alternative": "The pattern is dominated by water normal/refraction or underwater overlay rather than bed shading; test those only if bed ablation leaves it intact",
       "evidence": "build/visual-lab/experiments/VL-0004-bed-caustics",
-      "stage": "55 matched before/after pairs captured; source restored; blinded critique pending",
+      "stage": "complete; source restored",
       "missing": [
-        "ablation result",
-        "independent critique",
-        "functional replay repair",
+        "final restrained response",
         "motion/performance acceptance"
       ],
       "diagnostic_result": "Zeroing only submerged-bed caustic_light removes dominant luminous water lattice in directly inspected ground view. Water becomes very dark; final response unresolved.",
-      "matched_provenance": "seed/tick/counts/worlddigest/resolution/quality/light/allcamera poses match; exact global shader TIME at pause unmeasured"
+      "matched_provenance": "seed/tick/counts/worlddigest/resolution/quality/light/allcamera poses match; exact global shader TIME at pause unmeasured",
+      "reason": "Independent blind preferences candidate20/baseline0/inconclusive35. Removing lattice improves restraint, but water depth/readability remains unresolved."
+    },
+    {
+      "id": "VL-0005-restrained-bed-light",
+      "parent": "VL-0004-bed-caustics",
+      "decision": "revise",
+      "problem": "Luminous water lattice vs black/opaque ablation tradeoff",
+      "hypothesis": "Bounded warm-neutral bed contrast receiving scene lighting; no bed emission",
+      "evidence": "build/visual-lab/experiments/VL-0005-restrained-bed-light",
+      "stage": "complete; candidate retained as reversible working material pending depth/motion/performance refinements",
+      "blind_preferences": {
+        "candidate": 20,
+        "baseline": 0,
+        "inconclusive": 35
+      },
+      "missing": [
+        "water depth/bed readability resolution",
+        "motion/performance acceptance"
+      ],
+      "working_source": "terrain.gdshader currently contains this reversible candidate",
+      "normal_game_confirmation": {
+        "evidence": "build/visual-lab/world-diagnostics/restrained-bed-light-20261014",
+        "mean_fps_diagnostic": 53.85,
+        "p99_ms": 40.37,
+        "worst_ms": 67.637,
+        "exit_code": 1,
+        "reason": "Existing same-tick replay failure; isolation unconfirmed; not performance acceptance"
+      }
+    },
+    {
+      "id": "VL-0006-authored-plant",
+      "parent": "VL-0003-foliage-construction",
+      "decision": "reject",
+      "problem": "Repeated flat radial canopy and rigid twig scaffolds",
+      "hypothesis": "Blender-authored connected growth axes and36 curved single-sheet leaves improve visible anatomy within7668tri",
+      "alternative": "Paired-node shoots or denser botanical leaf area if alternate arrangement loses canopy",
+      "evidence": "build/visual-lab/experiments/VL-0006-authored-plant",
+      "stage": "complete; review-only asset not promoted",
+      "limitations": [
+        "vegetative candidate lacks bell flowers",
+        "LOD/denseworld/motion/performance unaccepted",
+        "new geometry is review-only; normal gameplay uses procedural source"
+      ],
+      "reason": "Fresh blind critique preferred baseline in all5 clearly changed views;13 inconclusive,12 byte-identical negativecontrols. Projected canopy fullness lost despite matching radius/height.",
+      "lesson": "Match projected leaf area and canopy mass, not bounding envelope alone; allocate triangles from excessive structure to more curved leaves, without silhouette sacrifices.",
+      "technical_evidence": "Actual Godot profile compilation and integrated FloraRenderer capture succeeded; compiler metadata/UV/wind channels verified; game build0 warnings/errors"
+    },
+    {
+      "id": "VL-0007-canopy-density",
+      "parent": "VL-0006-authored-plant",
+      "decision": "reject",
+      "problem": "Sparse authored canopy",
+      "hypothesis": "96 curved leaves recover projected coverage within8232tri",
+      "evidence": "build/visual-lab/experiments/VL-0007-canopy-density",
+      "stage": "complete",
+      "reason": "Independent blind critic preferred baseline5/candidate0/13 inconclusive, including12 identical controls. Broad blades merged into sagging sheets.",
+      "lesson": "Projected coverage alone does not establish naturalism; change construction reference instead of repeating density tuning."
+    },
+    {
+      "id": "VL-0008-water-ray-depth",
+      "parent": "VL-0005-restrained-bed-light",
+      "decision": "revise",
+      "problem": "Water remains dark with weak bed depth",
+      "hypothesis": "Convert camera-axis depth gap using camera-ray Z rather than surface-normal cosine",
+      "evidence": "build/visual-lab/experiments/VL-0008-water-ray-depth",
+      "stage": "complete; original shader restored",
+      "reason": "Independent blinded critic55 inconclusive preferences. Pose/ripple changes confound attribution; no established visual gain.",
+      "lesson": "Paused ecology/camera matching does not lock shader TIME or renderer motion. Add explicit render phase controls before future water A/B."
+    },
+    {
+      "id": "VL-0009-native-fern",
+      "decision": "revise",
+      "stage": "complete; no render",
+      "reason": "Protected snapshot correctly rejected a concurrent final fixture source change; immutable evidence retained, resumed asVL0010"
+    },
+    {
+      "id": "VL-0010-native-fern",
+      "parent": "VL-0009-native-fern",
+      "decision": "reject",
+      "stage": "complete; review-only asset not promoted",
+      "problem": "Procedural foliage lacks botanical structure",
+      "hypothesis": "Native textured CC0 fern clump improves anatomy/material response versus production veilfern",
+      "alternative": "Use reference anatomy to improve reusable procedural fronds if static imported asset fails ecology/motion requirements",
+      "evidence": "build/visual-lab/experiments/VL-0010-native-fern",
+      "reason": "Fresh independent critic opened all10 native images; baseline5/candidate0. Coarse broad strap silhouettes and regular ribbing lost to procedural divided fronds.",
+      "lesson": "CC0 provenance and PBR textures do not guarantee better appearance. Different entire-blade fern morphology also limits direct species equivalence; reject this replacement, not all native asset methods."
+    },
+    {
+      "id": "VL-0011-fern-terminal-pinnae",
+      "parent": "VL-0010-native-fern",
+      "decision": "revise",
+      "stage": "complete; retained working candidate pending motion/world/performance",
+      "problem": "Long bare distal rachis with isolated terminal leaflets observed by independentcritic",
+      "hypothesis": "Redistribute fixed lateral stations distally with continuous taper to bridge terminal leaflet",
+      "alternative": "Shorten rachis to final lateral pair or morphologically matched divided-frond asset",
+      "evidence": "build/visual-lab/experiments/VL-0011-fern-terminal-pinnae",
+      "limitations": [
+        "Static fixture cannot establish living motion/ecology/performance",
+        "Camera replay from immutable before receipt required because generated bounds may change"
+      ],
+      "reason": "Fresh blind critic opened10 original images: candidate4/baseline0/inconclusive1; medium preference weak, ordinarydistance inconclusive. Modest terminal silhouette gain, remaining bare tips and flatmaterial.",
+      "technical_evidence": "14 targeted tests passed in isolated artifacts because unrelated testhost locks default output; build0warnings/errors.81casecopyprobes preserve54immaturedigests/27maturebounds; maturetri+4.87to5.72percent.",
+      "lesson": "Observed terminal attachment failure responds to bounded distal placement/taper change; benefit fades at ordinary distance. Recheck animated ecology and triangle cost before acceptance."
     }
   ],
-  "next_experiment": "VL-0004-bed-caustics",
+  "next_experiment": "VL0011 motion and ecosystem confirmation, plus phasecontrol audit",
   "scheduler": {
     "id": "vivarium-visual-evolution",
     "status": "registered-active",
     "cadence": "hourly",
-    "scheduled_execution_verified": false
+    "scheduled_execution_verified": true,
+    "wake_messages_utc": [
+      "2026-10-14T16:01:12.173Z",
+      "2026-10-14T17:37:20.774Z",
+      "2026-10-14T18:35:21.609Z",
+      "2026-10-14T19:43:52.711Z",
+      "2026-10-14T20:43:53.639Z",
+      "2026-10-14T21:46:54.632Z"
+    ],
+    "verification_scope": "Scheduled wake messages delivered; agent and runner resumed work. App-closed unattended operation not tested."
   },
   "whole_world_diagnostic": {
     "evidence": "build/visual-lab/world-diagnostics/initial-baseline-20261014",
@@ -111,8 +221,14 @@
       "id": "plasmodium-state-not-persisted",
       "evidence": "build/visual-lab/workers/replay-diagnosis",
       "observation": "CPU-only current-format reload has matching digest yet loses520 colony cells; tick3 coverage/litter divergence",
-      "repair": "Persist authoritative future-affecting colony state; copied candidate under investigation",
+      "repair": "Isolated typed current-format persistence candidate delivered; oldsavecompat waived. Initial replay improved, additional evolved flora-cadence divergence remains; production integration deferred while visible experiments continue.",
       "gate": "same-tick replay remains failing"
     }
+  ],
+  "current_source_revision": "47dda5f57fb900129878a66ea5b5cdff0975fb9c",
+  "next_hypotheses": [
+    "Taper and distribute pinnae along bare outer rachis without increasing sheet overlap, guided by pinnate botanical reference",
+    "Use a morphologically matched divided-frond asset rather than Fern02 entire blades",
+    "Explicit render/shader time controls plus repeated unchanged-condition water captures before interpreting depth/illumination hypotheses"
   ]
 }

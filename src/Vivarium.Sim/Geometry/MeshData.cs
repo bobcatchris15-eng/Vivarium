@@ -19,6 +19,8 @@ public sealed class MeshData
     public readonly List<FloraLeaf> Leaves = new();
     public int? FloraDetailLevel { get; set; }
     public ulong FloraVisualSeed { get; set; }
+    /// <summary>Render-only LOD hint: terminal canopy needs priority over lower perimeter foliage.</summary>
+    public bool PreserveUpperCanopyOnLod { get; set; }
     /// <summary>Render-only parametric flora detail; null = authored full detail.</summary>
     public FloraLodParams? Lod { get; set; }
     /// <summary>Vertex spans of closed tubes (trunks, stems, petioles) with their radial side count.</summary>

@@ -8,7 +8,8 @@ public enum BroadleafOutline
     Sagittate, // Arrowhead-shaped (pointed downward/backward lobes, triangular body)
     Hastate,   // Spear-shaped (outward-flaring basal lobes)
     Ovate,     // Broadly oval, rounded base
-    Lanceolate // Tapering lance shape
+    Lanceolate, // Tapering lance shape
+    OrbicularCordate // Broad rhubarb-like near-round heart with basal sinus and blunt shoulders
 }
 
 public readonly record struct BroadleafParams(
@@ -59,6 +60,14 @@ public static class Broadleaf
                 Math.Pow(1.0 - t, 0.80) * Math.Pow(Math.Max(0.0, Math.Sin(Math.PI * Math.Pow(t, 0.35))), 0.50)
                     + (t < 0.25 ? 0.50 * Math.Pow(1.0 - t / 0.25, 2.0) * absX : 0.0),
                 t < 0.20 ? -0.08 * bladeLength * (1.0 - t / 0.20) * (x * x) : 0.0
+            ),
+            BroadleafOutline.OrbicularCordate => (
+                // Rhubarb-like broad, near-circular heart. The blade stays wide
+                // toward its distal third instead of becoming a hanging spear.
+                // Mild retuse base preserves two independent rounded basal lobes.
+                Math.Pow(Math.Max(0, Math.Sin(Math.PI * Math.Pow(t, 0.70))), 0.44)
+                    * (1.0 + 0.08 * (1.0 - t)),
+                t < 0.33 ? -0.15 * bladeLength * Math.Pow(1.0 - t / 0.33, 1.7) * (x * x) : 0.0
             ),
             BroadleafOutline.Ovate => (
                 // Broad oval: widest below middle, rounded base
@@ -167,6 +176,10 @@ public static class Broadleaf
 
         // 3. Grid discretization: spend budget on outline & silhouette with minimal interior subdivision
         int rows = detail == 0 ? 9 : (detail == 1 ? 6 : 3);
+        // Shadebell's almost circular heart leaves need enough silhouette stations
+        // to remain round even when their overall mesh is deliberately simplified.
+        if (outline == BroadleafOutline.OrbicularCordate)
+            rows = detail == 2 ? 5 : (detail == 1 ? 9 : 11);
         if (m.Lod is { } lod) rows = lod.Segments(rows, detail == 0 ? 4 : 3);
         int cols = detail == 0 && (m.Lod?.Blade ?? 1) >= .55 ? 4 : 2;
 

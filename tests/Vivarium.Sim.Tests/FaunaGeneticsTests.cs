@@ -265,7 +265,15 @@ public class FaunaTests
         f.LifespanFactor = 1;
         double det0 = w.Litter.TotalDetritus();
         int steps = 0;
-        while (w.Fauna.Get(f.Id) != null && steps++ < 100) { w.FaunaSystem.StepLifecycle(300); w.Clock.Tick += 30; }
+        // The old fixed 100 passes covered just 0.35 biological days.
+        // With longer-lived animals, derive the bound from that species'
+        // actual remaining lifespan rather than enforcing the old biology.
+        int maxSteps = Math.Max(100, (int)Math.Ceiling(sp.Lifespan * .02 / 300) + 5);
+        while (w.Fauna.Get(f.Id) != null && steps++ < maxSteps)
+        {
+            w.FaunaSystem.StepLifecycle(300);
+            w.Clock.Tick += 30;
+        }
         Assert.Null(w.Fauna.Get(f.Id));
         Assert.Equal("old age", w.Lineage.Get(f.Id)!.DeathCause);
         double expected = sp.MassAtMid * w.FaunaSystem.PhenotypeOf(f).MassScale * sp.DetritusOnDeath;
@@ -313,8 +321,17 @@ public class FaunaTests
         var sp = Sp(id);
         var w = FaunaFixtures.PondWorld(61);
         var at = sp.Medium == Medium.Aquatic ? FaunaFixtures.Pond : FaunaFixtures.Land;
-        var r = Introduction.IntroduceFauna(w, id, at, 8);
+        // Leave space below the smaller real-world species caps for a
+        // first litter. Introducing eight adults to a predator with an
+        // eight-animal cap made reproduction impossible by definition.
+        int founders = Math.Min(8, Math.Max(2, sp.PopulationCap - 2));
+        var r = Introduction.IntroduceFauna(w, id, at, founders);
         Assert.True(r.Ok, r.Message);
+        // This test checks full behaviour and feeding over biological days.
+        // Accelerate only the test clock, not production time: all scheduler
+        // rates still advance by their declared physical/bio dt.
+        w.Clock.BioAcceleration = 30;
+        int ticksPerBioDay = (int)(86400 / (10 * w.Clock.BioAcceleration));
 
         void RefillPrey()
         {
@@ -333,9 +350,9 @@ public class FaunaTests
         }
         RefillPrey();
         double days = Math.Max(8, sp.ReproCooldown / 86400 * 1.5);
-        for (long t = 0; t < days * 8640; t++)
+        for (long t = 0; t < days * ticksPerBioDay; t++)
         {
-            if (t % 8640 == 0)
+            if (t % ticksPerBioDay == 0)
             {
                 FaunaFixtures.HoldWater(w);
                 RefillPrey();

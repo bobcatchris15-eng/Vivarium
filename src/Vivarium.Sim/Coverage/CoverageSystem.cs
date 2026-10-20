@@ -15,7 +15,10 @@ namespace Vivarium.Sim.Coverage;
 /// parameter tables (occupant ids into each layer's <c>Occ</c> byte) are built once from
 /// <see cref="ContentLibrary.Flora"/> at construction.
 /// </summary>
-public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritusSink
+/// <summary>Dormant dispersal propagule stored in present ecological state.</summary>
+public readonly record struct PlasmodiumSpore(int Gx, int Gz, int Seed);
+
+public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritusSink, ISporeSink
 {
     private readonly VivariumWorld _w;
     private readonly MoistureBonusField _moistureBonus;
@@ -30,7 +33,85 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     private readonly LifecycleController? _plasmodiumLifecycle;
     private readonly PlasmodiumWorldEnv? _plasmodiumEnv;
     private readonly string? _plasmodiumSpeciesId;
+    private readonly List<PlasmodiumSpore> _plasmodiumSpores = new();
+    public IReadOnlyList<PlasmodiumSpore> PlasmodiumSpores => _plasmodiumSpores;
+    // Non-authoritative profiler readings; never serialized into ecology state.
+    public double LastPlasmodiumNetworkMs { get; private set; }
+    public double LastPlasmodiumColonyMs { get; private set; }
+    public double LastPlasmodiumRelabelMs { get; private set; }
+    public double LastPlasmodiumLifecycleMs { get; private set; }
+    public double LastPlasmodiumAttractantMs => _plasmodiumColony?.LastAttractantMs ?? 0;
+    public double LastPlasmodiumFrontAndFeedMs => _plasmodiumColony?.LastFrontAndFeedMs ?? 0;
+    public double LastPlasmodiumTransportMs => _plasmodiumColony?.LastPhaseAndTransportMs ?? 0;
+    public int LastPlasmodiumOccupiedCells { get; private set; }
     private long _step;
+
+    /// <summary>Persisted dormant spores, not a timer-based respawn system.</summary>
+    public IReadOnlyList<PlasmodiumSpore> ExportPlasmodiumSpores() =>
+        _plasmodiumSpores.OrderBy(x => x.Gx).ThenBy(x => x.Gz).ThenBy(x => x.Seed).ToArray();
+
+    public void RestorePlasmodiumSpores(IEnumerable<PlasmodiumSpore> spores)
+    {
+        _plasmodiumSpores.Clear();
+        foreach (var spore in spores.OrderBy(x => x.Gx).ThenBy(x => x.Gz).ThenBy(x => x.Seed))
+        {
+            var p = CellCentre(spore.Gx, spore.Gz);
+            if (_w.Domain.Contains(p)) _plasmodiumSpores.Add(spore);
+        }
+    }
+
+    public void ReleaseSpore(FruitingBody body)
+    {
+        // A fruiting body releases a sampled dispersal cohort. Most disperse
+        // beyond the depleted parental sheet; a minority remain nearby.
+        // Fixed local airflow is represented by this stable dispersal kernel,
+        // not by periodic stochastic weather changes.
+        uint h = unchecked((uint)body.Seed ^ (uint)_w.Seed);
+        h ^= h >> 16; h *= 0x7feb352dU; h ^= h >> 15; h *= 0x846ca68bU; h ^= h >> 16;
+        double angle = 2 * Math.PI * (h / (double)uint.MaxValue);
+        uint g = h ^ 0x9e3779b9U;
+        g ^= g >> 16; g *= 0x7feb352dU; g ^= g >> 15; g *= 0x846ca68bU; g ^= g >> 16;
+        double spread = g / (double)uint.MaxValue;
+        double distance = (h & 3) == 0 ? 0.02 + 0.18 * spread
+                                            : 0.25 + 2.3 * Math.Sqrt(spread);
+        var origin = new Vec2(body.Pos.cx * CoverageSpec.CellSize * 2,
+                              body.Pos.cz * CoverageSpec.CellSize * 2);
+        var destination = origin + new Vec2(Math.Cos(angle), Math.Sin(angle)) * distance;
+        if (!_w.Domain.Contains(destination)) return; // propagules can irreversibly leave
+        var (gx, gz) = CoverageSpec.CellOf(destination);
+        _plasmodiumSpores.Add(new PlasmodiumSpore(gx, gz, body.Seed));
+    }
+
+    /// <summary>Germinate only where litter, moisture and open substrate actually permit it.</summary>
+    private void GerminatePlasmodiumSpores()
+    {
+        if (_plasmodiumColony == null || _plasmodiumParams == null) return;
+        const int MaxGerminationsPerStep = 2; // bounded cost, not a carrying-capacity target
+        int germinated = 0;
+        for (int i = 0; i < _plasmodiumSpores.Count && germinated < MaxGerminationsPerStep;)
+        {
+            var spore = _plasmodiumSpores[i];
+            var p = CellCentre(spore.Gx, spore.Gz);
+            int coarseCell = _w.Grid.NearestDomainCell(p);
+            if (coarseCell < 0 ||
+                _w.Coverage.Plasmodium.GetOcc(spore.Gx, spore.Gz) != 0 ||
+                !_w.Domain.ContainsDisc(p, 0.07) ||
+                !IsPlasmodiumSuitable(p) ||
+                _w.Litter.DetritusAt(coarseCell) < _plasmodiumParams.StarveDetritusThreshold * 1.5)
+            {
+                i++;
+                continue;
+            }
+            int before = _plasmodiumColony.CellId.Count;
+            SeedPlasmodiumPatch(p, 5);
+            if (_plasmodiumColony.CellId.Count > before)
+            {
+                _plasmodiumSpores.RemoveAt(i);
+                germinated++;
+            }
+            else i++;
+        }
+    }
 
     /// <summary>Number of coverage growth steps completed; part of authoritative state because rules hash it.</summary>
     public long StepIndex => _step;
@@ -100,11 +181,18 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                     Dc = 0.04,
                     Delta = 0.10,
                     FeedRate = 3.0,
+                    // Biological starvation and migration are genuine periods
+                    // of searching/withdrawal, not a five-step extinction wave.
+                    TStarve = 90.0,
+                    TMig = 90.0,
                 };
                 _plasmodiumColony = new PlasmodiumColony(1, _plasmodiumParams);
                 _plasmodiumAttractant = new Attractant(_plasmodiumParams);
                 _plasmodiumNetwork = new Network { Gamma = 0.3, QGain = 5.0 };
-                _plasmodiumLifecycle = new LifecycleController(_plasmodiumParams);
+                _plasmodiumLifecycle = new LifecycleController(_plasmodiumParams)
+                {
+                    SporeSink = this,
+                };
                 _plasmodiumEnv = new PlasmodiumWorldEnv(w);
             }
         }
@@ -355,16 +443,22 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     /// individual placement) is what fills the island out from world creation onward.</summary>
     public void SeedInitial()
     {
-        const int DiscsPerSpecies = 5;
-        const double MinSeparation = 1.2; // m, keeps starter discs spread across the island
-        const int DiscRadiusCells = 4;    // ~8 cm discs
+        const int BaselineClumps = 5;
+        const double MinSeparation = 0.65; // dense, overlapping niche mosaics; still distinct patches
+        const int DiscRadiusCells = 5;    // ~10 cm patches; colonization still drives spread
+
+        int InitialClumps(string id) => Math.Clamp(
+            _w.Descriptor.StarterFlora.FirstOrDefault(e => e.Species == id)?.Count
+                ?? BaselineClumps, BaselineClumps, 24);
 
         foreach (var mp in _matSpecies)
-            SeedSpecies(_w.Coverage.Mat, mp.OccupantId, mp.SeedBiomass, DiscsPerSpecies, MinSeparation, DiscRadiusCells,
+            SeedSpecies(_w.Coverage.Mat, mp.OccupantId, mp.SeedBiomass,
+                InitialClumps(mp.Name), MinSeparation, DiscRadiusCells,
                 p => IsMatSuitable(mp, p));
 
         foreach (var lp in _lichenSpecies)
-            SeedSpecies(_w.Coverage.Crust, lp.OccSlot, lp.SeedBiomass, DiscsPerSpecies, MinSeparation, DiscRadiusCells,
+            SeedSpecies(_w.Coverage.Crust, lp.OccSlot, lp.SeedBiomass,
+                InitialClumps(_lichenSpeciesId[lp.OccSlot]), MinSeparation, DiscRadiusCells,
                 p => IsLichenSuitable(lp, p));
 
         if (_plasmodiumColony != null && _plasmodiumSpeciesId != null)
@@ -422,7 +516,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
 
             int gx = gx0 + dx, gz = gz0 + dz;
             Vec2 cPos = CellCentre(gx, gz);
-            if (!IsPlasmodiumSuitable(cPos)) continue;
+            if (!IsPlasmodiumSuitable(cPos) || _w.Coverage.Plasmodium.GetOcc(gx, gz) != 0) continue;
 
             double u = d / radiusCells;
             Vec2 offset = new Vec2(dx, dz);
@@ -516,13 +610,19 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     public void StepPlasmodium(double dtSeconds)
     {
         if (_plasmodiumColony == null || _plasmodiumNetwork == null || _plasmodiumAttractant == null || _plasmodiumEnv == null || _plasmodiumLifecycle == null) return;
+        GerminatePlasmodiumSpores();
         var occupied = _plasmodiumColony.CellId.Keys.ToList();
+        LastPlasmodiumOccupiedCells = occupied.Count;
         if (occupied.Count == 0) return;
         var sources = new HashSet<(int cx, int cz)>();
         foreach (var (gx, gz) in occupied)
         {
             var coarse = Attractant.CoarseOf(gx, gz);
-            if (_plasmodiumEnv.Detritus(gx, gz) > 0.015) sources.Add(coarse);
+            // A coarse source is present if *any* constituent fine cell has
+            // food. Once marked, querying the other cells is redundant, but
+            // could issue multiple costly fine-to-world environment samples.
+            if (!sources.Contains(coarse) && _plasmodiumEnv.Detritus(gx, gz) > 0.015)
+                sources.Add(coarse);
         }
         if (sources.Count < 2)
         {
@@ -539,15 +639,24 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         }
         _plasmodiumNetwork.SetSources(sources);
         double dt = Math.Clamp(dtSeconds, 0.1, 5.0);
+        long t = Stopwatch.GetTimestamp();
         _plasmodiumNetwork.Step(_w.Coverage.Plasmodium, occupied, dt);
+        LastPlasmodiumNetworkMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
+        t = Stopwatch.GetTimestamp();
         _plasmodiumColony.Step(_w.Coverage.Plasmodium, _plasmodiumAttractant, _plasmodiumEnv, _step, dt, _plasmodiumNetwork);
+        LastPlasmodiumColonyMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
+        t = Stopwatch.GetTimestamp();
         _plasmodiumColony.Relabel(_plasmodiumColony.CellId.Keys.ToList());
+        LastPlasmodiumRelabelMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
+        t = Stopwatch.GetTimestamp();
         _plasmodiumLifecycle.Step(_w.Coverage.Plasmodium, _plasmodiumColony, _plasmodiumNetwork, _plasmodiumEnv, _step, dt);
+        LastPlasmodiumLifecycleMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
         foreach (var ((gx, gz), mass) in _plasmodiumColony.Mass)
         {
             _w.Coverage.Plasmodium.SetB(gx, gz, (float)Math.Clamp(mass, 0.1, 5.0));
         }
         _w.Coverage.Plasmodium.Advance();
+        GerminatePlasmodiumSpores();
     }
 
     private bool IsLichenSuitable(LichenParams lp, Vec2 p)

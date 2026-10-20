@@ -1,0 +1,49 @@
+[
+  {
+    "name": "cobra",
+    "source": "https://opengameart.org/content/cobra-0",
+    "download": "https://opengameart.org/sites/default/files/cobra.zip",
+    "file": "cobra.zip",
+    "license": "CC0",
+    "sha256": "c47ec61b0a1895474b756999f4b69de7b42b68a51618275ced57752795e4178f",
+    "bytes": 86688,
+    "status": "Audited and clay-rendered; not promoted. Substantial anatomical and surfacing rework needed; current runtime asset retained.",
+    "author": "Micket",
+    "evidence": "build/guardian-polish-20261016/cc0-donors/cobra/audit.json"
+  },
+  {
+    "name": "armadillo",
+    "source": "https://opengameart.org/content/armadillo-foe",
+    "download": "https://opengameart.org/sites/default/files/Armadillo-3D-Pack-Fbx-Obj.zip",
+    "file": "Armadillo-3D-Pack-Fbx-Obj.zip",
+    "license": "CC0",
+    "sha256": "ee1f6d8810a27ea6d69cb5018a6d5ade3f750656703a07dd6b8d4abd0004df0c",
+    "bytes": 737678,
+    "status": "Audited and clay-rendered; not promoted. Substantial anatomical and surfacing rework needed; current runtime asset retained.",
+    "author": "overactiongamestudio",
+    "evidence": "build/guardian-polish-20261016/cc0-donors/armadillo/audit.json"
+  },
+  {
+    "name": "bird",
+    "source": "https://opengameart.org/content/bird",
+    "download": "https://opengameart.org/sites/default/files/bird_0.blend",
+    "file": "bird_0.blend",
+    "license": "CC0",
+    "bytes": 1033280,
+    "sha256": "ce694dea3a10b268f33217c665ff16e6b8e7222acbf9ceac178814cf5d7fb33a",
+    "status": "Audited and clay-rendered; not promoted. Substantial anatomical and surfacing rework needed; current runtime asset retained.",
+    "author": "gonzalfj / Fabio Gonzalez",
+    "evidence": "build/guardian-polish-20261016/cc0-donors/bird/audit.json"
+  },
+  {
+    "name": "rodent-fallback",
+    "source": "https://opengameart.org/content/rat-0",
+    "download": "https://opengameart.org/sites/default/files/rat_godot.zip",
+    "file": "rat_godot.zip",
+    "license": "CC0",
+    "bytes": 571697,
+    "sha256": "b01fb1976ae19ed80713853ec7c28b8cb098d1ced9e8c902791aa33fc4f7b28c",
+    "status": "COLLADA structure inspected:1geometry,1skin controller,100animation nodes. Geometry/animation preview not yet reviewed; not promoted.",
+    "author": "br-n518"
+  }
+]

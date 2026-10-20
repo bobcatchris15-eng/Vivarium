@@ -41,10 +41,14 @@ public partial class Main : Node3D
 
         if (ArgAfter("--guardian-review") is { } guardianDir)
         { AddChild(new GuardianReview { Content = content, OutDir = guardianDir }); return; }
+        if (ArgAfter("--fern-asset-review") is { } fernDir)
+        { AddChild(new FernAssetReview { Content = content, OutDir = fernDir,
+            AssetPath = ArgAfter("--fern-asset") ?? "res://content/visual-lab-candidates/fern02/fern02.glb",
+            Variant = ArgAfter("--fern-variant") ?? "procedural", CameraReferencePath = ArgAfter("--fern-camera-reference") ?? "" }); return; }
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
         if (ArgAfter("--material-port-review") is { } materialDir)
         { AddChild(new MaterialPortReview { Content = content, OutDir = materialDir,
-            BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"),
+            BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"), FloraModulePath = ArgAfter("--flora-module") ?? "",
             RenderDocCapture = UserArgs.Contains("--renderdoc-capture"), MotionSequence = UserArgs.Contains("--motion-sequence") }); return; }
         if(ArgAfter("--surface-fluid-review") is {} fluidReviewDir)
         {AddChild(new SurfaceFluidReview{Content=content,OutDir=fluidReviewDir,Scenario=ArgAfter("--scenario")??"A",BenchmarkView=ArgAfter("--fluid-view")??"oblique",Video=UserArgs.Contains("--fluid-video"),Motion=UserArgs.Contains("--motion"),Benchmark=UserArgs.Contains("--benchmark"),SavePath=ArgAfter("--save"),PresetId=ArgAfter("--fluid-preset"),DisableMobileDrawing=UserArgs.Contains("--fluid-drawing-off"),DurationSeconds=double.TryParse(ArgAfter("--fluid-duration"),out var fluidDuration)?fluidDuration:0});return;}
@@ -82,14 +86,6 @@ public partial class Main : Node3D
                 LiveMotion = UserArgs.Contains("--live-motion") });
             return;
         }
-        if (ArgAfter("--botanical-audit") is { } auditDir)
-        {
-            AddChild(new BotanicalReview {Content=content,OutDir=auditDir,AllSpecies=true});return;
-        }
-        if (ArgAfter("--botanical-review") is { } reviewDir)
-        {
-            AddChild(new BotanicalReview {Content=content,OutDir=reviewDir});return;
-        }
         if (ArgAfter("--specimen") is { } specimenId)
         {
             AddChild(new SpecimenPreview
@@ -104,6 +100,7 @@ public partial class Main : Node3D
                 Phase = float.TryParse(ArgAfter("--phase"), out float specimenPhase) ? specimenPhase : -1,
                 Reverse = UserArgs.Contains("--reverse"),
                 Legacy = UserArgs.Contains("--legacy-flora"),
+                GameTier = UserArgs.Contains("--game-tier"),
                 Close = UserArgs.Contains("--close"),
                 OutDir = ArgAfter("--output") ?? "build/specimens",
             });
@@ -118,7 +115,7 @@ public partial class Main : Node3D
         Session = new GameSession { Name = "Session" };
         AddChild(Session);
         Session.Initialize(content, settings);
-        if (testDir == null)
+        if (testDir == null || UserArgs.Contains("--diagnostics"))
         {
             Session.Diagnostics = new LiveDiagnostics { Name = "LiveDiagnostics", Session = Session,
                 AutoStart = UserArgs.Contains("--diagnostics") || UserArgs.Contains("--diagnostics-check") || UserArgs.Contains("--soak"),
@@ -131,7 +128,13 @@ public partial class Main : Node3D
             var mode = UserArgs.Contains("--world-review") ? SmokeRunner.Mode.WorldReview : UserArgs.Contains("--species-view") ? SmokeRunner.Mode.SpeciesWorld : UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
             var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode, SpeciesId = ArgAfter("--species-view") ?? "" };
             AddChild(runner);
-            if (ArgAfter("--load") is { } loadPath && File.Exists(loadPath)) Session.LoadFrom(loadPath);
+            if (ArgAfter("--load") is { } loadPath && File.Exists(loadPath))
+            {
+                var loaded=Session.LoadFrom(loadPath);
+                if(!loaded.Ok)
+                    throw new InvalidOperationException(
+                        $"Explicit performance/preview world load failed: {loaded.Message}");
+            }
             else if (mode != SmokeRunner.Mode.Reload)
             {
                 var world = Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default"));

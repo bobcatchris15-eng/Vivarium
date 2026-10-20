@@ -1,0 +1,42 @@
+{
+  "id": "VL-0006-authored-plant",
+  "created_utc": "2026-10-14T19:36:08.274296+00:00",
+  "stage": "complete",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0006-authored-plant",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T19:36:20.640058+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T19:37:17.881098+00:00"
+    },
+    {
+      "command": "authored",
+      "at": "2026-10-14T19:37:27.069744+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T19:37:53.698936+00:00"
+    },
+    {
+      "command": "blind",
+      "at": "2026-10-14T19:38:14.176152+00:00"
+    },
+    {
+      "command": "critiqued",
+      "at": "2026-10-14T19:41:32.762091+00:00"
+    },
+    {
+      "command": "compare",
+      "at": "2026-10-14T19:41:34.039615+00:00"
+    },
+    {
+      "command": "decision",
+      "at": "2026-10-14T19:41:38.279105+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T19:41:38.279120+00:00",
+  "author_identity": "branch-module-pipeline"
+}

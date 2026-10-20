@@ -1,0 +1,205 @@
+{
+  "id": "arid_canyon",
+  "name": "Sunstone Canyon",
+  "seed": 492017,
+  "diameter": 9,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.95,
+    "relief": 0.35,
+    "noiseScale": 0.18,
+    "octaves": 4,
+    "minHeight": -1.0,
+    "maxHeight": 3.5,
+    "bottom": -4.5,
+    "rockExposure": 0.38,
+    "slopeX": -0.1,
+    "slopeZ": -0.04,
+    "features": [
+      {
+        "type": "hill",
+        "x": -2.5,
+        "z": 0.5,
+        "radius": 2.1,
+        "amount": 0.85
+      },
+      {
+        "type": "hill",
+        "x": 2.5,
+        "z": -1.25,
+        "radius": 2.0,
+        "amount": 0.9
+      },
+      {
+        "type": "channel",
+        "x": -2.75,
+        "z": -1.75,
+        "toX": -1.6,
+        "toZ": -1.2,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.18,
+        "toBedHeight": 1.07
+      },
+      {
+        "type": "channel",
+        "x": -1.6,
+        "z": -1.2,
+        "toX": -0.4,
+        "toZ": -0.3,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.07,
+        "toBedHeight": 0.82
+      },
+      {
+        "type": "channel",
+        "x": -0.4,
+        "z": -0.3,
+        "toX": 0.9,
+        "toZ": 0.4,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.82,
+        "toBedHeight": 0.55
+      },
+      {
+        "type": "channel",
+        "x": 0.9,
+        "z": 0.4,
+        "toX": 2.1,
+        "toZ": 1.6,
+        "width": 0.183,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.55,
+        "toBedHeight": 0.45
+      },
+      {
+        "type": "channel",
+        "x": 2.1,
+        "z": 1.6,
+        "toX": 3.75,
+        "toZ": 2.4,
+        "width": 0.193,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.45,
+        "toBedHeight": 0.35
+      }
+    ]
+  },
+  "water": {
+    "waterTable": -0.2,
+    "springs": [
+      {
+        "x": -2.75,
+        "z": -1.75,
+        "dischargePerHour": 0.32
+      }
+    ],
+    "flowRate": 0.2,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.006,
+    "infiltrationPerDay": 0.03,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.3,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 6,
+    "rockMinScale": 0.18,
+    "rockMaxScale": 0.7,
+    "logs": 1,
+    "logMinLength": 1.2,
+    "logMaxLength": 2.2,
+    "logMinRadius": 0.12,
+    "logMaxRadius": 0.22,
+    "gravelPatches": 2,
+    "gravelMinRadius": 0.5,
+    "gravelMaxRadius": 1.2,
+    "spacing": 0.35
+  },
+  "starterFlora": [
+    {
+      "species": "cragparasol",
+      "count": 7
+    },
+    {
+      "species": "glowbriar",
+      "count": 4
+    },
+    {
+      "species": "sunstone_rosette",
+      "count": 19
+    },
+    {
+      "species": "embercrust_lichen",
+      "count": 18
+    },
+    {
+      "species": "antlerlace_lichen",
+      "count": 16
+    },
+    {
+      "species": "ruffle_lichen",
+      "count": 14
+    },
+    {
+      "species": "plumegrass",
+      "count": 14
+    },
+    {
+      "species": "frosttussock",
+      "count": 10
+    },
+    {
+      "species": "ghostbonnet",
+      "count": 6
+    },
+    {
+      "species": "coinrunner",
+      "count": 6
+    },
+    {
+      "species": "dewbonnet",
+      "count": 4
+    },
+    {
+      "species": "lanternbrush",
+      "count": 6
+    },
+    {
+      "species": "carrion_bell",
+      "count": 6
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "coalback_beetle",
+      "count": 5
+    },
+    {
+      "species": "marbleback",
+      "count": 6
+    },
+    {
+      "species": "prismhopper",
+      "count": 8
+    },
+    {
+      "species": "stonebell",
+      "count": 3
+    },
+    {
+      "species": "rustcoil",
+      "count": 3
+    }
+  ],
+  "faunaBudget": 396
+}

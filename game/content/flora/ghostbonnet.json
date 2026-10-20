@@ -4,7 +4,7 @@
   "archetype": "fungus",
   "placementGroup": "decomposer",
   "role": "Bioluminescent detritus-feeding fungus of damp, shaded litter.",
-  "description": "Pale caps on fine stems glow cool gray-blue above decaying leaves and wood fragments.",
+  "description": "An airy troop of attenuated stalks holds thin blue-grey spectral bell membranes with torn veils and exposed luminous gills above shaded litter.",
   "habitat": {
     "feeds": "detritus",
     "substrates": {

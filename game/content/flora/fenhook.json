@@ -28,6 +28,8 @@
       "optimum": 0.56,
       "tolerance": 0.34
     },
+    "oxygen": { "optimum": 0.22, "tolerance": 0.27 },
+    "topsoilDepth": { "optimum": 0.53, "tolerance": 0.36 },
     "maxWaterDepth": 0.018,
     "minSuitability": 0.18,
     "hardMinMoisture": 0.34,

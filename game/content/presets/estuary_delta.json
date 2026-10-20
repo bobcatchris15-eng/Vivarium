@@ -1,0 +1,221 @@
+{
+  "id": "estuary_delta",
+  "name": "Siltstone Delta",
+  "seed": 663190,
+  "diameter": 10,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.25,
+    "relief": 0.15,
+    "noiseScale": 0.18,
+    "octaves": 3,
+    "minHeight": -1.2,
+    "maxHeight": 2.5,
+    "bottom": -3.5,
+    "rockExposure": 0.05,
+    "slopeX": 0.0,
+    "slopeZ": -0.08,
+    "features": [
+      {
+        "type": "hill",
+        "x": -2.25,
+        "z": -3.25,
+        "radius": 1.75,
+        "amount": 0.45
+      },
+      {
+        "type": "hill",
+        "x": 2.25,
+        "z": -3.25,
+        "radius": 1.75,
+        "amount": 0.45
+      },
+      {
+        "type": "basin",
+        "x": 0.0,
+        "z": 2.75,
+        "radius": 2.25,
+        "amount": 0.35,
+        "bedHeight": -0.35
+      },
+      {
+        "type": "channel",
+        "x": -1.5,
+        "z": -3.5,
+        "toX": -0.9,
+        "toZ": -2.25,
+        "width": 0.183,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.618,
+        "toBedHeight": 0.231
+      },
+      {
+        "type": "channel",
+        "x": -0.9,
+        "z": -2.25,
+        "toX": -0.25,
+        "toZ": -0.9,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.231,
+        "toBedHeight": 0.13
+      },
+      {
+        "type": "channel",
+        "x": -0.25,
+        "z": -0.9,
+        "toX": 0.0,
+        "toZ": 0.75,
+        "width": 0.217,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.13,
+        "toBedHeight": 0.006
+      },
+      {
+        "type": "channel",
+        "x": 0.0,
+        "z": 0.75,
+        "toX": 0.0,
+        "toZ": 2.75,
+        "width": 0.233,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.006,
+        "toBedHeight": -0.14
+      }
+    ]
+  },
+  "water": {
+    "waterTable": 0.0,
+    "springs": [
+      {
+        "x": -1.5,
+        "z": -3.5,
+        "dischargePerHour": 0.45
+      }
+    ],
+    "flowRate": 0.22,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.004,
+    "infiltrationPerDay": 0.02,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.3,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 3,
+    "rockMinScale": 0.14,
+    "rockMaxScale": 0.45,
+    "logs": 2,
+    "logMinLength": 1.2,
+    "logMaxLength": 2.5,
+    "logMinRadius": 0.12,
+    "logMaxRadius": 0.22,
+    "gravelPatches": 2,
+    "gravelMinRadius": 0.4,
+    "gravelMaxRadius": 1.0,
+    "spacing": 0.35
+  },
+  "starterFlora": [
+    {
+      "species": "rainshield",
+      "count": 4
+    },
+    {
+      "species": "vaultfern",
+      "count": 2
+    },
+    {
+      "species": "kinkcane",
+      "count": 4
+    },
+    {
+      "species": "siltstars",
+      "count": 16
+    },
+    {
+      "species": "lanternsedge",
+      "count": 16
+    },
+    {
+      "species": "ringreed",
+      "count": 18
+    },
+    {
+      "species": "floodlace_moss",
+      "count": 14
+    },
+    {
+      "species": "rain_jelly",
+      "count": 8
+    },
+    {
+      "species": "glassrush",
+      "count": 16
+    },
+    {
+      "species": "brooklace",
+      "count": 12
+    },
+    {
+      "species": "tidebell",
+      "count": 12
+    },
+    {
+      "species": "streamribbon",
+      "count": 10
+    },
+    {
+      "species": "bogglass_moss",
+      "count": 10
+    },
+    {
+      "species": "shadebell",
+      "count": 8
+    },
+    {
+      "species": "moonfern",
+      "count": 10
+    },
+    {
+      "species": "dewbonnet",
+      "count": 8
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "siltshield",
+      "count": 6
+    },
+    {
+      "species": "glintfin",
+      "count": 6
+    },
+    {
+      "species": "glasscoil",
+      "count": 3
+    },
+    {
+      "species": "stiltclaw",
+      "count": 4
+    },
+    {
+      "species": "reedjaw",
+      "count": 3
+    },
+    {
+      "species": "emberglass_swimmer",
+      "count": 5
+    },
+    {
+      "species": "loamthread",
+      "count": 4
+    }
+  ],
+  "faunaBudget": 430
+}

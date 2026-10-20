@@ -1,0 +1,95 @@
+﻿{
+    "id":  "vaultfern",
+    "name":  "Vaultfern",
+    "archetype":  "plant",
+    "placementGroup":  "woody",
+    "role":  "Short trunked tree-fern analogue bearing arching fronds as a humid elevated microcanopy.",
+    "description":  "A fibrous upright stipe supports an uneven fountain of many finely divided fronds. The lower trunk remains exposed while the arching pinnae interlock overhead.",
+    "habitat":  {
+                    "substrates":  {
+                                       "soil":  1,
+                                       "gravel":  0.16,
+                                       "rock":  0.05
+                                   },
+                    "refuseSubstrates":  [
+                                             "water",
+                                             "wood"
+                                         ],
+                    "refuseTags":  [
+
+                                   ],
+                    "moisture":  {
+                                     "optimum":  0.79,
+                                     "tolerance":  0.25
+                                 },
+                    "light":  {
+                                  "optimum":  0.35,
+                                  "tolerance":  0.3
+                              },
+                    "nutrients":  {
+                                      "optimum":  0.49,
+                                      "tolerance":  0.39
+                                  },
+                    "maxWaterDepth":  0,
+                    "hardMinMoisture":  0.32000000000000006,
+                    "hardMaxMoisture":  1.0,
+                    "minSuitability":  0.18
+                },
+    "growth":  {
+                   "ratePerDay":  0.068,
+                   "maxBiomass":  7.1,
+                   "initialBiomass":  0.1,
+                   "declinePerDay":  0.065,
+                   "maturityDays":  35,
+                   "lifespanDays":  900,
+                   "nutrientPerBiomass":  0.24,
+                   "radiusAtMax":  1.27,
+                   "minRadius":  0.085
+               },
+    "spread":  {
+                   "intervalDays":  24,
+                   "radius":  1.35,
+                   "propagules":  2,
+                   "minBiomassFraction":  0.66
+               },
+    "competition":  {
+                        "radius":  0.68,
+                        "crowdingLimit":  4.4,
+                        "sensitivity":  0.35
+                    },
+    "proximity":  [
+
+                  ],
+    "litterFraction":  0.84,
+    "sheddingPerDay":  0.017,
+    "grazingValue":  0,
+    "woody":  {
+                  "layer":  "shrub",
+                  "canopyRadius":  1.32,
+                  "shadeOpacity":  0.42,
+                  "minSpacing":  0.57
+              },
+    "visual":  {
+                   "shape":  "microcanopy_vaultfern",
+                   "color":  [
+                                 0.11,
+                                 0.34,
+                                 0.23
+                             ],
+                   "color2":  [
+                                  0.39,
+                                  0.63,
+                                  0.38
+                              ],
+                   "colorVariance":  0.095,
+                   "height":  2.2
+               },
+    "tags":  [
+                 "plant",
+                 "fern",
+                 "understory",
+                 "microcanopy",
+                 "humid",
+                 "rhizomatous"
+             ]
+}

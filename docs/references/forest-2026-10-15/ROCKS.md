@@ -1,0 +1,13 @@
+# Stratified rocks and covering contact — retained
+
+The retained October16 pass gives large rocks irregular fracture faces and broken horizontal ledges. One seeded triangle profile now drives both their mesh and Rock.TopAt. The placed-rock renderer uses local-axis scale before yaw, matching the support query; a managed probe against installed GodotSharp4.7.1 confirms the old global-axis scale diverged in a synthetic anisotropic case.
+
+A close native view exposed large triangular gaps in covering across the new steep faces. Adaptive refinement now follows the actual support surface for moss AND lichen tiles near rocks. The visible dark patch in that view is lichen (Crust), not moss (Mat). Support-plane error is sampled at triangle edges/center, refined above1.5mm to at most4levels, with unresolved errors above2mm rejected. Terrain/log-only tiles keep the prior policy.
+
+Source originals, rejected v1 regular shelves, v2 geometry and v3 Mat-only refinement are preserved under build/forest-reference-20261015/rock-profile-20261016/. V4 covering refinement removes the coarse teeth in the close view. The final source is ba7935d7b468f42970a3f03ec3f4aa419d2bf613ba79c6852cf4dd7e5e329eb3.
+
+Evidence: final-validation.json and review.html in that directory. ROOT creek and bayou runs pass forced compilation/source guards, canonical saved-state equality and exact liquid snapshots against their matched baselines. A fresh100physical-second creek run matches the prior water snapshot with4025samples, zero airborne water and balance residual below8e-15m3. The2second actual-fluid continuation also matches the prior state.54focused ROOT checks pass, including geometry/support/stacking, pebble, fluid/drainage and shoreline cases. Four new full-frame void probes are exactly RGB(0,0,0). Representative actual-fluid frames were inspected; continuous-video and whole-forest temporal acceptance are not claimed. The far overview camera is trunk-occluded and excluded from visual preference.
+
+Footprint semantics and stored rock transforms/seeds are preserved; derived private profiles add no saved fields. Existing saves regenerate the revised rock form and query together on relaunch. Pebble bodies and the legacy detail:1 builder match the exact dirty before-source; an initial audit used older Git HEAD and retracted its false pebble-regression finding after reviewing those bytes. Unrelated source hashes and editors were preserved. Five runtime files plus the focused rock test file changed. Performance remains unmeasured and deferred.
+
+The next pass targets actual moss cushions and translucency, identifying Mat species and native colony views before changing their loft. Thin lichen should remain distinct.

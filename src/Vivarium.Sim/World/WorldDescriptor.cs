@@ -33,22 +33,22 @@ public sealed class WorldDescriptor
     /// </summary>
     public double BioAcceleration { get; set; } = DefaultBioAcceleration;
     /// <summary>
-    /// Whole-vivarium budget: the maximum number of living animals across every species. Independent of the
-    /// per-species safety caps, so adding a species cannot multiply the total population. The default sits above
-    /// the sum of every current species cap (1592), so no shipped preset or save changes behaviour; lowering it
-    /// is how a preset expresses a smaller island. Worlds saved before this setting existed also load with the
-    /// default.
+    /// Whole-vivarium budget: a hard ceiling on living animal individuals across species.
+    /// Each shipped habitat preset now sets a lower, size-appropriate faunaBudget
+    /// (247..430 in the current preset library), while direct legacy descriptors
+    /// and old saves retain the former 2000 fallback for compatibility. The new
+    /// per-species reproduction caps remain effective even in older saves.
     /// </summary>
     public int FaunaBudget { get; set; } = DefaultFaunaBudget;
 
-    public const double MinDiameter = 5, MaxDiameter = 10;
+    public const double MinDiameter = 5, MaxDiameter = 20;
     /// <summary>
-    /// Species-sum ceiling plus headroom: 1592 today (every shipped species at its own cap), rounded up so a
-    /// preset that never lowers this behaves exactly as it did before the budget existed.
+    /// Legacy/direct-world fallback. Presets explicitly constrain animal counts;
+    /// old saves preserve their serialized budget and existing living inhabitants.
     /// </summary>
     public const int DefaultFaunaBudget = 2000;
-    /// <summary>Largest diameter accepted when loading a save written before the 12 m cap.</summary>
-    public const double LegacyMaxDiameter = 20;
+    /// <summary>Largest diameter accepted when loading a save written before the current cap.</summary>
+    public const double LegacyMaxDiameter = 24;
 
     /// <summary>Set by the save loader so older, larger worlds still validate; new worlds use <see cref="MaxDiameter"/>.</summary>
     [ThreadStatic] public static bool AllowLegacyDiameter;

@@ -1,0 +1,15 @@
+{
+  "source": "https://polyhaven.com/a/fern_02",
+  "derivedFrom": "Poly Haven Fern 02 1K glTF",
+  "license": "CC0",
+  "sha256": "90D8C27B8D017D5AF087975C5A3DC0078A34A98EF54C16551CF42BD837424423",
+  "validation": {
+    "warnings": 0,
+    "sourceReport": "build/visual-lab/references/polyhaven/fern_02-tangents-validation.txt",
+    "errors": 0,
+    "validator": "2.0.0-dev.3.10"
+  },
+  "runtimeAcceptance": false,
+  "asset": "fern02.glb",
+  "process": "glTF-Transform v4.5.1 tangent generation and GLB packaging; original embedded JPEG textures retained"
+}

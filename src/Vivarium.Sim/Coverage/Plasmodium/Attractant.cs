@@ -17,6 +17,12 @@ public sealed class Attractant
 
     private int _minCx, _minCz, _w, _h; // interior (non-ghost) domain
     private double[] _values = Array.Empty<double>(); // (w+2) x (h+2), ghost-padded, row-major
+    // Reused Jacobi/source workspaces. The field often covers tens of
+    // thousands of cells; allocating three dense arrays every growth step
+    // produces large periodic GCs even when the domain does not change.
+    private double[] _sourceScratch = Array.Empty<double>();
+    private double[] _nextScratch = Array.Empty<double>();
+    private double[] _warmScratch = Array.Empty<double>();
 
     public Attractant(PlasmodiumParams prm) => _prm = prm;
 
@@ -73,14 +79,30 @@ public sealed class Attractant
         int w = maxCx - minCx + 1, h = maxCz - minCz + 1;
         int stride = w + 2;
 
-        var f = new double[stride * (h + 2)];
+        int capacity = stride * (h + 2);
+        if(_sourceScratch.Length < capacity)
+            _sourceScratch = new double[capacity];
+        var f = _sourceScratch;
         for (int lz = 0; lz < h; lz++)
             for (int lx = 0; lx < w; lx++)
                 f[(lz + 1) * stride + (lx + 1)] = source(minCx + lx, minCz + lz);
 
-        // Warm start: reuse whatever the previous step already solved for cells still in the new domain.
-        var cur = new double[stride * (h + 2)];
-        if (_w > 0 && _h > 0)
+        // Reuse the previous exact result when bounds/stride are unchanged.
+        // On a shifted/resized domain, clear a spare workspace and copy the
+        // overlapping old field, exactly as the original warm start did.
+        bool sameDomain = _w == w && _h == h &&
+            _minCx == minCx && _minCz == minCz;
+        double[] previous = _values;
+        double[] cur;
+        if (sameDomain) cur = _values;
+        else
+        {
+            cur = _warmScratch.Length >= capacity &&
+                !ReferenceEquals(_warmScratch, _values)
+                ? _warmScratch : new double[capacity];
+            Array.Clear(cur, 0, capacity);
+        }
+        if (!sameDomain && _w > 0 && _h > 0)
         {
             for (int lz = 0; lz < h; lz++)
             {
@@ -98,7 +120,12 @@ public sealed class Attractant
             }
         }
 
-        var next = new double[stride * (h + 2)];
+        if (_nextScratch.Length < capacity)
+            _nextScratch = new double[capacity];
+        // Clear all possible ghost-border positions when dimensions change;
+        // unused interior values are overwritten in every Jacobi pass.
+        Array.Clear(_nextScratch, 0, capacity);
+        var next = _nextScratch;
         double hh = _prm.CoarseCellSize;
         double h2 = hh * hh;
         double invDiag = 1.0 / (_prm.Delta + 4 * _prm.Dc / h2); // Delta > 0, so this never divides by zero
@@ -128,5 +155,7 @@ public sealed class Attractant
 
         _minCx = minCx; _minCz = minCz; _w = w; _h = h;
         _values = cur;
+        _nextScratch = next; // opposite ping-pong buffer after the final swap
+        if (!sameDomain) _warmScratch = previous;
     }
 }

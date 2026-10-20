@@ -1,0 +1,42 @@
+{
+  "id": "VL-0010-native-fern",
+  "created_utc": "2026-10-14T20:47:38.012660+00:00",
+  "stage": "complete",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0010-native-fern",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T20:47:49.271078+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T20:48:11.038862+00:00"
+    },
+    {
+      "command": "authored",
+      "at": "2026-10-14T20:48:18.612815+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T20:48:35.936133+00:00"
+    },
+    {
+      "command": "blind",
+      "at": "2026-10-14T20:48:46.052692+00:00"
+    },
+    {
+      "command": "compare",
+      "at": "2026-10-14T20:48:46.753787+00:00"
+    },
+    {
+      "command": "critiqued",
+      "at": "2026-10-14T20:50:12.132584+00:00"
+    },
+    {
+      "command": "decision",
+      "at": "2026-10-14T20:50:15.899171+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T20:50:15.899182+00:00",
+  "author_identity": "native-fern-review-author"
+}

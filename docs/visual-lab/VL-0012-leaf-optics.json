@@ -1,0 +1,13 @@
+{
+  "id": "VL-0012-leaf-optics",
+  "created_utc": "2026-10-18T06:59:39.872689+00:00",
+  "stage": "before",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0012-leaf-optics",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-18T07:00:04.571564+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-18T07:00:04.571579+00:00"
+}

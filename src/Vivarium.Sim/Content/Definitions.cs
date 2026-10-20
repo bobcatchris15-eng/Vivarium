@@ -97,6 +97,7 @@ public sealed class StratumDef
 public readonly record struct Pref(double Optimum, double Tolerance)
 {
     public double Eval(double v) => Core.MathD.Preference(v, Optimum, Tolerance);
+    public double EvalStage(double v, double toleranceScale) => Core.MathD.Preference(v, Optimum, Tolerance * toleranceScale);
 }
 
 public sealed class ProximityRule
@@ -205,6 +206,13 @@ public sealed class FloraSpeciesDef
     public Pref Moisture { get; init; }
     public Pref Light { get; init; }
     public Pref Nutrients { get; init; }
+    /// <summary>Optional root aeration niche; omitted means no oxygen discrimination.</summary>
+    public Pref? Oxygen { get; init; }
+    /// <summary>Optional effective topsoil depth niche, in metres.</summary>
+    public Pref? TopsoilDepth { get; init; }
+    public double SurvivalToleranceScale { get; init; } = 1.65;
+    public double EstablishmentToleranceScale { get; init; } = 0.85;
+    public double ReproductionToleranceScale { get; init; } = 0.72;
     public double MaxWaterDepth { get; init; }
     /// <summary>When true, habitat accepts any depth above MinWaterDepth without a maximum-depth ceiling.</summary>
     public bool UnlimitedWaterDepth { get; init; }

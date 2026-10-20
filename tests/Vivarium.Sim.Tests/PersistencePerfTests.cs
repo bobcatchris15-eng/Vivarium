@@ -230,7 +230,18 @@ public class PerfTests
         Assert.True(examined < 400, $"a local query examined {examined} of {w.Flora.Count} individuals");
         // identical ecological result with a brute-force scan
         var fast = w.FloraSystem.Crowding(sp, Vec2.Zero, EntityId.None);
-        double brute = w.Flora.Items.Where(f => Vec2.Distance(f.Position, Vec2.Zero) <= sp.CompetitionRadius).Sum(f => w.Content.FloraInteractions.CompetitionWeight(sp.Id, f.SpeciesId) * f.BiomassFraction(sp));
+        double newRadius = sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) *
+            Math.Sqrt(MathD.Clamp01(sp.InitialBiomass / sp.MaxBiomass));
+        double brute = w.Flora.Items.Where(f => Vec2.Distance(f.Position, Vec2.Zero) <= sp.CompetitionRadius).Sum(f =>
+        {
+            var other = w.Content.FloraOrThrow(f.SpeciesId);
+            double neighbourRadius = f.Radius(other), distance = Vec2.Distance(f.Position, Vec2.Zero);
+            double contact = MathD.Clamp01(1 - distance / Math.Max(1e-9, newRadius + neighbourRadius));
+            double roots = MathD.Clamp01(1 - distance / sp.CompetitionRadius);
+            double neighbourShare = neighbourRadius * neighbourRadius /
+                Math.Max(1e-12, newRadius * newRadius + neighbourRadius * neighbourRadius);
+            return f.BiomassFraction(other) * (0.65 * contact + 0.35 * roots) * 2 * neighbourShare;
+        });
         Assert.Equal(brute, fast, 9);
     }
 

@@ -27,6 +27,41 @@ public class TransportScenarios
         }
     }
 
+    private sealed class CountingNetwork : IPlasmodiumNetwork
+    {
+        public int ConductanceReads;
+        public bool ShouldRetract(int gx,int gz) => false;
+        public double VeinConductance(int gx,int gz,int nx,int nz)
+        {
+            ConductanceReads++;
+            return .025;
+        }
+    }
+
+    [Fact]
+    public void LongOscillatingStepReadsEachStaticVeinOnlyOnce()
+    {
+        var prm=new PlasmodiumParams {
+            Beta=0, LambdaF=0, InitialMass=200,
+            MaintenanceRate=0, MMin=0, FeedRate=0,
+            SheetConductance=.1,
+        };
+        var colony=new PlasmodiumColony(0,prm);
+        var cells=Enumerable.Range(0,21).Select(x=>(gx:x-10,gz:0)).ToArray();
+        colony.Seed(cells);
+        var layer=new CoverageLayer(CoverageLayerId.Plasmodium,worldSeed:15);
+        foreach(var (x,z) in cells)layer.SetOcc(x,z,1);
+        var env=new TestEnv();
+        var attractant=new Attractant(prm);
+        var network=new CountingNetwork();
+        double before=colony.TotalMass();
+        // 28 biological seconds implies 3 transport substeps; the old code
+        // re-read the same 20 vein edges each substep (60 expensive queries).
+        colony.Step(layer,attractant,env,step:1,dt:28,network);
+        Assert.Equal(20,network.ConductanceReads);
+        Assert.Equal(before,colony.TotalMass(),precision:8);
+    }
+
     // ------------------------------------------------------------------ transport_far_end_drains
 
     private const int StripHalf = 10; // strip spans gx in [-StripHalf, StripHalf] at gz = 0

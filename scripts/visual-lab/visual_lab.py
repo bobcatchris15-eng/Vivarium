@@ -95,12 +95,41 @@ def blind(exp):
 def check_halt(repo,exp):
     if (repo/'.clanker'/'HALT').exists() or (exp/'HALT').exists(): raise ValueError('HALT active')
 
+def reuse_before(repo, exp, parent_id):
+    if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}',parent_id or ''): raise ValueError('safe parent experiment ID required')
+    parent=confined(exp.parent,exp.parent/parent_id)
+    current=verify_baseline(exp); previous=verify_baseline(parent)
+    if current['files']!=previous['files']: raise ValueError('reused baseline source/assets differ')
+    source=parent/'captures'/'before'; target=exp/'captures'/'before'
+    if target.exists(): raise ValueError('capture evidence already exists')
+    launch=read(source/'launch.json')
+    if launch.get('exit_code')!=0 or launch.get('actual_render') is not True or not list(source.rglob('*.png')): raise ValueError('successful original render required')
+    if launch.get('baseline_manifest_sha256')!=digest(parent/'baseline/manifest.json'): raise ValueError('original baseline authentication missing')
+    records=[{'path':rel,'sha256':digest(p)} for rel,p in source_paths(repo)]
+    if records!=[{'path':r['path'],'sha256':r['sha256']} for r in current['files']]: raise ValueError('current source differs from protected baseline')
+    payload='\n'.join(r['path']+' '+r['sha256'].upper() for r in records if Path(r['path']).parts[0] in ('game','src')).encode()
+    if hashlib.sha256(payload).hexdigest()!=launch.get('source_tree_sha256'): raise ValueError('original capture source differs')
+    files=[]
+    for p in source.rglob('*'):
+        confined(source,p)
+        if p.is_file(): files.append((p.relative_to(source),p,digest(p)))
+    target.mkdir(parents=True)
+    for rel,p,sha in files:
+        dest=confined(target,target/rel); dest.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(p,dest)
+        if digest(p)!=sha or digest(dest)!=sha: raise ValueError('original capture changed during reuse')
+    shutil.copyfile(target/'launch.json',target/'original-launch.json')
+    launch['baseline_manifest_sha256']=digest(exp/'baseline/manifest.json')
+    launch['reused_from']=parent_id; launch['reused_utc']=stamp()
+    atomic(target/'launch.json',launch)
+    atomic(target/'reuse-receipt.json',{'parent':parent_id,'identical_source_asset_records':True,'original_baseline_manifest_sha256':digest(parent/'baseline/manifest.json'),'original_launch_sha256':digest(target/'original-launch.json'),'files':[{'path':str(rel),'sha256':sha} for rel,p,sha in files],'policy':'Original capture time and source retained; no new rendering or performance measurement asserted'})
+    return {'reused_from':parent_id,'files':len(files),'original_capture_utc':launch.get('captured_utc')}
+
 def compare_gallery(exp):
     """PNG fixture comparison only; never substitutes for reference/performance gates."""
     sides=[exp/'captures'/side for side in ('before','after')]
     for side in sides:
         launch=read(side/'launch.json')
-        if launch.get('mode') not in ('material-port-review','world-review') or launch.get('actual_render') is not True or launch.get('exit_code')!=0:
+        if launch.get('mode') not in ('material-port-review','world-review','fern-asset-review') or launch.get('actual_render') is not True or launch.get('exit_code')!=0:
             raise ValueError('successful material/world fixture captures required for PNG gallery')
     if read(sides[0]/'launch.json')['mode'] != read(sides[1]/'launch.json')['mode']:
         raise ValueError('matched capture modes required')
@@ -149,7 +178,7 @@ def record_decision(repo,exp,decision):
 def execute(args):
     repo=Path(args.repo).resolve(); state_root=confined(repo,repo/'docs'/'visual-lab'); evidence_root=confined(repo,repo/'build'/'visual-lab'/'experiments')
     if args.command=='inventory':
-        return {'experiments':[p.stem for p in state_root.glob('*.json')],'halted':(repo/'.clanker'/'HALT').exists(),'capture_modes':['reference','material-port-review','world-review'],'scheduler':'agent heartbeat consumes next_action; no paid API calls'}
+        return {'experiments':[p.stem for p in state_root.glob('*.json')],'halted':(repo/'.clanker'/'HALT').exists(),'capture_modes':['reference','material-port-review','world-review','fern-asset-review'],'scheduler':'agent heartbeat consumes next_action; no paid API calls'}
     if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}',args.experiment or ''): raise ValueError('safe experiment ID required')
     exp=confined(evidence_root,evidence_root/args.experiment); statepath=confined(state_root,state_root/(args.experiment+'.json'))
     if args.command=='initialize':
@@ -170,6 +199,8 @@ def execute(args):
         manifest=baseline(repo,exp)
         result={'manifest':str(exp/'baseline'/'manifest.json'),'manifest_sha256':digest(exp/'baseline'/'manifest.json'),'file_count':len(manifest['files']),'revision':manifest['revision']}
         state['stage']='before'
+    elif command=='reuse-before':
+        result=reuse_before(repo,exp,args.parent_experiment); state['stage']='author'
     elif command=='blind': result=blind(exp); state['stage']='critique'
     elif command=='compare':
         out=exp/'compare'; out.mkdir(exist_ok=True)
@@ -179,7 +210,7 @@ def execute(args):
         else:
             subprocess.run(['pwsh','-NoProfile','-File',str(repo/'scripts'/'compare-reference.ps1'),'-Before',str(sides[0]),'-After',str(sides[1]),'-Out',str(out)],check=True)
             result={'report':str(out/'index.html'),'kind':'reference-report'}
-        state['stage']='decision'
+        state['stage']='decision' if (exp/'critic'/'critique.json').is_file() else 'critique'
     elif command=='decision': result=record_decision(repo,exp,args.decision); state['stage']='complete'
     elif command=='capture-plan':
         verify_baseline(exp)
@@ -207,7 +238,7 @@ def execute(args):
     state['history'].append({'command':command,'at':stamp()}); state['updated_utc']=stamp(); atomic(statepath,state)
     return {'performed':True,'result':result,'next_action':{'stage':state['stage'],'experiment':args.experiment}}
 def main():
-    p=argparse.ArgumentParser(); p.add_argument('command'); p.add_argument('--repo',required=True); p.add_argument('--experiment'); p.add_argument('--decision',choices=['accept','reject','revise']); p.add_argument('--side',choices=['before','after']); p.add_argument('--author-identity'); args=p.parse_args()
+    p=argparse.ArgumentParser(); p.add_argument('command'); p.add_argument('--repo',required=True); p.add_argument('--experiment'); p.add_argument('--parent-experiment'); p.add_argument('--decision',choices=['accept','reject','revise']); p.add_argument('--side',choices=['before','after']); p.add_argument('--author-identity'); args=p.parse_args()
     try: print(json.dumps(execute(args),indent=2))
     except Exception as exc: print(json.dumps({'ok':False,'error':str(exc)})); return 1
     return 0

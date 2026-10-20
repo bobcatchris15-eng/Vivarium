@@ -107,7 +107,7 @@ public class BootstrapTests
         var b = ContentLoader.Load(TestUtil.ContentSource);
         Assert.Equal(a.ContentDigest, b.ContentDigest);
         Assert.Equal(a.Flora.Select(f => f.Id), b.Flora.Select(f => f.Id));
-        Assert.Equal(40, a.Flora.Count);
+        Assert.Equal(53, a.Flora.Count);
         Assert.Equal(17, a.Fauna.Count);
         Assert.All(a.Fauna, f =>
         {
@@ -115,11 +115,11 @@ public class BootstrapTests
             Assert.True(f.Animation.MaxHz >= f.Animation.IdleHz);
             Assert.InRange(f.Animation.DutyFactor, 0.05, 0.95);
         });
-        Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
+        Assert.Equal(8, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
         Assert.Equal(13, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
-        Assert.Equal(11, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));
-        Assert.Equal(6, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Decomposer));
-        Assert.Equal(3, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody)); // shrubs only; the tree layer was removed
+        Assert.Equal(14, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));
+        Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Decomposer));
+        Assert.Equal(11, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody));
         Assert.Empty(a.Warnings);
     }
 
@@ -174,7 +174,12 @@ public class BootstrapTests
     public void AllPresetsLoadAndBootSuccessfully()
     {
         var content = ContentLoader.Load(TestUtil.ContentSource);
-        var expectedPresets = new[] { "default", "rocky_rise", "shoreline", "creek", "bayou_marsh", "steep_rocky_slope", "isolated_pond", "oxbow_creek", "deep_inlet" };
+        var expectedPresets = new[] {
+            "default", "rocky_rise", "shoreline", "creek", "bayou_marsh",
+            "steep_rocky_slope", "isolated_pond", "oxbow_creek", "deep_inlet",
+            "misty_cloud_forest", "arid_canyon", "cascading_falls", "peat_fen",
+            "woodland_vernal_pools", "alpine_tundra", "estuary_delta"
+        };
         foreach (var id in expectedPresets)
         {
             Assert.True(content.Presets.ContainsKey(id), $"Preset '{id}' should be loaded");

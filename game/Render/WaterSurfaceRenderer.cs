@@ -23,6 +23,7 @@ public partial class WaterSurfaceRenderer : Node3D
     private readonly Dictionary<(int,int),SurfaceFluidSample> _cells=new();
     private readonly HashSet<(int,int)> _active=new();
     private VivariumWorld? _w;
+    public EnvironmentRig? Lighting { get; set; }
     private ArrayMesh _topology = null!;
     private BallisticFluidRenderer _air = null!;
     private long _version = -1;
@@ -124,10 +125,13 @@ public partial class WaterSurfaceRenderer : Node3D
         _air.SetInterpolation(_w.Clock.Paused ? 0f : (float)Math.Min(_elapsed, .016667));
         float opticalTime = (float)((_snapshot?.Time ?? 0) + (_w.Clock.Paused ? 0 : Math.Min(_elapsed, _blendSeconds)));
         _air.SetTime(opticalTime);
+        if (Lighting != null) _air.SetCanopyLighting(Lighting.CanopyEnergy, Lighting.CanopyLightDirection);
         float blend = (float)Math.Clamp(_elapsed / _blendSeconds, 0, 1);
         foreach (var t in _tiles.Values) if (t.Node.Visible)
         {
             t.Material.SetShaderParameter("state_blend", blend);
+            t.Material.SetShaderParameter("pond_level", (float)_w.Water.WaterTable);
+            if (Lighting != null) { t.Material.SetShaderParameter("sky_energy", Lighting.CanopyEnergy); t.Material.SetShaderParameter("light_direction", Lighting.CanopyLightDirection); }
             // Optical motion runs every displayed frame, rather than stopping between
             // asynchronous physical snapshots. It uses physical seconds and freezes on pause.
             t.Material.SetShaderParameter("fluid_time", opticalTime);

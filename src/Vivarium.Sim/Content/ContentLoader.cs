@@ -274,6 +274,13 @@ public static class ContentLoader
         return new Pref(p.Num("optimum", min: 0, max: 1), p.Num("tolerance", min: 0.01, max: 5));
     }
 
+    private static Pref ParseTopsoilDepthPref(JNode n)
+    {
+        var p = n.Req("topsoilDepth");
+        p.RejectUnknown("optimum", "tolerance");
+        return new Pref(p.Num("optimum", min: 0, max: 1.5), p.Num("tolerance", min: 0.01, max: 1.5));
+    }
+
     private static FloraSpeciesDef ParseFlora(JNode n)
     {
         n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber", "reproduction", "postLife", "decomposition");
@@ -284,7 +291,7 @@ public static class ContentLoader
         if (!FloraPlacementGroups.TryParse(placementGroupId, out var placementGroup))
             n["placementGroup"].Error("expected moss_lichen | terrestrial | waterside_aquatic | decomposer | woody");
         var h = n.Req("habitat");
-        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "maxWaterDepth", "minWaterDepth", "unlimitedWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
+        h.RejectUnknown("substrates", "refuseSubstrates", "refuseTags", "moisture", "light", "nutrients", "oxygen", "topsoilDepth", "survivalToleranceScale", "establishmentToleranceScale", "reproductionToleranceScale", "maxWaterDepth", "minWaterDepth", "unlimitedWaterDepth", "hardMinMoisture", "hardMaxMoisture", "minSuitability", "feeds", "requiresFeature");
         string feeds = h.Str("feeds", "nutrients");
         if (feeds is not ("nutrients" or "detritus")) h["feeds"].Error("expected nutrients | detritus");
         string reqFeature = ""; double reqRadius = 0;
@@ -547,6 +554,11 @@ public static class ContentLoader
             SubstrateAffinity = ParseAffinity(h, "substrates"), RefuseSubstrates = ParseSubstrateSet(h, "refuseSubstrates"),
             RefuseTags = new HashSet<string>(h.StrList("refuseTags"), StringComparer.Ordinal),
             Moisture = ParsePref(h, "moisture"), Light = ParsePref(h, "light"), Nutrients = ParsePref(h, "nutrients"),
+            Oxygen = h.Has("oxygen") ? ParsePref(h, "oxygen") : null,
+            TopsoilDepth = h.Has("topsoilDepth") ? ParseTopsoilDepthPref(h) : null,
+            SurvivalToleranceScale = h.Num("survivalToleranceScale", 1.65, 1, 5),
+            EstablishmentToleranceScale = h.Num("establishmentToleranceScale", 0.85, 0.25, 1.5),
+            ReproductionToleranceScale = h.Num("reproductionToleranceScale", 0.72, 0.25, 1.5),
             MaxWaterDepth = h.Num("maxWaterDepth", 0, 0, 5), MinWaterDepth = h.Num("minWaterDepth", 0, 0, 5),
             UnlimitedWaterDepth = h.Bool("unlimitedWaterDepth", false),
             HardMinMoisture = h.Num("hardMinMoisture", 0, 0, 1), HardMaxMoisture = h.Num("hardMaxMoisture", 1.0, 0, 1), MinSuitability = h.Num("minSuitability", 0.15, 0, 1),
@@ -725,7 +737,7 @@ public static class ContentLoader
 
     private static WorldDescriptor ParsePreset(JNode n)
     {
-        n.RejectUnknown("id", "name", "seed", "diameter", "cellSize", "terrain", "water", "placement", "starterFlora", "starterFauna");
+        n.RejectUnknown("id", "name", "seed", "diameter", "cellSize", "terrain", "water", "placement", "starterFlora", "starterFauna", "faunaBudget");
         var t = n.Req("terrain");
         t.RejectUnknown("baseHeight", "relief", "slopeX", "slopeZ", "noiseScale", "octaves", "minHeight", "maxHeight", "bottom", "rockExposure", "features");
         var w = n.Req("water");
@@ -738,6 +750,8 @@ public static class ContentLoader
             Seed = (ulong)n.Num("seed", min: 0, max: 9.0e15),
             Diameter = n.Num("diameter", min: WorldDescriptor.MinDiameter, max: WorldDescriptor.MaxDiameter),
             CellSize = n.Num("cellSize", 0.25, 0.1, 1.0),
+            FaunaBudget = n.Int("faunaBudget", WorldDescriptor.DefaultFaunaBudget,
+                0, WorldDescriptor.MaxFaunaBudget),
             Terrain = new TerrainProfile
             {
                 BaseHeight = t.Num("baseHeight", min: -2, max: 3), Relief = t.Num("relief", min: 0, max: 3), SlopeX = t.Num("slopeX", 0, min: -2, max: 2), SlopeZ = t.Num("slopeZ", 0, min: -2, max: 2), NoiseScale = t.Num("noiseScale", min: 0.01, max: 2),

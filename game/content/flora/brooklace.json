@@ -28,6 +28,7 @@
       "optimum": 0.4,
       "tolerance": 0.35
     },
+    "oxygen": { "optimum": 0.08, "tolerance": 0.24 },
     "maxWaterDepth": 0.04,
     "minWaterDepth": 0.004,
     "hardMinMoisture": 0.6,

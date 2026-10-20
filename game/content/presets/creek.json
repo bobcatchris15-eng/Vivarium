@@ -5,13 +5,15 @@
   "diameter": 8,
   "cellSize": 0.25,
   "terrain": {
-    "baseHeight": 0.2,
-    "relief": 0.04,
+    "baseHeight": 0.22,
+    "relief": 0.05,
+    "slopeX": -0.04,
+    "slopeZ": -0.08,
     "noiseScale": 0.18,
     "octaves": 3,
-    "minHeight": -0.65,
-    "maxHeight": 1.3,
-    "bottom": -2.6,
+    "minHeight": -1.1,
+    "maxHeight": 3.0,
+    "bottom": -4.0,
     "rockExposure": 0.18,
     "features": [
       {
@@ -19,113 +21,191 @@
         "x": -2.56,
         "z": 1.6,
         "radius": 1.68,
-        "amount": 0.07
+        "amount": 0.099
       },
       {
         "type": "hill",
         "x": 2.12,
         "z": -1.96,
         "radius": 1.8,
-        "amount": 0.09
+        "amount": 0.1273
       },
       {
         "type": "basin",
-        "x": 1.36,
-        "z": 2.6,
-        "radius": 0.96,
-        "amount": 0.13,
-        "bedHeight": -0.09
+        "x": 2.3,
+        "z": 2.5,
+        "radius": 1.95,
+        "amount": 0.2,
+        "bedHeight": -0.18
+      },
+      {
+        "type": "basin",
+        "x": 1.6,
+        "z": 1.9,
+        "radius": 1.2,
+        "amount": 0.08,
+        "bedHeight": -0.025
+      },
+      {
+        "type": "basin",
+        "x": -1.1,
+        "z": -0.95,
+        "radius": 0.6,
+        "amount": 0.12,
+        "bedHeight": 0.2396
+      },
+      {
+        "type": "basin",
+        "x": 0.25,
+        "z": 0.25,
+        "radius": 0.65,
+        "amount": 0.12,
+        "bedHeight": 0.0697
+      },
+      {
+        "type": "basin",
+        "x": 1.65,
+        "z": 1.6,
+        "radius": 0.6,
+        "amount": 0.12,
+        "bedHeight": -0.15
       },
       {
         "type": "channel",
         "x": -2.48,
         "z": -2.08,
-        "toX": -1.32,
-        "toZ": -1.68,
-        "width": 0.255,
-        "amount": 0.145,
+        "toX": -2.0,
+        "toZ": -1.8,
+        "width": 0.2,
+        "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.16844,
-        "toBedHeight": 0.14116
+        "bedHeight": 0.4095,
+        "toBedHeight": 0.3609
       },
       {
         "type": "channel",
-        "x": -1.32,
-        "z": -1.68,
-        "toX": -1.8,
-        "toZ": -0.48,
-        "width": 0.2798,
-        "amount": 0.145,
+        "x": -2.0,
+        "z": -1.8,
+        "toX": -1.5,
+        "toZ": -1.45,
+        "width": 0.2,
+        "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.14116,
-        "toBedHeight": 0.091
+        "bedHeight": 0.3609,
+        "toBedHeight": 0.3249
       },
       {
         "type": "channel",
-        "x": -1.8,
-        "z": -0.48,
-        "toX": -0.32,
-        "toZ": 0.12,
-        "width": 0.2437,
-        "amount": 0.145,
+        "x": -1.5,
+        "z": -1.45,
+        "toX": -1.1,
+        "toZ": -0.95,
+        "width": 0.2,
+        "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.091,
-        "toBedHeight": 0.05216
+        "bedHeight": 0.3249,
+        "toBedHeight": 0.2396
       },
       {
         "type": "channel",
-        "x": -0.32,
-        "z": 0.12,
-        "toX": 1.2,
-        "toZ": 0.4,
-        "width": 0.2353,
-        "amount": 0.145,
+        "x": -1.1,
+        "z": -0.95,
+        "toX": -0.7,
+        "toZ": -0.45,
+        "width": 0.2,
+        "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.05216,
-        "toBedHeight": 0.0274
+        "bedHeight": 0.2396,
+        "toBedHeight": 0.2246
       },
       {
         "type": "channel",
-        "x": 1.2,
-        "z": 0.4,
-        "toX": 1.52,
-        "toZ": 1.2,
-        "width": 0.2752,
-        "amount": 0.145,
+        "x": -0.7,
+        "z": -0.45,
+        "toX": -0.25,
+        "toZ": -0.05,
+        "width": 0.2,
+        "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.0274,
-        "toBedHeight": -0.01116
+        "bedHeight": 0.2246,
+        "toBedHeight": 0.1765
       },
       {
         "type": "channel",
-        "x": 1.52,
-        "z": 1.2,
-        "toX": 0.32,
-        "toZ": 1.96,
-        "width": 0.2655,
-        "amount": 0.145,
+        "x": -0.25,
+        "z": -0.05,
+        "toX": 0.25,
+        "toZ": 0.25,
+        "width": 0.2,
+        "amount": 0.18,
         "sharp": true,
-        "bedHeight": -0.01116,
-        "toBedHeight": -0.03576
+        "bedHeight": 0.1765,
+        "toBedHeight": 0.0697
       },
       {
         "type": "channel",
-        "x": 0.32,
-        "z": 1.96,
-        "toX": 1.36,
-        "toZ": 2.6,
-        "width": 0.23,
-        "amount": 0.145,
+        "x": 0.25,
+        "z": 0.25,
+        "toX": 0.75,
+        "toZ": 0.6,
+        "width": 0.2,
+        "amount": 0.18,
         "sharp": true,
-        "bedHeight": -0.03576,
-        "toBedHeight": -0.07288
+        "bedHeight": 0.0697,
+        "toBedHeight": 0.0547
+      },
+      {
+        "type": "channel",
+        "x": 0.75,
+        "z": 0.6,
+        "toX": 1.25,
+        "toZ": 1.05,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.0547,
+        "toBedHeight": -0.0098
+      },
+      {
+        "type": "channel",
+        "x": 1.25,
+        "z": 1.05,
+        "toX": 1.65,
+        "toZ": 1.6,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.0098,
+        "toBedHeight": -0.15
+      },
+      {
+        "type": "channel",
+        "x": 1.65,
+        "z": 1.6,
+        "toX": 2.05,
+        "toZ": 2.15,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.15,
+        "toBedHeight": -0.165
+      },
+      {
+        "type": "channel",
+        "x": 2.05,
+        "z": 2.15,
+        "toX": 2.45,
+        "toZ": 2.7,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.165,
+        "toBedHeight": -0.18
       }
-    ],
-    "slopeX": -0.008,
-    "slopeZ": -0.045
+    ]
   },
   "water": {
-    "waterTable": 0,
+    "waterTable": 0.0,
     "springs": [
       {
         "x": -2.48,
@@ -144,77 +224,106 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 10,
+    "rocks": 5,
     "rockMinScale": 0.16,
     "rockMaxScale": 0.68,
-    "logs": 2,
+    "logs": 1,
     "logMinLength": 1.2,
     "logMaxLength": 2.3,
     "logMinRadius": 0.11,
     "logMaxRadius": 0.22,
-    "gravelPatches": 4,
+    "gravelPatches": 2,
     "gravelMinRadius": 0.4,
     "gravelMaxRadius": 0.95,
     "spacing": 0.32
   },
   "starterFlora": [
     {
-      "species": "brooklace",
-      "count": 4
+      "species": "splitcrown",
+      "count": 2
     },
     {
-      "species": "velvetweave_moss",
+      "species": "vaultfern",
+      "count": 3
+    },
+    {
+      "species": "rainshield",
       "count": 6
     },
     {
+      "species": "lacemantle",
+      "count": 3
+    },
+    {
+      "species": "brooklace",
+      "count": 8
+    },
+    {
+      "species": "velvetweave_moss",
+      "count": 12
+    },
+    {
       "species": "pearl_cushion_moss",
-      "count": 4
+      "count": 10
     },
     {
       "species": "veilfern",
-      "count": 4
+      "count": 8
     },
     {
       "species": "dewbonnet",
-      "count": 4
+      "count": 8
     },
     {
       "species": "fenbead",
-      "count": 3
+      "count": 6
     },
     {
       "species": "frosttussock",
-      "count": 3
+      "count": 6
     },
     {
       "species": "clinglace",
-      "count": 3
+      "count": 6
+    },
+    {
+      "species": "shadebell",
+      "count": 8
+    },
+    {
+      "species": "ringreed",
+      "count": 12
+    },
+    {
+      "species": "glass_antlers",
+      "count": 8
     }
   ],
   "starterFauna": [
     {
       "species": "emberglass_swimmer",
-      "count": 6
+      "count": 3
     },
     {
       "species": "ghostbristle",
-      "count": 6
+      "count": 3
     },
     {
       "species": "glintfin",
-      "count": 6
+      "count": 3
     },
     {
       "species": "rainspine",
-      "count": 6
+      "count": 3
     },
     {
       "species": "rustcoil",
-      "count": 6
+      "count": 3
     },
     {
       "species": "prismhopper",
-      "count": 6
+      "count": 3
     }
-  ]
+  ],
+  "faunaBudget": 360
 }

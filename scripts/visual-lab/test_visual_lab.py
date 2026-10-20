@@ -54,6 +54,18 @@ class LabTests(unittest.TestCase):
   with self.assertRaisesRegex(ValueError,'matched'): lab.compare_gallery(self.exp)
   lab.atomic(self.exp/'captures/after/launch.json',{'mode':'reference','actual_render':True,'exit_code':0})
   with self.assertRaisesRegex(ValueError,'material'): lab.compare_gallery(self.exp)
+ def test_reuse_authenticated_capture_and_changed_source(self):
+  self.act('baseline'); parent=self.exp.parent/'parent'; parent.mkdir(); lab.baseline(self.repo,parent)
+  source=parent/'captures/before'; source.mkdir(parents=True); (source/'scene.png').write_bytes(b'capture fixture')
+  plan=self.act('capture-plan',side='before')
+  lab.atomic(source/'launch.json',{'exit_code':0,'actual_render':True,'source_tree_sha256':plan['source_tree_sha256'],'baseline_manifest_sha256':lab.digest(parent/'baseline/manifest.json'),'captured_utc':'original-time'})
+  result=lab.reuse_before(self.repo,self.exp,'parent'); self.assertEqual(result['original_capture_utc'],'original-time')
+  launch=lab.read(self.exp/'captures/before/launch.json'); self.assertEqual(launch['baseline_manifest_sha256'],lab.digest(self.exp/'baseline/manifest.json')); self.assertEqual(launch['captured_utc'],'original-time')
+  self.assertTrue((self.exp/'captures/before/original-launch.json').exists())
+  other=self.exp.parent/'other'; other.mkdir(); lab.baseline(self.repo,other)
+  (self.repo/'game/asset.tres').write_text('changed')
+  with self.assertRaisesRegex(ValueError,'current source'): lab.reuse_before(self.repo,other,'parent')
+  self.assertFalse((other/'captures/before').exists())
  def test_exclusive_filestream(self):
   lease=self.repo/'lease'; command="$f=[IO.File]::Open($args[0],[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None); try { try { $g=[IO.File]::Open($args[0],[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None); $g.Dispose(); exit 2 } catch [IO.IOException] { Write-Output 'LEASE_EXCLUSIVE_OK' } } finally { $f.Dispose() }"
   # Pass literal path by embedding only a generated, single-quote escaped temporary path.

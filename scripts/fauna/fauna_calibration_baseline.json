@@ -1,0 +1,843 @@
+{
+  "version": 1,
+  "species": {
+    "coalback_beetle": {
+      "lifecycle": {
+        "maturityDays": 20,
+        "lifespanDays": 150,
+        "dailyMortality": 0.003
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 1,
+        "clutchMax": 3,
+        "cooldownDays": 12,
+        "maxLocalDensity": 6,
+        "populationCap": 60
+      },
+      "guild": "terrestrial_grazer_detritivore"
+    },
+    "dewmantle": {
+      "lifecycle": {
+        "maturityDays": 10,
+        "lifespanDays": 80,
+        "dailyMortality": 0.004
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 5,
+        "cooldownDays": 8,
+        "maxLocalDensity": 10,
+        "populationCap": 90
+      },
+      "guild": "terrestrial_grazer_detritivore"
+    },
+    "duskflicker": {
+      "lifecycle": {
+        "maturityDays": 6,
+        "lifespanDays": 28,
+        "dailyMortality": 0.012
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 5,
+        "cooldownDays": 3,
+        "maxLocalDensity": 20,
+        "populationCap": 180
+      },
+      "guild": "flying_grazer_scavenger"
+    },
+    "emberglass_swimmer": {
+      "lifecycle": {
+        "maturityDays": 18,
+        "lifespanDays": 110,
+        "dailyMortality": 0.004
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 5,
+        "cooldownDays": 12,
+        "maxLocalDensity": 16,
+        "populationCap": 160
+      },
+      "guild": "aquatic_grazer_detritivore"
+    },
+    "ghostbristle": {
+      "lifecycle": {
+        "maturityDays": 14,
+        "lifespanDays": 120,
+        "dailyMortality": 0.004
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 1,
+        "clutchMax": 3,
+        "cooldownDays": 8,
+        "maxLocalDensity": 8,
+        "populationCap": 90
+      },
+      "guild": "terrestrial_grazer_detritivore"
+    },
+    "glasscoil": {
+      "lifecycle": {
+        "maturityDays": 20,
+        "lifespanDays": 190,
+        "dailyMortality": 0.0025
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 4,
+        "cooldownDays": 14,
+        "maxLocalDensity": 10,
+        "populationCap": 80
+      },
+      "guild": "aquatic_grazer_detritivore"
+    },
+    "glintfin": {
+      "lifecycle": {
+        "maturityDays": 25,
+        "lifespanDays": 140,
+        "dailyMortality": 0.003
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 6,
+        "cooldownDays": 10,
+        "maxLocalDensity": 80,
+        "populationCap": 90
+      },
+      "guild": "aquatic_grazer_detritivore"
+    },
+    "loamthread": {
+      "lifecycle": {
+        "maturityDays": 18,
+        "lifespanDays": 180,
+        "dailyMortality": 0.0025
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 4,
+        "cooldownDays": 12,
+        "maxLocalDensity": 12,
+        "populationCap": 120
+      },
+      "guild": "terrestrial_grazer_detritivore"
+    },
+    "marbleback": {
+      "lifecycle": {
+        "maturityDays": 14,
+        "lifespanDays": 90,
+        "dailyMortality": 0.004
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 5,
+        "cooldownDays": 10,
+        "maxLocalDensity": 8,
+        "populationCap": 90
+      },
+      "guild": "terrestrial_grazer_detritivore"
+    },
+    "moonveil": {
+      "lifecycle": {
+        "maturityDays": 12,
+        "lifespanDays": 65,
+        "dailyMortality": 0.006
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 5,
+        "cooldownDays": 6,
+        "maxLocalDensity": 12,
+        "populationCap": 100
+      },
+      "guild": "flying_grazer_scavenger"
+    },
+    "prismhopper": {
+      "lifecycle": {
+        "maturityDays": 6,
+        "lifespanDays": 30,
+        "dailyMortality": 0.01
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 1,
+        "clutchMax": 2,
+        "cooldownDays": 4,
+        "maxLocalDensity": 14,
+        "populationCap": 260
+      },
+      "guild": "terrestrial_grazer_detritivore"
+    },
+    "rainspine": {
+      "lifecycle": {
+        "maturityDays": 30,
+        "lifespanDays": 420,
+        "dailyMortality": 0.0018
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 1,
+        "clutchMax": 3,
+        "cooldownDays": 24,
+        "maxLocalDensity": 4,
+        "populationCap": 24
+      },
+      "guild": "predator"
+    },
+    "reedjaw": {
+      "lifecycle": {
+        "maturityDays": 15,
+        "lifespanDays": 95,
+        "dailyMortality": 0.004
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 4,
+        "cooldownDays": 10,
+        "maxLocalDensity": 5,
+        "populationCap": 45
+      },
+      "guild": "predator"
+    },
+    "rustcoil": {
+      "lifecycle": {
+        "maturityDays": 24,
+        "lifespanDays": 220,
+        "dailyMortality": 0.0025
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 2,
+        "clutchMax": 5,
+        "cooldownDays": 16,
+        "maxLocalDensity": 7,
+        "populationCap": 70
+      },
+      "guild": "terrestrial_grazer_detritivore"
+    },
+    "siltshield": {
+      "lifecycle": {
+        "maturityDays": 5,
+        "lifespanDays": 28,
+        "dailyMortality": 0.01
+      },
+      "reproduction": {
+        "mode": "asexual",
+        "clutchMin": 2,
+        "clutchMax": 4,
+        "cooldownDays": 3,
+        "maxLocalDensity": 8,
+        "populationCap": 60
+      },
+      "guild": "aquatic_grazer_detritivore"
+    },
+    "stiltclaw": {
+      "lifecycle": {
+        "maturityDays": 16,
+        "lifespanDays": 110,
+        "dailyMortality": 0.0035
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 1,
+        "clutchMax": 3,
+        "cooldownDays": 10,
+        "maxLocalDensity": 6,
+        "populationCap": 55
+      },
+      "guild": "predator"
+    },
+    "stonebell": {
+      "lifecycle": {
+        "maturityDays": 35,
+        "lifespanDays": 520,
+        "dailyMortality": 0.0015
+      },
+      "reproduction": {
+        "mode": "sexual",
+        "clutchMin": 1,
+        "clutchMax": 3,
+        "cooldownDays": 28,
+        "maxLocalDensity": 3,
+        "populationCap": 18
+      },
+      "guild": "predator"
+    }
+  },
+  "presets": {
+    "alpine_tundra": {
+      "starterFauna": [
+        {
+          "species": "coalback_beetle",
+          "count": 7
+        },
+        {
+          "species": "marbleback",
+          "count": 7
+        },
+        {
+          "species": "prismhopper",
+          "count": 11
+        },
+        {
+          "species": "ghostbristle",
+          "count": 5
+        },
+        {
+          "species": "rustcoil",
+          "count": 4
+        }
+      ],
+      "diameter": 7
+    },
+    "arid_canyon": {
+      "starterFauna": [
+        {
+          "species": "coalback_beetle",
+          "count": 9
+        },
+        {
+          "species": "marbleback",
+          "count": 10
+        },
+        {
+          "species": "prismhopper",
+          "count": 15
+        },
+        {
+          "species": "stonebell",
+          "count": 4
+        },
+        {
+          "species": "rustcoil",
+          "count": 5
+        }
+      ],
+      "diameter": 9
+    },
+    "bayou_marsh": {
+      "starterFauna": [
+        {
+          "species": "reedjaw",
+          "count": 6
+        },
+        {
+          "species": "siltshield",
+          "count": 6
+        },
+        {
+          "species": "glintfin",
+          "count": 7
+        },
+        {
+          "species": "dewmantle",
+          "count": 6
+        },
+        {
+          "species": "ghostbristle",
+          "count": 6
+        },
+        {
+          "species": "glasscoil",
+          "count": 6
+        },
+        {
+          "species": "stiltclaw",
+          "count": 4
+        }
+      ],
+      "diameter": 10
+    },
+    "cascading_falls": {
+      "starterFauna": [
+        {
+          "species": "glintfin",
+          "count": 10
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 9
+        },
+        {
+          "species": "stiltclaw",
+          "count": 6
+        },
+        {
+          "species": "reedjaw",
+          "count": 5
+        },
+        {
+          "species": "glasscoil",
+          "count": 5
+        },
+        {
+          "species": "dewmantle",
+          "count": 6
+        },
+        {
+          "species": "siltshield",
+          "count": 6
+        }
+      ],
+      "diameter": 8
+    },
+    "creek": {
+      "starterFauna": [
+        {
+          "species": "emberglass_swimmer",
+          "count": 6
+        },
+        {
+          "species": "ghostbristle",
+          "count": 6
+        },
+        {
+          "species": "glintfin",
+          "count": 6
+        },
+        {
+          "species": "rainspine",
+          "count": 6
+        },
+        {
+          "species": "rustcoil",
+          "count": 6
+        },
+        {
+          "species": "prismhopper",
+          "count": 6
+        }
+      ],
+      "diameter": 8
+    },
+    "deep_inlet": {
+      "starterFauna": [
+        {
+          "species": "glintfin",
+          "count": 11
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 7
+        },
+        {
+          "species": "siltshield",
+          "count": 6
+        },
+        {
+          "species": "stiltclaw",
+          "count": 4
+        },
+        {
+          "species": "prismhopper",
+          "count": 6
+        },
+        {
+          "species": "stonebell",
+          "count": 6
+        }
+      ],
+      "diameter": 10
+    },
+    "default": {
+      "starterFauna": [
+        {
+          "species": "prismhopper",
+          "count": 27
+        },
+        {
+          "species": "marbleback",
+          "count": 11
+        },
+        {
+          "species": "coalback_beetle",
+          "count": 6
+        },
+        {
+          "species": "ghostbristle",
+          "count": 8
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 9
+        },
+        {
+          "species": "siltshield",
+          "count": 6
+        },
+        {
+          "species": "glintfin",
+          "count": 7
+        },
+        {
+          "species": "dewmantle",
+          "count": 6
+        },
+        {
+          "species": "rustcoil",
+          "count": 6
+        },
+        {
+          "species": "loamthread",
+          "count": 12
+        },
+        {
+          "species": "moonveil",
+          "count": 6
+        },
+        {
+          "species": "duskflicker",
+          "count": 10
+        },
+        {
+          "species": "stiltclaw",
+          "count": 6
+        },
+        {
+          "species": "glasscoil",
+          "count": 6
+        },
+        {
+          "species": "reedjaw",
+          "count": 6
+        },
+        {
+          "species": "rainspine",
+          "count": 6
+        },
+        {
+          "species": "stonebell",
+          "count": 3
+        }
+      ],
+      "diameter": 8
+    },
+    "estuary_delta": {
+      "starterFauna": [
+        {
+          "species": "siltshield",
+          "count": 10
+        },
+        {
+          "species": "glintfin",
+          "count": 11
+        },
+        {
+          "species": "glasscoil",
+          "count": 6
+        },
+        {
+          "species": "stiltclaw",
+          "count": 7
+        },
+        {
+          "species": "reedjaw",
+          "count": 6
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 9
+        },
+        {
+          "species": "loamthread",
+          "count": 7
+        }
+      ],
+      "diameter": 10
+    },
+    "isolated_pond": {
+      "starterFauna": [
+        {
+          "species": "glintfin",
+          "count": 6
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 6
+        },
+        {
+          "species": "siltshield",
+          "count": 6
+        },
+        {
+          "species": "dewmantle",
+          "count": 6
+        },
+        {
+          "species": "prismhopper",
+          "count": 6
+        },
+        {
+          "species": "glasscoil",
+          "count": 6
+        }
+      ],
+      "diameter": 7
+    },
+    "misty_cloud_forest": {
+      "starterFauna": [
+        {
+          "species": "rainspine",
+          "count": 6
+        },
+        {
+          "species": "dewmantle",
+          "count": 6
+        },
+        {
+          "species": "duskflicker",
+          "count": 8
+        },
+        {
+          "species": "moonveil",
+          "count": 5
+        },
+        {
+          "species": "prismhopper",
+          "count": 12
+        },
+        {
+          "species": "loamthread",
+          "count": 7
+        },
+        {
+          "species": "ghostbristle",
+          "count": 6
+        },
+        {
+          "species": "stonebell",
+          "count": 3
+        }
+      ],
+      "diameter": 8
+    },
+    "oxbow_creek": {
+      "starterFauna": [
+        {
+          "species": "glintfin",
+          "count": 7
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 6
+        },
+        {
+          "species": "stiltclaw",
+          "count": 4
+        },
+        {
+          "species": "rainspine",
+          "count": 6
+        },
+        {
+          "species": "prismhopper",
+          "count": 6
+        },
+        {
+          "species": "marbleback",
+          "count": 6
+        }
+      ],
+      "diameter": 9
+    },
+    "peat_fen": {
+      "starterFauna": [
+        {
+          "species": "loamthread",
+          "count": 10
+        },
+        {
+          "species": "siltshield",
+          "count": 7
+        },
+        {
+          "species": "rustcoil",
+          "count": 7
+        },
+        {
+          "species": "reedjaw",
+          "count": 4
+        },
+        {
+          "species": "duskflicker",
+          "count": 9
+        },
+        {
+          "species": "dewmantle",
+          "count": 5
+        },
+        {
+          "species": "ghostbristle",
+          "count": 5
+        }
+      ],
+      "diameter": 8
+    },
+    "rocky_rise": {
+      "starterFauna": [
+        {
+          "species": "prismhopper",
+          "count": 6
+        },
+        {
+          "species": "marbleback",
+          "count": 5
+        },
+        {
+          "species": "coalback_beetle",
+          "count": 5
+        },
+        {
+          "species": "ghostbristle",
+          "count": 5
+        },
+        {
+          "species": "siltshield",
+          "count": 5
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 5
+        },
+        {
+          "species": "dewmantle",
+          "count": 5
+        },
+        {
+          "species": "rustcoil",
+          "count": 5
+        },
+        {
+          "species": "loamthread",
+          "count": 5
+        },
+        {
+          "species": "moonveil",
+          "count": 5
+        },
+        {
+          "species": "duskflicker",
+          "count": 5
+        },
+        {
+          "species": "stiltclaw",
+          "count": 5
+        },
+        {
+          "species": "glasscoil",
+          "count": 4
+        },
+        {
+          "species": "reedjaw",
+          "count": 3
+        },
+        {
+          "species": "rainspine",
+          "count": 3
+        },
+        {
+          "species": "stonebell",
+          "count": 3
+        }
+      ],
+      "diameter": 5
+    },
+    "shoreline": {
+      "starterFauna": [
+        {
+          "species": "stiltclaw",
+          "count": 4
+        },
+        {
+          "species": "glintfin",
+          "count": 7
+        },
+        {
+          "species": "emberglass_swimmer",
+          "count": 6
+        },
+        {
+          "species": "siltshield",
+          "count": 6
+        },
+        {
+          "species": "prismhopper",
+          "count": 6
+        },
+        {
+          "species": "marbleback",
+          "count": 6
+        }
+      ],
+      "diameter": 9
+    },
+    "steep_rocky_slope": {
+      "starterFauna": [
+        {
+          "species": "prismhopper",
+          "count": 5
+        },
+        {
+          "species": "stonebell",
+          "count": 5
+        },
+        {
+          "species": "marbleback",
+          "count": 5
+        },
+        {
+          "species": "coalback_beetle",
+          "count": 5
+        },
+        {
+          "species": "moonveil",
+          "count": 5
+        }
+      ],
+      "diameter": 6
+    },
+    "woodland_vernal_pools": {
+      "starterFauna": [
+        {
+          "species": "ghostbristle",
+          "count": 7
+        },
+        {
+          "species": "loamthread",
+          "count": 8
+        },
+        {
+          "species": "marbleback",
+          "count": 7
+        },
+        {
+          "species": "prismhopper",
+          "count": 12
+        },
+        {
+          "species": "stonebell",
+          "count": 3
+        },
+        {
+          "species": "dewmantle",
+          "count": 5
+        },
+        {
+          "species": "coalback_beetle",
+          "count": 5
+        }
+      ],
+      "diameter": 8
+    }
+  }
+}

@@ -16,6 +16,7 @@ public partial class GuardianVegetationContact : Node
         public Transform3D Base, Applied;
         public Vector3 Bend, Target, Root;
         public Aabb Bounds;
+        public long LastFloraUploadRevision = -1;
     }
     private readonly Dictionary<(ulong, int), Plant> _plants = new();
     private IEnumerator<(MultiMeshInstance3D, int)>? _scan;
@@ -51,6 +52,12 @@ public partial class GuardianVegetationContact : Node
     public int ContactCount { get; private set; }
     public float MaximumBend { get; private set; }
     public int CachedPlantCount => _plants.Count;
+    public long CpuBaseTransformReads { get; private set; }
+    public long NativeTransformFallbackReads { get; private set; }
+    public int CpuVsGpuAuditChecks { get; private set; }
+    public long AvoidedPoseUploads { get; private set; }
+    public long ActualPoseUploads { get; private set; }
+    public long SourcePoseReapplies { get; private set; }
     public override void _ExitTree()
     {
         _scan?.Dispose();
@@ -96,6 +103,7 @@ public partial class GuardianVegetationContact : Node
         ContactCount=0;MaximumBend=0;_frameDraws.Clear();_insideFrame=true;
         try
         {
+            using (Vivarium.Game.App.FrameProfiler.Measure("Guardian.Vegetation.Scan"))
             if(Flora!=null)
             {
                 _scan??=Flora.GuardianContactInstances().GetEnumerator();
@@ -104,23 +112,76 @@ public partial class GuardianVegetationContact : Node
                     if(!_scan.MoveNext()){_scan.Dispose();_scan=null;break;}
                     var (draw,index)=_scan.Current;
                     if(!TryDrawInfo(draw,out var info)||index>=info.Count)continue;
-                    var transform=info.Buffer.GetInstanceTransform(index);var world=info.Global*transform;
+                    // Flora already retains the exact instance transforms in
+                    // its upload buffer. Avoid native per-instance readback,
+                    // which can synchronise with rendering and stall a frame.
+                    Transform3D transform;
+                    if(Flora.TryGuardianBaseTransform(draw,index,out var baseTransform))
+                    {
+                        transform=baseTransform; CpuBaseTransformReads++;
+                        if(CpuVsGpuAuditChecks<96 &&
+                            Vivarium.Game.App.Main.UserArgs.Contains("--guardian-cpu-cache-audit") &&
+                            !_plants.ContainsKey((draw.GetInstanceId(),index)))
+                        {
+                            var native=info.Buffer.GetInstanceTransform(index);
+                            if(!native.IsEqualApprox(baseTransform))
+                                throw new InvalidOperationException(
+                                    $"Guardian flora CPU/GPU transform mismatch: {draw.Name} instance {index}");
+                            CpuVsGpuAuditChecks++;
+                        }
+                    }
+                    else
+                    {
+                        transform=info.Buffer.GetInstanceTransform(index);
+                        NativeTransformFallbackReads++;
+                    }
+                    var world=info.Global*transform;
                     if(world.Origin.DistanceSquaredTo(Focus)>16)continue;
                     var bounds=world*info.Bounds;if(bounds.Size.Y<.16f||bounds.Size.Y>2.5f)continue;
                     Register(draw,index,transform,info);
                 }
             }
+            using var applyTiming=Vivarium.Game.App.FrameProfiler.Measure("Guardian.Vegetation.Apply");
             var expired=new List<(ulong,int)>();
             foreach(var (key,plant) in _plants)
             {
                 if(!TryDrawInfo(plant.Draw,out var info)||plant.Index>=info.Count){expired.Add(key);continue;}
-                var current=info.Buffer.GetInstanceTransform(plant.Index);if(!current.IsEqualApprox(plant.Applied))plant.Base=current;
+                // The flora CPU upload cache is authoritative for undeformed
+                // plant placement. A native read is only needed for atypical
+                // buffers not managed by the flora renderer.
+                Transform3D stored=default;
+                long uploadRevision=-1;
+                bool fromFlora=Flora!=null && Flora.TryGuardianBaseTransform(
+                    plant.Draw,plant.Index,out stored,out uploadRevision);
+                var current=fromFlora?stored:info.Buffer.GetInstanceTransform(plant.Index);
+                if(!current.IsEqualApprox(plant.Applied))plant.Base=current;
                 float blend=1-MathF.Exp(-(float)Math.Clamp(delta,0,.1)*(plant.Target.LengthSquared()>0?14:4));
                 plant.Bend=plant.Bend.Lerp(plant.Target,blend);
                 if(plant.Target.LengthSquared()>0)ContactCount++;MaximumBend=Math.Max(MaximumBend,plant.Bend.Length());
                 var root=info.Global*plant.Base;plant.Root=root.Origin;var axis=Vector3.Up.Cross(plant.Bend);
                 var rotation=axis.LengthSquared()<1e-8f?Basis.Identity:new Basis(axis.Normalized(),plant.Bend.Length());
-                root.Basis=rotation*root.Basis;plant.Applied=info.Inverse*root;info.Buffer.SetInstanceTransform(plant.Index,plant.Applied);
+                root.Basis=rotation*root.Basis;
+                var previous=plant.Applied;
+                plant.Applied=info.Inverse*root;
+                // Flora uploads the entire packed MultiMesh buffer periodically,
+                // resetting previous individual bends even when the intended
+                // target pose is identical. Upload revision is the precise
+                // invalidation token; reapply once for each newer flora upload.
+                // When flora has just reset an instance to its undeformed
+                // base, there is nothing to reapply for a resting plant.
+                // Only a genuinely bent plant needs its individual override
+                // reinstated after an upload revision change.
+                bool sourceReset=fromFlora &&
+                    plant.LastFloraUploadRevision!=uploadRevision &&
+                    !plant.Applied.IsEqualApprox(current);
+                if(sourceReset||!plant.Applied.IsEqualApprox(previous))
+                {
+                    info.Buffer.SetInstanceTransform(plant.Index,plant.Applied);
+                    ActualPoseUploads++;
+                    if(sourceReset)SourcePoseReapplies++;
+                }
+                else AvoidedPoseUploads++;
+                if(fromFlora)plant.LastFloraUploadRevision=uploadRevision;
                 plant.Bounds=root*info.Bounds;plant.Target=Vector3.Zero;
                 if(root.Origin.DistanceSquaredTo(Focus)>25&&plant.Bend.LengthSquared()<1e-6f){info.Buffer.SetInstanceTransform(plant.Index,plant.Base);expired.Add(key);}
             }
@@ -266,6 +327,34 @@ public partial class GuardianVegetationContact : Node
 
 public partial class FloraRenderer
 {
+    /// <summary>Read the exact CPU data submitted to the flora MultiMesh GPU.
+    /// Guardian bending only overrides individual GPU transforms; the packed
+    /// flora buffer remains the stable undeformed plant placement.</summary>
+    internal bool TryGuardianBaseTransform(MultiMeshInstance3D draw,int index,out Transform3D transform)
+        => TryGuardianBaseTransform(draw,index,out transform,out _);
+
+    internal bool TryGuardianBaseTransform(MultiMeshInstance3D draw,int index,out Transform3D transform,
+        out long uploadRevision)
+    {
+        transform=Transform3D.Identity;
+        uploadRevision=-1;
+        var multimesh=draw.Multimesh;
+        if(multimesh==null||index<0||
+            !_pooledBuffers.TryGetValue(multimesh,out var pool)||
+            index>=pool.VisibleCount)return false;
+        var buffer=pool.Buffer;
+        uploadRevision=pool.UploadRevision;
+        int o=index*20;
+        if(o+11>=buffer.Length)return false;
+        transform=new Transform3D(
+            new Basis(
+                new Vector3(buffer[o],buffer[o+4],buffer[o+8]),
+                new Vector3(buffer[o+1],buffer[o+5],buffer[o+9]),
+                new Vector3(buffer[o+2],buffer[o+6],buffer[o+10])),
+            new Vector3(buffer[o+3],buffer[o+7],buffer[o+11]));
+        return true;
+    }
+
     internal IEnumerable<(MultiMeshInstance3D, int)> GuardianContactInstances()
     {
         // Snapshot draw nodes so an incremental scan survives population rebuilds.

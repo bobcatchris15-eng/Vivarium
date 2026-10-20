@@ -1,0 +1,116 @@
+﻿{
+    "id":  "lacemantle",
+    "name":  "Lacemantle",
+    "archetype":  "plant",
+    "placementGroup":  "woody",
+    "role":  "Tiered understory woody plant with lacy horizontal branch shelves and substantial filtered light.",
+    "description":  "Several thin upright stems carry staggered horizontal branches covered in many small ovate leaves. Tier gaps create visible shadow pockets and fine-grained foliage.",
+    "habitat":  {
+                    "substrates":  {
+                                       "soil":  1,
+                                       "gravel":  0.16,
+                                       "rock":  0.05
+                                   },
+                    "refuseSubstrates":  [
+                                             "water",
+                                             "wood"
+                                         ],
+                    "refuseTags":  [
+
+                                   ],
+                    "moisture":  {
+                                     "optimum":  0.55,
+                                     "tolerance":  0.35
+                                 },
+                    "light":  {
+                                  "optimum":  0.4,
+                                  "tolerance":  0.31
+                              },
+                    "nutrients":  {
+                                      "optimum":  0.51,
+                                      "tolerance":  0.42
+                                  },
+                    "maxWaterDepth":  0,
+                    "hardMinMoisture":  0.08000000000000007,
+                    "hardMaxMoisture":  1.0,
+                    "minSuitability":  0.18
+                },
+    "growth":  {
+                   "ratePerDay":  0.079,
+                   "maxBiomass":  7.6,
+                   "initialBiomass":  0.1,
+                   "declinePerDay":  0.065,
+                   "maturityDays":  31,
+                   "lifespanDays":  1300,
+                   "nutrientPerBiomass":  0.24,
+                   "radiusAtMax":  1.2,
+                   "minRadius":  0.085
+               },
+    "spread":  {
+                   "intervalDays":  18,
+                   "radius":  1.35,
+                   "propagules":  2,
+                   "minBiomassFraction":  0.66
+               },
+    "competition":  {
+                        "radius":  0.7,
+                        "crowdingLimit":  4.5,
+                        "sensitivity":  0.35
+                    },
+    "proximity":  [
+
+                  ],
+    "litterFraction":  0.84,
+    "sheddingPerDay":  0.012,
+    "grazingValue":  0,
+    "woody":  {
+                  "layer":  "shrub",
+                  "canopyRadius":  1.23,
+                  "shadeOpacity":  0.32,
+                  "minSpacing":  0.59
+              },
+    "visual":  {
+                   "shape":  "microcanopy_lacemantle",
+                   "color":  [
+                                 0.19,
+                                 0.38,
+                                 0.24
+                             ],
+                   "color2":  [
+                                  0.4,
+                                  0.56,
+                                  0.31
+                              ],
+                   "colorVariance":  0.095,
+                   "height":  2.15
+               },
+    "tags":  [
+                 "plant",
+                 "woody",
+                 "understory",
+                 "microcanopy",
+                 "tiered",
+                 "shelter"
+             ],
+    "reproduction":  {
+                         "form":  "berry",
+                         "dispersal":  "animal",
+                         "reservePerDay":  0.011,
+                         "pulseThreshold":  0.055,
+                         "maxAttachedMass":  0.11,
+                         "developmentDays":  11,
+                         "ripeDays":  20,
+                         "cooldownDays":  24,
+                         "seedFraction":  0.17,
+                         "viability":  0.64,
+                         "dormancyDays":  14,
+                         "dispersalRadius":  1.4,
+                         "fruitColor":  [
+                                            0.3,
+                                            0.16,
+                                            0.55
+                                        ],
+                         "displaySize":  0.024,
+                         "foodValue":  1.2
+                     }
+}

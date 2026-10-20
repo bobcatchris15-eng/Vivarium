@@ -63,10 +63,8 @@ public static class MatRules
     private const double CompetitionKappa = 2.0;
     private const double SeedWater01 = 0.6;
     private const int TileEdge = CoverageSpec.TileEdge;
-    private const double SteadyDeltaB = 0.002;
-    private const double EnvTolerance = 0.02;
-    private const int SteadyPeriod = 4;
-    private const int MaxD2E = 32; // dome/cushion height saturates long before this; bounds the BFS on huge flat colonies
+    private const double SteadyDeltaB = 0.002;    private const double EnvTolerance = 0.02;
+    private const int SteadyPeriod = 4;    private const int MaxD2E = 32; // dome/cushion height saturates long before this; bounds the BFS on huge flat colonies
 
     private static readonly (int dx, int dz)[] Neighbours8 =
     {

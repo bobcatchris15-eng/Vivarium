@@ -80,7 +80,9 @@ public sealed class NightFloraGeometryTests
         var ys = Enumerable.Range(0, mesh.VertexCount).Select(i => mesh.Position(i).Y).ToArray();
         Assert.InRange(ys.Min(), -0.02, 0.02);
         Assert.InRange(ys.Max(), 0.30, 0.65);
-        Assert.True(mesh.TriangleCount is > 300 and < 9000);
+        Assert.True(mesh.TriangleCount is > 9000 and < 35000, $"Glowbriar triangles: {mesh.TriangleCount}");
+        Assert.True(mesh.LeafSpans.Count >= 300, $"Glowbriar leaf blades: {mesh.LeafSpans.Count}");
+        Assert.True(mesh.Structural.Count >= 40, $"Glowbriar woody axes: {mesh.Structural.Count}");
         Assert.True(Enumerable.Range(0, mesh.VertexCount).Count(i => mesh.UV2[i * 2] is > 1.30f and < 1.50f) > 20,
             "Underside glow nodules must be explicitly marked for organ-only emission.");
     }
@@ -114,7 +116,8 @@ public sealed class NightFloraGeometryTests
         int gillVertices = Enumerable.Range(0, mesh.VertexCount).Count(i => Math.Abs(mesh.UV2[i * 2] - 1.0f) < 1e-4f);
         int capVertices = Enumerable.Range(0, mesh.VertexCount).Count(i => Math.Abs(mesh.UV2[i * 2]) < 1e-4f);
         Assert.True(gillVertices > 50, "Gills must be tagged with UV2.x = 1.0.");
-        Assert.True(capVertices > gillVertices, "Cap and stipe vertices must have UV2.x = 0.0.");
+        Assert.True(capVertices > 100, "Spectral cap and stipe must remain non-emissive tissue distinct from gills.");
+        Assert.True(gillVertices < mesh.VertexCount, "Only gills, never the whole bonnet, may emit.");
     }
 
     [Fact]

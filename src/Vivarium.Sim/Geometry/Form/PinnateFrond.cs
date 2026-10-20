@@ -20,7 +20,8 @@ public readonly record struct PinnateFrondParams(
     int DetailLevel = 0,                // Visual detail level (0 = full, 1 = mid, 2 = low)
     double StipeFlex = 0.85,            // Elastic flex of wiry stipe
     bool Compound = true,               // Compound pinnate frond with capillary petiolules
-    double PetioluleLength = 0.005      // Capillary petiolule attachment stalk length
+    double PetioluleLength = 0.005,     // Capillary petiolule attachment stalk length
+    bool FineFountain = false          // Moonfern: layered, compact fountain; preserve other ferns
 );
 
 public static class PinnateFrond
@@ -59,7 +60,8 @@ public static class PinnateFrond
         ulong seed = 1,
         ulong parentPartId = 0,
         double petioluleLength = 0.004,
-        double flex = 0.65)
+        double flex = 0.65,
+        bool fineFountain = false)
     {
         int startTris = m.TriangleCount;
         if (length <= 1e-6 || width <= 1e-6) return 0;
@@ -70,6 +72,10 @@ public static class PinnateFrond
         var side = norm0.Cross(dir).Normalized();
         if (side.LengthSq < 1e-6) side = dir.Cross(Vec3.Up).Normalized();
 
+        // Thin moonfern petiolules can be resolved by their blade attachment
+        // alone at medium and far LOD; tubes here cost more than the pinnae.
+        bool economical = fineFountain && m.Lod is { Blade: < 0.999 };
+        if (economical) petioluleLength = 0;
         Vec3 bladeAttach = attachPos;
         if (petioluleLength > 1e-5)
         {
@@ -100,8 +106,36 @@ public static class PinnateFrond
             return n;
         }
 
+        // Distant fine-fountain pinnae need a readable silhouette, not
+        // multiple tessellated front/back membranes smaller than a pixel.
+        // Both live foliage shaders use cull_disabled; a single sheet is
+        // therefore visible from above and below at these LOD distances.
+        if (economical)
+        {
+            int first = m.VertexCount, firstIndex = m.Indices.Count;
+            var normal = norm0;
+            var centre = bladeAttach + dir * (length * .47)
+                + normal * (camber * width * .11) - Vec3.Up * (droop * .22);
+            double half = width * .93;
+            var tip = bladeAttach + dir * length - Vec3.Up * droop;
+            // At screen-subpixel scale a soft cambered diamond is enough;
+            // retain anatomical coverage rather than destroying most pinnae.
+            int a = m.AddVertex(bladeAttach,normal,colBase,1,0,.5,0,1);
+            int b = m.AddVertex(centre-side*half,normal,Primitives.Mix(colBase,colTip,.52),1,.47,0,0,1);
+            int c = m.AddVertex(centre+side*half,normal,Primitives.Mix(colBase,colTip,.52),1,.47,1,0,1);
+            int e = m.AddVertex(tip,normal,colTip,1,1,.5,0,1);
+            Primitives.TriangleFacing(m,a,b,c,normal);
+            Primitives.TriangleFacing(m,b,e,c,normal);
+            m.RecordLeaf(first,firstIndex,bladeAttach,length);
+            return m.TriangleCount-startTris;
+        }
+
         int segs = detail == 0 ? 4 : (detail == 1 ? 3 : 2);
-        int faceCount = m.FloraDetailLevel.HasValue ? 1 : 2;
+        // Fine Moonfern pinnae are already two-sided in the in-game shader.
+        // The extra reversed geometry was what pushed larger crowns over
+        // the 30k top-tier budget and forced excessive LOD pruning.
+        int faceCount = fineFountain && m.Lod != null ? 1
+            : m.FloraDetailLevel.HasValue ? 1 : 2;
 
         var underCol = undersideColor ?? Primitives.Mix(colBase, new[] { 0.35, 0.50, 0.28 }, 0.40);
 
@@ -226,7 +260,8 @@ public static class PinnateFrond
         {
             P1 = P0 + U * (length * 0.72) + H * (length * 0.12 * Math.Sin(pitch));
             P2 = P0 + U * (length * 1.05) + H * (length * 0.55 * p.ArchCurve);
-            double apexDrop = 0.35 - 0.15 * p.ArchCurve;
+            double apexDrop = p.FineFountain ? 0.33 + 0.06 * (1 - p.ArchCurve)
+                : 0.35 - 0.15 * p.ArchCurve;
             P3 = P0 + U * (length * Math.Max(0.16, apexDrop)) + H * (length * 0.94 * p.ArchCurve);
         }
         else
@@ -299,7 +334,7 @@ public static class PinnateFrond
             frondPartId, parentPartId, FloraTissueSlot.Stem, frondFrame, length, p.RachisRadius, p.StipeFlex, 0, (P0, P3)));
 
         // 2. Pinnae Leaflets along the Rachis
-        double maxT = isMature ? 0.96 : Math.Min(0.96, unroll * 1.05);
+        double maxT = isMature ? 0.995 : Math.Min(0.96, unroll * 1.05);
         if (maxT > 0.18)
         {
             int pairs = p.PinnaePairs;
@@ -308,6 +343,13 @@ public static class PinnateFrond
             for (int i = 0; i < pairs; i++)
             {
                 double baseT = 0.18 + i * tStep;
+                // Keep the proximal half intact; spend existing distal pinnae where
+                // the accelerating Bezier arc otherwise leaves a naked terminal whip.
+                if (isMature && i > (pairs - 1) * 0.5)
+                {
+                    double distal = (2.0 * i / Math.Max(1, pairs - 1)) - 1.0;
+                    baseT = 0.57 + 0.405 * (1.0 - Math.Pow(1.0 - distal, 1.45));
+                }
                 if (baseT > maxT) break;
 
                 foreach (double sideSgn in new[] { -1.0, 1.0 })
@@ -324,6 +366,20 @@ public static class PinnateFrond
 
                     double tau = (t - 0.18) / (0.96 - 0.18);
                     double env = Math.Pow(Math.Max(0.0, Math.Sin(Math.PI * Math.Pow(tau, p.Taper))), 0.70) * (1.0 - 0.28 * tau);
+
+                    // A mature frond tapers to its actual apex (t=1), not to the
+                    // last lateral station. The old endpoint-zero envelope discarded
+                    // the last pair while retaining a separate terminal leaflet.
+                    if (isMature && t > 0.65)
+                    {
+                        double shoulderTau = (0.65 - 0.18) / (0.96 - 0.18);
+                        double shoulderEnv = Math.Pow(Math.Sin(Math.PI * Math.Pow(shoulderTau, p.Taper)), 0.70)
+                            * (1.0 - 0.28 * shoulderTau);
+                        // Boston-style feathering continues nearly to the apex.
+                        // Other ferns retain their original stronger distal taper.
+                        env = shoulderEnv * Math.Pow(Math.Max(0.0, (1.0 - t) / 0.35),
+                            p.FineFountain ? 0.51 : 0.85);
+                    }
 
                     double unrollExpansion = isMature ? 1.0 : Math.Min(1.0, Math.Max(0.25, (maxT - t) / 0.12));
                     double pinnaL = p.PinnaLength * env * unrollExpansion * (length / 0.88);
@@ -345,7 +401,7 @@ public static class PinnateFrond
                     ulong pSeed = Rng.Mix(frondPartId, (ulong)(i * 97 + (sideSgn > 0 ? 1 : 2)));
                     BuildPinna(m, attach, dir, norm, pinnaL, pinnaW, p.Camber, 0.05 * pinnaL,
                         pinnaBase, pinnaTip, detailOverride: detail, seed: pSeed, parentPartId: frondPartId,
-                        petioluleLength: p.PetioluleLength, flex: 0.65);
+                        petioluleLength: p.PetioluleLength, flex: 0.65, fineFountain:p.FineFountain);
                 }
             }
 
@@ -360,7 +416,8 @@ public static class PinnateFrond
                 ulong termSeed = Rng.Mix(frondPartId, 9999);
                 BuildPinna(m, termP, termT, termN, p.PinnaLength * 0.32, p.PinnaWidth * 0.32,
                     p.Camber, 0.02, termBase, termTip, detailOverride: detail, seed: termSeed,
-                    parentPartId: frondPartId, petioluleLength: p.PetioluleLength * 0.5, flex: 0.65);
+                    parentPartId: frondPartId, petioluleLength: p.PetioluleLength * 0.5,
+                    flex: 0.65, fineFountain:p.FineFountain);
             }
         }
 
@@ -377,7 +434,7 @@ public static class PinnateFrond
         var rng = Rng.Keyed(seed, "form.pinnate_frond", 0);
         int detail = m.FloraDetailLevel ?? p.DetailLevel;
 
-        int count = Math.Clamp(p.CrownCount, 1, 16);
+        int count = Math.Clamp(p.CrownCount, 1, p.FineFountain ? 20 : 16);
 
         ulong caudexId = Rng.Mix(seed, Hash.Fnv1a64("form.pinnate.caudex"));
         var caudexFrame = FloraAttachmentFrame.Create(p.Origin, Vec3.Up, new Vec3(1, 0, 0));
@@ -409,8 +466,14 @@ public static class PinnateFrond
             double azimuth = baseAzimuth + 2.0 * Math.PI * k / matureCount + rng.Range(-0.16, 0.16);
             double rad = rng.Range(0.022, 0.040);
             var attach = p.Origin + new Vec3(Math.Cos(azimuth) * rad, 0, Math.Sin(azimuth) * rad);
-            double pitch = rng.Range(0.42, 0.62);
-            double len = p.FrondLength * rng.Range(0.92, 1.08);
+            // Stagger the fine Moonfern canopy into overlapping maturity shelves
+            // rather than placing all its additional fronds in a single radial ring.
+            double shelf = p.FineFountain ? (k % 4) / 3.0 : 0.0;
+            double pitch = p.FineFountain ? rng.Range(0.39, 0.57) + shelf * 0.07
+                : rng.Range(0.42, 0.62);
+            double len = p.FrondLength * (p.FineFountain
+                ? rng.Range(0.86, 1.03) * (1.0 - shelf * 0.16)
+                : rng.Range(0.92, 1.08));
 
             double fProg = p.FiddleheadProgress > 0.0 ? p.FiddleheadProgress : 0.0;
             ulong frondSeed = Rng.Mix(seed, (ulong)(k * 619 + 7));

@@ -70,18 +70,18 @@ void fragment() {
         // per-clump hue drift (olive to deep green), yellowed light-catching tips, near-black crevices
         float fib = vnoise(uv * vec2(55.0, 14.0));
         vec3 base = mix(vec3(0.34, 0.46, 0.20), vec3(0.50, 0.58, 0.24), cl.w) * mix(0.85, 1.1, n2);
-        vec3 tipc = vec3(0.78, 0.82, 0.38);
+        vec3 tipc = vec3(0.62, 0.77, 0.29);
         vec3 mtint = mix(base, tipc, smoothstep(0.55, 0.98, h) * (0.35 + 0.4 * fib));
-        float ao = mix(0.22, 1.0, smoothstep(0.0, 0.6, h)) * (0.85 + 0.15 * cl2.x);
+        float ao = mix(0.38, 1.0, smoothstep(0.0, 0.72, h)) * (0.85 + 0.15 * cl2.x);
         vec3 mcol = moss.rgb * mtint * ao * (0.8 + 0.35 * fib);
         mcol = mix(vec3(lum(mcol)), mcol, 0.78);
-        mcol = mix(mcol, vec3(0.62, 0.55, 0.22) * (0.8 + 0.4 * fib), speck * 0.8);   // sporophyte / strand tips                      // muted, not felt-green
+        mcol = mix(mcol, vec3(0.62, 0.55, 0.22) * (0.8 + 0.4 * fib), speck * 0.22);   // sporophyte / strand tips                      // muted, not felt-green
         mcol = mix(mcol * 0.5, mcol, smoothstep(0.0, 0.6, mossy));   // thin edges read as dark damp fuzz
         col = mix(col, mcol, smoothstep(0.08, 0.5, mossy));
         float rough = mix(bark.a, max(moss.a, 0.85), mossy);
         // dome normal per clump (tangent space: x around, y along)
-        vec3 dn = normalize(vec3(cl.y, cl.z, 0.0) * 0.9 + vec3(cl2.y, cl2.z, 0.0) * 0.35 + vec3(0.0, 0.0, max(cl.x, 0.25)));
-        mn = normalize(vec3(mn.xy * 0.6 + dn.xy, dn.z));
+        vec3 dn = normalize(vec3(cl.y, cl.z, 0.0) * 0.24 + vec3(cl2.y, cl2.z, 0.0) * 0.10 + vec3(0.0, 0.0, 0.85 + 0.15 * h));
+        mn = normalize(vec3(mn.xy * 0.24 + dn.xy, dn.z));
         tn = normalize(mix(tn, mn, mossy));
         ALBEDO = col;
         ROUGHNESS = rough;
@@ -91,5 +91,14 @@ void fragment() {
         vec3 around = normalize(cross(axis, wn));   // direction of increasing uv.x (around the trunk)
         vec3 n = normalize(wn * tn.z + around * tn.x - axis * tn.y);
         NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+        // Soft translucent tuft tips; no emission into the black enclosure void.
+        float tips = smoothstep(0.35, 0.9, h) * mossy;
+        BACKLIGHT = vec3(0.28, 0.43, 0.08) * tips * 0.35;
+        AO = mix(1.0, ao, mossy * 0.55);
+        vec3 dx = dFdx(NORMAL);
+        vec3 dy = dFdy(NORMAL);
+        float variance = dot(dx, dx) + dot(dy, dy);
+        ROUGHNESS = clamp(sqrt(rough * rough + min(variance * 2.0, 0.25)), 0.65, 1.0);
+        SPECULAR = mix(0.3, 0.16, mossy);
     }
 }

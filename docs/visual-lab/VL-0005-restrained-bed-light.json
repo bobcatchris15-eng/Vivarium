@@ -1,0 +1,42 @@
+{
+  "id": "VL-0005-restrained-bed-light",
+  "created_utc": "2026-10-14T19:18:04.475492+00:00",
+  "stage": "complete",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0005-restrained-bed-light",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T19:18:18.729859+00:00"
+    },
+    {
+      "command": "reuse-before",
+      "at": "2026-10-14T19:20:13.240330+00:00"
+    },
+    {
+      "command": "authored",
+      "at": "2026-10-14T19:21:10.532754+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T19:22:34.937141+00:00"
+    },
+    {
+      "command": "blind",
+      "at": "2026-10-14T19:24:20.401367+00:00"
+    },
+    {
+      "command": "critiqued",
+      "at": "2026-10-14T19:33:22.573498+00:00"
+    },
+    {
+      "command": "compare",
+      "at": "2026-10-14T19:33:24.277711+00:00"
+    },
+    {
+      "command": "decision",
+      "at": "2026-10-14T19:33:28.492430+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T19:33:28.492447+00:00",
+  "author_identity": "root-restrained-bed-light"
+}

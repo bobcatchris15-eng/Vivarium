@@ -1,0 +1,42 @@
+{
+  "id": "VL-0011-fern-terminal-pinnae",
+  "created_utc": "2026-10-14T21:47:19.375511+00:00",
+  "stage": "complete",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0011-fern-terminal-pinnae",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T21:47:31.159188+00:00"
+    },
+    {
+      "command": "reuse-before",
+      "at": "2026-10-14T21:47:40.274641+00:00"
+    },
+    {
+      "command": "authored",
+      "at": "2026-10-14T21:50:25.604002+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T21:50:41.558697+00:00"
+    },
+    {
+      "command": "blind",
+      "at": "2026-10-14T21:51:12.404895+00:00"
+    },
+    {
+      "command": "compare",
+      "at": "2026-10-14T21:51:13.102337+00:00"
+    },
+    {
+      "command": "critiqued",
+      "at": "2026-10-14T21:52:18.076389+00:00"
+    },
+    {
+      "command": "decision",
+      "at": "2026-10-14T21:52:21.854852+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T21:52:21.854869+00:00",
+  "author_identity": "fern-tip-candidate"
+}

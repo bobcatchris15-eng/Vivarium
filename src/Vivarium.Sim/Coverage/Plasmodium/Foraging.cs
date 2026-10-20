@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Vivarium.Sim.Core;
 
 namespace Vivarium.Sim.Coverage.Plasmodium;
@@ -46,43 +47,29 @@ public static class ComponentLabeler
     /// stable, allocation-order-independent result for the same input set.</summary>
     public static List<List<(int gx, int gz)>> Label(IEnumerable<(int gx, int gz)> cells)
     {
-        var set = new HashSet<(int, int)>(cells);
-        var parent = new Dictionary<(int, int), (int, int)>();
-        foreach (var c in set) parent[c] = c;
-
-        (int, int) Find((int, int) x)
+        // One hash lookup/removal per neighbour, instead of constructing a
+        // tuple->tuple parent map and walking/hashing parent chains for every
+        // union. Component membership and canonical sort order are identical
+        // to the old union-find implementation; exploration order is irrelevant.
+        var unvisited = new HashSet<(int, int)>(cells);
+        var result = new List<List<(int gx, int gz)>>();
+        foreach (var seed in cells)
         {
-            while (!parent[x].Equals(x))
+            if (!unvisited.Remove(seed)) continue;
+            var component = new List<(int gx, int gz)> { seed };
+            // Use the list itself as a queue, eliminating Queue<T> allocations.
+            for (int i = 0; i < component.Count; i++)
             {
-                parent[x] = parent[parent[x]];
-                x = parent[x];
+                var (gx, gz) = component[i];
+                foreach (var (dx, dz) in Neighbours8)
+                {
+                    var n = (gx + dx, gz + dz);
+                    if (unvisited.Remove(n)) component.Add(n);
+                }
             }
-            return x;
+            component.Sort();
+            result.Add(component);
         }
-
-        void Union((int, int) a, (int, int) b)
-        {
-            var ra = Find(a); var rb = Find(b);
-            if (!ra.Equals(rb)) parent[ra] = rb;
-        }
-
-        foreach (var (gx, gz) in set)
-            foreach (var (dx, dz) in Neighbours8)
-            {
-                var n = (gx + dx, gz + dz);
-                if (set.Contains(n)) Union((gx, gz), n);
-            }
-
-        var groups = new Dictionary<(int, int), List<(int, int)>>();
-        foreach (var c in set)
-        {
-            var r = Find(c);
-            if (!groups.TryGetValue(r, out var list)) groups[r] = list = new List<(int, int)>();
-            list.Add(c);
-        }
-
-        var result = groups.Values.ToList();
-        foreach (var g in result) g.Sort();
         result.Sort((a, b) => a[0].CompareTo(b[0]));
         return result;
     }
@@ -102,6 +89,9 @@ public sealed class PlasmodiumColony
 
     public IReadOnlyDictionary<(int gx, int gz), int> CellId => _cellId;
     public IReadOnlyDictionary<int, Plasmodium> Organisms => _organisms;
+    public double LastAttractantMs { get; private set; }
+    public double LastFrontAndFeedMs { get; private set; }
+    public double LastPhaseAndTransportMs { get; private set; }
 
     /// <summary>Per-cell cytoplasm mass (§6R item 1). No global pool: every mass change is either a local
     /// feeding gain, a local maintenance/withdrawal loss (both tallied into <see cref="RemovedMass"/>/
@@ -325,7 +315,17 @@ public sealed class PlasmodiumColony
     private readonly List<(int gx, int gz)> _retractBuf = new();
     private readonly List<(int gx, int gz)> _cellsSortedBuf = new();
     private readonly Dictionary<(int, int), double> _outFlowBuf = new();
+    // Per-substep pressure snapshot: all edge flows are evaluated before any
+    // mass transfer, so the same cell pressure was redundantly recomputed
+    // (including Math.Sin) once for every incident edge in the old loop.
+    private readonly Dictionary<(int, int), double> _pressureBuf = new();
     private readonly List<((int gx, int gz) from, (int gx, int gz) to, double amount)> _edgeFlowBuf = new();
+    // Occupancy and vein conductance are fixed for an entire colony step.
+    // Reuse this exact ordered edge topology across pressure oscillation
+    // substeps instead of doing eight hash probes and a network lookup for
+    // *every cell on every substep*. This is not a persistent ecology cache.
+    private readonly List<((int gx,int gz) a,(int gx,int gz) b,
+        double totalConductance,double distance)> _transportEdges = new();
 
     /// <summary>
     /// One foraging step (§6.4, revised by §6R item 1): flags fronts, tries extension into empty 8-neighbours
@@ -358,7 +358,10 @@ public sealed class PlasmodiumColony
                 _massEma[cell] = prev + alpha * (m - prev);
             }
 
+        long profileStart = Stopwatch.GetTimestamp();
         attractant.Step(_cellId.Keys, (cx, cz) => SampleDetritusCoarse(env, cx, cz));
+        LastAttractantMs = Stopwatch.GetElapsedTime(profileStart).TotalMilliseconds;
+        profileStart = Stopwatch.GetTimestamp();
 
         // Retraction (§6.5): cells the transport network has flagged as off-network sheet vacate outright,
         // before front detection runs, so a retracting cell never gets re-flagged as a front the same step. Any
@@ -454,7 +457,10 @@ public sealed class PlasmodiumColony
 
         // Contraction phase field + conservative transport, interleaved (§6R items 1-4): see
         // StepPhaseAndTransport for why a single big-dt Transport call after the phase update is unsafe.
+        LastFrontAndFeedMs = Stopwatch.GetElapsedTime(profileStart).TotalMilliseconds;
+        profileStart = Stopwatch.GetTimestamp();
         StepPhaseAndTransport(env, network, dt);
+        LastPhaseAndTransportMs = Stopwatch.GetElapsedTime(profileStart).TotalMilliseconds;
 
         // Maintenance cost (local, tallied removed) and m_min withdrawal (§6R item 6).
         ApplyMaintenanceAndWithdrawal(layer, network, dt);
@@ -491,35 +497,48 @@ public sealed class PlasmodiumColony
     /// transfer scaled by its source cell's limiter. Every transfer subtracts from one cell and adds the same
     /// amount to another, so the sum over the colony is exactly unchanged by this method.
     /// </summary>
-    private void Transport(IPlasmodiumNetwork? network, double dt)
+    private void PrepareTransportEdges(IPlasmodiumNetwork? network)
+    {
+        _transportEdges.Clear();
+        foreach(var i in _cellsSortedBuf)
+            foreach(var (dx,dz,dist) in Dirs8)
+            {
+                var j=(i.gx+dx,i.gz+dz);
+                if(i.CompareTo(j)>=0 || !_cellId.ContainsKey(j))continue;
+                double vein=network?.VeinConductance(i.gx,i.gz,j.Item1,j.Item2)??0;
+                double conductance=Params.SheetConductance+vein;
+                if(conductance>0)
+                    _transportEdges.Add((i,j,conductance,dist));
+            }
+    }
+
+    private void Transport(double dt, bool recordFinalFlow)
     {
         if (dt <= 0 || _cellId.Count == 0) return;
 
-        _cellsSortedBuf.Clear();
-        _cellsSortedBuf.AddRange(_cellId.Keys);
-        _cellsSortedBuf.Sort();
-
+        // StepPhase prepared _cellsSortedBuf in stable canonical cell order.
+        // Occupancy cannot change during StepPhaseAndTransport; repeating a
+        // full sort for every transport substep is unnecessary.
         _outFlowBuf.Clear();
         _edgeFlowBuf.Clear();
+        _pressureBuf.Clear();
+        // This is an exact common-subexpression elimination: Transport never
+        // mutates mass or phase until *after* every candidate edge is evaluated.
+        // Preserve the sorted visit order and original arithmetic expression.
+        foreach (var cell in _cellsSortedBuf)
+            _pressureBuf[cell] = (Params.P0 +
+                Params.PhaseAmplitude * Math.Sin(ThetaAt(cell.gx, cell.gz)))
+                * MassAt(cell.gx, cell.gz) / Params.MRef;
 
-        foreach (var i in _cellsSortedBuf)
+        foreach (var (i,j,dTotal,dist) in _transportEdges)
         {
-            double mi = MassAt(i.gx, i.gz);
-            double pi = (Params.P0 + Params.PhaseAmplitude * Math.Sin(ThetaAt(i.gx, i.gz))) * mi / Params.MRef;
-            foreach (var (dx, dz, dist) in Dirs8)
-            {
-                var j = (i.gx + dx, i.gz + dz);
-                if (i.CompareTo(j) >= 0) continue; // each unordered pair once
-                if (!_cellId.ContainsKey(j)) continue;
-
-                double mj = MassAt(j.Item1, j.Item2);
-                double pj = (Params.P0 + Params.PhaseAmplitude * Math.Sin(ThetaAt(j.Item1, j.Item2))) * mj / Params.MRef;
-                double dVein = network?.VeinConductance(i.gx, i.gz, j.Item1, j.Item2) ?? 0;
-                double dTotal = Params.SheetConductance + dVein;
-                if (dTotal <= 0) continue;
-
+                double pi=_pressureBuf[i];
+                double pj=_pressureBuf[j];
                 double q = dTotal * (pi - pj) / dist;
-                _lastFlow[(i, j)] = q; // raw, pre-rectification: diagnostic/test view of the oscillating flow
+                // Only the final substep can survive in the observable
+                // diagnostic field. Earlier writes were immediately replaced
+                // with no reader between substeps (thousands of hash writes).
+                if(recordFinalFlow) _lastFlow[(i,j)] = q;
 
                 double amt = q * dt;
                 if (amt > 0)
@@ -539,7 +558,6 @@ public sealed class PlasmodiumColony
                     _outFlowBuf[from] = _outFlowBuf.GetValueOrDefault(from) + outAmt;
                     _edgeFlowBuf.Add((from, i, outAmt));
                 }
-            }
         }
 
         // Convert accumulated outflow totals into per-cell limiters in place (safe: fully populated above,
@@ -583,6 +601,7 @@ public sealed class PlasmodiumColony
         foreach (var cell in _cellId.Keys) _thetaStartBuf[cell] = ThetaAt(cell.Item1, cell.Item2);
 
         StepPhase(env, dt);
+        PrepareTransportEdges(network);
 
         _thetaEndBuf.Clear();
         foreach (var cell in _cellId.Keys) _thetaEndBuf[cell] = ThetaAt(cell.Item1, cell.Item2);
@@ -602,7 +621,7 @@ public sealed class PlasmodiumColony
                 double delta = WrapAngle(b - a);
                 _theta[cell] = WrapAngle(a + frac * delta);
             }
-            Transport(network, subDt);
+            Transport(subDt,s==subSteps);
         }
 
         // Sub-step interpolation lands exactly on the end value at frac = 1 modulo float error; pin it exactly.
@@ -677,7 +696,8 @@ public sealed class PlasmodiumColony
                 double coupling = 0;
                 int baseIdx = i * 8, count = _neighborCount[i];
                 double thetaI = _thetaArr[i];
-                for (int c = 0; c < count; c++) coupling += Math.Sin(_thetaArr[_neighborFlat[baseIdx + c]] - thetaI);
+                for (int c = 0; c < count; c++)
+                    coupling += Math.Sin(_thetaArr[_neighborFlat[baseIdx + c]] - thetaI);
                 _thetaNextArr[i] = thetaI + subDt * (_omegaArr[i] + k * coupling);
             }
             (_thetaArr, _thetaNextArr) = (_thetaNextArr, _thetaArr);

@@ -93,6 +93,8 @@ public sealed class CoverageLayerPayload
 public sealed class CoveragePayload
 {
     public List<CoverageLayerPayload> Layers { get; set; } = new();
+    /// <summary>Present-state dormant plasmodium propagules; missing in old saves.</summary>
+    public List<PlasmodiumSpore> PlasmodiumSpores { get; set; } = new();
     /// <summary>Coverage rule RNG step. Null in older saves; reconstructed from the scheduler cadence.</summary>
     public long? Step { get; set; }
     /// <summary>Per environment-grid-cell "last disturbed" time (<see cref="SubstrateStability"/>), packed doubles
@@ -172,6 +174,7 @@ public static class WorldSerializer
         p["coverage"] = Bytes(new CoveragePayload
         {
             Step = w.CoverageSystem.StepIndex,
+            PlasmodiumSpores = w.CoverageSystem.ExportPlasmodiumSpores().ToList(),
             Layers = w.Coverage.All.Select(layer => new CoverageLayerPayload
             {
                 Id = (int)layer.Id,
@@ -314,6 +317,7 @@ public static class WorldSerializer
         long inferredCoverageSteps = w.Clock.Tick < coverageSchedule.Phase
             ? 0 : (w.Clock.Tick - coverageSchedule.Phase) / coverageSchedule.Cadence + 1;
         w.CoverageSystem.RestoreStep(cp.Step ?? inferredCoverageSteps);
+        w.CoverageSystem.RestorePlasmodiumSpores(cp.PlasmodiumSpores ?? new());
         foreach (var lp in cp.Layers ?? new())
         {
             var layer = w.Coverage.ById((CoverageLayerId)lp.Id);

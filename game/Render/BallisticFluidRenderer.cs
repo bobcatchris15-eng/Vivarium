@@ -41,6 +41,11 @@ public partial class BallisticFluidRenderer : Node3D
             Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = new SphereMesh { Radius = 1, Height = 2, RadialSegments = 12, Rings = 6 } }
         }; AddChild(_drops);
     }
+    public void SetCanopyLighting(float energy, Vector3 direction)
+    {
+        foreach (var mat in new[] { _material, _dropMaterial })
+        { mat.SetShaderParameter("sky_energy", energy); mat.SetShaderParameter("light_direction", direction); }
+    }
     private static Vector3 V(Vivarium.Sim.Core.Vec3 p) => new((float)p.X, (float)p.Y, (float)p.Z);
     private static ImageTexture Upload(ImageTexture? texture, float[] values, int width, int height)
     {

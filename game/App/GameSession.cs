@@ -37,7 +37,7 @@ public partial class GameSession : Node3D
     public AmbientGroundCoverRenderer AmbientGround { get; private set; } = null!;
     public CoverageRenderer Coverage { get; private set; } = null!;
     public FloraRenderer Flora { get; private set; } = null!;
-    public FaunaRenderer Fauna { get; private set; } = null!;
+public FaunaRenderer Fauna { get; private set; } = null!;
     public GuardianRenderer Guardian { get; private set; } = null!;
     public OverlayRenderer Overlay { get; private set; } = null!;
     public ToolController Tools { get; private set; } = null!;
@@ -65,15 +65,15 @@ public partial class GameSession : Node3D
         CameraRig.SpeedChanged += s => { Settings.CameraSpeed = s; Settings.Save(); };
         CameraRig.MediumChanged += under => { EnvRig.SetUnderwater(under); Water.SetUnderwater(under); };
         Island = new IslandRenderer { Name = "Island" }; AddChild(Island);
-        Water = new WaterRenderer { Name = "WaterRenderer" }; AddChild(Water);
-        WaterFluid = new WaterSurfaceRenderer { Name = "WaterSurfaceRenderer" }; AddChild(WaterFluid);
+        Water = new WaterRenderer { Name = "WaterRenderer", Lighting = EnvRig }; AddChild(Water);
+        WaterFluid = new WaterSurfaceRenderer { Name = "WaterSurfaceRenderer", Lighting = EnvRig }; AddChild(WaterFluid);
         Props = new PropRenderer { Name = "PropRenderer" }; AddChild(Props);
         PilotTree = new PilotTreeRenderer { Name = "PilotTreeRenderer" }; AddChild(PilotTree);
         SoilDetail = new SoilDetailRenderer { Name = "SoilDetail" }; AddChild(SoilDetail);
         AmbientGround = new AmbientGroundCoverRenderer { Name = "AmbientGroundCover" }; AddChild(AmbientGround);
         Coverage = new CoverageRenderer { Name = "Coverage" }; AddChild(Coverage);
         Flora = new FloraRenderer { Name = "FloraRenderer" }; AddChild(Flora);
-        Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
+Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         Guardian = new GuardianRenderer { Name = "GuardianRenderer", Vegetation = Flora }; AddChild(Guardian);
         Overlay = new OverlayRenderer { Name = "Overlay" }; AddChild(Overlay);
         Tools = new ToolController { Name = "ToolController" }; AddChild(Tools);
@@ -138,7 +138,7 @@ public partial class GameSession : Node3D
         world.Scheduler.WallBudgetMs = 6;
         world.CoverageSystem.AsyncMode = true;
         CurrentSaveName = saveName;
-        Stage("Island", () => Island.Build(world));
+        Stage("Island", () => { EnvRig.ConfigureHabitat(world); Island.Build(world); });
         yield return "Island";
         Stage("Water", () => Water.Build(world));
         yield return "Water";
@@ -159,6 +159,7 @@ public partial class GameSession : Node3D
         yield return "Coverage";
         Flora.Camera = Fauna.Camera = Guardian.Camera = CameraRig.Cam;
         Stage("Flora", () => Flora.Build(world));
+
         yield return "Flora";
         Stage("Fauna", () => Fauna.Build(world));
         yield return "Fauna";

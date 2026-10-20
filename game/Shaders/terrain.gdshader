@@ -13,6 +13,7 @@ uniform sampler2D ambient_tex : filter_linear, repeat_disable;
 uniform sampler2D cover_tex : filter_linear, repeat_disable;   // moss/lichen colony occupancy (IslandRenderer)
 uniform vec4 field_rect;            // origin.x, origin.z, size.x, size.z
 uniform float water_table = 0.0;
+uniform float review_time = -1.0;
 uniform int overlay_mode = 0;       // 0 none, 1 moisture, 2 nutrients, 3 light, 4 substrate
 uniform float overlay_strength = 0.85;
 
@@ -31,6 +32,28 @@ uniform sampler2D leaf_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
+// Integer lattice keys give each neighboring noise cell exactly the same corner
+// values. Sine/fract hashes can reassociate dot products across corners on the GPU,
+// leaving straight material seams even though the interpolation itself is smooth.
+float terrain_hash(vec2 p) {
+    uvec2 q = uvec2(ivec2(p));
+    uint n = (q.x * 1597334677u) ^ (q.y * 3812015801u);
+    n = (n ^ (n >> 16u)) * 2246822519u;
+    n = n ^ (n >> 13u);
+    return float(n & 16777215u) / 16777215.0;
+}
+float terrain_noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(terrain_hash(i), terrain_hash(i + vec2(1, 0)), u.x),
+        mix(terrain_hash(i + vec2(0, 1)), terrain_hash(i + vec2(1, 1)), u.x), u.y);
+}
+float terrain_fbm(vec2 p) {
+    float s = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++) { s += a * terrain_noise(p); p *= 2.03; a *= 0.5; }
+    return s;
+}
+
 uniform float tile_metres = 0.56;    // physical scale of the main soil scan
 uniform float soil_relief_amp = 0.012;   // metres of fine geometric relief on soil (lumps, furrows)
 uniform float soil_relief_freq = 2.6;
@@ -127,6 +150,9 @@ void fragment() {
     // edge uses, so the shoreline is a soft irregular gradient rather than a step at a cell boundary.
     float silt_edge = (vnoise(world_pos.xz * 4.7 + vec2(21.3, 5.9)) - 0.5) * 0.34;
     float wSilt = (gw_sub > 0.0) ? smoothstep(0.10, 0.74, gw_sub + silt_edge) : 0.0;
+    // A shallow waterline retains the bank's substrate. Accumulated alluvial
+    // sediment takes over gradually with actual standing depth, not a binary plane cut.
+    wSilt *= smoothstep(0.002, 0.030, water_depth);
     f.g = texture(field_tex, fuv).g;              // the substrate code (overlay only) must not be smoothed
     float moisture = f.r, light = f.a;
     float code = floor(f.g * 4.0 + 0.5);         // overlay only: 0 soil, 1 gravel, 2 rock, 3 wood, 4 water
@@ -157,7 +183,7 @@ void fragment() {
     // Litter collects preferentially in sheltered contact zones (root collars, logs, rocks)
     float wLeaf = (stored_litter * (1.0 + contact_mask * 0.45)) * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
     float wMoss = smoothstep(0.48, 0.83, moisture) * smoothstep(0.20, 0.53, light)
-        * smoothstep(0.32, 0.69, fbm(world_pos.xz * 1.14 + 2.8)) * (1.0 - wSilt)
+        * smoothstep(0.32, 0.69, terrain_fbm(world_pos.xz * 1.14 + 2.8)) * (1.0 - wSilt)
         * (1.0 - 0.75 * smoothstep(0.04, 0.45, colony));
     float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
     float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
@@ -217,10 +243,20 @@ void fragment() {
         world_pert = mix(world_pert, vec3(n2.x, 0.0, -n2.y), w);
     }
     if (wLeaf > 0.01) {
-        vec2 lu = uv * 1.3 + 1.7;
-        vec3 ln = unpack_normal(texture(leaf_nrm, lu).rgb);
-        vec4 l = vec4(texture(leaf_col, lu).rgb, texture(leaf_rgh, lu).r);
-        float w = hblend(wLeaf, dot(l.rgb, vec3(0.33)) * 2.0);
+        // Larger, rotated scan fragments read as fallen leaves rather than a tiny repeated pebble print.
+        vec2 lu = uv * 0.72 + 1.7;
+        vec3 ln;
+        vec4 l = sample_untiled(leaf_col, leaf_nrm, leaf_rgh, lu, ln);
+        // ScatteredLeaves007 is isolated litter on black. Black gaps reveal the actual
+        // substrate; treating them as opaque albedo printed a black-backed carpet.
+        float leaf_presence = smoothstep(0.007, 0.045, dot(l.rgb, vec3(0.333)));
+        float pockets = smoothstep(0.25, 0.72, vnoise(world_pos.xz * 2.1 + vec2(19.7, 8.3)));
+        float w = hblend(wLeaf * mix(0.32, 1.0, pockets), dot(l.rgb, vec3(0.33)) * 2.0) * leaf_presence;
+        // A decomposing forest floor has a muted umber base with occasional intact warm leaves.
+        float leaf_luminance = dot(l.rgb, vec3(0.2126, 0.7152, 0.0722));
+        l.rgb = mix(vec3(leaf_luminance) * vec3(0.90, 0.82, 0.66), l.rgb, 0.56);
+        // Damp litter loses the dry scan's bright orange/yellow response.
+        l.rgb *= mix(vec3(1.0), vec3(0.50, 0.58, 0.48), smoothstep(0.24, 0.78, moisture));
         col = mix(col, l.rgb, w); rough = mix(rough, l.a, w);
         world_pert = mix(world_pert, vec3(ln.x, 0.0, -ln.y), w);
     }
@@ -270,8 +306,11 @@ void fragment() {
         vec3 silt_mud = vec3(0.048, 0.038, 0.029) * mix(0.82, 1.18, silt_grain + silt_ripple * 0.15);
         vec3 silt_col = mix(silt_bank, silt_mud, smoothstep(0.0, 0.02, water_depth));
 
-        // Sleek wet sheen per measurements.md (saturated shoreline mud roughness 0.12 - 0.28)
-        float silt_rough = mix(0.72, 0.22, smoothstep(0.0, 0.025, water_depth));
+        // The air/water interface owns the mirror reflection. Keep a wet sheen
+        // on the thin shoreline film, then roughen sediment beneath the water
+        // so the bed does not become a second silver reflection surface.
+        float silt_rough = mix(0.72, 0.22, smoothstep(0.0, 0.004, water_depth));
+        silt_rough = mix(silt_rough, 0.78, smoothstep(0.006, 0.025, water_depth));
 
         col = mix(col, silt_col, wSilt);
         rough = mix(rough, silt_rough, wSilt);
@@ -290,12 +329,15 @@ void fragment() {
     float ambient_micro = 0.76 + 0.24 * fbm(world_pos.xz * 7.5 + vec2(19.1, 4.7));
     float ambient_weight = smoothstep(0.035, 0.72, ambient_cover) * 0.72 * ambient_micro
         * (1.0 - wGrav) * (1.0 - wLeaf * 0.55) * (1.0 - wSilt);
-    vec3 ambient_dry = vec3(0.22, 0.35, 0.09);
-    vec3 ambient_mesic = vec3(0.075, 0.29, 0.065);
-    vec3 ambient_shade = vec3(0.045, 0.205, 0.105);
+    vec3 ambient_dry = srgb_to_linear(vec3(0.22, 0.35, 0.09));
+    vec3 ambient_mesic = srgb_to_linear(vec3(0.075, 0.29, 0.065));
+    vec3 ambient_shade = srgb_to_linear(vec3(0.045, 0.205, 0.105));
     vec3 ambient_col = mix(ambient_dry, ambient_mesic, smoothstep(0.12, 0.58, moisture));
     ambient_col = mix(ambient_col, ambient_shade, smoothstep(0.62, 0.18, light));
-    ambient_col *= mix(0.88, 1.08, ambient_micro);
+    // Anonymous creepers grow over humus, not an opaque flat green paint layer.
+    // Keep the scanned soil's organic grain beneath sparse moss pigmentation.
+    ambient_col = mix(soil.rgb * vec3(0.72, 0.69, 0.55), ambient_col, 0.32);
+    ambient_col *= mix(0.74, 1.05, ambient_micro);
     col = mix(col, ambient_col, ambient_weight);
     rough = mix(rough, 0.9, ambient_weight * 0.45);
 
@@ -304,9 +346,12 @@ void fragment() {
     float bare = max(wGrav, (1.0 - wMoss) * (1.0 - ambient_weight) * (1.0 - wLeaf * 0.7));
     float gedge = wGrav * (1.0 - wGrav) * 4.0;
     float favour = moisture * 0.7 + (1.0 - light) * 0.55 + ambient_cover * 0.5 + gedge * 0.6 - 0.40;
-    float patchn = vnoise(world_pos.xz * 1.7 + vec2(3.3, 9.1)) * 0.65 + vnoise(world_pos.xz * 4.9 + 1.2) * 0.35;
+    float patchn = terrain_noise(world_pos.xz * 1.7 + vec2(3.3, 9.1)) * 0.65 + terrain_noise(world_pos.xz * 4.9 + 1.2) * 0.35;
     float gm = smoothstep(0.0, 0.35, favour + (patchn - 0.5) * 0.6) * bare * (1.0 - wSilt)
         * (1.0 - smoothstep(0.04, 0.45, colony));   // bare ground around real colonies so they read as distinct patches
+    // Decorative moss grows in broken islands. Moisture alone must not paint the
+    // entire floor; the explicit colony mask still owns occupied moss/lichen patches.
+    gm *= smoothstep(0.28, 0.64, patchn + contact_mask * 0.06);
     if (gm > 0.02) {
         float speck;
         vec4 cl = moss_clumps(world_pos.xz * 38.0, speck);
@@ -316,17 +361,23 @@ void fragment() {
         // not smooth cobbles; it also breaks the cell seams so neighbouring cushions merge.
         float fz1 = vnoise(world_pos.xz * 420.0 + vec2(cl.w * 17.0));
         float fz2 = vnoise(world_pos.xz * 190.0 + 4.1);
-        float fuzz = fz1 * 0.55 + fz2 * 0.45;
+        float footprint = max(length(dFdx(world_pos.xz)), length(dFdy(world_pos.xz)));
+        float fine_detail = 1.0 - smoothstep(0.0015, 0.006, footprint);
+        float fuzz = mix(0.5, fz1 * 0.55 + fz2 * 0.45, fine_detail);
         float h = clamp(cl.x + (fuzz - 0.5) * 0.45, 0.0, 1.0);
-        vec3 base = mix(vec3(0.07, 0.135, 0.035), vec3(0.12, 0.20, 0.05), cl.w) * mix(0.85, 1.12, patchn);
-        vec3 mc = mix(base, vec3(0.24, 0.33, 0.09), smoothstep(0.45, 0.95, h) * (0.35 + 0.5 * fib));
-        mc *= mix(0.55, 1.0, smoothstep(0.0, 0.5, h)) * (0.62 + 0.6 * fuzz);
-        mc = mix(mc, vec3(0.42, 0.36, 0.13), speck * 0.6);
-        float a = smoothstep(0.12, 0.55, cover);
+        // Artist-facing sRGB greens: dark humid cushions, with chartreuse limited to
+        // growing tips. The previous linear constants produced a pale olive wash.
+        vec3 base = mix(srgb_to_linear(vec3(0.19, 0.30, 0.09)),
+            srgb_to_linear(vec3(0.28, 0.40, 0.12)), cl.w) * mix(0.85, 1.10, patchn);
+        vec3 mc = mix(base, srgb_to_linear(vec3(0.48, 0.66, 0.18)),
+            smoothstep(0.60, 0.96, h) * (0.25 + 0.35 * fib));
+        mc *= mix(0.56, 1.0, smoothstep(0.0, 0.5, h)) * (0.75 + 0.4 * fuzz);
+        mc = mix(mc, srgb_to_linear(vec3(0.30, 0.28, 0.12)), speck * 0.22 * fine_detail);
+        float a = smoothstep(0.20, 0.68, cover) * smoothstep(0.05, 0.60, gm);
         col = mix(col, mc, a);
         rough = mix(rough, 0.95, a);
         vec2 fg = vec2(vnoise(world_pos.xz * 300.0 + 2.7), vnoise(world_pos.xz * 300.0 + 8.3)) - 0.5;
-        vec3 dn = normalize(vec3(cl.y * 0.5 + fg.x * 0.9, 0.6 * max(cl.x, 0.25), cl.z * 0.5 + fg.y * 0.9));
+        vec3 dn = normalize(vec3(cl.y * 0.5 + fg.x * 0.6 * fine_detail, 0.6 * max(cl.x, 0.25), cl.z * 0.5 + fg.y * 0.6 * fine_detail));
         detail = normalize(mix(detail, normalize(wn + vec3(dn.x, 0.0, dn.z) * 0.7), a));
     }
 
@@ -346,8 +397,15 @@ void fragment() {
     float total_wet = clamp(max(soil_wet, shore_wet), 0.0, 1.0);
 
     col *= mix(1.0, 0.72, total_wet * (1.0 - wMoss * 0.6));
-    rough = mix(rough, 0.20, total_wet * 0.85);
-    detail = normalize(mix(detail, wn, total_wet * 0.45));
+    // Damp organic pores retain rough relief. The liquid interface, when present,
+    // supplies the sharp canopy reflection rather than a silver mirror on the bed.
+    float wet_pores = vnoise(world_pos.xz * 36.0 + vec2(11.7, 3.1));
+    rough = mix(rough, mix(0.40, 0.52, wet_pores), total_wet * 0.85);
+    // The water interface supplies specular reflection; submerged humus must not
+    // become another silver mirror as the silt weight fades at the bank.
+    float submerged_bed = smoothstep(0.004, 0.018, water_depth);
+    rough = mix(rough, max(rough, 0.78), submerged_bed);
+    detail = normalize(mix(detail, wn, total_wet * 0.12));
 
     // Animated procedural caustics on submerged waterway bed:
     float caustic_mask = 0.0;
@@ -357,10 +415,10 @@ void fragment() {
         float submerged = smoothstep(0.005, 0.06, water_depth);
         float caustic_depth = exp(-water_depth * 1.5);
         caustic_mask = submerged * caustic_depth;
-        float caustics = caustic_pattern(world_pos.xz, TIME);
-        caustic_light = vec3(0.24, 0.32, 0.26) * caustics * caustic_mask;
+        float caustics = caustic_pattern(world_pos.xz, review_time >= 0.0 ? review_time : TIME);
+        caustic_light = vec3(0.012, 0.011, 0.008) * min(caustics, 1.0) * caustic_mask;
         col += caustic_light * 0.65;
-        EMISSION = caustic_light * 0.35;
+        EMISSION = vec3(0.0); // Bed contrast receives scene illumination instead of glowing in shadow.
     }
     if (world_pos.y >= water_surface) {
         caustic_mask = 0.0;
@@ -388,6 +446,7 @@ void fragment() {
     AO_LIGHT_AFFECT = 0.25;
     ALBEDO = col;
     ROUGHNESS = rough;
-    SPECULAR = mix(0.35, 0.75, total_wet);
+    SPECULAR = mix(0.35, 0.32, total_wet);
+    SPECULAR = mix(SPECULAR, 0.12, smoothstep(0.006, 0.025, water_depth));
     NORMAL = normalize((VIEW_MATRIX * vec4(detail, 0.0)).xyz);
 }

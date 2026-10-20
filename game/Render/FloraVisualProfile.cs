@@ -10,6 +10,8 @@ namespace Vivarium.Game.Render;
 /// <summary>Editable visual recipes are independent of physiology and save files.</summary>
 public sealed class FloraVisualProfile
 {
+    // Disposable review hook; ordinary gameplay leaves this unset.
+    public static Func<string, MeshData, MeshData>? ReviewMeshTransform { get; set; }
     public string Species { get; set; } = "";
     public bool Enabled { get; set; } = true;
     public bool Volumetric { get; set; }
@@ -76,6 +78,7 @@ public sealed class FloraVisualProfile
 
     public ArrayMesh Compile(MeshData source, ShaderMaterial stem, ShaderMaterial leaf)
     {
+        if (ReviewMeshTransform != null) source = ReviewMeshTransform(Species, source);
         var split = FloraVisualCompiler.Split(source);
         var result = Bridge.ToArrayMesh(split.Stem, stem);
         using var blade = Bridge.ToArrayMesh(split.Leaf, leaf);

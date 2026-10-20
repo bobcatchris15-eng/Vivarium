@@ -57,11 +57,12 @@ public sealed class FaunaPopulation
 {
     public List<FaunaIndividual> Items { get; } = new();
     private readonly Dictionary<EntityId, FaunaIndividual> _byId = new();
-    public SpatialBuckets<FaunaIndividual> Index { get; }
+    public SpatialGrid<FaunaIndividual> Index { get; }
     public int Version { get; private set; }
     private readonly Dictionary<string, int> _countBySpecies = new(StringComparer.Ordinal);
+    private int _indexedVersion;
 
-    public FaunaPopulation(double halfExtent) { Index = new SpatialBuckets<FaunaIndividual>(halfExtent, 0.5, f => f.PositionXZ); }
+    public FaunaPopulation(double halfExtent) { Index = new SpatialBuckets<FaunaIndividual>(halfExtent, 0.5, f => f.PositionXZ); _indexedVersion = Version; }
 
     public int Count => Items.Count;
     public FaunaIndividual? Get(EntityId id) => _byId.GetValueOrDefault(id);
@@ -72,6 +73,7 @@ public sealed class FaunaPopulation
         if (Items.Count > 0 && Items[^1].Id.Value >= f.Id.Value) throw new InvalidOperationException("Fauna must be added in ascending id order.");
         Items.Add(f); _byId[f.Id] = f; Index.Add(f); Version++;
         _countBySpecies[f.SpeciesId] = CountOf(f.SpeciesId) + 1;
+        _indexedVersion = Version;
     }
 
     public bool Remove(EntityId id)
@@ -80,6 +82,7 @@ public sealed class FaunaPopulation
         Items.Remove(f); Version++;
         _countBySpecies[f.SpeciesId] = CountOf(f.SpeciesId) - 1;
         RebuildIndex();
+        _indexedVersion = Version;
         return true;
     }
 
@@ -92,13 +95,22 @@ public sealed class FaunaPopulation
         foreach (var f in Items) _countBySpecies[f.SpeciesId] = CountOf(f.SpeciesId) + 1;
         Version++;
         RebuildIndex();
+        _indexedVersion = Version;
     }
 
-    public void Clear() { Items.Clear(); _byId.Clear(); Index.Clear(); _countBySpecies.Clear(); Version++; }
+    public void Clear() { Items.Clear(); _byId.Clear(); Index.Clear(); _countBySpecies.Clear(); Version++; _indexedVersion = Version; }
 
     /// <summary>Rebuild in id order so neighbour query order is deterministic and position-current. Behaviour
     /// refreshes this on a slow cadence; membership changes rebuild it immediately.</summary>
-    public void RebuildIndex() { Index.Clear(); foreach (var f in Items) Index.Add(f); }
+    public void RebuildIndex() { Index.Clear(); foreach (var f in Items) Index.Add(f); _indexedVersion = Version; }
 
-    public void Neighbours(Vec2 p, double radius, List<FaunaIndividual> into) { into.Clear(); Index.Query(p, radius, into); }
+    public void RebuildIfNeeded() { if (_indexedVersion != Version) RebuildIndex(); }
+
+    public void Neighbours(Vec2 p, double radius, List<FaunaIndividual> into) { RebuildIfNeeded(); into.Clear(); Index.Query(p, radius, into); }
+    public void Query(Vec2 p, double radius, List<FaunaIndividual> into) { Neighbours(p, radius, into); }
+
+    public List<FaunaIndividual> ItemsNear(Vec2 p, double radius) { var list = new List<FaunaIndividual>(); Neighbours(p, radius, list); return list; }
+
+    public SpatialGrid<FaunaIndividual> SpatialGrid => Index;
+    public SpatialGrid<FaunaIndividual> SpatialHash => Index;
 }

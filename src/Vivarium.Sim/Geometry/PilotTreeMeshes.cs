@@ -10,14 +10,74 @@ namespace Vivarium.Sim.Geometry;
 /// </summary>
 public static class PilotTreeMeshes
 {
-    public static MeshData Build(VivariumWorld world)
+    /// <summary>
+    /// Exact terrain-footprint sampler for the mutable part of old-growth root
+    /// rendering. Uses every sampled ring footprint plus endpoint cap centers
+    /// from Roots(), not a global terrain revision or a coarse AABB guess.
+    /// A root mesh upload is required only if sampled ground geometry differs.
+    /// Cache is renderer-owned present state; nothing is persisted in ecology.
+    /// </summary>
+    public static ulong RootGroundSignature(VivariumWorld world)
+    {
+        var tree=world.PilotTree;
+        if(tree==null)return 0;
+        const ulong fnvOffset=14695981039346656037UL;
+        const ulong fnvPrime=1099511628211UL;
+        ulong hash=fnvOffset;
+        void MixHeight(Vec2 p)
+        {
+            ulong bits=BitConverter.DoubleToUInt64Bits(world.SurfaceHeight(p));
+            hash=unchecked((hash^bits)*fnvPrime);
+        }
+        foreach(var path in tree.Roots)
+        {
+            var samples=path.Samples;
+            for(int i=0;i<samples.Count;i++)
+            {
+                var s=samples[i];
+                var tangent=i==0?samples[1].Position-s.Position:
+                    i==samples.Count-1?s.Position-samples[i-1].Position:
+                    samples[i+1].Position-samples[i-1].Position;
+                var side=tangent.Normalized().Rotated(Math.PI/2);
+                for(int j=0;j<=12;j++)
+                {
+                    double a=Math.PI*j/12;
+                    var p=s.Position+side*(Math.Cos(a)*s.Width);
+                    MixHeight(p);
+                }
+            }
+            MixHeight(samples[0].Position);
+            MixHeight(samples[^1].Position);
+        }
+        return hash;
+    }
+
+    public static MeshData Build(VivariumWorld world, bool includeCrown = true) =>
+        BuildParts(world, includeRoots: true, includeTrunk: true, includeCrown);
+
+    /// <summary>Only terrain-dependent root crests, clipped to the island.
+    /// Terrain edits may refresh this without remeshing the massive static trunk.</summary>
+    public static MeshData BuildRoots(VivariumWorld world) =>
+        BuildParts(world, includeRoots: true, includeTrunk: false, includeCrown: false);
+
+    /// <summary>Permanent trunk, boundary cut faces and optional legacy crown.
+    /// Rebuild only on a renderer cutover, not on unrelated terrain erosion.</summary>
+    public static MeshData BuildTrunkAndCrown(VivariumWorld world, bool includeCrown = true) =>
+        BuildParts(world, includeRoots: false, includeTrunk: true, includeCrown);
+
+    private static MeshData BuildParts(VivariumWorld world, bool includeRoots,
+        bool includeTrunk, bool includeCrown)
     {
         var m = new MeshData();
         var tree = world.PilotTree;
         if (tree == null) return m;
         var b = new Builder(m, tree, world.SurfaceHeight);
-        b.Roots();
-        b.Trunk();
+        if (includeRoots) b.Roots();
+        if (includeTrunk) b.Trunk();
+        // The ancient boundary root and trunk remain terrain-authoritative.
+        // Once new axial/leaf hardware meshes are uploaded, skip legacy crown
+        // organs without ever altering the ecosystem's root samples or hull.
+        if (!includeCrown) return m;
         switch (tree.Def.Id)
         {
             case "gloomspire": b.Conifer(false, false); break;
@@ -261,11 +321,19 @@ public static class PilotTreeMeshes
                     double t = .022 + row * .030, a = Tau * (j + (row % 2) * .5) / 18 + phase;
                     double delta = Math.Abs(MathD.WrapAngle(a - facing));
                     if (delta > Math.PI / 3 - 0.12) continue;
+                    // Independent ornament stream: preserve the shared draws that define crown/support anatomy.
+                    var detail = Rng.Keyed(tree.Seed, "pilot.armor.breakup", (ulong)row, (ulong)j);
+                    t += detail.Range(-.005, .005);
+                    a = facing + Math.Clamp(MathD.WrapAngle(a - facing) + detail.Range(-.027, .027), -Math.PI / 3 + .14, Math.PI / 3 - .14);
                     var n = new Vec3(Math.Cos(a), 0, Math.Sin(a)); var side = new Vec3(-n.Z, 0, n.X);
                     var c = Centre(t) + n * Radius(t);
-                    double w = r * .19, hh = h * .024;
-                    Vec3 top = c + Vec3.Up * hh, right = c + side * w, low = c - Vec3.Up * hh + n * r * .022, left = c - side * w;
-                    var ridge = c + n * r * .085 + Vec3.Up * hh * .18;
+                    double w = Math.Min(r * .19 * detail.Range(.72, 1.12), Radius(t) * (Math.PI / 3 - Math.Abs(MathD.WrapAngle(a - facing))) * .88);
+                    double hh = h * .024 * detail.Range(.76, 1.15);
+                    Vec3 top = c + Vec3.Up * hh + side * w * detail.Range(-.22, .22),
+                        right = c + side * w * detail.Range(.80, 1.08) + Vec3.Up * hh * detail.Range(-.25, .25),
+                        low = c - Vec3.Up * hh * detail.Range(.82, 1.12) + n * r * detail.Range(.009, .024) + side * w * detail.Range(-.18, .18),
+                        left = c - side * w * detail.Range(.80, 1.08) + Vec3.Up * hh * detail.Range(-.25, .25);
+                    var ridge = c + n * r * detail.Range(.035, .078) + Vec3.Up * hh * detail.Range(-.12, .26) + side * w * detail.Range(-.16, .16);
                     var col = Primitives.Scale(bark, rng.Range(.78, 1.18));
                     Face(top, right, ridge, col, 1, n); Face(right, low, ridge, col, 1, n);
                     Face(low, left, ridge, Primitives.Scale(col, .88), 1, n); Face(left, top, ridge, col, 1, n);
@@ -532,27 +600,35 @@ public static class PilotTreeMeshes
             {
                 double a=facing+rng.Range(-.80,.80), t=rng.Range(.035,.35);
                 int shelves=2+rng.NextInt(4);
+                double attachment = t;
                 for(int i=0;i<shelves;i++)
                 {
-                    double y=t+i*rng.Range(.014,.027);
-                    var n=new Vec3(Math.Cos(a),0,Math.Sin(a));
+                    var detail = Rng.Keyed(tree.Seed, "pilot.fungi.breakup", (ulong)group, (ulong)i);
+                    double step = rng.Range(.014,.027); // Retain the original shared RNG consumption.
+                    if (i > 0) attachment += step * detail.Range(.72, 1.28);
+                    double y = attachment + detail.Range(-.003, .003);
+                    double angle = a + detail.Range(-.07, .07);
+                    var n=new Vec3(Math.Cos(angle),0,Math.Sin(angle));
                     var c=Centre(y)+n*Radius(y)*.96;
-                    Shelf(c,n,r*rng.Range(.13,.34)*(1-.07*i));
+                    Shelf(c,n,r*rng.Range(.13,.34)*(1-.07*i)*detail.Range(.82,1.10), detail.NextULong());
                 }
             }
         }
-        private void Shelf(Vec3 center,Vec3 outward,double size)
+        private void Shelf(Vec3 center,Vec3 outward,double size, ulong ornamentKey)
         {
             var side=new Vec3(-outward.Z,0,outward.X);
             const int count=24, rings=7;
             var top=new Vec3[rings+1,count+1];var bottom=new Vec3[rings+1,count+1];
             double asym=rng.Range(.85,1.15),phase2=rng.Range(0,Tau);
+            var detail = Rng.Keyed(tree.Seed, "pilot.shelf.breakup", ornamentKey);
+            double depth = detail.Range(.60, .81), skew = detail.Range(-.13, .13), crownHeight = detail.Range(.15, .24);
+            double lobe = detail.Range(.012, .046), scallopPhase = detail.Range(0, Tau);
             for(int ring=0;ring<=rings;ring++) for(int j=0;j<=count;j++)
             {
                 double q=ring/(double)rings, a=Math.PI*j/count;
-                double scallop=1+.025*Math.Sin(a*9+phase2)+.017*Math.Sin(a*17-phase2);
-                var p=center+side*(Math.Cos(a)*size*q*asym*scallop)+outward*(Math.Sin(a)*size*q*.72*scallop);
-                double crown=size*(.20*(1-q*q)+.015*Math.Sin(q*34+phase2)*(1-q));
+                double scallop=1+lobe*Math.Sin(a*7+scallopPhase)+.017*Math.Sin(a*13-phase2)+.035*Math.Sin(a*2+scallopPhase);
+                var p=center+side*((Math.Cos(a)*asym+Math.Sin(a)*skew)*size*q*scallop)+outward*(Math.Sin(a)*size*q*depth*scallop);
+                double crown=size*(crownHeight*(1-q*q)+.015*Math.Sin(q*34+phase2)*(1-q)+.025*Math.Sin(a*2+scallopPhase)*q);
                 double thick=size*(.032+.09*(1-q));
                 top[ring,j]=p+Vec3.Up*crown;
                 bottom[ring,j]=p+Vec3.Up*(crown-thick);

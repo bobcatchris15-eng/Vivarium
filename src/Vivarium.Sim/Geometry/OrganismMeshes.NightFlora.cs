@@ -121,65 +121,11 @@ public static partial class OrganismMeshes
         }
     }
 
-    /// <summary>Low, spreading tangle of arching canes with alternating leaves and underside mint nodules.</summary>
+    /// <summary>Spiral-caned honeysuckle-like woody shrub with three orders of shoots and lanceolate leaves.</summary>
     private static void ShrubGlowbriar(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
-        int detail = m.FloraDetailLevel ?? 0;
-        int canes = juvenile ? 4 : detail == 2 ? 5 : detail == 1 ? 7 : 9;
-        int leavesPerCane = detail == 2 ? 3 : detail == 1 ? 5 : 7;
-        int nodulesPerCane = detail == 2 ? 2 : detail == 1 ? 3 : 4;
-        double scale = juvenile ? 0.72 : 1.0;
-        var bark = Primitives.Mix(c1, new[] { 0.16, 0.23, 0.19 }, 0.46);
-        var leafBase = Primitives.Mix(c1, new[] { 0.10, 0.28, 0.20 }, 0.40);
-        var leafTip = Primitives.Mix(c2, new[] { 0.31, 0.53, 0.34 }, 0.48);
-        for (int c = 0; c < canes; c++)
-        {
-            double angle = 2 * Math.PI * c / canes + rng.Range(-0.19, 0.19);
-            var radial = new Vec3(Math.Cos(angle), 0, Math.Sin(angle));
-            var tangent = new Vec3(-radial.Z, 0, radial.X);
-            double phase = rng.Range(-0.22, 0.22);
-            var path = new Vec3[7]; var radii = new double[7];
-            for (int j = 0; j < path.Length; j++)
-            {
-                double t = j / 6.0;
-                double reach = (0.08 + 0.70 * t) * scale;
-                double weave = Math.Sin(t * Math.PI * 2.2 + phase) * 0.10 * scale;
-                double y = (0.025 + 0.37 * Math.Sin(Math.PI * t * 0.82) - 0.08 * t) * scale;
-                path[j] = radial * reach + tangent * weave + Vec3.Up * y;
-                radii[j] = (0.018 - 0.009 * t) * scale;
-            }
-            Primitives.Tube(m, path, radii, detail == 2 ? 5 : 7,
-                (i, v) => (bark, 1, i / 6.0, v, 2, 0), Vec3.Up);
-
-            for (int n = 0; n < nodulesPerCane; n++)
-            {
-                double t = 0.38 + 0.52 * (n + 0.35) / nodulesPerCane;
-                var point = SamplePolyline(path, t);
-                // Small nodules hang on the shaded underside; only these marked organs emit at night.
-                var center = point - Vec3.Up * (0.024 * scale) + tangent * (0.012 * scale * (n % 2 == 0 ? 1 : -1));
-                Primitives.Tube(m, new[] { point, center }, new[] { 0.0038 * scale, 0.0022 * scale }, 5,
-                    (i, v) => (bark, 1, i, v, 2, 0));
-                int first = m.VertexCount;
-                var mint = new[] { 0.45, 0.95, 0.66 };
-                Primitives.Ellipsoid(m, center, new Vec3(0.014 * scale, 0.020 * scale, 0.014 * scale), 4, 6,
-                    (u, v) => (mint, 1, u, v, 1.4, 1));
-                for (int v = first; v < m.VertexCount; v++) m.UV2[v * 2] = 1.4f;
-            }
-
-            for (int l = 0; l < leavesPerCane; l++)
-            {
-                double t = 0.18 + 0.76 * (l + 0.42) / leavesPerCane;
-                var attachment = SamplePolyline(path, t);
-                double sideSign = l % 2 == 0 ? 1 : -1;
-                var leafAxis = tangent * sideSign * rng.Range(0.075, 0.12) + radial * rng.Range(-0.025, 0.025)
-                    + Vec3.Up * rng.Range(0.015, 0.045);
-                FoliageBlade.Build(m, attachment, attachment + leafAxis, radial,
-                    rng.Range(0.016, 0.024) * scale, leafBase, leafTip,
-                    camber: 0.10, curl: 0.07, asymmetry: rng.Range(-0.08, 0.08), segments: 3);
-            }
-        }
+        GlowbriarGeometry.Build(m, rng, c1, c2, juvenile);
     }
-
     private static Vec3 SamplePolyline(IReadOnlyList<Vec3> points, double t)
     {
         double f = Math.Clamp(t, 0, 1) * (points.Count - 1);

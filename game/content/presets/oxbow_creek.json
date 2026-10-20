@@ -41,7 +41,7 @@
         "z": -1.71,
         "toX": -2.88,
         "toZ": -2.34,
-        "width": 0.31,
+        "width": 0.207,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.055,
@@ -53,7 +53,7 @@
         "z": -2.34,
         "toX": -1.17,
         "toZ": -1.935,
-        "width": 0.3341,
+        "width": 0.223,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.05786,
@@ -65,7 +65,7 @@
         "z": -1.935,
         "toX": 0.45,
         "toZ": -1.8,
-        "width": 0.3229,
+        "width": 0.215,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.06061,
@@ -77,7 +77,7 @@
         "z": -1.8,
         "toX": 1.62,
         "toZ": -1.17,
-        "width": 0.2928,
+        "width": 0.195,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.06316,
@@ -89,7 +89,7 @@
         "z": -1.17,
         "toX": 1.035,
         "toZ": -0.18,
-        "width": 0.2879,
+        "width": 0.192,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.06524,
@@ -101,7 +101,7 @@
         "z": -0.18,
         "toX": -0.765,
         "toZ": 0.09,
-        "width": 0.3154,
+        "width": 0.21,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.06704,
@@ -113,7 +113,7 @@
         "z": 0.09,
         "toX": -1.53,
         "toZ": 1.08,
-        "width": 0.335,
+        "width": 0.223,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.0699,
@@ -125,7 +125,7 @@
         "z": 1.08,
         "toX": -0.675,
         "toZ": 2.025,
-        "width": 0.318,
+        "width": 0.212,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.07186,
@@ -137,7 +137,7 @@
         "z": 2.025,
         "toX": 1.125,
         "toZ": 2.385,
-        "width": 0.2893,
+        "width": 0.193,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.07385,
@@ -149,7 +149,7 @@
         "z": 2.385,
         "toX": 1.62,
         "toZ": 3.24,
-        "width": 0.291,
+        "width": 0.194,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.07673,
@@ -161,7 +161,7 @@
         "z": 3.24,
         "toX": 0.99,
         "toZ": 4.14,
-        "width": 0.3205,
+        "width": 0.214,
         "amount": 0.15,
         "sharp": true,
         "bedHeight": -0.07828,
@@ -173,11 +173,35 @@
         "z": -3.06,
         "toX": -1.17,
         "toZ": -1.935,
-        "width": 0.24,
+        "width": 0.18,
         "amount": 0.145,
         "sharp": true,
         "bedHeight": 0.035,
         "toBedHeight": -0.06061
+      },
+      {
+        "type": "basin",
+        "x": 1.62,
+        "z": -1.17,
+        "radius": 0.65,
+        "amount": 0.08,
+        "bedHeight": -0.095
+      },
+      {
+        "type": "basin",
+        "x": -1.53,
+        "z": 1.08,
+        "radius": 0.65,
+        "amount": 0.08,
+        "bedHeight": -0.098
+      },
+      {
+        "type": "basin",
+        "x": 1.125,
+        "z": 2.385,
+        "radius": 0.65,
+        "amount": 0.08,
+        "bedHeight": -0.102
       }
     ],
     "slopeX": -0.002,
@@ -218,66 +242,91 @@
   },
   "starterFlora": [
     {
-      "species": "brooklace",
+      "species": "vaultfern",
+      "count": 3
+    },
+    {
+      "species": "rainshield",
       "count": 6
     },
     {
+      "species": "lacemantle",
+      "count": 3
+    },
+    {
+      "species": "brooklace",
+      "count": 12
+    },
+    {
       "species": "velvetweave_moss",
-      "count": 7
+      "count": 14
     },
     {
       "species": "trifold",
-      "count": 7
+      "count": 14
     },
     {
       "species": "glassrush",
-      "count": 4
+      "count": 8
     },
     {
       "species": "ringreed",
-      "count": 3
+      "count": 6
     },
     {
       "species": "pearl_cushion_moss",
-      "count": 4
+      "count": 10
     },
     {
       "species": "coinrunner",
-      "count": 4
+      "count": 8
     },
     {
       "species": "dewbonnet",
-      "count": 3
+      "count": 6
     },
     {
       "species": "shadebell",
-      "count": 3
+      "count": 6
+    },
+    {
+      "species": "glowbriar",
+      "count": 6
+    },
+    {
+      "species": "moonfern",
+      "count": 10
+    },
+    {
+      "species": "ghostbonnet",
+      "count": 6
     }
   ],
   "starterFauna": [
     {
       "species": "glintfin",
-      "count": 7
-    },
-    {
-      "species": "emberglass_swimmer",
-      "count": 6
-    },
-    {
-      "species": "stiltclaw",
       "count": 4
     },
     {
+      "species": "emberglass_swimmer",
+      "count": 3
+    },
+    {
+      "species": "stiltclaw",
+      "count": 3
+    },
+    {
       "species": "rainspine",
-      "count": 6
+      "count": 3
     },
     {
       "species": "prismhopper",
-      "count": 6
+      "count": 3
     },
     {
       "species": "marbleback",
-      "count": 6
+      "count": 3
     }
-  ]
+  ],
+  "faunaBudget": 396
 }

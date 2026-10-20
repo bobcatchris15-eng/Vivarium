@@ -43,5 +43,8 @@ void fragment() {
     vec3 graded = mix(scene, scene * tint * 1.15, 0.22) + caustic_light * strength;
     float vig = smoothstep(0.95, 0.35, distance(uv, vec2(0.5)));
     graded *= mix(0.82, 1.0, vig);
-    COLOR = vec4(mix(scene, graded, strength), 1.0);
+    // Screen-space caustics must never add light to the unexplained black void.
+    vec3 original = texture(screen_tex, uv).rgb;
+    float has_surface = step(0.000001, max(original.r, max(original.g, original.b)));
+    COLOR = vec4(mix(scene, graded, strength) * has_surface, 1.0);
 }

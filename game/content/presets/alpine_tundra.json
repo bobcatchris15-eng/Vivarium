@@ -1,0 +1,208 @@
+{
+  "id": "alpine_tundra",
+  "name": "Frostfell Tundra",
+  "seed": 904218,
+  "diameter": 7,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.85,
+    "relief": 0.38,
+    "noiseScale": 0.18,
+    "octaves": 4,
+    "minHeight": -1.0,
+    "maxHeight": 3.5,
+    "bottom": -4.5,
+    "rockExposure": 0.35,
+    "slopeX": -0.08,
+    "slopeZ": -0.08,
+    "features": [
+      {
+        "type": "hill",
+        "x": -0.75,
+        "z": -2.1,
+        "radius": 1.7,
+        "amount": 0.55
+      },
+      {
+        "type": "hill",
+        "x": -2.0,
+        "z": 1.25,
+        "radius": 1.6,
+        "amount": 0.5
+      },
+      {
+        "type": "hill",
+        "x": 1.9,
+        "z": -0.75,
+        "radius": 1.75,
+        "amount": 0.55
+      },
+      {
+        "type": "channel",
+        "x": -2.1,
+        "z": -1.1,
+        "toX": -1.0,
+        "toZ": -0.7,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.94,
+        "toBedHeight": 0.75
+      },
+      {
+        "type": "channel",
+        "x": -1.0,
+        "z": -0.7,
+        "toX": 0.0,
+        "toZ": 0.0,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.75,
+        "toBedHeight": 0.68
+      },
+      {
+        "type": "channel",
+        "x": 0.0,
+        "z": 0.0,
+        "toX": 0.9,
+        "toZ": 0.9,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.68,
+        "toBedHeight": 0.61
+      },
+      {
+        "type": "channel",
+        "x": 0.9,
+        "z": 0.9,
+        "toX": 1.8,
+        "toZ": 1.7,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.61,
+        "toBedHeight": 0.4
+      },
+      {
+        "type": "channel",
+        "x": 1.8,
+        "z": 1.7,
+        "toX": 2.75,
+        "toZ": 2.5,
+        "width": 0.18,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.4,
+        "toBedHeight": 0.2
+      }
+    ]
+  },
+  "water": {
+    "waterTable": -0.3,
+    "springs": [
+      {
+        "x": -2.1,
+        "z": -1.1,
+        "dischargePerHour": 0.28
+      }
+    ],
+    "flowRate": 0.2,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.004,
+    "infiltrationPerDay": 0.02,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.3,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 6,
+    "rockMinScale": 0.18,
+    "rockMaxScale": 0.68,
+    "logs": 1,
+    "logMinLength": 1.0,
+    "logMaxLength": 1.8,
+    "logMinRadius": 0.1,
+    "logMaxRadius": 0.18,
+    "gravelPatches": 2,
+    "gravelMinRadius": 0.4,
+    "gravelMaxRadius": 1.1,
+    "spacing": 0.35
+  },
+  "starterFlora": [
+    {
+      "species": "cragparasol",
+      "count": 3
+    },
+    {
+      "species": "frosttussock",
+      "count": 19
+    },
+    {
+      "species": "antlerlace_lichen",
+      "count": 16
+    },
+    {
+      "species": "starmoss",
+      "count": 14
+    },
+    {
+      "species": "sunstone_rosette",
+      "count": 14
+    },
+    {
+      "species": "plumegrass",
+      "count": 12
+    },
+    {
+      "species": "embercrust_lichen",
+      "count": 14
+    },
+    {
+      "species": "ruffle_lichen",
+      "count": 10
+    },
+    {
+      "species": "glass_antlers",
+      "count": 6
+    },
+    {
+      "species": "ghostbonnet",
+      "count": 4
+    },
+    {
+      "species": "glowbriar",
+      "count": 6
+    },
+    {
+      "species": "dewbonnet",
+      "count": 8
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "coalback_beetle",
+      "count": 4
+    },
+    {
+      "species": "marbleback",
+      "count": 4
+    },
+    {
+      "species": "prismhopper",
+      "count": 6
+    },
+    {
+      "species": "ghostbristle",
+      "count": 3
+    },
+    {
+      "species": "rustcoil",
+      "count": 2
+    }
+  ],
+  "faunaBudget": 324
+}

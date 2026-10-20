@@ -4,7 +4,7 @@
   "archetype": "plant",
   "placementGroup": "terrestrial",
   "role": "Bioluminescent fern for humid, shaded woodland.",
-  "description": "Fine blue-green fronds frame sparse cool white-blue points along their leaflets.",
+  "description": "Dense, narrow blue-green feather-fronds rise in a layered Boston-fern-like fountain, carrying sparse cool white-blue lights along their fine leaflets.",
   "habitat": {
     "substrates": {
       "soil": 1,
@@ -27,6 +27,8 @@
       "optimum": 0.4,
       "tolerance": 0.3
     },
+    "oxygen": { "optimum": 0.37, "tolerance": 0.32 },
+    "topsoilDepth": { "optimum": 0.57, "tolerance": 0.35 },
     "maxWaterDepth": 0,
     "hardMinMoisture": 0.3,
     "minSuitability": 0.2

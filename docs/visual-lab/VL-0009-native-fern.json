@@ -1,0 +1,17 @@
+{
+  "id": "VL-0009-native-fern",
+  "created_utc": "2026-10-14T20:46:56.775226+00:00",
+  "stage": "complete",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0009-native-fern",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T20:47:10.043981+00:00"
+    },
+    {
+      "command": "decision",
+      "at": "2026-10-14T20:47:37.367513+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T20:47:37.367526+00:00"
+}

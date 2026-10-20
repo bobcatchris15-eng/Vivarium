@@ -1,0 +1,46 @@
+{
+  "id": "VL-0008-water-ray-depth",
+  "created_utc": "2026-10-14T19:53:16.398186+00:00",
+  "stage": "complete",
+  "evidence": "E:\\Vivarium\\build\\visual-lab\\experiments\\VL-0008-water-ray-depth",
+  "history": [
+    {
+      "command": "baseline",
+      "at": "2026-10-14T19:53:28.485091+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T19:55:18.449967+00:00"
+    },
+    {
+      "command": "authored",
+      "at": "2026-10-14T19:57:39.323528+00:00"
+    },
+    {
+      "command": "captured",
+      "at": "2026-10-14T19:58:32.953253+00:00"
+    },
+    {
+      "command": "blind",
+      "at": "2026-10-14T19:59:08.759732+00:00"
+    },
+    {
+      "command": "compare",
+      "at": "2026-10-14T19:59:10.003144+00:00"
+    },
+    {
+      "command": "compare",
+      "at": "2026-10-14T19:59:55.912302+00:00"
+    },
+    {
+      "command": "critiqued",
+      "at": "2026-10-14T20:47:18.908895+00:00"
+    },
+    {
+      "command": "decision",
+      "at": "2026-10-14T20:47:22.561207+00:00"
+    }
+  ],
+  "updated_utc": "2026-10-14T20:47:22.561220+00:00",
+  "author_identity": "root-water-ray"
+}

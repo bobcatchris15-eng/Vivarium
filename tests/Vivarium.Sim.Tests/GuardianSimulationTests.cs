@@ -41,6 +41,26 @@ public class GuardianSimulationTests
     }
 
     [Fact]
+    public void SmallerGuardiansTravelAtTheSameBodyRelativeStrideRate()
+    {
+        foreach (var def in GuardianCatalog.All)
+        {
+            var descriptor = Content.PresetOrThrow("default").Clone();
+            descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            var world = VivariumWorld.Create(Content, descriptor);
+            var g = world.Guardian!;
+            g.X = 0; g.Z = 0; g.Heading = 0;
+            g.TargetPosition = new Vec3(0.5, world.GroundHeight(new Vec2(0.5, 0)), 0);
+            g.Activity = GuardianActivity.Explore; g.ActivityDuration = 100;
+            double individualScale = g.Scale;
+            world.GuardianSystem.StepBehaviour(Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * 0.1);
+            Assert.Equal(def.WalkSpeed * 0.5 * 0.1, g.X, 6);
+            Assert.Equal(0, g.Z, 6);
+            Assert.Equal(individualScale, g.Scale);
+        }
+    }
+
+    [Fact]
     public void LoadedGuardianInsideTrunkIsMovedToSafeSupport()
     {
         var descriptor = Content.PresetOrThrow("default").Clone();
@@ -121,6 +141,68 @@ public class GuardianSimulationTests
         Assert.Equal(GuardianActivity.Forage, loaded.Guardian.Activity);
         Assert.Single(loaded.Guardian.PendingSeeds);
         Assert.Equal("shadebell", loaded.Guardian.PendingSeeds[0].SpeciesId);
+    }
+
+    [Fact]
+    public void RemoteFoodTargetMustBeApproachedBeforeFeeding()
+    {
+        foreach (var def in GuardianCatalog.All)
+        {
+            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId;
+            var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
+            g.Position = new Vec3(0, w.GroundHeight(Vec2.Zero), 0);
+            g.TargetPosition = new Vec3(.35, w.GroundHeight(new Vec2(.35, 0)), 0);
+            int local = w.Grid.NearestDomainCell(g.PositionXZ);
+            int target = w.Grid.NearestDomainCell(new Vec2(.35, 0));
+            w.Litter.FruitMass[local] = w.Litter.FruitMass[target] = 1;
+            g.Activity = GuardianActivity.Feed; g.ActivityDuration = 100;
+            double energy = g.Energy;
+            w.GuardianSystem.StepBehaviour(Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * .1);
+            Assert.Equal(GuardianActivity.Forage, g.Activity);
+            Assert.Equal(energy, g.Energy);
+            Assert.Equal(1, w.Litter.FruitMass[local]); Assert.Equal(1, w.Litter.FruitMass[target]);
+            Assert.True(g.X > 0, def.Id + " should approach the remote food patch");
+        }
+    }
+
+    [Fact]
+    public void FeedingAcrossCellBoundaryConsumesTargetAndKeepsFeetPlanted()
+    {
+        foreach (var def in GuardianCatalog.All)
+        {
+            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId;
+            var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
+            int target = w.Grid.NearestDomainCell(Vec2.Zero); var center = w.Grid.CellCenter(target);
+            var position = new Vec2(center.X - .14, center.Z);
+            int local = w.Grid.NearestDomainCell(position); Assert.NotEqual(local, target);
+            g.Position = new Vec3(position.X, w.GroundHeight(position), position.Z);
+            g.TargetPosition = new Vec3(center.X, w.GroundHeight(center), center.Z);
+            g.Heading = 0; g.Activity = GuardianActivity.Feed; g.ActivityDuration = 100;
+            w.Litter.FineMass[target] = w.Litter.CoarseMass[target] = 0;
+            w.Litter.FruitMass[target] = w.Litter.FruitMass[local] = 1;
+            double energy = g.Energy; var before = g.PositionXZ;
+            w.GuardianSystem.StepBehaviour(Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * .1);
+            Assert.Equal(before, g.PositionXZ);
+            Assert.True(g.Energy > energy, def.Id + " did not consume the nearby selected patch");
+            Assert.True(w.Litter.FruitMass[target] < 1); Assert.Equal(1, w.Litter.FruitMass[local]);
+        }
+    }
+
+    [Fact]
+    public void FeedingTurnsTowardFoodBeforeConsumption()
+    {
+        var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = "basinwarden";
+        var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
+        g.Position = new Vec3(0, w.GroundHeight(Vec2.Zero), 0);
+        g.TargetPosition = new Vec3(.1, w.GroundHeight(new Vec2(.1, 0)), 0);
+        g.Activity = GuardianActivity.Feed; g.ActivityDuration = 100; g.Heading = Math.PI;
+        int target = w.Grid.NearestDomainCell(new Vec2(.1, 0)); w.Litter.FruitMass[target] = 1;
+        double energy = g.Energy; var before = g.PositionXZ;
+        w.GuardianSystem.StepBehaviour(Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * .1);
+        Assert.Equal(energy, g.Energy); Assert.Equal(before, g.PositionXZ);
+        Assert.True(Math.Cos(g.Heading) > -1);
+        w.GuardianSystem.StepBehaviour(Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * 2);
+        Assert.True(g.Energy > energy); Assert.Equal(before, g.PositionXZ);
     }
 
     [Fact]

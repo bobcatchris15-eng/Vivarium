@@ -71,8 +71,8 @@ public sealed class AmbientGroundCoverSystem
         double noise = 0.90 + 0.10 * Rng.HashUnit(_w.Seed, Hash.Fnv1a64("ambient-ground"), (ulong)idx);
         double target = MathD.Clamp01((0.84 + 0.14 * moistureFit) * lightFit * nutrientFit * litterFit * noise);
 
-        // Named plants own their silhouette. Anonymous cover is explicitly absent inside their visual footprint,
-        // with a soft transition around the edge. Trees only clear their base, not the entire canopy.
+        // Low vegetation can overlap the raised crowns of woody shrubs. Clear their basal
+        // collars, as for trees, while herbs/rosettes retain their full silhouette exclusion.
         _nearby.Clear();
         _w.Flora.Index.Query(p, 1.35, _nearby);
         double exclusion = 1.0;
@@ -81,9 +81,14 @@ public sealed class AmbientGroundCoverSystem
             var sp = _w.Content.FloraOrThrow(f.SpeciesId);
             if (sp.Archetype != "plant") continue;
             double visual = f.Radius(sp);
-            double radius = (sp.IsTree ? Math.Min(0.46, 0.16 + visual * 0.35)
-                : sp.IsShrub ? Math.Min(0.95, visual * 1.08 + 0.08)
-                : Math.Min(0.55, visual * 1.20 + 0.06)) + 0.14;
+            double radius = sp.IsTree ? Math.Min(0.46, 0.16 + visual * 0.35) + 0.14
+                : sp.IsShrub ? Math.Min(0.35, 0.07 + visual * 0.22)
+                // Groundcover is a carpet/rosette, not a bare trunk.
+                // Let anonymous tiny turf grow between leaves. Exclude only
+                // its few-centimetre physical root collar, not its whole canopy.
+                : sp.Tags.Contains("groundcover") ?
+                    Math.Min(0.035, Math.Max(0.008, visual * 0.16)) :
+                    Math.Min(0.55, visual * 1.20 + 0.06) + 0.14;
             double dist = Vec2.Distance(p, f.Position);
             double edge = MathD.Clamp01((dist - radius) / 0.12);
             edge = edge * edge * (3 - 2 * edge);

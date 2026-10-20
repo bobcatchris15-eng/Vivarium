@@ -58,14 +58,15 @@ public partial class SoilDetailRenderer : Node3D
         _crumbs = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildClod(0.0035f, 6) };
         _clods = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildClod(0.007f, 8) };
         _twigs = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildTwig(mat) };
-        _flakes = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFlake(mat) };
+        var litterMat = Bridge.Shader("res://Shaders/litter.gdshader");
+        _flakes = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFlake(litterMat) };
         _fruit = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildClod(0.011f, 11) };
         _blades = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFillerBlade(mat) };
         _stalks = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFillerStalk(mat) };
         _crumbMmi = new MultiMeshInstance3D { Name = "SoilCrumbs", Multimesh = _crumbs, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _clodMmi = new MultiMeshInstance3D { Name = "SoilClods", Multimesh = _clods, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _twigMmi = new MultiMeshInstance3D { Name = "SoilTwigs", Multimesh = _twigs, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
-        _flakeMmi = new MultiMeshInstance3D { Name = "LeafLitter", Multimesh = _flakes, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
+        _flakeMmi = new MultiMeshInstance3D { Name = "LeafLitter", Multimesh = _flakes, CastShadow = Quality >= 2 ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = litterMat };
         _fruitMmi = new MultiMeshInstance3D { Name = "FallenFruit", Multimesh = _fruit, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _bladeMmi = new MultiMeshInstance3D { Name = "AmbientGroundBlades", Multimesh = _blades, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
         _stalkMmi = new MultiMeshInstance3D { Name = "AmbientGroundStalks", Multimesh = _stalks, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, MaterialOverride = mat };
@@ -82,6 +83,7 @@ public partial class SoilDetailRenderer : Node3D
         using var prof = FrameProfiler.Measure("SoilDetail");
         if (_w == null) return;
         bool enabled = Quality > 0;
+        _flakeMmi.CastShadow = Quality >= 2 ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
         _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = _fruitMmi.Visible = _bladeMmi.Visible = _stalkMmi.Visible = enabled;
         if (!enabled) { _refresh?.Dispose(); _refresh = null; _accum = 999; return; }
         if (_refresh != null)
@@ -552,7 +554,8 @@ public partial class SoilDetailRenderer : Node3D
                 st.SetColor(Colors.White);
                 st.AddVertex(p);
             }
-            Vert(a); Vert(b); Vert(c);
+            // Godot front faces are clockwise; retain the authored outward normals.
+            Vert(a); Vert(c); Vert(b);
         }
         return st.Commit();
     }
@@ -578,7 +581,8 @@ public partial class SoilDetailRenderer : Node3D
         }
         void Tri(Vector3 a, Vector3 b, Vector3 c)
         {
-            var n = (b - a).Cross(c - a).Normalized();
+            // Clockwise front-face winding requires the opposite of the right-handed cross product.
+            var n = -(b - a).Cross(c - a).Normalized();
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(a);
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(b);
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(c);
@@ -602,7 +606,7 @@ public partial class SoilDetailRenderer : Node3D
         st.Begin(Mesh.PrimitiveType.Triangles);
         void Tri(Vector3 a, Vector3 b, Vector3 c)
         {
-            var n = (b - a).Cross(c - a).Normalized();
+            var n = -(b - a).Cross(c - a).Normalized();
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(a);
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(b);
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(c);
@@ -635,7 +639,7 @@ public partial class SoilDetailRenderer : Node3D
         st.Begin(Mesh.PrimitiveType.Triangles);
         void Tri(Vector3 a, Vector3 b, Vector3 c)
         {
-            var n = (b - a).Cross(c - a).Normalized();
+            var n = -(b - a).Cross(c - a).Normalized();
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(a);
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(b);
             st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(c);
@@ -669,44 +673,52 @@ public partial class SoilDetailRenderer : Node3D
         return st.Commit();
     }
 
-    /// <summary>Asymmetric curled leaf fragment with a raised midrib rather than a perfect quad.</summary>
+    /// <summary>Curled ovate litter with a smooth cup, tapered ends and a weathered vein surface.</summary>
     private static ArrayMesh BuildFlake(Material mat)
     {
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
-        var left = new[]
+        const int rows = 8, cols = 4;
+        Vector3 At(float t, float x)
         {
-            new Vector3(-0.001f, 0.000f, -0.014f),
-            new Vector3(-0.008f, 0.001f, -0.005f),
-            new Vector3(-0.007f, 0.003f,  0.006f),
-            new Vector3(-0.001f, 0.004f,  0.014f),
-        };
-        var right = new[]
-        {
-            new Vector3(0.001f, 0.000f, -0.014f),
-            new Vector3(0.009f, 0.003f, -0.005f),
-            new Vector3(0.006f, 0.001f,  0.006f),
-            new Vector3(0.001f, 0.004f,  0.014f),
-        };
-        var mid = new[]
-        {
-            new Vector3(0, 0.0015f, -0.014f),
-            new Vector3(0, 0.0035f, -0.005f),
-            new Vector3(0, 0.0045f,  0.006f),
-            new Vector3(0, 0.0055f,  0.014f),
-        };
-        void Tri(Vector3 a, Vector3 b, Vector3 c)
-        {
-            var n = (b - a).Cross(c - a).Normalized();
-            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(a);
-            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(b);
-            st.SetNormal(n); st.SetColor(Colors.White); st.AddVertex(c);
-            st.SetNormal(-n); st.AddVertex(a); st.SetNormal(-n); st.AddVertex(c); st.SetNormal(-n); st.AddVertex(b);
+            float envelope = Mathf.Pow(Mathf.Max(0, Mathf.Sin(Mathf.Pi * t)), 0.78f);
+            float halfWidth = 0.0086f * envelope * (1 + 0.11f * x * Mathf.Sin(t * 4.7f));
+            float curl = 0.0015f + 0.0016f * Mathf.Sin(t * 4.2f + x * 0.7f);
+            return new Vector3(x * halfWidth + 0.0010f * Mathf.Sin(t * 2.7f),
+                0.001f + 0.0011f * envelope + 0.004f * t * t * t + curl * x * x * envelope,
+                (t - 0.5f) * 0.028f);
         }
-        for (int i = 0; i < 3; i++)
+        void Vertex(float t, float x)
         {
-            Tri(left[i], mid[i], mid[i + 1]); Tri(left[i], mid[i + 1], left[i + 1]);
-            Tri(mid[i], right[i], right[i + 1]); Tri(mid[i], right[i + 1], mid[i + 1]);
+            const float e = 0.001f;
+            var across = At(t, Mathf.Min(1, x + e)) - At(t, Mathf.Max(-1, x - e));
+            var along = At(Mathf.Min(1, t + e), x) - At(Mathf.Max(0, t - e), x);
+            // The root/tip collapse into a single fan vertex: use an interior cross-section there.
+            if (across.LengthSquared() < 1e-14f)
+                across = At(Mathf.Clamp(t, 0.01f, 0.99f), 0.1f) - At(Mathf.Clamp(t, 0.01f, 0.99f), -0.1f);
+            var n = along.Cross(across).Normalized();
+            st.SetNormal(n);
+            st.SetUV(new Vector2(t, (x + 1) * 0.5f));
+            float tone = 0.82f + 0.18f * Mathf.Abs(x) + 0.07f * Mathf.Sin(t * 9 + x * 2);
+            st.SetColor(new Color(tone, tone * 0.96f, tone * 0.87f));
+            st.AddVertex(At(t, x));
+        }
+        void Tri(float ta, float xa, float tb, float xb, float tc, float xc)
+        {
+            // Godot upper faces wind clockwise against the outward smooth normal.
+            Vertex(ta, xa); Vertex(tc, xc); Vertex(tb, xb);
+        }
+        for (int c = 0; c < cols; c++)
+        {
+            float x0 = c * 2f / cols - 1, x1 = (c + 1) * 2f / cols - 1;
+            Tri(0, 0, 1f / rows, x0, 1f / rows, x1);
+            for (int row = 1; row < rows - 1; row++)
+            {
+                float t0 = row / (float)rows, t1 = (row + 1f) / rows;
+                Tri(t0, x0, t1, x0, t0, x1);
+                Tri(t0, x1, t1, x0, t1, x1);
+            }
+            Tri((rows - 1f) / rows, x0, 1, 0, (rows - 1f) / rows, x1);
         }
         st.SetMaterial(mat);
         return st.Commit();

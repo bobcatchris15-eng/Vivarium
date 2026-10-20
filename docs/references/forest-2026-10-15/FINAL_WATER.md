@@ -1,0 +1,7 @@
+# Final bounded environment water pass - 2026-10-16
+
+User requested a bit more visible ripples and refraction on standing and flowing water, then ended open-ended environment improvement. Pond capillary normal response and refraction are stronger; mobile film normal amplitude is0.022to0.15 instead of0.012to0.09 and screen refraction is stronger with a6/1000UV bound. Existing velocity advection, wet/dry support, fixed reservoir join and depth guards are preserved. Terrain, ambient light and water geometry are unchanged.
+
+Candidate and ROOT native creek and bayou pond-camera runs show readable moving highlights and small bed distortion. Each has48frames of actual fluid/material time with fixed camera. Representative native frames were inspected, not continuous playback. All four forced builds/source guards pass, canonical ecology/100sfluid unchanged, creek102s and candidate/ROOTpond102s continuations exact. Four ROOT empty-void frames remain RGB(0,0,0). Performance unmeasured. Deeper pond remains stylized/gray; no further open-ended environment iteration is scheduled.
+
+Evidence: build/forest-reference-20261015/water-final-readability-20261016/final-validation.json and final-void.json. ROOT water-final-readability-main and water-final-readability-main-pond. Subsequent work is exactly four bounded guardian passes: size, shape, color/material, behavior/near flora contact with final integrated review.

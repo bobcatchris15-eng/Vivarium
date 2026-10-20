@@ -20,6 +20,31 @@ public static class PropMeshes
     /// <summary>Unit rock (bounding radius ≈ 1, flattened base). Scale by the rock's half-extents when drawing.</summary>
     public static MeshData Rock(ulong variantSeed, int detail = 3)
     {
+        // Pebble's historical weathered-fragment branch retains its exact geometry.
+        if (detail == 1) return LegacyRock(variantSeed, detail);
+        var profile = RockSurfaceProfile.Create(variantSeed);
+        var rng = Rng.Keyed(variantSeed, "rock.faces", 0);
+        var color = RockPalette[profile.Palette];
+        var mesh = new MeshData();
+        foreach (var face in profile.Triangles)
+        {
+            var a = face.A; var b = face.B; var c = face.C;
+            var outward = face.Bottom ? new Vec3(0, -1, 0) :
+                (a.X == 0 && a.Z == 0 ? new Vec3(0, 1, 0) :
+                    new Vec3(a.X + b.X + c.X, 0, a.Z + b.Z + c.Z));
+            var cross = (b - a).Cross(c - a).Normalized();
+            var normal = cross.Dot(outward) >= 0 ? cross : cross * -1;
+            var col = Primitives.Scale(color, rng.Range(0.88, 1.08));
+            int start = mesh.AddVertex(a, normal, col, 1, a.X, a.Z, profile.Family, 0);
+            mesh.AddVertex(b, normal, col, 1, b.X, b.Z, profile.Family, 0);
+            mesh.AddVertex(c, normal, col, 1, c.X, c.Z, profile.Family, 0);
+            Primitives.TriangleFacing(mesh, start, start + 1, start + 2, outward);
+        }
+        return mesh;
+    }
+
+    private static MeshData LegacyRock(ulong variantSeed, int detail = 3)
+    {
         var rng = Rng.Keyed(variantSeed, "rock.mesh", 0);
         var basePal = RockPalette[rng.NextInt(RockPalette.Length)];
         int family = rng.NextInt(3); // fractured block, layered slab, upright shard
@@ -90,8 +115,66 @@ public static class PropMeshes
         return m;
     }
 
-    /// <summary>Small pebble for gravel scatter (render only).</summary>
-    public static MeshData Pebble(ulong seed) => Rock(seed, detail: 1);
+    /// <summary>Render-only talus chip with a broad cleavage plane, beveled edges and buried base.</summary>
+    public static MeshData Pebble(ulong seed)
+    {
+        var rng = Rng.Keyed(seed, "pebble.mesh", 0);
+        // Weathered fragments interrupt the fresh cleavage faces. Both profiles are
+        // flattened by the same scatter transform, without changing any large rock.
+        if (rng.NextInt(4) == 0) return Rock(seed, detail: 1);
+        var pigment = RockPalette[rng.NextInt(RockPalette.Length)];
+        int sides = 5 + rng.NextInt(3);
+        double crossScale = rng.Range(0.56, 1.0);
+        double phase = rng.Range(0, Math.PI * 2);
+        double slopeX = rng.Range(-0.14, 0.14), slopeZ = rng.Range(-0.14, 0.14);
+        var outline = new Vec3[sides];
+        double highestSlope = double.NegativeInfinity;
+        for (int i = 0; i < sides; i++)
+        {
+            double a = phase + (i + rng.Range(-0.16, 0.16)) * 2 * Math.PI / sides;
+            double radius = rng.Range(0.72, 1.05);
+            outline[i] = new Vec3(Math.Cos(a) * radius, 0, Math.Sin(a) * radius * crossScale);
+            highestSlope = Math.Max(highestSlope, (outline[i].X * slopeX + outline[i].Z * slopeZ) * 0.91);
+        }
+        // Retain the same local bottom and crest envelope used by scatter burial.
+        double capY = 0.75 - highestSlope;
+        var rings = new Vec3[3, sides];
+        for (int i = 0; i < sides; i++)
+        {
+            var p = outline[i];
+            rings[0, i] = new Vec3(p.X * 0.72, -0.38, p.Z * 0.72);
+            rings[1, i] = new Vec3(p.X, -0.16 + rng.Range(-0.045, 0.045), p.Z);
+            rings[2, i] = new Vec3(p.X * 0.91,
+                capY + (p.X * slopeX + p.Z * slopeZ) * 0.91, p.Z * 0.91);
+        }
+        var mesh = new MeshData();
+        void Face(Vec3 a, Vec3 b, Vec3 c, Vec3 outward, double shade, double cap = 0)
+        {
+            var normal = (b - a).Cross(c - a).Normalized();
+            if (normal.Dot(outward) < 0) normal = -normal;
+            var color = Primitives.Scale(pigment, shade);
+            int first = mesh.AddVertex(a, normal, color, 1, a.X, a.Z, 1, cap);
+            mesh.AddVertex(b, normal, color, 1, b.X, b.Z, 1, cap);
+            mesh.AddVertex(c, normal, color, 1, c.X, c.Z, 1, cap);
+            Primitives.TriangleFacing(mesh, first, first + 1, first + 2, normal);
+        }
+        double topShade = rng.Range(0.96, 1.06);
+        var capNormal = new Vec3(-slopeX, 1, -slopeZ).Normalized();
+        for (int i = 0; i < sides; i++)
+        {
+            int next = (i + 1) % sides;
+            var outward = outline[i] + outline[next];
+            for (int row = 0; row < 2; row++)
+            {
+                double shade = rng.Range(0.83, 1.03);
+                Face(rings[row, i], rings[row, next], rings[row + 1, next], outward, shade);
+                Face(rings[row, i], rings[row + 1, next], rings[row + 1, i], outward, shade);
+            }
+            Face(new Vec3(0, -0.38, 0), rings[0, next], rings[0, i], -Vec3.Up, 0.74);
+            Face(new Vec3(0, capY, 0), rings[2, i], rings[2, next], capNormal, topShade, 1);
+        }
+        return mesh;
+    }
 
     private readonly record struct LogKnot(double T, double Th, double Radius, double Height, Vec3 Dir, bool HasStub);
 
@@ -526,11 +609,11 @@ public static class PropMeshes
             }
             if (!g.Covers(p) || !w.Domain.ContainsDisc(p, 0.02)) continue;
             double s = rng.Range(0.011, 0.033) * (rng.Chance(0.08) ? rng.Range(1.5, 2.2) : 1);
-            double sx = s * rng.Range(0.78, 1.25), sy = s * rng.Range(0.55, 0.92), sz = s * rng.Range(0.8, 1.3);
+            double sx = s * rng.Range(0.78, 1.25), sy = s * rng.Range(0.25, 0.40), sz = s * rng.Range(0.8, 1.3);
             double burial = rng.Range(0.12, 0.42);
             var pos = new Vec3(p.X, w.Terrain.Height(p) + sy * (0.38 - burial), p.Z);
             list.Add(new PebbleInstance(pos, new Vec3(sx, sy, sz), rng.Range(0, 2 * Math.PI),
-                rng.Range(-0.45, 0.45), rng.Range(-0.45, 0.45), rng.NextInt(variants)));
+                rng.Range(-0.20, 0.20), rng.Range(-0.20, 0.20), rng.NextInt(variants)));
         }
         return list;
     }

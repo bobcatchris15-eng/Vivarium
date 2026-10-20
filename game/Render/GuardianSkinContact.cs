@@ -27,6 +27,7 @@ public sealed class GuardianSkinContact
     private readonly string _chainPrefix;
     private readonly Dictionary<string, List<Sample>> _samples = new();
     private readonly HashSet<MeshInstance3D> _meshes = new();
+    private readonly List<Sample> _nasalPad = new();
     private static readonly string[] Regions = { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Tail", "Head" };
     public bool Valid { get; private set; }
     public string Diagnostic { get; private set; } = "Not initialized";
@@ -87,6 +88,7 @@ public sealed class GuardianSkinContact
             Valid = false;
             Diagnostic = ex.Message;
             foreach (var list in _samples.Values) list.Clear();
+            _nasalPad.Clear();
         }
     }
 
@@ -182,6 +184,14 @@ public sealed class GuardianSkinContact
                 RestVerticesChecked++; MaximumRestReconstructionError = Math.Max(MaximumRestReconstructionError, error);
                 if (!float.IsFinite(error) || error > tolerance)
                     throw new InvalidOperationException($"{mesh.Name}: rest reconstruction mismatch {error:G6}m at vertex {vertex}; bind/local space invalid");
+                // Keep the complete small named surface, including Snout weights.
+                // Ground-clearance bins deliberately omit it and cannot certify food contact.
+                if (mesh.Name.ToString().Equals("coati_nasal_pad", StringComparison.OrdinalIgnoreCase)
+                    || material.Equals("CoatiWetNasalPad", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_nasalPad.Count >= 4096) throw new InvalidOperationException("Nasal-pad diagnostic budget exceeded");
+                    _nasalPad.Add(sample); used = true;
+                }
                 for (int region = 0; region < Regions.Length; region++)
                     if (regionWeights[region] >= WeightThreshold) { candidates[Regions[region]].Add(sample); used = true; }
             }
@@ -309,6 +319,24 @@ public sealed class GuardianSkinContact
         }
         catch (Exception ex) { Valid = false; Diagnostic = ex.Message; return new Clearance(region, false, 0, float.NaN, Vector3.Zero); }
     }
+    /// <summary>Nearest actual nasal vertex to a world point. Vertex distance is an
+    /// upper bound on triangle-surface distance; missing anatomy remains invalid.</summary>
+    public Clearance NasalDistance(Vector3 target)
+    {
+        if (!Valid || _nasalPad.Count == 0 || !target.IsFinite())
+            return new Clearance("NasalPad", false, 0, float.NaN, Vector3.Zero);
+        BeginEvaluation();
+        float minimum = float.PositiveInfinity; var nearest = Vector3.Zero;
+        foreach (var sample in _nasalPad)
+        {
+            var point = EvaluateVertex(sample, false);
+            if (!point.IsFinite()) throw new InvalidOperationException("Nonfinite nasal skin point");
+            float distance = point.DistanceTo(target);
+            if (distance < minimum) { minimum = distance; nearest = point; }
+        }
+        return new Clearance("NasalPad", true, _nasalPad.Count, minimum, nearest);
+    }
+
     public Dictionary<int, float> TailGroundCorrections(Func<Vector3, float> supportHeight)
     {
         var result = new Dictionary<int, float>();

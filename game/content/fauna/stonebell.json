@@ -57,22 +57,22 @@
     "wasteFraction": 0.3
   },
   "lifecycle": {
-    "maturityDays": 35,
-    "lifespanDays": 520,
+    "maturityDays": 49.0,
+    "lifespanDays": 1040.0,
     "lifespanVariance": 0.18,
-    "dailyMortality": 0.0015
+    "dailyMortality": 0.00075
   },
   "reproduction": {
     "mode": "sexual",
     "minEnergy": 0.65,
     "cost": 0.3,
     "clutchMin": 1,
-    "clutchMax": 3,
-    "cooldownDays": 28,
+    "clutchMax": 2,
+    "cooldownDays": 70.0,
     "mateRadius": 1,
     "offspringEnergy": 0.45,
     "maxLocalDensity": 3,
-    "populationCap": 18
+    "populationCap": 8
   },
   "body": {
     "sizeMin": 0.045,
@@ -118,7 +118,7 @@
       "limbLift": 1,
       "bob": 0.65,
       "phaseSpread": 0.2,
-      "dutyFactor": 0.60
+      "dutyFactor": 0.6
     }
   },
   "behaviors": []

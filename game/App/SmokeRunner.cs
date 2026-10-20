@@ -363,6 +363,32 @@ public partial class SmokeRunner : Node
         long lastTick = W.Clock.Tick;
         double worstFrame = 0; int frames = 0; ulong lastSample = start;
         var allFrames = new List<double>(8192); var fpsSamples = new List<double>();
+        // A 30-minute stress recording writes stills directly from the Godot
+        // viewport: unlike Windows desktop duplication, this works even when
+        // the authorized remote desktop session is locked or headless.
+        bool recordFrames=Main.UserArgs.Contains("--record-frames");
+        string framesDirectory=Path.Combine(OutDir,"render-frames");
+        if(recordFrames)Directory.CreateDirectory(framesDirectory);
+        ulong lastFrameCapture=0;
+        int frameIndex=0;
+        var initialFlora=W.Flora.Items;
+        var strata=new {
+            woody=initialFlora.Count(f=>W.Content.FloraOrThrow(f.SpeciesId).Woody!=null),
+            vascularUnderstory=initialFlora.Count(f=>W.Content.FloraOrThrow(f.SpeciesId).Archetype=="plant"
+                && W.Content.FloraOrThrow(f.SpeciesId).Woody==null),
+            fungi=initialFlora.Count(f=>W.Content.FloraOrThrow(f.SpeciesId).Archetype=="fungus"),
+            matOccupied=W.Coverage.Mat.Tiles.Sum(tile=>tile.Occ.Count(b=>b!=0)),
+            lichenOccupied=W.Coverage.Crust.Tiles.Sum(tile=>tile.Occ.Count(b=>b!=0)),
+            ambientGroundCells=W.AmbientGroundCover.Cover.Count(v=>v>.5),
+            starterRequested=W.Descriptor.StarterFlora.Sum(f=>f.Count)
+        };
+        _facts["initial_flora_strata"]=strata;
+        GD.Print($"DENSE_STARTER_STRATA woody={strata.woody} understorey={strata.vascularUnderstory} fungi={strata.fungi} matCells={strata.matOccupied} lichenCells={strata.lichenOccupied} ambientCells={strata.ambientGroundCells} requested={strata.starterRequested}");
+        if(recordFrames)
+        {
+            var saved=SaveSystem.Save(W,Path.Combine(OutDir,"world-initial.vivsave"));
+            if(!saved.Ok)GD.PushWarning("Long-run initial world save failed: "+saved.Message);
+        }
         // VIVARIUM_PERF_LOW=1: a slow orbit at critter height over the ground, where close-up detail layers cost most
         bool low = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_LOW") == "1";
         bool sculpt = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_SCULPT") == "1";
@@ -375,6 +401,14 @@ public partial class SmokeRunner : Node
             float t = (Time.GetTicksMsec() - start) / 1000f;
             if (low) cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.15f) * 3.5f, 0.5f, Mathf.Cos(t * 0.15f) * 3.5f), new Vector3(Mathf.Sin(t * 0.15f + 0.6f) * 2.5f, 0, Mathf.Cos(t * 0.15f + 0.6f) * 2.5f));
             else cam.LookAtPoint(new Vector3(Mathf.Sin(t * 0.3f) * 9, 3.5f, Mathf.Cos(t * 0.3f) * 9), new Vector3(0, 0, 0));
+            if(recordFrames && (lastFrameCapture==0 ||
+                Time.GetTicksMsec()-lastFrameCapture>=30_000))
+            {
+                lastFrameCapture=Time.GetTicksMsec();
+                using var image=GetViewport().GetTexture().GetImage();
+                image.SavePng(Path.Combine(framesDirectory,
+                    $"frame-{frameIndex++:D4}-{t:000000}.png"));
+            }
             // VIVARIUM_PERF_SCULPT=1: sculpt every frame, to soak the terrain mesh rebuild path
             if (sculpt) Vivarium.Sim.World.TerrainEditing.Sculpt(W, new Vivarium.Sim.Core.Vec2(Mathf.Sin(t) * 2, Mathf.Cos(t * 0.7f) * 2), 0.6, (frames & 1) == 0 ? 0.01 : -0.01, Vivarium.Sim.World.SculptMode.Raise);
             ulong f0 = Time.GetTicksUsec();
@@ -389,7 +423,10 @@ public partial class SmokeRunner : Node
                 var line = $"t={++second,3}s fps={Engine.GetFramesPerSecond(),3} frames={frames,3} worstFrame={worstFrame,6:0.0}ms " +
                     $"process={Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000,6:0.0}ms simLast={W.Scheduler.LastAdvanceMs,5:0.0}ms " +
                     $"ticks/s={W.Clock.Tick - lastTick,4} backlog={W.Scheduler.Backlog,7:0}s flora={W.Flora.Count} fauna={W.Fauna.Count} mem={OS.GetStaticMemoryUsage() / 1048576}MB vram={Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576:0}MB ws={System.Environment.WorkingSet / 1048576}MB " +
-                    $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} floraVis={Session.Flora.Visible_} faunaDrawn={Session.Fauna.Drawn} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} gc0={System.GC.CollectionCount(0)} gc1={System.GC.CollectionCount(1)} gc2={System.GC.CollectionCount(2)} slowest: " + FrameProfiler.TakeReport();
+                    $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} floraVis={Session.Flora.Visible_} faunaDrawn={Session.Fauna.Drawn} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} gc0={System.GC.CollectionCount(0)} gc1={System.GC.CollectionCount(1)} gc2={System.GC.CollectionCount(2)} slowest: " + FrameProfiler.TakeReport() +
+                    $" floraStages=({Session.Flora.TakeRefreshDiagnostics()})" +
+                    $" ambientInst={Session.AmbientGround.LastGroundcoverInstances} matureCarpetCells={Session.AmbientGround.LastInfluencedGridCells} floraExcludeChecks={Session.AmbientGround.LastFloraExclusionCandidateChecks}" +
+                    $" plasmo_cells={W.CoverageSystem.LastPlasmodiumOccupiedCells} net={W.CoverageSystem.LastPlasmodiumNetworkMs:0.0}ms attr={W.CoverageSystem.LastPlasmodiumAttractantMs:0.0}ms front={W.CoverageSystem.LastPlasmodiumFrontAndFeedMs:0.0}ms phase={W.CoverageSystem.LastPlasmodiumTransportMs:0.0}ms relabel={W.CoverageSystem.LastPlasmodiumRelabelMs:0.0}ms lifecycle={W.CoverageSystem.LastPlasmodiumLifecycleMs:0.0}ms";
                 Log.Info(LogCategory.Perf, line);
                 samples.Add(line);
                 if (second > 3) fpsSamples.Add(Engine.GetFramesPerSecond());
@@ -397,6 +434,31 @@ public partial class SmokeRunner : Node
             }
         }
         _facts["samples"] = samples;
+        _facts["render_frames_recorded"]=frameIndex;
+        if(recordFrames)
+        {
+            var saved=SaveSystem.Save(W,Path.Combine(OutDir,"world-final.vivsave"));
+            if(!saved.Ok)GD.PushWarning("Long-run final world save failed: "+saved.Message);
+        }
+        // Explicitly capture source-authored render population statistics so a
+        // strong average FPS cannot conceal missing leaves or fallback usage.
+
+_facts["fauna_gpu_allocation"] = new {
+            visibleAnimals=Session.Fauna.Drawn,
+            offScreenAnimals=Session.Fauna.OffScreen,
+            reservedMorphInstanceSlots=Session.Fauna.ReservedGpuInstanceSlots
+        };
+        _facts["ambient_groundcover"] = new {
+            renderInstances=Session.AmbientGround.LastGroundcoverInstances,
+            establishedCarpetCells=Session.AmbientGround.LastInfluencedGridCells,
+            exactPlantExclusionCandidates=Session.AmbientGround.LastFloraExclusionCandidateChecks,
+        };
+        _facts["flora_renderer"] = new {
+            ready=Session.Flora.PopulationReady,
+            legacySpecies=Session.Flora.LoadedSpeciesCount,
+            shadebellLegacyLayer=Session.Flora.HasLegacyLayer("shadebell"),
+            authoredShadebell=false
+        };
         if (allFrames.Count > 0)
         {
             allFrames.Sort();

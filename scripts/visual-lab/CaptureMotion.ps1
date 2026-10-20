@@ -23,9 +23,14 @@ try{
  foreach($name in @('VIVARIUM_LANDSCAPE_SCENARIO','VIVARIUM_BENCHMARK_USER_DIR')){$prior[$name]=[Environment]::GetEnvironmentVariable($name)}
  $env:VIVARIUM_LANDSCAPE_SCENARIO='frozen';$env:VIVARIUM_BENCHMARK_USER_DIR=Join-Path $out 'user'
  $exe=Get-GodotExe
- $run=Invoke-Timed $exe @('--path',(Join-Path $repo 'game'),'--log-file',(Join-Path $out 'engine.log'),'--','--material-port-review',$out,'--material-baseline',(Join-Path $exp 'baseline/source/game/Shaders'),'--geometry-only','--motion-sequence') $TimeoutSec (Join-Path $out 'capture')
+ $renderArgs=@('--path',(Join-Path $repo 'game'),'--log-file',(Join-Path $out 'engine.log'),'--','--material-port-review',$out,'--material-baseline',(Join-Path $exp 'baseline/source/game/Shaders'),'--geometry-only','--motion-sequence')
+ if($still.flora_module){
+  if((Get-FileHash -LiteralPath $still.flora_module -Algorithm SHA256).Hash -ne $still.flora_module_sha256){throw 'Review asset differs from still capture'}
+  $renderArgs+=@('--flora-module',$still.flora_module)
+ }
+ $run=Invoke-Timed $exe $renderArgs $TimeoutSec (Join-Path $out 'capture')
  $frames=@(Get-ChildItem (Join-Path $out 'motion') -Filter 'frame-*.png' -ErrorAction SilentlyContinue)
- @{exit_code=$run.ExitCode;frames=$frames.Count;source_tree_sha256=$source;diagnostic=$true;competing_pids=@($busy.Id);runtime_fps_measured=$false;captured_utc=[DateTime]::UtcNow.ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $out 'launch.json') -Encoding utf8
+ @{exit_code=$run.ExitCode;frames=$frames.Count;source_tree_sha256=$source;flora_module=$still.flora_module;flora_module_sha256=$still.flora_module_sha256;diagnostic=$true;competing_pids=@($busy.Id);runtime_fps_measured=$false;captured_utc=[DateTime]::UtcNow.ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $out 'launch.json') -Encoding utf8
  if($run.ExitCode -ne 0 -or $frames.Count -ne 48){throw 'Motion capture incomplete; evidence retained'}
  & (Join-Path $PSScriptRoot 'Toolchain.ps1') -Action EncodeMotion -InputPath (Join-Path $out 'motion/frame-%03d.png') -OutputPath (Join-Path $out 'motion/motion.mp4')
  if($LASTEXITCODE -ne 0){throw 'Motion encoding failed'}

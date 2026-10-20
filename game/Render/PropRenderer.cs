@@ -85,7 +85,7 @@ public partial class PropRenderer : Node3D
         foreach (var r in _w.Props.Rocks)
         {
             activeRockIds.Add(r.Id);
-            var basis = Bridge.Yaw(r.RotationY).Scaled(new Vector3((float)r.SizeX, (float)r.SizeY, (float)r.SizeZ));
+            var basis = Bridge.Yaw(r.RotationY).ScaledLocal(new Vector3((float)r.SizeX, (float)r.SizeY, (float)r.SizeZ));
             var xform = new Transform3D(basis, new Vector3((float)r.X, (float)r.Y, (float)r.Z));
             if (_placedRocks.TryGetValue(r.Id, out var mi))
             {

@@ -5,6 +5,7 @@ using Vivarium.Game.App;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Geometry;
+using Vivarium.Sim.Flora;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Game.Render;
@@ -26,6 +27,9 @@ public partial class AmbientGroundCoverRenderer : Node3D
     public int Quality { get; set; } = 1;
     private const float CullRadius = 11.5f;
     private const float FadeStart = 8.0f;
+    public int LastGroundcoverInstances { get; private set; }
+    public int LastInfluencedGridCells { get; private set; }
+    public int LastFloraExclusionCandidateChecks { get; private set; }
 
     public void Build(VivariumWorld w)
     {
@@ -94,7 +98,11 @@ public partial class AmbientGroundCoverRenderer : Node3D
         var nearRocks = new List<Vivarium.Sim.World.Rock>();
         var nearLogs = new List<Vivarium.Sim.World.LogProp>();
         var nearGravel = new List<Vivarium.Sim.World.GravelPatch>();
-        var nearFlora = new List<(Vivarium.Sim.Core.Vec2 P, double Exclusion)>();
+        // Exact circular exclusion via 75cm spatial hash buckets, replacing
+        // O(plants * anonymous foliage blades) per-instance scans.
+        var floraExclusions = new AmbientCoverSpatialIndex();
+        var livingCarpet = new AmbientCoverSpatialIndex();
+        int exclusionCandidates=0, influencedCells=0;
         float searchRadius = CullRadius + 2.5f;
         var camP = new Vivarium.Sim.Core.Vec2(cam.X, cam.Z);
 
@@ -116,8 +124,21 @@ public partial class AmbientGroundCoverRenderer : Node3D
             if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, plant.Position) <= searchRadius + Math.Max(0.4, plant.Radius(sp)))
             {
                 bool isWoody = sp.Shape == "tree" || sp.Tags.Contains("tree") || sp.Tags.Contains("woody");
-                double collarR = isWoody ? Math.Max(0.22, plant.Radius(sp) * 0.38) : Math.Max(0.14, plant.Radius(sp) + 0.08);
-                nearFlora.Add((plant.Position, collarR));
+                double collarR = isWoody ?
+                    Math.Max(0.22, plant.Radius(sp) * 0.38) :
+                    Math.Max(0.14, plant.Radius(sp) + 0.08);
+                if (sp.Archetype=="plant" && sp.Tags.Contains("groundcover") && !isWoody)
+                {
+                    // Living clonal carpets fill in between leaves as the
+                    // actual tracked plant gains biomass. These are inexpensive
+                    // anonymous turf instances, not simulated daughter plants.
+                    double maturity = plant.BiomassFraction(sp);
+                    livingCarpet.Add(plant.Position,
+                        Math.Max(0.16, plant.Radius(sp)*1.5),
+                        maturity * Math.Clamp(plant.Health,0,1));
+                    collarR = Math.Min(0.035, Math.Max(0.008, plant.Radius(sp)*0.16));
+                }
+                floraExclusions.Add(plant.Position, collarR);
             }
         }
 
@@ -162,7 +183,15 @@ public partial class AmbientGroundCoverRenderer : Node3D
             baseCol = baseCol.Lerp(shade, (float)MathD.Clamp01((0.58 - light) / 0.5));
 
             rng.Seed = Rng.Mix(_w.Seed, (ulong)idx + 0xA6B13UL);
-            int count = Math.Clamp((int)Math.Round((8.0 + cover * 14.0) * Quality * distFade * litterPenalty), 2, Quality >= 2 ? 36 : 22);
+            // This present-state influence rises naturally as established
+            // rooted carpets accumulate biomass. Constant authored blades
+            // become denser without creating extra tracked organisms.
+            double establishedCarpet = livingCarpet.Influence(center);
+            if(establishedCarpet>0.02) influencedCells++;
+            int count = Math.Clamp(
+                (int)Math.Round((8.0 + cover * 14.0 +
+                    establishedCarpet * 11.0) * Quality * distFade * litterPenalty),
+                2, Quality >= 2 ? 44 : 34);
 
             // Terrain slope normal and tilt
             double e = g.CellSize;
@@ -188,10 +217,8 @@ public partial class AmbientGroundCoverRenderer : Node3D
                 if (excluded) continue;
                 for (int gi = 0; gi < nearGravel.Count; gi++) if (nearGravel[gi].Covers(p)) { excluded = true; break; }
                 if (excluded) continue;
-                for (int pi = 0; pi < nearFlora.Count; pi++)
-                {
-                    if (Vivarium.Sim.Core.Vec2.Distance(p, nearFlora[pi].P) < nearFlora[pi].Exclusion) { excluded = true; break; }
-                }
+                excluded = floraExclusions.Contains(p);
+                exclusionCandidates += floraExclusions.LastCandidates;
                 if (excluded) continue;
 
                 bool isLeaf = rng.Next01() < broadleaf;
@@ -213,6 +240,9 @@ public partial class AmbientGroundCoverRenderer : Node3D
 
         Fill(_blade, _bladeT, _bladeC);
         Fill(_leaf, _leafT, _leafC);
+        LastGroundcoverInstances = _bladeT.Count+_leafT.Count;
+        LastInfluencedGridCells = influencedCells;
+        LastFloraExclusionCandidateChecks = exclusionCandidates;
     }
 
     private (double Moisture, double Light) NeighbourCharacter(int i, int j)

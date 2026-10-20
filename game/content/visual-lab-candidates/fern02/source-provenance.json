@@ -1,0 +1,48 @@
+{
+  "asset": "Fern 02",
+  "source": "https://polyhaven.com/a/fern_02",
+  "license": "CC0 https://polyhaven.com/license",
+  "credit": "Powered by Poly Haven",
+  "authors": [
+    "Rico Cilliers",
+    "Rob Tuytel"
+  ],
+  "files": [
+    {
+      "file": "fern_02_1k.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fern_02/fern_02_1k.gltf",
+      "bytes": 6899,
+      "md5_matches_source": true,
+      "sha256": "33974295ee19670af4877705fc7d91f33f42d6302f0d44a625e072271223031f"
+    },
+    {
+      "file": "textures/fern_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_arm_1k.jpg",
+      "bytes": 280359,
+      "md5_matches_source": true,
+      "sha256": "ebfb5d76ce9cbdaec20bcd22dce9b755f0b1b8650ef29ca13555e3e6961025d7"
+    },
+    {
+      "file": "textures/fern_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_diff_1k.jpg",
+      "bytes": 315705,
+      "md5_matches_source": true,
+      "sha256": "a828a6e7b4c01c826911e2eac4b3afc7457dab7b3b392a31c681ed88b7d50029"
+    },
+    {
+      "file": "textures/fern_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_nor_gl_1k.jpg",
+      "bytes": 367222,
+      "md5_matches_source": true,
+      "sha256": "45bce132c6e96a0864bc89ab5da51361ab3f4afa83a6669ae499ab5ca811f621"
+    },
+    {
+      "file": "fern_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fern_02/fern_02.bin",
+      "bytes": 176176,
+      "md5_matches_source": true,
+      "sha256": "fe1abb762bcbbc7ad9e86925c8080437a62add257d9280e9142fdc85c226e64c"
+    }
+  ],
+  "download_only": "No runtime import or appearance acceptance yet"
+}

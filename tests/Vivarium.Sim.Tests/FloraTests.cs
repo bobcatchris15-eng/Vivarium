@@ -487,6 +487,28 @@ public class FloraTests
         Assert.Empty(w.CheckInvariants());
     }
 
+    [Theory]
+    [InlineData("trifold",false)]
+    [InlineData("coinrunner",false)]
+    [InlineData("siltstars",true)]
+    public void LowClonalCarpetsRefuseOverlappingPropagulesButCanExpandOutward(
+        string id,bool submerged)
+    {
+        var w=TestUtil.FlatWorld(seed:741);
+        TestUtil.Condition(w,submerged?.92:.55,submerged?.95:.55,.70);
+        if(submerged)
+            w.Water.Config.WaterTable=w.Terrain.Height(Vec2.Zero)+.6;
+        var sp=Sp(id);
+        Assert.True(w.FloraSystem.CanEstablish(sp,Vec2.Zero,out var why),why);
+        var founder=w.FloraSystem.Establish(sp,Vec2.Zero,"groundcover-test",sp.MaxBiomass);
+        int count=w.Flora.Count;
+        Assert.False(w.FloraSystem.CanEstablish(sp,new Vec2(.018,0),out why));
+        Assert.Contains("carpet",why);
+        Assert.True(w.FloraSystem.CanEstablish(sp,new Vec2(.64,0),out why),why);
+        Assert.Equal(count,w.Flora.Count);  // an establishment query never spawns a plant
+        Assert.Same(founder,w.Flora.Get(founder.Id));
+    }
+
     [Fact]
     public void DryGroundGroundcoversPreferAridSunnyGround()
     {

@@ -8,7 +8,7 @@ public static partial class OrganismMeshes
 {
     // Continuous quadratic midrib, tapered margins and a shallow fold. Unlike the old three-triangle
     // blades, these ribbons can bow, twist and roll without producing a sharp elbow in the silhouette.
-    private static void CurvedBlade(MeshData m, Vec3 root, Vec3 control, Vec3 tip, Vec3 sideHint,
+    internal static void CurvedBlade(MeshData m, Vec3 root, Vec3 control, Vec3 tip, Vec3 sideHint,
         double width, double[] baseCol, double[] tipCol, int segments = 8,
         double twist = 0, double shoulder = 1, double serration = 0, double foliage = 1)
     {
@@ -62,71 +62,6 @@ public static partial class OrganismMeshes
         double teeth = 1 + serration * (2*Math.Abs(t*9-Math.Floor(t*9+.5))-.5);
         double half = width * envelope * (1 + .07*x*Math.Sin(t*5));
         return centre + across*(x*half*teeth) + up*(half*(.16*(1-x*x)-.035*Math.Abs(x)));
-    }
-
-    private static void Kinkcane(MeshData m, Rng rng, double[] c1, double[] c2, double aspect)
-    {
-        var nodeCol = Primitives.Scale(c1,.58);
-        var youngCol = Primitives.Mix(c1,c2,.42);
-        int canes=14+rng.NextInt(7);
-        for(int k=0;k<canes;k++)
-        {
-            double a=rng.Range(0,Math.PI*2), rr=Math.Sqrt(rng.NextDouble())*.54;
-            var outward=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            var foot=outward*rr;
-            var light=(Vec3.Up+outward*.18).Normalized();
-            var direction=(Vec3.Up+outward*rng.Range(.15,.4)).Normalized();
-            var physical=new Vec3[7];
-            for(int j=1;j<physical.Length;j++)
-            {
-                if(j>1)
-                {
-                    // Select a point on a 34..46 degree cone around the preceding internode.
-                    // Prefer the open sky; seed variation chooses among similarly exposed directions.
-                    double turn=rng.Range(34,46)*Math.PI/180;
-                    var toward=light-direction*light.Dot(direction);
-                    if(toward.LengthSq<1e-8) toward=outward-direction*outward.Dot(direction);
-                    toward=toward.Normalized();
-                    var across=direction.Cross(toward).Normalized();
-                    double phi=rng.Range(-.5,.5);
-                    direction=(direction*Math.Cos(turn)+(toward*Math.Cos(phi)+across*Math.Sin(phi))*Math.Sin(turn)).Normalized();
-                }
-                physical[j]=physical[j-1]+direction*rng.Range(.15,.21);
-            }
-            // Convert the physically angled path back into the game's nonuniform unit coordinates.
-            // Uniform normalization before conversion preserves all internode angles.
-            double scale=rng.Range(.78,1.02)/physical[^1].Y;
-            var path=physical.Select(p=>foot+new Vec3(p.X*aspect,p.Y,p.Z*aspect)*scale).ToArray();
-            var rad=Enumerable.Range(0,7).Select(j=>MathD.Lerp(.027,.009,j/6.0)).ToArray();
-            Primitives.Tube(m,path,rad,7,(i,v)=>(Primitives.Mix(Primitives.Scale(c1,.68),youngCol,i/6.0),1,i/6.0,v,0,0));
-            for(int j=1;j<6;j++)
-            {
-                // Node collars follow their internode, rather than sitting as horizontal beads.
-                var tangent=(path[j+1]-path[j-1]).Normalized();
-                Primitives.Tube(m,new[]{path[j]-tangent*.008,path[j],path[j]+tangent*.009},
-                    new[]{rad[j]*1.05,rad[j]*1.23,rad[j]*1.05},7,(i,v)=>(nodeCol,1,i*.5,v,0,0));
-                double az=a+j*2.4+rng.Range(-.4,.4);
-                var spray=new Vec3(Math.Cos(az),rng.Range(.03,.15),Math.Sin(az));
-                var twigEnd=path[j]+spray*rng.Range(.14,.23);
-                Primitives.Tube(m,new[]{path[j],twigEnd},new[]{.006,.002},6,(i,v)=>(youngCol,1,i,v,0,0));
-                for(int leaf=0;leaf<3;leaf++)
-                {
-                    var root=Vec3.Lerp(path[j],twigEnd,.45+leaf*.24);
-                    var dir=Axis.RotateAround(spray.Normalized(),Vec3.Up,(leaf-1)*.48);
-                    var tip=root+dir*rng.Range(.24,.43)-Vec3.Up*rng.Range(.035,.10);
-                    var control=root+dir*.18+Vec3.Up*rng.Range(.015,.05);
-                    CurvedBlade(m,root,control,tip,new Vec3(-dir.Z,0,dir.X),rng.Range(.03,.055),
-                        Primitives.Scale(c1,rng.Range(.82,1.05)),c2,8,rng.Range(-.5,.5),1.1);
-                }
-            }
-        }
-        for(int r=0;r<4;r++)
-        {
-            double a=rng.Range(0,Math.PI*2);
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            Primitives.Tube(m,new[]{dir*.1+Vec3.Up*.015,dir*.4+Vec3.Up*.024,dir*.72+Vec3.Up*.012},
-                new[]{.015,.012,.006},6,(i,v)=>(nodeCol,1,i,v,0,0));
-        }
     }
 
     private static void Veilblade(MeshData m, Rng rng, double[] c1, double[] c2)
@@ -477,8 +412,8 @@ public static partial class OrganismMeshes
 {
     public const int FloraLodTiers = 3;
     /// <summary>Hard cap on the top tier of every species.</summary>
-    public const int FloraTopTriangleCap = 10000;
-    public const double FloraMidRatio = 0.35, FloraLowRatio = 0.08;
+    public const int FloraTopTriangleCap = 30000;
+    public const double FloraMidRatio = 0.55, FloraLowRatio = 0.18;
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int), double> LodScaleCache = new();
 
@@ -649,15 +584,23 @@ public static partial class OrganismMeshes
             var order = Enumerable.Range(0, parts).Where(p => size[p] > 0).Select(p =>
             {
                 var q = (mn[p] + mx[p]) * 0.5 - c;
-                double exposure = Math.Sqrt(q.X / sx * (q.X / sx) + q.Z / sz * (q.Z / sz)) + 0.3 * (q.Y / sy + 1);
-                return (p, score: exposure + 0.5 * (mx[p] - mn[p]).Length / maxSpan + (tubePart.Contains(p) ? 4 : 0));
+                double radialExposure = Math.Sqrt(q.X / sx * (q.X / sx) + q.Z / sz * (q.Z / sz));
+                double height = Math.Clamp(q.Y / sy + 1, 0, 2);
+                double shape = (mx[p] - mn[p]).Length / maxSpan;
+                // Only Embercrown currently requests the crown-first rule.
+                // Other species retain their existing radial selection policy.
+                double importance = src.PreserveUpperCanopyOnLod
+                    ? .70 * radialExposure + 1.25 * height + .45 * shape
+                    : radialExposure + .30 * height + .50 * shape;
+                return (p, score: importance + (tubePart.Contains(p) ? 4 : 0));
             }).OrderBy(x => x.score).ThenBy(x => x.p).ToList();
             int dropCount = Math.Min(order.Count - 1, (int)Math.Round(order.Count * (1 - keepFraction)));
             for (int k = 0; k < dropCount; k++) drop[order[k].p] = true;
         }
 
         var map = new int[nv];
-        var dst = new MeshData { FloraDetailLevel = src.FloraDetailLevel, FloraVisualSeed = src.FloraVisualSeed, Lod = src.Lod };
+        var dst = new MeshData { FloraDetailLevel = src.FloraDetailLevel, FloraVisualSeed = src.FloraVisualSeed, Lod = src.Lod,
+            PreserveUpperCanopyOnLod = src.PreserveUpperCanopyOnLod };
         bool c0 = nv > 0 && src.Custom0.Count >= nv * 4, c1 = nv > 0 && src.Custom1.Count >= nv * 4;
         for (int v = 0; v < nv; v++)
         {

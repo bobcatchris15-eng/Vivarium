@@ -13,6 +13,7 @@ internal static class FloraSurfaceProfiles
     {
         if (species.Id == "plumegrass")
             material.SetShaderParameter("pampas_plume_color", new Vector3(0.84f, 0.76f, 0.59f));
+        material.SetShaderParameter("ghost_membrane", species.Id == "ghostbonnet" ? 1.0f : 0.0f);
         var leaf = Leaf(species.Id);
         material.SetShaderParameter("leaf_top", leaf.Top);
         material.SetShaderParameter("top_pigment", leaf.Top);

@@ -128,7 +128,7 @@ public sealed class Hydrology
 
     /// <summary>Dynamic surface-water depth only; groundwater is excluded.</summary>
     public double DepthAt(Vec2 p) { if(Liquid!=null)return Liquid.DepthAt(p);int c = Grid.CellAt(p); return c >= 0 && Grid.InDomain(c) ? Depth[c] : 0; }
-    public double SurfaceWaterDepth(int idx) => Grid.InDomain(idx) ? Depth[idx] : 0;
+    public double SurfaceWaterDepth(int idx) => Grid.InDomain(idx) ? (Liquid != null ? Liquid.DepthAt(Grid.CellCenter(idx)) : Depth[idx]) : 0;
     public double SurfaceWaterDepth(Vec2 p)
     {
         if(Liquid!=null)return Liquid.DepthAt(p);
@@ -136,11 +136,11 @@ public sealed class Hydrology
         if (c < 0 || !Grid.InDomain(c) || Depth[c] <= 0) return 0;
         return Math.Max(0.0, (HydraulicBed(c) + Depth[c]) - _terrain.Height(p));
     }
-    public bool HasSurfaceWater(int idx) => Grid.InDomain(idx) && Depth[idx] >= 0.00005;
+    public bool HasSurfaceWater(int idx) => Grid.InDomain(idx) && SurfaceWaterDepth(idx) >= 0.00005;
     public bool HasSurfaceWater(Vec2 p) => SurfaceWaterDepth(p) >= 0.00005;
 
     /// <summary>Open-water depth from mobile liquid or the preserved standing table.</summary>
-    public double OpenWaterDepth(int idx) => Grid.InDomain(idx) ? Math.Max(Depth[idx], WaterTableDepth(idx)) : 0;
+    public double OpenWaterDepth(int idx) => Grid.InDomain(idx) ? Math.Max(SurfaceWaterDepth(idx), WaterTableDepth(idx)) : 0;
     public double OpenWaterDepth(Vec2 p) => Math.Max(SurfaceWaterDepth(p), WaterTableDepth(p));
 
     /// <summary>Fluid surface elevation, or NaN in dry cells.</summary>
@@ -234,7 +234,9 @@ public sealed class Hydrology
 
     private long ComputeDepthHash()
     {
-        long hash = 17;
+        // Invalidate wet-distance queries when the authoritative mobile-water
+        // snapshot changes, even if the old legacy Depth array is unchanged.
+        long hash = unchecked(17 * 31 + (Liquid?.Version ?? 0));
         foreach (int c in Grid.DomainCells)
         {
             hash = unchecked(hash * 31 + BitConverter.DoubleToInt64Bits(Depth[c]));
@@ -283,8 +285,9 @@ public sealed class Hydrology
     /// hydrostatic capillary rise from groundwater, saturating local surface-water depth, neighbouring
     /// surface-water depth, then the ordinary soil diffusion/drying response.
     /// </summary>
-    public void CoupleMoisture(ScalarField moisture, EcologyConfig eco, double dt, double[] scratch)
+    public void CoupleMoisture(ScalarField moisture, EcologyConfig eco, double dt, double[] scratch, RootZoneEnvironment? rootZone = null)
     {
+        rootZone?.EnsureCurrent();
         double wet = 1 - Math.Exp(-eco.MoistureWetting * dt);
         double dry = 1 - Math.Exp(-eco.MoistureDrying * dt);
         double depthScale = Math.Max(Config.WetDepth * 2.5, 0.02);
@@ -295,7 +298,7 @@ public sealed class Hydrology
 
         // Soil only couples on the environment cadence. Evaluate water hydration once per cell,
         // and the fixed neighbour kernel once per pass, instead of repeating exp/sqrt 24 times per cell.
-        foreach (int idx in Grid.DomainCells) scratch[idx] = SurfaceHydration(Depth[idx]);
+        foreach (int idx in Grid.DomainCells) scratch[idx] = SurfaceHydration(SurfaceWaterDepth(idx));
         var neighbourWeight = new double[25];
         for (int dj = -2; dj <= 2; dj++)
             for (int di = -2; di <= 2; di++)
@@ -310,7 +313,12 @@ public sealed class Hydrology
 
             // Groundwater influence depends on vertical distance to the hydrostatic table.
             double aboveTable = Math.Max(0, Bed[idx] - WaterTable);
-            double capillary = MathD.Clamp01(1 - aboveTable / Math.Max(eco.MoistureWaterTableRange, 1e-9));
+            // Drainage is the terrain-derived capacity for water to leave the
+            // root zone. It modifies capillary retention but cannot dry out a
+            // submerged or actively flooded cell.
+            double drainage = rootZone?.DrainagePotential.Values[idx] ?? 0.5;
+            double capillary = MathD.Clamp01((1 - aboveTable / Math.Max(eco.MoistureWaterTableRange, 1e-9)) *
+                                             (1.20 - 0.40 * drainage));
             double groundwaterTarget = IsWaterTable(idx)
                 ? 1.0
                 : Math.Max(eco.MoistureDryBaseline, 0.85 * capillary * capillary);
@@ -335,7 +343,12 @@ public sealed class Hydrology
                 }
 
             double target = MathD.Clamp01(Math.Max(groundwaterTarget, Math.Max(localTarget, neighbourTarget)));
-            double rate = target > m ? wet : dry;
+            // Well-drained ridges relax toward their baseline faster than
+            // convergent hollows. Keep the legacy behavior for isolated tests
+            // invoking hydrology without a terrain-derived root-zone model.
+            double drying = rootZone == null ? dry :
+                1 - Math.Exp(-eco.MoistureDrying * dt * (0.65 + 1.4 * drainage));
+            double rate = target > m ? wet : drying;
             moisture[idx] = m + (target - m) * rate;
         }
         moisture.Diffuse(eco.MoistureDiffusion * dt, scratch);

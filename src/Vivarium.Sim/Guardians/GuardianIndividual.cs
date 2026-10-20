@@ -30,6 +30,17 @@ public sealed class GuardianIndividual
     public double Energy { get; set; }
     public double Hydration { get; set; } = 1.0;
     public double Fatigue { get; set; }
+    public double Comfort { get; set; } = 1.0;
+    public double BodyTemperature { get; set; } = 0.5;
+    public double Arousal { get; set; } = 0.5;
+    public double Alertness { get; set; } = 0.5;
+
+    // Behavioral memory
+    public double LastDrinkBioSeconds { get; set; }
+    public double LastBatheBioSeconds { get; set; }
+    public double LastPlayBioSeconds { get; set; }
+    public double LastScentMarkBioSeconds { get; set; }
+    public int ConsecutiveRestCycles { get; set; }
 
     // Behavior & Activity
     public GuardianActivity Activity { get; set; } = GuardianActivity.Rest;

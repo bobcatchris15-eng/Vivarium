@@ -17,6 +17,7 @@ render_mode diffuse_burley, cull_disabled;
 uniform float sway = 1.0;
 uniform float stiffness = 1.0;
 uniform int surface_mode = 2;
+uniform float ghost_membrane = 0.0; // Species-specific thin fungal membrane lighting, never dewbonnet
 uniform bool deform_leaf_tips = false;
 uniform float review_time = -1.0;
 uniform vec3 bioluminescence_color = vec3(0.0);
@@ -180,6 +181,18 @@ void fragment() {
         c *= 0.9 + 0.14 * fuzz;
         float ndv = clamp(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos)), 0.0, 1.0);
         c *= 1.0 + 0.22 * pow(1.0 - ndv, 2.0);
+        if (ghost_membrane > 0.5) {
+            // Unlike Dewbonnet's damp flesh, spectral tissue is a very thin
+            // light-scattering membrane. Edge emphasis is driven by real cap
+            // radial UVs and is never applied to stalks or the underside glow.
+            float cap = (1.0 - step(0.5, UV2.x)) * step(0.5, UV2.y);
+            float rim = cap * smoothstep(0.37, 0.98, UV.y);
+            vec3 cold = vec3(0.66, 0.83, 0.94) * max(lum(c), 0.08);
+            c = mix(c, cold, 0.18 * cap + 0.33 * rim);
+            c *= 1.0 - 0.24 * cap * (1.0 - smoothstep(0.12, 0.94, UV.y));
+            rough = mix(rough, 0.49, cap * 0.70);
+            rough = mix(rough, 0.72, step(0.5, UV2.x) * 0.38);
+        }
     } else if (surface_mode == 4) {
         // slime mold: glossy, translucent yellow protoplasm with a slow streaming pulse along the veins
         float pulse = 0.5 + 0.5 * sin(TIME * 1.6 - length(obj_pos.xz) * 9.0 + inst.w * 20.0);
@@ -378,6 +391,17 @@ void fragment() {
        leaf_type == 5 ? .56 : leaf_type == 2 ? .43 : .82;
     vec3 leaf_backlight=leaf_through(c,trans_clamped,vein_mass,tissue_depth,1.-top_side);
     BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    if (surface_mode == 3 && ghost_membrane > 0.5) {
+        // Stable opaque depth writes stay intact; thin gills/caps scatter
+        // transmitted light rather than making a sorting-prone alpha cloud.
+        float membrane = (1.0 - step(0.5, UV2.x)) * step(0.5, UV2.y);
+        float gill = step(0.5, UV2.x);
+        float edge = membrane * smoothstep(0.40, 0.98, UV.y);
+        BACKLIGHT += vec3(0.14, 0.29, 0.38) * (0.40 * membrane + 0.65 * edge + 0.24 * gill);
+        SSS_TRANSMITTANCE_COLOR = vec4(0.60, 0.83, 0.95, 1.0);
+        SSS_TRANSMITTANCE_DEPTH = 0.14;
+        SSS_TRANSMITTANCE_BOOST = 0.25;
+    }
     if (surface_mode == 2 && !woody_surface && UV2.y > .5) {
         SSS_TRANSMITTANCE_COLOR=vec4(clamp(leaf_backlight/max(c.g*.36,.015),vec3(0.),vec3(1.)),1.);
         SSS_TRANSMITTANCE_DEPTH=mix(.60,.18,vein_mass);
@@ -398,6 +422,11 @@ void fragment() {
     else if (emission_mask_mode == 6) night_mask = edge_strip;
     else night_mask = smoothstep(0.45, 0.60, UV2.y);
     EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
+    if (surface_mode == 3 && ghost_membrane > 0.5) {
+        float spectral_rim = (1.0 - step(0.5, UV2.x)) * step(0.5, UV2.y) *
+            smoothstep(0.70, 1.0, UV.y);
+        EMISSION += bioluminescence_color * bioluminescence_strength * night_factor * 0.11 * spectral_rim;
+    }
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
     // Fiber axis for real leaf blades only. Reeds, stems, berries and
     // underside organ tags retain isotropic cuticle reflectance.

@@ -11,76 +11,49 @@ public static class WaterMesh
     public static MeshData BuildWaterTable(VivariumWorld w, Heightfield terrain)
     {
         var mesh = new MeshData();
-        double level = w.Water.WaterTable, step = w.Grid.CellSize / 4;
-        foreach (int cell in w.Grid.DomainCells)
-        {
-            int i = cell % w.Grid.Nx, j = cell / w.Grid.Nx;
-            double cx0 = w.Grid.OriginX + i * w.Grid.CellSize;
-            double cz0 = w.Grid.OriginZ + j * w.Grid.CellSize;
-            double cx1 = cx0 + w.Grid.CellSize, cz1 = cz0 + w.Grid.CellSize;
-            if (w.Water.Bed[cell] > level &&
-                terrain.Height(new Vec2(cx0, cz0)) > level &&
-                terrain.Height(new Vec2(cx1, cz0)) > level &&
-                terrain.Height(new Vec2(cx0, cz1)) > level &&
-                terrain.Height(new Vec2(cx1, cz1)) > level)
+        double level = w.Water.WaterTable;
+        // Work on the authoritative terrain faces, rather than an independently
+        // centered hydrology grid. A coarse cell's dry corners/center cannot prove
+        // there is no submerged terrain vertex inside it.
+        for (int z = 0; z < terrain.Nz - 1; z++)
+            for (int x = 0; x < terrain.Nx - 1; x++)
             {
-                if (!w.Grid.IsBoundaryCell[cell]) continue;
+                var a = terrain.VertexPos(x, z);
+                var b = terrain.VertexPos(x + 1, z);
+                var c = terrain.VertexPos(x + 1, z + 1);
+                var d = terrain.VertexPos(x, z + 1);
+                Emit(new[] { a, b, c }); Emit(new[] { a, c, d });
             }
-            double x0 = cx0, z0 = cz0, x1 = cx1, z1 = cz1;
-            ExtendBoundarySquare(w.Grid, cell, i, j, ref x0, ref z0, ref x1, ref z1);
-            if (terrain.Height(new Vec2(x0, z0)) > level &&
-                terrain.Height(new Vec2(x1, z0)) > level &&
-                terrain.Height(new Vec2(x0, z1)) > level &&
-                terrain.Height(new Vec2(x1, z1)) > level &&
-                w.Water.Bed[cell] > level)
-                continue;
-            for (double z = z0; z < z1 - 1e-9; z += step)
-                for (double x = x0; x < x1 - 1e-9; x += step)
-                {
-                    var a = new Vec2(x,z); var b = new Vec2(x+step,z);
-                    var c = new Vec2(x+step,z+step); var d = new Vec2(x,z+step);
-                    Emit(new[]{a,b,c}); Emit(new[]{a,c,d});
-                }
-        }
         return mesh;
+
         void Emit(Vec2[] triangle)
         {
+            if (triangle.All(p => terrain.Height(p) >= level)) return;
+            // Domain clipping preserves the terrain face's single plane. Every
+            // shoreline intersection is then linear on exactly that same plane.
             var polygon = w.Domain.ClipPolygon(triangle);
             var wet = new List<Vec2>();
-            for(int k=0;k<polygon.Count;k++)
+            for (int k = 0; k < polygon.Count; k++)
             {
-                var a=polygon[k]; var b=polygon[(k+1)%polygon.Count];
-                double ha=terrain.Height(a)-level, hb=terrain.Height(b)-level;
-                if(ha<0)wet.Add(a);
-                if((ha<0)!=(hb<0))
-                {
-                    // Bisect the actual heightfield, rather than averaging neighboring water heights.
-                    double lo=0,hi=1;
-                    for(int n=0;n<24;n++)
-                    {
-                        double t=(lo+hi)*.5; var q=a+(b-a)*t;
-                        if((terrain.Height(q)<level)==(ha<0))lo=t;else hi=t;
-                    }
-                    wet.Add(a+(b-a)*((lo+hi)*.5));
-                }
+                var a = polygon[k]; var b = polygon[(k + 1) % polygon.Count];
+                double ha = terrain.Height(a) - level, hb = terrain.Height(b) - level;
+                if (ha < 0) Append(a);
+                if ((ha < 0) != (hb < 0)) Append(a + (b - a) * (ha / (ha - hb)));
             }
-            if(wet.Count<3)return;
-            var ids=wet.Select(q=>mesh.AddVertex(Vec3.FromXZ(q,level),Vec3.Up,.2,.55,.7,
-                MathD.Clamp01((level-terrain.Height(q))/.15),q.X,q.Z)).ToArray();
-            for(int k=1;k+1<ids.Length;k++)mesh.AddTriangle(ids[0],ids[k],ids[k+1]);
-            AddCutFaces(mesh,w.Domain,terrain,wet,_=>level,.15);
-        }
-    }
+            if (wet.Count > 1 && Vec2.DistanceSq(wet[0], wet[^1]) < 1e-20) wet.RemoveAt(wet.Count - 1);
+            if (wet.Count < 3) return;
+            var ids = wet.Select(q => mesh.AddVertex(Vec3.FromXZ(q, level), Vec3.Up, .2, .55, .7,
+                MathD.Clamp01((level - terrain.Height(q)) / .15), q.X, q.Z)).ToArray();
+            for (int k = 1; k + 1 < ids.Length; k++)
+                if (Math.Abs((wet[k] - wet[0]).Cross(wet[k + 1] - wet[0])) > 1e-12)
+                    mesh.AddTriangle(ids[0], ids[k], ids[k + 1]);
+            AddCutFaces(mesh, w.Domain, terrain, wet, _ => level, .15);
 
-    private static void ExtendBoundarySquare(
-        GridSpec g, int idx, int i, int j, ref double x0, ref double z0, ref double x1, ref double z1)
-    {
-        if (!g.IsBoundaryCell[idx]) return;
-        double cs = g.CellSize;
-        if (!g.InDomain(i - 1, j)) x0 -= cs;
-        if (!g.InDomain(i + 1, j)) x1 += cs;
-        if (!g.InDomain(i, j - 1)) z0 -= cs;
-        if (!g.InDomain(i, j + 1)) z1 += cs;
+            void Append(Vec2 p)
+            {
+                if (wet.Count == 0 || Vec2.DistanceSq(wet[^1], p) > 1e-20) wet.Add(p);
+            }
+        }
     }
 
     private static void AddCutFaces(

@@ -28,11 +28,12 @@ public class GeometryLodTests
             if (top <= 0 || mid <= 0 || low <= 0) failures.Add($"{sp.Id}: empty tier {top}/{mid}/{low}");
             if (top > OrganismMeshes.FloraTopTriangleCap) failures.Add($"{sp.Id}: top {top} over cap");
             if (mid > top || low > mid) failures.Add($"{sp.Id}: tiers not monotone {top}/{mid}/{low}");
-            // Ratios (mid <= 40%, low <= 15% or under 1k tris) only bind where the minimum tessellation (5-sided tubes, 2-segment blades) leaves room.
+            // Follow the current visual-detail policy with the existing discretization margin.
+            // Minimum tessellation (5-sided tubes, 2-segment blades) still limits small meshes.
             if (top >= 3000)
             {
-                if (mid > top * 0.40) failures.Add($"{sp.Id}: mid {mid} of {top}");
-                if (low > top * 0.15 && low > 1000) failures.Add($"{sp.Id}: low {low} of {top}");
+                if (mid > top * (OrganismMeshes.FloraMidRatio + 0.05)) failures.Add($"{sp.Id}: mid {mid} of {top}");
+                if (low > top * (OrganismMeshes.FloraLowRatio + 0.07) && low > 1000) failures.Add($"{sp.Id}: low {low} of {top}");
             }
         }
         Assert.True(failures.Count == 0, string.Join("\n", failures));

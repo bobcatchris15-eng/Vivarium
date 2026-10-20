@@ -81,8 +81,18 @@ public partial class MaterialPortReview : Node3D
         try
         {
             Directory.CreateDirectory(OutDir);
-            if (!string.IsNullOrWhiteSpace(FloraModulePath))
-                throw new NotSupportedException("Authored branch-module review is maintained separately.");
+            if (!string.IsNullOrWhiteSpace(FloraModulePath)) {
+                string payload = Path.GetFullPath(FloraModulePath);
+                FloraVisualProfile.ReviewMeshTransform = (id, original) => {
+                    if (id != "shadebell") return original;
+                    var imported = Vivarium.VisualLab.BranchModuleLoader.Load(payload);
+                    imported.FloraVisualSeed = original.FloraVisualSeed;
+                    for (int i = 0; i < imported.Leaves.Count; i++)
+                        imported.Leaves[i] = imported.Leaves[i] with { Identity = Rng.Mix(imported.Leaves[i].Identity, original.FloraVisualSeed) };
+                    return imported;
+                };
+                _receipts.Add(new { authoredMeshPayload = payload, payloadSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(payload))), scope = "vegetative Shadebell candidate; no flowers or LOD acceptance" });
+            }
 
             GetWindow().Size = new Vector2I(1600, 900);
             _rig = new EnvironmentRig { BenchmarkLightSeconds = 450 }; AddChild(_rig);
@@ -138,7 +148,7 @@ public partial class MaterialPortReview : Node3D
                     (float)sp.Height, (float)sp.RadiusAtMax)), Vector3.Zero));
                 mm.SetInstanceColor(0, Colors.White); mm.SetInstanceCustomData(0, new Color(.5f, 1f, 0f, .5f));
                 var specimen = new MultiMeshInstance3D { Multimesh = mm }; AddChild(specimen);
-
+                
                 // Match cameras to the unchanged source when review geometry is substituted.
                 var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
                 var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
@@ -150,6 +160,136 @@ public partial class MaterialPortReview : Node3D
                 float size = Math.Max(.2f, Math.Max(bounds.Size.X, Math.Max(bounds.Size.Y, bounds.Size.Z)));
                 _camera.Position = target + new Vector3(.85f, .55f, 1).Normalized() * size * 1.8f; _camera.LookAt(target);
                 await Pair(id + "-front", leaf, oldLeaf, newLeaf);
+                if (System.Environment.GetEnvironmentVariable("VIVARIUM_BARK_REVIEW") == "1")
+                {
+                    leaf.Shader = newLeaf;
+                    Lighting();
+                    foreach (float gain in new[] { 0f, .65f, 2f, 4f })
+                    {
+                        stem.SetShaderParameter("u_bark_fissures", gain);
+                        stem.SetShaderParameter("u_living_stem", gain);
+                        await Capture($"{id}-cork-and-epidermis-{gain:0.00}");
+                    }
+                    stem.SetShaderParameter("u_bark_fissures", .65f);
+                    stem.SetShaderParameter("u_living_stem", .8f);
+                }
+                if (id == "shadebell" &&
+                    System.Environment.GetEnvironmentVariable("VIVARIUM_FOLIAGE_EXPLORER") == "1")
+                {
+                    leaf.Shader = newLeaf;
+                    Lighting();
+                    foreach (float gain in new[] { 0f, .20f, .65f, 1.20f })
+                    {
+                        leaf.SetShaderParameter("tissue_diffuse_wrap", gain);
+                        await Capture($"explorer-wrap-{gain:0.00}");
+                    }
+                    leaf.SetShaderParameter("tissue_diffuse_wrap", 0f);
+                    var cameraRay = (_camera.Position - target).Normalized();
+                    var reflectKey = 2f * Vector3.Up.Dot(cameraRay) * Vector3.Up - cameraRay;
+                    _rig.Sun.LookAt(_rig.Sun.GlobalPosition - reflectKey, Vector3.Up);
+                    _rig.Sun.LightEnergy = 1.8f;
+                    foreach (float gain in new[] { 0f, .50f, .85f, .96f })
+                    {
+                        leaf.SetShaderParameter("tissue_fiber_anisotropy", gain);
+                        await Capture($"explorer-fiber-{gain:0.00}");
+                    }
+                    leaf.SetShaderParameter("tissue_fiber_anisotropy", 0f);
+                    Lighting(backlit: true);
+                    _rig.Env.AmbientLightEnergy = .12f;
+                    _rig.Sun.LightEnergy = 1.8f;
+                    _rig.Sun.LookAt(_rig.Sun.GlobalPosition + cameraRay, Vector3.Up);
+                    foreach (float gain in new[] { 0f, .5f, 2f, 8f })
+                    {
+                        leaf.SetShaderParameter("tissue_phase_scatter", gain);
+                        await Capture($"explorer-phase-{gain:0.00}");
+                    }
+                    leaf.SetShaderParameter("tissue_phase_scatter", 0f);
+                    Lighting();
+                    leaf.SetShaderParameter("tissue_fiber_anisotropy", 0f);
+                    leaf.SetShaderParameter("tissue_phase_scatter", 0f);
+                    await Capture("explorer-combined-before");
+                    leaf.SetShaderParameter("tissue_fiber_anisotropy", .72f);
+                    leaf.SetShaderParameter("tissue_phase_scatter", 1.6f);
+                    await Capture("explorer-combined-after");
+                    Lighting(backlit: true);
+                    _rig.Sun.LightEnergy = 1.8f;
+                    _rig.Sun.LookAt(_rig.Sun.GlobalPosition + cameraRay, Vector3.Up);
+                    leaf.SetShaderParameter("tissue_phase_scatter", 0f);
+                    leaf.SetShaderParameter("tissue_fiber_anisotropy", 0f);
+                    await Capture("explorer-combined-backlit-before");
+                    leaf.SetShaderParameter("tissue_phase_scatter", 1.6f);
+                    leaf.SetShaderParameter("tissue_fiber_anisotropy", .72f);
+                    await Capture("explorer-combined-backlit-after");
+                    Lighting();
+                    leaf.SetShaderParameter("tissue_phase_scatter", 1.6f);
+                    leaf.SetShaderParameter("tissue_fiber_anisotropy", .72f);
+                    foreach (float gain in new[] { 0f, .5f, 1.8f, 4f })
+                    {
+                        leaf.SetShaderParameter("leaf_pigment_mottle", gain);
+                        await Capture($"explorer-pigment-{gain:0.00}");
+                    }
+                    leaf.SetShaderParameter("leaf_pigment_mottle", 0f);
+                    foreach (float gain in new[] { 0f, .35f, .85f, 1f })
+                    {
+                        leaf.SetShaderParameter("canopy_occlusion", gain);
+                        await Capture($"explorer-canopy-ao-{gain:0.00}");
+                    }
+                    leaf.SetShaderParameter("canopy_occlusion", .55f);
+                }
+                if (id == "shadebell" &&
+                    System.Environment.GetEnvironmentVariable("VIVARIUM_LEAF_STRESS") == "1")
+                {
+                    Lighting();
+                    foreach (float gain in new[] { 0f, 2f, 6f, 12f })
+                    {
+                        leaf.Shader = newLeaf;
+                        leaf.SetShaderParameter("lamina_curl_strength", gain);
+                        await Capture($"shadebell-lamina-front-{gain:0}");
+                    }
+                    Lighting(backlit: true);
+                    foreach (float gain in new[] { 0f, 2f, 6f, 12f })
+                    {
+                        leaf.Shader = newLeaf;
+                        leaf.SetShaderParameter("lamina_curl_strength", gain);
+                        await Capture($"shadebell-lamina-back-{gain:0}");
+                    }
+                    leaf.SetShaderParameter("lamina_curl_strength", 1.5f);
+                    // Isolate exaggerated thin tissue transmission with the
+                    // directional key behind the viewer-facing production leaves.
+                    Lighting(backlit: true);
+                    _rig.Env.AmbientLightEnergy = 0f;
+                    _rig.Env.ReflectedLightSource = Godot.Environment.ReflectionSource.Disabled;
+                    _rig.Sun.LightEnergy = 2f;
+                    var cameraRay = (_camera.Position - target).Normalized();
+                    _rig.Sun.LookAt(_rig.Sun.GlobalPosition + cameraRay, Vector3.Up);
+                    leaf.SetShaderParameter("tissue_light_diagnostic", 2);
+                    stem.SetShaderParameter("tissue_light_diagnostic", 2);
+                    foreach (float gain in new[] { 0f, 1f, 4f, 10f })
+                    {
+                        leaf.SetShaderParameter("tissue_direct_transmission", gain);
+                        await Capture($"shadebell-strong-transmission-{gain:0}");
+                    }
+                    leaf.SetShaderParameter("tissue_direct_transmission", 1.9f);
+                    leaf.SetShaderParameter("tissue_light_diagnostic", 0);
+                    stem.SetShaderParameter("tissue_light_diagnostic", 0);
+
+                    // Deliberately mirror-align the direct key with upper laminae
+                    // to test a full range of cuticle specular responses.
+                    var mirrorSource = 2f * Vector3.Up.Dot(cameraRay) *
+                        Vector3.Up - cameraRay;
+                    _rig.Sun.LookAt(_rig.Sun.GlobalPosition - mirrorSource, Vector3.Up);
+                    leaf.SetShaderParameter("tissue_light_diagnostic", 3);
+                    stem.SetShaderParameter("tissue_light_diagnostic", 3);
+                    foreach (float gain in new[] { 0f, 1f, 4f, 10f })
+                    {
+                        leaf.SetShaderParameter("tissue_specular_stress", gain);
+                        await Capture($"shadebell-strong-cuticle-{gain:0}");
+                    }
+                    leaf.SetShaderParameter("tissue_specular_stress", 1f);
+                    leaf.SetShaderParameter("tissue_light_diagnostic", 0);
+                    stem.SetShaderParameter("tissue_light_diagnostic", 0);
+                    _rig.Env.ReflectedLightSource = Godot.Environment.ReflectionSource.Sky;
+                }
                 Lighting(backlit: true); await Pair(id + "-backlit", leaf, oldLeaf, newLeaf);
                 // A radiometrically meaningful diagnostic: with ambient disabled, each
                 // capture isolates a term of the production leaf light() function.
@@ -207,6 +347,27 @@ public partial class MaterialPortReview : Node3D
                 FloraSurfaceProfiles.Bind(mat, sp);
                 ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + id), 0x9E3779B97F4A7C15UL);
                 var source = OrganismMeshes.FloraTier(sp, seed, 0);
+                if (System.Environment.GetEnvironmentVariable("VIVARIUM_LEAF_STRESS") == "1")
+                {
+                    int marked = 0, markedNarrow = 0, woody = 0;
+                    float minU = float.PositiveInfinity, maxU = float.NegativeInfinity;
+                    float minV = float.PositiveInfinity, maxV = float.NegativeInfinity;
+                    for (int vi = 0; vi < source.VertexCount; vi++)
+                    {
+                        float u2 = source.UV2[2 * vi], v2 = source.UV2[2 * vi + 1];
+                        if (v2 > .5f)
+                        {
+                            marked++;
+                            if (u2 < 1.2f) markedNarrow++;
+                            minU = Math.Min(minU, source.UV[2 * vi]);
+                            maxU = Math.Max(maxU, source.UV[2 * vi]);
+                            minV = Math.Min(minV, source.UV[2 * vi + 1]);
+                            maxV = Math.Max(maxV, source.UV[2 * vi + 1]);
+                        }
+                        if (u2 > 1.5f) woody++;
+                    }
+                    GD.Print($"LEGACY_BLADE_AUDIT species={id} vertices={source.VertexCount} marked={marked} narrow={markedNarrow} woody={woody} uv=({minU:F3},{maxU:F3})x({minV:F3},{maxV:F3})");
+                }
                 var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
                     UseColors = true, UseCustomData = true, Mesh = Bridge.ToArrayMesh(source, mat), InstanceCount = 1 };
                 mm.SetInstanceTransform(0, new Transform3D(Basis.Identity.Scaled(new Vector3(
@@ -219,6 +380,46 @@ public partial class MaterialPortReview : Node3D
                 _camera.Position = target + new Vector3(.85f, .55f, 1f).Normalized() * size * 2.5f;
                 _camera.LookAt(target);
                 await Pair(id + "-legacy-front", mat, oldFlora, newFlora);
+                if (System.Environment.GetEnvironmentVariable("VIVARIUM_BARK_REVIEW") == "1")
+                {
+                    Lighting();
+                    mat.Shader = newFlora;
+                    foreach (float gain in new[] { 0f, .65f, 2f, 4f })
+                    {
+                        mat.SetShaderParameter("u_living_stem", gain);
+                        await Capture($"{id}-stem-epidermis-{gain:0.00}");
+                    }
+                    mat.SetShaderParameter("u_living_stem", .8f);
+                }
+                if (System.Environment.GetEnvironmentVariable("VIVARIUM_FOLIAGE_EXPLORER") == "1")
+                {
+                    Lighting();
+                    mat.Shader = newFlora;
+                    mat.SetShaderParameter("tissue_fiber_anisotropy", 0f);
+                    mat.SetShaderParameter("tissue_phase_scatter", 0f);
+                    await Capture($"{id}-explorer-combined-before");
+                    mat.SetShaderParameter("tissue_fiber_anisotropy", .72f);
+                    mat.SetShaderParameter("tissue_phase_scatter", 1.6f);
+                    await Capture($"{id}-explorer-combined-after");
+                }
+                if (System.Environment.GetEnvironmentVariable("VIVARIUM_LEAF_STRESS") == "1")
+                {
+                    Lighting();
+                    foreach (float gain in new[] { 0f, 2f, 6f, 12f })
+                    {
+                        mat.Shader = newFlora;
+                        mat.SetShaderParameter("lamina_curl_strength", gain);
+                        await Capture($"{id}-legacy-lamina-front-{gain:0}");
+                    }
+                    Lighting(backlit: true);
+                    foreach (float gain in new[] { 0f, 2f, 6f, 12f })
+                    {
+                        mat.Shader = newFlora;
+                        mat.SetShaderParameter("lamina_curl_strength", gain);
+                        await Capture($"{id}-legacy-lamina-back-{gain:0}");
+                    }
+                    mat.SetShaderParameter("lamina_curl_strength", 1.3f);
+                }
                 Lighting(backlit: true);
                 await Pair(id + "-legacy-backlit", mat, oldFlora, newFlora);
                 specimen.QueueFree(); await Frames(2);

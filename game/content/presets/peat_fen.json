@@ -1,0 +1,380 @@
+{
+  "id": "peat_fen",
+  "name": "Blackwater Fen",
+  "seed": 781034,
+  "diameter": 8,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.2,
+    "relief": 0.08,
+    "noiseScale": 0.18,
+    "octaves": 3,
+    "minHeight": -0.8,
+    "maxHeight": 2.0,
+    "bottom": -3.0,
+    "rockExposure": 0.04,
+    "slopeX": -0.01875,
+    "slopeZ": -0.01875,
+    "features": [
+      {
+        "type": "hill",
+        "x": -1.493,
+        "z": 1.173,
+        "radius": 1.173,
+        "amount": 0.18
+      },
+      {
+        "type": "hill",
+        "x": 1.707,
+        "z": 0.96,
+        "radius": 1.28,
+        "amount": 0.16
+      },
+      {
+        "type": "hill",
+        "x": 0.107,
+        "z": -1.707,
+        "radius": 1.173,
+        "amount": 0.15
+      },
+      {
+        "type": "basin",
+        "x": 2.7,
+        "z": 0.05,
+        "radius": 2.05,
+        "amount": 0.18,
+        "bedHeight": -0.14
+      },
+      {
+        "type": "basin",
+        "x": 2.1,
+        "z": 0.0,
+        "radius": 1.1,
+        "amount": 0.06,
+        "bedHeight": -0.025
+      },
+      {
+        "type": "basin",
+        "x": -0.8,
+        "z": -0.427,
+        "radius": 1.493,
+        "amount": 0.12,
+        "bedHeight": 0.0638
+      },
+      {
+        "type": "basin",
+        "x": 0.96,
+        "z": -0.213,
+        "radius": 1.387,
+        "amount": 0.12,
+        "bedHeight": -0.06
+      },
+      {
+        "type": "basin",
+        "x": -1.35,
+        "z": -0.9,
+        "radius": 0.6,
+        "amount": 0.1,
+        "bedHeight": 0.1038
+      },
+      {
+        "type": "basin",
+        "x": 0.1,
+        "z": -0.32,
+        "radius": 0.65,
+        "amount": 0.1,
+        "bedHeight": 0.0238
+      },
+      {
+        "type": "basin",
+        "x": 1.85,
+        "z": -0.1,
+        "radius": 0.65,
+        "amount": 0.1,
+        "bedHeight": -0.1
+      },
+      {
+        "type": "channel",
+        "x": -2.027,
+        "z": -1.387,
+        "toX": -1.7,
+        "toZ": -1.15,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.163,
+        "toBedHeight": 0.1188
+      },
+      {
+        "type": "channel",
+        "x": -1.7,
+        "z": -1.15,
+        "toX": -1.35,
+        "toZ": -0.9,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.1188,
+        "toBedHeight": 0.1038
+      },
+      {
+        "type": "channel",
+        "x": -1.35,
+        "z": -0.9,
+        "toX": -1.05,
+        "toZ": -0.65,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.1038,
+        "toBedHeight": 0.0788
+      },
+      {
+        "type": "channel",
+        "x": -1.05,
+        "z": -0.65,
+        "toX": -0.8,
+        "toZ": -0.427,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.0788,
+        "toBedHeight": 0.0638
+      },
+      {
+        "type": "channel",
+        "x": -0.8,
+        "z": -0.427,
+        "toX": -0.35,
+        "toZ": -0.38,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.0638,
+        "toBedHeight": 0.0388
+      },
+      {
+        "type": "channel",
+        "x": -0.35,
+        "z": -0.38,
+        "toX": 0.1,
+        "toZ": -0.32,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.0388,
+        "toBedHeight": 0.0238
+      },
+      {
+        "type": "channel",
+        "x": 0.1,
+        "z": -0.32,
+        "toX": 0.55,
+        "toZ": -0.27,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.0238,
+        "toBedHeight": -0.0012
+      },
+      {
+        "type": "channel",
+        "x": 0.55,
+        "z": -0.27,
+        "toX": 0.96,
+        "toZ": -0.213,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.0012,
+        "toBedHeight": -0.06
+      },
+      {
+        "type": "channel",
+        "x": 0.96,
+        "z": -0.213,
+        "toX": 1.45,
+        "toZ": -0.15,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.06,
+        "toBedHeight": -0.085
+      },
+      {
+        "type": "channel",
+        "x": 1.45,
+        "z": -0.15,
+        "toX": 1.85,
+        "toZ": -0.1,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.085,
+        "toBedHeight": -0.1
+      },
+      {
+        "type": "channel",
+        "x": 1.85,
+        "z": -0.1,
+        "toX": 2.25,
+        "toZ": -0.05,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.1,
+        "toBedHeight": -0.125
+      },
+      {
+        "type": "channel",
+        "x": 2.25,
+        "z": -0.05,
+        "toX": 2.7,
+        "toZ": 0.05,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.125,
+        "toBedHeight": -0.14
+      }
+    ]
+  },
+  "water": {
+    "waterTable": 0.0,
+    "springs": [
+      {
+        "x": -2.027,
+        "z": -1.387,
+        "dischargePerHour": 0.22
+      }
+    ],
+    "flowRate": 0.18,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.004,
+    "infiltrationPerDay": 0.015,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.3,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 3,
+    "rockMinScale": 0.12,
+    "rockMaxScale": 0.4,
+    "logs": 2,
+    "logMinLength": 1.4,
+    "logMaxLength": 2.8,
+    "logMinRadius": 0.12,
+    "logMaxRadius": 0.25,
+    "gravelPatches": 1,
+    "gravelMinRadius": 0.3,
+    "gravelMaxRadius": 0.8,
+    "spacing": 0.35
+  },
+  "starterFlora": [
+    {
+      "species": "rainshield",
+      "count": 5
+    },
+    {
+      "species": "vaultfern",
+      "count": 3
+    },
+    {
+      "species": "pitcher_plant",
+      "count": 6
+    },
+    {
+      "species": "snaptrap",
+      "count": 6
+    },
+    {
+      "species": "blue_sundew",
+      "count": 6
+    },
+    {
+      "species": "carrion_bell",
+      "count": 6
+    },
+    {
+      "species": "bogglass_moss",
+      "count": 18
+    },
+    {
+      "species": "fenbead",
+      "count": 12
+    },
+    {
+      "species": "fencomb",
+      "count": 10
+    },
+    {
+      "species": "fenhook",
+      "count": 8
+    },
+    {
+      "species": "ringreed",
+      "count": 12
+    },
+    {
+      "species": "floodlace_moss",
+      "count": 12
+    },
+    {
+      "species": "rain_jelly",
+      "count": 6
+    },
+    {
+      "species": "lanternsedge",
+      "count": 8
+    },
+    {
+      "species": "glassrush",
+      "count": 8
+    },
+    {
+      "species": "shadebell",
+      "count": 6
+    },
+    {
+      "species": "moonfern",
+      "count": 10
+    },
+    {
+      "species": "dewbonnet",
+      "count": 8
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "loamthread",
+      "count": 6
+    },
+    {
+      "species": "siltshield",
+      "count": 4
+    },
+    {
+      "species": "rustcoil",
+      "count": 4
+    },
+    {
+      "species": "reedjaw",
+      "count": 3
+    },
+    {
+      "species": "duskflicker",
+      "count": 5
+    },
+    {
+      "species": "dewmantle",
+      "count": 3
+    },
+    {
+      "species": "ghostbristle",
+      "count": 3
+    }
+  ],
+  "faunaBudget": 360
+}

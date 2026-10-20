@@ -36,7 +36,19 @@ public static class GuardianCatalog
             PreferredDiets: Array.AsReadOnly(new[] { "fruit", "flora:foliage", "seeds" }),
             BaseColor: new Vec3(0.55, 0.38, 0.18),
             SecondaryColor: new Vec3(0.12, 0.45, 0.65),
-            Description: "Layered rust plumage, bright turquoise eye patch, erectile crest, and deliberate branch-climbing."
+            Description: "Layered rust plumage, bright turquoise eye patch, erectile crest, and deliberate branch-climbing.",
+            BehaviorProfile: new GuardianBehaviorProfile(
+                ForageWeight: 1.1,
+                DrinkFrequency: 0.9,
+                PlayThreshold: 0.65,
+                BaskPriority: 0.4,
+                DigAbility: 0.1,
+                CuriosityBias: 0.9,
+                NocturnalBias: 0.2,
+                CanSwim: false,
+                CanClimbTrunk: true,
+                PreferredRestType: "tree_perch"
+            )
         ),
 
         // G02 — Armored forest guardian (Pangolin-inspired, associated with Gloomspire hemlock)
@@ -55,7 +67,19 @@ public static class GuardianCatalog
             PreferredDiets: Array.AsReadOnly(new[] { "detritus", "litter", "biofilm" }),
             BaseColor: new Vec3(0.48, 0.38, 0.28),
             SecondaryColor: new Vec3(0.72, 0.58, 0.36),
-            Description: "Overlapping keratin plates, digging claws, heavy tail, and defensive curling reflex."
+            Description: "Overlapping keratin plates, digging claws, heavy tail, and defensive curling reflex.",
+            BehaviorProfile: new GuardianBehaviorProfile(
+                ForageWeight: 1.0,
+                DrinkFrequency: 0.7,
+                PlayThreshold: 0.75,
+                BaskPriority: 0.5,
+                DigAbility: 1.8,
+                CuriosityBias: 0.4,
+                NocturnalBias: 0.8,
+                CanSwim: false,
+                CanClimbTrunk: false,
+                PreferredRestType: "ball"
+            )
         ),
 
         // G03 — Canopy serpent guardian (Tree boa-inspired, associated with Needlevault spruce)
@@ -74,7 +98,19 @@ public static class GuardianCatalog
             PreferredDiets: Array.AsReadOnly(new[] { "fauna:small", "detritus" }),
             BaseColor: new Vec3(0.32, 0.42, 0.24),
             SecondaryColor: new Vec3(0.70, 0.55, 0.18),
-            Description: "Muscular branch-wrapping coils, suspended resting loops, and slow deliberate thermal basking."
+            Description: "Muscular branch-wrapping coils, suspended resting loops, and slow deliberate thermal basking.",
+            BehaviorProfile: new GuardianBehaviorProfile(
+                ForageWeight: 0.8,
+                DrinkFrequency: 0.6,
+                PlayThreshold: 0.80,
+                BaskPriority: 1.8,
+                DigAbility: 0.0,
+                CuriosityBias: 0.6,
+                NocturnalBias: 0.3,
+                CanSwim: true,
+                CanClimbTrunk: true,
+                PreferredRestType: "coil"
+            )
         ),
 
         // G04 — Great ground guardian (Asian water monitor-inspired, associated with Emberpillar redwood)
@@ -93,7 +129,19 @@ public static class GuardianCatalog
             PreferredDiets: Array.AsReadOnly(new[] { "fruit", "detritus", "fauna:small" }),
             BaseColor: new Vec3(0.24, 0.26, 0.22),
             SecondaryColor: new Vec3(0.65, 0.62, 0.45),
-            Description: "Heavy sprawling walk, powerful lateral tail, probing forked tongue, and fallen log exploration."
+            Description: "Heavy sprawling walk, powerful lateral tail, probing forked tongue, and fallen log exploration.",
+            BehaviorProfile: new GuardianBehaviorProfile(
+                ForageWeight: 1.2,
+                DrinkFrequency: 1.3,
+                PlayThreshold: 0.50,
+                BaskPriority: 1.5,
+                DigAbility: 0.6,
+                CuriosityBias: 0.8,
+                NocturnalBias: 0.1,
+                CanSwim: true,
+                CanClimbTrunk: false,
+                PreferredRestType: "ground_curl"
+            )
         ),
 
         // G05 — Long-nosed woodland guardian (Coati-inspired, associated with Basinwarden broadleaf)
@@ -112,7 +160,19 @@ public static class GuardianCatalog
             PreferredDiets: Array.AsReadOnly(new[] { "fruit", "seeds", "litter", "detritus" }),
             BaseColor: new Vec3(0.50, 0.32, 0.20),
             SecondaryColor: new Vec3(0.85, 0.78, 0.65),
-            Description: "Flexible investigative snout, agile climbing gait, ringed tail carried upright, and litter rooting."
+            Description: "Flexible investigative snout, agile climbing gait, ringed tail carried upright, and litter rooting.",
+            BehaviorProfile: new GuardianBehaviorProfile(
+                ForageWeight: 1.3,
+                DrinkFrequency: 1.1,
+                PlayThreshold: 0.45,
+                BaskPriority: 0.3,
+                DigAbility: 1.4,
+                CuriosityBias: 1.6,
+                NocturnalBias: 0.3,
+                CanSwim: true,
+                CanClimbTrunk: true,
+                PreferredRestType: "ground_curl"
+            )
         ),
 
         // G06 — Quilled arboreal guardian (Brazilian porcupine-inspired, associated with Palehollow conifer)
@@ -131,7 +191,19 @@ public static class GuardianCatalog
             PreferredDiets: Array.AsReadOnly(new[] { "fruit", "flora:bark", "flora:fungus" }),
             BaseColor: new Vec3(0.28, 0.24, 0.20),
             SecondaryColor: new Vec3(0.85, 0.82, 0.68),
-            Description: "Prehensile gripping tail, bicoloured defensive quills, deliberate climbing, and canopy rest."
+            Description: "Prehensile gripping tail, bicoloured defensive quills, deliberate climbing, and canopy rest.",
+            BehaviorProfile: new GuardianBehaviorProfile(
+                ForageWeight: 0.9,
+                DrinkFrequency: 0.8,
+                PlayThreshold: 0.70,
+                BaskPriority: 0.4,
+                DigAbility: 0.2,
+                CuriosityBias: 0.5,
+                NocturnalBias: 0.7,
+                CanSwim: false,
+                CanClimbTrunk: true,
+                PreferredRestType: "fork_wedge"
+            )
         ),
     });
 

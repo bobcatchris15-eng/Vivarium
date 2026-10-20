@@ -42,7 +42,7 @@
         "z": -2.07,
         "toX": -1.71,
         "toZ": -1.035,
-        "width": 0.255,
+        "width": 0.18,
         "amount": 0.145,
         "sharp": true,
         "bedHeight": 0.11372,
@@ -54,7 +54,7 @@
         "z": -1.035,
         "toX": -0.405,
         "toZ": -0.765,
-        "width": 0.2798,
+        "width": 0.187,
         "amount": 0.145,
         "sharp": true,
         "bedHeight": 0.06787,
@@ -66,7 +66,7 @@
         "z": -0.765,
         "toX": 0.36,
         "toZ": 0.27,
-        "width": 0.2437,
+        "width": 0.18,
         "amount": 0.145,
         "sharp": true,
         "bedHeight": 0.036,
@@ -78,7 +78,7 @@
         "z": 0.27,
         "toX": 1.62,
         "toZ": 0.63,
-        "width": 0.2353,
+        "width": 0.18,
         "amount": 0.145,
         "sharp": true,
         "bedHeight": -0.00985,
@@ -90,7 +90,7 @@
         "z": 0.63,
         "toX": 2.205,
         "toZ": 1.575,
-        "width": 0.2752,
+        "width": 0.183,
         "amount": 0.145,
         "sharp": true,
         "bedHeight": -0.04369,
@@ -106,7 +106,7 @@
       {
         "x": -2.475,
         "z": -2.07,
-        "dischargePerHour": 0.3
+        "dischargePerHour": 0.4
       }
     ],
     "flowRate": 0.2,
@@ -120,77 +120,94 @@
     "subSteps": 2
   },
   "placement": {
-    "rocks": 8,
+    "rocks": 4,
     "rockMinScale": 0.15,
     "rockMaxScale": 0.55,
-    "logs": 2,
+    "logs": 1,
     "logMinLength": 1.1,
     "logMaxLength": 2.2,
     "logMinRadius": 0.1,
     "logMaxRadius": 0.2,
-    "gravelPatches": 4,
+    "gravelPatches": 2,
     "gravelMinRadius": 0.45,
     "gravelMaxRadius": 1.1,
     "spacing": 0.35
   },
   "starterFlora": [
     {
+      "species": "rainshield",
+      "count": 4
+    },
+    {
+      "species": "cragparasol",
+      "count": 2
+    },
+    {
       "species": "ringreed",
-      "count": 6
+      "count": 12
     },
     {
       "species": "glassrush",
-      "count": 6
+      "count": 12
     },
     {
       "species": "floodlace_moss",
-      "count": 7
+      "count": 14
     },
     {
       "species": "mooncoin",
-      "count": 4
+      "count": 8
     },
     {
       "species": "brooklace",
-      "count": 4
+      "count": 8
     },
     {
       "species": "fenbead",
-      "count": 3
+      "count": 6
     },
     {
       "species": "trifold",
-      "count": 4
+      "count": 8
     },
     {
       "species": "velvetweave_moss",
+      "count": 12
+    },
+    {
+      "species": "kinkcane",
       "count": 6
+    },
+    {
+      "species": "dewbonnet",
+      "count": 8
     }
   ],
   "starterFauna": [
     {
       "species": "stiltclaw",
-      "count": 4
+      "count": 3
     },
     {
       "species": "glintfin",
-      "count": 7
+      "count": 4
     },
     {
       "species": "emberglass_swimmer",
-      "count": 6
+      "count": 3
     },
     {
       "species": "siltshield",
-      "count": 6
+      "count": 3
     },
     {
       "species": "prismhopper",
-      "count": 6
+      "count": 3
     },
     {
       "species": "marbleback",
-      "count": 6
+      "count": 3
     }
-  ]
+  ],
+  "faunaBudget": 396
 }

@@ -50,9 +50,9 @@ public class SaveMigrationTests
     [Fact]
     public void LegacyLargeDiameterSaveStillLoadsButNewWorldsAreCapped()
     {
-        Assert.Equal(10, WorldDescriptor.MaxDiameter);
+        Assert.Equal(20, WorldDescriptor.MaxDiameter);
         var d = TestUtil.FlatDescriptor(78);
-        d.Diameter = 16;
+        d.Diameter = 24;
         Assert.NotEmpty(d.Validate());
 
         WorldDescriptor.AllowLegacyDiameter = true;
@@ -61,7 +61,7 @@ public class SaveMigrationTests
         finally { WorldDescriptor.AllowLegacyDiameter = false; }
 
         var restored = WorldSerializer.Deserialize(big.Content, WorldSerializer.Serialize(big));
-        Assert.Equal(16, restored.Descriptor.Diameter);
+        Assert.Equal(24, restored.Descriptor.Diameter);
         Assert.False(WorldDescriptor.AllowLegacyDiameter);
     }
 }
