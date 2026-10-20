@@ -220,215 +220,215 @@
   "starterFlora": [
     {
       "species": "splitcrown",
-      "count": 4
+      "count": 3
     },
     {
       "species": "vaultfern",
-      "count": 4
+      "count": 3
     },
     {
       "species": "rainshield",
-      "count": 4
+      "count": 3
     },
     {
       "species": "lacemantle",
-      "count": 4
+      "count": 3
     },
     {
       "species": "cragparasol",
-      "count": 4
+      "count": 3
     },
     {
       "species": "velvetweave_moss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "pearl_cushion_moss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "floodlace_moss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "embercrust_lichen",
-      "count": 10
+      "count": 7
     },
     {
       "species": "ruffle_lichen",
-      "count": 10
+      "count": 7
     },
     {
       "species": "coinrunner",
-      "count": 6
+      "count": 4
     },
     {
       "species": "glassrush",
-      "count": 7
+      "count": 5
     },
     {
       "species": "prismstar",
-      "count": 6
+      "count": 4
     },
     {
       "species": "veilfern",
-      "count": 6
+      "count": 4
     },
     {
       "species": "clinglace",
-      "count": 4
+      "count": 3
     },
     {
       "species": "dewbonnet",
-      "count": 6
+      "count": 4
     },
     {
       "species": "emberfan_fungus",
-      "count": 4
+      "count": 3
     },
     {
       "species": "ambervein",
-      "count": 4
+      "count": 3
     },
     {
       "species": "sunstone_rosette",
-      "count": 7
+      "count": 5
     },
     {
       "species": "frosttussock",
-      "count": 7
+      "count": 5
     },
     {
       "species": "antlerlace_lichen",
-      "count": 10
+      "count": 7
     },
     {
       "species": "brooklace",
-      "count": 6
+      "count": 4
     },
     {
       "species": "fenbead",
-      "count": 6
+      "count": 4
     },
     {
       "species": "bogglass_moss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "mooncoin",
-      "count": 6
+      "count": 4
     },
     {
       "species": "trifold",
-      "count": 6
+      "count": 4
     },
     {
       "species": "glassfinger",
-      "count": 6
+      "count": 4
     },
     {
       "species": "mirrorleaf",
-      "count": 6
+      "count": 4
     },
     {
       "species": "embercrown",
-      "count": 4
+      "count": 3
     },
     {
       "species": "lanternbrush",
-      "count": 3
+      "count": 2
     },
     {
       "species": "shadebell",
-      "count": 3
+      "count": 2
     },
     {
       "species": "spiralvine",
-      "count": 4
+      "count": 3
     },
     {
       "species": "fenhook",
-      "count": 4
+      "count": 3
     },
     {
       "species": "ringreed",
-      "count": 6
+      "count": 4
     },
     {
       "species": "kinkcane",
-      "count": 4
+      "count": 3
     },
     {
       "species": "veilblade",
-      "count": 4
+      "count": 3
     },
     {
       "species": "hookthicket",
-      "count": 4
+      "count": 3
     },
     {
       "species": "blue_sundew",
-      "count": 4
+      "count": 3
     },
     {
       "species": "pitcher_plant",
-      "count": 4
+      "count": 3
     },
     {
       "species": "snaptrap",
-      "count": 4
+      "count": 3
     },
     {
       "species": "rain_jelly",
-      "count": 4
+      "count": 3
     },
     {
       "species": "carrion_bell",
-      "count": 4
+      "count": 3
     },
     {
       "species": "glass_antlers",
-      "count": 4
+      "count": 3
     },
     {
       "species": "fencomb",
-      "count": 3
+      "count": 2
     },
     {
       "species": "ghostbonnet",
-      "count": 3
+      "count": 2
     },
     {
       "species": "glowbriar",
-      "count": 3
+      "count": 2
     },
     {
       "species": "lanternsedge",
-      "count": 3
+      "count": 2
     },
     {
       "species": "moonfern",
-      "count": 3
+      "count": 2
     },
     {
       "species": "plumegrass",
-      "count": 3
+      "count": 2
     },
     {
       "species": "siltstars",
-      "count": 3
+      "count": 2
     },
     {
       "species": "starmoss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "streamribbon",
-      "count": 3
+      "count": 2
     },
     {
       "species": "tidebell",
-      "count": 3
+      "count": 2
     }
   ],
   "starterFauna": [

@@ -124,67 +124,67 @@
   "starterFlora": [
     {
       "species": "rainshield",
-      "count": 4
+      "count": 3
     },
     {
       "species": "vaultfern",
-      "count": 2
+      "count": 1
     },
     {
       "species": "kinkcane",
-      "count": 4
+      "count": 3
     },
     {
       "species": "siltstars",
-      "count": 16
+      "count": 11
     },
     {
       "species": "lanternsedge",
-      "count": 16
+      "count": 11
     },
     {
       "species": "ringreed",
-      "count": 18
+      "count": 13
     },
     {
       "species": "floodlace_moss",
-      "count": 14
+      "count": 10
     },
     {
       "species": "rain_jelly",
-      "count": 8
+      "count": 6
     },
     {
       "species": "glassrush",
-      "count": 16
+      "count": 11
     },
     {
       "species": "brooklace",
-      "count": 12
+      "count": 8
     },
     {
       "species": "tidebell",
-      "count": 12
+      "count": 8
     },
     {
       "species": "streamribbon",
-      "count": 10
+      "count": 7
     },
     {
       "species": "bogglass_moss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "shadebell",
-      "count": 8
+      "count": 6
     },
     {
       "species": "moonfern",
-      "count": 10
+      "count": 7
     },
     {
       "species": "dewbonnet",
-      "count": 8
+      "count": 6
     }
   ],
   "starterFauna": [

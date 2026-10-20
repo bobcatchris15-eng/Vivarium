@@ -240,63 +240,63 @@
   "starterFlora": [
     {
       "species": "splitcrown",
-      "count": 2
+      "count": 1
     },
     {
       "species": "vaultfern",
-      "count": 3
+      "count": 2
     },
     {
       "species": "rainshield",
-      "count": 6
+      "count": 4
     },
     {
       "species": "lacemantle",
-      "count": 3
+      "count": 2
     },
     {
       "species": "brooklace",
-      "count": 8
+      "count": 6
     },
     {
       "species": "velvetweave_moss",
-      "count": 12
+      "count": 8
     },
     {
       "species": "pearl_cushion_moss",
-      "count": 10
+      "count": 7
     },
     {
       "species": "veilfern",
-      "count": 8
+      "count": 6
     },
     {
       "species": "dewbonnet",
-      "count": 8
+      "count": 6
     },
     {
       "species": "fenbead",
-      "count": 6
+      "count": 4
     },
     {
       "species": "frosttussock",
-      "count": 6
+      "count": 4
     },
     {
       "species": "clinglace",
-      "count": 6
+      "count": 4
     },
     {
       "species": "shadebell",
-      "count": 8
+      "count": 6
     },
     {
       "species": "ringreed",
-      "count": 12
+      "count": 8
     },
     {
       "species": "glass_antlers",
-      "count": 8
+      "count": 6
     }
   ],
   "starterFauna": [

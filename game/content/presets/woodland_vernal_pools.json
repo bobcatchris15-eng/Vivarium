@@ -277,87 +277,87 @@
   "starterFlora": [
     {
       "species": "splitcrown",
-      "count": 4
+      "count": 3
     },
     {
       "species": "vaultfern",
-      "count": 4
+      "count": 3
     },
     {
       "species": "rainshield",
-      "count": 5
+      "count": 4
     },
     {
       "species": "lacemantle",
-      "count": 4
+      "count": 3
     },
     {
       "species": "glowbriar",
-      "count": 4
+      "count": 3
     },
     {
       "species": "hookthicket",
-      "count": 4
+      "count": 3
     },
     {
       "species": "shadebell",
-      "count": 4
+      "count": 3
     },
     {
       "species": "veilblade",
-      "count": 6
+      "count": 4
     },
     {
       "species": "coinrunner",
-      "count": 12
+      "count": 8
     },
     {
       "species": "trifold",
-      "count": 12
+      "count": 8
     },
     {
       "species": "mirrorleaf",
-      "count": 10
+      "count": 7
     },
     {
       "species": "ambervein",
-      "count": 8
-    },
-    {
-      "species": "emberfan_fungus",
-      "count": 8
-    },
-    {
-      "species": "dewbonnet",
-      "count": 10
-    },
-    {
-      "species": "starmoss",
-      "count": 10
-    },
-    {
-      "species": "veilfern",
-      "count": 8
-    },
-    {
-      "species": "mooncoin",
-      "count": 8
-    },
-    {
-      "species": "glassfinger",
-      "count": 8
-    },
-    {
-      "species": "lanternbrush",
       "count": 6
     },
     {
+      "species": "emberfan_fungus",
+      "count": 6
+    },
+    {
+      "species": "dewbonnet",
+      "count": 7
+    },
+    {
+      "species": "starmoss",
+      "count": 7
+    },
+    {
+      "species": "veilfern",
+      "count": 6
+    },
+    {
+      "species": "mooncoin",
+      "count": 6
+    },
+    {
+      "species": "glassfinger",
+      "count": 6
+    },
+    {
+      "species": "lanternbrush",
+      "count": 4
+    },
+    {
       "species": "rain_jelly",
-      "count": 10
+      "count": 7
     },
     {
       "species": "floodlace_moss",
-      "count": 16
+      "count": 11
     }
   ],
   "starterFauna": [

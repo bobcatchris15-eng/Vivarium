@@ -273,63 +273,63 @@
   "starterFlora": [
     {
       "species": "splitcrown",
-      "count": 3
+      "count": 2
     },
     {
       "species": "vaultfern",
-      "count": 5
-    },
-    {
-      "species": "rainshield",
-      "count": 5
-    },
-    {
-      "species": "kinkcane",
       "count": 4
     },
     {
+      "species": "rainshield",
+      "count": 4
+    },
+    {
+      "species": "kinkcane",
+      "count": 3
+    },
+    {
       "species": "brooklace",
-      "count": 16
+      "count": 11
     },
     {
       "species": "streamribbon",
-      "count": 14
+      "count": 10
     },
     {
       "species": "velvetweave_moss",
-      "count": 14
+      "count": 10
     },
     {
       "species": "floodlace_moss",
-      "count": 12
-    },
-    {
-      "species": "tidebell",
-      "count": 10
-    },
-    {
-      "species": "glassrush",
-      "count": 12
-    },
-    {
-      "species": "pearl_cushion_moss",
-      "count": 10
-    },
-    {
-      "species": "starmoss",
-      "count": 10
-    },
-    {
-      "species": "fencomb",
       "count": 8
     },
     {
+      "species": "tidebell",
+      "count": 7
+    },
+    {
+      "species": "glassrush",
+      "count": 8
+    },
+    {
+      "species": "pearl_cushion_moss",
+      "count": 7
+    },
+    {
+      "species": "starmoss",
+      "count": 7
+    },
+    {
+      "species": "fencomb",
+      "count": 6
+    },
+    {
       "species": "veilfern",
-      "count": 12
+      "count": 8
     },
     {
       "species": "dewbonnet",
-      "count": 10
+      "count": 7
     }
   ],
   "starterFauna": [

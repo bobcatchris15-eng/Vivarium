@@ -256,87 +256,87 @@
   "starterFlora": [
     {
       "species": "splitcrown",
-      "count": 5
+      "count": 4
     },
     {
       "species": "vaultfern",
-      "count": 7
+      "count": 5
     },
     {
       "species": "rainshield",
-      "count": 4
+      "count": 3
     },
     {
       "species": "lacemantle",
-      "count": 5
+      "count": 4
     },
     {
       "species": "shadebell",
-      "count": 4
+      "count": 3
     },
     {
       "species": "lanternbrush",
-      "count": 4
+      "count": 3
     },
     {
       "species": "glowbriar",
-      "count": 4
+      "count": 3
     },
     {
       "species": "spiralvine",
-      "count": 4
+      "count": 3
     },
     {
       "species": "clinglace",
-      "count": 4
+      "count": 3
     },
     {
       "species": "veilfern",
-      "count": 8
+      "count": 6
     },
     {
       "species": "moonfern",
-      "count": 8
+      "count": 6
     },
     {
       "species": "dewbonnet",
-      "count": 6
+      "count": 4
     },
     {
       "species": "ghostbonnet",
-      "count": 6
+      "count": 4
     },
     {
       "species": "velvetweave_moss",
-      "count": 14
-    },
-    {
-      "species": "pearl_cushion_moss",
-      "count": 12
-    },
-    {
-      "species": "floodlace_moss",
       "count": 10
     },
     {
+      "species": "pearl_cushion_moss",
+      "count": 8
+    },
+    {
+      "species": "floodlace_moss",
+      "count": 7
+    },
+    {
       "species": "brooklace",
-      "count": 6
+      "count": 4
     },
     {
       "species": "trifold",
-      "count": 8
+      "count": 6
     },
     {
       "species": "coinrunner",
-      "count": 8
+      "count": 6
     },
     {
       "species": "hookthicket",
-      "count": 5
+      "count": 4
     },
     {
       "species": "glass_antlers",
-      "count": 8
+      "count": 6
     }
   ],
   "starterFauna": [

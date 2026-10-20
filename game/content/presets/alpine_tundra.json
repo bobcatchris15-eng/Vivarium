@@ -135,51 +135,51 @@
   "starterFlora": [
     {
       "species": "cragparasol",
-      "count": 3
+      "count": 2
     },
     {
       "species": "frosttussock",
-      "count": 19
+      "count": 13
     },
     {
       "species": "antlerlace_lichen",
-      "count": 16
+      "count": 11
     },
     {
       "species": "starmoss",
-      "count": 14
-    },
-    {
-      "species": "sunstone_rosette",
-      "count": 14
-    },
-    {
-      "species": "plumegrass",
-      "count": 12
-    },
-    {
-      "species": "embercrust_lichen",
-      "count": 14
-    },
-    {
-      "species": "ruffle_lichen",
       "count": 10
     },
     {
-      "species": "glass_antlers",
-      "count": 6
+      "species": "sunstone_rosette",
+      "count": 10
     },
     {
-      "species": "ghostbonnet",
+      "species": "plumegrass",
+      "count": 8
+    },
+    {
+      "species": "embercrust_lichen",
+      "count": 10
+    },
+    {
+      "species": "ruffle_lichen",
+      "count": 7
+    },
+    {
+      "species": "glass_antlers",
       "count": 4
     },
     {
+      "species": "ghostbonnet",
+      "count": 3
+    },
+    {
       "species": "glowbriar",
-      "count": 6
+      "count": 4
     },
     {
       "species": "dewbonnet",
-      "count": 8
+      "count": 6
     }
   ],
   "starterFauna": [
