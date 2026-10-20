@@ -154,27 +154,136 @@ public static partial class OrganismMeshes
     private static void MidRainshield(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
         int detail = m.FloraDetailLevel ?? 0;
-        int leaves = juvenile ? 7 : (detail == 2 ? 11 : 17 + rng.NextInt(5));
+        int leaves = juvenile
+            ? 14 + rng.NextInt(5)
+            : detail switch
+            {
+                2 => 14 + rng.NextInt(5),
+                1 => 24 + rng.NextInt(7),
+                _ => 36 + rng.NextInt(11)
+            };
+
         var stalk = Primitives.Mix(c1, new[] { .29, .32, .23 }, .60);
         var under = Primitives.Mix(c2, new[] { .48, .63, .47 }, .45);
+        var petioleBaseCol = Primitives.Mix(stalk, new[] { .33, .30, .22 }, .30);
+        var petioleTipCol = Primitives.Mix(stalk, c1, .35);
+
+        // Basal rootstock / crown collar
+        var crownCol = Primitives.Mix(MidBark, stalk, .40);
+        var rootstockPath = new[]
+        {
+            new Vec3(0, 0, 0),
+            new Vec3(rng.Range(-.006, .006), juvenile ? .02 : .03, rng.Range(-.006, .006)),
+            new Vec3(0, juvenile ? .04 : .055, 0)
+        };
+        var rootstockRadii = new[]
+        {
+            juvenile ? .065 : .095,
+            juvenile ? .075 : .105,
+            juvenile ? .045 : .065
+        };
+        Primitives.Tube(m, rootstockPath, rootstockRadii, detail == 2 ? 4 : 6,
+            (i, v) => (crownCol, 1.0, i / 2.0, v, 0, 0));
+
+        double baseAzimuth = rng.Range(0, Math.PI * 2);
+        int stations = detail == 2 ? 5 : 6;
+        int tubeSides = detail == 2 ? 4 : (detail == 1 ? 5 : 6);
+
         for (int k = 0; k < leaves; k++)
         {
-            double a = k * 2.399963 + rng.Range(-.29, .29);
-            double r = Math.Sqrt((k + .5) / (double)leaves) * rng.Range(.29, .53);
+            double u = k / (double)Math.Max(1, leaves - 1);
+            double a = baseAzimuth + k * 2.399963 + rng.Range(-.12, .12);
             var outward = MidRadial(a);
-            var foot = outward * (r * .65);
-            double h = juvenile ? rng.Range(.35, .63) : rng.Range(.67, .99);
-            var mid = foot + outward * (r * .40) + Vec3.Up * (h * .60);
-            var crown = foot + outward * (r + .11) + Vec3.Up * h;
-            MidStem(m, stalk, new[] { foot, mid, crown }, juvenile ? .008 : .013);
-            var dir = (outward * .96 + Vec3.Up * rng.Range(-.10, .09)).Normalized();
-            double len = (juvenile ? .23 : .31) * rng.Range(.81, 1.16);
-            Broadleaf.BuildLeaf(m, crown, dir, len, len * rng.Range(.97, 1.20),
-                BroadleafOutline.OrbicularCordate, Rng.Mix(seed, (ulong)(k * 439 + 13)),
-                c1, c2, age: rng.Range(.71, .98), camber: .07, midribFold: .045,
-                wavyMargin: .025, wavyFrequency: 3.2, tipCurl: .043,
-                petioleLength: .07, petioleRadius: .006, petioleKink: .05,
-                undersideColor: under, detailOverride: Math.Max(1, detail));
+
+            // Stems emerge from a compact central basal rootstock/crown (radius ~0.04 to 0.12)
+            double rBase = MathD.Lerp(0.04, 0.11, Math.Pow(u, 0.75)) + rng.Range(-.008, .008);
+            rBase = Math.Clamp(rBase, 0.04, 0.12);
+            double hBase = MathD.Lerp(juvenile ? 0.03 : 0.045, 0.015, u) + rng.Range(-.004, .004);
+            hBase = Math.Max(0.01, hBase);
+            var foot = outward * rBase + Vec3.Up * hBase;
+
+            // Tiered reach and summit height
+            double reachNorm = Math.Pow(u, 0.75);
+            double reach = MathD.Lerp(0.16, 0.52, reachNorm) * rng.Range(0.92, 1.08);
+            if (juvenile) reach *= 0.75;
+
+            double archPeak = Math.Sin(Math.PI * Math.Pow(u, 0.80));
+            double h = (juvenile
+                ? MathD.Lerp(0.42, 0.38, u) + 0.20 * archPeak
+                : MathD.Lerp(0.64, 0.56, u) + 0.26 * archPeak) + rng.Range(-.03, .03);
+
+            var crown = foot + outward * reach + Vec3.Up * Math.Max(0.10, h - hBase);
+            double hSpan = crown.Y - foot.Y;
+
+            // Cantilever arch control points: emerging steep, arching outward, gently flattening near summit
+            double k1r = MathD.Lerp(0.06, 0.15, u);
+            double k1y = MathD.Lerp(0.52, 0.48, u);
+            var p1 = foot + outward * (reach * k1r) + Vec3.Up * (hSpan * k1y);
+
+            double k2r = MathD.Lerp(0.30, 0.42, u);
+            double k2y = MathD.Lerp(0.25, -0.03, Math.Pow(u, 0.70));
+            var p2 = crown - outward * (reach * k2r) - Vec3.Up * (hSpan * k2y);
+
+            // 5-6 station cantilevered arch path
+            var path = new Vec3[stations];
+            double swayAmp = rng.Range(-.015, .015) * (1.0 - 0.4 * u);
+            var ortho = MidRadial(a + Math.PI * 0.5);
+
+            for (int s = 0; s < stations; s++)
+            {
+                double t = s / (double)(stations - 1);
+                double omt = 1.0 - t;
+                var pt = foot * (omt * omt * omt)
+                       + p1 * (3.0 * omt * omt * t)
+                       + p2 * (3.0 * omt * t * t)
+                       + crown * (t * t * t);
+                pt += ortho * (swayAmp * Math.Sin(Math.PI * t));
+                path[s] = pt;
+            }
+
+            // Caliper: ~0.018-0.024 base tapering to ~0.010-0.013 at leaf junction
+            double baseCal = juvenile ? rng.Range(0.013, 0.017) : rng.Range(0.018, 0.024);
+            double junctionCal = juvenile ? rng.Range(0.007, 0.010) : rng.Range(0.010, 0.013);
+            double caliperScale = MathD.Lerp(0.90, 1.08, u);
+            double rBaseCal = baseCal * caliperScale;
+            double rTipCal = junctionCal * caliperScale;
+
+            var radii = new double[stations];
+            for (int s = 0; s < stations; s++)
+            {
+                double st = s / (double)(stations - 1);
+                radii[s] = MathD.Lerp(rBaseCal, rTipCal, Math.Pow(st, 0.80));
+            }
+
+            Primitives.Tube(m, path, radii, tubeSides,
+                (i, v) => (Primitives.Mix(petioleBaseCol, petioleTipCol, (double)i / (stations - 1)), 1.0, (double)i / (stations - 1), v, 0, 0));
+
+            // Petiole connects directly to leaf blade without double-neck kink
+            var dDir = path[^1] - path[^2];
+            var petioleDir = (dDir.LengthSq > 1e-7 ? dDir : outward).Normalized();
+
+            // Tiered leaf sizing
+            double sizeFactor = juvenile ? 0.72 : 1.0;
+            double bladeLen = MathD.Lerp(0.20, 0.38, Math.Sin(Math.PI * Math.Pow(u, 0.65))) * sizeFactor * rng.Range(0.92, 1.08);
+            if (u >= 0.25 && u <= 0.75)
+                bladeLen = Math.Max(bladeLen, (juvenile ? 0.26 : 0.36) * rng.Range(0.95, 1.10));
+
+            double bladeWid = bladeLen * MathD.Lerp(0.95, 1.22, u) * rng.Range(0.96, 1.05);
+
+            double age = MathD.Lerp(0.25, 0.95, Math.Pow(u, 0.75));
+            double camber = MathD.Lerp(0.08, 0.05, u);
+            double midribFold = MathD.Lerp(0.06, 0.035, u);
+            double wavyMargin = MathD.Lerp(0.02, 0.035, u);
+            double tipCurl = MathD.Lerp(0.02, 0.05, u);
+
+            ulong leafSeed = Rng.Mix(seed, (ulong)(k * 439 + 13));
+
+            Broadleaf.BuildLeaf(m, crown, petioleDir, bladeLen, bladeWid,
+                BroadleafOutline.OrbicularCordate, leafSeed, c1, c2,
+                age: age, camber: camber, midribFold: midribFold,
+                wavyMargin: wavyMargin, wavyFrequency: 3.2, tipCurl: tipCurl,
+                petioleLength: 0, petioleRadius: rTipCal, petioleKink: 0,
+                undersideColor: under, detailOverride: detail);
         }
     }
 
