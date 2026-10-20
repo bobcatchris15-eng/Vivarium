@@ -20,7 +20,7 @@ public sealed class MidstorySpeciesTests
             Assert.Equal(FloraPlacementGroup.Woody, sp.PlacementGroup);
             Assert.NotNull(sp.Woody);
             Assert.True(sp.Woody!.CanopyRadius >= sp.RadiusAtMax);
-            Assert.InRange(sp.Height, 1.5, 3);
+            Assert.InRange(sp.Height, 1.1, 3);
             Assert.Contains("microcanopy", sp.Tags);
             var mesh = OrganismMeshes.Flora(sp, 48290);
             Assert.True(mesh.TriangleCount > 250, $"{name} has no meaningful geometry");

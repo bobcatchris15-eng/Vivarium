@@ -804,7 +804,8 @@ public static partial class OrganismMeshes
     }
 
     // Windswept rocky-hillside juniper habit: shorter, thinner gnarled zig-zag stems
-    // and dense untidy outsprays of small, narrow lanceolate leaves along each branch.
+    // forming a low, wide, dense under-under-canopy with extensive untidy outsprays
+    // of small, narrow lanceolate leaves along all limbs and twigs.
     private static void MidCragparasol(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
         int detail = m.FloraDetailLevel ?? 0;
@@ -814,12 +815,12 @@ public static partial class OrganismMeshes
 
         // 1. Gnarled, crooked lower trunk (leaning, twisted with an angular knee/elbow)
         var foot = Vec3.Zero;
-        double kneeHeight = juvenile ? rng.Range(0.10, 0.14) : rng.Range(0.13, 0.18);
+        double kneeHeight = juvenile ? rng.Range(0.08, 0.12) : rng.Range(0.10, 0.15);
         var knee = lean * rng.Range(0.06, 0.11) + orthoTrunk * rng.Range(-0.03, 0.03) + Vec3.Up * kneeHeight;
 
-        double forkHeight = juvenile ? rng.Range(0.19, 0.25) : rng.Range(0.25, 0.33);
+        double forkHeight = juvenile ? rng.Range(0.16, 0.22) : rng.Range(0.20, 0.28);
         double forkLean = rng.Range(0.10, 0.18);
-        var fork = lean * forkLean + orthoTrunk * rng.Range(-0.05, 0.05) + Vec3.Up * forkHeight;
+        var fork = lean * forkLean + orthoTrunk * rng.Range(-0.04, 0.04) + Vec3.Up * forkHeight;
 
         int trunkStations = detail == 2 ? 4 : 5;
         var trunkPoints = new Vec3[trunkStations];
@@ -838,17 +839,17 @@ public static partial class OrganismMeshes
             }
         }
 
-        double trunkBaseR = juvenile ? rng.Range(0.019, 0.024) : rng.Range(0.028, 0.036);
+        double trunkBaseR = juvenile ? rng.Range(0.018, 0.022) : rng.Range(0.026, 0.033);
         double trunkForkR = trunkBaseR * 0.72;
         MidCragparasolGnarledStem(m, trunkPoints, trunkBaseR, trunkForkR, detail);
 
-        // 2. Gnarled scaffold limbs radiating outward with tortuous angular bends
-        int limbs = juvenile ? 3 : (detail == 2 ? 3 : 3 + rng.NextInt(2));
+        // 2. Gnarled scaffold limbs radiating outward to form a wide, low parasol framework
+        int limbs = juvenile ? 3 : (detail == 2 ? 3 : 4 + rng.NextInt(2));
         var limbDirections = new double[limbs];
-        double baseLimbAz = az + rng.Range(0.3, 0.7);
+        double baseLimbAz = az + rng.Range(0.2, 0.6);
         for (int k = 0; k < limbs; k++)
         {
-            limbDirections[k] = baseLimbAz + 2 * Math.PI * k / limbs + rng.Range(-0.25, 0.25);
+            limbDirections[k] = baseLimbAz + 2 * Math.PI * k / limbs + rng.Range(-0.20, 0.20);
         }
 
         var underColor = Primitives.Mix(c2, new[] { 0.44, 0.50, 0.34 }, 0.45);
@@ -859,26 +860,26 @@ public static partial class OrganismMeshes
             var outward = MidRadial(a);
             var ortho = MidRadial(a + Math.PI * 0.5);
 
-            // Limb reaches outward and curves up to crown summit
-            double reach = juvenile ? rng.Range(0.50, 0.65) : rng.Range(0.65, 0.82);
-            double summitY = (juvenile ? rng.Range(0.68, 0.72) : rng.Range(0.71, 0.75));
+            // Broad lateral reach to form a wide under-canopy shelf
+            double reach = juvenile ? rng.Range(0.55, 0.70) : rng.Range(0.72, 0.90);
+            double summitY = juvenile ? rng.Range(0.68, 0.71) : rng.Range(0.71, 0.74);
 
             int limbStations = detail == 2 ? 4 : 5;
             var limbPath = new Vec3[limbStations];
 
-            // Elbow 1: pushes out and tilts
+            // Elbow 1: pushes out horizontally
             double j1Reach = reach * rng.Range(0.24, 0.32);
-            double j1Y = MathD.Lerp(forkHeight, summitY, 0.28) + rng.Range(-0.02, 0.03);
+            double j1Y = MathD.Lerp(forkHeight, summitY, 0.32) + rng.Range(-0.02, 0.02);
             var p1 = fork + outward * j1Reach + ortho * rng.Range(-0.06, 0.06) + Vec3.Up * (j1Y - forkHeight);
 
-            // Knee 2: sharp zigzag crook, dipping slightly or jutting sideways
-            double j2Reach = reach * rng.Range(0.52, 0.62);
-            double j2Y = MathD.Lerp(forkHeight, summitY, 0.55) + rng.Range(-0.04, 0.02);
-            var p2 = fork + outward * j2Reach + ortho * rng.Range(-0.09, 0.09) + Vec3.Up * (j2Y - forkHeight);
+            // Knee 2: sharp zigzag crook, spreading wide
+            double j2Reach = reach * rng.Range(0.55, 0.65);
+            double j2Y = MathD.Lerp(forkHeight, summitY, 0.62) + rng.Range(-0.03, 0.02);
+            var p2 = fork + outward * j2Reach + ortho * rng.Range(-0.08, 0.08) + Vec3.Up * (j2Y - forkHeight);
 
-            // Elbow 3: rising toward crown
-            double j3Reach = reach * rng.Range(0.78, 0.88);
-            double j3Y = MathD.Lerp(forkHeight, summitY, 0.85) + rng.Range(-0.02, 0.03);
+            // Elbow 3: flattening into parasol table
+            double j3Reach = reach * rng.Range(0.80, 0.88);
+            double j3Y = MathD.Lerp(forkHeight, summitY, 0.88) + rng.Range(-0.02, 0.02);
             var p3 = fork + outward * j3Reach + ortho * rng.Range(-0.05, 0.05) + Vec3.Up * (j3Y - forkHeight);
 
             // Tip
@@ -903,24 +904,29 @@ public static partial class OrganismMeshes
             double limbTipR = Math.Max(0.0035, limbBaseR * 0.40);
             MidCragparasolGnarledStem(m, limbPath, limbBaseR, limbTipR, detail);
 
-            // 3. Secondary gnarled lateral branches emerging from the main limb
-            int secBranches = juvenile ? 1 : (detail == 2 ? 1 : 2 + rng.NextInt(2));
-            var secEndpoints = new List<(Vec3 Start, Vec3 End, Vec3 Dir)>();
+            // 3. Multiple secondary and tertiary gnarled branches filling the lateral space
+            int secBranches = juvenile ? 2 : (detail == 2 ? 1 : (detail == 1 ? 2 : 3 + (k % 2)));
+            var secEndpoints = new List<(Vec3 Start, Vec3 End, Vec3 Dir, double Length)>();
 
             for (int b = 0; b < secBranches; b++)
             {
-                double branchFrac = b == 0 ? rng.Range(0.38, 0.52) : rng.Range(0.65, 0.80);
+                double branchFrac = b switch
+                {
+                    0 => rng.Range(0.30, 0.45),
+                    1 => rng.Range(0.55, 0.70),
+                    _ => rng.Range(0.75, 0.88)
+                };
                 int segIdx = Math.Min(limbStations - 2, (int)(branchFrac * (limbStations - 1)));
                 double segT = (branchFrac * (limbStations - 1)) - segIdx;
                 var branchRoot = limbPath[segIdx] * (1.0 - segT) + limbPath[segIdx + 1] * segT;
 
                 double sideSign = (b % 2 == 0) ? 1.0 : -1.0;
-                double secAz = a + sideSign * rng.Range(0.65, 1.25);
+                double secAz = a + sideSign * rng.Range(0.55, 1.15);
                 var secOut = MidRadial(secAz);
-                double secReach = rng.Range(0.18, 0.32) * (juvenile ? 0.75 : 1.0);
-                double secRise = rng.Range(0.04, 0.12);
+                double secReach = rng.Range(0.20, 0.36) * (juvenile ? 0.75 : 1.0);
+                double secRise = rng.Range(0.03, 0.09);
 
-                var secKnee = branchRoot + secOut * (secReach * 0.52) + Vec3.Up * (secRise * 0.4) + ortho * (sideSign * 0.03);
+                var secKnee = branchRoot + secOut * (secReach * 0.52) + Vec3.Up * (secRise * 0.45) + ortho * (sideSign * 0.03);
                 var secTip = branchRoot + secOut * secReach + Vec3.Up * secRise;
 
                 var secPath = new[] { branchRoot, secKnee, secTip };
@@ -928,50 +934,50 @@ public static partial class OrganismMeshes
                 double secTipR = Math.Max(0.0025, secBaseR * 0.45);
                 MidCragparasolGnarledStem(m, secPath, secBaseR, secTipR, detail);
 
-                secEndpoints.Add((branchRoot, secTip, (secTip - branchRoot).Normalized()));
+                secEndpoints.Add((branchRoot, secTip, (secTip - branchRoot).Normalized(), (secTip - branchRoot).Length));
             }
 
-            // 4. Dense untidy outsprays of small, narrow leaves along the limb and its secondary branches
-            int sprayStations = juvenile ? 2 : (detail == 2 ? 2 : (detail == 1 ? 3 : 5));
+            // 4. Dense untidy outsprays of small, narrow leaves along the main limb
+            int sprayStations = juvenile ? 3 : (detail == 2 ? 3 : (detail == 1 ? 5 : 7));
             for (int s = 0; s < sprayStations; s++)
             {
-                double stT = MathD.Lerp(0.30, 0.88, (s + 0.5) / sprayStations);
+                double stT = MathD.Lerp(0.22, 0.90, (s + 0.5) / sprayStations);
                 int segIdx = Math.Min(limbStations - 2, (int)(stT * (limbStations - 1)));
                 double segT = (stT * (limbStations - 1)) - segIdx;
                 var attach = limbPath[segIdx] * (1.0 - segT) + limbPath[segIdx + 1] * segT;
                 var limbDir = (limbPath[segIdx + 1] - limbPath[segIdx]).Normalized();
 
-                int clusterLeaves = detail == 2 ? 2 : (juvenile ? 2 : 3 + (s % 2));
+                int clusterLeaves = detail == 2 ? 2 : (juvenile ? 3 : (detail == 1 ? 3 : 4 + (s % 2)));
                 for (int l = 0; l < clusterLeaves; l++)
                 {
-                    double lAz = a + rng.Range(-1.15, 1.15);
-                    double lPitch = rng.Range(-0.18, 0.38);
-                    var lDir = (MidRadial(lAz) * 0.65 + limbDir * 0.35 + Vec3.Up * lPitch).Normalized();
+                    double lAz = a + rng.Range(-1.25, 1.25);
+                    double lPitch = rng.Range(-0.15, 0.35);
+                    var lDir = (MidRadial(lAz) * 0.70 + limbDir * 0.30 + Vec3.Up * lPitch).Normalized();
 
-                    double bladeLen = (juvenile ? rng.Range(0.060, 0.082) : rng.Range(0.075, 0.115));
-                    double bladeWid = bladeLen * rng.Range(0.20, 0.24); // Small narrow leaf
+                    double bladeLen = juvenile ? rng.Range(0.060, 0.082) : rng.Range(0.075, 0.115);
+                    double bladeWid = bladeLen * rng.Range(0.20, 0.24);
                     ulong lSeed = Rng.Mix(seed, (ulong)(k * 10000 + s * 100 + l * 7 + 1));
 
                     Broadleaf.BuildLeaf(m, attach, lDir, bladeLen, bladeWid,
                         BroadleafOutline.Lanceolate, lSeed, c1, c2,
                         age: rng.Range(0.65, 0.95), camber: 0.07, midribFold: 0.09,
                         wavyMargin: 0.015, wavyFrequency: 3.2, tipCurl: 0.05,
-                        petioleLength: 0.012, petioleRadius: 0.0018, petioleKink: 0.12,
+                        petioleLength: 0.011, petioleRadius: 0.0018, petioleKink: 0.12,
                         undersideColor: underColor, detailOverride: Math.Max(1, detail));
                 }
             }
 
             // Terminal outspray of leaves at the end of the main limb
-            int terminalLeaves = detail == 2 ? 3 : (juvenile ? 4 : (detail == 1 ? 5 : 8 + rng.NextInt(3)));
+            int terminalLeaves = detail == 2 ? 4 : (juvenile ? 5 : (detail == 1 ? 7 : 10 + rng.NextInt(3)));
             var tipAttach = limbPath[^1];
             var tipDir = (limbPath[^1] - limbPath[^2]).Normalized();
             for (int l = 0; l < terminalLeaves; l++)
             {
-                double lAz = a + 2 * Math.PI * l / terminalLeaves + rng.Range(-0.28, 0.28);
-                double lPitch = rng.Range(-0.06, 0.32);
+                double lAz = a + 2 * Math.PI * l / terminalLeaves + rng.Range(-0.25, 0.25);
+                double lPitch = rng.Range(-0.05, 0.30);
                 var lDir = (MidRadial(lAz) * 0.55 + tipDir * 0.45 + Vec3.Up * lPitch).Normalized();
 
-                double bladeLen = (juvenile ? rng.Range(0.065, 0.088) : rng.Range(0.085, 0.125));
+                double bladeLen = juvenile ? rng.Range(0.065, 0.088) : rng.Range(0.085, 0.125);
                 double bladeWid = bladeLen * rng.Range(0.20, 0.24);
                 ulong lSeed = Rng.Mix(seed, (ulong)(k * 20000 + l * 19 + 55));
 
@@ -979,42 +985,46 @@ public static partial class OrganismMeshes
                     BroadleafOutline.Lanceolate, lSeed, c1, c2,
                     age: rng.Range(0.70, 0.98), camber: 0.07, midribFold: 0.09,
                     wavyMargin: 0.015, wavyFrequency: 3.2, tipCurl: 0.05,
-                    petioleLength: 0.014, petioleRadius: 0.0018, petioleKink: 0.12,
+                    petioleLength: 0.013, petioleRadius: 0.0018, petioleKink: 0.12,
                     undersideColor: underColor, detailOverride: Math.Max(1, detail));
             }
 
-            // Outsprays on secondary branches
+            // Outsprays on secondary branches: along their length and at their tips
             for (int b = 0; b < secEndpoints.Count; b++)
             {
-                var (secStart, secEnd, sDir) = secEndpoints[b];
+                var (secStart, secEnd, sDir, sLen) = secEndpoints[b];
 
-                if (detail < 2)
+                // Multiple spray stations along secondary branch
+                int secSprays = detail == 2 ? 1 : (juvenile ? 2 : (detail == 1 ? 2 : 3));
+                for (int sb = 0; sb < secSprays; sb++)
                 {
-                    var midAttach = (secStart + secEnd) * 0.5;
-                    int midCount = juvenile ? 1 : 2;
-                    for (int l = 0; l < midCount; l++)
+                    double st = (sb + 1.0) / (secSprays + 1.0);
+                    var attach = secStart * (1.0 - st) + secEnd * st;
+                    int count = detail == 2 ? 1 : (juvenile ? 2 : 2 + (sb % 2));
+                    for (int l = 0; l < count; l++)
                     {
-                        double lAz = a + (l % 2 == 0 ? 0.7 : -0.7) + rng.Range(-0.35, 0.35);
-                        var lDir = (MidRadial(lAz) * 0.60 + sDir * 0.40 + Vec3.Up * rng.Range(-0.15, 0.25)).Normalized();
-                        double bladeLen = (juvenile ? rng.Range(0.055, 0.075) : rng.Range(0.070, 0.100));
+                        double lAz = a + (l % 2 == 0 ? 0.75 : -0.75) + rng.Range(-0.35, 0.35);
+                        var lDir = (MidRadial(lAz) * 0.65 + sDir * 0.35 + Vec3.Up * rng.Range(-0.12, 0.28)).Normalized();
+                        double bladeLen = juvenile ? rng.Range(0.055, 0.075) : rng.Range(0.070, 0.100);
                         double bladeWid = bladeLen * rng.Range(0.20, 0.24);
-                        ulong lSeed = Rng.Mix(seed, (ulong)(k * 30000 + b * 200 + l * 13 + 3));
+                        ulong lSeed = Rng.Mix(seed, (ulong)(k * 30000 + b * 500 + sb * 20 + l * 7 + 3));
 
-                        Broadleaf.BuildLeaf(m, midAttach, lDir, bladeLen, bladeWid,
+                        Broadleaf.BuildLeaf(m, attach, lDir, bladeLen, bladeWid,
                             BroadleafOutline.Lanceolate, lSeed, c1, c2,
                             age: rng.Range(0.65, 0.95), camber: 0.07, midribFold: 0.09,
                             wavyMargin: 0.015, wavyFrequency: 3.2, tipCurl: 0.05,
-                            petioleLength: 0.012, petioleRadius: 0.0018, petioleKink: 0.12,
+                            petioleLength: 0.011, petioleRadius: 0.0018, petioleKink: 0.12,
                             undersideColor: underColor, detailOverride: Math.Max(1, detail));
                     }
                 }
 
-                int secTipLeaves = detail == 2 ? 2 : (juvenile ? 3 : (detail == 1 ? 3 : 5 + rng.NextInt(2)));
+                // Terminal spray at secondary branch tip
+                int secTipLeaves = detail == 2 ? 2 : (juvenile ? 3 : (detail == 1 ? 4 : 6 + rng.NextInt(3)));
                 for (int l = 0; l < secTipLeaves; l++)
                 {
-                    double lAz = a + 2 * Math.PI * l / secTipLeaves + rng.Range(-0.3, 0.3);
-                    var lDir = (MidRadial(lAz) * 0.55 + sDir * 0.45 + Vec3.Up * rng.Range(-0.08, 0.28)).Normalized();
-                    double bladeLen = (juvenile ? rng.Range(0.060, 0.080) : rng.Range(0.075, 0.110));
+                    double lAz = a + 2 * Math.PI * l / secTipLeaves + rng.Range(-0.25, 0.25);
+                    var lDir = (MidRadial(lAz) * 0.55 + sDir * 0.45 + Vec3.Up * rng.Range(-0.06, 0.28)).Normalized();
+                    double bladeLen = juvenile ? rng.Range(0.060, 0.080) : rng.Range(0.075, 0.110);
                     double bladeWid = bladeLen * rng.Range(0.20, 0.24);
                     ulong lSeed = Rng.Mix(seed, (ulong)(k * 40000 + b * 500 + l * 23 + 9));
 
@@ -1022,7 +1032,7 @@ public static partial class OrganismMeshes
                         BroadleafOutline.Lanceolate, lSeed, c1, c2,
                         age: rng.Range(0.70, 0.98), camber: 0.07, midribFold: 0.09,
                         wavyMargin: 0.015, wavyFrequency: 3.2, tipCurl: 0.05,
-                        petioleLength: 0.012, petioleRadius: 0.0018, petioleKink: 0.12,
+                        petioleLength: 0.011, petioleRadius: 0.0018, petioleKink: 0.12,
                         undersideColor: underColor, detailOverride: Math.Max(1, detail));
                 }
             }
