@@ -150,6 +150,99 @@ public static partial class OrganismMeshes
         }
     }
 
+    // Ribbed petiole with prominent longitudinal ridges and regular nodules.
+    private static void MidRainshieldStem(MeshData m, Vec3[] path, double rBase, double rTip,
+        double[] baseCol, double[] tipCol, int segments, int stations, int nodules = 4, int ridges = 5,
+        double ridgeAmp = 0.20, double noduleAmp = 0.30)
+    {
+        int start = m.VertexCount;
+        var tangents = new Vec3[stations];
+        for (int i = 0; i < stations; i++)
+        {
+            Vec3 d;
+            if (i == 0) d = path[1] - path[0];
+            else if (i == stations - 1) d = path[^1] - path[^2];
+            else d = path[i + 1] - path[i - 1];
+            tangents[i] = d.Normalized();
+        }
+
+        var hint = Vec3.Up;
+        var side = tangents[0].Cross(hint);
+        if (side.LengthSq < 1e-8) side = tangents[0].Cross(new Vec3(1, 0, 0));
+        side = side.Normalized();
+
+        for (int i = 0; i < stations; i++)
+        {
+            var dir = tangents[i];
+            if (i > 0)
+            {
+                side = side - dir * side.Dot(dir);
+                if (side.LengthSq < 1e-8)
+                {
+                    side = dir.Cross(hint);
+                    if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
+                }
+                side = side.Normalized();
+            }
+            var up2 = side.Cross(dir).Normalized();
+
+            double t = i / (double)Math.Max(1, stations - 1);
+            double baseR = MathD.Lerp(rBase, rTip, Math.Pow(t, 0.75));
+
+            // Regular nodules spaced along the petiole
+            double noduleMod = 0;
+            for (int n = 1; n <= nodules; n++)
+            {
+                double noduleCenter = 0.15 + n * (0.72 / (nodules + 1));
+                double dist = (t - noduleCenter) / 0.038;
+                noduleMod += noduleAmp * Math.Exp(-dist * dist * 0.5);
+            }
+            double stationR = baseR * (1.0 + noduleMod);
+
+            for (int s = 0; s <= segments; s++)
+            {
+                double th = 2 * Math.PI * s / segments;
+                // Longitudinal fluted ridges
+                double ridgeCos = Math.Cos(ridges * th);
+                double ridgeSin = Math.Sin(ridges * th);
+                double ridgeMod = 1.0 + ridgeAmp * ridgeCos;
+                double r = stationR * ridgeMod;
+
+                var radial = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
+                var ringTan = (-side * Math.Sin(th) + up2 * Math.Cos(th)).Normalized();
+                var pos = path[i] + radial * r;
+
+                // Surface normal accounting for ridge fluting and path direction
+                var dPos_dTh = ringTan * r + radial * (stationR * (-ridges * ridgeAmp * ridgeSin));
+                var normal = dPos_dTh.Cross(dir).Normalized();
+                if (normal.Dot(radial) < 0) normal = -normal;
+
+                var col = Primitives.Mix(baseCol, tipCol, t);
+                if (noduleMod > 0.04)
+                    col = Primitives.Mix(col, new[] { 0.24, 0.21, 0.15 }, Math.Min(0.48, noduleMod * 1.2));
+
+                if (ridgeCos < 0)
+                    col = Primitives.Mix(col, Primitives.Scale(col, 0.82), -ridgeCos * 0.38);
+                else
+                    col = Primitives.Mix(col, Primitives.Mix(col, new[] { 0.44, 0.49, 0.30 }, 0.28), ridgeCos * 0.28);
+
+                m.AddVertex(pos, normal, col, 1.0, t, (double)s / segments, 0, 0);
+            }
+        }
+
+        for (int i = 0; i < stations - 1; i++)
+        {
+            for (int s = 0; s < segments; s++)
+            {
+                int a = start + i * (segments + 1) + s;
+                int b = a + segments + 1;
+                m.AddTriangle(a, a + 1, b);
+                m.AddTriangle(a + 1, b + 1, b);
+            }
+        }
+        m.Structural.Add((start, m.VertexCount - start, segments, rBase));
+    }
+
     // Rhubarb/Darmera-like umbrella: individual petioles, overlapping nearly horizontal leaves.
     private static void MidRainshield(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
@@ -186,8 +279,10 @@ public static partial class OrganismMeshes
             (i, v) => (crownCol, 1.0, i / 2.0, v, 0, 0));
 
         double baseAzimuth = rng.Range(0, Math.PI * 2);
-        int stations = detail == 2 ? 5 : 6;
-        int tubeSides = detail == 2 ? 4 : (detail == 1 ? 5 : 6);
+        int pathStations = detail == 2 ? 7 : 11;
+        int stemSegments = detail == 2 ? 6 : 10;
+        int stemRidges = detail == 2 ? 3 : 5;
+        int stemNodules = detail == 2 ? 3 : 4;
 
         for (int k = 0; k < leaves; k++)
         {
@@ -224,14 +319,14 @@ public static partial class OrganismMeshes
             double k2y = MathD.Lerp(0.25, -0.03, Math.Pow(u, 0.70));
             var p2 = crown - outward * (reach * k2r) - Vec3.Up * (hSpan * k2y);
 
-            // 5-6 station cantilevered arch path
-            var path = new Vec3[stations];
+            // Multi-station cantilevered arch path
+            var path = new Vec3[pathStations];
             double swayAmp = rng.Range(-.015, .015) * (1.0 - 0.4 * u);
             var ortho = MidRadial(a + Math.PI * 0.5);
 
-            for (int s = 0; s < stations; s++)
+            for (int s = 0; s < pathStations; s++)
             {
-                double t = s / (double)(stations - 1);
+                double t = s / (double)(pathStations - 1);
                 double omt = 1.0 - t;
                 var pt = foot * (omt * omt * omt)
                        + p1 * (3.0 * omt * omt * t)
@@ -248,19 +343,14 @@ public static partial class OrganismMeshes
             double rBaseCal = baseCal * caliperScale;
             double rTipCal = junctionCal * caliperScale;
 
-            var radii = new double[stations];
-            for (int s = 0; s < stations; s++)
-            {
-                double st = s / (double)(stations - 1);
-                radii[s] = MathD.Lerp(rBaseCal, rTipCal, Math.Pow(st, 0.80));
-            }
+            // Build ribbed petiole with longitudinal ridges and regular nodules
+            MidRainshieldStem(m, path, rBaseCal, rTipCal, petioleBaseCol, petioleTipCol,
+                stemSegments, pathStations, stemNodules, stemRidges);
 
-            Primitives.Tube(m, path, radii, tubeSides,
-                (i, v) => (Primitives.Mix(petioleBaseCol, petioleTipCol, (double)i / (stations - 1)), 1.0, (double)i / (stations - 1), v, 0, 0));
-
-            // Petiole connects directly to leaf blade without double-neck kink
-            var dDir = path[^1] - path[^2];
-            var petioleDir = (dDir.LengthSq > 1e-7 ? dDir : outward).Normalized();
+            // Leaves held mostly horizontal, but slightly tipping downward towards the leaf tip
+            var horizOutward = new Vec3(outward.X, 0, outward.Z).Normalized();
+            double downTilt = rng.Range(0.08, 0.16); // ~5-9 degrees downward from horizontal
+            var leafFwd = (horizOutward - Vec3.Up * downTilt).Normalized();
 
             // Tiered leaf sizing
             double sizeFactor = juvenile ? 0.72 : 1.0;
@@ -271,14 +361,14 @@ public static partial class OrganismMeshes
             double bladeWid = bladeLen * MathD.Lerp(0.95, 1.22, u) * rng.Range(0.96, 1.05);
 
             double age = MathD.Lerp(0.25, 0.95, Math.Pow(u, 0.75));
-            double camber = MathD.Lerp(0.08, 0.05, u);
-            double midribFold = MathD.Lerp(0.06, 0.035, u);
+            double camber = MathD.Lerp(0.05, 0.035, u);
+            double midribFold = MathD.Lerp(0.04, 0.025, u);
             double wavyMargin = MathD.Lerp(0.02, 0.035, u);
-            double tipCurl = MathD.Lerp(0.02, 0.05, u);
+            double tipCurl = MathD.Lerp(0.03, 0.06, u);
 
             ulong leafSeed = Rng.Mix(seed, (ulong)(k * 439 + 13));
 
-            Broadleaf.BuildLeaf(m, crown, petioleDir, bladeLen, bladeWid,
+            Broadleaf.BuildLeaf(m, crown, leafFwd, bladeLen, bladeWid,
                 BroadleafOutline.OrbicularCordate, leafSeed, c1, c2,
                 age: age, camber: camber, midribFold: midribFold,
                 wavyMargin: wavyMargin, wavyFrequency: 3.2, tipCurl: tipCurl,
