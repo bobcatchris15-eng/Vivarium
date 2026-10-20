@@ -91,24 +91,142 @@ public static partial class OrganismMeshes
         }
     }
 
-    // Tree-fern analogue: exposed fibrous stipe under umbrella of compound drooping fronds.
+    // Stout tree-fern caudex with woody tessellated leaf scars, tapering rapidly to a rounded dome crown.
+    private static (Vec3 Apex, double ApexRadius) MidVaultfernCaudex(MeshData m, Rng rng, double height, double rBase, int detail)
+    {
+        int stations = detail == 2 ? 8 : 14;
+        int segments = detail == 2 ? 8 : 12;
+        int start = m.VertexCount;
+
+        // Path curves subtly like a real fibrous tree-fern trunk
+        var path = new Vec3[stations];
+        double leanAz = rng.Range(0, Math.PI * 2);
+        var leanDir = MidRadial(leanAz);
+        for (int i = 0; i < stations; i++)
+        {
+            double v = i / (double)(stations - 1);
+            double y = height * v;
+            double sway = Math.Sin(Math.PI * v) * rng.Range(0.012, 0.028);
+            path[i] = leanDir * sway + Vec3.Up * y;
+        }
+
+        // Taper profile: thick base, stout lower/mid stipe, rapid upper taper to rounded top
+        var radii = new double[stations];
+        for (int i = 0; i < stations; i++)
+        {
+            double v = i / (double)(stations - 1);
+            if (v < 0.68)
+            {
+                // Stout body with slight basal flare
+                radii[i] = rBase * MathD.Lerp(1.18, 0.82, Math.Pow(v / 0.68, 0.80));
+            }
+            else
+            {
+                // Taper pretty quickly above 68% height to a rounded dome top
+                double topFrac = (v - 0.68) / 0.32;
+                radii[i] = rBase * MathD.Lerp(0.82, 0.34, Math.Pow(topFrac, 1.35));
+            }
+        }
+
+        var hint = Vec3.Up;
+        var dir0 = (path[1] - path[0]).Normalized();
+        var side = dir0.Cross(hint);
+        if (side.LengthSq < 1e-8) side = dir0.Cross(new Vec3(1, 0, 0));
+        side = side.Normalized();
+
+        for (int i = 0; i < stations; i++)
+        {
+            var dir = i == 0 ? (path[1] - path[0]).Normalized()
+                    : i == stations - 1 ? (path[^1] - path[^2]).Normalized()
+                    : (path[i + 1] - path[i - 1]).Normalized();
+
+            side = (side - dir * side.Dot(dir)).Normalized();
+            var up2 = side.Cross(dir).Normalized();
+
+            double v = i / (double)(stations - 1);
+            double stationR = radii[i];
+
+            for (int s = 0; s <= segments; s++)
+            {
+                double u = s / (double)segments;
+                double th = 2 * Math.PI * u;
+
+                // Woody tessellated texture: dual spiral lattice of diamond leaf scar cushions
+                double phi1 = (u * 6.0 + v * 8.0) * Math.PI * 2.0;
+                double phi2 = (u * 6.0 - v * 8.0) * Math.PI * 2.0;
+                double diamond = Math.Cos(phi1) * Math.Cos(phi2);
+
+                double tessRelief = v < 0.88 ? 0.08 * Math.Max(0.0, diamond) : 0.0;
+                double r = stationR * (1.0 + tessRelief);
+
+                var radial = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
+                var pos = path[i] + radial * r;
+                var normal = radial;
+
+                // Woody tessellated coloring
+                double[] deepBark = { 0.17, 0.13, 0.09 };
+                double[] padWood = { 0.33, 0.27, 0.18 };
+                double[] scaleEdge = { 0.42, 0.35, 0.22 };
+
+                var col = Primitives.Mix(deepBark, padWood, Math.Clamp((diamond + 0.5) * 0.7, 0.0, 1.0));
+                if (diamond > 0.35)
+                    col = Primitives.Mix(col, scaleEdge, (diamond - 0.35) * 1.4);
+                if (v < 0.15)
+                    col = Primitives.Mix(col, new[] { 0.20, 0.24, 0.14 }, (1.0 - v / 0.15) * 0.35);
+
+                m.AddVertex(pos, normal, col, 1.0, u, v, 0, 0);
+            }
+        }
+
+        // Triangles along trunk
+        for (int i = 0; i < stations - 1; i++)
+        {
+            for (int s = 0; s < segments; s++)
+            {
+                int a = start + i * (segments + 1) + s;
+                int b = a + segments + 1;
+                m.AddTriangle(a, a + 1, b);
+                m.AddTriangle(a + 1, b + 1, b);
+            }
+        }
+
+        // Rounded top dome cap
+        double apexR = radii[^1];
+        var apexCenter = path[^1] + Vec3.Up * (apexR * 0.75);
+        int apexIdx = m.AddVertex(apexCenter, Vec3.Up, new[] { 0.36, 0.29, 0.18 }, 1.0, 0.5, 1.0, 0, 0);
+        int topRowStart = start + (stations - 1) * (segments + 1);
+        for (int s = 0; s < segments; s++)
+        {
+            m.AddTriangle(topRowStart + s, topRowStart + s + 1, apexIdx);
+        }
+
+        m.Structural.Add((start, m.VertexCount - start, segments, rBase));
+        return (apexCenter, apexR);
+    }
+
+    // Tree-fern analogue: stout fibrous stipe under umbrella of compound drooping fronds.
     private static void MidVaultfern(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
         int detail = m.FloraDetailLevel ?? 0;
         var bark = new[] { .25, .28, .19 };
-        double height = juvenile ? .48 : rng.Range(.66, .78);
-        var trunk = new[] { Vec3.Zero, new Vec3(.025, .24, -.02),
-            new Vec3(-.025, height * .75, .022), new Vec3(0, height, 0) };
-        MidStem(m, bark, trunk, juvenile ? .047 : .085);
-        int fronds = juvenile ? 5 : (detail == 2 ? 7 : 10 + rng.NextInt(3));
+
+        // Caudex is about a third shorter, thicker, and tapers rapidly to a rounded top
+        double height = juvenile ? 0.36 : rng.Range(0.50, 0.56);
+        double rBase = juvenile ? 0.075 : rng.Range(0.115, 0.14);
+        var (apex, apexR) = MidVaultfernCaudex(m, rng, height, rBase, detail);
+
+        int fronds = juvenile ? 6 : (detail == 2 ? 8 : 12 + rng.NextInt(3));
         var low = Primitives.Scale(c1, .76);
+
         for (int f = 0; f < fronds; f++)
         {
-            double angle = 2 * Math.PI * f / fronds + rng.Range(-.15, .15);
+            double angle = 2 * Math.PI * f / fronds + rng.Range(-.12, .12);
             var radial = MidRadial(angle);
             var ortho = MidRadial(angle + Math.PI * .5);
-            double reach = (juvenile ? .49 : rng.Range(.69, .98));
-            var root = trunk[^1] + Vec3.Up * .012;
+            double reach = (juvenile ? .46 : rng.Range(.68, .96));
+
+            // Fronds project out directly from the rounded dome top
+            var root = apex - Vec3.Up * (apexR * 0.25) + radial * (apexR * 0.85);
             int stations = 9;
             var path = new Vec3[stations];
             var radii = new double[stations];
@@ -116,8 +234,8 @@ public static partial class OrganismMeshes
             {
                 double t = s / (double)(stations - 1);
                 path[s] = root + radial * (reach * t) + ortho * (.045 * Math.Sin(t * Math.PI * 1.3))
-                    + Vec3.Up * (.18 * Math.Sin(Math.PI * t) - .23 * t * t);
-                radii[s] = .012 * (1 - .85 * t);
+                    + Vec3.Up * (.22 * Math.Sin(Math.PI * t) - .20 * t * t);
+                radii[s] = .014 * (1 - .85 * t);
             }
             Primitives.Tube(m, path, radii, detail == 2 ? 3 : 5,
                 (i, v) => (bark, 1, i, v, 0, 0));
