@@ -174,28 +174,47 @@ public static partial class OrganismMeshes
                 // Scaffold branch
                 MidSplitcrownWoodyStem(m, new[] { fork, join, tip }, .018, isLowerTrunk: false, detail);
 
-                int branchlets = detail == 2 ? 2 : (juvenile ? 2 : 3);
+                // Dedicated terminal spray of 2 or 3 poplar leaves at the very end of each scaffold branch
+                int branchEndLeaves = 2 + rng.NextInt(2); // 2 or 3 leaves
+                for (int bl = 0; bl < branchEndLeaves; bl++)
+                {
+                    double spread = (bl - (branchEndLeaves - 1) * 0.5) * 0.55;
+                    var endDir = (outward * 0.85 + MidRadial(ba + Math.PI * 0.5) * spread + Vec3.Up * rng.Range(0.04, 0.18)).Normalized();
+                    double endBladeLen = rng.Range(0.12, 0.18);
+                    double endBladeWid = endBladeLen * rng.Range(0.88, 0.98);
+                    ulong endSeed = Rng.Mix(seed, (ulong)(tr * 200000 + b * 20000 + bl * 100 + 43));
+                    Broadleaf.BuildLeaf(m, tip, endDir, endBladeLen, endBladeWid,
+                        BroadleafOutline.Ovate, endSeed, c1, c2,
+                        age: rng.Range(0.65, 0.90), camber: 0.055, midribFold: 0.038,
+                        wavyMargin: 0.030, wavyFrequency: 4.2, tipCurl: 0.035,
+                        petioleLength: endBladeLen * 0.42, petioleRadius: 0.0035, petioleKink: 0.16,
+                        undersideColor: under, detailOverride: detail);
+                }
+
+                int branchlets = detail == 2 ? 3 : (juvenile ? 3 : 5 + rng.NextInt(2));
                 for (int n = 0; n < branchlets; n++)
                 {
-                    var origin = join * (1 - n * .28) + tip * (n * .28);
-                    var spray = (outward * rng.Range(.70, 1.0) + MidRadial(ba + Math.PI * .5) * rng.Range(-.40, .40)
+                    double frac = 0.20 + 0.70 * (n / (double)Math.Max(1, branchlets - 1));
+                    var origin = fork * (1 - frac) + tip * frac;
+                    double branchletAngle = ba + ((n % 2 == 0) ? 0.60 : -0.60) * rng.Range(0.75, 1.25);
+                    var spray = (MidRadial(branchletAngle) * rng.Range(.75, 1.0) + outward * 0.35
                         + Vec3.Up * rng.Range(-.02, .18)).Normalized();
-                    var twigEnd = origin + spray * rng.Range(.18, .28) + Vec3.Up * rng.Range(.02, .08);
+                    var twigEnd = origin + spray * rng.Range(.20, .32) + Vec3.Up * rng.Range(.02, .08);
 
                     // Twig
                     MidSplitcrownWoodyStem(m, new[] { origin, twigEnd }, .007, isLowerTrunk: false, detail);
 
-                    // Broad, deltoid/ovate poplar leaves on slender petioles
-                    int leafCount = detail == 2 ? 3 : (juvenile ? 3 : 5);
+                    // Broad, deltoid/ovate poplar leaves on slender petioles along the twig
+                    int leafCount = detail == 2 ? 4 : (juvenile ? 5 : 7 + rng.NextInt(3));
                     for (int l = 0; l < leafCount; l++)
                     {
                         double lt = (l + 0.5) / leafCount;
                         var attach = origin * (1 - lt) + twigEnd * lt;
-                        double lAngle = ba + (l % 2 == 0 ? 0.90 : -0.90) + rng.Range(-0.15, 0.15);
+                        double lAngle = branchletAngle + (l % 2 == 0 ? 0.85 : -0.85) + rng.Range(-0.15, 0.15);
                         var lOut = MidRadial(lAngle);
-                        var lDir = (lOut * 0.85 + Vec3.Up * rng.Range(-0.06, 0.12)).Normalized();
+                        var lDir = (lOut * 0.85 + Vec3.Up * rng.Range(-0.06, 0.14)).Normalized();
 
-                        double bladeLen = rng.Range(0.11, 0.17);
+                        double bladeLen = rng.Range(0.10, 0.16);
                         double bladeWid = bladeLen * rng.Range(0.88, 0.98); // Broad poplar deltoid proportions
 
                         ulong leafSeed = Rng.Mix(seed, (ulong)(tr * 100000 + b * 10000 + n * 1000 + l * 10 + 7));
@@ -205,6 +224,20 @@ public static partial class OrganismMeshes
                             age: rng.Range(0.70, 0.96), camber: 0.05, midribFold: 0.038,
                             wavyMargin: 0.030, wavyFrequency: 4.2, tipCurl: 0.035,
                             petioleLength: bladeLen * 0.40, petioleRadius: 0.0035, petioleKink: 0.16,
+                            undersideColor: under, detailOverride: detail);
+                    }
+
+                    // Terminal pair at twig end
+                    for (int tl = -1; tl <= 1; tl += 2)
+                    {
+                        var tDir = (spray * 0.82 + MidRadial(branchletAngle + tl * 0.45) * 0.40 + Vec3.Up * rng.Range(0.02, 0.12)).Normalized();
+                        double tLen = rng.Range(0.10, 0.15);
+                        ulong tSeed = Rng.Mix(seed, (ulong)(tr * 150000 + b * 15000 + n * 1500 + (tl + 1) * 33 + 1));
+                        Broadleaf.BuildLeaf(m, twigEnd, tDir, tLen, tLen * 0.92,
+                            BroadleafOutline.Ovate, tSeed, c1, c2,
+                            age: rng.Range(0.68, 0.92), camber: 0.05, midribFold: 0.038,
+                            wavyMargin: 0.030, wavyFrequency: 4.2, tipCurl: 0.035,
+                            petioleLength: tLen * 0.38, petioleRadius: 0.0035, petioleKink: 0.16,
                             undersideColor: under, detailOverride: detail);
                     }
                 }
