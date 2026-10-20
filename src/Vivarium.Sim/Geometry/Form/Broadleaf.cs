@@ -9,7 +9,8 @@ public enum BroadleafOutline
     Hastate,   // Spear-shaped (outward-flaring basal lobes)
     Ovate,     // Broadly oval, rounded base
     Lanceolate, // Tapering lance shape
-    OrbicularCordate // Broad rhubarb-like near-round heart with basal sinus and blunt shoulders
+    OrbicularCordate, // Broad rhubarb-like near-round heart with basal sinus and blunt shoulders
+    Reniform // Kidney/fan-shaped: flares out rapidly from the pedicel into a broad, wide blade
 }
 
 public readonly record struct BroadleafParams(
@@ -78,6 +79,11 @@ public static class Broadleaf
                 // Slender lance
                 Math.Pow(Math.Max(0.0, Math.Sin(Math.PI * t)), 1.25) * 0.70,
                 0.0
+            ),
+            BroadleafOutline.Reniform => (
+                // Kidney/fan shape: flares out rapidly from the pedicel into a broad, wide blade
+                Math.Pow(Math.Max(0.0, Math.Sin(Math.PI * Math.Pow(t, 0.30))), 0.55) * (1.0 + 0.12 * (1.0 - t)),
+                t < 0.28 ? -0.14 * bladeLength * Math.Pow(1.0 - t / 0.28, 2.0) * (x * x) : 0.0
             ),
             _ => (Math.Max(0.0, Math.Sin(Math.PI * t)), 0.0)
         };

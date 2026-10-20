@@ -815,7 +815,7 @@ public static partial class OrganismMeshes
         return (pos, dir);
     }
 
-    // Clothes a branch or twig with small, narrow leaves up and down BOTH sides
+    // Clothes a branch or twig with leaves wider than long, flaring out rapidly from the pedicel and overlapping along the stem
     private static void MidCragparasolFoliageOnBranch(
         MeshData m, Vec3[] path, double startT, double endT, int stations,
         double[] c1, double[] c2, double[] underColor, ulong branchSeed,
@@ -833,36 +833,38 @@ public static partial class OrganismMeshes
             // Up and down BOTH sides of the branch / twig
             for (int sideSign = -1; sideSign <= 1; sideSign += 2)
             {
-                double lateralSpread = 0.76 + 0.14 * Math.Sin(s * 1.7 + sideSign);
-                double fwdThrust = 0.32 + 0.08 * Math.Cos(s * 2.3);
-                double pitch = 0.12 + 0.12 * Math.Sin(s * 3.1 + sideSign * 0.5);
+                // Forward thrust and outward spread so broad blades overlap like shingles along the branch
+                double lateralSpread = 0.68 + 0.12 * Math.Sin(s * 1.7 + sideSign);
+                double fwdThrust = 0.44 + 0.08 * Math.Cos(s * 2.3);
+                double pitch = 0.06 + 0.10 * Math.Sin(s * 3.1 + sideSign * 0.5);
 
                 var lDir = (side * (sideSign * lateralSpread) + fwd * fwdThrust + up * pitch).Normalized();
-                double bladeLen = (juvenile ? 0.052 : 0.076) * lengthScale * (0.88 + 0.24 * Rng.HashUnit(branchSeed, (ulong)(s * 10 + (sideSign > 0 ? 1 : 2)), 0));
-                double bladeWid = bladeLen * 0.22;
+                double bladeLen = (juvenile ? 0.046 : 0.064) * lengthScale * (0.88 + 0.24 * Rng.HashUnit(branchSeed, (ulong)(s * 10 + (sideSign > 0 ? 1 : 2)), 0));
+                // Leaves wider than they are long: flaring out into broad overlapping fans
+                double bladeWid = bladeLen * (1.38 + 0.22 * Rng.HashUnit(branchSeed, (ulong)(s * 10 + (sideSign > 0 ? 3 : 4)), 0));
 
                 ulong lSeed = Rng.Mix(branchSeed, (ulong)(s * 73 + (sideSign > 0 ? 19 : 37)));
                 Broadleaf.BuildLeaf(m, pos, lDir, bladeLen, bladeWid,
-                    BroadleafOutline.Lanceolate, lSeed, c1, c2,
-                    age: 0.65 + 0.30 * st, camber: 0.07, midribFold: 0.09,
-                    wavyMargin: 0.015, wavyFrequency: 3.2, tipCurl: 0.05,
-                    petioleLength: 0.008, petioleRadius: 0.0016, petioleKink: 0.10,
+                    BroadleafOutline.Reniform, lSeed, c1, c2,
+                    age: 0.65 + 0.30 * st, camber: 0.08, midribFold: 0.06,
+                    wavyMargin: 0.015, wavyFrequency: 3.5, tipCurl: 0.04,
+                    petioleLength: 0.005, petioleRadius: 0.0016, petioleKink: 0.08,
                     undersideColor: underColor, detailOverride: Math.Max(1, detail));
             }
 
-            // In full detail tier, add occasional topside leaves to give natural 3D volume
+            // In full detail tier, add topside leaves overlapping across the central stem spine
             if (detail == 0 && s % 2 == 1)
             {
-                double sideSkew = 0.35 * Math.Sin(s * 2.1);
-                var upDir = (up * 0.70 + fwd * 0.35 + side * sideSkew).Normalized();
-                double bladeLen = (juvenile ? 0.048 : 0.068) * lengthScale;
-                double bladeWid = bladeLen * 0.22;
+                double sideSkew = 0.28 * Math.Sin(s * 2.1);
+                var upDir = (up * 0.68 + fwd * 0.44 + side * sideSkew).Normalized();
+                double bladeLen = (juvenile ? 0.042 : 0.058) * lengthScale;
+                double bladeWid = bladeLen * 1.35;
                 ulong lSeed = Rng.Mix(branchSeed, (ulong)(s * 101 + 7));
                 Broadleaf.BuildLeaf(m, pos, upDir, bladeLen, bladeWid,
-                    BroadleafOutline.Lanceolate, lSeed, c1, c2,
-                    age: 0.70 + 0.25 * st, camber: 0.07, midribFold: 0.09,
-                    wavyMargin: 0.015, wavyFrequency: 3.2, tipCurl: 0.05,
-                    petioleLength: 0.007, petioleRadius: 0.0016, petioleKink: 0.10,
+                    BroadleafOutline.Reniform, lSeed, c1, c2,
+                    age: 0.70 + 0.25 * st, camber: 0.08, midribFold: 0.06,
+                    wavyMargin: 0.015, wavyFrequency: 3.5, tipCurl: 0.04,
+                    petioleLength: 0.005, petioleRadius: 0.0016, petioleKink: 0.08,
                     undersideColor: underColor, detailOverride: Math.Max(1, detail));
             }
         }
@@ -883,24 +885,24 @@ public static partial class OrganismMeshes
             double angle = 2 * Math.PI * l / count + 0.2 * Math.Sin(l * 2.5);
             double lateral = Math.Cos(angle);
             double vertical = Math.Sin(angle);
-            var lDir = (side * (lateral * 0.65) + up * (vertical * 0.50 + 0.15) + tipDir * 0.45).Normalized();
+            var lDir = (side * (lateral * 0.65) + up * (vertical * 0.42 + 0.12) + tipDir * 0.50).Normalized();
 
-            double bladeLen = (juvenile ? 0.060 : 0.085) * lengthScale * (0.90 + 0.22 * Rng.HashUnit(spraySeed, (ulong)l, 0));
-            double bladeWid = bladeLen * 0.22;
+            double bladeLen = (juvenile ? 0.052 : 0.072) * lengthScale * (0.90 + 0.20 * Rng.HashUnit(spraySeed, (ulong)l, 0));
+            double bladeWid = bladeLen * 1.40;
             ulong lSeed = Rng.Mix(spraySeed, (ulong)(l * 53 + 17));
 
             Broadleaf.BuildLeaf(m, tipAttach, lDir, bladeLen, bladeWid,
-                BroadleafOutline.Lanceolate, lSeed, c1, c2,
-                age: 0.75 + 0.20 * (l / (double)count), camber: 0.07, midribFold: 0.09,
-                wavyMargin: 0.015, wavyFrequency: 3.2, tipCurl: 0.05,
-                petioleLength: 0.009, petioleRadius: 0.0016, petioleKink: 0.10,
+                BroadleafOutline.Reniform, lSeed, c1, c2,
+                age: 0.75 + 0.20 * (l / (double)count), camber: 0.08, midribFold: 0.06,
+                wavyMargin: 0.015, wavyFrequency: 3.5, tipCurl: 0.04,
+                petioleLength: 0.006, petioleRadius: 0.0016, petioleKink: 0.08,
                 undersideColor: underColor, detailOverride: Math.Max(1, detail));
         }
     }
 
     // Windswept rocky-hillside juniper habit: shorter, thinner gnarled zig-zag stems
-    // forming a low, wide, dense under-under-canopy with extensive untidy outsprays
-    // of small, narrow lanceolate leaves up and down both sides of all twigs and branches.
+    // forming a low, wide, dense under-under-canopy with broad reniform leaves
+    // wider than they are long, flaring out rapidly from the pedicel and overlapping along the branches.
     private static void MidCragparasol(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
         int detail = m.FloraDetailLevel ?? 0;

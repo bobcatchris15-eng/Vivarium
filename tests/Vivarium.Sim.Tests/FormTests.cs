@@ -680,7 +680,7 @@ public class FormTests
         Assert.Equal(m1.DigestHex(), m2.DigestHex());
 
         // Validate all outline profiles produce valid finite, non-degenerate meshes within budget
-        foreach (var outline in new[] { BroadleafOutline.Sagittate, BroadleafOutline.Hastate, BroadleafOutline.Ovate, BroadleafOutline.Lanceolate })
+        foreach (var outline in new[] { BroadleafOutline.Sagittate, BroadleafOutline.Hastate, BroadleafOutline.Ovate, BroadleafOutline.Lanceolate, BroadleafOutline.Reniform })
         {
             var mOutline = new MeshData();
             Broadleaf.Build(mOutline, p with { Outline = outline }, 42, Green, LightGreen);
