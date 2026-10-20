@@ -36,56 +36,177 @@ public static partial class OrganismMeshes
             shoulder: round ? .72 : 1.10, serration: round ? 0 : .035);
     }
 
-    // Small forked tree, compound terminal foliage on genuinely clear lower stems.
+    // Woody stem with smooth pale greenish-grey bark and dark furrowed splits on older lower trunk.
+    private static void MidSplitcrownWoodyStem(MeshData m, Vec3[] points, double baseRadius, bool isLowerTrunk, int detail)
+    {
+        int stations = detail == 2 ? 6 : (isLowerTrunk ? 12 : 8);
+        int segments = detail == 2 ? 6 : (isLowerTrunk ? 10 : 7);
+        int start = m.VertexCount;
+
+        var path = new Vec3[stations];
+        for (int i = 0; i < stations; i++)
+        {
+            double t = i / (double)(stations - 1);
+            if (points.Length == 3)
+            {
+                double u = 1.0 - t;
+                path[i] = points[0] * (u * u) + points[1] * (2.0 * u * t) + points[2] * (t * t);
+            }
+            else
+            {
+                double st = t * (points.Length - 1);
+                int idx = Math.Min(points.Length - 2, (int)st);
+                double frac = st - idx;
+                path[i] = points[idx] * (1.0 - frac) + points[idx + 1] * frac;
+            }
+        }
+
+        var dir0 = (path[1] - path[0]).Normalized();
+        var hint = Vec3.Up;
+        var side = dir0.Cross(hint);
+        if (side.LengthSq < 1e-8) side = dir0.Cross(new Vec3(1, 0, 0));
+        side = side.Normalized();
+
+        // Smooth pale grey/greenish bark (poplar/aspen stipe) with dark split wood in mature fissures
+        double[] smoothGrey = { 0.55, 0.57, 0.52 };
+        double[] smoothGreyLight = { 0.62, 0.64, 0.58 };
+        double[] darkSplit = { 0.17, 0.14, 0.11 };
+        double[] darkWoodEdge = { 0.28, 0.24, 0.19 };
+
+        int splits = isLowerTrunk ? 4 : 0;
+
+        for (int i = 0; i < stations; i++)
+        {
+            var dir = i == 0 ? (path[1] - path[0]).Normalized()
+                    : i == stations - 1 ? (path[^1] - path[^2]).Normalized()
+                    : (path[i + 1] - path[i - 1]).Normalized();
+
+            side = (side - dir * side.Dot(dir)).Normalized();
+            var up2 = side.Cross(dir).Normalized();
+
+            double t = i / (double)(stations - 1);
+            double taperR = Math.Max(0.002, baseRadius * (1.0 - 0.52 * Math.Pow(t, 0.90)));
+
+            for (int s = 0; s <= segments; s++)
+            {
+                double u = s / (double)segments;
+                double th = 2 * Math.PI * u;
+
+                // Dark splits in older mature bark (lower trunk)
+                double splitFactor = 0.0;
+                double splitIndent = 0.0;
+                if (isLowerTrunk && t < 0.65)
+                {
+                    double splitWave = Math.Cos(th * splits);
+                    double heightMaturity = 1.0 - t / 0.65;
+                    if (splitWave > 0.38)
+                    {
+                        double fissureT = (splitWave - 0.38) / 0.62;
+                        splitFactor = fissureT * heightMaturity;
+                        splitIndent = 0.14 * splitFactor;
+                    }
+                }
+
+                double r = taperR * (1.0 - splitIndent);
+                var radial = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
+                var pos = path[i] + radial * r;
+                var normal = radial;
+
+                // Smooth grey bark with dark furrowed splits
+                var barkBase = Primitives.Mix(smoothGrey, smoothGreyLight, t);
+                var col = barkBase;
+                if (splitFactor > 0.04)
+                {
+                    var splitCol = Primitives.Mix(darkWoodEdge, darkSplit, splitFactor);
+                    col = Primitives.Mix(barkBase, splitCol, Math.Min(1.0, splitFactor * 1.4));
+                }
+
+                // UV2.x = 2.0 marks woody tissue for the flora shader
+                m.AddVertex(pos, normal, col, 1.0, path[i].Y * 3.0, u, 2.0, 0);
+            }
+        }
+
+        for (int i = 0; i < stations - 1; i++)
+        {
+            for (int s = 0; s < segments; s++)
+            {
+                int a = start + i * (segments + 1) + s;
+                int b = a + segments + 1;
+                m.AddTriangle(a, a + 1, b);
+                m.AddTriangle(a + 1, b + 1, b);
+            }
+        }
+        m.Structural.Add((start, m.VertexCount - start, segments, baseRadius));
+    }
+
+    // Small forked tree with smooth grey bark, dark mature splits, and broad poplar foliage.
     private static void MidSplitcrown(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
         int trunks = juvenile ? 1 : 2 + rng.NextInt(2);
-        var bark = Primitives.Mix(MidBark, new[] { .27, .32, .22 }, .25);
-        var under = Primitives.Scale(c2, .77);
+        var under = Primitives.Mix(c2, new[] { 0.55, 0.65, 0.48 }, 0.45);
         int detail = m.FloraDetailLevel ?? 0;
+
         for (int tr = 0; tr < trunks; tr++)
         {
             double az = tr * 2.399963 + rng.Range(-.20, .20);
             var radial = MidRadial(az);
             var basePos = radial * (tr == 0 ? 0 : rng.Range(.04, .14));
-            double trunkTop = juvenile ? rng.Range(.50, .66) : rng.Range(.64, .78);
-            var p1 = basePos * .50 + Vec3.Up * (trunkTop * .38);
+
+            // Shorter habit: trunk forks much lower (about half original height)
+            double trunkTop = juvenile ? rng.Range(.26, .34) : rng.Range(.34, .44);
+            var p1 = basePos * .50 + Vec3.Up * (trunkTop * .42);
             var fork = radial * rng.Range(.05, .13) + Vec3.Up * trunkTop;
-            MidStem(m, bark, new[] { basePos, p1, fork }, juvenile ? .034 : .046);
+
+            // Lower trunk with smooth grey bark and dark mature splits
+            MidSplitcrownWoodyStem(m, new[] { basePos, p1, fork }, juvenile ? .036 : .050, isLowerTrunk: true, detail);
+
             int branches = juvenile ? 3 : 4 + rng.NextInt(2);
             for (int b = 0; b < branches; b++)
             {
-                double ba = az + 2 * Math.PI * b / branches + rng.Range(-.27, .27);
+                double ba = az + 2 * Math.PI * b / branches + rng.Range(-.25, .25);
                 var outward = MidRadial(ba);
-                double reach = rng.Range(.46, .77);
-                var join = fork + outward * (reach * .43) + Vec3.Up * rng.Range(.08, .17);
-                var tip = fork + outward * reach + Vec3.Up * rng.Range(.09, .22);
-                tip = new Vec3(tip.X, Math.Min(.99, tip.Y), tip.Z);
-                MidStem(m, bark, new[] { fork, join, tip }, .016);
+                double reach = rng.Range(.48, .76);
+                var join = fork + outward * (reach * .42) + Vec3.Up * rng.Range(.10, .18);
+                double tipLift = b == 0 ? rng.Range(.28, .36) : rng.Range(.20, .30);
+                var tip = fork + outward * reach + Vec3.Up * tipLift;
+                tip = new Vec3(tip.X, Math.Clamp(tip.Y, .58, .74), tip.Z);
+
+                // Scaffold branch
+                MidSplitcrownWoodyStem(m, new[] { fork, join, tip }, .018, isLowerTrunk: false, detail);
+
                 int branchlets = detail == 2 ? 2 : (juvenile ? 2 : 3);
                 for (int n = 0; n < branchlets; n++)
                 {
-                    var origin = join * (1 - n * .26) + tip * (n * .26);
-                    var spray = (outward * rng.Range(.72, 1.0) + MidRadial(ba + Math.PI * .5) * rng.Range(-.44, .44)
-                        + Vec3.Up * rng.Range(-.12, .12)).Normalized();
-                    var rachis = origin + spray * rng.Range(.20, .32);
-                    MidStem(m, bark, new[] { origin, rachis }, .005);
-                    int pairs = detail == 2 ? 3 : 5;
-                    var tangent = new Vec3(-spray.Z, 0, spray.X);
-                    for (int p = 0; p < pairs; p++)
+                    var origin = join * (1 - n * .28) + tip * (n * .28);
+                    var spray = (outward * rng.Range(.70, 1.0) + MidRadial(ba + Math.PI * .5) * rng.Range(-.40, .40)
+                        + Vec3.Up * rng.Range(-.02, .18)).Normalized();
+                    var twigEnd = origin + spray * rng.Range(.18, .28) + Vec3.Up * rng.Range(.02, .08);
+
+                    // Twig
+                    MidSplitcrownWoodyStem(m, new[] { origin, twigEnd }, .007, isLowerTrunk: false, detail);
+
+                    // Broad, deltoid/ovate poplar leaves on slender petioles
+                    int leafCount = detail == 2 ? 3 : (juvenile ? 3 : 5);
+                    for (int l = 0; l < leafCount; l++)
                     {
-                        double t = (p + .7) / (pairs + .4);
-                        var node = origin * (1 - t) + rachis * t;
-                        for (int sign = -1; sign <= 1; sign += 2)
-                        {
-                            var ld = (spray * .28 + tangent * sign + Vec3.Up * rng.Range(-.13, .17)).Normalized();
-                            double len = rng.Range(.095, .16) * (1 - .24 * t);
-                            MidBlade(m, node, ld, len, len * .19, c1, under,
-                                Rng.Mix(seed, (ulong)(tr * 100000 + b * 10000 + n * 1000 + p * 10 + sign + 3)));
-                        }
+                        double lt = (l + 0.5) / leafCount;
+                        var attach = origin * (1 - lt) + twigEnd * lt;
+                        double lAngle = ba + (l % 2 == 0 ? 0.90 : -0.90) + rng.Range(-0.15, 0.15);
+                        var lOut = MidRadial(lAngle);
+                        var lDir = (lOut * 0.85 + Vec3.Up * rng.Range(-0.06, 0.12)).Normalized();
+
+                        double bladeLen = rng.Range(0.11, 0.17);
+                        double bladeWid = bladeLen * rng.Range(0.88, 0.98); // Broad poplar deltoid proportions
+
+                        ulong leafSeed = Rng.Mix(seed, (ulong)(tr * 100000 + b * 10000 + n * 1000 + l * 10 + 7));
+
+                        Broadleaf.BuildLeaf(m, attach, lDir, bladeLen, bladeWid,
+                            BroadleafOutline.Ovate, leafSeed, c1, c2,
+                            age: rng.Range(0.70, 0.96), camber: 0.05, midribFold: 0.038,
+                            wavyMargin: 0.030, wavyFrequency: 4.2, tipCurl: 0.035,
+                            petioleLength: bladeLen * 0.40, petioleRadius: 0.0035, petioleKink: 0.16,
+                            undersideColor: under, detailOverride: detail);
                     }
-                    MidBlade(m, rachis, spray, .12, .023, c1, under,
-                        Rng.Mix(seed, (ulong)(tr * 811 + b * 47 + n * 7 + 999)));
                 }
             }
         }
