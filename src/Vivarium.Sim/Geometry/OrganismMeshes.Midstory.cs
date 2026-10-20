@@ -91,10 +91,10 @@ public static partial class OrganismMeshes
         }
     }
 
-    // Stout tree-fern caudex with woody tessellated leaf scars, tapering rapidly to a rounded dome crown.
+    // Stout tree-fern caudex with light woody regular macro-tessellated leaf scars, tapering rapidly to a rounded dome crown.
     private static (Vec3 Apex, double ApexRadius) MidVaultfernCaudex(MeshData m, Rng rng, double height, double rBase, int detail)
     {
-        int stations = detail == 2 ? 8 : 14;
+        int stations = detail == 2 ? 10 : 16;
         int segments = detail == 2 ? 8 : 12;
         int start = m.VertexCount;
 
@@ -106,7 +106,7 @@ public static partial class OrganismMeshes
         {
             double v = i / (double)(stations - 1);
             double y = height * v;
-            double sway = Math.Sin(Math.PI * v) * rng.Range(0.012, 0.028);
+            double sway = Math.Sin(Math.PI * v) * rng.Range(0.012, 0.026);
             path[i] = leanDir * sway + Vec3.Up * y;
         }
 
@@ -134,6 +134,14 @@ public static partial class OrganismMeshes
         if (side.LengthSq < 1e-8) side = dir0.Cross(new Vec3(1, 0, 0));
         side = side.Normalized();
 
+        // Lighter weathered wood palette (inspired by WoodyBarkLight in Embercrown and Shadebell)
+        double[] creviceWood = { 0.34, 0.30, 0.23 };
+        double[] bodyWood = { 0.48, 0.42, 0.33 };
+        double[] crestWood = { 0.58, 0.52, 0.40 };
+
+        const double numRows = 7.0;
+        const double numCols = 6.0;
+
         for (int i = 0; i < stations; i++)
         {
             var dir = i == 0 ? (path[1] - path[0]).Normalized()
@@ -145,36 +153,39 @@ public static partial class OrganismMeshes
 
             double v = i / (double)(stations - 1);
             double stationR = radii[i];
+            double y = height * v;
 
             for (int s = 0; s <= segments; s++)
             {
                 double u = s / (double)segments;
                 double th = 2 * Math.PI * u;
 
-                // Woody tessellated texture: dual spiral lattice of diamond leaf scar cushions
-                double phi1 = (u * 6.0 + v * 8.0) * Math.PI * 2.0;
-                double phi2 = (u * 6.0 - v * 8.0) * Math.PI * 2.0;
-                double diamond = Math.Cos(phi1) * Math.Cos(phi2);
+                // Regular macro pattern: staggered rhombic/hexagonal leaf scar cushions
+                double rowCoord = v * numRows;
+                double stagger = ((int)Math.Floor(rowCoord) % 2) * 0.5;
+                double colCoord = u * numCols + stagger;
+                double cellU = (colCoord - Math.Floor(colCoord)) - 0.5;
+                double cellV = (rowCoord - Math.Floor(rowCoord)) - 0.5;
+                double diamondDist = (Math.Abs(cellU) + Math.Abs(cellV)) * 2.0;
+                double cushionPillow = Math.Clamp(1.0 - diamondDist, 0.0, 1.0);
+                double pillowRelief = Math.Sin(cushionPillow * Math.PI * 0.5);
 
-                double tessRelief = v < 0.88 ? 0.08 * Math.Max(0.0, diamond) : 0.0;
+                double tessRelief = v < 0.86 ? 0.09 * pillowRelief : 0.0;
                 double r = stationR * (1.0 + tessRelief);
 
                 var radial = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
                 var pos = path[i] + radial * r;
                 var normal = radial;
 
-                // Woody tessellated coloring
-                double[] deepBark = { 0.17, 0.13, 0.09 };
-                double[] padWood = { 0.33, 0.27, 0.18 };
-                double[] scaleEdge = { 0.42, 0.35, 0.22 };
+                // Lighter woody coloration with distinct macro scar definition
+                var col = Primitives.Mix(creviceWood, bodyWood, Math.Min(1.0, pillowRelief * 1.5));
+                if (pillowRelief > 0.42)
+                    col = Primitives.Mix(col, crestWood, (pillowRelief - 0.42) * 1.7);
+                if (v < 0.12)
+                    col = Primitives.Mix(col, new[] { 0.32, 0.36, 0.24 }, (1.0 - v / 0.12) * 0.35);
 
-                var col = Primitives.Mix(deepBark, padWood, Math.Clamp((diamond + 0.5) * 0.7, 0.0, 1.0));
-                if (diamond > 0.35)
-                    col = Primitives.Mix(col, scaleEdge, (diamond - 0.35) * 1.4);
-                if (v < 0.15)
-                    col = Primitives.Mix(col, new[] { 0.20, 0.24, 0.14 }, (1.0 - v / 0.15) * 0.35);
-
-                m.AddVertex(pos, normal, col, 1.0, u, v, 0, 0);
+                // UV2.x = 2.0 marks woody tissue for the flora shader
+                m.AddVertex(pos, normal, col, 1.0, y * 2.5, u, 2.0, 0);
             }
         }
 
@@ -193,7 +204,7 @@ public static partial class OrganismMeshes
         // Rounded top dome cap
         double apexR = radii[^1];
         var apexCenter = path[^1] + Vec3.Up * (apexR * 0.75);
-        int apexIdx = m.AddVertex(apexCenter, Vec3.Up, new[] { 0.36, 0.29, 0.18 }, 1.0, 0.5, 1.0, 0, 0);
+        int apexIdx = m.AddVertex(apexCenter, Vec3.Up, crestWood, 1.0, (height + apexR * 0.75) * 2.5, 0.5, 2.0, 0);
         int topRowStart = start + (stations - 1) * (segments + 1);
         for (int s = 0; s < segments; s++)
         {
