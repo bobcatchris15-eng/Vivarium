@@ -660,54 +660,242 @@ public static partial class OrganismMeshes
         }
     }
 
-    // Fine-grained horizontal foliage shelves; dark spaces remain visible between tiers.
+    // Dark rough woody stem with deep charcoal fissures and rough crests
+    private static void MidLacemantleDarkWoodyStem(MeshData m, Vec3[] points, double rBase, double rTip, int detail, int ridges = 6)
+    {
+        int stations = points.Length;
+        int segments = detail == 2 ? 4 : (detail == 1 ? 6 : 8);
+        int start = m.VertexCount;
+
+        var tangents = new Vec3[stations];
+        for (int i = 0; i < stations; i++)
+        {
+            Vec3 d;
+            if (i == 0) d = points[1] - points[0];
+            else if (i == stations - 1) d = points[^1] - points[^2];
+            else d = points[i + 1] - points[i - 1];
+            tangents[i] = d.LengthSq > 1e-8 ? d.Normalized() : Vec3.Up;
+        }
+
+        var hint = Vec3.Up;
+        var side = tangents[0].Cross(hint);
+        if (side.LengthSq < 1e-8) side = tangents[0].Cross(new Vec3(1, 0, 0));
+        side = side.Normalized();
+
+        // Dark rough woody bark: deep charcoal/blackish-brown with textured crests
+        double[] darkWoodBase = { 0.16, 0.14, 0.13 };
+        double[] darkWoodMid = { 0.22, 0.20, 0.18 };
+        double[] roughCrest = { 0.28, 0.25, 0.22 };
+        double[] deepFissure = { 0.10, 0.09, 0.08 };
+
+        for (int i = 0; i < stations; i++)
+        {
+            var dir = tangents[i];
+            if (i > 0)
+            {
+                side = (side - dir * side.Dot(dir)).Normalized();
+                if (side.LengthSq < 1e-8)
+                {
+                    side = dir.Cross(hint);
+                    if (side.LengthSq < 1e-8) side = dir.Cross(new Vec3(1, 0, 0));
+                    side = side.Normalized();
+                }
+            }
+            var up2 = side.Cross(dir).Normalized();
+
+            double t = i / (double)Math.Max(1, stations - 1);
+            double baseR = MathD.Lerp(rBase, rTip, Math.Pow(t, 0.85));
+
+            for (int s = 0; s <= segments; s++)
+            {
+                double u = s / (double)segments;
+                double th = 2 * Math.PI * u;
+
+                // Rough longitudinal fissures
+                double ridgeWave = Math.Cos(ridges * th);
+                double roughMod = 1.0 + 0.12 * ridgeWave;
+                double r = Math.Max(0.0015, baseR * roughMod);
+
+                var radial = (side * Math.Cos(th) + up2 * Math.Sin(th)).Normalized();
+                var pos = points[i] + radial * r;
+                var normal = radial;
+
+                // Dark rough bark coloration
+                var baseCol = Primitives.Mix(darkWoodBase, darkWoodMid, t * 0.5);
+                if (ridgeWave < -0.25)
+                {
+                    double f = (-ridgeWave - 0.25) / 0.75;
+                    baseCol = Primitives.Mix(baseCol, deepFissure, f * 0.80);
+                }
+                else if (ridgeWave > 0.25)
+                {
+                    double c = (ridgeWave - 0.25) / 0.75;
+                    baseCol = Primitives.Mix(baseCol, roughCrest, c * 0.65);
+                }
+
+                // UV2.x = 2.0 marks woody tissue for the flora shader
+                m.AddVertex(pos, normal, baseCol, 1.0, points[i].Y * 3.5, u, 2.0, 0);
+            }
+        }
+
+        for (int i = 0; i < stations - 1; i++)
+        {
+            for (int s = 0; s < segments; s++)
+            {
+                int a = start + i * (segments + 1) + s;
+                int b = a + segments + 1;
+                m.AddTriangle(a, a + 1, b);
+                m.AddTriangle(a + 1, b + 1, b);
+            }
+        }
+        m.Structural.Add((start, m.VertexCount - start, segments, rBase));
+    }
+
+    // Single straight dark rough trunk with clockwise 120-degree tiered branches
+    // curving to horizontal tips with heavy terminal leaf and twig concentrations.
     private static void MidLacemantle(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
         int detail = m.FloraDetailLevel ?? 0;
-        var bark = Primitives.Mix(MidBark, new[] { .27, .22, .24 }, .28);
-        int stems = juvenile ? 2 : 3 + rng.NextInt(2);
-        for (int s = 0; s < stems; s++)
+        var underColor = Primitives.Mix(c2, new[] { 0.40, 0.55, 0.35 }, 0.40);
+
+        // 1. Single straight dark trunk
+        double apexY = juvenile ? rng.Range(0.68, 0.72) : rng.Range(0.74, 0.77);
+        int trunkStations = detail == 2 ? 5 : 7;
+        var trunkPoints = new Vec3[trunkStations];
+        for (int i = 0; i < trunkStations; i++)
         {
-            double phase = rng.Range(0, Math.PI * 2);
-            var rootDir = MidRadial(phase);
-            var root = rootDir * rng.Range(0, .10);
-            double height = rng.Range(.83, .99);
-            var mid = root + rootDir * .10 + Vec3.Up * (height * .51);
-            var top = root + rootDir * .15 + Vec3.Up * height;
-            MidStem(m, bark, new[] { root, mid, top }, juvenile ? .025 : .040);
-            int tiers = juvenile ? 2 : (detail == 2 ? 3 : 4);
-            for (int t = 0; t < tiers; t++)
+            double t = i / (double)(trunkStations - 1);
+            trunkPoints[i] = Vec3.Up * (apexY * t);
+        }
+
+        double trunkBaseR = juvenile ? rng.Range(0.016, 0.020) : rng.Range(0.024, 0.030);
+        double trunkTipR = Math.Max(0.005, trunkBaseR * 0.30);
+        MidLacemantleDarkWoodyStem(m, trunkPoints, trunkBaseR, trunkTipR, detail);
+
+        // 2. Upright leaf spray at the top of the trunk
+        int apexLeaves = detail == 2 ? 4 : (juvenile ? 5 : (detail == 1 ? 7 : 9 + rng.NextInt(3)));
+        var apexPos = Vec3.Up * apexY;
+        for (int l = 0; l < apexLeaves; l++)
+        {
+            double leafAngle = 2 * Math.PI * l / apexLeaves + rng.Range(-0.15, 0.15);
+            var lDir = (MidRadial(leafAngle) * 0.42 + Vec3.Up * rng.Range(0.78, 0.95)).Normalized();
+            double bladeLen = (juvenile ? rng.Range(0.050, 0.070) : rng.Range(0.065, 0.090));
+            double bladeWid = bladeLen * 0.50;
+            ulong lSeed = Rng.Mix(seed, (ulong)(l * 37 + 101));
+
+            Broadleaf.BuildLeaf(m, apexPos, lDir, bladeLen, bladeWid,
+                BroadleafOutline.Ovate, lSeed, c1, c2,
+                age: 0.50 + 0.30 * (l / (double)apexLeaves), camber: 0.06, midribFold: 0.08,
+                wavyMargin: 0.015, wavyFrequency: 3.5, tipCurl: 0.04,
+                petioleLength: 0.008, petioleRadius: 0.0016, petioleKink: 0.12,
+                undersideColor: underColor, detailOverride: Math.Max(1, detail));
+        }
+
+        // 3. Branches spaced vertically regularly up the trunk, each clockwise 120° from the one below it
+        int numBranches = juvenile ? 5 : (detail == 2 ? 5 : (detail == 1 ? 7 : 9 + rng.NextInt(2)));
+        double yStart = juvenile ? 0.09 : 0.08;
+        double yEnd = juvenile ? 0.60 : 0.65;
+        double baseAz = rng.Range(0, Math.PI * 2);
+
+        for (int b = 0; b < numBranches; b++)
+        {
+            double t = b / (double)(numBranches - 1);
+            double yJunc = MathD.Lerp(yStart, yEnd, t);
+
+            // Clockwise 120 degrees from the branch below it
+            double branchAz = baseAz - b * (2.0 * Math.PI / 3.0);
+            var outward = MidRadial(branchAz);
+            var ortho = MidRadial(branchAz + Math.PI * 0.5);
+
+            double reach = (juvenile ? 0.56 : 0.78) * MathD.Lerp(1.05, 0.65, Math.Pow(t, 0.85));
+            double rise = (juvenile ? 0.08 : 0.12) * MathD.Lerp(1.10, 0.75, t);
+
+            // Branch splits from trunk angled up, and gradually curves to be mostly horizontal at the tip
+            var s0 = Vec3.Up * yJunc;
+            var s1 = s0 + outward * (reach * 0.22) + Vec3.Up * (rise * 0.50);
+            var s2 = s0 + outward * (reach * 0.48) + Vec3.Up * (rise * 0.82);
+            var s3 = s0 + outward * (reach * 0.76) + Vec3.Up * (rise * 0.96);
+            var s4 = s0 + outward * reach + Vec3.Up * rise;
+
+            var branchPath = new[] { s0, s1, s2, s3, s4 };
+            double branchBaseR = Math.Max(0.005, trunkBaseR * 0.45 * (1.0 - 0.35 * t));
+            double branchTipR = Math.Max(0.002, branchBaseR * 0.35);
+            MidLacemantleDarkWoodyStem(m, branchPath, branchBaseR, branchTipR, detail);
+
+            // 4. Heavy leaf and twig concentration at the end of each branch
+            var twigEndpoints = new List<(Vec3 Start, Vec3 End, Vec3 Dir)>();
+
+            // First pair of lateral twigs at s2 (inner distal reach)
+            if (detail < 2)
             {
-                double ht = .38 + t * (.55 / (tiers - 1));
-                var junction = root * (1 - ht) + top * ht;
-                int arms = detail == 2 ? 2 : 3;
-                for (int a = 0; a < arms; a++)
+                double sideReach1 = reach * 0.26;
+                var leftTwigEnd = s2 + (outward * 0.75 - ortho * 0.65).Normalized() * sideReach1 + Vec3.Up * (rise * 0.06);
+                var rightTwigEnd = s2 + (outward * 0.75 + ortho * 0.65).Normalized() * sideReach1 + Vec3.Up * (rise * 0.06);
+                MidLacemantleDarkWoodyStem(m, new[] { s2, leftTwigEnd }, branchTipR * 1.1, branchTipR * 0.6, detail);
+                MidLacemantleDarkWoodyStem(m, new[] { s2, rightTwigEnd }, branchTipR * 1.1, branchTipR * 0.6, detail);
+                twigEndpoints.Add((s2, leftTwigEnd, (leftTwigEnd - s2).Normalized()));
+                twigEndpoints.Add((s2, rightTwigEnd, (rightTwigEnd - s2).Normalized()));
+            }
+
+            // Second pair of lateral twigs at s3 (outer distal reach)
+            double sideReach2 = reach * 0.20;
+            var leftSubTwigEnd = s3 + (outward * 0.80 - ortho * 0.45).Normalized() * sideReach2 + Vec3.Up * (rise * 0.03);
+            var rightSubTwigEnd = s3 + (outward * 0.80 + ortho * 0.45).Normalized() * sideReach2 + Vec3.Up * (rise * 0.03);
+            MidLacemantleDarkWoodyStem(m, new[] { s3, leftSubTwigEnd }, branchTipR, branchTipR * 0.6, detail);
+            MidLacemantleDarkWoodyStem(m, new[] { s3, rightSubTwigEnd }, branchTipR, branchTipR * 0.6, detail);
+            twigEndpoints.Add((s3, leftSubTwigEnd, (leftSubTwigEnd - s3).Normalized()));
+            twigEndpoints.Add((s3, rightSubTwigEnd, (rightSubTwigEnd - s3).Normalized()));
+
+            // Terminal branch tip
+            twigEndpoints.Add((s3, s4, (s4 - s3).Normalized()));
+
+            // Heavy concentration of fine lacy ovate leaves at the end of each twig and branch tip
+            for (int tw = 0; tw < twigEndpoints.Count; tw++)
+            {
+                var (tStart, tEnd, tDir) = twigEndpoints[tw];
+
+                // Intermediate bilateral leaves along distal twig
+                int midLeafCount = detail == 2 ? 1 : (juvenile ? 2 : 3);
+                for (int l = 0; l < midLeafCount; l++)
                 {
-                    double az = phase + (a * 2 * Math.PI / arms) + (t % 2) * .7 + rng.Range(-.24, .24);
-                    var outward = MidRadial(az);
-                    double reach = rng.Range(.43, .79) * (1 - .22 * t / (double)tiers);
-                    var bend = junction + outward * reach * .54 + Vec3.Up * .025;
-                    var end = junction + outward * reach + Vec3.Up * rng.Range(-.07, .05);
-                    MidStem(m, bark, new[] { junction, bend, end }, .009);
-                    int twigs = detail == 2 ? 3 : 5;
-                    for (int q = 0; q < twigs; q++)
-                    {
-                        var anchor = bend * (1 - q / (double)(twigs + 1)) + end * (q / (double)(twigs + 1));
-                        double twigAz = az + rng.Range(-.95, .95);
-                        var dir = MidRadial(twigAz);
-                        var twigTip = anchor + dir * rng.Range(.12, .23) + Vec3.Up * rng.Range(-.06, .07);
-                        MidStem(m, bark, new[] { anchor, twigTip }, .0036);
-                        int leafCount = detail == 2 ? 3 : 5;
-                        for (int l = 0; l < leafCount; l++)
-                        {
-                            var attach = anchor * (1 - l / (double)leafCount) + twigTip * (l / (double)leafCount);
-                            var leafDir = (dir * .35 + MidRadial(twigAz + (l % 2 == 0 ? 1.10 : -1.10))
-                                + Vec3.Up * rng.Range(-.08, .10)).Normalized();
-                            double len = rng.Range(.085, .15);
-                            MidBlade(m, attach, leafDir, len, len * .27, c1, c2,
-                                Rng.Mix(seed, (ulong)(s * 100000 + t * 10000 + a * 1000 + q * 100 + l)));
-                        }
-                    }
+                    double st = (l + 1.0) / (midLeafCount + 1.0);
+                    var attach = tStart * (1.0 - st) + tEnd * st;
+                    double sideSign = (l % 2 == 0) ? 1.0 : -1.0;
+                    var sideVec = tDir.Cross(Vec3.Up).Normalized();
+                    var lDir = (sideVec * (sideSign * 0.70) + tDir * 0.45 + Vec3.Up * 0.08).Normalized();
+
+                    double bladeLen = (juvenile ? rng.Range(0.045, 0.065) : rng.Range(0.055, 0.080));
+                    double bladeWid = bladeLen * 0.50;
+                    ulong lSeed = Rng.Mix(seed, (ulong)(b * 10000 + tw * 200 + l * 7 + 1));
+
+                    Broadleaf.BuildLeaf(m, attach, lDir, bladeLen, bladeWid,
+                        BroadleafOutline.Ovate, lSeed, c1, c2,
+                        age: 0.65 + 0.30 * t, camber: 0.06, midribFold: 0.08,
+                        wavyMargin: 0.015, wavyFrequency: 3.5, tipCurl: 0.04,
+                        petioleLength: 0.007, petioleRadius: 0.0016, petioleKink: 0.10,
+                        undersideColor: underColor, detailOverride: Math.Max(1, detail));
+                }
+
+                // Dense fan spray at each twig and branch tip
+                int tipLeaves = detail == 2 ? 3 : (juvenile ? 4 : (detail == 1 ? 5 : 6 + rng.NextInt(2)));
+                var tSide = tDir.Cross(Vec3.Up).Normalized();
+                for (int l = 0; l < tipLeaves; l++)
+                {
+                    double angle = 2 * Math.PI * l / tipLeaves + rng.Range(-0.20, 0.20);
+                    double lateral = Math.Cos(angle);
+                    double vertical = Math.Sin(angle);
+                    var lDir = (tSide * (lateral * 0.65) + Vec3.Up * (vertical * 0.35 + 0.10) + tDir * 0.50).Normalized();
+
+                    double bladeLen = (juvenile ? rng.Range(0.050, 0.070) : rng.Range(0.060, 0.088));
+                    double bladeWid = bladeLen * 0.50;
+                    ulong lSeed = Rng.Mix(seed, (ulong)(b * 20000 + tw * 500 + l * 19 + 55));
+
+                    Broadleaf.BuildLeaf(m, tEnd, lDir, bladeLen, bladeWid,
+                        BroadleafOutline.Ovate, lSeed, c1, c2,
+                        age: 0.70 + 0.25 * t, camber: 0.06, midribFold: 0.08,
+                        wavyMargin: 0.015, wavyFrequency: 3.5, tipCurl: 0.04,
+                        petioleLength: 0.008, petioleRadius: 0.0016, petioleKink: 0.10,
+                        undersideColor: underColor, detailOverride: Math.Max(1, detail));
                 }
             }
         }

@@ -4,7 +4,7 @@
     "archetype":  "plant",
     "placementGroup":  "woody",
     "role":  "Tiered understory woody plant with lacy horizontal branch shelves and substantial filtered light.",
-    "description":  "Several thin upright stems carry staggered horizontal branches covered in many small ovate leaves. Tier gaps create visible shadow pockets and fine-grained foliage.",
+    "description":  "A straight dark woody trunk carries regularly spaced tiers of branches rotating in 120-degree intervals, curving outward to heavy terminal concentrations of fine lacy foliage with an upright apex spray.",
     "habitat":  {
                     "substrates":  {
                                        "soil":  1,
@@ -82,7 +82,7 @@
                                   0.31
                               ],
                    "colorVariance":  0.095,
-                   "height":  2.15
+                   "height":  1.4
                },
     "tags":  [
                  "plant",
