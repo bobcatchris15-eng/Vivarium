@@ -103,7 +103,7 @@ public sealed class FloraSystem
         lock (_canopyLock)
         {
             if (!_canopyShadeDirty) return;
-            foreach (int cell in _w.Grid.DomainCells) _canopyShade.Values[cell] = 0;
+            Array.Clear(_canopyShade.Values, 0, _canopyShade.Values.Length);
             foreach (var f in _woodyCanopy)
             {
                 var sp = C.FloraOrThrow(f.SpeciesId);
