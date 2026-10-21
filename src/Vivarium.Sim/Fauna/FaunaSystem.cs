@@ -24,6 +24,8 @@ public sealed class FaunaSystem
 {
     private readonly VivariumWorld _w;
     private readonly List<FaunaIndividual> _nb = new();
+    // Dedicated buffer: neighborhood queries elsewhere reuse _nb, including during reproduction.
+    private readonly List<FaunaIndividual> _metricMembers = new();
     private readonly List<Flora.FloraIndividual> _fnb = new();
     private readonly ulong _wanderHash = Hash.Fnv1a64("fauna.wander");
     /// <summary>Ticks between wander control values (60 ticks = 10 simulated minutes).</summary>
@@ -317,16 +319,23 @@ public sealed class FaunaSystem
     /// <summary>Local cohesion metric: mean distance of individuals of a species to their nearest conspecific.</summary>
     public double MeanNearestNeighbourDistance(string species)
     {
-        var members = _w.Fauna.Items.Where(f => f.SpeciesId == species).ToList();
-        if (members.Count < 2) return double.NaN;
+        _metricMembers.Clear();
+        foreach (var f in _w.Fauna.Items)
+        {
+            if (f.SpeciesId == species)
+            {
+                _metricMembers.Add(f);
+            }
+        }
+        if (_metricMembers.Count < 2) return double.NaN;
         double sum = 0;
-        foreach (var a in members)
+        foreach (var a in _metricMembers)
         {
             double best = double.PositiveInfinity;
-            foreach (var b in members) if (a != b) best = Math.Min(best, Vec2.Distance(a.PositionXZ, b.PositionXZ));
+            foreach (var b in _metricMembers) if (a != b) best = Math.Min(best, Vec2.Distance(a.PositionXZ, b.PositionXZ));
             sum += best;
         }
-        return sum / members.Count;
+        return sum / _metricMembers.Count;
     }
 
     private static double BlendAngles(double a, double b, double t) => a + MathD.WrapAngle(b - a) * t;

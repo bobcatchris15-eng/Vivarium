@@ -214,6 +214,36 @@ public class EcologyTests
         Assert.True(world.Fauna.Count > 0 && world.Flora.Count > 0);
         Assert.Equal(d1, Run(out _));
     }
+    [Fact]
+    public void AddWasteNutrientsAddsToCorrectCellAndTally()
+    {
+        var w = TestUtil.FlatWorld(1);
+        var p = new Vec2(1, 1);
+        int c = w.Grid.NearestDomainCell(p);
+
+        double initialTally = w.Tally.NutrientsFromWaste;
+        double initialCellNutrients = w.Fields.Nutrients.Values[c];
+
+        // Negative amount should do nothing
+        w.Ecology.AddWasteNutrients(p, -5.0);
+        Assert.Equal(initialTally, w.Tally.NutrientsFromWaste);
+        Assert.Equal(initialCellNutrients, w.Fields.Nutrients.Values[c]);
+
+        // Zero amount should do nothing
+        w.Ecology.AddWasteNutrients(p, 0);
+        Assert.Equal(initialTally, w.Tally.NutrientsFromWaste);
+        Assert.Equal(initialCellNutrients, w.Fields.Nutrients.Values[c]);
+
+        // Positive amount should add to tally and cell
+        double amount = 0.5; // Use a reasonable amount that won't get clamped to max capacity
+        w.Ecology.AddWasteNutrients(p, amount);
+
+        double actualAdded = w.Fields.Nutrients.Values[c] - initialCellNutrients;
+
+        // Verify tally increases by actual amount added
+        Assert.Equal(initialTally + actualAdded, w.Tally.NutrientsFromWaste, 5);
+        Assert.True(actualAdded > 0);
+    }
 }
 
 [Trait("Suite", "Tools")]

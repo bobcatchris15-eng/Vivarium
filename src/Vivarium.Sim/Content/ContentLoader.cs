@@ -17,10 +17,35 @@ public interface IContentSource
 public sealed class DirectoryContentSource : IContentSource
 {
     public string Root { get; }
-    public DirectoryContentSource(string root) { Root = Path.GetFullPath(root); }
+    private readonly string _rootWithSep;
+
+    public DirectoryContentSource(string root)
+    {
+        Root = Path.GetFullPath(root);
+        _rootWithSep = Root.EndsWith(Path.DirectorySeparatorChar.ToString()) ? Root : Root + Path.DirectorySeparatorChar;
+    }
+
     public string Describe => Root;
-    public bool Exists(string p) => File.Exists(Path.Combine(Root, p));
-    public string ReadText(string p) => File.ReadAllText(Path.Combine(Root, p));
+
+    private string GetSafePath(string p)
+    {
+        var combined = Path.Combine(Root, p);
+        var full = Path.GetFullPath(combined);
+        if (!full.StartsWith(_rootWithSep, Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) && full != Root)
+        {
+            throw new UnauthorizedAccessException($"Path traversal attempt detected: {p}");
+        }
+        return full;
+    }
+
+    public bool Exists(string p)
+    {
+        try { return File.Exists(GetSafePath(p)); }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (ArgumentException) { return false; }
+    }
+
+    public string ReadText(string p) => File.ReadAllText(GetSafePath(p));
 }
 
 /// <summary>In-memory source for tests (e.g. intentionally broken fixtures layered over real content).</summary>
