@@ -67,13 +67,23 @@ public sealed class MoistureBonusField
 
     public void ImportDomainValues(double[] a)
     {
-        if (a.Length != Grid.DomainCells.Length)
-            throw new InvalidDataException($"moisture bonus expects {Grid.DomainCells.Length} values, got {a.Length}.");
+        int[] cells = Grid.DomainCells;
+        if (a.Length != cells.Length)
+            throw new InvalidDataException($"moisture bonus expects {cells.Length} values, got {a.Length}.");
+
+        double[] vals = Values;
+        double sum = 0;
         for (int k = 0; k < a.Length; k++)
         {
             double v = a[k];
-            if (!double.IsFinite(v)) throw new InvalidDataException($"moisture bonus value {k} is not finite.");
-            Values[Grid.DomainCells[k]] = v;
+            sum += v;
+            vals[cells[k]] = v;
+        }
+
+        if (!double.IsFinite(sum))
+        {
+            for (int k = 0; k < a.Length; k++)
+                if (!double.IsFinite(a[k])) throw new InvalidDataException($"moisture bonus value {k} is not finite.");
         }
     }
 }
