@@ -128,6 +128,29 @@ public class PersistenceTests
         Assert.Null(r.World);
     }
 
+    [Fact]
+    public void TryStartSkipsWhenBusy()
+    {
+        var w = Running(50);
+        var path = Path.Combine(TestUtil.TempDir(), "trystart.vivsave");
+        var gate = new ManualResetEventSlim(false);
+        var auto = new AutosaveController(path) { IntervalSeconds = 1 };
+        auto.Writer = (m, p, file) => { gate.Wait(TimeSpan.FromSeconds(10)); return SaveSystem.Write(m, p, file); };
+
+        Assert.True(auto.TryStart(w));
+        Assert.Equal(1, auto.Started);
+        Assert.True(auto.Busy);
+        Assert.Equal(0, auto.SkippedBecauseBusy);
+
+        Assert.False(auto.TryStart(w));
+        Assert.Equal(1, auto.Started);
+        Assert.True(auto.Busy);
+        Assert.Equal(1, auto.SkippedBecauseBusy);
+
+        gate.Set();
+        auto.Flush(TimeSpan.FromSeconds(10));
+        Assert.False(auto.Busy);
+    }
     [Fact] // t-162
     public void AutosaveNeverOverlapsAndDoesNotBlockSimulation()
     {
