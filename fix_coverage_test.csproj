@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="src/Vivarium.Sim/Vivarium.Sim.csproj" />
+    <ProjectReference Include="tests/Vivarium.Sim.Tests/Vivarium.Sim.Tests.csproj" />
+  </ItemGroup>
+</Project>

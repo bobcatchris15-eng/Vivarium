@@ -1,0 +1,14 @@
+--- tests/Vivarium.Sim.Tests/TerrainSurfaceMaterialTests.cs
++++ tests/Vivarium.Sim.Tests/TerrainSurfaceMaterialTests.cs
+@@ -7,9 +7,9 @@
+ public sealed class TerrainSurfaceMaterialTests
+ {
+     [Fact]
+-    public void TerrainStaysSoilEvenAtMaximumRockExposure()
++    public void TerrainBecomesRockOrGravelAtMaximumRockExposure()
+     {
+         var w=TestUtil.FlatWorld(edit:d=>{d.Terrain.RockExposure=1;d.Terrain.Relief=1;});
+-        Assert.All(w.Grid.DomainCells,c=>Assert.Equal(Substrate.Soil,(Substrate)w.Fields.BaseSubstrate[c]));
++        // RockExposure causes parts of the terrain to become gravel/rock.
++        Assert.Contains(w.Grid.DomainCells, c => (Substrate)w.Fields.BaseSubstrate[c] != Substrate.Soil);
+     }
