@@ -148,10 +148,10 @@ public sealed class Network : IPlasmodiumNetwork
         if (activeSources.Count < 2 || nodes.Count == 0)
         {
             // No flow context: let conductance relax toward zero (pure decay), but do not judge retraction.
-            foreach (var key in _edgeD.Keys.ToList())
+            foreach (var kvp in _edgeD)
             {
-                double dNew = _edgeD[key] / (1 + dt * Gamma);
-                _edgeD[key] = dNew < PruneThreshold ? 0 : dNew;
+                double dNew = kvp.Value / (1 + dt * Gamma);
+                _edgeD[kvp.Key] = dNew < PruneThreshold ? 0 : dNew;
             }
             return;
         }
