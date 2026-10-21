@@ -48,10 +48,11 @@ public partial class GuardianRenderer : Node3D
     public GuardianSecondaryMotion? SecondaryMotion { get; private set; }
     public GuardianWaterContact? WaterContact { get; private set; }
     public float BodyTrunkCorrection { get; private set; }
+    /// <summary>Wall time of each step of the most recent guardian build, in milliseconds.</summary>
+    public readonly System.Collections.Generic.Dictionary<string, double> BuildTimings = new();
     /// <summary>Diagnostic studio support only; null uses production terrain/root contact.</summary>
     public float? ReviewSupportPlaneHeight { get; set; }
-    public Func<Vector3, float>? ReviewGroundSample { get; set; }
-    public bool UseLocalFootholds => _def?.Archetype is "woodland_omnivore" or "armored_forest" or "quilled_arboreal" or "crested_canopy";
+    public Func<Vector3, float>? ReviewGroundSample { get; set; }    public bool UseLocalFootholds => _def?.Archetype is "woodland_omnivore" or "armored_forest" or "quilled_arboreal" or "crested_canopy";
     public bool FootTargetAllowed(Vector3 point) => _w?.PilotTree?.BlocksTrunk(new Vec2(point.X, point.Z)) != true;
     public float SupportHeight(Vector3 point)
     {
@@ -71,8 +72,13 @@ public partial class GuardianRenderer : Node3D
     public void Build(VivariumWorld w)
     {
         _w = w;
-        if (_instance != null)
-        {
+        // Loading a guardian is the longest single stage of a world start, so the
+        // individual costs are timed and reported instead of guessed at.
+        var buildTimer = System.Diagnostics.Stopwatch.StartNew();
+        double mark = 0;
+        void Mark(string name) { double now = buildTimer.Elapsed.TotalMilliseconds; BuildTimings[name] = now - mark; mark = now; }
+        BuildTimings.Clear();
+        if (_instance != null)        {
             RemoveChild(_instance);
             _instance.QueueFree();
             _instance = null;
@@ -93,11 +99,24 @@ public partial class GuardianRenderer : Node3D
         if (_def == null) return;
 
         string glbPath = $"res://assets/guardians/{_def.Archetype}/guardian.glb";
+        // The guardian model is the largest asset in the game. When the world
+        // start knows which guardian it will need, the load is started on a
+        // worker thread so the island, water, props and tree are prepared while
+        // the model is still streaming in.
+        var threaded = PreloadGuardians.TryTake(glbPath);
         if (ResourceLoader.Exists(glbPath))
         {
             try
             {
-                var scene = GD.Load<PackedScene>(glbPath);
+                PackedScene? scene = threaded;
+                if (scene == null)
+                {
+                    var status = ResourceLoader.LoadThreadedGetStatus(glbPath);
+                    if (status == ResourceLoader.ThreadLoadStatus.Loaded) scene = ResourceLoader.LoadThreadedGet(glbPath) as PackedScene;
+                    else if (status == ResourceLoader.ThreadLoadStatus.InProgress) scene = null;
+                }
+                if (scene == null) scene = GD.Load<PackedScene>(glbPath);
+                Mark("LoadPackedScene");
                 if (scene != null)
                 {
                     if (_def.Archetype == "woodland_omnivore" && Array.IndexOf(Main.UserArgs, "--guardian-review") >= 0
@@ -111,6 +130,7 @@ public partial class GuardianRenderer : Node3D
                             ?? throw new InvalidOperationException("Coati model candidate is not spatial");
                     }
                     else _instance = scene.Instantiate<Node3D>();
+                    Mark("Instantiate");
                     if (_def.Archetype == "woodland_omnivore" && Array.IndexOf(Main.UserArgs, "--guardian-review") >= 0
                         && Main.ArgAfter("--guardian-coati-coat-candidate") is { } coatPath)
                         LoadReviewCoat(_instance, coatPath);
@@ -151,14 +171,17 @@ public partial class GuardianRenderer : Node3D
         float scale = (float)(_def.VisualScale * w.Guardian.Scale * GuardianDef.BodySizeMultiplier);
         _instance.Scale *= scale;
         ApplySurfaceMaterials(_instance);
+        Mark("SurfaceMaterials");
         _groundOffset = Math.Max(0, -LowestPoint(_instance, Transform3D.Identity));
         _instance.Position += Vector3.Up * _groundOffset;
+        Mark("LowestPoint");
 
         // Enable and review each species as its cinematic pass is completed.
         if (_skeleton != null && _def.Archetype is "woodland_omnivore" or "great_ground" or "armored_forest" or "quilled_arboreal" or "canopy_serpent" or "crested_canopy")
         {
             ShrubContact = new GuardianVegetationContact { Name = "GuardianShrubContact", Flora = Vegetation };
             AddChild(ShrubContact);
+            if (Array.IndexOf(Main.UserArgs, "--guardian-stem-audit") >= 0) ShrubContact.BeginStemAudit(512);
             AppendageContact = new GuardianAppendageModifier { Name = "GuardianTailContact", World = w,
                 Renderer = this, Vegetation = ShrubContact };
             if (_def.Archetype == "woodland_omnivore")
@@ -202,7 +225,11 @@ public partial class GuardianRenderer : Node3D
                 _skeleton.AddChild(LegContact);
             }
             _skeleton.AddChild(AppendageContact);
+            Mark("ContactModifiers");
             SkinContact = new GuardianSkinContact(_instance, _skeleton, continuousBody: continuousBody, chainPrefix: continuousBody ? "Body" : "Tail", biped: _def.Archetype == "crested_canopy");
+            if (Array.IndexOf(Main.UserArgs, "--guardian-lowest-point-audit") >= 0)
+                SkinContact.LowestPointAuditBudget = 256;
+            Mark("SkinContact");
             GD.Print("GUARDIAN_SKIN_CONTACT " + _def.Archetype + " valid=" + SkinContact.Valid + " " + SkinContact.Diagnostic);
         }
 
@@ -228,6 +255,7 @@ public partial class GuardianRenderer : Node3D
         _curT = w.Clock.SimSeconds;
         _prevT = _curT - VivariumWorld.Cadence.FaunaBehaviour * Vivarium.Sim.Time.SimClock.FixedStepSeconds;
         _currentAnim = "";
+        Mark("Total");
     }
 
     // Review only: replace a single mesh resource while retaining the original
@@ -556,9 +584,10 @@ public partial class GuardianRenderer : Node3D
                 if (SkinContact?.Valid == true)
                     foreach (string region in new[] { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Head" })
                     {
-                        var skinSample = SkinContact.Evaluate(region, SupportHeight);
-                        if (!skinSample.Valid) continue;
-                        var point = skinSample.LowestPoint;
+                        // The lowest point by ground clearance, measured the way
+                        // the full evaluation measures it, without asking the
+                        // ground about every sample.
+                        if (!SkinContact.TryLowestPoint(region, SupportHeight, out var point)) continue;
                         var hit = _w.PilotTree.Penetration(new Vec3(point.X, point.Y, point.Z), .025f);
                         if (hit.Depth > 0 && hit.Normal.Y < .5f)
                         {

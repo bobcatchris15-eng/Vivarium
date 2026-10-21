@@ -24,7 +24,7 @@ namespace Vivarium.Game.App;
 /// </summary>
 public partial class SmokeRunner : Node
 {
-    public enum Mode { Smoke, Reload, Render, Perf, Reference, SpeciesWorld, WorldReview }
+    public enum Mode { Smoke, Reload, Render, Perf, Reference, SpeciesWorld, WorldReview, NewWorld }
     public GameSession Session { get; set; } = null!;
     public string OutDir { get; set; } = "";
     public Mode RunMode { get; set; }
@@ -58,6 +58,7 @@ public partial class SmokeRunner : Node
                 case Mode.Render: await RenderAsync(); break;
                 case Mode.WorldReview: await WorldReviewAsync(); break;
                 case Mode.Perf: if (System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null) await LandscapeAsync(); else await PerfAsync(); break;
+                case Mode.NewWorld: await NewWorldAsync(); break;
                 case Mode.Reference: await ReferenceAsync(); break;
                 case Mode.SpeciesWorld: await SpeciesWorldAsync(); break;
             }
@@ -75,7 +76,7 @@ public partial class SmokeRunner : Node
             ["mode"] = RunMode.ToString(), ["version"] = AppVersion.Application, ["ok"] = ok && code == 0,
             ["checks"] = _checks, ["facts"] = _facts, ["exported"] = OS.HasFeature("template"),
         };
-        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", Mode.Reference => "reference_report.json", Mode.SpeciesWorld => "species_world_report.json", Mode.WorldReview => "world_review_result.json", _ => "render_report.json" };
+        string name = RunMode switch { Mode.Smoke => "smoke_result.json", Mode.Reload => "reload_result.json", Mode.Perf => "perf_report.json", Mode.Reference => "reference_report.json", Mode.SpeciesWorld => "species_world_report.json", Mode.WorldReview => "world_review_result.json", Mode.NewWorld => "new_world_report.json", _ => "render_report.json" };
         File.WriteAllText(Path.Combine(OutDir, name), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print($"VIVARIUM_{RunMode.ToString().ToUpperInvariant()}_{(code == 0 ? "OK" : "FAILED")} checks={_checks.Count} failed={_checks.Count(c => !(bool)c["ok"])}");
         foreach (var c in _checks.Where(c => !(bool)c["ok"])) GD.PrintErr($"  FAILED: {c["name"]}: {c["detail"]}");
@@ -137,8 +138,21 @@ public partial class SmokeRunner : Node
         // new world through the ordinary UI
         await Press("NewWorldButton");
         Find<LineEdit>("SeedEdit").Text = "20260923";
-        await Press("CreateWorldButton", 10);
+        var previousWorld = Session.World;
+        await Press("CreateWorldButton", 1);
+        ulong creationDeadline = Time.GetTicksMsec() + 120_000;
+        while ((Session.Ui.Windows.CreatingWorld || ReferenceEquals(Session.World, previousWorld)) && Time.GetTicksMsec() < creationDeadline)
+            await Frames(1);
         Check("new world created from UI", Session.World != null && W.Flora.Count > 0 && W.Fauna.Count > 0, $"flora {W.Flora.Count}, fauna {W.Fauna.Count}");
+        Check("async world entry completed", !Session.Ui.Windows.CreatingWorld && !Session.LoadingWorld && !ReferenceEquals(Session.World, previousWorld));
+        if (Main.UserArgs.Contains("--startup-only"))
+        {
+            await Frames(3);
+            Check("cached fauna renders after world replacement", Session.Fauna.Drawn > 0, $"drawn={Session.Fauna.Drawn}");
+            Check("world entry releases camera and tools", !Session.CameraRig.KeyboardBlocked && Session.Tools.IsProcessing());
+            await Screenshot("world_ready");
+            return;
+        }
 
         // camera: exterior view, dive under water, surface again
         var cam = Session.CameraRig;
@@ -203,7 +217,7 @@ public partial class SmokeRunner : Node
         r = tools.ApplyAt(HitAt(mossSpot));
         Check("introduce flora", r?.Ok == true && W.Flora.Count == flora + 1, r?.Message ?? "");
         // one of each new kind of organism: fern, fungus, slime mold (where their habitat allows)
-        foreach (var newId in new[] { "veilfern", "dewbonnet", "ambervein" })
+        foreach (var newId in new[] { "veilfern", "dewbonnet" })
         {
             tools.FloraSpecies = newId;
             var nsp = W.Content.FloraOrThrow(newId);
@@ -351,6 +365,51 @@ public partial class SmokeRunner : Node
         await Screenshot("reload_continued");
     }
 
+    // ------------------------------------------------------------------ new world insertion
+
+    /// <summary>
+    /// Measures the "new vivarium" insertion path: how long the world takes to grow
+    /// and how long each renderer stage takes to prepare it, for a world created
+    /// after the process already built its content meshes.
+    /// </summary>
+    private async Task NewWorldAsync()
+    {
+        var content = Session.Content;
+        var descriptor = content.PresetOrThrow("default").Clone();
+        descriptor.Seed = 12345UL;
+        descriptor.Name += " - insertion";
+        var report = new List<Dictionary<string, object>>();
+        for (int round = 0; round < 2; round++)
+        {
+            descriptor.Seed = 12345UL + (ulong)round;
+            var gen = System.Diagnostics.Stopwatch.StartNew();
+            var world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, descriptor, warmupSurfaceWater: false));
+            double generationMs = gen.Elapsed.TotalMilliseconds;
+            await Session.StartWorldAsync(world, null, _ => { });
+            await Frames(4);
+            var stages = Session.StageTimings.Select(t => new { stage = t.Stage, ms = Math.Round(t.Ms, 1) }).ToArray();
+            double stageTotal = stages.Sum(s => s.ms);
+            report.Add(new Dictionary<string, object>
+            {
+                ["round"] = round,
+                ["generation_ms"] = Math.Round(generationMs, 1),
+                ["stage_total_ms"] = Math.Round(stageTotal, 1),
+                ["stages"] = stages,
+                ["guardian_build"] = Session.Guardian.BuildTimings.ToDictionary(p => p.Key, p => Math.Round(p.Value, 1)),
+                ["guardian_skin_build"] = Session.Guardian.SkinContact?.BuildTimings.ToDictionary(p => p.Key, p => Math.Round(p.Value, 1)),
+                ["flora"] = world.Flora.Count,
+                ["fauna"] = world.Fauna.Count,
+            });
+            GD.Print($"NEW_WORLD_ROUND {round} generation_ms={generationMs:0.0} stage_total_ms={stageTotal:0.0}");
+            foreach (var s in stages) GD.Print($"NEW_WORLD_STAGE {s.stage} {s.ms:0.0}ms");
+            foreach (var t in Session.Guardian.BuildTimings) GD.Print($"NEW_WORLD_GUARDIAN {t.Key} {t.Value:0.0}ms");
+            if (Session.Guardian.SkinContact is { } skin)
+                foreach (var t in skin.BuildTimings) GD.Print($"NEW_WORLD_SKIN {t.Key} {t.Value:0.0}");
+        }
+        _facts["new_world"] = report;
+        Check("new world insertion completes", report.Count == 2, $"{report.Count} rounds");
+    }
+
     // ------------------------------------------------------------------ perf: normal play, flying camera
 
     private async Task PerfAsync()
@@ -363,6 +422,18 @@ public partial class SmokeRunner : Node
         long lastTick = W.Clock.Tick;
         double worstFrame = 0; int frames = 0; ulong lastSample = start;
         var allFrames = new List<double>(8192); var fpsSamples = new List<double>();
+        FrameProfiler.Reset();
+        // Machine and clock calibration: without it a slow timestamp read can be
+        // mistaken for slow work in every scope measured with the same clock.
+        var calibClock = System.Diagnostics.Stopwatch.GetTimestamp();
+        for (int i = 0; i < 200_000; i++) _ = System.Diagnostics.Stopwatch.GetTimestamp();
+        double timestampNs = System.Diagnostics.Stopwatch.GetElapsedTime(calibClock).TotalMilliseconds * 1e6 / 200_000.0;
+        var calibLoop = System.Diagnostics.Stopwatch.GetTimestamp();
+        double acc = 0;
+        for (int i = 0; i < 20_000_000; i++) acc += Math.Sqrt(i);
+        double loopNs = System.Diagnostics.Stopwatch.GetElapsedTime(calibLoop).TotalMilliseconds * 1e6 / 20_000_000.0;
+        _facts["calibration"] = new { timestamp_ns = timestampNs, sqrt_loop_ns = loopNs, checksum = acc };
+        var profileStartFrame = Engine.GetProcessFrames();
         // A 30-minute stress recording writes stills directly from the Godot
         // viewport: unlike Windows desktop duplication, this works even when
         // the authorized remote desktop session is locked or headless.
@@ -426,7 +497,7 @@ public partial class SmokeRunner : Node
                     $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} floraVis={Session.Flora.Visible_} faunaDrawn={Session.Fauna.Drawn} objs={Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} gc0={System.GC.CollectionCount(0)} gc1={System.GC.CollectionCount(1)} gc2={System.GC.CollectionCount(2)} slowest: " + FrameProfiler.TakeReport() +
                     $" floraStages=({Session.Flora.TakeRefreshDiagnostics()})" +
                     $" ambientInst={Session.AmbientGround.LastGroundcoverInstances} matureCarpetCells={Session.AmbientGround.LastInfluencedGridCells} floraExcludeChecks={Session.AmbientGround.LastFloraExclusionCandidateChecks}" +
-                    $" plasmo_cells={W.CoverageSystem.LastPlasmodiumOccupiedCells} net={W.CoverageSystem.LastPlasmodiumNetworkMs:0.0}ms attr={W.CoverageSystem.LastPlasmodiumAttractantMs:0.0}ms front={W.CoverageSystem.LastPlasmodiumFrontAndFeedMs:0.0}ms phase={W.CoverageSystem.LastPlasmodiumTransportMs:0.0}ms relabel={W.CoverageSystem.LastPlasmodiumRelabelMs:0.0}ms lifecycle={W.CoverageSystem.LastPlasmodiumLifecycleMs:0.0}ms";
+                    " busy: " + FrameProfiler.TakeIntervalReport();
                 Log.Info(LogCategory.Perf, line);
                 samples.Add(line);
                 if (second > 3) fpsSamples.Add(Engine.GetFramesPerSecond());
@@ -434,6 +505,61 @@ public partial class SmokeRunner : Node
             }
         }
         _facts["samples"] = samples;
+        _facts["cpu_scope_per_frame_ms"] = FrameProfiler.PerFrameDurations((int)(Engine.GetProcessFrames() - profileStartFrame));
+        if (Session.Guardian.SkinContact is { } skin)
+            _facts["guardian_skin_cache"] = new {
+                valid = skin.Valid, rest_vertices = skin.RestVerticesChecked,
+                rest_error_m = skin.MaximumRestReconstructionError,
+                chain_audits = skin.ChainCacheAudits,
+                chain_samples = skin.ChainCacheAuditedSamples,
+                penetrating_samples = skin.ChainCachePenetratingSamples,
+                chain_influences = skin.ChainCacheAuditedInfluences,
+                correction_error_m = skin.MaximumChainCacheAuditError
+            };
+        if (Session.Guardian.AppendageContact is { } appendage)
+            _facts["guardian_constraint_cache"] = new {
+                radii_audited = appendage.ConstraintRadiusAuditValues,
+                error = appendage.MaximumConstraintCacheAuditError,
+                solve_steps = appendage.SolveSteps,
+                solve_iterations = appendage.SolveIterations,
+                vegetation_queries = appendage.VegetationQueries,
+                tree_queries = appendage.TreeQueries,
+                ground_queries = appendage.GroundQueries,
+                vegetation_ms = appendage.VegetationMs,
+                tree_ms = appendage.TreeMs,
+                ground_ms = appendage.GroundMs,
+                iteration_move_m = appendage.IterationMove,
+                convergence_histogram = appendage.ConvergenceHistogram,
+                convergence_samples = appendage.ConvergenceSamples,
+                convergence_tolerance_m = appendage.ConvergenceTolerance
+            };
+        if (Session.Guardian.ShrubContact is { } vegetation)
+            _facts["guardian_registry_cache"] = new {
+                queries = vegetation.RegistryCacheQueries,
+                hits = vegetation.RegistryCacheHits,
+                audits = vegetation.RegistryCacheAudits,
+                accepted = vegetation.RegistryCacheAcceptedAudits,
+                rejected = vegetation.RegistryCacheRejectedAudits,
+                reused_audits = vegetation.RegistryCacheReuseAudits,
+                spatial_queries = vegetation.SpatialQueries,
+                spatial_candidates = vegetation.SpatialCandidates,
+                spatial_broadphase = vegetation.SpatialBroadphase,
+                spatial_full_scans = vegetation.SpatialFullScans,
+                spatial_projected = vegetation.SpatialProjected,
+                spatial_narrow_ms = vegetation.SpatialNarrowMs,
+                spatial_broadphase_ms = vegetation.SpatialBroadphaseMs,
+                spatial_cell_lookups = vegetation.SpatialCellLookups,
+                spatial_max_span = vegetation.SpatialMaxSpan,
+                spatial_index_builds = vegetation.SpatialIndexBuilds,
+                spatial_index_cells = vegetation.SpatialIndexCells,
+                spatial_narrow_calls = vegetation.SpatialNarrowCalls,
+                stem_audits = vegetation.StemAudits,
+                stem_audit_error = vegetation.MaximumStemAuditError,
+                lowest_point_audits = Session.Guardian.SkinContact?.LowestPointAudits,
+                lowest_point_differences = Session.Guardian.SkinContact?.LowestPointAuditDifferences,
+                lowest_point_error = Session.Guardian.SkinContact?.MaximumLowestPointAuditError,
+                contact_plants = vegetation.ContactCount
+            };
         _facts["render_frames_recorded"]=frameIndex;
         if(recordFrames)
         {
@@ -442,6 +568,9 @@ public partial class SmokeRunner : Node
         }
         // Explicitly capture source-authored render population statistics so a
         // strong average FPS cannot conceal missing leaves or fallback usage.
+        var invariants = W.CheckInvariants();
+        Check("world invariants after performance run", invariants.Count == 0, string.Join("; ", invariants.Take(5)));
+        _facts["bio_days"] = W.Clock.BioDays;
 
 _facts["fauna_gpu_allocation"] = new {
             visibleAnimals=Session.Fauna.Drawn,
@@ -457,7 +586,16 @@ _facts["fauna_gpu_allocation"] = new {
             ready=Session.Flora.PopulationReady,
             legacySpecies=Session.Flora.LoadedSpeciesCount,
             shadebellLegacyLayer=Session.Flora.HasLegacyLayer("shadebell"),
-            authoredShadebell=false
+            authoredShadebell=false,
+            luminousLights=Session.Flora.LuminousLightCount,
+            floraVisible=Session.Flora.Visible_,
+            trianglesDrawn=Session.Flora.TrianglesDrawn
+        };
+        _facts["flora_light_cache"] = new {
+            refreshes = Session.Flora.LuminousLightCacheAuditRefreshes,
+            lights = Session.Flora.LuminousLightCacheAuditLights,
+            pairs = Session.Flora.LuminousLightCacheAuditPairs,
+            overlap_error = Session.Flora.MaximumLuminousLightCacheAuditError
         };
         if (allFrames.Count > 0)
         {
@@ -504,7 +642,7 @@ _facts["fauna_gpu_allocation"] = new {
             float scale = (float)(W.FaunaSystem.PhenotypeOf(f).BodySize * W.Content.FaunaOrThrow(species).VisualScale);
             views.Add(("closeup_" + species, p + new Vector3(scale * 2.2f, scale * 1.6f, scale * 2.2f), p));
         }
-        foreach (var species in new[] { "velvetweave_moss", "embercrust_lichen", "glassrush", "prismstar", "veilfern", "clinglace", "dewbonnet", "emberfan_fungus", "ambervein", "sunstone_rosette", "frosttussock", "antlerlace_lichen" })
+        foreach (var species in new[] { "velvetweave_moss", "embercrust_lichen", "glassrush", "prismstar", "veilfern", "clinglace", "dewbonnet", "emberfan_fungus", "sunstone_rosette", "frosttussock", "antlerlace_lichen" })
         {
             var f = W.Flora.Items.FirstOrDefault(x => x.SpeciesId == species);
             if (f == null) continue;
@@ -555,31 +693,6 @@ _facts["fauna_gpu_allocation"] = new {
             await Frames(8);
             await Screenshot("growth_t1");
             _facts["growth_timelapse"] = $"{W.Clock.BioDays - day0:0.0} biological days, flora {flora0} -> {W.Flora.Count}";
-            // the slime-mold network after those days: centre on its largest cluster of patches
-            var slime = W.Flora.Items.Where(x => x.SpeciesId == "ambervein").ToList();
-            if (slime.Count > 0)
-            {
-                var hub = slime.OrderByDescending(x => slime.Count(o => Vec2.Distance(o.Position, x.Position) < 0.5)).ThenBy(x => x.Id.Value).First();
-                var hp = new Vector3((float)hub.X, (float)W.GroundHeight(hub.Position), (float)hub.Z);
-                cam.LookAtPoint(hp + new Vector3(0.55f, 0.6f, 0.55f), hp);
-                await Frames(8);
-                await Screenshot("slime_network");
-                _facts["slime_patches"] = slime.Count;
-            }
-            else if (W.Coverage.Plasmodium.Tiles.Any(t => !t.IsEmpty()))
-            {
-                var firstTile = W.Coverage.Plasmodium.Tiles.First(t => !t.IsEmpty());
-                int firstLi = 0;
-                for (int i = 0; i < CoverageTile.N; i++) if (firstTile.Occ[i] != 0) { firstLi = i; break; }
-                int gx = firstTile.Ti * CoverageSpec.TileEdge + (firstLi % CoverageSpec.TileEdge);
-                int gz = firstTile.Tj * CoverageSpec.TileEdge + (firstLi / CoverageSpec.TileEdge);
-                var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
-                var hp = new Vector3((float)p.X, (float)W.GroundHeight(p), (float)p.Z);
-                cam.LookAtPoint(hp + new Vector3(0.55f, 0.6f, 0.55f), hp);
-                await Frames(8);
-                await Screenshot("slime_network");
-                _facts["slime_patches"] = 1;
-            }
         }
         // full detail at distance: from the far overview every animal is either drawn with its full model or is
         // genuinely outside the view, and every plant instance uses its full mesh

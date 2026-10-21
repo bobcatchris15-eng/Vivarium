@@ -138,15 +138,12 @@ public class DeadFloraTests
         var w = TestUtil.FlatWorld();
         var dew = w.Content.FloraOrThrow("dewbonnet").Decomposition;
         var ember = w.Content.FloraOrThrow("emberfan_fungus").Decomposition;
-        var amber = w.Content.FloraOrThrow("ambervein").Decomposition;
 
         Assert.NotNull(dew);
         Assert.NotNull(ember);
-        Assert.NotNull(amber);
         Assert.True(dew!.FineMultiplier > dew.CoarseMultiplier);
         Assert.True(ember!.CoarseMultiplier > ember.FineMultiplier);
         Assert.True(dew.FruitMultiplier > 1);
-        Assert.True(amber!.FineMultiplier > 1);
     }
 
     [Fact]

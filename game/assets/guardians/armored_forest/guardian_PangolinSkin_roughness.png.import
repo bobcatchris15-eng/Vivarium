@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://njcjno53aq6h"
-path="res://.godot/imported/guardian_PangolinSkin_roughness.png-72beaa44ca54fb581d70369ee8377ca3.ctex"
+path.s3tc="res://.godot/imported/guardian_PangolinSkin_roughness.png-72beaa44ca54fb581d70369ee8377ca3.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7d8bc8891add5af0f5b8db34c308ec4b"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/guardians/armored_forest/guardian_PangolinSkin_roughness.png"
-dest_files=["res://.godot/imported/guardian_PangolinSkin_roughness.png-72beaa44ca54fb581d70369ee8377ca3.ctex"]
+dest_files=["res://.godot/imported/guardian_PangolinSkin_roughness.png-72beaa44ca54fb581d70369ee8377ca3.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

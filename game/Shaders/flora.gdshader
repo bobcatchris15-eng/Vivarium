@@ -193,11 +193,6 @@ void fragment() {
             rough = mix(rough, 0.49, cap * 0.70);
             rough = mix(rough, 0.72, step(0.5, UV2.x) * 0.38);
         }
-    } else if (surface_mode == 4) {
-        // slime mold: glossy, translucent yellow protoplasm with a slow streaming pulse along the veins
-        float pulse = 0.5 + 0.5 * sin(TIME * 1.6 - length(obj_pos.xz) * 9.0 + inst.w * 20.0);
-        c *= 0.85 + 0.3 * pulse;
-        rough = 0.3;
     } else {
         // vascular plants normally use leaf veins; woody meshes mark trunk/branch vertices with UV2.x=2 so
         // bark stays matte, opaque-looking and longitudinally rough instead of acquiring leaf venation.
@@ -210,13 +205,13 @@ void fragment() {
             c = bark * bark_tint;
             c *= mix(1.0 - bark_weathering * 0.26, 1.0 + bark_weathering * 0.09, exposure);
             vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
+            float raw_rgh = texture(bark_rgh, buv).r;
             vec3 cork, cork_normal;
-            float cork_ao;
-            bark_fissure(c, bn, buv, u_bark_fissures, cork, cork_normal, cork_ao);
+            float cork_ao, cork_groove;
+            bark_fissure_pbr(c, bn, raw_rgh, buv, u_bark_fissures, bark_weathering, exposure,
+                cork, cork_normal, rough, cork_ao, cork_groove);
             c = cork * cork_ao;
-            n = surface_normal(wn, world_pos, buv, cork_normal);
-            rough = clamp(texture(bark_rgh, buv).r + bark_weathering * 0.07
-                + u_bark_fissures * .035, 0.7, 0.99);
+            n = stem_surface_normal(wn, world_pos, buv, cork_normal);
         } else if (pitcher_tissue && UV2.y < -1.5 && UV2.y > -3.5) {
             // Trap walls and hoods carry ochre/green/brown living tissue, distinct from the flower.
             // Original procedural pigment follows organ UVs; it is stable while the plant sways.
@@ -282,6 +277,13 @@ void fragment() {
                 // Fern pinnules: fine branching veins and light transmitted edges.
                 c *= 0.90 + 0.14 * cells + 0.10 * branch;
                 c = mix(c, c * vec3(1.06, 1.13, 0.95), edge * 0.22);
+            } else if (leaf_pattern == 7) {
+                // Glaucous farina (mooncoin): the blade wears a dry, dusty silver bloom rather
+                // than a wet cuticle. It reads matte, and the bloom lifts the tissue towards a
+                // cool dust instead of towards a specular highlight.
+                float dust = smoothstep(0.30, 0.78, cells * 0.6 + micro * 0.4);
+                c = mix(c, c * vec3(1.10, 1.12, 1.13), dust * 0.42);
+                c *= 0.95 + 0.07 * micro;
             }
             // Every broad/strap blade: pale raised midrib and secondary veins on the upper face, fresher
             // saturated young leaves, and a lift so shaded foliage still reads as leaf rather than silhouette.
@@ -302,12 +304,38 @@ void fragment() {
             } else if (leaf_variegation == 3) {
                 c = mix(c, vec3(0.20, 0.025, 0.07) * (0.8 + 0.4 * cells), face * 0.85);
                 c = mix(c, c * vec3(1.9, 0.6, 0.85), edge * top_face * 0.45);
+            } else if (leaf_variegation == 4) {
+                // White clover's chevron: a pale band across the upper face pointing at the leaflet
+                // apex. Drawn from the blade's own coordinates, so it stays a clean band at any
+                // leaf size instead of breaking into the generic vein lattice. It is a paler green
+                // tissue band, not a white stripe, so it keeps the blade's own shading.
+                float chevron_axis = 0.34 + 0.30 * abs(across);
+                float chevron = 1.0 - smoothstep(0.025, 0.100, abs(along - chevron_axis));
+                chevron *= 1.0 - midrib * 0.30;
+                vec3 pale = mix(c, vec3(lum(c)) * vec3(1.62, 1.70, 1.40) + vec3(0.018, 0.024, 0.014), 0.8);
+                c = mix(c, pale, chevron * top_face * 0.72);
+            } else if (leaf_variegation == 5) {
+                // Azure crystal frost (glassfinger): the distal blade grows a saturated blue
+                // crystalline veneer over the dorsal flanks, densest towards the tip and
+                // strongest along the ridge, with the red tip flush burning through it.
+                float crystal_ridge = 1.0 - smoothstep(0.03, 0.42, abs(across));
+                float cellA = vnoise(vec2(along * 20.0, across * 16.0) + inst.w * 23.7);
+                float cellB = vnoise(vec2(along * 47.0, across * 38.0) + inst.w * 51.3);
+                float vesicle = smoothstep(0.54, 0.86, cellA * 0.68 + cellB * 0.32);
+                float crystal_reach = smoothstep(0.42, 0.92, along);
+                float frost = (0.30 + 0.70 * vesicle) * crystal_reach * (0.34 + 0.66 * crystal_ridge);
+                vec3 azure = vec3(0.004, 0.026, 0.22);
+                vec3 azureHot = vec3(0.012, 0.145, 0.90);
+                c = mix(c, mix(azure, azureHot, vesicle), clamp(frost, 0.0, 1.0) * 0.90);
+                float crystal_flush = smoothstep(0.84, 1.0, along);
+                c = mix(c, vec3(0.42, 0.030, 0.050), crystal_flush * 0.72);
             }
             float ridge = venation * (leaf_type == 1 || leaf_type == 4 ? 0.11 : 0.32);
             if (leaf_pattern == 3) ridge = venation * 0.50;
             else if (leaf_pattern == 4) ridge = venation * 0.06;
             else if (leaf_pattern == 5) ridge = venation * 0.08 + (stripe - 0.5) * 0.10;
             else if (leaf_pattern == 6) ridge = venation * 0.24 + branch * 0.10;
+            else if (leaf_pattern == 7) ridge = venation * 0.05;
             ridge -= midrib * 0.10; // shallow midrib groove
             vec2 uv_slope = leaf_uv_gradient(ridge, UV);
             float longitudinal = smoothstep(.03,.24,along) *
@@ -327,6 +355,7 @@ void fragment() {
             if (leaf_pattern == 3) rough = clamp(rough - 0.18 * top_face, 0.24, 0.85);
             else if (leaf_pattern == 4) rough = clamp(rough - 0.08 + (cells - 0.5) * 0.08, 0.32, 0.85);
             else if (leaf_pattern == 5) rough = clamp(rough - 0.04, 0.32, 0.92);
+            else if (leaf_pattern == 7) rough = clamp(rough + 0.22, 0.50, 0.95);
             if (leaf_scan_blend > 0.0) {
                 vec2 atlas_axis = leaf_scan_swap ? vec2(UV.y, UV.x) : UV;
                 vec2 scan_uv = leaf_scan_rect.xy + atlas_axis * leaf_scan_rect.zw;
@@ -346,9 +375,19 @@ void fragment() {
             }
             // Authored pampas rachillae use a dedicated organ marker so scanned leaf palettes cannot turn
             // their pale, dry plume tissue green. Glowbriar nodules retain their own mint vertex pigment.
-            if (UV2.x > 1.20 && UV2.x < 1.30) {
+            if (UV2.x > 1.20 && UV2.x < 1.26) {
                 c = srgb_to_linear(pampas_plume_color);
                 rough = 0.88;
+            } else if (UV2.x >= 1.26 && UV2.x < 1.30) {
+                // Prismatic plume (plumegrass). The tuft's place in the spectral ladder is baked
+                // into the filament pigment, so each step of the ladder is its own colour; the
+                // view angle then rotates that pigment the way a thin film does, and each step
+                // glints differently as the plant turns.
+                c = srgb_to_linear(COLOR.rgb);
+                float ndv = clamp(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos)), 0.0, 1.0);
+                float shift = pow(1.0 - ndv, 2.2);
+                c = mix(c, c.gbr * 1.18, shift * 0.62);
+                rough = 0.66;
             } else if (UV2.x > 1.30 && UV2.x < 1.50) {
                 c = srgb_to_linear(COLOR.rgb);
                 rough = 0.42;
@@ -382,7 +421,10 @@ void fragment() {
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
     float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
     float leaf_spec = mix(0.35, mix(0.38, 0.50, cuticle_sheen), top_side);
-    SPECULAR = surface_mode == 2 ? (woody_surface ? 0.20 : leaf_spec) : surface_mode == 4 ? 0.52 : surface_mode == 3 ? 0.12 : 0.24;
+    // A farina-coated blade is dust, not varnish: it keeps almost no specular lobe.
+    if (leaf_pattern == 7) leaf_spec = mix(leaf_spec, 0.07, 0.86);
+    float bark_spec = mix(0.42, 0.12, smoothstep(0.55, 0.92, rough));
+    SPECULAR = surface_mode == 2 ? (woody_surface ? bark_spec : leaf_spec) : surface_mode == 3 ? 0.12 : 0.24;
     float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
     float trans_clamped = clamp(actual_leaf_trans, 0.0, 0.5);
     float vein_mass = UV2.y > .5 ?
@@ -420,6 +462,14 @@ void fragment() {
     else if (emission_mask_mode == 4) night_mask = seed_head_mask;
     else if (emission_mask_mode == 5) night_mask = center_stripe;
     else if (emission_mask_mode == 6) night_mask = edge_strip;
+    else if (emission_mask_mode == 7) {
+        // Clover chevron: the same band the leaf shader paints, so the nocturnal glow follows the
+        // marking instead of lighting the whole blade.
+        float clover_across = UV.y - 0.5;
+        float clover_axis = 0.34 + 0.30 * abs(clover_across);
+        night_mask = (1.0 - smoothstep(0.030, 0.085, abs(UV.x - clover_axis)))
+            * step(0.5, UV2.y) * float(FRONT_FACING);
+    }
     else night_mask = smoothstep(0.45, 0.60, UV2.y);
     EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
     if (surface_mode == 3 && ghost_membrane > 0.5) {

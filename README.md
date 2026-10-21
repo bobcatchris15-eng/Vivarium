@@ -45,7 +45,7 @@ reintroduce it from the catalog.
 - **Trees:** Ironlace, Umbraheart, Fenneedle and Kiteleaf.
 - **Shrubs:** Embercrown, Lanternbrush and Shadebell. Trees retain an island-wide carrying limit of roughly one tree per 15 m²; shrubs use a looser structural budget.
 - **Climbers:** Clinglace, Spiralvine and Fenhook. Climbers establish on suitable ground, run horizontally as persistent stem networks while searching for structure, then attach to woody plants, logs or rocks and transition to vertical growth.
-- **Fungi & plasmodium:** Dewbonnet fungus, Emberfan fungus and Ambervein plasmodium.
+- **Fungi:** Dewbonnet fungus and Emberfan fungus.
 
 **Fauna (17).** The original Prismhoppers, Marblebacks, Ghostbristles and Coalback beetles are joined by Dewmantles, Rustcoils and Loamthreads as damp-litter grazers and decomposers; Moonveils and Duskflickers add aerial movement; Stiltclaws hunt small terrestrial prey; Rainspines and Stonebells form the larger damp-ground predator tier. In the pond, Emberglass swimmers, Siltshields and Glintfins are joined by Glasscoils and predatory Reedjaws. Fauna still carry heritable genomes for colour, markings, size and appendages with lineage tracking, so populations drift over generations.
 
@@ -54,7 +54,6 @@ Some behaviour worth knowing about:
 - **Structural succession.** Woody pioneers create persistent shade and vertical structure. Lanternbrush occupies wet bright margins; Shadebell is an understory shrub favored by partial canopy.
 - **Searching climbers.** A climber does not require a support beside its germination point. Active tips extend node by node across the ground, bias toward supports within a wide sensing radius, branch occasionally, and only switch to vertical growth after physically reaching a support. Unsupported runners have a finite lineage length.
 - **Colonial growth.** Mosses and lichens grow as coverage-layer colonies that advance at their edges and thicken internally while remaining bounded.
-- **Ambervein.** The plasmodium forages as a network that follows dead matter. Productive veins thicken and the growth front brightens; prolonged starvation triggers fruiting and spore release.
 - **Water.** Groundwater and surface water move across the terrain. Moisture wicks outward from wet ground, producing distinct dry, mesic, saturated and aquatic niches.
 - **Food web.** Grazers consume plants, biofilm and plankton. Decomposers and dead matter return nutrients to the soil.
 

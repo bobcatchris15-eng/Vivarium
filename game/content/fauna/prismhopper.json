@@ -34,11 +34,6 @@
       "efficiency": 10
     },
     {
-      "resource": "flora:slime_mold",
-      "ratePerHour": 0.0015,
-      "efficiency": 10
-    },
-    {
       "resource": "detritus",
       "ratePerHour": 0.0022,
       "efficiency": 12

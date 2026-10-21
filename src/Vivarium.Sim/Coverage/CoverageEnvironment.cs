@@ -161,6 +161,14 @@ public static class CoverageEnvironment
         };
     }
 
+    /// <summary>The exact moisture/substrate fields of Sample, without unused light, humidity or slope work.</summary>
+    internal static (double Moisture, CoverageSubstrate Substrate) SampleMoistureAndSubstrate(VivariumWorld w, Vec2 p)
+    {
+        double now = w.Clock.SimSeconds;
+        double moisture = SampleMoisture(w, p);
+        return (moisture, ClassifySubstrate(w, p, now));
+    }
+
     // ------------------------------------------------------------------ moisture
 
     private static double SampleMoisture(VivariumWorld w, Vec2 p, double? laplacian = null, MoistureBonusField? bonus = null, double distToWater = -1)

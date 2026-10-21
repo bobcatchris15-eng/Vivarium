@@ -95,6 +95,10 @@ public partial class FloraRenderer : Node3D
     private readonly List<Node> _buildingNodes = new();
     // Stable per-organism ownership. No nearest-32 ranking, reassignment, or alternating light slots.
     private readonly Dictionary<EntityId,OmniLight3D> _luminousLights = new();
+    public int LuminousLightCacheAuditRefreshes { get; private set; }
+    public int LuminousLightCacheAuditLights { get; private set; }
+    public long LuminousLightCacheAuditPairs { get; private set; }
+    public float MaximumLuminousLightCacheAuditError { get; private set; }
     public int LuminousLightCount=>_luminousLights.Values.Count(l=>l.Visible);
     /// <summary>All currently present species are built and one complete instance refresh has been uploaded.</summary>
     public bool PopulationReady { get; private set; }
@@ -270,9 +274,9 @@ public int Quality
         var mat = Bridge.Shader("res://Shaders/flora.gdshader");
         NightFloraMaterials.Bind(mat, sp);
         mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
-        mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
+        mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
         mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
-        if (sp.Archetype is "fungus" or "slime_mold") mat.SetShaderParameter("sway", 0.0f);
+        if (sp.Archetype == "fungus") mat.SetShaderParameter("sway", 0.0f);
         Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
         FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
         var leafMat = profile?.LeafMaterial();
@@ -287,6 +291,9 @@ public int Quality
         ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
 
         var tasks = new List<Task<(MeshData Full, MeshData? Young, MeshData? Fruit)>>();
+        // Capture review policy on the publishing thread. Review hooks can use
+        // Godot resources and must never be invoked by the geometry workers.
+        bool prepareProfileUpload = profile != null && FloraVisualProfile.ReviewMeshTransform == null;
         for (int v = 0; v < layer.Variants.Length; v++)
         {
             int morph = v % layer.MorphCount;
@@ -303,6 +310,14 @@ public int Quality
                     ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
                     : null;
                 var fruitMesh = OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null);
+                void Prepare(MeshData mesh)
+                {
+                    if (prepareProfileUpload) FloraVisualProfile.PrepareUpload(mesh);
+                    else if (profile == null) Bridge.PrepareMeshUpload(mesh);
+                }
+                Prepare(fullMesh);
+                if (youngMesh != null) Prepare(youngMesh);
+                if (fruitMesh != null) Prepare(fruitMesh);
                 return (Full: fullMesh, Young: youngMesh, Fruit: fruitMesh);
             }));
         }
@@ -946,7 +961,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         var planes=Camera.GetFrustum();var frustum=new Plane[planes.Count];
         for(int i=0;i<planes.Count;i++)frustum[i]=planes[i];
         var present=new HashSet<EntityId>();
-        var active=new List<(OmniLight3D Light,float Energy)>();
+        var active=new List<(OmniLight3D Light,float Energy,Vector3 Position,float Range)>();
         foreach(var f in _snapshot)
         {
             var sp=_w.Content.FloraOrThrow(f.SpeciesId);
@@ -969,7 +984,9 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             light.Position=pos;
             float size=(float)Math.Clamp(radius/Math.Max(sp.RadiusAtMax,.01),.3,1);
             light.OmniRange=NightFloraMaterials.LightRange(sp)*MathF.Sqrt(size);
-            active.Add((light,NightFloraMaterials.LightEnergy(sp)*size));
+            // Read back the native values once after setters, preserving any
+            // engine clamping rather than assuming the authored values survived.
+            active.Add((light,NightFloraMaterials.LightEnergy(sp)*size,light.Position,light.OmniRange));
         }
         foreach(var id in _luminousLights.Keys.Where(id=>!present.Contains(id)).ToArray())
         {
@@ -977,20 +994,49 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         }
         // Nearby organisms act as a broad, gentle emitter. Every light stays on; coincident colonies
         // cannot multiply a subtle glow into an overexposed fire. Hash only source positions, not light.
+        bool audit=active.Count>0 && LuminousLightCacheAuditRefreshes<2 &&
+            Array.IndexOf(Main.UserArgs,"--flora-light-cache-audit")>=0;
         var neighbourhood=new Dictionary<(int,int,int),List<int>>();
         for(int i=0;i<active.Count;i++)
-        {var p=active[i].Light.Position;var key=((int)MathF.Floor(p.X),(int)MathF.Floor(p.Y),(int)MathF.Floor(p.Z));
+        {var p=active[i].Position;var key=((int)MathF.Floor(p.X),(int)MathF.Floor(p.Y),(int)MathF.Floor(p.Z));
+            if(audit)
+            {
+                var native=active[i].Light.Position;
+                var nativeKey=((int)MathF.Floor(native.X),(int)MathF.Floor(native.Y),(int)MathF.Floor(native.Z));
+                if(key!=nativeKey || BitConverter.SingleToInt32Bits(p.X)!=BitConverter.SingleToInt32Bits(native.X) ||
+                    BitConverter.SingleToInt32Bits(p.Y)!=BitConverter.SingleToInt32Bits(native.Y) ||
+                    BitConverter.SingleToInt32Bits(p.Z)!=BitConverter.SingleToInt32Bits(native.Z) ||
+                    BitConverter.SingleToInt32Bits(active[i].Range)!=BitConverter.SingleToInt32Bits(active[i].Light.OmniRange))
+                    throw new InvalidOperationException("Flora native light cache/bin mismatch");
+            }
             if(!neighbourhood.TryGetValue(key,out var bucket))neighbourhood[key]=bucket=new();bucket.Add(i);}
         for(int i=0;i<active.Count;i++)
         {
-            var a=active[i];var p=a.Light.Position;float overlap=1;
+            var a=active[i];var p=a.Position;float overlap=1;
             int x=(int)MathF.Floor(p.X),y=(int)MathF.Floor(p.Y),z=(int)MathF.Floor(p.Z);
             for(int dz=-1;dz<=1;dz++)for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
             {if(!neighbourhood.TryGetValue((x+dx,y+dy,z+dz),out var bucket))continue;
-                foreach(int j in bucket){if(i==j)continue;var other=active[j].Light;
-                    float q=1-p.DistanceSquaredTo(other.Position)/(other.OmniRange*other.OmniRange);if(q>0)overlap+=q*q;}}
+                foreach(int j in bucket){if(i==j)continue;var other=active[j];
+                    float q=1-p.DistanceSquaredTo(other.Position)/(other.Range*other.Range);if(q>0)overlap+=q*q;}}
+            if(audit)
+            {
+                // Original native-read overlap, same bins/traversal/arithmetic.
+                // RegisterLight changes energy/visibility, never position/range.
+                var nativePosition=a.Light.Position;float reference=1;
+                int nx=(int)MathF.Floor(nativePosition.X),ny=(int)MathF.Floor(nativePosition.Y),nz=(int)MathF.Floor(nativePosition.Z);
+                for(int dz=-1;dz<=1;dz++)for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+                {if(!neighbourhood.TryGetValue((nx+dx,ny+dy,nz+dz),out var bucket))continue;
+                    foreach(int j in bucket){if(i==j)continue;var other=active[j].Light;
+                        float q=1-nativePosition.DistanceSquaredTo(other.Position)/(other.OmniRange*other.OmniRange);
+                        if(q>0)reference+=q*q;LuminousLightCacheAuditPairs++;}}
+                MaximumLuminousLightCacheAuditError=Math.Max(MaximumLuminousLightCacheAuditError,Math.Abs(overlap-reference));
+                if(BitConverter.SingleToInt32Bits(overlap)!=BitConverter.SingleToInt32Bits(reference))
+                    throw new InvalidOperationException("Flora native light overlap cache mismatch");
+                LuminousLightCacheAuditLights++;
+            }
             NightFloraMaterials.RegisterLight(a.Light,a.Energy/overlap);
         }
+        if(audit)LuminousLightCacheAuditRefreshes++;
     }
 
     /// <summary>Geometric tier (0 near .. 2 far) from the projected bounding-sphere diameter, with hysteresis.
@@ -1141,6 +1187,7 @@ public partial class FaunaRenderer : Node3D
 
     private readonly Dictionary<EntityId, Track> _tracks = new();
     private double _normalClock;
+    private ContentLibrary? _builtFaunaContent;
 
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
@@ -1157,6 +1204,25 @@ public partial class FaunaRenderer : Node3D
     public void Build(VivariumWorld w)
     {
         _w = w;
+        _tracks.Clear();
+        _normalClock = 0;
+        // Geometry, materials and morph variants are content resources. A new
+        // seed only changes instances; retain the expensive meshes and LODs.
+        if (ReferenceEquals(_builtFaunaContent, w.Content) && _layers.Count == w.Content.Fauna.Count)
+        {
+            foreach (var layer in _layers.Values)
+                foreach (var variant in layer.Variants)
+                {
+                    variant.High.Multimesh.VisibleInstanceCount = 0;
+                    if (variant.Curled != null)
+                    {
+                        variant.Curled.Multimesh.VisibleInstanceCount = 0;
+                    }
+                    variant.HighCount = variant.CurledCount = 0;
+                }
+            return;
+        }
+        _builtFaunaContent = null;
         foreach (var c in GetChildren()) c.QueueFree();
         _layers.Clear(); _tracks.Clear();
         foreach (var sp in w.Content.Fauna)
@@ -1197,6 +1263,7 @@ public partial class FaunaRenderer : Node3D
             }
             _layers[sp.Id] = layer;
         }
+        _builtFaunaContent = w.Content;
     }
 
     private static MultiMeshInstance3D MakeMmi(string name, ArrayMesh mesh) => new()

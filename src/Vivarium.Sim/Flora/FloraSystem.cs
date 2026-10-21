@@ -448,7 +448,7 @@ public sealed class FloraSystem
                 continue;
             }
 
-            if (sp.Archetype != "slime_mold" && sp.CreepSpeed > 0 && Creep(f, sp, dt, births)) continue;
+            if (sp.CreepSpeed > 0 && Creep(f, sp, dt, births)) continue;
             if (sp.Climber is { } climber && ClimberStep(f, sp, climber, dt)) continue;
 
             if (sp.Colony is { } cd)
@@ -564,7 +564,7 @@ public sealed class FloraSystem
         foreach (var f in _w.Flora.Items) _sporeCounts[f.SpeciesId] = _sporeCounts.GetValueOrDefault(f.SpeciesId) + 1;
         foreach (var sp in C.Flora)
         {
-            if (sp.Archetype != "fungus") continue;   // slime_mold handled by Coverage plasmodium network
+            if (sp.Archetype != "fungus") continue;
             // Some highly episodic or substrate-specific fungi are introduced as starters and then spread
             // locally. Excluding them from generic atmospheric spore rain prevents total spore pressure from
             // scaling linearly with every fungus definition added to the library.

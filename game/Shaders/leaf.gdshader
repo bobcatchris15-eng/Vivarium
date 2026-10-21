@@ -130,6 +130,29 @@ void fragment() {
     else if (leaf_variegation == 2) color = mix(color, vec3(.30,.34,.32), smoothstep(.45,.65,texture(tissue_physical,vec3(tissue_uv*.5,layer)).b)*(1.-anatomy.r)*topf*.55);
     else if (leaf_variegation == 3) color = mix(color, vec3(.20,.025,.07)*(.8+.4*photograph.g), side*.85);
     if (volumetric) color = mix(color,srgb_to_linear(COLOR.rgb),smoothstep(.64,.99,UV.x)*.72);
+    if (leaf_variegation == 5) {
+        // Azure crystal frost (glassfinger). The family's epidermal bladder cells are grown
+        // here as a saturated blue crystalline veneer over the distal blade, densest towards
+        // the tip and strongest along the dorsal ridge, with the anthocyanin flush of the
+        // real ice plant still burning red at the very point.
+        float along = UV.x;
+        float across = UV.y - 0.5;
+        float ridge = 1.0 - smoothstep(0.03, 0.42, abs(across));
+        // The vesicles are discrete, so the frost is cellular and patchy, not a smooth wash.
+        float cellA = vnoise(vec2(along * 20.0, UV.y * 16.0) + seed * 23.7);
+        float cellB = vnoise(vec2(along * 47.0, UV.y * 38.0) + seed * 51.3);
+        float vesicle = smoothstep(0.54, 0.86, cellA * 0.68 + cellB * 0.32);
+        float reach = smoothstep(0.42, 0.92, along);
+        // A continuous wash carries the blue, with the vesicles burning brighter inside it.
+        float frost = (0.30 + 0.70 * vesicle) * reach * (0.34 + 0.66 * ridge);
+        // Deep cobalt, not a pale wash: the blue has to carry the eye at plant scale.
+        vec3 azure = vec3(0.004, 0.026, 0.22);
+        vec3 azureHot = vec3(0.012, 0.145, 0.90);
+        color = mix(color, mix(azure, azureHot, vesicle), clamp(frost, 0.0, 1.0) * 0.90);
+        // The tip keeps the species' red flush, burning through the frost.
+        float flush = smoothstep(0.84, 1.0, along);
+        color = mix(color, vec3(0.42, 0.030, 0.050), flush * 0.72);
+    }
     vec4 physical = mix(texture(tissue_physical,vec3(tissue_uv,layer)),texture(tissue_physical,vec3(tissue_uv,second)),blend);
     vec3 micro = unpack_normal(mix(texture(tissue_normal,vec3(tissue_uv,layer)).rgb,texture(tissue_normal,vec3(tissue_uv,second)).rgb,blend));
     vec3 veins = unpack_normal(texture(vein_normal,UV).rgb);

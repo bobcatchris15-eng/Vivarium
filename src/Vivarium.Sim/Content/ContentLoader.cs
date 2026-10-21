@@ -286,7 +286,7 @@ public static class ContentLoader
         n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber", "reproduction", "postLife", "decomposition");
         const double D = SimUnits.Day;
         string arch = n.Str("archetype");
-        if (arch is not ("moss" or "lichen" or "plant" or "fungus" or "slime_mold")) n["archetype"].Error("expected moss | lichen | plant | fungus | slime_mold");
+        if (arch is not ("moss" or "lichen" or "plant" or "fungus")) n["archetype"].Error("expected moss | lichen | plant | fungus");
         string placementGroupId = n.Str("placementGroup");
         if (!FloraPlacementGroups.TryParse(placementGroupId, out var placementGroup))
             n["placementGroup"].Error("expected moss_lichen | terrestrial | waterside_aquatic | decomposer | woody");

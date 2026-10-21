@@ -107,7 +107,7 @@ public partial class Main : Node3D
             return;
         }
         var settings = UserSettings.Load();
-        string? testDir = ArgAfter("--world-review") ?? ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference") ?? (UserArgs.Contains("--species-view") ? ArgAfter("--output") ?? "build/specimens/world" : null);
+        string? testDir = ArgAfter("--world-review") ?? ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference") ?? ArgAfter("--new-world-test") ?? (UserArgs.Contains("--species-view") ? ArgAfter("--output") ?? "build/specimens/world" : null);
         if (UserArgs.Contains("--soak")) { settings.Transient = true; settings.AutosaveEnabled = true; settings.AutosaveMinutes = 5; settings.ShowHelpOnStart = false; }
         if (UserArgs.Contains("--diagnostics-check")) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
         if (testDir != null) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
@@ -125,7 +125,7 @@ public partial class Main : Node3D
 
         if (testDir != null)
         {
-            var mode = UserArgs.Contains("--world-review") ? SmokeRunner.Mode.WorldReview : UserArgs.Contains("--species-view") ? SmokeRunner.Mode.SpeciesWorld : UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
+            var mode = UserArgs.Contains("--world-review") ? SmokeRunner.Mode.WorldReview : UserArgs.Contains("--species-view") ? SmokeRunner.Mode.SpeciesWorld : UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--new-world-test") ? SmokeRunner.Mode.NewWorld : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
             var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode, SpeciesId = ArgAfter("--species-view") ?? "" };
             AddChild(runner);
             if (ArgAfter("--load") is { } loadPath && File.Exists(loadPath))
@@ -152,7 +152,7 @@ public partial class Main : Node3D
         var loadingText = new Label { Text = "Opening your island...", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         loadingText.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         loadingText.AddThemeFontSizeOverride("font_size", 24);
-        var progressBar = new ProgressBar { MaxValue = 12, ShowPercentage = false };
+        var progressBar = new ProgressBar { MaxValue = 13, ShowPercentage = false };
         progressBar.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.Center);
         progressBar.OffsetLeft = -220; progressBar.OffsetRight = 220; progressBar.OffsetTop = 45; progressBar.OffsetBottom = 57;
         loadingPanel.AddChild(loadingText); loadingPanel.AddChild(progressBar);

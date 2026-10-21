@@ -15,6 +15,8 @@ public static class FrameProfiler
     private static readonly Dictionary<string, double> _accum = new();
     private static readonly Dictionary<string, int> _count = new();
     private static readonly Dictionary<string, double> _last = new();
+    private static readonly Dictionary<string, double> _intervalAccum = new();
+    private static readonly Dictionary<string, int> _intervalCount = new();
 
     public readonly struct Scope : System.IDisposable
     {
@@ -55,6 +57,40 @@ public static class FrameProfiler
             _accum[name] = _accum.GetValueOrDefault(name) + ms;
             _count[name] = _count.GetValueOrDefault(name) + 1;
             _last[name] = ms;
+            _intervalAccum[name] = _intervalAccum.GetValueOrDefault(name) + ms;
+            _intervalCount[name] = _intervalCount.GetValueOrDefault(name) + 1;
+        }
+    }
+
+    /// <summary>
+    /// Total CPU milliseconds and call counts recorded per scope since the previous call.
+    /// Unlike the maximum report this shows how much wall time a scope actually consumed
+    /// in the interval, which is what grows when a world matures.
+    /// </summary>
+    public static (Dictionary<string,double> TotalMs, Dictionary<string,int> Calls) TakeIntervalTotals()
+    {
+        lock (_lock)
+        {
+            var total = new Dictionary<string,double>(_intervalAccum);
+            var calls = new Dictionary<string,int>(_intervalCount);
+            _intervalAccum.Clear();
+            _intervalCount.Clear();
+            return (total, calls);
+        }
+    }
+
+    /// <summary>The busiest scopes of the last interval by total milliseconds ("name=ms", "name=ms/calls").</summary>
+    public static string TakeIntervalReport(int top = 12)
+    {
+        lock (_lock)
+        {
+            var s = string.Join(" ", _intervalAccum
+                .OrderByDescending(kv => kv.Value)
+                .Take(top)
+                .Select(kv => $"{kv.Key}={kv.Value:0.0}/{_intervalCount[kv.Key]}"));
+            _intervalAccum.Clear();
+            _intervalCount.Clear();
+            return s;
         }
     }
 
@@ -133,6 +169,8 @@ public static class FrameProfiler
             _accum.Clear();
             _count.Clear();
             _last.Clear();
+            _intervalAccum.Clear();
+            _intervalCount.Clear();
         }
     }
 }

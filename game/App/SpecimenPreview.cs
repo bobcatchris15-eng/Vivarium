@@ -88,7 +88,7 @@ public partial class SpecimenPreview : Node3D
 
             var mat = Bridge.Shader("res://Shaders/flora.gdshader");
             mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
-            mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, "slime_mold" => 4, _ => 2 });
+            mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
             mat.SetShaderParameter("sway", 0.0f);
             if (Phase >= 0) { mat.SetShaderParameter("sway",1f); mat.SetShaderParameter("review_time",Phase); }
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);

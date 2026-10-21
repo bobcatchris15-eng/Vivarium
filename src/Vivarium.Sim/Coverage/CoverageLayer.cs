@@ -3,7 +3,7 @@ using Vivarium.Sim.Core;
 namespace Vivarium.Sim.Coverage;
 
 /// <summary>Which coverage layer a cell belongs to (docs/overhaul/growth_models.md §1.3).</summary>
-public enum CoverageLayerId : int { Mat = 0, Crust = 1, Plasmodium = 2, SurfaceFloat = 10, AlgaeBed = 11, AlgaeFloat = 12 }
+public enum CoverageLayerId : int { Mat = 0, Crust = 1, SurfaceFloat = 10, AlgaeBed = 11, AlgaeFloat = 12 }
 
 [Flags]
 public enum CoverageFlags : byte
@@ -92,7 +92,7 @@ public readonly struct TileView
 }
 
 /// <summary>
-/// Sparse 32x32-cell tile raster for one coverage layer (Mat, Crust or Plasmodium). Tiles are keyed by
+/// Sparse 32x32-cell tile raster for one coverage layer (Mat or Crust). Tiles are keyed by
 /// (ti, tj) in a <see cref="SortedDictionary{TKey,TValue}"/> so iteration order is always deterministic
 /// regardless of allocation order (docs/overhaul/growth_models.md §1.1, §1.5).
 /// </summary>

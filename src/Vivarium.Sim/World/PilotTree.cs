@@ -59,6 +59,7 @@ public sealed class PilotTreeState
     private readonly RootSegment[] _segments;
     private const double RootQueryCell=.5;
     private readonly Dictionary<(int,int),RootSegment[]> _rootQueryCells=new();
+    private readonly Dictionary<(int,int),ulong> _rootQueryMasks=new();
     private readonly record struct RootSegment(PilotRootSample A, PilotRootSample B, Vec2 Delta, double LengthSq,
         double MinX, double MaxX, double MinZ, double MaxZ, double MaxWidth)
     {
@@ -136,13 +137,15 @@ public sealed class PilotTreeState
         // Root form is immutable. Index its conservative footprint, not sampled
         // heights, so terrain edits retain the exact current support calculation.
         var cells=new Dictionary<(int,int),List<RootSegment>>();
-        foreach(var segment in _segments)
+        for(int segmentIndex=0;segmentIndex<_segments.Length;segmentIndex++)
         {
+            var segment=_segments[segmentIndex];
             double width=segment.MaxWidth+1e-9;
             int x0=(int)Math.Floor((segment.MinX-width)/RootQueryCell),x1=(int)Math.Floor((segment.MaxX+width)/RootQueryCell);
             int z0=(int)Math.Floor((segment.MinZ-width)/RootQueryCell),z1=(int)Math.Floor((segment.MaxZ+width)/RootQueryCell);
             for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)
-            {var key=(x,z);if(!cells.TryGetValue(key,out var list))cells[key]=list=new();list.Add(segment);}
+            {var key=(x,z);if(!cells.TryGetValue(key,out var list))cells[key]=list=new();list.Add(segment);
+                if(_segments.Length<=64)_rootQueryMasks[key]=_rootQueryMasks.GetValueOrDefault(key)|(1UL<<segmentIndex);}
         }
         foreach(var (key,list) in cells)_rootQueryCells[key]=list.ToArray();
     }
@@ -262,20 +265,52 @@ public sealed class PilotTreeState
             if(!_rootQueryCells.TryGetValue(key,out segments))return 0;
         }
         double top = 0;
-        foreach (var segment in segments)
+        if(radius!=0 && TryRootQueryMask(p,radius,out ulong candidates))
+        {
+            // Ascending bits retain the full scan's segment order. Each segment
+            // is evaluated once even when several footprint cells contain it.
+            while(candidates!=0)
             {
-                double limit = segment.MaxWidth + radius;
-                if (segment.BoundsDistanceSq(p) >= limit*limit) continue;
-                var a = segment.A; var b = segment.B; var ab = segment.Delta;
-                double t = segment.LengthSq > 1e-12 ? MathD.Clamp01((p - a.Position).Dot(ab) / segment.LengthSq) : 0;
-                double width = MathD.Lerp(a.Width, b.Width, t) + radius;
-                double d = Vec2.Distance(p, a.Position + ab * t);
-                if (d >= width) continue;
-                double height = MathD.Lerp(a.Height, b.Height, t);
-                double section = Math.Sqrt(Math.Max(0, 1 - d * d / (width * width)));
-                top = Math.Max(top, height * section);
+                int index=System.Numerics.BitOperations.TrailingZeroCount(candidates);
+                candidates&=candidates-1;
+                top=RootSegmentRise(_segments[index],p,radius,top);
             }
+            return top;
+        }
+        foreach (var segment in segments)
+            top=RootSegmentRise(segment,p,radius,top);
         return top;
+    }
+
+    private bool TryRootQueryMask(Vec2 p,double radius,out ulong candidates)
+    {
+        candidates=0;
+        if(_segments.Length>64 || !double.IsFinite(radius) || radius<=0 ||
+            !double.IsFinite(p.X) || !double.IsFinite(p.Z))return false;
+        // Query the existing width-expanded footprints with a conservative
+        // radius-expanded box. Bound work and casts before converting to ints.
+        double x0=Math.Floor((p.X-radius-1e-9)/RootQueryCell),x1=Math.Floor((p.X+radius+1e-9)/RootQueryCell);
+        double z0=Math.Floor((p.Z-radius-1e-9)/RootQueryCell),z1=Math.Floor((p.Z+radius+1e-9)/RootQueryCell);
+        if(x0<int.MinValue || x1>=int.MaxValue || z0<int.MinValue || z1>=int.MaxValue ||
+            !double.IsFinite(x0) || !double.IsFinite(x1) || !double.IsFinite(z0) || !double.IsFinite(z1) ||
+            (x1-x0+1)*(z1-z0+1)>64)return false;
+        for(int z=(int)z0;z<=(int)z1;z++)for(int x=(int)x0;x<=(int)x1;x++)
+            candidates|=_rootQueryMasks.GetValueOrDefault((x,z));
+        return true;
+    }
+
+    private static double RootSegmentRise(RootSegment segment,Vec2 p,double radius,double top)
+    {
+        double limit = segment.MaxWidth + radius;
+        if (segment.BoundsDistanceSq(p) >= limit*limit) return top;
+        var a = segment.A; var b = segment.B; var ab = segment.Delta;
+        double t = segment.LengthSq > 1e-12 ? MathD.Clamp01((p - a.Position).Dot(ab) / segment.LengthSq) : 0;
+        double width = MathD.Lerp(a.Width, b.Width, t) + radius;
+        double d = Vec2.Distance(p, a.Position + ab * t);
+        if (d >= width) return top;
+        double height = MathD.Lerp(a.Height, b.Height, t);
+        double section = Math.Sqrt(Math.Max(0, 1 - d * d / (width * width)));
+        return Math.Max(top, height * section);
     }
 
     public double RootDensity(Vec2 p)

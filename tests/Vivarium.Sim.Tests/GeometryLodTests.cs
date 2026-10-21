@@ -26,7 +26,9 @@ public class GeometryLodTests
             int top = tiers[0], mid = tiers[1], low = tiers[2];
             _out.WriteLine($"{sp.Id}={top}/{mid}/{low}");
             if (top <= 0 || mid <= 0 || low <= 0) failures.Add($"{sp.Id}: empty tier {top}/{mid}/{low}");
-            if (top > OrganismMeshes.FloraTopTriangleCap) failures.Add($"{sp.Id}: top {top} over cap");
+            // A species may hold a richer near-field mesh than the shared cap; the cap it is held to
+            // is the one the tier system actually applied to it.
+            if (top > OrganismMeshes.FloraTopTriangleCapFor(sp.Id)) failures.Add($"{sp.Id}: top {top} over cap");
             if (mid > top || low > mid) failures.Add($"{sp.Id}: tiers not monotone {top}/{mid}/{low}");
             // Follow the current visual-detail policy with the existing discretization margin.
             // Minimum tessellation (5-sided tubes, 2-segment blades) still limits small meshes.

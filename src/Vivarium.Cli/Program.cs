@@ -19,18 +19,29 @@ Log.AddSink(new ConsoleSink());
 Log.MinimumLevel = LogLevel.Warning;
 
 string root = FindRepoRoot();
-var content = ContentLoader.Load(new DirectoryContentSource(Path.Combine(root, "game", "content")));
+// The content library is loaded lazily so that single-file developer commands keep working while
+// unrelated content is being edited.
+ContentLibrary? _content = null;
+ContentLibrary Content()
+{
+    if (_content is null)
+        _content = ContentLoader.Load(new DirectoryContentSource(Path.Combine(root, "game", "content")));
+    return _content;
+}
 
 switch (cmd)
 {
     case "validate":
+    {
+        var content = Content();
         Console.WriteLine($"content OK: {content.Flora.Count} flora, {content.Fauna.Count} fauna, {content.Presets.Count} presets, digest {content.ContentDigest[..16]}");
         return 0;
+    }
     case "inspect-save":
     {
         string savePath = Opt("file", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Vivarium", "saves", "autosave.vivsave"));
         Console.WriteLine($"Loading {savePath}...");
-        var save = Vivarium.Sim.Persistence.SaveSystem.Load(content, savePath);
+        var save = Vivarium.Sim.Persistence.SaveSystem.Load(Content(), savePath);
         if (!save.Ok) { Console.WriteLine("Failed to load: " + save.Message); return 1; }
         var w = save.World!;
         Console.WriteLine($"World loaded: day {w.Clock.BioDays:0.0}, tick {w.Clock.Tick}, flora {w.Flora.Count}, fauna {w.Fauna.Count}");
@@ -39,7 +50,7 @@ switch (cmd)
         foreach (var t in w.Coverage.Mat.Tiles) matCells += t.Occ.Count(o => o != 0);
         foreach (var t in w.Coverage.Crust.Tiles) crustCells += t.Occ.Count(o => o != 0);
         Console.WriteLine($"Occupied cells: mat {matCells}, crust {crustCells}");
-        foreach (var sp in content.Flora)
+        foreach (var sp in Content().Flora)
         {
             var m = Vivarium.Sim.Geometry.OrganismMeshes.Flora(sp, 0);
             int count = w.Flora.Items.Count(f => f.SpeciesId == sp.Id);
@@ -58,13 +69,13 @@ switch (cmd)
     }
     case "schedule":
     {
-        var w = VivariumWorld.Create(content, content.PresetOrThrow("default"));
+        var w = VivariumWorld.Create(Content(), Content().PresetOrThrow("default"));
         Console.WriteLine(w.Scheduler.DescribeSchedule());
         return 0;
     }
     case "soak":
     {
-        var d = content.PresetOrThrow(Opt("preset", "default"));
+        var d = Content().PresetOrThrow(Opt("preset", "default"));
         if (Opt("seed", "") is { Length: > 0 } s) d.Seed = ulong.Parse(s);
         if (!FaunaScenario.TryParse(Opt("scenario", "default"), out var scenario))
         {
@@ -74,7 +85,7 @@ switch (cmd)
         double days = double.Parse(Opt("days", "28"));
         double report = double.Parse(Opt("report-days", "2"));
         var sw = Stopwatch.StartNew();
-        var w = VivariumWorld.Create(content, d);
+        var w = VivariumWorld.Create(Content(), d);
         // Snapshot the creation report before the scenario touches fauna, so this line keeps describing creation.
         string created = $"created in {sw.ElapsedMilliseconds} ms: props {w.Props.Count}, flora {w.Flora.Count}, fauna {w.Fauna.Count}, wet {EcosystemStatistics.Compute(w).WetFraction:P1}";
         ApplyFaunaScenario(w, scenario);
@@ -114,11 +125,11 @@ switch (cmd)
     // 2160 ticks is the measured pre-fix failure point (bio-day 2.14, aquatic max 131140 ms).
     case "bench":
     {
-        var d = content.PresetOrThrow(Opt("preset", "default"));
+        var d = Content().PresetOrThrow(Opt("preset", "default"));
         if (Opt("seed", "") is { Length: > 0 } s2) d.Seed = ulong.Parse(s2);
         long ticks = long.Parse(Opt("ticks", "2160"));
         var sw = Stopwatch.StartNew();
-        var w = VivariumWorld.Create(content, d);
+        var w = VivariumWorld.Create(Content(), d);
         Console.WriteLine($"bench preset={Opt("preset", "default")} seed={w.Seed} ticks={ticks} create={sw.ElapsedMilliseconds}ms");
         int report = (int)OptInt("report-every", ticks / 4);
         long done = 0;
@@ -140,7 +151,7 @@ switch (cmd)
     }
     case "water":
     {
-        var w = VivariumWorld.Create(content, content.PresetOrThrow(Opt("preset", "default")), populate: false);
+        var w = VivariumWorld.Create(Content(), Content().PresetOrThrow(Opt("preset", "default")), populate: false);
         var g = w.Grid;
         int wet = 0, wetBoundary = 0; double minEdge = double.PositiveInfinity;
         foreach (int c in g.DomainCells)
@@ -163,9 +174,117 @@ switch (cmd)
         }
         return 0;
     }
+    case "flora-mesh":
+    {
+        // Exports one authored flora mesh for offline look development (Blender) and prints its budget.
+        var speciesId = Opt("species", "trifold");
+        ulong meshSeed = (ulong)OptInt("seed", 1);
+        int tier = (int)OptInt("tier", -1);
+        var sp = LoadSpecies(root, speciesId);
+        var mesh = tier < 0
+            ? Vivarium.Sim.Geometry.OrganismMeshes.Flora(sp, meshSeed)
+            : Vivarium.Sim.Geometry.OrganismMeshes.FloraTier(sp, meshSeed, tier);
+        var b = mesh.Bounds();
+        Console.WriteLine($"{sp.Id} seed={meshSeed} tier={(tier < 0 ? "authored" : tier.ToString())} " +
+            $"verts={mesh.VertexCount} tris={mesh.TriangleCount} leaves={mesh.Leaves.Count} " +
+            $"leafspans={mesh.LeafSpans.Count} tubes={mesh.Structural.Count} " +
+            $"bounds=({b.Min.X:0.000},{b.Min.Y:0.000},{b.Min.Z:0.000})..({b.Max.X:0.000},{b.Max.Y:0.000},{b.Max.Z:0.000}) " +
+            $"digest={mesh.DigestHex()[..16]}");
+        for (int t = 0; t < Vivarium.Sim.Geometry.OrganismMeshes.FloraLodTiers; t++)
+        {
+            var tiered = Vivarium.Sim.Geometry.OrganismMeshes.FloraTier(sp, meshSeed, t);
+            Console.WriteLine($"  tier {t}: verts={tiered.VertexCount} tris={tiered.TriangleCount}");
+        }
+        if (Opt("obj", "") is { Length: > 0 } objPath)
+        {
+            ExportObj(mesh, objPath);
+            Console.WriteLine($"  wrote {Path.GetFullPath(objPath)}");
+        }
+        return 0;
+    }
+    case "flora-tiers":
+    {
+        // Reports the authored triangle budget of every species so the per-tier caps can be judged.
+        foreach (var sp in Content().Flora)
+        {
+            var mesh = Vivarium.Sim.Geometry.OrganismMeshes.Flora(sp, 42);
+            var tier0 = Vivarium.Sim.Geometry.OrganismMeshes.FloraTier(sp, 42, 0);
+            Console.WriteLine($"{sp.Id,-26} shape={sp.Shape,-16} authored={mesh.TriangleCount,7} tier0={tier0.TriangleCount,7}");
+        }
+        return 0;
+    }
     default:
         Console.Error.WriteLine($"unknown command {cmd}");
         return 1;
+}
+
+/// <summary>
+/// Reads one flora definition straight from its JSON file. Used by developer commands that only need
+/// a single species, so they keep working while unrelated content files are being edited.
+/// </summary>
+static Vivarium.Sim.Content.FloraSpeciesDef LoadSpecies(string root, string id)
+{
+    try
+    {
+        var library = ContentLoader.Load(new DirectoryContentSource(Path.Combine(root, "game", "content")));
+        return library.FloraOrThrow(id);
+    }
+    catch (Exception)
+    {
+        string path = Path.Combine(root, "game", "content", "flora", id + ".json");
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var e = doc.RootElement;
+        var visual = e.GetProperty("visual");
+        var growth = e.GetProperty("growth");
+        double[] Colour(System.Text.Json.JsonElement a) =>
+            new[] { a[0].GetDouble(), a[1].GetDouble(), a[2].GetDouble() };
+        return new Vivarium.Sim.Content.FloraSpeciesDef
+        {
+            Id = id,
+            Shape = visual.GetProperty("shape").GetString() ?? "roundleaf",
+            Color = Colour(visual.GetProperty("color")),
+            Color2 = Colour(visual.GetProperty("color2")),
+            ColorVariance = visual.GetProperty("colorVariance").GetDouble(),
+            Height = visual.GetProperty("height").GetDouble(),
+            RadiusAtMax = growth.GetProperty("radiusAtMax").GetDouble(),
+            MinRadius = growth.GetProperty("minRadius").GetDouble(),
+        };
+    }
+}
+
+/// <summary>Writes a mesh as Wavefront OBJ with per-vertex normals, UVs and vertex colours.</summary>
+/// <remarks>
+/// The engine emits Godot's winding, where a triangle's right-hand normal points into the surface.
+/// OBJ uses the opposite convention, so the face order is reversed on the way out; that keeps
+/// offline viewers (Blender) shaded the same way the engine shades them.
+/// </remarks>
+static void ExportObj(Vivarium.Sim.Geometry.MeshData mesh, string path)
+{
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("# Vivarium flora mesh export");
+    for (int i = 0; i < mesh.VertexCount; i++)
+    {
+        var p = mesh.Position(i);
+        var n = mesh.NormalAt(i);
+        sb.AppendLine($"v {p.X:0.######} {p.Y:0.######} {p.Z:0.######} " +
+            $"{mesh.Colors[i * 4]:0.######} {mesh.Colors[i * 4 + 1]:0.######} {mesh.Colors[i * 4 + 2]:0.######}");
+    }
+    for (int i = 0; i < mesh.VertexCount; i++)
+    {
+        var n = mesh.NormalAt(i);
+        sb.AppendLine($"vn {n.X:0.######} {n.Y:0.######} {n.Z:0.######}");
+    }
+    for (int i = 0; i < mesh.VertexCount; i++)
+    {
+        sb.AppendLine($"vt {mesh.UV[i * 2]:0.######} {mesh.UV[i * 2 + 1]:0.######}");
+    }
+    for (int t = 0; t < mesh.TriangleCount; t++)
+    {
+        int a = mesh.Indices[t * 3] + 1, b = mesh.Indices[t * 3 + 1] + 1, c = mesh.Indices[t * 3 + 2] + 1;
+        sb.AppendLine($"f {a}/{a}/{a} {c}/{c}/{c} {b}/{b}/{b}");
+    }
+    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+    File.WriteAllText(path, sb.ToString());
 }
 
 static void Print(VivariumWorld w)

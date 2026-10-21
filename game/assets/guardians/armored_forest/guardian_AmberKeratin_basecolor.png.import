@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bnp436ih1h1vc"
-path="res://.godot/imported/guardian_AmberKeratin_basecolor.png-76c40607ef822edb96b6f56eff34e61e.ctex"
+path.s3tc="res://.godot/imported/guardian_AmberKeratin_basecolor.png-76c40607ef822edb96b6f56eff34e61e.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "3ac65d7a77ac4f1092837e93ff724412"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/guardians/armored_forest/guardian_AmberKeratin_basecolor.png"
-dest_files=["res://.godot/imported/guardian_AmberKeratin_basecolor.png-76c40607ef822edb96b6f56eff34e61e.ctex"]
+dest_files=["res://.godot/imported/guardian_AmberKeratin_basecolor.png-76c40607ef822edb96b6f56eff34e61e.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

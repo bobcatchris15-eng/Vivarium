@@ -143,7 +143,6 @@ public sealed class LitterSystem
                 fruit += Math.Max(-0.9, dc.FruitMultiplier - 1) * activity;
             }
             else if (sp.Shape == "bracket") coarse += 1.4 * activity;
-            else if (sp.Archetype == "slime_mold") { fine += 0.35 * activity; coarse += 0.15 * activity; fruit += 0.2 * activity; }
             else { fine += 0.85 * activity; fruit += 0.35 * activity; }
         }
         return (Math.Clamp(fine, 0.1, 4.0), Math.Clamp(coarse, 0.1, 4.0), Math.Clamp(fruit, 0.1, 4.0));

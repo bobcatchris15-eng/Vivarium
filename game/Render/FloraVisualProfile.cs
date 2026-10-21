@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Godot;
 using Vivarium.Game.App;
@@ -10,6 +11,19 @@ namespace Vivarium.Game.Render;
 /// <summary>Editable visual recipes are independent of physiology and save files.</summary>
 public sealed class FloraVisualProfile
 {
+    private sealed record PreparedSplit(MeshData Stem, MeshData Leaf);
+    private static readonly ConditionalWeakTable<MeshData, PreparedSplit> PreparedSplits = new();
+    private static PreparedSplit PrepareSplit(MeshData source)
+    {
+        var split = FloraVisualCompiler.Split(source);
+        Bridge.PrepareMeshUpload(split.Stem);
+        Bridge.PrepareMeshUpload(split.Leaf);
+        return new(split.Stem, split.Leaf);
+    }
+
+    /// <summary>Prepares immutable completed geometry using managed arrays only; safe on mesh workers.</summary>
+    public static void PrepareUpload(MeshData source) => PreparedSplits.GetValue(source, PrepareSplit);
+
     // Disposable review hook; ordinary gameplay leaves this unset.
     public static Func<string, MeshData, MeshData>? ReviewMeshTransform { get; set; }
     public string Species { get; set; } = "";
@@ -78,8 +92,17 @@ public sealed class FloraVisualProfile
 
     public ArrayMesh Compile(MeshData source, ShaderMaterial stem, ShaderMaterial leaf)
     {
-        if (ReviewMeshTransform != null) source = ReviewMeshTransform(Species, source);
-        var split = FloraVisualCompiler.Split(source);
+        var reviewTransform = ReviewMeshTransform;
+        PreparedSplit split;
+        if (reviewTransform != null)
+        {
+            // Review transforms may access native resources and remain on the
+            // publishing thread. Never reuse an ordinary source's cached split.
+            source = reviewTransform(Species, source);
+            var transformed = FloraVisualCompiler.Split(source);
+            split = new(transformed.Stem, transformed.Leaf);
+        }
+        else split = PreparedSplits.GetValue(source, PrepareSplit);
         var result = Bridge.ToArrayMesh(split.Stem, stem);
         using var blade = Bridge.ToArrayMesh(split.Leaf, leaf);
         if (blade.GetSurfaceCount() > 0)

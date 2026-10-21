@@ -192,7 +192,7 @@ public sealed class FloraSpeciesDef
 {
     public string Id { get; init; } = "";
     public string Name { get; init; } = "";
-    public string Archetype { get; init; } = "";   // moss | lichen | plant | fungus | slime_mold
+    public string Archetype { get; init; } = "";   // moss | lichen | plant | fungus
     public string Role { get; init; } = "";
     public string Description { get; init; } = "";
     public string SourceFile { get; init; } = "";
@@ -302,7 +302,7 @@ public sealed class FloraSpeciesDef
 
     /// <summary>True for species that run on the coverage layers (Mat, Lichen, or Plasmodium) rather than as
     /// <see cref="Vivarium.Sim.Flora.FloraIndividual"/>s.</summary>
-    public bool IsCoverageSpecies => Mat != null || Lichen != null || Archetype == "slime_mold";
+    public bool IsCoverageSpecies => Mat != null || Lichen != null;
 }
 
 /// <summary>Moss ("mat") species content, parsed from the "mat" JSON block (docs/overhaul/growth_models.md §8).

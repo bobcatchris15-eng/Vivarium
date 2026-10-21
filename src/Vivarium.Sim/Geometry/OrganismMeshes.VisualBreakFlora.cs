@@ -143,7 +143,7 @@ public static partial class OrganismMeshes
             const int caneSegments=48;
             var path=Enumerable.Range(0,caneSegments+1).Select(j=>Point(j/(double)caneSegments)).ToArray();
             var radius=Enumerable.Range(0,caneSegments+1).Select(j=>MathD.Lerp(.014,.0025,j/(double)caneSegments)).ToArray();
-            Primitives.Tube(m,path,radius,7,(i,v)=>(Primitives.Mix(wood,c1,i/(double)caneSegments*.48),1,i/(double)caneSegments,v,0,0));
+            Primitives.Tube(m,path,radius,7,(i,v)=>(Primitives.Mix(wood,c1,i/(double)caneSegments*.48),1,i/(double)caneSegments,v,2,0));
             for(int j=1;j<10;j++)
             {
                 double t=j/10.0;
@@ -171,7 +171,7 @@ public static partial class OrganismMeshes
                 if(j==4||j==7)
                 {
                     var end=petiole+leafDir*.17+Vec3.Up*.035;
-                    Primitives.Tube(m,new[]{p,petiole,end},new[]{.006,.003,.001},6,(i,v)=>(wood,1,i/2.0,v,0,0));
+                    Primitives.Tube(m,new[]{p,petiole,end},new[]{.006,.003,.001},6,(i,v)=>(wood,1,i/2.0,v,2,0));
                     HookPrickle(m,petiole,side,tangent,.035,thorn);
                     CurvedBlade(m,end,end+leafDir*.13+Vec3.Up*.04,end+leafDir*.25,
                         side,.07,c1,c2,6,rng.Range(-.3,.3),.75,.2);
@@ -415,6 +415,31 @@ public static partial class OrganismMeshes
     public const int FloraTopTriangleCap = 30000;
     public const double FloraMidRatio = 0.55, FloraLowRatio = 0.18;
 
+    /// <summary>
+    /// Top-tier triangle cap for one species. The default holds for every form, but a species whose
+    /// near-field read depends on dense, fine foliage may ask for a richer closest mesh: the extra
+    /// triangles are only paid for the instances the camera is close to.
+    /// </summary>
+    public static int FloraTopTriangleCapFor(string id) => id switch
+    {
+        // A clover mat is hundreds of small overlapping leaflets; at the default cap the near tier
+        // thins the mat into scattered pads instead of a continuous sward.
+        "trifold" => 40000,
+        // The coinrunner mat is the same argument: a wide carpet of large reniform coins, each one
+        // a modelled blade with its own venation, a coin-border bead and a rolled edge. At the
+        // default cap the near tier drops coins and the carpet opens into separate rafts.
+        "coinrunner" => 36000,
+        // A fern's near read is its pinnae: dozens of finely divided blades per frond, eight fronds
+        // deep. At the default cap the near tier drops pinnae and the fern reads as a handful of
+        // broad leaves instead of a feather.
+        "veilfern" => 52000,
+        // A plume's near read is its filaments. A pampas panicle is thousands of fine vanes and
+        // stigmas; at the default cap the near tier strips them back and the ladder of plumes
+        // reads as a sparse starburst instead of a soft feather.
+        "plumegrass" => 44000,
+        _ => FloraTopTriangleCap,
+    };
+
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int), double> LodScaleCache = new();
 
     /// <summary>Triangle target for a tier, given the top-tier triangle count.</summary>
@@ -447,7 +472,7 @@ public static partial class OrganismMeshes
             if (LodScaleCache.TryGetValue(key, out double cached)) return cached;
             int target;
             double hiS;
-            if (t == 0) { target = FloraTopTriangleCap; hiS = 1; }
+            if (t == 0) { target = FloraTopTriangleCapFor(id); hiS = 1; }
             else
             {
                 double sTop = S(0);

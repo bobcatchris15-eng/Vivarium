@@ -32,6 +32,31 @@ vec3 cotangent_normal(vec3 geom_normal, vec3 p_world, vec2 uv, vec3 detail) {
     return normalize(geom_normal * detail.z + (t * detail.x - b * detail.y) * inv);
 }
 
+// Orthonormal tangent frame for cylindrical stems and branches.
+// Compensates for non-isotropic UV aspect ratios (circumference vs length),
+// wraps derivatives seamlessly across the 0..1 tube seam, and aligns
+// the bitangent with the growth axis (+V along stem).
+vec3 stem_surface_normal(vec3 geom_normal, vec3 p_world, vec2 uv, vec3 detail) {
+    vec3 px = dFdx(p_world), py = dFdy(p_world);
+    vec2 ux = dFdx(uv), uy = dFdy(uv);
+    ux.x -= round(ux.x);
+    uy.x -= round(uy.x);
+    vec3 r1 = cross(py, geom_normal);
+    vec3 r2 = cross(geom_normal, px);
+    vec3 t = r1 * ux.x + r2 * uy.x;
+    vec3 b = r1 * ux.y + r2 * uy.y;
+    float lt = length(t);
+    float lb = length(b);
+    vec3 T = lt > 1e-7 ? (t / lt) : normalize(cross(geom_normal, vec3(0.0, 1.0, 0.0)));
+    T = normalize(T - geom_normal * dot(geom_normal, T));
+    vec3 B = lb > 1e-7 ? (b / lb) : normalize(cross(geom_normal, T));
+    B = normalize(B - geom_normal * dot(geom_normal, B) - T * dot(T, B));
+    float det = ux.x * uy.y - ux.y * uy.x;
+    if (det < 0.0) T = -T;
+    return normalize(geom_normal * detail.z + T * detail.x + B * detail.y);
+}
+
+
 // Anti-tiling: two lookups at different scales/rotations mixed by low-frequency noise.
 // Returns albedo (linear), roughness in .a; the matching normal is written to n_out (tangent space).
 vec4 sample_untiled(sampler2D col, sampler2D nrm, sampler2D rgh, vec2 uv, out vec3 n_out) {

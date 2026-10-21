@@ -43,6 +43,7 @@ void fragment() {
         // plain lookups (no anti-tiling rotation): the grain must stay aligned with the trunk
         vec4 bark = vec4(texture(bark_col, uv).rgb, texture(bark_rgh, uv).r);
         vec3 tn = unpack_normal(texture(bark_nrm, uv).rgb);
+        tn = normalize(vec3(tn.xy * 2.4, tn.z));
         float avg = max(lum(textureLod(bark_col, vec2(0.5), 10.0).rgb), 0.02);
         // decay tint from the vertex colour (fresh / weathered / rotting), keeping the scan's detail
         float vmoss = clamp((vcol.g - vcol.r) * 6.0, 0.0, 1.0);
@@ -78,7 +79,9 @@ void fragment() {
         mcol = mix(mcol, vec3(0.62, 0.55, 0.22) * (0.8 + 0.4 * fib), speck * 0.22);   // sporophyte / strand tips                      // muted, not felt-green
         mcol = mix(mcol * 0.5, mcol, smoothstep(0.0, 0.6, mossy));   // thin edges read as dark damp fuzz
         col = mix(col, mcol, smoothstep(0.08, 0.5, mossy));
-        float rough = mix(bark.a, max(moss.a, 0.85), mossy);
+        float r_plate = smoothstep(0.18, 0.88, bark.a);
+        float bark_rgh_mapped = mix(0.38, 0.90, r_plate);
+        float rough = mix(bark_rgh_mapped, max(moss.a, 0.85), mossy);
         // dome normal per clump (tangent space: x around, y along)
         vec3 dn = normalize(vec3(cl.y, cl.z, 0.0) * 0.24 + vec3(cl2.y, cl2.z, 0.0) * 0.10 + vec3(0.0, 0.0, 0.85 + 0.15 * h));
         mn = normalize(vec3(mn.xy * 0.24 + dn.xy, dn.z));
@@ -98,7 +101,8 @@ void fragment() {
         vec3 dx = dFdx(NORMAL);
         vec3 dy = dFdy(NORMAL);
         float variance = dot(dx, dx) + dot(dy, dy);
-        ROUGHNESS = clamp(sqrt(rough * rough + min(variance * 2.0, 0.25)), 0.65, 1.0);
-        SPECULAR = mix(0.3, 0.16, mossy);
+        ROUGHNESS = clamp(sqrt(rough * rough + min(variance * 2.0, 0.25)), 0.35, 1.0);
+        float log_bark_spec = mix(0.42, 0.14, smoothstep(0.55, 0.90, bark_rgh_mapped));
+        SPECULAR = mix(log_bark_spec, 0.16, mossy);
     }
 }

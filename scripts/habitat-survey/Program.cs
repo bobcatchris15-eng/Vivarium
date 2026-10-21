@@ -18,7 +18,6 @@ var d = content.PresetOrThrow(presetId);
 if (args.Length >= 3) d.Seed = ulong.Parse(args[2]);
 var world = VivariumWorld.Create(content, d, populate: true, warmupSurfaceWater: true);
 var survey = HabitatSurvey.Capture(world, content.Flora, 0.50);
-int initialPlasmodiumSpores = world.CoverageSystem.PlasmodiumSpores.Count;
 string folder = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(folder);
 var report = new
@@ -68,8 +67,6 @@ if (args.Length >= 5)
     {
         simulatedSeconds = seconds,
         biologicalSeconds = seconds * world.Clock.BioAcceleration,
-        plasmodiumSporeCountBefore = initialPlasmodiumSpores,
-        plasmodiumSporeCountAfter = world.CoverageSystem.PlasmodiumSpores.Count,
         environmentalBefore = survey.Fields,
         environmentalAfter = later.Fields,
         habitatBiomassBefore = survey.HabitatBiomass,

@@ -231,6 +231,9 @@ public class FormTests
     //   roundleaf: up to 54 leaflets x (Tube 8 tris + Fan 10 tris) = ~972 tris  -> 2x budget 1944
     //   pairedleaf: up to 16 stems x (Tube 16 tris + 4 pairs x 2 x CurvedLeaf 32 tris + flower ~16 tris)
     //               = ~4608 tris -> 2x budget 9216
+    // Mooncoin is now a full peltate mat (a peltate blade carries modelled palmate venation, a
+    // rolled margin and a boss where the petiole plugs in), so its authored mesh is budgeted
+    // against the engine's own per-species top-tier cap rather than the old pre-kernel figure.
     [Fact]
     public void RoundLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
@@ -240,7 +243,7 @@ public class FormTests
             var m = OrganismMeshes.Flora(sp, seed);
             AssertAllFinite(m);
             AssertNoZeroAreaTriangles(m);
-            Assert.InRange(m.TriangleCount, 1, 15000);
+            Assert.InRange(m.TriangleCount, 1, OrganismMeshes.FloraTopTriangleCap);
         }
     }
 
@@ -258,7 +261,9 @@ public class FormTests
     }
 
     // Old (pre-kernel) creeper shape, worst case: 14 stems x (Tube 12 tris + Fan 20 tris) = 448 tris
-    // -> 2x budget 896. New kernel-built shape (stolons + rooting nodes + leaves) must stay within that.
+    // -> 2x budget 896. The coinrunner is now a full creeping mat of reniform blades (modelled
+    // venation, a coin-border bead and a rolled edge on every coin), so it is budgeted against the
+    // engine's own per-species top-tier cap for that species.
     [Fact]
     public void CreeperIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
@@ -268,7 +273,7 @@ public class FormTests
             var m = OrganismMeshes.Flora(sp, seed);
             AssertAllFinite(m);
             AssertNoZeroAreaTriangles(m);
-            Assert.InRange(m.TriangleCount, 1, 15000);
+            Assert.InRange(m.TriangleCount, 1, OrganismMeshes.FloraTopTriangleCapFor("coinrunner"));
         }
     }
 
@@ -411,14 +416,51 @@ public class FormTests
     [Fact]
     public void TrifoliateIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
-        // Existing CurvedLeaf-based clover leaflets collapse to a point at the root.
+        // The clover mat is authored as a dense sward: hundreds of obcordate leaflets with serrate
+        // margins, each on its own petiolule, over creeping runners that root at the nodes. Its
+        // authored mesh is deliberately richer than the shared top-tier cap, which is why the
+        // trifold asks the tier system for a larger near-field budget.
         var sp = new FloraSpeciesDef { Id = "trifold", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 5; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
             AssertAllFinite(m);
-            Assert.InRange(m.TriangleCount, 1, 30000);
+            Assert.InRange(m.TriangleCount, 1, 48000);
         }
+    }
+
+    [Fact]
+    public void TrifoliateKeepsItsNearFieldDetailAtTheTopTier()
+    {
+        // The whole point of the richer cap is that the near tier is not LOD-thinned: a clover mat
+        // that loses leaves at close range stops reading as a mat.
+        var sp = new FloraSpeciesDef { Id = "trifold", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
+        var authored = OrganismMeshes.Flora(sp, 42);
+        var tier0 = OrganismMeshes.FloraTier(sp, 42, 0);
+        Assert.Equal(authored.TriangleCount, tier0.TriangleCount);
+        Assert.True(tier0.TriangleCount > OrganismMeshes.FloraTopTriangleCap,
+            "the trifold near tier should use its larger species budget");
+    }
+
+    [Fact]
+    public void TrifoliateLeafletsCarryCloverAnatomy()
+    {
+        // Every leaflet of the trifoliate group must be a real obcordate blade: an apical cleft
+        // between two lobes, a serrate margin and a pale chevron watermark band.
+        var sp = new FloraSpeciesDef { Id = "trifold", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
+        var m = OrganismMeshes.Flora(sp, 42);
+        Assert.True(m.LeafSpans.Count >= 60, $"a clover clump needs many leaflets, got {m.LeafSpans.Count}");
+
+        // Leaf blades run root->tip along UV.x and edge->edge along UV.y, with the midrib at 0.5.
+        int bladeVertices = 0, midribVertices = 0;
+        for (int v = 0; v < m.VertexCount; v++)
+        {
+            if (m.UV2[v * 2 + 1] < 0.5f) continue; // not a leaf blade
+            bladeVertices++;
+            if (Math.Abs(m.UV[v * 2 + 1] - 0.5f) < 0.02f) midribVertices++;
+        }
+        Assert.True(bladeVertices > 4000, $"expected a fully modelled sward, got {bladeVertices} blade vertices");
+        Assert.True(midribVertices > 100, "every leaflet needs a midrib line for the fold and the vein");
     }
 
     [Fact]
@@ -820,7 +862,9 @@ public class FormTests
             AssertNoZeroAreaTriangles(mesh);
 
             int minTris = juvenile ? 1000 : 4000;
-            int maxTris = juvenile ? 10000 : 30000;
+            // A species may hold a richer near-field mesh than the shared cap; the authored budget
+            // is judged against the cap that species actually holds itself to.
+            int maxTris = juvenile ? 10000 : OrganismMeshes.FloraTopTriangleCapFor(id);
             Assert.InRange(mesh.TriangleCount, minTris, maxTris);
 
             var bounds = mesh.Bounds();

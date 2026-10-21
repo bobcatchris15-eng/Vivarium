@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using Vivarium.Game.App;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.World;
 
@@ -46,13 +47,44 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     public int GroundCacheAuditBudget {get;set;}
     public int GroundCacheSamplesAudited {get;private set;}
     public float MaximumGroundCacheAuditError {get;private set;}
+    private float[] _stationRadii=Array.Empty<float>(),_stationGroundRadii=Array.Empty<float>();
+    private bool _constraintAuditConfigured;
+    public int ConstraintCacheAuditBudget {get;set;}
+    public int ConstraintRadiusAuditValues {get;private set;}
+    public double MaximumConstraintCacheAuditError {get;private set;}
     private Vector3 _lastRoot;
     private bool _initialized;
     private float _scale = 1;
+    // Cost accounting for the constraint solve. The three inner costs dominate the
+    // modifier, so they are timed separately instead of guessing from the total.
+    private double _vegetationMs, _treeMs, _groundMs;
+    private int _solveIterations, _solveSteps, _vegetationQueries, _treeQueries, _groundQueries;
+    public double VegetationMs => _vegetationMs;
+    public double TreeMs => _treeMs;
+    public double GroundMs => _groundMs;
+    public int SolveIterations => _solveIterations;
+    public int SolveSteps => _solveSteps;
+    public int VegetationQueries => _vegetationQueries;
+    public int TreeQueries => _treeQueries;
+    public int GroundQueries => _groundQueries;
+    private readonly float[] _iterationMove = new float[32];
+    /// <summary>Largest joint movement observed per constraint iteration (metres).</summary>
+    public IReadOnlyList<float> IterationMove => _iterationMove;
+    // Convergence study: how many constraint iterations a step needs before the
+    // joints stop moving by more than the tolerance.
+    public float ConvergenceTolerance { get; set; } = 1e-4f;
+    private bool _convergedThisStep;
+    private readonly int[] _convergenceHistogram = new int[32];
+    private long _convergenceSamples;
+    public IReadOnlyList<int> ConvergenceHistogram => _convergenceHistogram;
+    public long ConvergenceSamples => _convergenceSamples;
     public void ResetContact() => _initialized = false;
     public override void _ProcessModificationWithDelta(double delta)
     {
         using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian.Appendage");
+        long phaseStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        _vegetationMs = 0; _treeMs = 0; _groundMs = 0;
+        _solveIterations = 0; _solveSteps = 0; _vegetationQueries = 0; _treeQueries = 0; _groundQueries = 0;
         var skeleton = GetSkeleton();
         if (skeleton == null || World == null || Renderer == null) return;
         if (_bones.Length == 0)
@@ -64,8 +96,26 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         }
         if (_bones.Length < 2) return;
         _supportSamples.Clear();
+        if(!_constraintAuditConfigured)
+        {
+            _constraintAuditConfigured=true;
+            if(Array.IndexOf(Main.UserArgs,"--guardian-constraint-cache-audit")>=0)ConstraintCacheAuditBudget=128;
+        }
         var transform = skeleton.GlobalTransform;
         _scale = transform.Basis.Scale.X;
+        int stations=(_points.Length-1)*4+1;
+        if(_stationRadii.Length<stations){_stationRadii=new float[stations];_stationGroundRadii=new float[stations];}
+        for(int i=0;i<_points.Length;i++)
+        {
+            _stationRadii[i*4]=Radius(i,_points.Length);
+            _stationGroundRadii[i*4]=GroundRadius(i,_points.Length);
+        }
+        for(int i=0;i<_points.Length-1;i++)for(int sample=1;sample<4;sample++)
+        {
+            float t=sample*.25f;
+            _stationRadii[i*4+sample]=Radius(i+t,_points.Length);
+            _stationGroundRadii[i*4+sample]=GroundRadius(i+t,_points.Length);
+        }
         var inverse = transform.AffineInverse();
         var poses = new Transform3D[_bones.Length];
         var goals = new Vector3[_points.Length];
@@ -109,10 +159,26 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         { Array.Copy(goals, _points, goals.Length); Array.Clear(_velocity); _initialized = true; }
         _lastRoot = goals[0];
         float dt = World.Clock.Paused ? 0 : (float)Math.Clamp(delta * World.Clock.SpeedMultiplier, 0, .08);
-        int steps = Math.Max(1, (int)Math.Ceiling(dt / (1f / 60))); float h = dt / steps;
+        // A slow frame must not multiply the solve cost. The substep size stays at
+        // the stable 1/60 s and at most two substeps run per frame, so the tail lags
+        // a little instead of the frame time feeding back into itself. Before this
+        // cap a 20 fps frame ran three substeps, which cost a third more again.
+        int steps = Math.Clamp((int)Math.Ceiling(dt / (1f / 60)), 1, 2);
+        float h = Math.Min(dt / steps, 1f / 60);
+        _solveSteps = steps;
+        FrameProfiler.Record("Guardian.Appendage.Setup", System.Diagnostics.Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds);
+        phaseStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         for (int step = 0; step < steps; step++)
         {
             _points[0] = goals[0];
+            // Sample the plants' bend response once per solver step. The bend a
+            // plant takes follows the tail's path across frames, and the
+            // per-iteration projection below keeps the tail itself out of the
+            // stems, so the step's samples carry the same information as the
+            // sixty-four per-step samples the solver used to take.
+            for (int i = 1; i < _points.Length; i++)
+                ResolveVegetation(_points[i], StationRadius(i*4,i,false));
+            _convergedThisStep = false;
             for (int i = 1; i < _points.Length; i++)
             {
                 // The pose remains the intent; inertia produces secondary follow-through.
@@ -124,6 +190,7 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             bool auditingFixedPoint=false;
             for (int iteration = 0; iteration < 32; iteration++)
             {
+                _solveIterations++;
                 _points[0] = goals[0];Array.Copy(_points,_iterationStart,_points.Length);
                 for (int i = 0; i < lengths.Length; i++)
                 {
@@ -147,14 +214,14 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                 }
                 for (int i = 1; i < _points.Length; i++)
                 {
-                    float radius = Radius(i, _points.Length);
-                    var point = Vegetation?.Resolve(_points[i], radius, true) ?? _points[i];
+                    float radius = StationRadius(i*4,i,false);
+                    var point = ProjectVegetation(_points[i], radius);
                     if (!Renderer.ReviewSupportPlaneHeight.HasValue && Renderer.ReviewGroundSample == null && World.PilotTree != null)
                     {
-                        var hit = World.PilotTree.Penetration(new Vec3(point.X, point.Y, point.Z), radius);
+                        var hit = TreePenetration(point, radius);
                         if (hit.Depth > 0) point += new Vector3((float)hit.Normal.X, (float)hit.Normal.Y, (float)hit.Normal.Z) * (float)hit.Depth;
                     }
-                    point.Y = Math.Max(point.Y, Ground(point) + GroundRadius(i, _points.Length));
+                    point.Y = Math.Max(point.Y, Ground(point) + StationRadius(i*4,i,true));
                     _points[i] = point;
                 }
                 // Sample the capsule interiors as well as joints: a thin ridge
@@ -163,14 +230,14 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                     for (int sample = 1; sample < 4; sample++)
                     {
                         float t = sample * .25f; var point = _points[i].Lerp(_points[i + 1], t);
-                        float radius = Radius(i + t, _points.Length);
-                        var projected = Vegetation?.Resolve(point, radius, true) ?? point;
+                        float radius = StationRadius(i*4+sample,i+t,false);
+                        var projected = ProjectVegetation(point, radius);
                         if (!Renderer.ReviewSupportPlaneHeight.HasValue && Renderer.ReviewGroundSample == null && World.PilotTree != null)
                         {
-                            var hit = World.PilotTree.Penetration(new Vec3(projected.X, projected.Y, projected.Z), radius);
+                            var hit = TreePenetration(projected, radius);
                             if (hit.Depth > 0) projected += new Vector3((float)hit.Normal.X, (float)hit.Normal.Y, (float)hit.Normal.Z) * (float)hit.Depth;
                         }
-                        projected.Y = Math.Max(projected.Y, Ground(projected) + GroundRadius(i + t, _points.Length));
+                        projected.Y = Math.Max(projected.Y, Ground(projected) + StationRadius(i*4+sample,i+t,true));
                         var correction = projected - point;
                         // Project a segment sample through its barycentric
                         // endpoint weights. A pinned root has zero inverse mass.
@@ -180,14 +247,31 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                         _points[i + 1] += correction * (t / denominator);
                     }
                 // This iteration is a deterministic map while goals, terrain and
-                // plant bounds are unchanged inside the call. Exact equality means
-                // every remaining iteration would repeat the same result and targets.
+                // plant bounds are unchanged inside the call. Once the joints
+                // stop moving by more than the tolerance, further iterations
+                // repeat the same projection: the chain has settled.
                 bool fixedPoint=true;
-                for(int i=0;i<_points.Length;i++)if(_points[i]!=_iterationStart[i]){fixedPoint=false;break;}
+                float worstMove=0;
+                for(int i=0;i<_points.Length;i++)
+                {
+                    float move=(_points[i]-_iterationStart[i]).LengthSquared();
+                    if(move>worstMove)worstMove=move;
+                    if(_points[i]!=_iterationStart[i])fixedPoint=false;
+                }
+                float moveMetres=MathF.Sqrt(worstMove);
+                if(moveMetres>_iterationMove[iteration])_iterationMove[iteration]=moveMetres;
+                if(moveMetres<ConvergenceTolerance&&!_convergedThisStep){_convergedThisStep=true;_convergenceHistogram[iteration]++;_convergenceSamples++;}
+                if(moveMetres<=ConvergenceTolerance)
+                {
+                    if(FixedPointAuditBudget>0)
+                    {
+                        FixedPointAuditBudget--;Array.Copy(_points,_fixedPointReference,_points.Length);auditingFixedPoint=true;
+                    }
+                    else{ExactIterationsSkipped+=31-iteration;break;}
+                }
                 if(fixedPoint&&!auditingFixedPoint)
                 {
-                    if(FixedPointAuditBudget>0){FixedPointAuditBudget--;Array.Copy(_points,_fixedPointReference,_points.Length);auditingFixedPoint=true;}
-                    else{ExactIterationsSkipped+=31-iteration;break;}
+                    ExactIterationsSkipped+=31-iteration;break;
                 }
             }
             if(auditingFixedPoint)
@@ -197,6 +281,8 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             }
         }
         // Fit the actual lowest skin/armor samples as well as centerline
+        FrameProfiler.Record("Guardian.Appendage.Constraints", System.Diagnostics.Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds);
+        phaseStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         // capsules. Rigid plate tips and blended skin can extend beyond those
         // proxies on a tight bend. Tail-root motion blends through its skin
         // attachment instead of raising every foot to clear a distal plate.
@@ -254,6 +340,8 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                 }
         }
         // The last fit can exhaust its budget after changing points. Always
+        FrameProfiler.Record("Guardian.Appendage.SkinFit", System.Diagnostics.Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds);
+        phaseStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         // apply those final points before evaluating the rendered skin.
         ApplyTailPose();
         MaximumLengthError = 0; MaximumGroundPenetration = 0; MaximumBendDeviation = 0;
@@ -304,9 +392,38 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         // Connected trunk and head volumes brush the same visible shrubs.
         foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Body", "Body0", "Body1", "Body2", "Body3" })
         { int bone = skeleton.FindBone(name); if (bone >= 0) Vegetation?.Resolve(transform * skeleton.GetBoneGlobalPose(bone).Origin, (name == "Head" ? .075f : BodyBrushRadius) * _scale, false); }
+        FrameProfiler.Record("Guardian.Appendage.Diagnostics", System.Diagnostics.Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds);
+        FrameProfiler.Record("Guardian.Appendage.Veg", _vegetationMs);
+        FrameProfiler.Record("Guardian.Appendage.Tree", _treeMs);
+        FrameProfiler.Record("Guardian.Appendage.Ground", _groundMs);
+    }
+    private Vector3 ResolveVegetation(Vector3 point, float radius)
+    {
+        if (Vegetation == null) return point;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        var result = Vegetation.Resolve(point, radius, true);
+        _vegetationMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+        _vegetationQueries++;
+        return result;
+    }
+    /// <summary>Projects a point out of the stems near it, without resampling the
+    /// plants' bend targets. The solver runs this for every constraint
+    /// iteration; the bend targets only need the tail's position along its
+    /// path, so they are sampled once per solver step instead.</summary>
+    private Vector3 ProjectVegetation(Vector3 point, float radius)
+    {
+        if (Vegetation == null) return point;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        var result = Vegetation.ProjectStem(point, radius);
+        _vegetationMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+        _vegetationQueries++;
+        return result;
     }
     private float Ground(Vector3 point)
     {
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
         // In production support depends on XZ and one trunk-roof branch. Terrain,
         // props and renderer mode cannot change inside this synchronous modifier call.
         // Review callbacks may be arbitrary functions of XYZ and deliberately bypass it.
@@ -314,13 +431,38 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         bool below=World.PilotTree is {} tree&&point.Y<tree.BaseHeight+tree.Def.TrunkHeight-.05;
         var key=(point.X,point.Z,below);
         if(!_supportSamples.TryGetValue(key,out float height))
-        {height=Renderer.SupportHeight(point);_supportSamples.Add(key,height);}
+        {height=Renderer.SupportHeight(point);_supportSamples.Add(key,height);_groundQueries++;}
         else if(GroundCacheAuditBudget>0)
         {
             GroundCacheAuditBudget--;GroundCacheSamplesAudited++;
             MaximumGroundCacheAuditError=Math.Max(MaximumGroundCacheAuditError,Math.Abs(height-Renderer.SupportHeight(point)));
         }
         return height;
+        }
+        finally { _groundMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds; }
+    }
+    private float StationRadius(int station,float originalIndex,bool ground)
+    {
+        float cached=ground?_stationGroundRadii[station]:_stationRadii[station];
+        if(ConstraintCacheAuditBudget>0 && ConstraintRadiusAuditValues<128)
+        {
+            float reference=ground?GroundRadius(originalIndex,_points.Length):Radius(originalIndex,_points.Length);
+            ConstraintRadiusAuditValues++;
+            MaximumConstraintCacheAuditError=Math.Max(MaximumConstraintCacheAuditError,Math.Abs(cached-reference));
+            if(BitConverter.SingleToInt32Bits(cached)!=BitConverter.SingleToInt32Bits(reference))
+                throw new InvalidOperationException("Guardian constraint radius cache mismatch");
+        }
+        return cached;
+    }
+    private (Vec3 Normal,double Depth) TreePenetration(Vector3 point,float radius)
+    {
+        // The immutable root footprint index is cheaper than a per-call memo
+        // table here: measured exact-query reuse was only about four percent.
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        var result = World.PilotTree!.Penetration(new Vec3(point.X,point.Y,point.Z),radius);
+        _treeMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+        _treeQueries++;
+        return result;
     }
     private float Radius(float index, int count) => LateralRadii.Length > 0 ? ProfileRadius(LateralRadii, index, count)
         : Mathf.Lerp(RootRadius, TipRadius, Math.Clamp(index / (count - 1), 0, 1)) * _scale;

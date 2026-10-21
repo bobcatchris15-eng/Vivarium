@@ -104,6 +104,8 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
     // ------------------------------------------------------------------ world lifecycle
 
     public bool LoadingWorld { get; private set; }
+    /// <summary>Wall time of each render stage of the most recent world start, in order.</summary>
+    public readonly List<(string Stage, double Ms)> StageTimings = new();
     public void StartWorld(VivariumWorld world, string? saveName = null)
     {
         foreach (var _ in StartWorldStages(world, saveName)) { }
@@ -126,11 +128,14 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
     private IEnumerable<string> StartWorldStages(VivariumWorld world, string? saveName)
     {
         var startup = System.Diagnostics.Stopwatch.StartNew();
+        StageTimings.Clear();
         void Stage(string name, Action build)
         {
             GD.Print($"WORLD_RENDER_STAGE_BEGIN {name} elapsed_ms={startup.ElapsedMilliseconds}");
             long begin = startup.ElapsedMilliseconds;
             build();
+            double stageMs = startup.ElapsedMilliseconds - begin;
+            StageTimings.Add((name, stageMs));
             GD.Print($"WORLD_RENDER_STAGE_END {name} stage_ms={startup.ElapsedMilliseconds - begin} elapsed_ms={startup.ElapsedMilliseconds}");
         }
         if (Host == null) Host = new SimHost(world); else Host.Swap(world);
@@ -138,37 +143,42 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         world.Scheduler.WallBudgetMs = 6;
         world.CoverageSystem.AsyncMode = true;
         CurrentSaveName = saveName;
-        Stage("Island", () => { EnvRig.ConfigureHabitat(world); Island.Build(world); });
-        yield return "Island";
-        Stage("Water", () => Water.Build(world));
-        yield return "Water";
-        Stage("WaterFluid", () => {world.Liquid.Enable();world.Liquid.AsyncMode=true;WaterFluid.Bind(world);});
-        yield return "WaterFluid";
-        Stage("Props", () => Props.Build(world));
-        yield return "Props";
-        Stage("PilotTree", () => PilotTree.Build(world));
-        yield return "PilotTree";
-        SoilDetail.Camera = CameraRig.Cam;
-        Stage("SoilDetail", () => SoilDetail.Build(world));
-        yield return "SoilDetail";
-        AmbientGround.Camera = CameraRig.Cam;
-        Stage("AmbientGround", () => AmbientGround.Build(world));
-        yield return "AmbientGround";
-        Coverage.Camera = CameraRig.Cam;
-        Stage("Coverage", () => Coverage.Build(world));
-        yield return "Coverage";
-        Flora.Camera = Fauna.Camera = Guardian.Camera = CameraRig.Cam;
-        Stage("Flora", () => Flora.Build(world));
-
-        yield return "Flora";
-        Stage("Fauna", () => Fauna.Build(world));
-        yield return "Fauna";
-        Stage("Guardian", () => Guardian.Build(world));
-        yield return "Guardian";
-        Stage("Overlay", () => Overlay.Bind(world));
-        yield return "Overlay";
+        // Camera-local layers may process between loading stages. Start them at
+        // the final entry pose rather than rebuilding around the previous island.
         CameraRig.World = world;
         CameraRig.ResetView();
+        // The guardian model is the largest asset in the game. Start streaming
+        // it now so the island, water, props and pilot tree are prepared while
+        // the model loads, instead of waiting for it afterwards.
+        if (world.Guardian != null) PreloadGuardians.Begin(world.Guardian.ArchetypeId);
+        yield return "Island";
+        Stage("Island", () => { EnvRig.ConfigureHabitat(world); Island.Build(world); });
+        yield return "Water";
+        Stage("Water", () => Water.Build(world));
+        yield return "WaterFluid";
+        Stage("WaterFluid", () => {world.Liquid.Enable();world.Liquid.AsyncMode=true;WaterFluid.Bind(world);});
+        yield return "Props";
+        Stage("Props", () => Props.Build(world));
+        yield return "PilotTree";
+        Stage("PilotTree", () => PilotTree.Build(world));
+        SoilDetail.Camera = CameraRig.Cam;
+        yield return "SoilDetail";
+        Stage("SoilDetail", () => SoilDetail.Build(world));
+        AmbientGround.Camera = CameraRig.Cam;
+        yield return "AmbientGround";
+        Stage("AmbientGround", () => AmbientGround.Build(world));
+        Coverage.Camera = CameraRig.Cam;
+        yield return "Coverage";
+        Stage("Coverage", () => Coverage.Build(world));
+        Flora.Camera = Fauna.Camera = Guardian.Camera = CameraRig.Cam;
+        yield return "Flora";
+        Stage("Flora", () => Flora.Build(world));
+        yield return "Fauna";
+        Stage("Fauna", () => Fauna.Build(world));
+        yield return "Guardian";
+        Stage("Guardian", () => Guardian.Build(world));
+        yield return "Overlay";
+        Stage("Overlay", () => Overlay.Bind(world));
         Tools.Bind(world);
         Autosave ??= new AutosaveController(AutosavePath);
         Autosave.Path = AutosavePath;
@@ -179,8 +189,8 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         History.Clear(); _lastHistoryDay = -1;
         world.Scheduler.SystemTimed += (sys, ms) => FrameProfiler.Record("Sys." + sys.Name, ms);
         Log.Info(LogCategory.App, $"World started: '{world.Descriptor.Name}' seed {world.Seed}, day {world.Clock.BioDays:0.0}.");
-        Stage("WorldChanged", () => WorldChanged?.Invoke());
         yield return "WorldChanged";
+        Stage("WorldChanged", () => WorldChanged?.Invoke());
     }
 
     private void OnAutosaved(SaveResult r)

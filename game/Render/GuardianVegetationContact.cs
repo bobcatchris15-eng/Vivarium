@@ -23,6 +23,17 @@ public partial class GuardianVegetationContact : Node
     private readonly record struct DrawInfo(MultiMeshInstance3D Draw,MultiMesh Buffer,Transform3D Global,Transform3D Inverse,Aabb Bounds,int Count);
     private readonly Dictionary<MultiMeshInstance3D,DrawInfo> _frameDraws=new(ReferenceEqualityComparer.Instance);
     private bool _insideFrame;
+    private bool _farthestValid;
+    private (ulong,int) _farthestKey;
+    private float _farthestDistance;
+    private (ulong,int) _farthestSecondKey;
+    private float _farthestSecondDistance;
+    public long RegistryCacheQueries {get;private set;}
+    public long RegistryCacheHits {get;private set;}
+    public int RegistryCacheAudits {get;private set;}
+    public int RegistryCacheAcceptedAudits {get;private set;}
+    public int RegistryCacheRejectedAudits {get;private set;}
+    public int RegistryCacheReuseAudits {get;private set;}
     public int DrawFrameAuditBudget {get;set;}
     public int DrawFrameAudits {get;private set;}
     public float MaximumDrawFrameAuditError {get;private set;}
@@ -39,11 +50,48 @@ public partial class GuardianVegetationContact : Node
     }
     private const float ContactCell=.5f;
     private readonly Dictionary<(int,int),UInt128> _contactCells=new();
+    /// <summary>Plants indexed by their stem rather than their whole bounds. The
+    /// tail only ever collides with a stem, so the solver's inner loop can use
+    /// this index instead of testing every plant whose bounds overlap it.</summary>
+    private readonly Dictionary<(int,int),UInt128> _stemCells=new();
+    /// <summary>Half-width of the stem index margin: the largest stem radius plus the largest contact radius.</summary>
+    private const float StemMargin=.25f;
+    /// <summary>Cell size of the stem index. Finer than the bounds index
+    /// because only the plants whose stem stands within reach of the tail can
+    /// push it, and their roots are often clustered within centimetres.</summary>
+    private const float StemCell=.125f;
     private readonly Plant[] _orderedPlants=new Plant[128];
+    private readonly Aabb[] _orderedBounds=new Aabb[128];
+    /// <summary>Flat copies of the stem data. Reading a class field per
+    /// candidate chased a pointer into scattered heap objects; these keep the
+    /// per-candidate test in cache, and the three vectors share one record so a
+    /// candidate touches a single line.</summary>
+    private struct StemData
+    {
+        public Vector3 Root;
+        public Vector3 Size;
+        public Vector3 Center;
+    }
+    private readonly StemData[] _orderedStems=new StemData[128];
     private UInt128 _widePlants,_allPlants;
     private bool _contactIndexDirty=true;
     public long SpatialQueries {get;private set;}
     public long SpatialCandidates {get;private set;}
+    public long SpatialBroadphase {get;private set;}
+    public long SpatialFullScans {get;private set;}
+    public long SpatialProjected {get;private set;}
+    public double SpatialBroadphaseMs {get;private set;}
+    public double SpatialNarrowMs {get;private set;}
+    public long SpatialPlantTests {get;private set;}
+    public long SpatialCellLookups {get;private set;}
+    public long SpatialMaxSpan {get;private set;}
+    public long SpatialIndexBuilds {get;private set;}
+    public long SpatialIndexCells {get;private set;}
+    public long SpatialNarrowCalls {get;private set;}
+    /// <summary>Audit seam: compares the stem projection with the original full scan.</summary>
+    public int StemAuditBudget {get;set;}
+    public int StemAudits {get;private set;}
+    public float MaximumStemAuditError {get;private set;}
     public int SpatialAuditCases {get;private set;}
     public int SpatialAuditContactCases {get;private set;}
     public float MaximumSpatialAuditError {get;private set;}
@@ -71,6 +119,11 @@ public partial class GuardianVegetationContact : Node
         if(!TryDrawInfo(draw,out var info)||index>=info.Count)return;
         Register(draw,index,info.Buffer.GetInstanceTransform(index),info);
     }
+    /// <summary>Enables the stem-projection audit for the next N projections.</summary>
+    public void BeginStemAudit(int budget)
+    {
+        StemAuditBudget=budget;
+    }
     private void Register(MultiMeshInstance3D draw,int index,Transform3D transform,DrawInfo info)
     {
         var key=(draw.GetInstanceId(),index);
@@ -79,28 +132,92 @@ public partial class GuardianVegetationContact : Node
             if(_plants.Count>=128)
             {
                 var incoming=(info.Global*transform).Origin.DistanceSquaredTo(Focus);
-                (ulong,int) farthest=default;float distance=incoming;
-                foreach(var (candidate,existing) in _plants)
+                RegistryCacheQueries++;
+                (ulong,int) farthest;float distance;(ulong,int) second;float secondDistance;bool reused=false;
+                if(!_insideFrame || !float.IsFinite(incoming))
+                    (farthest,distance,second,secondDistance)=FindFarthest(incoming);
+                else
                 {
-                    if(!TryDrawInfo(existing.Draw,out var existingInfo)){farthest=candidate;distance=float.PositiveInfinity;break;}
-                    float d=(existingInfo.Global*existing.Base).Origin.DistanceSquaredTo(Focus);
-                    if(d>distance){distance=d;farthest=candidate;}
+                    if(!_farthestValid)
+                    {
+                        (_farthestKey,_farthestDistance,_farthestSecondKey,_farthestSecondDistance)=FindFarthest(float.NegativeInfinity);
+                        _farthestValid=true;
+                    }
+                    else {RegistryCacheHits++;reused=true;}
+                    farthest=_farthestKey;distance=_farthestDistance;
+                    second=_farthestSecondKey;secondDistance=_farthestSecondDistance;
+                }
+                bool rejected=distance<=incoming;
+                if((rejected?RegistryCacheRejectedAudits:RegistryCacheAcceptedAudits)<32 && Array.IndexOf(Vivarium.Game.App.Main.UserArgs,"--guardian-registry-cache-audit")>=0)
+                {
+                    var reference=FindFarthest(incoming);
+                    bool referenceRejected=reference.Distance<=incoming;
+                    if(rejected!=referenceRejected || (!rejected && farthest!=reference.Key))
+                        throw new InvalidOperationException("Guardian registry farthest cache decision mismatch");
+                    RegistryCacheAudits++;
+                    if(reused)RegistryCacheReuseAudits++;
+                    if(rejected)RegistryCacheRejectedAudits++;else RegistryCacheAcceptedAudits++;
                 }
                 if(distance<=incoming)return;
                 var removed=_plants[farthest];
                 if(TryDrawInfo(removed.Draw,out var removedInfo)&&removed.Index<removedInfo.Count&&removedInfo.Buffer.GetInstanceTransform(removed.Index).IsEqualApprox(removed.Applied))
                     removedInfo.Buffer.SetInstanceTransform(removed.Index,removed.Base);
                 _plants.Remove(farthest);
+                // The runner-up is now the farthest of the remaining plants, so
+                // the registry does not have to be scanned again for the next
+                // registration. A registry that held a single plant has no
+                // runner-up, and the next registration recomputes it.
+                if(secondDistance>=0 && _plants.ContainsKey(second))
+                {
+                    _farthestKey=second;_farthestDistance=secondDistance;_farthestValid=true;
+                }
+                else _farthestValid=false;
             }
             _plants[key]=plant=new Plant{Draw=draw,Index=index,Base=transform,Applied=transform};
+            if(_farthestValid)
+            {
+                // The set grew: the new plant only becomes the farthest if it is
+                // further from the focus than the current one.
+                float d=(info.Global*transform).Origin.DistanceSquaredTo(Focus);
+                if(d>_farthestDistance){_farthestKey=key;_farthestDistance=d;}
+            }
         }
-        else if(!transform.IsEqualApprox(plant.Applied))plant.Base=transform;
+        else if(!transform.IsEqualApprox(plant.Applied))
+        {
+            plant.Base=transform;
+            // A plant that moved only changes the farthest plant if it is now
+            // further from the focus than the current one. Rescanning the
+            // registry for every moved plant cost a scan per registration.
+            if(_farthestValid)
+            {
+                float d=(info.Global*transform).Origin.DistanceSquaredTo(Focus);
+                if(key==_farthestKey)_farthestDistance=d;
+                else if(d>_farthestDistance){_farthestKey=key;_farthestDistance=d;}
+            }
+        }
         var world=info.Global*plant.Base;plant.Root=world.Origin;plant.Bounds=world*info.Bounds;_contactIndexDirty=true;
+    }
+    private ((ulong,int) Key,float Distance,(ulong,int) SecondKey,float SecondDistance) FindFarthest(float incoming)
+    {
+        // Strict > retains the first dictionary entry on a distance tie. An
+        // invalid draw still wins immediately, exactly as the original scan.
+        // The runner-up is tracked as well: evicting the farthest leaves it as
+        // the new farthest, which saves rescanning the registry.
+        (ulong,int) farthest=default;float distance=incoming;
+        (ulong,int) second=default;float secondDistance=incoming;
+        foreach(var (candidate,existing) in _plants)
+        {
+            if(!TryDrawInfo(existing.Draw,out var info))return(candidate,float.PositiveInfinity,default,float.PositiveInfinity);
+            float d=(info.Global*existing.Base).Origin.DistanceSquaredTo(Focus);
+            if(d>distance){second=farthest;secondDistance=distance;farthest=candidate;distance=d;}
+            else if(d>secondDistance){second=candidate;secondDistance=d;}
+        }
+        return(farthest,distance,second,secondDistance);
     }
     public override void _Process(double delta)
     {
         using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian.Vegetation");
-        ContactCount=0;MaximumBend=0;_frameDraws.Clear();_insideFrame=true;
+        ContactCount=0;MaximumBend=0;_frameDraws.Clear();_farthestValid=false;_insideFrame=true;
         try
         {
             using (Vivarium.Game.App.FrameProfiler.Measure("Guardian.Vegetation.Scan"))
@@ -154,7 +271,7 @@ public partial class GuardianVegetationContact : Node
                 bool fromFlora=Flora!=null && Flora.TryGuardianBaseTransform(
                     plant.Draw,plant.Index,out stored,out uploadRevision);
                 var current=fromFlora?stored:info.Buffer.GetInstanceTransform(plant.Index);
-                if(!current.IsEqualApprox(plant.Applied))plant.Base=current;
+                if(!current.IsEqualApprox(plant.Applied)){plant.Base=current;_farthestValid=false;}
                 float blend=1-MathF.Exp(-(float)Math.Clamp(delta,0,.1)*(plant.Target.LengthSquared()>0?14:4));
                 plant.Bend=plant.Bend.Lerp(plant.Target,blend);
                 if(plant.Target.LengthSquared()>0)ContactCount++;MaximumBend=Math.Max(MaximumBend,plant.Bend.Length());
@@ -187,7 +304,7 @@ public partial class GuardianVegetationContact : Node
             }
             foreach(var key in expired)_plants.Remove(key);
         }
-        finally{_insideFrame=false;_contactIndexDirty=true;}
+        finally{_insideFrame=false;_farthestValid=false;_contactIndexDirty=true;}
         if(DrawFrameAuditBudget>0)
         {
             DrawFrameAuditBudget--;
@@ -203,28 +320,93 @@ public partial class GuardianVegetationContact : Node
     }
     private void BuildContactIndex()
     {
-        _contactCells.Clear();_widePlants=0;_allPlants=0;int index=0;
+        SpatialIndexBuilds++;
+        _contactCells.Clear();_stemCells.Clear();_widePlants=0;_allPlants=0;int index=0;
         // Bit order exactly matches the existing dictionary traversal. Querying
         // fewer bounds must not reorder sequential stem projections.
         foreach(var plant in _plants.Values)
         {
             _orderedPlants[index]=plant;UInt128 bit=(UInt128)1<<index++;_allPlants|=bit;
+            // Flat copy of the contact bounds. The broadphase rejects almost every
+            // candidate, and reading a class field per candidate chased a pointer
+            // into scattered heap objects. The flat array keeps that test in cache.
+            _orderedBounds[index-1]=plant.Bounds;
+            _orderedStems[index-1]=new StemData{Root=plant.Root,Size=plant.Bounds.Size,Center=plant.Bounds.GetCenter()};
             var box=plant.Bounds;
             int x0=(int)MathF.Floor(box.Position.X/ContactCell),x1=(int)MathF.Floor(box.End.X/ContactCell);
             int z0=(int)MathF.Floor(box.Position.Z/ContactCell),z1=(int)MathF.Floor(box.End.Z/ContactCell);
             if((long)(x1-x0+1)*(z1-z0+1)>256){_widePlants|=bit;continue;}
             for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)_contactCells[(x,z)]=_contactCells.GetValueOrDefault((x,z))|bit;
+            SpatialIndexCells+=(long)(x1-x0+1)*(z1-z0+1);
+            // The stem stands at the plant's root, not at the centre of its
+            // bounds, so it gets its own index.
+            var root=plant.Root;
+            int sx0=(int)MathF.Floor((root.X-StemMargin)/StemCell),sx1=(int)MathF.Floor((root.X+StemMargin)/StemCell);
+            int sz0=(int)MathF.Floor((root.Z-StemMargin)/StemCell),sz1=(int)MathF.Floor((root.Z+StemMargin)/StemCell);
+            for(int z=sz0;z<=sz1;z++)for(int x=sx0;x<=sx1;x++)_stemCells[(x,z)]=_stemCells.GetValueOrDefault((x,z))|bit;
         }
         _contactIndexDirty=false;
     }
+
+    /// <summary>Moves a point out of the stems it overlaps, without touching the
+    /// plants' bend targets. The solver calls this for every constraint
+    /// iteration; only a handful of plants have a stem near the tail, so this
+    /// index keeps the inner loop proportional to the plants actually in reach
+    /// rather than to the plants whose bounds happen to overlap the point.</summary>
+    public Vector3 ProjectStem(Vector3 point,float radius)
+    {
+        if(!point.IsFinite()||!float.IsFinite(radius)||radius<0||_plants.Count>128)return point;
+        if(_contactIndexDirty)BuildContactIndex();
+        SpatialQueries++;
+        // Audit: the original full scan is the reference for the projection.
+        Vector3? reference=null;
+        if(StemAuditBudget>0){StemAuditBudget--;reference=ResolveAll(point,radius,true);}
+        float extent=StemMargin;
+        int x0=(int)MathF.Floor((point.X-extent)/StemCell),x1=(int)MathF.Floor((point.X+extent)/StemCell);
+        int z0=(int)MathF.Floor((point.Z-extent)/StemCell),z1=(int)MathF.Floor((point.Z+extent)/StemCell);
+        UInt128 candidates=0;
+        for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)candidates|=_stemCells.GetValueOrDefault((x,z));
+        while(candidates!=0)
+        {
+            ulong low=(ulong)candidates;
+            int index=low!=0?System.Numerics.BitOperations.TrailingZeroCount(low):64+System.Numerics.BitOperations.TrailingZeroCount((ulong)(candidates>>64));
+            candidates&=candidates-1;SpatialCandidates++;SpatialPlantTests++;
+            var stem=_orderedStems[index];
+            var root=stem.Root;
+            var lateral=point-root;lateral.Y=0;
+            float stemRadius=Math.Min(.045f,stem.Size.X*.10f)+radius;
+            if(lateral.LengthSquared()>=stemRadius*stemRadius)continue;
+            if(point.Y>=root.Y+stem.Size.Y*.65f)continue;
+            var away=stem.Center-point;away.Y=0;
+            if(away.LengthSquared()<1e-6f)away=Vector3.Right;
+            if(lateral.LengthSquared()<1e-8f)lateral=-away.Normalized();
+            float lateralLength=lateral.Length();
+            point+=lateral.Normalized()*(stemRadius-lateralLength);
+            SpatialProjected++;
+        }
+        if(reference is { } expected)
+        {
+            float error=point.DistanceTo(expected);
+            MaximumStemAuditError=Math.Max(MaximumStemAuditError,error);
+            StemAudits++;
+            if(!float.IsFinite(error)||error>1e-5f)
+                throw new InvalidOperationException($"Guardian stem projection differs from the full scan by {error:G6}m");
+        }
+        return point;
+    }
     private UInt128 Nearby(Vector3 point,float radius)
     {
+        SpatialBroadphase++;
         if(radius>ContactCell*32)return _allPlants;
         float extent=radius+.0001f; // Conservative broadphase padding only; narrowphase is unchanged.
         int x0=(int)MathF.Floor((point.X-extent)/ContactCell),x1=(int)MathF.Floor((point.X+extent)/ContactCell);
         int z0=(int)MathF.Floor((point.Z-extent)/ContactCell),z1=(int)MathF.Floor((point.Z+extent)/ContactCell);
         UInt128 mask=_widePlants;
-        for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)mask|=_contactCells.GetValueOrDefault((x,z));
+        int cells=0;
+        for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++){mask|=_contactCells.GetValueOrDefault((x,z));cells++;}
+        SpatialCellLookups+=cells;
+        long span=Math.Max((long)x1-x0+1,(long)z1-z0+1);
+        if(span>SpatialMaxSpan)SpatialMaxSpan=span;
         return mask;
     }
     private static Vector3 ResolvePlant(Plant plant,Vector3 point,float radius,bool flexible,bool cachedRoot=false)
@@ -242,6 +424,13 @@ public partial class GuardianVegetationContact : Node
         // Bounds and original root are sampled together when the visible instance
         // registry updates. Avoid another native transform read for every contact.
         var root=cachedRoot?plant.Root:(plant.Draw.GlobalTransform*plant.Base).Origin;
+        return PushOutOfStem(plant,box,point,radius,root,away);
+    }
+
+    /// <summary>Pushes a point out of a plant's stem. This is the only part of the
+    /// contact that moves the tail; the plant's bend target is a separate effect.</summary>
+    private static Vector3 PushOutOfStem(Plant plant,Aabb box,Vector3 point,float radius,Vector3 root,Vector3 away)
+    {
         var lateral=point-root;lateral.Y=0;
         float stemRadius=Math.Min(.045f,box.Size.X*.10f)+radius;
         if(point.Y<root.Y+box.Size.Y*.65f&&lateral.Length()<stemRadius)
@@ -255,19 +444,32 @@ public partial class GuardianVegetationContact : Node
     {foreach(var plant in _plants.Values)point=ResolvePlant(plant,point,radius,flexible);return point;}
     public Vector3 Resolve(Vector3 point,float radius,bool flexible)
     {
-        if(!point.IsFinite()||!float.IsFinite(radius)||radius<0||_plants.Count>128)return ResolveAll(point,radius,flexible);
+        if(!point.IsFinite()||!float.IsFinite(radius)||radius<0||_plants.Count>128){SpatialFullScans++;return ResolveAll(point,radius,flexible);}
         if(_contactIndexDirty)BuildContactIndex();
-        SpatialQueries++;UInt128 candidates=Nearby(point,radius);
+        SpatialQueries++;
+        long narrowStart=System.Diagnostics.Stopwatch.GetTimestamp();
+        UInt128 candidates=Nearby(point,radius);
+        long afterBroad=System.Diagnostics.Stopwatch.GetTimestamp();
+        SpatialBroadphaseMs+=System.Diagnostics.Stopwatch.GetElapsedTime(narrowStart,afterBroad).TotalMilliseconds;
         while(candidates!=0)
         {
             ulong low=(ulong)candidates;
             int index=low!=0?System.Numerics.BitOperations.TrailingZeroCount(low):64+System.Numerics.BitOperations.TrailingZeroCount((ulong)(candidates>>64));
-            candidates&=candidates-1;SpatialCandidates++;
-            var before=point;point=ResolvePlant(_orderedPlants[index],point,radius,flexible,true);
+            candidates&=candidates-1;SpatialCandidates++;SpatialPlantTests++;
+            // Fast rejection against the flat bounds copy. Only a plant whose box
+            // is genuinely closer than the contact radius can project the point,
+            // so the class instance is touched for those alone.
+            var flat=_orderedBounds[index];
+            var flatClosest=new Vector3(Math.Clamp(point.X,flat.Position.X,flat.End.X),Math.Clamp(point.Y,flat.Position.Y,flat.End.Y),Math.Clamp(point.Z,flat.Position.Z,flat.End.Z));
+            var flatSeparation=point-flatClosest;
+            var before=point;
+            if(flatSeparation.LengthSquared()<radius*radius){SpatialNarrowCalls++;point=ResolvePlant(_orderedPlants[index],point,radius,flexible,true);}
+            if(point!=before)SpatialProjected++;
             // A projection can enter another bound. Add only later plants:
             // earlier entries were already visited by the original full scan.
             if(point!=before&&index<127)candidates|=Nearby(point,radius)&(UInt128.MaxValue<<(index+1));
         }
+        SpatialNarrowMs+=System.Diagnostics.Stopwatch.GetElapsedTime(afterBroad).TotalMilliseconds;
         return point;
     }
     /// <summary>Native regression fixture covering all128 mask bits, dense sequential

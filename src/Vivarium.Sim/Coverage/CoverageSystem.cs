@@ -3,7 +3,6 @@ using System.Diagnostics;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Coverage.Rules;
-using Vivarium.Sim.Coverage.Plasmodium;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Coverage;
@@ -15,10 +14,8 @@ namespace Vivarium.Sim.Coverage;
 /// parameter tables (occupant ids into each layer's <c>Occ</c> byte) are built once from
 /// <see cref="ContentLibrary.Flora"/> at construction.
 /// </summary>
-/// <summary>Dormant dispersal propagule stored in present ecological state.</summary>
-public readonly record struct PlasmodiumSpore(int Gx, int Gz, int Seed);
 
-public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritusSink, ISporeSink
+public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritusSink
 {
     private readonly VivariumWorld _w;
     private readonly MoistureBonusField _moistureBonus;
@@ -26,92 +23,8 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     private readonly Dictionary<byte, string> _matSpeciesId = new();
     private readonly List<LichenParams> _lichenSpecies = new();
     private readonly Dictionary<byte, string> _lichenSpeciesId = new();
-    private readonly PlasmodiumParams? _plasmodiumParams;
-    private readonly PlasmodiumColony? _plasmodiumColony;
-    private readonly Attractant? _plasmodiumAttractant;
-    private readonly Network? _plasmodiumNetwork;
-    private readonly LifecycleController? _plasmodiumLifecycle;
-    private readonly PlasmodiumWorldEnv? _plasmodiumEnv;
-    private readonly string? _plasmodiumSpeciesId;
-    private readonly List<PlasmodiumSpore> _plasmodiumSpores = new();
-    public IReadOnlyList<PlasmodiumSpore> PlasmodiumSpores => _plasmodiumSpores;
-    // Non-authoritative profiler readings; never serialized into ecology state.
-    public double LastPlasmodiumNetworkMs { get; private set; }
-    public double LastPlasmodiumColonyMs { get; private set; }
-    public double LastPlasmodiumRelabelMs { get; private set; }
-    public double LastPlasmodiumLifecycleMs { get; private set; }
-    public double LastPlasmodiumAttractantMs => _plasmodiumColony?.LastAttractantMs ?? 0;
-    public double LastPlasmodiumFrontAndFeedMs => _plasmodiumColony?.LastFrontAndFeedMs ?? 0;
-    public double LastPlasmodiumTransportMs => _plasmodiumColony?.LastPhaseAndTransportMs ?? 0;
-    public int LastPlasmodiumOccupiedCells { get; private set; }
     private long _step;
 
-    /// <summary>Persisted dormant spores, not a timer-based respawn system.</summary>
-    public IReadOnlyList<PlasmodiumSpore> ExportPlasmodiumSpores() =>
-        _plasmodiumSpores.OrderBy(x => x.Gx).ThenBy(x => x.Gz).ThenBy(x => x.Seed).ToArray();
-
-    public void RestorePlasmodiumSpores(IEnumerable<PlasmodiumSpore> spores)
-    {
-        _plasmodiumSpores.Clear();
-        foreach (var spore in spores.OrderBy(x => x.Gx).ThenBy(x => x.Gz).ThenBy(x => x.Seed))
-        {
-            var p = CellCentre(spore.Gx, spore.Gz);
-            if (_w.Domain.Contains(p)) _plasmodiumSpores.Add(spore);
-        }
-    }
-
-    public void ReleaseSpore(FruitingBody body)
-    {
-        // A fruiting body releases a sampled dispersal cohort. Most disperse
-        // beyond the depleted parental sheet; a minority remain nearby.
-        // Fixed local airflow is represented by this stable dispersal kernel,
-        // not by periodic stochastic weather changes.
-        uint h = unchecked((uint)body.Seed ^ (uint)_w.Seed);
-        h ^= h >> 16; h *= 0x7feb352dU; h ^= h >> 15; h *= 0x846ca68bU; h ^= h >> 16;
-        double angle = 2 * Math.PI * (h / (double)uint.MaxValue);
-        uint g = h ^ 0x9e3779b9U;
-        g ^= g >> 16; g *= 0x7feb352dU; g ^= g >> 15; g *= 0x846ca68bU; g ^= g >> 16;
-        double spread = g / (double)uint.MaxValue;
-        double distance = (h & 3) == 0 ? 0.02 + 0.18 * spread
-                                            : 0.25 + 2.3 * Math.Sqrt(spread);
-        var origin = new Vec2(body.Pos.cx * CoverageSpec.CellSize * 2,
-                              body.Pos.cz * CoverageSpec.CellSize * 2);
-        var destination = origin + new Vec2(Math.Cos(angle), Math.Sin(angle)) * distance;
-        if (!_w.Domain.Contains(destination)) return; // propagules can irreversibly leave
-        var (gx, gz) = CoverageSpec.CellOf(destination);
-        _plasmodiumSpores.Add(new PlasmodiumSpore(gx, gz, body.Seed));
-    }
-
-    /// <summary>Germinate only where litter, moisture and open substrate actually permit it.</summary>
-    private void GerminatePlasmodiumSpores()
-    {
-        if (_plasmodiumColony == null || _plasmodiumParams == null) return;
-        const int MaxGerminationsPerStep = 2; // bounded cost, not a carrying-capacity target
-        int germinated = 0;
-        for (int i = 0; i < _plasmodiumSpores.Count && germinated < MaxGerminationsPerStep;)
-        {
-            var spore = _plasmodiumSpores[i];
-            var p = CellCentre(spore.Gx, spore.Gz);
-            int coarseCell = _w.Grid.NearestDomainCell(p);
-            if (coarseCell < 0 ||
-                _w.Coverage.Plasmodium.GetOcc(spore.Gx, spore.Gz) != 0 ||
-                !_w.Domain.ContainsDisc(p, 0.07) ||
-                !IsPlasmodiumSuitable(p) ||
-                _w.Litter.DetritusAt(coarseCell) < _plasmodiumParams.StarveDetritusThreshold * 1.5)
-            {
-                i++;
-                continue;
-            }
-            int before = _plasmodiumColony.CellId.Count;
-            SeedPlasmodiumPatch(p, 5);
-            if (_plasmodiumColony.CellId.Count > before)
-            {
-                _plasmodiumSpores.RemoveAt(i);
-                germinated++;
-            }
-            else i++;
-        }
-    }
 
     /// <summary>Number of coverage growth steps completed; part of authoritative state because rules hash it.</summary>
     public long StepIndex => _step;
@@ -169,36 +82,10 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                     EdenNoiseExponent = ld.EdenNoiseExponent,
                 });
             }
-            if (sp.Archetype == "slime_mold")
-            {
-                _plasmodiumSpeciesId = sp.Id;
-                _plasmodiumParams = new PlasmodiumParams
-                {
-                    InitialMass = 500,
-                    Beta = 0.05,
-                    LambdaF = 4.0,
-                    Sigma = 5.0,
-                    Dc = 0.04,
-                    Delta = 0.10,
-                    FeedRate = 3.0,
-                    // Biological starvation and migration are genuine periods
-                    // of searching/withdrawal, not a five-step extinction wave.
-                    TStarve = 90.0,
-                    TMig = 90.0,
-                };
-                _plasmodiumColony = new PlasmodiumColony(1, _plasmodiumParams);
-                _plasmodiumAttractant = new Attractant(_plasmodiumParams);
-                _plasmodiumNetwork = new Network { Gamma = 0.3, QGain = 5.0 };
-                _plasmodiumLifecycle = new LifecycleController(_plasmodiumParams)
-                {
-                    SporeSink = this,
-                };
-                _plasmodiumEnv = new PlasmodiumWorldEnv(w);
-            }
         }
     }
 
-    public bool HasCoverageSpecies => _matSpecies.Count > 0 || _lichenSpecies.Count > 0 || _plasmodiumColony != null;
+    public bool HasCoverageSpecies => _matSpecies.Count > 0 || _lichenSpecies.Count > 0;
 
     // ------------------------------------------------------------------ IMicroEnvSource / ILichenEnvSource
 
@@ -461,8 +348,6 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                 InitialClumps(_lichenSpeciesId[lp.OccSlot]), MinSeparation, DiscRadiusCells,
                 p => IsLichenSuitable(lp, p));
 
-        if (_plasmodiumColony != null && _plasmodiumSpeciesId != null)
-            SeedPlasmodiumInitial();
     }
 
     private bool IsMatSuitable(MatParams mp, Vec2 p)
@@ -473,190 +358,6 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         double gW = WaterBalance.GrowthMultiplierWater(e.Moisture, mp);
         double gL = WaterBalance.GrowthMultiplierLight(e.Light, mp);
         return gW * gL > 0.15;
-    }
-
-    private bool IsPlasmodiumSuitable(Vec2 p)
-    {
-        var e = CoverageEnvironment.Sample(_w, p);
-        if (e.Substrate == CoverageSubstrate.Water) return false;
-        if (e.Moisture < 0.25) return false;
-        int cell = _w.Grid.NearestDomainCell(p);
-        if (cell < 0) return false;
-        double det = _w.Litter.DetritusAt(cell);
-        return det > 0.02;
-    }
-
-    private void SeedPlasmodiumPatch(Vec2 p, int radiusCells)
-    {
-        if (_plasmodiumColony == null) return;
-        var seededCells = new List<(int gx, int gz)>();
-        var (gx0, gz0) = CoverageSpec.CellOf(p);
-
-        // Find direction of highest detritus/moisture to orient the foraging front
-        Vec2 bestDir = new Vec2(1, 0);
-        double bestVal = double.MinValue;
-        for (int a = 0; a < 8; a++)
-        {
-            double angle = a * Math.PI * 0.25;
-            Vec2 testP = p + new Vec2(Math.Cos(angle), Math.Sin(angle)) * (radiusCells * CoverageSpec.CellSize * 1.5);
-            int domainCell = _w.Grid.NearestDomainCell(testP);
-            double val = domainCell >= 0 ? _w.Litter.DetritusAt(domainCell) * 2.0 + _w.Fields.Moisture.Sample(testP) : 0;
-            if (val > bestVal)
-            {
-                bestVal = val;
-                bestDir = new Vec2(Math.Cos(angle), Math.Sin(angle)).Normalized();
-            }
-        }
-
-        for (int dz = -radiusCells; dz <= radiusCells; dz++)
-        for (int dx = -radiusCells; dx <= radiusCells; dx++)
-        {
-            double d = Math.Sqrt(dx * dx + dz * dz);
-            if (d > radiusCells) continue;
-
-            int gx = gx0 + dx, gz = gz0 + dz;
-            Vec2 cPos = CellCentre(gx, gz);
-            if (!IsPlasmodiumSuitable(cPos) || _w.Coverage.Plasmodium.GetOcc(gx, gz) != 0) continue;
-
-            double u = d / radiusCells;
-            Vec2 offset = new Vec2(dx, dz);
-            Vec2 dirNorm = d > 0.001 ? offset.Normalized() : bestDir;
-            double frontAlign = dirNorm.Dot(bestDir);
-            double angle = Math.Atan2(dz, dx);
-
-            byte flags = 0;
-            byte w;
-            float b;
-
-            bool isFront = frontAlign > 0.60 && u > 0.80;
-            if (isFront)
-            {
-                flags = (byte)CoverageFlags.Front;
-                b = (float)(1.2 + 0.3 * frontAlign);
-                w = (byte)Math.Clamp(60 + 40 * frontAlign, 50, 100);
-            }
-            else
-            {
-                double cordWave = Math.Cos(angle * 5.0 + 0.35 * Math.Sin(d * 0.9));
-                bool isTrunkCord = Math.Abs(cordWave) > 0.48;
-                double bridgeWave = Math.Sin(d * 1.4 + angle * 3.0);
-                bool isLoopBridge = Math.Abs(bridgeWave) > 0.75 && u > 0.30 && u < 0.85;
-                bool isCore = u < 0.28;
-
-                if (isCore)
-                {
-                    w = 210;
-                    b = 1.4f;
-                }
-                else if (isTrunkCord || isLoopBridge)
-                {
-                    double widthFactor = 0.5 + 0.5 * Math.Abs(cordWave);
-                    w = (byte)Math.Clamp(150 + 65 * widthFactor, 120, 225);
-                    b = (float)(1.0 + 0.35 * widthFactor);
-                }
-                else
-                {
-                    bool isTrailing = frontAlign < -0.5 && u > 0.75;
-                    if (isTrailing)
-                    {
-                        flags = (byte)CoverageFlags.Rim;
-                        w = 15;
-                        b = 0.20f;
-                    }
-                    else
-                    {
-                        w = 25;
-                        b = 0.35f;
-                    }
-                }
-            }
-
-            _w.Coverage.Plasmodium.SetCell(gx, gz, occ: 1, b: b, w: w, 0, 0, flags, (byte)Math.Min(255, (int)(d + 1)));
-            seededCells.Add((gx, gz));
-        }
-
-        if (seededCells.Count > 0)
-        {
-            _plasmodiumColony.Seed(seededCells);
-        }
-    }
-
-    private void SeedPlasmodiumInitial()
-    {
-        if (_plasmodiumColony == null) return;
-        var cells = _w.Grid.DomainCells;
-        if (cells.Length == 0) return;
-        var candidates = cells
-            .Select(c => (_w.Grid.CellCenter(c), _w.Litter.DetritusAt(c)))
-            .Where(x => IsPlasmodiumSuitable(x.Item1))
-            .OrderByDescending(x => x.Item2)
-            .Select(x => x.Item1)
-            .ToList();
-        var chosen = new List<Vec2>();
-        foreach (var p in candidates)
-        {
-            if (chosen.Count >= 3) break;
-            bool tooClose = false;
-            foreach (var c in chosen) if (Vec2.Distance(c, p) < 1.8) { tooClose = true; break; }
-            if (tooClose) continue;
-            chosen.Add(p);
-        }
-        foreach (var p in chosen)
-        {
-            SeedPlasmodiumPatch(p, radiusCells: 10);
-        }
-    }
-
-    public void StepPlasmodium(double dtSeconds)
-    {
-        if (_plasmodiumColony == null || _plasmodiumNetwork == null || _plasmodiumAttractant == null || _plasmodiumEnv == null || _plasmodiumLifecycle == null) return;
-        GerminatePlasmodiumSpores();
-        var occupied = _plasmodiumColony.CellId.Keys.ToList();
-        LastPlasmodiumOccupiedCells = occupied.Count;
-        if (occupied.Count == 0) return;
-        var sources = new HashSet<(int cx, int cz)>();
-        foreach (var (gx, gz) in occupied)
-        {
-            var coarse = Attractant.CoarseOf(gx, gz);
-            // A coarse source is present if *any* constituent fine cell has
-            // food. Once marked, querying the other cells is redundant, but
-            // could issue multiple costly fine-to-world environment samples.
-            if (!sources.Contains(coarse) && _plasmodiumEnv.Detritus(gx, gz) > 0.015)
-                sources.Add(coarse);
-        }
-        if (sources.Count < 2)
-        {
-            int minGx = int.MaxValue, maxGx = int.MinValue, minGz = int.MaxValue, maxGz = int.MinValue;
-            foreach (var (gx, gz) in occupied)
-            {
-                if (gx < minGx) minGx = gx;
-                if (gx > maxGx) maxGx = gx;
-                if (gz < minGz) minGz = gz;
-                if (gz > maxGz) maxGz = gz;
-            }
-            sources.Add(Attractant.CoarseOf(minGx, minGz));
-            sources.Add(Attractant.CoarseOf(maxGx, maxGz));
-        }
-        _plasmodiumNetwork.SetSources(sources);
-        double dt = Math.Clamp(dtSeconds, 0.1, 5.0);
-        long t = Stopwatch.GetTimestamp();
-        _plasmodiumNetwork.Step(_w.Coverage.Plasmodium, occupied, dt);
-        LastPlasmodiumNetworkMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
-        t = Stopwatch.GetTimestamp();
-        _plasmodiumColony.Step(_w.Coverage.Plasmodium, _plasmodiumAttractant, _plasmodiumEnv, _step, dt, _plasmodiumNetwork);
-        LastPlasmodiumColonyMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
-        t = Stopwatch.GetTimestamp();
-        _plasmodiumColony.Relabel(_plasmodiumColony.CellId.Keys.ToList());
-        LastPlasmodiumRelabelMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
-        t = Stopwatch.GetTimestamp();
-        _plasmodiumLifecycle.Step(_w.Coverage.Plasmodium, _plasmodiumColony, _plasmodiumNetwork, _plasmodiumEnv, _step, dt);
-        LastPlasmodiumLifecycleMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
-        foreach (var ((gx, gz), mass) in _plasmodiumColony.Mass)
-        {
-            _w.Coverage.Plasmodium.SetB(gx, gz, (float)Math.Clamp(mass, 0.1, 5.0));
-        }
-        _w.Coverage.Plasmodium.Advance();
-        GerminatePlasmodiumSpores();
     }
 
     private bool IsLichenSuitable(LichenParams lp, Vec2 p)
@@ -732,14 +433,6 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                 reason = !lp.AllowsSubstrate(e.Substrate) ? "wrong substrate (needs rock, log or stable soil)" : "conditions too poor here";
                 return false;
             }
-        if (_plasmodiumSpeciesId != null && speciesId == _plasmodiumSpeciesId)
-        {
-            if (IsPlasmodiumSuitable(p)) { reason = "ok"; return true; }
-            var e = CoverageEnvironment.Sample(_w, p);
-            reason = e.Substrate == CoverageSubstrate.Water ? "underwater" :
-                e.Moisture < 0.25 ? "too dry here" : "needs dead organic matter (detritus)";
-            return false;
-        }
         reason = $"unknown coverage species '{speciesId}'";
         return false;
     }
@@ -764,11 +457,6 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                 SeedClumpCells(_w.Coverage.Crust, lp.OccSlot, lp.SeedBiomass, gx0, gz0, radiusCells, q => IsLichenSuitable(lp, q));
                 return;
             }
-        if (_plasmodiumSpeciesId != null && speciesId == _plasmodiumSpeciesId && _plasmodiumColony != null)
-        {
-            SeedPlasmodiumPatch(center, Math.Max(5, radiusCells));
-            return;
-        }
     }
 
     private void SeedClumpCells(CoverageLayer layer, byte occ, double seedB, int gx0, int gz0, int radiusCells, Func<Vec2, bool> suitable)
@@ -796,7 +484,6 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         int cleared = 0;
         cleared += ClearDiscLayer(_w.Coverage.Mat, gx0, gz0, radiusCells, occ => _matSpeciesId.GetValueOrDefault(occ) is { } id && (speciesFilter == null || id == speciesFilter));
         cleared += ClearDiscLayer(_w.Coverage.Crust, gx0, gz0, radiusCells, occ => _lichenSpeciesId.GetValueOrDefault(occ) is { } id && (speciesFilter == null || id == speciesFilter));
-        cleared += ClearDiscLayer(_w.Coverage.Plasmodium, gx0, gz0, radiusCells, occ => occ == 1 && (speciesFilter == null || _plasmodiumSpeciesId == speciesFilter));
         return cleared;
     }
 
@@ -824,7 +511,6 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     {
         CoverageLayerId.Mat => _matSpeciesId.GetValueOrDefault(occupant),
         CoverageLayerId.Crust => _lichenSpeciesId.GetValueOrDefault(occupant),
-        CoverageLayerId.Plasmodium => occupant == 1 ? _plasmodiumSpeciesId : null,
         _ => null,
     };
 
@@ -838,8 +524,6 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
             if (id == speciesId) total += CountOccupied(_w.Coverage.Mat, occ) * cellArea;
         foreach (var (occ, id) in _lichenSpeciesId)
             if (id == speciesId) total += CountOccupied(_w.Coverage.Crust, occ) * cellArea;
-        if (_plasmodiumSpeciesId != null && speciesId == _plasmodiumSpeciesId)
-            total += CountOccupied(_w.Coverage.Plasmodium, 1) * cellArea;
         return total;
     }
 
@@ -850,32 +534,5 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
             for (int i = 0; i < CoverageTile.N; i++)
                 if (t.Occ[i] == occ) n++;
         return n;
-    }
-}
-
-internal sealed class PlasmodiumWorldEnv : IPlasmodiumEnvironment
-{
-    private readonly VivariumWorld _w;
-    public PlasmodiumWorldEnv(VivariumWorld w) => _w = w;
-
-    public double Moisture(int gx, int gz)
-    {
-        var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
-        return _w.Fields.Moisture.Sample(p);
-    }
-
-    public double Detritus(int gx, int gz)
-    {
-        var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
-        int cell = _w.Grid.NearestDomainCell(p);
-        return cell >= 0 ? _w.Litter.DetritusAt(cell) : 0;
-    }
-
-    public double TakeDetritus(int gx, int gz, double amount)
-    {
-        var p = new Vec2((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
-        int cell = _w.Grid.NearestDomainCell(p);
-        if (cell < 0 || amount <= 0) return 0;
-        return _w.Litter.TakeDetritus(cell, amount);
     }
 }

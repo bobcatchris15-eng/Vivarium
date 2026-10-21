@@ -17,7 +17,7 @@ public enum DirtyReason : uint
     FloraAttributes = 1 << 2,    // Health, wobble, tint, custom shader params
     FloraPopulation = 1 << 3,    // Organism spawned, died, or despawned
     TerrainVersion = 1 << 4,     // Sculpting / ground elevation changed
-    CoverageTile = 1 << 5,       // Moss, lichen, or plasmodium occupancy changed
+    CoverageTile = 1 << 5,       // Moss or lichen occupancy changed
     Litter = 1 << 6,             // Litter mass, composition, or color changed
     Moisture = 1 << 7,           // Hydration or water table changed
     Props = 1 << 8,              // Log or rock placed, moved, or degraded

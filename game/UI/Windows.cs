@@ -27,6 +27,8 @@ public partial class Windows : Control
     private Label _diameterLabel = null!, _reliefLabel = null!, _springLabel = null!;
     private readonly List<string> _presetIds = new();
     private readonly Dictionary<string, (Label Count, Sparkline Line)> _statRows = new();
+    private bool _creatingWorld;
+    public bool CreatingWorld => _creatingWorld;
 
     public override void _Ready()
     {
@@ -70,6 +72,7 @@ public partial class Windows : Control
 
     public void Toggle(string name)
     {
+        if (_creatingWorld) return;
         if (!_w.TryGetValue(name, out var p)) return;
         bool open = !p.Visible;
         foreach (var other in _w.Values) other.Visible = false;
@@ -81,6 +84,7 @@ public partial class Windows : Control
     public void Open(string name) { if (!IsOpen(name)) Toggle(name); }
     public void Close(string name)
     {
+        if (_creatingWorld) return;
         if (_w.TryGetValue(name, out var p)) p.Visible = false;
         Session.CameraRig.KeyboardBlocked = false;
         if (name == "Help" && Session.Settings.ShowHelpOnStart) { Session.Settings.ShowHelpOnStart = false; Session.Settings.Save(); }
@@ -108,7 +112,15 @@ public partial class Windows : Control
         _growthL!.Text = GrowthText(Session.World.Clock.BioAcceleration);
     }
 
-    public void OnWorldChanged() { RebuildCatalog(); RebuildStats(); }
+    public void OnWorldChanged()
+    {
+        // The catalog and statistics panels list the content, which does not
+        // change with the world; only their numbers do. Rebuilding several
+        // hundred controls cost a fifth of a second right when the island
+        // appears, so refresh the values instead.
+        if (IsOpen("Catalog")) UpdateCatalogCounts();
+        if (IsOpen("Stats")) UpdateStats();
+    }
 
     public override void _Process(double delta)
     {
@@ -355,18 +367,65 @@ public partial class Windows : Control
         return d;
     }
 
-    private void CreateFromUi()
+    private async void CreateFromUi()
     {
+        if (_creatingWorld || Session.LoadingWorld) return;
+        CanvasLayer? loading = null;
+        var previousWorld = Session.World;
+        bool previousPaused = previousWorld?.Clock.Paused ?? false;
+        bool previousBlocked = Session.CameraRig.KeyboardBlocked;
+        bool previousToolsProcessing = Session.Tools.IsProcessing();
         try
         {
             var d = DescriptorFromUi();
             var problems = d.Validate();
             if (problems.Count > 0) { Session.Ui.Toast("Invalid settings: " + string.Join("; ", problems), true); return; }
-            Session.StartWorld(Session.CreateWorld(d));
+            _creatingWorld = true;
+            if (previousWorld != null) previousWorld.Clock.Paused = true;
+            Session.CameraRig.KeyboardBlocked = true;
+            Session.Tools.SetProcess(false);
+            GetViewport().GuiGetFocusOwner()?.ReleaseFocus();
+            loading = new CanvasLayer { Layer = 100 };
+            var backdrop = new ColorRect { Color = new Color(.035f, .055f, .045f, .98f), MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.All };
+            backdrop.GuiInput += _ => backdrop.AcceptEvent();
+            backdrop.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+            var label = new Label { Text = "Growing your new island...", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            label.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+            label.AddThemeFontSizeOverride("font_size", 24);
+            var progress = new ProgressBar { Indeterminate = true, ShowPercentage = false };
+            progress.SetAnchorsAndOffsetsPreset(LayoutPreset.Center);
+            progress.OffsetLeft = -220; progress.OffsetRight = 220; progress.OffsetTop = 45; progress.OffsetBottom = 57;
+            backdrop.AddChild(label); backdrop.AddChild(progress);
+            loading.AddChild(backdrop); AddChild(loading);
+            backdrop.GrabFocus();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var content = Session.Content;
+            var world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, d, warmupSurfaceWater: false));
+            if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
+            await Session.StartWorldAsync(world, null, stage => label.Text = d.Name + "\nPreparing your island - " + stage);
+            _creatingWorld = false;
             Close("NewWorld");
-            Session.Ui.Toast($"Created '{d.Name}'", false);
+            Session.Ui.Toast($"Created '{d.Name}'. Plant detail continues loading in the background.", false);
         }
-        catch (Exception ex) { Log.Error(LogCategory.UI, "World creation failed", ex); Session.Ui.Toast("World creation failed: " + ex.Message, true); }
+        catch (Exception ex)
+        {
+            Log.Error(LogCategory.UI, "World creation failed", ex);
+            if (GodotObject.IsInstanceValid(Session.Ui) && Session.Ui.IsInsideTree())
+                Session.Ui.Toast("World creation failed: " + ex.Message, true);
+        }
+        finally
+        {
+            _creatingWorld = false;
+            if (previousWorld != null && ReferenceEquals(Session.World, previousWorld)) previousWorld.Clock.Paused = previousPaused;
+            if (GodotObject.IsInstanceValid(this) && IsInsideTree())
+            {
+                if (GodotObject.IsInstanceValid(Session.CameraRig))
+                    Session.CameraRig.KeyboardBlocked = IsOpen("NewWorld") && previousBlocked;
+                if (GodotObject.IsInstanceValid(Session.Tools)) Session.Tools.SetProcess(previousToolsProcessing);
+            }
+            if (GodotObject.IsInstanceValid(loading)) loading!.QueueFree();
+        }
     }
 
     // ------------------------------------------------------------------ settings

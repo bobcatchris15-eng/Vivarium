@@ -106,7 +106,7 @@ public class CoverageTests
         var w = TestUtil.FlatWorld(101);
         w.Coverage.Mat.SetCell(3, 4, occ: 1, b: 0.42f, w: 200, age: 17, dorm: 2, flags: (byte)CoverageFlags.Rim, d2e: 5);
         w.Coverage.Crust.SetOcc(-3, -1, 2);
-        w.Coverage.Plasmodium.SetB(50, 50, 0.9f);
+        w.Coverage.Crust.SetB(50, 50, 0.9f);
 
         var digestBefore = WorldSerializer.Digest(w);
         var payloads = WorldSerializer.Serialize(w);
@@ -117,7 +117,7 @@ public class CoverageTests
         Assert.Equal(1, loaded.Coverage.Mat.GetOcc(3, 4));
         Assert.Equal(0.42f, loaded.Coverage.Mat.GetB(3, 4));
         Assert.Equal(2, loaded.Coverage.Crust.GetOcc(-3, -1));
-        Assert.Equal(0.9f, loaded.Coverage.Plasmodium.GetB(50, 50));
+        Assert.Equal(0.9f, loaded.Coverage.Crust.GetB(50, 50));
 
         // a changed cell must change the digest
         loaded.Coverage.Mat.SetB(3, 4, 0.1f);

@@ -225,7 +225,7 @@ public partial class SmokeRunner
         var sp = W.Content.FloraOrThrow(SpeciesId);
         if (sp.IsCoverageSpecies)
         {
-            var layerId = sp.Mat != null ? CoverageLayerId.Mat : sp.Lichen != null ? CoverageLayerId.Crust : CoverageLayerId.Plasmodium;
+            var layerId = sp.Mat != null ? CoverageLayerId.Mat : CoverageLayerId.Crust;
             var layer = W.Coverage.ById(layerId);
             byte occ = FindCoverageOccupant(layerId, SpeciesId)
                 ?? throw new InvalidOperationException($"No coverage slot for {SpeciesId}");
@@ -244,12 +244,6 @@ public partial class SmokeRunner
                 Session.CameraRig.LookAtPoint(patchTarget + new Vector3(-0.19f, 0.13f, -0.15f), patchTarget);
                 await SettleExposureAsync(20);
                 await Screenshot("species_" + SpeciesId + "_side");
-            }
-            else if (SpeciesId == "ambervein")
-            {
-                Session.CameraRig.LookAtPoint(patchTarget + new Vector3(-0.12f, 0.08f, -0.10f), patchTarget);
-                await SettleExposureAsync(20);
-                await Screenshot("species_" + SpeciesId + "_close");
             }
             _facts["species"] = SpeciesId;
             _facts["coverage_cells"] = patch.count;
@@ -408,10 +402,6 @@ public partial class SmokeRunner
         // 4 macro flora: the tallest non-colonial plant
         var tall = vascular.Where(f => !Colonial(f.SpeciesId)).OrderByDescending(f => H(f)).ThenBy(f => f.Id.Value).FirstOrDefault();
         if (tall != null) list.Add(Orbit("macro_flora", "macro", Ground(tall.Position) + new Vector3(0, (float)H(tall) * 0.4f, 0), (float)Math.Max(0.12, H(tall) * 2.2), 22));
-        // 5 slime mold network (and a macro of its front)
-        var slime = flora.Where(f => Arch(f.SpeciesId) == "slime_mold").ToList();
-        AddHub("slime_network", "slime", slime, 0.5, 0.9f, 50);
-        AddHub("slime_macro", "slime", slime, 0.25, 0.28f, 30, 110);
         // 6 fungi
         var fungi = flora.Where(f => Arch(f.SpeciesId) == "fungus").ToList();
         AddHub("fungi_patch", "fungi", fungi, 0.4, 0.55f, 25);
@@ -446,7 +436,7 @@ public partial class SmokeRunner
         var coverageHubs = new List<(Vec2 center, double area, string id)>();
         foreach (var sp in W.Content.Flora.Where(sp => sp.IsCoverageSpecies).OrderBy(sp => sp.Id))
         {
-            var layerId = sp.Mat != null ? CoverageLayerId.Mat : sp.Lichen != null ? CoverageLayerId.Crust : CoverageLayerId.Plasmodium;
+            var layerId = sp.Mat != null ? CoverageLayerId.Mat : CoverageLayerId.Crust;
             var layer = W.Coverage.ById(layerId);
             byte? occ = FindCoverageOccupant(layerId, sp.Id);
             if (occ == null) continue;
@@ -997,7 +987,7 @@ public partial class SmokeRunner
                 bool foundTile = false;
                 foreach (var sp in W.Content.Flora.Where(s => s.IsCoverageSpecies))
                 {
-                    var layerId = sp.Mat != null ? CoverageLayerId.Mat : sp.Lichen != null ? CoverageLayerId.Crust : CoverageLayerId.Plasmodium;
+                    var layerId = sp.Mat != null ? CoverageLayerId.Mat : CoverageLayerId.Crust;
                     var layer = W.Coverage.ById(layerId);
                     byte? occ = FindCoverageOccupant(layerId, sp.Id);
                     if (occ == null) continue;

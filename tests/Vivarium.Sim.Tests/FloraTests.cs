@@ -413,40 +413,6 @@ public class FloraTests
         Assert.True(w.FloraSystem.Suitability(Sp("emberfan_fungus"), new Vec2(2.5, 2.5)).HardRefused, "bracket fungi only grow on logs");
     }
 
-    [Fact]
-    public void SlimeMoldCreepsTowardFoodThenFruitsWhenItRunsOut()
-    {
-        var w = TestUtil.FlatWorld(35);
-        TestUtil.Condition(w, 0.8, 0.2, 0.2);
-        var sp = Sp("ambervein");
-        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0.5;
-        var food = new Vec2(1.5, 0.5);
-        foreach (int c in w.Grid.CellsInRadius(food, 0.6)) w.Fields.Detritus[c] = 3.0;
-        var f = w.FloraSystem.Establish(sp, new Vec2(0, 0.5), "t", 0.5);
-        var start = f.Position;
-        double Nearest() => w.Flora.Items.Where(x => x.SpeciesId == sp.Id).Min(x => Vec2.Distance(x.Position, food));
-        double d0 = Nearest();
-        for (int i = 0; i < 48; i++) w.FloraSystem.Step(3600);
-        var patches = w.Flora.Items.Where(x => x.SpeciesId == sp.Id).ToList();
-        Assert.True(Nearest() < d0 - 0.4, $"the network should grow toward the food: {d0:0.00} → {Nearest():0.00}");
-        Assert.True(patches.Count >= 3, $"it grows as a network of patches, not one body ({patches.Count})");
-        Assert.Equal(start.X, f.Position.X, 12);   // no patch slides: fronts bud, the body stays put
-        Assert.All(patches.Where(x => x.Id != f.Id), x => Assert.False(x.ParentId.IsNone));
-        // starve it: the network fruits, releases spores and dies back
-        foreach (int c in w.Grid.DomainCells) w.Fields.Detritus[c] = 0.05;
-        foreach (int c in w.Grid.CellsInRadius(new Vec2(-1.5, -1.0), 0.8)) w.Fields.Detritus[c] = 2.0;
-        bool fruited = false;
-        for (int i = 0; i < 24 * 8 && patches.Any(x => w.Flora.Get(x.Id) != null); i++)
-        {
-            w.FloraSystem.Step(3600);
-            fruited |= w.Flora.Items.Any(x => x.SpeciesId == sp.Id && x.Fruiting);
-        }
-        Assert.True(fruited, "a starving plasmodium fruits");
-        Assert.All(patches, x => Assert.Null(w.Flora.Get(x.Id)));
-        Assert.Empty(w.CheckInvariants());
-        Assert.NotNull(OrganismMeshes.FloraFruiting(sp));
-        Assert.Null(OrganismMeshes.FloraFruiting(Sp("velvetweave_moss")));
-    }
 
     [Fact]
     public void SlimeMoldNetworkTintsDarkAtRootBrightAtFront()
@@ -483,7 +449,6 @@ public class FloraTests
         for (int day = 0; day < 6; day++) for (int h = 0; h < 24; h++) { w.FloraSystem.Step(3600); w.Clock.Tick += 360; }
         var fungi = w.Flora.Items.Where(f => f.SpeciesId == "dewbonnet").ToList();
         Assert.NotEmpty(fungi);
-        Assert.True(w.Flora.Items.Count(f => f.SpeciesId == "ambervein") > 0, "slime mold spores sprout too");
         Assert.Empty(w.CheckInvariants());
     }
 

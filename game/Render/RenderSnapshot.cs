@@ -117,10 +117,8 @@ public sealed class RenderSnapshot
         var coverage = new CoverageSnapshot(
             w.Coverage.Mat.Step,
             w.Coverage.Crust.Step,
-            w.Coverage.Plasmodium.Step,
             w.Coverage.Mat.TileCount,
-            w.Coverage.Crust.TileCount,
-            w.Coverage.Plasmodium.TileCount);
+            w.Coverage.Crust.TileCount);
 
         // Snapshot props
         var logs = w.Props.Logs;
@@ -296,22 +294,17 @@ public sealed class CoverageSnapshot
 {
     public long MatStep { get; }
     public long CrustStep { get; }
-    public long PlasmodiumStep { get; }
     public long MatVersion => MatStep;
     public long CrustVersion => CrustStep;
-    public long PlasmodiumVersion => PlasmodiumStep;
     public int MatTileCount { get; }
     public int CrustTileCount { get; }
-    public int PlasmodiumTileCount { get; }
 
-    public CoverageSnapshot(long matStep, long crustStep, long plasStep, int matCount, int crustCount, int plasCount)
+    public CoverageSnapshot(long matStep, long crustStep, int matCount, int crustCount)
     {
         MatStep = matStep;
         CrustStep = crustStep;
-        PlasmodiumStep = plasStep;
         MatTileCount = matCount;
         CrustTileCount = crustCount;
-        PlasmodiumTileCount = plasCount;
     }
 }
 

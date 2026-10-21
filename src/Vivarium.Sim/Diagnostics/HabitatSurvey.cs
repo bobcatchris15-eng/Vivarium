@@ -183,7 +183,7 @@ public static class HabitatSurvey
         // FloraIndividuals. Keep its native biomass units separate from plant mass.
         foreach (var layer in world.Coverage.All)
         {
-            if (layer.Id is not (CoverageLayerId.Mat or CoverageLayerId.Crust or CoverageLayerId.Plasmodium))
+            if (layer.Id is not (CoverageLayerId.Mat or CoverageLayerId.Crust))
                 continue;
             foreach (var tile in layer.Tiles)
             {

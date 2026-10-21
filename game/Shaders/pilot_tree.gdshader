@@ -58,14 +58,16 @@ void fragment() {
         float average = max(dot(textureLod(bark_col, vec2(0.5), 10.0).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.025);
         float micro = vnoise(object_position.xz * 31.0 + object_position.y * 7.0);
         vec3 bark = tissue * clamp(scan / average, vec3(0.36), vec3(1.65));
-        vec3 bark_optical, bark_optical_normal;
-        float bark_ao;
-        bark_fissure(bark, unpack_normal(texture(bark_nrm, grain).rgb),
-            grain, u_bark_fissures, bark_optical, bark_optical_normal, bark_ao);
-        ALBEDO = mix(tissue * (0.92 + micro * 0.14),
-            bark_optical * bark_ao, wood);
-        ROUGHNESS = mix(0.72, max(0.78, texture(bark_rgh, grain).r), wood);
-        SPECULAR = mix(0.26, 0.18, wood);
+        vec3 bn = unpack_normal(texture(bark_nrm, grain).rgb);
+        float raw_rgh = texture(bark_rgh, grain).r;
+        vec3 cork, cork_normal;
+        float cork_ao, cork_groove, cork_rough;
+        bark_fissure_pbr(bark, bn, raw_rgh, grain, u_bark_fissures, 0.35, micro,
+            cork, cork_normal, cork_rough, cork_ao, cork_groove);
+        ALBEDO = mix(tissue * (0.92 + micro * 0.14), cork * cork_ao, wood);
+        ROUGHNESS = mix(0.72, cork_rough, wood);
+        float tree_bark_spec = mix(0.42, 0.14, smoothstep(0.55, 0.92, cork_rough));
+        SPECULAR = mix(0.26, tree_bark_spec, wood);
         BACKLIGHT = tissue * (1.0 - wood) * 0.12;
 
         // Derivative tangent frame follows the cylindrical mesh UVs on trunk, branches and buttresses.
@@ -75,9 +77,9 @@ void fragment() {
         if (length(tangent) > 0.00001 && wood > 0.5) {
             tangent = normalize(tangent - NORMAL * dot(NORMAL, tangent));
             vec3 bitangent = normalize(cross(NORMAL, tangent));
-            NORMAL = normalize(tangent * bark_optical_normal.x * 0.65 +
-                bitangent * bark_optical_normal.y * 0.65 +
-                NORMAL * bark_optical_normal.z);
+            NORMAL = normalize(tangent * cork_normal.x +
+                bitangent * cork_normal.y +
+                NORMAL * cork_normal.z);
         }
     }
 }

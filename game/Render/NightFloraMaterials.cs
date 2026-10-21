@@ -44,6 +44,8 @@ public static class NightFloraMaterials
         // 4: seed heads only (lanternsedge pod cylinder)
         // 5: center stripe down leaf (siltstars)
         // 6: edge strip around leaf (tidebell)
+        // 7: clover chevron marking (trifold)
+        // 8: spore beads on the fertile fronds (veilfern)
         int maskMode = species.Id switch
         {
             "glowbriar" => 2,
@@ -51,6 +53,8 @@ public static class NightFloraMaterials
             "lanternsedge" => 4,
             "siltstars" => 5,
             "tidebell" => 6,
+            "trifold" => 7,
+            "veilfern" => 2,
             "starmoss" => 1,
             _ => species.Archetype is "moss" or "lichen" || (species.Shape == "carpet" && species.Id != "siltstars") ? 1 : 0
         };
