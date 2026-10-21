@@ -29,8 +29,9 @@ public sealed class DirectoryContentSource : IContentSource
 
     private string GetSafePath(string p)
     {
-        var full = Path.GetFullPath(Path.Combine(Root, p));
-        if (!full.StartsWith(_rootWithSep, Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        var combined = Path.Combine(Root, p);
+        var full = Path.GetFullPath(combined);
+        if (!full.StartsWith(_rootWithSep, Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) && full != Root)
         {
             throw new UnauthorizedAccessException($"Path traversal attempt detected: {p}");
         }
@@ -41,6 +42,7 @@ public sealed class DirectoryContentSource : IContentSource
     {
         try { return File.Exists(GetSafePath(p)); }
         catch (UnauthorizedAccessException) { return false; }
+        catch (ArgumentException) { return false; }
     }
 
     public string ReadText(string p) => File.ReadAllText(GetSafePath(p));
