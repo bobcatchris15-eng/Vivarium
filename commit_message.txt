@@ -1,0 +1,5 @@
+🔒 Fix path traversal in DirectoryContentSource
+
+🎯 **What:** Fix path traversal vulnerability in DirectoryContentSource.
+⚠️ **Risk:** Attackers could supply paths containing `../` to access files outside the intended content root, potentially reading sensitive data.
+🛡️ **Solution:** Added a check using `Path.GetFullPath` to ensure the resolved absolute path always starts with the normalized content root directory.
