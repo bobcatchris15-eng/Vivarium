@@ -250,8 +250,8 @@ public sealed class PropPlacement
     /// <summary>Re-seats rocks and logs whose footprint touches a sculpted disc. Returns true if any moved.</summary>
     public bool Reseat(Vec2 centre, double radius)
     {
-        var rocks = Props.Rocks.Where(r => Vec2.Distance(r.Position, centre) <= radius + r.FootprintRadius).ToList();
-        var logs = Props.Logs.Where(l => Vec2.Distance(l.Position, centre) <= radius + l.FootprintRadius).ToList();
+        var rocks = Props.Rocks.Where(r => Vec2.Distance(r.Position, centre) <= radius + r.FootprintRadius);
+        var logs = Props.Logs.Where(l => Vec2.Distance(l.Position, centre) <= radius + l.FootprintRadius);
         bool any = ReseatOrdered(rocks, logs);
         if (any) Props.Touch();
         return any;
@@ -260,14 +260,36 @@ public sealed class PropPlacement
     /// <summary>Re-seats every rock and log in ascending height order, so a stack follows its base after an edit.</summary>
     private void ReseatStack() => ReseatOrdered(Props.Rocks, Props.Logs);
 
-    private bool ReseatOrdered(List<Rock> rocks, List<LogProp> logs)
+    private bool ReseatOrdered(IEnumerable<Rock> rocks, IEnumerable<LogProp> logs)
     {
         bool any = false;
         // ascending by current Y so a lower prop in a stack reseats before whatever rests on it. Anything still
         // "pending" (not yet reseated) is excluded from support height too — it started out above this prop, so
         // it can never be legitimate ground for it, even mid-cascade before its own new height is settled.
-        var pending = new HashSet<EntityId>(rocks.Select(r => r.Id).Concat(logs.Select(l => l.Id)));
-        var order = rocks.Select(r => ((object)r, r.Y)).Concat(logs.Select(l => ((object)l, l.Y))).OrderBy(t => t.Y).ToList();
+        int rCount = 0;
+        if (rocks is ICollection<Rock> rc) rCount = rc.Count;
+        else if (rocks is IReadOnlyCollection<Rock> rroc) rCount = rroc.Count;
+
+        int lCount = 0;
+        if (logs is ICollection<LogProp> lc) lCount = lc.Count;
+        else if (logs is IReadOnlyCollection<LogProp> lroc) lCount = lroc.Count;
+
+        int count = rCount + lCount;
+
+        var pending = new HashSet<EntityId>(count > 0 ? count : 16);
+        var order = new List<(object obj, double Y)>(count > 0 ? count : 16);
+
+        foreach (var r in rocks)
+        {
+            pending.Add(r.Id);
+            order.Add((r, r.Y));
+        }
+        foreach (var l in logs)
+        {
+            pending.Add(l.Id);
+            order.Add((l, l.Y));
+        }
+        order.Sort((a, b) => a.Y.CompareTo(b.Y));
         foreach (var (obj, _) in order)
         {
             if (obj is Rock r)
