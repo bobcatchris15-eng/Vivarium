@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Buffers;
 using Vivarium.Sim.Core;
 
 namespace Vivarium.Sim.Coverage.Plasmodium;
@@ -725,13 +726,24 @@ public sealed class PlasmodiumColony
     {
         if (Params.MaintenanceRate > 0)
         {
-            foreach (var cell in _cellId.Keys.ToList())
+            int count = _cellId.Count;
+            if (count > 0)
             {
-                double m = MassAt(cell.Item1, cell.Item2);
-                double cost = Math.Min(m, Params.MaintenanceRate * dt);
-                if (cost <= 0) continue;
-                _mass[cell] = m - cost;
-                RemovedMass += cost;
+                var keys = ArrayPool<(int, int)>.Shared.Rent(count);
+                int idx = 0;
+                foreach (var k in _cellId.Keys) keys[idx++] = k;
+
+                for (int i = 0; i < count; i++)
+                {
+                    var cell = keys[i];
+                    double m = MassAt(cell.Item1, cell.Item2);
+                    double cost = Math.Min(m, Params.MaintenanceRate * dt);
+                    if (cost <= 0) continue;
+                    _mass[cell] = m - cost;
+                    RemovedMass += cost;
+                }
+
+                ArrayPool<(int, int)>.Shared.Return(keys);
             }
         }
 
