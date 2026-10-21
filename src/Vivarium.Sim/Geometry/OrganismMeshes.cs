@@ -159,11 +159,11 @@ public static partial class OrganismMeshes
             case "shrub_lanternbrush": ShrubLanternbrush(m, rng, c1, c2); break;
             case "shrub_glowbriar": ShrubGlowbriar(m, rng, seed, c1, c2, juvenile); break;
             case "shrub_shadebell": ShrubShadebell(m, rng, seed, c1, c2, juvenile); break;
-            case "microcanopy_splitcrown": MidSplitcrown(m, rng, seed, c1, c2, juvenile); break;
+            case "microcanopy_splitcrown": Splitcrown(m, rng, seed, c1, c2, juvenile); break;
             case "microcanopy_vaultfern": MidVaultfern(m, rng, seed, c1, c2, juvenile); break;
             case "microcanopy_rainshield": MidRainshield(m, rng, seed, c1, c2, juvenile); break;
-            case "microcanopy_lacemantle": MidLacemantle(m, rng, seed, c1, c2, juvenile); break;
-            case "microcanopy_cragparasol": MidCragparasol(m, rng, seed, c1, c2, juvenile); break;
+            case "microcanopy_lacemantle": Lacemantle(m, rng, seed, c1, c2, juvenile); break;
+            case "microcanopy_cragparasol": Cragparasol(m, rng, seed, c1, c2, juvenile); break;
             case "ribbonweed": case "streamribbon": Streamribbon(m, rng, seed, c1, c2, juvenile); break;
             case "milfoil": case "fencomb": Fencomb(m, rng, seed, c1, c2, juvenile); break;
             case "tree":

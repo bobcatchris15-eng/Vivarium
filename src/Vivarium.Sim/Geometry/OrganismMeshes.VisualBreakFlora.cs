@@ -412,7 +412,7 @@ public static partial class OrganismMeshes
 {
     public const int FloraLodTiers = 3;
     /// <summary>Hard cap on the top tier of every species.</summary>
-    public const int FloraTopTriangleCap = 30000;
+    public const int FloraTopTriangleCap = 100000;
     public const double FloraMidRatio = 0.55, FloraLowRatio = 0.18;
 
     /// <summary>
@@ -420,25 +420,7 @@ public static partial class OrganismMeshes
     /// near-field read depends on dense, fine foliage may ask for a richer closest mesh: the extra
     /// triangles are only paid for the instances the camera is close to.
     /// </summary>
-    public static int FloraTopTriangleCapFor(string id) => id switch
-    {
-        // A clover mat is hundreds of small overlapping leaflets; at the default cap the near tier
-        // thins the mat into scattered pads instead of a continuous sward.
-        "trifold" => 40000,
-        // The coinrunner mat is the same argument: a wide carpet of large reniform coins, each one
-        // a modelled blade with its own venation, a coin-border bead and a rolled edge. At the
-        // default cap the near tier drops coins and the carpet opens into separate rafts.
-        "coinrunner" => 36000,
-        // A fern's near read is its pinnae: dozens of finely divided blades per frond, eight fronds
-        // deep. At the default cap the near tier drops pinnae and the fern reads as a handful of
-        // broad leaves instead of a feather.
-        "veilfern" => 52000,
-        // A plume's near read is its filaments. A pampas panicle is thousands of fine vanes and
-        // stigmas; at the default cap the near tier strips them back and the ladder of plumes
-        // reads as a sparse starburst instead of a soft feather.
-        "plumegrass" => 44000,
-        _ => FloraTopTriangleCap,
-    };
+    public static int FloraTopTriangleCapFor(string id) => FloraTopTriangleCap;
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int), double> LodScaleCache = new();
 

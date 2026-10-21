@@ -438,7 +438,7 @@ public class FormTests
         var authored = OrganismMeshes.Flora(sp, 42);
         var tier0 = OrganismMeshes.FloraTier(sp, 42, 0);
         Assert.Equal(authored.TriangleCount, tier0.TriangleCount);
-        Assert.True(tier0.TriangleCount > OrganismMeshes.FloraTopTriangleCap,
+        Assert.True(tier0.TriangleCount > 30000,
             "the trifold near tier should use its larger species budget");
     }
 

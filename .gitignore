@@ -21,3 +21,4 @@ TestResults/
 # Python diagnostic caches
 __pycache__/
 *.py[cod]
+reference/
