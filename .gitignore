@@ -21,3 +21,5 @@ TestResults/
 # Python diagnostic caches
 __pycache__/
 *.py[cod]
+godot-bin/
+godot.zip
