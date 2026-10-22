@@ -1787,7 +1787,7 @@ public sealed class FloraSystem
         _w.Tally.Death(sp.Id, cause);
 
         bool persistentCorpse = sp.Archetype == "plant" && sp.Colony == null && !sp.IsCoverageSpecies
-            && sp.Climber == null && sp.Shape != "floatleaf";
+            && sp.Climber == null && sp.Shape != "floatleaf" && sp.Shape != "glasslily_pad";
         if (persistentCorpse)
         {
             _w.DeadFloraSystem.CreateFrom(f, sp, cause);

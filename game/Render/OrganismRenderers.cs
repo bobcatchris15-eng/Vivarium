@@ -703,7 +703,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             if (sp.Shape == "kinkcane_brake" && sp.Height > 0)
                 r = h * sp.RadiusAtMax / sp.Height;
             var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
-            if (sp.Shape == "floatleaf")
+            if (sp.Shape is "floatleaf" or "glasslily_pad")
             {
                 // Pads are authored directly in metres (not the unit-XZ-radius-1 convention every other flora
                 // shape uses), so fixing the horizontal scale to 1 keeps pad size constant regardless of the
@@ -744,7 +744,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                 h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
                 r *= 1.0 + stress * 0.035;
             }
-            else if (sp.Shape != "vine" && sp.Shape != "floatleaf")
+            else if (sp.Shape != "vine" && sp.Shape != "floatleaf" && sp.Shape != "glasslily_pad")
             {
                 var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
                 yawBasis = SurfaceFrame.TiltTo(norm) * yawBasis;

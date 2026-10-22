@@ -263,7 +263,7 @@ public partial class SmokeRunner
                 .DefaultIfEmpty(10).Min();
             return Math.Min(rock, log);
         }
-        bool floating = sp.Shape == "floatleaf";
+        bool floating = sp.Shape is "floatleaf" or "glasslily_pad";
         bool aquatic = floating || sp.MinWaterDepth > 0;
         var spots = W.Grid.DomainCells.Select(c => W.Grid.CellCenter(c))
             .Where(p => aquatic

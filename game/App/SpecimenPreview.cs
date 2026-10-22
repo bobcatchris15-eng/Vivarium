@@ -32,7 +32,7 @@ public partial class SpecimenPreview : Node3D
         try
         {
             var sp = Content.FloraOrThrow(SpeciesId);
-            bool floating = sp.Shape == "floatleaf";
+            bool floating = sp.Shape is "floatleaf" or "glasslily_pad";
             GetWindow().Size = new Vector2I(1024, 1024);
             var environment = new EnvironmentRig { Name = "Environment" };
             AddChild(environment);
@@ -48,7 +48,7 @@ public partial class SpecimenPreview : Node3D
                 MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.36f, 0.35f, 0.29f), Roughness = 1.0f },
                 Position = new Vector3(0, -0.018f, 0),
             };
-            ground.Visible = !Underside && !floating;
+            ground.Visible = !Underside;
             AddChild(ground);
             if (sp.Shape == "bracket")
             {
@@ -75,10 +75,11 @@ public partial class SpecimenPreview : Node3D
                 AddChild(new MeshInstance3D
                 {
                     Name = "PreviewWater",
-                    Mesh = new CylinderMesh { TopRadius = 0.28f, BottomRadius = 0.28f, Height = 0.003f, RadialSegments = 64 },
+                    Mesh = new CylinderMesh { TopRadius = Math.Max(0.28f, (float)sp.RadiusAtMax * 1.15f), BottomRadius = Math.Max(0.28f, (float)sp.RadiusAtMax * 1.15f), Height = 0.003f, RadialSegments = 64 },
                     MaterialOverride = new StandardMaterial3D
                     {
-                        AlbedoColor = new Color(0.18f, 0.34f, 0.38f),
+                        AlbedoColor = new Color(0.12f, 0.28f, 0.32f, 0.70f),
+                        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                         Metallic = 0.15f,
                         Roughness = 0.3f,
                     },
@@ -132,15 +133,15 @@ public partial class SpecimenPreview : Node3D
                     : (sp.Shape == "bracket")
                         ? new Vector3(0.08f, 0.22f, 0)
                         : new Vector3(0, (float)sp.Height * 0.45f, 0);
-            if (Close) target.Y = (float)sp.Height * .65f;
+            if (Close) target.Y = floating ? 0.24f : (float)sp.Height * .65f;
             float dist = Math.Max(0.6f, boundDim * 1.5f);
             var camera = new Camera3D
             {
                 Name = "SpecimenCamera",
                 Projection = Camera3D.ProjectionType.Orthogonal,
-                Size = Close ? specSize * .38f : floating ? 0.38f : Juvenile ? Math.Max(0.18f, specSize * 0.65f) : specSize,
+                Size = Close ? (floating ? 0.26f : specSize * .38f) : floating ? Math.Max(0.38f, (float)sp.RadiusAtMax * 1.6f) : Juvenile ? Math.Max(0.18f, specSize * 0.65f) : specSize,
                 Position = floating
-                    ? new Vector3(0.25f, 0.68f, 0.25f)
+                    ? (new Vector3(0.32f, 0.52f, 0.32f) * (sp.RadiusAtMax > 0.35 ? 1.45f : 1.0f))
                     : Underside
                         ? new Vector3(0.8f, -0.12f, 0.8f)
                         : target + new Vector3(1.0f, 0.70f, 1.0f).Normalized() * dist,
