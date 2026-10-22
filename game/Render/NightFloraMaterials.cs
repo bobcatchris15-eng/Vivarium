@@ -18,14 +18,20 @@ public static class NightFloraMaterials
     private sealed class RegisteredLight
     {
         public readonly WeakReference<OmniLight3D> Light;
+        public readonly ulong Id;
         public float BaseEnergy;
         public RegisteredLight(OmniLight3D light, float baseEnergy)
         {
             Light = new WeakReference<OmniLight3D>(light);
+            Id = light.GetInstanceId();
             BaseEnergy = baseEnergy;
         }
     }
     private static readonly List<RegisteredLight> Lights = new();
+    /// <summary>Instance id to registration. The registry is consulted once per
+    /// luminous plant per refresh, so a linear scan turned a mature world into a
+    /// hundred milliseconds of work every refresh.</summary>
+    private static readonly Dictionary<ulong, RegisteredLight> LightIndex = new();
 
     public static void Bind(ShaderMaterial material, FloraSpeciesDef species)
     {
@@ -55,7 +61,17 @@ public static class NightFloraMaterials
             "tidebell" => 6,
             "trifold" => 7,
             "veilfern" => 2,
+            // The brake's berries carry a lit heart; nothing else in the thicket glows.
+            "hookthicket" => 2,
+            // The latchjaw's flower throat is the only lit part of the plant.
+            "snaptrap" => 2,
             "starmoss" => 1,
+            // The coalspike's violet ember is the one lit organ; the coal around it stays dead.
+            "coalspike" => 2,
+            // The embercup's spore capsules glow; the cushion they stand on does not.
+            "embercup" => 2,
+            // The hollowcrown's cavity moss is the only light inside the tree.
+            "hollowcrown" => 2,
             _ => species.Archetype is "moss" or "lichen" || (species.Shape == "carpet" && species.Id != "siltstars") ? 1 : 0
         };
         material.SetShaderParameter("emission_mask_mode", maskMode);
@@ -70,15 +86,17 @@ public static class NightFloraMaterials
         if (light == null) return;
         light.LightEnergy=baseEnergy*CurrentNightFactor;
         light.Visible=light.LightEnergy>.00001f;
-        for (int i = Lights.Count - 1; i >= 0; i--)
+        ulong id=light.GetInstanceId();
+        if(LightIndex.TryGetValue(id,out var existing) && existing.Light.TryGetTarget(out var known) && ReferenceEquals(known,light))
         {
-            if (Lights[i].Light.TryGetTarget(out var old) && ReferenceEquals(old, light))
-            {
-                Lights[i].BaseEnergy = baseEnergy;
-                return;
-            }
+            existing.BaseEnergy=baseEnergy;
+            return;
         }
-        Lights.Add(new RegisteredLight(light, baseEnergy));
+        // A new light, or one whose instance id was recycled after the old
+        // light was freed.
+        var registered=new RegisteredLight(light,baseEnergy);
+        Lights.Add(registered);
+        LightIndex[id]=registered;
     }
 
     public static OmniLight3D CreateLightForSpecies(FloraSpeciesDef species, Vector3 position = default)
@@ -129,6 +147,7 @@ public static class NightFloraMaterials
         {
             if (!Lights[i].Light.TryGetTarget(out var light) || !GodotObject.IsInstanceValid(light))
             {
+                LightIndex.Remove(Lights[i].Id);
                 Lights.RemoveAt(i);
                 continue;
             }

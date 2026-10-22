@@ -180,7 +180,19 @@
     {
       "species": "dewbonnet",
       "count": 6
-    }
+    },
+      {
+      "species": "starbulb",
+      "count": 3
+      },
+      {
+      "species": "blackneedle",
+      "count": 3
+      },
+      {
+      "species": "embercup",
+      "count": 5
+      }
   ],
   "starterFauna": [
     {

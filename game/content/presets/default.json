@@ -425,7 +425,47 @@
     {
       "species": "tidebell",
       "count": 2
-    }
+    },
+      {
+      "species": "hollowcrown",
+      "count": 1
+      },
+      {
+      "species": "glasslily",
+      "count": 2
+      },
+      {
+      "species": "silverweed",
+      "count": 3
+      },
+      {
+      "species": "coalspike",
+      "count": 4
+      },
+      {
+      "species": "marrowbloom",
+      "count": 4
+      },
+      {
+      "species": "blackneedle",
+      "count": 3
+      },
+      {
+      "species": "starbulb",
+      "count": 3
+      },
+      {
+      "species": "bonecup",
+      "count": 3
+      },
+      {
+      "species": "embercup",
+      "count": 6
+      },
+      {
+      "species": "tankbloom",
+      "count": 3
+      }
   ],
   "starterFauna": [
     {

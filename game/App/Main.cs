@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using Godot;
+using Vivarium.Game.Render;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Persistence;
@@ -46,6 +47,16 @@ public partial class Main : Node3D
             AssetPath = ArgAfter("--fern-asset") ?? "res://content/visual-lab-candidates/fern02/fern02.glb",
             Variant = ArgAfter("--fern-variant") ?? "procedural", CameraReferencePath = ArgAfter("--fern-camera-reference") ?? "" }); return; }
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (ArgAfter("--photographic-physical-review") is { } physicalDir)
+        { AddChild(new PhotographicPhysicalReview { OutDir = physicalDir }); return; }
+        if (ArgAfter("--photographic-family-review") is { } familyDir)
+        { AddChild(new PhotographicFamilyReview { Content = content, OutDir = familyDir,
+            ProfilePath = ArgAfter("--family-profiles") ?? "", BacklightSweep = UserArgs.Contains("--backlight-sweep"), WetLayerSweep = UserArgs.Contains("--wet-layer-sweep") }); return; }
+        if (ArgAfter("--photorealism-light-review") is { } photoLightDir)
+        { AddChild(new PhotorealismLightReview { Content = content, OutDir = photoLightDir }); return; }
+        if (ArgAfter("--photorealism-review") is { } photoDir)
+        { AddChild(new PhotorealismReview { Content = content, OutDir = photoDir,
+            ExposureSweep = UserArgs.Contains("--exposure-sweep") }); return; }
         if (ArgAfter("--material-port-review") is { } materialDir)
         { AddChild(new MaterialPortReview { Content = content, OutDir = materialDir,
             BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"), FloraModulePath = ArgAfter("--flora-module") ?? "",
@@ -103,6 +114,23 @@ public partial class Main : Node3D
                 GameTier = UserArgs.Contains("--game-tier"),
                 Close = UserArgs.Contains("--close"),
                 OutDir = ArgAfter("--output") ?? "build/specimens",
+            });
+            return;
+        }
+        if (ArgAfter("--vine-review") is { } vineId)
+        {
+            AddChild(new VineReview
+            {
+                Name = "VineReview",
+                Content = content,
+                SpeciesId = vineId,
+                Days = float.TryParse(ArgAfter("--days"), out float vineDays) ? vineDays : 40f,
+                Seed = int.TryParse(ArgAfter("--seed"), out int vineSeed) ? vineSeed : 62,
+                Tip = UserArgs.Contains("--tip"),
+                Habitat = UserArgs.Contains("--habitat"),
+                Angle = float.TryParse(ArgAfter("--angle"), out float vineAngle) ? vineAngle : 35f,
+                Zoom = float.TryParse(ArgAfter("--zoom"), out float vineZoom) ? vineZoom : 1f,
+                OutDir = ArgAfter("--output") ?? "build/vine-review",
             });
             return;
         }
@@ -178,6 +206,10 @@ public partial class Main : Node3D
                 if (restored != null) Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + restored.Message);
                 loadingText.Text = "Growing a new island...";
                 var descriptor = content.PresetOrThrow(ArgAfter("--preset") ?? "default").Clone();
+                // The guardian's model is the largest asset in the game. Its
+                // archetype follows from the descriptor, so the load can start
+                // while the world is still being generated.
+                PreloadGuardians.Begin(VivariumWorld.GuardianArchetypeFor(descriptor));
                 if (UserArgs.Contains("--soak"))
                 {
                     descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var soakSeed) ? soakSeed : 804584441UL;

@@ -390,7 +390,23 @@
     {
       "species": "rain_jelly",
       "count": 6
-    }
+    },
+      {
+      "species": "coalspike",
+      "count": 4
+      },
+      {
+      "species": "glasslily",
+      "count": 3
+      },
+      {
+      "species": "tankbloom",
+      "count": 3
+      },
+      {
+      "species": "silverweed",
+      "count": 3
+      }
   ],
   "starterFauna": [
     {

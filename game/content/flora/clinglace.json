@@ -100,16 +100,33 @@
   "climber": {
     "searchRadius": 3.2,
     "groundSpeedPerDay": 0.18,
-    "segmentLength": 0.14,
+    "segmentLength": 0.06,
     "attachmentRadius": 0.16,
-    "branchChance": 0.12,
-    "maxUnsupportedLength": 4,
+    "maxUnsupportedLength": 4.5,
     "verticalGrowthMultiplier": 2.2,
+    "nodeCap": 200,
+    "populationCap": 10,
     "supportTypes": [
       "woody",
       "log",
       "rock"
     ],
-    "nodeCap": 120
+    "climbWeight": 1.0,
+    "driftWeight": 0.55,
+    "lightWeight": 0.25,
+    "wanderAmp": 0.45,
+    "wanderPeriod": 1.4,
+    "branchRate": 0.13,
+    "branchAngle": 68,
+    "lateralSpeed": 0.4,
+    "lateralClimb": 0.25,
+    "maxBranchOrder": 2,
+    "branchLength": 0.6,
+    "baseRadius": 0.011,
+    "stemTaper": 0.9,
+    "tipRadius": 0.0016,
+    "grabRadius": 0.10,
+    "seekRate": 0.7,
+    "stolonLength": 0.9
   }
 }

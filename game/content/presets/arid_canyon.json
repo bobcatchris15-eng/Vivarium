@@ -177,7 +177,15 @@
     {
       "species": "carrion_bell",
       "count": 4
-    }
+    },
+      {
+      "species": "starbulb",
+      "count": 3
+      },
+      {
+      "species": "blackneedle",
+      "count": 3
+      }
   ],
   "starterFauna": [
     {

@@ -23,10 +23,15 @@ public sealed class FaunaSuitability
 public sealed class FaunaSystem
 {
     private readonly VivariumWorld _w;
-    private readonly List<FaunaIndividual> _nb = new();
+    /// <summary>Scratch for the neighbour queries. They are per thread because
+    /// the starter placement scores cells across cores, and a shared list
+    /// would be a race.</summary>
+    [ThreadStatic] private static List<FaunaIndividual>? _neighbourScratch;
+    [ThreadStatic] private static List<Flora.FloraIndividual>? _floraNeighbourScratch;
+    private static List<FaunaIndividual> _nb => _neighbourScratch ??= new List<FaunaIndividual>();
+    private static List<Flora.FloraIndividual> _fnb => _floraNeighbourScratch ??= new List<Flora.FloraIndividual>();
     // Dedicated buffer: neighborhood queries elsewhere reuse _nb, including during reproduction.
     private readonly List<FaunaIndividual> _metricMembers = new();
-    private readonly List<Flora.FloraIndividual> _fnb = new();
     private readonly ulong _wanderHash = Hash.Fnv1a64("fauna.wander");
     /// <summary>Ticks between wander control values (60 ticks = 10 simulated minutes).</summary>
     private const int WanderPeriod = 60;

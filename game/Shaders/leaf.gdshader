@@ -22,7 +22,7 @@ uniform float normal_strength = .45;
 // Production lamina curvature, selected after 0x/2x/6x/12x stress captures.
 uniform float lamina_curl_strength = 1.5;
 uniform float vein_strength = .4;
-uniform float wind_strength = .018;
+uniform float wind_strength = 0.0;
 uniform float plant_stiffness = 7.;
 uniform float tissue_scale = 1.6;
 uniform float canopy_occlusion = .55;
@@ -46,12 +46,14 @@ vec3 turn(vec3 p, vec3 axis, float angle) {
 void vertex() {
     plant = INSTANCE_CUSTOM; blade = CUSTOM0;
     float clock = review_time >= 0. ? review_time : TIME;
-    if (wind_strength > 0.) {
+    float wind = wind_strength;
+    float poke = plant.z * .15;
+    if (wind > 0. || poke > 0.) {
         // Hierarchical wind: branch cantilever sway with bounded displacement preserving shadow bounds
         float phase_branch = clock * 1.25 + plant.w * 6.2831;
         float h = max(VERTEX.y, 0.0);
         float stem_flex = (h * h) / (1.0 + 0.35 * h);
-        float stem_amount = clamp((.012 + plant.z * .15) / max(plant_stiffness, 0.5), 0.0, 0.08);
+        float stem_amount = clamp((.012 * (wind / max(.018, 0.0001)) + poke) / max(plant_stiffness, 0.5), 0.0, 0.08);
         vec2 branch_disp = clamp(vec2(sin(phase_branch) * 2.2, cos(phase_branch * 0.85) * 1.6) * stem_amount * stem_flex, vec2(-0.35), vec2(0.35));
 
         // Attachment anchor CUSTOM1.xyz moves with branch sway
@@ -67,7 +69,7 @@ void vertex() {
         float leaf_phase = plant.w * 6.2831 + blade.x * 17.3;
         vec3 wind_axis = normalize(vec3(cos(leaf_phase), 0.0, sin(leaf_phase)));
         float leaf_wave = sin(clock * 2.6 + leaf_phase) * 0.6 + sin(clock * 5.2 + blade.x * 37.0) * 0.4;
-        float leaf_angle = leaf_wave * wind_strength * blade.w * tip;
+        float leaf_angle = leaf_wave * wind * blade.w * tip;
         leaf_local = turn(leaf_local, wind_axis, leaf_angle);
         VERTEX = animated_anchor + leaf_local;
         NORMAL = normalize(turn(NORMAL, wind_axis, leaf_angle));

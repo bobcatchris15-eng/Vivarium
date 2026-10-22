@@ -459,7 +459,9 @@ public static class ContentLoader
         if (n.Has("climber"))
         {
             var cl = n["climber"];
-            cl.RejectUnknown("searchRadius", "groundSpeedPerDay", "segmentLength", "attachmentRadius", "branchChance", "maxUnsupportedLength", "verticalGrowthMultiplier", "nodeCap", "supportTypes");
+            cl.RejectUnknown("searchRadius", "groundSpeedPerDay", "segmentLength", "attachmentRadius", "maxUnsupportedLength", "verticalGrowthMultiplier", "nodeCap", "populationCap", "supportTypes",
+                "climbWeight", "driftWeight", "lightWeight", "wanderAmp", "wanderPeriod", "branchRate", "branchChance", "branchAngle",
+                "lateralSpeed", "lateralClimb", "maxBranchOrder", "branchLength", "baseRadius", "stemTaper", "tipRadius", "grabRadius", "seekRate", "stolonLength");
             var supportTypes = new HashSet<string>(cl.StrList("supportTypes", required: true), StringComparer.Ordinal);
             foreach (var support in supportTypes)
                 if (support is not ("woody" or "log" or "rock")) cl["supportTypes"].Error($"unknown climber support '{support}' (expected woody | log | rock)");
@@ -470,15 +472,34 @@ public static class ContentLoader
                 GroundSpeed = cl.Num("groundSpeedPerDay", min: 0.001, max: 5) / D,
                 SegmentLength = cl.Num("segmentLength", min: 0.04, max: 0.5),
                 AttachmentRadius = cl.Num("attachmentRadius", min: 0.02, max: 0.75),
-                BranchChance = cl.Num("branchChance", 0.1, 0, 1),
                 MaxUnsupportedLength = cl.Num("maxUnsupportedLength", min: 0.2, max: 12),
                 VerticalGrowthMultiplier = cl.Num("verticalGrowthMultiplier", 1.0, 0.5, 6),
                 NodeCap = cl.Int("nodeCap", 96, min: 8, max: 1000),
+                PopulationCap = cl.Int("populationCap", 10, min: 1, max: 200),
                 SupportTypes = supportTypes,
+                ClimbWeight = cl.Num("climbWeight", 1.0, 0, 4),
+                DriftWeight = cl.Num("driftWeight", 0.4, -4, 4),
+                LightWeight = cl.Num("lightWeight", 0.5, 0, 4),
+                WanderAmp = cl.Num("wanderAmp", 0.5, 0, 3),
+                WanderPeriod = cl.Num("wanderPeriod", 1.2, 0.05, 20),
+                BranchRate = cl.Has("branchRate") ? cl.Num("branchRate", 0.08, 0, 1) : cl.Num("branchChance", 0.08, 0, 1),
+                BranchAngle = cl.Num("branchAngle", 55, 5, 170),
+                LateralSpeed = cl.Num("lateralSpeed", 0.45, 0, 2),
+                LateralClimb = cl.Num("lateralClimb", 0.4, -2, 2),
+                MaxBranchOrder = cl.Int("maxBranchOrder", 2, min: 0, max: 6),
+                BranchLength = cl.Num("branchLength", 1.2, 0.05, 12),
+                BaseRadius = cl.Num("baseRadius", 0.03, 0.001, 0.5),
+                StemTaper = cl.Num("stemTaper", 0.9, 0.1, 1),
+                TipRadius = cl.Num("tipRadius", 0.0015, 0.0001, 0.2),
+                GrabRadius = cl.Num("grabRadius", 0.06, 0.01, 0.5),
+                SeekRate = cl.Num("seekRate", 0.6, 0, 1),
+                StolonLength = cl.Num("stolonLength", 1.2, 0.05, 12),
             };
             if (arch != "plant") cl.Error("climbers must use archetype 'plant'");
             if (climber.AttachmentRadius >= climber.SearchRadius) cl["attachmentRadius"].Error("attachmentRadius must be smaller than searchRadius");
             if (climber.SegmentLength > climber.MaxUnsupportedLength) cl["segmentLength"].Error("segmentLength exceeds maxUnsupportedLength");
+            if (climber.GrabRadius > climber.AttachmentRadius) cl["grabRadius"].Error("grabRadius must not exceed attachmentRadius");
+            if (climber.MaxBranchOrder > 0 && climber.BranchRate <= 0) cl["branchRate"].Error("branchRate must be positive when maxBranchOrder allows branching");
         }
 
         WoodyDef? woody = null;

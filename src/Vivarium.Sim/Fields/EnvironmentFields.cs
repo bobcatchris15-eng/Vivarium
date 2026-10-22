@@ -91,6 +91,7 @@ public sealed class EnvironmentFields
     {
         _lightPropsVersion = props.Version;
         const int dirs = 8;
+        var surfaceStart = System.Diagnostics.Stopwatch.GetTimestamp();
         var surfaceH = new double[Grid.Count];
         for (int i = 0; i < Grid.DomainCells.Length; i++)
         {
@@ -99,7 +100,9 @@ public sealed class EnvironmentFields
             double top = props.PropTopAt(p);
             surfaceH[idx] = double.IsNaN(top) ? hf.Height(p) : Math.Max(top, hf.Height(p));
         }
+        double surfaceMs = System.Diagnostics.Stopwatch.GetElapsedTime(surfaceStart).TotalMilliseconds;
 
+        var horizonStart = System.Diagnostics.Stopwatch.GetTimestamp();
         Parallel.ForEach(Grid.DomainCells, idx =>
         {
             var p = Grid.CellCenter(idx);
@@ -125,7 +128,15 @@ public sealed class EnvironmentFields
             double canopy = pilotTree == null ? 1 : 1 - pilotTree.Def.ShadeOpacity * pilotTree.CanopyInfluence(p);
             Light[idx] = MathD.Clamp01((0.08 + 0.92 * openness) * canopy);
         });
+        LastLightSurfaceMs = surfaceMs;
+        LastLightHorizonMs = System.Diagnostics.Stopwatch.GetElapsedTime(horizonStart).TotalMilliseconds;
+        LastLightCells = Grid.DomainCells.Length;
     }
+
+    /// <summary>Where the last light recompute went, for diagnostics.</summary>
+    public double LastLightSurfaceMs { get; private set; }
+    public double LastLightHorizonMs { get; private set; }
+    public int LastLightCells { get; private set; }
 
     /// <summary>
     /// Effective stored mineral nutrients from the maintained soil reservoir.

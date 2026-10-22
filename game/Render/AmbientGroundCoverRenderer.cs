@@ -39,6 +39,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
 
         // Same optical rules for ephemeral ground vegetation and persistent organisms.
         var mat = Bridge.Shader("res://Shaders/ground_cover.gdshader");
+        mat.SetShaderParameter("sway_strength", 0f);
         _blade = NewMultiMesh(BuildBlade(mat));
         _leaf = NewMultiMesh(BuildBroadleaf(mat));
         _bladeMmi = new MultiMeshInstance3D { Name = "AmbientBlades", Multimesh = _blade, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };

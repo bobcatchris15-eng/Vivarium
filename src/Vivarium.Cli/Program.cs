@@ -185,9 +185,24 @@ switch (cmd)
             ? Vivarium.Sim.Geometry.OrganismMeshes.Flora(sp, meshSeed)
             : Vivarium.Sim.Geometry.OrganismMeshes.FloraTier(sp, meshSeed, tier);
         var b = mesh.Bounds();
+        {
+            // Mirror the flora refinement check's cane extraction so a geometry change can be
+            // compared against the same numbers the tests use.
+            var centres = new List<Vec3>();
+            for (int ring = 0; ring < mesh.VertexCount / 8; ring++)
+            {
+                var centre = Vec3.Zero;
+                for (int side = 0; side < 7; side++) centre += mesh.Position(ring * 8 + side) / 7;
+                centres.Add(centre);
+                if (mesh.UV[ring * 8 * 2] >= .9999) break;
+            }
+            if (centres.Count > 1)
+                Console.WriteLine($"  cane rings={centres.Count} first=({centres[0].X:0.00000},{centres[0].Y:0.00000},{centres[0].Z:0.00000}) last=({centres[^1].X:0.00000},{centres[^1].Y:0.00000},{centres[^1].Z:0.00000})");
+        }
         Console.WriteLine($"{sp.Id} seed={meshSeed} tier={(tier < 0 ? "authored" : tier.ToString())} " +
             $"verts={mesh.VertexCount} tris={mesh.TriangleCount} leaves={mesh.Leaves.Count} " +
             $"leafspans={mesh.LeafSpans.Count} tubes={mesh.Structural.Count} " +
+            $"radius={sp.RadiusAtMax:0.###} height={sp.Height:0.###} " +
             $"bounds=({b.Min.X:0.000},{b.Min.Y:0.000},{b.Min.Z:0.000})..({b.Max.X:0.000},{b.Max.Y:0.000},{b.Max.Z:0.000}) " +
             $"digest={mesh.DigestHex()[..16]}");
         for (int t = 0; t < Vivarium.Sim.Geometry.OrganismMeshes.FloraLodTiers; t++)

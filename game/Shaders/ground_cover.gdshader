@@ -5,7 +5,7 @@ render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 #include "res://Shaders/leaf_direct_light.gdshaderinc"
 
 uniform float leaf_detail = 1.0;
-uniform float sway_strength = 1.0;
+uniform float sway_strength = 0.0;
 uniform float review_time = -1.0;
 varying vec3 tissue_color;
 varying float individuality;
@@ -21,8 +21,10 @@ void vertex() {
     individuality = fract(sin(dot(MODEL_MATRIX[3].xz, vec2(12.9898, 78.233))) * 43758.5453);
     float clock = review_time >= 0.0 ? review_time : TIME;
     float rooted = smoothstep(0.003, 0.055, VERTEX.y) * sway_strength;
-    VERTEX.x += sin(clock * 1.8 + individuality * 6.283) * .0018 * rooted;
-    VERTEX.z += cos(clock * 1.3 + individuality * 6.283) * .0011 * rooted;
+    if (rooted > 0.0) {
+        VERTEX.x += sin(clock * 1.8 + individuality * 6.283) * .0018 * rooted;
+        VERTEX.z += cos(clock * 1.3 + individuality * 6.283) * .0011 * rooted;
+    }
 }
 
 void fragment() {

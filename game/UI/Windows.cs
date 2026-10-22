@@ -1,4 +1,5 @@
 using System;
+using Vivarium.Game.Render;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -401,6 +402,10 @@ public partial class Windows : Control
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var content = Session.Content;
+            // The guardian's model is the largest asset in the game. Its
+            // archetype follows from the descriptor, so the load can start while
+            // the world is still being generated.
+            PreloadGuardians.Begin(VivariumWorld.GuardianArchetypeFor(d));
             var world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, d, warmupSurfaceWater: false));
             if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
             await Session.StartWorldAsync(world, null, stage => label.Text = d.Name + "\nPreparing your island - " + stage);

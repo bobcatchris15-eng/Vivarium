@@ -159,7 +159,12 @@ public class PilotTreeTests
         Assert.Equal(int.MaxValue,w.FloraSystem.WoodyPopulationCap(Vivarium.Sim.Content.WoodyLayer.Shrub));
         foreach(var id in new[]{"kinkcane","hookthicket"})
             Assert.Equal(Vivarium.Sim.Content.WoodyLayer.Shrub,w.Content.FloraOrThrow(id).Woody!.Layer);
-        Assert.DoesNotContain(w.Content.Flora,sp=>sp.Woody?.Layer==Vivarium.Sim.Content.WoodyLayer.Tree);
+        // The roster's only tree-layer species is the veteran hollow tree, and it is held to the
+        // island's area-based tree budget. Everything else woody is a shrub, and shrubs are uncapped.
+        var trees=w.Content.Flora.Where(sp=>sp.Woody?.Layer==Vivarium.Sim.Content.WoodyLayer.Tree).ToList();
+        Assert.Single(trees);
+        Assert.Equal("hollowcrown",trees[0].Id);
+        Assert.Equal(4,w.FloraSystem.WoodyPopulationCap(Vivarium.Sim.Content.WoodyLayer.Tree));
     }
     [Theory][MemberData(nameof(FormsAndCorners))]
     public void RootSurfaceIndexMatchesFullGeometryScanBeforeAndAfterEdits(string id,int corner)

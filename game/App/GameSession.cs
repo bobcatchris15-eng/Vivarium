@@ -157,6 +157,7 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         Stage("Water", () => Water.Build(world));
         yield return "WaterFluid";
         Stage("WaterFluid", () => {world.Liquid.Enable();world.Liquid.AsyncMode=true;WaterFluid.Bind(world);});
+        WaterFluid.Camera = CameraRig.Cam;
         yield return "Props";
         Stage("Props", () => Props.Build(world));
         yield return "PilotTree";

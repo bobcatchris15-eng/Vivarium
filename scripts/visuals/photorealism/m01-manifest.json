@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "fixture_id": "m01-native-review-pair",
+  "world": {
+    "material_port_review": "synthetic fixed material fixture using production renderers; four mature fixture plants",
+    "world_review": "disposable initial GameSession; paused after startup; no six-day maturation",
+    "saved_player_world_used": false
+  },
+  "camera": {
+    "material_port_review": "native fixture-authored camera; views vary by material and mode",
+    "world_review": "native reference camera query set (55 views)",
+    "arbitrary_camera_override_supported": false
+  },
+  "exposure": {
+    "material_port_review": "native auto exposure disabled; tonemap exposure 1.12",
+    "world_review": "native world-review viewport policy; no CLI exposure override",
+    "matched_between_modes": false
+  },
+  "light": {
+    "material_port_review": "native fixed light routine; day phase 450 and night phase 1020",
+    "world_review": "native fixed light phase 420 seconds",
+    "matched_between_modes": false
+  },
+  "readiness": {
+    "require_process_exit_zero": true,
+    "require_native_success_marker": true,
+    "require_capture_files": true,
+    "hash_all_output_files": true,
+    "shader_time_pinned": false,
+    "mature_world_readiness": false
+  },
+  "requested_modes": ["material-port-review", "world-review"],
+  "claimed_runtime_overrides": []
+}

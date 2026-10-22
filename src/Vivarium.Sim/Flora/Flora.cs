@@ -85,7 +85,11 @@ public sealed class FloraIndividual
         : sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(BiomassFraction(sp));
 }
 
-/// <summary>One node and internode segment of a climbing or creeping vine, grown sequentially.</summary>
+/// <summary>
+/// One node of a climbing or creeping vine. A node is also the state of the shoot that ends there: while it has
+/// no children it is that shoot's growing tip, and it carries the shoot's heading, its transported lateral
+/// reference and its accumulated growth credit.
+/// </summary>
 public sealed class ClimberSegment
 {
     public Vec3 Position { get; set; }
@@ -97,6 +101,33 @@ public sealed class ClimberSegment
     public bool Terminal { get; set; }
     public double Age { get; set; }
     public bool Senescent { get; set; }
+
+    /// <summary>
+    /// The shoot's lateral reference, parallel-transported along the surface. It does not rotate across a flat
+    /// plane and does rotate around a round host; that difference is what makes one growth law wind a vine
+    /// around a trunk without winding it around a wall.
+    /// </summary>
+    public Vec3 Lateral { get; set; } = new Vec3(1, 0, 0);
+    /// <summary>The world direction this shoot wants to travel: the host's axis, or its course over open ground.</summary>
+    public Vec3 ClimbDir { get; set; } = Vec3.Up;
+    /// <summary>The surface this node lies on.</summary>
+    public ClimberSurfaceKind Support { get; set; } = ClimberSurfaceKind.Ground;
+    /// <summary>Host entity for woody supports.</summary>
+    public EntityId HostId { get; set; }
+    /// <summary>Index into the prop log or rock list; -1 otherwise.</summary>
+    public int HostIndex { get; set; } = -1;
+    /// <summary>Arc length from the founder to this node, in metres.</summary>
+    public double Arc { get; set; }
+    /// <summary>Arc length from the start of this node's own shoot, in metres. Lateral shoots are short.</summary>
+    public double LocalArc { get; set; }
+    /// <summary>Node depth from the founder. Drives the stem's taper.</summary>
+    public int Depth { get; set; }
+    /// <summary>Growth credit accumulated by the shoot whose tip this node is.</summary>
+    public double Credit { get; set; }
+    /// <summary>Stem radius at this node, in metres.</summary>
+    public double Radius { get; set; }
+    /// <summary>Length of stem this shoot has grown without a host to hold it.</summary>
+    public double UnsupportedLength { get; set; }
 }
 
 /// <summary>Uniform-grid (spatial hash) bucket index for local queries (avoids whole-population scans).</summary>

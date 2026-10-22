@@ -354,7 +354,23 @@
     {
       "species": "floodlace_moss",
       "count": 11
-    }
+    },
+      {
+      "species": "marrowbloom",
+      "count": 4
+      },
+      {
+      "species": "hollowcrown",
+      "count": 1
+      },
+      {
+      "species": "embercup",
+      "count": 6
+      },
+      {
+      "species": "tankbloom",
+      "count": 3
+      }
   ],
   "starterFauna": [
     {

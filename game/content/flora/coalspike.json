@@ -1,0 +1,93 @@
+{
+  "id": "coalspike",
+  "name": "Coalspike",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Dense emergent margin stand of saturated ground.",
+  "description": "A tight stand of keeled strap leaves rises out of wet mud, each stalk ending in a shingled coal-black spike with a violet ember at its tip.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.3,
+      "water": 0.7
+    },
+    "refuseSubstrates": [
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.95,
+      "tolerance": 0.13
+    },
+    "light": {
+      "optimum": 0.62,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.52,
+      "tolerance": 0.34
+    },
+    "maxWaterDepth": 0.24,
+    "hardMinMoisture": 0.58,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.26,
+    "maxBiomass": 2.4,
+    "initialBiomass": 0.07,
+    "declinePerDay": 0.24,
+    "maturityDays": 16,
+    "lifespanDays": 340,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.42,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.4,
+    "propagules": 3,
+    "minBiomassFraction": 0.52
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 2.8,
+    "sensitivity": 0.6
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.8,
+      "bonus": 0.28
+    }
+  ],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.02,
+  "grazingValue": 0.18,
+  "visual": {
+    "shape": "coalspike_cattail",
+    "color": [
+      0.13,
+      0.31,
+      0.15
+    ],
+    "color2": [
+      0.42,
+      0.5,
+      0.24
+    ],
+    "colorVariance": 0.05,
+    "height": 1.34,
+    "bioluminescenceColor": [
+      0.62,
+      0.24,
+      1.0
+    ],
+    "bioluminescenceStrength": 2.4
+  },
+  "tags": [
+    "plant",
+    "wetland",
+    "emergent",
+    "reed"
+  ]
+}

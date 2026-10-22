@@ -48,6 +48,20 @@ public sealed class VivariumWorld
     public SimClock Clock { get; } = new();
     public Scheduler Scheduler { get; }
 
+    /// <summary>Where the time went while this world was created, for diagnostics.</summary>
+    public System.Collections.Generic.Dictionary<string, double> CreationTimings { get; internal set; } = new();
+
+    /// <summary>Wall time of the parts of the environment tick, for diagnostics.</summary>
+    public double EnvironmentMoistureMs { get; private set; }
+    public double EnvironmentHabitatMs { get; private set; }
+    public double EnvironmentNutrientsMs { get; private set; }
+    public double EnvironmentLightMs { get; private set; }
+    /// <summary>The slowest environment tick seen, per part.</summary>
+    public double WorstEnvironmentMoistureMs { get; private set; }
+    public double WorstEnvironmentHabitatMs { get; private set; }
+    public double WorstEnvironmentNutrientsMs { get; private set; }
+    public double WorstEnvironmentLightMs { get; private set; }
+
     public PropPlacement Placement { get; }
     public FloraSystem FloraSystem { get; }
     public DeadFloraSystem DeadFloraSystem { get; }
@@ -125,10 +139,45 @@ public sealed class VivariumWorld
     /// </summary>
     public static VivariumWorld CreateBaseline(ContentLibrary content, WorldDescriptor d) => new(content, d);
 
-    /// <summary>Creates a complete new world: baseline, springs, props, initial fields, water, starter flora and fauna.</summary>
-    public static VivariumWorld Create(ContentLibrary content, WorldDescriptor d, bool populate = true, bool warmupSurfaceWater = true)
+    /// <summary>
+    /// The guardian archetype a descriptor will grow, without growing it. The
+    /// world chooses the guardian from the pilot tree, and the pilot tree form
+    /// follows from the descriptor, so a client can prepare the guardian's
+    /// assets while the world is still being generated. A wrong answer only
+    /// costs a wasted preparation: the world decides for itself.
+    /// </summary>
+    public static string? GuardianArchetypeFor(WorldDescriptor descriptor)
     {
+        string? id;
+        if (descriptor.GuardianId is not ("auto" or "" or null))
+        {
+            if (descriptor.GuardianId == "none") return null;
+            id = descriptor.GuardianId;
+        }
+        else
+        {
+            // Without a pilot tree there is no guardian at all, which is what
+            // the guardian system decides when it initialises.
+            var pilotTree = PilotTreeState.SeededPilotTreeFormId(descriptor);
+            if (pilotTree == null) return null;
+            id = Guardians.GuardianCatalog.ForPilotTree(pilotTree)?.Id ?? Guardians.GuardianCatalog.GreatGround;
+        }
+        return Guardians.GuardianCatalog.Find(id)?.Archetype;
+    }
+
+    /// <summary>Creates a complete new world: baseline, springs, props, initial fields, water, starter flora and fauna.</summary>
+    public static VivariumWorld Create(ContentLibrary content, WorldDescriptor d, bool populate = true, bool warmupSurfaceWater = true)    {
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        double mark = timer.Elapsed.TotalMilliseconds;
+        var timings = new System.Collections.Generic.Dictionary<string, double>();
+        void Mark(string name)
+        {
+            double now = timer.Elapsed.TotalMilliseconds;
+            timings[name] = Math.Round(now - mark, 1);
+            mark = now;
+        }
         var w = new VivariumWorld(content, d);
+        Mark("baseline");
         foreach (var s in w.Descriptor.Water.Springs)
         {
             var sp = new Spring { Id = w.Ids.Next(EntityKind.Spring), X = s.X, Z = s.Z, Discharge = s.Discharge / SimUnits.Hour };
@@ -136,24 +185,34 @@ public sealed class VivariumWorld
             w.Water.Springs.Add(sp);
         }
         w.Placement.Generate(w.Descriptor);
+        Mark("props");
         w.Fields.RecomputeLight(w.Terrain, w.Props, w.PilotTree);
+        Mark("light");
         w.Water.InitializeFromWaterTable();
         // A short physical warmup establishes spring runoff without inventing a water-table plane.
         w.Liquid.Enable();
         if(warmupSurfaceWater&&w.Water.Springs.Count>0)w.Liquid.AdvancePhysical(5);
+        Mark("water");
         for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch, w.RootZone);
+        Mark("moisture");
         w.PilotTree?.CoupleHabitat(w, SimUnits.Day);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
         w.PilotTree?.DepositLitter(w, SimUnits.Day * 5);
         w.AquaticSystem.SeedInitial();
+        Mark("habitat");
         if (populate)
         {
             w.CoverageSystem.SeedInitial();
+            Mark("coverage");
             Populate.Starters(w);
+            Mark("starters");
             w.GuardianSystem.InitializeGuardian();
+            Mark("guardian");
         }
         w.AmbientGroundCover.InitializeFromHabitat();
-        Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna, guardian={(w.Guardian != null ? w.Guardian.ArchetypeId : "none")}.");
+        Mark("groundcover");
+        w.CreationTimings = timings;
+        Log.Info(LogCategory.World, $"Created world '{w.Descriptor.Name}' seed {w.Seed}: {w.Props.Count} props, {w.Flora.Count} flora, {w.Fauna.Count} fauna, guardian={(w.Guardian != null ? w.Guardian.ArchetypeId : "none")}. Created in {timer.Elapsed.TotalMilliseconds:0} ms ({string.Join(", ", timings.Select(p => p.Key + " " + p.Value + "ms"))}).");
         return w;
     }
 
@@ -170,10 +229,22 @@ public sealed class VivariumWorld
         Scheduler.Register("hydrology", Cadence.Hydrology, 40, _ => { }, phase: 2);
         Scheduler.Register("environment", Cadence.Environment, 50, dt =>
         {
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
             Water.CoupleMoisture(Fields.Moisture, eco, dt, Fields.Scratch, RootZone);
+            EnvironmentMoistureMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            if (EnvironmentMoistureMs > WorstEnvironmentMoistureMs) WorstEnvironmentMoistureMs = EnvironmentMoistureMs;
+            started = System.Diagnostics.Stopwatch.GetTimestamp();
             PilotTree?.CoupleHabitat(this, dt);
+            EnvironmentHabitatMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            if (EnvironmentHabitatMs > WorstEnvironmentHabitatMs) WorstEnvironmentHabitatMs = EnvironmentHabitatMs;
+            started = System.Diagnostics.Stopwatch.GetTimestamp();
             Fields.StepNutrients(eco, dt * Clock.BioAcceleration, RootZone);
+            EnvironmentNutrientsMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            if (EnvironmentNutrientsMs > WorstEnvironmentNutrientsMs) WorstEnvironmentNutrientsMs = EnvironmentNutrientsMs;
+            started = System.Diagnostics.Stopwatch.GetTimestamp();
             if (Fields.LightStale(Props)) Fields.RecomputeLight(Terrain, Props, PilotTree);
+            EnvironmentLightMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            if (EnvironmentLightMs > WorstEnvironmentLightMs) WorstEnvironmentLightMs = EnvironmentLightMs;
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         // Keep expensive passes on separate ticks; intervals and elapsed time are unchanged.

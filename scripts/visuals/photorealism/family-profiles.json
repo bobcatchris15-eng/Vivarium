@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "units": "relative_engine",
+  "profiles": [
+    {"id":"canopy-only-production","light_mode":"canopy_only","material_mode":"production","exposure":1.0,"sun_energy":0.0,"ambient_energy":0.42,"f0":0.055,"specular_gain":1.0,"transmission_gain":1.9,"phase_gain":1.6,"diffuse_wrap":0.0,"anisotropy":0.72},
+    {"id":"canopy-only-reflection-only","light_mode":"canopy_only","material_mode":"reflection_only","exposure":1.0,"sun_energy":0.0,"ambient_energy":0.42,"f0":0.055,"specular_gain":1.0,"transmission_gain":0.0,"phase_gain":0.0,"diffuse_wrap":0.0,"anisotropy":0.72},
+    {"id":"canopy-key-production","light_mode":"canopy_key","material_mode":"production","exposure":1.0,"sun_energy":1.2,"ambient_energy":0.42,"f0":0.055,"specular_gain":1.0,"transmission_gain":1.9,"phase_gain":1.6,"diffuse_wrap":0.0,"anisotropy":0.72},
+    {"id":"canopy-key-reflection-only","light_mode":"canopy_key","material_mode":"reflection_only","exposure":1.0,"sun_energy":1.2,"ambient_energy":0.42,"f0":0.055,"specular_gain":1.0,"transmission_gain":0.0,"phase_gain":0.0,"diffuse_wrap":0.0,"anisotropy":0.72},
+    {"id":"key-only-production","light_mode":"key_only","material_mode":"production","exposure":1.0,"sun_energy":1.2,"ambient_energy":0.0,"f0":0.055,"specular_gain":1.0,"transmission_gain":1.9,"phase_gain":1.6,"diffuse_wrap":0.0,"anisotropy":0.72},
+    {"id":"key-only-reflection-only","light_mode":"key_only","material_mode":"reflection_only","exposure":1.0,"sun_energy":1.2,"ambient_energy":0.0,"f0":0.055,"specular_gain":1.0,"transmission_gain":0.0,"phase_gain":0.0,"diffuse_wrap":0.0,"anisotropy":0.72}
+  ]
+}

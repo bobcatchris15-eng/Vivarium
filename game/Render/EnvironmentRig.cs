@@ -317,11 +317,19 @@ public partial class EnvironmentRig : Node3D
     private float SunAzimuth(double seconds) =>
         Mathf.PosMod(SunAzimuthStart + SunAzimuthSweep * (float)(seconds / DayNightClock.CycleSeconds), 360f);
 
+    /// <summary>The night factor the bioluminescent flora uses. A performance
+    /// run can force it to one so the night-time path is measured.</summary>
+    private float NightFactor()
+    {
+        if (System.Environment.GetEnvironmentVariable("VIVARIUM_FORCE_NIGHT") == "1") return 1f;
+        return NightFloraMaterials.NightFactorAtSeconds(Clock.Seconds);
+    }
+
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("Environment");
         ApplyDayNight();
-        NightFloraMaterials.SetNightFactor(NightFloraMaterials.NightFactorAtSeconds(Clock.Seconds));
+        NightFloraMaterials.SetNightFactor(NightFactor());
         // quick crossfade so the medium change is visible but not jarring
         _underwater = Mathf.MoveToward(_underwater, _underwaterTarget, (float)delta * 5f);
         _underwaterRect.Visible = _underwater > 0.01f;

@@ -1,0 +1,110 @@
+{
+  "id": "hollowcrown",
+  "name": "Hollowcrown",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Veteran shade tree of moist, sheltered ground, hollowed and pollarded.",
+  "description": "A furrowed, buttressed bole stands open like a door, its dark cavity lined with lit moss, while a few cut-back limbs throw a tight crown of epicormic shoots.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.2
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.64,
+      "tolerance": 0.26
+    },
+    "light": {
+      "optimum": 0.42,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.56,
+      "tolerance": 0.36
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.26,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.028,
+    "maxBiomass": 16.0,
+    "initialBiomass": 0.2,
+    "declinePerDay": 0.03,
+    "maturityDays": 70,
+    "lifespanDays": 2400,
+    "nutrientPerBiomass": 0.26,
+    "radiusAtMax": 1.55,
+    "minRadius": 0.22
+  },
+  "spread": {
+    "intervalDays": 40,
+    "radius": 1.5,
+    "propagules": 2,
+    "minBiomassFraction": 0.7
+  },
+  "competition": {
+    "radius": 1.9,
+    "crowdingLimit": 1.6,
+    "sensitivity": 0.3
+  },
+  "proximity": [],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "tree",
+    "canopyRadius": 1.7,
+    "shadeOpacity": 0.62,
+    "minSpacing": 1.5
+  },
+  "postLife": {
+    "standingDays": 420,
+    "collapseDays": 90,
+    "fallenDays": 260,
+    "advancedDays": 30,
+    "coarseFraction": 0.55,
+    "decayHalfLifeMultiplier": 1.35,
+    "standingRetention": 0.9,
+    "deadColor": [
+      0.68,
+      0.62,
+      0.5
+    ],
+    "litterColorInfluence": 0.8,
+    "dryBleach": 0.24,
+    "wetDarken": 0.24
+  },
+  "visual": {
+    "shape": "hollowcrown_tree",
+    "color": [
+      0.15,
+      0.26,
+      0.14
+    ],
+    "color2": [
+      0.42,
+      0.5,
+      0.26
+    ],
+    "colorVariance": 0.07,
+    "height": 4.4,
+    "bioluminescenceColor": [
+      0.34,
+      1.0,
+      0.52
+    ],
+    "bioluminescenceStrength": 1.5
+  },
+  "tags": [
+    "plant",
+    "tree",
+    "veteran",
+    "hollow",
+    "shade"
+  ]
+}

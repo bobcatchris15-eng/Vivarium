@@ -1,0 +1,88 @@
+{
+  "id": "bonecup",
+  "name": "Bonecup",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Wood-decaying cup fungus of damp, shaded litter.",
+  "description": "A pale lobed cushion on rotting wood carries a crowd of alabaster cups, each one holding a still disc of dark fluid that never spills.",
+  "habitat": {
+    "substrates": {
+      "wood": 1,
+      "soil": 0.45
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.74,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.26,
+      "tolerance": 0.24
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.36
+    },
+    "feeds": "detritus",
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.42,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.24,
+    "maxBiomass": 0.55,
+    "initialBiomass": 0.03,
+    "declinePerDay": 0.42,
+    "maturityDays": 14,
+    "lifespanDays": 46,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.16,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.22,
+    "propagules": 6,
+    "minBiomassFraction": 0.4
+  },
+  "competition": {
+    "radius": 0.14,
+    "crowdingLimit": 4.0,
+    "sensitivity": 0.4
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.9,
+      "bonus": 0.35
+    }
+  ],
+  "litterFraction": 0.5,
+  "sheddingPerDay": 0.01,
+  "grazingValue": 0.02,
+  "visual": {
+    "shape": "bonecup_fungus",
+    "color": [
+      0.88,
+      0.82,
+      0.76
+    ],
+    "color2": [
+      0.64,
+      0.13,
+      0.15
+    ],
+    "colorVariance": 0.06,
+    "height": 0.075
+  },
+  "tags": [
+    "fungus",
+    "decomposer",
+    "wood",
+    "saprotroph"
+  ]
+}

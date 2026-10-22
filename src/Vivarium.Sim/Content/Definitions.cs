@@ -128,22 +128,78 @@ public sealed class ClimberDef
 {
     /// <summary>Radius (m) within which a searching tip can bias growth toward a support. Sensing never teleports growth.</summary>
     public double SearchRadius { get; init; }
-    /// <summary>Horizontal runner extension in metres per biological second.</summary>
+    /// <summary>Stem extension rate in metres per biological second, measured along the stem.</summary>
     public double GroundSpeed { get; init; }
     /// <summary>Persistent stem-node spacing in metres.</summary>
     public double SegmentLength { get; init; }
     /// <summary>Physical contact distance at which a searching tip attaches to a support.</summary>
     public double AttachmentRadius { get; init; }
-    /// <summary>Chance that the parent remains an active tip after budding, producing a branch.</summary>
-    public double BranchChance { get; init; }
     /// <summary>Maximum lineage length that may be produced without finding a support.</summary>
     public double MaxUnsupportedLength { get; init; }
     /// <summary>Visual vertical-growth multiplier once attached.</summary>
     public double VerticalGrowthMultiplier { get; init; } = 1;
-    /// <summary>Maximum persistent stem nodes of this climber species in one world.</summary>
+    /// <summary>Maximum persistent stem nodes of this climber species in one world, per plant.</summary>
     public int NodeCap { get; init; } = 96;
+    /// <summary>
+    /// Maximum living plants of this climber species in the world. A species is not a lawn: a few well
+    /// established vines and a little litter of seedlings is what a habitat carries.
+    /// </summary>
+    public int PopulationCap { get; init; } = 10;
     /// <summary>Allowed support classes: woody, log, rock.</summary>
     public HashSet<string> SupportTypes { get; init; } = new(StringComparer.Ordinal);
+
+    // --- surface-bound growth law -------------------------------------------------
+    // The species supplies weights and a circumnutation; the host surface supplies the geometry.
+    // See ClimberGrowth for the derivation.
+
+    /// <summary>Weight of the climb direction (the host's axis, or world up on open ground) in the heading.</summary>
+    public double ClimbWeight { get; init; } = 1;
+    /// <summary>
+    /// Weight of the shoot's transported lateral reference. This is the twining and spreading term: on a round
+    /// host the transported frame rotates, so a non-zero weight makes the shoot wind around it. Negative winds
+    /// the other way.
+    /// </summary>
+    public double DriftWeight { get; init; } = 0.4;
+    /// <summary>Weight of the light the shoot seeks.</summary>
+    public double LightWeight { get; init; } = 0.5;
+    /// <summary>Circumnutation amplitude in radians: how far the heading swings inside the surface.</summary>
+    public double WanderAmp { get; init; } = 0.5;
+    /// <summary>Circumnutation wavelength along the stem, in metres.</summary>
+    public double WanderPeriod { get; init; } = 1.2;
+    /// <summary>Chance per internode that the shoot throws a lateral shoot from the node it just made.</summary>
+    public double BranchRate { get; init; } = 0.08;
+    public double BranchChance => BranchRate;
+    /// <summary>Angle between a lateral shoot and the parent stem, in degrees.</summary>
+    public double BranchAngle { get; init; } = 55;
+    /// <summary>Lateral shoot growth rate relative to the leader (apical dominance).</summary>
+    public double LateralSpeed { get; init; } = 0.45;
+    /// <summary>
+    /// Climb direction of a lateral shoot relative to the leader. Negative makes the lateral hang (a drooping
+    /// swag), positive makes it climb with the leader.
+    /// </summary>
+    public double LateralClimb { get; init; } = 0.4;
+    /// <summary>Maximum branch generation. 0 disables branching entirely.</summary>
+    public int MaxBranchOrder { get; init; } = 2;
+    /// <summary>Maximum length of a single lateral shoot, in metres. Keeps side shoots from eating the node budget.</summary>
+    public double BranchLength { get; init; } = 1.2;
+    /// <summary>Stem radius at the base of the plant, in metres. This is also the cap: no node is ever thicker.</summary>
+    public double BaseRadius { get; init; } = 0.03;
+    /// <summary>Per-metre falloff of the stem radius from base to tip.</summary>
+    public double StemTaper { get; init; } = 0.9;
+    /// <summary>
+    /// The thinnest the stem may get, in metres. Without it the taper would drive the tip to nothing on a long
+    /// shoot, and it is the one bound of the radius that is not free to scale with the plant.
+    /// </summary>
+    public double TipRadius { get; init; } = 0.0015;
+    /// <summary>How close a shoot must come to a host before it grabs it, in metres.</summary>
+    public double GrabRadius { get; init; } = 0.06;
+    /// <summary>How eagerly the shoot turns toward the nearest host while searching, 0..1.</summary>
+    public double SeekRate { get; init; } = 0.6;
+    /// <summary>
+    /// How far a runner travels over the ground before it roots and starts a plant of its own. This is how a
+    /// creeping vine spreads through a habitat: it does not seed into the air, it walks.
+    /// </summary>
+    public double StolonLength { get; init; } = 1.2;
 }
 
 public sealed class DecomposerProfileDef

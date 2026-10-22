@@ -25,38 +25,38 @@
       "tolerance": 2
     },
     "nutrients": {
-      "optimum": 0.12,
-      "tolerance": 0.15
+      "optimum": 0.22,
+      "tolerance": 0.16
     },
     "maxWaterDepth": 0,
-    "hardMinMoisture": 0.34,
-    "minSuitability": 0.2
+    "hardMinMoisture": 0.38,
+    "minSuitability": 0.24
   },
   "growth": {
-    "ratePerDay": 1.15,
+    "ratePerDay": 1.0,
     "maxBiomass": 0.42,
     "initialBiomass": 0.035,
     "declinePerDay": 0.85,
     "maturityDays": 0.8,
     "lifespanDays": 4.5,
-    "nutrientPerBiomass": 0.55,
+    "nutrientPerBiomass": 0.65,
     "radiusAtMax": 0.19,
     "minRadius": 0.04
   },
   "spread": {
-    "intervalDays": 2.5,
-    "radius": 0.85,
-    "propagules": 3,
+    "intervalDays": 3.2,
+    "radius": 0.75,
+    "propagules": 2,
     "minBiomassFraction": 0.58
   },
   "competition": {
-    "radius": 0.22,
-    "crowdingLimit": 2.2,
-    "sensitivity": 0.45
+    "radius": 0.24,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.6
   },
   "proximity": [],
-  "litterFraction": 0.98,
-  "sheddingPerDay": 0.08,
+  "litterFraction": 0.82,
+  "sheddingPerDay": 0.04,
   "grazingValue": 0.65,
   "visual": {
     "shape": "carrion_bell",

@@ -1,0 +1,88 @@
+{
+  "id": "silverweed",
+  "name": "Silverweed",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Submerged meadow plant of flowing, well-oxygenated water.",
+  "description": "A creeping stolon on the bed throws up jointed stems that carry whorls of narrow ribbon leaves fringed with fine silver threads.",
+  "habitat": {
+    "substrates": {
+      "water": 1,
+      "soil": 0.6,
+      "gravel": 0.35
+    },
+    "refuseSubstrates": [
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.12
+    },
+    "light": {
+      "optimum": 0.46,
+      "tolerance": 0.34
+    },
+    "nutrients": {
+      "optimum": 0.42,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 1.1,
+    "minWaterDepth": 0.1,
+    "hardMinMoisture": 0.94,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.34,
+    "maxBiomass": 1.1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.3,
+    "maturityDays": 9,
+    "lifespanDays": 150,
+    "nutrientPerBiomass": 0.26,
+    "radiusAtMax": 0.34,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.36,
+    "propagules": 3,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.26,
+    "crowdingLimit": 3.0,
+    "sensitivity": 0.45
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.6,
+      "bonus": 0.3
+    }
+  ],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0.3,
+  "visual": {
+    "shape": "submerged_whorl",
+    "color": [
+      0.1,
+      0.3,
+      0.24
+    ],
+    "color2": [
+      0.44,
+      0.68,
+      0.52
+    ],
+    "colorVariance": 0.06,
+    "height": 0.25
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "submerged",
+    "rheophyte"
+  ]
+}

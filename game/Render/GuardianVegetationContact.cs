@@ -56,6 +56,11 @@ public partial class GuardianVegetationContact : Node
     private readonly Dictionary<(int,int),UInt128> _stemCells=new();
     /// <summary>Half-width of the stem index margin: the largest stem radius plus the largest contact radius.</summary>
     private const float StemMargin=.25f;
+    /// <summary>How far the stem index has to reach: the widest stem plus the
+    /// caller's contact radius. The margin follows the caller's own reach
+    /// instead of a fixed guess, so a narrow tail searches a small area.</summary>
+    public float ContactReach { get; set; } = .2f;
+    private float StemExtent => Math.Min(StemMargin, .045f + Math.Max(0f, ContactReach));
     /// <summary>Cell size of the stem index. Finer than the bounds index
     /// because only the plants whose stem stands within reach of the tail can
     /// push it, and their roots are often clustered within centimetres.</summary>
@@ -341,8 +346,9 @@ public partial class GuardianVegetationContact : Node
             // The stem stands at the plant's root, not at the centre of its
             // bounds, so it gets its own index.
             var root=plant.Root;
-            int sx0=(int)MathF.Floor((root.X-StemMargin)/StemCell),sx1=(int)MathF.Floor((root.X+StemMargin)/StemCell);
-            int sz0=(int)MathF.Floor((root.Z-StemMargin)/StemCell),sz1=(int)MathF.Floor((root.Z+StemMargin)/StemCell);
+            float stemExtent=StemExtent;
+            int sx0=(int)MathF.Floor((root.X-stemExtent)/StemCell),sx1=(int)MathF.Floor((root.X+stemExtent)/StemCell);
+            int sz0=(int)MathF.Floor((root.Z-stemExtent)/StemCell),sz1=(int)MathF.Floor((root.Z+stemExtent)/StemCell);
             for(int z=sz0;z<=sz1;z++)for(int x=sx0;x<=sx1;x++)_stemCells[(x,z)]=_stemCells.GetValueOrDefault((x,z))|bit;
         }
         _contactIndexDirty=false;
@@ -361,7 +367,7 @@ public partial class GuardianVegetationContact : Node
         // Audit: the original full scan is the reference for the projection.
         Vector3? reference=null;
         if(StemAuditBudget>0){StemAuditBudget--;reference=ResolveAll(point,radius,true);}
-        float extent=StemMargin;
+        float extent=StemExtent;
         int x0=(int)MathF.Floor((point.X-extent)/StemCell),x1=(int)MathF.Floor((point.X+extent)/StemCell);
         int z0=(int)MathF.Floor((point.Z-extent)/StemCell),z1=(int)MathF.Floor((point.Z+extent)/StemCell);
         UInt128 candidates=0;

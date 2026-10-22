@@ -1,0 +1,81 @@
+{
+  "id": "tankbloom",
+  "name": "Tankbloom",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Tank-forming rosette of humid, bright ground.",
+  "description": "A wide rosette of strap leaves sweeps down to the soil and folds inward into a cupped tank that holds a mirror of still water under a scarlet spike of bracts.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.5,
+      "rock": 0.45
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.68,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.74,
+      "tolerance": 0.26
+    },
+    "nutrients": {
+      "optimum": 0.34,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.28,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.18,
+    "maxBiomass": 1.3,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.24,
+    "maturityDays": 26,
+    "lifespanDays": 320,
+    "nutrientPerBiomass": 0.24,
+    "radiusAtMax": 0.52,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 13,
+    "radius": 0.44,
+    "propagules": 3,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.38,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.6
+  },
+  "proximity": [],
+  "litterFraction": 0.84,
+  "sheddingPerDay": 0.012,
+  "grazingValue": 0.25,
+  "visual": {
+    "shape": "tankbloom_bromeliad",
+    "color": [
+      0.19,
+      0.35,
+      0.22
+    ],
+    "color2": [
+      0.52,
+      0.68,
+      0.42
+    ],
+    "colorVariance": 0.06,
+    "height": 0.58
+  },
+  "tags": [
+    "plant",
+    "rosette",
+    "humid",
+    "tank"
+  ]
+}

@@ -37,7 +37,7 @@ public sealed class FloraVisualProfile
     public float Transmission { get; set; } = .28f;
     public float Relief { get; set; } = .48f;
     public float VeinStrength { get; set; } = .4f;
-    public float Wind { get; set; } = .018f;
+    public float Wind { get; set; } = 0f;
     public float TissueScale { get; set; } = 1.6f;
     public float CanopyOcclusion { get; set; } = .15f;
     public float MicroScale { get; set; } = 1f;
@@ -58,7 +58,7 @@ public sealed class FloraVisualProfile
         return p;
     }
 
-    public ShaderMaterial LeafMaterial(bool animated = true)
+    public ShaderMaterial LeafMaterial(bool animated = false)
     {
         var mat = Bridge.Shader("res://Shaders/leaf.gdshader");
         mat.SetShaderParameter("tissue_color", Pool("color"));

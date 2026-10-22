@@ -93,12 +93,15 @@ internal static class FloraSurfaceProfiles
         "fencomb" => new(new(.055f, .14f, .06f), new(.13f, .18f, .085f), 1, .30f, .32f, .42f),
         "veilblade" => new(new(.05f, .20f, .055f), new(.075f, .22f, .06f), 5, .18f, .30f, .34f),
         "kinkcane" => new(new(.055f, .21f, .04f), new(.08f, .23f, .055f), 5, .20f, .30f, .32f),
-        "hookthicket" => new(new(.045f, .175f, .035f), new(.075f, .21f, .05f), 0, .50f, .26f, .34f),
+        "hookthicket" => new(new(.026f, .088f, .052f), new(.092f, .120f, .115f), 0, .48f, .16f, .34f),
         "blue_sundew" => new(new(.055f, .20f, .23f), new(.10f, .23f, .27f), 0, .22f, .48f, .28f),
         "snaptrap" => new(new(.06f, .20f, .042f), new(.09f, .22f, .06f), 0, .35f, .32f, .22f),
         // Plumegrass is a grass: parallel striations, a glaucous blade, and enough
         // transmission to read as a thin sunlit blade rather than a painted card.
         "plumegrass" => new(new(.082f, .112f, .066f), new(.132f, .144f, .090f), 5, .13f, .08f, .28f),
+        // A cycad pinna is firm and leathery, not a soft broad leaf: a hard cuticle, a
+        // single strong midrib and almost no translucency.
+        "vaultfern" => new(new(.030f, .058f, .044f), new(.056f, .080f, .058f), 0, .20f, .26f, .07f),
         _ => new(new(.06f, .17f, .05f), new(.09f, .20f, .06f), 0, .45f, .30f, .28f),
     };
 
@@ -154,7 +157,7 @@ internal static class FloraSurfaceProfiles
         "cragparasol" => ("Bark001", 2.6f, .42f, new(.40f, .34f, .30f)),
         "glowbriar" => ("Bark001", 3.0f, .28f, new(.44f, .38f, .32f)),
         "splitcrown" => ("Bark013", 2.5f, .35f, new(.62f, .64f, .56f)),
-        "vaultfern" => ("Bark013", 3.5f, .20f, new(.38f, .34f, .28f)),
+        "vaultfern" => ("Bark013", 3.2f, .22f, new(.235f, .265f, .262f)),
         "lacemantle" => ("Bark001", 2.8f, .32f, new(.36f, .32f, .29f)),
         "rainshield" => ("Bark014", 2.4f, .25f, new(.48f, .46f, .38f)),
         _ => (Bridge.Surfaces.Bark, 2.5f, .30f, new(.45f, .40f, .35f)),

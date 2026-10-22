@@ -148,16 +148,44 @@ public static class Populate
         }
     }
 
-    /// <summary>Samples in-domain cell centres, scores them, returns descending score order (ties by index).</summary>
+    /// <summary>Set by tests to score the island on one thread. The parallel
+    /// scan must choose exactly the same cells as the sequential one.</summary>
+    public static bool ForceSequentialScoring;
+
     private static List<(Vec2 Pos, double Score)> RankedCells(VivariumWorld w, Rng rng, Func<Vec2, double> score, double minScore)
     {
         var list = new List<(Vec2, double, int)>();
         var cells = w.Grid.DomainCells;
-        for (int k = 0; k < cells.Length; k += 2)
+        int count = (cells.Length + 1) / 2;
+        // A cell's score does not depend on the other cells, so the island is
+        // scored across cores. The random tie-break is still drawn in the
+        // original order, and the sort is the same, so the chosen cells are
+        // the same as before.
+        var scores = new double[count];
+        var positions = new Vec2[count];
+        // The caches the score reads have to be current before the cores
+        // start: a rebuild in the middle of the scan would be a race.
+        w.RootZone.EnsureCurrent();
+        w.Flora.RebuildIndex();
+        w.FloraSystem.PrepareCanopyCaches();
+        if (count >= 256 && !ForceSequentialScoring && System.Environment.ProcessorCount > 1)
+            System.Threading.Tasks.Parallel.For(0, count, i =>
+            {
+                var c = w.Grid.CellCenter(cells[i * 2]);
+                positions[i] = c;
+                scores[i] = score(c);
+            });
+        else
+            for (int i = 0; i < count; i++)
+            {
+                var c = w.Grid.CellCenter(cells[i * 2]);
+                positions[i] = c;
+                scores[i] = score(c);
+            }
+        for (int i = 0; i < count; i++)
         {
-            var c = w.Grid.CellCenter(cells[k]);
-            double s = score(c);
-            if (s >= minScore) list.Add((c, s + rng.NextDouble() * 0.15, cells[k]));
+            double s = scores[i];
+            if (s >= minScore) list.Add((positions[i], s + rng.NextDouble() * 0.15, cells[i * 2]));
         }
         return list.OrderByDescending(x => x.Item2).ThenBy(x => x.Item3).Select(x => (x.Item1, x.Item2)).ToList();
     }

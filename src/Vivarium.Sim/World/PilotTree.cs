@@ -150,6 +150,20 @@ public sealed class PilotTreeState
         foreach(var (key,list) in cells)_rootQueryCells[key]=list.ToArray();
     }
 
+    /// <summary>
+    /// The pilot tree form a descriptor will grow, without growing it. The random
+    /// draw consumes the same stream in the same order as
+    /// <see cref="Generate"/>, so the answer matches the tree the world will
+    /// actually have. Callers use it to prepare for the world before it exists.
+    /// </summary>
+    public static string? SeededPilotTreeFormId(WorldDescriptor descriptor)
+    {
+        if (descriptor.PilotTreeId == "none") return null;
+        if (descriptor.PilotTreeId != "random") return descriptor.PilotTreeId;
+        var rng = Rng.Stream(descriptor.Seed, "world.pilot");
+        return PilotTreeCatalog.All[rng.NextInt(PilotTreeCatalog.All.Count)].Id;
+    }
+
     public static PilotTreeState? Generate(WorldDescriptor descriptor, HexDomain domain, Heightfield terrain)
     {
         if (descriptor.PilotTreeId == "none") return null;

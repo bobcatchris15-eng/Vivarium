@@ -1,0 +1,93 @@
+{
+  "id": "embercup",
+  "name": "Embercup",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Cushion moss of damp stone and rotten wood, ripening lit spore cups.",
+  "description": "A gold-flecked cushion of fine upright shoots hides a scatter of long setae, each carrying an ember-coloured capsule under a pointed hood.",
+  "habitat": {
+    "substrates": {
+      "rock": 0.85,
+      "soil": 0.55,
+      "wood": 0.45
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.76,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.34,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.28,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.34,
+    "minSuitability": 0.22
+  },
+  "growth": {
+    "ratePerDay": 0.14,
+    "maxBiomass": 0.45,
+    "initialBiomass": 0.02,
+    "declinePerDay": 0.2,
+    "maturityDays": 26,
+    "lifespanDays": 180,
+    "nutrientPerBiomass": 0.16,
+    "radiusAtMax": 0.19,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 11,
+    "radius": 0.26,
+    "propagules": 8,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.16,
+    "crowdingLimit": 3.2,
+    "sensitivity": 0.45
+  },
+  "proximity": [
+    {
+      "target": "feature:rock",
+      "radius": 0.7,
+      "bonus": 0.3
+    }
+  ],
+  "litterFraction": 0.6,
+  "sheddingPerDay": 0.008,
+  "grazingValue": 0.02,
+  "visual": {
+    "shape": "embercup_moss",
+    "color": [
+      0.22,
+      0.34,
+      0.16
+    ],
+    "color2": [
+      0.92,
+      0.38,
+      0.14
+    ],
+    "colorVariance": 0.07,
+    "height": 0.15,
+    "bioluminescenceColor": [
+      1.0,
+      0.42,
+      0.12
+    ],
+    "bioluminescenceStrength": 2.0
+  },
+  "tags": [
+    "moss",
+    "cushion",
+    "shade",
+    "sporophyte"
+  ]
+}

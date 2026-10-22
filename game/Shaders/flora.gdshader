@@ -14,7 +14,7 @@ render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/living_leaf_optics.gdshaderinc"
 #include "res://Shaders/leaf_direct_light.gdshaderinc"
 
-uniform float sway = 1.0;
+uniform float sway = 0.0;
 uniform float stiffness = 1.0;
 uniform int surface_mode = 2;
 uniform float ghost_membrane = 0.0; // Species-specific thin fungal membrane lighting, never dewbonnet
@@ -104,9 +104,9 @@ void vertex() {
     VERTEX.xz += branch_sway;
 
     // High-frequency leaf flutter for distal blades (never woody trunks)
-    if (is_leaf) {
+    if (is_leaf && sway > 0.0) {
         float tip = smoothstep(0.1, 0.9, UV.x);
-        float flutter = sin(clock * 4.5 + inst.w * 25.0 + UV.x * 6.0) * (0.008 * tip);
+        float flutter = sin(clock * 4.5 + inst.w * 25.0 + UV.x * 6.0) * (0.008 * tip) * sway;
         VERTEX.y += flutter;
     }
 

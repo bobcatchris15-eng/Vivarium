@@ -1,4 +1,5 @@
 using System;
+using Vivarium.Game.Render;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -382,6 +383,9 @@ public partial class SmokeRunner : Node
         for (int round = 0; round < 2; round++)
         {
             descriptor.Seed = 12345UL + (ulong)round;
+            // The guardian's model is the largest asset in the game; start it
+            // loading while the world is generated.
+            PreloadGuardians.Begin(VivariumWorld.GuardianArchetypeFor(descriptor));
             var gen = System.Diagnostics.Stopwatch.StartNew();
             var world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, descriptor, warmupSurfaceWater: false));
             double generationMs = gen.Elapsed.TotalMilliseconds;
@@ -393,6 +397,7 @@ public partial class SmokeRunner : Node
             {
                 ["round"] = round,
                 ["generation_ms"] = Math.Round(generationMs, 1),
+                ["generation_parts"] = world.CreationTimings,
                 ["stage_total_ms"] = Math.Round(stageTotal, 1),
                 ["stages"] = stages,
                 ["guardian_build"] = Session.Guardian.BuildTimings.ToDictionary(p => p.Key, p => Math.Round(p.Value, 1)),
@@ -582,12 +587,32 @@ _facts["fauna_gpu_allocation"] = new {
             establishedCarpetCells=Session.AmbientGround.LastInfluencedGridCells,
             exactPlantExclusionCandidates=Session.AmbientGround.LastFloraExclusionCandidateChecks,
         };
+        _facts["environment_tick"] = new {
+            moisture_ms = W.EnvironmentMoistureMs,
+            habitat_ms = W.EnvironmentHabitatMs,
+            nutrients_ms = W.EnvironmentNutrientsMs,
+            light_ms = W.EnvironmentLightMs,
+            worst_moisture_ms = W.WorstEnvironmentMoistureMs,
+            worst_habitat_ms = W.WorstEnvironmentHabitatMs,
+            worst_nutrients_ms = W.WorstEnvironmentNutrientsMs,
+            worst_light_ms = W.WorstEnvironmentLightMs,
+            light_surface_ms = W.Fields.LastLightSurfaceMs,
+            light_horizon_ms = W.Fields.LastLightHorizonMs,
+            light_cells = W.Fields.LastLightCells
+        };
         _facts["flora_renderer"] = new {
             ready=Session.Flora.PopulationReady,
             legacySpecies=Session.Flora.LoadedSpeciesCount,
             shadebellLegacyLayer=Session.Flora.HasLegacyLayer("shadebell"),
             authoredShadebell=false,
             luminousLights=Session.Flora.LuminousLightCount,
+            waterTiles=Session.WaterFluid.TileCount,
+            waterTilesUploaded=Session.WaterFluid.TilesUploaded,
+            waterTilesCulled=Session.WaterFluid.TilesCulled,
+            waterTilesResynced=Session.WaterFluid.TilesResynced,
+            luminousSnapshot=Session.Flora.LuminousLightSnapshotCount,
+            luminousActive=Session.Flora.LuminousLightActiveCount,
+            luminousNightFactor=Session.Flora.LuminousNightFactor,
             floraVisible=Session.Flora.Visible_,
             trianglesDrawn=Session.Flora.TrianglesDrawn
         };
@@ -595,7 +620,12 @@ _facts["fauna_gpu_allocation"] = new {
             refreshes = Session.Flora.LuminousLightCacheAuditRefreshes,
             lights = Session.Flora.LuminousLightCacheAuditLights,
             pairs = Session.Flora.LuminousLightCacheAuditPairs,
-            overlap_error = Session.Flora.MaximumLuminousLightCacheAuditError
+            overlap_error = Session.Flora.MaximumLuminousLightCacheAuditError,
+            cells_visited = Session.Flora.LuminousOverlapCellsVisited,
+            cells_skipped = Session.Flora.LuminousOverlapCellsSkipped,
+            pairs_examined = Session.Flora.LuminousOverlapPairsExamined,
+            refresh_count = Session.Flora.LuminousOverlapRefreshes,
+            overlap_total_ms = Session.Flora.LuminousOverlapTotalMs
         };
         if (allFrames.Count > 0)
         {

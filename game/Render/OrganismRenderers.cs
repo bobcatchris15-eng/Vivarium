@@ -24,7 +24,7 @@ public partial class FloraRenderer : Node3D
     private const int MigratedMorphVariants = 12;
     private static int MorphVariantsFor(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate" or "vine_clinglace" or "vine_spiralvine" or "vine_fenhook"
         ? MigratedMorphVariants : DefaultMorphVariants;
-    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Juvenile; public int FullTris, FruitTris, JuvenileTris; public bool CanCastShadow; }
+    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Juvenile, Tendril; public int FullTris, FruitTris, JuvenileTris, TendrilTris; public bool CanCastShadow; }
     private sealed class Layer
     {
         public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris;
@@ -99,7 +99,19 @@ public partial class FloraRenderer : Node3D
     public int LuminousLightCacheAuditLights { get; private set; }
     public long LuminousLightCacheAuditPairs { get; private set; }
     public float MaximumLuminousLightCacheAuditError { get; private set; }
+    /// <summary>How much of the overlap work the cell-level skip removed.
+    /// A measurement only: the overlap value is the same either way.</summary>
+    public long LuminousOverlapCellsVisited { get; private set; }
+    public long LuminousOverlapCellsSkipped { get; private set; }
+    public long LuminousOverlapPairsExamined { get; private set; }
+    public long LuminousOverlapRefreshes { get; private set; }
+    /// <summary>Total time spent in the overlap loop over the run.</summary>
+    public double LuminousOverlapTotalMs { get; private set; }
     public int LuminousLightCount=>_luminousLights.Values.Count(l=>l.Visible);
+    /// <summary>Diagnostics for the luminous light update.</summary>
+    public int LuminousLightSnapshotCount { get; private set; }
+    public int LuminousLightActiveCount { get; private set; }
+    public float LuminousNightFactor { get; private set; }
     /// <summary>All currently present species are built and one complete instance refresh has been uploaded.</summary>
     public bool PopulationReady { get; private set; }
     public int LoadedSpeciesCount => _layers.Count;
@@ -142,7 +154,7 @@ public int Quality
         _luminousLights.Clear();
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
         _pooledBuffers.Clear(); _prevPlantStates.Clear(); DirtyRegions.Clear();
-        _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear();
+        _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear(); _tendrils.Clear();
         _visualTiers.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
         PopulationReady = false;
@@ -276,16 +288,17 @@ public int Quality
         mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
         mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
         mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
-        if (sp.Archetype == "fungus") mat.SetShaderParameter("sway", 0.0f);
+        mat.SetShaderParameter("sway", 0.0f);
         Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
         FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
-        var leafMat = profile?.LeafMaterial();
+        var leafMat = profile?.LeafMaterial(animated: false);
         if (leafMat != null) NightFloraMaterials.Bind(leafMat, sp);
         if (profile != null)
         {
             Bridge.BindSurface(mat, "bark", profile.Bark);
             mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0], profile.BarkTint[1], profile.BarkTint[2]));
             leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
+            leafMat.SetShaderParameter("wind_strength", 0.0f);
         }
         var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
         ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
@@ -351,6 +364,17 @@ public int Quality
                         GD.Print($"FLORA_PUBLISH_SLOW species={sp.Id} variant={v} organ=young ms={juvenileMs:0.0} verts={young.VertexCount}");
                     yield return true;
                 }
+                if (sp.Climber != null)
+                {
+                    // The growing tip of every shoot: a thin tendril rather than a leaf cluster.
+                    uploadStart = Stopwatch.GetTimestamp();
+                    ulong tipSeed = Rng.Mix(speciesSeed, (ulong)((v % layer.MorphCount) + 1) * 0x9E3779B97F4A7C15UL);
+                    var tip = OrganismMeshes.ClimberNodeTipTier(sp, tipSeed, v / layer.MorphCount);
+                    vl.Tendril = MakeMmi($"Flora_{sp.Id}_{v}_tendril", Bridge.ToArrayMesh(tip, mat));
+                    vl.TendrilTris = tip.TriangleCount;
+                    AddChild(vl.Tendril); build.Nodes.Add(vl.Tendril);
+                    yield return true;
+                }
                 if (prepared.Fruit is { } fruit)
                 {
                     uploadStart=Stopwatch.GetTimestamp();
@@ -372,13 +396,31 @@ public int Quality
                 // Persistent links joining each network node to the node it grew from (plasmodial veins or climber stems).
                 var vein = new MeshData();
                 var col = Primitives.Mix(sp.Color, sp.Color2, 0.3);
-                // a slightly arched, pinched tube: thinner at mid-length like a real plasmodial vein
                 var vpath = new List<Vec3>(); var vrad = new List<double>();
-                for (int i = 0; i <= 8; i++)
+                if (sp.Climber is { } climber)
                 {
-                    double t = i / 8.0;
-                    vpath.Add(new Vec3(-0.02 + 1.04 * t, sp.Climber != null ? 0.008 * Math.Sin(Math.PI * t) : 0.1 * Math.Sin(Math.PI * t), 0));
-                    vrad.Add(sp.Climber != null ? 0.85 : 0.75 + 0.25 * Math.Cos(t * 2 * Math.PI));
+                    // A climber's stem is a tapering tube whose radius ratio across one internode is the species'
+                    // stem taper, so consecutive internodes meet without a step and the stem reads as one stem.
+                    // The tube overlaps its neighbours a little so their end caps stay buried inside the stem.
+                    // Four rings is all a straight internode needs: the taper is gentle and the stem is long.
+                    double ratio = Math.Pow(climber.StemTaper, climber.SegmentLength);
+                    const double overlap = 0.10;
+                    for (int i = 0; i <= 3; i++)
+                    {
+                        double x = -overlap + (1.0 + 2 * overlap) * (i / 3.0);
+                        vpath.Add(new Vec3(x, 0, 0));
+                        vrad.Add(Math.Pow(ratio, x));
+                    }
+                }
+                else
+                {
+                    // a slightly arched, pinched tube: thinner at mid-length like a real plasmodial vein
+                    for (int i = 0; i <= 8; i++)
+                    {
+                        double t = i / 8.0;
+                        vpath.Add(new Vec3(-0.02 + 1.04 * t, 0.1 * Math.Sin(Math.PI * t), 0));
+                        vrad.Add(0.75 + 0.25 * Math.Cos(t * 2 * Math.PI));
+                    }
                 }
                 Primitives.Tube(vein, vpath, vrad, 6, (i, v) => (col, 1, i, v, 0, 0));
                 layer.Veins = MakeMmi($"Flora_{sp.Id}_veins", Bridge.ToArrayMesh(vein, mat));
@@ -488,7 +530,7 @@ public int Quality
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
     }
 
-    private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _juvenile = new(), _veins = new();
+    private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _juvenile = new(), _veins = new(), _tendrils = new();
 
     /// <summary>
     /// Where a climber or bracket attaches: the nearest log or rock (sim angle toward it from p, its top height,
@@ -642,6 +684,7 @@ public int Quality
                 var fl = Get(_full, mk); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
                 var fr = Get(_fruit, mk); fr.T.Clear(); fr.Tint.Clear(); fr.C.Clear();
                 var ju = Get(_juvenile, mk); ju.T.Clear(); ju.Tint.Clear(); ju.C.Clear();
+                var td = Get(_tendrils, mk); td.T.Clear(); td.Tint.Clear(); td.C.Clear();
             }
         int visible = 0;
         long triangles = 0;
@@ -715,10 +758,23 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             }
             if (sp.Climber != null && f.ClimberSegments is { Count: > 1 } segs)
             {
-                // Multi-segment climber: each node is rendered at its exact 3D position and orientation
+                // Multi-segment climber: the stem is drawn as one tapering tube in the vein layer, and the
+                // foliage sits on the nodes. Leaves are spaced along the shoot the way they are on a real one,
+                // rather than on every internode, and the growing tip of each shoot is a bare tendril.
                 var cTint = f.Tint;
                 int cTier = VisualTier(f.Id, pos, (float)Math.Max(h, 0.3), (float)Math.Max(r, 0.3));
                 int cVariant = (int)((hash >> 8) % (ulong)_layers[sp.Id].MorphCount) + cTier * _layers[sp.Id].MorphCount;
+                float leafSpacing = (float)Math.Max(0.11, sp.Climber!.SegmentLength * 3.0);
+                var lastLeaf = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+
+                // A node with no child is the growing tip of its shoot.
+                bool[] hasChild = new bool[segs.Count];
+                for (int s = 0; s < segs.Count; s++)
+                {
+                    int p = segs[s].ParentIndex;
+                    if (p >= 0 && p < segs.Count) hasChild[p] = true;
+                }
+
                 for (int s = 0; s < segs.Count; s++)
                 {
                     var seg = segs[s];
@@ -729,18 +785,22 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                     var nrm = new Vector3((float)seg.Normal.X, (float)seg.Normal.Y, (float)seg.Normal.Z);
                     if (fwd.LengthSquared() < 1e-6f) fwd = Vector3.Up; else fwd = fwd.Normalized();
                     if (nrm.LengthSquared() < 1e-6f) nrm = Vector3.Forward; else nrm = nrm.Normalized();
-                    var side = fwd.Cross(nrm);
-                    if (side.LengthSquared() < 1e-6f) side = fwd.Cross(Vector3.Up);
-                    if (side.LengthSquared() < 1e-6f) side = fwd.Cross(Vector3.Right);
-                    side = side.Normalized();
-                    var orthoNrm = side.Cross(fwd).Normalized();
-                    // Mesh X = side, Mesh Y = fwd (along stem), Mesh Z = orthoNrm (outward from host)
-                    var nodeBasis = new Basis(side, fwd, orthoNrm);
+                    // The foliage always sits on the upper side of the stem, whatever the stem is doing: a shoot
+                    // spiralling round a trunk still carries its leaves on top of it.
+                    ClimberGrowth.StemFrame(new Vec3(fwd.X, fwd.Y, fwd.Z), new Vec3(nrm.X, nrm.Y, nrm.Z), out var sideV, out var upV);
+                    var side = new Vector3((float)sideV.X, (float)sideV.Y, (float)sideV.Z);
+                    var up = new Vector3((float)upV.X, (float)upV.Y, (float)upV.Z);
+                    // Mesh X = side (across the stem), Mesh Y = fwd (along the stem), Mesh Z = up (upper side)
+                    var nodeBasis = new Basis(side, fwd, up);
 
-                    float nodeScale = 1.0f;
-                    var nodeT = new Transform3D(nodeBasis.Scaled(new Vector3(nodeScale, nodeScale, nodeScale)), nodePos);
-                    var nodeBucket = seg.Attached ? _full : _juvenile;
-                    var nodeBd = Get(nodeBucket, MorphKey(sp.Id, cVariant));
+                    bool growingTip = !hasChild[s];
+                    if (!growingTip && nodePos.DistanceTo(lastLeaf) < leafSpacing) continue;
+                    if (!growingTip) lastLeaf = nodePos;
+
+                    var nodeT = new Transform3D(nodeBasis, nodePos);
+                    var nodeBd = growingTip
+                        ? Get(_tendrils, MorphKey(sp.Id, cVariant))
+                        : Get(seg.Attached ? _full : _juvenile, MorphKey(sp.Id, cVariant));
                     nodeBd.T.Add(nodeT);
                     nodeBd.Tint.Add(cTint);
                     nodeBd.C.Add(new Color((hash % 1000) / 1000f, (float)f.Health, 0, ((hash >> 12) % 1000) / 1000f));
@@ -899,7 +959,10 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                         var segD = pB - pA;
                         if (segD.Length() < 1e-4f) continue;
                         float cFrac = (float)Math.Sqrt(f.BiomassFraction(vsp));
-                        float cThick = (0.0028f + 0.0048f * cFrac) * (seg.Senescent ? 0.6f : 1.0f);
+                        // A climber's stem carries its own radius: it tapers from the base of the plant to the
+                        // growing tip and thickens as the plant ages.
+                        float cThick = (float)pSeg.Radius * (seg.Senescent ? 0.6f : 1.0f);
+                        if (cThick <= 0f) cThick = (0.0028f + 0.0048f * cFrac) * (seg.Senescent ? 0.6f : 1.0f);
                         var cXAxis = segD;
                         var norm = new Vector3((float)seg.Normal.X, (float)seg.Normal.Y, (float)seg.Normal.Z);
                         if (norm.LengthSquared() < 1e-6f) norm = Vector3.Up; else norm = norm.Normalized();
@@ -942,9 +1005,11 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                 Fill(vl.Full.Multimesh, Get(_full, mk));
                 if (vl.Fruit != null) Fill(vl.Fruit.Multimesh, Get(_fruit, mk));
                 if (vl.Juvenile != null) Fill(vl.Juvenile.Multimesh, Get(_juvenile, mk));
+                if (vl.Tendril != null) Fill(vl.Tendril.Multimesh, Get(_tendrils, mk));
                 triangles += (long)vl.Full.Multimesh.VisibleInstanceCount * vl.FullTris
                     + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.VisibleInstanceCount * vl.FruitTris : 0)
-                    + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.VisibleInstanceCount * vl.JuvenileTris : 0);
+                    + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.VisibleInstanceCount * vl.JuvenileTris : 0)
+                    + (vl.Tendril != null ? (long)vl.Tendril.Multimesh.VisibleInstanceCount * vl.TendrilTris : 0);
             }
         Visible_ = visible; TrianglesDrawn = triangles;
         PopulationReady = _build == null &&
@@ -958,15 +1023,21 @@ if (!_layers.ContainsKey(sp.Id)) continue;
     {
         using var lightsProfile=FrameProfiler.Measure("Flora.Lights");
         if(Camera==null)return;
+        var lightTimer=System.Diagnostics.Stopwatch.GetTimestamp();
         var planes=Camera.GetFrustum();var frustum=new Plane[planes.Count];
         for(int i=0;i<planes.Count;i++)frustum[i]=planes[i];
         var present=new HashSet<EntityId>();
         var active=new List<(OmniLight3D Light,float Energy,Vector3 Position,float Range)>();
+        // In daylight every one of these lights is invisible, so moving them and
+        // re-energising them is work nobody can see. The state is refreshed when
+        // night falls.
+        bool night=NightFloraMaterials.CurrentNightFactor>0.00001f;
         foreach(var f in _snapshot)
         {
             var sp=_w.Content.FloraOrThrow(f.SpeciesId);
             if(sp.BioluminescenceStrength<=0||sp.BioluminescenceColor is not {Length:>=3}||_w.Flora.Get(f.Id)==null)continue;
             present.Add(f.Id);
+            if(!night)continue;
             var pos=new Vector3((float)f.X,(float)_w.GroundHeight(f.Position),(float)f.Z);
             float radius=(float)f.Radius(sp),height=(float)(sp.Height*(.45+.55*Math.Sqrt(f.BiomassFraction(sp))));
             bool visible=FloraVisible(frustum,pos,radius,height);
@@ -997,8 +1068,19 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         bool audit=active.Count>0 && LuminousLightCacheAuditRefreshes<2 &&
             Array.IndexOf(Main.UserArgs,"--flora-light-cache-audit")>=0;
         var neighbourhood=new Dictionary<(int,int,int),List<int>>();
+        // Flat copies of the light state for the pair loop. The overlap runs
+        // over millions of pairs in a mature world, and copying the light
+        // record for each pair cost more than the arithmetic did.
+        var positions=new Vector3[active.Count];var rangeSquares=new float[active.Count];
+        // The widest light in each cell. A cell whose nearest point is already
+        // further away than that cannot hold a light within reach, so the cell
+        // is skipped whole instead of light by light.
+        var cellReach=new Dictionary<(int,int,int),float>();
         for(int i=0;i<active.Count;i++)
         {var p=active[i].Position;var key=((int)MathF.Floor(p.X),(int)MathF.Floor(p.Y),(int)MathF.Floor(p.Z));
+           positions[i]=p;float r=active[i].Range;rangeSquares[i]=r*r;
+           cellReach.TryGetValue(key,out float widest);
+           if(r>widest)cellReach[key]=r;
             if(audit)
             {
                 var native=active[i].Light.Position;
@@ -1016,8 +1098,22 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             int x=(int)MathF.Floor(p.X),y=(int)MathF.Floor(p.Y),z=(int)MathF.Floor(p.Z);
             for(int dz=-1;dz<=1;dz++)for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
             {if(!neighbourhood.TryGetValue((x+dx,y+dy,z+dz),out var bucket))continue;
-                foreach(int j in bucket){if(i==j)continue;var other=active[j];
-                    float q=1-p.DistanceSquaredTo(other.Position)/(other.Range*other.Range);if(q>0)overlap+=q*q;}}
+                if(audit)LuminousOverlapCellsVisited++;
+                if(cellReach.TryGetValue((x+dx,y+dy,z+dz),out float widest))
+                {
+                    // The nearest point of this cell to the light.
+                    float mx=MathF.Max(MathF.Max(x+dx-p.X,p.X-(x+dx+1)),0);
+                    float my=MathF.Max(MathF.Max(y+dy-p.Y,p.Y-(y+dy+1)),0);
+                    float mz=MathF.Max(MathF.Max(z+dz-p.Z,p.Z-(z+dz+1)),0);
+                    if(mx*mx+my*my+mz*mz>=widest*widest){if(audit)LuminousOverlapCellsSkipped++;continue;}
+                }
+                foreach(int j in bucket){if(i==j)continue;
+                    if(audit)LuminousOverlapPairsExamined++;
+                    float d2=p.DistanceSquaredTo(positions[j]);
+                    // A neighbour further away than its own reach contributes
+                    // nothing, and the division is the expensive part.
+                    if(d2>=rangeSquares[j])continue;
+                    float q=1-d2/rangeSquares[j];overlap+=q*q;}}
             if(audit)
             {
                 // Original native-read overlap, same bins/traversal/arithmetic.
@@ -1037,6 +1133,11 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             NightFloraMaterials.RegisterLight(a.Light,a.Energy/overlap);
         }
         if(audit)LuminousLightCacheAuditRefreshes++;
+        LuminousOverlapRefreshes++;
+        LuminousOverlapTotalMs+=System.Diagnostics.Stopwatch.GetElapsedTime(lightTimer).TotalMilliseconds;
+        LuminousLightSnapshotCount=_snapshot.Count;
+        LuminousLightActiveCount=active.Count;
+        LuminousNightFactor=NightFloraMaterials.CurrentNightFactor;
     }
 
     /// <summary>Geometric tier (0 near .. 2 far) from the projected bounding-sphere diameter, with hysteresis.

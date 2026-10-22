@@ -1,0 +1,81 @@
+{
+  "id": "starbulb",
+  "name": "Starbulb",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Bulb plant of dry open ground, flowering on a leafless scape.",
+  "description": "A gold-papery bulb half buried in grit throws a rosette of glaucous strap leaves and a bare stalk crowned by a globe of pale blue stars.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.78,
+      "rock": 0.35
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.28,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.78,
+      "tolerance": 0.26
+    },
+    "nutrients": {
+      "optimum": 0.26,
+      "tolerance": 0.26
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.1,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.2,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.24,
+    "maturityDays": 24,
+    "lifespanDays": 300,
+    "nutrientPerBiomass": 0.22,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 12,
+    "radius": 0.42,
+    "propagules": 3,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.24,
+    "crowdingLimit": 2.6,
+    "sensitivity": 0.62
+  },
+  "proximity": [],
+  "litterFraction": 0.86,
+  "sheddingPerDay": 0.012,
+  "grazingValue": 0.35,
+  "visual": {
+    "shape": "starbulb_umbel",
+    "color": [
+      0.24,
+      0.4,
+      0.26
+    ],
+    "color2": [
+      0.64,
+      0.78,
+      0.64
+    ],
+    "colorVariance": 0.05,
+    "height": 0.62
+  },
+  "tags": [
+    "plant",
+    "bulb",
+    "dry",
+    "flowers"
+  ]
+}

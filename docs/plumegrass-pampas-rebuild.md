@@ -102,16 +102,14 @@ A young plant (`--juvenile`) opens only its first two steps and two culms.
 | Tier | Triangles |
 |---|---|
 | authored | 40 588 |
-| tier 0 (game) | 43 302 |
-| tier 1 | 22 890 |
-| tier 2 | 7 794 |
+| tier 0 (game) | 55 708 |
+| tier 1 | 30 632 |
+| tier 2 | 9 962 |
 
 The plume's near read is its filaments — a pampas panicle is thousands of fine vanes and stigmas,
-and at the default 30,000 cap the near tier strips them back until the ladder of plumes reads as a
-sparse starburst instead of a soft feather. The species therefore asks for a richer near-field
-mesh through the per-species cap mechanism, `OrganismMeshes.FloraTopTriangleCapFor("plumegrass") =
-44000`, alongside `trifold` (40,000), `coinrunner` (36,000) and `veilfern` (52,000). The extra
-triangles are only paid for by the instances the camera is close to.
+and at a tight budget the near tier strips them back until the ladder of plumes reads as a sparse
+starburst instead of a soft feather. The species therefore needs a rich near-field mesh; it sits
+well inside the flora system's top-tier budget and does not need a per-species cap.
 
 The plume's whorls, branchlets and stigmas all scale with `m.Lod`, so the LOD tierer can strip the
 filament detail down rather than the whole plant, and tier 2 still reads as a chromatic ladder.
@@ -126,7 +124,7 @@ species' 0.16 m radius.
 | `src/Vivarium.Sim/Geometry/OrganismMeshes.Plumegrass.cs` | **new** — the whole generator |
 | `src/Vivarium.Sim/Geometry/OrganismMeshes.cs` | one dispatch line |
 | `src/Vivarium.Sim/Geometry/OrganismMeshes.NightFlora.cs` | the old `Pampas` generator removed |
-| `src/Vivarium.Sim/Geometry/OrganismMeshes.VisualBreakFlora.cs` | a per-species near-field triangle cap for the plume filaments |
+| `src/Vivarium.Sim/Geometry/OrganismMeshes.VisualBreakFlora.cs` | the LOD tier budget the plume's filaments are judged against |
 | `game/Shaders/flora.gdshader` | new prismatic plume band `UV2.x in (1.26, 1.30)` |
 | `game/Render/FloraSurfaceProfiles.cs` | `plumegrass` → grass leaf type, parallel striations, single leaf sheet |
 | `scripts/visuals/plumegrass/pampas_reference.py` | **new** — the Blender reference |

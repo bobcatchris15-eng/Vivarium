@@ -38,7 +38,10 @@ public sealed class FloraSuitability
 public sealed class FloraSystem
 {
     private readonly VivariumWorld _w;
-    private readonly List<FloraIndividual> _nb = new();
+    /// <summary>Scratch for the neighbour queries. It is per thread because the
+    /// suitability scan runs across cores and a shared list would be a race.</summary>
+    [ThreadStatic] private static List<FloraIndividual>? _neighbourScratch;
+    private static List<FloraIndividual> _nb => _neighbourScratch ??= new List<FloraIndividual>();
     private readonly List<FloraIndividual> _woodyCanopy = new();
     private readonly ScalarField _canopyShade;
     private int _woodyCanopyVersion = -1;
@@ -122,6 +125,14 @@ public sealed class FloraSystem
             _canopyShadeDirty = false;
         }
     }
+
+    /// <summary>
+    /// Brings the derived canopy caches up to date. A scan that runs across
+    /// cores has to do this first: the shade field is rebuilt by clearing it
+    /// and adding the crowns, so a rebuild in the middle of a scan would be
+    /// read half written.
+    /// </summary>
+    public void PrepareCanopyCaches() => RefreshCanopyShade();
 
     public double EffectiveLightCell(int cell)
     {
@@ -373,7 +384,7 @@ public sealed class FloraSystem
             yield return true;
             var sp0 = C.FloraOrThrow(f.SpeciesId);
             if (sp0.Climber != null)
-                _climberNodeCounts[f.SpeciesId] = _climberNodeCounts.GetValueOrDefault(f.SpeciesId) + 1;
+                _climberNodeCounts[f.SpeciesId] = _climberNodeCounts.GetValueOrDefault(f.SpeciesId) + (f.ClimberSegments?.Count ?? 0);
             if (sp0.Colony == null) continue;
             var root0 = f.ColonyRoot.IsNone ? f.Id : f.ColonyRoot;
             _colonySize[root0] = _colonySize.GetValueOrDefault(root0) + 1;
@@ -472,7 +483,10 @@ public sealed class FloraSystem
             }
 
             // propagation
-            if (sp.Reproduction == null && f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
+            // A climber only seeds once it has found something to climb: a vine that is still searching is not
+            // established, and a species made of searching runners is a lawn, not a population.
+            bool seeds = sp.Climber == null || f.ClimberAttached;
+            if (seeds && sp.Reproduction == null && f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
                 && f.Age - f.LastSpreadAge >= sp.SpreadInterval && sp.Propagules > 0)
             {
                 var rng = Rng.Keyed(_w.Seed, PropagationStream, f.Id.Value, (ulong)f.SpreadCount);
@@ -518,11 +532,7 @@ public sealed class FloraSystem
             nf.Generation = (_w.Flora.Get(parent)?.Generation ?? -1) + 1;
             nf.UnsupportedLength = unsupportedLength;
             nf.ClimberTip = true;
-            if (sp.Climber is { } cd && NearestClimberSupport(nf, cd) is { } support && support.Distance <= cd.AttachmentRadius)
-            {
-                nf.ClimberAttached = true;
-                nf.ClimberTip = false;
-            }
+            // The bud takes hold of a host only when it actually reaches one, which the growth law decides.
         }
         foreach (var (sp, q, root, ringDist) in _colonyBuds)
         {
@@ -662,6 +672,8 @@ public sealed class FloraSystem
     }
 
     private readonly List<FloraIndividual> _climberSupportNeighbours = new();
+    /// <summary>Scratch buffer marking the nodes that have already extended, so the rest are shoot tips.</summary>
+    private bool[] _tipFlags = new bool[256];
 
     public readonly record struct HostMaterialHit(
         bool HasMaterial,
@@ -881,304 +893,694 @@ public sealed class FloraSystem
         return bestDistance <= cd.SearchRadius ? (bestTarget, bestDistance) : null;
     }
 
-    /// <summary>
-    /// Sequential segment-by-segment growth and attachment for vines and climbers.
-    /// Each segment actively checks for host material; growth stops when reaching empty space (the end of the support),
-    /// and distal segments die back during senescence.
+/// <summary>
+    /// Surface-bound vine growth. Every shoot grows from its tip: it lays a new stem node down on the surface it
+    /// is touching and lets the host's geometry decide where the stem ends up. The species supplies only weights
+    /// (climb, lateral drift, light, circumnutation); the surface supplies the frame. See
+    /// <see cref="ClimberGrowth"/> for why one law can both wind around a round trunk and run flat on the ground.
     /// </summary>
     private bool ClimberStep(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd, double dt)
     {
-        // 1. Initialize segment network if not yet established
-        if (f.ClimberSegments == null)
-        {
-            f.ClimberSegments = new List<ClimberSegment>();
-            double gy = double.IsNaN(f.GroundHeight) ? (f.GroundHeight = _w.GroundHeight(f.Position)) : f.GroundHeight;
-            f.ClimberSegments.Add(new ClimberSegment
-            {
-                Position = new Vec3(f.X, gy, f.Z),
-                Normal = Vec3.Up,
-                Forward = new Vec3(0, 0, 1),
-                ParentIndex = -1,
-                ShootOrder = 0,
-                Attached = false,
-                Terminal = false,
-                Age = 0,
-                Senescent = false,
-            });
-        }
+        if (f.ClimberSegments == null) FoundClimber(f, sp, cd);
+        var segs = f.ClimberSegments!;
 
-        // 2. Senescence & Die Back: when reaching senescence age, distal segments start to die back
+        // Senescence: the distal nodes wither and the plant stops extending.
         if (f.Stage(sp) == FloraStage.Senescent)
         {
-            f.CreepCredit = 0;
             double senescentFrac = Math.Clamp((f.Age - sp.Lifespan * f.LifespanFactor * 0.85) / Math.Max(0.01, sp.Lifespan * f.LifespanFactor * 0.15), 0, 1);
-            int countToDie = (int)(f.ClimberSegments.Count * senescentFrac);
-            for (int i = f.ClimberSegments.Count - 1; i >= Math.Max(1, f.ClimberSegments.Count - countToDie); i--)
-            {
-                f.ClimberSegments[i].Senescent = true;
-            }
+            int countToDie = (int)(segs.Count * senescentFrac);
+            for (int i = segs.Count - 1; i >= Math.Max(1, segs.Count - countToDie); i--)
+                segs[i].Senescent = true;
             return true;
         }
 
-        // 3. Growth accumulation
-        f.CreepCredit = Math.Min(f.CreepCredit + cd.GroundSpeed * dt * (0.35 + 0.65 * f.BiomassFraction(sp)), cd.SegmentLength * 2.5);
-        if (f.CreepCredit < cd.SegmentLength) return true;
-        if (f.ClimberSegments.Count >= cd.NodeCap) return true;
+        foreach (var s in segs) s.Age += dt;
 
-        var rng = Rng.Keyed(_w.Seed, "flora.climber.step", f.Id.Value, (ulong)f.ClimberSegments.Count);
+        GrowClimber(f, sp, cd, dt);
 
-        // Find active, non-terminal, non-senescent growth tips
-        var tipIndices = new List<int>();
-        for (int i = 0; i < f.ClimberSegments.Count; i++)
+        bool anyTip = false, anyAttached = false;
+        double unsupported = 0;
+        foreach (var s in segs)
         {
-            var seg = f.ClimberSegments[i];
-            if (!seg.Terminal && !seg.Senescent)
-            {
-                int childCount = 0;
-                for (int j = 0; j < f.ClimberSegments.Count; j++)
-                    if (f.ClimberSegments[j].ParentIndex == i) childCount++;
+            if (s.Senescent) continue;
+            if (!s.Terminal) anyTip = true;
+            if (s.Attached) anyAttached = true;
+            if (s.UnsupportedLength > unsupported) unsupported = s.UnsupportedLength;
+        }
+        f.ClimberTip = anyTip;
+        f.ClimberAttached = anyAttached;
+        f.UnsupportedLength = unsupported;
+        // Returning false lets the ordinary propagation rule run, so a mature vine seeds new runners.
+        return false;
+    }
 
-                if (childCount == 0 || (childCount < 2 && rng.NextDouble() < cd.BranchChance))
-                    tipIndices.Add(i);
+    /// <summary>Plants the founder node and gives the shoot its opening course.</summary>
+    private void FoundClimber(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd)
+    {
+        f.ClimberSegments = new List<ClimberSegment>();
+        double gy = double.IsNaN(f.GroundHeight) ? (f.GroundHeight = _w.GroundHeight(f.Position)) : f.GroundHeight;
+        var origin = new Vec3(f.X, gy, f.Z);
+
+        // A plant that budded off a runner continues the runner's line, so the network reads as one creeping
+        // stem rather than a scatter of unrelated shoots.
+        Vec3 forward = Vec3.Right;
+        Vec3 lateral = Vec3.Right;
+        Vec3 course = Vec3.Right;
+        bool inherited = false;
+        if (!f.ParentId.IsNone && _w.Flora.Get(f.ParentId) is { } parent && parent.ClimberSegments is { Count: > 0 } psegs)
+        {
+            int best = 0; double bestD = double.MaxValue;
+            for (int i = 0; i < psegs.Count; i++)
+            {
+                double d = (psegs[i].Position - origin).LengthSq;
+                if (d < bestD) { bestD = d; best = i; }
             }
+            var tip = psegs[best];
+            forward = tip.Forward.LengthSq > 1e-12 ? tip.Forward : Vec3.Right;
+            lateral = tip.Lateral.LengthSq > 1e-12 ? tip.Lateral : forward;
+            course = tip.ClimbDir.LengthSq > 1e-12 ? tip.ClimbDir : forward;
+            inherited = true;
         }
 
-        if (tipIndices.Count == 0) return true;
-
-        int chosenTipIndex = tipIndices[(int)(rng.NextDouble() * tipIndices.Count)];
-        var tip = f.ClimberSegments[chosenTipIndex];
-
-        Vec3 candPos;
-        Vec3 candNormal = Vec3.Up;
-        bool isAttached = tip.Attached;
-        bool isTerminal = false;
-
-        if (!tip.Attached)
+        if (!inherited)
         {
-            // Ground runner: searching across ground for nearest support
-            var sup = NearestClimberSupport(f, cd);
-            Vec2 walkDir;
-            if (sup is { } s0 && (s0.Target - tip.Position.XZ).LengthSq > 1e-6)
-                walkDir = (s0.Target - tip.Position.XZ).Normalized();
-            else
-                walkDir = Vec2.FromAngle(rng.Range(0, Math.PI * 2));
-
-            var candXZ = tip.Position.XZ + walkDir * cd.SegmentLength;
-            double candY = _w.GroundHeight(candXZ);
-            candPos = new Vec3(candXZ.X, candY, candXZ.Z);
-
-            // Check if reached host material
-            var hit = CheckHostMaterial(candPos, cd.AttachmentRadius, cd.SupportTypes);
-            if (hit.HasMaterial)
+            // The founder sets off on a course: toward the nearest host when one is within reach, otherwise on a
+            // heading of its own. Sensing biases the heading; it never moves the shoot.
+            var rng = Rng.Keyed(_w.Seed, "flora.climber.found", f.Id.Value, 0);
+            if (TryFindHost(origin, cd.SearchRadius, cd, out _, out var hostSurface))
             {
-                candPos = hit.SurfacePoint;
-                candNormal = hit.SurfaceNormal;
-                isAttached = true;
-                f.ClimberAttached = true;
+                var to = hostSurface.Point - origin;
+                course = to.LengthSq > 1e-9 ? to.Normalized() : Vec3.Right;
             }
-            else if (f.UnsupportedLength + cd.SegmentLength > cd.MaxUnsupportedLength)
+            else
             {
-                isTerminal = true;
+                double ang = rng.Range(0, Math.PI * 2);
+                course = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
+            }
+            // A runner runs across the ground: keep its opening course level.
+            course = new Vec3(course.X, 0, course.Z);
+            course = course.LengthSq > 1e-9 ? course.Normalized() : Vec3.Right;
+            forward = course;
+            lateral = course;
+        }
+
+        f.ClimberSegments.Add(new ClimberSegment
+        {
+            Position = origin,
+            Normal = GroundNormalAt(origin.XZ),
+            Forward = forward,
+            ParentIndex = -1,
+            ShootOrder = 0,
+            Attached = false,
+            Terminal = false,
+            Age = 0,
+            Senescent = false,
+            Lateral = lateral,
+            ClimbDir = course,
+            Support = ClimberSurfaceKind.Ground,
+            HostId = EntityId.None,
+            HostIndex = -1,
+            Arc = 0,
+            Depth = 0,
+            Credit = 0,
+            Radius = ClimberRadius(f, sp, cd, 0),
+            UnsupportedLength = 0,
+        });
+        f.ClimberTip = true;
+    }
+
+    /// <summary>
+    /// Runs every growing tip forward. Each tip carries its own credit, so the leader advances steadily while
+    /// lateral shoots fill in behind it at their own rate: that is apical dominance, expressed as a speed rather
+    /// than as a rule.
+    /// </summary>
+    private void GrowClimber(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd, double dt)
+    {
+        var segs = f.ClimberSegments!;
+        if (segs.Count >= cd.NodeCap) return;
+
+
+        // Tips are the nodes with no children. A child is always appended after its parent, so marking the
+        // parents in one pass identifies every node that has already extended. The node budget bounds the
+        // segment count, so the buffer can be sized once from it.
+        int need = cd.NodeCap + 2;
+        if (_tipFlags.Length < need) Array.Resize(ref _tipFlags, need);
+        Array.Clear(_tipFlags, 0, need);
+        for (int i = 0; i < segs.Count; i++)
+        {
+            int p = segs[i].ParentIndex;
+            if (p >= 0 && p < need) _tipFlags[p] = true;
+        }
+
+        double vigor = 0.35 + 0.65 * f.BiomassFraction(sp);
+        // The species as a whole has a stem budget, not just each plant: without it a runner that keeps seeding
+        // new plants would fill the island with stem and eat the simulation's time.
+        int speciesBudget = cd.NodeCap * 4;
+        int startCount = segs.Count;
+        int budgetUsed = _climberNodeCounts.GetValueOrDefault(sp.Id);
+        if (budgetUsed >= speciesBudget) return;
+        for (int i = 0; i < segs.Count; i++)
+        {
+            if (_tipFlags[i]) continue;
+            var tip = segs[i];
+            if (tip.Terminal || tip.Senescent) continue;
+
+            bool lateral = tip.ShootOrder > 0;
+            double rate = cd.GroundSpeed * vigor
+                        * (lateral ? cd.LateralSpeed : 1.0)
+                        * (tip.Attached ? cd.VerticalGrowthMultiplier : 1.0);
+            tip.Credit += rate * dt;
+
+            int guard = 0;
+            while (tip.Credit >= cd.SegmentLength && segs.Count < cd.NodeCap && guard++ < 8)
+            {
+                tip.Credit -= cd.SegmentLength;
+                if (!ExtendClimber(f, sp, cd, i)) break;
+                _tipFlags[i] = true;              // the tip has a child now
+                if (i >= segs.Count) break;
+                tip = segs[i];
+                if (tip.Terminal) break;
+            }
+        }
+        _climberNodeCounts[sp.Id] = budgetUsed + (segs.Count - startCount);
+
+        // Secondary growth: the stem thickens as the plant ages, so every node's radius is refreshed, not just
+        // the ones laid down now. The base of an old vine is its thickest part, and the cap is only reached if
+        // the older wood is allowed to thicken too.
+        if (segs.Count != startCount)
+        {
+            double basal = ClimberGrowth.BasalRadius(f, sp, cd);
+            for (int i = 0; i < segs.Count; i++)
+                segs[i].Radius = ClimberGrowth.StemRadius(basal, cd, segs[i].Depth);
+        }
+    }
+
+    /// <summary>
+    /// Lays down one internode for the shoot whose tip sits at <paramref name="tipIndex"/>. Returns false when the
+    /// shoot cannot grow any further.
+    /// </summary>
+    private bool ExtendClimber(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd, int tipIndex)
+    {
+        var segs = f.ClimberSegments!;
+        var tip = segs[tipIndex];
+        var rng = Rng.Keyed(_w.Seed, "flora.climber.extend", f.Id.Value, (ulong)tipIndex);
+
+        // 1. The surface this shoot is bound to, and the host we could reach.
+        ClimberSurfaceKind kind = tip.Support;
+        ClimberHost host = default;
+        bool bound = false;
+        if (kind is ClimberSurfaceKind.Woody or ClimberSurfaceKind.Log or ClimberSurfaceKind.Rock)
+        {
+            if (TryBind(tip, cd, out host) && ProjectHost(host, tip.Position, out _, out _))
+            {
+                bound = true;
+            }
+            else
+            {
+                // The support ended under the shoot. Step back onto the ground if we can still reach it, otherwise
+                // run free for a while: a vine that tops a trunk reaches out into the light before it gives up.
+                double gy = GroundHeightAt(tip.Position.XZ);
+                kind = tip.Position.Y - gy <= cd.AttachmentRadius * 2.0 ? ClimberSurfaceKind.Ground : ClimberSurfaceKind.Free;
+                tip.Support = kind;
+                tip.HostId = EntityId.None;
+                tip.HostIndex = -1;
+                tip.Attached = false;
+            }
+        }
+        bool onGround = kind == ClimberSurfaceKind.Ground;
+        bool free = kind == ClimberSurfaceKind.Free;
+
+        bool haveHost = false;
+        ClimberHost target = default;
+        ClimberSurface targetSurface = ClimberSurface.None;
+        // Only a shoot that is not holding on has any reason to look for something to hold.
+        if (!bound && !free)
+        {
+            haveHost = TryFindHost(tip.Position, cd.SearchRadius, cd, out target, out targetSurface);
+        }
+
+        // 2. Course. Bound to a host the shoot travels along that host's axis; on open ground it steers toward
+        //    the nearest host it can sense.
+        Vec3 climbDir = tip.ClimbDir;
+        Vec3 lateral = tip.Lateral;
+        if (bound)
+        {
+            climbDir = host.Axis.LengthSq > 1e-9 ? host.Axis : Vec3.Up;
+        }
+        else if (onGround)
+        {
+            // Open ground has no geometry to wind around, so the shoot's frame follows its own course. Keeping
+            // the lateral reference aligned with the course is what stops the twining term from pinning the
+            // shoot to the heading it was born with.
+            double turn = SteerCourse(tip, cd, targetSurface.Point, haveHost);
+            climbDir = tip.ClimbDir;
+            if (Math.Abs(turn) > 1e-9)
+            {
+                Vec3 n = GroundNormalAt(tip.Position.XZ);
+                lateral = ClimberGrowth.RotateAround(lateral, n, turn);
             }
         }
         else
         {
-            // Host-attached climber: ascending and branching segment by segment along host contour
-            var hostHit = CheckHostMaterial(tip.Position, cd.AttachmentRadius * 2.5, cd.SupportTypes);
-            if (hostHit.HasMaterial && hostHit.HostType == "woody" && _w.Flora.Get(hostHit.HostId) is { } tree)
+            climbDir = Vec3.Zero;
+        }
+
+        // 3. Heading inside the tangent plane of the surface under the tip.
+        Vec3 surfaceNormal;
+        if (bound) ProjectHost(host, tip.Position, out _, out surfaceNormal);
+        else if (free) surfaceNormal = Vec3.Up;
+        else surfaceNormal = GroundNormalAt(tip.Position.XZ);
+        Vec3 light = LightDirection(tip.Position.XZ, out double lightStrength);
+        double climbWeight = cd.ClimbWeight * (tip.ShootOrder > 0 ? cd.LateralClimb : 1.0);
+        Vec3 heading = ClimberGrowth.Heading(
+            surfaceNormal, lateral, tip.Arc,
+            climbDir, climbWeight,
+            light, cd.LightWeight * lightStrength,
+            cd.DriftWeight,
+            cd.WanderAmp, cd.WanderPeriod);
+        if (heading.LengthSq < 1e-12) heading = tip.Forward.LengthSq > 1e-12 ? tip.Forward : surfaceNormal;
+
+        // 4. March.
+        Vec3 raw = tip.Position + heading * cd.SegmentLength;
+
+        // 5. Grab a host when the shoot has actually reached one.
+        ClimberSurfaceKind nodeSupport = tip.Support;
+        EntityId nodeHostId = tip.HostId;
+        int nodeHostIndex = tip.HostIndex;
+        bool nodeAttached = tip.Attached;
+        double nodeUnsupported = tip.UnsupportedLength;
+
+        if (haveHost && !bound && !free && targetSurface.DistanceTo(raw) <= cd.GrabRadius)
+        {
+            bound = true;
+            host = target;
+            raw = targetSurface.Point;
+            nodeSupport = target.Kind;
+            nodeHostId = target.HostId;
+            nodeHostIndex = target.HostIndex;
+            nodeAttached = true;
+            nodeUnsupported = 0;
+            climbDir = target.Axis.LengthSq > 1e-9 ? target.Axis : Vec3.Up;
+            // The shoot has arrived, and its frame becomes the host's frame: the lateral reference now runs
+            // around the host rather than across the ground, which is what lets the stem wind around it.
+            Vec3 around = host.Circumferential(raw);
+            if (around.LengthSq > 1e-12) lateral = around.Normalized();
+            surfaceNormal = targetSurface.Normal;
+        }
+
+        // 6. Lay the stem down on the surface.
+        Vec3 next, nextNormal;
+        if (bound)
+        {
+            if (!ProjectHost(host, raw, out next, out nextNormal)) return false;
+        }
+        else if (free)
+        {
+            // No support under the tip: the stem hangs and reaches.
+            next = raw + new Vec3(0, -cd.SegmentLength * 0.35, 0);
+            nextNormal = Vec3.Up;
+        }
+        else
+        {
+            next = new Vec3(raw.X, GroundHeightAt(raw.XZ), raw.Z);
+            nextNormal = GroundNormalAt(raw.XZ);
+        }
+
+        // The stem lies on the surface, so the direction it actually travels is the tangent of the step rather
+        // than the heading we aimed with: the surface has the last word.
+        Vec3 forward = ClimberGrowth.TangentOf(next - tip.Position, nextNormal);
+        if (forward.LengthSq < 1e-12) forward = heading;
+
+        double step = (next - tip.Position).Length;
+        if (step < 1e-6) return false;
+
+        // Unsupported shoots give up once they have run too far without anything to hold them.
+        if (!nodeAttached)
+        {
+            nodeUnsupported += step;
+            if (nodeUnsupported > cd.MaxUnsupportedLength)
             {
-                var nsp = C.FloraOrThrow(tree.SpeciesId);
-                var toTip = tip.Position.XZ - tree.Position;
-                double curTheta = toTip.LengthSq > 1e-8 ? Math.Atan2(toTip.Z, toTip.X) : 0.0;
-                double curY = tip.Position.Y;
-
-                if (sp.Id == "spiralvine" || sp.Shape.Contains("spiral"))
-                {
-                    // SPIRALVINE: Stem-twiner. Winds in a continuous upward helix around the trunk.
-                    double chirality = ((f.Id.Value ^ 0x5A) % 2 == 0) ? 1.0 : -1.0;
-                    double pitchAngle = 0.82; // ~47 degrees
-                    double stepY = cd.SegmentLength * Math.Sin(pitchAngle);
-                    double stepS = cd.SegmentLength * Math.Cos(pitchAngle);
-
-                    double nextY = curY + stepY;
-                    var (nextRadius, treeGround, trunkTop) = TreeTrunkProfile(tree, nsp, nextY);
-
-                    if (nextY <= trunkTop)
-                    {
-                        double dTheta = (chirality * stepS) / Math.Max(0.04, nextRadius);
-                        // Secondary strand in twin-helix liana: offset by 180 degrees
-                        if (tip.ShootOrder > 0 && tip.ParentIndex == 0)
-                            curTheta += Math.PI;
-
-                        double nextTheta = curTheta + dTheta;
-                        var outward = Vec2.FromAngle(nextTheta);
-                        candPos = new Vec3(tree.Position.X + outward.X * (nextRadius + 0.006), nextY, tree.Position.Z + outward.Z * (nextRadius + 0.006));
-                        candNormal = new Vec3(outward.X, 0, outward.Z);
-                        isAttached = true;
-                    }
-                    else
-                    {
-                        // Reached empty space above host trunk: free-reaching tendril whips searching for light
-                        candPos = tip.Position + (tip.Normal * 0.45 + Vec3.Up * 0.85).Normalized() * (cd.SegmentLength * 0.85);
-                        candNormal = Vec3.Up;
-                        isAttached = false;
-                        isTerminal = true;
-                    }
-                }
-                else if (sp.Id == "fenhook" || sp.Shape.Contains("fenhook"))
-                {
-                    // FENHOOK: Scrambler / Clamberer.
-                    // Climbs with irregular wander, hooks onto crevices, and sends cascading hanging curtains/swags downward!
-                    bool isSwag = (tip.ShootOrder > 0) || (rng.NextDouble() < 0.35 && curY > tree.GroundHeight + 0.25);
-                    if (isSwag)
-                    {
-                        // Cascading hanging swag: droops DOWNWARD under gravity along the bark!
-                        double stepY = -cd.SegmentLength * rng.Range(0.60, 0.82);
-                        double nextY = curY + stepY;
-                        if (nextY >= tree.GroundHeight + 0.05)
-                        {
-                            var (nextRadius, _, _) = TreeTrunkProfile(tree, nsp, nextY);
-                            double dTheta = rng.Range(-0.15, 0.15) * (cd.SegmentLength / Math.Max(0.04, nextRadius));
-                            double nextTheta = curTheta + dTheta;
-                            var outward = Vec2.FromAngle(nextTheta);
-                            candPos = new Vec3(tree.Position.X + outward.X * (nextRadius + 0.008), nextY, tree.Position.Z + outward.Z * (nextRadius + 0.008));
-                            candNormal = new Vec3(outward.X, -0.35, outward.Z).Normalized();
-                            isAttached = true;
-                            // Hanging swags terminate after 2-4 drooping segments
-                            if (tip.ShootOrder >= 3 || rng.NextDouble() < 0.30)
-                                isTerminal = true;
-                        }
-                        else
-                        {
-                            candPos = tip.Position;
-                            isTerminal = true;
-                        }
-                    }
-                    else
-                    {
-                        // Clambering upward shoot
-                        double stepY = cd.SegmentLength * rng.Range(0.65, 0.85);
-                        double nextY = curY + stepY;
-                        var (nextRadius, treeGround, trunkTop) = TreeTrunkProfile(tree, nsp, nextY);
-
-                        if (nextY <= trunkTop)
-                        {
-                            double dTheta = rng.Range(-0.35, 0.35) * (cd.SegmentLength / Math.Max(0.04, nextRadius));
-                            double nextTheta = curTheta + dTheta;
-                            var outward = Vec2.FromAngle(nextTheta);
-                            candPos = new Vec3(tree.Position.X + outward.X * (nextRadius + 0.006), nextY, tree.Position.Z + outward.Z * (nextRadius + 0.006));
-                            candNormal = new Vec3(outward.X, 0, outward.Z);
-                            isAttached = true;
-                        }
-                        else
-                        {
-                            // Reached top/branch tip: droops over the edge in cascading pendulous swag into empty space
-                            candPos = tip.Position + tip.Normal * 0.04 - Vec3.Up * (cd.SegmentLength * 0.80);
-                            candNormal = -Vec3.Up;
-                            isAttached = false;
-                            isTerminal = true;
-                        }
-                    }
-                }
-                else
-                {
-                    // CLINGLACE: Root-climber (Hedera helix).
-                    // Hugs host bark tightly with adventitious rootlet pads; primary shoots ascend,
-                    // lateral shoots splay horizontally around the circumference into an interlocking mantle.
-                    bool isLateral = tip.ShootOrder > 0 && rng.NextDouble() < 0.65;
-                    if (isLateral)
-                    {
-                        // Splay laterally around trunk circumference
-                        double dir = (rng.NextDouble() < 0.5 ? 1.0 : -1.0);
-                        double stepS = cd.SegmentLength * rng.Range(0.60, 0.85);
-                        double stepY = cd.SegmentLength * rng.Range(0.18, 0.38);
-                        double nextY = curY + stepY;
-                        var (nextRadius, _, trunkTop) = TreeTrunkProfile(tree, nsp, nextY);
-
-                        if (nextY <= trunkTop)
-                        {
-                            double dTheta = (dir * stepS) / Math.Max(0.04, nextRadius);
-                            double nextTheta = curTheta + dTheta;
-                            var outward = Vec2.FromAngle(nextTheta);
-                            candPos = new Vec3(tree.Position.X + outward.X * (nextRadius + 0.004), nextY, tree.Position.Z + outward.Z * (nextRadius + 0.004));
-                            candNormal = new Vec3(outward.X, 0, outward.Z);
-                            isAttached = true;
-                        }
-                        else
-                        {
-                            candPos = tip.Position;
-                            isTerminal = true;
-                        }
-                    }
-                    else
-                    {
-                        // Ascending vertical shoot
-                        double stepY = cd.SegmentLength * rng.Range(0.80, 0.95);
-                        double nextY = curY + stepY;
-                        var (nextRadius, treeGround, trunkTop) = TreeTrunkProfile(tree, nsp, nextY);
-
-                        if (nextY <= trunkTop)
-                        {
-                            double dTheta = rng.Range(-0.12, 0.12) * (cd.SegmentLength / Math.Max(0.04, nextRadius));
-                            double nextTheta = curTheta + dTheta;
-                            var outward = Vec2.FromAngle(nextTheta);
-                            candPos = new Vec3(tree.Position.X + outward.X * (nextRadius + 0.004), nextY, tree.Position.Z + outward.Z * (nextRadius + 0.004));
-                            candNormal = new Vec3(outward.X, 0, outward.Z);
-                            isAttached = true;
-                        }
-                        else
-                        {
-                            // Reached bark rim at crown: terminates immediately (cannot climb into empty air)
-                            candPos = tip.Position;
-                            isTerminal = true;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // Fallback for logs or rocks: generic contour climb
-                double stepY = cd.SegmentLength * (sp.Height > 0.5 ? 0.90 : 0.75);
-                double nextY = tip.Position.Y + stepY;
-                var testPos = new Vec3(tip.Position.X, nextY, tip.Position.Z);
-                var hit = CheckHostMaterial(testPos, cd.AttachmentRadius * 1.5, cd.SupportTypes);
-                if (hit.HasMaterial)
-                {
-                    candPos = hit.SurfacePoint;
-                    candNormal = hit.SurfaceNormal;
-                    isAttached = true;
-                }
-                else
-                {
-                    candPos = tip.Position;
-                    isTerminal = true;
-                }
+                tip.Terminal = true;
+                return false;
             }
         }
 
-        if (!isTerminal || candPos != tip.Position)
+        // A lateral shoot is a side branch, not a second leader: it stops once it has run its length, and the
+        // shorter the branch the further from the leader it is.
+        if (tip.ShootOrder > 0)
         {
-            var fwd = (candPos - tip.Position).LengthSq > 1e-6 ? (candPos - tip.Position).Normalized() : tip.Forward;
-            f.ClimberSegments.Add(new ClimberSegment
+            double limit = cd.BranchLength * Math.Pow(0.55, tip.ShootOrder - 1);
+            if (tip.LocalArc + step >= limit)
             {
-                Position = candPos,
-                Normal = candNormal,
-                Forward = fwd,
-                ParentIndex = chosenTipIndex,
-                ShootOrder = tip.ShootOrder + (chosenTipIndex != tipIndices[0] ? 1 : 0),
-                Attached = isAttached,
-                Terminal = isTerminal,
+                tip.Terminal = true;
+                return false;
+            }
+        }
+
+        // 7. Transport the lateral reference and commit the new node.
+        Vec3 nodeLateral = ClimberGrowth.Transport(lateral, surfaceNormal, nextNormal);
+        int depth = tip.Depth + 1;
+        int order = tip.ShootOrder;
+        Vec3 nodeClimb = climbDir.LengthSq > 1e-12 ? climbDir.Normalized() : tip.ClimbDir;
+
+        var node = new ClimberSegment
+        {
+            Position = next,
+            Normal = nextNormal,
+            Forward = forward,
+            ParentIndex = tipIndex,
+            ShootOrder = order,
+            Attached = nodeAttached,
+            Terminal = false,
+            Age = 0,
+            Senescent = false,
+            Lateral = nodeLateral,
+            ClimbDir = nodeClimb,
+            Support = nodeSupport,
+            HostId = nodeHostId,
+            HostIndex = nodeHostIndex,
+            Arc = tip.Arc + step,
+            LocalArc = order == 0 ? tip.Arc + step : tip.LocalArc + step,
+            Depth = depth,
+            Credit = 0,
+            Radius = ClimberRadius(f, sp, cd, depth),
+            UnsupportedLength = tip.UnsupportedLength,
+        };
+        segs.Add(node);
+
+        // 8. A runner that has walked far enough over the ground roots and starts a plant of its own. This is
+        //    how a creeping vine spreads: it does not seed into the air, it walks and roots where it lands.
+        if (nodeSupport == ClimberSurfaceKind.Ground && tip.LocalArc + step >= cd.StolonLength)
+        {
+            int runners = _climberBuds.Count(b => b.Sp.Id == sp.Id);
+            if (runners < cd.PopulationCap)
+                _climberBuds.Add((sp, next.XZ, f.Id, Math.Max(sp.InitialBiomass, f.Biomass * 0.12), nodeUnsupported));
+        }
+
+        // 8. A lateral shoot may leave the same node. It is the parent's frame turned by the branch angle, so
+        //    the shoot really does leave the stem at that angle on any surface.
+        if (cd.MaxBranchOrder > 0 && order < cd.MaxBranchOrder && rng.NextDouble() < cd.BranchRate)
+        {
+            double sign = (cd.DriftWeight >= 0 ? 1.0 : -1.0) * (order % 2 == 0 ? 1.0 : -1.0);
+            double angle = cd.BranchAngle * Math.PI / 180.0 * sign;
+            var branch = new ClimberSegment
+            {
+                Position = next,
+                Normal = nextNormal,
+                Forward = ClimberGrowth.RotateAround(forward, nextNormal, angle),
+                ParentIndex = tipIndex,
+                ShootOrder = order + 1,
+                Attached = node.Attached,
+                Terminal = false,
                 Age = 0,
                 Senescent = false,
-            });
-            f.CreepCredit -= cd.SegmentLength;
-        }
-        else
-        {
-            tip.Terminal = true;
+                Lateral = ClimberGrowth.RotateAround(nodeLateral, nextNormal, angle),
+                ClimbDir = ClimberGrowth.RotateAround(nodeClimb, nextNormal, angle),
+                Support = node.Support,
+                HostId = node.HostId,
+                HostIndex = node.HostIndex,
+                Arc = node.Arc,
+                LocalArc = 0,
+                Depth = depth,
+                Credit = 0,
+                Radius = node.Radius,
+                UnsupportedLength = node.UnsupportedLength,
+            };
+            segs.Add(branch);
         }
 
         return true;
+    }
+
+    /// <summary>Stem radius at a node: the plant's basal radius tapered by the node's depth.</summary>
+    private static double ClimberRadius(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd, int depth) =>
+        ClimberGrowth.StemRadius(ClimberGrowth.BasalRadius(f, sp, cd), cd, depth);
+
+    /// <summary>
+    /// Turns a ground shoot's course toward the nearest host it can sense and returns how far it turned.
+    /// <para>
+    /// The turn is rate limited, but the limit is not fixed: a pursuer needs roughly one radian of turn per metre
+    /// of separation to close on its target, and a slower shoot simply orbits the host instead of landing on it.
+    /// </para>
+    /// </summary>
+    private static double SteerCourse(ClimberSegment tip, ClimberDef cd, Vec3 hostPoint, bool haveHost)
+    {
+        Vec3 course = tip.ClimbDir.LengthSq > 1e-9 ? tip.ClimbDir.Normalized() : tip.Forward;
+        if (!haveHost || cd.SeekRate <= 0) return 0;
+
+        var to = hostPoint - tip.Position;
+        double dist = to.Length;
+        if (dist < 1e-6) return 0;
+        var dir = to / dist;
+        double ang = Math.Acos(Math.Clamp(course.Dot(dir), -1, 1));
+        if (ang < 1e-6) return 0;
+
+        double rate = Math.Max(cd.SeekRate * 4.0, 1.5 / Math.Max(dist, 0.03));
+        double turn = Math.Min(Math.Min(rate * cd.SegmentLength, ang), 1.0);
+        var blended = course * (1 - turn / ang) + dir * (turn / ang);
+        tip.ClimbDir = blended.LengthSq > 1e-12 ? blended.Normalized() : course;
+        return turn;
+    }
+
+    /// <summary>
+    /// Direction of the brightest light near a point, derived from the light field's gradient, together with how
+    /// strong that pull is. A vine bends toward brighter ground in proportion to the difference, not toward the
+    /// faintest gradient as if it were a floodlight.
+    /// </summary>
+    private Vec3 LightDirection(Vec2 p, out double strength)
+    {
+        const double e = 0.4;
+        double lx = EffectiveLight(p + new Vec2(e, 0)) - EffectiveLight(p - new Vec2(e, 0));
+        double lz = EffectiveLight(p + new Vec2(0, e)) - EffectiveLight(p - new Vec2(0, e));
+        var d = new Vec3(lx, 0, lz);
+        double m = d.Length;
+        // A quarter of the exposure range per metre already counts as a full-strength pull.
+        strength = MathD.Clamp01(m / 0.25);
+        return m > 1e-12 ? d / m : Vec3.Up;
+    }
+
+    private double GroundHeightAt(Vec2 p) => _w.GroundHeight(p);
+    private Vec3 GroundNormalAt(Vec2 p) => _w.Terrain.Normal(p);
+
+    /// <summary>Resolves the host a node is bound to, and reports whether that support still exists.</summary>
+    private bool TryBind(ClimberSegment tip, ClimberDef cd, out ClimberHost host)
+    {
+        switch (tip.Support)
+        {
+            case ClimberSurfaceKind.Woody:
+            {
+                if (_w.Flora.Get(tip.HostId) is not { } tree) { host = default; return false; }
+                var nsp = C.FloraOrThrow(tree.SpeciesId);
+                if (nsp.Woody == null) { host = default; return false; }
+                if (!TryWoodyProfile(tree, nsp, tip.Position.Y, out double r, out double slope, out double top))
+                { host = default; return false; }
+                host = new ClimberHost(ClimberSurfaceKind.Woody, tree.Id, -1, tree, nsp, null, null, r, slope, top);
+                return true;
+            }
+            case ClimberSurfaceKind.Log:
+            {
+                var logs = _w.Props.Logs;
+                if (tip.HostIndex < 0 || tip.HostIndex >= logs.Count) { host = default; return false; }
+                host = new ClimberHost(ClimberSurfaceKind.Log, EntityId.None, tip.HostIndex, null, null, logs[tip.HostIndex], null, 0, 0, 0);
+                return true;
+            }
+            case ClimberSurfaceKind.Rock:
+            {
+                var rocks = _w.Props.Rocks;
+                if (tip.HostIndex < 0 || tip.HostIndex >= rocks.Count) { host = default; return false; }
+                host = new ClimberHost(ClimberSurfaceKind.Rock, EntityId.None, tip.HostIndex, null, null, null, rocks[tip.HostIndex], 0, 0, 0);
+                return true;
+            }
+            default:
+                host = default;
+                return false;
+        }
+    }
+
+    /// <summary>Projects a point onto a host's live surface.</summary>
+    private bool ProjectHost(in ClimberHost host, Vec3 p, out Vec3 point, out Vec3 normal)
+    {
+        point = p;
+        normal = Vec3.Up;
+        switch (host.Kind)
+        {
+            case ClimberSurfaceKind.Woody:
+            {
+                if (host.Tree is not { } tree || host.TreeSpecies is not { } nsp) return false;
+                // The radius is read at the height being projected to, not at the height the shoot left: a stem
+                // that flares at the foot would otherwise be left hanging in the air above its own bark.
+                var (r, ground, top) = TreeTrunkProfile(tree, nsp, p.Y);
+                if (p.Y < ground - 0.05 || p.Y > top) return false;
+                var (r2, _, _) = TreeTrunkProfile(tree, nsp, p.Y + 0.05);
+                double slope = (r2 - r) / 0.05;
+                if (!ClimberSurface.TryWoody(p, tree.X, tree.Z, r, slope, top, tree.Id, out var s)) return false;
+                point = s.Point; normal = s.Normal;
+                return true;
+            }
+            case ClimberSurfaceKind.Log:
+            {
+                if (host.Log is not { } log) return false;
+                if (!ClimberSurface.TryLog(p, log, host.HostIndex, out var l)) return false;
+                point = l.Point; normal = l.Normal;
+                return true;
+            }
+            case ClimberSurfaceKind.Rock:
+            {
+                if (host.RockProp is not { } rock) return false;
+                if (!ClimberSurface.TryRock(p, rock, host.HostIndex, out var rk)) return false;
+                point = rk.Point; normal = rk.Normal;
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Trunk radius and taper at a height, and the height at which the stem ends.</summary>
+    private bool TryWoodyProfile(FloraIndividual tree, FloraSpeciesDef nsp, double y,
+        out double radius, out double slope, out double top)
+    {
+        var (r, ground, trunkTop) = TreeTrunkProfile(tree, nsp, y);
+        radius = r; top = trunkTop;
+        if (y < ground - 0.05 || y > trunkTop)
+        {
+            slope = 0;
+            return false;
+        }
+        var (r2, _, _) = TreeTrunkProfile(tree, nsp, y + 0.05);
+        slope = (r2 - r) / 0.05;
+        return true;
+    }
+
+    /// <summary>
+    /// Finds the nearest support within a radius. Sensing only biases growth; the shoot still has to travel the
+    /// distance before it can hold on.
+    /// </summary>
+    private bool TryFindHost(Vec3 p, double radius, ClimberDef cd, out ClimberHost host, out ClimberSurface surface)
+    {
+        host = default;
+        surface = ClimberSurface.None;
+        double best = radius;
+        bool found = false;
+
+        if (cd.SupportTypes.Contains("woody"))
+        {
+            _w.Flora.Neighbours(p.XZ, radius + 1.5, _climberSupportNeighbours);
+            foreach (var n in _climberSupportNeighbours)
+            {
+                var nsp = C.FloraOrThrow(n.SpeciesId);
+                if (nsp.Woody == null) continue;
+                if (!TryWoodyProfile(n, nsp, p.Y, out double r, out double slope, out double top)) continue;
+                if (!ClimberSurface.TryWoody(p, n.X, n.Z, r, slope, top, n.Id, out var s)) continue;
+                double d = s.DistanceTo(p);
+                if (d < best)
+                {
+                    best = d; surface = s; found = true;
+                    host = new ClimberHost(ClimberSurfaceKind.Woody, n.Id, -1, n, nsp, null, null, r, slope, top);
+                }
+            }
+        }
+
+        if (cd.SupportTypes.Contains("log"))
+        {
+            var logs = _w.Props.Logs;
+            for (int i = 0; i < logs.Count; i++)
+            {
+                var l = logs[i];
+                if (Vec2.DistanceSq(new Vec2(l.X, l.Z), p.XZ) > (radius + l.FootprintRadius) * (radius + l.FootprintRadius)) continue;
+                if (!ClimberSurface.TryLog(p, l, i, out var s)) continue;
+                double d = s.DistanceTo(p);
+                if (d < best)
+                {
+                    best = d; surface = s; found = true;
+                    host = new ClimberHost(ClimberSurfaceKind.Log, EntityId.None, i, null, null, l, null, 0, 0, 0);
+                }
+            }
+        }
+
+        if (cd.SupportTypes.Contains("rock"))
+        {
+            var rocks = _w.Props.Rocks;
+            for (int i = 0; i < rocks.Count; i++)
+            {
+                var r = rocks[i];
+                if (Vec2.DistanceSq(new Vec2(r.X, r.Z), p.XZ) > (radius + r.FootprintRadius) * (radius + r.FootprintRadius)) continue;
+                if (!ClimberSurface.TryRock(p, r, i, out var s)) continue;
+                double d = s.DistanceTo(p);
+                if (d < best)
+                {
+                    best = d; surface = s; found = true;
+                    host = new ClimberHost(ClimberSurfaceKind.Rock, EntityId.None, i, null, null, null, r, 0, 0, 0);
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>A support a vine shoot can be bound to, with the data needed to project onto it.</summary>
+    private readonly struct ClimberHost
+    {
+        public readonly ClimberSurfaceKind Kind;
+        public readonly EntityId HostId;
+        public readonly int HostIndex;
+        public readonly FloraIndividual? Tree;
+        public readonly FloraSpeciesDef? TreeSpecies;
+        public readonly LogProp? Log;
+        public readonly Rock? RockProp;
+        /// <summary>Trunk radius at the binding height.</summary>
+        public readonly double Radius;
+        /// <summary>Trunk taper (dr/dy) at the binding height.</summary>
+        public readonly double Slope;
+        /// <summary>Height at which the stem ends.</summary>
+        public readonly double Top;
+
+        /// <summary>The direction a shoot bound to this host travels along it.</summary>
+        public Vec3 Axis => Kind switch
+        {
+            ClimberSurfaceKind.Woody => Vec3.Up,
+            ClimberSurfaceKind.Log => Log is { } l ? new Vec3(Math.Cos(l.RotationY), 0, Math.Sin(l.RotationY)) : Vec3.Up,
+            _ => Vec3.Up,
+        };
+
+        /// <summary>The direction that runs around this host at a point, or zero when the host has no axis.</summary>
+        public Vec3 Circumferential(Vec3 p)
+        {
+            switch (Kind)
+            {
+                case ClimberSurfaceKind.Woody:
+                {
+                    if (Tree is not { } t) return Vec3.Zero;
+                    double dx = p.X - t.X, dz = p.Z - t.Z;
+                    double h = Math.Sqrt(dx * dx + dz * dz);
+                    if (h < 1e-7) return Vec3.Up.Cross(Vec3.Right);
+                    var radial = new Vec3(dx / h, 0, dz / h);
+                    return Vec3.Up.Cross(radial);
+                }
+                case ClimberSurfaceKind.Log:
+                {
+                    if (Log is not { } l) return Vec3.Zero;
+                    var axis = new Vec3(Math.Cos(l.RotationY), 0, Math.Sin(l.RotationY));
+                    var centre = new Vec3(l.X, l.Y, l.Z);
+                    var rel = p - centre;
+                    var perp = rel - axis * rel.Dot(axis);
+                    double pl = perp.Length;
+                    if (pl < 1e-7) return Vec3.Zero;
+                    return axis.Cross(perp / pl);
+                }
+                default:
+                    return Vec3.Zero;
+            }
+        }
+
+        public ClimberHost(ClimberSurfaceKind kind, EntityId hostId, int hostIndex,
+            FloraIndividual? tree, FloraSpeciesDef? treeSpecies, LogProp? log, Rock? rockProp,
+            double radius, double slope, double top)
+        {
+            Kind = kind; HostId = hostId; HostIndex = hostIndex;
+            Tree = tree; TreeSpecies = treeSpecies; Log = log; RockProp = rockProp;
+            Radius = radius; Slope = slope; Top = top;
+        }
     }
     /// <summary>
     /// Colonial growth (moss/lichen): a cell with fewer than 3 same-species neighbours within 2·cellRadius is on
@@ -1289,6 +1691,17 @@ public sealed class FloraSystem
             reason = $"{sp.Name} grows on the coverage layers, not as individuals";
             return false;
         }
+        if (sp.Climber is { } climberDef)
+        {
+            int count = 0;
+            foreach (var other in _w.Flora.Items)
+                if (other.SpeciesId == sp.Id) count++;
+            if (count >= climberDef.PopulationCap)
+            {
+                reason = $"{sp.Name} is at its population limit ({count}/{climberDef.PopulationCap})";
+                return false;
+            }
+        }
         if (sp.Woody is { } woody)
         {
             int cap = WoodyPopulationCap(woody.Layer);
@@ -1388,4 +1801,3 @@ public sealed class FloraSystem
         return true;
     }
 }
-

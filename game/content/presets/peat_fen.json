@@ -344,7 +344,27 @@
     {
       "species": "dewbonnet",
       "count": 6
-    }
+    },
+      {
+      "species": "coalspike",
+      "count": 5
+      },
+      {
+      "species": "glasslily",
+      "count": 2
+      },
+      {
+      "species": "silverweed",
+      "count": 3
+      },
+      {
+      "species": "bonecup",
+      "count": 3
+      },
+      {
+      "species": "embercup",
+      "count": 6
+      }
   ],
   "starterFauna": [
     {

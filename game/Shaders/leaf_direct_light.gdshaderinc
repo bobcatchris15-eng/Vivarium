@@ -5,6 +5,10 @@
 uniform float tissue_direct_transmission = 1.9;
 // Diagnostic gain; default leaves all existing direct cuticle optics intact.
 uniform float tissue_specular_stress = 1.0;
+// M02: retain established directional-light reflectance independently of light
+// intensity. The legacy switch remains available for controlled comparisons.
+uniform bool tissue_use_explicit_material_f0 = true;
+uniform float tissue_material_f0 = 0.055;
 // Experimental controlled scattering modes. Defaults preserve last accepted rendering.
 uniform float tissue_diffuse_wrap = 0.0;
 uniform float tissue_phase_scatter = 1.6;
@@ -72,7 +76,10 @@ void light() {
     float k = (ROUGHNESS + 1.0) * (ROUGHNESS + 1.0) * 0.125;
     float geometry = (nv / (nv * (1.0 - k) + k)) *
                      (reflected / (reflected * (1.0 - k) + k));
-    float f0 = mix(0.018, 0.055, clamp(SPECULAR_AMOUNT, 0.0, 1.0));
+    float light_f0_legacy = mix(0.018, 0.055, clamp(SPECULAR_AMOUNT, 0.0, 1.0));
+    float f0 = tissue_use_explicit_material_f0
+        ? clamp(tissue_material_f0, 0.0, 0.16)
+        : light_f0_legacy;
     float fresnel = f0 + (1.0 - f0) * pow(1.0 - vh, 5.0);
     float specular = distribution * geometry * fresnel / max(4.0 * nv, 0.01);
     if (tissue_light_diagnostic == 1) specular = 0.0;

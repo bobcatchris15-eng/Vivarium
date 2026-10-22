@@ -107,7 +107,7 @@ public class BootstrapTests
         var b = ContentLoader.Load(TestUtil.ContentSource);
         Assert.Equal(a.ContentDigest, b.ContentDigest);
         Assert.Equal(a.Flora.Select(f => f.Id), b.Flora.Select(f => f.Id));
-        Assert.Equal(52, a.Flora.Count);
+        Assert.Equal(62, a.Flora.Count);
         Assert.Equal(17, a.Fauna.Count);
         Assert.All(a.Fauna, f =>
         {
@@ -115,11 +115,11 @@ public class BootstrapTests
             Assert.True(f.Animation.MaxHz >= f.Animation.IdleHz);
             Assert.InRange(f.Animation.DutyFactor, 0.05, 0.95);
         });
-        Assert.Equal(8, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
-        Assert.Equal(13, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
-        Assert.Equal(14, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));
-        Assert.Equal(6, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Decomposer));
-        Assert.Equal(11, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody));
+        Assert.Equal(9, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.MossLichen));
+        Assert.Equal(17, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Terrestrial));
+        Assert.Equal(17, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.WatersideAquatic));
+        Assert.Equal(7, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Decomposer));
+        Assert.Equal(12, a.Flora.Count(f => f.PlacementGroup == FloraPlacementGroup.Woody));
         Assert.Empty(a.Warnings);
     }
 

@@ -250,13 +250,30 @@ public class FormTests
     [Fact]
     public void PairedLeafIsFiniteNonDegenerateAndWithinTriangleBudget()
     {
+        // Fenbead is now a clump of modelled crassula: every leaf is a three-dimensional bead with
+        // a connate collar at its base, so it is budgeted against the engine's per-species cap.
         var sp = new FloraSpeciesDef { Id = "fenbead", Shape = "pairedleaf", Color = Green, Color2 = LightGreen };
         for (ulong seed = 1; seed <= 5; seed++)
         {
             var m = OrganismMeshes.Flora(sp, seed);
             AssertAllFinite(m);
             AssertNoZeroAreaTriangles(m);
-            Assert.InRange(m.TriangleCount, 1, 9216);
+            Assert.InRange(m.TriangleCount, 1, OrganismMeshes.FloraTopTriangleCapFor("fenbead"));
+        }
+    }
+
+    [Fact]
+    public void BrooklaceIsFiniteNonDegenerateAndWithinTriangleBudget()
+    {
+        // Brooklace is now a creeping water-starwort: modelled spatulate leaves, a floating rosette
+        // and branching white lace rootlets, budgeted against the engine's per-species cap.
+        var sp = new FloraSpeciesDef { Id = "brooklace", Shape = "roundleaf", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 5; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            AssertNoZeroAreaTriangles(m);
+            Assert.InRange(m.TriangleCount, 1, OrganismMeshes.FloraTopTriangleCapFor("brooklace"));
         }
     }
 
@@ -432,14 +449,14 @@ public class FormTests
     [Fact]
     public void TrifoliateKeepsItsNearFieldDetailAtTheTopTier()
     {
-        // The whole point of the richer cap is that the near tier is not LOD-thinned: a clover mat
-        // that loses leaves at close range stops reading as a mat.
+        // The whole point of the near-tier budget is that the closest mesh is not LOD-thinned: a
+        // clover mat that loses leaves at close range stops reading as a mat.
         var sp = new FloraSpeciesDef { Id = "trifold", Shape = "trifoliate", Color = Green, Color2 = LightGreen };
         var authored = OrganismMeshes.Flora(sp, 42);
         var tier0 = OrganismMeshes.FloraTier(sp, 42, 0);
         Assert.Equal(authored.TriangleCount, tier0.TriangleCount);
-        Assert.True(tier0.TriangleCount > 30000,
-            "the trifold near tier should use its larger species budget");
+        Assert.True(authored.TriangleCount <= OrganismMeshes.FloraTopTriangleCapFor(sp.Id),
+            "the authored mesh must fit inside the budget the near tier is held to");
     }
 
     [Fact]
@@ -844,6 +861,35 @@ public class FormTests
         }
     }
 
+    [Fact]
+    public void LatchjawCarriesItsJawLeavesUpAColumnUnderOneFlower()
+    {
+        // The latchjaw is a column of jaw-leaves under a single large flower, not a basal rosette
+        // of traps. This locks that growth form in: a tall stalk, jaw-leaves climbing it, and the
+        // bloom standing clear at the top.
+        var sp = new FloraSpeciesDef { Id = "snaptrap", Shape = "snaptrap_rosette", Color = Green, Color2 = LightGreen };
+        for (ulong seed = 1; seed <= 4; seed++)
+        {
+            var m = OrganismMeshes.Flora(sp, seed);
+            AssertAllFinite(m);
+            AssertNoZeroAreaTriangles(m);
+
+            var bounds = m.Bounds();
+            double height = bounds.Max.Y - bounds.Min.Y;
+            Assert.True(height > 0.7, $"the latchjaw should stand as a column, height {height:0.000}");
+
+            int blades = 0, climbing = 0;
+            for (int v = 0; v < m.VertexCount; v++)
+            {
+                if (m.UV2[v * 2 + 1] < 0.5f) continue; // leaf blades only
+                blades++;
+                if (m.Position(v).Y > bounds.Min.Y + height * 0.45) climbing++;
+            }
+            Assert.True(blades > 400, $"expected a full column of jaw-leaves, got {blades} blade vertices");
+            Assert.True(climbing > blades / 5, "jaw-leaves must climb the column rather than sit at its foot");
+        }
+    }
+
     [Theory]
     [InlineData("veilfern", "veilfern", false)]
     [InlineData("veilfern", "veilfern", true)]
@@ -994,27 +1040,18 @@ public class FormTests
 
         for (ulong seed = 1; seed <= 3; seed++)
         {
-            // 1. Attached modular climber node: must generate downward-trailing hanging stems/tendrils (-Y direction)
+            // 1. Attached modular climber node: it carries a short trailing switch of side growth. The hanging
+            // growth a climber really throws is part of the grown stem now, not a decoration on every node, so
+            // this stays small and close to the bark instead of trailing off into the air.
             var nodeMesh = OrganismMeshes.ClimberNode(sp, seed, attached: true);
             AssertAllFinite(nodeMesh);
             AssertNoZeroAreaTriangles(nodeMesh);
 
             var bounds = nodeMesh.Bounds();
-            Assert.True(bounds.Min.Y < -0.05, $"{id} attached node must generate downward-trailing segment with Min.Y < -0.05, got {bounds.Min.Y}");
+            Assert.True(bounds.Min.Y < -0.02, $"{id} attached node must carry a trailing switch below the stem, got {bounds.Min.Y}");
+            Assert.True(bounds.Min.Y > -0.08, $"{id} trailing switch must stay close to the stem, got {bounds.Min.Y}");
 
-            // Verify downward-trailing leaf or stem coordinates
-            bool hasDownwardCoords = false;
-            for (int i = 0; i < nodeMesh.VertexCount; i++)
-            {
-                if (nodeMesh.Position(i).Y < -0.05)
-                {
-                    hasDownwardCoords = true;
-                    break;
-                }
-            }
-            Assert.True(hasDownwardCoords, $"{id} attached node must contain downward-trailing coordinates below -0.05");
-
-            // Compare to unattached ground runner node (which stays near/above substrate)
+            // The ground runner node stays near the substrate, with no trailing switch at all.
             var groundMesh = OrganismMeshes.ClimberNode(sp, seed, attached: false);
             AssertAllFinite(groundMesh);
             AssertNoZeroAreaTriangles(groundMesh);
@@ -1027,6 +1064,47 @@ public class FormTests
             AssertAllFinite(floraMesh);
             AssertNoZeroAreaTriangles(floraMesh);
             Assert.InRange(floraMesh.TriangleCount, 3000, 25000);
+        }
+    }
+
+    [Theory]
+    [InlineData("clinglace")]
+    [InlineData("spiralvine")]
+    [InlineData("fenhook")]
+    public void ClimberFoliageSitsOnTheUpperSideOfTheStem(string id)
+    {
+        var sp = new FloraSpeciesDef { Id = id, Shape = "vine", Color = Green, Color2 = LightGreen };
+
+        for (ulong seed = 1; seed <= 3; seed++)
+        {
+            var nodeMesh = OrganismMeshes.ClimberNode(sp, seed, attached: true);
+            AssertAllFinite(nodeMesh);
+            Assert.True(nodeMesh.VertexCount > 0, $"{id} node must carry foliage");
+
+            // The node's local +Z is the upper side of the stem, so the foliage has to sit on that side of it
+            // however the stem happens to be twisted. Leaf vertices carry the underside marker in UV2.
+            double sum = 0; int n = 0;
+            for (int v = 0; v < nodeMesh.VertexCount; v++)
+            {
+                if (nodeMesh.UV2[v * 2] <= 0.5f) continue;
+                sum += nodeMesh.Position(v).Z;
+                n++;
+            }
+            Assert.True(n > 0, $"{id} node must have leaf vertices");
+            double meanZ = sum / n;
+            Assert.True(meanZ > 0.004, $"{id} foliage must sit on the upper side of the stem, mean height {meanZ:0.0000}");
+
+            // The growing tip is a thin tendril, not a leaf cluster.
+            var tip = OrganismMeshes.ClimberNodeTip(sp, seed);
+            AssertAllFinite(tip);
+            AssertNoZeroAreaTriangles(tip);
+            var tipBounds = tip.Bounds();
+            var tipSize = tipBounds.Max - tipBounds.Min;
+            // A tendril reaches forward along the stem (+Y) and is otherwise narrow.
+            Assert.True(tipSize.X < 0.06 && tipSize.Z < 0.06 && tipSize.Y < 0.07,
+                $"{id} growing tip must be a small thin tendril, got {tipSize}");
+            Assert.True(tip.TriangleCount < nodeMesh.TriangleCount,
+                $"{id} growing tip must be lighter than a full node, got {tip.TriangleCount} vs {nodeMesh.TriangleCount}");
         }
     }
 }

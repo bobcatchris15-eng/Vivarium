@@ -405,12 +405,23 @@ public class FloraTests
         var w = TestUtil.FlatWorld(34);
         TestUtil.Condition(w, 0.6, 0.9, 0.6);
         var vine = Sp("clinglace");
-        var open = new Vec2(-2, -2);
-        var s = w.FloraSystem.Suitability(vine, open);
-        Assert.True(s.HardRefused && s.RefusalReason.Contains("log"), s.ToString());
-        w.Placement.PlaceLog(open + new Vec2(0.4, 0.25), 0, 2.0, 0.12, 1, 8);
-        Assert.False(w.FloraSystem.Suitability(vine, open).HardRefused);
-        Assert.True(w.FloraSystem.Suitability(Sp("emberfan_fungus"), new Vec2(2.5, 2.5)).HardRefused, "bracket fungi only grow on logs");
+        // A climber may start on open ground: it runs a runner out looking for something to hold.
+        var founder = w.FloraSystem.Establish(vine, new Vec2(-2, -2), "climber test", vine.MaxBiomass * 0.6);
+        RunFlora(w, 40, () => TestUtil.Condition(w, 0.6, 0.9, 0.6));
+        var segs = founder.ClimberSegments!;
+        Assert.True(segs.Count > 4, $"a climber should lay down a runner, got {segs.Count} nodes");
+        Assert.DoesNotContain(segs, s => s.Attached);
+        double reach = segs.Max(s => Vec2.Distance(s.Position.XZ, founder.Position));
+        Assert.True(reach <= vine.Climber!.MaxUnsupportedLength * 1.5,
+            $"a climber with nothing to climb must run out of steam, it reached {reach:0.00} m");
+        // Put a log beside it and it will hold on instead.
+        var w2 = TestUtil.FlatWorld(35);
+        TestUtil.Condition(w2, 0.6, 0.9, 0.6);
+        var placed = w2.Placement.PlaceLog(new Vec2(-2, -1.4), 0, 2.0, 0.12, 1, 8);
+        Assert.True(placed.Ok, placed.Message);
+        var f2 = w2.FloraSystem.Establish(vine, new Vec2(-2, -2), "climber test", vine.MaxBiomass * 0.6);
+        RunFlora(w2, 40, () => TestUtil.Condition(w2, 0.6, 0.9, 0.6));
+        Assert.True(w2.Flora.Get(f2.Id)!.ClimberAttached, "with a log beside it, the climber should hold on");
     }
 
 
@@ -622,10 +633,22 @@ public class FloraTests
         var founder = w.FloraSystem.Establish(vineSp, Vec2.Zero, "climber test", vineSp.MaxBiomass * 0.7);
         Assert.False(founder.ClimberAttached);
         RunFlora(w, 45, () => TestUtil.Condition(w, 0.62, 0.9, 0.75));
-        var nodes = w.Flora.Items.Where(x => x.SpeciesId == vineSp.Id).ToList();
-        Assert.Contains(nodes, x => x.ClimberAttached);
-        var attached = nodes.First(x => x.ClimberAttached);
-        Assert.True(Vec2.Distance(attached.Position, support.Position) <= vineSp.Climber!.AttachmentRadius + vineSp.Climber.SegmentLength + 1e-6);
+        var f = w.Flora.Get(founder.Id)!;
+        Assert.True(f.ClimberAttached, "the climber should reach the woody support and hold on");
+        var segs = f.ClimberSegments!;
+        var climbing = segs.Where(s => s.Attached).ToList();
+        Assert.True(climbing.Count > 0, "the climber should hold on with stem nodes");
+        // It attached only after travelling there: the stem's arc to the first hold is the distance walked.
+        var first = climbing.OrderBy(s => s.Arc).First();
+        Assert.True(first.Arc >= 1.4, $"the climber must travel to the support, not appear on it (it walked {first.Arc:0.00} m)");
+        // And the stem that holds on lies on the bark.
+        foreach (var s in climbing)
+        {
+            var (r, _, _) = w.FloraSystem.TreeTrunkProfile(support, supportSp, s.Position.Y);
+            double dist = Math.Sqrt(Math.Pow(s.Position.X - support.X, 2) + Math.Pow(s.Position.Z - support.Z, 2));
+            Assert.True(Math.Abs(dist - r) < 0.06,
+                $"the stem must lie on the bark: node is {dist:0.000} m from the axis but the trunk is {r:0.000} m");
+        }
     }
 
     [Fact]

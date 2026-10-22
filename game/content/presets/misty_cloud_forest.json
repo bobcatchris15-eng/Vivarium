@@ -337,7 +337,27 @@
     {
       "species": "glass_antlers",
       "count": 6
-    }
+    },
+      {
+      "species": "hollowcrown",
+      "count": 2
+      },
+      {
+      "species": "marrowbloom",
+      "count": 5
+      },
+      {
+      "species": "embercup",
+      "count": 7
+      },
+      {
+      "species": "bonecup",
+      "count": 3
+      },
+      {
+      "species": "silverweed",
+      "count": 2
+      }
   ],
   "starterFauna": [
     {

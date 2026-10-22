@@ -1,0 +1,81 @@
+{
+  "id": "marrowbloom",
+  "name": "Marrowbloom",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Rootless woodland understory flower of deep shade, feeding on leaf litter.",
+  "description": "A cluster of bone-white stems rises out of the duft and nods over at the top, each carrying a single translucent bell that never opens green.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.35,
+      "gravel": 0.08
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.62,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.14,
+      "tolerance": 0.2
+    },
+    "nutrients": {
+      "optimum": 0.22,
+      "tolerance": 0.26
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.3,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.16,
+    "maxBiomass": 0.4,
+    "initialBiomass": 0.03,
+    "declinePerDay": 0.3,
+    "maturityDays": 22,
+    "lifespanDays": 70,
+    "nutrientPerBiomass": 0.12,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 10,
+    "radius": 0.3,
+    "propagules": 4,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.22,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.5
+  },
+  "proximity": [],
+  "litterFraction": 0.7,
+  "sheddingPerDay": 0.01,
+  "grazingValue": 0.05,
+  "visual": {
+    "shape": "marrowbloom_stem",
+    "color": [
+      0.88,
+      0.83,
+      0.78
+    ],
+    "color2": [
+      0.96,
+      0.88,
+      0.83
+    ],
+    "colorVariance": 0.04,
+    "height": 0.28
+  },
+  "tags": [
+    "plant",
+    "understory",
+    "shade",
+    "mycoheterotroph"
+  ]
+}

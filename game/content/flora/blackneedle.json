@@ -1,0 +1,98 @@
+{
+  "id": "blackneedle",
+  "name": "Blackneedle",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Spiny pioneer of disturbed, sun-baked ground.",
+  "description": "A spiny rosette of white-backed leaves holds a winged stem, and each stem ends in a bronze-edged bract cage around a crown of violet florets.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.6,
+      "rock": 0.3
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.32,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.24
+    },
+    "nutrients": {
+      "optimum": 0.3,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.12,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1.5,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.26,
+    "maturityDays": 20,
+    "lifespanDays": 260,
+    "nutrientPerBiomass": 0.26,
+    "radiusAtMax": 0.44,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 9,
+    "radius": 0.5,
+    "propagules": 4,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.34,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.7
+  },
+  "proximity": [],
+  "litterFraction": 0.82,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0.08,
+  "postLife": {
+    "standingDays": 120,
+    "collapseDays": 14,
+    "fallenDays": 60,
+    "advancedDays": 18,
+    "coarseFraction": 0.45,
+    "decayHalfLifeMultiplier": 0.88,
+    "standingRetention": 0.86,
+    "deadColor": [
+      0.66,
+      0.58,
+      0.4
+    ],
+    "litterColorInfluence": 0.7,
+    "dryBleach": 0.38,
+    "wetDarken": 0.12
+  },
+  "visual": {
+    "shape": "blackneedle_thistle",
+    "color": [
+      0.16,
+      0.3,
+      0.14
+    ],
+    "color2": [
+      0.44,
+      0.5,
+      0.22
+    ],
+    "colorVariance": 0.05,
+    "height": 0.78
+  },
+  "tags": [
+    "plant",
+    "pioneer",
+    "dry",
+    "thorny"
+  ]
+}

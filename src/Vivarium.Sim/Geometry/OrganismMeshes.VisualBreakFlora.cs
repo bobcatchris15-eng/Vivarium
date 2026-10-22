@@ -64,131 +64,6 @@ public static partial class OrganismMeshes
         return centre + across*(x*half*teeth) + up*(half*(.16*(1-x*x)-.035*Math.Abs(x)));
     }
 
-    private static void Veilblade(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        // Several basal fans, with shorter outer leaves and rising inner spears.
-        int fans=5;
-        for(int fan=0;fan<fans;fan++)
-        {
-            double a=fan*Math.PI*2/fans+rng.Range(-.35,.35);
-            var baseDir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            var crown=baseDir*rng.Range(.12,.45);
-            for(int k=0;k<8;k++)
-            {
-                double az=a+(k-3.5)*rng.Range(.19,.30)+rng.Range(-.15,.15);
-                var dir=new Vec3(Math.Cos(az),0,Math.Sin(az));
-                var side=new Vec3(-dir.Z,0,dir.X);
-                double age=Math.Abs(k-3.5)/3.5;
-                double h=rng.Range(.78,1.03)*(1-.30*age);
-                double lean=rng.Range(.12,.26)+age*rng.Range(.3,.55);
-                var root=crown+side*rng.Range(-.055,.055);
-                var control=root+dir*(lean*.12)+Vec3.Up*(h*1.23)+side*rng.Range(-.09,.09);
-                var tip=root+dir*lean+Vec3.Up*(h*(1-age*.6));
-                var col=Primitives.Mix(c1,c2,rng.Range(.04,.48));
-                CurvedBlade(m,root,control,tip,side,rng.Range(.035,.07),Primitives.Scale(col,.78),col,
-                    12,rng.Range(-.55,.55),.8);
-            }
-        }
-        for(int k=0;k<5;k++)
-        {
-            double a=rng.Range(0,Math.PI*2);
-            var foot=new Vec3(Math.Cos(a)*rng.Range(.05,.36),0,Math.Sin(a)*rng.Range(.05,.36));
-            var top=foot+new Vec3(rng.Range(-.12,.12),rng.Range(.88,1.10),rng.Range(-.12,.12));
-            var path=Enumerable.Range(0,6).Select(i=>Vec3.Lerp(foot,top,i/5.0)+Vec3.Up*(.025*Math.Sin(i*Math.PI/5))).ToArray();
-            Primitives.Tube(m,path,new[]{.009,.008,.007,.006,.005,.003},6,(i,v)=>(Primitives.Scale(c1,.76),1,i/5.0,v,0,0));
-            Primitives.Ellipsoid(m,top-Vec3.Up*.035,new Vec3(.018,.075,.018),5,8,
-                (u,v)=>(Primitives.Mix(c2,new[]{.55,.42,.22},.55),1,u,v,0,0));
-        }
-    }
-
-    private static void HookPrickle(MeshData m, Vec3 root, Vec3 outward, Vec3 tangent, double size, double[] color)
-    {
-        var side=outward.Cross(tangent).Normalized()*size*.23;
-        var low=root-tangent*size*.25;
-        var high=root+tangent*size*.25;
-        var elbow=root+outward*size*.72;
-        var tip=root+outward*size-tangent*size*.65;
-        void Tri(Vec3 a,Vec3 b,Vec3 c)
-        {
-            var normal=(b-a).Cross(c-a).Normalized();
-            int v=m.AddVertex(a,normal,color,1,0,0,0,0);
-            m.AddVertex(b,normal,color,1,.5,0,0,0); m.AddVertex(c,normal,color,1,1,1,0,0);
-            Primitives.TriangleFacing(m,v,v+1,v+2,normal);
-        }
-        Tri(low-side,high-side,elbow); Tri(high+side,low+side,elbow);
-        Tri(low-side,elbow,tip); Tri(elbow,low+side,tip);
-        Tri(high-side,high+side,elbow); Tri(low+side,low-side,tip);
-    }
-
-    private static void Hookthicket(MeshData m, Rng rng, double[] c1, double[] c2, bool juvenile)
-    {
-        var wood=Primitives.Mix(c1,new[]{.32,.16,.12},.6);
-        var thorn=new[]{.65,.42,.24};
-        int canes=12+rng.NextInt(4);
-        for(int k=0;k<canes;k++)
-        {
-            double az=k*Math.PI*2/canes+rng.Range(-.25,.25);
-            var dir=new Vec3(Math.Cos(az),0,Math.Sin(az));
-            var side=new Vec3(-dir.Z,0,dir.X);
-            var root=dir*rng.Range(.06,.28);
-            double height=rng.Range(.62,.88), reach=rng.Range(.90,1.14);
-            Vec3 Point(double t)
-            {
-                // Half-ellipse: continuously turns from rising cane through a broad shoulder
-                // into the returning runner. A gentle sideways bow varies its sweep plane.
-                return root+dir*(reach*(1-Math.Cos(Math.PI*t))*.5)
-                    +Vec3.Up*(height*Math.Sin(t*(juvenile?1.75:Math.PI)))
-                    +side*(.13*Math.Sin(k*.7)*Math.Sin(Math.PI*t));
-            }
-            const int caneSegments=48;
-            var path=Enumerable.Range(0,caneSegments+1).Select(j=>Point(j/(double)caneSegments)).ToArray();
-            var radius=Enumerable.Range(0,caneSegments+1).Select(j=>MathD.Lerp(.014,.0025,j/(double)caneSegments)).ToArray();
-            Primitives.Tube(m,path,radius,7,(i,v)=>(Primitives.Mix(wood,c1,i/(double)caneSegments*.48),1,i/(double)caneSegments,v,2,0));
-            for(int j=1;j<10;j++)
-            {
-                double t=j/10.0;
-                var p=Point(t);
-                var tangent=(Point(t+.01)-Point(t-.01)).Normalized();
-                double nodeRadius=MathD.Lerp(.014,.0025,t);
-                var outv=Axis.RotateAround(side,tangent,j*2.4+k*.7).Normalized();
-                HookPrickle(m,p+outv*nodeRadius,outv,tangent,rng.Range(.027,.048),thorn);
-                if(j%2==0) HookPrickle(m,p-outv*nodeRadius,-outv,tangent,.032,thorn);
-                var leafDir=(dir*.55+side*(j%2==0?1:-1)+Vec3.Up*rng.Range(-.05,.15)).Normalized();
-                var petiole=p+leafDir*rng.Range(.065,.12)+Vec3.Up*.025;
-                Primitives.Tube(m,new[]{p,petiole},new[]{.0035,.0015},6,(i,v)=>(c1,1,i,v,0,0));
-                for(int leaflet=-1;leaflet<=1;leaflet++)
-                {
-                    var forward=Axis.RotateAround(leafDir,Vec3.Up,leaflet*.82);
-                    double length=leaflet==0?rng.Range(.21,.29):rng.Range(.15,.22);
-                    var attach=petiole+forward*.015;
-                    var tip=attach+forward*length-Vec3.Up*rng.Range(.01,.045);
-                    CurvedBlade(m,attach,attach+forward*(length*.55)+Vec3.Up*.035,tip,
-                        new Vec3(-forward.Z,0,forward.X),length*rng.Range(.29,.38),
-                        Primitives.Scale(c1,rng.Range(.85,1.12)),Primitives.Mix(c1,c2,.3),6,
-                        rng.Range(-.45,.45),.75,.2);
-                }
-                // Short leafy lateral shoots knit the thicket together; no floating cross-braces.
-                if(j==4||j==7)
-                {
-                    var end=petiole+leafDir*.17+Vec3.Up*.035;
-                    Primitives.Tube(m,new[]{p,petiole,end},new[]{.006,.003,.001},6,(i,v)=>(wood,1,i/2.0,v,2,0));
-                    HookPrickle(m,petiole,side,tangent,.035,thorn);
-                    CurvedBlade(m,end,end+leafDir*.13+Vec3.Up*.04,end+leafDir*.25,
-                        side,.07,c1,c2,6,rng.Range(-.3,.3),.75,.2);
-                }
-            }
-            if(!juvenile)
-            {
-                // Thin tip roots disappear into soil at the next rooting point of the runner.
-                for(int r=0;r<3;r++)
-                {
-                    var end=path[^1]+dir*(.025+r*.012)+side*((r-1)*.022)-Vec3.Up*.012;
-                    Primitives.Tube(m,new[]{path[^1],Vec3.Lerp(path[^1],end,.5),end},new[]{.004,.002,.0008},6,
-                        (i,v)=>(Primitives.Mix(wood,new[]{.56,.47,.30},.45),1,i*.5,v,0,0));
-                }
-            }
-        }
-    }
 
     private static void BlueSundewRosette(MeshData m, Rng rng, double[] c1, double[] c2)
     {
@@ -241,165 +116,11 @@ public static partial class OrganismMeshes
         }
         static Vec3 dirForFlower(double a) => new(Math.Cos(a),0,Math.Sin(a));
     }
-
-    private static void PitcherPlant(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        int count=6+rng.NextInt(3);
-        for(int k=0;k<count;k++)
-        {
-            double a=k*2.39996+rng.Range(-.18,.18);
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            var side=new Vec3(-dir.Z,0,dir.X);
-            var root=dir*rng.Range(.035,.09)+Vec3.Up*.012;
-            double h=rng.Range(.46,.66), lean=rng.Range(.23,.46), breadth=rng.Range(.17,.22);
-            double phase=rng.Range(0,Math.PI*2);
-            Vec3 Centre(double t) => root+dir*(lean*(1-Math.Cos(t*Math.PI*.5)))+Vec3.Up*(h*t);
-            double Radius(double t) => breadth*(.11+.77*Math.Sin(Math.PI*t*.84)+.20*Math.Pow(t,8));
-            double[] Tissue(double t,double v)
-            {
-                double patch=.5+.26*Math.Sin(t*19+Math.Sin(v*17+phase)*1.7+phase)
-                    +.22*Math.Sin(v*31-t*13+phase*.7);
-                var yellow=new[]{.72,.69,.30}; var green=new[]{.34,.48,.17}; var brown=new[]{.42,.27,.12};
-                var pigment=Primitives.Mix(yellow,green,MathD.SmoothStep(.20,.65,patch));
-                return Primitives.Mix(pigment,brown,MathD.SmoothStep(.66,.93,patch)*.85);
-            }
-            int around=m.Lod is {} lod?Math.Max(6,(int)Math.Round(20*lod.Radial)):20;
-            int rings=m.Lod is {} lod2?Math.Max(3,(int)Math.Round(12*lod2.Length)):12;
-            int lipQ=m.Lod is {} lod3?Math.Max(3,(int)Math.Round(6*lod3.Radial)):6;
-            int start=m.VertexCount;
-            // Exterior and descending interior meet at an open annular rim, never a filled mouth disc.
-            for(int face=0;face<2;face++)
-            {
-                for(int row=0;row<=rings;row++)
-                {
-                    double t=face==0?row/(double)rings:1-row/(double)rings*.60;
-                    double radius=Radius(t)-(face==0?0:.012);
-                    for(int s=0;s<=around;s++)
-                    {
-                        double v=s/(double)around, angle=v*Math.PI*2;
-                        var radial=dir*Math.Cos(angle)+side*Math.Sin(angle)*.84;
-                        var p=Centre(t)+radial*radius;
-                        var normal=(radial-Vec3.Up*(.14*Math.Cos(t*Math.PI))).Normalized()*(face==0?1:-1);
-                        var color=face==0?Tissue(t,v):Primitives.Scale(Tissue(t,v),.50+.20*t);
-                        m.AddVertex(p,normal,color,1,t,v,0,face==0?-2:-3);
-                    }
-                }
-                int offset=start+face*(rings+1)*(around+1);
-                for(int row=0;row<rings;row++) for(int s=0;s<around;s++)
-                {
-                    int b=offset+row*(around+1)+s, next=b+around+1;
-                    Primitives.TriangleFacing(m,b,next,b+1,m.NormalAt(b));
-                    Primitives.TriangleFacing(m,b+1,next,next+1,m.NormalAt(b));
-                }
-            }
-            var mouth=Centre(1);
-            double lip=Radius(1)-.006;
-            int rim=m.VertexCount;
-            for(int s=0;s<=around;s++) for(int q=0;q<=lipQ;q++)
-            {
-                double angle=s*Math.PI*2/around, theta=q*Math.PI*2/lipQ;
-                var radial=dir*Math.Cos(angle)+side*Math.Sin(angle)*.84;
-                var normal=(radial*Math.Cos(theta)+Vec3.Up*Math.Sin(theta)).Normalized();
-                m.AddVertex(mouth+radial*(lip+.013*Math.Cos(theta))+Vec3.Up*(.008*Math.Sin(theta)),
-                    normal,Primitives.Mix(Tissue(1,s/(double)around),new[]{.53,.36,.16},.32),1,1,s/(double)around,0,-2);
-            }
-            for(int s=0;s<around;s++) for(int q=0;q<lipQ;q++)
-            {
-                int b=rim+s*(lipQ+1)+q, w=lipQ+1;
-                Primitives.TriangleFacing(m,b,b+w,b+1,m.NormalAt(b));
-                Primitives.TriangleFacing(m,b+1,b+w,b+w+1,m.NormalAt(b));
-            }
-            // Liquid sits deep inside the cavity and leaves the inner wall visible.
-            Primitives.Ellipsoid(m,Centre(.43),new Vec3(Radius(.43)*.88,.004,Radius(.43)*.75),3,12,
-                (u,v)=>(new[]{.075,.10,.055},1,u,v,0,-4));
-            var hoodRoot=mouth-dir*lip;
-            CurvedBlade(m,hoodRoot,hoodRoot-dir*.13+Vec3.Up*.20,hoodRoot-dir*.09+Vec3.Up*.23,
-                side,breadth*.86,Tissue(.85,.1),Tissue(1,.6),10,rng.Range(-.35,.35),.7,0,-2);
-            // A leafy keel joins the inflated trap to the common basal crown.
-            CurvedBlade(m,root,Centre(.45)+dir*Radius(.45),mouth+dir*lip,
-                side,.018,Tissue(.2,.1),Tissue(.9,.3),8,0,1,0,-2);
-        }
-        // A tall, leafless central scape carries a nodding five-part Sarracenia-like flower.
-        var flower=new Vec3(.09,.97,.015);
-        var scape=Enumerable.Range(0,9).Select(i=>
-        {
-            double t=i/8.0;
-            return new Vec3(.10*Math.Sin(t*Math.PI*.75),t*.96,.015*t);
-        }).Append(flower).ToArray();
-        Primitives.Tube(m,scape,Enumerable.Range(0,scape.Length).Select(i=>MathD.Lerp(.018,.007,i/(double)(scape.Length-1))).ToArray(),7,
-            (i,v)=>(new[]{.37,.48,.18},1,i/(double)(scape.Length-1),v,0,0));
-        Primitives.Ellipsoid(m,flower,new Vec3(.057,.025,.057),5,10,(u,v)=>(new[]{.56,.58,.22},1,u,v,0,0));
-        for(int k=0;k<5;k++)
-        {
-            double a=k*Math.PI*2/5;
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a)); var side=new Vec3(-dir.Z,0,dir.X);
-            CurvedBlade(m,flower,flower+dir*.09+Vec3.Up*.01,flower+dir*.12-Vec3.Up*.045,
-                side,.053,new[]{.67,.64,.26},new[]{.46,.42,.16},8,0,.8,0,0);
-            CurvedBlade(m,flower+dir*.03,flower+dir*.10-Vec3.Up*.055,flower+dir*.055-Vec3.Up*.16,
-                side,.046,new[]{.58,.27,.16},new[]{.67,.43,.20},8,.1,.65,0,0);
-        }
-    }
-
-    private static void SnapTrap(MeshData m, Rng rng, double[] c1, double[] c2)
-    {
-        int traps=8+rng.NextInt(3);
-        for(int k=0;k<traps;k++)
-        {
-            double a=k*2.39996+rng.Range(-.15,.15);
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a)); var side=new Vec3(-dir.Z,0,dir.X);
-            var root=dir*.025+Vec3.Up*.02;
-            var hinge=root+dir*rng.Range(.40,.65)+Vec3.Up*rng.Range(.04,.20);
-            CurvedBlade(m,root,Vec3.Lerp(root,hinge,.5)+Vec3.Up*.045,hinge,side,
-                rng.Range(.04,.065),c1,c2,8,rng.Range(-.2,.2),.85);
-            double length=rng.Range(.24,.31), half=rng.Range(.12,.16), open=rng.Range(.32,.80);
-            var forward=(dir+Vec3.Up*rng.Range(-.12,.16)).Normalized();
-            var up=side.Cross(forward).Normalized();
-            for(int sign=-1;sign<=1;sign+=2)
-            {
-                Vec3 At(double t,double x)
-                {
-                    double envelope=Math.Pow(Math.Max(0,Math.Sin(Math.PI*t)),.65);
-                    return hinge+forward*(length*t)+side*(sign*half*envelope*x*Math.Cos(open))
-                        +up*(half*envelope*(x*Math.Sin(open)+.12*x*x));
-                }
-                const int rows=10,cols=4;
-                int first=m.VertexCount;
-                for(int row=0;row<=rows;row++) for(int col=0;col<=cols;col++)
-                {
-                    double t=.025+.95*row/rows, x=col/(double)cols;
-                    var along=At(Math.Min(.99,t+.001),x)-At(Math.Max(.01,t-.001),x);
-                    var cross=At(t,Math.Min(1,x+.001))-At(t,Math.Max(0,x-.001));
-                    var normal=cross.Cross(along).Normalized()*sign;
-                    var red=Primitives.Mix(new[]{.43,.20,.17},new[]{.61,.31,.23},t);
-                    var color=Primitives.Mix(red,c1,MathD.SmoothStep(.72,1,x)*.8);
-                    m.AddVertex(At(t,x),normal,color,1,t,x,0,-5);
-                }
-                for(int row=0;row<rows;row++) for(int col=0;col<cols;col++)
-                {
-                    int b=first+row*(cols+1)+col;
-                    Primitives.TriangleFacing(m,b,b+cols+1,b+1,m.NormalAt(b));
-                    Primitives.TriangleFacing(m,b+1,b+cols+1,b+cols+2,m.NormalAt(b));
-                }
-                for(int tooth=0;tooth<11;tooth++)
-                {
-                    double t=.08+tooth*.084;
-                    var p=At(t,1);
-                    // Marginal cilia curve upward and inward, framing the trap's two lobes.
-                    var end=p+side*(sign*.02)+up*.075;
-                    Primitives.Tube(m,new[]{p,p+side*(sign*.025)+up*.035,end},new[]{.0035,.002,.0007},6,
-                        (i,v)=>(Primitives.Mix(c2,new[]{.68,.74,.36},.65),1,i*.5,v,0,0));
-                }
-                for(int hair=0;hair<3;hair++)
-                {
-                    var p=At(.30+hair*.20,.48);
-                    Primitives.Tube(m,new[]{p,p+up*.035-side*(sign*.009)},new[]{.002,.0005},6,
-                        (i,v)=>(new[]{.33,.20,.13},1,i,v,0,0));
-                }
-            }
-            Primitives.Tube(m,new[]{hinge,hinge+forward*length},new[]{.006,.003},6,(i,v)=>(c1,1,i,v,0,0));
-        }
-    }
 }
+
+
+
+
 
 /// <summary>
 /// Render-only parametric detail tiers for flora. Every tier is the same generator run with the same seed and
@@ -420,7 +141,28 @@ public static partial class OrganismMeshes
     /// near-field read depends on dense, fine foliage may ask for a richer closest mesh: the extra
     /// triangles are only paid for the instances the camera is close to.
     /// </summary>
-    public static int FloraTopTriangleCapFor(string id) => FloraTopTriangleCap;
+    public static int FloraTopTriangleCapFor(string id) => id switch
+    {
+        // A clover mat is hundreds of small overlapping leaflets; below its budget the near tier
+        // thins the mat into scattered pads instead of a continuous sward.
+        "trifold" => 40000,
+        // A fern's near read is its pinnae: dozens of finely divided blades per frond, nine fronds
+        // deep. Below its budget the near tier drops pinnae and the fern reads as a handful of
+        // broad leaves instead of a feather.
+        "veilfern" => 52000,
+        // A bramble's near read is its prickles and its palmate leaves: without them the brake is a
+        // tangle of bare wires.
+        "hookthicket" => 64000,
+        // The coinrunner mat is the same argument: a wide carpet of large reniform coins, each one
+        // a modelled blade with its own venation, a coin-border bead and a rolled edge. Below its
+        // budget the near tier drops coins and the carpet opens into separate rafts.
+        "coinrunner" => 36000,
+        // A Sarracenia trap is a modelled organ: trumpet wall, throat, rolled lip, erect hood with
+        // its areolate net and a fringe of crystalline needles. Below its budget the tierer drops
+        // the hood fringe and the net, and the trap stops reading as a pitcher plant.
+        "pitcher_plant" => 44000,
+        _ => FloraTopTriangleCap,
+    };
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int), double> LodScaleCache = new();
 
@@ -443,6 +185,10 @@ public static partial class OrganismMeshes
 
     public static MeshData ClimberNodeTier(FloraSpeciesDef sp, ulong seed, bool attached, int tier) =>
         BuildTier(sp.Id, seed, attached ? 3 : 4, false, tier, (_, lod) => ClimberNode(sp, seed, attached, lod))!;
+
+    /// <summary>The growing tip of a shoot, at the given detail tier.</summary>
+    public static MeshData ClimberNodeTipTier(FloraSpeciesDef sp, ulong seed, int tier) =>
+        BuildTier(sp.Id, seed, 5, false, tier, (_, lod) => ClimberNodeTip(sp, seed, lod))!;
 
     private static MeshData? BuildTier(string id, ulong seed, int kind, bool tiered, int tier, Func<int, FloraLodParams, MeshData?> gen)
     {

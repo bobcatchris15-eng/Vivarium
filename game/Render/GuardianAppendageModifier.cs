@@ -110,6 +110,11 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             _stationRadii[i*4]=Radius(i,_points.Length);
             _stationGroundRadii[i*4]=GroundRadius(i,_points.Length);
         }
+        // The vegetation index only has to reach as far as the widest contact
+        // this tail uses, so it can search a much smaller area.
+        float reach=0;
+        for(int i=0;i<_stationRadii.Length;i++)reach=Math.Max(reach,_stationRadii[i]);
+        if(Vegetation!=null)Vegetation.ContactReach=reach;
         for(int i=0;i<_points.Length-1;i++)for(int sample=1;sample<4;sample++)
         {
             float t=sample*.25f;

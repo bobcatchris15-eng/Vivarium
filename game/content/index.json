@@ -58,7 +58,17 @@
     "flora/vaultfern.json",
     "flora/rainshield.json",
     "flora/lacemantle.json",
-    "flora/cragparasol.json"
+    "flora/cragparasol.json",
+    "flora/glasslily.json",
+    "flora/silverweed.json",
+    "flora/coalspike.json",
+    "flora/marrowbloom.json",
+    "flora/blackneedle.json",
+    "flora/starbulb.json",
+    "flora/bonecup.json",
+    "flora/embercup.json",
+    "flora/hollowcrown.json",
+    "flora/tankbloom.json"
   ],
   "fauna": [
     "fauna/prismhopper.json",

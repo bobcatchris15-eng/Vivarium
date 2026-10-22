@@ -67,18 +67,41 @@ Replace the Vivarium's recognizable real-world species identities with fictional
 ## Climber simulation
 A climber species owns a `climber` content block:
 - `searchRadius`: support-sensing neighborhood. This biases growth; it is not teleportation.
-- `groundSpeedPerDay`: lateral runner production.
+- `groundSpeedPerDay`: stem extension production, measured along the stem.
 - `segmentLength`: distance between persistent stem nodes.
 - `attachmentRadius`: physical contact distance for support capture.
-- `branchChance`: probability that a parent tip remains active after producing a child tip.
 - `maxUnsupportedLength`: practical search limit before a tip exhausts.
 - `verticalGrowthMultiplier`: visual/growth advantage after attachment.
-- `nodeCap`: per-species persistent stem-node budget so branching networks remain bounded.
+- `nodeCap`: per-plant persistent stem-node budget so branching networks remain bounded.
 - `supportTypes`: any of `woody`, `log`, `rock`.
+- `climbWeight`, `driftWeight`, `lightWeight`: the weights the surface-bound growth law uses to
+  choose a heading inside the surface's tangent plane. `driftWeight` is the twining term.
+- `wanderAmp`, `wanderPeriod`: circumnutation: how far and over what wavelength the shoot's
+  heading oscillates inside the surface.
+- `branchRate`, `branchAngle`, `lateralSpeed`, `lateralClimb`, `maxBranchOrder`, `branchLength`:
+  how side shoots leave the stem, how fast they run, and how long they may be.
+- `baseRadius`, `stemTaper`, `tipRadius`: the stem's thickness at the base of the plant (which is also the
+  cap), its per-metre falloff from base to tip, and the thinnest the stem may get.
+- `grabRadius`: how close a shoot must come to a host before it takes hold.
+- `seekRate`: how eagerly a searching shoot turns toward the nearest host it can sense.
 
-Each founder begins as a ground tip. Tips accumulate extension credit, choose a heading biased toward the nearest valid support inside searchRadius, and bud a connected node only after physically covering segmentLength. Without a support they persist in exploratory growth with directional inertia and jitter. A node inside attachmentRadius marks itself attached and stops ground extension. Mature attached nodes resume ordinary propagule production, so a successful climb is not a reproductive dead end. Branching produces multiple searching tips. Unsupported length is tracked along the lineage and each species has a node budget so runners cannot become immortal spaghetti or consume the world entity budget.
+Growth is surface-bound: a shoot grows from its tip, lays stem down on whatever surface it is
+touching, and the surface's geometry decides where the stem ends up. The species supplies only
+weights; the host supplies the frame. Because the shoot's lateral reference is parallel-
+transported along the surface, the same law winds a vine around a round trunk and runs it
+straight up a flat wall, because a wall gives it nothing to wind around. See
+`docs/overhaul/surface-bound-vine-growth.md` for the derivation.
 
-Woody individuals are valid supports based on their actual simulated positions. Logs and rocks remain supports. Rendering draws the persistent ground stems between parent and child nodes; attached nodes stretch/leaf upward against the selected support.
+Each founder begins as a ground tip. Tips accumulate extension credit and extend only after
+physically covering segmentLength. Without a support they persist in exploratory growth with
+directional inertia, jitter and circumnutation. A shoot takes hold when the host's surface
+comes within grabRadius of where it is actually growing; it never teleports onto a support.
+Mature attached nodes resume ordinary propagule production, so a successful climb is not a
+reproductive dead end. Branching produces lateral shoots that leave the parent at the branch
+angle on any surface. Unsupported length is tracked along the lineage and each species has a
+node budget so runners cannot become immortal spaghetti or consume the world entity budget.
+
+Woody individuals are valid supports based on their actual simulated positions. Logs and rocks remain supports. Rendering draws the persistent ground stems between parent and child nodes as one tapering stem; attached nodes stretch/leaf upward against the selected support.
 
 ## Structural succession target
 Bare/open ground -> low pioneers -> shrubs/trees -> canopy shade -> shade shrub and climbers -> mixed mature vertical structure. Disturbance or woody death can reverse this progression.

@@ -22,3 +22,16 @@ TestResults/
 __pycache__/
 *.py[cod]
 reference/
+
+# Blender backup files
+*.blend1
+*.blend2
+
+# Temporary files
+*.tmp
+*.TMP
+*.import~*
+
+# Generated review output / remote attachments
+--out/
+.codex-remote-attachments/

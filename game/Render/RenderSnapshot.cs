@@ -208,7 +208,7 @@ public readonly struct FloraSnapshotItem
             for (int i = 0; i < f.ClimberSegments.Count; i++)
             {
                 var s = f.ClimberSegments[i];
-                segs[i] = new ClimberSegmentSnapshot(s.Position, s.Normal, s.Forward, s.ParentIndex, s.Attached, s.Senescent);
+                segs[i] = new ClimberSegmentSnapshot(s.Position, s.Normal, s.Forward, s.ParentIndex, s.Attached, s.Senescent, s.Radius);
             }
             ClimberSegments = segs;
         }
@@ -240,8 +240,10 @@ public readonly struct ClimberSegmentSnapshot
     public int ParentIndex { get; }
     public bool Attached { get; }
     public bool Senescent { get; }
+    /// <summary>Stem radius at this node, in metres. The stem tapers from the base of the plant to the growing tip.</summary>
+    public double Radius { get; }
 
-    public ClimberSegmentSnapshot(Vec3 pos, Vec3 normal, Vec3 forward, int parentIdx, bool attached, bool senescent)
+    public ClimberSegmentSnapshot(Vec3 pos, Vec3 normal, Vec3 forward, int parentIdx, bool attached, bool senescent, double radius = 0)
     {
         Position = pos;
         Normal = normal;
@@ -249,6 +251,7 @@ public readonly struct ClimberSegmentSnapshot
         ParentIndex = parentIdx;
         Attached = attached;
         Senescent = senescent;
+        Radius = radius;
     }
 }
 

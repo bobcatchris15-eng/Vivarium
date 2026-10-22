@@ -70,7 +70,13 @@
       0.3
     ],
     "colorVariance": 0.05,
-    "height": 0.2
+    "height": 0.2,
+    "bioluminescenceColor": [
+      0.95,
+      0.12,
+      0.16
+    ],
+    "bioluminescenceStrength": 1.5
   },
   "tags": [
     "plant",

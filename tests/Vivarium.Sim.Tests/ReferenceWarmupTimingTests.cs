@@ -21,6 +21,8 @@ public class ReferenceWarmupTimingTests
     /// <summary>
     /// Through the first flowing-pond steps: fast, and bit-identical to the pre-fix advection (digest captured
     /// from HEAD 2fdf4f7 before the fix). If content/sim changes legitimately move the digest, re-pin it.
+    /// Re-pinned 2026-10-21 for the ten-species new-flora set, which adds starter plants to the default
+    /// preset and so moves the world the warm-up runs on. The advection itself is untouched.
     /// </summary>
     [Fact]
     public void FlowingPondAquaticStepIsBoundedAndUnchanged()
@@ -31,7 +33,7 @@ public class ReferenceWarmupTimingTests
         w.Step(1945);
         _out.WriteLine($"step 1945 ticks: {sw.Elapsed.TotalSeconds:0.0}s");
         Assert.True(sw.Elapsed.TotalSeconds < 120, $"1945 ticks took {sw.Elapsed.TotalSeconds:0}s (pre-fix ~400s)");
-        Assert.Equal("fc6e50079942822c66afcbaceb2b6b9f297948339c42a6fcd946d9d436d4f9e5", WorldSerializer.Digest(w));
+        Assert.Equal("5f92e69cfc78ae788c57ce295ff1f467c4258724ea8db2a13e557dc9024449b4", WorldSerializer.Digest(w));
     }
 
     /// <summary>Diagnostic: per-chunk and per-system timing for the full 6-day warm-up.</summary>

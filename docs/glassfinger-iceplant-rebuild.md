@@ -93,11 +93,12 @@ sits in the older wood near the crown.
 | Tier | Triangles | Leaves |
 |---|---|---|
 | authored | 58 252 | 169 |
-| tier 0 (game) | 29 754 | ~200 |
-| tier 1 | 16 053 | — |
-| tier 2 | 5 172 | — |
+| tier 0 (game) | 59 162 | ~200 |
+| tier 1 | 30 618 | — |
+| tier 2 | 9 972 | — |
 
-Tier 0 sits just under the 30 000 cap that `OrganismMeshes.FloraTopTriangleCap` enforces.
+Tier 0 sits well inside the flora system's top-tier budget, so the ice plant does not need a
+per-species cap.
 
 ## Files touched
 

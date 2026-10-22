@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 
@@ -188,6 +189,83 @@ public sealed class GuardianSkinContact
         foreach (Node child in node.GetChildren()) Visit(child, visitor);
     }
 
+    /// <summary>The per-vertex pass of the skin scan. It is a plain object with
+    /// no captured state so the work can be split across cores without a
+    /// closure: the closure form of this loop was ten times slower and
+    /// allocated gigabytes on one of the guardian meshes.</summary>
+    private sealed class VertexPass
+    {
+        public Vector3[] Vertices = Array.Empty<Vector3>();
+        public int[] Binds = Array.Empty<int>();
+        public float[] Weights = Array.Empty<float>();
+        public int Influences;
+        public Transform3D[] BindMatrix = Array.Empty<Transform3D>();
+        public SurfaceScan Scan = null!;
+        public float[] Errors = Array.Empty<float>();
+        public int[] RegionMasks = Array.Empty<int>();
+        public bool[] ChainBinds = Array.Empty<bool>();
+        public int[] BoneMap = Array.Empty<int>();
+        public Transform3D MeshWorld, RestWorld;
+        public float Tolerance;
+        public string MeshName = "";
+
+        public void Run(int from, int to)
+        {
+            for (int vertex = from; vertex < to; vertex++)
+            {
+                if (!Vertices[vertex].IsFinite()) throw new InvalidOperationException("Nonfinite source vertex");
+                float r0 = 0, r1 = 0, r2 = 0, r3 = 0, r4 = 0, r5 = 0, r6 = 0;
+                float sum = 0; int chainBone = -1; float strongestChain = 0;
+                for (int slot = 0; slot < Influences; slot++)
+                {
+                    int offset = vertex * Influences + slot; float weight = Weights[offset]; int bind = Binds[offset];
+                    if (!float.IsFinite(weight) || weight < 0 || weight > 1) throw new InvalidOperationException("Invalid skin weight");
+                    if (weight == 0) continue; // Zero slots can contain otherwise irrelevant padding indices.
+                    if (bind < 0 || bind >= BindMatrix.Length) throw new InvalidOperationException("Skin bind index out of range");
+                    sum += weight;
+                    int mask = RegionMasks[bind];
+                    if ((mask & 1) != 0) r0 += weight;
+                    if ((mask & 2) != 0) r1 += weight;
+                    if ((mask & 4) != 0) r2 += weight;
+                    if ((mask & 8) != 0) r3 += weight;
+                    if ((mask & 16) != 0) r4 += weight;
+                    if ((mask & 32) != 0) r5 += weight;
+                    if ((mask & 64) != 0) r6 += weight;
+                    if (ChainBinds[bind] && weight > strongestChain) { strongestChain = weight; chainBone = BoneMap[bind]; }
+                }
+                if (Math.Abs(sum - 1) > .001f) throw new InvalidOperationException($"{MeshName}: weights sum {sum:G6}, expected1");
+                // The same arithmetic the per-vertex sample form used, without
+                // the sample: bone rest * inverse bind * vertex, weighted.
+                var local = Vector3.Zero;
+                var vertexPosition = Vertices[vertex];
+                for (int slot = 0; slot < Influences; slot++)
+                {
+                    int offset = vertex * Influences + slot; float weight = Weights[offset];
+                    if (weight == 0) continue;
+                    int bind = Binds[offset];
+                    local += (BindMatrix[bind] * vertexPosition) * weight;
+                }
+                var restWorld = RestWorld * local;
+                var expected = MeshWorld * vertexPosition;
+                float error = restWorld.DistanceTo(expected);
+                Errors[vertex] = error;
+                if (!float.IsFinite(error) || error > Tolerance)
+                    throw new InvalidOperationException($"{MeshName}: rest reconstruction mismatch {error:G6}m at vertex {vertex}; bind/local space invalid");
+                byte regionMask = 0;
+                if (r0 >= WeightThreshold) regionMask |= 1;
+                if (r1 >= WeightThreshold) regionMask |= 2;
+                if (r2 >= WeightThreshold) regionMask |= 4;
+                if (r3 >= WeightThreshold) regionMask |= 8;
+                if (r4 >= WeightThreshold) regionMask |= 16;
+                if (r5 >= WeightThreshold) regionMask |= 32;
+                if (r6 >= WeightThreshold) regionMask |= 64;
+                Scan.RestWorld[vertex] = restWorld;
+                Scan.RegionMask[vertex] = regionMask;
+                Scan.ChainBone[vertex] = chainBone;
+            }
+        }
+    }
+
     private void ScanMesh(MeshInstance3D mesh, Dictionary<string, List<Candidate>> candidates,
         ref int surfaceCount, float tolerance, ref double arraysMs, ref double vertexMs)
     {
@@ -265,6 +343,11 @@ public sealed class GuardianSkinContact
                 throw new InvalidOperationException($"{mesh.Name}: malformed skin arrays");
             arraysMs += System.Diagnostics.Stopwatch.GetElapsedTime(arrayStart).TotalMilliseconds;
             long vertexStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            // One matrix per skin bind: the bone rest pose times the inverse
+            // bind. It is the same for every vertex that uses that bind, so it
+            // is built once per bind instead of once per vertex influence.
+            var bindMatrix = new Transform3D[bindCount];
+            for (int bind = 0; bind < bindCount; bind++) bindMatrix[bind] = _restPoses[boneMap[bind]] * inverseBinds[bind];
             int surfaceIndex = meshScan.Surfaces.Count;
             var scan = new SurfaceScan
             {
@@ -279,62 +362,20 @@ public sealed class GuardianSkinContact
             // Each vertex writes only its own slots, and the arithmetic per
             // vertex is unchanged, so the result is identical.
             var errors = new float[vertices.Length];
-            void ScanVertex(int vertex)
+            var pass = new VertexPass
             {
-                if (!vertices[vertex].IsFinite()) throw new InvalidOperationException("Nonfinite source vertex");
-                float r0 = 0, r1 = 0, r2 = 0, r3 = 0, r4 = 0, r5 = 0, r6 = 0;
-                float sum = 0; int chainBone = -1; float strongestChain = 0;
-                for (int slot = 0; slot < influences; slot++)
-                {
-                    int offset = vertex * influences + slot; float weight = weights[offset]; int bind = binds[offset];
-                    if (!float.IsFinite(weight) || weight < 0 || weight > 1) throw new InvalidOperationException("Invalid skin weight");
-                    if (weight == 0) continue; // Zero slots can contain otherwise irrelevant padding indices.
-                    if (bind < 0 || bind >= bindCount) throw new InvalidOperationException("Skin bind index out of range");
-                    sum += weight;
-                    int mask = regionMasks[bind];
-                    if ((mask & 1) != 0) r0 += weight;
-                    if ((mask & 2) != 0) r1 += weight;
-                    if ((mask & 4) != 0) r2 += weight;
-                    if ((mask & 8) != 0) r3 += weight;
-                    if ((mask & 16) != 0) r4 += weight;
-                    if ((mask & 32) != 0) r5 += weight;
-                    if ((mask & 64) != 0) r6 += weight;
-                    if (chainBinds[bind] && weight > strongestChain) { strongestChain = weight; chainBone = boneMap[bind]; }
-                }
-                if (Math.Abs(sum - 1) > .001f) throw new InvalidOperationException($"{mesh.Name}: weights sum {sum:G6}, expected1");
-                // The same arithmetic the per-vertex sample form used, without
-                // the sample: bone rest * inverse bind * vertex, weighted.
-                var local = Vector3.Zero;
-                var vertexPosition = vertices[vertex];
-                for (int slot = 0; slot < influences; slot++)
-                {
-                    int offset = vertex * influences + slot; float weight = weights[offset];
-                    if (weight == 0) continue;
-                    int bind = binds[offset];
-                    local += (_restPoses[boneMap[bind]] * inverseBinds[bind] * vertexPosition) * weight;
-                }
-                var restWorld = _restWorld * local;
-                var expected = meshWorld * vertexPosition;
-                float error = restWorld.DistanceTo(expected);
-                errors[vertex] = error;
-                if (!float.IsFinite(error) || error > tolerance)
-                    throw new InvalidOperationException($"{mesh.Name}: rest reconstruction mismatch {error:G6}m at vertex {vertex}; bind/local space invalid");
-                byte regionMask = 0;
-                if (r0 >= WeightThreshold) regionMask |= 1;
-                if (r1 >= WeightThreshold) regionMask |= 2;
-                if (r2 >= WeightThreshold) regionMask |= 4;
-                if (r3 >= WeightThreshold) regionMask |= 8;
-                if (r4 >= WeightThreshold) regionMask |= 16;
-                if (r5 >= WeightThreshold) regionMask |= 32;
-                if (r6 >= WeightThreshold) regionMask |= 64;
-                scan.RestWorld[vertex] = restWorld;
-                scan.RegionMask[vertex] = regionMask;
-                scan.ChainBone[vertex] = chainBone;
-            }
-            if (vertices.Length >= 8192 && System.Environment.ProcessorCount > 1) Parallel.For(0, vertices.Length, ScanVertex);
-            else for (int vertex = 0; vertex < vertices.Length; vertex++) ScanVertex(vertex);
-            RestVerticesChecked += vertices.Length;
-            for (int vertex = 0; vertex < vertices.Length; vertex++)
+                Vertices = vertices, Binds = binds, Weights = weights, Influences = influences,
+                BindMatrix = bindMatrix, Scan = scan, Errors = errors,
+                RegionMasks = regionMasks, ChainBinds = chainBinds, BoneMap = boneMap,
+                MeshWorld = meshWorld, RestWorld = _restWorld, Tolerance = tolerance,
+                MeshName = mesh.Name.ToString()
+            };
+            // The scan runs on one thread. Splitting it across cores was tried
+            // and measured slower, and it allocated gigabytes on one of the
+            // guardian meshes: the per-vertex work is small enough that the
+            // shared arrays and the thread hand-off cost more than the work.
+            pass.Run(0, vertices.Length);
+            RestVerticesChecked += vertices.Length;            for (int vertex = 0; vertex < vertices.Length; vertex++)
                 MaximumRestReconstructionError = Math.Max(MaximumRestReconstructionError, errors[vertex]);
             vertexMs += System.Diagnostics.Stopwatch.GetElapsedTime(vertexStart).TotalMilliseconds;
             // The qualifying vertices become candidates in the same order the
