@@ -47,6 +47,7 @@ public partial class GuardianRenderer : Node3D
     public GuardianHeadTracker? HeadTracker { get; private set; }
     public GuardianSecondaryMotion? SecondaryMotion { get; private set; }
     public GuardianWaterContact? WaterContact { get; private set; }
+    private readonly System.Collections.Generic.List<ShaderMaterial> _guardianMaterials = new();
     public float BodyTrunkCorrection { get; private set; }
     /// <summary>Wall time of each step of the most recent guardian build, in milliseconds.</summary>
     public readonly System.Collections.Generic.Dictionary<string, double> BuildTimings = new();
@@ -299,120 +300,55 @@ public partial class GuardianRenderer : Node3D
         contact.GroundRadii = new[] { 0.0144f, 0.040244081f, 0.056619353f, 0.063017101f, 0.067618318f, 0.069380629f, 0.073860392f, 0.078268196f, 0.079802466f, 0.081052143f, 0.08310368f, 0.084692605f, 0.084807928f, 0.084157641f, 0.083269439f, 0.082541466f, 0.082203829f, 0.079860239f, 0.076209919f, 0.073353888f, 0.071948366f, 0.066243917f, 0.060002527f, 0.057679457f, 0.051085223f, 0.044850648f, 0.041338213f, 0.032662715f, 0.028115153f, 0.0215093f, 0.014522689f, 0.01001142f, 0.0041224488f, 0.00408f };
     }
 
-    private static void ApplySurfaceMaterials(Node node)
+    private static Shader? _guardianShader;
+    private static Shader GuardianShader => _guardianShader ??= GD.Load<Shader>("res://Shaders/guardian_surface.gdshader");
+
+    private static int ModeFor(string name)
+    {
+        string n = name.ToLowerInvariant();
+        if (n.Contains("iris") || n.Contains("eye") || n.Contains("cornea") || n.Contains("pupil")) return 4;
+        if (n.Contains("keratin") || n.Contains("scute") || n.Contains("claw") || n.Contains("horn") || n.Contains("quill") || n.Contains("tooth") || n.Contains("ivory") || n.Contains("whisker") || n.Contains("vibrissae") || n.Contains("scale") || n.Contains("labial")) return 0;
+        if (n.Contains("bristle") || n.Contains("plumage")) return 2;
+        if (n.Contains("fur") || n.Contains("underfur") || n.Contains("underplumage") || n.Contains("crest") || n.Contains("contour") || n.Contains("buff") || n.Contains("flight") || n.Contains("streak")) return 1;
+        if (n.Contains("skin") || n.Contains("mouth") || n.Contains("tongue") || n.Contains("nasal") || n.Contains("pigment") || n.Contains("lip") || n.Contains("pbr") || n.Contains("facial")) return 3;
+        return 3;
+    }
+
+    private void ApplySurfaceMaterials(Node node)
     {
         if (node is MeshInstance3D mesh && mesh.Mesh != null)
         {
             for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
             {
                 if (mesh.GetActiveMaterial(i) is not StandardMaterial3D source) continue;
-                var material = (StandardMaterial3D)source.Duplicate();
-                material.VertexColorUseAsAlbedo = true;
-                // Keep the imported pigment, normal maps and roughness texture
-                // channels. Profiles affect only named anatomical materials.
-                switch (source.ResourceName)
+                if (source.ResourceName.Equals("EyeHighlight", StringComparison.OrdinalIgnoreCase))
                 {
-                    case "AmberKeratin":
-                        // Its atlas already supplies striae, root wear and
-                        // roughness variation. Roughness is a texture multiplier,
-                        // so gently scale the source factor rather than replace
-                        // the sampled .48-.83 range with one uniform value.
-                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0f, 1f);
-                        material.ClearcoatEnabled = true;
-                        material.Clearcoat = .28f; material.ClearcoatRoughness = .30f;
-                        material.RimEnabled = true; material.Rim = .35f; material.RimTint = .68f;
-                        break;
-                    case "PangolinSkin":
-                        material.Roughness = Math.Clamp(source.Roughness, 0.65f, 1.0f);
-                        material.RimEnabled = true; material.Rim = .08f; material.RimTint = .50f;
-                        break;
-                    case "DarkClaw":
-                        material.Roughness = Math.Clamp(source.Roughness * .75f, 0.20f, 0.70f);
-                        material.ClearcoatEnabled = true;
-                        material.Clearcoat = .35f; material.ClearcoatRoughness = .20f;
-                        break;
-                    case "DenseUnderfur":
-                        // Authored short ribbons already exist beneath quills.
-                        // Lit grazing response improves their separation; it
-                        // cannot fill a coverage gap or replace missing hairs.
-                        material.RimEnabled = true; material.Rim = .14f; material.RimTint = .65f;
-                        break;
-                    case "DarkUnderplumage":
-                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.30f, 0.75f);
-                        material.RimEnabled = true; material.Rim = .28f; material.RimTint = .70f;
-                        break;
-                    case "BlueOrbitalSkin":
-                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.25f, 0.65f);
-                        material.RimEnabled = true; material.Rim = .22f; material.RimTint = .35f;
-                        material.ClearcoatEnabled = true; material.Clearcoat = .24f; material.ClearcoatRoughness = .28f;
-                        break;
-                    case "RufousCrest":
-                        material.Roughness = Math.Clamp(source.Roughness * .80f, 0.15f, 0.65f);
-                        material.RimEnabled = true; material.Rim = .18f; material.RimTint = .35f;
-                        material.ClearcoatEnabled = true; material.Clearcoat = .20f; material.ClearcoatRoughness = .20f;
-                        break;
-                    case "RedIris":
-                        material.Roughness = .04f;
-                        material.ClearcoatEnabled = true; material.Clearcoat = 1.0f; material.ClearcoatRoughness = .01f;
-                        break;
-                    case "WetPupilAndMouth":
-                        material.Roughness = .02f;
-                        material.ClearcoatEnabled = true; material.Clearcoat = 1.0f; material.ClearcoatRoughness = .02f;
-                        break;
-                    case "HornBillAndScutes":
-                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.20f, 0.65f);
-                        material.ClearcoatEnabled = true; material.Clearcoat = .25f; material.ClearcoatRoughness = .25f;
-                        break;
-                    case "BuffCrop":
-                    case "BuffUnderplumage":
-                        material.Roughness = Math.Clamp(source.Roughness * .88f, 0.35f, 0.85f);
-                        material.RimEnabled = true; material.Rim = .25f; material.RimTint = .65f;
-                        break;
-                    case "StreakedContour":
-                        material.Roughness = Math.Clamp(source.Roughness * .90f, 0.25f, 0.75f);
-                        material.RimEnabled = true; material.Rim = .18f; material.RimTint = .50f;
-                        break;
-                    case "BuffStreak":
-                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.20f, 0.65f);
-                        material.RimEnabled = true; material.Rim = .25f; material.RimTint = .65f;
-                        break;
-                    case "FlightChestnut":
-                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.20f, 0.70f);
-                        material.ClearcoatEnabled = true; material.Clearcoat = .18f; material.ClearcoatRoughness = .35f;
-                        material.RimEnabled = true; material.Rim = .25f; material.RimTint = .70f;
-                        break;
-                    case "BandedQuills":
-                    case "BandedQuillsCrown":
-                    case "BandedQuillsFlank":
-                        // Keratin spines: smooth waxy sheen with crisp rim light to accentuate spiky canopy
-                        material.Roughness = Math.Clamp(source.Roughness * .85f, 0.28f, 0.60f);
-                        material.ClearcoatEnabled = true;
-                        material.Clearcoat = .35f; material.ClearcoatRoughness = .22f;
-                        material.RimEnabled = true; material.Rim = .35f; material.RimTint = .85f;
-                        break;
-                    case "NoseEarsAndGripSkin":
-                        // Fleshy rose-pink bulbous rhinarium with soft rim response
-                        material.Roughness = Math.Clamp(source.Roughness, 0.48f, 0.68f);
-                        material.RimEnabled = true; material.Rim = .22f; material.RimTint = .75f;
-                        break;
-                    case "PawAndGripSkin":
-                        // Dark charcoal leathery grasping skin on paws and tactile tail
-                        material.Roughness = 0.65f;
-                        material.RimEnabled = true; material.Rim = .10f; material.RimTint = .50f;
-                        break;
-                    case "WhiskersAndIncisors":
-                        material.Roughness = 0.18f;
-                        material.ClearcoatEnabled = true; material.Clearcoat = 0.50f; material.ClearcoatRoughness = 0.15f;
-                        break;
-                    case "ClawsNostrilsAndMouth":
-                        material.Roughness = 0.25f;
-                        material.ClearcoatEnabled = true; material.Clearcoat = 0.25f; material.ClearcoatRoughness = 0.30f;
-                        break;
+                    mesh.Visible = false;
+                    continue;
                 }
-                // Preserve the authored PBR response, including eye gloss, coat,
-                // roughness textures and scale normals. A blanket roughness floor
-                // erased the distinction between fur, keratin and reptile skin.
+                var material = new ShaderMaterial { Shader = GuardianShader };
+                material.SetShaderParameter("mode", ModeFor(source.ResourceName));
+                material.SetShaderParameter("base_color", source.AlbedoColor);
+                material.SetShaderParameter("roughness_mul", Math.Clamp(source.Roughness <= 0 ? 1f : source.Roughness, 0.05f, 1f));
+                material.SetShaderParameter("metallic", source.Metallic);
+                material.SetShaderParameter("specular", 0.5f);
+                if (source.AlbedoTexture != null)
+                {
+                    material.SetShaderParameter("albedo_texture", source.AlbedoTexture);
+                    material.SetShaderParameter("has_albedo_texture", true);
+                }
+                if (source.NormalTexture != null)
+                {
+                    material.SetShaderParameter("normal_texture", source.NormalTexture);
+                    material.SetShaderParameter("has_normal_texture", true);
+                }
+                if (source.RoughnessTexture != null)
+                {
+                    material.SetShaderParameter("roughness_texture", source.RoughnessTexture);
+                    material.SetShaderParameter("has_roughness_texture", true);
+                }
                 mesh.SetSurfaceOverrideMaterial(i, material);
+                _guardianMaterials.Add(material);
             }
         }
         foreach (var child in node.GetChildren()) ApplySurfaceMaterials(child);
