@@ -56,12 +56,10 @@ void process_leaf_direct_light(
 
     vec3 sss_transport = (T_leaf / max(albedo, vec3(0.014))) * transmission_factor * 12.5;
 
-    // Retain BACKLIGHT fallback if tau is unset
-    if (tissue_tau <= 0.001) {
-        float transmission_cosine = transmitted + phase * max(tissue_phase_scatter, 0.0) * 0.24;
-        sss_transport = clamp(BACKLIGHT / max(albedo, vec3(.014)),
-            vec3(0.0), vec3(2.0)) * (transmission_cosine * tissue_direct_transmission);
-    }
+    // BACKLIGHT is a write-only built-in output in Godot 4, so it cannot be read
+    // here. When tau is unset, tissue_tau is already substituted to 0.65 above,
+    // so the Beer-Lambert main case (T_leaf) applies and no fallback read is
+    // needed. (WP-20 latent compile bug; surfaced by WP-10's ground_cover include.)
 
     // Trichome / Margin Fuzz (RIM): grazing-angle asperity scattering
     float rim_factor = tissue_rim > 0.0 ? tissue_rim : 0.0;
