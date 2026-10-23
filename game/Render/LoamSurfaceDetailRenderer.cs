@@ -7,7 +7,7 @@ using Vivarium.Sim.World;
 
 namespace Vivarium.Game.Render;
 
-/// <summary>Bounded, camera-local loam dressing. Organic pieces read existing litter mass; no simulation writes.</summary>
+/// <summary>Bounded loam dressing covering the full island domain. Organic pieces read existing litter mass; no simulation writes.</summary>
 public partial class LoamSurfaceDetailRenderer : Node3D
 {
     private const float PatchSize = 2f;
@@ -24,8 +24,16 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         foreach (var entry in _patches.Values) entry.Node.QueueFree();
         _patches.Clear();
         _world = world;
-        _elapsed = 999;
+        _elapsed = 0;
         RebuildCount = 0;
+        if (Quality > 0)
+        {
+            var all = GetDomainPatches(world);
+            foreach (var key in all)
+            {
+                RebuildPatch(key, world);
+            }
+        }
     }
 
     public override void _Process(double delta)
@@ -40,6 +48,56 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         RefreshOnePatch();
     }
 
+    private List<(int X, int Z)> GetDomainPatches(VivariumWorld world)
+    {
+        int minPatch = -Mathf.CeilToInt((float)world.Domain.Radius / PatchSize);
+        int maxPatch = Mathf.CeilToInt((float)world.Domain.Radius / PatchSize);
+        var patches = new List<(int X, int Z)>();
+        float h = PatchSize * 0.5f;
+        for (int z = minPatch; z <= maxPatch; z++)
+        for (int x = minPatch; x <= maxPatch; x++)
+        {
+            var center = new Vector2((x + .5f) * PatchSize, (z + .5f) * PatchSize);
+            // Check if any corner or center is within Domain
+            if (!world.Domain.Contains(new Vivarium.Sim.Core.Vec2(center.X, center.Y)) &&
+                !world.Domain.Contains(new Vivarium.Sim.Core.Vec2(center.X - h, center.Y - h)) &&
+                !world.Domain.Contains(new Vivarium.Sim.Core.Vec2(center.X + h, center.Y - h)) &&
+                !world.Domain.Contains(new Vivarium.Sim.Core.Vec2(center.X - h, center.Y + h)) &&
+                !world.Domain.Contains(new Vivarium.Sim.Core.Vec2(center.X + h, center.Y + h)))
+                continue;
+            patches.Add((x, z));
+        }
+        return patches;
+    }
+
+    private void RebuildPatch((int X, int Z) key, VivariumWorld world)
+    {
+        long stamp = PatchStamp(key);
+        _patches.TryGetValue(key, out var old);
+        var center = new Vector2((key.X + .5f) * PatchSize, (key.Z + .5f) * PatchSize);
+        int seed = unchecked((int)world.Seed ^ key.X * 73856093 ^ key.Z * 19349663);
+        var patch = new Node3D { Name = $"LoamPatch_{key.X}_{key.Z}" };
+        var litterNode = LoamLitterBuilder.Build(world, seed, Quality >= 2 ? 1.45f : .85f,
+            detailStage: 2, patchCenter: center, halfExtent: PatchSize * .5f, respectLitterMass: true);
+        var aggregateNode = LoamAggregateBuilder.Build(world, seed, center, PatchSize * .5f);
+        SetShadowsRecursive(litterNode);
+        SetShadowsRecursive(aggregateNode);
+        patch.AddChild(litterNode);
+        patch.AddChild(aggregateNode);
+        if (old.Node is not null) { RemoveChild(old.Node); old.Node.QueueFree(); }
+        AddChild(patch);
+        _patches[key] = (patch, stamp);
+        RebuildCount++;
+    }
+
+    private static void SetShadowsRecursive(Node node)
+    {
+        if (node is GeometryInstance3D geom)
+            geom.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+        foreach (var child in node.GetChildren())
+            SetShadowsRecursive(child);
+    }
+
     private void RefreshOnePatch()
     {
         var world = _world!;
@@ -50,27 +108,20 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         float reach = forward.Y < -.1f ? Mathf.Clamp((eye.Y - (float)ground) / -forward.Y, 0f, 5f) : 0f;
         Vector3 focus = eye + forward * reach;
         int cx = Mathf.FloorToInt(focus.X / PatchSize), cz = Mathf.FloorToInt(focus.Z / PatchSize);
-        var wanted = new List<(int X, int Z)>();
-        for (int z = cz - 1; z <= cz + 1; z++)
-        for (int x = cx - 1; x <= cx + 1; x++) wanted.Add((x, z));
+
+        var wanted = GetDomainPatches(world);
         foreach (var key in _patches.Keys.Where(k => !wanted.Contains(k)).ToArray())
         { _patches[key].Node.QueueFree(); _patches.Remove(key); }
-        // Nearest patch first; at most one mesh upload per update regardless of island size.
+
+        // Refresh up to 4 dirty patches per call, ordered by proximity to camera focus
+        int refreshed = 0;
         foreach (var key in wanted.OrderBy(k => (k.X - cx) * (k.X - cx) + (k.Z - cz) * (k.Z - cz)))
         {
             long stamp = PatchStamp(key);
             if (_patches.TryGetValue(key, out var old) && old.Stamp == stamp) continue;
-            var center = new Vector2((key.X + .5f) * PatchSize, (key.Z + .5f) * PatchSize);
-            int seed = unchecked((int)world.Seed ^ key.X * 73856093 ^ key.Z * 19349663);
-            var patch = new Node3D { Name = $"LoamPatch_{key.X}_{key.Z}" };
-            patch.AddChild(LoamLitterBuilder.Build(world, seed, Quality >= 2 ? 1.45f : .85f,
-                detailStage: 2, patchCenter: center, halfExtent: PatchSize * .5f, respectLitterMass: true));
-            patch.AddChild(LoamAggregateBuilder.Build(world, seed, center, PatchSize * .5f));
-            if (old.Node is not null) { RemoveChild(old.Node); old.Node.QueueFree(); }
-            AddChild(patch);
-            _patches[key] = (patch, stamp);
-            RebuildCount++;
-            return;
+            RebuildPatch(key, world);
+            refreshed++;
+            if (refreshed >= 4) break;
         }
     }
 
