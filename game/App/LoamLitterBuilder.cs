@@ -18,19 +18,6 @@ public static class LoamLitterBuilder
     private const float NominalPerSquareMetre = 120f;
     private const int HardLeafCap = 5000;
     private const int HardDuffCap = 6000;
-    private const float AtlasSize = 1024f;
-
-    // Isolated single-leaf regions in ScatteredLeaves007_1K-JPG_Color.jpg. Rectangles include a small
-    // black margin, which the shader discards. Wide regions rotate UVs so the atlas leaf follows mesh length.
-    private static readonly AtlasLeaf[] AtlasLeaves =
-    {
-        new(631, 470, 48, 57, false),
-        new(551, 379, 38, 60, false),
-        new(212, 548, 57, 33, true),
-        new(680, 502, 26, 42, false),
-        new(392, 890, 29, 35, false),
-        new(707, 887, 39, 30, true),
-    };
 
     /// <summary>Builds a seeded 5 m board of curled leaves, decomposed fragments, and sparse fine twigs.</summary>
     public static Node3D Build(VivariumWorld world, int seed, float density = 1f, int detailStage = 2,
@@ -53,22 +40,56 @@ public static class LoamLitterBuilder
         twigs.Begin(Mesh.PrimitiveType.Triangles);
         var duff = new SurfaceTool();
         duff.Begin(Mesh.PrimitiveType.Triangles);
+
         var leafMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-        leafMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_Color.png"));
-        leafMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_NormalGL.png"));
-        leafMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_Roughness.png"));
-        leafMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_Opacity.png"));
+        leafMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
+        leafMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
+        leafMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
+        leafMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
+        leafMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
         leafMaterial.SetShaderParameter("twig_mode", false);
+
         var twigMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
         twigMaterial.SetShaderParameter("twig_mode", true);
+        twigMaterial.SetShaderParameter("bark_col", GD.Load<Texture2D>("res://Textures/Bark014_1K-JPG_Color.jpg"));
+        twigMaterial.SetShaderParameter("bark_nrm", GD.Load<Texture2D>("res://Textures/Bark014_1K-JPG_NormalGL.jpg"));
+        twigMaterial.SetShaderParameter("bark_rgh", GD.Load<Texture2D>("res://Textures/Bark014_1K-JPG_Roughness.jpg"));
+
         var duffMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-        duffMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_Color.png"));
-        duffMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_NormalGL.png"));
-        duffMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_Roughness.png"));
-        duffMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ScatteredLeaves007_4K-PNG_Opacity.png"));
+        duffMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
+        duffMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
+        duffMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
+        duffMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
+        duffMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
         duffMaterial.SetShaderParameter("duff_mode", true);
         duffMaterial.SetShaderParameter("decay_strength", 0.72f);
+
         int leafCount = 0, twigCountPlaced = 0, duffCount = 0;
+
+        // Local height-field stacking grid (2 cm spacing) to prevent duff and leaf cards from interpenetrating
+        int stackCells = (int)Math.Ceiling(halfExtent * 2f / 0.02f) + 1;
+        float[,] stackHeight = new float[stackCells, stackCells];
+        float stackOriginX = origin.X - halfExtent;
+        float stackOriginZ = origin.Y - halfExtent;
+
+        float QueryStack(SimVec2 p)
+        {
+            int gx = Math.Clamp((int)((p.X - stackOriginX) / 0.02f), 0, stackCells - 1);
+            int gz = Math.Clamp((int)((p.Z - stackOriginZ) / 0.02f), 0, stackCells - 1);
+            return stackHeight[gx, gz];
+        }
+
+        void PushStack(SimVec2 p, float radius, float delta)
+        {
+            int rCells = (int)Math.Ceiling(radius / 0.02f);
+            int cx = (int)((p.X - stackOriginX) / 0.02f);
+            int cz = (int)((p.Z - stackOriginZ) / 0.02f);
+            for (int z = Math.Max(0, cz - rCells); z <= Math.Min(stackCells - 1, cz + rCells); z++)
+            for (int x = Math.Max(0, cx - rCells); x <= Math.Min(stackCells - 1, cx + rCells); x++)
+            {
+                stackHeight[x, z] += delta;
+            }
+        }
 
         if (density > 0f)
         {
@@ -93,7 +114,7 @@ public static class LoamLitterBuilder
                 int spawnCount = SamplePoisson(lambda, ref rng);
                 for (int k = 0; k < spawnCount && leafCount < HardLeafCap; k++)
                 {
-                var center = new SimVec2(px + rng.Range((float)-step * 0.5f, (float)step * 0.5f),
+                    var center = new SimVec2(px + rng.Range((float)-step * 0.5f, (float)step * 0.5f),
                         pz + rng.Range((float)-step * 0.5f, (float)step * 0.5f));
                     if (!world.Domain.ContainsDisc(center, 0.085) || world.Water.IsWet(center) || world.SubstrateAt(center) != Substrate.Soil)
                         continue;
@@ -103,8 +124,10 @@ public static class LoamLitterBuilder
 
                     if (respectLitterMass && FineLitterCover(world, center) <= 0f) continue;
                     bool intact = rng.NextFloat() < 0.62f;
+                    float stackLift = QueryStack(center);
                     float overlapLift = k > 0 && rng.NextFloat() < 0.65f ? rng.Range(0.001f, 0.003f) : 0f;
-                    AddLeaf(leaves, world, center, ref rng, intact, overlapLift);
+                    AddLeaf(leaves, world, center, ref rng, intact, overlapLift + stackLift);
+                    PushStack(center, intact ? 0.045f : 0.025f, 0.0012f);
                     leafCount++;
                 }
             }
@@ -122,14 +145,12 @@ public static class LoamLitterBuilder
                     continue;
                 if (respectLitterMass && rng.NextFloat() >= CoarseLitterCover(world, center)) continue;
                 AddTwig(twigs, world, center, ref rng);
+                PushStack(center, 0.06f, 0.0025f);
                 twigCountPlaced++;
             }
 
-            // Keep stage 0 identical: decomposition has its own stream and never consumes the
-            // leaf/twig generator. Stage 1 keeps the same uniform distribution; stage 2 biases
-            // deposits into low, gently sloped terrain and coherent sheltered patches.
             if (detailStage > 0)
-                duffCount = AddDuff(duff, world, seed, density, detailStage, origin, halfExtent, respectLitterMass);
+                duffCount = AddDuff(duff, world, seed, density, detailStage, origin, halfExtent, respectLitterMass, QueryStack, PushStack);
         }
 
         root.SetMeta("seed", seed);
@@ -155,6 +176,7 @@ public static class LoamLitterBuilder
             });
         }
 
+        if (twigCountPlaced > 0) twigs.GenerateTangents();
         var twigMesh = twigCountPlaced > 0 ? twigs.Commit() : null;
         if (twigMesh is not null && twigMesh.GetSurfaceCount() > 0)
         {
@@ -181,7 +203,8 @@ public static class LoamLitterBuilder
     }
 
     private static int AddDuff(SurfaceTool mesh, VivariumWorld world, int seed, float density, int detailStage,
-        Vector2 origin, float halfExtent, bool respectLitterMass)
+        Vector2 origin, float halfExtent, bool respectLitterMass,
+        Func<SimVec2, float> queryStack, Action<SimVec2, float, float> pushStack)
     {
         var rng = new StableRandom(unchecked((ulong)(uint)seed) + 0xD1B54A32D192ED03UL);
         const float spacing = 0.072f;
@@ -240,7 +263,9 @@ public static class LoamLitterBuilder
                 if (world.PilotTree?.BlocksDisc(p, 0.025) == true || world.Props.RockAt(p) != null ||
                     world.Props.LogAt(p) != null || world.Props.GravelAt(p) != null)
                     continue;
-                AddDuffFragment(mesh, world, p, ref rng);
+                float stackLift = queryStack(p);
+                AddDuffFragment(mesh, world, p, ref rng, stackLift);
+                pushStack(p, 0.018f, 0.0006f);
                 placed++;
             }
         }
@@ -264,7 +289,7 @@ public static class LoamLitterBuilder
     private static float BareGroundFraction(VivariumWorld world, int cell) =>
         1f - 0.78f * Mathf.Clamp((float)world.AmbientGroundCover.Cover[cell], 0f, 1f);
 
-    private static void AddDuffFragment(SurfaceTool mesh, VivariumWorld world, SimVec2 center, ref StableRandom rng)
+    private static void AddDuffFragment(SurfaceTool mesh, VivariumWorld world, SimVec2 center, ref StableRandom rng, float stackLift)
     {
         int stations = 5, across = 4;
         float length = rng.Range(0.014f, 0.034f);
@@ -272,7 +297,8 @@ public static class LoamLitterBuilder
         float angle = rng.Range(0f, Mathf.Tau);
         float fold = rng.Range(0.0002f, 0.0018f);
         float phase = rng.Range(0f, Mathf.Tau);
-        var atlas = AtlasLeaves[rng.NextInt(0, AtlasLeaves.Length - 1)];
+        // Fragmented humus flakes (cells 10..12) or decomposed remnants (cells 6..9)
+        int cellIndex = rng.NextFloat() < 0.65f ? rng.NextInt(10, 12) : rng.NextInt(6, 9);
         Color tint = new(rng.Range(0.62f, 0.84f), rng.Range(0.62f, 0.79f), rng.Range(0.58f, 0.74f));
         var points = new Vector3[stations * across];
         var normals = new Vector3[points.Length];
@@ -290,10 +316,10 @@ public static class LoamLitterBuilder
             double wz = center.Z + Math.Sin(angle) * lx + Math.Cos(angle) * side;
             float centerLift = (1f - Mathf.Abs(s)) * fold;
             float burial = rng.Range(-0.00115f, 0.00045f);
-            float y = (float)world.Terrain.Height(new SimVec2(wx, wz)) + centerLift + burial;
+            float y = (float)world.Terrain.Height(new SimVec2(wx, wz)) + centerLift + burial + stackLift;
             int index = i * across + j;
             points[index] = new Vector3((float)wx, y, (float)wz);
-            uvs[index] = AtlasUv(atlas, t, (s + 1f) * 0.5f);
+            uvs[index] = AtlasUv(cellIndex, t, s);
         }
 
         for (int i = 0; i < stations; i++)
@@ -318,7 +344,7 @@ public static class LoamLitterBuilder
 
     private static void AddLeaf(SurfaceTool mesh, VivariumWorld world, SimVec2 center, ref StableRandom rng, bool intact, float overlapLift)
     {
-        int stations = intact ? 8 : 5;
+        int stations = intact ? 8 : 6;
         int across = intact ? 5 : 4;
         float length = intact ? rng.Range(0.065f, 0.120f) : rng.Range(0.028f, 0.065f);
         float width = intact ? rng.Range(0.028f, 0.050f) : rng.Range(0.015f, 0.032f);
@@ -326,7 +352,8 @@ public static class LoamLitterBuilder
         float curl = rng.Range(0.001f, intact ? 0.009f : 0.0035f);
         float fold = rng.Range(0.000f, intact ? 0.0025f : 0.0012f);
         float phase = rng.Range(0f, Mathf.Tau);
-        var atlas = AtlasLeaves[rng.NextInt(0, AtlasLeaves.Length - 1)];
+        // Cells 0..5 are intact; cells 6..9 are skeletonized/decaying
+        int cellIndex = intact ? rng.NextInt(0, 5) : rng.NextInt(6, 9);
         Color color = new(rng.Range(0.88f, 0.99f), rng.Range(0.88f, 0.98f), rng.Range(0.86f, 0.96f));
         var points = new Vector3[stations * across];
         var normals = new Vector3[points.Length];
@@ -337,10 +364,9 @@ public static class LoamLitterBuilder
         {
             float t = i / (float)(stations - 1);
             float longitudinal = (t - 0.5f) * length;
-            // The scanned alpha silhouette supplies the taper; tapering the carrier mesh squeezes it twice.
             float envelope = 1f;
             float asym = 0.82f + 0.18f * Mathf.Sin(t * 11.3f + phase);
-            if (!intact && i == 1 && rng.NextFloat() < 0.45f) asym *= rng.Range(0.45f, 0.78f); // torn notch
+            if (!intact && i == 1 && rng.NextFloat() < 0.45f) asym *= rng.Range(0.45f, 0.78f);
             float centerBend = fold * (0.5f + 0.5f * Mathf.Sin(t * Mathf.Pi * 2 + phase))
                 + 0.0015f * Mathf.Sin(t * Mathf.Pi) * (0.5f + 0.5f * Mathf.Sin(phase));
             for (int j = 0; j < across; j++)
@@ -359,7 +385,7 @@ public static class LoamLitterBuilder
                 float surfaceY = (float)terrain.Height(p) + 0.0009f + overlapLift + centerBend + midrib + cup + edgeCurl;
                 int index = i * across + j;
                 points[index] = new Vector3((float)wx, surfaceY, (float)wz);
-                uvs[index] = AtlasUv(atlas, t, (s + 1f) * 0.5f);
+                uvs[index] = AtlasUv(cellIndex, t, s);
             }
         }
 
@@ -386,35 +412,88 @@ public static class LoamLitterBuilder
 
     private static void AddTwig(SurfaceTool mesh, VivariumWorld world, SimVec2 center, ref StableRandom rng)
     {
-        float length = rng.Range(0.045f, 0.145f), radius = rng.Range(0.0008f, 0.0018f);
-        float angle = rng.Range(0f, Mathf.Tau), bend = rng.Range(-0.012f, 0.012f);
-        float start = rng.Range(0.0015f, 0.003f);
-        var p = new Vector3[8];
-        for (int ring = 0; ring < 2; ring++)
+        float length = rng.Range(0.055f, 0.165f), radius = rng.Range(0.0012f, 0.0028f);
+        float angle = rng.Range(0f, Mathf.Tau), bend = rng.Range(-0.018f, 0.018f);
+        float startLift = rng.Range(0.0015f, 0.0035f);
+        const int stations = 6;
+        const int sides = 8;
+        var ringCenters = new Vector3[stations];
+        for (int i = 0; i < stations; i++)
         {
-            float t = ring;
-            double cx = center.X + Math.Cos(angle) * (length * t - length * 0.5f) + Math.Sin(angle) * bend * t;
-            double cz = center.Z + Math.Sin(angle) * (length * t - length * 0.5f) - Math.Cos(angle) * bend * t;
-            float y = (float)world.Terrain.Height(new SimVec2(cx, cz)) + start + 0.001f * t;
-            for (int k = 0; k < 4; k++)
+            float t = i / (float)(stations - 1);
+            float along = (t - 0.5f) * length;
+            float across = bend * Mathf.Sin(t * Mathf.Pi);
+            double cx = center.X + Math.Cos(angle) * along - Math.Sin(angle) * across;
+            double cz = center.Z + Math.Sin(angle) * along + Math.Cos(angle) * across;
+            float groundY = (float)world.Terrain.Height(new SimVec2(cx, cz));
+            ringCenters[i] = new Vector3((float)cx, groundY + startLift + radius * 0.9f, (float)cz);
+        }
+
+        var dir = (ringCenters[^1] - ringCenters[0]).Normalized();
+        var sideVec = new Vector3(-dir.Z, 0, dir.X).Normalized();
+        var upVec = sideVec.Cross(dir).Normalized();
+
+        var ringVerts = new Vector3[stations, sides];
+        var ringNorms = new Vector3[stations, sides];
+        var ringUvs = new Vector2[stations, sides];
+
+        for (int i = 0; i < stations; i++)
+        {
+            float t = i / (float)(stations - 1);
+            float r = radius * (1.0f - 0.25f * t);
+            for (int j = 0; j < sides; j++)
             {
-                float a = k * Mathf.Pi * 0.5f;
-                float across = radius * Mathf.Cos(a);
-                p[ring * 4 + k] = new Vector3((float)cx - Mathf.Sin(angle) * across,
-                    y + radius * Mathf.Sin(a), (float)cz + Mathf.Cos(angle) * across);
+                float a = j * Mathf.Tau / sides;
+                Vector3 radial = sideVec * Mathf.Cos(a) + upVec * Mathf.Sin(a);
+                ringVerts[i, j] = ringCenters[i] + radial * r;
+                ringNorms[i, j] = radial;
+                ringUvs[i, j] = new Vector2(a / Mathf.Tau * 2.0f, t * (length / 0.05f));
             }
         }
-        Color color = new(rng.Range(0.17f, 0.27f), rng.Range(0.085f, 0.14f), rng.Range(0.035f, 0.075f));
-        for (int k = 0; k < 4; k++)
+
+        Color tint = new(rng.Range(0.18f, 0.28f), rng.Range(0.11f, 0.17f), rng.Range(0.06f, 0.10f));
+        Vector2 uv2Bark = new(1.0f, 0.0f);
+        Vector2 uv2End = new(2.0f, 0.0f);
+
+        // Cylindrical tube quads
+        for (int i = 0; i < stations - 1; i++)
+        for (int j = 0; j < sides; j++)
         {
-            int next = (k + 1) & 3;
-            AddFlatTriangle(mesh, p[k], p[4 + k], p[4 + next], color);
-            AddFlatTriangle(mesh, p[k], p[4 + next], p[next], color);
+            int next = (j + 1) % sides;
+            var v00 = ringVerts[i, j]; var v01 = ringVerts[i, next];
+            var v10 = ringVerts[i + 1, j]; var v11 = ringVerts[i + 1, next];
+            var n00 = ringNorms[i, j]; var n01 = ringNorms[i, next];
+            var n10 = ringNorms[i + 1, j]; var n11 = ringNorms[i + 1, next];
+            var u00 = ringUvs[i, j]; var u01 = ringUvs[i, next];
+            var u10 = ringUvs[i + 1, j]; var u11 = ringUvs[i + 1, next];
+
+            AddTriWithUv2(mesh, v00, v10, v01, n00, n10, n01, u00, u10, u01, uv2Bark, tint);
+            AddTriWithUv2(mesh, v01, v10, v11, n01, n10, n11, u01, u10, u11, uv2Bark, tint);
         }
-        AddFlatTriangle(mesh, p[0], p[1], p[2], color);
-        AddFlatTriangle(mesh, p[0], p[2], p[3], color);
-        AddFlatTriangle(mesh, p[4], p[6], p[5], color);
-        AddFlatTriangle(mesh, p[4], p[7], p[6], color);
+
+        // Base end cap (severed wood grain)
+        Vector3 baseCenter = ringCenters[0];
+        Vector3 baseNormal = -dir;
+        for (int j = 0; j < sides; j++)
+        {
+            int next = (j + 1) % sides;
+            var u0 = new Vector2(0.5f, 0.5f);
+            var u1 = new Vector2(0.5f + 0.45f * Mathf.Cos(j * Mathf.Tau / sides), 0.5f + 0.45f * Mathf.Sin(j * Mathf.Tau / sides));
+            var u2 = new Vector2(0.5f + 0.45f * Mathf.Cos(next * Mathf.Tau / sides), 0.5f + 0.45f * Mathf.Sin(next * Mathf.Tau / sides));
+            AddTriWithUv2(mesh, baseCenter, ringVerts[0, next], ringVerts[0, j], baseNormal, baseNormal, baseNormal, u0, u2, u1, uv2End, tint);
+        }
+
+        // Tip end cap
+        Vector3 tipCenter = ringCenters[^1];
+        Vector3 tipNormal = dir;
+        for (int j = 0; j < sides; j++)
+        {
+            int next = (j + 1) % sides;
+            var u0 = new Vector2(0.5f, 0.5f);
+            var u1 = new Vector2(0.5f + 0.45f * Mathf.Cos(j * Mathf.Tau / sides), 0.5f + 0.45f * Mathf.Sin(j * Mathf.Tau / sides));
+            var u2 = new Vector2(0.5f + 0.45f * Mathf.Cos(next * Mathf.Tau / sides), 0.5f + 0.45f * Mathf.Sin(next * Mathf.Tau / sides));
+            AddTriWithUv2(mesh, tipCenter, ringVerts[stations - 1, j], ringVerts[stations - 1, next], tipNormal, tipNormal, tipNormal, u0, u1, u2, uv2End, tint);
+        }
     }
 
     private static int SamplePoisson(float lambda, ref StableRandom rng)
@@ -430,23 +509,38 @@ public static class LoamLitterBuilder
         return samples - 1;
     }
 
-    private static Vector2 AtlasUv(AtlasLeaf leaf, float t, float s)
+    private static Vector2 AtlasUv(int cellIndex, float t, float s)
     {
-        const float pad = 2f;
-        float u0 = (leaf.X - pad) / AtlasSize, u1 = (leaf.X + leaf.Width + pad) / AtlasSize;
-        float v0 = (leaf.Y - pad) / AtlasSize, v1 = (leaf.Y + leaf.Height + pad) / AtlasSize;
-        return leaf.Wide
-            ? new Vector2(Mathf.Lerp(u1, u0, t), Mathf.Lerp(v0, v1, s))
-            : new Vector2(Mathf.Lerp(u0, u1, s), Mathf.Lerp(v0, v1, t));
+        int col = cellIndex % 4;
+        int row = cellIndex / 4;
+        // Element is 800 x 950 px centered in 1024 x 1024 cell on 4096 x 4096 atlas
+        // Margin X = 112 px, Margin Y = 37 px
+        float uMin = (col * 1024f + 112f) / 4096f;
+        float uMax = (col * 1024f + 112f + 800f) / 4096f;
+        float vTip = (row * 1024f + 37f) / 4096f;
+        float vBase = (row * 1024f + 37f + 950f) / 4096f;
+        float u = Mathf.Lerp(uMin, uMax, (s + 1f) * 0.5f);
+        float v = Mathf.Lerp(vBase, vTip, t);
+        return new Vector2(u, v);
     }
 
     private static void AddTriangle(SurfaceTool mesh, Vector3 a, Vector3 b, Vector3 c,
         Vector3 na, Vector3 nb, Vector3 nc, Vector2 ua, Vector2 ub, Vector2 uc, Color color)
     {
-        // Godot uses clockwise front faces. Match winding to the supplied outward normals
-        // so the two-sided shader does not mistake the top of a leaf for its underside.
         if ((b - a).Cross(c - a).Dot(na + nb + nc) > 0f)
         { (b, c) = (c, b); (nb, nc) = (nc, nb); (ub, uc) = (uc, ub); }
+        mesh.SetUV2(Vector2.Zero);
+        AddVertex(mesh, a, na, ua, color);
+        AddVertex(mesh, b, nb, ub, color);
+        AddVertex(mesh, c, nc, uc, color);
+    }
+
+    private static void AddTriWithUv2(SurfaceTool mesh, Vector3 a, Vector3 b, Vector3 c,
+        Vector3 na, Vector3 nb, Vector3 nc, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 uv2, Color color)
+    {
+        if ((b - a).Cross(c - a).Dot(na + nb + nc) > 0f)
+        { (b, c) = (c, b); (nb, nc) = (nc, nb); (ub, uc) = (uc, ub); }
+        mesh.SetUV2(uv2);
         AddVertex(mesh, a, na, ua, color);
         AddVertex(mesh, b, nb, ub, color);
         AddVertex(mesh, c, nc, uc, color);
@@ -459,16 +553,6 @@ public static class LoamLitterBuilder
         mesh.SetUV(uv);
         mesh.AddVertex(p);
     }
-
-    private static void AddFlatTriangle(SurfaceTool mesh, Vector3 a, Vector3 b, Vector3 c, Color color)
-    {
-        Vector3 n = (b - a).Cross(c - a).Normalized();
-        mesh.SetNormal(n); mesh.SetColor(color); mesh.SetUV(Vector2.Zero); mesh.AddVertex(a);
-        mesh.SetNormal(n); mesh.SetColor(color); mesh.SetUV(Vector2.Down); mesh.AddVertex(c);
-        mesh.SetNormal(n); mesh.SetColor(color); mesh.SetUV(Vector2.Right); mesh.AddVertex(b);
-    }
-
-    private readonly record struct AtlasLeaf(int X, int Y, int Width, int Height, bool Wide);
 
     private struct StableRandom
     {
