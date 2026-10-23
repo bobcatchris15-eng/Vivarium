@@ -45,7 +45,7 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         _elapsed += delta > 0 ? delta : .10;
         if (_elapsed < .10) return;
         _elapsed = 0;
-        RefreshOnePatch();
+        RebuildOnePatch();
     }
 
     private List<(int X, int Z)> GetDomainPatches(VivariumWorld world)
@@ -98,7 +98,7 @@ public partial class LoamSurfaceDetailRenderer : Node3D
             SetShadowsRecursive(child);
     }
 
-    private void RefreshOnePatch()
+    private void RebuildOnePatch()
     {
         var world = _world!;
         Vector3 eye = Camera?.GlobalPosition ?? Vector3.Zero;
