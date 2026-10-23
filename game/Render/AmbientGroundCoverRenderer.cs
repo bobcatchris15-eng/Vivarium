@@ -42,9 +42,11 @@ public partial class AmbientGroundCoverRenderer : Node3D
         mat.SetShaderParameter("sway_strength", 0f);
         _blade = NewMultiMesh(BuildBlade(mat));
         _leaf = NewMultiMesh(BuildBroadleaf(mat));
-        _bladeMmi = new MultiMeshInstance3D { Name = "AmbientBlades", Multimesh = _blade, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
-        _leafMmi = new MultiMeshInstance3D { Name = "AmbientTinyLeaves", Multimesh = _leaf, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        // Turf this dense only reads as ground cover when it grounds itself with a contact shadow.
+        _bladeMmi = new MultiMeshInstance3D { Name = "AmbientBlades", Multimesh = _blade, CastShadow = GeometryInstance3D.ShadowCastingSetting.On };
+        _leafMmi = new MultiMeshInstance3D { Name = "AmbientTinyLeaves", Multimesh = _leaf, CastShadow = GeometryInstance3D.ShadowCastingSetting.On };
         AddChild(_bladeMmi); AddChild(_leafMmi);
+        BuildBankFringe(mat);
         _revision = -1; _accum = 999; _lastCam = new(float.MaxValue, 0, 0);
     }
 
@@ -69,6 +71,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
         if (_w == null) return;
         bool enabled = Quality > 0;
         _bladeMmi.Visible = _leafMmi.Visible = enabled;
+        if (_bankNode != null) _bankNode.Visible = enabled;
         if (!enabled) { _accum = 999; return; }
 
         _accum += delta;
@@ -103,6 +106,8 @@ public partial class AmbientGroundCoverRenderer : Node3D
         // O(plants * anonymous foliage blades) per-instance scans.
         var floraExclusions = new AmbientCoverSpatialIndex();
         var livingCarpet = new AmbientCoverSpatialIndex();
+        // Conservative single discs handed to the bank fringe; it needs the raw exclusions, not a hash.
+        var floraDiscs = new List<(Vec2 P, double Exclusion)>();
         int exclusionCandidates=0, influencedCells=0;
         float searchRadius = CullRadius + 2.5f;
         var camP = new Vivarium.Sim.Core.Vec2(cam.X, cam.Z);
@@ -140,6 +145,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
                     collarR = Math.Min(0.035, Math.Max(0.008, plant.Radius(sp)*0.16));
                 }
                 floraExclusions.Add(plant.Position, collarR);
+                floraDiscs.Add((plant.Position, collarR));
             }
         }
 
@@ -244,6 +250,8 @@ public partial class AmbientGroundCoverRenderer : Node3D
         LastGroundcoverInstances = _bladeT.Count+_leafT.Count;
         LastInfluencedGridCells = influencedCells;
         LastFloraExclusionCandidateChecks = exclusionCandidates;
+        // Creeping stolons and bank-fringe leaves follow the same water margins the turf avoids.
+        RefreshBankFringe(cam, haveCam, nearRocks, nearLogs, nearGravel, floraDiscs);
     }
 
     private (double Moisture, double Light) NeighbourCharacter(int i, int j)
@@ -264,60 +272,141 @@ public partial class AmbientGroundCoverRenderer : Node3D
 
     private static ArrayMesh BuildBlade(Material mat)
     {
+        // A render instance is a 5-blade turf cluster: high instance count plus deterministic cell
+        // jitter makes this read as continuous anonymous turf instead of repeated circular clumps.
+        // Every blade is a 6 x 2 cambered V-sheet carrying real u (across the width) and v (base to
+        // tip), so ground_cover.gdshader's midrib and vein terms are live instead of dead code.
         var m = new MeshData();
         var white = new[] { 1.0, 1.0, 1.0 };
-        // A render instance is only a tiny three-blade tuft. High instance count plus deterministic cell jitter
-        // makes this read as continuous anonymous turf instead of repeated circular clumps.
-        for (int k = 0; k < 3; k++)
+        for (int k = 0; k < 5; k++)
         {
             double a = k * 2.399963229728653 + 0.31;
-            var root = new Vec3(Math.Cos(a) * 0.004, 0, Math.Sin(a) * 0.004);
-            double len = 0.014 + k * 0.004;
-            var side = new Vec3(Math.Cos(a + Math.PI * 0.5), 0, Math.Sin(a + Math.PI * 0.5));
-            var tip = root + new Vec3(Math.Cos(a + 0.7) * 0.0025, len, Math.Sin(a + 0.7) * 0.0025);
-            double hw = 0.00072 + k * 0.00012;
-            var left = root - side * hw;
-            var right = root + side * hw;
-            var n = (right - left).Cross(tip - left).Normalized();
-            int f0 = m.AddVertex(left, n, white), f1 = m.AddVertex(right, n, white), f2 = m.AddVertex(tip, n, white);
-            m.AddTriangle(f0, f1, f2);
-            int b0 = m.AddVertex(left, -n, white), b1 = m.AddVertex(tip, -n, white), b2 = m.AddVertex(right, -n, white);
-            m.AddTriangle(b0, b1, b2);
+            AddBladeSheet(m, a, 0.017 + k * 0.0032, 0.00078 + k * 0.00011, white);
         }
         return Bridge.ToArrayMesh(m, mat);
     }
 
+    private static void AddBladeSheet(MeshData m, double angle, double length, double halfWidth, double[] rgb)
+    {
+        const int rows = 6, lanes = 2;
+        var pos = new Vec3[rows + 1, lanes + 1];
+        // Buried root collar, then a steeper rise and an outward-drooping tip.
+        var root = new Vec3(Math.Cos(angle) * 0.0035, -0.0015, Math.Sin(angle) * 0.0035);
+        var lean = new Vec3(Math.Cos(angle + 0.55), 0, Math.Sin(angle + 0.55));
+        var side = new Vec3(-Math.Sin(angle), 0, Math.Cos(angle));
+        for (int r = 0; r <= rows; r++)
+        {
+            double t = r / (double)rows;
+            double height = length * (t - 0.40 * t * t);
+            double reach = length * 0.44 * t * t;
+            double width = halfWidth * Math.Max(0.08, 1.0 - 0.94 * t * t);
+            for (int lane = 0; lane <= lanes; lane++)
+            {
+                // Lanes run +side to -side so the sheet normal (and therefore the front face) points
+                // away from the clump axis, i.e. the visible outside of the blade.
+                double s = 1.0 - 2.0 * lane / lanes;                         // +1, 0, -1
+                double ridge = halfWidth * 0.85 * (1.0 - Math.Abs(s));       // raised midrib
+                double fold = -halfWidth * 0.34 * Math.Abs(s);               // folded edges: V camber
+                pos[r, lane] = root + Vec3.Up * (height + ridge + fold) + lean * reach + side * (width * s);
+            }
+        }
+        EmitSheet(m, pos, rows, lanes, rgb, 0.58, 1.0);
+    }
+
     private static ArrayMesh BuildBroadleaf(Material mat)
     {
-        // Low rosette of 5 overlapping leaves of varied size: each blade is folded along its midrib (raised midrib,
-        // edges lifted = cupped) and droops toward the tip so the cover reads as leafy, not as flat cards.
+        // Low rosette of five curled cotyledons of varied size. Each leaf is an 8 x 6 grid with an
+        // arched petiole, a crenate margin and cupped edges, carrying real u (across) and v (petiole
+        // to tip) so the venation terms resolve on every blade.
         var m = new MeshData();
         var white = new[] { 1.0, 1.0, 1.0 };
-        var crown = new Vec3(0, 0.004, 0);
-        double[] sizes = { 1.0, 0.72, 1.25, 0.85, 0.6 };
+        double[] sizes = { 1.0, 0.72, 1.25, 0.85, 0.60 };
         for (int k = 0; k < 5; k++)
-        {
-            double a = 0.4 + k * 2.399963229728653;
-            double sz = sizes[k];
-            var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
-            var side = new Vec3(-Math.Sin(a), 0, Math.Cos(a));
-            double len = 0.011 * sz, hw = 0.0042 * sz;
-            var b0 = crown + dir * (0.001 * sz);
-            var mid = crown + dir * (len * 0.5) + new Vec3(0, 0.0032 * sz, 0);   // midrib arches up
-            var tip = crown + dir * len + new Vec3(0, 0.0004 * sz, 0);          // then droops at the tip
-            var el = crown + dir * (len * 0.48) - side * hw + new Vec3(0, 0.0042 * sz, 0); // edges curl up (cup)
-            var er = crown + dir * (len * 0.48) + side * hw + new Vec3(0, 0.0042 * sz, 0);
-            void Tri(Vec3 p0, Vec3 p1, Vec3 p2)
-            {
-                var n = (p1 - p0).Cross(p2 - p0).Normalized();
-                if (n.Y < 0) { n = -n; (p1, p2) = (p2, p1); }
-                int i0 = m.AddVertex(p0, n, white), i1 = m.AddVertex(p1, n, white), i2 = m.AddVertex(p2, n, white);
-                m.AddTriangle(i0, i1, i2);
-            }
-            Tri(b0, mid, el); Tri(b0, er, mid); Tri(el, mid, tip); Tri(mid, er, tip);
-        }
+            AddLeafSheet(m, 0.4 + k * 2.399963229728653, sizes[k], white);
         return Bridge.ToArrayMesh(m, mat);
     }
+
+    private static void AddLeafSheet(MeshData m, double angle, double size, double[] rgb)
+    {
+        const int rows = 8, lanes = 6;
+        var pos = new Vec3[rows + 1, lanes + 1];
+        var dir = new Vec3(Math.Cos(angle), 0, Math.Sin(angle));
+        var side = new Vec3(-Math.Sin(angle), 0, Math.Cos(angle));
+        var crown = new Vec3(0, 0.0032, 0);
+        double length = 0.0115 * size, halfWidth = 0.0048 * size;
+        for (int r = 0; r <= rows; r++)
+        {
+            double t = r / (double)rows;
+            double bladeT = Math.Clamp((t - 0.22) / 0.78, 0, 1);
+            double profile = Math.Sin(Math.PI * bladeT);
+            // Arched petiole lifts the blade off the soil, then the tip droops back toward it.
+            double arch = 0.30 * length * Math.Sin(Math.PI * Math.Clamp(t, 0, 1))
+                + 0.010 * length * Math.Min(1.0, t / 0.22) - 0.02 * length * t * t * t;
+            // Crenate margin: shallow scallops rather than a smooth lens.
+            double width = halfWidth * Math.Pow(profile, 0.70) * (1.0 + 0.06 * Math.Sin(bladeT * Math.Tau * 4.5));
+            width = Math.Max(width, halfWidth * 0.075);
+            for (int lane = 0; lane <= lanes; lane++)
+            {
+                double s = 2.0 * lane / lanes - 1.0;
+                double cup = halfWidth * 0.55 * Math.Abs(s) * profile;          // margin curls up
+                double rib = halfWidth * 0.30 * (1.0 - Math.Abs(s)) * profile;  // raised midrib
+                pos[r, lane] = crown + dir * (length * t) + side * (width * s) + Vec3.Up * (arch + cup + rib);
+            }
+        }
+        EmitSheet(m, pos, rows, lanes, rgb, 0.55, 1.0);
+    }
+
+    /// <summary>
+    /// Emits one single-sided sheet with smooth normals and real (u, v) coordinates.
+    /// Godot front faces are clockwise, so every triangle is reversed against its vertex normal.
+    /// </summary>
+    private static void EmitSheet(MeshData m, Vec3[,] grid, int rows, int lanes, double[] rgb,
+        double aoBase, double aoTip)
+    {
+        int stride = lanes + 1;
+        int count = (rows + 1) * stride;
+        var normals = new Vec3[count];
+        for (int r = 0; r < rows; r++)
+        for (int lane = 0; lane < lanes; lane++)
+        {
+            Vec3 p00 = grid[r, lane], p10 = grid[r, lane + 1];
+            Vec3 p01 = grid[r + 1, lane], p11 = grid[r + 1, lane + 1];
+            Vec3 n0 = (p10 - p00).Cross(p11 - p00);
+            Vec3 n1 = (p11 - p00).Cross(p01 - p00);
+            int v00 = r * stride + lane, v10 = v00 + 1;
+            int v01 = (r + 1) * stride + lane, v11 = v01 + 1;
+            normals[v00] += n0; normals[v10] += n0; normals[v11] += n0;
+            normals[v00] += n1; normals[v11] += n1; normals[v01] += n1;
+        }
+        for (int i = 0; i < count; i++)
+            normals[i] = normals[i].LengthSq > 1e-20 ? normals[i].Normalized() : Vec3.Up;
+
+        var index = new int[count];
+        for (int r = 0; r <= rows; r++)
+        for (int lane = 0; lane <= lanes; lane++)
+        {
+            int v = r * stride + lane;
+            double u = lane / (double)lanes, w = r / (double)rows;
+            double ao = aoBase + (aoTip - aoBase) * w;
+            index[v] = m.AddVertex(grid[r, lane], normals[v], rgb, 1, u, w, ao, 0);
+        }
+        for (int r = 0; r < rows; r++)
+        for (int lane = 0; lane < lanes; lane++)
+        {
+            int a = index[r * stride + lane], b = index[r * stride + lane + 1];
+            int c = index[(r + 1) * stride + lane + 1], d = index[(r + 1) * stride + lane];
+            AddSheetTriangle(m, a, b, c);
+            AddSheetTriangle(m, a, c, d);
+        }
+    }
+
+    private static void AddSheetTriangle(MeshData m, int a, int b, int c)
+    {
+        var face = (m.Position(b) - m.Position(a)).Cross(m.Position(c) - m.Position(a));
+        if (face.Dot(m.NormalAt(a) + m.NormalAt(b) + m.NormalAt(c)) > 0) (b, c) = (c, b);
+        m.AddTriangle(a, b, c);
+    }
+
 
     private void Fill(MultiMesh mm, List<Transform3D> xf, List<Color> col)
     {
