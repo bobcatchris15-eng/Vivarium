@@ -1,4 +1,5 @@
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry.Form;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Geometry;
@@ -68,7 +69,9 @@ public static class PilotTreeMeshes
     private static MeshData BuildParts(VivariumWorld world, bool includeRoots,
         bool includeTrunk, bool includeCrown)
     {
-        var m = new MeshData();
+        // Foliage spans are recorded so the renderer can split laminae onto the
+        // dedicated leaf shader without one node per leaf. Zero is authored detail.
+        var m = new MeshData { FloraDetailLevel = 0, FloraVisualSeed = world.PilotTree?.Seed ?? 1 };
         var tree = world.PilotTree;
         if (tree == null) return m;
         var b = new Builder(m, tree, world.SurfaceHeight);
@@ -101,6 +104,7 @@ public static class PilotTreeMeshes
         private readonly double[] bark, green;
         private readonly double phase, facing;
         private readonly Func<Vec2,double> ground;
+        private readonly (double T,double A,double Hw,double Aw,double Amp)[] scars;
         private const double Tau = Math.PI * 2;
         public Builder(MeshData mesh, PilotTreeState state, Func<Vec2,double> terrainHeight)
         {
@@ -109,6 +113,13 @@ public static class PilotTreeMeshes
             origin = Vec3.FromXZ(state.Anchor, state.BaseHeight);
             bark = RGB(state.Def.BarkColor); green = RGB(state.Def.FoliageColor);
             phase = rng.Range(0, Tau); facing = (-state.CornerPoint).Angle;
+            // Healing wounds and their callus rolls are an independent ornament
+            // stream: they never perturb the shared draws that shape the crown.
+            var scarRng = Rng.Keyed(state.Seed, "pilot.bark.scars", 0);
+            scars = new (double,double,double,double,double)[3];
+            for (int i = 0; i < scars.Length; i++)
+                scars[i] = (scarRng.Range(.13, .60), facing + scarRng.Range(-.60, .60),
+                    scarRng.Range(.030, .058), scarRng.Range(.16, .30), scarRng.Range(.045, .085));
         }
         private static double[] RGB(Vec3 color) => new[] { color.X, color.Y, color.Z };
         private Vec3 Centre(double t) => origin + Vec3.Up * (h * t);
@@ -177,29 +188,88 @@ public static class PilotTreeMeshes
             }
         }
 
+        // ---- Bark surface -------------------------------------------------
+        // One analytic radial displacement carries the flutes, the basal
+        // buttress flare and the healed scars, so the dense grid cannot tear.
+        private double BarkRelief(double a, double t)
+        {
+            double fade = Math.Pow(Math.Max(0, 1 - t), 1.3);
+            double drift = .9 * Math.Sin(t * 3.4 + phase * 1.7) + .35 * Math.Sin(t * 8.1);
+            // Rounded ridges with narrow valleys: a bark flute is not a sine wave.
+            double flute = Math.Pow(.5 + .5 * Math.Cos(a * 17 + phase + drift), .62) - .5;
+            double fine = .5 + .5 * Math.Sin(a * 43 - phase * 2.1 + t * 11.7);
+            // Basal buttresses are broad radial fins where the root crown meets
+            // the bole; they fade out below the first limbs.
+            double baseFlare = Math.Exp(-t * 9.5) * (.5 + .5 * Math.Sin(a * 5 + phase * 2.3));
+            double relief = flute * (.034 * fade + .014) + (fine - .5) * .008 * fade
+                + baseFlare * .030;
+            if (tree.Def.Id == "crowncoil") relief *= .45; // armor dominates this bole
+            return relief;
+        }
+
+        /// <summary>Healed branch wounds: a shallow pit ringed by a raised callus roll.</summary>
+        private double Callus(double a, double t)
+        {
+            double bump = 0;
+            foreach (var scar in scars)
+            {
+                double dt = (t - scar.T) / scar.Aw;
+                double da = MathD.WrapAngle(a - scar.A) / scar.Hw;
+                double d2 = dt * dt + da * da;
+                if (d2 >= 1) continue;
+                double d = Math.Sqrt(d2), window = 1 - d2;
+                bump += scar.Amp * window * window
+                    * (1.9 * Math.Exp(-Math.Pow((d - .66) / .30, 2)) - .55);
+            }
+            return bump;
+        }
+
+        private Vec3 BarkPoint(double t, double a)
+        {
+            double radius = Radius(t) * (1 + BarkRelief(a, t) + Callus(a, t));
+            double y = t >= 1 && tree.Def.Id == "palehollow"
+                ? -.032 * h * (.5 + .5 * Math.Sin(a * 7 + phase)) : 0;
+            return Centre(t) + new Vec3(Math.Cos(a) * radius, y, Math.Sin(a) * radius);
+        }
+
+        private Vec3 BarkNormal(double t, double a, double da, double dt)
+        {
+            var alongT = BarkPoint(Math.Min(1, t + dt), a) - BarkPoint(Math.Max(0, t - dt), a);
+            var alongA = BarkPoint(t, a + da) - BarkPoint(t, a - da);
+            var n = alongT.Cross(alongA).Normalized();
+            if (n.LengthSq < 1e-10) n = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+            return n;
+        }
+
+        private double BarkShade(double a, double t)
+        {
+            double band = .5 + .5 * Math.Sin(a * 17 + phase + .9 * Math.Sin(t * 3.4 + phase * 1.7));
+            double fine = .5 + .5 * Math.Sin(a * 43 - phase * 2.1 + t * 11.7);
+            double weather = .5 + .5 * Math.Sin(t * 21.0 + phase * 3.1);
+            return .78 + .16 * band + .07 * fine + .05 * weather;
+        }
+
         public void Trunk()
         {
             bool pale = tree.Def.Id == "palehollow", cycad = tree.Def.Id == "crowncoil";
-            const int rows = 32, sides = 32;
-            var rings = new Vec3[rows + 1, sides + 1];
-            var shade = new double[rows + 1, sides + 1];
+            // Spec density for the three fluted boles; the lighter forms keep a
+            // 64x88 grid so their heavy crowns stay inside the native budget.
+            bool dense = cycad || tree.Def.Id is "gloomspire" or "emberpillar";
+            int rows = dense ? 120 : 88, sides = dense ? 96 : 64;
             double startAngle = facing - Math.PI / 3;
             double sweep = 2 * Math.PI / 3;
+            double dA = .08 * sweep / sides, dT = .5 / rows;
 
+            var rings = new Vec3[rows + 1, sides + 1];
+            var normals = new Vec3[rows + 1, sides + 1];
             for (int i = 0; i <= rows; i++)
             {
                 double t = (double)i / rows;
                 for (int j = 0; j <= sides; j++)
                 {
                     double a = startAngle + sweep * j / sides;
-                    double edgeBlend = Math.Sin(Math.PI * j / sides);
-                    double furrow = cycad ? .012 : .045;
-                    double relief = (furrow * Math.Sin(a * 19 + phase + .18 * Math.Sin(t * 18))
-                        + .017 * Math.Sin(a * 31 - phase + t * 9)) * edgeBlend;
-                    double radius = Radius(t) * (1 + relief);
-                    double y = i == rows && pale ? -.032 * h * (.5 + .5 * Math.Sin(a * 7 + phase)) : 0;
-                    rings[i, j] = Centre(t) + new Vec3(Math.Cos(a) * radius, y, Math.Sin(a) * radius);
-                    shade[i, j] = .76 + .22 * (.5 + .5 * Math.Sin(a * 19 + phase)) + .10 * rng.NextDouble();
+                    rings[i, j] = BarkPoint(t, a);
+                    normals[i, j] = BarkNormal(t, a, dA, dT);
                 }
             }
 
@@ -212,26 +282,32 @@ public static class PilotTreeMeshes
                 return t > .025 && t < .24 && delta < .37 * Math.Sqrt(Math.Max(0, 1 - Math.Pow((t - .125) / .12, 2)));
             }
 
-            // 1. Curved front bark surface facing into the island
+            // 1. Fluted front bark surface facing into the island. Vertices are
+            // shared per grid point so the analytic surface normal is smooth;
+            // the photographed bark and its POM carry the small-scale relief.
+            var ids = new int[rows + 1, sides + 1];
+            for (int i = 0; i <= rows; i++)
+            {
+                double t = (double)i / rows;
+                for (int j = 0; j <= sides; j++)
+                {
+                    double a = startAngle + sweep * j / sides;
+                    var col = Primitives.Scale(bark, BarkShade(a, t));
+                    ids[i, j] = m.AddVertex(rings[i, j], normals[i, j], col, 1,
+                        a * r, rings[i, j].Y - origin.Y);
+                }
+            }
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < sides; j++)
                 {
-                    int k = j + 1;
                     if (Hole(i, j)) continue;
-                    double midA = startAngle + sweep * (j + .5) / sides;
-                    var outN = new Vec3(Math.Cos(midA), 0, Math.Sin(midA));
-                    var col = Primitives.Scale(bark, shade[i, j]);
-                    int first = m.VertexCount;
-                    Quad(rings[i, j], rings[i, k], rings[i + 1, k], rings[i + 1, j], col, 1, outN);
-                    for (int v = first; v < m.VertexCount; v++)
-                    {
-                        var p = m.Position(v);
-                        double angle = Math.Atan2(p.Z - origin.Z, p.X - origin.X);
-                        angle = midA + MathD.WrapAngle(angle - midA);
-                        m.UV[v * 2] = (float)(angle * r);
-                        m.UV[v * 2 + 1] = (float)(p.Y - origin.Y);
-                    }
+                    var faceN = normals[i, j] + normals[i, j + 1]
+                        + normals[i + 1, j + 1] + normals[i + 1, j];
+                    Primitives.TriangleFacing(m, ids[i, j], ids[i, j + 1],
+                        ids[i + 1, j + 1], faceN);
+                    Primitives.TriangleFacing(m, ids[i, j], ids[i + 1, j + 1],
+                        ids[i + 1, j], faceN);
                 }
             }
 
