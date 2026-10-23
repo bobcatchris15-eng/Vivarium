@@ -17,29 +17,140 @@ public static class PropMeshes
         new[] { 0.53, 0.46, 0.42 }, // muted umber-red
     };
 
-    /// <summary>Unit rock (bounding radius ≈ 1, flattened base). Scale by the rock's half-extents when drawing.</summary>
+    // Mineral tints for river pebbles (dark basalt, warm quartzite, slate grey, ochre chert, speckled granite).
+    private static readonly double[][] PebblePalette =
+    {
+        new[] { 0.22, 0.22, 0.24 }, // dark basalt
+        new[] { 0.62, 0.55, 0.42 }, // warm quartzite
+        new[] { 0.46, 0.48, 0.50 }, // slate grey
+        new[] { 0.58, 0.46, 0.30 }, // ochre chert
+        new[] { 0.50, 0.48, 0.44 }, // speckled granite
+    };
+
+    /// <summary>Unit rock (bounding radius ≈ 1). ~9,216-triangle Voronoi-cleaved stratified undercut boulder
+    /// with smooth area-weighted normals; cavity AO in COLOR.r, ridge exposure in COLOR.g.</summary>
     public static MeshData Rock(ulong variantSeed, int detail = 3)
     {
         // Pebble's historical weathered-fragment branch retains its exact geometry.
         if (detail == 1) return LegacyRock(variantSeed, detail);
-        var profile = RockSurfaceProfile.Create(variantSeed);
-        var rng = Rng.Keyed(variantSeed, "rock.faces", 0);
-        var color = RockPalette[profile.Palette];
-        var mesh = new MeshData();
-        foreach (var face in profile.Triangles)
+
+        var rng = Rng.Keyed(variantSeed, "rock.mesh", 0);
+        var palette = RockPalette[rng.NextInt(RockPalette.Length)];
+
+        // 14 random 3D fracture planes (Voronoi cleavage facets).
+        const int planeCount = 14;
+        var pn = new Vec3[planeCount];
+        var pd = new double[planeCount];
+        for (int k = 0; k < planeCount; k++)
         {
-            var a = face.A; var b = face.B; var c = face.C;
-            var outward = face.Bottom ? new Vec3(0, -1, 0) :
-                (a.X == 0 && a.Z == 0 ? new Vec3(0, 1, 0) :
-                    new Vec3(a.X + b.X + c.X, 0, a.Z + b.Z + c.Z));
-            var cross = (b - a).Cross(c - a).Normalized();
-            var normal = cross.Dot(outward) >= 0 ? cross : cross * -1;
-            var col = Primitives.Scale(color, rng.Range(0.88, 1.08));
-            int start = mesh.AddVertex(a, normal, col, 1, a.X, a.Z, profile.Family, 0);
-            mesh.AddVertex(b, normal, col, 1, b.X, b.Z, profile.Family, 0);
-            mesh.AddVertex(c, normal, col, 1, c.X, c.Z, profile.Family, 0);
-            Primitives.TriangleFacing(mesh, start, start + 1, start + 2, outward);
+            var v = new Vec3(rng.Range(-1, 1), rng.Range(-1, 1), rng.Range(-1, 1)).Normalized();
+            if (v.LengthSq < 1e-8) v = Vec3.Up;
+            pn[k] = v;
+            pd[k] = rng.Range(0.55, 0.95);
         }
+
+        const int lon = 96, lat = 48;
+        const int stride = lon + 1;
+        var pos = new Vec3[(lat + 1) * stride];
+
+        for (int i = 0; i <= lat; i++)
+        {
+            double theta = Math.PI * i / lat;
+            for (int j = 0; j <= lon; j++)
+            {
+                double phi = 2 * Math.PI * j / lon;
+                double st = Math.Sin(theta), ct = Math.Cos(theta);
+                var u = new Vec3(st * Math.Cos(phi), ct, st * Math.Sin(phi));
+
+                // soft-minimum of fracture planes -> cleavage facet radius.
+                double r = double.PositiveInfinity;
+                for (int k = 0; k < planeCount; k++)
+                {
+                    double dot = pn[k].Dot(u);
+                    if (dot <= 0.05) continue;
+                    double val = pd[k] / dot;
+                    if (double.IsInfinity(r)) r = val;
+                    else
+                    {
+                        const double kk = 8.0;
+                        r = -(1.0 / kk) * Math.Log(Math.Exp(-kk * r) + Math.Exp(-kk * val));
+                    }
+                }
+                if (double.IsInfinity(r)) r = 1.0;
+                // blend with base sphere (soft min).
+                {
+                    const double kk = 8.0;
+                    r = -(1.0 / kk) * Math.Log(Math.Exp(-kk * r) + Math.Exp(-kk * 1.1));
+                }
+
+                // basal undercut erosion.
+                if (u.Y < -0.2) r *= 0.78;
+
+                // sedimentary bedding groove displacement.
+                double fbm4 = Noise.Fbm3(variantSeed, u.X * 4, u.Y * 4, u.Z * 4, 4);
+                double groove = Math.Sin(u.Y * 28.0 + fbm4 * 4.0);
+                // micro-displacement.
+                double micro = Noise.Fbm3(variantSeed, u.X * 6, u.Y * 6, u.Z * 6, 4);
+                double disp = 0.015 * groove + 0.03 * micro;
+
+                pos[i * stride + j] = u * (r + disp);
+            }
+        }
+
+        int vertCount = (lat + 1) * stride;
+        var ao = new double[vertCount];
+        var ridge = new double[vertCount];
+        for (int idx = 0; idx < vertCount; idx++)
+        {
+            int i = idx / stride;
+            int j = idx % stride;
+            var sum = Vec3.Zero;
+            int deg = 0;
+            if (i > 0) { sum += pos[(i - 1) * stride + j]; deg++; }
+            if (i < lat) { sum += pos[(i + 1) * stride + j]; deg++; }
+            int jl = j > 0 ? j - 1 : lon;
+            int jr = j < lon ? j + 1 : 0;
+            sum += pos[i * stride + jl]; deg++;
+            sum += pos[i * stride + jr]; deg++;
+            var lap = (sum / deg) - pos[idx];
+            var nrm = pos[idx].Normalized();
+            double curv = lap.Dot(nrm);
+            double kcurv = Math.Clamp(curv * 4.0, -1.0, 1.0);
+            // concave (curv>0) -> lower AO; convex -> ridge.
+            ao[idx] = Math.Clamp(0.5 - 0.5 * kcurv, 0.2, 1.0);
+            ridge[idx] = Math.Clamp(0.5 + 0.5 * (-kcurv), 0.0, 1.0);
+        }
+
+        var mesh = new MeshData();
+        double palLum = (palette[0] + palette[1] + palette[2]) / 3.0;
+        for (int idx = 0; idx < vertCount; idx++)
+        {
+            int i = idx / stride;
+            int j = idx % stride;
+            var p = pos[idx];
+            var n = p.Normalized();
+            var color = new[] { ao[idx], ridge[idx], palLum };
+            double u = (double)j / lon;
+            double v = (double)i / lat;
+            mesh.AddVertex(p, n, color, 1.0, u, v, 0, 0);
+        }
+
+        for (int i = 0; i < lat; i++)
+        {
+            for (int j = 0; j < lon; j++)
+            {
+                int a = i * stride + j;
+                int b = i * stride + (j + 1);
+                int c = (i + 1) * stride + (j + 1);
+                int d = (i + 1) * stride + j;
+                var center = (pos[a] + pos[b] + pos[c] + pos[d]) / 4.0;
+                var outward = center.Normalized();
+                Primitives.TriangleFacing(mesh, a, b, c, outward);
+                Primitives.TriangleFacing(mesh, a, c, d, outward);
+            }
+        }
+
+        mesh.RecomputeNormals();
         return mesh;
     }
 
@@ -115,64 +226,98 @@ public static class PropMeshes
         return m;
     }
 
-    /// <summary>Render-only talus chip with a broad cleavage plane, beveled edges and buried base.</summary>
+    /// <summary>Render-only water-worn river cobble / angular mineral chip, ~768 triangles, smooth normals.</summary>
     public static MeshData Pebble(ulong seed)
     {
         var rng = Rng.Keyed(seed, "pebble.mesh", 0);
-        // Weathered fragments interrupt the fresh cleavage faces. Both profiles are
-        // flattened by the same scatter transform, without changing any large rock.
-        if (rng.NextInt(4) == 0) return Rock(seed, detail: 1);
-        var pigment = RockPalette[rng.NextInt(RockPalette.Length)];
-        int sides = 5 + rng.NextInt(3);
-        double crossScale = rng.Range(0.56, 1.0);
-        double phase = rng.Range(0, Math.PI * 2);
-        double slopeX = rng.Range(-0.14, 0.14), slopeZ = rng.Range(-0.14, 0.14);
-        var outline = new Vec3[sides];
-        double highestSlope = double.NegativeInfinity;
-        for (int i = 0; i < sides; i++)
+        // ~25% angular chips, rest smooth water-worn cobbles.
+        bool angular = rng.NextInt(4) == 0;
+        var pigment = PebblePalette[rng.NextInt(PebblePalette.Length)];
+
+        double rx = rng.Range(0.78, 1.05);
+        double ry = rng.Range(0.55, 0.78);
+        double rz = rng.Range(0.78, 1.05) * rng.Range(0.85, 1.0);
+
+        // optional cleavage planes for angular chips.
+        int pcount = angular ? 5 : 0;
+        var ppn = new Vec3[pcount];
+        var ppd = new double[pcount];
+        for (int k = 0; k < pcount; k++)
         {
-            double a = phase + (i + rng.Range(-0.16, 0.16)) * 2 * Math.PI / sides;
-            double radius = rng.Range(0.72, 1.05);
-            outline[i] = new Vec3(Math.Cos(a) * radius, 0, Math.Sin(a) * radius * crossScale);
-            highestSlope = Math.Max(highestSlope, (outline[i].X * slopeX + outline[i].Z * slopeZ) * 0.91);
+            var v = new Vec3(rng.Range(-1, 1), rng.Range(-1, 1), rng.Range(-1, 1)).Normalized();
+            if (v.LengthSq < 1e-8) v = Vec3.Up;
+            ppn[k] = v;
+            ppd[k] = rng.Range(0.6, 0.9);
         }
-        // Retain the same local bottom and crest envelope used by scatter burial.
-        double capY = 0.75 - highestSlope;
-        var rings = new Vec3[3, sides];
-        for (int i = 0; i < sides; i++)
+
+        const int lon = 32, lat = 12;
+        const int stride = lon + 1;
+        var pos = new Vec3[(lat + 1) * stride];
+
+        for (int i = 0; i <= lat; i++)
         {
-            var p = outline[i];
-            rings[0, i] = new Vec3(p.X * 0.72, -0.38, p.Z * 0.72);
-            rings[1, i] = new Vec3(p.X, -0.16 + rng.Range(-0.045, 0.045), p.Z);
-            rings[2, i] = new Vec3(p.X * 0.91,
-                capY + (p.X * slopeX + p.Z * slopeZ) * 0.91, p.Z * 0.91);
-        }
-        var mesh = new MeshData();
-        void Face(Vec3 a, Vec3 b, Vec3 c, Vec3 outward, double shade, double cap = 0)
-        {
-            var normal = (b - a).Cross(c - a).Normalized();
-            if (normal.Dot(outward) < 0) normal = -normal;
-            var color = Primitives.Scale(pigment, shade);
-            int first = mesh.AddVertex(a, normal, color, 1, a.X, a.Z, 1, cap);
-            mesh.AddVertex(b, normal, color, 1, b.X, b.Z, 1, cap);
-            mesh.AddVertex(c, normal, color, 1, c.X, c.Z, 1, cap);
-            Primitives.TriangleFacing(mesh, first, first + 1, first + 2, normal);
-        }
-        double topShade = rng.Range(0.96, 1.06);
-        var capNormal = new Vec3(-slopeX, 1, -slopeZ).Normalized();
-        for (int i = 0; i < sides; i++)
-        {
-            int next = (i + 1) % sides;
-            var outward = outline[i] + outline[next];
-            for (int row = 0; row < 2; row++)
+            double theta = Math.PI * i / lat;
+            for (int j = 0; j <= lon; j++)
             {
-                double shade = rng.Range(0.83, 1.03);
-                Face(rings[row, i], rings[row, next], rings[row + 1, next], outward, shade);
-                Face(rings[row, i], rings[row + 1, next], rings[row + 1, i], outward, shade);
+                double phi = 2 * Math.PI * j / lon;
+                double st = Math.Sin(theta), ct = Math.Cos(theta);
+                var u = new Vec3(st * Math.Cos(phi), ct, st * Math.Sin(phi));
+
+                double r = 1.0;
+                if (angular && pcount > 0)
+                {
+                    double rr = double.PositiveInfinity;
+                    for (int k = 0; k < pcount; k++)
+                    {
+                        double dot = ppn[k].Dot(u);
+                        if (dot <= 0.05) continue;
+                        double val = ppd[k] / dot;
+                        if (double.IsInfinity(rr)) rr = val;
+                        else
+                        {
+                            const double kk = 10.0;
+                            rr = -(1.0 / kk) * Math.Log(Math.Exp(-kk * rr) + Math.Exp(-kk * val));
+                        }
+                    }
+                    if (!double.IsInfinity(rr)) r = rr;
+                }
+
+                // micro displacement
+                double micro = Noise.Fbm3(seed, u.X * 5, u.Y * 5, u.Z * 5, 3);
+                double disp = (angular ? 0.04 : 0.015) * micro;
+
+                var p = new Vec3(u.X * rx * (r + disp), u.Y * ry * (r + disp), u.Z * rz * (r + disp));
+                // flatten bottom slightly
+                if (p.Y < -0.3) p = new Vec3(p.X, -0.35, p.Z);
+                pos[i * stride + j] = p;
             }
-            Face(new Vec3(0, -0.38, 0), rings[0, next], rings[0, i], -Vec3.Up, 0.74);
-            Face(new Vec3(0, capY, 0), rings[2, i], rings[2, next], capNormal, topShade, 1);
         }
+
+        var mesh = new MeshData();
+        int vertCount = (lat + 1) * stride;
+        for (int idx = 0; idx < vertCount; idx++)
+        {
+            var p = pos[idx];
+            var n = p.Normalized();
+            mesh.AddVertex(p, n, pigment, 1.0, 0, 0, 0, 0);
+        }
+
+        for (int i = 0; i < lat; i++)
+        {
+            for (int j = 0; j < lon; j++)
+            {
+                int a = i * stride + j;
+                int b = i * stride + (j + 1);
+                int c = (i + 1) * stride + (j + 1);
+                int d = (i + 1) * stride + j;
+                var center = (pos[a] + pos[b] + pos[c] + pos[d]) / 4.0;
+                var outward = center.Normalized();
+                Primitives.TriangleFacing(mesh, a, b, c, outward);
+                Primitives.TriangleFacing(mesh, a, c, d, outward);
+            }
+        }
+
+        mesh.RecomputeNormals();
         return mesh;
     }
 
@@ -577,7 +722,7 @@ public static class PropMeshes
     public readonly record struct PebbleInstance(Vec3 Position, Vec3 Scale, double RotationY, double TiltX, double TiltZ, int Variant);
 
     /// <summary>Render-only clustered gravel with voids, burial and full 3-D orientation.</summary>
-    public static List<PebbleInstance> GravelScatter(VivariumWorld w, GravelPatch g, double density = 140, int variants = 16)
+    public static List<PebbleInstance> GravelScatter(VivariumWorld w, GravelPatch g, double density = 650, int variants = 32)
     {
         var rng = Rng.Keyed(g.VariantSeed, "gravel.scatter", 0);
         int count = (int)(Math.PI * g.Radius * g.Radius * density);
@@ -608,7 +753,11 @@ public static class PropMeshes
                 p = g.Position + Vec2.FromAngle(a) * r;
             }
             if (!g.Covers(p) || !w.Domain.ContainsDisc(p, 0.02)) continue;
-            double s = rng.Range(0.011, 0.033) * (rng.Chance(0.08) ? rng.Range(1.5, 2.2) : 1);
+            double s;
+            if (rng.Chance(0.10))
+                s = rng.Range(0.025, 0.045); // large cobble 2.5-4.5 cm
+            else
+                s = rng.Range(0.004, 0.012); // interstitial grain 4-12 mm
             double sx = s * rng.Range(0.78, 1.25), sy = s * rng.Range(0.25, 0.40), sz = s * rng.Range(0.8, 1.3);
             double burial = rng.Range(0.12, 0.42);
             var pos = new Vec3(p.X, w.Terrain.Height(p) + sy * (0.38 - burial), p.Z);

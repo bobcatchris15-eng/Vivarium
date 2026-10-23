@@ -32,6 +32,8 @@ public partial class PropRenderer : Node3D
         {
             _rockMat = Bridge.Shader("res://Shaders/rock.gdshader");
             Bridge.BindSurface(_rockMat, "rock", Bridge.Surfaces.Rock);
+            if (!IslandRenderer.CoverMaskConsumers.Contains(_rockMat)) IslandRenderer.CoverMaskConsumers.Add(_rockMat);
+            _rockMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
             _logMat = Bridge.Shader("res://Shaders/log.gdshader");
             Bridge.BindSurface(_logMat, "bark", Bridge.Surfaces.Bark);
             Bridge.BindSurface(_logMat, "moss", Bridge.Surfaces.Moss);
@@ -42,7 +44,8 @@ public partial class PropRenderer : Node3D
             var pebbleMat = (ShaderMaterial)_rockMat.Duplicate();
             pebbleMat.SetShaderParameter("lichen", 0.0f);
             pebbleMat.SetShaderParameter("tile_metres", 0.35f);
-            _pebbles = new ArrayMesh[16];
+            _pebbles = new ArrayMesh[32];
+            pebbleMat.SetShaderParameter("pebble_mode", 1.0f);
             for (int i = 0; i < _pebbles.Length; i++) _pebbles[i] = Bridge.ToArrayMesh(PropMeshes.Pebble(1000 + (ulong)i * 7), pebbleMat);
         }
         _logMeshes.Clear();
@@ -161,7 +164,7 @@ public partial class PropRenderer : Node3D
             if (byVariant[v].Count == 0) continue;
             var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = _pebbles[v], InstanceCount = byVariant[v].Count };
             for (int i = 0; i < byVariant[v].Count; i++) mm.SetInstanceTransform(i, byVariant[v][i]);
-            _gravelRoot.AddChild(new MultiMeshInstance3D { Name = $"Gravel_{v}", Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+            _gravelRoot.AddChild(new MultiMeshInstance3D { Name = $"Gravel_{v}", Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.On });
         }
     }
 }
