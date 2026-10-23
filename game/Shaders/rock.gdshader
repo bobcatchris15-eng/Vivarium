@@ -4,6 +4,7 @@ shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/water_caustics.gdshaderinc"
 
 uniform sampler2D rock_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -11,6 +12,7 @@ uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform float tile_metres = 0.9;
 uniform float lichen = 1.0;
 uniform float dust = 0.4;   // pale dust settling in low spots / interstices between gravel pebbles
+uniform float water_table = 0.0;
 
 varying vec3 world_pos;
 varying vec3 obj_pos;
@@ -54,4 +56,35 @@ void fragment() {
     ROUGHNESS = mix(clamp(t.a, 0.48, 1.0), 0.92, crust);
     SPECULAR = 0.3;   // lower sky reflection: the glossy blue sheen read as cartoony on gravel
     NORMAL = normalize((VIEW_MATRIX * vec4(normalize(mix(n, wn, crust * 0.6)), 0.0)).xyz);
+}
+
+void light() {
+    vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    vec3 wl = normalize((INV_VIEW_MATRIX * vec4(LIGHT, 0.0)).xyz);
+    vec3 vv = normalize(VIEW);
+
+    float ndotl = max(dot(wn, wl), 0.0);
+    DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndotl * (1.0 / PI);
+
+    if (ndotl > 0.0) {
+        vec3 h = normalize(wl + vv);
+        float ndoth = max(dot(wn, h), 0.0);
+        float ndotv = max(dot(wn, vv), 1e-4);
+        float a = max(ROUGHNESS * ROUGHNESS, 0.001);
+        float a2 = a * a;
+        float denom = ndoth * ndoth * (a2 - 1.0) + 1.0;
+        float D = a2 / max(PI * denom * denom, 1e-4);
+        float F0 = SPECULAR * 0.08;
+        float vh = max(dot(vv, h), 0.0);
+        float F = F0 + (1.0 - F0) * pow(1.0 - vh, 5.0);
+        float k = (ROUGHNESS + 1.0) * (ROUGHNESS + 1.0) * 0.125;
+        float G = (ndotv / max(ndotv * (1.0 - k) + k, 1e-4)) *
+                 (ndotl / max(ndotl * (1.0 - k) + k, 1e-4));
+        float spec = D * G * F / max(4.0 * ndotv * ndotl, 1e-4);
+        SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * spec * ndotl;
+    }
+
+    float water_surface_y = water_table;
+    vec3 caustic = evaluate_submerged_caustics(world_pos, wn, water_surface_y, wl, TIME);
+    DIFFUSE_LIGHT += caustic * ATTENUATION * LIGHT_COLOR;
 }

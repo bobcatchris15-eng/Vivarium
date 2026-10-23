@@ -5,6 +5,7 @@ shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/water_caustics.gdshaderinc"
 
 uniform sampler2D field_tex : filter_linear, repeat_disable;
 uniform sampler2D sub_tex : filter_linear, repeat_disable;
@@ -87,23 +88,6 @@ vec4 smooth_field(sampler2D tex, vec2 uv) {
     vec2 i = floor(p), f = fract(p);
     f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
     return texture(tex, (i + f - 0.5) / res);
-}
-
-// Dual animated wave interference network for submerged bed caustics
-float caustic_pattern(vec2 pos, float t) {
-    vec2 p1 = pos * 14.0 + vec2(t * 0.70, t * 0.45);
-    p1 += vec2(sin(p1.y * 1.35 + t * 0.85), cos(p1.x * 1.35 - t * 0.75)) * 0.45;
-    float w1 = sin(p1.x * 2.2 + p1.y * 1.2);
-    float w2 = cos(p1.y * 2.2 - p1.x * 1.1);
-    float c1 = pow(clamp(1.0 - abs(w1 * w2), 0.0, 1.0), 3.5);
-
-    vec2 p2 = vec2(pos.x * 0.707 - pos.y * 0.707, pos.x * 0.707 + pos.y * 0.707) * 17.0 + vec2(-t * 0.60, t * 0.65);
-    p2 += vec2(cos(p2.y * 1.25 - t * 0.80), sin(p2.x * 1.25 + t * 0.90)) * 0.45;
-    float w3 = sin(p2.x * 2.0 - p2.y * 1.3);
-    float w4 = cos(p2.y * 2.1 + p2.x * 1.2);
-    float c2 = pow(clamp(1.0 - abs(w3 * w4), 0.0, 1.0), 3.5);
-
-    return clamp((c1 + c2) * 0.45 + (c1 * c2) * 1.4, 0.0, 2.0);
 }
 
 void vertex() {
@@ -340,22 +324,7 @@ void fragment() {
     rough = mix(rough, max(rough, 0.78), submerged_bed);
     detail = normalize(mix(detail, wn, total_wet * 0.12));
 
-    float caustic_mask = 0.0;
-    vec3 caustic_light = vec3(0.0);
     EMISSION = vec3(0.0);
-    if ((world_pos.y < water_surface) && (water_depth > 0.005)) {
-        float submerged = smoothstep(0.005, 0.06, water_depth);
-        float caustic_depth = exp(-water_depth * 1.5);
-        caustic_mask = submerged * caustic_depth;
-        float caustics = caustic_pattern(world_pos.xz, review_time >= 0.0 ? review_time : TIME);
-        caustic_light = vec3(0.012, 0.011, 0.008) * min(caustics, 1.0) * caustic_mask;
-        col += caustic_light * 0.65;
-        EMISSION = vec3(0.0);
-    }
-    if (world_pos.y >= water_surface) {
-        caustic_mask = 0.0;
-        EMISSION = vec3(0.0);
-    }
 
     if (contact_mask > 0.01) {
         vec3 humus_enrich = vec3(0.88, 0.85, 0.80);
@@ -379,4 +348,38 @@ void fragment() {
     SPECULAR = mix(0.35, 0.32, total_wet);
     SPECULAR = mix(SPECULAR, 0.12, smoothstep(0.006, 0.025, water_depth));
     NORMAL = normalize((VIEW_MATRIX * vec4(detail, 0.0)).xyz);
+}
+
+void light() {
+    vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    vec3 wl = normalize((INV_VIEW_MATRIX * vec4(LIGHT, 0.0)).xyz);
+    vec3 vv = normalize(VIEW);
+    float t = (review_time >= 0.0) ? review_time : TIME;
+
+    float ndotl = max(dot(wn, wl), 0.0);
+    DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndotl * (1.0 / PI);
+
+    if (ndotl > 0.0) {
+        vec3 h = normalize(wl + vv);
+        float ndoth = max(dot(wn, h), 0.0);
+        float ndotv = max(dot(wn, vv), 1e-4);
+        float a = max(ROUGHNESS * ROUGHNESS, 0.001);
+        float a2 = a * a;
+        float denom = ndoth * ndoth * (a2 - 1.0) + 1.0;
+        float D = a2 / max(PI * denom * denom, 1e-4);
+        float F0 = SPECULAR * 0.08;
+        float vh = max(dot(vv, h), 0.0);
+        float F = F0 + (1.0 - F0) * pow(1.0 - vh, 5.0);
+        float k = (ROUGHNESS + 1.0) * (ROUGHNESS + 1.0) * 0.125;
+        float G = (ndotv / max(ndotv * (1.0 - k) + k, 1e-4)) *
+                 (ndotl / max(ndotl * (1.0 - k) + k, 1e-4));
+        float spec = D * G * F / max(4.0 * ndotv * ndotl, 1e-4);
+        SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * spec * ndotl;
+    }
+
+    vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
+    vec4 sub = texture(sub_tex, fuv);
+    float water_surface_y = max(water_table, world_pos.y + sub.b * 0.25);
+    vec3 caustic = evaluate_submerged_caustics(world_pos, wn, water_surface_y, wl, t);
+    DIFFUSE_LIGHT += caustic * ATTENUATION * LIGHT_COLOR;
 }

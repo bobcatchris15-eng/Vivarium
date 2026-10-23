@@ -1,10 +1,17 @@
-// Screen-space underwater treatment: gentle teal grade, soft caustic shimmer and vignette.
-// Kept subtle on purpose so small aquatic fauna stay clearly visible.
+// Screen-space underwater treatment: Beer-Lambert spectral attenuation, Henyey-Greenstein
+// forward-scattered volumetric light shafts, and suspended detritus motes.
+// Replaces the old floating 2D lens caustic overlay.
 shader_type canvas_item;
 
 uniform float strength : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 tint : source_color = vec3(0.42, 0.70, 0.50);
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
+uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
+
+uniform vec3 sun_dir = vec3(0.35, 0.75, 0.45);
+uniform vec3 water_absorption = vec3(3.4, 1.15, 2.65);
+uniform vec3 water_scattering = vec3(0.42, 0.62, 0.48);
+uniform vec3 water_ambient_radiance = vec3(0.10, 0.135, 0.115);
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float vnoise(vec2 p) {
@@ -13,37 +20,44 @@ float vnoise(vec2 p) {
     return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
 }
 
-// Dual animated wave interference network for shimmering caustics
-float caustic_pattern(vec2 pos, float t) {
-    vec2 p1 = pos * 12.0 + vec2(t * 0.55, t * 0.35);
-    p1 += vec2(sin(p1.y * 1.35 + t * 0.75), cos(p1.x * 1.35 - t * 0.65)) * 0.45;
-    float w1 = sin(p1.x * 2.2 + p1.y * 1.2);
-    float w2 = cos(p1.y * 2.2 - p1.x * 1.1);
-    float c1 = pow(clamp(1.0 - abs(w1 * w2), 0.0, 1.0), 3.5);
-
-    vec2 p2 = vec2(pos.x * 0.707 - pos.y * 0.707, pos.x * 0.707 + pos.y * 0.707) * 15.0 + vec2(-t * 0.45, t * 0.55);
-    p2 += vec2(cos(p2.y * 1.25 - t * 0.70), sin(p2.x * 1.25 + t * 0.80)) * 0.45;
-    float w3 = sin(p2.x * 2.0 - p2.y * 1.3);
-    float w4 = cos(p2.y * 2.1 + p2.x * 1.2);
-    float c2 = pow(clamp(1.0 - abs(w3 * w4), 0.0, 1.0), 3.5);
-
-    return clamp((c1 + c2) * 0.45 + (c1 * c2) * 1.4, 0.0, 2.0);
+// Henyey-Greenstein phase function, g = 0.78 (forward scattering).
+float henyey_greenstein(float cos_theta, float g) {
+    float g2 = g * g;
+    float denom = pow(max(1.0 + g2 - 2.0 * g * cos_theta, 1e-3), 1.5);
+    return (1.0 - g2) / max(4.0 * PI * denom, 1e-4);
 }
 
 void fragment() {
     vec2 uv = SCREEN_UV;
-    vec2 wob = vec2(vnoise(uv * 8.0 + TIME * 0.4), vnoise(uv * 8.0 - TIME * 0.35)) - 0.5;
-    vec3 scene = texture(screen_tex, uv + wob * 0.004 * strength).rgb;
-    
-    // Shimmering caustic light bands
-    float caustic = caustic_pattern(uv + wob * 0.015, TIME);
-    vec3 caustic_color = vec3(0.70, 0.95, 0.82);
-    vec3 caustic_light = caustic_color * caustic * 0.32;
+    vec3 scene = texture(screen_tex, uv).rgb;
 
-    vec3 graded = mix(scene, scene * tint * 1.15, 0.22) + caustic_light * strength;
+    // Depth-buffer derived path length for Beer-Lambert attenuation.
+    float depth_raw = texture(depth_tex, uv).r;
+    float view_depth = depth_raw * 6.0;
+
+    // Beer-Lambert spectral attenuation.
+    vec3 sigma_t = max(water_absorption + water_scattering, vec3(1e-4));
+    vec3 transmittance = exp(-sigma_t * view_depth * 0.35 * strength);
+    vec3 single_scatter = (water_scattering / sigma_t) * water_ambient_radiance * (vec3(1.0) - transmittance);
+    vec3 graded = scene * transmittance + single_scatter;
+
+    // Henyey-Greenstein forward-scattered volumetric light shafts (g = 0.78).
+    vec3 view_dir = normalize(vec3((uv - 0.5) * vec2(1.6, 0.9), -1.0));
+    vec3 ldir = normalize(sun_dir);
+    float cos_theta = dot(ldir, view_dir);
+    float hg = henyey_greenstein(cos_theta, 0.78);
+    float shaft_mask = smoothstep(0.0, 1.0, depth_raw) * (0.5 + 0.5 * vnoise(uv * 6.0 + TIME * 0.1));
+    vec3 shafts = vec3(0.75, 0.85, 0.70) * hg * shaft_mask * 0.18 * strength;
+    graded += shafts;
+
+    // Suspended organic detritus / plankton motes.
+    vec2 mote_uv = uv * vec2(120.0, 80.0) + vec2(TIME * 0.05, -TIME * 0.03);
+    float mote = vnoise(mote_uv);
+    mote = smoothstep(0.985, 1.0, mote) * 0.6;
+    graded += vec3(0.7, 0.75, 0.6) * mote * strength * 0.4;
+
     float vig = smoothstep(0.95, 0.35, distance(uv, vec2(0.5)));
     graded *= mix(0.82, 1.0, vig);
-    // Screen-space caustics must never add light to the unexplained black void.
     vec3 original = texture(screen_tex, uv).rgb;
     float has_surface = step(0.000001, max(original.r, max(original.g, original.b)));
     COLOR = vec4(mix(scene, graded, strength) * has_surface, 1.0);
