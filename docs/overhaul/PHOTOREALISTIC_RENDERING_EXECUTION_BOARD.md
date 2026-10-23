@@ -32,24 +32,24 @@ State is **evidence-based** — each row was confirmed by reading the source, no
 | WP-04 | **DONE** | `CameraAttributesSetDofBlurQuality(High)`, `DofBokehShape.Circle`, exp. metering, `DofBlurFarEnabled`; `CameraRig._focusDistance`, `VIVARIUM_DISABLE_DOF` |
 | WP-05 | **DONE** | `SurfaceSet(Color, Normal, Roughness, Height, Ao)`; `_hgt`/`_ao` bound; `sample_stochastic_pbr` L70; `pom_raymarch` L149 |
 | WP-06 | **DONE** | `const int sub = 6`; `CatmullRom` + `RenderHeight`; tangents in `Bridge.ToArrayMesh`; `damp_*`/`leaf_*` sampled; 24-step POM |
-| WP-07 | **NOT STARTED** | `BuildWalls` L137 unsubdivided, no rootlets; `strata.gdshader` L6 still `render_mode diffuse_burley` — no `specular_schlick_ggx`, no POM, no `rock_*` |
+| WP-07 | **MERGED** | `BuildWalls` subdivided (8 rows, ~3 cm), layer-specific displacement (turf lip +1.2 cm, ped ±1.5, cobble ±2.2, bedding ±2.8), 12–25 rootlet tubes, `specular_schlick_ggx` + POM + rock binding + clearcoat seepage. Merged `39113eb4` |
 | WP-08 | **NOT STARTED** | `LoamSurfaceDetailRenderer` L54 still `cz-1 .. cz+1` (6 m window); `SoilDetailRenderer` L54 still `StandardMaterial3D`, all `CastShadow = Off` |
-| WP-09 | **NOT STARTED** | No `GenerateLitterAtlas.py`; litter still crops `ScatteredLeaves007` |
-| WP-10 | **NOT STARTED** | `LoamAggregateBuilder` single-ring pyramids; `UV=(0,0)` blades; `BankFringe` never called |
-| WP-11 | **NOT STARTED** | **Zero files changed.** `water_stream`/`surface_fluid` still `render_mode unshaded`; `dFdx` normal L105; `gap` clamp L67; `+0.055` floor |
+| WP-09 | **PARTIAL** | 4K isolated atlas generated (`ForestFloorLitter_4K_*`, 6 maps) + `GenerateLitterAtlas.py`. Outstanding: `LoamLitterBuilder` still crops `ScatteredLeaves007`, no height-field stacking, no 6-seg bark twigs, no `loam_litter.gdshader` backlight. WIP commit `2512d554` |
+| WP-10 | **MERGED** | Undercut peds (0.72 waist, 16×5 rings), triplanar `soil_*` with clamp removed, real `u,v` on blades/leaves, `BankFringe` wired, shadows on. Merged `4ad9e409` |
+| WP-11 | **MERGED** | Lit Forward+ `blend_mix, depth_draw_always, cull_disabled, diffuse_burley, specular_schlick_ggx`; analytic B-spline normals; un-clamped optical path; humic absorption; `+0.055` floor removed. Merged `438b340d` |
 | WP-12 | **NOT STARTED** | No `water_caustics.gdshaderinc`; albedo-additive `caustic_pattern` still in `terrain.gdshader` |
 | WP-13 | **NOT STARTED** | No meniscus/foam; `_drops`/`_sheets` shadows off; no `plunge_impacts` |
-| WP-14 | **NOT STARTED** | 6–8 sided prisms; 16 pebble variants; gravel 140/m²; no `rock_hgt`/`rock_ao` |
+| WP-14 | **NOT STARTED** | 6–8 sided prisms; 16 pebble variants; gravel 140/m²; no `rock_hgt`/`rock_ao`. Fresh worktree `wp14-rocks` ready |
 | WP-15 | **NOT STARTED** | `around = 28`, no hollow tunnel, normals from undisplaced `dir` L406; `cap > 0.5` writes no normal |
-| WP-16 | **NOT STARTED** | `CastShadow = Off` L489; `mossGrowthStrength >= 4` gate L967; `maxY - minY > 0.03` drop L910 |
+| WP-16 | **MERGED** | `CastShadow = On`, `>= 4` gate removed, 8–14 shoots/cell, UV2.y base-to-tip, POM pore space + sheen + dew glints. Merged `d0afb267` |
 | WP-17 | **NOT STARTED** | Lichen branch leaves `bump = 0.0`, `ao = 1.0` |
 | WP-18 | **NOT STARTED** | No aquatic coverage renderer; `surface_mode == 4` absent |
 | WP-19 | **DONE** | `Broadleaf` L224-225 → `rows 28/cols 16` at Tier 0; two-sided lamina |
 | WP-20 | **DONE** | `sway`/`wind_strength` `0.35` with `VIVARIUM_FREEZE_WIND`; `T_leaf` Beer-Lambert L50 |
-| WP-21 | **PARTIAL** | UV inversion fixed (`PilotTreeMeshes.SetLeafUv` L590). Outstanding: flat leaf cards, no `leaf.gdshader` routing, pyramid bark spikes, fungi untouched |
+| WP-21 | **PARTIAL** | Bark fluting, buttresses, callus rolls and analytic normals done. Outstanding: crown still uses 5-sided `Blade` (not `Broadleaf.BuildLeaf`), no `leaf.gdshader` routing, fungi untouched (`OrganismMeshes`, `GhostbonnetGeometry`). WIP commit `5ee6cde1` |
 | WP-22 | **NOT STARTED** | `FaunaRenderer.MakeMmi` `CastShadow = Off` |
 | WP-23 | **NOT STARTED** | `fauna.gdshader` procedural noise, no SSS/thin-film |
-| WP-24 | **NOT STARTED** | Vertex-coloured `StandardMaterial3D`; single-bone vertical foot offset; CPU `ClearSurfaces()` |
+| WP-24 | **NOT STARTED** | Vertex-coloured `StandardMaterial3D`; single-bone vertical foot offset; CPU `ClearSurfaces()`. Fresh worktree `wp24-guardians` ready |
 
 **Correction to the prior handoff:** WP-03, WP-04 and WP-11 were misreported. WP-02/03/04 are complete; WP-11 was never begun (zero file changes). The WP-07/08/21 files that showed as modified were pre-existing unrelated edits, not packet work.
 
@@ -99,12 +99,12 @@ All worktrees live under `C:\Users\Chris\.local\share\opencode\worktree\8235e5\`
 
 | Packet | Worktree | Branch | Dispatched | Session | Merge |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| WP-07 | `wp07-strata` | `wp07-strata` | yes | `ses_e9981f0e0ffeB3vbcyiXXEn8c0` | pending |
-| WP-09 | `wp09-litter-atlas` | `wp09-litter-atlas` | yes | `ses_e9981f0deffeTOABbH5CMgj7Si` | pending |
-| WP-10 | `wp10-aggregates` | `wp10-aggregates` | yes | `ses_e9981f0beffe3mxEO6j2wvEwlI` | pending |
-| WP-11 | `wp11-lit-water` | `wp11-lit-water` | yes | `ses_e9981f0bdffeMwUSq1395dr37e` | pending |
-| WP-16 | `wp16-moss` | `wp16-moss` | yes | `ses_e9981f0bdffdgV5S1NLaMqa8di` | pending |
-| WP-21 | `wp21-pilot-tree` | `wp21-pilot-tree` | yes | `ses_e9981f0bcffekhu9uQe6vmkbA8` | pending |
+| WP-07 | `wp07-strata` | `wp07-strata` | yes | `ses_e9981f0e0ffeB3vbcyiXXEn8c0` | **MERGED** `39113eb4` |
+| WP-09 | `wp09-litter-atlas` | `wp09-litter-atlas` | yes | `ses_e9981f0deffeTOABbH5CMgj7Si` | partial WIP `2512d554` (unmerged) |
+| WP-10 | `wp10-aggregates` | `wp10-aggregates` | yes | `ses_e9981f0beffe3mxEO6j2wvEwlI` | **MERGED** `4ad9e409` |
+| WP-11 | `wp11-lit-water` | `wp11-lit-water` | yes | `ses_e9981f0bdffeMwUSq1395dr37e` | **MERGED** `438b340d` (via `36f8eaaa`) |
+| WP-16 | `wp16-moss` | `wp16-moss` | yes | `ses_e9981f0bdffdgV5S1NLaMqa8di` | **MERGED** `d0afb267` |
+| WP-21 | `wp21-pilot-tree` | `wp21-pilot-tree` | yes | `ses_e9981f0bcffekhu9uQe6vmkbA8` | partial WIP `5ee6cde1` (unmerged) |
 
 Merge procedure per packet (orchestrator only):
 
