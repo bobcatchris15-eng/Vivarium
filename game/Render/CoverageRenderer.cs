@@ -486,7 +486,7 @@ public partial class CoverageRenderer : Node3D
             Name = $"Coverage_{layer.Id}_{t.Ti}_{t.Tj}",
             Mesh = mesh,
             MaterialOverride = mat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
         };
         AddChild(mi);
         _tiles[key] = new TileRecord
@@ -1205,98 +1205,219 @@ public partial class CoverageRenderer : Node3D
             (i, v) => (capCol, 1, 0, 0, 0, 0));
     }
 
+    private static void AddStraightTube(MeshData mesh, Vec3 a, Vec3 b, double r0, double r1, int sides, double[] col)
+    {
+        var axis = b - a;
+        double len = axis.Length;
+        if (len < 1e-9) return;
+        axis = axis / len;
+        Vec3 hint = Math.Abs(axis.Y) < 0.9 ? Vec3.Up : new Vec3(1, 0, 0);
+        var side = axis.Cross(hint);
+        if (side.LengthSq < 1e-8) side = axis.Cross(new Vec3(0, 0, 1));
+        side = side.Normalized();
+        var up = side.Cross(axis).Normalized();
+
+        int start = mesh.VertexCount;
+        for (int ring = 0; ring < 2; ring++)
+        {
+            var center = ring == 0 ? a : b;
+            double r = ring == 0 ? r0 : r1;
+            for (int i = 0; i < sides; i++)
+            {
+                double th = 2 * Math.PI * i / sides;
+                var radial = side * Math.Cos(th) + up * Math.Sin(th);
+                var n = radial;
+                mesh.AddVertex(center + radial * r, n, col, 1, (double)i / sides, ring, 0, 0);
+            }
+        }
+        for (int i = 0; i < sides; i++)
+        {
+            int i0 = i, i1 = (i + 1) % sides;
+            int a0 = start + i0, a1 = start + i1;
+            int b0 = start + sides + i0, b1 = start + sides + i1;
+            mesh.AddTriangle(a0, a1, b0);
+            mesh.AddTriangle(a1, b1, b0);
+        }
+    }
+
     private static void AppendAntlerlacePodetia(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
     {
-        // Fruticose lichen upright antler-like branching podetia
-        double totalH = (0.016 + ((hash >> 16) & 255) / 255.0 * 0.009) * vigour;
-        var podetiaCol = new[] { col1.R * 1.08, col1.G * 1.15, col1.B * 1.05 };
-        var buttonCol = new[] { 0.45, 0.32, 0.18 };
+        // Fruticose lichen: dense dichotomous 3D branching podetia bushes.
+        var podetiaCol = new[] { col1.R * 1.05, col1.G * 1.12, col1.B * 1.02 };
+        var tipCol = new[] { Math.Min(1.0, col1.R * 1.35 + 0.15), Math.Min(1.0, col1.G * 1.25 + 0.10), Math.Min(1.0, col1.B * 1.15 + 0.05) };
 
-        double ang = (hash & 1023) / 1023.0 * Math.PI * 2;
-        var sideFork = new Vec3(Math.Cos(ang), 0, Math.Sin(ang));
+        Vec3 right = Vec3.Up.Cross(normal);
+        if (right.LengthSq < 1e-8) right = new Vec3(1, 0, 0).Cross(normal);
+        right = right.Normalized();
+        Vec3 fwd = normal.Cross(right).Normalized();
 
-        var trunkTop = foot + normal * (totalH * 0.45);
-        Primitives.Tube(mesh, new[] { foot, trunkTop }, new[] { 0.0022, 0.0016 }, 5,
-            (i, v) => (podetiaCol, 1, 0, 0, 0, 0));
+        int stemCount = 4 + (int)((hash >> 2) & 3); // 4..7
+        double phase = (hash & 1023) / 1023.0 * Math.PI * 2;
 
-        for (int b = -1; b <= 1; b += 2)
+        for (int s = 0; s < stemCount; s++)
         {
-            var branchDir = (normal * 0.7 + sideFork * (b * 0.45)).Normalized();
-            var fork1 = trunkTop + branchDir * (totalH * 0.30);
-            Primitives.Tube(mesh, new[] { trunkTop, fork1 }, new[] { 0.0015, 0.0011 }, 4,
-                (i, v) => (podetiaCol, 1, 0, 0, 0, 0));
+            uint h = ReliefHash(unchecked((int)hash) + s * 97, s * 13 + 7);
+            double ang = phase + s * Math.PI * 2.0 / stemCount + ((h & 255) / 255.0 - 0.5) * 0.35;
+            var radial = (right * Math.Cos(ang) + fwd * Math.Sin(ang)).Normalized();
+            double clusterR = 0.0015 + ((h >> 8) & 255) / 255.0 * 0.0035;
+            var basePos = foot + radial * clusterR;
+            double height = (0.006 + ((h >> 16) & 255) / 255.0 * 0.008) * vigour;
 
-            // Palmate tines
-            for (int t = -1; t <= 1; t += 2)
+            var trunkTop = basePos + normal * (height * 0.38);
+            AddStraightTube(mesh, basePos, trunkTop, 0.0016, 0.0012, 5, podetiaCol);
+
+            var work = new List<(Vec3 start, Vec3 dir, double len, double rad, int depth)>();
+            var firstDir = (normal * 0.55 + radial * 0.45).Normalized();
+            work.Add((trunkTop, firstDir, height * 0.30, 0.0010, 0));
+            while (work.Count > 0)
             {
-                var tineDir = (branchDir * 0.7 + sideFork * (b * t * 0.35)).Normalized();
-                var tineTip = fork1 + tineDir * (totalH * 0.25);
-                Primitives.Tube(mesh, new[] { fork1, tineTip }, new[] { 0.0009, 0.0004 }, 4,
-                    (i, v) => (podetiaCol, 1, 0, 0, 0, 0));
+                var (start, dir, len, rad, depth) = work[work.Count - 1];
+                work.RemoveAt(work.Count - 1);
+                var end = start + dir * len;
+                double r1 = depth >= 2 ? rad * 0.55 : rad * 0.80;
+                AddStraightTube(mesh, start, end, rad, r1, 5, podetiaCol);
 
-                Primitives.Ellipsoid(mesh, tineTip + tineDir * 0.0005, new Vec3(0.0007, 0.0007, 0.0007), 3, 4,
-                    (u, v) => (buttonCol, 1, u, v, 0, 0));
+                if (depth < 3)
+                {
+                    var perp = dir.Cross(normal);
+                    if (perp.LengthSq < 1e-8) perp = dir.Cross(right);
+                    perp = perp.Normalized();
+                    for (int f = -1; f <= 1; f += 2)
+                    {
+                        var forkDir = (dir * 0.72 + perp * (f * 0.32) + normal * 0.18).Normalized();
+                        work.Add((end, forkDir, len * 0.72, rad * 0.72, depth + 1));
+                    }
+                }
+                else
+                {
+                    Primitives.Ellipsoid(mesh, end + dir * 0.0004, new Vec3(0.0006, 0.0006, 0.0006), 3, 4,
+                        (u, v) => (tipCol, 1, u, v, 0, 0));
+                }
             }
         }
     }
 
     private static void AppendRuffleLobes(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
     {
-        // Foliose lichen wavy ruffled thallus lobes and apothecia saucers
-        var upperCol = new[] { (double)col1.R, (double)col1.G, (double)col1.B };
-        var underCol = new[] { 0.82, 0.80, 0.70 };
-        var discCol = new[] { 0.80, 0.45, 0.18 };
+        // Foliose lichen: 6-10 imbricate arched shells with concave apothecia cups.
+        var upperCol = new[] { (double)col1.R * 1.05, (double)col1.G * 1.05, (double)col1.B * 1.02 };
+        var underCol = new[] { 0.28, 0.25, 0.22 };
+        var pruinoseCol = new[] { Math.Min(1.0, col1.R * 1.4 + 0.15), Math.Min(1.0, col1.G * 1.35 + 0.12), Math.Min(1.0, col1.B * 1.3 + 0.10) };
+        var discCol = new[] { 0.85, 0.50, 0.20 };
+        var rimCol = new[] { 0.92, 0.85, 0.60 };
 
+        Vec3 right = Vec3.Up.Cross(normal);
+        if (right.LengthSq < 1e-8) right = new Vec3(1, 0, 0).Cross(normal);
+        right = right.Normalized();
+        Vec3 fwd = normal.Cross(right).Normalized();
+
+        int lobeCount = 6 + (int)((hash >> 4) & 7);
+        if (lobeCount > 10) lobeCount = 10;
         double baseAng = (hash & 1023) / 1023.0 * Math.PI * 2;
-        for (int l = 0; l < 3; l++)
+
+        for (int l = 0; l < lobeCount; l++)
         {
-            double a = baseAng + l * Math.PI * 2 / 3.0;
-            var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
-            var side = new Vec3(-dir.Z, 0, dir.X) * 0.004;
-            double len = 0.008 + ((hash >> (l * 4)) & 15) * 0.0004;
+            uint h = ReliefHash(unchecked((int)hash) + l * 53, l * 29 + 11);
+            double a = baseAng + l * Math.PI * 2.0 / lobeCount + ((h & 255) / 255.0 - 0.5) * 0.25;
+            var radial = (right * Math.Cos(a) + fwd * Math.Sin(a)).Normalized();
+            var lateral = (right * (-Math.Sin(a)) + fwd * Math.Cos(a)).Normalized();
 
-            var pMid = foot + dir * (len * 0.5) + normal * 0.0025;
-            var pTip = foot + dir * len + normal * 0.004; // curled up edge!
+            double len = (0.008 + ((h >> 8) & 255) / 255.0 * 0.006) * vigour;
+            double lift = (0.0015 + ((h >> 16) & 255) / 255.0 * 0.0030) * vigour;
+            double halfW = 0.0025 + ((h >> 4) & 15) * 0.0003;
 
-            // Curled thallus lobe
-            int u0 = mesh.AddVertex(foot - side * 0.5, normal, upperCol);
-            int u1 = mesh.AddVertex(foot + side * 0.5, normal, upperCol);
-            int uMidL = mesh.AddVertex(pMid - side, normal, upperCol);
-            int uMidR = mesh.AddVertex(pMid + side, normal, upperCol);
-            int uApex = mesh.AddVertex(pTip, normal, underCol); // edge shows pale underside
-
-            Primitives.TriangleFacing(mesh, u0, u1, uMidR, normal);
-            Primitives.TriangleFacing(mesh, u0, uMidR, uMidL, normal);
-            Primitives.TriangleFacing(mesh, uMidL, uMidR, uApex, normal);
+            int segs = 4;
+            int across = 3;
+            int[,] U = new int[segs + 1, across + 1];
+            int[,] L = new int[segs + 1, across + 1];
+            for (int i = 0; i <= segs; i++)
+            {
+                double t = (double)i / segs;
+                for (int j = 0; j <= across; j++)
+                {
+                    double x = (double)j / across * 2.0 - 1.0;
+                    double widthScale = 1.0 - t * 0.25;
+                    double lateralOff = x * halfW * widthScale;
+                    double ruffle = 0.0008 * Math.Sin(3.0 * x + t * 4.0 + a * 2.0);
+                    double height = lift * t * t + ruffle * (0.4 + 0.6 * t);
+                    if (t > 0.7) height += (t - 0.7) * 0.002;
+                    var pos = foot + radial * (len * t) + lateral * lateralOff + normal * height;
+                    var nrm = (radial * 0.3 + normal * (1.0 - t * 0.3)).Normalized();
+                    double[] col = t > 0.8 ? pruinoseCol : upperCol;
+                    U[i, j] = mesh.AddVertex(pos, nrm, col, 1, t, (x + 1) * 0.5);
+                    L[i, j] = mesh.AddVertex(pos, -nrm, underCol, 1, t, (x + 1) * 0.5);
+                }
+            }
+            for (int i = 0; i < segs; i++)
+                for (int j = 0; j < across; j++)
+                {
+                    Primitives.TriangleFacing(mesh, U[i, j], U[i + 1, j], U[i, j + 1], normal);
+                    Primitives.TriangleFacing(mesh, U[i, j + 1], U[i + 1, j], U[i + 1, j + 1], normal);
+                }
+            for (int i = 0; i < segs; i++)
+                for (int j = 0; j < across; j++)
+                {
+                    Primitives.TriangleFacing(mesh, L[i, j], L[i, j + 1], L[i + 1, j], -normal);
+                    Primitives.TriangleFacing(mesh, L[i, j + 1], L[i + 1, j + 1], L[i + 1, j], -normal);
+                }
         }
 
-        // Apothecium saucer cup
-        var cupCenter = foot + normal * 0.0018;
-        double cupR = 0.0022;
-        Primitives.Tube(mesh, new[] { foot, cupCenter }, new[] { cupR * 0.8, cupR }, 5,
-            (i, v) => (underCol, 1, 0, 0, 0, 0));
-        Primitives.Ellipsoid(mesh, cupCenter + normal * 0.0003, new Vec3(cupR * 0.8, 0.0004, cupR * 0.8), 3, 5,
-            (u, v) => (discCol, 1, u, v, 0, 0));
+        int cupCount = 1 + (int)((hash >> 20) & 1);
+        for (int c = 0; c < cupCount; c++)
+        {
+            uint h = ReliefHash(unchecked((int)hash) + c * 71, c * 19 + 3);
+            double ca = (h & 1023) / 1023.0 * Math.PI * 2;
+            double cr = 0.002 + ((h >> 10) & 255) / 255.0 * 0.004;
+            var cupCenter = foot + (right * Math.Cos(ca) + fwd * Math.Sin(ca)) * cr + normal * 0.0015;
+            double cupD = 0.0012 + ((h >> 18) & 255) / 255.0 * 0.0016;
+            double cupR = cupD * 0.5;
+            int rimSegs = 8;
+            var rimPath = new List<Vec3>();
+            for (int r = 0; r < rimSegs; r++)
+            {
+                double th = 2 * Math.PI * r / rimSegs;
+                var radial = right * Math.Cos(th) + fwd * Math.Sin(th);
+                rimPath.Add(cupCenter + radial * cupR + normal * 0.0006);
+            }
+            rimPath.Add(rimPath[0]);
+            var rimRadii = new double[rimPath.Count];
+            for (int r = 0; r < rimRadii.Length; r++) rimRadii[r] = cupR * 0.18;
+            Primitives.Tube(mesh, rimPath, rimRadii, rimSegs,
+                (i, v) => (rimCol, 1, 0, 0, 0, 0));
+            Primitives.Ellipsoid(mesh, cupCenter + normal * 0.0002, new Vec3(cupR * 0.85, 0.00035, cupR * 0.85), 3, 6,
+                (u, v) => (discCol, 1, u, v, 0, 0));
+        }
     }
 
     private static void AppendEmbercrustApothecia(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
     {
-        // Crustose lichen raised ember-orange apothecial discs
-        var rimCol = new[] { 0.88, 0.76, 0.40 };
-        var discCol = new[] { 0.92, 0.38, 0.08 };
+        // Crustose lichen: clustered orange/amber apothecia discs near colony center.
+        var rimCol = new[] { 0.90, 0.78, 0.42 };
+        var discCol = new[] { 0.95, 0.42, 0.10 };
+        var centerCol = new[] { 0.75, 0.30, 0.06 };
 
-        int discCount = 2 + (int)((hash & 3));
+        Vec3 right = Vec3.Up.Cross(normal);
+        if (right.LengthSq < 1e-8) right = new Vec3(1, 0, 0).Cross(normal);
+        right = right.Normalized();
+        Vec3 fwd = normal.Cross(right).Normalized();
+
+        int discCount = 3 + (int)((hash & 3));
         for (int d = 0; d < discCount; d++)
         {
-            double a = (hash & 255) / 255.0 * Math.PI * 2 + d * Math.PI * 2 / discCount;
-            double dist = 0.0035 * ((d + 1) / (double)discCount);
-            var center = foot + new Vec3(Math.Cos(a), 0, Math.Sin(a)) * dist + normal * 0.0008;
-            double r = 0.0016;
+            uint h = ReliefHash(unchecked((int)hash) + d * 41, d * 17 + 5);
+            double ca = (h & 1023) / 1023.0 * Math.PI * 2 + d * 0.7;
+            double cr = 0.0012 * (d + 1) * 0.6;
+            if (cr > 0.0045) cr = 0.0045;
+            var center = foot + (right * Math.Cos(ca) + fwd * Math.Sin(ca)) * cr + normal * 0.0007;
+            double r = 0.0013 + ((h >> 8) & 255) / 255.0 * 0.0012;
 
-            Primitives.Tube(mesh, new[] { center, center + normal * 0.0008 }, new[] { r * 0.9, r }, 5,
+            Primitives.Tube(mesh, new[] { center, center + normal * 0.0007 }, new[] { r * 0.92, r }, 6,
                 (i, v) => (rimCol, 1, 0, 0, 0, 0));
-            Primitives.Ellipsoid(mesh, center + normal * 0.0009, new Vec3(r * 0.75, 0.0003, r * 0.75), 3, 5,
+            Primitives.Ellipsoid(mesh, center + normal * 0.00075, new Vec3(r * 0.8, 0.00025, r * 0.8), 3, 6,
                 (u, v) => (discCol, 1, u, v, 0, 0));
+            if ((h & 1) == 0)
+                Primitives.Ellipsoid(mesh, center + normal * 0.00085, new Vec3(r * 0.35, 0.0002, r * 0.35), 3, 4,
+                    (u, v) => (centerCol, 1, u, v, 0, 0));
         }
     }
 

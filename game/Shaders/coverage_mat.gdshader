@@ -22,6 +22,25 @@ varying vec3 world_pos;
 varying float sundew_surface;
 varying float sundew_dew;
 
+float voronoi_cracks(vec2 p) {
+    vec2 n = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j));
+            vec2 o = vec2(hash21(n + g), hash21(n + g + vec2(37.0, 17.0)));
+            vec2 r = g + o - f;
+            float d = dot(r, r);
+            if (d < f1) { f2 = f1; f1 = d; }
+            else if (d < f2) { f2 = d; }
+        }
+    }
+    float crack = f2 - f1;
+    return 1.0 - smoothstep(0.0, 0.06, crack);
+}
+
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     sundew_surface = float(UV2.y < -4.5);
@@ -116,11 +135,34 @@ void fragment() {
         RIM = 0.065 * tips * coverMask;
         RIM_TINT = 0.75;
     } else {
-        // A scanned-style lichen thallus replaces the synthetic dark squiggles. Its light curled
-        // lobes and granular troughs are recoloured by the species, over the folded sheet mesh.
+        // Lichen: scanned thallus colour + high-frequency tangent-space normal and cavity AO
+        // from LichenThallus.png, plus procedural Voronoi areole cracks.
         vec3 thallus = texture(lichen_col, wp / 0.22).rgb;
         c *= clamp(vec3(0.42) + thallus * 1.25, vec3(0.3), vec3(1.55));
-        rough = 0.91;
+
+        float thallus_lum = dot(thallus, vec3(0.299, 0.587, 0.114));
+        float e = 0.004;
+        float hx = dot(texture(lichen_col, (wp + vec2(e, 0.0)) / 0.22).rgb, vec3(0.299, 0.587, 0.114));
+        float hz = dot(texture(lichen_col, (wp + vec2(0.0, e)) / 0.22).rgb, vec3(0.299, 0.587, 0.114));
+        bump = vec3((thallus_lum - hx) * 6.0, 0.0, (thallus_lum - hz) * 6.0);
+
+        float cracks = voronoi_cracks(wp * 65.0);
+        float cx = voronoi_cracks((wp + vec2(e, 0.0)) * 65.0);
+        float cz = voronoi_cracks((wp + vec2(0.0, e)) * 65.0);
+        bump += vec3((cracks - cx) * 1.6, 0.0, (cracks - cz) * 1.6);
+
+        // Dusty soredia / cortex micro-roughness; waxy apothecia discs stay smooth.
+        float soredia_mask = fbm(wp * 80.0);
+        rough = mix(0.68, 0.92, soredia_mask);
+        float apothecia_mask = smoothstep(0.45, 0.75, thallus.r - thallus.g * 0.6);
+        rough = mix(rough, 0.28, apothecia_mask);
+
+        // Cavity AO: thallus height + crack crevices.
+        float thallus_ao = mix(0.45, 1.0, thallus_lum);
+        thallus_ao *= mix(1.0, 0.35, cracks);
+        ao = clamp(thallus_ao * COLOR.a, 0.15, 1.0);
+        AO = ao;
+        AO_LIGHT_AFFECT = 0.75;
     }
 
     // Rim/interior relief: brighten and lift shading slightly where coverage is thin (rim), consistent
