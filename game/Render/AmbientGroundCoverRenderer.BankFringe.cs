@@ -22,7 +22,7 @@ public partial class AmbientGroundCoverRenderer
     {
         _bankMaterial = (ShaderMaterial)material.Duplicate();
         _bankMaterial.SetShaderParameter("sway_strength", 0f);
-        _bankNode = new MeshInstance3D { Name="TerrainCreepingBankLeaves", CastShadow=GeometryInstance3D.ShadowCastingSetting.Off };
+        _bankNode = new MeshInstance3D { Name="TerrainCreepingBankLeaves", CastShadow=GeometryInstance3D.ShadowCastingSetting.On };
         AddChild(_bankNode);
         _bankTable=double.NaN; _bankLiquidVersion=-1;
     }
