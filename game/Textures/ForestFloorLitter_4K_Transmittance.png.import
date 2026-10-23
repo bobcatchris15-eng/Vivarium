@@ -2,11 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://ccleocykm51bx"
+path.bptc="res://.godot/imported/ForestFloorLitter_4K_Transmittance.png-11766500a4d4efa726c544ae17ebc659.bptc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
 
 [deps]
 
 source_file="res://Textures/ForestFloorLitter_4K_Transmittance.png"
-dest_files=[]
+dest_files=["res://.godot/imported/ForestFloorLitter_4K_Transmittance.png-11766500a4d4efa726c544ae17ebc659.bptc.ctex"]
 
 [params]
 

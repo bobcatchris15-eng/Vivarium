@@ -2,11 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://b41mkghwju5gk"
+path.bptc="res://.godot/imported/ForestFloorLitter_4K_Color.png-b0d60c8a4cba9bd7426e050c5c600c52.bptc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
 
 [deps]
 
 source_file="res://Textures/ForestFloorLitter_4K_Color.png"
-dest_files=[]
+dest_files=["res://.godot/imported/ForestFloorLitter_4K_Color.png-b0d60c8a4cba9bd7426e050c5c600c52.bptc.ctex"]
 
 [params]
 

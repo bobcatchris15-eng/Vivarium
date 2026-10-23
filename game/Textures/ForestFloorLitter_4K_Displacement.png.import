@@ -2,11 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://4xytbfenqkni"
+path.bptc="res://.godot/imported/ForestFloorLitter_4K_Displacement.png-425919ca20cc4e2205b7d3509c4174f1.bptc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
 
 [deps]
 
 source_file="res://Textures/ForestFloorLitter_4K_Displacement.png"
-dest_files=[]
+dest_files=["res://.godot/imported/ForestFloorLitter_4K_Displacement.png-425919ca20cc4e2205b7d3509c4174f1.bptc.ctex"]
 
 [params]
 
