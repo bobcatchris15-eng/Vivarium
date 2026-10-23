@@ -39,6 +39,16 @@ public partial class SmokeRunner
         // Lock available opt-in material clocks. Other raw TIME users and initial CPU animal
         // poses remain uncontrolled; this diagnostic must not claim whole-frame repeatability.
         int lockedMaterials = LockReviewFoliage(Session);
+        if (Main.UserArgs.Contains("--habitat-light-production-check"))
+        {
+            await HabitatLightValidationAsync();
+            return;
+        }
+        if (Main.UserArgs.Contains("--habitat-light-sweep"))
+        {
+            await HabitatLightReviewAsync();
+            return;
+        }
         if (forestReview)
         {
             // Authenticate the material and UV region labels after their real Godot upload.
@@ -109,6 +119,8 @@ public partial class SmokeRunner
             using var cameras = JsonDocument.Parse(File.ReadAllText(cameraReference));
             scenes = cameras.RootElement.GetProperty("scenes").EnumerateArray().Select(row =>
             {
+                if (row.TryGetProperty("pilot_view", out var pilotView))
+                    return PilotReviewScene(row.GetProperty("name").GetString()!, pilotView.GetString()!);
                 Vector3 V(string key) { var a = row.GetProperty(key); return new Vector3(a[0].GetSingle(), a[1].GetSingle(), a[2].GetSingle()); }
                 return new RefScene(row.GetProperty("name").GetString()!, "replayed", V("eye"), V("target"));
             }).ToList();
@@ -136,7 +148,11 @@ public partial class SmokeRunner
                 triangles_per_instance = mm.Multimesh.Mesh.GetFaces().Length / 3,
             }).ToArray();
             var actualEye = Session.CameraRig.GlobalPosition;
-            rows.Add(new { name = scene.Name, eye = new[] {scene.Eye.X,scene.Eye.Y,scene.Eye.Z}, actual_eye = new[] {actualEye.X,actualEye.Y,actualEye.Z}, target = new[] {scene.Target.X,scene.Target.Y,scene.Target.Z}, ambient_cover = cover, flora_triangles=Session.Flora.TrianglesDrawn });
+            rows.Add(new { name = scene.Name, eye = new[] {scene.Eye.X,scene.Eye.Y,scene.Eye.Z}, actual_eye = new[] {actualEye.X,actualEye.Y,actualEye.Z}, target = new[] {scene.Target.X,scene.Target.Y,scene.Target.Z}, ambient_cover = cover, loam_patches=Session.SoilDetail.LoamDetails.PatchCount,
+                loam_patch_rebuilds=Session.SoilDetail.LoamDetails.RebuildCount,
+                loam_leaf_count=CountLoamMeta(Session.SoilDetail.LoamDetails, "leaf_count"),
+                loam_duff_count=CountLoamMeta(Session.SoilDetail.LoamDetails, "duff_count"),
+                flora_triangles=Session.Flora.TrianglesDrawn });
         }
         if (Main.UserArgs.Contains("--review-motion"))
         {
@@ -175,6 +191,33 @@ public partial class SmokeRunner
         _facts["world_review"] = new { seed=W.Descriptor.Seed, tick=W.Clock.Tick, flora=W.Flora.Count, fauna=W.Fauna.Count, digest_before=before, digest_after=after, resolution=new[]{1600,900}, quality, light_seconds=lightSeconds, fixed_exposure=forestReview, foliage_review_seconds=0, material_review_seconds=0, locked_materials=lockedMaterials, camera_reference=cameraReference, shader_time="Available review_time/preview_time locked; other TIME users and initial CPU animal poses uncontrolled", performance_evaluated=false, scenes=rows };
         File.WriteAllText(Path.Combine(OutDir,"world_review.json"),JsonSerializer.Serialize(_facts["world_review"],new JsonSerializerOptions{WriteIndented=true}));
         if (Main.UserArgs.Contains("--review-water-motion")) await WaterImpactMotion(scenes);
+    }
+
+    private RefScene PilotReviewScene(string name, string view)
+    {
+        var tree = W.PilotTree ?? throw new InvalidOperationException("Pilot-relative camera needs a pilot tree");
+        var inward = new Vector3((float)-tree.Anchor.X, 0, (float)-tree.Anchor.Z).Normalized();
+        var side = inward.Cross(Vector3.Up).Normalized();
+        if (view == "crown")
+        {
+            Vector3 origin = Bridge.V(tree.Anchor, tree.BaseHeight + tree.Def.TrunkHeight * .86);
+            return new RefScene(name, "pilot_relative", origin + inward * 5.2f + side * 2.6f + Vector3.Up * .55f,
+                origin + inward * 1.1f - Vector3.Up * .25f);
+        }
+        if (view == "cutwood")
+        {
+            Vector3 origin = Bridge.V(tree.Anchor, tree.BaseHeight + tree.Def.TrunkHeight * .45);
+            float distance = Math.Max(3f, (float)tree.Def.TrunkRadius * 3.2f);
+            return new RefScene(name, "pilot_relative", origin - inward * distance + side * distance * .55f + Vector3.Up * .3f, origin);
+        }
+        throw new ArgumentException("Unknown pilot-relative view: " + view);
+    }
+
+    private static int CountLoamMeta(Node node, string key)
+    {
+        int count = node.HasMeta(key) ? node.GetMeta(key).AsInt32() : 0;
+        foreach (var child in node.GetChildren()) count += CountLoamMeta(child, key);
+        return count;
     }
 
     private static int LockReviewFoliage(Node node, float seconds = 0)
@@ -217,6 +260,19 @@ public partial class SmokeRunner
             var ground = Ground(W.Grid.CellCenter(candidates[0]));
             list.Add(new("forest_floor_close", "ground", ground + new Vector3(0.28f, 0.26f, 0.38f), ground + new Vector3(0, .025f, 0)));
             list.Add(new("forest_floor_medium", "ground", ground + new Vector3(0.7f, 0.72f, 1.0f), ground));
+        }
+        if (Main.UserArgs.Contains("--loam-live"))
+        {
+            int cell = W.Grid.DomainCells.Where(c =>
+            {
+                var p = W.Grid.CellCenter(c);
+                return W.Domain.ContainsDisc(p, .8) && !W.Water.IsWet(c)
+                    && W.SubstrateAtCell(p) == Vivarium.Sim.Content.Substrate.Soil
+                    && double.IsNaN(W.Props.PropTopAt(p));
+            }).OrderByDescending(c => W.Litter.FineMass[c] * (1 - W.AmbientGroundCover.Cover[c])).First();
+            var ground = Ground(W.Grid.CellCenter(cell));
+            list.Add(new("loam_floor_close", "ground", ground + new Vector3(.28f, .36f, .38f), ground));
+            list.Add(new("loam_floor_medium", "ground", ground + new Vector3(.7f, .85f, 1f), ground));
         }
         list.AddRange(BuildReferenceScenes().Where(s => s.Name is "interaction" or "ground_vegetation" or "rock_contact" or "log_contact" or "species_shadebell" or "species_veilfern" or "fauna_terrestrial" or "fauna_aquatic" or "water_margin" || s.Name.Contains("moss")));
         AddWaterImpactScenes(list);

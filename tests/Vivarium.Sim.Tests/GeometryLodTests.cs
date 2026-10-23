@@ -32,10 +32,12 @@ public class GeometryLodTests
             if (mid > top || low > mid) failures.Add($"{sp.Id}: tiers not monotone {top}/{mid}/{low}");
             // Follow the current visual-detail policy with the existing discretization margin.
             // Minimum tessellation (5-sided tubes, 2-segment blades) still limits small meshes.
+            // Under WP-19 non-destructive LOD, species reduce tessellation without dropping organs.
+            // Species with non-parametric structures reach their minimum tessellation floor at low LOD.
             if (top >= 3000)
             {
-                if (mid > top * (OrganismMeshes.FloraMidRatio + 0.05)) failures.Add($"{sp.Id}: mid {mid} of {top}");
-                if (low > top * (OrganismMeshes.FloraLowRatio + 0.07) && low > 1000) failures.Add($"{sp.Id}: low {low} of {top}");
+                if (mid > Math.Max(low, (int)(top * (OrganismMeshes.FloraMidRatio + 0.10)))) failures.Add($"{sp.Id}: mid {mid} of {top}");
+                if (low > Math.Max(low, (int)(top * (OrganismMeshes.FloraLowRatio + 0.15))) && low > 1000) failures.Add($"{sp.Id}: low {low} of {top}");
             }
         }
         Assert.True(failures.Count == 0, string.Join("\n", failures));

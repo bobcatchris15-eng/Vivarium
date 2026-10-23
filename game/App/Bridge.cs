@@ -76,6 +76,86 @@ public static class Bridge
         arrays[(int)Mesh.ArrayType.TexUV] = uv;
         arrays[(int)Mesh.ArrayType.TexUV2] = uv2;
         arrays[(int)Mesh.ArrayType.Index] = m.Indices.ToArray();
+        if (norms.Length == n && uv.Length == n && n > 0)
+        {
+            float[] tangents = new float[n * 4];
+            Vector3[] tan1 = new Vector3[n];
+            Vector3[] tan2 = new Vector3[n];
+
+            if (m.Indices.Count >= 3)
+            {
+                for (int t = 0; t < m.Indices.Count; t += 3)
+                {
+                    int i1 = m.Indices[t];
+                    int i2 = m.Indices[t + 1];
+                    int i3 = m.Indices[t + 2];
+                    if (i1 >= n || i2 >= n || i3 >= n) continue;
+
+                    Vector3 v1 = verts[i1];
+                    Vector3 v2 = verts[i2];
+                    Vector3 v3 = verts[i3];
+
+                    Vector2 w1 = uv[i1];
+                    Vector2 w2 = uv[i2];
+                    Vector2 w3 = uv[i3];
+
+                    float x1 = v2.X - v1.X;
+                    float x2 = v3.X - v1.X;
+                    float y1 = v2.Y - v1.Y;
+                    float y2 = v3.Y - v1.Y;
+                    float z1 = v2.Z - v1.Z;
+                    float z2 = v3.Z - v1.Z;
+
+                    float s1 = w2.X - w1.X;
+                    float s2 = w3.X - w1.X;
+                    float t1 = w2.Y - w1.Y;
+                    float t2 = w3.Y - w1.Y;
+
+                    float r = (s1 * t2 - s2 * t1);
+                    if (MathF.Abs(r) > 1e-10f)
+                    {
+                        r = 1.0f / r;
+                        Vector3 sdir = new Vector3((t2 * x1 - t1 * x2) * r, (t2 * y1 - t1 * y2) * r, (t2 * z1 - t1 * z2) * r);
+                        Vector3 tdir = new Vector3((s1 * x2 - s2 * x1) * r, (s1 * y2 - s2 * y1) * r, (s1 * z2 - s2 * z1) * r);
+                        tan1[i1] += sdir;
+                        tan1[i2] += sdir;
+                        tan1[i3] += sdir;
+                        tan2[i1] += tdir;
+                        tan2[i2] += tdir;
+                        tan2[i3] += tdir;
+                    }
+                }
+            }
+
+            for (int a = 0; a < n; a++)
+            {
+                Vector3 norm = norms[a];
+                Vector3 t = tan1[a];
+
+                Vector3 tangent = t - norm * norm.Dot(t);
+                if (tangent.LengthSquared() > 1e-8f)
+                {
+                    tangent = tangent.Normalized();
+                }
+                else
+                {
+                    tangent = norm.Cross(MathF.Abs(norm.Y) < 0.99f ? Vector3.Up : Vector3.Right);
+                    if (tangent.LengthSquared() > 1e-8f)
+                        tangent = tangent.Normalized();
+                    else
+                        tangent = Vector3.Right;
+                }
+
+                float sign = (norm.Cross(t).Dot(tan2[a]) < 0.0f) ? -1.0f : 1.0f;
+
+                tangents[a * 4 + 0] = tangent.X;
+                tangents[a * 4 + 1] = tangent.Y;
+                tangents[a * 4 + 2] = tangent.Z;
+                tangents[a * 4 + 3] = sign;
+            }
+
+            arrays[(int)Mesh.ArrayType.Tangent] = tangents;
+        }
         var flags = signedVertexData
             ? (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift)
             : (Mesh.ArrayFormat)0;
@@ -135,24 +215,88 @@ public static class Bridge
         return material;
     }
 
+    public readonly record struct SurfaceSet(string Color, string Normal, string Roughness, string Height = "", string Ao = "");
+
     /// <summary>
-    /// Binds a photo-scanned surface set (res://Textures/&lt;asset&gt;_1K-JPG_{Color,NormalGL,Roughness}.jpg, CC0 from
-    /// ambientCG) to the shader uniforms &lt;prefix&gt;_col, &lt;prefix&gt;_nrm and &lt;prefix&gt;_rgh.
+    /// Binds a 5-channel PBR surface set (Color, NormalGL, Roughness, Displacement/Height, AO)
+    /// to shader uniforms &lt;prefix&gt;_col, &lt;prefix&gt;_nrm, &lt;prefix&gt;_rgh, &lt;prefix&gt;_hgt, and &lt;prefix&gt;_ao.
+    /// </summary>
+    public static void BindSurface(ShaderMaterial mat, string prefix, SurfaceSet s)
+    {
+        mat.SetShaderParameter(prefix + "_col", LoadTex(s.Color));
+        mat.SetShaderParameter(prefix + "_nrm", LoadTex(s.Normal));
+        mat.SetShaderParameter(prefix + "_rgh", LoadTex(s.Roughness));
+        if (!string.IsNullOrEmpty(s.Height)) mat.SetShaderParameter(prefix + "_hgt", LoadTex(s.Height));
+        if (!string.IsNullOrEmpty(s.Ao)) mat.SetShaderParameter(prefix + "_ao", LoadTex(s.Ao));
+    }
+
+    /// <summary>
+    /// Binds a photo-scanned surface set (resolving 4K PNG or 1K JPG/PNG for 5 PBR channels)
+    /// to shader uniforms &lt;prefix&gt;_col, &lt;prefix&gt;_nrm, &lt;prefix&gt;_rgh, &lt;prefix&gt;_hgt, and &lt;prefix&gt;_ao.
     /// </summary>
     public static void BindSurface(ShaderMaterial mat, string prefix, string asset)
     {
-        mat.SetShaderParameter(prefix + "_col", SurfaceMap(asset, "Color"));
-        mat.SetShaderParameter(prefix + "_nrm", SurfaceMap(asset, "NormalGL"));
-        mat.SetShaderParameter(prefix + "_rgh", SurfaceMap(asset, "Roughness"));
+        BindSurface(mat, prefix, ResolveSurfaceSet(asset));
+    }
+
+    public static SurfaceSet ResolveSurfaceSet(string asset)
+    {
+        string color = FindTexPath(asset, "Color", isRequired: true);
+        string normal = FindTexPath(asset, "NormalGL", isRequired: true);
+        string roughness = FindTexPath(asset, "Roughness", isRequired: true);
+        string height = FindTexPath(asset, "Displacement", isRequired: false);
+        string ao = FindTexPath(asset, "AmbientOcclusion", isRequired: false);
+
+        return new SurfaceSet(color, normal, roughness, height, ao);
+    }
+
+    private static string FindTexPath(string asset, string map, bool isRequired)
+    {
+        // 1. Try 4K PNG
+        string p4k = $"res://Textures/{asset}_4K-PNG_{map}.png";
+        if (FileAccess.FileExists(p4k) || ResourceLoader.Exists(p4k)) return p4k;
+
+        // 2. Try 1K PNG
+        string p1kPng = $"res://Textures/{asset}_1K-JPG_{map}.png";
+        if (FileAccess.FileExists(p1kPng) || ResourceLoader.Exists(p1kPng)) return p1kPng;
+
+        // 3. Try 1K JPG
+        string p1kJpg = $"res://Textures/{asset}_1K-JPG_{map}.jpg";
+        if (FileAccess.FileExists(p1kJpg) || ResourceLoader.Exists(p1kJpg)) return p1kJpg;
+
+        // 4. Try generic {asset}_{map}.png
+        string pGenPng = $"res://Textures/{asset}_{map}.png";
+        if (FileAccess.FileExists(pGenPng) || ResourceLoader.Exists(pGenPng)) return pGenPng;
+
+        // 5. Try generic {asset}_{map}.jpg
+        string pGenJpg = $"res://Textures/{asset}_{map}.jpg";
+        if (FileAccess.FileExists(pGenJpg) || ResourceLoader.Exists(pGenJpg)) return pGenJpg;
+
+        if (isRequired)
+        {
+            throw new InvalidOperationException($"missing required texture for asset '{asset}', map '{map}'");
+        }
+        return string.Empty;
     }
 
     private static readonly System.Collections.Generic.Dictionary<string, Texture2D> _maps = new();
 
+    public static Texture2D LoadTex(string path)
+    {
+        if (string.IsNullOrEmpty(path)) throw new ArgumentException("texture path cannot be empty", nameof(path));
+        if (!_maps.TryGetValue(path, out var tex))
+        {
+            tex = GD.Load<Texture2D>(path);
+            if (tex == null) throw new InvalidOperationException($"missing texture {path}");
+            _maps[path] = tex;
+        }
+        return tex;
+    }
+
     private static Texture2D SurfaceMap(string asset, string map)
     {
-        string path = $"res://Textures/{asset}_1K-JPG_{map}.jpg";
-        if (!_maps.TryGetValue(path, out var tex)) _maps[path] = tex = GD.Load<Texture2D>(path) ?? throw new InvalidOperationException($"missing texture {path}");
-        return tex;
+        string path = FindTexPath(asset, map, isRequired: true);
+        return LoadTex(path);
     }
 
     /// <summary>The surface sets in use (one place, so notices and exports stay in sync).</summary>

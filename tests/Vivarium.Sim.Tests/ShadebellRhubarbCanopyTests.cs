@@ -83,7 +83,8 @@ public sealed class ShadebellRhubarbCanopyTests
         Assert.InRange(high.TriangleCount,1,OrganismMeshes.FloraTopTriangleCap);
         Assert.InRange(mid.TriangleCount,1,OrganismMeshes.FloraTierBudget(high.TriangleCount,1));
         Assert.InRange(far.TriangleCount,1,OrganismMeshes.FloraTierBudget(high.TriangleCount,2));
-        Assert.True(high.LeafSpans.Count>mid.LeafSpans.Count);
-        Assert.True(mid.LeafSpans.Count>far.LeafSpans.Count);
+        // WP-19: Non-destructive LOD preserves all leaf organs without dropping
+        Assert.Equal(high.LeafSpans.Count, mid.LeafSpans.Count);
+        Assert.Equal(mid.LeafSpans.Count, far.LeafSpans.Count);
     }
 }

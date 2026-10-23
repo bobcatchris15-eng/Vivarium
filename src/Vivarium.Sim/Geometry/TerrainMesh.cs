@@ -22,7 +22,7 @@ public static class TerrainMesh
         var xz = new List<Vec2>();
         var shared = new Dictionary<int, int>();
 
-        const int sub = 2;
+        const int sub = 6;
         double step = hf.Step / sub;
         int nx = (hf.Nx - 1) * sub + 1;
         int nz = (hf.Nz - 1) * sub + 1;
@@ -54,11 +54,45 @@ public static class TerrainMesh
     }
 
     /// <summary>The visible bed and fluid/collision support share one elevation.</summary>
-    public static double RenderHeight(Heightfield hf, Vec2 p) => hf.Height(p);
+    private static double CatmullRom(double p0, double p1, double p2, double p3, double t)
+    {
+        double t2 = t * t;
+        double t3 = t2 * t;
+        return 0.5 * ((2.0 * p1) +
+                      (-p0 + p2) * t +
+                      (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
+                      (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3);
+    }
+
+    /// <summary>The visible bed evaluates C1-continuous bicubic height with subtle micro-relief hummocks.</summary>
+    public static double RenderHeight(Heightfield hf, Vec2 p)
+    {
+        double fx = (p.X - hf.OriginX) / hf.Step;
+        double fz = (p.Z - hf.OriginZ) / hf.Step;
+        int i = (int)Math.Floor(fx);
+        int j = (int)Math.Floor(fz);
+        double tx = MathD.Clamp01(fx - i);
+        double tz = MathD.Clamp01(fz - j);
+
+        double r0 = CatmullRom(hf.Vertex(i - 1, j - 1), hf.Vertex(i, j - 1), hf.Vertex(i + 1, j - 1), hf.Vertex(i + 2, j - 1), tx);
+        double r1 = CatmullRom(hf.Vertex(i - 1, j), hf.Vertex(i, j), hf.Vertex(i + 1, j), hf.Vertex(i + 2, j), tx);
+        double r2 = CatmullRom(hf.Vertex(i - 1, j + 1), hf.Vertex(i, j + 1), hf.Vertex(i + 1, j + 1), hf.Vertex(i + 2, j + 1), tx);
+        double r3 = CatmullRom(hf.Vertex(i - 1, j + 2), hf.Vertex(i, j + 2), hf.Vertex(i + 1, j + 2), hf.Vertex(i + 2, j + 2), tx);
+
+        double smoothH = CatmullRom(r0, r1, r2, r3, tz);
+
+        // Subtle deterministic micro-relief hummocks (within +/- 3.5 mm)
+        double hummock = 0.0035 * Math.Clamp(
+            0.7 * Noise.Gradient(0xC0FFEE_F00DUL, p.X * 5.5, p.Z * 5.5) +
+            0.3 * Noise.Gradient(0xDEAD_BEEFUL, p.X * 12.0, p.Z * 12.0),
+            -1.0, 1.0);
+
+        return smoothH + hummock;
+    }
 
     public static Vec3 RenderNormal(Heightfield hf, Vec2 p)
     {
-        double e = hf.Step * 0.5;
+        double e = Math.Min(hf.Step * 0.25, 0.03);
         double dx = (RenderHeight(hf, p + new Vec2(e, 0)) - RenderHeight(hf, p - new Vec2(e, 0))) / (2 * e);
         double dz = (RenderHeight(hf, p + new Vec2(0, e)) - RenderHeight(hf, p - new Vec2(0, e))) / (2 * e);
         return new Vec3(-dx, 1, -dz).Normalized();
@@ -97,8 +131,8 @@ public static class TerrainMesh
 
     /// <summary>
     /// Six vertical cut faces from the terrain edge down to the island bottom, banded by strata. Each band
-    /// has its own vertices so layer colours meet in crisp lines. UV = (distance along perimeter, depth below
-    /// surface); UV2 = (layer index, depth within layer). Colours come from content data.
+    /// has its own vertices so geology can vary across each face. UV = (distance along perimeter, depth below
+    /// surface); UV2 = (layer index, normalized depth within that layer). Colours come from content data.
     /// </summary>
     public static MeshData BuildWalls(VivariumWorld w, double sampleStep = 0)
     {
@@ -108,15 +142,23 @@ public static class TerrainMesh
         var mesh = new MeshData();
         double perimeter = 0;
 
+        // Keep horizons continuous across all six faces by sampling in world XZ, not per-face UV.
+        // Large, slowly changing folds give the cut an exposed geological profile while a strict
+        // fraction-of-layer bound keeps adjacent horizons from crossing.
         double HorizonDepth(int boundary, Vec2 p)
         {
             if (boundary <= 0) return 0;
             double baseDepth = strata.LayerTop(boundary);
             ulong seed = Rng.Mix(w.Seed, Hash.Fnv1a64("strata.horizon." + boundary));
-            double amp = Math.Min(0.055, 0.012 + baseDepth * 0.035);
-            double broad = Noise.Fbm(seed, p.X * 0.42, p.Z * 0.42, 2);
-            double fine = Noise.Gradient(Rng.Mix(seed, 29), p.X * 1.15, p.Z * 1.15);
-            return Math.Max(0, baseDepth + amp * (broad * 0.78 + fine * 0.22));
+            double neighboringThickness = Math.Min(strata.Layers[boundary - 1].Thickness, strata.Layers[boundary].Thickness);
+            // The living-soil contact can cut deeply into a thick A horizon; lower contacts retain
+            // a wider clearance so even opposing folds leave each mineral layer intact.
+            double fraction = boundary == 1 ? 0.72 : 0.42;
+            double amp = Math.Min(neighboringThickness * fraction, 0.22 + baseDepth * 0.08);
+            double broad = Noise.Fbm(seed, p.X * 0.19, p.Z * 0.19, 3);
+            double secondary = Noise.Gradient(Rng.Mix(seed, 29), p.X * 0.47, p.Z * 0.47);
+            double local = Noise.Gradient(Rng.Mix(seed, 71), p.X * 0.91, p.Z * 0.91);
+            return Math.Max(0, baseDepth + amp * (broad * 0.72 + secondary * 0.22 + local * 0.06));
         }
         for (int k = 0; k < 6; k++)
         {
@@ -138,11 +180,13 @@ public static class TerrainMesh
                     double surf = RenderHeight(hf, p);
                     double top = HorizonDepth(layer, p);
                     double bot = layer == layers - 1 ? surf - bottom : HorizonDepth(layer + 1, p);
+                    // Guard malformed/custom strata and float conversion at very thin bands.
+                    bot = Math.Max(bot, top + 0.025);
                     double yTop = Math.Max(surf - top, bottom);
                     double yBot = Math.Max(surf - Math.Min(bot, surf - bottom), bottom);
                     double u = perimeter + t * len;
                     int vt = mesh.AddVertex(new Vec3(p.X, yTop, p.Z), n, col, 1, u, surf - yTop, layer, 0);
-                    int vb = mesh.AddVertex(new Vec3(p.X, yBot, p.Z), n, col, 1, u, surf - yBot, layer, yTop - yBot);
+                    int vb = mesh.AddVertex(new Vec3(p.X, yBot, p.Z), n, col, 1, u, surf - yBot, layer, 1);
                     if (s > 0)
                     {
                         // quad (prevTop, prevBot, vb, vt) facing outward

@@ -157,85 +157,139 @@ public static class Broadleaf
 
         double wavyPhase = Rng.HashUnit(seed, Hash.Fnv1a64("form.broadleaf.wavy"), 0) * Math.PI * 2.0;
 
-        // Position evaluator on the leaf parametric surface
-        Vec3 SurfacePos(double t, double x)
+        // Position evaluator on the leaf parametric surface with 3D lamina extrusion & botanical margins
+        Vec3 SurfacePos(double t, double x, int face)
         {
             var (env, lobeBack) = SampleOutline(outline, t, x, bladeLength);
             double phase = wavyPhase + t * wavyFrequency * Math.PI * 2.0;
             double organic = Math.Sin(Math.PI * t);
             double skew = asymmetry + 0.035 * Math.Sin(wavyPhase);
-            double marginMod = 1.0 + wavyMargin * 0.35 * Math.Cos(phase) * (x * x) * Math.Sin(Math.PI * t);
+            double absX = Math.Abs(x);
+
+            // Botanical Margin Profile:
+            // 1. Dentate / Serrate (asymmetric forward-pointing teeth)
+            double marginToothFreq = 18.0;
+            double tf = (t * marginToothFreq) % 1.0;
+            if (tf < 0) tf += 1.0;
+            double toothShape = tf * tf * (1.0 - tf) * 6.75;
+            double toothMod = 0.045 * Math.Sin(Math.PI * t) * toothShape * Math.Pow(absX, 3.5);
+
+            // 2. Crenate / Undulate (scalloped lobes with subtle 3D vertical edge wave)
+            double edgeWave = wavyMargin * (bladeWidth * 0.4) * Math.Sin(wavyPhase + t * 16.0) * Math.Pow(absX, 4.0) * organic;
+
+            // 3. Acuminate Drip-Tip (curved downward-arching apex at t in [0.85, 1.0])
+            double dripTip = t > 0.85 ? Math.Pow((t - 0.85) / 0.15, 2.2) * 0.06 * bladeLength : 0.0;
+
+            double marginMod = 1.0 + wavyMargin * 0.35 * Math.Cos(phase) * (x * x) * organic + toothMod;
             double hw = (bladeWidth * 0.5) * env * marginMod * (1.0 + skew * x);
             var lateral = side * (x * hw);
 
-            double droop = tipCurl * bladeLength * (t * t * 0.75 + 0.25 * t * t * t);
+            double droop = tipCurl * bladeLength * (t * t * 0.75 + 0.25 * t * t * t) + dripTip;
             var pMidrib = junctionPos + fwd * (t * bladeLength + lobeBack) - normal0 * droop;
 
             double zCamber = camber * (bladeWidth * 0.5) * (1.0 - x * x) * Math.Sin(Math.PI * Math.Pow(t, 0.40));
-            double zFold = -midribFold * (bladeWidth * 0.5) * Math.Abs(x) * Math.Sin(Math.PI * Math.Pow(t, 0.40));
-            double zWave = wavyMargin * (bladeWidth * 0.5) * Math.Sin(phase) * (x * x) * Math.Sin(Math.PI * t);
-            var crown = normal0 * (zCamber + zFold + zWave);
+            double zFold = -midribFold * (bladeWidth * 0.5) * absX * Math.Sin(Math.PI * Math.Pow(t, 0.40));
+            double zWave = wavyMargin * (bladeWidth * 0.5) * Math.Sin(phase) * (x * x) * organic;
+            var crown = normal0 * (zCamber + zFold + zWave + edgeWave);
 
-            return pMidrib + lateral + crown + side * (bladeWidth * 0.025 * Math.Sin(wavyPhase + t * 2.0) * organic)
+            var basePos = pMidrib + lateral + crown + side * (bladeWidth * 0.025 * Math.Sin(wavyPhase + t * 2.0) * organic)
                 + normal0 * (bladeWidth * 0.018 * Math.Sin(phase * 0.45 + x * 1.7) * organic * x * x);
+
+            // True 3D Extruded Lamina Thickness & 3D venation reliefs
+            const double laminaThickness = 0.00035; // 0.35 mm physical thickness
+            double veinPhase = (t - 0.22 * absX) * 12.0 * Math.PI * 2.0;
+
+            double normalOffset;
+            if (face == 0)
+            {
+                // Adaxial (Upper): recessed midrib canaliculate groove (-0.4 mm) and convex bullate pillowing (+0.8 to +2.2 mm)
+                double groove = -0.0004 * Math.Exp(-x * x * 64.0) * Math.Sin(Math.PI * Math.Pow(t, 0.40));
+                double bullateAmp = Math.Clamp(bladeWidth * 0.008, 0.0008, 0.0022);
+                double bullate = bullateAmp * (0.5 - 0.5 * Math.Cos(veinPhase)) * (1.0 - Math.Pow(x, 4.0)) * organic;
+                normalOffset = 0.5 * laminaThickness + groove + bullate;
+            }
+            else
+            {
+                // Abaxial (Lower): offset downward by physical thickness, protruding midrib keel (2.5 mm -> 0.3 mm), raised lateral veins
+                double keelDepth = MathD.Lerp(0.0025, 0.0003, t);
+                double keel = -keelDepth * Math.Exp(-x * x * 80.0);
+                double veinRib = -0.0006 * Math.Max(0.0, Math.Cos(veinPhase) - 0.3) / 0.7 * (1.0 - absX) * organic;
+                normalOffset = -0.5 * laminaThickness + keel + veinRib;
+            }
+
+            return basePos + normal0 * normalOffset;
         }
 
-        // 3. Grid discretization: spend budget on outline & silhouette with minimal interior subdivision
-        int rows = detail == 0 ? 9 : (detail == 1 ? 6 : 3);
-        // Shadebell's almost circular heart leaves need enough silhouette stations
-        // to remain round even when their overall mesh is deliberately simplified.
+        // 3. Grid discretization: WP-19 high-resolution tessellation
+        int rows = detail == 0 ? 28 : (detail == 1 ? 20 : 12);
+        int cols = detail == 0 ? 16 : (detail == 1 ? 12 : 8);
         if (outline == BroadleafOutline.OrbicularCordate)
-            rows = detail == 2 ? 5 : (detail == 1 ? 9 : 11);
-        if (m.Lod is { } lod) rows = lod.Segments(rows, detail == 0 ? 4 : 3);
-        int cols = detail == 0 && (m.Lod?.Blade ?? 1) >= .55 ? 4 : 2;
-
-        var rootPos = SurfacePos(0.0, 0.0);
-        var tipPos = SurfacePos(1.0, 0.0);
+        {
+            rows = detail == 2 ? 10 : (detail == 1 ? 16 : 20);
+            cols = detail == 2 ? 6 : (detail == 1 ? 10 : 12);
+        }
+        if (m.Lod is { } lod) rows = lod.Segments(rows, detail == 0 ? 12 : 8);
+        if (m.Lod is { } lodC) cols = Math.Max(4, (int)Math.Round(cols * lodC.Blade));
 
         int midRows = rows - 1;
-        var grid = new Vec3[midRows, cols + 1];
-        for (int r = 1; r < rows; r++)
+        var grid = new Vec3[2, midRows, cols + 1];
+        var gridNormals = new Vec3[2, midRows, cols + 1];
+        var rootPositions = new Vec3[2];
+        var tipPositions = new Vec3[2];
+        var rootNormals = new Vec3[2];
+        var tipNormals = new Vec3[2];
+
+        for (int face = 0; face < 2; face++)
         {
-            double t = (double)r / rows;
-            for (int c = 0; c <= cols; c++)
+            double faceSign = face == 0 ? 1.0 : -1.0;
+            var expectedNormal = normal0 * faceSign;
+
+            rootPositions[face] = SurfacePos(0.0, 0.0, face);
+            tipPositions[face] = SurfacePos(1.0, 0.0, face);
+
+            for (int r = 1; r < rows; r++)
             {
-                double x = (double)c / cols * 2.0 - 1.0;
-                grid[r - 1, c] = SurfacePos(t, x);
+                double t = (double)r / rows;
+                for (int c = 0; c <= cols; c++)
+                {
+                    double x = (double)c / cols * 2.0 - 1.0;
+                    grid[face, r - 1, c] = SurfacePos(t, x, face);
+                }
             }
-        }
 
-        // Tangents and normals computed directly from grid differences to avoid 4x redundant evaluation of surface formula
-        var gridNormals = new Vec3[midRows, cols + 1];
-        for (int ri = 0; ri < midRows; ri++)
-        {
-            for (int c = 0; c <= cols; c++)
+            for (int ri = 0; ri < midRows; ri++)
             {
-                Vec3 tT = midRows > 1
-                    ? (ri == 0 ? grid[1, c] - rootPos : (ri == midRows - 1 ? tipPos - grid[ri - 1, c] : grid[ri + 1, c] - grid[ri - 1, c]))
-                    : (tipPos - rootPos);
+                for (int c = 0; c <= cols; c++)
+                {
+                    Vec3 tT = midRows > 1
+                        ? (ri == 0 ? grid[face, 1, c] - rootPositions[face] : (ri == midRows - 1 ? tipPositions[face] - grid[face, ri - 1, c] : grid[face, ri + 1, c] - grid[face, ri - 1, c]))
+                        : (tipPositions[face] - rootPositions[face]);
 
-                Vec3 tX = cols > 1
-                    ? (c == 0 ? grid[ri, 1] - grid[ri, 0] : (c == cols ? grid[ri, cols] - grid[ri, cols - 1] : grid[ri, c + 1] - grid[ri, c - 1]))
-                    : side;
+                    Vec3 tX = cols > 1
+                        ? (c == 0 ? grid[face, ri, 1] - grid[face, ri, 0] : (c == cols ? grid[face, ri, cols] - grid[face, ri, cols - 1] : grid[face, ri, c + 1] - grid[face, ri, c - 1]))
+                        : side;
 
-                if (tX.LengthSq < 1e-8) tX = side;
-                if (tT.LengthSq < 1e-8) tT = fwd;
+                    if (tX.LengthSq < 1e-8) tX = side;
+                    if (tT.LengthSq < 1e-8) tT = fwd;
 
-                var n = tX.Cross(tT).Normalized();
-                if (n.LengthSq < 1e-6 || n.Dot(normal0) < 0) n = normal0;
-                gridNormals[ri, c] = n;
+                    var n = (face == 0 ? tX.Cross(tT) : tT.Cross(tX)).Normalized();
+                    if (n.LengthSq < 1e-6 || n.Dot(expectedNormal) < 0) n = expectedNormal;
+                    gridNormals[face, ri, c] = n;
+                }
             }
+
+            var rootTT = midRows > 0 ? grid[face, 0, cols / 2] - rootPositions[face] : tipPositions[face] - rootPositions[face];
+            if (rootTT.LengthSq < 1e-8) rootTT = fwd;
+            var rN = (face == 0 ? side.Cross(rootTT) : rootTT.Cross(side)).Normalized();
+            if (rN.LengthSq < 1e-6 || rN.Dot(expectedNormal) < 0) rN = expectedNormal;
+            rootNormals[face] = rN;
+
+            var tipTT = midRows > 0 ? tipPositions[face] - grid[face, midRows - 1, cols / 2] : tipPositions[face] - rootPositions[face];
+            if (tipTT.LengthSq < 1e-8) tipTT = fwd;
+            var tN = (face == 0 ? side.Cross(tipTT) : tipTT.Cross(side)).Normalized();
+            if (tN.LengthSq < 1e-6 || tN.Dot(expectedNormal) < 0) tN = expectedNormal;
+            tipNormals[face] = tN;
         }
-
-        var rootTT = midRows > 0 ? grid[0, cols / 2] - rootPos : tipPos - rootPos;
-        if (rootTT.LengthSq < 1e-8) rootTT = fwd;
-        var rootNorm = side.Cross(rootTT).Normalized();
-        if (rootNorm.LengthSq < 1e-6 || rootNorm.Dot(normal0) < 0) rootNorm = normal0;
-
-        var tipTT = midRows > 0 ? tipPos - grid[midRows - 1, cols / 2] : tipPos - rootPos;
-        if (tipTT.LengthSq < 1e-8) tipTT = fwd;
-        var tipNorm = side.Cross(tipTT).Normalized();
-        if (tipNorm.LengthSq < 1e-6 || tipNorm.Dot(normal0) < 0) tipNorm = normal0;
 
         // Color & age tinting: younger leaves paler/greener/fresher, older leaves deeper/darker
         var youngBase = Primitives.Mix(c2, new[] { 0.65, 0.82, 0.35 }, 0.40);
@@ -250,82 +304,99 @@ public static class Broadleaf
         int leafVertex = m.VertexCount;
         int leafIndex = m.Indices.Count;
 
-        int faceCount = m.FloraDetailLevel.HasValue ? 1 : 2;
+        int[] rootIndices = new int[2];
+        int[] tipIndices = new int[2];
+        int[,,] gridIndices = new int[2, midRows, cols + 1];
 
-        for (int face = 0; face < faceCount; face++)
+        // Emit solid 2-sided 3D shell (faceCount = 2 + stitched margin rim strip)
+        for (int face = 0; face < 2; face++)
         {
-            double faceSign = face == 0 ? 1.0 : -1.0;
-            double u2 = face; // 0 = upper face, 1 = lower face
+            double u2 = face; // 0 = adaxial upper, 1 = abaxial lower
 
             // Root vertex at station 0
-            var rootNormFace = rootNorm * faceSign;
             var rootColor = face == 0 ? baseCol : underCol;
-            int rootIdx = m.AddVertex(rootPos, rootNormFace, rootColor, 1.0, 0.0, 0.5, u2, 1.0);
+            rootIndices[face] = m.AddVertex(rootPositions[face], rootNormals[face], rootColor, 1.0, 0.0, 0.5, u2, 1.0);
 
             // Middle rows
-            int[] rowStarts = new int[rows - 1];
             for (int r = 1; r < rows; r++)
             {
                 double t = (double)r / rows;
-                rowStarts[r - 1] = m.VertexCount;
-
                 for (int c = 0; c <= cols; c++)
                 {
                     double x = (double)c / cols * 2.0 - 1.0;
-                    var pos = grid[r - 1, c];
-                    var norm = gridNormals[r - 1, c] * faceSign;
+                    var pos = grid[face, r - 1, c];
+                    var norm = gridNormals[face, r - 1, c];
                     var cGrad = Primitives.Mix(baseCol, tipCol, t);
                     // Midrib vein subtle highlight
                     if (Math.Abs(x) < 0.15)
                         cGrad = Primitives.Mix(cGrad, tipCol, 0.18 * (1.0 - Math.Abs(x) / 0.15));
 
                     var vertCol = face == 0 ? cGrad : underCol;
-                    m.AddVertex(pos, norm, vertCol, 1.0, t, (x + 1.0) * 0.5, u2, 1.0);
+                    gridIndices[face, r - 1, c] = m.AddVertex(pos, norm, vertCol, 1.0, t, (x + 1.0) * 0.5, u2, 1.0);
                 }
             }
 
             // Tip vertex at station rows
-            var tipNormFace = tipNorm * faceSign;
             var tipColor = face == 0 ? tipCol : underCol;
-            int tipIdx = m.AddVertex(tipPos, tipNormFace, tipColor, 1.0, 1.0, 0.5, u2, 1.0);
+            tipIndices[face] = m.AddVertex(tipPositions[face], tipNormals[face], tipColor, 1.0, 1.0, 0.5, u2, 1.0);
 
             // Triangulation: root fan
-            int firstRowStart = rowStarts[0];
             for (int c = 0; c < cols; c++)
             {
-                int va = firstRowStart + c;
-                int vb = firstRowStart + c + 1;
-                Primitives.TriangleFacing(m, rootIdx, va, vb, m.NormalAt(rootIdx));
+                int va = gridIndices[face, 0, c];
+                int vb = gridIndices[face, 0, c + 1];
+                Primitives.TriangleFacing(m, rootIndices[face], va, vb, m.NormalAt(rootIndices[face]));
             }
 
             // Triangulation: middle quad strips
             for (int r = 0; r < rows - 2; r++)
             {
-                int currStart = rowStarts[r];
-                int nextStart = rowStarts[r + 1];
                 for (int c = 0; c < cols; c++)
                 {
-                    int a = currStart + c;
-                    int b = currStart + c + 1;
-                    int d = nextStart + c;
-                    int e = nextStart + c + 1;
+                    int a = gridIndices[face, r, c];
+                    int b = gridIndices[face, r, c + 1];
+                    int d = gridIndices[face, r + 1, c];
+                    int e = gridIndices[face, r + 1, c + 1];
                     Primitives.TriangleFacing(m, a, d, b, m.NormalAt(a));
                     Primitives.TriangleFacing(m, b, d, e, m.NormalAt(b));
                 }
             }
 
             // Triangulation: tip fan
-            int lastRowStart = rowStarts[rows - 2];
             for (int c = 0; c < cols; c++)
             {
-                int va = lastRowStart + c;
-                int vb = lastRowStart + c + 1;
-                Primitives.TriangleFacing(m, va, tipIdx, vb, m.NormalAt(va));
+                int va = gridIndices[face, rows - 2, c];
+                int vb = gridIndices[face, rows - 2, c + 1];
+                Primitives.TriangleFacing(m, va, tipIndices[face], vb, m.NormalAt(va));
             }
         }
 
-        m.RecordLeaf(leafVertex, leafIndex, attachPos, bladeLength);
+        // Stitched boundary rim connecting upper and lower margin vertices
+        // Left margin rim (c = 0, x = -1.0)
+        Primitives.TriangleFacing(m, rootIndices[0], rootIndices[1], gridIndices[0, 0, 0], -side);
+        Primitives.TriangleFacing(m, rootIndices[1], gridIndices[1, 0, 0], gridIndices[0, 0, 0], -side);
+        for (int r = 0; r < rows - 2; r++)
+        {
+            Primitives.TriangleFacing(m, gridIndices[0, r, 0], gridIndices[1, r, 0], gridIndices[0, r + 1, 0], -side);
+            Primitives.TriangleFacing(m, gridIndices[1, r, 0], gridIndices[1, r + 1, 0], gridIndices[0, r + 1, 0], -side);
+        }
+        Primitives.TriangleFacing(m, gridIndices[0, rows - 2, 0], gridIndices[1, rows - 2, 0], tipIndices[0], -side);
+        Primitives.TriangleFacing(m, gridIndices[1, rows - 2, 0], tipIndices[1], tipIndices[0], -side);
 
+        // Right margin rim (c = cols, x = +1.0)
+        Primitives.TriangleFacing(m, rootIndices[0], gridIndices[0, 0, cols], rootIndices[1], side);
+        Primitives.TriangleFacing(m, rootIndices[1], gridIndices[0, 0, cols], gridIndices[1, 0, cols], side);
+        for (int r = 0; r < rows - 2; r++)
+        {
+            Primitives.TriangleFacing(m, gridIndices[0, r, cols], gridIndices[0, r + 1, cols], gridIndices[1, r, cols], side);
+            Primitives.TriangleFacing(m, gridIndices[1, r, cols], gridIndices[0, r + 1, cols], gridIndices[1, r + 1, cols], side);
+        }
+        Primitives.TriangleFacing(m, gridIndices[0, rows - 2, cols], tipIndices[0], gridIndices[1, rows - 2, cols], side);
+        Primitives.TriangleFacing(m, gridIndices[1, rows - 2, cols], tipIndices[0], tipIndices[1], side);
+
+                m.RecordLeaf(leafVertex, leafIndex, attachPos, bladeLength);
+
+        var rootPos = rootPositions[0]; var tipPos = tipPositions[0];
         ulong partId = Rng.Mix(seed, Hash.Fnv1a64("form.broadleaf.blade"));
         var leafFrame = FloraAttachmentFrame.Create(junctionPos, normal0, fwd);
         var bMin = new Vec3(Math.Min(rootPos.X, tipPos.X) - bladeWidth * 0.5, Math.Min(rootPos.Y, tipPos.Y), Math.Min(rootPos.Z, tipPos.Z) - bladeWidth * 0.5);

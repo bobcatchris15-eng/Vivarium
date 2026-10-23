@@ -88,8 +88,8 @@ public static class EpiphyticRosette
             return Math.Sin(Math.PI * Math.Pow(t, 0.38)) * Math.Pow(1.0 - t, 0.58) * 1.35;
         }
 
-        // Surface point evaluator
-        Vec3 SurfacePos(double t, double x)
+        // Surface point evaluator with 3D lamina extrusion, keeled V-section, and sheathed culm base
+        Vec3 SurfacePos(double t, double x, int face)
         {
             t = MathD.Clamp01(t);
             x = Math.Clamp(x, -1.0, 1.0);
@@ -101,22 +101,33 @@ public static class EpiphyticRosette
             if (side.LengthSq < 1e-6) side = tan.Cross(radialDir).Normalized();
             if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
 
+            // Sheathed culm base clasping around the rosette core
+            if (t < 0.20)
+            {
+                double sw = 1.0 - t / 0.20;
+                side = Axis.RotateAround(side, tan, sw * 0.35 * x);
+            }
+
             var norm0 = side.Cross(tan).Normalized();
             if (norm0.Dot(Vec3.Up) < -0.2 && norm0.Dot(radialDir) < 0) norm0 = -norm0;
 
             double hw = (bladeWidth * 0.5) * Taper(t);
             var lateral = side * (x * hw);
 
-            // Canaliculate U-gutter (concave upper face) and transverse camber
+            // Canaliculate U-gutter on adaxial face, prominent keel on abaxial face
+            double absX = Math.Abs(x);
             double uFold = -midribFold * (bladeWidth * 0.5) * (1.0 - x * x) * Math.Sin(Math.PI * Math.Pow(t, 0.45));
-            double zCamber = camber * (bladeWidth * 0.5) * (1.0 - Math.Abs(x)) * Math.Sin(Math.PI * Math.Pow(t, 0.50));
+            double zCamber = camber * (bladeWidth * 0.5) * (1.0 - absX) * Math.Sin(Math.PI * Math.Pow(t, 0.50));
             double droopY = tipCurl * (t * t * t) * (bladeWidth * 0.4);
 
-            return spineP + lateral + norm0 * (uFold + zCamber) - Vec3.Up * droopY;
+            double keel = -midribFold * 1.5 * (bladeWidth * 0.5) * (1.0 - absX) * Math.Sin(Math.PI * Math.Pow(t, 0.40));
+            double normalOffset = face == 0 ? (0.00022 + uFold) : (-0.00022 + keel);
+
+            return spineP + lateral + norm0 * (zCamber + normalOffset) - Vec3.Up * droopY;
         }
 
         // Analytical / finite-difference surface normal
-        Vec3 SurfaceNormal(double t, double x)
+        Vec3 SurfaceNormal(double t, double x, int face = 0)
         {
             t = MathD.Clamp01(t);
             x = Math.Clamp(x, -1.0, 1.0);
@@ -129,10 +140,11 @@ public static class EpiphyticRosette
             if (norm0.Dot(Vec3.Up) < -0.2 && norm0.Dot(radialDir) < 0) norm0 = -norm0;
 
             const double dt = 0.002, dx = 0.004;
-            var tT = SurfacePos(Math.Min(1.0, t + dt), x) - SurfacePos(Math.Max(0.0, t - dt), x);
-            var tX = SurfacePos(t, Math.Min(1.0, x + dx)) - SurfacePos(t, Math.Max(-1.0, x - dx));
-            var n = tX.Cross(tT).Normalized();
-            if (n.LengthSq < 1e-6 || n.Dot(norm0) < 0) n = norm0;
+            var tT = SurfacePos(Math.Min(1.0, t + dt), x, face) - SurfacePos(Math.Max(0.0, t - dt), x, face);
+            var tX = SurfacePos(t, Math.Min(1.0, x + dx), face) - SurfacePos(t, Math.Max(-1.0, x - dx), face);
+            var n = (face == 0 ? tX.Cross(tT) : tT.Cross(tX)).Normalized();
+            var expected = face == 0 ? norm0 : -norm0;
+            if (n.LengthSq < 1e-6 || n.Dot(expected) < 0) n = expected;
             return n;
         }
 
@@ -166,84 +178,128 @@ public static class EpiphyticRosette
             return cGrad;
         }
 
-        int rows = detail == 0 ? 5 : (detail == 1 ? 4 : 3);
-        int cols = detail == 0 ? 3 : 2;
-        int faceCount = m.FloraDetailLevel.HasValue ? 1 : 2;
+        int rows = detail == 0 ? 18 : (detail == 1 ? 12 : 8);
+        if (m.Lod is { } lod) rows = lod.Segments(rows, 4);
+        int cols = detail == 0 ? 8 : (detail == 1 ? 6 : 4);
+        if (m.Lod is { } lodC) cols = Math.Max(3, (int)Math.Round(cols * lodC.Blade));
 
-        for (int face = 0; face < faceCount; face++)
+        int midRows = rows - 1;
+        var grid = new Vec3[2, midRows, cols + 1];
+        var gridNormals = new Vec3[2, midRows, cols + 1];
+        var rootPositions = new Vec3[2];
+        var tipPositions = new Vec3[2];
+        var rootNormals = new Vec3[2];
+        var tipNormals = new Vec3[2];
+
+        for (int face = 0; face < 2; face++)
         {
-            double faceSign = face == 0 ? 1.0 : -1.0;
-            double u2 = face;
+            rootPositions[face] = SurfacePos(0.0, 0.0, face);
+            rootNormals[face] = SurfaceNormal(0.0, 0.0, face);
+            tipPositions[face] = SurfacePos(1.0, 0.0, face);
+            tipNormals[face] = SurfaceNormal(1.0, 0.0, face);
 
-            // Station 0: Root vertex at leaf base
-            var rootPos = SurfacePos(0.0, 0.0);
-            var rootNorm = SurfaceNormal(0.0, 0.0) * faceSign;
-            var rootCol = face == 0 ? colSheath : (undersideColor ?? Primitives.Mix(colSheath, new[] { 0.35, 0.45, 0.30 }, 0.40));
-            int rootIdx = m.AddVertex(rootPos, rootNorm, rootCol, 1.0, 0.0, 0.5, u2, 1.0);
-
-            // Middle rows: quad strips
-            int[] rowStarts = new int[rows - 1];
             for (int r = 1; r < rows; r++)
             {
                 double t = (double)r / rows;
-                rowStarts[r - 1] = m.VertexCount;
-
                 for (int c = 0; c <= cols; c++)
                 {
                     double x = (double)c / cols * 2.0 - 1.0;
-                    var pos = SurfacePos(t, x);
-                    var norm = SurfaceNormal(t, x) * faceSign;
-                    var cGrad = BladeColor(t, x);
-                    var vertCol = face == 0
-                        ? cGrad
-                        : (undersideColor ?? Primitives.Mix(cGrad, new[] { 0.35, 0.45, 0.30 }, 0.40));
+                    grid[face, r - 1, c] = SurfacePos(t, x, face);
+                    gridNormals[face, r - 1, c] = SurfaceNormal(t, x, face);
+                }
+            }
+        }
 
-                    m.AddVertex(pos, norm, vertCol, 1.0, t, (x + 1.0) * 0.5, u2, 1.0);
+        var underCol = undersideColor ?? Primitives.Mix(colBlade, new[] { 0.35, 0.45, 0.30 }, 0.40);
+        int[] rootIndices = new int[2];
+        int[] tipIndices = new int[2];
+        int[,,] gridIndices = new int[2, midRows, cols + 1];
+
+        // Emit solid 2-sided 3D shell (faceCount = 2 + stitched margin rim strip)
+        for (int face = 0; face < 2; face++)
+        {
+            double u2 = face; // 0 = adaxial, 1 = abaxial
+            var rootColor = face == 0 ? colSheath : underCol;
+            rootIndices[face] = m.AddVertex(rootPositions[face], rootNormals[face], rootColor, 1.0, 0.0, 0.5, u2, 1.0);
+
+            for (int r = 1; r < rows; r++)
+            {
+                double t = (double)r / rows;
+                for (int c = 0; c <= cols; c++)
+                {
+                    double x = (double)c / cols * 2.0 - 1.0;
+                    var pos = grid[face, r - 1, c];
+                    var norm = gridNormals[face, r - 1, c];
+                    var cGrad = BladeColor(t, x);
+                    var vertCol = face == 0 ? cGrad : underCol;
+
+                    gridIndices[face, r - 1, c] = m.AddVertex(pos, norm, vertCol, 1.0, t, (x + 1.0) * 0.5, u2, 1.0);
                 }
             }
 
-            // Station 1: Tip vertex
-            var tipPos = SurfacePos(1.0, 0.0);
-            var tipNorm = SurfaceNormal(1.0, 0.0) * faceSign;
-            var tipCol = face == 0 ? BladeColor(1.0, 0.0) : (undersideColor ?? Primitives.Mix(colTip, new[] { 0.35, 0.45, 0.30 }, 0.40));
-            int tipIdx = m.AddVertex(tipPos, tipNorm, tipCol, 1.0, 1.0, 0.5, u2, 1.0);
+            var tipColor = face == 0 ? BladeColor(1.0, 0.0) : underCol;
+            tipIndices[face] = m.AddVertex(tipPositions[face], tipNormals[face], tipColor, 1.0, 1.0, 0.5, u2, 1.0);
 
             // Triangulation: root fan
-            int firstRowStart = rowStarts[0];
             for (int c = 0; c < cols; c++)
             {
-                int va = firstRowStart + c;
-                int vb = firstRowStart + c + 1;
-                Primitives.TriangleFacing(m, rootIdx, va, vb, m.NormalAt(rootIdx));
+                int va = gridIndices[face, 0, c];
+                int vb = gridIndices[face, 0, c + 1];
+                Primitives.TriangleFacing(m, rootIndices[face], va, vb, m.NormalAt(rootIndices[face]));
             }
 
             // Triangulation: middle quad strips
             for (int r = 0; r < rows - 2; r++)
             {
-                int currStart = rowStarts[r];
-                int nextStart = rowStarts[r + 1];
                 for (int c = 0; c < cols; c++)
                 {
-                    int a = currStart + c;
-                    int b = currStart + c + 1;
-                    int d = nextStart + c;
-                    int e = nextStart + c + 1;
+                    int a = gridIndices[face, r, c];
+                    int b = gridIndices[face, r, c + 1];
+                    int d = gridIndices[face, r + 1, c];
+                    int e = gridIndices[face, r + 1, c + 1];
                     Primitives.TriangleFacing(m, a, d, b, m.NormalAt(a));
                     Primitives.TriangleFacing(m, b, d, e, m.NormalAt(b));
                 }
             }
 
             // Triangulation: tip fan
-            int lastRowStart = rowStarts[rows - 2];
             for (int c = 0; c < cols; c++)
             {
-                int va = lastRowStart + c;
-                int vb = lastRowStart + c + 1;
-                Primitives.TriangleFacing(m, va, tipIdx, vb, m.NormalAt(va));
+                int va = gridIndices[face, rows - 2, c];
+                int vb = gridIndices[face, rows - 2, c + 1];
+                Primitives.TriangleFacing(m, va, tipIndices[face], vb, m.NormalAt(va));
             }
         }
 
-        m.RecordLeaf(leafVertex, leafIndex, p0, bladeLength);
+        var sampleTan = (p1 - p0).Normalized();
+        var sampleSide = sampleTan.Cross(Vec3.Up).Normalized();
+        if (sampleSide.LengthSq < 1e-6) sampleSide = sampleTan.Cross(radialDir).Normalized();
+        if (sampleSide.LengthSq < 1e-6) sampleSide = new Vec3(1, 0, 0);
+
+        // Stitched boundary rim connecting upper and lower margin vertices
+        // Left margin rim (c = 0, x = -1.0)
+        Primitives.TriangleFacing(m, rootIndices[0], rootIndices[1], gridIndices[0, 0, 0], -sampleSide);
+        Primitives.TriangleFacing(m, rootIndices[1], gridIndices[1, 0, 0], gridIndices[0, 0, 0], -sampleSide);
+        for (int r = 0; r < rows - 2; r++)
+        {
+            Primitives.TriangleFacing(m, gridIndices[0, r, 0], gridIndices[1, r, 0], gridIndices[0, r + 1, 0], -sampleSide);
+            Primitives.TriangleFacing(m, gridIndices[1, r, 0], gridIndices[1, r + 1, 0], gridIndices[0, r + 1, 0], -sampleSide);
+        }
+        Primitives.TriangleFacing(m, gridIndices[0, rows - 2, 0], gridIndices[1, rows - 2, 0], tipIndices[0], -sampleSide);
+        Primitives.TriangleFacing(m, gridIndices[1, rows - 2, 0], tipIndices[1], tipIndices[0], -sampleSide);
+
+        // Right margin rim (c = cols, x = +1.0)
+        Primitives.TriangleFacing(m, rootIndices[0], gridIndices[0, 0, cols], rootIndices[1], sampleSide);
+        Primitives.TriangleFacing(m, rootIndices[1], gridIndices[0, 0, cols], gridIndices[1, 0, cols], sampleSide);
+        for (int r = 0; r < rows - 2; r++)
+        {
+            Primitives.TriangleFacing(m, gridIndices[0, r, cols], gridIndices[0, r + 1, cols], gridIndices[1, r, cols], sampleSide);
+            Primitives.TriangleFacing(m, gridIndices[1, r, cols], gridIndices[0, r + 1, cols], gridIndices[1, r + 1, cols], sampleSide);
+        }
+        Primitives.TriangleFacing(m, gridIndices[0, rows - 2, cols], tipIndices[0], gridIndices[1, rows - 2, cols], sampleSide);
+        Primitives.TriangleFacing(m, gridIndices[1, rows - 2, cols], tipIndices[0], tipIndices[1], sampleSide);
+
+                m.RecordLeaf(leafVertex, leafIndex, p0, bladeLength);
 
         ulong partId = Rng.Mix(seed, (ulong)(rankU * 10000 + 1));
         var surfNorm = SurfaceNormal(0.0, 0.0);

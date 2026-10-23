@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -282,13 +282,14 @@ public int Quality
     {
         long speciesStarted=Stopwatch.GetTimestamp();
         GD.Print("FLORA_LAYER_BUILD_BEGIN " + sp.Id);
-        var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id);
+        var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id, sp: sp);
         var mat = Bridge.Shader("res://Shaders/flora.gdshader");
         NightFloraMaterials.Bind(mat, sp);
         mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
         mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
         mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
-        mat.SetShaderParameter("sway", 0.0f);
+        bool freezeWind = System.Environment.GetEnvironmentVariable("VIVARIUM_FREEZE_WIND") == "1";
+        mat.SetShaderParameter("sway", freezeWind ? 0.0f : 0.35f);
         Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
         FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
         var leafMat = profile?.LeafMaterial(animated: false);
@@ -298,7 +299,7 @@ public int Quality
             Bridge.BindSurface(mat, "bark", profile.Bark);
             mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0], profile.BarkTint[1], profile.BarkTint[2]));
             leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
-            leafMat.SetShaderParameter("wind_strength", 0.0f);
+            leafMat.SetShaderParameter("wind_strength", freezeWind ? 0.0f : 0.35f);
         }
         var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
         ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);

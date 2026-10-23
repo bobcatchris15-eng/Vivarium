@@ -64,8 +64,10 @@ class Builder:
         for i,c in enumerate(self.col): col.data[i].color=c
         for name in self.rig.data.bones.keys(): ob.vertex_groups.new(name=name)
         for i,ws in enumerate(self.w):
-            for name,weight in ws.items():
-                if weight>0: ob.vertex_groups[name].add([i],weight,'REPLACE')
+            items=sorted([(k,v) for k,v in ws.items() if v>0],key=lambda p:-p[1])[:4]
+            total_w=sum(v for _,v in items) or 1.0
+            for name,weight in items:
+                ob.vertex_groups[name].add([i],weight/total_w,'REPLACE')
         mod=ob.modifiers.new('AnatomicalSkin','ARMATURE'); mod.object=self.rig
         ob.parent=self.rig
         # Normals use actual consistent face orientation, not double-sided masks.
@@ -152,7 +154,7 @@ def rigging(species,chain,limbs,tail):
     if species=='monitor':
         for side,suffix in [(-1,'R'),(1,'L')]:
             for name in ['Blink_'+suffix,'BlinkLower_'+suffix]: bone(name,(side*.087,.326,-1.006),(side*.087,.306,-1.006),'Head')
-        bone('Tongue',(0,.269,-1.235),(0,.269,-1.355),'Head')
+        bone('Tongue',(0,.268,-1.10),(0,.268,-1.22),'Head')
     if species=='coati':
         for side,suffix in [(-1,'R'),(1,'L')]: bone('Ear_'+suffix,(side*.087,.510,-.385),(side*.087,.565,-.385),'Head')
     for i in range(len(tail)-1): bone('Tail'+str(i+1),tail[i],tail[i+1],'Pelvis' if i==0 else 'Tail'+str(i))
@@ -187,12 +189,6 @@ def surface_color(species):
             return (.19,.155,.077,1) if spotted and seed%5<2 else (.069,.061,.040,1)
         from coati_surface_v2 import coarse_color
         return coarse_color(c,q)
-        if c.z<-.77: return (.085,.065,.055,1)
-        if c.z<-.59: return (.66,.58,.46,1) if math.cos(q)<.50 else (.29,.16,.085,1)
-        if c.z<-.37:
-            eye_band=abs(math.sin(q))>.58 and math.cos(q)>.12
-            return (.73,.66,.54,1) if eye_band or belly else (.36,.18,.085,1)
-        return (.57,.43,.27,1) if belly else (.32,.145,.055,1)
     return color
 
 def interpolate_profiles(profile):
@@ -206,6 +202,99 @@ def interpolate_profiles(profile):
             for k in range(4): vals.append(.5*((2*b[k])+(-a[k]+c[k])*t+(2*a[k]-5*b[k]+4*c[k]-d[k])*t*t+(-a[k]+3*b[k]-3*c[k]+d[k])*t*t*t))
             result.append(vals)
     result.append(profile[-1]); return result
+
+def build_monitor_anatomical_trunk(skin, profile, coat):
+    """Build varanid skull, cervical folds, broad ribcage with lateral flank folds, and pelvis."""
+    from monitor_surface_solo import mouth_y, upper_jaw_halfwidth
+    prof = interpolate_profiles(profile)
+    radial = 48
+    start = len(skin.v)
+    n = len(prof)
+    for i, (z, cy, rx, ry) in enumerate(prof):
+        rx = max(rx, 0.003)
+        ry = max(ry, 0.003)
+        ws = body_weight(z, 'monitor')
+        c_vec = Vector((0.0, cy, z))
+
+        # Smooth regional masks
+        w_head = max(0.0, min(1.0, (-0.80 - z) / 0.09))
+        w_snout = max(0.0, min(1.0, (-0.86 - z) / 0.06))
+        w_torso = max(0.0, min(1.0, (z + 0.48) / 0.14)) * max(0.0, min(1.0, (0.38 - z) / 0.14))
+
+        # Gular / antehumeral fold constrictions on neck
+        neck_pinch = 1.0 - 0.065 * math.exp(-((z + 0.79) / 0.032) ** 2) - 0.055 * math.exp(-((z + 0.57) / 0.035) ** 2)
+        rx_eff = rx * neck_pinch
+        ry_eff = ry * neck_pinch
+
+        ym = mouth_y(z)
+        jaw_hw = upper_jaw_halfwidth(z)
+
+        for j in range(radial + 1):
+            q = TAU * j / radial
+            sq = math.sin(q)
+            cq = math.cos(q)
+
+            # Standard elliptical base point (note: -sq is +X in the ringmesh frame)
+            lat = -sq
+            px = lat * rx_eff
+            py = cy + cq * ry_eff
+
+            # 1. Varanid cranial shaping (flat skull table, canthus rostralis, brow shelf, flat maxillary mouth floor)
+            if w_head > 0.0:
+                # Match upper jaw halfwidth contour
+                h_rx = (1.0 - w_snout) * rx_eff + w_snout * jaw_hw
+                # Trapezoidal skull cross-section: wider at jugal/temporal cheeks (cq ~ -0.1..0.3), narrower at dorsal table
+                trap = 0.88 + 0.14 * (1.0 - max(0.0, cq) ** 1.35)
+                # Overhanging supraorbital brow shelf & canthus rostralis flare
+                brow_env = math.exp(-((z + 0.995) / 0.072) ** 2) * math.exp(-((cq - 0.58) / 0.24) ** 2)
+                canthus_env = math.exp(-((z + 1.12) / 0.065) ** 2) * math.exp(-((cq - 0.52) / 0.24) ** 2)
+                px_head = lat * (h_rx * trap + 0.011 * brow_env + 0.005 * canthus_env)
+
+                # Flattened dorsal skull table
+                if cq > 0.42:
+                    flat_top = 1.0 - 0.20 * ((cq - 0.42) / 0.58) ** 1.4
+                    py_head = cy + cq * ry_eff * flat_top + 0.003 * brow_env
+                else:
+                    py_head = cy + cq * ry_eff
+
+                # Flat horizontal upper jaw labial floor for z < -0.85 so upper skull meets sculpted mandible cleanly
+                if w_snout > 0.0 and cq < 0.05:
+                    floor_y = ym + 0.0015 * max(0.0, 1.0 + cq)
+                    clamp_t = min(1.0, max(0.0, (0.05 - cq) / 0.35)) * w_snout
+                    py_head = py_head * (1.0 - clamp_t) + max(floor_y, py_head * 0.3 + floor_y * 0.7) * clamp_t
+
+                px = (1.0 - w_head) * px + w_head * px_head
+                py = (1.0 - w_head) * py + w_head * py_head
+
+            # 2. Torso shaping: dorsoventral basking compression, lateral dermal flank fold, flat ventral plastron
+            if w_torso > 0.0:
+                flank_fold = math.exp(-((cq + 0.14) / 0.24) ** 2) * (abs(lat) ** 1.5)
+                px += lat * (0.009 * flank_fold * w_torso)
+                py -= 0.005 * flank_fold * w_torso
+                if cq < -0.45:
+                    belly_flat = ((abs(cq) - 0.45) / 0.55) ** 1.5
+                    py += 0.012 * belly_flat * w_torso
+
+            skin.v.append((px, py, z))
+            skin.uv.append((j / radial, i / max(1, n - 1)))
+            skin.w.append(ws)
+            skin.col.append(coat(c_vec, q, i))
+
+    for i in range(n - 1):
+        for j in range(radial):
+            k = start + i * (radial + 1) + j
+            skin.f.append((k, k + radial + 1, k + radial + 2, k + 1))
+    for i, reverse in [(0, True), (n - 1, False)]:
+        k = len(skin.v)
+        z, cy, _, _ = prof[i]
+        c_pt = (0.0, cy, z)
+        skin.v.append(c_pt)
+        skin.uv.append((0.5, i / max(1, n - 1)))
+        skin.w.append(body_weight(z, 'monitor'))
+        skin.col.append(coat(Vector(c_pt), 0, i))
+        r = start + i * (radial + 1)
+        for j in range(radial):
+            skin.f.append((r + j + 1, r + j, k) if reverse else (r + j, r + j + 1, k))
 
 def unify_anatomy(obj, species):
     """Union body, limb masses and paws, then recover regional skin ownership.
@@ -221,12 +310,15 @@ def unify_anatomy(obj, species):
         kd.insert(v.co,v.index)
         samples.append(({groupnames[g.group]:g.weight for g in v.groups},tuple(colors.data[v.index].color)))
     kd.balance(); active(obj)
-    remesh=obj.modifiers.new('ContinuousAnatomyUnion','REMESH'); remesh.mode='VOXEL'; remesh.voxel_size=.006 if species=='coati' else .009
+    remesh=obj.modifiers.new('ContinuousAnatomyUnion','REMESH'); remesh.mode='VOXEL'; remesh.voxel_size=.006 if species=='coati' else .0075
     remesh.use_smooth_shade=True; bpy.ops.object.modifier_apply(modifier=remesh.name)
-    smooth=obj.modifiers.new('OrganicSurfaceRelax','SMOOTH'); smooth.factor=.65; smooth.iterations=5
+    smooth=obj.modifiers.new('OrganicSurfaceRelax','SMOOTH'); smooth.factor=.65 if species=='coati' else .52; smooth.iterations=5 if species=='coati' else 4
     bpy.ops.object.modifier_apply(modifier=smooth.name)
-    dec=obj.modifiers.new('GameRetopology','DECIMATE'); dec.ratio=.46
+    dec=obj.modifiers.new('GameRetopology','DECIMATE'); dec.ratio=.46 if species=='coati' else .54
     bpy.ops.object.modifier_apply(modifier=dec.name)
+    if species=='monitor':
+        post_smooth=obj.modifiers.new('PostDecimateRelax','SMOOTH'); post_smooth.factor=.35; post_smooth.iterations=2
+        bpy.ops.object.modifier_apply(modifier=post_smooth.name)
     if species=='coati':
         # Actual skin recession around each orbit, before weight/UV recovery.
         # A smaller globe alone still sat outside the smooth skull in Godot.
@@ -273,16 +365,23 @@ def unify_anatomy(obj, species):
                 old=color.data[v.index].color
                 color.data[v.index].color=tuple(old[k]*(1-blend)+(.018,.010,.005)[k]*blend for k in range(3))+(1,)
     for p in obj.data.polygons: p.use_smooth=True
+    if not obj.data.uv_layers:
+        obj.data.uv_layers.new(name='SurfaceUV')
+    else:
+        obj.data.uv_layers.active.name='SurfaceUV'
     active(obj); bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(angle_limit=1.15,island_margin=.008)
     bpy.ops.object.mode_set(mode='OBJECT')
 
 def geometry(species,rig,mat,profile,limbs,tail):
     skin=Builder(species+'_body',rig,mat); coat=surface_color(species)
-    nodes=[((0,y,z),max(rx,.003),max(ry,.003),body_weight(z,species)) for z,y,rx,ry in interpolate_profiles(profile)]
-    skin.ringmesh(nodes,48,coat)
-    # Chain tail uses elongated transverse sections; monitor tail is laterally
-    # compressed with a swimming crest, coati tail near trunk length.
+    if species=='monitor':
+        build_monitor_anatomical_trunk(skin, profile, coat)
+    else:
+        nodes=[((0,y,z),max(rx,.003),max(ry,.003),body_weight(z,species)) for z,y,rx,ry in interpolate_profiles(profile)]
+        skin.ringmesh(nodes,48,coat)
+    # Chain tail uses elongated transverse sections; monitor tail has a heavy
+    # caudofemoralis base tapering into a laterally compressed swimming blade.
     tn=[]
     for i in range(len(tail)-1):
         for j in range(8):
@@ -297,8 +396,17 @@ def geometry(species,rig,mat,profile,limbs,tail):
             else:
                 c=Vector(tail[i]).lerp(Vector(tail[i+1]),t);ws={'Tail'+str(i+1):1}
                 if i>0 and t<.4: ws={'Tail'+str(i):.5*(1-t/.4),'Tail'+str(i+1):.5+.5*t/.4}
-            r=(.052 if species=='coati' else .11)*(1-u)**1.1+.004
-            tn.append((tuple(c),r*(.75 if species=='monitor' else 1),r*(1.25 if species=='monitor' else 1),ws))
+            if species=='monitor':
+                r=.114*(1-u)**1.05+.004
+                sacral_blend=min(1.0,u/0.16)
+                sacral_blend=sacral_blend*sacral_blend*(3.0-2.0*sacral_blend)
+                caudofemoral=max(0.0,1.0-u/0.26)
+                rx_tail=r*(0.72+0.30*caudofemoral)
+                ry_tail=r*(0.88*(1.0-sacral_blend)+1.26*sacral_blend)
+                tn.append((tuple(c),rx_tail,ry_tail,ws))
+            else:
+                r=.052*(1-u)**1.1+.004
+                tn.append((tuple(c),r,r,ws))
     tn.append((tail[-1],.001,.001,{'Tail'+str(len(tail)-1):1}))
     def tailcol(c,q,i):
         if species=='coati':
@@ -309,55 +417,99 @@ def geometry(species,rig,mat,profile,limbs,tail):
     for side,front,h,k,f in limbs:
         names=('UpperArm','Forearm','Hand') if front else ('Thigh','Shin','Foot')
         a,b,c=[n+'_'+side for n in names]
-        # Strong upper masses, tapering wrists, leg segments align with skeleton.
-        radii=((.052,.032,.022) if front else (.072,.036,.025)) if species=='coati' else ((.072,.043,.026) if front else (.087,.052,.030))
+        # Strong upper masses, muscular forearm/calf bellies, tapering wrists/ankles.
+        radii=((.052,.032,.022) if front else (.072,.036,.025)) if species=='coati' else ((.076,.046,.028) if front else (.094,.055,.032))
         ln=[]
         for seg,(p0,p1,r0,r1) in enumerate([(h,k,radii[0],radii[1]),(k,f,radii[1],radii[2])]):
             for j in range(9):
                 if seg==1 and j==0: continue
                 t=j/8; p=p0.lerp(p1,t); r=r0*(1-t)+r1*t
-                if seg==0: r*=1+.20*math.sin(math.pi*t)
+                if seg==0:
+                    r*=1+(.20 if species=='coati' else .25)*math.sin(math.pi*t)
+                elif species=='monitor':
+                    r*=1+.16*math.sin(math.pi*(t**0.75))
                 if seg==0: ws={a:1-max(0,(t-.65)/.35)*.5,b:max(0,(t-.65)/.35)*.5}
                 else: ws={a:max(0,(.35-t)/.35)*.5,b:1-max(0,(.35-t)/.35)*.5}
-                ln.append((tuple(p),r,r*.88,ws))
+                ln.append((tuple(p),r,r*(.88 if species=='coati' else .92),ws))
         skin.ringmesh(ln,24,(.29,.14,.06,1) if species=='coati' else (.072,.064,.043,1))
         limbcolor=(.29,.14,.06,1) if species=='coati' else (.072,.064,.043,1)
-        joint_r=.040 if species=='coati' else .060
-        skin.ellipsoid(tuple(k),(joint_r,joint_r,joint_r),{a:.5,b:.5},limbcolor)
-        shoulder_r=(.069 if front else .088) if species=='coati' else .076
-        skin.ellipsoid(tuple(h),(shoulder_r*.85,shoulder_r,shoulder_r*1.16),{a:.75,('Chest' if front else 'Pelvis'):.25},limbcolor)
-        skin.ellipsoid(tuple(f+Vector((0,-(.027 if species=='coati' else .025),-.025))),(.039,.028,.065) if species=='coati' else (.059,.025,.074),{c:1},(.105,.07,.035,1) if species=='coati' else (.075,.068,.047,1))
-        # Five individually rounded articulated-looking digits and hooked claws.
-        s=1 if side=='L' else -1
-        for digit in range(5):
-            spread=(digit-2)*(.014 if species=='coati' else .026)
-            length=(.05 if species=='coati' else .085)*(1-.14*abs(digit-2))
-            p=f+Vector((spread,.0,-.065)); end=p+Vector((spread*.40,-.008,-length))
-            skin.ringmesh([(tuple(p),.011,.012,{c:1}),(tuple(p.lerp(end,.5)),.010,.010,{c:1}),(tuple(end),.006,.006,{c:1})],12,(.16,.10,.052,1) if species=='coati' else (.083,.074,.052,1))
-            claws=Builder(species+'_claw_'+c+str(digit),rig,MATS['claw'])
-            claws.ringmesh([(tuple(end),.006,.006,{c:1}),(tuple(end+Vector((0,-.006,-.02))),.004,.004,{c:1}),(tuple(end+Vector((0,-.040,-.028))),.0005,.0005,{c:1})],10)
-            claws.build()
+        joint_r=.040 if species=='coati' else (.044 if front else .050)
+        skin.ellipsoid(tuple(k),(joint_r,joint_r*.92,joint_r),{a:.5,b:.5},limbcolor)
+        shoulder_r=(.069 if front else .088) if species=='coati' else (.082 if front else .096)
+        skin.ellipsoid(tuple(h),(shoulder_r*.88,shoulder_r,shoulder_r*1.18),{a:.75,('Chest' if front else 'Pelvis'):.25},limbcolor)
+        if species=='coati':
+            skin.ellipsoid(tuple(f+Vector((0,-.027,-.025))),(.039,.028,.065),{c:1},(.105,.07,.035,1))
+            s=1 if side=='L' else -1
+            for digit in range(5):
+                spread=(digit-2)*.014
+                length=.05*(1-.14*abs(digit-2))
+                p=f+Vector((spread,.0,-.065)); end=p+Vector((spread*.40,-.008,-length))
+                skin.ringmesh([(tuple(p),.011,.012,{c:1}),(tuple(p.lerp(end,.5)),.010,.010,{c:1}),(tuple(end),.006,.006,{c:1})],12,(.16,.10,.052,1))
+                claws=Builder(species+'_claw_'+c+str(digit),rig,MATS['claw'])
+                claws.ringmesh([(tuple(end),.006,.006,{c:1}),(tuple(end+Vector((0,-.006,-.02))),.004,.004,{c:1}),(tuple(end+Vector((0,-.040,-.028))),.0005,.0005,{c:1})],10)
+                claws.build()
+        else:
+            # Broad plantigrade metapodial palm/sole pad; the 5 distinct articulated digits
+            # are built after unify_anatomy so voxel remeshing never melts toes together.
+            skin.ellipsoid(tuple(f+Vector((0,-.022,-.018))),(.050,.020,.054),{c:1},(.075,.068,.047,1))
     if species=='coati':
         for side in [-1,1]:
             skin.ellipsoid((side*.037,.382,-.665),(.017,.011,.055),{'Head':.35,'Snout':.65},(.39,.34,.26,1))
     body=skin.build(); unify_anatomy(body,species)
     if species=='monitor':
-        from monitor_pigment_solo import bake_pigment
-        bake_pigment(body,mat,ROOT/'game/assets/guardians/great_ground',profile)
-    if species=='monitor':
-        from monitor_surface_solo import face
-        face(Builder,rig,body,mat,MATS)
+        from monitor_pigment_solo import apply_3d_dermal_relief, bake_pigment
+        from monitor_surface_solo import build_digits_and_claws, face
+        from monitor_animation_v3 import lids
         from monitor_scutes_solo import scutes
-        scutes(Builder,rig,body,mat)
+
+        apply_3d_dermal_relief(body, amplitude=0.00015)
+        # Scale body's clean smart_project UVs into [0.002, 0.998] x [0.002, 0.745] so the trunk/head/limbs get 75% of the 2048x2048 map
+        for loop_uv in body.data.uv_layers.active.data:
+            loop_uv.uv = (0.002 + loop_uv.uv[0] * 0.996, 0.002 + loop_uv.uv[1] * 0.743)
+
+        digits_ob = build_digits_and_claws(Builder, rig, mat, MATS, limbs)
+        skin_face_parts = face(Builder, rig, body, mat, MATS)
+        blink_lids = lids(Builder, rig, mat)
+        osteoderms_ob = scutes(Builder, rig, body, mat, tail)
+
+        # Unwrap only the small orbital/naris/aural rings into [0.650, 0.716] x [0.760, 0.990],
+        # preserving the huge un-fragmented parametric UV grids of digits_ob and skin_face_parts[0] (mandible).
+        small_rings = [p for p in [*skin_face_parts[1:], *blink_lids] if p is not None]
+        if small_rings:
+            active(small_rings[0])
+            for part in small_rings[1:]:
+                part.select_set(True)
+            if len(small_rings) > 1:
+                bpy.ops.object.join()
+            rings_ob = small_rings[0]
+            active(rings_ob)
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.uv.smart_project(angle_limit=1.15, island_margin=0.004)
+            bpy.ops.object.mode_set(mode='OBJECT')
+            for loop_uv in rings_ob.data.uv_layers.active.data:
+                loop_uv.uv = (0.650 + loop_uv.uv[0] * 0.066, 0.760 + loop_uv.uv[1] * 0.230)
+        else:
+            rings_ob = None
+
+        # Join digits, sculpted mandible, small facial rings, and grid-mapped osteoderms into body
+        active(body)
+        digits_ob.select_set(True)
+        if skin_face_parts and skin_face_parts[0] is not None:
+            skin_face_parts[0].select_set(True)
+        if rings_ob is not None:
+            rings_ob.select_set(True)
+        if osteoderms_ob is not None:
+            osteoderms_ob.select_set(True)
+        bpy.ops.object.join()
+
+        bake_pigment(body, mat, ROOT / 'game/assets/guardians/great_ground', profile)
     # Face includes actual eyeballs, eyelid/socket shapes, nostrils and lips.
     eye_z=-.493 if species=='coati' else -1.00
     eye_y=.47 if species=='coati' else .326
     eye_x=.082 if species=='coati' else .087
     eye_r=.011 if species=='coati' else .013
     for s in [-1,1]:
-        if False:
-            sockets=Builder(species+'_orbital_ridge_'+str(s),rig,mat)
-            sockets.ellipsoid((s*eye_x,eye_y,eye_z),(.023,.025,.033),{'Head':1},(.33,.34,.23,1)); sockets.build()
         eye=Builder(species+'_eye_'+str(s),rig,MATS['eye'])
         eye.ellipsoid((s*(eye_x+(.001 if species=='coati' else -.001)),eye_y,eye_z-.006),(eye_r*.65,eye_r,eye_r),{'Head':1},(.035,.025,.014,1) if species=='coati' else (.014,.010,.006,1))
         eye.build()
@@ -366,21 +518,16 @@ def geometry(species,rig,mat,profile,limbs,tail):
             curved_eye(Builder,rig,MATS,s)
         else:
             iris=Builder(species+'_iris_'+str(s),rig,MATS['iris'])
-            iris.ellipsoid((s*(eye_x+(.0072 if species=='coati' else .0052)),eye_y,eye_z-(.009 if species=='coati' else .006)),(.0008 if species=='coati' else .0006,eye_r*(.64 if species=='coati' else .40),eye_r*(.65 if species=='coati' else .40)),{'Head':1})
+            iris.ellipsoid((s*(eye_x+.0072),eye_y,eye_z-.009),(.0008,eye_r*.64,eye_r*.65),{'Head':1})
             iris.build()
             pupil=Builder(species+'_pupil_'+str(s),rig,MATS['eye'])
-            pupil.ellipsoid((s*(eye_x+(.0078 if species=='coati' else .0062)),eye_y,eye_z-(.009 if species=='coati' else .006)),(.0006 if species=='coati' else .0005,eye_r*(.40 if species=='coati' else .25),eye_r*(.39 if species=='coati' else .24)),{'Head':1})
+            pupil.ellipsoid((s*(eye_x+.0078),eye_y,eye_z-.009),(.0006,eye_r*.40,eye_r*.39),{'Head':1})
             pupil.build()
-        nostril=Builder(species+'_nostril_'+str(s),rig,MATS['eye'])
-        nz=-.825 if species=='coati' else -1.188; ny=.376 if species=='coati' else .306; nx=.026 if species=='coati' else .063
-        if species=='monitor':
-            hit,loc,norm,index=body.ray_cast(Vector((s*.3,ny,nz)),Vector((-s,0,0)),distance=1)
-            if hit: nx=abs(loc.x)+.0003
-        nostril.ellipsoid((s*nx,ny,nz),(.002,.006,.009),{'Snout' if species=='coati' else 'Head':1})
-        nostril.build()
-        # Mouth line is a narrow actual surface, not a painted abstraction.
-        lip=Builder(species+'_mouth_'+str(s),rig,MATS['mouth'])
-        if species=='coati':
+            nostril=Builder(species+'_nostril_'+str(s),rig,MATS['eye'])
+            nz=-.825; ny=.376; nx=.026
+            nostril.ellipsoid((s*nx,ny,nz),(.002,.006,.009),{'Snout':1})
+            nostril.build()
+            lip=Builder(species+'_mouth_'+str(s),rig,MATS['mouth'])
             lp=[]
             for j in range(21):
                 z=-.788+j*(.288/20)
@@ -388,25 +535,12 @@ def geometry(species,rig,mat,profile,limbs,tail):
                 y=(min(nearby)+.012) if nearby else .355
                 hit,loc,norm,index=body.ray_cast(Vector((s*.25,y,z)),Vector((-s,0,0)),distance=1)
                 lp.append((loc.x+s*.0004,y,z) if hit else (s*.021,y,z))
-        else:
-            lp=[]
-            for j in range(25):
-                z=-1.25+j*.34/24; y=.258+(z+1.25)*.045
-                hit,loc,norm,index=body.ray_cast(Vector((s*.3,y,z)),Vector((-s,0,0)),distance=1)
-                lp.append((loc.x+s*.0004,y,z) if hit else (s*.05,y,z))
-        lipradius=.0013 if species=='coati' else .0014
-        lip.ringmesh([(p,lipradius,lipradius,{'Jaw':1}) for p in lp],8); lip.build()
-        if species=='coati':
-            pass  # Coati-only cup geometry is authored below, not a disc pair.
-        else:
-            opening=Builder('monitor_ear_opening_'+str(s),rig,MATS['mouth'])
-            opening.ellipsoid((s*.095,.30,-.88),(.001,.011,.009),{'Head':1}); opening.build()
-    # Lower jaw has its own bone and underside, so feeding moves a jaw.
-    jaw=Builder(species+'_mandible',rig,mat)
-    if species=='coati': jaw.ellipsoid((0,.366,-.645),(.035,.014,.140),{'Jaw':1},(.34,.28,.20,1))
-    else: jaw.ellipsoid((0,.247,-1.08),(.061,.015,.164),{'Jaw':1},(.29,.28,.18,1))
-    jaw.build()
+            lipradius=.0013
+            lip.ringmesh([(p,lipradius,lipradius,{'Jaw':1}) for p in lp],8); lip.build()
     if species=='coati':
+        jaw=Builder(species+'_mandible',rig,mat)
+        jaw.ellipsoid((0,.366,-.645),(.035,.014,.140),{'Jaw':1},(.34,.28,.20,1))
+        jaw.build()
         from coati_surface_v2 import cup_ears,lids_and_muzzle,surface_fur
         ears=cup_ears(Builder,rig,mat); lids_and_muzzle(Builder,rig,mat,MATS,body)
         pads=[o for o in bpy.data.objects if o.type=='MESH' and o.name.startswith('coati_muzzle_pad_')]
@@ -424,6 +558,24 @@ def consolidate_material_meshes(species):
         for ob in objects: ob.select_set(True)
         if len(objects)>1: bpy.ops.object.join()
         bpy.context.object.name=species+'_'+name
+
+def normalize_all_skin_weights():
+    for ob in bpy.data.objects:
+        if ob.type!='MESH' or not ob.vertex_groups: continue
+        for v in ob.data.vertices:
+            pairs=[(g.group,g.weight) for g in v.groups if g.weight>1e-6]
+            if not pairs:
+                ob.vertex_groups[0].add([v.index],1.0,'REPLACE')
+                continue
+            pairs.sort(key=lambda p:-p[1])
+            keep=pairs[:4]
+            keep_ids={g_id for g_id,_ in keep}
+            for g in list(v.groups):
+                if g.group not in keep_ids:
+                    ob.vertex_groups[g.group].remove([v.index])
+            total=sum(w for _,w in keep) or 1.0
+            for g_id,w in keep:
+                ob.vertex_groups[g_id].add([v.index],w/total,'REPLACE')
 
 def set_bone_segment(rig,name,h,t):
     pb=rig.pose.bones[name]; rest=rig.data.bones[name]
@@ -497,7 +649,8 @@ def animations(species,rig,limbs,tail):
                     rig.pose.bones['Head'].rotation_quaternion=world_rotation('Head',(0,1,0),look)*world_rotation('Head',(1,0,0),.009*math.sin(phase))
                     rig.pose.bones['Neck'].rotation_quaternion=world_rotation('Neck',(0,1,0),-.012*math.sin(phase))
                 flick=(max(0,min(1,(t-.265)/.018))*max(0,min(1,(.365-t)/.082))) if name=='idle' else 0
-                rig.pose.bones['Tongue'].scale=(1,max(.002,flick),1)
+                rig.pose.bones['Tongue'].location=(0,0.145*flick,0)
+                rig.pose.bones['Tongue'].scale=(1,1.0+0.35*flick,1)
                 if flick>0:rig.pose.bones['Jaw'].rotation_quaternion=world_rotation('Jaw',(1,0,0),-.025*flick)
             if name=='feed':
                 dip=(1-math.cos(phase))*.5
@@ -646,44 +799,40 @@ def generate(species):
         from coati_animation_v3 import lids
         lids(Builder,rig,mat)
     if species=='monitor':
-        from monitor_animation_v3 import lids
-        lids(Builder,rig,mat)
+        # Retracted-in-mouth rest tongue so rest/bind pose has a clean closed snout,
+        # darting forward out of the parted jaws during the idle tongue-flick.
         tongue=Builder('monitor_forked_tongue',rig,MATS['tongue'])
-        tongue.ringmesh([((0,.269,-1.238),.0035,.0015,{'Tongue':1}),((0,.268,-1.31),.003,.0013,{'Tongue':1}),((0,.267,-1.35),.0025,.001,{'Tongue':1})],10)
-        for side in [-1,1]: tongue.ringmesh([((side*.0015,.267,-1.345),.0017,.0008,{'Tongue':1}),((side*.012,.264,-1.375),.0004,.0004,{'Tongue':1})],8)
+        tongue.ringmesh([((0,.268,-1.095),.0035,.0015,{'Tongue':1}),((0,.268,-1.155),.003,.0013,{'Tongue':1}),((0,.267,-1.200),.0024,.001,{'Tongue':1})],10)
+        for side in [-1,1]: tongue.ringmesh([((side*.0014,.267,-1.196),.0016,.0008,{'Tongue':1}),((side*.011,.265,-1.232),.0004,.0004,{'Tongue':1})],8)
         tongue.build()
-    if species=='monitor':lift_monitor_anatomy(rig);clean_monitor_triangles()
-    consolidate_material_meshes(species); print('GROUND_ART_MESH '+species,flush=True)
+    if species=='monitor':
+        lift_monitor_anatomy(rig)
+        clean_monitor_triangles()
+    consolidate_material_meshes(species)
+    normalize_all_skin_weights()
+    print('GROUND_ART_MESH '+species,flush=True)
     acts,animreport=animations(species,rig,limbs,tail)
     rig['authored_axes']='Y up; -Z forward; runtime +90X'; rig['walk_stride_m']=.32 if species=='coati' else .40
-    rig['walk_cycle_seconds']=(24 if species=='coati' else 32)/24; rig['art_revision']='monitor-solo-v15'
+    rig['walk_cycle_seconds']=(24 if species=='coati' else 32)/24; rig['art_revision']='monitor-solo-v16'
     # Save editable source before the studio objects are created.
     for obj in bpy.data.objects:
         if obj.type=='MESH': obj.data.validate(verbose=True,clean_customdata=False)
     bpy.ops.wm.save_as_mainfile(filepath=str(out/'guardian.blend'))
     bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.export_scene.gltf(filepath=str(out/'guardian.glb'),export_format='GLB',use_selection=True,export_animations=True,export_skins=True,export_animation_mode='ACTIONS',export_force_sampling=True,export_frame_range=False,export_apply=False,export_extras=True,export_materials='EXPORT',export_vertex_color='ACTIVE')
-    audit=glb_audit(out/'guardian.glb'); audit['animation_contact_audit']=animreport
+    tmp_glb=out/'guardian_tmp.glb'; final_glb=out/'guardian.glb'
+    if tmp_glb.exists(): tmp_glb.unlink()
+    bpy.ops.export_scene.gltf(filepath=str(tmp_glb),export_format='GLB',use_selection=True,export_animations=True,export_skins=True,export_animation_mode='ACTIONS',export_force_sampling=True,export_frame_range=False,export_apply=False,export_extras=True,export_materials='EXPORT',export_vertex_color='ACTIVE')
+    import time,shutil
+    for _ in range(10):
+        try:
+            os.replace(tmp_glb,final_glb); break
+        except OSError:
+            try:
+                shutil.copyfile(tmp_glb,final_glb); tmp_glb.unlink(); break
+            except OSError:
+                time.sleep(0.25)
+    audit=glb_audit(final_glb); audit['animation_contact_audit']=animreport
     (folder/'audit.json').write_text(json.dumps(audit,indent=2))
     print('GROUND_ART_AUDIT '+json.dumps(audit),flush=True)
     if os.environ.get('GROUND_ART_SKIP_EVIDENCE')!='1': render_evidence(species,rig,acts,folder)
     print('GROUND_ART_COMPLETE '+species,flush=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

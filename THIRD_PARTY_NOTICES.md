@@ -19,3 +19,5 @@ Apart from the CC0 textures above, no third-party art, audio, fonts beyond Godot
 services are used. The textures are public domain and need no attribution; ambientCG and Poly Haven are credited anyway.
 
 .NET runtime license: https://github.com/dotnet/runtime/blob/main/LICENSE.TXT (MIT, Copyright (c) .NET Foundation and Contributors).
+
+Loam look-development fixture (2026-10-22): ScatteredLeaves007 4K PNG Color, NormalGL, Roughness and Opacity maps by ambientCG / Lennart Demes, CC0 1.0. Source https://ambientcg.com/view?id=ScatteredLeaves007 ; archive https://ambientcg.com/get?file=ScatteredLeaves007_4K-PNG.zip . Existing 1K maps remain unchanged.

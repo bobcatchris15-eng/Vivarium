@@ -1,0 +1,1375 @@
+[
+  {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\armored_forest\\guardian.glb",
+    "bytes": 45062476,
+    "triangles": 244006,
+    "skin_joint_counts": [
+      32
+    ],
+    "primitives": [
+      {
+        "mesh": "ClosedOverlappingArmor",
+        "vertices": 98000,
+        "triangles": 192500,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 2108,
+        "triangles": 3736,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 1390,
+        "triangles": 2520,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 466,
+        "triangles": 880,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 310,
+        "triangles": 576,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 553,
+        "triangles": 1008,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "FaceDigitsClaws",
+        "vertices": 29,
+        "triangles": 48,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PangolinContinuousSkin",
+        "vertices": 21371,
+        "triangles": 42738,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "AmberKeratin",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "PangolinSkin",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "DarkClaw",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "GlossEye",
+        "roughness": 0.029999999329447746,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "WarmIris",
+        "roughness": 0.18000000715255737,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "Mouth",
+        "roughness": 0.7200000286102295,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "Tongue",
+        "roughness": 0.3799999952316284,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      }
+    ],
+    "animations": [
+      {
+        "name": "idle",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      },
+      {
+        "name": "walk",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      },
+      {
+        "name": "feed",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      },
+      {
+        "name": "rest",
+        "duration": 1.9999999832361937,
+        "channels": 96
+      }
+    ],
+    "image_count": 9,
+    "failures": [],
+    "warnings": [],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  },
+  {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\canopy_serpent\\guardian.glb",
+    "bytes": 14283264,
+    "triangles": 44669,
+    "skin_joint_counts": [
+      37
+    ],
+    "primitives": [
+      {
+        "mesh": "BoaEyesPitsTeethMarkings",
+        "vertices": 1382,
+        "triangles": 2432,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaEyesPitsTeethMarkings",
+        "vertices": 42,
+        "triangles": 40,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaEyesPitsTeethMarkings",
+        "vertices": 336,
+        "triangles": 320,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaEyesPitsTeethMarkings",
+        "vertices": 810,
+        "triangles": 1432,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaEyesPitsTeethMarkings",
+        "vertices": 378,
+        "triangles": 616,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaEyesPitsTeethMarkings",
+        "vertices": 74,
+        "triangles": 124,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaHeadAndJaw",
+        "vertices": 5928,
+        "triangles": 10303,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaHeadAndJaw",
+        "vertices": 4100,
+        "triangles": 7998,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaMuscularBody",
+        "vertices": 8054,
+        "triangles": 15188,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "BoaMuscularBody",
+        "vertices": 3345,
+        "triangles": 6216,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "BoaEyeGold",
+        "roughness": 0.18000000715255737,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "BoaPupil",
+        "roughness": 0.1599999964237213,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "BoaLabialPit",
+        "roughness": 0.949999988079071,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "BoaMouth",
+        "roughness": 0.7799999713897705,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "IvoryTeeth",
+        "roughness": 0.4399999976158142,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "BoaForkedTongue",
+        "roughness": 0.3799999952316284,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "BoaDorsalScales",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "BoaVentralScutes",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_specular"
+        ]
+      }
+    ],
+    "animations": [
+      {
+        "name": "idle",
+        "duration": 2.0,
+        "channels": 111
+      },
+      {
+        "name": "walk",
+        "duration": 2.0,
+        "channels": 111
+      },
+      {
+        "name": "slither",
+        "duration": 2.0,
+        "channels": 111
+      },
+      {
+        "name": "feed",
+        "duration": 2.0,
+        "channels": 111
+      },
+      {
+        "name": "rest",
+        "duration": 2.0,
+        "channels": 111
+      }
+    ],
+    "image_count": 6,
+    "failures": [],
+    "warnings": [],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  },
+  {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\crested_canopy\\guardian.glb",
+    "bytes": 21432076,
+    "triangles": 380992,
+    "skin_joint_counts": [
+      25
+    ],
+    "primitives": [
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 78080,
+        "triangles": 146500,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 19277,
+        "triangles": 36028,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 52161,
+        "triangles": 69612,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 2232,
+        "triangles": 4200,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 2750,
+        "triangles": 4820,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 2559,
+        "triangles": 3862,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 982,
+        "triangles": 1680,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 2149,
+        "triangles": 3596,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 43508,
+        "triangles": 84114,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "HoatzinAnatomy",
+        "vertices": 14362,
+        "triangles": 26580,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "FlightChestnut",
+        "roughness": 0.5799999833106995,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "BuffCrop",
+        "roughness": 0.7599999904632568,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "RufousCrest",
+        "roughness": 0.5,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "BuffStreak",
+        "roughness": 0.5600000023841858,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "BlueOrbitalSkin",
+        "roughness": 0.5799999833106995,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "HornBillAndScutes",
+        "roughness": 0.46000000834465027,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "RedIris",
+        "roughness": 0.05999999865889549,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "WetPupilAndMouth",
+        "roughness": 0.019999999552965164,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "DarkUnderplumage",
+        "roughness": 0.699999988079071,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "StreakedContour",
+        "roughness": 0.6000000238418579,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      }
+    ],
+    "animations": [
+      {
+        "name": "feed",
+        "duration": 3.999999839812517,
+        "channels": 75
+      },
+      {
+        "name": "idle",
+        "duration": 3.999999839812517,
+        "channels": 75
+      },
+      {
+        "name": "rest",
+        "duration": 3.999999839812517,
+        "channels": 75
+      },
+      {
+        "name": "walk",
+        "duration": 0.9999999590218067,
+        "channels": 75
+      }
+    ],
+    "image_count": 12,
+    "failures": [],
+    "warnings": [],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  },
+  {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\great_ground\\guardian.glb",
+    "bytes": 13415136,
+    "triangles": 121395,
+    "skin_joint_counts": [
+      40
+    ],
+    "primitives": [
+      {
+        "mesh": "monitor_iris_curved_-1",
+        "vertices": 866,
+        "triangles": 1632,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_claw_Foot_L0",
+        "vertices": 2740,
+        "triangles": 5040,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_nostril_pit_-1",
+        "vertices": 1162,
+        "triangles": 2208,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_body",
+        "vertices": 62048,
+        "triangles": 109127,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "COLOR_1",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_forked_tongue",
+        "vertices": 75,
+        "triangles": 124,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "monitor_eye_-1",
+        "vertices": 1720,
+        "triangles": 3264,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "AmberIris",
+        "roughness": 0.2199999988079071,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "Keratin",
+        "roughness": 0.4000000059604645,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "LipCrease",
+        "roughness": 0.6800000071525574,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "MonitorAnatomicalPigmentPBR",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": [
+          "KHR_materials_clearcoat",
+          "KHR_materials_specular"
+        ]
+      },
+      {
+        "name": "MonitorTongue",
+        "roughness": 0.36000001430511475,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "WetCornea",
+        "roughness": 0.11999999731779099,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      }
+    ],
+    "animations": [
+      {
+        "name": "feed",
+        "duration": 3.0000000782310963,
+        "channels": 120
+      },
+      {
+        "name": "idle",
+        "duration": 2.5000000782310963,
+        "channels": 120
+      },
+      {
+        "name": "rest",
+        "duration": 2.5000000782310963,
+        "channels": 120
+      },
+      {
+        "name": "walk",
+        "duration": 1.33333333209157,
+        "channels": 120
+      }
+    ],
+    "image_count": 3,
+    "failures": [],
+    "warnings": [],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  },
+  {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\quilled_arboreal\\guardian.glb",
+    "bytes": 16062972,
+    "triangles": 242436,
+    "skin_joint_counts": [
+      30
+    ],
+    "primitives": [
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 133491,
+        "triangles": 96208,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 44800,
+        "triangles": 62216,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 1386,
+        "triangles": 2336,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 646,
+        "triangles": 1056,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 1500,
+        "triangles": 2432,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 1490,
+        "triangles": 2156,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 29085,
+        "triangles": 38780,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 23240,
+        "triangles": 32536,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "PorcupineAnatomy",
+        "vertices": 2705,
+        "triangles": 4716,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "DenseUnderfur",
+        "roughness": 0.9200000166893005,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "BandedQuills",
+        "roughness": 0.3799999952316284,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "NoseEarsAndGripSkin",
+        "roughness": 0.5799999833106995,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "WetEyePupil",
+        "roughness": 0.05000000074505806,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "ClawsNostrilsAndMouth",
+        "roughness": 0.2800000011920929,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "WhiskersAndIncisors",
+        "roughness": 0.18000000715255737,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "BandedQuillsCrown",
+        "roughness": 0.4000000059604645,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "BandedQuillsFlank",
+        "roughness": 0.4000000059604645,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "PawAndGripSkin",
+        "roughness": 0.6499999761581421,
+        "albedo_texture": true,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      }
+    ],
+    "animations": [
+      {
+        "name": "feed",
+        "duration": 2.0,
+        "channels": 90
+      },
+      {
+        "name": "idle",
+        "duration": 2.0,
+        "channels": 90
+      },
+      {
+        "name": "rest",
+        "duration": 2.0,
+        "channels": 90
+      },
+      {
+        "name": "walk",
+        "duration": 0.75,
+        "channels": 90
+      }
+    ],
+    "image_count": 8,
+    "failures": [],
+    "warnings": [],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  },
+  {
+    "asset": "E:\\Vivarium\\game\\assets\\guardians\\woodland_omnivore\\guardian.glb",
+    "bytes": 14287084,
+    "triangles": 177502,
+    "skin_joint_counts": [
+      33
+    ],
+    "primitives": [
+      {
+        "mesh": "coati_iris_-1",
+        "vertices": 854,
+        "triangles": 1632,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "coati_body",
+        "vertices": 93376,
+        "triangles": 160278,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "TEXCOORD_1",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 45,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "coati_body",
+        "vertices": 93376,
+        "triangles": 7048,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "TEXCOORD_1",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "coati_fine_skinned_fur",
+        "vertices": 160,
+        "triangles": 96,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "coati_nasal_pad",
+        "vertices": 863,
+        "triangles": 1680,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "coati_claw_Foot_L0",
+        "vertices": 700,
+        "triangles": 1200,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "coati_mouth_-1",
+        "vertices": 382,
+        "triangles": 672,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      },
+      {
+        "mesh": "coati_eye_-1",
+        "vertices": 2562,
+        "triangles": 4896,
+        "attributes": [
+          "POSITION",
+          "NORMAL",
+          "TEXCOORD_0",
+          "COLOR_0",
+          "JOINTS_0",
+          "WEIGHTS_0"
+        ],
+        "degenerate_triangles": 0,
+        "invalid_weight_sums": 0
+      }
+    ],
+    "materials": [
+      {
+        "name": "AmberIris",
+        "roughness": 0.2199999988079071,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "coati_PBR",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "CoatiVibrissae",
+        "roughness": 0.9100000262260437,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "CoatiWetNasalPad",
+        "roughness": 0.3700000047683716,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": true,
+        "extensions": []
+      },
+      {
+        "name": "Keratin",
+        "roughness": 0.4000000059604645,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "LipCrease",
+        "roughness": 0.6800000071525574,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "WetCornea",
+        "roughness": 0.11999999731779099,
+        "albedo_texture": false,
+        "roughness_texture": false,
+        "normal_texture": false,
+        "extensions": []
+      },
+      {
+        "name": "CoatiFacialDetailPreserved",
+        "roughness": 1,
+        "albedo_texture": true,
+        "roughness_texture": true,
+        "normal_texture": true,
+        "extensions": []
+      }
+    ],
+    "animations": [
+      {
+        "name": "feed",
+        "duration": 3.0000000782310963,
+        "channels": 99
+      },
+      {
+        "name": "idle",
+        "duration": 2.5000000782310963,
+        "channels": 99
+      },
+      {
+        "name": "rest",
+        "duration": 2.5000000782310963,
+        "channels": 99
+      },
+      {
+        "name": "walk",
+        "duration": 0.9999999590218067,
+        "channels": 99
+      }
+    ],
+    "image_count": 5,
+    "failures": [],
+    "warnings": [
+      "coati_body has 45 degenerate triangles"
+    ],
+    "integrity_passed": true,
+    "visual_acceptance": "Requires rendered anatomy, material, contact and motion review"
+  }
+]

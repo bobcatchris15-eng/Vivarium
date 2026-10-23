@@ -15,6 +15,7 @@ namespace Vivarium.Game.Render;
 /// </summary>
 public partial class SoilDetailRenderer : Node3D
 {
+    public LoamSurfaceDetailRenderer LoamDetails { get; private set; } = null!;
     private VivariumWorld _w = null!;
     private MultiMesh _crumbs = null!, _clods = null!, _twigs = null!, _flakes = null!, _fruit = null!, _blades = null!, _stalks = null!;
     private MultiMeshInstance3D _crumbMmi = null!, _clodMmi = null!, _twigMmi = null!, _flakeMmi = null!, _fruitMmi = null!, _bladeMmi = null!, _stalkMmi = null!;
@@ -46,6 +47,9 @@ public partial class SoilDetailRenderer : Node3D
         _w = w;
         _buffers.Clear();
         foreach (var c in GetChildren()) c.QueueFree();
+        LoamDetails = new LoamSurfaceDetailRenderer { Name = "LoamSurfaceDetails", Camera = Camera, Quality = Quality };
+        AddChild(LoamDetails);
+        LoamDetails.Build(w);
 
         var mat = new StandardMaterial3D
         {
@@ -82,9 +86,13 @@ public partial class SoilDetailRenderer : Node3D
     {
         using var prof = FrameProfiler.Measure("SoilDetail");
         if (_w == null) return;
+        LoamDetails.Camera = Camera;
+        LoamDetails.Quality = Quality;
         bool enabled = Quality > 0;
         _flakeMmi.CastShadow = Quality >= 2 ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
         _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = _fruitMmi.Visible = _bladeMmi.Visible = _stalkMmi.Visible = enabled;
+        // New scanned litter and irregular aggregates replace these four legacy dressing batches.
+        _crumbMmi.Visible = _clodMmi.Visible = _twigMmi.Visible = _flakeMmi.Visible = false;
         if (!enabled) { _refresh?.Dispose(); _refresh = null; _accum = 999; return; }
         if (_refresh != null)
         {
@@ -127,7 +135,8 @@ public partial class SoilDetailRenderer : Node3D
         int i1 = Mathf.Min(g.Nx - 1, (int)((cam.X + CullRadius - g.OriginX) / g.CellSize));
         int j0 = Mathf.Max(0, (int)((cam.Z - CullRadius - g.OriginZ) / g.CellSize));
         int j1 = Mathf.Min(g.Nz - 1, (int)((cam.Z + CullRadius - g.OriginZ) / g.CellSize));
-        int stride = Quality >= 2 ? 1 : 2;
+        // Refresh may combine 2x2 cells at normal quality. Every contributing cell must invalidate it.
+        int stride = 1;
         long hash = 17;
         for (int j = j0 - j0 % stride; j <= j1; j += stride)
         for (int i = i0 - i0 % stride; i <= i1; i += stride)
@@ -378,6 +387,8 @@ public partial class SoilDetailRenderer : Node3D
                     Place(_stalkXf, _stalkCol, g, p, ref rng, baseGreen.Lerp(new Color(0.62f, 0.56f, 0.30f), 0.30f), 0.78f, 1.28f, DetailKind.Stalk, cellTilt, nearRocks, nearLogs, nearGravel);
             }
 
+            // These details are supplied by the new camera-local loam layer.
+            crumbCount = clodCount = twigCount = flakeCount = 0;
             for (int k = 0; k < crumbCount; k++) Place(_crumbXf, _crumbCol, g, p, ref rng, soilTint, 0.7f, 1.3f, DetailKind.Crumb, cellTilt, nearRocks, nearLogs, nearGravel);
             for (int k = 0; k < clodCount; k++) Place(_clodXf, _clodCol, g, p, ref rng, soilTint * 1.05f, 0.7f, 1.4f, DetailKind.Clod, cellTilt, nearRocks, nearLogs, nearGravel);
             for (int k = 0; k < twigCount; k++) Place(_twigXf, _twigCol, g, p, ref rng, twigTint, 0.6f, 1.3f, DetailKind.Twig, cellTilt, nearRocks, nearLogs, nearGravel);

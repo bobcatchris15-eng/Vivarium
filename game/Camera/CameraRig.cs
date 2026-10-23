@@ -3,6 +3,7 @@ using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Observation;
 using Vivarium.Sim.World;
+using Vivarium.Game.Render;
 
 namespace Vivarium.Game.Camera;
 
@@ -32,6 +33,11 @@ public partial class CameraRig : Node3D
     public bool Focused { get; private set; }
     private Func<Vector3>? _focusTarget;
     private float _orbitDistance = 1.2f;
+    private float _focusDistance = 2.5f;
+    public float FocusDistance => _focusDistance;
+    private Vector3? _orbitTarget;
+    public Vector3? OrbitTarget { get => _orbitTarget; set => _orbitTarget = value; }
+    public EnvironmentRig? EnvironmentRig { get; set; }
     public WaterMediumTracker Medium { get; } = new();
     public VivariumWorld? World { get; set; }
     /// <summary>Set by UI when a text field has focus so typing doesn't fly the camera.</summary>
@@ -214,6 +220,7 @@ public partial class CameraRig : Node3D
             }
         }
         if (World != null) Medium.Update(World, Bridge.S(GlobalPosition));
+        UpdateFocusAndDof(delta);
     }
 
     private static Vector3 MoveInput()
@@ -230,4 +237,76 @@ public partial class CameraRig : Node3D
 
     /// <summary>World ray under a screen point (for picking against sim geometry).</summary>
     public (Vector3 Origin, Vector3 Dir) ScreenRay(Vector2 screen) => (Cam.ProjectRayOrigin(screen), Cam.ProjectRayNormal(screen));
+
+    private float GetFocalPointDistance()
+    {
+        if (_orbitTarget.HasValue)
+            return Cam.GlobalPosition.DistanceTo(_orbitTarget.Value);
+
+        if (Focused && _focusTarget != null)
+            return Cam.GlobalPosition.DistanceTo(_focusTarget());
+
+        if (World != null)
+        {
+            var hit = Vivarium.Sim.Tools.Selection.Raycast(World, Bridge.S(Cam.GlobalPosition), Bridge.S(-Cam.GlobalBasis.Z));
+            if (hit.IsHit && hit.Distance > 0.001)
+                return (float)hit.Distance;
+        }
+
+        return 2.5f;
+    }
+
+    private CameraAttributesPractical? ResolveCameraAttributes()
+    {
+        if (Cam.Attributes is CameraAttributesPractical camAttr)
+            return camAttr;
+        if (EnvironmentRig?.CameraAttributes is { } envAttr)
+            return envAttr;
+        if (GetParent()?.GetNodeOrNull<EnvironmentRig>("Environment")?.CameraAttributes is { } parentAttr)
+            return parentAttr;
+        if (EnvironmentRig.Instance?.CameraAttributes is { } staticAttr)
+            return staticAttr;
+        return null;
+    }
+
+    private void UpdateFocusAndDof(double delta)
+    {
+        bool dofDisabled = System.Environment.GetEnvironmentVariable("VIVARIUM_DISABLE_DOF") == "1";
+        if (dofDisabled)
+        {
+            var disabledAttr = ResolveCameraAttributes();
+            if (disabledAttr != null)
+            {
+                disabledAttr.DofBlurFarEnabled = false;
+                disabledAttr.DofBlurNearEnabled = false;
+            }
+            return;
+        }
+
+        float targetDist = Mathf.Clamp(GetFocalPointDistance(), 0.06f, 18.0f);
+        _focusDistance = Mathf.Lerp(_focusDistance, targetDist, 1f - Mathf.Exp(-(float)delta * 10f));
+
+        var attr = ResolveCameraAttributes();
+        if (attr == null) return;
+
+        attr.DofBlurFarEnabled = true;
+        attr.DofBlurNearEnabled = true;
+
+        if (_focusDistance < 2.5f)
+        {
+            attr.DofBlurFarDistance = _focusDistance * 1.18f;
+            attr.DofBlurFarTransition = Mathf.Max(0.08f, _focusDistance * 0.85f);
+            attr.DofBlurNearDistance = Mathf.Max(0.015f, _focusDistance * 0.78f);
+            attr.DofBlurNearTransition = Mathf.Max(0.01f, _focusDistance * 0.28f);
+            attr.DofBlurAmount = Mathf.Clamp(0.085f * (1.0f - (_focusDistance - 0.15f) / 2.8f), 0.015f, 0.085f);
+        }
+        else
+        {
+            attr.DofBlurFarDistance = _focusDistance * 1.6f;
+            attr.DofBlurFarTransition = Mathf.Max(0.5f, _focusDistance * 0.5f);
+            attr.DofBlurNearDistance = Mathf.Max(0.1f, _focusDistance * 0.6f);
+            attr.DofBlurNearTransition = Mathf.Max(0.1f, _focusDistance * 0.2f);
+            attr.DofBlurAmount = 0.012f;
+        }
+    }
 }

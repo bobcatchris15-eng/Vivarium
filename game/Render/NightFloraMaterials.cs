@@ -12,7 +12,7 @@ public static class NightFloraMaterials
     private static readonly List<WeakReference<ShaderMaterial>> Materials = new();
     private const float EmissionGain = 0.075f;
     public static float CurrentNightFactor {get;private set;}
-    public static float LightEnergy(FloraSpeciesDef species)=>(float)Math.Clamp(species.BioluminescenceStrength*.025,0,.065);
+    public static float LightEnergy(FloraSpeciesDef species)=>(float)Math.Clamp(species.BioluminescenceStrength*.025*1.8,0,.065*1.8);
     public static float LightRange(FloraSpeciesDef species)=>(float)Math.Clamp(species.RadiusAtMax*1.1+species.Height*.18+.12,.2,.95);
 
     private sealed class RegisteredLight
@@ -114,7 +114,11 @@ public static class NightFloraMaterials
             LightColor = tint,
             OmniRange = range,
             OmniAttenuation = 1.7f,
-            ShadowEnabled = false,
+            ShadowEnabled = true,
+            ShadowBias = 0.005f,
+            ShadowNormalBias = 0.08f,
+            ShadowBlur = 1.5f,
+            OmniShadowMode = OmniLight3D.ShadowMode.DualParaboloid,
             LightEnergy = 0f,
             Visible = false
         };

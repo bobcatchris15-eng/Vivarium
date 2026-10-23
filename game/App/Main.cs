@@ -47,11 +47,15 @@ public partial class Main : Node3D
             AssetPath = ArgAfter("--fern-asset") ?? "res://content/visual-lab-candidates/fern02/fern02.glb",
             Variant = ArgAfter("--fern-variant") ?? "procedural", CameraReferencePath = ArgAfter("--fern-camera-reference") ?? "" }); return; }
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (ArgAfter("--loam-ground-review") is { } loamDir)
+        { AddChild(new LoamGroundReview { Content = content, OutDir = loamDir }); return; }
+        if (ArgAfter("--pilot-overhaul-review") is { } pilotOverhaulDir)
+        { AddChild(new PilotTreeOverhaulReview { Content = content, OutDir = pilotOverhaulDir }); return; }
         if (ArgAfter("--photographic-physical-review") is { } physicalDir)
         { AddChild(new PhotographicPhysicalReview { OutDir = physicalDir }); return; }
         if (ArgAfter("--photographic-family-review") is { } familyDir)
         { AddChild(new PhotographicFamilyReview { Content = content, OutDir = familyDir,
-            ProfilePath = ArgAfter("--family-profiles") ?? "", BacklightSweep = UserArgs.Contains("--backlight-sweep"), WetLayerSweep = UserArgs.Contains("--wet-layer-sweep") }); return; }
+            ProfilePath = ArgAfter("--family-profiles") ?? "", BacklightSweep = UserArgs.Contains("--backlight-sweep"), WetLayerSweep = UserArgs.Contains("--wet-layer-sweep"), LookSweep = UserArgs.Contains("--look-sweep") || UserArgs.Contains("--look-refine") || UserArgs.Contains("--substrate-refine"), LookRefinement = UserArgs.Contains("--look-refine"), SubstrateSweep = UserArgs.Contains("--substrate-refine") }); return; }
         if (ArgAfter("--photorealism-light-review") is { } photoLightDir)
         { AddChild(new PhotorealismLightReview { Content = content, OutDir = photoLightDir }); return; }
         if (ArgAfter("--photorealism-review") is { } photoDir)

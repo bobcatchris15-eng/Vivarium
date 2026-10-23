@@ -25,15 +25,23 @@ public partial class PhotographicFamilyReview : Node3D
     public string ProfilePath { get; set; } = "";
     public bool BacklightSweep { get; set; } = false;
     public bool WetLayerSweep { get; set; } = false;
+    public bool LookSweep { get; set; } = false;
+    public bool LookRefinement { get; set; } = false;
+    public bool SubstrateSweep { get; set; } = false;
 
     private sealed record Profile(string Id, string LightMode, string MaterialMode, float Exposure,
         float SunEnergy, float AmbientEnergy, float F0, float SpecularGain, float TransmissionGain,
         float PhaseGain, float DiffuseWrap, float Anisotropy);
+    private sealed record LookConfig(string Id, float Exposure, float Contrast, float SunEnergy, float AmbientEnergy,
+        Color SunColor, Color AmbientColor, Vector3 SourceDirection, float F0, float SpecularGain,
+        float TransmissionGain, float PhaseGain, float MossScale, Color MossTint, float Film, float FilmRoughness,
+        float CoverageSaturation, float CoverageValue, bool SkyAmbient, float GroundMossScale, Color? DampTint = null);
     private readonly List<object> _captures = new();
     private readonly Dictionary<ulong, ShaderMaterial> _materials = new();
     private readonly Dictionary<ulong, Shader> _originalShaders = new();
     private readonly Dictionary<ulong, Shader> _reflectionShaders = new();
     private readonly Dictionary<ulong, (float transmission, float leafTransmission)> _productionTransmission = new();
+    private readonly List<(MeshInstance3D node, Material? original, ShaderMaterial local)> _lookCoverageMaterials = new();
     private EnvironmentRig _rig = null!;
     private Camera3D _camera = null!;
     private VivariumWorld _world = null!;
@@ -42,6 +50,8 @@ public partial class PhotographicFamilyReview : Node3D
     private CoverageRenderer _coverage = null!;
     private string _digest = "";
     private string _variantShader = "";
+    private string _lookCoverageSourceHash = "";
+    private string _lookCoverageVariantHash = "";
     private int _captureCount;
     private int _fixedFrames;
     private Vector3 _patchTarget = new(0, .38f, 0);
@@ -82,7 +92,7 @@ public partial class PhotographicFamilyReview : Node3D
 
     public override async void _Ready()
     {
-        try { await Run(); GD.Print((WetLayerSweep ? "PHOTO_WET_LAYER_REVIEW_OK " : BacklightSweep ? "PHOTO_BACKLIGHT_REVIEW_OK " : "PHOTO_FAMILY_REVIEW_OK ") + OutDir); GetTree().Quit(0); }
+        try { await Run(); GD.Print((LookSweep ? "PHOTO_LOOK_SWEEP_OK " : WetLayerSweep ? "PHOTO_WET_LAYER_REVIEW_OK " : BacklightSweep ? "PHOTO_BACKLIGHT_REVIEW_OK " : "PHOTO_FAMILY_REVIEW_OK ") + OutDir); GetTree().Quit(0); }
         catch (Exception ex) { GD.PrintErr("PHOTO_FAMILY_REVIEW_FAILED " + ex); GetTree().Quit(2); }
     }
 
@@ -140,6 +150,13 @@ public partial class PhotographicFamilyReview : Node3D
         AddStandards();
         _digest = WorldSerializer.Digest(_world);
         var framesBefore = Engine.GetProcessFrames();
+        if (LookSweep)
+        {
+            if (BacklightSweep || WetLayerSweep || (LookRefinement && SubstrateSweep)) throw new InvalidOperationException("LookSweep cannot be combined with another photographic sweep mode");
+            await RunLookSweep(lightRig, framesBefore);
+            return;
+        }
+        if (LookRefinement || SubstrateSweep) throw new InvalidOperationException("LookRefinement and SubstrateSweep require LookSweep mode dispatch");
         if (WetLayerSweep)
         {
             if (BacklightSweep) throw new InvalidOperationException("WetLayerSweep and BacklightSweep are mutually exclusive");
@@ -282,6 +299,227 @@ public partial class PhotographicFamilyReview : Node3D
     {
         foreach (var child in node.GetChildren()) { if (child is Light3D light && light != _rig.Sun) { record.Add(new { name = light.Name.ToString(), type = light.GetClass(), previous_energy = light.LightEnergy, effective_energy = 0f }); light.LightEnergy = 0; } DisablePrivateFill(child, record); }
     }
+
+    private async Task RunLookSweep(List<object> lightRig, ulong framesBefore)
+    {
+        // This matrix is a set of plausible look directions, not a winner-selection rule.
+        // All values are bounded relative-engine controls under the same frozen scene/cameras.
+        var authoredDirection = _rig.Sun.GlobalBasis.Z.Normalized();
+        float rigExposure = _rig.Env.TonemapExposure, rigContrast = _rig.Env.TonemapAgxContrast;
+        float rigSunEnergy = _rig.Sun.LightEnergy, rigAmbientEnergy = _rig.Env.AmbientLightEnergy;
+        Color rigSunColor = _rig.Sun.LightColor, rigAmbientColor = _rig.Env.AmbientLightColor;
+        var rigReference = new LookConfig("rig-reference", rigExposure, rigContrast, rigSunEnergy, rigAmbientEnergy, rigSunColor, rigAmbientColor, authoredDirection, .055f, 1f, 1.9f, 1.6f, 1f, Colors.White, 0f, .30f, 1f, 1f, true, 1f);
+        var balancedGrounded = new LookConfig("balanced-grounded", 1.12f, 1.30f, 1.25f, .60f, new Color(1f,.90f,.78f), new Color(.76f,.82f,.88f), new Vector3(-.48f,.66f,.57f), .05f, .90f, 1.30f, 1.10f, .35f, new Color(.80f,.84f,.74f), 0f, .30f, .50f, .85f, false, .20f);
+        var looks = SubstrateSweep ? new[]
+        {
+            rigReference,
+            balancedGrounded,
+            balancedGrounded with { Id = "balanced-umber-mild", DampTint = new Color(1f,.72f,.68f) },
+            balancedGrounded with { Id = "balanced-umber-strong", DampTint = new Color(1f,.55f,.65f) },
+        } : LookRefinement ? new[]
+        {
+            rigReference,
+            new LookConfig("neutral-grounded", 1.05f, 1.25f, 1.1f, .48f, new Color(.98f,.96f,.90f), new Color(.78f,.83f,.86f), new Vector3(.15f,.94f,.30f), .05f, .85f, 1.25f, 1.05f, .40f, new Color(.80f,.84f,.78f), 0f, .30f, .60f, .88f, false, .25f),
+            balancedGrounded,
+            new LookConfig("rake-grounded", 1.10f, 1.25f, 1.40f, .40f, new Color(1f,.86f,.68f), new Color(.76f,.82f,.90f), new Vector3(-.60f,.50f,.62f), .05f, .90f, 1.30f, 1.10f, .45f, new Color(.80f,.84f,.74f), 0f, .30f, .60f, .88f, false, .35f),
+        } : new[]
+        {
+            rigReference,
+            new LookConfig("soft-overcast", 1f, 1f, .40f, .72f, new Color(.88f,.92f,1f), new Color(.78f,.84f,.92f), new Vector3(.45f,.78f,.43f), .045f, .85f, 1.25f, 1.05f, .72f, new Color(.82f,.84f,.78f), 0f, .32f, .85f, .90f, false, 1f),
+            new LookConfig("warm-side-rake", 1f, 1f, 1.35f, .30f, new Color(1f,.78f,.57f), new Color(.66f,.76f,.88f), new Vector3(-.66f,.38f,.65f), .05f, .90f, 1.25f, 1.10f, .72f, new Color(.80f,.82f,.70f), 0f, .30f, .80f, .90f, false, 1f),
+            new LookConfig("neutral-high-angle", 1f, 1f, 1f, .48f, Colors.White, new Color(.84f,.86f,.82f), new Vector3(.15f,.94f,.30f), .045f, .85f, 1.35f, 1.10f, .68f, new Color(.82f,.84f,.78f), 0f, .32f, .82f, .88f, false, 1f),
+            new LookConfig("cool-shade-warm-break", 1f, 1f, 1.2f, .56f, new Color(1f,.84f,.66f), new Color(.68f,.78f,.94f), new Vector3(-.55f,.58f,.60f), .05f, .90f, 1.4f, 1.2f, .72f, new Color(.78f,.82f,.72f), 0f, .30f, .80f, .90f, false, 1f),
+            new LookConfig("damp-restrained-glint", 1f, 1f, .90f, .52f, new Color(.93f,.96f,1f), new Color(.78f,.83f,.88f), new Vector3(-.66f,.38f,.65f), .05f, .85f, 1.15f, 1f, .65f, new Color(.80f,.83f,.78f), .25f, .30f, .80f, .82f, false, 1f),
+            new LookConfig("bright-clear-canopy", 1f, 1f, 1.55f, .38f, new Color(1f,.94f,.82f), new Color(.76f,.82f,.88f), new Vector3(.15f,.90f,.40f), .05f, .85f, 1.2f, 1f, .68f, new Color(.82f,.84f,.75f), 0f, .32f, .82f, .86f, false, 1f),
+            new LookConfig("balanced-agx-contrast", 1.12f, 1.2f, 1.15f, .52f, new Color(1f,.86f,.70f), new Color(.76f,.82f,.88f), new Vector3(-.48f,.66f,.57f), .05f, .90f, 1.3f, 1.1f, .68f, new Color(.80f,.84f,.74f), 0f, .32f, .55f, .85f, false, 1f),
+        };
+        int expectedLooks = LookRefinement || SubstrateSweep ? 4 : 8;
+        if (looks.Length != expectedLooks || looks.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != expectedLooks)
+            throw new InvalidOperationException("Look matrix has an unexpected count or duplicate direction");
+        GD.Print("PHOTO_LOOK_REFERENCE " + JsonSerializer.Serialize(LookRecord(looks[0])));
+        foreach (var l in looks.Where(l => l.Id != "rig-reference"))
+            if (l.Exposure is < .7f or > 1.3f || l.Contrast is < .8f or > 1.5f || l.SunEnergy is < 0 or > 2.5f || l.AmbientEnergy is < 0 or > 1.2f || l.F0 is < .02f or > .08f || l.SpecularGain is < .4f or > 1.4f || l.TransmissionGain is < .5f or > 2.2f || l.PhaseGain is < .3f or > 1.8f || l.MossScale is < .2f or > 1f || l.GroundMossScale is < .15f or > 1f || l.MossTint.R is < .6f or > 1f || l.MossTint.G is < .6f or > 1f || l.MossTint.B is < .6f or > 1f || l.Film is < 0 or > .5f || l.FilmRoughness is < .2f or > .4f || l.CoverageSaturation is < .4f or > 1f || l.CoverageValue is < .65f or > 1f)
+                throw new InvalidOperationException("Look configuration outside bounded review range: " + l.Id);
+
+        var terrainTop = _island.GetNode<MeshInstance3D>("TerrainTop");
+        if (terrainTop.Mesh is not ArrayMesh mesh || mesh.GetSurfaceCount() != 1 || mesh.SurfaceGetMaterial(0) is not ShaderMaterial source || source.Shader is null || source.Shader.ResourcePath != "res://Shaders/terrain.gdshader")
+            throw new InvalidOperationException("LookSweep requires the integrated production TerrainTop material");
+        string code = source.Shader.Code;
+        const string wMossAnchor = "    float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);";
+        const string mossColorAnchor = "        vec3 natural_moss = mix(m.rgb, m.rgb * vec3(0.74, 0.88, 0.58), 0.5);";
+        const string groundMossAnchor = "    gm *= smoothstep(0.28, 0.64, patchn + contact_mask * 0.06);";
+        const string dampBlendAnchor = "        float w = mix(wDamp, hblend(wDamp, dot(d.rgb, vec3(0.33)) * 2.0), 0.35);   // soft: moisture creeps, it has no edge";
+        const string outputAnchor = "    ALBEDO = col;";
+        if (Count(code, wMossAnchor) != 1 || Count(code, mossColorAnchor) != 1 || Count(code, groundMossAnchor) != 1 || Count(code, outputAnchor) != 1 || Count(code, dampBlendAnchor) != 1 || Count(code, "float silt_clear = 1.0 - wSilt;") != 1 || Count(code, "float submerged_bed = smoothstep(0.004, 0.018, water_depth);") != 1)
+            throw new InvalidOperationException("LookSweep terrain source anchors changed; refusing ambiguous private variant");
+        string uniforms = "\nuniform float photo_look_moss_scale = 1.0;\nuniform float photo_look_ground_moss_scale = 1.0;\nuniform vec3 photo_look_moss_tint = vec3(1.0);\nuniform vec3 photo_look_damp_tint = vec3(1.0);\nuniform float photo_look_wet_film = 0.0;\nuniform float photo_look_wet_roughness = 0.28;\n";
+        code = code.Replace("shader_type spatial;", "shader_type spatial;" + uniforms, StringComparison.Ordinal);
+        code = code.Replace(wMossAnchor, wMossAnchor + "\n    wMoss *= photo_look_moss_scale;", StringComparison.Ordinal);
+        code = code.Replace(groundMossAnchor, groundMossAnchor + "\n    gm *= photo_look_ground_moss_scale;", StringComparison.Ordinal);
+        code = code.Replace(mossColorAnchor, mossColorAnchor + "\n        natural_moss *= photo_look_moss_tint;", StringComparison.Ordinal);
+        code = code.Replace(dampBlendAnchor, dampBlendAnchor + "\n        d.rgb *= photo_look_damp_tint;", StringComparison.Ordinal);
+        string filmOutput = "    float photo_look_film_mask = clamp(total_wet * (1.0 - wMoss) * (1.0 - wGrav) * (1.0 - wLeaf) * (1.0 - step(0.5, code)) * (1.0 - wSilt) * (1.0 - submerged_bed), 0.0, 1.0);\n" +
+            "    CLEARCOAT = photo_look_wet_film * photo_look_film_mask;\n    CLEARCOAT_ROUGHNESS = photo_look_wet_roughness;\n" + outputAnchor;
+        code = code.Replace(outputAnchor, filmOutput, StringComparison.Ordinal);
+        if (Count(code, "uniform float photo_look_moss_scale") != 1 || Count(code, "uniform float photo_look_ground_moss_scale") != 1 || Count(code, "uniform vec3 photo_look_moss_tint") != 1 || Count(code, "uniform vec3 photo_look_damp_tint") != 1 || Count(code, "wMoss *= photo_look_moss_scale;") != 1 || Count(code, "gm *= photo_look_ground_moss_scale;") != 1 || Count(code, "natural_moss *= photo_look_moss_tint;") != 1 || Count(code, "d.rgb *= photo_look_damp_tint;") != 1 || Count(code, "float photo_look_film_mask =") != 1 || Count(code, "CLEARCOAT = photo_look_wet_film") != 1)
+            throw new InvalidOperationException("LookSweep local source variant failed exact single-insertion checks");
+        var variant = new Shader { Code = code, ResourceName = "terrain.photo-look-sweep-local" };
+        var localMaterial = source.Duplicate(true) as ShaderMaterial ?? throw new InvalidOperationException("Could not deep-duplicate production terrain material for LookSweep");
+        localMaterial.Shader = variant;
+        string sourceHash = Sha256(source.Shader.Code), variantHash = Sha256(code);
+        var coverageShader = BuildCoverageLookVariant();
+        _lookCoverageSourceHash = Sha256((GD.Load<Shader>("res://Shaders/coverage_mat.gdshader") ?? throw new InvalidOperationException("Missing coverage shader for hash" )).Code);
+        _lookCoverageVariantHash = Sha256(coverageShader.Code);
+        int coverageMaterialCount = CloneCoverageMaterials(coverageShader);
+        if (coverageMaterialCount == 0) throw new InvalidOperationException("LookSweep found no production coverage_mat materials to vary locally");
+        File.WriteAllText(Path.Combine(OutDir, "terrain-look-sweep-local.gdshader"), code);
+        File.WriteAllText(Path.Combine(OutDir, "coverage-look-sweep-local.gdshader"), coverageShader.Code);
+        var lookRecords = looks.Select(LookRecord).ToArray();
+        File.WriteAllText(Path.Combine(OutDir, "look-configs.json"), JsonSerializer.Serialize(new { schema_version = 1, units = "relative_engine", configs = lookRecords }, new JsonSerializerOptions { WriteIndented = true }));
+
+        // Refinement holds a reference and three grounded alternatives: 4 x 2 views + repeat + local gate = 10.
+        // The original broad look matrix remains 8 x 2 + repeat + local gate = 18.
+        var baseline = looks[0];
+        ApplyLook(baseline, null);
+        terrainTop.MaterialOverride = null;
+        Aim("patch");
+        string baselinePatch = await CaptureLook(baseline, "patch-foliage", "rig-reference-patch", null, sourceHash, variantHash, lightRig);
+        Aim("overview");
+        await CaptureLook(baseline, "ground-overview", "rig-reference-overview", null, sourceHash, variantHash, lightRig);
+        for (int i = 1; i < looks.Length; i++)
+        {
+            var look = looks[i]; ApplyLook(look, localMaterial); terrainTop.MaterialOverride = localMaterial;
+            Aim("patch"); await CaptureLook(look, "patch-foliage", look.Id + "-patch", localMaterial, sourceHash, variantHash, lightRig);
+            Aim("overview"); await CaptureLook(look, "ground-overview", look.Id + "-overview", localMaterial, sourceHash, variantHash, lightRig);
+        }
+        ApplyLook(baseline, null); terrainTop.MaterialOverride = null;
+        Aim("patch");
+        string baselineRepeat = await CaptureLook(baseline, "patch-foliage", "baseline-repeat", null, sourceHash, variantHash, lightRig);
+        if (baselineRepeat != baselinePatch) throw new InvalidOperationException("Original production look baseline was not pixel-identical on repeat");
+        ApplyLook(baseline, localMaterial); terrainTop.MaterialOverride = localMaterial;
+        Aim("patch");
+        string zeroGate = await CaptureLook(baseline, "patch-foliage", "local-zero-change-gate", localMaterial, sourceHash, variantHash, lightRig);
+        // Record shader-variant differences; this is visual exploration, not a
+        // requirement that alternative implementations reproduce the old pixels.
+        if (WorldSerializer.Digest(_world) != _digest) throw new InvalidOperationException("LookSweep mutated world state");
+        int expectedCaptures = LookRefinement || SubstrateSweep ? 10 : 18;
+        if (_captureCount != expectedCaptures || Engine.GetProcessFrames() - framesBefore > 7200) throw new InvalidOperationException("Look sweep exceeded its capture or time bound");
+        File.WriteAllText(Path.Combine(OutDir, "metadata.json"), JsonSerializer.Serialize(new {
+            schema_version = 1, experiment = SubstrateSweep ? "integrated-damp-substrate-tint-sweep" : LookRefinement ? "integrated-look-refinement" : "integrated-look-sweep", claim = SubstrateSweep ? "two bounded local damp-substrate pigment tint alternatives against a balanced untinted control, plus rig reference; all lighting, moss, and coverage controls held fixed; visual selection only" : LookRefinement ? "three stronger grounded relative-engine candidates plus the original rig reference across two held views; visual selection only, not calibrated photographic acceptance" : "eight reviewable relative-engine look directions across held foliage and ground cameras; choose a candidate by visual inspection, not a calibrated photographic claim",
+            units = "relative_engine", source_shader = "res://Shaders/terrain.gdshader", source_shader_sha256 = sourceHash, local_shader_sha256 = variantHash,
+            coverage_source_shader = "res://Shaders/coverage_mat.gdshader", coverage_source_shader_sha256 = _lookCoverageSourceHash, coverage_local_shader_sha256 = _lookCoverageVariantHash,
+            config_file = "look-configs.json", private_shader_files = new[] { "terrain-look-sweep-local.gdshader", "coverage-look-sweep-local.gdshader" }, configs = lookRecords,
+            private_coverage_material_overrides = new { shader = "res://Shaders/coverage_mat.gdshader", cloned_instance_overrides = coverageMaterialCount, source_materials_unchanged = true, colored_coverage_species_geometry_unchanged = true,
+                originals = _lookCoverageMaterials.Select(x => new { node = x.node.Name.ToString(), source_shader = (x.original as ShaderMaterial)?.Shader?.ResourcePath, source_pattern = (x.original as ShaderMaterial)?.GetShaderParameter("u_pattern").AsSingle() }).ToArray() },
+            capture_count = _captureCount, world_digest = _digest, world_digest_unchanged = true, player_save_touched = false, simulation_ticks = 0,
+            baseline_repeat = new { baseline_sha256 = baselinePatch, repeat_sha256 = baselineRepeat, identical = baselinePatch == baselineRepeat },
+            local_zero_gate = new { production_sha256 = baselinePatch, variant_sha256 = zeroGate, pixel_identical = baselinePatch == zeroGate },
+            production_readiness = new { flora_ready = _flora.PopulationReady, moss_tiles = _coverage.TileCount, moss_instances = _coverage.InstanceCount, moss_pending = _coverage.PendingRebuildCount, frozen_review_time = 0, sway = 0, wind = 0, quality = _rig.Quality, private_fill = lightRig },
+            fixed_camera_contract = new { patch = "existing foliage interaction view", overview = "fixed ground overview view", camera_attributes = "EnvironmentRig.CameraAttributes; exposure fixed per named config; auto exposure off" },
+            preserved_stage = new { black_camera_surround = "unchanged from existing photographic fixture", environment_background = _rig.Env.BackgroundMode.ToString(), authored_reference = "rig light, ambient, exposure and AgX settings sampled before look edits; auto exposure is frozen for capture" },
+            limits = new[] { "No configuration is promoted as photographic acceptance; the sweep offers distinct candidates for visual selection.", "Terrain moss and production coverage color adjustments use private local shader/material overrides; species, geometry, simulation and world data are unchanged. Coverage saturation/value controls do not recolor other coverage families outside coverage_mat.gdshader.", "The look board has no standing-water specimen; damp film strength is a local soil-layer diagnostic and terrain coverage does not identify dynamic surface-water pixels.", "Broad overview/foliage fixed views do not establish full habitat, motion, or performance acceptance.", "Color key choices are relative RGB art directions, not calibrated color temperatures or measured illumination." },
+            captures = _captures
+        }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private void ApplyLook(LookConfig look, ShaderMaterial? terrainVariant)
+    {
+        _rig.Env.TonemapExposure = look.Exposure; _rig.Env.TonemapAgxContrast = look.Contrast;
+        _rig.Env.AdjustmentEnabled = true; _rig.Env.AdjustmentContrast = 1.07f; _rig.Env.AdjustmentSaturation = .97f; _rig.Env.AdjustmentBrightness = 1f;
+        _rig.Sun.LightEnergy = look.SunEnergy; _rig.Sun.LightColor = look.SunColor; SetSunSourceDirection(look.SourceDirection);
+        _rig.Env.AmbientLightEnergy = look.AmbientEnergy; _rig.Env.AmbientLightColor = look.AmbientColor;
+        _rig.Env.AmbientLightSource = look.SkyAmbient ? Godot.Environment.AmbientSource.Sky : Godot.Environment.AmbientSource.Color;
+        _rig.Env.ReflectedLightSource = Godot.Environment.ReflectionSource.Sky;
+        _rig.CameraAttributes.AutoExposureEnabled = false;
+        foreach (var mat in FoliageMaterials())
+        {
+            mat.Shader = _originalShaders[mat.GetInstanceId()];
+            mat.SetShaderParameter("tissue_use_explicit_material_f0", true); mat.SetShaderParameter("tissue_material_f0", look.F0);
+            mat.SetShaderParameter("tissue_specular_stress", look.SpecularGain); mat.SetShaderParameter("tissue_direct_transmission", look.TransmissionGain);
+            mat.SetShaderParameter("tissue_phase_scatter", look.PhaseGain); mat.SetShaderParameter("tissue_diffuse_wrap", 0f);
+        }
+        if (terrainVariant is not null)
+        {
+            terrainVariant.SetShaderParameter("photo_look_moss_scale", look.MossScale);
+            terrainVariant.SetShaderParameter("photo_look_ground_moss_scale", look.GroundMossScale);
+            terrainVariant.SetShaderParameter("photo_look_moss_tint", new Vector3(look.MossTint.R, look.MossTint.G, look.MossTint.B));
+            var dampTint = look.DampTint ?? Colors.White;
+            terrainVariant.SetShaderParameter("photo_look_damp_tint", new Vector3(dampTint.R, dampTint.G, dampTint.B));
+            terrainVariant.SetShaderParameter("photo_look_wet_film", look.Film);
+            terrainVariant.SetShaderParameter("photo_look_wet_roughness", look.FilmRoughness);
+        }
+        foreach (var entry in _lookCoverageMaterials)
+        {
+            entry.node.MaterialOverride = terrainVariant is null ? entry.original : entry.local;
+            if (terrainVariant is not null)
+            {
+                entry.local.SetShaderParameter("photo_look_coverage_saturation", look.CoverageSaturation);
+                entry.local.SetShaderParameter("photo_look_coverage_value", look.CoverageValue);
+            }
+        }
+    }
+
+    private async Task<string> CaptureLook(LookConfig look, string view, string name, ShaderMaterial? localTerrain, string sourceHash, string variantHash, List<object> lightRig)
+    {
+        if (++_captureCount > 18) throw new InvalidOperationException("LookSweep hard capture limit 18 exceeded");
+        const int settle = 8; _fixedFrames += settle; await Frames(settle); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        using var image = GetViewport().GetTexture().GetImage(); var file = name + ".png"; var full = Path.Combine(OutDir, file);
+        if (image.SavePng(full) != Error.Ok) throw new IOException("Failed to save " + full);
+        string hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(full))).ToLowerInvariant();
+        _captures.Add(new { file, sha256 = hash, name, view, config = LookRecord(look),
+            actual = new { exposure = _rig.Env.TonemapExposure, agx_contrast = _rig.Env.TonemapAgxContrast, sun_energy = _rig.Sun.LightEnergy, sun_color = _rig.Sun.LightColor.ToHtml(), source_direction = _rig.Sun.GlobalBasis.Z.Normalized().ToString(), ambient_energy = _rig.Env.AmbientLightEnergy, ambient_color = _rig.Env.AmbientLightColor.ToHtml(), ambient_source = _rig.Env.AmbientLightSource.ToString(), auto_exposure = _rig.CameraAttributes.AutoExposureEnabled, shadows = _rig.Sun.ShadowEnabled,
+                foliage = ActualFoliageControls(), terrain = new { local_variant_active = localTerrain is not null, local_shader_sha256 = localTerrain is not null ? variantHash : null, moss_scale = localTerrain?.GetShaderParameter("photo_look_moss_scale").AsSingle(), ground_moss_scale = localTerrain?.GetShaderParameter("photo_look_ground_moss_scale").AsSingle(), moss_tint = localTerrain is null ? null : localTerrain.GetShaderParameter("photo_look_moss_tint").AsVector3().ToString(), damp_tint = localTerrain is null ? null : localTerrain.GetShaderParameter("photo_look_damp_tint").AsVector3().ToString(), wet_film = localTerrain?.GetShaderParameter("photo_look_wet_film").AsSingle(), wet_roughness = localTerrain?.GetShaderParameter("photo_look_wet_roughness").AsSingle(), production_moisture_absorption_unchanged = true },
+                coverage = _lookCoverageMaterials.Select(x => new { node = x.node.Name.ToString(), active = x.node.MaterialOverride == x.local, source_shader = (x.original as ShaderMaterial)?.Shader?.ResourcePath, source_pattern = (x.original as ShaderMaterial)?.GetShaderParameter("u_pattern").AsSingle(), shader = x.local.Shader?.ResourceName, source_shader_sha256 = _lookCoverageSourceHash, local_shader_sha256 = _lookCoverageVariantHash, saturation = x.node.MaterialOverride == x.local ? x.local.GetShaderParameter("photo_look_coverage_saturation").AsSingle() : (float?)null, value = x.node.MaterialOverride == x.local ? x.local.GetShaderParameter("photo_look_coverage_value").AsSingle() : (float?)null }).ToArray() },
+            camera = new { position = _camera.Position.ToString(), rotation = _camera.Rotation.ToString(), target = view == "patch-foliage" ? "existing patch foliage target" : "fixed ground overview target", fov = _camera.Fov },
+            environment = new { tonemap = _rig.Env.TonemapMode.ToString(), adjustment_contrast = _rig.Env.AdjustmentContrast, ssil = _rig.Env.SsilEnabled, ssao = _rig.Env.SsaoEnabled, reflection_source = _rig.Env.ReflectedLightSource.ToString() },
+            source_shader_sha256 = sourceHash, world_digest = WorldSerializer.Digest(_world), readiness_frames = settle, review_time = 0, private_fill = lightRig });
+        GD.Print("PHOTO_LOOK_CAPTURE " + name + " sha256=" + hash);
+        return hash;
+    }
+
+    private Shader BuildCoverageLookVariant()
+    {
+        const string path = "res://Shaders/coverage_mat.gdshader";
+        var source = GD.Load<Shader>(path) ?? throw new InvalidOperationException("Missing production coverage material shader");
+        const string baseAnchor = "    vec3 base = srgb_to_linear(COLOR.rgb);";
+        string code = source.Code;
+        if (Count(code, baseAnchor) != 1) throw new InvalidOperationException("Coverage color anchor changed; refusing local saturation/value variant");
+        string uniforms = "\nuniform float photo_look_coverage_saturation = 1.0;\nuniform float photo_look_coverage_value = 1.0;\n";
+        code = code.Replace("shader_type spatial;", "shader_type spatial;" + uniforms, StringComparison.Ordinal);
+        string replacement = baseAnchor + "\n    base = mix(vec3(dot(base, vec3(0.2126, 0.7152, 0.0722))), base, photo_look_coverage_saturation) * photo_look_coverage_value;";
+        code = code.Replace(baseAnchor, replacement, StringComparison.Ordinal);
+        if (Count(code, "uniform float photo_look_coverage_saturation") != 1 || Count(code, "base = mix(vec3(dot(base") != 1)
+            throw new InvalidOperationException("Coverage local variant insertion count was not exactly one");
+        return new Shader { Code = code, ResourceName = "coverage_mat.photo-look-sweep-local" };
+    }
+
+    private static object LookRecord(LookConfig l) => new {
+        id = l.Id, exposure = l.Exposure, agx_contrast = l.Contrast, sun_energy = l.SunEnergy, ambient_energy = l.AmbientEnergy,
+        sun_color_rgb = new[] { l.SunColor.R, l.SunColor.G, l.SunColor.B }, ambient_color_rgb = new[] { l.AmbientColor.R, l.AmbientColor.G, l.AmbientColor.B },
+        source_direction_xyz = new[] { l.SourceDirection.X, l.SourceDirection.Y, l.SourceDirection.Z },
+        f0 = l.F0, specular_gain = l.SpecularGain, direct_transmission = l.TransmissionGain, phase_gain = l.PhaseGain,
+        terrain_moss_scale = l.MossScale, procedural_ground_moss_scale = l.GroundMossScale, terrain_moss_tint_rgb = new[] { l.MossTint.R, l.MossTint.G, l.MossTint.B }, damp_substrate_tint_rgb = l.DampTint is { } tint ? new[] { tint.R, tint.G, tint.B } : new[] { 1f, 1f, 1f }, wet_film = l.Film, wet_film_roughness = l.FilmRoughness,
+        coverage_saturation = l.CoverageSaturation, coverage_value = l.CoverageValue, ambient_source = l.SkyAmbient ? "sky" : "color"
+    };
+
+    private int CloneCoverageMaterials(Shader localShader)
+    {
+        void Visit(Node node)
+        {
+            if (node is MeshInstance3D instance && instance.MaterialOverride is ShaderMaterial original && original.Shader?.ResourcePath == "res://Shaders/coverage_mat.gdshader")
+            {
+                var clone = original.Duplicate(true) as ShaderMaterial ?? throw new InvalidOperationException("Could not deep-duplicate production coverage material");
+                clone.Shader = localShader;
+                clone.SetShaderParameter("photo_look_coverage_saturation", 1f);
+                clone.SetShaderParameter("photo_look_coverage_value", 1f);
+                _lookCoverageMaterials.Add((instance, instance.MaterialOverride, clone));
+            }
+            foreach (Node child in node.GetChildren()) Visit(child);
+        }
+        Visit(_coverage);
+        return _lookCoverageMaterials.Count;
+    }
+
     private void Collect(Node node)
     {
         if (node is MultiMeshInstance3D multi && multi.Multimesh?.Mesh is { } mesh)

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "selected_look": {
+    "id": "balanced-umber-mild",
+    "exposure": 1.12,
+    "agx_contrast": 1.3,
+    "sun_energy": 1.25,
+    "ambient_energy": 0.6,
+    "sun_color_rgb": [
+      1,
+      0.9,
+      0.78
+    ],
+    "ambient_color_rgb": [
+      0.76,
+      0.82,
+      0.88
+    ],
+    "source_direction_xyz": [
+      -0.48,
+      0.66,
+      0.57
+    ],
+    "f0": 0.05,
+    "specular_gain": 0.9,
+    "direct_transmission": 1.3,
+    "phase_gain": 1.1,
+    "terrain_moss_scale": 0.35,
+    "procedural_ground_moss_scale": 0.2,
+    "terrain_moss_tint_rgb": [
+      0.8,
+      0.84,
+      0.74
+    ],
+    "damp_substrate_tint_rgb": [
+      1,
+      0.72,
+      0.68
+    ],
+    "wet_film": 0,
+    "wet_film_roughness": 0.3,
+    "coverage_saturation": 0.5,
+    "coverage_value": 0.85,
+    "ambient_source": "color"
+  },
+  "status": "selected visual replacement direction after three rounds of native comparisons",
+  "scope": "look-development scene; gameplay renderer integration is next",
+  "terrain_shader": "res://content/visual-lab-candidates/photographic-look/terrain-look.gdshader",
+  "coverage_shader": "res://content/visual-lab-candidates/photographic-look/coverage-look.gdshader",
+  "resource_hashes": {
+    "terrain-look.gdshader": "8ead5cee48dbd950d622a3b635b41b7fe8a013dc6307d41f44dd641f18f41ac2",
+    "coverage-look.gdshader": "87350fa8b14a2c04942d4d50396feb58ac15de90fb990789b83060069fbecddf"
+  },
+  "native_evidence": "build/photorealism/substrate-sweep-01",
+  "reproduce": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/visuals/photorealism/run-native.ps1 -Name selected-look-review -Mode substrate"
+}

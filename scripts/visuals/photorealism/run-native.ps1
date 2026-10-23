@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Name, [ValidateSet('leaf','exposure','light','family','backlight','physical','wet')][string]$Mode = 'leaf', [int]$TimeoutSeconds = 120)
+param([Parameter(Mandatory)][string]$Name, [ValidateSet('leaf','exposure','light','family','backlight','physical','wet','looks','refine','substrate','loam','world','habitat','habitat-final','pilot','overview')][string]$Mode = 'leaf', [int]$TimeoutSeconds = 120, [string]$CameraReference, [switch]$ReviewMotion)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 if ($Name -notmatch '^[a-z0-9-]+$') { throw 'Use a lowercase run name.' }
@@ -13,6 +13,9 @@ function Write-PhotoSource([string]$Target) {
             Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.Extension -in @('.cs','.gdshader','.gdshaderinc','.json','.py','.ps1') } |
             ForEach-Object { [ordered]@{ path=$_.FullName.Substring($repo.Length + 1); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } }
     }
+    $entries += @(Get-ChildItem -LiteralPath (Join-Path $repo 'game/Textures') -File |
+        Where-Object { $_.Name -like 'ScatteredLeaves007_4K-PNG_*' -or $_.Name -like 'Ground048_1K-JPG_*' } |
+        ForEach-Object { [ordered]@{ path=$_.FullName.Substring($repo.Length + 1); sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } })
     $entries += [ordered]@{ path='game/project.godot'; sha256=(Get-FileHash -LiteralPath (Join-Path $repo 'game/project.godot') -Algorithm SHA256).Hash }
     @($entries | Sort-Object path) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $Target
 }
@@ -46,12 +49,25 @@ try {
         [IO.File]::WriteAllText($privateConfig, $configText, (New-Object Text.UTF8Encoding($false)))
         $startupProjectHash = (Get-FileHash -LiteralPath $privateConfig).Hash
     }
-    $reviewFlag = switch ($Mode) { 'physical' { '--photographic-physical-review' } { $_ -in @('family','backlight','wet') } { '--photographic-family-review' } 'light' { '--photorealism-light-review' } default { '--photorealism-review' } }
+    $reviewFlag = switch ($Mode) { 'pilot' { '--pilot-overhaul-review' } 'overview' { '--world-review' } 'habitat-final' { '--world-review' } 'habitat' { '--world-review' } 'world' { '--world-review' } 'loam' { '--loam-ground-review' } 'physical' { '--photographic-physical-review' } { $_ -in @('family','backlight','wet','looks','refine','substrate') } { '--photographic-family-review' } 'light' { '--photorealism-light-review' } default { '--photorealism-review' } }
     $argsPhoto = @('--path', $launchProject, '--log-file', (Join-Path $run 'engine.log'), '--', $reviewFlag, (Join-Path $run 'captures'))
+    if ($Mode -eq 'overview') {
+        if (!$CameraReference) { throw 'Overview requires an explicit camera reference so the full tall tree is framed.' }
+        $referencePath = (Resolve-Path -LiteralPath $CameraReference).Path
+        Copy-Item -LiteralPath $referencePath -Destination (Join-Path $run 'cameras.json')
+        $argsPhoto += @('--review-camera-reference', (Join-Path $run 'cameras.json'), '--review-light-seconds', '60')
+        if ($ReviewMotion) { $argsPhoto += '--review-motion' }
+    }
+    if ($Mode -eq 'habitat-final') { $argsPhoto += @('--forest-review', '--habitat-light-production-check') }
+    if ($Mode -eq 'habitat') { $argsPhoto += @('--forest-review', '--habitat-light-sweep') }
+    if ($Mode -eq 'world') { $argsPhoto += @('--forest-review', '--review-scenes', 'loam_floor_close,loam_floor_medium,log_contact,water_margin', '--review-motion', '--loam-live') }
     if ($Mode -eq 'exposure') { $argsPhoto += '--exposure-sweep' }
-    if ($Mode -in @('family','backlight','wet')) { $argsPhoto += @('--family-profiles', (Join-Path $PSScriptRoot 'family-profiles.json')) }
+    if ($Mode -in @('family','backlight','wet','looks','refine','substrate')) { $argsPhoto += @('--family-profiles', (Join-Path $PSScriptRoot 'family-profiles.json')) }
     if ($Mode -eq 'backlight') { $argsPhoto += '--backlight-sweep' }
     if ($Mode -eq 'wet') { $argsPhoto += '--wet-layer-sweep' }
+    if ($Mode -eq 'looks') { $argsPhoto += '--look-sweep' }
+    if ($Mode -eq 'refine') { $argsPhoto += '--look-refine' }
+    if ($Mode -eq 'substrate') { $argsPhoto += '--substrate-refine' }
     $quoted = $argsPhoto | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
     $p = Start-Process -FilePath $godot -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $run 'stdout.log') -RedirectStandardError (Join-Path $run 'stderr.log')
     $processHandle = $p.Handle # retain the native handle so Windows PowerShell preserves ExitCode
@@ -65,7 +81,7 @@ try {
     $stable = (Get-FileHash (Join-Path $run 'source-before.json')).Hash -eq (Get-FileHash (Join-Path $run 'source-after.json')).Hash
     $stdout = [string](Get-Content (Join-Path $run 'stdout.log') -Raw)
     $stderr = [string](Get-Content (Join-Path $run 'stderr.log') -Raw)
-    $successMarker = switch ($Mode) { 'wet' { 'PHOTO_WET_LAYER_REVIEW_OK' } 'physical' { 'PHOTO_PHYSICAL_REVIEW_OK' } 'backlight' { 'PHOTO_BACKLIGHT_REVIEW_OK' } 'family' { 'PHOTO_FAMILY_REVIEW_OK' } 'exposure' { 'PHOTO_EXPOSURE_REVIEW_OK' } 'light' { 'PHOTO_REALISM_LIGHT_REVIEW_OK' } default { 'PHOTO_REALISM_REVIEW_OK' } }
+    $successMarker = switch ($Mode) { 'pilot' { 'PILOT_OVERHAUL_REVIEW_OK' } 'overview' { 'VIVARIUM_WORLDREVIEW_OK' } 'habitat-final' { 'VIVARIUM_WORLDREVIEW_OK' } 'habitat' { 'VIVARIUM_WORLDREVIEW_OK' } 'world' { 'VIVARIUM_WORLDREVIEW_OK' } 'loam' { 'LOAM_GROUND_REVIEW_OK' } 'looks' { 'PHOTO_LOOK_SWEEP_OK' } 'refine' { 'PHOTO_LOOK_SWEEP_OK' } 'substrate' { 'PHOTO_LOOK_SWEEP_OK' } 'wet' { 'PHOTO_WET_LAYER_REVIEW_OK' } 'physical' { 'PHOTO_PHYSICAL_REVIEW_OK' } 'backlight' { 'PHOTO_BACKLIGHT_REVIEW_OK' } 'family' { 'PHOTO_FAMILY_REVIEW_OK' } 'exposure' { 'PHOTO_EXPOSURE_REVIEW_OK' } 'light' { 'PHOTO_REALISM_LIGHT_REVIEW_OK' } default { 'PHOTO_REALISM_REVIEW_OK' } }
     $ok = $p.ExitCode -eq 0 -and $stdout.Contains($successMarker) -and $stderr -notmatch 'SHADER ERROR|SCRIPT ERROR|Parse Error|ERROR:' -and $stable -and $startupStable
     @{mode=$Mode;revision=$revision;tools=$toolHashes;launch_project=$launchProject;startup_project_sha256=$startupProjectHash;exit_code=$p.ExitCode;source_stable=$stable;native_success=$ok;elapsed_seconds=$timer.Elapsed.TotalSeconds;godot_sha256=(Get-FileHash $godot).Hash;binaries=$binaries;limitation='Shared machine with open editors; diagnostic capture, not isolated performance acceptance.'} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $run 'launch.json')
     if (!$ok) { throw "Native capture did not pass: $run" }

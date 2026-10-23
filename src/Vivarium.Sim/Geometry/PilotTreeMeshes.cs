@@ -399,52 +399,96 @@ public static class PilotTreeMeshes
 
         public void Conifer(bool spruce,bool broken)
         {
-            int levels=broken?6:10;
+            int levels=broken?11:spruce?14:16;
             for(int level=0;level<levels;level++)
             {
-                double t=.24+level*(broken?.095:.073);
-                int branches=broken?5:7;
+                double t=.24+(broken?.61:.73)*(level+rng.Range(.12,.88))/levels;
+                int branches=broken?4+rng.NextInt(3):6+rng.NextInt(3);
                 for(int j=0;j<branches;j++)
                 {
-                    if(broken&&rng.Chance(.28)) continue;
-                    double a=facing+(.86*(2.0*j/(branches-1)-1))+Math.Sin(level*1.7)*.10+rng.Range(-.05,.05);
-                    double len=tree.Def.CanopyRadius*(.16+.84*(1-t))*rng.Range(.8,1.05);
+                    bool dead=broken&&rng.Chance(.34);
+                    if(broken&&rng.Chance(.12)) continue;
+                    // Deliberately uneven branch insertion and angle avoid the
+                    // mechanical whorl ladder while keeping crowns inside the cutaway wedge.
+                    double a=facing+rng.Range(-.92,.92)+Math.Sin(level*1.7+j*2.31)*.09;
+                    double heightFraction=Math.Clamp((t-.24)/.73,0,1);
+                    double crown=broken?.82-.36*heightFraction:spruce?.90-.47*heightFraction:.98-.38*heightFraction;
+                    double len=tree.Def.CanopyRadius*crown*rng.Range(.78,1.12);
                     var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-                    double rise=len*(spruce?.20:.13),droop=len*(spruce?.19:.30);
-                    Branch(t,a,len,rise,droop,r*(.11-.045*t));
-                    for(int twig=1;twig<=5;twig++)
+                    // Lower limbs fall away from the bole; upper tiers turn back
+                    // toward light and close the crown into a broken tapered spire.
+                    double rise=len*(broken?.10:spruce?.16+.52*heightFraction:.10+.42*heightFraction);
+                    double droop=len*(broken?.55:spruce?.32-.20*heightFraction:.43-.25*heightFraction);
+                    var tip=Branch(t,a,len,rise,droop,r*(.125-.045*t));
+                    if(!broken)
                     {
-                        double q=twig/6.0;
-                        var at=Centre(t)+dir*(Radius(t)*.65+q*len)+Vec3.Up*(rise*q-droop*q*q);
-                        for(int s=-1;s<=1;s+=2)
+                        for(int run=0;run<2;run++)
                         {
-                            double ta=a+s*(spruce?.78:.98);
-                            var td=new Vec3(Math.Cos(ta),0,Math.Sin(ta));
-                            double tl=len*(1-q)*rng.Range(.38,.55)+r*.20;
-                            var end=at+td*tl-Vec3.Up*tl*(spruce?.12:.28);
-                            Tube(new[]{at,Vec3.Lerp(at,end,.55)+Vec3.Up*tl*.06,end},
-                                new[]{r*.019,r*.012,r*.002},Primitives.Scale(bark,.79),6);
-                            NeedleSpray(at,end,spruce);
-                            var fork=Vec3.Lerp(at,end,.45);
-                            var cross=td.Cross(Vec3.Up).Normalized();
-                            for(int sprig=-1;sprig<=1;sprig+=2)
-                                NeedleSpray(fork,end+cross*(tl*.30*sprig)+td*tl*.12,spruce);
+                            double q=run==0?.48:.80;
+                            var root=Centre(t)+dir*(Radius(t)*.65+len*q)+Vec3.Up*(rise*q-droop*q*q);
+                            var side=dir.Cross(Vec3.Up).Normalized()*(run==0?1:-1);
+                            // Sprays continue along the arm, masking its rigid
+                            // scaffold and joining adjacent tier clusters.
+                            double reach=run==0?.29:.24;
+                            var foliageTip=root+dir*len*reach+side*len*(run==0?.18:.15)+Vec3.Up*len*rng.Range(-.035,.075)-Vec3.Up*len*(spruce?.035:.08);
+                            NeedleSpray(root,foliageTip,spruce);
                         }
                     }
-                    if(spruce&&level<5&&j%2==0)
+                    int secondaries=dead?2:spruce?2:3;
+                    for(int twig=1;twig<=secondaries;twig++)
                     {
-                        var tip=Centre(t)+dir*(len*.78)-Vec3.Up*len*.03;
-                        Cone(tip-Vec3.Up*r*.18,new Vec3(r*.10,r*.30,r*.10),new[]{.32,.24,.13});
+                        double q=(twig+rng.Range(-.22,.22))/(secondaries+1.0);
+                        var at=Vec3.Lerp(Centre(t)+dir*Radius(t)*.65,tip,q);
+                        for(int s=-1;s<=1;s+=2)
+                        {
+                            double ta=a+s*rng.Range(.62,1.24)+rng.Range(-.20,.20);
+                            var td=new Vec3(Math.Cos(ta),0,Math.Sin(ta));
+                            double tl=len*rng.Range(.25,.40)*(1-.16*q)+r*.12;
+                            var end=at+td*tl-Vec3.Up*tl*(broken?.42:spruce?.12:.22);
+                            Tube(new[]{at,Vec3.Lerp(at,end,.55)+Vec3.Up*tl*.08,end},
+                                new[]{r*.040,r*.027,r*.012},Primitives.Scale(bark,.79),7);
+                            if(dead) continue;
+                            double sl=tl*rng.Range(.58,.84);
+                            for(int spray=0;spray<2;spray++)
+                            {
+                                double u=spray==0?.34:.88;
+                                double sideA=ta+(twig%2==0?1:-1)*(spray==0?1:-1)*rng.Range(.46,.82);
+                                var sd=new Vec3(Math.Cos(sideA),0,Math.Sin(sideA));
+                                var root=Vec3.Lerp(at,end,u);
+                                var se=root+sd*sl-Vec3.Up*sl*(broken?.48:spruce?.15:.34);
+                                NeedleSpray(root,se,spruce);
+                            }
+                        }
+                    }
+                    if(spruce&&level%3==1&&j%3==0)
+                    {
+                        var coneTip=Vec3.Lerp(Centre(t),tip,.72)-Vec3.Up*r*.08;
+                        Cone(coneTip,new Vec3(r*.075,r*.24,r*.075),new[]{.32,.24,.13});
                     }
                 }
             }
             if(!broken)
             {
-                var top=Centre(.83);NeedleSpray(top,Centre(1)+Vec3.Up*h*.03,spruce);
+                for(int leader=0;leader<5;leader++)
+                {
+                    double a=phase+Tau*leader/5;
+                    var d=new Vec3(Math.Cos(a),0,Math.Sin(a));
+                    var baseP=Centre(.88)+d*r*.08;
+                    var top=Centre(1)+d*rng.Range(.10,.23);
+                    Tube(new[]{baseP,Vec3.Lerp(baseP,top,.56)+d*r*.05,top},
+                        new[]{r*.08,r*.045,r*.008},Primitives.Scale(bark,.78),7);
+                    NeedleSpray(baseP,top,spruce);
+                    NeedleSpray(Vec3.Lerp(baseP,top,.38)+d*r*.12,top+d*r*.22,spruce);
+                }
             }
             else
             {
-                for(int j=0;j<3;j++)Branch(.85+j*.045,phase+j*1.9,r*1.5,h*.04,h*.015,r*.07);
+                for(int j=0;j<5;j++)
+                {
+                    double a=phase+j*2.37;
+                    var end=Branch(.78+j*.027,a,r*rng.Range(1.8,3.6),h*.025,h*.035,r*.07);
+                    if(j%2==0) NeedleSpray(end,end+new Vec3(Math.Cos(a),.08,Math.Sin(a))*r*.72,false);
+                }
             }
         }
 
@@ -452,76 +496,149 @@ public static class PilotTreeMeshes
         {
             var axis=(end-start).Normalized();
             var side=axis.Cross(Vec3.Up).Normalized();if(side.LengthSq<.1)side=new Vec3(1,0,0);
-            int leaves=spruce?16:14;
+            int leaves=spruce?10:9;
+            double clump=rng.Range(.82,1.18);
             for(int i=0;i<leaves;i++)
             {
-                double q=(i+.35)/leaves;
+                // Small irregular gaps between short, overlapping needle fans
+                // keep the spray from reading as a perfectly combed ladder.
+                if(i>1&&i<leaves-2&&rng.Chance(.12))continue;
+                double q=Math.Clamp((i+rng.Range(.12,.84))/leaves,0,1);
                 var at=Vec3.Lerp(start,end,q);
-                double size=(end-start).Length*(.18+.22*Math.Sin(q*Math.PI));
+                double size=(end-start).Length*(.31+.27*Math.Sin(q*Math.PI))*clump*rng.Range(.82,1.18);
                 for(int sign=-1;sign<=1;sign+=2)
                 {
-                    var tip=at+side*(sign*size)+axis*size*.33-Vec3.Up*size*(spruce?.15:.30);
-                    NeedleBlade(at,tip,size*(spruce?.10:.17),Primitives.Scale(green,rng.Range(.80,1.20)));
+                    double lift=rng.Range(-.18,.20);
+                    var lateral=at+side*(sign*size*rng.Range(.66,.88))+axis*size*.20+Vec3.Up*size*lift-Vec3.Up*size*(spruce?.08:.18);
+                    var tip=lateral+axis*size*rng.Range(.27,.42)+side*(sign*size*rng.Range(.18,.32))-Vec3.Up*size*(spruce?.16:.38);
+                    // One continuous needle per side avoids doubled base faces
+                    // while the curled centerline still gives each spray depth.
+                    NeedleBlade(at,tip,size*(spruce?.25:.31),Primitives.Scale(green,rng.Range(.72,1.22)));
                 }
             }
         }
 
         private void NeedleBlade(Vec3 baseP, Vec3 tip, double width, double[] color)
         {
-            var axis = (tip-baseP).Normalized();
-            var side = axis.Cross(Vec3.Up).Normalized();
-            if (side.LengthSq < .1) side = new Vec3(1,0,0);
-            var normal = side.Cross(axis).Normalized();
-            if (normal.Y < 0) normal = -normal;
-            var center = Vec3.Lerp(baseP,tip,.43)+normal*width*.15;
-            var left = center-side*width;
-            var right = center+side*width;
-            Face(baseP,left,tip,color,0,normal);
-            Face(baseP,tip,right,Primitives.Scale(color,.88),0,normal);
+            CurvedBlade(baseP,tip,width,color,2,rng.Range(-.72,.72),width*rng.Range(.12,.32),rng.Range(-.12,.14),1);
         }
 
-        // A cambered solid blade with a midrib fold and a serrated asymmetric outline.
-        // Two faces with different normals provide readable foliage from above and below.
+        // A single cull-disabled surface has a rolled, folded cross section and
+        // gently swept centerline. Per-vertex differential normals preserve the
+        // blade's curved volume without coincident backfaces fighting the shader.
         private void Blade(Vec3 baseP,Vec3 tip,double width,double[] color,int segments=4)
         {
-            var axis=(tip-baseP).Normalized();var side=axis.Cross(Vec3.Up).Normalized();
-            if(side.LengthSq<.1)side=new Vec3(1,0,0);
-            int start=m.VertexCount;
-            Primitives.CurvedLeaf(m,baseP,tip,side,width,color,Primitives.Scale(color,.88),
-                camber:width*.18,longitudinal:Math.Max(6,segments),asymmetry:Math.Sin(phase+baseP.X)*.08);
-            // Pilot tree material distinguishes foliage through COLOR.a rather than flora UV2.
-            for(int i=start;i<m.VertexCount;i++) m.Colors[i*4+3]=0;
+            CurvedBlade(baseP,tip,width,color,Math.Clamp(segments,3,5),rng.Range(-.9,.9),
+                width*rng.Range(.18,.46),rng.Range(-.14,.18));
+        }
+
+        private void CurvedBlade(Vec3 baseP,Vec3 tip,double halfWidth,double[] color,int longitudinal,double roll,double camber,double sweep,int across=2)
+        {
+            var axis=tip-baseP;double length=axis.Length;
+            if(length<1e-8||halfWidth<=0)return;
+            var dir=axis/length;
+            var side=dir.Cross(Vec3.Up);
+            if(side.LengthSq<1e-8)side=dir.Cross(new Vec3(1,0,0));
+            side=side.Normalized();
+            var normal=side.Cross(dir).Normalized();
+            // Roll the blade around its own growth axis, independently from the
+            // pitch/curl that places the leaflet in the crown.
+            var rolledSide=side*Math.Cos(roll)+normal*Math.Sin(roll);
+            var rolledNormal=normal*Math.Cos(roll)-side*Math.Sin(roll);
+            int first=m.VertexCount;
+            Vec3 At(double t,double x)
+            {
+                double envelope=Math.Max(.045,Math.Pow(Math.Max(0,Math.Sin(Math.PI*t)),.68));
+                double width=halfWidth*envelope*(1+.11*x*Math.Sin(phase+baseP.X*1.7));
+                double twist=roll+(t-.5)*sweep;
+                var localSide=side*Math.Cos(twist)+normal*Math.Sin(twist);
+                var localNormal=normal*Math.Cos(twist)-side*Math.Sin(twist);
+                double fold=halfWidth*.19*(1-x*x)*Math.Sin(Math.PI*t);
+                double curl=camber*Math.Sin(Math.PI*t)+length*.055*t*t;
+                double lateralSweep=length*.018*Math.Sin(2*Math.PI*t+phase+tip.Z)*t;
+                return baseP+axis*t+localSide*(width*x+lateralSweep)+localNormal*(fold+curl);
+            }
+            for(int i=0;i<=longitudinal;i++)
+            {
+                double t=i/(double)longitudinal;
+                for(int j=0;j<=across;j++)
+                {
+                    double x=j/(double)across*2-1;
+                    var p=At(t,x);
+                    var along=At(Math.Min(1,t+1.0/longitudinal),x)-At(Math.Max(0,t-1.0/longitudinal),x);
+                    var lateral=At(t,Math.Min(1,x+.25))-At(t,Math.Max(-1,x-.25));
+                    var n=along.Cross(lateral).Normalized();
+                    if(n.LengthSq<1e-8)n=rolledNormal;
+                    if(n.Dot(rolledNormal)<0)n=-n;
+                    double shade=.86+.14*(1-Math.Abs(x))+.05*Math.Sin(t*Math.PI+phase);
+                    m.AddVertex(p,n,Primitives.Scale(color,shade),0,.5+.5*x,t);
+                }
+            }
+            int row=across+1;
+            for(int i=0;i<longitudinal;i++)for(int j=0;j<across;j++)
+            {
+                int a=first+i*row+j,b=a+row;
+                Primitives.TriangleFacing(m,a,b,a+1,m.NormalAt(a));
+                Primitives.TriangleFacing(m,a+1,b,b+1,m.NormalAt(a+1));
+            }
+            // All foliage uses the stable shader contract: across in U, base-tip in V.
+            for(int i=first;i<m.VertexCount;i++)m.Colors[i*4+3]=0;
+        }
+
+        // Foliage shaders consume a stable leaf-local coordinate: U crosses the
+        // blade and V runs from attachment to tip, independent of world placement.
+        private void SetLeafUv(int first,Vec3 baseP,Vec3 tip,Vec3 across,double width)
+        {
+            var axis=tip-baseP;double lengthSq=Math.Max(1e-12,axis.LengthSq);
+            for(int i=first;i<m.VertexCount;i++)
+            {
+                var p=m.Position(i)-baseP;
+                double v=Math.Clamp(p.Dot(axis)/lengthSq,0,1);
+                double u=Math.Clamp(.5+p.Dot(across)/Math.Max(1e-9,2*width*across.LengthSq),0,1);
+                m.UV[i*2]=(float)u;m.UV[i*2+1]=(float)v;
+                m.Colors[i*4+3]=0;
+            }
         }
 
         public void Cycad()
         {
-            // Unequal double crown, arching rachises, separated stiff pinnae. No umbrella disks.
-            for(int tier=0;tier<2;tier++) for(int f=0;f<24;f++)
+            // Dense, staggered crown of arching pinnate fronds. Fronds vary in age,
+            // lean and droop; each carries many paired leathery leaflets on a stout rachis.
+            for(int tier=0;tier<3;tier++) for(int f=0;f<18;f++)
             {
-                double a=phase+Tau*(f+tier*.43)/24+rng.Range(-.08,.08);
-                double length=tree.Def.CanopyRadius*rng.Range(.72,1.10);
+                double a=phase+Tau*(f+tier*.37)/18+rng.Range(-.07,.07);
+                double age=rng.Range(.78,1.13);
+                double length=tree.Def.CanopyRadius*rng.Range(.76,1.14)*age;
                 var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));var side=new Vec3(-dir.Z,0,dir.X);
-                var start=Centre(.88-tier*.09)+dir*r*.18;
-                var path=new Vec3[13];var rad=new double[13];
+                var start=Centre(.91-tier*.055)+dir*r*.16;
+                var path=new Vec3[19];var rad=new double[19];
                 for(int i=0;i<path.Length;i++)
                 {
-                    double t=i/12.0;
-                    path[i]=start+dir*(length*t)+Vec3.Up*(length*(.61*t-.70*t*t));
-                    rad[i]=r*(.028*(1-t)+.003);
+                    double t=i/18.0;
+                    double rise=tier==0?.94:tier==1?.66:.34;
+                    double fall=tier==0?.62:tier==1?.70:.88;
+                    double arch=length*(rise*t-fall*t*t)-length*Math.Pow(t,3)*rng.Range(.02,tier==2?.28:.12);
+                    path[i]=start+dir*(length*t)+Vec3.Up*arch;
+                    rad[i]=r*(.037*(1-t)+.0025);
                 }
-                Tube(path,rad,Primitives.Scale(green,.73),8,0);
-                for(int i=1;i<12;i++)
+                Tube(path,rad,Primitives.Scale(green,.71),9,0);
+                for(int i=1;i<18;i++)
                 {
-                    double t=i/12.0,leaf=length*.20*Math.Pow(Math.Sin(t*Math.PI),.55);
+                    double t=i/18.0;
+                    double leaflet=length*(.16+.105*Math.Sin(Math.PI*t))*rng.Range(.88,1.13);
                     for(int sign=-1;sign<=1;sign+=2)
                     {
-                        var end=path[i]+side*(leaf*sign)+dir*leaf*.34-Vec3.Up*leaf*.13;
-                        Blade(path[i],end,leaf*.065,Primitives.Scale(green,rng.Range(.84,1.13)),3);
+                        double cant=tier==0?rng.Range(-.28,.58):tier==1?rng.Range(-.48,.48):rng.Range(-.92,-.24);
+                        cant*=sign*(rng.Chance(.35)?-1:1);
+                        var end=path[i]+side*(leaflet*sign)+dir*leaflet*.20+Vec3.Up*leaflet*cant;
+                        // The leaflet blade grows directly from the rachis. A stalk
+                        // tube at every pinna only reads as wire at normal camera scale.
+                        Blade(path[i],end,leaflet*rng.Range(.18,.23),Primitives.Scale(green,rng.Range(.78,1.12)),5);
                     }
                 }
             }
-            Cone(Centre(.96)+Vec3.Up*r*.55,new Vec3(r*.43,r*1.1,r*.43),new[]{.65,.38,.16});
-            Cone(Centre(.91)+new Vec3(r*.55,r*.3,r*.18),new Vec3(r*.32,r*.70,r*.32),new[]{.42,.44,.20});
+            Cone(Centre(.96)+Vec3.Up*r*.42,new Vec3(r*.48,r*.94,r*.48),new[]{.65,.38,.16});
+            Cone(Centre(.93)+new Vec3(r*.48,r*.22,-r*.26),new Vec3(r*.34,r*.64,r*.34),new[]{.42,.44,.20});
         }
 
         private void Cone(Vec3 centre,Vec3 radii,double[] color)
@@ -539,27 +656,71 @@ public static class PilotTreeMeshes
 
         public void Redwood()
         {
-            // High, irregular reiterated crown above a long fibrous bole, with sparse dead lower limbs.
-            for(int j=0;j<4;j++)Branch(.31+j*.06,phase+j*1.7,r*rng.Range(1.1,1.8),r*.3,r*.1,r*.08);
-            for(int crown=0;crown<12;crown++)
+            // Tall, broken, tiered crown. Reiterated leaders emerge from a compact
+            // crown mass while old lower limbs remain as blunt, bark-heavy stubs.
+            for(int j=0;j<7;j++)
             {
-                double a=phase+crown*2.399;
-                double t=.67+crown*.020;
-                double len=tree.Def.CanopyRadius*rng.Range(.48,.85);
-                var tip=Branch(t,a,len,len*.34,len*.18,r*.13);
-                var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-                for(int twig=0;twig<5;twig++)
+                double a=phase+j*2.399+rng.Range(-.18,.18);
+                var end=Branch(.30+j*.052,a,r*rng.Range(1.3,2.3),r*.25,r*.18,r*.10);
+                if(j%2==0) Tube(new[]{end,end+Vec3.Up*r*.25,end+Vec3.Up*r*.42},
+                    new[]{r*.075,r*.047,r*.006},Primitives.Scale(bark,.72),8);
+            }
+            // Reiterated leaders rise above the bole rather than leaving a bare spike.
+            for(int leader=0;leader<5;leader++)
+            {
+                double a=facing+(-.72+leader*.36)+rng.Range(-.10,.10);
+                var d=new Vec3(Math.Cos(a),0,Math.Sin(a));
+                var start=Centre(.80+rng.Range(-.035,.035))+d*r*.10;
+                var end=Centre(1.08+rng.Range(-.018,.045))+d*r*rng.Range(.48,1.12);
+                var mid=Vec3.Lerp(start,end,.55)+d*r*.16;
+                Tube(new[]{start,mid,end},new[]{r*.12,r*.075,r*.016},Primitives.Scale(bark,.76),8);
+                NeedleSpray(start,end,false);
+                for(int fork=0;fork<3;fork++)
                 {
-                    var at=Vec3.Lerp(Centre(t),tip,(twig+.5)/6);
-                    for(int sign=-1;sign<=1;sign+=2)
+                    double q=.35+fork*.24+rng.Range(-.05,.05);
+                    var root=Vec3.Lerp(start,end,q);
+                    double fa=a+(fork%2==0?1:-1)*rng.Range(.56,.95);
+                    var fd=new Vec3(Math.Cos(fa),0,Math.Sin(fa));
+                    var forkTip=root+fd*r*rng.Range(.70,1.30)+Vec3.Up*r*rng.Range(.34,.76);
+                    Tube(new[]{root,Vec3.Lerp(root,forkTip,.58)+Vec3.Up*r*.08,forkTip},
+                        new[]{r*.06,r*.032,r*.006},Primitives.Scale(bark,.73),7);
+                    NeedleSpray(root,forkTip,false);
+                    NeedleSpray(Vec3.Lerp(root,forkTip,.52),forkTip+fd*r*.16,false);
+                }
+            }
+            for(int tier=0;tier<5;tier++)
+            {
+                int limbs=7+tier%2;
+                for(int crown=0;crown<limbs;crown++)
+                {
+                    double a=facing+rng.Range(-.78,.78)+Math.Sin(tier*1.9+crown*2.3)*.12;
+                    double t=.58+tier*.082+rng.Range(-.028,.028);
+                    double len=tree.Def.CanopyRadius*rng.Range(.82,1.18)*(1-.10*tier);
+                    var tip=Branch(t,a,len,len*.37,len*.16,r*.105*(1-.08*tier));
+                    var d=new Vec3(Math.Cos(a),0,Math.Sin(a));
+                    for(int run=0;run<2;run++)
                     {
-                        var td=new Vec3(Math.Cos(a+sign*.92),0,Math.Sin(a+sign*.92));
-                        var end=at+td*len*.26+Vec3.Up*len*.10;
-                        Tube(new[]{at,Vec3.Lerp(at,end,.6),end},new[]{r*.02,r*.009,r*.002},bark,6);
-                        NeedleSpray(at,end,false);
-                        var cross=td.Cross(Vec3.Up).Normalized();
-                        NeedleSpray(Vec3.Lerp(at,end,.35),end+cross*len*.12,false);
-                        NeedleSpray(Vec3.Lerp(at,end,.45),end-cross*len*.12,false);
+                        double u=run==0?.66:.90;
+                        var root=Centre(t)+d*(Radius(t)*.65+len*u)+Vec3.Up*(len*.37*u-len*.16*u*u);
+                        var lateral=d.Cross(Vec3.Up).Normalized()*(run==0?1:-1);
+                        NeedleSpray(root,root+d*len*.12+lateral*len*.10-Vec3.Up*len*.035,false);
+                    }
+                    for(int twig=0;twig<5;twig++)
+                    {
+                        double q=(twig+.7)/5.8;
+                        var at=Vec3.Lerp(Centre(t)+d*Radius(t)*.65,tip,q);
+                        for(int sign=-1;sign<=1;sign+=2)
+                        {
+                            double ta=a+sign*rng.Range(.74,1.02);
+                            var td=new Vec3(Math.Cos(ta),0,Math.Sin(ta));
+                            double sl=len*rng.Range(.20,.34);
+                            var se=at+td*sl+Vec3.Up*sl*.08;
+                            Tube(new[]{at,Vec3.Lerp(at,se,.55),se},new[]{r*.019,r*.009,r*.0015},Primitives.Scale(bark,.78),6);
+                            NeedleSpray(at,se,false);
+                            var cross=td.Cross(Vec3.Up).Normalized();
+                            NeedleSpray(Vec3.Lerp(at,se,.42),se+cross*sl*.28,false);
+                            NeedleSpray(Vec3.Lerp(at,se,.58),se-cross*sl*.24,false);
+                        }
                     }
                 }
             }
@@ -567,28 +728,42 @@ public static class PilotTreeMeshes
 
         public void Broadleaf()
         {
-            for(int limb=0;limb<12;limb++)
+            // Irregular, tiered crown with sweeping structural limbs, fine twigs,
+            // overlapping broad blades and small fruit on outer branchlets.
+            for(int limb=0;limb<18;limb++)
             {
-                double a=facing+.95*Math.Sin(limb*2.399), t=.55+limb*.034;
-                double length=tree.Def.CanopyRadius*rng.Range(.68,.95);
-                var tip=Branch(t,a,length,length*.36,length*.12,r*.20);
-                for(int twig=0;twig<10;twig++)
+                double a=facing+rng.Range(-.78,.78)+Math.Sin(limb*2.39)*.11;
+                double t=.54+(limb%8)*.052+rng.Range(-.018,.018);
+                double tier=(t-.54)/.40;
+                double length=tree.Def.CanopyRadius*(.90-.16*tier)*rng.Range(.78,1.04);
+                var tip=Branch(t,a,length,length*rng.Range(.30,.48),length*rng.Range(.08,.24),r*.19);
+                for(int twig=0;twig<8;twig++)
                 {
-                    double q=(twig+1)/11.0;
+                    double q=(twig+.5)/8.5;
                     var at=Vec3.Lerp(Centre(t),tip,q);
-                    double ta=a+(twig%2==0?1:-1)*rng.Range(.6,1.15);
+                    double ta=a+(twig%2==0?1:-1)*rng.Range(.58,1.02);
                     var dir=new Vec3(Math.Cos(ta),0,Math.Sin(ta));
-                    var end=at+dir*length*.25+Vec3.Up*length*.12;
-                    Tube(new[]{at,Vec3.Lerp(at,end,.5)+Vec3.Up*r*.16,end},new[]{r*.046,r*.023,r*.004},bark,8);
+                    double twigLength=length*rng.Range(.20,.31);
+                    var end=at+dir*twigLength+Vec3.Up*twigLength*rng.Range(.20,.47);
+                    Tube(new[]{at,Vec3.Lerp(at,end,.48)+Vec3.Up*r*.12,end},new[]{r*.035,r*.016,r*.002},Primitives.Scale(bark,.82),7);
                     for(int leaf=0;leaf<7;leaf++)
                     {
-                        var attach=Vec3.Lerp(at,end,(leaf+1)/8.0);
-                        double la=ta+(leaf%2==0?1:-1)*.85;
-                        double ll=r*rng.Range(.43,.69);
-                        var leafTip=attach+new Vec3(Math.Cos(la)*ll,ll*rng.Range(.15,.7),Math.Sin(la)*ll);
-                        Blade(attach,leafTip,ll*.31,Primitives.Scale(green,rng.Range(.78,1.18)),4);
+                        double u=(leaf+.5)/7.0;
+                        var attach=Vec3.Lerp(at,end,u);
+                        double la=ta+(leaf%2==0?1:-1)*rng.Range(.72,1.18);
+                        double ll=r*rng.Range(.38,.66);
+                        double pitch=rng.Range(-1.00,1.14);
+                        var leafTip=attach+new Vec3(Math.Cos(la)*ll*Math.Cos(pitch),ll*Math.Sin(pitch),Math.Sin(la)*ll*Math.Cos(pitch))-Vec3.Up*ll*rng.Range(.02,.15);
+                        Blade(attach,leafTip,ll*rng.Range(.25,.34),Primitives.Scale(green,rng.Range(.76,1.20)),5);
+                        if(leaf%2==0)
+                        {
+                            double opposite=la+(leaf%4==0?.72:-.72);
+                            double secondPitch=rng.Range(-1.12,.96);
+                            var second=attach+new Vec3(Math.Cos(opposite)*ll*.82*Math.Cos(secondPitch),ll*.82*Math.Sin(secondPitch),Math.Sin(opposite)*ll*.82*Math.Cos(secondPitch))-Vec3.Up*ll*.07;
+                            Blade(attach,second,ll*.25,Primitives.Scale(green,rng.Range(.82,1.16)),5);
+                        }
                     }
-                    if(twig%3==0) Cone(end-Vec3.Up*r*.13,new Vec3(r*.085,r*.12,r*.085),new[]{.57,.32,.15});
+                    if(twig%3==0) Cone(end-Vec3.Up*r*.13,new Vec3(r*.09,r*.14,r*.09),new[]{.57,.32,.15});
                 }
             }
         }

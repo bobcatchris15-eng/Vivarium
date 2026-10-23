@@ -9,47 +9,111 @@ public static partial class OrganismMeshes
     // Continuous quadratic midrib, tapered margins and a shallow fold. Unlike the old three-triangle
     // blades, these ribbons can bow, twist and roll without producing a sharp elbow in the silhouette.
     internal static void CurvedBlade(MeshData m, Vec3 root, Vec3 control, Vec3 tip, Vec3 sideHint,
-        double width, double[] baseCol, double[] tipCol, int segments = 8,
+        double width, double[] baseCol, double[] tipCol, int segments = 18,
         double twist = 0, double shoulder = 1, double serration = 0, double foliage = 1)
     {
-        int n = m.FloraDetailLevel switch { 2 => Math.Max(4, segments / 2), 1 => Math.Max(5, segments - 2), _ => segments };
-        if (m.Lod is { } lod) n = lod.Segments(n, 3);
-        Vec3 At(double t, double x) => CurvedBladePoint(root,control,tip,sideHint,width,t,x,twist,shoulder,serration);
-        Vec3 Normal(double t, double x)
+        int rows = m.FloraDetailLevel switch { 2 => 8, 1 => 12, _ => Math.Max(segments, 18) };
+        if (m.Lod is { } lod) rows = lod.Segments(rows, 4);
+        int cols = m.FloraDetailLevel switch { 2 => 4, 1 => 6, _ => 8 };
+        if (m.Lod is { } lodC) cols = Math.Max(3, (int)Math.Round(cols * lodC.Blade));
+
+        Vec3 At(double t, double x, int face) => CurvedBladePoint(root, control, tip, sideHint, width, t, x, twist, shoulder, serration, face);
+        Vec3 Normal(double t, double x, int face)
         {
-            const double e = .001;
-            var along = At(Math.Min(1,t+e),x)-At(Math.Max(0,t-e),x);
-            var across = At(t,Math.Min(1,x+e))-At(t,Math.Max(-1,x-e));
+            const double e = .002;
+            var along = At(Math.Min(1, t + e), x, face) - At(Math.Max(0, t - e), x, face);
+            var across = At(t, Math.Min(1, x + e), face) - At(t, Math.Max(-1, x - e), face);
             var normal = across.Cross(along).Normalized();
             return normal.LengthSq > 1e-8 ? normal : Vec3.Up;
         }
+
         int vertex = m.VertexCount, index = m.Indices.Count;
-        // Both materials render a single thin sheet with explicit backface pigment.
-        // Coincident front/back triangles double the work and can fight over their normals.
-        for (int face = 0; face < 1; face++)
+        int[] rootIdx = new int[2];
+        int[] tipIdx = new int[2];
+        int[,,] gridIdx = new int[2, rows - 1, cols + 1];
+
+        for (int face = 0; face < 2; face++)
         {
-            double sign = face == 0 ? 1 : -1;
-            int V(double t, double x) => m.AddVertex(At(t,x), Normal(t,x)*sign,
-                Primitives.Mix(baseCol,tipCol,t),1,t,(x+1)*.5,face,foliage);
-            int start = V(0,0);
-            for (int row=1;row<n;row++) for(int col=-1;col<=1;col++) V(row/(double)n,col);
-            int end = V(1,0);
-            void Tri(int a,int b,int c) => Primitives.TriangleFacing(m,a,b,c,
-                (m.NormalAt(a)+m.NormalAt(b)+m.NormalAt(c)).Normalized());
-            Tri(start,start+1,start+2); Tri(start,start+2,start+3);
-            for(int row=0;row<n-2;row++)
+            double sign = face == 0 ? 1.0 : -1.0;
+            var underCol = Primitives.Mix(baseCol, new[] { 0.35, 0.48, 0.28 }, 0.42);
+            var bCol = face == 0 ? baseCol : underCol;
+            var tCol = face == 0 ? tipCol : underCol;
+
+            rootIdx[face] = m.AddVertex(At(0, 0, face), Normal(0, 0, face) * sign, bCol, 1.0, 0.0, 0.5, face, foliage);
+
+            for (int r = 1; r < rows; r++)
             {
-                int a=start+1+row*3;
-                Tri(a,a+3,a+1); Tri(a+1,a+3,a+4);
-                Tri(a+1,a+4,a+2); Tri(a+2,a+4,a+5);
+                double t = (double)r / rows;
+                var rowCol = Primitives.Mix(bCol, tCol, t);
+                for (int c = 0; c <= cols; c++)
+                {
+                    double x = (double)c / cols * 2.0 - 1.0;
+                    gridIdx[face, r - 1, c] = m.AddVertex(At(t, x, face), Normal(t, x, face) * sign, rowCol, 1.0, t, (x + 1.0) * 0.5, face, foliage);
+                }
             }
-            Tri(end-3,end,end-2); Tri(end-2,end,end-1);
+
+            tipIdx[face] = m.AddVertex(At(1, 0, face), Normal(1, 0, face) * sign, tCol, 1.0, 1.0, 0.5, face, foliage);
+
+            // Triangulation: root fan
+            for (int c = 0; c < cols; c++)
+            {
+                int va = gridIdx[face, 0, c];
+                int vb = gridIdx[face, 0, c + 1];
+                Primitives.TriangleFacing(m, rootIdx[face], va, vb, m.NormalAt(rootIdx[face]));
+            }
+
+            // Triangulation: middle quad strips
+            for (int r = 0; r < rows - 2; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    int a = gridIdx[face, r, c];
+                    int b = gridIdx[face, r, c + 1];
+                    int d = gridIdx[face, r + 1, c];
+                    int e = gridIdx[face, r + 1, c + 1];
+                    Primitives.TriangleFacing(m, a, d, b, m.NormalAt(a));
+                    Primitives.TriangleFacing(m, b, d, e, m.NormalAt(b));
+                }
+            }
+
+            // Triangulation: tip fan
+            for (int c = 0; c < cols; c++)
+            {
+                int va = gridIdx[face, rows - 2, c];
+                int vb = gridIdx[face, rows - 2, c + 1];
+                Primitives.TriangleFacing(m, va, tipIdx[face], vb, m.NormalAt(va));
+            }
         }
-        if (foliage > .5) m.RecordLeaf(vertex,index,root,(tip-root).Length);
+
+        // Stitched boundary rim connecting upper and lower surfaces
+        var sampleAcross = sideHint.Normalized();
+        // Left rim (c = 0)
+        Primitives.TriangleFacing(m, rootIdx[0], rootIdx[1], gridIdx[0, 0, 0], -sampleAcross);
+        Primitives.TriangleFacing(m, rootIdx[1], gridIdx[1, 0, 0], gridIdx[0, 0, 0], -sampleAcross);
+        for (int r = 0; r < rows - 2; r++)
+        {
+            Primitives.TriangleFacing(m, gridIdx[0, r, 0], gridIdx[1, r, 0], gridIdx[0, r + 1, 0], -sampleAcross);
+            Primitives.TriangleFacing(m, gridIdx[1, r, 0], gridIdx[1, r + 1, 0], gridIdx[0, r + 1, 0], -sampleAcross);
+        }
+        Primitives.TriangleFacing(m, gridIdx[0, rows - 2, 0], gridIdx[1, rows - 2, 0], tipIdx[0], -sampleAcross);
+        Primitives.TriangleFacing(m, gridIdx[1, rows - 2, 0], tipIdx[1], tipIdx[0], -sampleAcross);
+
+        // Right rim (c = cols)
+        Primitives.TriangleFacing(m, rootIdx[0], gridIdx[0, 0, cols], rootIdx[1], sampleAcross);
+        Primitives.TriangleFacing(m, rootIdx[1], gridIdx[0, 0, cols], gridIdx[1, 0, cols], sampleAcross);
+        for (int r = 0; r < rows - 2; r++)
+        {
+            Primitives.TriangleFacing(m, gridIdx[0, r, cols], gridIdx[0, r + 1, cols], gridIdx[1, r, cols], sampleAcross);
+            Primitives.TriangleFacing(m, gridIdx[1, r, cols], gridIdx[0, r + 1, cols], gridIdx[1, r + 1, cols], sampleAcross);
+        }
+        Primitives.TriangleFacing(m, gridIdx[0, rows - 2, cols], tipIdx[0], gridIdx[1, rows - 2, cols], sampleAcross);
+        Primitives.TriangleFacing(m, gridIdx[1, rows - 2, cols], tipIdx[0], tipIdx[1], sampleAcross);
+
+        if (foliage > .5) m.RecordLeaf(vertex, index, root, (tip - root).Length);
     }
 
     private static Vec3 CurvedBladePoint(Vec3 root, Vec3 control, Vec3 tip, Vec3 sideHint,
-        double width, double t, double x, double twist, double shoulder, double serration)
+        double width, double t, double x, double twist, double shoulder, double serration, int face = 0)
     {
         var side = sideHint.Normalized();
         var centre = root * ((1-t)*(1-t)) + control * (2*t*(1-t)) + tip * (t*t);
@@ -58,10 +122,22 @@ public static partial class OrganismMeshes
         if (across.LengthSq < 1e-8) across = tangent.Cross(new Vec3(1, 0, 0));
         across = Axis.RotateAround(across.Normalized(), tangent, twist*t);
         var up = across.Cross(tangent).Normalized();
+        // Sheathed culm base wrapping around axis
+        if (t < 0.18)
+        {
+            double sw = (1.0 - t / 0.18);
+            across = Axis.RotateAround(across, tangent, sw * 0.35 * x);
+            up = across.Cross(tangent).Normalized();
+        }
         double envelope = Math.Pow(Math.Max(0, Math.Sin(Math.PI*Math.Pow(t, shoulder))), .75);
         double teeth = 1 + serration * (2*Math.Abs(t*9-Math.Floor(t*9+.5))-.5);
         double half = width * envelope * (1 + .07*x*Math.Sin(t*5));
-        return centre + across*(x*half*teeth) + up*(half*(.16*(1-x*x)-.035*Math.Abs(x)));
+        double absX = Math.Abs(x);
+        double zThick = face == 0 ? 0.00018 : -0.00018;
+        double zProfile = face == 0
+            ? (0.16 * (1.0 - x * x) - 0.08 * absX)
+            : (0.16 * (1.0 - x * x) - 0.22 * (1.0 - absX));
+        return centre + across*(x*half*teeth) + up*(zThick + half * zProfile);
     }
 
 
@@ -133,8 +209,8 @@ public static partial class OrganismMeshes
 {
     public const int FloraLodTiers = 3;
     /// <summary>Hard cap on the top tier of every species.</summary>
-    public const int FloraTopTriangleCap = 100000;
-    public const double FloraMidRatio = 0.55, FloraLowRatio = 0.18;
+    public const int FloraTopTriangleCap = 160000;
+    public const double FloraMidRatio = 0.85, FloraLowRatio = 0.60;
 
     /// <summary>
     /// Top-tier triangle cap for one species. The default holds for every form, but a species whose
@@ -145,22 +221,22 @@ public static partial class OrganismMeshes
     {
         // A clover mat is hundreds of small overlapping leaflets; below its budget the near tier
         // thins the mat into scattered pads instead of a continuous sward.
-        "trifold" => 40000,
+        "trifold" => 160000,
         // A fern's near read is its pinnae: dozens of finely divided blades per frond, nine fronds
         // deep. Below its budget the near tier drops pinnae and the fern reads as a handful of
         // broad leaves instead of a feather.
-        "veilfern" => 52000,
+        "veilfern" => 160000,
         // A bramble's near read is its prickles and its palmate leaves: without them the brake is a
         // tangle of bare wires.
-        "hookthicket" => 64000,
+        "hookthicket" => 160000,
         // The coinrunner mat is the same argument: a wide carpet of large reniform coins, each one
         // a modelled blade with its own venation, a coin-border bead and a rolled edge. Below its
         // budget the near tier drops coins and the carpet opens into separate rafts.
-        "coinrunner" => 36000,
+        "coinrunner" => 160000,
         // A Sarracenia trap is a modelled organ: trumpet wall, throat, rolled lip, erect hood with
         // its areolate net and a fringe of crystalline needles. Below its budget the tierer drops
         // the hood fringe and the net, and the trap stops reading as a pitcher plant.
-        "pitcher_plant" => 44000,
+        "pitcher_plant" => 160000,
         _ => FloraTopTriangleCap,
     };
 
@@ -348,7 +424,8 @@ public static partial class OrganismMeshes
                 return (p, score: importance + (tubePart.Contains(p) ? 4 : 0));
             }).OrderBy(x => x.score).ThenBy(x => x.p).ToList();
             int dropCount = Math.Min(order.Count - 1, (int)Math.Round(order.Count * (1 - keepFraction)));
-            for (int k = 0; k < dropCount; k++) drop[order[k].p] = true;
+            // WP-19: Plants never lose leaves or minor stems at distance; LOD is handled via tessellation reduction.
+            // for (int k = 0; k < dropCount; k++) drop[order[k].p] = true;
         }
 
         var map = new int[nv];

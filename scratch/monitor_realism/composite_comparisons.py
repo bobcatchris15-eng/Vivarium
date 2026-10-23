@@ -67,7 +67,7 @@ for view_id, view_title in views:
 
     # Footer metrics
     draw.text((x_base + 10, total_h - 32), "Baseline: 192,924 Vertices | 270,596 Tris | 14,000 Floating Scute Prisms", fill=(160, 165, 175), font=font_sub)
-    draw.text((x_real + 10, total_h - 32), "Realistic: 84,886 Vertices (-56%) | 148,462 Tris | Shield Imbricate PBR", fill=(100, 210, 150), font=font_sub)
+    draw.text((x_real + 10, total_h - 32), "Realistic: 68,611 Vertices (-64%) | 121,395 Tris (-55%) | 3D Osteoderms & Seam-Free PBR", fill=(100, 210, 150), font=font_sub)
 
     out_file = os.path.join(COMP_DIR, f"comparison_{view_id}.png")
     comp.save(out_file)

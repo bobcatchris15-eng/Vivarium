@@ -1,4 +1,4 @@
-// Shared living-tissue optics, using linear-light reflectance rather than emission.
+﻿// Shared living-tissue optics, using linear-light reflectance rather than emission.
 float leaf_hash(float x) { return fract(sin(x * 59.171 + 11.79) * 43758.5453); }
 vec3 leaf_pigment(vec3 vertex_tissue, vec3 species_pigment, float maturity, float identity) {
  float age=smoothstep(.18,.91,clamp(maturity,0.,1.));
@@ -38,4 +38,10 @@ vec2 leaf_uv_gradient(float height,vec2 uv) {
  vec2 grad=vec2(dFdx(height)*b.y-dFdy(height)*a.y,
                 dFdy(height)*a.x-dFdx(height)*b.x)/jac;
  return clamp(grad,vec2(-4.),vec2(4.));
+}
+// Henyey-Greenstein phase function for forward tissue subsurface scattering
+float henyey_greenstein(float cos_theta, float g) {
+ float g2 = g * g;
+ float denom = 1.0 + g2 - 2.0 * g * cos_theta;
+ return (1.0 - g2) / (4.0 * 3.14159265359 * pow(max(denom, 0.001), 1.5));
 }

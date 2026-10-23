@@ -1,4 +1,4 @@
-// Dedicated thin/volumetric foliage. CUSTOM0=(seed,variant,age,flex), CUSTOM1=(attachment,length).
+﻿// Dedicated thin/volumetric foliage. CUSTOM0=(seed,variant,age,flex), CUSTOM1=(attachment,length).
 shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/surface.gdshaderinc"
@@ -197,6 +197,10 @@ void fragment() {
     ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), .35, 1.0);
     SPECULAR=volumetric ? .45 : mix(0.35, mix(0.38, 0.50, cuticle_sheen), topf);
     float vein_thickness = clamp(anatomy.g * 0.75 + anatomy.r * 0.25, 0.0, 1.0);
+    RIM = mix(0.18, 0.48, cuticle_sheen);
+    tissue_rim = RIM;
+    float tau = clamp(mix(0.35, 2.2, physical.b) + anatomy.r * 0.85, 0.15, 3.0);
+    tissue_tau = tau;
     vec3 through=leaf_through(color, actual_trans, vein_thickness,
         mix(.62, 1.35, physical.b), side) * mix(.65, 1., physical.g);
     BACKLIGHT=through;

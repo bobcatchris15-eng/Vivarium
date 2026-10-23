@@ -16,7 +16,7 @@ OUT_DIR = Path(r"E:\Vivarium\scratch\monitor_realism\renders")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 BASELINE_GLB = r"E:\Vivarium\game\assets\guardians\great_ground\guardian.glb"
-REALISTIC_GLB = r"E:\Vivarium\scratch\monitor_realism\models\guardian_realistic.glb"
+REALISTIC_GLB = r"E:\Vivarium\game\assets\guardians\great_ground\guardian.glb"
 
 def setup_studio():
     scene = bpy.context.scene
@@ -131,7 +131,8 @@ def render_model(glb_path, prefix):
     print(f"Finished calibrated renders for {prefix}!")
 
 def main():
-    render_model(BASELINE_GLB, "baseline")
+    if not (OUT_DIR / "baseline_head.png").exists():
+        render_model(BASELINE_GLB, "baseline")
     render_model(REALISTIC_GLB, "realistic")
     print("ALL CALIBRATED STUDIO RENDERS COMPLETED!")
 

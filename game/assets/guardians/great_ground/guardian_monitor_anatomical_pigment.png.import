@@ -3,22 +3,23 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c64bskehosvqf"
-path="res://.godot/imported/guardian_monitor_anatomical_pigment.png-b3af896d7473a05eed2560ff31b68de2.ctex"
+path.s3tc="res://.godot/imported/guardian_monitor_anatomical_pigment.png-b3af896d7473a05eed2560ff31b68de2.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "af5282d8ad46dad37f92af31967b30d3"
+"md5": "1f8f7f0312ee78b8e4edfd49e9acd9ed"
 }
 
 [deps]
 
 source_file="res://assets/guardians/great_ground/guardian_monitor_anatomical_pigment.png"
-dest_files=["res://.godot/imported/guardian_monitor_anatomical_pigment.png-b3af896d7473a05eed2560ff31b68de2.ctex"]
+dest_files=["res://.godot/imported/guardian_monitor_anatomical_pigment.png-b3af896d7473a05eed2560ff31b68de2.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

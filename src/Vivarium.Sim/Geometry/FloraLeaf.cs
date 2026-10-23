@@ -11,7 +11,7 @@ public readonly record struct FloraLeaf(int FirstVertex, int VertexCount, int Fi
 /// 1 medium (down to ~40 px), 2 far. Every tier is a full parametric mesh; nothing is ever skipped.</summary>
 public static class FloraDetail
 {
-    public const double FullPixels = 120, MidPixels = 40;
+    public const double FullPixels = 25, MidPixels = 10;
 
     public static int Select(double pixels, int previous = -1) => previous switch
     {

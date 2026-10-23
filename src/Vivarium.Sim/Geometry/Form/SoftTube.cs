@@ -28,7 +28,8 @@ public static class SoftTube
         var frames = Axis.Build(p.Axis, seed);
         int n = frames.Count;
         if (n < 2) return 0;
-        int segments = Math.Max(6, p.Segments);
+        int segments = Math.Max(12, p.Segments);
+        if (m.Lod is { } lod) segments = Math.Max(8, lod.Sides(segments));
 
         double filletFrac = junction is { } j0 && p.Axis.Length > 1e-9 ? MathD.Clamp01(j0.FilletLength / p.Axis.Length) : 0;
 
@@ -38,13 +39,25 @@ public static class SoftTube
             double t = (double)i / (n - 1);
             double taper = MathD.Lerp(p.BaseRadius, p.TipRadius, t);
             double flare = p.BaseFlare * Math.Exp(-8 * t);
+
+            // Botanical pulvinus swellings at petiole ends (t < 0.12 and t > 0.88)
+            double pulvinusBase = t < 0.12 ? 0.38 * Math.Sin(Math.PI * (t / 0.12)) : 0.0;
+            double pulvinusApex = t > 0.88 ? 0.42 * Math.Sin(Math.PI * ((1.0 - t) / 0.12)) : 0.0;
+            double pulvinus = 1.0 + Math.Max(pulvinusBase, pulvinusApex);
+
+            // Sheathing stipule / ochrea collars at stem nodes
+            double collar = (junction != null || t < 0.15) ? 0.22 * Math.Exp(-Math.Pow((t - 0.08) / 0.04, 2.0)) : 0.0;
+
+            // Flared basal root-collar soil mounds where stems enter the ground
+            double rootFlare = p.BaseFlare > 0 ? p.BaseFlare * 0.45 * Math.Exp(-12 * t) : 0.0;
+
             double filletBoost = 0;
             if (junction is { } j && filletFrac > 1e-9 && t < filletFrac)
             {
                 double ft = 1 - t / filletFrac; // 1 at base, 0 at end of fillet
                 filletBoost = (j.ParentRadius - p.BaseRadius) * MathD.SmoothStep(0, 1, ft) * 0.6;
             }
-            radii[i] = Math.Max(1e-6, taper * (1 + flare) + Math.Max(0, filletBoost));
+            radii[i] = Math.Max(1e-6, taper * (1 + flare + rootFlare) * pulvinus * (1 + collar) + Math.Max(0, filletBoost));
         }
 
         int start = m.VertexCount;

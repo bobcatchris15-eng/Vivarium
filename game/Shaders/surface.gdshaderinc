@@ -57,6 +57,189 @@ vec3 stem_surface_normal(vec3 geom_normal, vec3 p_world, vec2 uv, vec3 detail) {
 }
 
 
+vec2 hash22(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(443.897, 441.423, 437.195));
+    p3 += dot(p3, p3.yzx + 19.19);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// Variance-preserving hexagonal stochastic texture bombing.
+// Samples 3 triangle grid cells with height-weighted contrast-preserving blend:
+// W_i = pow(w_i, 4.0) * exp(6.0 * h_i).
+// Returns albedo (rgb) and roughness in .a, with tangent normal in n_out, height in h_out, and AO in ao_out.
+vec4 sample_stochastic_pbr(sampler2D col, sampler2D nrm, sampler2D rgh, sampler2D hgt, sampler2D ao, vec2 uv, out vec3 n_out, out float h_out, out float ao_out) {
+    // Transform to equilateral triangular (skewed) coordinates
+    // Skew factors: 1/sqrt(3) ~ 0.577350269, 2/sqrt(3) ~ 1.154700538
+    vec2 skewed = vec2(uv.x - 0.577350269 * uv.y, 1.154700538 * uv.y);
+    vec2 ip = floor(skewed);
+    vec2 fp = fract(skewed);
+
+    vec2 v0, v1, v2;
+    vec3 w;
+    if (fp.x + fp.y < 1.0) {
+        v0 = ip;
+        v1 = ip + vec2(1.0, 0.0);
+        v2 = ip + vec2(0.0, 1.0);
+        w = vec3(1.0 - fp.x - fp.y, fp.x, fp.y);
+    } else {
+        v0 = ip + vec2(1.0, 1.0);
+        v1 = ip + vec2(1.0, 0.0);
+        v2 = ip + vec2(0.0, 1.0);
+        w = vec3(fp.x + fp.y - 1.0, 1.0 - fp.y, 1.0 - fp.x);
+    }
+
+    vec2 h0 = hash22(v0);
+    vec2 h1 = hash22(v1);
+    vec2 h2 = hash22(v2);
+
+    float a0 = h0.x * 6.2831853;
+    float a1 = h1.x * 6.2831853;
+    float a2 = h2.x * 6.2831853;
+
+    vec2 uv0 = rot2(uv, a0) + h0 * 17.13;
+    vec2 uv1 = rot2(uv, a1) + h1 * 17.13;
+    vec2 uv2 = rot2(uv, a2) + h2 * 17.13;
+
+    // Base UV derivatives for anisotropic filtering across grid boundaries
+    vec2 duv_dx = dFdx(uv);
+    vec2 duv_dy = dFdy(uv);
+
+    vec4 c0 = textureGrad(col, uv0, duv_dx, duv_dy);
+    vec4 c1 = textureGrad(col, uv1, duv_dx, duv_dy);
+    vec4 c2 = textureGrad(col, uv2, duv_dx, duv_dy);
+
+    float r0 = textureGrad(rgh, uv0, duv_dx, duv_dy).r;
+    float r1 = textureGrad(rgh, uv1, duv_dx, duv_dy).r;
+    float r2 = textureGrad(rgh, uv2, duv_dx, duv_dy).r;
+
+    float h0_val = textureGrad(hgt, uv0, duv_dx, duv_dy).r;
+    float h1_val = textureGrad(hgt, uv1, duv_dx, duv_dy).r;
+    float h2_val = textureGrad(hgt, uv2, duv_dx, duv_dy).r;
+
+    float ao0 = textureGrad(ao, uv0, duv_dx, duv_dy).r;
+    float ao1 = textureGrad(ao, uv1, duv_dx, duv_dy).r;
+    float ao2 = textureGrad(ao, uv2, duv_dx, duv_dy).r;
+
+    vec3 n0 = unpack_normal(textureGrad(nrm, uv0, duv_dx, duv_dy).rgb);
+    vec3 n1 = unpack_normal(textureGrad(nrm, uv1, duv_dx, duv_dy).rgb);
+    vec3 n2 = unpack_normal(textureGrad(nrm, uv2, duv_dx, duv_dy).rgb);
+    n0.xy = rot2(n0.xy, -a0);
+    n1.xy = rot2(n1.xy, -a1);
+    n2.xy = rot2(n2.xy, -a2);
+
+    // Height-weighted contrast-preserving blend: W_i = pow(w_i, 4.0) * exp(6.0 * h_i)
+    float W0 = pow(max(0.0, w.x), 4.0) * exp(clamp(6.0 * h0_val, -10.0, 10.0));
+    float W1 = pow(max(0.0, w.y), 4.0) * exp(clamp(6.0 * h1_val, -10.0, 10.0));
+    float W2 = pow(max(0.0, w.z), 4.0) * exp(clamp(6.0 * h2_val, -10.0, 10.0));
+    float W_sum = max(1e-6, W0 + W1 + W2);
+    vec3 bw = vec3(W0, W1, W2) / W_sum;
+
+    vec3 final_col = c0.rgb * bw.x + c1.rgb * bw.y + c2.rgb * bw.z;
+    float final_rgh = r0 * bw.x + r1 * bw.y + r2 * bw.z;
+    n_out = normalize(n0 * bw.x + n1 * bw.y + n2 * bw.z);
+    h_out = h0_val * bw.x + h1_val * bw.y + h2_val * bw.z;
+    ao_out = ao0 * bw.x + ao1 * bw.y + ao2 * bw.z;
+
+    return vec4(final_col, final_rgh);
+}
+
+// Contact-Refining Parallax Occlusion Mapping (POM) + soft self-shadowing helper.
+// Uses linear stepping (24 steps) + 4 binary/secant refinement steps,
+// and computes soft self-shadow factor pom_shadow along light_ts (8 steps).
+vec2 pom_raymarch(sampler2D hgt_map, vec2 uv, vec3 view_ts, float height_scale, int steps, out float pom_shadow, vec3 light_ts) {
+    pom_shadow = 1.0;
+    if (height_scale <= 0.0) return uv;
+
+    vec3 v = view_ts.z < 0.0 ? -view_ts : view_ts;
+    v = normalize(v);
+    float vz = max(v.z, 0.05);
+    vec2 max_offset = -v.xy / vz * height_scale;
+
+    int num_steps = steps > 0 ? steps : 24;
+    float step_size = 1.0 / float(num_steps);
+
+    float curr_layer_depth = 0.0;
+    vec2 curr_uv = uv;
+    float curr_map_h = texture(hgt_map, curr_uv).r;
+    float curr_ray_h = 1.0;
+
+    vec2 prev_uv = uv;
+    float prev_ray_h = 1.0;
+    float prev_map_h = curr_map_h;
+
+    for (int i = 0; i < num_steps; i++) {
+        curr_layer_depth += step_size;
+        curr_uv = uv + max_offset * curr_layer_depth;
+        curr_ray_h = 1.0 - curr_layer_depth;
+        curr_map_h = texture(hgt_map, curr_uv).r;
+
+        if (curr_ray_h <= curr_map_h) {
+            break;
+        }
+
+        prev_uv = curr_uv;
+        prev_ray_h = curr_ray_h;
+        prev_map_h = curr_map_h;
+    }
+
+    // 4 refinement steps (secant + interval contraction)
+    vec2 uv_min = prev_uv;
+    vec2 uv_max = curr_uv;
+    float ray_min = prev_ray_h;
+    float ray_max = curr_ray_h;
+    float map_min = prev_map_h;
+    float map_max = curr_map_h;
+
+    for (int j = 0; j < 4; j++) {
+        float denom = (map_min - ray_min) + (ray_max - map_max);
+        float t = denom > 1e-5 ? clamp((map_min - ray_min) / denom, 0.0, 1.0) : 0.5;
+        vec2 mid_uv = mix(uv_min, uv_max, t);
+        float mid_ray_h = mix(ray_min, ray_max, t);
+        float mid_map_h = texture(hgt_map, mid_uv).r;
+
+        if (mid_ray_h > mid_map_h) {
+            uv_min = mid_uv;
+            ray_min = mid_ray_h;
+            map_min = mid_map_h;
+        } else {
+            uv_max = mid_uv;
+            ray_max = mid_ray_h;
+            map_max = mid_map_h;
+        }
+    }
+
+    vec2 final_uv = mix(uv_min, uv_max, 0.5);
+    float final_h = mix(ray_min, ray_max, 0.5);
+
+    // Soft self-shadowing along light_ts (8 steps)
+    vec3 l = light_ts;
+    if (l.z > 0.02) {
+        l = normalize(l);
+        vec2 light_dir = l.xy / max(l.z, 0.05) * height_scale;
+        float shadow_occlusion = 0.0;
+        float remaining_h = 1.0 - final_h;
+
+        if (remaining_h > 0.01) {
+            for (int s = 1; s <= 8; s++) {
+                float step_frac = float(s) / 8.0;
+                float shadow_ray_h = final_h + 0.01 + step_frac * remaining_h;
+                vec2 shadow_uv = final_uv + light_dir * (step_frac * remaining_h);
+                float shadow_map_h = texture(hgt_map, shadow_uv).r;
+
+                if (shadow_map_h > shadow_ray_h) {
+                    float diff = (shadow_map_h - shadow_ray_h) * (1.0 - step_frac * 0.5) * 3.5;
+                    shadow_occlusion = max(shadow_occlusion, diff);
+                }
+            }
+        }
+        pom_shadow = clamp(1.0 - shadow_occlusion, 0.0, 1.0);
+    } else {
+        pom_shadow = 0.0;
+    }
+
+    return final_uv;
+}
+
 // Anti-tiling: two lookups at different scales/rotations mixed by low-frequency noise.
 // Returns albedo (linear), roughness in .a; the matching normal is written to n_out (tangent space).
 vec4 sample_untiled(sampler2D col, sampler2D nrm, sampler2D rgh, vec2 uv, out vec3 n_out) {
