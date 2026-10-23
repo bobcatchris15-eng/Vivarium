@@ -114,6 +114,11 @@ public partial class IslandRenderer : Node3D
         _strataMat = Bridge.Shader("res://Shaders/strata.gdshader");
         Bridge.BindSurface(_strataMat, "soil", Bridge.Surfaces.Soil);
         Bridge.BindSurface(_strataMat, "gravel", Bridge.Surfaces.Gravel);
+        Bridge.BindSurface(_strataMat, "rock", Bridge.Surfaces.Rock);
+        // The cut faces map their U coordinate around the whole hex perimeter; an integer repeat count
+        // keeps the loop seam texel-continuous at the first corner.
+        _strataMat.SetShaderParameter("perimeter_metres", (float)(6.0 * w.Domain.Radius));
+        _strataMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
         BindStrataPalette(w);
         _top = new MeshInstance3D { Name = "TerrainTop" };
         _walls = new MeshInstance3D { Name = "StrataWalls" };
@@ -176,6 +181,7 @@ public partial class IslandRenderer : Node3D
         }
         _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
         _terrainMat.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
+        _strataMat.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
         bool propsDirty = _propsVersion != _w.Props.Version;
         if (!propsDirty && _accum < 1.5) return;
         _accum = 0;
