@@ -582,6 +582,29 @@ public partial class GuardianRenderer : Node3D
 
         WaterContact?.UpdateContact(delta);
 
+        // Push per-frame state into guardian surface shaders (GPU-side; no mesh re-upload).
+        float wetness = 0f;
+        float waterLevel = 0f;
+        if (WaterContact != null)
+        {
+            waterLevel = WaterContact.SurfaceElevation;
+            wetness = WaterContact.Wetness;
+            if (WaterContact.SurfaceElevation > 0 && _shownPos.Y < WaterContact.SurfaceElevation + 0.04f)
+                wetness = Math.Max(wetness, 1f - Math.Clamp((_shownPos.Y - (WaterContact.SurfaceElevation - 0.04f)) / 0.08f, 0f, 1f));
+        }
+        float breathingPhase = BreathingModifier != null ? BreathingModifier.Phase : MathF.Sin((float)_w!.Clock.SimSeconds * 1.5f);
+        Vector3 contactSphere = Vector3.Zero;
+        float contactRadius = 0f;
+        foreach (var mat in _guardianMaterials)
+        {
+            mat.SetShaderParameter("wetness", wetness);
+            mat.SetShaderParameter("water_level", waterLevel);
+            mat.SetShaderParameter("breathing_phase", breathingPhase);
+            mat.SetShaderParameter("contact_sphere", contactSphere);
+            mat.SetShaderParameter("contact_radius", contactRadius);
+            mat.SetShaderParameter("day_night", 1f);
+        }
+
         // Manage animation state
         UpdateAnimationState(g);
     }

@@ -22,6 +22,7 @@ public partial class GuardianWaterContact : Node3D
     public bool IsWalkingInWater { get; private set; }
     public float WaterDepth { get; private set; }
     public float SurfaceElevation { get; private set; }
+    public float Wetness { get; private set; }
     public float DisturbanceRadius { get; private set; }
     public Vector3[] RipplePositions { get; private set; } = Array.Empty<Vector3>();
 
@@ -50,6 +51,7 @@ public partial class GuardianWaterContact : Node3D
         IsWalkingInWater = walkingInWater;
         WaterDepth = depth;
         SurfaceElevation = double.IsNaN(surfY) ? pos.Y : (float)surfY;
+        Wetness = IsInWater ? 1f : 0f;
 
         float scale = (float)(g?.Scale ?? 1.0);
 

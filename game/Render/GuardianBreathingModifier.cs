@@ -23,6 +23,7 @@ public partial class GuardianBreathingModifier : SkeletonModifier3D
 
     public GuardianActivity Activity { get; set; } = GuardianActivity.Rest;
     public float CurrentExpansion { get; private set; }
+    public float Phase => _phase;
 
     public void Reset() => _initialized = false;
 

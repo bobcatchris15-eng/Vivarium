@@ -45,6 +45,8 @@ public sealed class GuardianSkinContact
     private readonly List<Candidate> _nasalCandidates = new();
     private static readonly string[] Regions = { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Tail", "Head" };
     public bool Valid { get; private set; }
+    /// <summary>When true, deformation/contact is applied via GPU shader uniforms instead of CPU mesh re-upload.</summary>
+    public bool GpuDeformationEnabled { get; set; } = true;
     public string Diagnostic { get; private set; } = "Not initialized";
     public float MaximumRestReconstructionError { get; private set; }
     public int RestVerticesChecked { get; private set; }
