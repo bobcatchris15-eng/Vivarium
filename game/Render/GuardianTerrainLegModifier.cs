@@ -67,7 +67,10 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
             bodyDrop = Math.Max(bodyDrop, Math.Min(0, Renderer.SupportHeight(p) + .145f * transform.Basis.Scale.X - p.Y));
         }
         BodyHeightAdjustment = bodyDrop;
+        // 2-bone analytical IK: pelvis/hips depression follows the lowest foot drop.
         int root = skeleton.FindBone("Root");
+        if (root < 0) root = skeleton.FindBone("Pelvis");
+        if (root < 0) root = skeleton.FindBone("Hips");
         if (root >= 0 && bodyDrop < 0)
         {
             var pose = transform * skeleton.GetBoneGlobalPose(root);
