@@ -1371,7 +1371,7 @@ public partial class FaunaRenderer : Node3D
     private static MultiMeshInstance3D MakeMmi(string name, ArrayMesh mesh) => new()
     {
         Name = name,
-        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
         Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = mesh, InstanceCount = 0 },
     };
 
