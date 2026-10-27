@@ -91,4 +91,7 @@ public sealed class RockSurfaceProfile
         }
         return highest;
     }
+
+    /// <summary>Canonical support surface query alias for entity placement.</summary>
+    public double SampleTop(double x, double z) => TopAt(x, z);
 }

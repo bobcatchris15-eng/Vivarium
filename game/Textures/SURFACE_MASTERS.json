@@ -1,0 +1,222 @@
+{
+  "license_url": "https://docs.ambientcg.com/license/",
+  "sets": [
+    {
+      "asset": "Ground048",
+      "url": "https://ambientcg.com/get?file=Ground048_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Ground048_4K-PNG_Color.png",
+          "sha256": "14a0d5e616c2092ad53e885e069539819caf1a797e77737d11c27fd359f8a4f4"
+        },
+        {
+          "path": "game/Textures/Ground048_4K-PNG_NormalGL.png",
+          "sha256": "900769878d4458fc1f26d754b170f0fa2a202555a44d0df1668e011ec7a52409"
+        },
+        {
+          "path": "game/Textures/Ground048_4K-PNG_Roughness.png",
+          "sha256": "54b9ac71366b5d4239a995358fdf411d82aa13fd4d6d2b096ad764fa4fab3823"
+        },
+        {
+          "path": "game/Textures/Ground048_4K-PNG_Displacement.png",
+          "sha256": "860fca326a219ec687c930ec097607e524e69f25b9201a8542c032c654892fea"
+        },
+        {
+          "path": "game/Textures/Ground048_4K-PNG_AmbientOcclusion.png",
+          "sha256": "85240eab3fda3c6f11c21ab0a05b481e0082d877355648d292a7a941143a048c"
+        }
+      ]
+    },
+    {
+      "asset": "Ground037",
+      "url": "https://ambientcg.com/get?file=Ground037_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Ground037_4K-PNG_Color.png",
+          "sha256": "a88782cd1b5655386eba0ccd4faff7311eec141a4d119298911e2d31a802fbca"
+        },
+        {
+          "path": "game/Textures/Ground037_4K-PNG_NormalGL.png",
+          "sha256": "8a1a42ca644149cce8474aabc3751aefd04d217c98838e7b44c67ac8356252e0"
+        },
+        {
+          "path": "game/Textures/Ground037_4K-PNG_Roughness.png",
+          "sha256": "8fb7f7900b5fe025c3bdb8937785390804a39909447482c41f4824af46db4f2a"
+        },
+        {
+          "path": "game/Textures/Ground037_4K-PNG_Displacement.png",
+          "sha256": "c1a3a2a3097cd0f5a9eb41148f6871baa1b54d1ece2aab86bf50679cedb1097e"
+        },
+        {
+          "path": "game/Textures/Ground037_4K-PNG_AmbientOcclusion.png",
+          "sha256": "37f884d6cc82b4967db8de9f3c620a9ade04b7050a47efc8e69670441da9dafd"
+        }
+      ]
+    },
+    {
+      "asset": "Moss002",
+      "url": "https://ambientcg.com/get?file=Moss002_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Moss002_4K-PNG_Color.png",
+          "sha256": "92fc2fddcafd8d690810efdf6aee5329994f83bfeede315a5e45ac470e198c45"
+        },
+        {
+          "path": "game/Textures/Moss002_4K-PNG_NormalGL.png",
+          "sha256": "da063c4fd279fc0e55f777e383d9844f45b46fb69c9ca8416db9c4ce9e3fe72d"
+        },
+        {
+          "path": "game/Textures/Moss002_4K-PNG_Roughness.png",
+          "sha256": "edfcc7f41be3683e454e4b7aa0ac7f5e34911823bd913fd9c30fcd96dbc74189"
+        },
+        {
+          "path": "game/Textures/Moss002_4K-PNG_Displacement.png",
+          "sha256": "9fac9e130559de97bc0e938d48bb45814289007350b0072e3382e51536749d32"
+        },
+        {
+          "path": "game/Textures/Moss002_4K-PNG_AmbientOcclusion.png",
+          "sha256": "39f3073020001bbda600097d799f4e8aecfed59fbab5a420822df7520ba866e7"
+        }
+      ]
+    },
+    {
+      "asset": "Rock058",
+      "url": "https://ambientcg.com/get?file=Rock058_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Rock058_4K-PNG_Color.png",
+          "sha256": "be7b2490de433d3294b7d798d9467f552a3ff743623d655bcf7d035f7b8f0625"
+        },
+        {
+          "path": "game/Textures/Rock058_4K-PNG_NormalGL.png",
+          "sha256": "2b3c0e56a14ff748139b15d9a40529a036da263023d4396af2168410fea91ad1"
+        },
+        {
+          "path": "game/Textures/Rock058_4K-PNG_Roughness.png",
+          "sha256": "998de84bf70dbaeaae29e7c2b8c83b2623dbe044c80c57e3808d002cb2289e61"
+        },
+        {
+          "path": "game/Textures/Rock058_4K-PNG_Displacement.png",
+          "sha256": "7d98e222c922b09f73c3b92668ec24f2858e5d12ca6364d2d4bf062cc5dc4ace"
+        },
+        {
+          "path": "game/Textures/Rock058_4K-PNG_AmbientOcclusion.png",
+          "sha256": "9f242fa1b84bcd314b21d49659a1ea103a13fd1b8d4e5bb5d7a81e1d7c2441de"
+        }
+      ]
+    },
+    {
+      "asset": "Gravel022",
+      "url": "https://ambientcg.com/get?file=Gravel022_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Gravel022_4K-PNG_Color.png",
+          "sha256": "c6785823c7be98e47a7ca240c8691b0b13dad728e30f1000039ecde0f5bafb8a"
+        },
+        {
+          "path": "game/Textures/Gravel022_4K-PNG_NormalGL.png",
+          "sha256": "6d46a123563581ea53f3b8d08513180c7f1b352fa3f6c1dcf08db73ed4991c0b"
+        },
+        {
+          "path": "game/Textures/Gravel022_4K-PNG_Roughness.png",
+          "sha256": "fc5a488cb9ede4a49f9bed800bfdd0b9847bee4fc5e35c49f2e2db747568d739"
+        },
+        {
+          "path": "game/Textures/Gravel022_4K-PNG_Displacement.png",
+          "sha256": "23dcf1f4fe9bf160cb6db0313d5467a8acbeaeb5f0656b30625f14646f697198"
+        },
+        {
+          "path": "game/Textures/Gravel022_4K-PNG_AmbientOcclusion.png",
+          "sha256": "91422ed049ce043356e18feb88b906bec6f57da39ab9630af6c8de34b078fb7b"
+        }
+      ]
+    },
+    {
+      "asset": "Bark001",
+      "url": "https://ambientcg.com/get?file=Bark001_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark001_4K-PNG_Color.png",
+          "sha256": "1ec23d3db9d225d7fcc6c9ba05d484b1ad5fff7864185c103e9ae279aa4c5a1b"
+        },
+        {
+          "path": "game/Textures/Bark001_4K-PNG_NormalGL.png",
+          "sha256": "02606819054ba5b912ec75dcb6c9dfaa0154eb575f563fe2a3e10825c4bf54d4"
+        },
+        {
+          "path": "game/Textures/Bark001_4K-PNG_Roughness.png",
+          "sha256": "e41abda4a433fca11ef0eb133fe02db5913f786772db56833bdb4ca4f176385f"
+        },
+        {
+          "path": "game/Textures/Bark001_4K-PNG_Displacement.png",
+          "sha256": "202100592589e9ee83c304de6875017ac0460eb2f3700ec3ad81dceb33d32edb"
+        },
+        {
+          "path": "game\\Textures\\Bark001_4K-PNG_AmbientOcclusion.png",
+          "sha256": "bc463eddd09fc66b805b9cfa689e81902f5cf51e8b40c75191bc21c5fba642e7",
+          "derived": "horizon AO from original 4K displacement"
+        }
+      ]
+    },
+    {
+      "asset": "Bark013",
+      "url": "https://ambientcg.com/get?file=Bark013_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark013_4K-PNG_Color.png",
+          "sha256": "7379dc88738b15026bb8e879cf3bb77d694a61d4752e350d12b83248663acd1b"
+        },
+        {
+          "path": "game/Textures/Bark013_4K-PNG_NormalGL.png",
+          "sha256": "613ffc44bd6e1cc9b1e6fddf4b7eeb1681afeff25969e56ddb8eb8ff9f2a17ef"
+        },
+        {
+          "path": "game/Textures/Bark013_4K-PNG_Roughness.png",
+          "sha256": "751389cd994b34fcba9dc0c3328656cd84e748e2a4c9455741ea461f970f8cf8"
+        },
+        {
+          "path": "game/Textures/Bark013_4K-PNG_Displacement.png",
+          "sha256": "142ae8d42596cae5ee7e1e90e5602dcb40c48ca5290cf57f5de0e76ddba21d44"
+        },
+        {
+          "path": "game/Textures/Bark013_4K-PNG_AmbientOcclusion.png",
+          "sha256": "4a14e40e6fe534a9e83c4580b2234c32b99d0dd82085cd3a7e9366171a0fcf4b"
+        }
+      ]
+    },
+    {
+      "asset": "Bark014",
+      "url": "https://ambientcg.com/get?file=Bark014_4K-PNG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark014_4K-PNG_Color.png",
+          "sha256": "46f23a5c4d712dd70ed75bb821a7ab0fbeb209eb3a7515a145461fbd9f3b8b5d"
+        },
+        {
+          "path": "game/Textures/Bark014_4K-PNG_NormalGL.png",
+          "sha256": "0b3b9d63cb2bb7ade906b816df3dfc89062987be4d3203737b6149cd3a09ab59"
+        },
+        {
+          "path": "game/Textures/Bark014_4K-PNG_Roughness.png",
+          "sha256": "24caa061c1236533aa1ce122036decf9d551ddb0f5e16c095da2719a3cc80a6f"
+        },
+        {
+          "path": "game/Textures/Bark014_4K-PNG_Displacement.png",
+          "sha256": "dafa9ad34f42bcc27807eea2d130f9ac6d9fb1aee8e040cded77cb4b63865275"
+        },
+        {
+          "path": "game/Textures/Bark014_4K-PNG_AmbientOcclusion.png",
+          "sha256": "97593743b9bd05ab745253de8430720b2e700f6b50a08d95a3a82325a6b142e9"
+        }
+      ]
+    }
+  ]
+}

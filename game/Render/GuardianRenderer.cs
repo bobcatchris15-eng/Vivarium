@@ -73,6 +73,8 @@ public partial class GuardianRenderer : Node3D
     public void Build(VivariumWorld w)
     {
         _w = w;
+        _guardianMaterials.Clear();
+        SkinContact = null;
         // Loading a guardian is the longest single stage of a world start, so the
         // individual costs are timed and reported instead of guessed at.
         var buildTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -323,10 +325,15 @@ public partial class GuardianRenderer : Node3D
                 if (mesh.GetActiveMaterial(i) is not StandardMaterial3D source) continue;
                 if (source.ResourceName.Equals("EyeHighlight", StringComparison.OrdinalIgnoreCase))
                 {
-                    mesh.Visible = false;
+                    if (mesh.Mesh.GetSurfaceCount() == 1) mesh.Visible = false;
+                    else mesh.SetSurfaceOverrideMaterial(i, new StandardMaterial3D
+                    {
+                        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                        AlbedoColor = new Color(0f, 0f, 0f, 0f)
+                    });
                     continue;
                 }
-                var material = new ShaderMaterial { Shader = GuardianShader };
+                var material = new ShaderMaterial { Shader = GuardianShader, ResourceName = source.ResourceName };
                 material.SetShaderParameter("mode", ModeFor(source.ResourceName));
                 material.SetShaderParameter("base_color", source.AlbedoColor);
                 material.SetShaderParameter("roughness_mul", Math.Clamp(source.Roughness <= 0 ? 1f : source.Roughness, 0.05f, 1f));
@@ -483,6 +490,8 @@ public partial class GuardianRenderer : Node3D
         BodyTrunkCorrection = 0;
         if (AppendageContact != null && _skeleton != null && !ReviewSupportPlaneHeight.HasValue && ReviewGroundSample == null && _w.PilotTree != null)
         {
+            double treeDist = Vec2.Distance(new Vec2(_shownPos.X, _shownPos.Z), _w.PilotTree.Anchor);
+            double treeReach = _w.PilotTree.Def.TrunkRadius + 3.0;
             // The old center-only .35 m simulation margin can put the long
             // muzzle into a trunk. Resolve the rendered body footprint too.
             for (int iteration = 0; iteration < 8; iteration++)
@@ -517,7 +526,7 @@ public partial class GuardianRenderer : Node3D
                 // Wide paws and curved claws can cross a trunk while the
                 // ankle and torso centers remain outside. Include evaluated
                 // contact vertices before solving reachable ground targets.
-                if (SkinContact?.Valid == true)
+                if (SkinContact?.Valid == true && treeDist < treeReach)
                     foreach (string region in new[] { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Head" })
                     {
                         // The lowest point by ground clearance, measured the way
@@ -582,27 +591,36 @@ public partial class GuardianRenderer : Node3D
 
         WaterContact?.UpdateContact(delta);
 
-        // Push per-frame state into guardian surface shaders (GPU-side; no mesh re-upload).
-        float wetness = 0f;
-        float waterLevel = 0f;
-        if (WaterContact != null)
-        {
-            waterLevel = WaterContact.SurfaceElevation;
-            wetness = WaterContact.Wetness;
-            if (WaterContact.SurfaceElevation > 0 && _shownPos.Y < WaterContact.SurfaceElevation + 0.04f)
-                wetness = Math.Max(wetness, 1f - Math.Clamp((_shownPos.Y - (WaterContact.SurfaceElevation - 0.04f)) / 0.08f, 0f, 1f));
-        }
-        float breathingPhase = BreathingModifier != null ? BreathingModifier.Phase : MathF.Sin((float)_w!.Clock.SimSeconds * 1.5f);
+        // Wetness is gated by the per-fragment waterline. Drying retains the
+        // highest contacted line rather than painting the whole animal wet.
+        float wetness = WaterContact?.Wetness ?? 0f;
+        float waterLevel = WaterContact?.WetHeightWorld ?? -10000f;
+        // Skeletal breathing already moves the imported skin and its samplers.
+        // Do not add a second uniform pulse to every vertex.
         Vector3 contactSphere = Vector3.Zero;
         float contactRadius = 0f;
+        if (SkinContact is { Valid: true, GpuDeformationEnabled: true })
+        {
+            // One actual evaluated underside contact patch. Never inflate the
+            // entire body to hide a bad foothold or an unreachable nasal target.
+            var underside = SkinContact.Evaluate("Body", SupportHeight);
+            if (underside.Valid && underside.Minimum < 0.015f && underside.Minimum > -0.04f)
+            {
+                contactRadius = 0.035f;
+                contactSphere = new Vector3(underside.LowestPoint.X,
+                    SupportHeight(underside.LowestPoint) - 0.025f, underside.LowestPoint.Z);
+            }
+        }
+        float daylight = EnvironmentRig.Instance?.Sun is { } sun
+            ? Math.Clamp(sun.LightEnergy / 1.2f, 0f, 1f) : 1f;
         foreach (var mat in _guardianMaterials)
         {
             mat.SetShaderParameter("wetness", wetness);
             mat.SetShaderParameter("water_level", waterLevel);
-            mat.SetShaderParameter("breathing_phase", breathingPhase);
             mat.SetShaderParameter("contact_sphere", contactSphere);
             mat.SetShaderParameter("contact_radius", contactRadius);
-            mat.SetShaderParameter("day_night", 1f);
+            mat.SetShaderParameter("contact_max_displacement", GuardianSkinContact.MaximumGpuCoatDisplacement);
+            mat.SetShaderParameter("day_night", daylight);
         }
 
         // Manage animation state

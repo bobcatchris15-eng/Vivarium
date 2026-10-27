@@ -19,6 +19,10 @@ namespace Vivarium.Game.Render;
 /// </summary>
 public partial class FloraRenderer : Node3D
 {
+    // Fewer lengthwise gill segments only on the far Dewbonnet mesh.
+    // Cap silhouettes, gill counts and both closer tiers stay unchanged.
+    internal const int DistantGillStations = 3;
+    internal const int DistantEmberMicroSides = 3;
     private VivariumWorld _w = null!;
     private const int DefaultMorphVariants = 5;
     private const int MigratedMorphVariants = 12;
@@ -33,6 +37,31 @@ public partial class FloraRenderer : Node3D
         { MorphCount = count; Profile = profile; Variants = new VariantLayer[count * OrganismMeshes.FloraLodTiers]; }
     }
     private readonly Dictionary<EntityId, int> _visualTiers = new();
+    private readonly Dictionary<EntityId, int> _distanceTiers = new();
+    private bool _reducedDistantPlants;
+    private double _distanceLodScale = 1;
+    /// <summary>Distance band multiplier; permits matched in-world measurement without rebuilding geometry.</summary>
+    public double DistanceLodScale
+    {
+        get => _distanceLodScale;
+        set
+        {
+            if (!double.IsFinite(value) || value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            if (_distanceLodScale == value) return;
+            _distanceLodScale = value;
+            _visualTiers.Clear(); _distanceTiers.Clear(); _accum = 999;
+        }
+    }
+    public bool ReducedDistantPlants
+    {
+        get => _reducedDistantPlants;
+        set
+        {
+            if (_reducedDistantPlants == value) return;
+            _reducedDistantPlants = value;
+            _visualTiers.Clear(); _distanceTiers.Clear(); _accum = 999;
+        }
+    }
     private Vector3 _detailCameraPosition, _detailCameraForward;
     private float _detailPixels, _detailOrthoSize;
     private bool _detailOrthogonal;
@@ -68,6 +97,7 @@ public partial class FloraRenderer : Node3D
     private readonly Dictionary<EntityId, PlantStateRecord> _prevPlantStates = new();
     private readonly HashSet<EntityId> _currentPlantIds = new();
     private double _accum = 999;
+    private double _lastMissingCheck;
     private double _clock;
     // Keep the currently drawn buffers intact while preparing the next population snapshot. Each unit of
     // work is one individual or one upload, so camera input never waits for an entire flora rebuild.
@@ -114,6 +144,10 @@ public partial class FloraRenderer : Node3D
     public float LuminousNightFactor { get; private set; }
     /// <summary>All currently present species are built and one complete instance refresh has been uploaded.</summary>
     public bool PopulationReady { get; private set; }
+    private readonly HashSet<EntityId> _publishedPlants = new();
+    public bool IsPlantPublished(EntityId id) => _publishedPlants.Contains(id);
+    public Mesh? PlacementGhostMesh(string speciesId) => _layers.TryGetValue(speciesId, out var layer)
+        ? (layer.Variants[0].Juvenile ?? layer.Variants[0].Full).Multimesh.Mesh : null;
     public int LoadedSpeciesCount => _layers.Count;
     public bool HasLegacyLayer(string speciesId) => _layers.ContainsKey(speciesId);
     private readonly List<FloraSnapshotItem> _snapshot = new();
@@ -122,6 +156,26 @@ public partial class FloraRenderer : Node3D
     private readonly List<EntityId> _expired = new();
     private int _terrainVersion = -1;
     private int _quality = 1;
+    private int _shadowMaxTier = 0;
+    /// <summary>Largest projected-size tier allowed to cast. Visible geometry is unchanged.</summary>
+    public int ShadowMaxTier
+    {
+        get => _shadowMaxTier;
+        set { _shadowMaxTier = Math.Clamp(value, -1, 2); ApplyFloraShadows(); }
+    }
+    private void ApplyFloraShadows()
+    {
+        foreach (var layer in _layers.Values)
+            for (int index = 0; index < layer.Variants.Length; index++)
+            {
+                var variant = layer.Variants[index];
+                var shadow = _quality >= 1 && variant.CanCastShadow && index / layer.MorphCount <= _shadowMaxTier
+                    ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
+                variant.Full.CastShadow = shadow;
+                if (variant.Fruit != null) variant.Fruit.CastShadow = shadow;
+                if (variant.Juvenile != null) variant.Juvenile.CastShadow = shadow;
+            }
+    }
     public Camera3D? Camera { get; set; }
 public int Quality
     {
@@ -130,15 +184,7 @@ public int Quality
         {
             if (_quality == value) return;
             _quality = value;
-            foreach (var layer in _layers.Values)
-                foreach (var variant in layer.Variants)
-                {
-                    var shadow = value >= 1 && variant.CanCastShadow
-                        ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
-                    variant.Full.CastShadow = shadow;
-                    if (variant.Fruit != null) variant.Fruit.CastShadow = shadow;
-                    if (variant.Juvenile != null) variant.Juvenile.CastShadow = shadow;
-                }
+            ApplyFloraShadows();
         }
     }
     public int Visible_ { get; private set; }
@@ -152,10 +198,11 @@ public int Quality
         _buildingNodes.Clear();
         foreach (var light in _luminousLights.Values) light.QueueFree();
         _luminousLights.Clear();
-        _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
+        _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear(); _publishedPlants.Clear();
         _pooledBuffers.Clear(); _prevPlantStates.Clear(); DirtyRegions.Clear();
         _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear(); _tendrils.Clear();
         _visualTiers.Clear();
+        _distanceTiers.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
         PopulationReady = false;
         _w = w;
@@ -288,8 +335,7 @@ public int Quality
         mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
         mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
         mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
-        bool freezeWind = System.Environment.GetEnvironmentVariable("VIVARIUM_FREEZE_WIND") == "1";
-        mat.SetShaderParameter("sway", freezeWind ? 0.0f : 0.35f);
+        mat.SetShaderParameter("sway", 0.0f);
         Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
         FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
         var leafMat = profile?.LeafMaterial(animated: false);
@@ -299,7 +345,7 @@ public int Quality
             Bridge.BindSurface(mat, "bark", profile.Bark);
             mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0], profile.BarkTint[1], profile.BarkTint[2]));
             leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
-            leafMat.SetShaderParameter("wind_strength", freezeWind ? 0.0f : 0.35f);
+            leafMat.SetShaderParameter("wind_strength", 0.0f);
         }
         var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
         ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
@@ -319,7 +365,7 @@ public int Quality
             // Calibration and parametric tessellation are pure managed work. Never block input/rendering on them.
             tasks.Add(Task.Run(() =>
             {
-                var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null);
+                var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null, farGillStations: DistantGillStations, farEmberMicroSides: DistantEmberMicroSides);
                 MeshData? youngMesh = sp.Shape.StartsWith("microcanopy_", StringComparison.Ordinal) || sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
                     ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
                     : null;
@@ -344,7 +390,7 @@ public int Quality
                 var prepared = tasks[v].GetAwaiter().GetResult();
                 var full = prepared.Full;
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
-                bool castShadow = Quality >= 1 && canCastShadow;
+                bool castShadow = Quality >= 1 && canCastShadow && v / layer.MorphCount <= ShadowMaxTier;
                 long uploadStart=Stopwatch.GetTimestamp();
                 var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
                 AddChild(vl.Full); build.Nodes.Add(vl.Full);
@@ -431,6 +477,7 @@ public int Quality
             // Refresh can yield while enumerating the dictionary; retire it before publishing a new layer.
             _refresh?.Dispose(); _refresh = null;
             _layers[sp.Id] = layer;
+            ApplyFloraShadows();
             GD.Print("FLORA_LAYER_BUILD_END " + sp.Id + " loaded_species=" + _layers.Count);
             _accum = 999;
         }
@@ -474,28 +521,36 @@ public int Quality
             _terrainVersion = _w.Terrain.Version;
             DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
         }
-        long missingStart = Stopwatch.GetTimestamp();
-        RequestMissingLayers();
-        _peakMissingMs = Math.Max(_peakMissingMs,
-            Stopwatch.GetElapsedTime(missingStart).TotalMilliseconds);
+        if (_build != null || _clock - _lastMissingCheck >= 1.0)
+        {
+            _lastMissingCheck = _clock;
+            long missingStart = Stopwatch.GetTimestamp();
+            RequestMissingLayers();
+            _peakMissingMs = Math.Max(_peakMissingMs,
+                Stopwatch.GetElapsedTime(missingStart).TotalMilliseconds);
+        }
         if (_build != null)
         {
             long buildStarted = Stopwatch.GetTimestamp();
-            for (int step = 0; step < 4 && _build != null; step++)
+            double buildBudget = PopulationReady ? 2.0 : 50.0;
+            for (int step = 0; step < 16 && _build != null; step++)
             {
                 long stepStarted = Stopwatch.GetTimestamp();
                 bool advanced = _build.MoveNext();
                 _peakBuildStepMs = Math.Max(_peakBuildStepMs,
                     Stopwatch.GetElapsedTime(stepStarted).TotalMilliseconds);
                 if (!advanced) { _build.Dispose(); _build = null; break; }
-                if (Stopwatch.GetElapsedTime(buildStarted).TotalMilliseconds >= 2) break;
+                if (Stopwatch.GetElapsedTime(buildStarted).TotalMilliseconds >= buildBudget) break;
             }
         }
         _accum += delta;
-        bool wobbling = _wobbleStart.Count > 0;
         if (_refresh == null)
         {
-            if (_accum < (wobbling ? 0.05 : 1.0)) return;            _accum = 0;
+            bool cameraChanged = Camera != null &&
+                (Camera.GlobalPosition.DistanceSquaredTo(_detailCameraPosition) > .25f ||
+                 (-Camera.GlobalBasis.Z).Dot(_detailCameraForward) < .995f);
+            if (_accum < (cameraChanged ? .2 : 4.0)) return;
+            _accum = 0;
             _refresh = Refresh().GetEnumerator();
         }
         long started = Stopwatch.GetTimestamp();
@@ -511,17 +566,43 @@ public int Quality
         } while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < RefreshBudgetMs);
     }
 
+    /// <summary>
+    /// Creeping, running, or prostrate organisms (runners, moss carpets, cushions, crusts, and mats)
+    /// that conform to their substrate and tilt with the local surface normal.
+    /// In contrast, erect plants with stems, culms, trunks, or scapes grow world-up (negative gravitropism)
+    /// regardless of the local slope.
+    /// </summary>
+    private static bool IsCreepingOrGroundHugging(FloraSpeciesDef sp)
+    {
+        if (sp.Woody != null || sp.IsTree || sp.Shape.StartsWith("shrub_") || sp.Shape.StartsWith("microcanopy_"))
+            return false;
+
+        if (sp.Shape.EndsWith("_stem") || sp.Shape.EndsWith("_cattail") || sp.Shape.EndsWith("_thistle") || sp.Shape.EndsWith("_umbel")
+            || sp.Shape.EndsWith("_brake") || sp.Shape.EndsWith("_curtain") || sp.Shape.EndsWith("_bromeliad")
+            || sp.Shape is "pampas" or "reed" or "ribbonweed" or "milfoil" or "submerged_whorl"
+            || sp.Shape is "fern" or "veilfern" or "tussock" or "pairedleaf"
+            || sp.Shape is "pitcher_rosette" or "snaptrap_rosette"
+            || sp.Shape is "carrion_bell" or "herb" or "mushroom_cluster" or "cap")
+            return false;
+
+        if (sp.Shape is "creeper" or "roundleaf" or "trifoliate")
+            return true;
+
+        if (sp.Shape is "sundew_mat" or "carpet" or "cushion" or "crust" or "foliose" or "fruticose" or "capitula" or "embercup_moss"
+            or "succulent" or "iceplant")
+            return true;
+
+        if (sp.Shape is "bonecup_fungus" or "rain_jelly" or "bracket" or "glass_antlers")
+            return true;
+
+        return sp.Tags.Contains("groundcover") || sp.Tags.Contains("mat");
+    }
+
     private static bool IsUpright(FloraSpeciesDef sp) =>
-        sp.Woody != null || sp.IsTree
-        || sp.Shape.StartsWith("shrub_")
-        || sp.Shape is "kinkcane_brake" or "veilblade_curtain" or "reed" or "ribbonweed" or "milfoil"
-        || sp.Shape.EndsWith("_brake") || sp.Shape.EndsWith("_curtain")
-        || sp.Shape == "fern" || sp.Shape == "veilfern"
-        || sp.Shape == "tussock"
-        || sp.Shape == "pitcher_rosette"
-        || sp.Shape == "carrion_bell"
-        || sp.Shape == "herb"
-        || sp.Shape is "mushroom_cluster" or "cap";
+        !IsCreepingOrGroundHugging(sp)
+        && sp.Shape is not ("floatleaf" or "glasslily_pad")
+        && sp.Climber == null
+        && !sp.Shape.StartsWith("vine");
 
     public override void _ExitTree()
     {
@@ -605,9 +686,10 @@ public int Quality
     }
 
     /// <summary>Explicit callers get a complete synchronous refresh; normal frames use the bounded path.</summary>
-    public void Rebuild()
+    public void Rebuild(bool resetDetailHistory = false)
     {
         if (_w == null) return;
+        if (resetDetailHistory) { _visualTiers.Clear(); _distanceTiers.Clear(); }
         _refresh?.Dispose(); _refresh = null;
         foreach (bool _ in Refresh()) { }
         _accum = 0;
@@ -730,10 +812,10 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             {
                 var fp = f.Position;
                 double e = Math.Max(_w.Grid.CellSize * 0.55, Math.Min(0.35, Math.Max(r, 0.05)));
-                double gx = _w.FloraSystem.EffectiveLight(fp + new Vivarium.Sim.Core.Vec2(e, 0), f.Id)
-                          - _w.FloraSystem.EffectiveLight(fp - new Vivarium.Sim.Core.Vec2(e, 0), f.Id);
-                double gz = _w.FloraSystem.EffectiveLight(fp + new Vivarium.Sim.Core.Vec2(0, e), f.Id)
-                          - _w.FloraSystem.EffectiveLight(fp - new Vivarium.Sim.Core.Vec2(0, e), f.Id);
+                double gx = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(e, 0))
+                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(e, 0));
+                double gz = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(0, e))
+                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(0, e));
                 double moisture = _w.Fields.Moisture.Sample(fp);
                 double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
                 double stressAngle = ((hash >> 24) % 6283) / 1000.0;
@@ -876,7 +958,9 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             Basis basis;
             if (!isUpright)
             {
-                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                var norm = (sp.Shape is "floatleaf" or "glasslily_pad")
+                    ? Vector3.Up
+                    : SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
                 basis = SurfaceFrame.TiltTo(norm) * new Basis(Vector3.Up, (float)dead.CollapseHeading);
                 pos += norm * 0.003f;
             }
@@ -994,7 +1078,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             }
             yield return true;
             Fill(layer.Veins.Multimesh, list);
-            triangles += (long)layer.Veins.Multimesh.VisibleInstanceCount * layer.VeinTris;
+            triangles += (long)PublishedCount(layer.Veins.Multimesh) * layer.VeinTris;
         }
         foreach (var (id, layer) in _layers)
             for (int v = 0; v < layer.Variants.Length; v++)
@@ -1007,16 +1091,20 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                 if (vl.Fruit != null) Fill(vl.Fruit.Multimesh, Get(_fruit, mk));
                 if (vl.Juvenile != null) Fill(vl.Juvenile.Multimesh, Get(_juvenile, mk));
                 if (vl.Tendril != null) Fill(vl.Tendril.Multimesh, Get(_tendrils, mk));
-                triangles += (long)vl.Full.Multimesh.VisibleInstanceCount * vl.FullTris
-                    + (vl.Fruit != null ? (long)vl.Fruit.Multimesh.VisibleInstanceCount * vl.FruitTris : 0)
-                    + (vl.Juvenile != null ? (long)vl.Juvenile.Multimesh.VisibleInstanceCount * vl.JuvenileTris : 0)
-                    + (vl.Tendril != null ? (long)vl.Tendril.Multimesh.VisibleInstanceCount * vl.TendrilTris : 0);
+                triangles += (long)PublishedCount(vl.Full.Multimesh) * vl.FullTris
+                    + (vl.Fruit != null ? (long)PublishedCount(vl.Fruit.Multimesh) * vl.FruitTris : 0)
+                    + (vl.Juvenile != null ? (long)PublishedCount(vl.Juvenile.Multimesh) * vl.JuvenileTris : 0)
+                    + (vl.Tendril != null ? (long)PublishedCount(vl.Tendril.Multimesh) * vl.TendrilTris : 0);
             }
         Visible_ = visible; TrianglesDrawn = triangles;
+        _publishedPlants.Clear();
+        foreach (var plant in _snapshot)
+            if (_layers.ContainsKey(plant.SpeciesId)) _publishedPlants.Add(plant.Id);
         PopulationReady = _build == null &&
             _w.Flora.Items.All(f => _layers.ContainsKey(f.SpeciesId)) &&
             _w.DeadFlora.Items.All(f => _layers.ContainsKey(f.SpeciesId));
         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
+        foreach (var id in _distanceTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _distanceTiers.Remove(id);
         UpdateLuminousLights();
     }
 
@@ -1147,20 +1235,31 @@ if (!_layers.ContainsKey(sp.Id)) continue;
     {
         if (Camera == null) return 0;
         float bound = 2f * MathF.Sqrt(radius * radius + height * height * .25f);
-        float depth = Math.Max(.05f,(position + Vector3.Up * height * .5f - _detailCameraPosition).Dot(_detailCameraForward));
+        Vector3 toCam = position + Vector3.Up * height * .5f - _detailCameraPosition;
+        float forwardDepth = toCam.Dot(_detailCameraForward);
+        float dist = toCam.Length();
+        float depth = forwardDepth > 0.05f ? forwardDepth : Math.Max(dist, 0.05f);
         float pixels = _detailOrthogonal ? bound * _detailPixels / _detailOrthoSize : bound * _detailPixels / depth;
         bool had = _visualTiers.TryGetValue(id, out int old);
         int tier = FloraDetail.Select(pixels, had && old >= 0 ? old : -1);
+        if (ReducedDistantPlants && !_detailOrthogonal)
+        {
+            int previous = _distanceTiers.GetValueOrDefault(id, -1);
+            int distanceTier = FloraDetail.SelectDistance(depth, previous, DistanceLodScale);
+            _distanceTiers[id] = distanceTier;
+            tier = Math.Max(tier, distanceTier);
+        }
         _visualTiers[id] = tier;
         return tier;
     }
 
     // World-space slack added around the bounding sphere before the frustum test. The instance list is only
-    // rebuilt every 0.4s (see _Process), so a plant that is off-frustum now but would rotate into view before
+    // refreshed after camera motion every 0.2s (see _Process), so a plant that is off-frustum now but would rotate into view before
     // the next rebuild must still test as visible; this margin absorbs a normal camera turn across that window.
     private const float FrustumSafetyMargin = 2.0f;
+    private const float NearPlaneSlack = 0.15f;
 
-    private static bool FloraVisible(Plane[] frustum, Vector3 basePos, float radius, float height)
+    private bool FloraVisible(Plane[] frustum, Vector3 basePos, float radius, float height)
     {
         // Occlusion is intentionally never tested here: a plant that is only partly behind a log/rock must never
         // be culled, since any ray-based "opaque in front" test flips on/off with sub-pixel camera motion and
@@ -1168,10 +1267,13 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         // bounding sphere so genuinely off-screen plants are still dropped.
         float mid = Math.Max(height * 0.5f, 0.01f);
         var center = basePos + Vector3.Up * mid;
-        float sphereRadius = Math.Max(radius, mid) + FrustumSafetyMargin;
+        float plantRadius = Math.Max(radius, mid);
         // Godot frustum planes face outward: inside points have negative distance, outside positive.
         foreach (var plane in frustum)
-            if (plane.DistanceTo(center) > sphereRadius) return false;
+        {
+            float margin = plane.Normal.Dot(_detailCameraForward) < -0.7f ? NearPlaneSlack : FrustumSafetyMargin;
+            if (plane.DistanceTo(center) > plantRadius + margin) return false;
+        }
         return true;
     }
 
@@ -1221,6 +1323,56 @@ if (!_layers.ContainsKey(sp.Id)) continue;
     }
 
     private readonly Dictionary<MultiMesh, PooledMultiMeshBuffer> _pooledBuffers = new();
+    private int PublishedCount(MultiMesh mm) => _pooledBuffers.TryGetValue(mm, out var buffer) ? buffer.VisibleCount : 0;
+
+    public sealed record TriangleContribution(string Species, int Tier, int Variant, string Organ,
+        int Instances, int TrianglesPerInstance, long Triangles, bool Profile);
+
+    /// <summary>Diagnostic snapshot of published base geometry, without native instance-buffer readbacks.</summary>
+    public IReadOnlyList<TriangleContribution> AuditTriangleContributions()
+    {
+        var rows = new List<TriangleContribution>();
+        foreach (var (id, layer) in _layers)
+        {
+            void Add(MultiMeshInstance3D? node, int triangles, int tier, int variant, string organ)
+            {
+                if (node == null) return;
+                int instances = PublishedCount(node.Multimesh);
+                if (instances > 0) rows.Add(new(id, tier, variant, organ, instances, triangles,
+                    (long)instances * triangles, layer.Profile != null));
+            }
+            Add(layer.Veins, layer.VeinTris, -1, -1, "veins");
+            for (int i = 0; i < layer.Variants.Length; i++)
+            {
+                var v = layer.Variants[i];
+                int tier = i / layer.MorphCount, variant = i % layer.MorphCount;
+                Add(v.Full, v.FullTris, tier, variant, "full");
+                Add(v.Juvenile, v.JuvenileTris, tier, variant, "juvenile");
+                Add(v.Fruit, v.FruitTris, tier, variant, "fruit");
+                Add(v.Tendril, v.TendrilTris, tier, variant, "tendril");
+            }
+        }
+        return rows.OrderByDescending(r => r.Triangles).ThenBy(r => r.Species, StringComparer.Ordinal).ToArray();
+    }
+
+    /// <summary>Native metadata oracle for a completed refresh; no instance-buffer readback. Not a GPU pass count.</summary>
+    public long AuditPublishedTriangles()
+    {
+        long triangles = 0;
+        foreach (var instance in GetChildren().OfType<MultiMeshInstance3D>())
+        {
+            var mm = instance.Multimesh;
+            var mesh = (ArrayMesh)mm.Mesh;
+            int count = mm.VisibleInstanceCount < 0 ? mm.InstanceCount : mm.VisibleInstanceCount;
+            for (int surface = 0; surface < mesh.GetSurfaceCount(); surface++)
+            {
+                int indices = mesh.SurfaceGetArrayIndexLen(surface);
+                int vertices = mesh.SurfaceGetArrayLen(surface);
+                triangles += (long)count * (indices > 0 ? indices : vertices) / 3;
+            }
+        }
+        return triangles;
+    }
 
     private void Fill(MultiMesh mm, (List<Transform3D> T, List<Color> Tint, List<Color> C) data)
     {
@@ -1229,6 +1381,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         if (!_pooledBuffers.TryGetValue(mm, out var pb))
             _pooledBuffers[mm] = pb = new PooledMultiMeshBuffer();
 
+        if (n == 0 && pb.VisibleCount == 0) return;
         pb.EnsureCapacity(mm, n);
         if (n > 0)
         {
@@ -1343,6 +1496,8 @@ public partial class FaunaRenderer : Node3D
             });
             var still = (ShaderMaterial)hiMat.Duplicate();
             still.SetShaderParameter("anim_amplitude", 0.0f);
+            if (sp.Id == "duskflicker" || sp.Model == "midge")
+                NightFloraMaterials.RegisterMaterial(still);
             var layer = new Layer { Animation = sp.Animation };
             ulong speciesSeed = Hash.Fnv1a64("fauna.visual." + sp.Id);
             for (int v = 0; v < MorphVariants; v++)

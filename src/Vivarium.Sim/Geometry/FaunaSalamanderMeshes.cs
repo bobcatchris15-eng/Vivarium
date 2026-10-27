@@ -20,6 +20,10 @@ public static partial class OrganismMeshes
         for(int i=0;i<rings.Count;i++)for(int j=0;j<=sides;j++)
         {
             var row=rings[i];double a=Math.Tau*j/sides;var p=new Vec3(row[0],row[1]+row[3]*Math.Sin(a),row[2]*Math.Cos(a));
+            // Glands blend into the continuous skin rather than intersecting oval parts.
+            double gland=.012*Math.Exp(-Math.Pow((p.X-.287)/.072,2)-Math.Pow((Math.Abs(p.Z)-.076)/.034,2))*Math.Max(0,Math.Sin(a));
+            double costal=p.X<.16&&p.X>-.27?.0016*Math.Pow(.5+.5*Math.Cos((p.X+.27)*Math.Tau*31),8)*(1-Math.Abs(Math.Sin(a))):0;
+            p=new Vec3(p.X,p.Y+gland,p.Z-Math.Sign(p.Z)*costal);
             m.AddVertex(p,Vec3.Up,Body,0,(p.X+.87)/1.36,(double)j/sides,Math.Sin(a)<-.45?3:1,0);
         }
         for(int i=0;i<rings.Count-1;i++)for(int j=0;j<sides;j++)
@@ -37,7 +41,6 @@ public static partial class OrganismMeshes
         foreach(double side in new[]{-1.0,1.0})
         {
             // Fleshy brows and low parotoid glands continue the broad head surface.
-            BodySegment(m,new Vec3(.287,.128,.076*side),new Vec3(.072,.032,.034),14,24,(a,b)=>Region(.84,b,1));
             BodySegment(m,new Vec3(.374,.139,.081*side),new Vec3(.025,.018,.024),12,20,(a,b)=>Region(.94,b,1));
             BodySegment(m,new Vec3(.379,.151,.094*side),new Vec3(.015,.013,.010),12,20,(a,b)=>Region(.95,b,2));
             BodySegment(m,new Vec3(.386,.153,.103*side),new Vec3(.008,.009,.003),10,16,(a,b)=>Region(.95,b,5));

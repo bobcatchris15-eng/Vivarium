@@ -1,5 +1,8 @@
+using System.Linq;
 using Vivarium.Sim.Coverage;
 using Vivarium.Sim.Coverage.Aquatic;
+using Vivarium.Sim.Content;
+using Vivarium.Sim.World;
 using Xunit;
 
 namespace Vivarium.Sim.Tests.GrowthLab;
@@ -45,5 +48,27 @@ public class AquaticWorldTests
         Assert.True(w.Fields.Biofilm[wet] > 0);
         Assert.True(w.Fields.Biofilm.AllFinite());
         Assert.Contains(w.Scheduler.Systems, s => s.Name == "aquatic");
+    }
+
+    [Fact]
+    public void SixDayRunEstablishesPersistentAquaticPopulations()
+    {
+        var content = ContentLoader.Load(TestUtil.ContentSource);
+        foreach (var name in new[] { "default", "isolated_pond", "creek" })
+        {
+            var preset = content.PresetOrThrow(name);
+            preset.BioAcceleration = TestUtil.ShippedBio;
+            var w = VivariumWorld.Create(content, preset);
+            for (int day = 0; day < 6; day++)
+                w.Step(TestUtil.TicksPerBioDay());
+
+            int bed = w.Coverage.AlgaeBed.Tiles.Sum(t => t.B.Count(b => b > 0.05f));
+            int flt = w.Coverage.AlgaeFloat.Tiles.Sum(t => t.B.Count(b => b > 0.05f));
+            int duck = w.Coverage.SurfaceFloat.Tiles.Sum(t => t.B.Count(b => b > 0.05f));
+
+            Assert.True(bed > 100, $"{name} should establish healthy benthic periphyton (got {bed} cells)");
+            Assert.True(flt > 50, $"{name} should establish healthy floating algae (got {flt} cells)");
+            Assert.True(duck > 100, $"{name} should establish healthy duckweed cover (got {duck} cells)");
+        }
     }
 }

@@ -76,13 +76,7 @@
       0.14
     ],
     "colorVariance": 0.07,
-    "height": 0.15,
-    "bioluminescenceColor": [
-      1.0,
-      0.42,
-      0.12
-    ],
-    "bioluminescenceStrength": 2.0
+    "height": 0.15
   },
   "tags": [
     "moss",

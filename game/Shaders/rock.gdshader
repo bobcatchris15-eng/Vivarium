@@ -12,6 +12,7 @@ uniform sampler2D rock_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform sampler2D rock_hgt : hint_default_black, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_ao : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D field_tex : filter_linear, repeat_disable;
+uniform sampler2D sub_tex : hint_default_black, filter_linear, repeat_disable;
 uniform vec4 field_rect = vec4(0.0, 0.0, 1.0, 1.0);
 uniform float water_table = 0.0;
 uniform float tile_metres = 0.9;
@@ -25,14 +26,15 @@ varying vec3 inst_origin;
 varying vec3 v_ts;
 varying vec3 l_ts;
 
+varying float material_specular;
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     obj_pos = VERTEX;
     inst_origin = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-    vec3 view_dir = normalize(-VERTEX);
+    vec3 view_dir = normalize((inverse(MODEL_MATRIX) * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz - VERTEX);
     v_ts = vec3(dot(view_dir, TANGENT), dot(view_dir, BINORMAL), dot(view_dir, NORMAL));
     vec3 sun_world = normalize(vec3(0.35, 0.85, 0.25));
-    vec3 light_view = normalize((VIEW_MATRIX * vec4(sun_world, 0.0)).xyz);
+    vec3 light_view = normalize((inverse(MODEL_MATRIX) * vec4(sun_world, 0.0)).xyz);
     l_ts = vec3(dot(light_view, TANGENT), dot(light_view, BINORMAL), dot(light_view, NORMAL));
 }
 
@@ -54,8 +56,7 @@ void fragment() {
     float h_val, ao_tex;
     vec4 pbr = sample_stochastic_pbr(rock_col, rock_nrm, rock_rgh, rock_hgt, rock_ao, displaced_uv, n_ts, h_val, ao_tex);
 
-    vec3 scan_n_world = normalize(vec3(n_ts.x, n_ts.z, n_ts.y));
-    vec3 perturbed = normalize(mix(wn, scan_n_world, 0.65));
+    vec3 perturbed = cotangent_normal(wn, world_pos, displaced_uv, n_ts);
 
     float avg = max(lum(textureLod(rock_col, vec2(0.5), 10.0).rgb), 0.02);
 
@@ -123,12 +124,13 @@ void fragment() {
         CLEARCOAT = 0.85 * wet;
         CLEARCOAT_ROUGHNESS = 0.1;
     }
+    material_specular = SPECULAR;
 }
 
 void light() {
     vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
     vec3 wl = normalize((INV_VIEW_MATRIX * vec4(LIGHT, 0.0)).xyz);
-    vec3 vv = normalize(VIEW);
+    vec3 vv = normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz);
 
     float ndotl = max(dot(wn, wl), 0.0);
     DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndotl * (1.0 / PI);
@@ -141,7 +143,7 @@ void light() {
         float a2 = a * a;
         float denom = ndoth * ndoth * (a2 - 1.0) + 1.0;
         float D = a2 / max(PI * denom * denom, 1e-4);
-        float F0 = SPECULAR * 0.08;
+        float F0 = material_specular * 0.08;
         float vh = max(dot(vv, h), 0.0);
         float F = F0 + (1.0 - F0) * pow(1.0 - vh, 5.0);
         float k = (ROUGHNESS + 1.0) * (ROUGHNESS + 1.0) * 0.125;
@@ -151,7 +153,9 @@ void light() {
         SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * spec * ndotl;
     }
 
-    float water_surface_y = water_table;
+    vec2 field_uv = (world_pos.xz - field_rect.xy) / max(field_rect.zw, vec2(0.001));
+    float stream_depth = texture(sub_tex, clamp(field_uv, vec2(0.001), vec2(0.999))).b;
+    float water_surface_y = water_table + max(0.0, stream_depth * 2.55 - 0.01);
     vec3 caustic = evaluate_submerged_caustics(world_pos, wn, water_surface_y, wl, TIME);
     DIFFUSE_LIGHT += caustic * ATTENUATION * LIGHT_COLOR;
 }

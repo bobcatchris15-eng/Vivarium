@@ -212,23 +212,31 @@ public partial class LeafMaterialBaker : Node
             prevMid = currMid;
         }
 
-        // 2° Secondary Lateral Veins: curved Bézier arches (9-14 pairs) branching at species-specific angles (42° - 68°)
+        // 2° Secondary Lateral Veins: curved Bézier arches (6-15 pairs) branching at species-specific angles (42° - 72°)
         // forming brochidodromous loops near margins
         int pairs = style switch
         {
             "needle" => 0,
+            "striate" or "slender" => 6,
             "leathery" => 9,
-            "slender" => 10,
+            "pitcher" => 8,
+            "peltate" => 8,
             "cordate" => 14,
             "compound" => 13,
+            "pinnate" => 15,
+            "fenestrata" => 15,
             _ => 12
         };
         float branchAngleDeg = style switch
         {
             "cordate" => 68f,
+            "peltate" => 72f,
             "needle" => 42f,
-            "slender" => 46f,
+            "striate" or "slender" => 46f,
             "leathery" => 50f,
+            "pitcher" => 48f,
+            "pinnate" => 54f,
+            "fenestrata" => 62f,
             _ => 58f
         };
         float angleRad = branchAngleDeg * MathF.PI / 180f;
@@ -294,7 +302,7 @@ public partial class LeafMaterialBaker : Node
             }
         }
 
-        // Needle & cordate special styles
+        // Morphological family venation: needle, cordate, peltate, striate, pitcher, pinnate
         if (style == "needle")
         {
             for (int side = -1; side <= 1; side += 2)
@@ -310,6 +318,71 @@ public partial class LeafMaterialBaker : Node
             {
                 Bezier(new(.04f, .5f), new(.08f, .5f + side * .25f), new(.18f, .5f + side * .45f), new(.32f, .5f + side * .48f),
                     .0042f, .0022f, .00095f, .00045f, 0.94f, 16);
+            }
+        }
+        if (style == "peltate")
+        {
+            Vector2 origin = new(0.14f, 0.5f);
+            for (int ray = -4; ray <= 4; ray++)
+            {
+                if (ray == 0) continue;
+                float rayAngle = ray * 22f * MathF.PI / 180f;
+                Vector2 target = origin + new Vector2(MathF.Cos(rayAngle) * 0.82f, MathF.Sin(rayAngle) * 0.44f);
+                target = new(Math.Clamp(target.X, 0.02f, 0.98f), Math.Clamp(target.Y, 0.05f, 0.95f));
+                Vector2 c1 = origin + new Vector2(MathF.Cos(rayAngle) * 0.28f, MathF.Sin(rayAngle) * 0.15f);
+                Vector2 c2 = origin + new Vector2(MathF.Cos(rayAngle) * 0.55f, MathF.Sin(rayAngle) * 0.30f);
+                Bezier(origin, c1, c2, target, .0042f, .0016f, .00095f, .00030f, 0.92f, 16);
+            }
+        }
+        if (style is "striate" or "slender")
+        {
+            for (int side = -1; side <= 1; side += 2)
+            {
+                for (int rib = 1; rib <= 5; rib++)
+                {
+                    float vOffset = side * rib * .085f;
+                    Segment(new(.01f, .5f + vOffset), new(.99f, .5f + vOffset * 0.85f), .0020f, .00045f, 0.88f);
+                    for (int bridge = 1; bridge <= 10; bridge++)
+                    {
+                        float ub = bridge / 11f;
+                        Vector2 pA = new(ub, .5f + vOffset);
+                        Vector2 pB = new(ub + 0.015f, .5f + (vOffset - side * .085f));
+                        Segment(pA, pB, .0009f, .00015f, 0.65f);
+                    }
+                }
+            }
+        }
+        if (style == "pitcher")
+        {
+            for (int rib = 1; rib <= 4; rib++)
+            {
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    float vMax = .5f + side * rib * .11f;
+                    Vector2 p0 = new(.02f, .5f);
+                    Vector2 p1 = new(.25f, vMax);
+                    Vector2 p2 = new(.75f, vMax * 0.95f);
+                    Vector2 p3 = new(.98f, .5f + side * .15f);
+                    Bezier(p0, p1, p2, p3, .0035f, .0014f, .00070f, .00025f, 0.88f, 16);
+                }
+            }
+        }
+        if (style == "pinnate")
+        {
+            for (int k = 0; k < 16; k++)
+            {
+                float uBase = .04f + .90f * (k + 0.25f) / 16f;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    Vector2 p0 = new(uBase, .5f);
+                    Vector2 pEnd = new(Math.Min(.98f, uBase + .14f), .5f + side * .44f);
+                    Vector2 pMid = p0.Lerp(pEnd, 0.5f) + new Vector2(0.02f, side * 0.04f);
+                    Segment(p0, pMid, .0030f, .00075f, 0.90f);
+                    Vector2 forkA = pEnd + new Vector2(0.03f, -side * 0.04f);
+                    Vector2 forkB = pEnd + new Vector2(0.04f, side * 0.02f);
+                    Segment(pMid, forkA, .0016f, .00035f, 0.75f);
+                    Segment(pMid, forkB, .0016f, .00035f, 0.75f);
+                }
             }
         }
 

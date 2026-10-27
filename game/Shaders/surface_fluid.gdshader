@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_always, cull_disabled, diffuse_burley, specular_schlick_ggx;
+render_mode cull_disabled, depth_draw_opaque, unshaded, fog_disabled;
 uniform sampler2D previous_state : filter_nearest, repeat_disable;
 uniform sampler2D current_state : filter_nearest, repeat_disable;
 uniform sampler2D previous_support : filter_nearest, repeat_disable;
@@ -90,15 +90,6 @@ void vertex(){
     world_position=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;
 }
 float scene_depth(vec2 uv,mat4 inverse_projection){vec4 p=inverse_projection*vec4(uv*2.0-1.0,texture(depth_tex,uv).r,1.0);return -p.z/p.w;}
-vec3 refracted_screen(vec2 uv,vec2 bend_dir,float path,float roughness){
-    float mip=water_refraction_mip(path,roughness);
-    float spread=water_dispersion_amount(path,roughness);
-    vec2 lo=clamp(uv-bend_dir*spread,vec2(.002),vec2(.998));
-    vec2 hi=clamp(uv+bend_dir*spread,vec2(.002),vec2(.998));
-    return vec3(textureLod(screen_tex,lo,mip).r,
-        textureLod(screen_tex,uv,mip).g,
-        textureLod(screen_tex,hi,mip).b);
-}
 void fragment(){
     float tint_depth;vec4 water=fluid(local_uv,tint_depth);vec4 bed=ground(local_uv);
     float tint_visibility=bed.x<pond_level?1.0:clamp(tint_depth/max(water.y,.00000001),0.0,1.0);
@@ -109,64 +100,43 @@ void fragment(){
     if(water.y<=0.00000001||water.x<=bed.x+.000003||bed.z<.5)discard;
     // The fixed-head reservoir exclusively presents liquid at its own surface.
     if(bed.x<pond_level&&water.x<=pond_level+.000015)discard;
-    float clock=review_time>=0.0?review_time:fluid_time;
-    // Analytic central-difference gradient of the quadratic B-spline surface, taken
-    // at the mesh's own sample spacing (one 16-cell tile is 96 samples wide). Screen
-    // derivatives of the displaced position gave every triangle one flat normal;
-    // this gradient is C1 across every triangle and tile boundary, so the surface is
-    // completely facet-free.
-    float eps=1.0/(16.0*6.0);
-    float td_xp,td_xm,td_zp,td_zm;
-    float h_xp=fluid(local_uv+vec2(eps,0.0),td_xp).x;
-    float h_xm=fluid(local_uv-vec2(eps,0.0),td_xm).x;
-    float h_zp=fluid(local_uv+vec2(0.0,eps),td_zp).x;
-    float h_zm=fluid(local_uv-vec2(0.0,eps),td_zm).x;
-    float span=2.0*eps*tile_size;
-    // Guard the wet/dry front, where the reconstruction legitimately steps onto the
-    // bed; beyond 80 degrees the slope is no longer a water surface.
-    vec2 gradient=clamp(vec2(h_xm-h_xp,h_zm-h_zp)/span,vec2(-6.0),vec2(6.0));
-    // Dispersion-correct gravity-capillary cascade, forced by the simulated flow and
-    // damped towards the shoreline where the conserved column thins out.
-    float speed=length(water.zw);
-    vec2 flow_dir=speed>1e-4?water.zw/speed:water_wind_direction;
-    float wave_wind=water_wind_speed+speed*2.2;
-    float slope_variance=0.0;
-    vec2 wave=water_wave_slope(world_position.xz,clock,water.y,wave_wind,flow_dir,slope_variance);
-    vec3 wn=normalize(vec3(gradient.x-wave.x,1.0,gradient.y-wave.y));
+    // Shade the reconstructed surface itself. Averaging the old cell-plane
+    // normals makes a terrain-following film reflect like disconnected flat plates.
+    vec3 wn=normalize(cross(dFdx(world_position),dFdy(world_position)));
     if(wn.y<0.0)wn=-wn;
+    float speed=length(water.zw);float activity=smoothstep(.003,.12,speed);
+    vec2 position=tile_origin+local_uv*tile_size;
+    // Two overlapping advection intervals keep coordinates bounded. Multiplying
+    // a changing velocity/direction by total world age stretches the highlights
+    // into stationary contour bands and eventually aliases at wet/dry fronts.
+    float clock=review_time>=0.0?review_time:fluid_time;
+    float phase0=fract(clock/.6),phase1=fract(phase0+.5);
+    vec2 q0=position-water.zw*(phase0*.6),q1=position-water.zw*(phase1*.6);
+    // Keep the carrier in world coordinates. A spatially rotating velocity basis
+    // multiplied by world position produces false contour bands at bends.
+    vec2 r0=vec2(1.0,.35)*cos(dot(q0,vec2(88.0,31.0))+sin(q0.y*42.0)*.8)*.65
+        +vec2(-.4,1.0)*cos(dot(q0,vec2(-42.0,117.0)))*.35;
+    vec2 r1=vec2(1.0,.35)*cos(dot(q1,vec2(88.0,31.0))+sin(q1.y*42.0)*.8)*.65
+        +vec2(-.4,1.0)*cos(dot(q1,vec2(-42.0,117.0)))*.35;
+    float ripple_amplitude=mix(.022,.15,smoothstep(.01,.28,speed));
+    vec2 ripple=mix(r1,r0,1.0-abs(phase0*2.0-1.0))*ripple_amplitude;
+    wn=normalize(wn+vec3(ripple.x,0.0,ripple.y)*activity);
     vec3 n=normalize((VIEW_MATRIX*vec4(wn,0.0)).xyz),view=normalize(VIEW);
     NORMAL=n;float cosine=clamp(dot(n,view),0.0,1.0);
-    float fresnel=water_fresnel(cosine);
-    float roughness=clamp(0.018+slope_variance*0.25,0.018,0.14);
+    float fresnel=.0204+.9796*pow(1.0-cosine,5.0);
     float gap=max(scene_depth(SCREEN_UV,INV_PROJECTION_MATRIX)+VERTEX.z,0.0);
-    // True optical path along the visible ray. The old 15 cm clamp made an entire pond
-    // read as one opaque olive slab; only a pixel with no bed behind it falls back to
-    // the conserved column depth.
-    float path=gap;
-    if(!(gap>0.0&&gap<20.0))path=max(water.x-bed.y,0.0003)/max(cosine,0.2);
+    float thickness=min(gap,max(.0003,water.x-bed.y)/max(cosine,.2));
     vec3 flat_view=normalize((VIEW_MATRIX*vec4(0.0,1.0,0.0,0.0)).xyz);
     vec2 uv=clamp(SCREEN_UV+clamp((n.xy-flat_view.xy)*.022,vec2(-.006),vec2(.006))*smoothstep(.0002,.008,gap),vec2(.002),vec2(.998));
     if(scene_depth(uv,INV_PROJECTION_MATRIX)<-VERTEX.z)uv=SCREEN_UV;
-    vec2 bend=uv-SCREEN_UV;
-    vec2 bend_dir=length(bend)>1e-6?normalize(bend):vec2(0.0);
-    vec3 behind=refracted_screen(uv,bend_dir,path,roughness);
-    vec3 transmission=mobile_transmission(behind,path,tint_visibility);
+    vec3 transmission=mobile_transmission(textureLod(screen_tex,uv,0.0).rgb,thickness,tint_visibility);
     vec3 reflected=reflect(-normalize(CAMERA_POSITION_WORLD-world_position),wn);
-    // (1 - F) is the energy left for the refracted body; the pipeline's GGX lobe
-    // supplies the complementary F-weighted reflection, so nothing is counted twice.
-    vec3 emission=transmission*(1.0-fresnel);
-    if(water_debug==1)emission=wn*.5+.5;
-    if(water_debug==2)emission=transmission;
-    if(water_debug==3)emission=mobile_reflection(reflected);
-    if(water_debug==4)emission=vec3(fresnel);
-    if(debug_surface)emission=vec3(.0,.5,.9);
-    // ALBEDO is the near-black volumetric albedo of the body, not a tint: the
-    // refracted bed is radiance, so it lives in EMISSION where the surface lighting
-    // cannot modulate it a second time. SPECULAR 0.255 is F0 = 0.0204 for n = 1.333.
-    ALBEDO=(water_debug>0||debug_surface)?vec3(0.0):vec3(0.012,0.024,0.018);
-    METALLIC=0.0;
-    SPECULAR=(water_debug>0||debug_surface)?0.0:WATER_SPECULAR;
-    ROUGHNESS=(water_debug>0||debug_surface)?1.0:roughness;
-    EMISSION=emission;
+    EMISSION=mobile_surface_color(transmission,reflected,fresnel,tint_visibility);
+    if(water_debug==1){ALBEDO=vec3(0.0);EMISSION=wn*.5+.5;}
+    if(water_debug==2){ALBEDO=vec3(0.0);EMISSION=transmission;}
+    if(water_debug==3){ALBEDO=vec3(0.0);EMISSION=mobile_reflection(reflected);}
+    if(water_debug==4){ALBEDO=vec3(0.0);EMISSION=vec3(fresnel);}
+    if(debug_surface){ALBEDO=vec3(0.0);EMISSION=vec3(.0,.5,.9);}
+    ALBEDO=EMISSION;EMISSION=vec3(0.0);
     ALPHA=smoothstep(.000001,.000008,water.x-bed.x)*smoothstep(.015,.25,tint_visibility);
 }

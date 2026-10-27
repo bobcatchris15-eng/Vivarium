@@ -69,10 +69,10 @@ vec3 bump_normal(vec3 n, vec3 p, float h) {
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    vec3 view_dir_view = normalize(-VERTEX);
+    vec3 view_dir_view = normalize((inverse(MODEL_MATRIX) * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz - VERTEX);
     ts_view = vec3(dot(view_dir_view, TANGENT), dot(view_dir_view, BINORMAL), dot(view_dir_view, NORMAL));
     vec3 sun_world = normalize(vec3(0.35, 0.75, 0.45));
-    vec3 light_dir_view = normalize((VIEW_MATRIX * vec4(sun_world, 0.0)).xyz);
+    vec3 light_dir_view = normalize((inverse(MODEL_MATRIX) * vec4(sun_world, 0.0)).xyz);
     ts_light = vec3(dot(light_dir_view, TANGENT), dot(light_dir_view, BINORMAL), dot(light_dir_view, NORMAL));
 }
 

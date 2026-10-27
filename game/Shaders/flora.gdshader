@@ -75,48 +75,18 @@ varying vec3 world_pos;
 varying vec3 obj_pos;
 
 void vertex() {
-    float clock = review_time >= 0.0 ? review_time : TIME;
     inst = INSTANCE_CUSTOM;
     obj_pos = VERTEX;
-    float h = max(VERTEX.y, 0.0);
-    bool is_leaf = UV2.y > 0.5 && UV2.x < 1.5;
-    bool is_woody = surface_mode == 2 && UV2.x > 1.5;
+    float clock = review_time >= 0.0 ? review_time : 0.0;
 
-    // Migrated blades encode base-to-tip position in UV.x. Keep attachments fixed and
-    // bend the distal blade with smooth, seed-stable variation rather than vertex noise.
-    if (deform_leaf_tips && is_leaf) {
-        float tip = smoothstep(0.08, 0.92, UV.x);
-        float above_base = smoothstep(0.0, 0.12, h);
-        float weight = tip * tip * above_base;
-        float bend_x = sin(inst.w * 31.416 + 0.8);
-        float bend_z = cos(inst.w * 24.973 + 1.7);
-        float spread = 1.0 + (inst.w - 0.5) * 0.12 * weight;
-        VERTEX.xz *= vec2(spread, 2.0 - spread);
-        VERTEX.xz += vec2(bend_x, bend_z) * weight * 0.028;
+    if (surface_mode == 4) {
+        vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+        float phase = clock * 1.8 - wp.x * 18.0 - wp.z * 11.0;
+        // Micrometre-scale streaming thickness, never translation of the colony.
+        VERTEX += NORMAL * (0.00018 * sin(phase));
     }
-
-    // Hierarchical branch sway: bounded cantilever curvature preserving shadow bounds
-    float h_bend = (h * h) / (1.0 + 0.35 * h);
-    float eff_stiffness = is_woody ? max(stiffness * 2.0, 1.4) : max(stiffness, 0.5);
-    float amount = (0.010 * sway + inst.z * 0.12) / eff_stiffness;
-    float branch_phase = clock * 1.25 + inst.w * 6.2831;
-    vec2 branch_sway = clamp(vec2(sin(branch_phase) * 2.2, cos(branch_phase * 0.85) * 1.6) * amount * h_bend, vec2(-0.35), vec2(0.35));
-    VERTEX.xz += branch_sway;
-
-    // High-frequency leaf flutter for distal blades (never woody trunks)
-    if (is_leaf && sway > 0.0) {
-        float tip = smoothstep(0.1, 0.9, UV.x);
-        float flutter = sin(clock * 4.5 + inst.w * 25.0 + UV.x * 6.0) * (0.008 * tip) * sway;
-        VERTEX.y += flutter;
-    }
-
-    // Rotate normal with stem deflection
-    float d_bend = amount * 2.0 * h / (1.0 + 0.35 * h);
-    vec2 dw = vec2(sin(branch_phase) * 2.2, cos(branch_phase * 0.85) * 1.6) * d_bend;
-    NORMAL = normalize(vec3(NORMAL.x - dw.x * NORMAL.y, NORMAL.y + dw.x * NORMAL.x + dw.y * NORMAL.z, NORMAL.z - dw.y * NORMAL.y));
 
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-
 }
 
 float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
@@ -124,13 +94,17 @@ float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 void fragment() {
     tissue_fiber_view = vec3(1.0, 0.0, 0.0);
     tissue_fiber_mask = 0.0;
-    tissue_phase_mask = surface_mode == 2 && UV2.y > .5 && UV2.x < 1.2 ? 1.0 : 0.0;
+    tissue_phase_mask = surface_mode == 4 ? 0.65 :
+        (surface_mode == 2 && UV2.y > .5 && UV2.x < 1.2 ? 1.0 : 0.0);
+    // Shared light() uses optical thickness directly; slime is thin living plasmodium.
+    tissue_tau = surface_mode == 4 ? 0.4 : 0.0;
+    tissue_rim = 0.0;
     // Double-sided normal handling: invert backface normal so undersides do not render dark or inverted.
     if (!FRONT_FACING) {
         NORMAL = -NORMAL;
     }
     vec3 c = srgb_to_linear(COLOR.rgb) * (1.0 + (inst.x - 0.5) * 0.3);
-    vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    vec3 wn = finite_surface_normal((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz, vec3(0.0, 1.0, 0.0));
     vec3 n = wn;
     float rough = 0.75;
     if (surface_mode == 0) {
@@ -163,6 +137,12 @@ void fragment() {
         float dx = fbm(p + vec2(e, 0.0)) - lobes, dz = fbm(p + vec2(0.0, e)) - lobes;
         n = normalize(wn - vec3(dx, 0.0, dz) / e * colony_relief * 0.055);
         rough = 0.95;
+    } else if (surface_mode == 4) {
+        float stream = 0.5 + 0.5 * sin(UV.x * 42.0 - (review_time >= 0.0 ? review_time : 0.0) * 1.8 + world_pos.z * 18.0);
+        float vein = pow(0.5 + 0.5 * sin(UV.y * 29.0 + stream * 1.8), 6.0);
+        c = mix(c, srgb_to_linear(vec3(0.88, 0.64, 0.07)), 0.55);
+        c *= 0.88 + 0.12 * stream + 0.10 * vein;
+        rough = 0.12;
     } else if (surface_mode == 3) {
         // fungi: matte, faintly translucent flesh; radial gill lines on undersides (UV2.x = 1) and fine
         // concentric growth zones on caps and shelves (UV.x runs from centre to rim)
@@ -228,6 +208,28 @@ void fragment() {
             rough = 0.49;
         } else if (pitcher_tissue && UV2.y < -3.5) {
             rough = 0.19;
+        } else if (UV2.y > 0.5 && UV2.x > 1.20 && UV2.x < 1.50) {
+            // Authored organs keep their own pigment and geometric normals. Do not
+            // sample foliage textures or apply leaf veins before shading petals.
+            // Authored pampas rachillae use a dedicated organ marker so scanned leaf palettes cannot turn
+            // their pale, dry plume tissue green. Glowbriar nodules retain their own mint vertex pigment.
+            if (UV2.x > 1.20 && UV2.x < 1.26) {
+                c = srgb_to_linear(pampas_plume_color);
+                rough = 0.88;
+            } else if (UV2.x >= 1.26 && UV2.x < 1.30) {
+                // Prismatic plume (plumegrass). The tuft's place in the spectral ladder is baked
+                // into the filament pigment, so each step of the ladder is its own colour; the
+                // view angle then rotates that pigment the way a thin film does, and each step
+                // glints differently as the plant turns.
+                c = srgb_to_linear(COLOR.rgb);
+                float ndv = clamp(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos)), 0.0, 1.0);
+                float shift = pow(1.0 - ndv, 2.2);
+                c = mix(c, c.gbr * 1.18, shift * 0.62);
+                rough = 0.66;
+            } else if (UV2.x > 1.30 && UV2.x < 1.50) {
+                c = srgb_to_linear(COLOR.rgb);
+                rough = 0.42;
+            }
         } else if (UV2.y > 0.5) {
             float along = UV.x, across = UV.y - 0.5;
             float face = (!FRONT_FACING || (UV2.x > 0.5 && UV2.x < 1.5)) ? 1.0 : 0.0;
@@ -373,25 +375,7 @@ void fragment() {
                 rough = clamp(mix(rough, texture(leaf_scan_rgh, scan_uv).r,
                     leaf_scan_blend * 0.8) + face * 0.12, 0.28, 0.98);
             }
-            // Authored pampas rachillae use a dedicated organ marker so scanned leaf palettes cannot turn
-            // their pale, dry plume tissue green. Glowbriar nodules retain their own mint vertex pigment.
-            if (UV2.x > 1.20 && UV2.x < 1.26) {
-                c = srgb_to_linear(pampas_plume_color);
-                rough = 0.88;
-            } else if (UV2.x >= 1.26 && UV2.x < 1.30) {
-                // Prismatic plume (plumegrass). The tuft's place in the spectral ladder is baked
-                // into the filament pigment, so each step of the ladder is its own colour; the
-                // view angle then rotates that pigment the way a thin film does, and each step
-                // glints differently as the plant turns.
-                c = srgb_to_linear(COLOR.rgb);
-                float ndv = clamp(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos)), 0.0, 1.0);
-                float shift = pow(1.0 - ndv, 2.2);
-                c = mix(c, c.gbr * 1.18, shift * 0.62);
-                rough = 0.66;
-            } else if (UV2.x > 1.30 && UV2.x < 1.50) {
-                c = srgb_to_linear(COLOR.rgb);
-                rough = 0.42;
-            }
+
         } else if (UV2.x > 0.5) {
             // Glossy fruit / berries
             rough = 0.22;
@@ -433,6 +417,15 @@ void fragment() {
        leaf_type == 5 ? .56 : leaf_type == 2 ? .43 : .82;
     vec3 leaf_backlight=leaf_through(c,trans_clamped,vein_mass,tissue_depth,1.-top_side);
     BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    if (surface_mode == 4) {
+        SSS_STRENGTH = 0.85;
+        BACKLIGHT = vec3(0.65, 0.48, 0.05);
+        CLEARCOAT = 1.0;
+        CLEARCOAT_ROUGHNESS = 0.03;
+        SPECULAR = 0.58;
+        SSS_TRANSMITTANCE_COLOR = vec4(0.90, 0.61, 0.06, 1.0);
+        SSS_TRANSMITTANCE_DEPTH = 0.015;
+    }
     if (surface_mode == 3 && ghost_membrane > 0.5) {
         // Stable opaque depth writes stay intact; thin gills/caps scatter
         // transmitted light rather than making a sorting-prone alpha cloud.
@@ -477,12 +470,17 @@ void fragment() {
             smoothstep(0.70, 1.0, UV.y);
         EMISSION += bioluminescence_color * bioluminescence_strength * night_factor * 0.11 * spectral_rim;
     }
-    NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+    n = finite_surface_normal(n, wn);
+    NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(n, 0.0)).xyz, vec3(0.0, 0.0, 1.0));
+    // Evaluate quad derivatives before per-fragment organ/face branches.
+    vec2 ux = dFdx(UV), uy = dFdy(UV);
+    vec3 px = dFdx(world_pos), py = dFdy(world_pos);
+    vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
+    float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
+    if (!(normal_variance >= 0.0 && normal_variance < 1e12)) normal_variance = 0.0;
     // Fiber axis for real leaf blades only. Reeds, stems, berries and
     // underside organ tags retain isotropic cuticle reflectance.
     if (surface_mode == 2 && UV2.y > .5 && UV2.x < 1.2 && FRONT_FACING) {
-        vec2 ux = dFdx(UV), uy = dFdy(UV);
-        vec3 px = dFdx(world_pos), py = dFdy(world_pos);
         float det = ux.x * uy.y - uy.x * ux.y;
         vec3 fiber_world = (px * uy.y - py * ux.y) /
             (abs(det) > 1e-7 ? det : 1.0);
@@ -494,8 +492,17 @@ void fragment() {
         }
     }
     if (surface_mode == 2 && !woody_surface && UV2.y > .5 && UV2.x < 1.2) {
-        vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
-        float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
         ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), .35, 1.0);
+    }
+    if (!(ROUGHNESS >= 0.0 && ROUGHNESS <= 1.0)) ROUGHNESS = 0.75;
+    // Photographic/color modulation changes reflectance, never emission.
+    // Bright plume/scan ratios must remain inside the diffuse energy budget.
+    ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(0.98));
+    if (tissue_light_diagnostic == 5) {
+        SSS_STRENGTH = 0.0;
+        SSS_TRANSMITTANCE_COLOR = vec4(0.0);
+        SSS_TRANSMITTANCE_DEPTH = 0.1;
+        SSS_TRANSMITTANCE_BOOST = 0.0;
+        BACKLIGHT = vec3(0.0);
     }
 }

@@ -89,7 +89,23 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
     public void ApplySettings()
     {
         Settings.Clamp();
+        // One production presentation; legacy saved tiers are ignored. Benchmarks
+        // retain explicit diagnostic controls without exposing player presets.
+        if (!Main.UserArgs.Contains("--perf-test")) Settings.Quality = 1;
         EnvRig.ApplyQuality(Settings.Quality);
+        EnvRig.ApplyIndirectLightingDetail(Settings.FineIndirectLighting);
+        EnvRig.Sun.ShadowEnabled &= Settings.DynamicShadows;
+        EnvRig.Env.SdfgiEnabled &= Settings.GlobalIllumination;
+        EnvRig.Env.SsilEnabled &= Settings.GlobalIllumination;
+        EnvRig.Env.SsaoEnabled &= Settings.AmbientOcclusion;
+        EnvRig.VolumetricMistEnabled = Settings.VolumetricMist;
+        EnvRig.Env.VolumetricFogEnabled &= Settings.VolumetricMist;
+        GetViewport().Scaling3DScale = (float)Settings.RenderScale;
+        Flora.ReducedDistantPlants = Settings.ReducedDistantPlants;
+        CameraRig.DistanceBlur = Settings.DistanceBlur;
+        Bridge.SetSimpleFoliageLighting(Settings.SimpleFoliageLighting);
+        if (Settings.DistanceBlur)
+            RenderingServer.CameraAttributesSetDofBlurQuality(RenderingServer.DofBlurQuality.Medium, true);
         Flora.Quality = Fauna.Quality = Guardian.Quality = Settings.Quality;
         SoilDetail.Quality = Settings.Quality;
         AmbientGround.Quality = Settings.Quality;
@@ -139,6 +155,16 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
             GD.Print($"WORLD_RENDER_STAGE_END {name} stage_ms={startup.ElapsedMilliseconds - begin} elapsed_ms={startup.ElapsedMilliseconds}");
         }
         if (Host == null) Host = new SimHost(world); else Host.Swap(world);
+        SimHost.StageTimed = FrameProfiler.Record;
+        Vivarium.Sim.Water.SurfaceLiquid.StageTimed = FrameProfiler.Record;
+        Vivarium.Sim.Coverage.Aquatic.AquaticSystem.StageTimed = FrameProfiler.Record;
+        Vivarium.Sim.Coverage.Aquatic.SurfaceFloatRules.BatchTimed = FrameProfiler.Record;
+        Host.Tools.SurfaceEdited += (centre, radius) =>
+        {
+            AmbientGround.Invalidate(centre, radius);
+            SoilDetail.LoamDetails.Invalidate(centre, radius);
+            SoilDetail.Invalidate();
+        };
         // Leave room for camera and rendering after every fixed simulation tick.
         world.Scheduler.WallBudgetMs = 6;
         world.CoverageSystem.AsyncMode = true;
@@ -157,7 +183,6 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         Stage("Water", () => Water.Build(world));
         yield return "WaterFluid";
         Stage("WaterFluid", () => {world.Liquid.Enable();world.Liquid.AsyncMode=true;WaterFluid.Bind(world);});
-        WaterFluid.Camera = CameraRig.Cam;
         yield return "Props";
         Stage("Props", () => Props.Build(world));
         yield return "PilotTree";
@@ -165,9 +190,14 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         SoilDetail.Camera = CameraRig.Cam;
         yield return "SoilDetail";
         Stage("SoilDetail", () => SoilDetail.Build(world));
+        while (!SoilDetail.LoamDetails.InitializationComplete)
+        {
+            yield return "Forest floor";
+            SoilDetail.LoamDetails.BuildStartupBatch();
+        }
         AmbientGround.Camera = CameraRig.Cam;
         yield return "AmbientGround";
-        Stage("AmbientGround", () => AmbientGround.Build(world));
+        Stage("AmbientGround", () => AmbientGround.Build(world, Island));
         Coverage.Camera = CameraRig.Cam;
         yield return "Coverage";
         Stage("Coverage", () => Coverage.Build(world));
@@ -241,6 +271,12 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
 
     private ulong _lastWallMicroseconds;
     private bool _previousFramePaused=true;
+    /// <summary>Resume a deliberately suspended presentation audit without queuing its wall time.</summary>
+    internal void ResetFrameClock()
+    {
+        _lastWallMicroseconds = Godot.Time.GetTicksUsec();
+        _previousFramePaused = true;
+    }
     public override void _Process(double delta)
     {
         // Godot may cap process delta after a long frame. Physical input must retain

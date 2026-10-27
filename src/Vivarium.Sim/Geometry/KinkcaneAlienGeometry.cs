@@ -1,4 +1,5 @@
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry.Form;
 
 namespace Vivarium.Sim.Geometry;
 
@@ -98,8 +99,9 @@ internal static class KinkcaneAlienGeometry
             for(int n=0;n<leaves;n++)
             {
                 double theta=az+tier*1.3+n*Math.Tau/leaves+rng.Range(-.22,.22);
-                var radial=new Vec3(Math.Cos(theta),0,Math.Sin(theta));
-                var side=new Vec3(-radial.Z,0,radial.X);
+                double pitch=rng.Range(-.05,.05);
+                var radial=(new Vec3(Math.Cos(theta),pitch,Math.Sin(theta))).Normalized();
+                var side=Axis.RotateAround(new Vec3(-radial.Z,0,radial.X).Normalized(),radial,rng.Range(-.15,.15));
                 var petiole=origin+radial*rng.Range(.058,.092)+
                     Vec3.Up*rng.Range(.012,.035);
                 Primitives.Tube(m,new[]{origin,petiole},new[]{.003,.00135},6,
@@ -130,14 +132,15 @@ internal static class KinkcaneAlienGeometry
                 (i,v)=>(twigCol,1,i*.5,v,0,0));
             for(int finger=-2;finger<=2;finger++)
             {
-                double theta=angle+finger*.245+rng.Range(-.045,.045);
-                var dir=new Vec3(Math.Cos(theta),0,Math.Sin(theta));
-                var side=new Vec3(-dir.Z,0,dir.X);
+                double theta=angle+finger*.245+rng.Range(-.055,.055);
+                double pitch=rng.Range(-.04,.06);
+                var dir=(new Vec3(Math.Cos(theta),pitch,Math.Sin(theta))).Normalized();
+                var side=Axis.RotateAround(new Vec3(-dir.Z,0,dir.X).Normalized(),dir,rng.Range(-.14,.14));
                 double ratio=1-.14*Math.Abs(finger);
                 double length=rng.Range(.29,.39)*ratio;
                 var leafRoot=palmBase+dir*.012;
                 var tip=leafRoot+dir*length+
-                    Vec3.Up*(.018+(.052-.009*Math.Abs(finger)));
+                    Vec3.Up*(.018+(.052-.009*Math.Abs(finger))+rng.Range(-.012,.012));
                 OrganismMeshes.CurvedBlade(m,leafRoot,
                     leafRoot+dir*length*.56+Vec3.Up*.066,
                     tip,side,(finger==0?.079:.060)*ratio,

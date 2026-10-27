@@ -6,6 +6,9 @@ render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 uniform sampler2D bark_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D bark_hgt : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D bark_ao : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float bark_height_scale = 0.025;
 uniform float hex_apothem = 6.92820323;
 uniform float u_bark_fissures = 0.65;
 // Gains are exposed for restrained/full material comparison captures.
@@ -26,6 +29,13 @@ void vertex() {
     planar_bark_uv = 1.0 - smoothstep(0.001, 0.02, planar_error);
 }
 
+vec3 pilot_bump(vec3 n,vec3 p,float height) {
+    vec3 dx=dFdx(p),dy=dFdy(p);
+    vec3 rx=cross(dy,n),ry=cross(n,dx);
+    float det=dot(dx,rx);
+    vec3 grad=(rx*dFdx(height)+ry*dFdy(height))*sign(det)/max(abs(det),1e-9);
+    return normalize(n-grad);
+}
 void fragment() {
     // Island slice plane: any part of the tree outside the regular hexagon gets sliced clean and flat
     float d = max(abs(world_position.z), 0.8660254037844386 * abs(world_position.x) + 0.5 * abs(world_position.z)) - hex_apothem;
@@ -72,7 +82,17 @@ void fragment() {
         ROUGHNESS = clamp(0.82 + (fibres - 0.5) * 0.08 * structure + ring_line * 0.035, 0.75, 0.94);
         SPECULAR = 0.10;
         BACKLIGHT = vec3(0.0);
-        // Clean planar normal without bark bump map
+        // Annual rings and medullary fibers perturb the actual cut plane in view space.
+        float height=(ring_line*.0012+fine_fibre*.00045-rays*.001)*structure;
+        NORMAL=pilot_bump(normalize(NORMAL),VERTEX,height);
+    } else if (COLOR.a > 0.55 && COLOR.a < 0.75) {
+        // Explicit moss gametophores on exposed buttress crests, with translucent tips.
+        float variation=vnoise(object_position.xz*87.0+object_position.y*31.0);
+        ALBEDO=tissue*(.8+.3*variation);
+        ROUGHNESS=.86;
+        SPECULAR=.18;
+        BACKLIGHT=tissue*.3;
+        AO=.75+.25*variation;
     } else if (COLOR.a > 0.2 && COLOR.a < 0.4) {
         float porous = smoothstep(0.72, 0.88, vnoise(object_position.xz * 95.0 + object_position.y * 17.0));
         float mottling = fbm(object_position.xz * 13.0 + vec2(object_position.y * 2.0, -object_position.y));
@@ -139,9 +159,27 @@ void fragment() {
             SPECULAR = 0.13;
             NORMAL = normalize((VIEW_MATRIX * vec4(
                 normalize(mix(normal_world, bark_normal_world, 0.30)), 0.0)).xyz);
+            vec3 aw=pow(abs(normal_world),vec3(4.0));aw/=max(dot(aw,vec3(1.0)),.001);
+            float relief=texture(bark_hgt,world_position.zy*4.0).r*aw.x+
+                texture(bark_hgt,world_position.xz*4.0).r*aw.y+texture(bark_hgt,world_position.xy*4.0).r*aw.z;
+            NORMAL=pilot_bump(NORMAL,VERTEX,relief*.003);
+            AO=texture(bark_ao,world_position.xz*4.0).r;
             BACKLIGHT = vec3(0.0);
         } else {
             vec2 grain = UV / 0.65;
+            vec3 dp_x=dFdx(VERTEX),dp_y=dFdy(VERTEX);
+            vec2 uv_x=dFdx(grain),uv_y=dFdy(grain);
+            float uv_det=uv_x.x*uv_y.y-uv_x.y*uv_y.x;
+            vec3 ts_tangent=(dp_x*uv_y.y-dp_y*uv_x.y)*sign(uv_det);
+            vec3 ts_bitangent=(-dp_x*uv_y.x+dp_y*uv_x.x)*sign(uv_det);
+            if(length(ts_tangent)>1e-7 && length(ts_bitangent)>1e-7) {
+                ts_tangent=normalize(ts_tangent);
+                ts_bitangent=normalize(ts_bitangent);
+                vec3 view_ts=vec3(dot(VIEW,ts_tangent),dot(VIEW,ts_bitangent),dot(VIEW,NORMAL));
+                float pom_shadow;
+                grain=pom_raymarch(bark_hgt,grain,view_ts,bark_height_scale,16,pom_shadow,vec3(0.,0.,1.));
+                AO=pom_shadow*texture(bark_ao,grain).r;
+            }
             vec3 scan = texture(bark_col, grain).rgb;
             float average = max(dot(textureLod(bark_col, vec2(0.5), 10.0).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.025);
             float micro = fbm(object_position.xz * 9.0 + vec2(object_position.y * 2.7, object_position.y * 1.3));

@@ -1,0 +1,27 @@
+{
+  "source": "authored deterministic linear radiance, not measured photography",
+  "size": [
+    4096,
+    2048
+  ],
+  "files": [
+    {
+      "path": "vivarium_canopy_day_4k.exr",
+      "sha256": "00e0acbb0cb47f9d5a6d8b379479cbd170d2265181d610f50bae546d0b024983",
+      "min_linear": 0.01615566574037075,
+      "max_linear": 29.097570419311523
+    },
+    {
+      "path": "vivarium_canopy_dusk_4k.exr",
+      "sha256": "b3003f92b25c90fa0b9a3d9c616296e543f9d787df1ea679bf6a212948c85086",
+      "min_linear": 0.004810666665434837,
+      "max_linear": 11.837407112121582
+    },
+    {
+      "path": "vivarium_canopy_night_4k.exr",
+      "sha256": "62fa2d0d1ca2eaf618b656f590670df25e246fc6eb0b409ac40cae666b6c2096",
+      "min_linear": 0.0004185199795756489,
+      "max_linear": 0.7259513735771179
+    }
+  ]
+}

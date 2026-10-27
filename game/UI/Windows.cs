@@ -1,3 +1,4 @@
+using Vivarium.Sim.Guardians;
 using System;
 using Vivarium.Game.Render;
 using System.Collections.Generic;
@@ -24,6 +25,8 @@ public partial class Windows : Control
     private OptionButton _preset = null!;
     private OptionButton _pilotTree = null!;
     private static readonly string[] PilotTreeIds = { "random", "none", "gloomspire", "needlevault", "crowncoil", "emberpillar", "basinwarden", "palehollow" };
+    private OptionButton _guardian = null!;
+    private static readonly string[] GuardianIds = { "random", "none", "hoatzin_crested", "pangolin_armored", "serpent_canopy", "monitor_great", "coati_woodland", "porcupine_quilled" };
     private HSlider _diameter = null!, _relief = null!, _springFlow = null!;
     private Label _diameterLabel = null!, _reliefLabel = null!, _springLabel = null!;
     private readonly List<string> _presetIds = new();
@@ -305,7 +308,7 @@ public partial class Windows : Control
 
     private void BuildNewWorld()
     {
-        var (_, body) = Add("NewWorld", "Create a new vivarium", new Vector2(560, 510));
+        var (_, body) = Add("NewWorld", "Create a new vivarium", new Vector2(560, 540));
         _preset = new OptionButton { Name = "PresetPicker" };
         foreach (var (id, d) in Session.Content.Presets.OrderBy(p => p.Key == "default" ? "" : p.Key)) { _preset.AddItem(d.Name); _presetIds.Add(id); }
         _preset.ItemSelected += _ => LoadPresetDefaults();
@@ -317,6 +320,8 @@ public partial class Windows : Control
         _springFlow = UiKit.Slider("SpringSlider", 0.0, 3.0, 0.1, 1.0, v => _springLabel.Text = v < 0.05 ? "dry (no springs)" : $"×{v:0.0}");
         _pilotTree = new OptionButton { Name = "PilotTreePicker" };
         foreach (string label in new[] { "Random ancient tree", "None", "Gloomspire", "Needlevault", "Crowncoil", "Emberpillar", "Basinwarden", "Palehollow" }) _pilotTree.AddItem(label);
+        _guardian = new OptionButton { Name = "GuardianPicker" };
+        foreach (string label in new[] { "Random guardian animal", "None", "Crested canopy", "Armored forest", "Canopy serpent", "Great ground", "Long-nosed woodland", "Quilled arboreal" }) _guardian.AddItem(label);
 
 
 
@@ -328,6 +333,7 @@ public partial class Windows : Control
         Row("Terrain relief", _relief, _reliefLabel);
         Row("Spring flow", _springFlow, _springLabel);
         Row("Pilot tree", _pilotTree, null);
+        Row("Guardian animal", _guardian, null);
 
         body.AddChild(grid);
         body.AddChild(UiKit.Label("The same seed and settings always grow the same starting island.", 13, UiKit.Muted, wrap: true));
@@ -342,6 +348,14 @@ public partial class Windows : Control
         _seed.Text = d.Seed.ToString(CultureInfo.InvariantCulture);
         _diameter.Value = d.Diameter; _relief.Value = 1.0; _springFlow.Value = 1.0;
         _pilotTree.Select(Math.Max(0, Array.IndexOf(PilotTreeIds, d.PilotTreeId)));
+        int gIdx = Array.IndexOf(GuardianIds, d.GuardianId);
+        if (gIdx < 0)
+        {
+            var gDef = GuardianCatalog.Find(d.GuardianId);
+            if (gDef != null) gIdx = Array.IndexOf(GuardianIds, gDef.Id);
+            else gIdx = 0;
+        }
+        _guardian.Select(Math.Max(0, gIdx));
 
         _diameterLabel.Text = $"{d.Diameter:0.0} m"; _reliefLabel.Text = "×1.00"; _springLabel.Text = "×1.0";
     }
@@ -352,6 +366,7 @@ public partial class Windows : Control
         var d = Session.Content.PresetOrThrow(_presetIds[Math.Max(0, _preset.Selected)]);
         d.PilotTreeId = PilotTreeIds[Math.Clamp(_pilotTree.Selected, 0, PilotTreeIds.Length - 1)];
         d.PilotTreeCorner = -1;
+        d.GuardianId = GuardianIds[Math.Clamp(_guardian.Selected, 0, GuardianIds.Length - 1)];
         if (ulong.TryParse(_seed.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seed)) d.Seed = seed;
         else d.Seed = Hash.Fnv1a64(_seed.Text.Trim());           // any text works as a seed
         double scale = _diameter.Value / d.Diameter;
@@ -437,7 +452,7 @@ public partial class Windows : Control
 
     private void BuildSettings()
     {
-        var (_, body) = Add("Settings", "Settings", new Vector2(520, 420));
+        var (_, body) = Add("Settings", "Settings", new Vector2(620, 650));
         var s = Session.Settings;
         var grid = new GridContainer { Columns = 2 };
         var speedL = UiKit.Label($"{s.CameraSpeed:0.00} m/s");
@@ -455,11 +470,6 @@ public partial class Windows : Control
         var invert = new CheckBox { Name = "InvertYCheck", ButtonPressed = s.InvertY, Text = "Invert Y" };
         invert.Toggled += b => { s.InvertY = b; Apply(); };
         grid.AddChild(UiKit.Label("Mouse look")); grid.AddChild(invert);
-        var quality = new OptionButton { Name = "QualityPicker" };
-        quality.AddItem("Low"); quality.AddItem("Medium"); quality.AddItem("High");
-        quality.Select(s.Quality);
-        quality.ItemSelected += i => { s.Quality = (int)i; Apply(); };
-        grid.AddChild(UiKit.Label("Graphics quality")); grid.AddChild(quality);
         var auto = new CheckBox { Name = "AutosaveCheck", ButtonPressed = s.AutosaveEnabled, Text = "Enabled" };
         auto.Toggled += b => { s.AutosaveEnabled = b; Apply(); };
         var autoL = UiKit.Label($"every {s.AutosaveMinutes:0} min");
@@ -467,6 +477,27 @@ public partial class Windows : Control
         var uiL = UiKit.Label($"×{s.UiScale:0.00}");
         grid.AddChild(UiKit.Label("Interface size")); grid.AddChild(UiKit.Row(UiKit.Slider("UiScaleSlider", 0.75, 1.6, 0.05, s.UiScale, v => { s.UiScale = v; uiL.Text = $"×{v:0.00}"; Apply(); }), uiL));
         body.AddChild(grid);
+        body.AddChild(UiKit.Label("Rendering", 16));
+        void ToggleRender(string name, string label, bool current, Action<bool> update, string hint)
+        {
+            var check = new CheckBox { Name = name, Text = label, ButtonPressed = current, TooltipText = hint };
+            check.Toggled += enabled => { update(enabled); Apply(); };
+            body.AddChild(check);
+        }
+        ToggleRender("DynamicShadowsCheck", "Dynamic shadows", s.DynamicShadows, b => s.DynamicShadows = b, "Shadows from the main light. Turning this off reduces rendering cost.");
+        ToggleRender("GlobalIlluminationCheck", "Indirect lighting", s.GlobalIllumination, b => s.GlobalIllumination = b, "Bounced light and ambient shading. Turning this off changes the lighting.");
+        ToggleRender("FineIndirectLightingCheck", "Fine indirect lighting", s.FineIndirectLighting, b => s.FineIndirectLighting = b, "Finer detail in bounced light. Uses more GPU time, especially while moving.");
+        ToggleRender("AmbientOcclusionCheck", "Contact shading", s.AmbientOcclusion, b => s.AmbientOcclusion = b, "Darkens small creases and contacts between surfaces.");
+        ToggleRender("VolumetricMistCheck", "Volumetric mist", s.VolumetricMist, b => s.VolumetricMist = b, "Light through humid air and underwater haze.");
+        ToggleRender("ReducedDistantPlantsCheck", "Reduce distant plant detail", s.ReducedDistantPlants, b => s.ReducedDistantPlants = b, "Earlier mesh detail transitions beyond 6 and 12 metres. Nearby plants retain full detail.");
+        ToggleRender("DistanceBlurCheck", "Soften distant detail (depth of field)", s.DistanceBlur, b => s.DistanceBlur = b, "Optional far blur begins at 4.8 metres, before the distance detail transition. Blur adds rendering cost.");
+        ToggleRender("SimpleFoliageLightingCheck", "Simpler foliage lighting", s.SimpleFoliageLighting, b => s.SimpleFoliageLighting = b, "Reduces leaf lighting cost, with simpler highlights and transmission.");
+        var scale = new OptionButton { Name = "RenderScalePicker", TooltipText = "Lower resolution for the 3D view. The interface stays at full resolution." };
+        scale.AddItem("3D resolution: 100%"); scale.AddItem("3D resolution: 95%"); scale.AddItem("3D resolution: 75%"); scale.AddItem("3D resolution: 50%");
+        scale.Selected = s.RenderScale > .975 ? 0 : s.RenderScale > .85 ? 1 : s.RenderScale > .625 ? 2 : 3;
+        double[] renderScales = { 1, .95, .75, .5 };
+        scale.ItemSelected += index => { s.RenderScale = renderScales[(int)index]; Apply(); };
+        body.AddChild(scale);
         body.AddChild(UiKit.Label("These settings affect presentation only; the ecosystem runs identically on every setting.", 13, UiKit.Muted, wrap: true));
         void Apply() { Session.ApplySettings(); s.Save(); }
     }

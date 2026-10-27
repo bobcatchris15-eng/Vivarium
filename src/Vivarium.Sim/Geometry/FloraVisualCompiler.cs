@@ -84,7 +84,12 @@ public static class FloraVisualCompiler
         var maps = new[] { new Dictionary<int, int>(), new Dictionary<int, int>() };
         for (int t = 0; t < source.Indices.Count; t += 3)
         {
-            int a = source.Indices[t]; bool isLeaf = owner[a] >= 0;
+            int a = source.Indices[t];
+            // Leaf spans also preserve petals/bracts for LOD. Their organ marker must
+            // win over span ownership so the leaf pool cannot repaint their pigment.
+            float marker = source.UV2[a * 2];
+            bool authoredOrgan = source.UV2[a * 2 + 1] > .5f && marker > 1.20f && marker < 1.50f;
+            bool isLeaf = owner[a] >= 0 && !authoredOrgan;
             var dst = isLeaf ? blade : stem; var map = maps[isLeaf ? 1 : 0];
             for (int c = 0; c < 3; c++)
             {

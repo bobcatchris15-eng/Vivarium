@@ -21,6 +21,7 @@ function Invoke-Timed([string]$Exe, [string[]]$Arguments, [int]$TimeoutSec, [str
     New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
     $quoted = $Arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
     $p = Start-Process -FilePath $Exe -ArgumentList $quoted -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+    $null = $p.Handle
     if (-not $p.WaitForExit($TimeoutSec * 1000)) {
         Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
         return @{ ExitCode = 124; Out = (Get-Content $out -Raw -ErrorAction SilentlyContinue); Err = "TIMEOUT after $TimeoutSec s" }

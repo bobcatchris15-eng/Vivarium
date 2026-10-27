@@ -155,7 +155,8 @@ internal static class GlowbriarGeometry
         if(side.LengthSq<.00001)side=stem.Cross(Vec3.Up).Normalized();
         for(int sign=-1;sign<=1;sign+=2)
         {
-            var spread=(side*sign+radial*.09+Vec3.Up*.12).Normalized();
+            var spread=(side*sign+radial*(.09+rng.Range(-.03,.03))+
+                Vec3.Up*(.12+rng.Range(-.04,.04))).Normalized();
             double size=scale*rng.Range(.82,1.18);
             double petioleLength=.0085*size;
             var join=node+spread*petioleLength;
@@ -166,7 +167,7 @@ internal static class GlowbriarGeometry
             // proximal to centre, with a long continuously tapering distal end.
             double length=rng.Range(.112,.174)*size;
             var dir=(spread*.94+stem*rng.Range(.13,.33)+Vec3.Up*
-                rng.Range(-.13,.15)).Normalized();
+                rng.Range(-.13,.15)+side*rng.Range(-.06,.06)).Normalized();
             var tip=join+dir*length;
             var leafSide=new Vec3(-dir.Z,0,dir.X);
             if(leafSide.LengthSq<.00001)leafSide=sideways;
@@ -175,7 +176,7 @@ internal static class GlowbriarGeometry
             var tipTint=Primitives.Mix(baseColor,endColor,rng.Range(.35,.66));
             FoliageBlade.Build(mesh,join,tip,leafSide,width,
                 baseTint,tipTint,camber:.14,curl:rng.Range(.04,.12),
-                roll:rng.Range(-.12,.12),asymmetry:rng.Range(-.06,.06),
+                roll:rng.Range(-.20,.20),asymmetry:rng.Range(-.06,.06),
                 shoulder:rng.Range(.65,.80),segments:detail==2?2:3);
         }
     }

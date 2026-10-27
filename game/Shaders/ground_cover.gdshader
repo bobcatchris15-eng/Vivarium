@@ -7,24 +7,39 @@ render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 uniform float leaf_detail = 1.0;
 uniform float sway_strength = 0.0;
 uniform float review_time = -1.0;
+uniform sampler2D field_tex : filter_linear, repeat_disable;
+uniform vec4 field_rect = vec4(0.0);
+uniform bool instance_shape_variation = false;
 varying vec3 tissue_color;
 varying float individuality;
 varying float baked_ao;
 varying float old_stem;
+varying vec2 habitat_uv;
+
+float cover_hash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
 
 void vertex() {
     tissue_color = srgb_to_linear(COLOR.rgb);
     baked_ao = UV2.x > .01 ? UV2.x : .94;
     // UV2.y is reserved here for the runner mesh's senescent stem tissue; existing meshes use zero.
     old_stem = UV2.y;
-    // Stable instance position varies tissue without consuming ecological RNG draws.
-    individuality = fract(sin(dot(MODEL_MATRIX[3].xz, vec2(12.9898, 78.233))) * 43758.5453);
-    float clock = review_time >= 0.0 ? review_time : TIME;
-    float rooted = smoothstep(0.003, 0.055, VERTEX.y) * sway_strength;
-    if (rooted > 0.0) {
-        VERTEX.x += sin(clock * 1.8 + individuality * 6.283) * .0018 * rooted;
-        VERTEX.z += cos(clock * 1.3 + individuality * 6.283) * .0011 * rooted;
+    // Static instance-specific bending, with its exact inverse-transpose normal.
+    // Terrain-conforming bank meshes keep their checked world-coordinate support.
+    vec2 origin = MODEL_MATRIX[3].xz;
+    individuality = cover_hash(origin);
+    if (instance_shape_variation && VERTEX.y > 0.0) {
+        vec2 lean = (vec2(cover_hash(origin + 3.17), cover_hash(origin - 7.31)) - .5) * .38;
+        vec2 curl = (vec2(cover_hash(origin + 11.9), cover_hash(origin - 17.3)) - .5) * 6.0;
+        float y = max(VERTEX.y, 0.0);
+        VERTEX.xz += lean * y + curl * y * y;
+        vec2 slope = lean + 2.0 * curl * y;
+        NORMAL = normalize(vec3(NORMAL.x, NORMAL.y - dot(slope, NORMAL.xz), NORMAL.z));
     }
+    vec2 world_xz = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
+    habitat_uv = (world_xz - field_rect.xy) / max(field_rect.zw, vec2(.001));
+    if (!instance_shape_variation) individuality = cover_hash(world_xz);
 }
 
 void fragment() {
@@ -47,7 +62,18 @@ void fragment() {
     float sheath = (1.0 - smoothstep(.02, .11, blade_v)) * blade;
     float hyaline = smoothstep(.88, 1.0, blade_v) * smoothstep(.10, .42, across) * blade;
     float anatomy = clamp(midrib * .65 + veins * .28, 0.0, 1.0) * leaf_detail * (1.0 - sheath * .9);
-    vec3 pigment = tissue_color * mix(.90, 1.08, individuality);
+    // Terrain's live R/A channels are moisture and canopy-adjusted exposure.
+    // Moisture controls value; exposure independently controls yellow/blue hue.
+    vec2 habitat = vec2(.45, .6);
+    if (field_rect.z > .001 && field_rect.w > .001) habitat = texture(field_tex, habitat_uv).ra;
+    float moisture = smoothstep(.08, .85, clamp(habitat.x, 0.0, 1.0));
+    float exposure = smoothstep(.10, .85, clamp(habitat.y, 0.0, 1.0));
+    vec3 hue = mix(vec3(.20, .53, .58), vec3(.68, .76, .13), exposure);
+    vec3 pigment = srgb_to_linear(hue * mix(1.10, .42, moisture)) * tissue_color
+        * mix(.95, 1.05, individuality);
+    // Keep the shared chlorophyll transmission lobe from painting every blade
+    // the same bright green irrespective of its requested habitat pigment.
+    tissue_phase_mask *= clamp(dot(pigment, vec3(.2126, .7152, .0722)) * 5.0, 0.0, .9);
     pigment *= mix(.94, 1.09, anatomy);
     pigment = mix(pigment, pigment * vec3(1.35, .91, .52), old_stem * .72);
     // Tips senesce first; some individuals dry off far ahead of their neighbours.
@@ -58,12 +84,12 @@ void fragment() {
     float crown = clamp(baked_ao, .15, 1.0);
     float crown_ao = mix(.45, 1.0, crown);
     ALBEDO = pigment * mix(.75, 1.0, sqrt(crown));
-    ROUGHNESS = mix(.83, .66 + across * .14, leaf_detail);
-    SPECULAR = .28;
+    ROUGHNESS = .94 + .035 * individuality;
+    SPECULAR = .035;
     BACKLIGHT = leaf_through(pigment, .28 * mix(1., .2, old_stem), anatomy, .48 + hyaline * .34, float(!FRONT_FACING));
     vec3 dndx = dFdx(NORMAL), dndy = dFdy(NORMAL);
     float variance = dot(dndx, dndx) + dot(dndy, dndy);
-    ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * variance, .25)), .35, 1.0);
+    ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * variance, .25)), .90, 1.0);
     AO = crown_ao;
     AO_LIGHT_AFFECT = .10;
 }

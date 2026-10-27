@@ -229,7 +229,7 @@ public partial class GuardianVegetationContact : Node
             if(Flora!=null)
             {
                 _scan??=Flora.GuardianContactInstances().GetEnumerator();
-                for(int i=0;i<256;i++)
+                for(int i=0;i<24;i++)
                 {
                     if(!_scan.MoveNext()){_scan.Dispose();_scan=null;break;}
                     var (draw,index)=_scan.Current;
@@ -268,6 +268,15 @@ public partial class GuardianVegetationContact : Node
             foreach(var (key,plant) in _plants)
             {
                 if(!TryDrawInfo(plant.Draw,out var info)||plant.Index>=info.Count){expired.Add(key);continue;}
+                if(plant.Target.LengthSquared()<1e-8f && plant.Bend.LengthSquared()<1e-8f && plant.Applied.IsEqualApprox(plant.Base))
+                {
+                    AvoidedPoseUploads++;
+                    if(plant.Root.DistanceSquaredTo(Focus)>25)
+                    {
+                        expired.Add(key);
+                    }
+                    continue;
+                }
                 // The flora CPU upload cache is authoritative for undeformed
                 // plant placement. A native read is only needed for atypical
                 // buffers not managed by the flora renderer.

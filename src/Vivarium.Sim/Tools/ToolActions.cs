@@ -37,6 +37,13 @@ public sealed class PokeResult
 public sealed class ToolActions
 {
     private readonly VivariumWorld _w;
+    /// <summary>Successful edits that can change static surface dressing. Null centre means all regions.</summary>
+    public event Action<Vec2?, double>? SurfaceEdited;
+    private ToolResult SurfaceEdit(ToolResult result, Vec2? centre = null, double radius = double.PositiveInfinity)
+    {
+        if (result.Ok) SurfaceEdited?.Invoke(centre, radius);
+        return result;
+    }
     public ToolActions(VivariumWorld w) { _w = w; }
     private ToolConfig Cfg => _w.Content.Tools;
     private ToolResult AtTickBoundary(Func<ToolResult> action)
@@ -109,7 +116,7 @@ public sealed class ToolActions
         var f = _w.Flora.Get(floraId);
         if (f == null) return ToolResult.Fail("nothing to remove");
         var name = _w.Content.FloraOrThrow(f.SpeciesId).Name;
-        return _w.FloraSystem.Kill(f, "removed") ? ToolResult.Success($"removed {name}", floraId) : ToolResult.Fail("nothing to remove");
+        return SurfaceEdit(_w.FloraSystem.Kill(f, "removed") ? ToolResult.Success($"removed {name}", floraId) : ToolResult.Fail("nothing to remove"), f.Position, 2);
     }
 
     /// <summary>Removal radius (m) for clearing a moss/lichen coverage patch under the cursor.</summary>
@@ -121,7 +128,7 @@ public sealed class ToolActions
     {
         _w.Scheduler.CompletePendingTick();
         int cleared = _w.CoverageSystem.ClearDisc(p, RemoveCoverageRadius);
-        return cleared > 0 ? ToolResult.Success("cleared moss/lichen") : ToolResult.Fail("nothing to remove");
+        return SurfaceEdit(cleared > 0 ? ToolResult.Success("cleared moss/lichen") : ToolResult.Fail("nothing to remove"), p, RemoveCoverageRadius + 1);
     }
 
     // ------------------------------------------------------------------ nutrients
@@ -202,7 +209,7 @@ public sealed class ToolActions
     private ToolResult Wrap(PlacementResult r, string what)
     {
         if (r.Ok && what != "gravel") _w.RefreshDerived();
-        return r.Ok ? ToolResult.Success($"{r.Message} {what}", r.Id) : ToolResult.Fail($"Can't place {what}: {r.Message}");
+        return SurfaceEdit(r.Ok ? ToolResult.Success($"{r.Message} {what}", r.Id) : ToolResult.Fail($"Can't place {what}: {r.Message}"));
     }
 
     // ------------------------------------------------------------------ terrain
@@ -219,7 +226,7 @@ public sealed class ToolActions
         double amount = mode == SculptMode.Smooth ? 4 * seconds : Cfg.SculptRate * seconds;
         int n = TerrainEditing.Sculpt(_w, centre, radius, amount, mode);
         if (n == 0) return ToolResult.Fail(mode switch { SculptMode.Raise => "already at the height limit", SculptMode.Lower => "already at the depth limit", _ => "already smooth" });
-        return ToolResult.Success(mode switch { SculptMode.Raise => "raised the ground", SculptMode.Lower => "lowered the ground", _ => "smoothed the ground" });
+        return SurfaceEdit(ToolResult.Success(mode switch { SculptMode.Raise => "raised the ground", SculptMode.Lower => "lowered the ground", _ => "smoothed the ground" }), centre, radius + 1);
     }
 
     /// <summary>Call when a sculpt stroke ends so derived fields (light) are fresh before anything reads them.</summary>
@@ -234,7 +241,7 @@ public sealed class ToolActions
         _w.Scheduler.CompletePendingTick();
         if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
         double v = _w.Water.AddWater(centre, ClampWaterRadius(radius), Cfg.PourRate * MathD.Clamp(seconds, 0, 0.5));
-        return v > 0 ? ToolResult.Success($"poured {v * 1000:0.0} L") : ToolResult.Fail("nothing poured");
+        return SurfaceEdit(v > 0 ? ToolResult.Success($"poured {v * 1000:0.0} L") : ToolResult.Fail("nothing poured"), centre, ClampWaterRadius(radius) + 1);
     }
 
     public ToolResult DrainWater(Vec2 centre, double radius, double seconds)
@@ -242,7 +249,7 @@ public sealed class ToolActions
         _w.Scheduler.CompletePendingTick();
         if (!_w.Domain.Contains(centre)) return ToolResult.Fail("outside the island");
         double v = _w.Water.RemoveWater(centre, ClampWaterRadius(radius), Cfg.DrainRate * MathD.Clamp(seconds, 0, 0.5));
-        return v > 0 ? ToolResult.Success($"soaked up {v * 1000:0.0} L") : ToolResult.Fail("no surface water here");
+        return SurfaceEdit(v > 0 ? ToolResult.Success($"soaked up {v * 1000:0.0} L") : ToolResult.Fail("no surface water here"), centre, ClampWaterRadius(radius) + 1);
     }
 
     public const double MinSpringDischarge = 5.0 / 3600000.0; // 5 L/hour
@@ -257,7 +264,7 @@ public sealed class ToolActions
         var spring = _w.Water.Springs.FirstOrDefault(s => s.Id == id);
         if (spring == null) return ToolResult.Fail("spring no longer exists");
         spring.Discharge = ClampSpringDischarge(rate);
-        return ToolResult.Success($"spring flow {spring.Discharge * 3600000:0} L/hour", id);
+        return SurfaceEdit(ToolResult.Success($"spring flow {spring.Discharge * 3600000:0} L/hour", id));
     }
 
     /// <summary>The spring within <paramref name="reach"/> of p, if any.</summary>
@@ -283,7 +290,7 @@ public sealed class ToolActions
             {
                 _w.Props.Remove(vent);
             }
-            return ToolResult.Success("removed the spring", existing.Id);
+            return SurfaceEdit(ToolResult.Success("removed the spring", existing.Id));
         }
         var problem = PreviewSpring(p);
         if (problem != null) return ToolResult.Fail($"Can't add a spring: {problem}");
@@ -303,7 +310,7 @@ public sealed class ToolActions
             VariantSeed = (ulong)sp.Id.Value,
         };
         _w.Props.Add(ventProp);
-        return ToolResult.Success("a new spring bubbles up", sp.Id);
+        return SurfaceEdit(ToolResult.Success("a new spring bubbles up", sp.Id));
     }
 
     // ------------------------------------------------------------------ growth speed (biological clock)
@@ -325,7 +332,7 @@ public sealed class ToolActions
     {
         _w.Scheduler.CompletePendingTick();
         var r = Introduction.IntroduceFlora(_w, speciesId, p);
-        return r.Ok ? new ToolResult(true, r.Message, r.Created) : ToolResult.Fail(r.Message);
+        return SurfaceEdit(r.Ok ? new ToolResult(true, r.Message, r.Created) : ToolResult.Fail(r.Message), p, 2);
     }
 
     public string? PreviewFlora(string speciesId, Vec2 p)

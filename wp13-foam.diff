@@ -1,0 +1,166 @@
+diff --git a/game/Render/BallisticFluidRenderer.cs b/game/Render/BallisticFluidRenderer.cs
+index 9996c63d..ad68068f 100644
+--- a/game/Render/BallisticFluidRenderer.cs
++++ b/game/Render/BallisticFluidRenderer.cs
+@@ -10,12 +10,13 @@ namespace Vivarium.Game.Render;
+ public partial class BallisticFluidRenderer : Node3D
+ {
+     private const int Sides = 16;
+-    private MultiMeshInstance3D _sheets = null!, _drops = null!;
+-    private ShaderMaterial _material = null!, _dropMaterial = null!;
++    private MultiMeshInstance3D _sheets = null!, _drops = null!, _bubbles = null!;
++    private ShaderMaterial _material = null!, _dropMaterial = null!, _bubbleMaterial = null!;
+     private ImageTexture? _positions, _widths, _normals, _velocities;
+     private readonly record struct Ring(Vector3 Position, Vector3 Velocity, Vector3 WidthAxis, Vector3 Normal, float WidthRadius, float Thickness, float ShapePower);
+     public int BrickCount { get; private set; }
+     public int KernelCount { get; private set; }
++    public readonly List<Vector4> PlungeImpacts = new();
+     public override void _Ready()
+     {
+         _material = Vivarium.Game.App.Bridge.Shader("res://Shaders/airborne_sheet.gdshader"); _material.SetShaderParameter("debug_surface", System.Environment.GetEnvironmentVariable("VIVARIUM_FLUID_DIAGNOSTIC") == "1");
+@@ -28,7 +29,7 @@ public partial class BallisticFluidRenderer : Node3D
+         {
+             Name = "FallingLiquidSheets",
+             MaterialOverride = _material,
+-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
++            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+             CustomAabb = new(new(-10, -5, -10), new(20, 10, 20)),
+             Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = topology }
+         }; AddChild(_sheets);
+@@ -37,9 +38,17 @@ public partial class BallisticFluidRenderer : Node3D
+         {
+             Name = "SecondaryLiquidDroplets",
+             MaterialOverride = _dropMaterial,
+-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
++            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+             Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = new SphereMesh { Radius = 1, Height = 2, RadialSegments = 12, Rings = 6 } }
+         }; AddChild(_drops);
++        try { _bubbleMaterial = Vivarium.Game.App.Bridge.Shader("res://Shaders/airborne_fluid.gdshader"); } catch { _bubbleMaterial = _dropMaterial; }
++        _bubbles = new()
++        {
++            Name = "PlungeMicroBubbles",
++            MaterialOverride = _bubbleMaterial,
++            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
++            Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseCustomData = true, Mesh = new SphereMesh { Radius = 1, Height = 2, RadialSegments = 8, Rings = 4 } }
++        }; AddChild(_bubbles);
+     }
+     public void SetCanopyLighting(float energy, Vector3 direction)
+     {
+@@ -65,11 +74,24 @@ public partial class BallisticFluidRenderer : Node3D
+             yield return ordered[start..i]; start = i;
+         }
+     }
+-    public void UpdateFluid(SurfaceFluidSnapshot snapshot)
++    public void UpdateFluid(SurfaceFluidSnapshot snapshot, float waterSurfaceY = 0f)
+     {
++        PlungeImpacts.Clear();
+         var rings = new List<Ring>(); var segments = new List<(int, int)>(); var compact = new List<FluidParticle>();
+         var visible = snapshot.Airborne.Where(p => p.Volume > SurfaceFluidDynamics.MinimumResolvedVolume).ToArray();
+-        foreach (var p in visible) if (p.Stream == 0 || p.Width <= 0) compact.Add(p);
++        foreach (var p in visible)
++        {
++            if (p.Stream == 0 || p.Width <= 0)
++            {
++                if (waterSurfaceY > -1000f && p.Position.Y <= waterSurfaceY + 0.001f && p.Velocity.Y < 0)
++                {
++                    float momentum = (float)(Math.Sqrt(p.Velocity.X * p.Velocity.X + p.Velocity.Y * p.Velocity.Y + p.Velocity.Z * p.Velocity.Z) * p.Volume);
++                    PlungeImpacts.Add(new Vector4((float)p.Position.X, waterSurfaceY, (float)p.Position.Z, momentum));
++                    if (PlungeImpacts.Count >= 8) { /* will be clamped */ }
++                }
++                compact.Add(p);
++            }
++        }
+         foreach (var parcels in visible.Where(p => p.Stream != 0 && p.Width > 0).GroupBy(p => p.Stream).OrderBy(p => p.Key).SelectMany(ConnectedRuns))
+         {
+             // A short connected run is still an emitted face of liquid. Turning it into
+@@ -130,6 +152,30 @@ public partial class BallisticFluidRenderer : Node3D
+             var basis = Basis.Identity; if (velocity.LengthSquared() > .001f) { var axis = velocity.Normalized(); var cross = Vector3.Up.Cross(axis); if (cross.LengthSquared() > .00001f) basis = new(cross.Normalized(), Mathf.Acos(Mathf.Clamp(Vector3.Up.Dot(axis), -1, 1))); }
+             basis *= Basis.FromScale(new(radius / Mathf.Sqrt(stretch), radius * stretch, radius / Mathf.Sqrt(stretch))); drops.SetInstanceTransform(i, new(basis, V(p.Position))); drops.SetInstanceCustomData(i, new(velocity.X, velocity.Y, velocity.Z, radius * 2));
+         }
++        if (_bubbles != null)
++        {
++            int bubbleCount = 0;
++            foreach (var iv in PlungeImpacts) if (iv.W > 0.0001f) bubbleCount += 12;
++            var bm = _bubbles.Multimesh; bm.InstanceCount = bubbleCount;
++            int bi = 0;
++            float tNow = (float)(Time.GetTicksMsec() * 0.001);
++            foreach (var iv in PlungeImpacts)
++            {
++                if (iv.W <= 0.0001f) continue;
++                Vector3 impact = new(iv.X, iv.Y, iv.Z);
++                float mom = iv.W;
++                for (int b = 0; b < 12 && bi < bubbleCount; b++, bi++)
++                {
++                    float ang = (float)(b * 0.5235987756 + tNow * 0.7);
++                    float r = (0.002f + (float)GD.RandRange(0.0, 0.0015f)) * (0.6f + mom * 0.0008f);
++                    float dist = (float)GD.RandRange(0.0, 0.08f) * (0.5f + mom * 0.002f);
++                    Vector3 pos = impact + new Vector3(Mathf.Cos(ang) * dist, (float)GD.RandRange(0.0, 0.015f), Mathf.Sin(ang) * dist);
++                    float s = r / 0.001f;
++                    bm.SetInstanceTransform(bi, new Transform3D(Basis.FromScale(new Vector3(s, s, s)), pos));
++                    bm.SetInstanceCustomData(bi, new Vector4((float)GD.RandRange(-0.01f, 0.01f), (float)GD.RandRange(0.02f, 0.05f), (float)GD.RandRange(-0.01f, 0.01f), r));
++                }
++            }
++        }
+         SetInterpolation(0);
+     }
+     public override void _ExitTree() { _positions?.Dispose(); _widths?.Dispose(); _normals?.Dispose(); _velocities?.Dispose(); }
+diff --git a/game/Render/WaterSurfaceRenderer.cs b/game/Render/WaterSurfaceRenderer.cs
+index 0d34742d..d1d4d6f3 100644
+--- a/game/Render/WaterSurfaceRenderer.cs
++++ b/game/Render/WaterSurfaceRenderer.cs
+@@ -205,5 +205,10 @@ public partial class WaterSurfaceRenderer : Node3D
+             t.Material.SetShaderParameter("fluid_time", opticalTime);
+         }
+     }
+-    private void UpdateAir(SurfaceFluidSnapshot snapshot) => _air.UpdateFluid(snapshot);
++    private void UpdateAir(SurfaceFluidSnapshot snapshot)
++    {
++        float waterLevel = 0f;
++        if (_w != null) waterLevel = (float)_w.Water.WaterTable;
++        try { _air.UpdateFluid(snapshot, waterLevel); } catch { _air.UpdateFluid(snapshot); }
++    }
+ }
+diff --git a/game/Shaders/surface_fluid.gdshader b/game/Shaders/surface_fluid.gdshader
+index 32f91b33..f29ec909 100644
+--- a/game/Shaders/surface_fluid.gdshader
++++ b/game/Shaders/surface_fluid.gdshader
+@@ -90,6 +90,8 @@ void vertex(){
+     world_position=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;
+ }
+ float scene_depth(vec2 uv,mat4 inverse_projection){vec4 p=inverse_projection*vec4(uv*2.0-1.0,texture(depth_tex,uv).r,1.0);return -p.z/p.w;}
++float hash(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.345);return fract(p.x*p.y);}
++float voronoi_bubbles(vec2 uv){vec2 i=floor(uv),f=fract(uv);float minv=1.0;for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 g=vec2(float(x),float(y));vec2 o=vec2(hash(i+g),hash(i+g+vec2(27.1,31.7)));vec2 r=g+o-f;float d=dot(r,r);if(d<minv)minv=d;}return minv;}
+ vec3 refracted_screen(vec2 uv,vec2 bend_dir,float path,float roughness){
+     float mip=water_refraction_mip(path,roughness);
+     float spread=water_dispersion_amount(path,roughness);
+@@ -110,6 +112,30 @@ void fragment(){
+     // The fixed-head reservoir exclusively presents liquid at its own surface.
+     if(bed.x<pond_level&&water.x<=pond_level+.000015)discard;
+     float clock=review_time>=0.0?review_time:fluid_time;
++    float scene_g = scene_depth(SCREEN_UV,INV_PROJECTION_MATRIX);
++    float gap_m = max(scene_g + VERTEX.z, 0.0);
++    vec3 view_dir_f = normalize(CAMERA_POSITION_WORLD - world_position);
++    vec2 meniscus_uv = local_uv * tile_size * 0.5;
++    float meniscus_gap = gap_m;
++    float meniscus_pull = exp(-meniscus_gap / 0.0018);
++    // Thin capillary meniscus contact at obstacles/shoreline
++    if(meniscus_gap > 0.0 && meniscus_gap < 0.0045){
++        vec3 meniscus_n = normalize(vec3(wn.x * (1.0 - meniscus_pull), 1.0 + meniscus_pull * 0.4, wn.z * (1.0 - meniscus_pull)));
++        wn = normalize(mix(wn, meniscus_n, meniscus_pull * 0.6));
++    }
++    float flow_speed_f = length(water.zw);
++    float jump_grad = max_slope; // approx
++    if(flow_speed_f > 0.12 || jump_grad > 0.08){
++        vec2 adv = (world_position.xz + water.zw * clock * 0.3) * 6.0;
++        float b1 = voronoi_bubbles(adv * 85.0);
++        float b2 = voronoi_bubbles(adv * 240.0);
++        float foam_mask = smoothstep(0.0, 0.12, flow_speed_f) * smoothstep(0.7, 0.25, b1) * smoothstep(0.8, 0.2, b2);
++        if(foam_mask > 0.01){
++            vec3 foam_albedo = vec3(0.88, 0.92, 0.90);
++            emission = mix(emission, foam_albedo * (0.6 + 0.4 * dot(normalize(vec3(0.3,1.0,0.2)), -view_dir_f)), foam_mask * 0.9);
++            roughness = mix(roughness, 0.35, foam_mask);
++        }
++    }
+     // Analytic central-difference gradient of the quadratic B-spline surface, taken
+     // at the mesh's own sample spacing (one 16-cell tile is 96 samples wide). Screen
+     // derivatives of the displaced position gave every triangle one flat normal;

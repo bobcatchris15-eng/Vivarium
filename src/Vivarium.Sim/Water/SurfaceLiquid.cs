@@ -9,6 +9,7 @@ namespace Vivarium.Sim.Water;
 /// <summary>Single production owner of mobile water, jobs, published queries and geometry boundaries.</summary>
 public sealed class SurfaceLiquid
 {
+    public static Action<string, double>? StageTimed { get; set; }
     private readonly VivariumWorld _w;
     private Task<(SurfaceFluidSnapshot Snapshot, WaterBudget Budget, double Ms)>? _job;
     private SurfaceFluidSnapshot _snapshot = new(0, 0, SurfaceFluidDynamics.DefaultSpacing, [], []);
@@ -137,11 +138,18 @@ public sealed class SurfaceLiquid
         b.BoundaryOutflow += delta.BoundaryOutflow; b.Evaporation += delta.Evaporation; b.Infiltration += delta.Infiltration;
     }
     private void ObserveErosion()
-    { double elapsed = Math.Max(0, _snapshot.Time - _erosionTime); _erosionTime = _snapshot.Time; Erosion.Advance(_contacts, elapsed); }
+    {
+        long begin = System.Diagnostics.Stopwatch.GetTimestamp();
+        double elapsed = Math.Max(0, _snapshot.Time - _erosionTime); _erosionTime = _snapshot.Time; Erosion.Advance(_contacts, elapsed);
+        StageTimed?.Invoke("Liquid.Erosion", System.Diagnostics.Stopwatch.GetElapsedTime(begin).TotalMilliseconds);
+    }
     private void Publish(SurfaceFluidSnapshot? snapshot = null)
     {
         long allocationStart = GC.GetAllocatedBytesForCurrentThread();
+        long stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
         _snapshot = snapshot ?? Dynamics.CaptureRenderState(); _publishedFractions = Dynamics.FractionalVolume;
+        StageTimed?.Invoke("Liquid.SnapshotCapture", System.Diagnostics.Stopwatch.GetElapsedTime(stageStart).TotalMilliseconds);
+        stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
         double spacing = _snapshot.Spacing;
         // Private main-thread query index can retain its capacity. Published state and
         // contact arrays remain immutable for callers holding the preceding snapshot.
@@ -155,6 +163,8 @@ public sealed class SurfaceLiquid
             contacts[contactIndex++]=new(Vec3.FromXZ(c.Position,support+SurfaceFluidDynamics.Radius(c.Volume)),Vec3.FromXZ(c.Velocity,0),c.Volume,0);
         }
         _snapshot.Airborne.CopyTo(contacts,contactIndex);_contacts=contacts;
+        StageTimed?.Invoke("Liquid.QueryIndex", System.Diagnostics.Stopwatch.GetElapsedTime(stageStart).TotalMilliseconds);
+        stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
         var h = _w.Water; Array.Clear(h.Depth); Array.Clear(h.FlowX); Array.Clear(h.FlowZ); Array.Clear(h.FaceFlowEast); Array.Clear(h.FaceFlowNorth);
         foreach (var sample in _snapshot.Cells)
         {
@@ -163,6 +173,7 @@ public sealed class SurfaceLiquid
         }
         // Airborne fluid is not an aquatic habitat or a saturated-ground measurement.
         h.InvalidateWaterDistance(); PublishedAllocatedBytes += GC.GetAllocatedBytesForCurrentThread() - allocationStart;
+        StageTimed?.Invoke("Liquid.CoarseProjection", System.Diagnostics.Stopwatch.GetElapsedTime(stageStart).TotalMilliseconds);
     }
     public SurfaceFluidState CaptureState()
     { CompletePending(); return Dynamics.Export() with { PendingInputs = _inputs.Count == 0 ? null : _inputs.ToArray() }; }

@@ -47,6 +47,16 @@ public partial class GuardianReview : Node3D
                 var lighting = new EnvironmentRig { BenchmarkLightSeconds = materialReview ? 60 : 0 };
                 stage.AddChild(lighting);
                 lighting.ApplyQuality(2);
+                bool materialInspection = materialReview || Main.UserArgs.Contains("--guardian-surface-detail") || Main.UserArgs.Contains("--guardian-coat-detail");
+                bool originalDofNear = lighting.CameraAttributes.DofBlurNearEnabled;
+                bool originalDofFar = lighting.CameraAttributes.DofBlurFarEnabled;
+                if (materialInspection)
+                {
+                    // Close material inspection views need full subject sharpness.
+                    // Keep this override local to the review rig and restore its prior settings below.
+                    lighting.CameraAttributes.DofBlurNearEnabled = false;
+                    lighting.CameraAttributes.DofBlurFarEnabled = false;
+                }
                 // Neutral studio illumination reveals surface defects that the
                 // enclosure grade can hide. Restore production lighting for live review.
                 if (materialReview)
@@ -71,11 +81,39 @@ public partial class GuardianReview : Node3D
                 {
                     var surfaces = DescendantMeshes(renderer).SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(i =>
                     {
-                        var material = mesh.GetActiveMaterial(i) as StandardMaterial3D;
+                        var activeMaterial = mesh.GetActiveMaterial(i);
+                        var material = activeMaterial as StandardMaterial3D;
+                        var shaderMaterial = activeMaterial as ShaderMaterial;
                         if (Main.UserArgs.Contains("--guardian-material-positive-control") && material?.ResourceName == "AmberKeratin")
                             material.AlbedoColor = Colors.Red;
                         var bounds = mesh.GlobalTransform * mesh.Mesh.GetAabb();
-                        return new { rest_bounds_size = new[] { bounds.Size.X, bounds.Size.Y, bounds.Size.Z }, mesh = mesh.Name.ToString(), surface = i, name = material?.ResourceName,
+                        var shaderUniforms = shaderMaterial?.Shader?.ResourcePath == "res://Shaders/guardian_surface.gdshader"
+                            ? new Dictionary<string, object?>
+                            {
+                                ["mode"] = SafeShaderValue(shaderMaterial.GetShaderParameter("mode")),
+                                ["base_color"] = SafeShaderValue(shaderMaterial.GetShaderParameter("base_color")),
+                                ["has_albedo_texture"] = SafeShaderValue(shaderMaterial.GetShaderParameter("has_albedo_texture")),
+                                ["has_normal_texture"] = SafeShaderValue(shaderMaterial.GetShaderParameter("has_normal_texture")),
+                                ["has_roughness_texture"] = SafeShaderValue(shaderMaterial.GetShaderParameter("has_roughness_texture")),
+                                ["roughness_mul"] = SafeShaderValue(shaderMaterial.GetShaderParameter("roughness_mul")),
+                                ["metallic"] = SafeShaderValue(shaderMaterial.GetShaderParameter("metallic")),
+                                ["specular"] = SafeShaderValue(shaderMaterial.GetShaderParameter("specular")),
+                                ["wetness"] = SafeShaderValue(shaderMaterial.GetShaderParameter("wetness")),
+                                ["water_level"] = SafeShaderValue(shaderMaterial.GetShaderParameter("water_level")),
+                                ["day_night"] = SafeShaderValue(shaderMaterial.GetShaderParameter("day_night")),
+                                ["contact_sphere"] = SafeShaderValue(shaderMaterial.GetShaderParameter("contact_sphere")),
+                                ["contact_radius"] = SafeShaderValue(shaderMaterial.GetShaderParameter("contact_radius")),
+                                ["contact_max_displacement"] = SafeShaderValue(shaderMaterial.GetShaderParameter("contact_max_displacement")),
+                                ["strand_density"] = SafeShaderValue(shaderMaterial.GetShaderParameter("strand_density")),
+                                ["albedo_texture"] = SafeShaderValue(shaderMaterial.GetShaderParameter("albedo_texture")),
+                                ["normal_texture"] = SafeShaderValue(shaderMaterial.GetShaderParameter("normal_texture")),
+                                ["roughness_texture"] = SafeShaderValue(shaderMaterial.GetShaderParameter("roughness_texture")),
+                            }
+                            : null;
+                        return new { rest_bounds_size = new[] { bounds.Size.X, bounds.Size.Y, bounds.Size.Z }, mesh = mesh.Name.ToString(), surface = i,
+                            material_name = activeMaterial?.ResourceName, material_type = activeMaterial?.GetClass(),
+                            shader_path = shaderMaterial?.Shader?.ResourcePath, shader_uniforms = shaderUniforms,
+                            name = activeMaterial?.ResourceName,
                             roughness = material?.Roughness, coat = material?.ClearcoatEnabled, rim = material?.RimEnabled,
                             rim_strength = material?.Rim, albedo_texture = material?.AlbedoTexture?.ResourcePath,
                             shading = material?.ShadingMode.ToString(), specular = material?.MetallicSpecular,
@@ -87,6 +125,7 @@ public partial class GuardianReview : Node3D
                     {
                         assembly = typeof(GuardianRenderer).Assembly.Location,
                         module_id = typeof(GuardianRenderer).Module.ModuleVersionId,
+                        material_inspection = new { depth_of_field_disabled = materialInspection },
                         surfaces,
                     }, new JsonSerializerOptions { WriteIndented=true }));
                 }
@@ -186,7 +225,7 @@ public partial class GuardianReview : Node3D
                     }
                     else
                     {
-                        camera.Size = def.Archetype == "crested_canopy" ? 0.55f : 0.8f;
+                        camera.Size = def.Archetype switch { "crested_canopy" => 0.55f, "woodland_omnivore" => 0.32f, _ => 0.8f };
                         camera.Position = face + new Vector3(0.8f, 0.3f, 0.8f);
                         camera.LookAt(face);
                     }
@@ -227,6 +266,11 @@ public partial class GuardianReview : Node3D
                         for (int i = 0; i < meshes.Length; i++) meshes[i].MaterialOverride = overrides[i];
                     }
                     camera.Size = oldSize;
+                }
+                if (materialInspection)
+                {
+                    lighting.CameraAttributes.DofBlurNearEnabled = originalDofNear;
+                    lighting.CameraAttributes.DofBlurFarEnabled = originalDofFar;
                 }
                 // Exercise the real decision and locomotion path, independent of renderer frame rate.
                 g.ActivityDuration = 0;
@@ -797,5 +841,23 @@ public partial class GuardianReview : Node3D
         foreach (var child in node.GetChildren())
             foreach (var descendant in DescendantMeshes(child)) yield return descendant;
     }
+
+    private static object? SafeShaderValue(Variant value) => value.VariantType switch
+    {
+        Variant.Type.Nil => null,
+        Variant.Type.Bool => value.AsBool(),
+        Variant.Type.Int => value.AsInt64(),
+        Variant.Type.Float => value.AsDouble(),
+        Variant.Type.String => value.AsString(),
+        Variant.Type.StringName => value.AsStringName().ToString(),
+        Variant.Type.Vector2 => new[] { value.AsVector2().X, value.AsVector2().Y },
+        Variant.Type.Vector3 => new[] { value.AsVector3().X, value.AsVector3().Y, value.AsVector3().Z },
+        Variant.Type.Vector4 => new[] { value.AsVector4().X, value.AsVector4().Y, value.AsVector4().Z, value.AsVector4().W },
+        Variant.Type.Color => new[] { value.AsColor().R, value.AsColor().G, value.AsColor().B, value.AsColor().A },
+        Variant.Type.Object => value.AsGodotObject() is Resource resource
+            ? new { name = resource.ResourceName, path = resource.ResourcePath }
+            : value.AsGodotObject()?.GetClass(),
+        _ => value.ToString()
+    };
 }
 

@@ -1,3 +1,4 @@
+using Vivarium.Sim.Guardians;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -25,8 +26,8 @@ public sealed class WorldDescriptor
     public string PilotTreeId { get; set; } = "random";
     /// <summary>-1 selects a seeded corner; 0..5 selects an exact hexagon vertex. Edge anchors are not allowed.</summary>
     public int PilotTreeCorner { get; set; } = -1;
-    /// <summary>auto | none | a GuardianCatalog id. Resolved to the tree guardian or specific archetype.</summary>
-    public string GuardianId { get; set; } = "auto";
+    /// <summary>random | none | auto | a GuardianCatalog id. Resolved to a specific guardian archetype or none.</summary>
+    public string GuardianId { get; set; } = "random";
     /// <summary>
     /// Biological seconds per physical simulated second. The default makes one real minute one biological day at
     /// 1× speed (1440 / 168). Worlds saved before this setting existed also load with the default.
@@ -82,6 +83,7 @@ public sealed class WorldDescriptor
     {
         var e = new List<string>();
         if (PilotTreeId is not ("random" or "none") && PilotTreeCatalog.Find(PilotTreeId) == null) e.Add($"unknown Pilot Tree '{PilotTreeId}'");
+        if (GuardianId is not ("random" or "none" or "auto") && GuardianCatalog.Find(GuardianId) == null) e.Add($"unknown Guardian '{GuardianId}'");
         if (PilotTreeCorner is < -1 or > 5) e.Add("Pilot Tree corner must be -1 or 0..5");
         double maxD = AllowLegacyDiameter ? LegacyMaxDiameter : MaxDiameter;
         if (!(Diameter >= MinDiameter && Diameter <= maxD)) e.Add($"diameter {Diameter} must be within [{MinDiameter}, {maxD}] m");
@@ -104,6 +106,7 @@ public sealed class WorldDescriptor
         foreach (var f in Terrain.Features)
         {
             if (f.Type is not ("basin" or "hill" or "channel" or "ridge")) e.Add($"terrain feature type '{f.Type}' is unknown");
+            if (f.BasinOutline != null && (f.Type != "basin" || f.BasinOutline is not ("bean" or "lobed"))) e.Add("basinOutline must be bean or lobed on a basin");
             if (f.BedHeight.HasValue)
             {
                 if (f.Type is not ("channel" or "basin")) e.Add("bedHeight is only supported for channels and basins");
@@ -163,6 +166,9 @@ public sealed class TerrainFeature
     public double Width { get; set; } = 0.6;
     /// <summary>When true the feature has near-vertical sides instead of a smooth blend.</summary>
     public bool Sharp { get; set; } = false;
+    /// <summary>Optional organic outline for a basin. Null retains the legacy circular footprint.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BasinOutline { get; set; }
     /// <summary>Optional absolute channel or basin floor. Overlapping cuts take the lower floor, never add depths.</summary>
     public double? BedHeight { get; set; }
     /// <summary>Downstream floor at (ToX,ToZ). Absent means a level basin/channel.</summary>

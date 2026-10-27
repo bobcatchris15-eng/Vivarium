@@ -327,7 +327,8 @@ public static partial class OrganismMeshes
                         double k = fleck ? MathD.SmoothStep(0.42, 1.0, u) : MathD.SmoothStep(0.78, 1.0, u) * 0.28;
                         return Primitives.Mix(c, gold, k);
                     },
-                    rows: 2, sides: 5, flatness: 0.32, keel: 0.40, camber: 0.30);
+                    rows: 2, sides: 5, flatness: 0.32, keel: 0.40, camber: 0.30,
+                    sectionSides: m.Lod?.EmberMicroSides);
             }
         }
     }

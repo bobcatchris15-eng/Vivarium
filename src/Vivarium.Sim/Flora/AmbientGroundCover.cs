@@ -52,7 +52,29 @@ public sealed class AmbientGroundCoverSystem
     {
         if (!_w.Grid.InDomain(idx)) return 0;
         var p = _w.Grid.CellCenter(idx);
-        if (_w.SubstrateAtCell(p) != Substrate.Soil || _w.Water.OpenWaterDepth(p) > 0.006) return 0;
+        if (_w.SubstrateAtCell(p) != Substrate.Soil) return 0;
+        double openWater = _w.Water.OpenWaterDepth(p);
+        if (openWater > 0.006) return 0;
+
+        // Near water margins want the same lushness as bank fringe
+        bool nearWaterMargin = false;
+        if (openWater <= 0.0001)
+        {
+            foreach (double r in new[] { 0.16, 0.32, 0.52, 0.72 })
+            {
+                for (int s = 0; s < 12; s++)
+                {
+                    double a = s * Math.Tau / 12;
+                    var q2 = p + new Vec2(Math.Cos(a), Math.Sin(a)) * r;
+                    if (_w.Domain.Contains(q2) && _w.Water.OpenWaterDepth(q2) > 0.001 && Math.Abs(_w.Terrain.Height(p) - _w.Terrain.Height(q2)) < 0.55)
+                    {
+                        nearWaterMargin = true;
+                        break;
+                    }
+                }
+                if (nearWaterMargin) break;
+            }
+        }
 
         double moisture = MathD.Clamp01(_w.Fields.Moisture.Values[idx]);
         double light = MathD.Clamp01(_w.FloraSystem.EffectiveLightCell(idx));
@@ -65,11 +87,14 @@ public sealed class AmbientGroundCoverSystem
         double lightFit = 0.78 + 0.22 * MathD.Clamp01((light - 0.05) / 0.55);
         double nutrientFit = 0.90 + 0.10 * nutrients;
         double litter = _w.Litter.FineMass[idx] + _w.Litter.CoarseMass[idx];
-        double litterFit = 1.0 - 0.38 * MathD.Clamp01(litter * 5.0);
+        double litterFit = nearWaterMargin
+            ? 1.0 - 0.18 * MathD.Clamp01(litter * 5.0)
+            : 1.0 - 0.38 * MathD.Clamp01(litter * 5.0);
 
         // Stable per-cell patchiness keeps the field organic without turning it into a grid or a population.
         double noise = 0.90 + 0.10 * Rng.HashUnit(_w.Seed, Hash.Fnv1a64("ambient-ground"), (ulong)idx);
-        double target = MathD.Clamp01((0.84 + 0.14 * moistureFit) * lightFit * nutrientFit * litterFit * noise);
+        double baseTarget = MathD.Clamp01((0.84 + 0.14 * moistureFit) * lightFit * nutrientFit * litterFit * noise);
+        double target = nearWaterMargin ? MathD.Clamp01(baseTarget * 1.6 + 0.15) : baseTarget;
 
         // Low vegetation can overlap the raised crowns of woody shrubs. Clear their basal
         // collars, as for trees, while herbs/rosettes retain their full silhouette exclusion.

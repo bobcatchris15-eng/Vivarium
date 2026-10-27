@@ -6,7 +6,9 @@ shader_type canvas_item;
 uniform float strength : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 tint : source_color = vec3(0.42, 0.70, 0.50);
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
-uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
+// canvas_item shaders cannot read the 3D depth buffer; path length is approximated from
+// screen position (lower screen = nearer bed, upper = longer horizontal water path).
+uniform float path_length_scale = 1.0;
 
 uniform vec3 sun_dir = vec3(0.35, 0.75, 0.45);
 uniform vec3 water_absorption = vec3(3.4, 1.15, 2.65);
@@ -32,8 +34,8 @@ void fragment() {
     vec3 scene = texture(screen_tex, uv).rgb;
 
     // Depth-buffer derived path length for Beer-Lambert attenuation.
-    float depth_raw = texture(depth_tex, uv).r;
-    float view_depth = depth_raw * 6.0;
+    float depth_raw = clamp(1.0 - uv.y * 0.85, 0.0, 1.0);
+    float view_depth = depth_raw * 6.0 * path_length_scale;
 
     // Beer-Lambert spectral attenuation.
     vec3 sigma_t = max(water_absorption + water_scattering, vec3(1e-4));

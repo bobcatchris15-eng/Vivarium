@@ -13,19 +13,37 @@ public readonly record struct SurfaceFloatStats(double GrowthMs, double AdvectMs
 /// </summary>
 public static class SurfaceFloatRules
 {
+    public static Action<string, double>? BatchTimed { get; set; }
     /// <summary>The layer's sole occupant id — duckweed cover has no species variation yet (Aq-2).</summary>
     public const byte OccupantId = 1;
 
     public static SurfaceFloatStats Step(CoverageLayer layer, IAquaticEnv env, DuckweedParams p, GridBounds domain, double dtDays, long step, ulong seed, double? advectionDays = null)
     {
+        SurfaceFloatStats result = default;
+        foreach (bool _ in StepBatches(layer, env, p, domain, dtDays, step, seed, advectionDays, stats => result = stats)) { }
+        return result;
+    }
+
+    /// <summary>Yields between growth and advection chunks; no thread-local scratch spans a yield.</summary>
+    public static IEnumerable<bool> StepBatches(CoverageLayer layer, IAquaticEnv env, DuckweedParams p, GridBounds domain, double dtDays, long step, ulong seed, double? advectionDays = null, Action<SurfaceFloatStats>? complete = null)
+    {
         var sw = Stopwatch.StartNew();
         Grow(layer, env, p, domain, dtDays);
-        double growthMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
+        double growthMs = sw.Elapsed.TotalMilliseconds;
+        yield return true;
+        sw.Restart();
 
-        int substeps = Advect(layer, env, domain, advectionDays ?? dtDays, p.WindX, p.WindZ);
-        double advectMs = sw.Elapsed.TotalMilliseconds;
+        int substeps = 0; double advectMs = 0;
+        using (var work = SurfaceFloatRules.AdvectBatches(layer, env, domain, advectionDays ?? dtDays, p.WindX, p.WindZ, count => substeps = count).GetEnumerator())
+        while (true)
+        {
+            sw.Restart(); bool more = work.MoveNext(); double ms = sw.Elapsed.TotalMilliseconds; advectMs += ms;
+            BatchTimed?.Invoke("Aquatic.Duckweed.AdvectionBatch", ms);
+            if (!more) break;
+            yield return true;
+        }
 
-        return new SurfaceFloatStats(growthMs, advectMs, substeps);
+        complete?.Invoke(new SurfaceFloatStats(growthMs, advectMs, substeps));
     }
 
     // ------------------------------------------------------------------ §15.2 logistic budding
@@ -36,9 +54,11 @@ public static class SurfaceFloatRules
         // unallocated cells are implicitly empty and Grow is a no-op on them either way.
         foreach (var tile in layer.Tiles)
         {
+            if (tile.IsEmpty()) continue;
             int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
             for (int li = 0; li < CoverageTile.N; li++)
             {
+                if (tile.B[li] <= 0 && tile.Occ[li] == 0) continue;
                 int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
                 if (!d.Contains(gx, gz)) continue;
 
@@ -216,5 +236,174 @@ public static class SurfaceFloatRules
         }
 
         return substeps;
+    }
+
+    /// <summary>Exact advection with owned scratch and captured inputs; mutations publish only at completion.</summary>
+    public static IEnumerable<bool> AdvectBatches(CoverageLayer layer, IAquaticEnv env, GridBounds d, double dtDays, double windX, double windZ, Action<int>? complete = null)
+    {
+        double dtSeconds = dtDays * AquaticConst.SecondsPerDay;
+        double cell = CoverageSpec.CellSize;
+        int w = d.Width, h = d.Height;
+        int n = w * h;
+        // Each operation owns its buffers across cooperative yields.
+        var rho = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var vx = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var vz = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var next = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var fx = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var fz = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var amtX = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var amtZ = System.Buffers.ArrayPool<double>.Shared.Rent(n);
+        var blocked = System.Buffers.ArrayPool<bool>.Shared.Rent(n);
+        try
+        {
+
+
+
+
+
+
+        double maxSpeed = 0;
+
+        // Tile pointer cached across the row: consecutive gx share a tile most of the time (32 cells per
+        // tile), so this turns ~n dictionary lookups into ~n/32 of them. gx/gz -> (ti,li) tracked by
+        // increment instead of CoverageSpec.TileOf/LocalIndex's div/mod per cell — those add up at this
+        // cell count (a fine 2 cm coverage grid over a whole pond can be hundreds of thousands of cells).
+        int edge = CoverageSpec.TileEdge;
+        CoverageTile? readTile = null; int rTi = int.MinValue, rTj = int.MinValue;
+
+        for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
+        {
+            int tj = CoverageSpec.FloorDiv(gz, edge), lz = CoverageSpec.FloorMod(gz, edge);
+            int ti = CoverageSpec.FloorDiv(d.MinGx, edge), lx = CoverageSpec.FloorMod(d.MinGx, edge);
+            int idx = d.Index(d.MinGx, gz);
+            for (int gx = d.MinGx; gx <= d.MaxGx; gx++, idx++)
+            {
+                if (ti != rTi || tj != rTj) { layer.TryGetTile(ti, tj, out readTile); rTi = ti; rTj = tj; }
+                rho[idx] = readTile != null ? readTile.B[lz * edge + lx] : 0f;
+                bool block = env.DepthAt(gx, gz) <= 0 || env.IsObstacle(gx, gz);
+                blocked[idx] = block;
+                if (!block)
+                {
+                    var v = env.FlowAt(gx, gz) + new Vec2(windX, windZ);
+                    vx[idx] = v.X; vz[idx] = v.Z;
+                    double s = v.Length;
+                    if (s > maxSpeed) maxSpeed = s;
+                }
+
+                lx++; if (lx == edge) { lx = 0; ti++; }
+            }
+        }
+
+        // All layer densities, blockers and velocities are captured before yielding.
+        yield return true;
+
+        // Substeps are a pure stability requirement and are NOT capped to a slice budget here: taking more
+        // substeps than the caller's halo can cover is only wasteful, whereas taking FEWER makes amt exceed rho
+        // and lets the next[i] < 0 guard below destroy mass at the domain edge. AquaticSystem.Step guarantees the
+        // production path is bounded by sizing each slice from the global wet-domain max speed, which upper-bounds
+        // the max speed of any slice's own domain; a direct caller with a too-small domain still gets correct,
+        // conservative-in-the-limit behaviour rather than a silent clamp.
+        int substeps = maxSpeed > 1e-9
+            ? Math.Clamp((int)Math.Ceiling(maxSpeed * dtSeconds / (AquaticConst.CflSafety * cell)), 1, AquaticConst.MaxSubsteps)
+            : 1;
+        double subDt = dtSeconds / substeps;
+
+        // Face velocities are constant across substeps: precompute them once, with NaN marking a closed face
+        // (either side blocked, or on the domain edge). fx[a] is the face between cell a and its +x neighbour,
+        // fz[a] the face between cell a and its +z neighbour.
+
+
+        for (int j = 0; j < h; j++)
+        {
+            if (j > 0 && j % 8 == 0) yield return true;
+            int row = j * w;
+            for (int i = 0; i < w; i++)
+            {
+                int a = row + i;
+                fx[a] = i + 1 < w && !blocked[a] && !blocked[a + 1] ? 0.5 * (vx[a] + vx[a + 1]) : double.NaN;
+                fz[a] = j + 1 < h && !blocked[a] && !blocked[a + w] ? 0.5 * (vz[a] + vz[a + w]) : double.NaN;
+            }
+        }
+
+        // Gather form of the former scatter loops (all x faces row-major, then all z faces, then the clamp).
+        // Per cell it applies the same operations in the same order: += the -x face, -= the +x face, += the -z
+        // face, -= the +z face, clamp. Results are bit-identical, without a full copy-in/copy-out per substep.
+
+
+
+        for (int s = 0; s < substeps; s++)
+        {
+            for (int a = 0; a < n; a++)
+            {
+                if (a > 0 && a % 4096 == 0) yield return true;
+                double u = fx[a];
+                if (!double.IsNaN(u)) amtX[a] = (u >= 0 ? rho[a] * u : rho[a + 1] * u) * subDt / cell;
+                u = fz[a];
+                if (!double.IsNaN(u)) amtZ[a] = (u >= 0 ? rho[a] * u : rho[a + w] * u) * subDt / cell;
+            }
+
+            for (int j = 0; j < h; j++)
+            {
+                if (j > 0 && j % 8 == 0) yield return true;
+                int row = j * w;
+                for (int i = 0; i < w; i++)
+                {
+                    int a = row + i;
+                    double v = rho[a];
+                    if (i > 0 && !double.IsNaN(fx[a - 1])) v += amtX[a - 1];
+                    if (!double.IsNaN(fx[a])) v -= amtX[a];
+                    if (j > 0 && !double.IsNaN(fz[a - w])) v += amtZ[a - w];
+                    if (!double.IsNaN(fz[a])) v -= amtZ[a];
+                    next[a] = v < 0 ? 0 : v; // numerical guard only; CFL keeps this a no-op in practice
+                }
+            }
+            (rho, next) = (next, rho);
+        }
+
+        // Publish the complete result atomically; only preparation is resumable.
+        yield return true;
+        CoverageTile? writeTile = null; int wTi = int.MinValue, wTj = int.MinValue;
+        for (int gz = d.MinGz; gz <= d.MaxGz; gz++)
+        {
+            int tj = CoverageSpec.FloorDiv(gz, edge), lz = CoverageSpec.FloorMod(gz, edge);
+            int ti = CoverageSpec.FloorDiv(d.MinGx, edge), lx = CoverageSpec.FloorMod(d.MinGx, edge);
+            int idx = d.Index(d.MinGx, gz);
+            for (int gx = d.MinGx; gx <= d.MaxGx; gx++, idx++)
+            {
+                if (!blocked[idx])
+                {
+                    if (ti != wTi || tj != wTj) { layer.TryGetTile(ti, tj, out writeTile); wTi = ti; wTj = tj; }
+                    double nb = rho[idx];
+                    int li = lz * edge + lx;
+                    byte curOcc = writeTile != null ? writeTile.Occ[li] : (byte)0;
+                    if (!(nb <= 0 && curOcc == 0))
+                    {
+                        if (writeTile == null) { writeTile = layer.GetOrCreateTile(ti, tj); wTi = ti; wTj = tj; }
+                        var t = writeTile;
+                        if (t.B[li] != (float)nb) { t.B[li] = (float)nb; t.Active = true; t.Touch(); }
+                        byte occ = nb > 1e-6 ? OccupantId : (byte)0;
+                        if (t.Occ[li] != occ) { t.Occ[li] = occ; t.Active = true; t.Touch(); }
+                    }
+                }
+
+                lx++; if (lx == edge) { lx = 0; ti++; }
+            }
+        }
+
+        complete?.Invoke(substeps);
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<double>.Shared.Return(rho);
+            System.Buffers.ArrayPool<double>.Shared.Return(vx);
+            System.Buffers.ArrayPool<double>.Shared.Return(vz);
+            System.Buffers.ArrayPool<double>.Shared.Return(next);
+            System.Buffers.ArrayPool<double>.Shared.Return(fx);
+            System.Buffers.ArrayPool<double>.Shared.Return(fz);
+            System.Buffers.ArrayPool<double>.Shared.Return(amtX);
+            System.Buffers.ArrayPool<double>.Shared.Return(amtZ);
+            System.Buffers.ArrayPool<bool>.Shared.Return(blocked);
+        }
     }
 }

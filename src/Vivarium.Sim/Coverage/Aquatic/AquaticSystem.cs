@@ -8,6 +8,13 @@ public sealed class AquaticSystem : IAquaticEnv
 {
     private readonly VivariumWorld _w;
     private long _step;
+    /// <summary>Completed aquatic steps; recruitment uses this ordinal.</summary>
+    public long StepIndex => _step;
+    internal void RestoreStep(long step)
+    {
+        if (step < 0) throw new InvalidDataException($"aquatic step is invalid ({step})");
+        _step = step;
+    }
 
     public AquaticSystem(VivariumWorld world) => _w = world;
 
@@ -17,39 +24,253 @@ public sealed class AquaticSystem : IAquaticEnv
         foreach (int cell in _w.Grid.DomainCells)
         {
             if (!_w.Water.IsWet(cell)) continue;
-            var (gx, gz) = CoverageSpec.CellOf(_w.Grid.CellCenter(cell));
-            // Sparse, repeatable founders. Subsequent expansion follows the water and its flow.
-            if (ordinal % 9 == 0) _w.Coverage.AlgaeBed.SetCell(gx, gz, AlgaeRules.OccupantId, 0.2f, 0, 0, 0, 0, 0);
-            if (ordinal % 47 == 0) _w.Coverage.AlgaeFloat.SetCell(gx, gz, AlgaeRules.OccupantId, 0.1f, 0, 0, 0, 0, 0);
-            if (ordinal % 31 == 0) _w.Coverage.SurfaceFloat.SetCell(gx, gz, SurfaceFloatRules.OccupantId, 0.1f, 0, 0, 0, 0, 0);
+            var c = _w.Grid.CellCenter(cell);
+            var (centerGx, centerGz) = CoverageSpec.CellOf(c);
+            double depth = _w.Water.OpenWaterDepth(cell);
+            double speed = Math.Sqrt(_w.Water.FlowX[cell] * _w.Water.FlowX[cell] + _w.Water.FlowZ[cell] * _w.Water.FlowZ[cell]);
+            double light = _w.Fields.Light[cell];
+            double nut = _w.Fields.Nutrients[cell];
+
+            // 1. Benthic periphyton (AlgaeBed) founder colonies on submerged bed with light
+            if (depth >= 0.003 && light >= 0.08 && speed <= 0.28)
+            {
+                for (int dz = -2; dz <= 2; dz++)
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    if (dx * dx + dz * dz > 5) continue;
+                    int gx = centerGx + dx, gz = centerGz + dz;
+                    if (DepthAt(gx, gz) > 0)
+                        _w.Coverage.AlgaeBed.SetCell(gx, gz, AlgaeRules.OccupantId, 0.3f, 0, 0, 0, 0, 0);
+                }
+            }
+
+            // 2. Duckweed (SurfaceFloat) founder colonies in calm water
+            if (speed <= 0.06 && depth >= 0.008 && light >= 0.15 && ordinal % 3 == 0)
+            {
+                for (int dz = -2; dz <= 2; dz++)
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    if (dx * dx + dz * dz > 6) continue;
+                    int gx = centerGx + dx, gz = centerGz + dz;
+                    if (DepthAt(gx, gz) > 0 && !IsObstacle(gx, gz))
+                        _w.Coverage.SurfaceFloat.SetCell(gx, gz, SurfaceFloatRules.OccupantId, 0.35f, 0, 0, 0, 0, 0);
+                }
+            }
+
+            // 3. Filamentous algae (AlgaeFloat) founder clusters in calm nutrient-rich pools
+            if (speed <= 0.04 && depth >= 0.008 && nut >= 0.08 && light >= 0.15 && ordinal % 5 == 0)
+            {
+                for (int dz = -2; dz <= 2; dz++)
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    if (dx * dx + dz * dz > 5) continue;
+                    int gx = centerGx + dx, gz = centerGz + dz;
+                    if (DepthAt(gx, gz) > 0 && !IsObstacle(gx, gz))
+                        _w.Coverage.AlgaeFloat.SetCell(gx, gz, AlgaeRules.OccupantId, 0.25f, 0, 0, 0, 0, 0);
+                }
+            }
+
             ordinal++;
         }
         ProjectBiofilm();
     }
 
     private readonly List<WetCoarseCell> _wetCells = new(256);
+    private readonly List<(int Gx, int Gz, float B)> _spreadDuck = new(128);
+    private readonly List<(int Gx, int Gz, float B)> _spreadBed = new(128);
+    private readonly List<(int Gx, int Gz, float B)> _spreadFloat = new(128);
+    private readonly HashSet<long> _seenCoords = new(256);
 
     public void Step(double physicalSeconds, double bioSeconds)
+    {
+        foreach (bool _ in StepBatches(physicalSeconds, bioSeconds)) { }
+    }
+
+    public static System.Action<string, double>? StageTimed { get; set; }
+    public AlgaeStepStats LastAlgaeStep { get; private set; }
+    public SurfaceFloatStats LastSurfaceFloatStep { get; private set; }
+
+    /// <summary>Preserves step order while allowing the scheduler to spread atomic stages over frames.</summary>
+    public IEnumerable<bool> StepBatches(double physicalSeconds, double bioSeconds)
     {
         double dtDays = bioSeconds / AquaticConst.SecondsPerDay;
         double flowDays = physicalSeconds / AquaticConst.SecondsPerDay;
         var wet = CollectWetCoarseCells();
+        yield return true;
+
+        if (wet != null && dtDays > 0)
+        {
+            var swRecruit = System.Diagnostics.Stopwatch.StartNew();
+            RecruitAndSpread(dtDays, _step);
+            StageTimed?.Invoke("Aquatic.Step.Recruit", swRecruit.Elapsed.TotalMilliseconds);
+        }
+        yield return true;
 
         var occBed = OccupiedBounds(_w.Coverage.AlgaeBed);
         var occFloat = OccupiedBounds(_w.Coverage.AlgaeFloat);
         var occAlgae = Union(occBed, occFloat);
         var algaeArea = ComputeReachableBounds(occAlgae, physicalSeconds, wet);
+        yield return true;
         if (algaeArea is { } a)
-            AlgaeRules.Step(_w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat, this,
-                new AlgaeBedParams(), new AlgaeFloatParams(), a, dtDays, _step, _w.Seed, flowDays);
+            foreach (bool batch in AlgaeRules.StepBatches(_w.Coverage.AlgaeBed, _w.Coverage.AlgaeFloat, this,
+                new AlgaeBedParams(), new AlgaeFloatParams(), a, dtDays, _step, _w.Seed, flowDays,
+                complete: stats =>
+                {
+                    LastAlgaeStep = stats;
+                    StageTimed?.Invoke("Aquatic.Step.AlgaeBed", stats.BedMs);
+                    StageTimed?.Invoke("Aquatic.Step.AlgaeFloatGrow", stats.FloatGrowMs);
+                }))
+                yield return batch;
+        yield return true;
 
         var occDuck = OccupiedBounds(_w.Coverage.SurfaceFloat);
         var duckweedArea = ComputeReachableBounds(occDuck, physicalSeconds, wet);
+        yield return true;
         if (duckweedArea is { } d)
-            SurfaceFloatRules.Step(_w.Coverage.SurfaceFloat, this, new DuckweedParams(), d, dtDays, _step, _w.Seed, flowDays);
+            foreach (bool batch in SurfaceFloatRules.StepBatches(_w.Coverage.SurfaceFloat, this, new DuckweedParams(), d, dtDays, _step, _w.Seed, flowDays,
+                complete: stats =>
+                {
+                    LastSurfaceFloatStep = stats;
+                    StageTimed?.Invoke("Aquatic.Step.DuckweedGrow", stats.GrowthMs);
+                }))
+                yield return batch;
+        yield return true;
 
         _step++;
+        var swBiofilm = System.Diagnostics.Stopwatch.StartNew();
         ProjectBiofilm();
+        StageTimed?.Invoke("Aquatic.Step.Biofilm", swBiofilm.Elapsed.TotalMilliseconds);
+    }
+
+    private void RecruitAndSpread(double dtDays, long step)
+    {
+        // 1. Natural recruitment into suitable wet coarse cells (e.g. spring runoff that filled pools after world creation)
+        int ordinal = 0;
+        foreach (int cell in _w.Grid.DomainCells)
+        {
+            if (!_w.Water.IsWet(cell)) continue;
+            var c = _w.Grid.CellCenter(cell);
+            var (cgx, cgz) = CoverageSpec.CellOf(c);
+            double depth = _w.Water.OpenWaterDepth(cell);
+            double speed = Math.Sqrt(_w.Water.FlowX[cell] * _w.Water.FlowX[cell] + _w.Water.FlowZ[cell] * _w.Water.FlowZ[cell]);
+            double light = _w.Fields.Light[cell];
+            double nut = _w.Fields.Nutrients[cell];
+
+            // Benthic periphyton recruitment: uncolonized submerged bed with light
+            if (depth >= 0.003 && light >= 0.12 && speed <= 0.20 && _w.Coverage.AlgaeBed.GetB(cgx, cgz) < 0.05f)
+            {
+                if ((step + ordinal) % 3 == 0)
+                {
+                    _w.Coverage.AlgaeBed.SetCell(cgx, cgz, AlgaeRules.OccupantId, 0.2f, 0, 0, 0, 0, 0);
+                }
+            }
+
+            // Duckweed pioneer recruitment in calm, sunny water
+            if (speed <= 0.04 && depth >= 0.01 && light >= 0.25 && _w.Coverage.SurfaceFloat.GetB(cgx, cgz) < 0.05f)
+            {
+                if ((step + ordinal) % 5 == 0)
+                {
+                    _w.Coverage.SurfaceFloat.SetCell(cgx, cgz, SurfaceFloatRules.OccupantId, 0.2f, 0, 0, 0, 0, 0);
+                }
+            }
+
+            // Filamentous algae pioneer recruitment in calm nutrient pools
+            if (speed <= 0.03 && depth >= 0.01 && nut >= 0.15 && light >= 0.25 && _w.Coverage.AlgaeFloat.GetB(cgx, cgz) < 0.05f)
+            {
+                if ((step + ordinal) % 7 == 0)
+                {
+                    _w.Coverage.AlgaeFloat.SetCell(cgx, cgz, AlgaeRules.OccupantId, 0.15f, 0, 0, 0, 0, 0);
+                }
+            }
+            ordinal++;
+        }
+
+        // 2. Vegetative lateral expansion from thriving colonies into adjacent suitable wet cells
+        _spreadDuck.Clear();
+        _spreadBed.Clear();
+        _spreadFloat.Clear();
+
+        // Duckweed clonal budding expansion
+        _seenCoords.Clear();
+        foreach (var tile in _w.Coverage.SurfaceFloat.Tiles)
+        {
+            int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
+            for (int li = 0; li < CoverageTile.N; li++)
+            {
+                float b = tile.B[li];
+                if (b < 0.15f) continue;
+                int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
+                if (DepthAt(gx, gz) <= 0) continue;
+                if (LightAt(gx, gz) < 0.1 || FlowAt(gx, gz).Length > 0.06) continue;
+
+                TryQueueSpread(_w.Coverage.SurfaceFloat, gx + 1, gz, _spreadDuck);
+                TryQueueSpread(_w.Coverage.SurfaceFloat, gx - 1, gz, _spreadDuck);
+                TryQueueSpread(_w.Coverage.SurfaceFloat, gx, gz + 1, _spreadDuck);
+                TryQueueSpread(_w.Coverage.SurfaceFloat, gx, gz - 1, _spreadDuck);
+            }
+        }
+
+        // AlgaeBed benthic periphyton expansion
+        _seenCoords.Clear();
+        foreach (var tile in _w.Coverage.AlgaeBed.Tiles)
+        {
+            int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
+            for (int li = 0; li < CoverageTile.N; li++)
+            {
+                float b = tile.B[li];
+                if (b < 0.15f) continue;
+                int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
+                if (DepthAt(gx, gz) <= 0 || FlowAt(gx, gz).Length > 0.15) continue;
+                if (LightAt(gx, gz) < 0.08) continue;
+
+                TryQueueSpread(_w.Coverage.AlgaeBed, gx + 1, gz, _spreadBed);
+                TryQueueSpread(_w.Coverage.AlgaeBed, gx - 1, gz, _spreadBed);
+                TryQueueSpread(_w.Coverage.AlgaeBed, gx, gz + 1, _spreadBed);
+                TryQueueSpread(_w.Coverage.AlgaeBed, gx, gz - 1, _spreadBed);
+            }
+        }
+
+        // AlgaeFloat mat expansion in calm water
+        _seenCoords.Clear();
+        foreach (var tile in _w.Coverage.AlgaeFloat.Tiles)
+        {
+            int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
+            for (int li = 0; li < CoverageTile.N; li++)
+            {
+                float b = tile.B[li];
+                if (b < 0.15f) continue;
+                int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
+                if (DepthAt(gx, gz) <= 0) continue;
+                if (FlowAt(gx, gz).Length > 0.05) continue;
+
+                TryQueueSpread(_w.Coverage.AlgaeFloat, gx + 1, gz, _spreadFloat);
+                TryQueueSpread(_w.Coverage.AlgaeFloat, gx - 1, gz, _spreadFloat);
+                TryQueueSpread(_w.Coverage.AlgaeFloat, gx, gz + 1, _spreadFloat);
+                TryQueueSpread(_w.Coverage.AlgaeFloat, gx, gz - 1, _spreadFloat);
+            }
+        }
+
+        // Apply queued spreads
+        foreach (var (gx, gz, b) in _spreadDuck)
+            _w.Coverage.SurfaceFloat.SetCell(gx, gz, SurfaceFloatRules.OccupantId, b, 0, 0, 0, 0, 0);
+        foreach (var (gx, gz, b) in _spreadBed)
+            _w.Coverage.AlgaeBed.SetCell(gx, gz, AlgaeRules.OccupantId, b, 0, 0, 0, 0, 0);
+        foreach (var (gx, gz, b) in _spreadFloat)
+            _w.Coverage.AlgaeFloat.SetCell(gx, gz, AlgaeRules.OccupantId, b, 0, 0, 0, 0, 0);
+    }
+
+    private void TryQueueSpread(CoverageLayer layer, int gx, int gz, List<(int, int, float)> queue)
+    {
+        // Dense colonies reject most neighbours here. Avoid hydrology queries for
+        // an occupied cell, or one that is already queued, without changing order.
+        if (layer.GetB(gx, gz) >= 0.05f) return;
+        long key = ((long)gx << 32) | (uint)gz;
+        if (_seenCoords.Contains(key)) return;
+        double depth = DepthAt(gx, gz);
+        if (depth <= 0) return;
+        // This sealed adapter defines IsObstacle as DepthAt <= 0, already tested.
+        if (_seenCoords.Add(key))
+            queue.Add((gx, gz, 0.10f));
     }
 
     public void ProjectBiofilm() => AquaticBiofilm.Project(_w.Coverage.AlgaeBed, _w.Fields.Biofilm, _w.Water);
@@ -177,15 +398,39 @@ public sealed class AquaticSystem : IAquaticEnv
         return cell;
     }
 
-    private int _depthGx = int.MinValue, _depthGz = int.MinValue; private double _depthVal;
+    private struct DepthSample
+    {
+        public bool Valid;
+        public long LiquidVersion;
+        public int TerrainVersion, PropsVersion;
+        public double Table, Stored, Bed, Value;
+    }
+    private DepthSample[]? _depthSamples;
+    public long DepthCacheHits { get; private set; }
+    public long DepthCacheMisses { get; private set; }
 
     public double DepthAt(int gx, int gz)
     {
-        if (gx == _depthGx && gz == _depthGz) return _depthVal;
         int c = Cell(gx, gz);
-        double d = c >= 0 && _w.Water.IsWet(c) ? _w.Water.OpenWaterDepth(c) : 0;
-        _depthGx = gx; _depthGz = gz; _depthVal = d;
-        return d;
+        if (c < 0) return 0;
+        var water = _w.Water;
+        long version = water.Liquid?.Version ?? -1;
+        double table = water.WaterTable, stored = water.Depth[c], bed = water.Bed[c];
+        // Tile scans repeatedly revisit the same coarse cell in different rows and
+        // layers. Retain each exact coarse sample, validating all query dependencies.
+        _depthSamples ??= new DepthSample[water.Depth.Length];
+        ref var sample = ref _depthSamples[c];
+        if (sample.Valid && sample.LiquidVersion == version && sample.Table == table &&
+            sample.Stored == stored && sample.Bed == bed && sample.TerrainVersion == _w.Terrain.Version &&
+            sample.PropsVersion == _w.Props.Version)
+        {
+            DepthCacheHits++; return sample.Value;
+        }
+        DepthCacheMisses++;
+        sample = new DepthSample { Valid = true, LiquidVersion = version, Table = table, Stored = stored, Bed = bed,
+            TerrainVersion = _w.Terrain.Version, PropsVersion = _w.Props.Version,
+            Value = water.IsWet(c) ? water.OpenWaterDepth(c) : 0 };
+        return sample.Value;
     }
     public Vec2 FlowAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? new Vec2(_w.Water.FlowX[c], _w.Water.FlowZ[c]) : Vec2.Zero; }
     public double LightAt(int gx, int gz) { int c = Cell(gx, gz); return c >= 0 ? _w.Fields.Light[c] : 0; }

@@ -36,6 +36,7 @@ public partial class EnvironmentRig : Node3D
     private float _underwater;       // 0..1 blend
     private float _underwaterTarget;
     public int Quality { get; private set; } = 2;
+    public bool VolumetricMistEnabled { get; set; } = true;
     /// <summary>Opt-in diagnostic presentation phase; null keeps the normal wall clock. Never serialized.</summary>
     public double? BenchmarkLightSeconds { get; set; }
 
@@ -254,7 +255,7 @@ public partial class EnvironmentRig : Node3D
         {
             LightColor = GrowLightTint,
             LightEnergy = 0.11f,
-            ShadowEnabled = true,
+            ShadowEnabled = false,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
             ShadowBlur = 3.5f,
         };
@@ -273,19 +274,29 @@ public partial class EnvironmentRig : Node3D
         NightFloraMaterials.SetNightFactor(NightFloraMaterials.NightFactorAtSeconds(Clock.Seconds));
     }
 
+    public void ApplyIndirectLightingDetail(bool fine)
+    {
+        // Linked distance properties use these values for the same 25.6 m reach.
+        int cascades = fine ? 4 : 3;
+        float cellSize = fine ? .025f : .05f;
+        // Unrelated settings edits must not restart the GI volume.
+        if (Env.SdfgiCascades != cascades) Env.SdfgiCascades = cascades;
+        if (!Mathf.IsEqualApprox(Env.SdfgiMinCellSize, cellSize)) Env.SdfgiMinCellSize = cellSize;
+    }
+
     public void ApplyQuality(int tier)
     {
         Quality = Mathf.Clamp(tier, 0, 2);
         var vp = GetViewport();
-        RenderingServer.EnvironmentSetSsaoQuality(RenderingServer.EnvironmentSsaoQuality.Ultra, false, 0.5f, 2, 50f, 300f);
-        RenderingServer.EnvironmentSetSsilQuality(RenderingServer.EnvironmentSsilQuality.Ultra, false, 0.5f, 4, 50f, 300f);
-        RenderingServer.DirectionalShadowAtlasSetSize(8192, true);
-        RenderingServer.PositionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftUltra);
-        RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftUltra);
 
         switch (Quality)
         {
             case 0:
+                RenderingServer.EnvironmentSetSsaoQuality(RenderingServer.EnvironmentSsaoQuality.VeryLow, false, 0.5f, 1, 50f, 300f);
+                RenderingServer.EnvironmentSetSsilQuality(RenderingServer.EnvironmentSsilQuality.VeryLow, false, 0.5f, 1, 50f, 300f);
+                RenderingServer.DirectionalShadowAtlasSetSize(2048, true);
+                RenderingServer.PositionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.Hard);
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.Hard);
                 Sun.ShadowEnabled = false;
                 Env.SsaoEnabled = false; Env.GlowEnabled = false;
                 Env.SsilEnabled = false; Env.VolumetricFogEnabled = false;
@@ -295,13 +306,34 @@ public partial class EnvironmentRig : Node3D
                 vp.Scaling3DScale = 0.75f;
                 break;
             case 1:
+                RenderingServer.EnvironmentSetSsaoQuality(RenderingServer.EnvironmentSsaoQuality.Medium, false, 0.5f, 2, 50f, 300f);
+                RenderingServer.DirectionalShadowAtlasSetSize(4096, true);
+                RenderingServer.PositionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftMedium);
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftMedium);
+                Sun.ShadowEnabled = true;
+                Env.SsaoEnabled = true; Env.GlowEnabled = true;
+                Env.SsilEnabled = false; Env.VolumetricFogEnabled = true;
+                Env.SdfgiEnabled = true; Env.SsrEnabled = false;
+                vp.Msaa3D = Viewport.Msaa.Disabled;
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
+                vp.UseTaa = true;
+                Sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits;
+                Sun.DirectionalShadowSplit1 = 0.22f;
+                vp.Scaling3DScale = 1.0f;
+                break;
+            case 2:
             default:
+                RenderingServer.EnvironmentSetSsaoQuality(RenderingServer.EnvironmentSsaoQuality.Ultra, false, 0.5f, 2, 50f, 300f);
+                RenderingServer.EnvironmentSetSsilQuality(RenderingServer.EnvironmentSsilQuality.Ultra, false, 0.5f, 4, 50f, 300f);
+                RenderingServer.DirectionalShadowAtlasSetSize(8192, true);
+                RenderingServer.PositionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftUltra);
+                RenderingServer.DirectionalSoftShadowFilterSetQuality(RenderingServer.ShadowQuality.SoftUltra);
                 Sun.ShadowEnabled = true;
                 Env.SsaoEnabled = true; Env.GlowEnabled = true;
                 Env.SsilEnabled = true; Env.VolumetricFogEnabled = true;
                 Env.SdfgiEnabled = true; Env.SsrEnabled = true;
-                vp.Msaa3D = Viewport.Msaa.Msaa4X;
-                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Fxaa;
+                vp.Msaa3D = Viewport.Msaa.Disabled;
+                vp.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
                 vp.UseTaa = true;
                 Sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
                 vp.Scaling3DScale = 1.0f;
@@ -449,7 +481,7 @@ public partial class EnvironmentRig : Node3D
         Env.FogDensity = Mathf.Lerp(HazeFogDensity * 0.35f, UnderwaterFogDensity, _underwater);
         Env.FogAerialPerspective = Mathf.Lerp(0.18f, 0.0f, _underwater);
         Env.FogSunScatter = Mathf.Lerp(0.45f, 0.15f, _underwater);
-        Env.VolumetricFogEnabled = Quality >= 1;
+        Env.VolumetricFogEnabled = Quality >= 1 && VolumetricMistEnabled;
         Env.VolumetricFogDensity = Mathf.Lerp(0.0045f, 0.045f, _underwater);
         Env.VolumetricFogAlbedo = new Color(0.82f, 0.88f, 0.78f).Lerp(UnderwaterFogColor, _underwater);
         Env.VolumetricFogAnisotropy = Mathf.Lerp(0.72f, 0.55f, _underwater);

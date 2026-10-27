@@ -92,4 +92,48 @@ public class FloraRefinementTests
             }
         }
     }
+
+    [Fact]
+    public void HookthicketBerriesAreAttachedCloseToCanes()
+    {
+        var species = new FloraSpeciesDef
+        {
+            Id = "hookthicket", Shape = "hookthicket_brake", Height = 1.72, RadiusAtMax = 0.9,
+            Color = new[] { 0.23, 0.4, 0.18 }, Color2 = new[] { 0.47, 0.58, 0.25 }
+        };
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var mesh = OrganismMeshes.Flora(species, seed);
+
+            // Collect cane vertices (structural wood tubes)
+            var caneVerts = new List<Vec3>();
+            foreach (var st in mesh.Structural)
+            {
+                for (int v = 0; v < st.VertexCount; v++)
+                {
+                    int vi = st.FirstVertex + v;
+                    var pos = mesh.Position(vi);
+                    caneVerts.Add(new Vec3(pos.X * species.RadiusAtMax, pos.Y * species.Height, pos.Z * species.RadiusAtMax));
+                }
+            }
+
+            // Identify berry hearts (UV2.x ~ 1.4, UV2.y ~ 1.0)
+            int berryCount = 0;
+            for (int v = 0; v < mesh.VertexCount; v++)
+            {
+                float u2x = mesh.UV2[v * 2];
+                float u2y = mesh.UV2[v * 2 + 1];
+                if (Math.Abs(u2x - 1.4f) < 0.05f && Math.Abs(u2y - 1.0f) < 0.05f)
+                {
+                    var pos = mesh.Position(v);
+                    var worldPos = new Vec3(pos.X * species.RadiusAtMax, pos.Y * species.Height, pos.Z * species.RadiusAtMax);
+                    double minDist = caneVerts.Min(cv => (cv - worldPos).Length);
+                    // Berry should be nestled tightly near the cane surface (under 6 cm in world space)
+                    Assert.True(minDist < 0.065, $"Seed {seed}: Berry heart is too far from cane ({minDist:F3}m), floating in space");
+                    berryCount++;
+                }
+            }
+            Assert.True(berryCount > 0, $"Seed {seed}: Should have berries on mature hookthicket");
+        }
+    }
 }

@@ -18,6 +18,7 @@ public partial class CameraRig : Node3D
     public double Speed { get; set; } = 1.5;
     public double Sensitivity { get; set; } = 0.25;
     public bool InvertY { get; set; }
+    public bool DistanceBlur { get; set; }
     public event Action<double>? SpeedChanged;
     public event Action<bool>? MediumChanged;
     /// <summary>Right button pressed and released without dragging (opens the tool wheel).</summary>
@@ -62,15 +63,35 @@ public partial class CameraRig : Node3D
 
     public void LookAtPoint(Vector3 eye, Vector3 target)
     {
+        if (!float.IsFinite(eye.X) || !float.IsFinite(eye.Y) || !float.IsFinite(eye.Z))
+            eye = new Vector3(0, 3.5f, 9.0f);
+        if (!float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z))
+            target = Vector3.Zero;
+
         Position = eye;
-        var d = (target - eye).Normalized();
+        _lastResolvedPos = eye;
+        if (World != null)
+        {
+            _lastTerrainVersion = World.Terrain.Version;
+            _lastPropsVersion = World.Props.Version;
+        }
+        var diff = target - eye;
+        if (diff.LengthSquared() < 1e-6f)
+            diff = new Vector3(0, 0, -1);
+        var d = diff.Normalized();
         _yaw = Mathf.Atan2(-d.X, -d.Z);
-        _pitch = Mathf.Asin(Mathf.Clamp(d.Y, -1, 1));
+        float clampedY = Mathf.Clamp(d.Y, -0.999f, 0.999f);
+        _pitch = Mathf.Asin(clampedY);
         Focused = false;
         ApplyRotation();
     }
 
-    private void ApplyRotation() => Rotation = new Vector3(_pitch, _yaw, 0);
+    private void ApplyRotation()
+    {
+        if (!float.IsFinite(_pitch)) _pitch = -0.5f;
+        if (!float.IsFinite(_yaw)) _yaw = 0f;
+        Rotation = new Vector3(_pitch, _yaw, 0);
+    }
 
     private Vector3 _lastResolvedPos;
     private int _lastTerrainVersion = int.MinValue;
@@ -271,42 +292,19 @@ public partial class CameraRig : Node3D
 
     private void UpdateFocusAndDof(double delta)
     {
-        bool dofDisabled = System.Environment.GetEnvironmentVariable("VIVARIUM_DISABLE_DOF") == "1";
-        if (dofDisabled)
-        {
-            var disabledAttr = ResolveCameraAttributes();
-            if (disabledAttr != null)
-            {
-                disabledAttr.DofBlurFarEnabled = false;
-                disabledAttr.DofBlurNearEnabled = false;
-            }
-            return;
-        }
-
         float targetDist = Mathf.Clamp(GetFocalPointDistance(), 0.06f, 18.0f);
         _focusDistance = Mathf.Lerp(_focusDistance, targetDist, 1f - Mathf.Exp(-(float)delta * 10f));
 
         var attr = ResolveCameraAttributes();
         if (attr == null) return;
 
-        attr.DofBlurFarEnabled = true;
-        attr.DofBlurNearEnabled = true;
-
-        if (_focusDistance < 2.5f)
-        {
-            attr.DofBlurFarDistance = _focusDistance * 1.18f;
-            attr.DofBlurFarTransition = Mathf.Max(0.08f, _focusDistance * 0.85f);
-            attr.DofBlurNearDistance = Mathf.Max(0.015f, _focusDistance * 0.78f);
-            attr.DofBlurNearTransition = Mathf.Max(0.01f, _focusDistance * 0.28f);
-            attr.DofBlurAmount = Mathf.Clamp(0.085f * (1.0f - (_focusDistance - 0.15f) / 2.8f), 0.015f, 0.085f);
-        }
-        else
-        {
-            attr.DofBlurFarDistance = _focusDistance * 1.6f;
-            attr.DofBlurFarTransition = Mathf.Max(0.5f, _focusDistance * 0.5f);
-            attr.DofBlurNearDistance = Mathf.Max(0.1f, _focusDistance * 0.6f);
-            attr.DofBlurNearTransition = Mathf.Max(0.1f, _focusDistance * 0.2f);
-            attr.DofBlurAmount = 0.012f;
-        }
+        // Optional distance blur starts before the reduced-detail distance band.
+        // Keep foreground, inspected plants and tool feedback sharp.
+        bool enabled = DistanceBlur && System.Environment.GetEnvironmentVariable("VIVARIUM_DISABLE_DOF") != "1";
+        attr.DofBlurFarEnabled = enabled;
+        attr.DofBlurNearEnabled = false;
+        attr.DofBlurFarDistance = (float)Vivarium.Sim.Geometry.FloraDetail.DistanceMid * .8f;
+        attr.DofBlurFarTransition = 8f;
+        attr.DofBlurAmount = enabled ? .015f : 0f;
     }
 }

@@ -32,20 +32,23 @@ public sealed class GuardianSystem
         {
             Def = GuardianCatalog.Find(_world.Guardian.ArchetypeId);
         }
-        else if (_world.PilotTree != null && _world.Descriptor.GuardianId != "none")
+        else if (_world.Descriptor.GuardianId != "none")
         {
-            Def = _world.Descriptor.GuardianId is "auto" or "" or null
-                ? GuardianCatalog.ForPilotTree(_world.PilotTree.Def.Id)
-                : GuardianCatalog.Find(_world.Descriptor.GuardianId);
+            var formId = GuardianCatalog.SeededGuardianFormId(_world.Descriptor);
+            Def = formId != null ? GuardianCatalog.Find(formId) : null;
         }
         else
         {
             Def = null;
         }
 
-        if (_world.PilotTree != null)
+        if (Def != null || _world.PilotTree != null)
         {
             Habitat = new GuardianHabitat(_world.PilotTree, _world.Domain, _world);
+        }
+        else
+        {
+            Habitat = null;
         }
     }
 
@@ -54,20 +57,21 @@ public sealed class GuardianSystem
     /// </summary>
     public GuardianIndividual? InitializeGuardian(string? archetypeOverride = null)
     {
-        if (_world.PilotTree == null && archetypeOverride == null) return null;
         RefreshDefinition();
 
-        string targetArchetype = archetypeOverride
-            ?? (_world.Descriptor.GuardianId is "auto" or "" or null
-                ? GuardianCatalog.ForPilotTree(_world.PilotTree!.Def.Id)?.Id ?? GuardianCatalog.GreatGround
-                : _world.Descriptor.GuardianId);
-
-        if (targetArchetype == "none") return null;
+        string? targetArchetype = archetypeOverride ?? GuardianCatalog.SeededGuardianFormId(_world.Descriptor);
+        if (targetArchetype == null || targetArchetype == "none") return null;
 
         var def = GuardianCatalog.Find(targetArchetype);
         if (def == null) return null;
 
         Def = def;
+        _world.Descriptor.GuardianId = def.Id;
+        if (Habitat == null)
+        {
+            Habitat = new GuardianHabitat(_world.PilotTree, _world.Domain, _world);
+        }
+
         var rng = Rng.Keyed(_world.Seed, "guardian.init", (ulong)(_world.PilotTree?.Corner ?? 0));
         var id = _world.Ids.Next(EntityKind.Fauna);
 

@@ -4,6 +4,15 @@ namespace Vivarium.Sim.Geometry;
 
 public static partial class OrganismMeshes
 {
+    private static void FaunaScutellum(MeshData m)
+    {
+        // Small triangular shield seated between pronotum and paired elytra.
+        var points=new[]{new Vec3(.123,.291,-.029),new Vec3(.123,.291,.029),new Vec3(.066,.321,0),new Vec3(.104,.285,0)};
+        int first=m.VertexCount;
+        foreach(var p in points)m.AddVertex(p,Vec3.Up,Body,0,(p.X+.45)/.95,.5,1,0);
+        m.Indices.AddRange(new[]{first,first+2,first+1,first,first+1,first+3,first+1,first+2,first+3,first+2,first,first+3});
+    }
+
     private static void CinematicBeetle(MeshData m)
     {
         // Coalback: a single shell envelope with a recessed dorsal suture,
@@ -22,6 +31,7 @@ public static partial class OrganismMeshes
         BodySegment(m,new Vec3(.229,.161,0),new Vec3(.128,.102,.173),18,28,(a,b)=>Region(a,b,1));
         BodySegment(m,new Vec3(.347,.137,0),new Vec3(.047,.061,.103),12,20,(a,b)=>Region(a,b,3));
         BodySegment(m,new Vec3(.399,.144,0),new Vec3(.087,.063,.102),16,24,(a,b)=>Region(a,b,1));
+        FaunaScutellum(m);
         // Shallow longitudinal elytral ribs follow the actual dome, rather
         // than a straight rod floating above it. Fine pits are shaded separately.
         foreach(double side in new[]{-1.0,1.0})
@@ -38,7 +48,7 @@ public static partial class OrganismMeshes
                 }
                 Primitives.Tube(m,path,path.Select(_=>.0018).ToArray(),5,(i,v)=>Region(i/20.0,v,1));
             }
-            BodySegment(m,new Vec3(.423,.169,.083*side),new Vec3(.031,.027,.023),12,18,(a,b)=>Region(a,b,2));
+            BodySegment(m,new Vec3(.423,.169,.083*side),new Vec3(.031,.027,.023),16,24,(a,b)=>Region(a,b,2));
             var antennaRoot=new Vec3(.450,.157,.059*side);
             var antenna=new[]{antennaRoot,new Vec3(.485,.173,.092*side),new Vec3(.538,.190,.145*side),
                 new Vec3(.599,.198,.180*side),new Vec3(.656,.183,.201*side)};
@@ -71,7 +81,7 @@ public static partial class OrganismMeshes
                 }
                 // Segmented tarsus and paired recurved terminal claws share
                 // the exact coxal attachment, so the walk shader moves them together.
-                for(int tarsus=0;tarsus<3;tarsus++)
+                for(int tarsus=0;tarsus<5;tarsus++)
                 {
                     var p=foot+new Vec3(-.004*tarsus,.001,side*.008*tarsus);
                     int first=m.VertexCount;BodySegment(m,p,new Vec3(.006,.0035,.006),6,10,(a,b)=>Region(a,b,4));

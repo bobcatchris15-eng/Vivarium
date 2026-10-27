@@ -81,6 +81,14 @@ public static class NightFloraMaterials
             Materials.Add(new WeakReference<ShaderMaterial>(material));
     }
 
+    public static void RegisterMaterial(ShaderMaterial material)
+    {
+        if (material == null) return;
+        material.SetShaderParameter("night_factor", CurrentNightFactor);
+        if (!Materials.Any(w => w.TryGetTarget(out var old) && ReferenceEquals(old, material)))
+            Materials.Add(new WeakReference<ShaderMaterial>(material));
+    }
+
     public static void RegisterLight(OmniLight3D light, float baseEnergy)
     {
         if (light == null) return;

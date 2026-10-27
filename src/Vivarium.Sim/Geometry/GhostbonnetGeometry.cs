@@ -17,8 +17,8 @@ internal static class GhostbonnetGeometry
         int count=juvenile?8+rng.NextInt(4):12+rng.NextInt(5);
         if(mesh.Lod!=null)count=Math.Max(3,(int)Math.Round(count*lod));
         int detail=mesh.FloraDetailLevel??0;
-        int around=detail==2?14:detail==1?20:28;
-        int rings=detail==2?6:detail==1?8:11;
+        int around=detail==2?14:detail==1?24:32;
+        int rings=detail==2?6:detail==1?10:16;
         if(mesh.Lod!=null)
         {
             around=Math.Max(12,(int)Math.Round(around*(.58+.42*(mesh.Lod.Radial))));
@@ -77,7 +77,7 @@ internal static class GhostbonnetGeometry
             var baseColour=Primitives.Mix(body,new[]{.53,.63,.68},.36);
             Primitives.Tube(mesh,stemPath,
                 new[]{baseRadius*1.18,baseRadius,baseRadius*.69,topRadius*1.15,topRadius},
-                detail==2?6:8,
+                detail==2?8:16,
                 (i,v)=>(Primitives.Mix(baseColour,ivory,i/4.0),1,i*.18,v,0,0));
 
             double phase=rng.Range(0,Math.Tau);
@@ -164,11 +164,11 @@ internal static class GhostbonnetGeometry
             }
             // Real radial lamellae dangle under the membrane. Vary their
             // insertion radii and vertical extent; don't draw gill lines alone.
-            int gills=detail==2?9:detail==1?13:18;
+            int gills=detail==2?12:detail==1?24:36;
             for(int g=0;g<gills;g++)
             {
                 double angle=(g+.16*rng.Range(-1,1))*Math.Tau/gills;
-                double inner=.12+(g%3)*.07;
+                double inner=g%2==0?.12:.53;
                 double startT=inner;
                 int begin=mesh.VertexCount;
                 var across=new Vec3(-Math.Sin(angle),0,Math.Cos(angle));

@@ -29,10 +29,13 @@ public sealed class MeshData
     public readonly List<(int FirstVertex, int VertexCount)> LeafSpans = new();
     /// <summary>Small silhouette/anatomy features that must survive loose-piece LOD culling.</summary>
     public readonly List<(int FirstVertex, int VertexCount)> EssentialSpans = new();
+    /// <summary>Authentic node/axil positions on branches where leaves or organs attach.</summary>
+    public readonly List<Vec3> AttachmentNodes = new();
 
     public void RecordLeaf(int vertex, int index, Vec3 attachment, double length, bool volumetric = false)
     {
         if (VertexCount > vertex) LeafSpans.Add((vertex, VertexCount - vertex));
+        if (attachment.LengthSq > 1e-6) AttachmentNodes.Add(attachment);
         if (FloraDetailLevel == null) return;
         ulong identity = Rng.Mix(FloraVisualSeed, (ulong)Leaves.Count + 1);
         Leaves.Add(new FloraLeaf(vertex, VertexCount - vertex, index, Indices.Count - index,
@@ -130,6 +133,7 @@ public sealed class MeshData
         foreach (var i in other.Indices) Indices.Add(baseIndex + i);
         foreach (var st in other.Structural) Structural.Add((st.FirstVertex + baseIndex, st.VertexCount, st.Sides, st.Radius));
         foreach (var ls in other.LeafSpans) LeafSpans.Add((ls.FirstVertex + baseIndex, ls.VertexCount));
+        foreach (var an in other.AttachmentNodes) AttachmentNodes.Add(transform != null ? transform(an) : an);
     }
 }
 
@@ -138,7 +142,8 @@ public sealed class MeshData
 /// authored counts; primitives clamp to minimums (tubes >= 5 sides, blades >= 2 segments).
 /// <see cref="LeafFraction"/> of leaf blades survive (inner/smallest dropped first).
 /// </summary>
-public sealed record FloraLodParams(double Radial = 1, double Length = 1, double Blade = 1, double LeafFraction = 1)
+public sealed record FloraLodParams(double Radial = 1, double Length = 1, double Blade = 1, double LeafFraction = 1,
+    int GillStations = 9, int EmberMicroSides = 5)
 {
     public static FloraLodParams FromScale(double s)
     {

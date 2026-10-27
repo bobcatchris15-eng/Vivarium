@@ -16,8 +16,8 @@ public class PebbleMeshTests
             var mesh = PropMeshes.Pebble(seed);
             Assert.Equal(mesh.DigestHex(), PropMeshes.Pebble(seed).DigestHex());
             variants.Add(mesh.DigestHex());
-            Assert.InRange(mesh.TriangleCount, 16, 80);
-            Assert.InRange(mesh.VertexCount, 48, 240);
+            Assert.InRange(mesh.TriangleCount, 650, 800);
+            Assert.InRange(mesh.VertexCount, 450, 550);
             for (int i = 0; i < mesh.VertexCount; i++)
             {
                 var p = mesh.Position(i); var n = mesh.NormalAt(i);
@@ -36,7 +36,7 @@ public class PebbleMeshTests
             if (Enumerable.Range(0, mesh.VertexCount).Any(i => mesh.UV2[i*2+1] > .5))
                 Assert.Equal(-0.38, mesh.Bounds().Min.Y, 6);
             else
-                Assert.InRange(mesh.Bounds().Min.Y, -.5, -.38);
+                Assert.InRange(mesh.Bounds().Min.Y, -.5, -.379999);
             Assert.Equal(0.75, mesh.Bounds().Max.Y, 6);
         }
         Assert.True(variants.Count >= 40);

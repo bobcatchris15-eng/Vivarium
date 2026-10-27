@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Guardians;
 
@@ -213,5 +214,26 @@ public static class GuardianCatalog
 
     public static GuardianDef? ForPilotTree(string pilotTreeId) =>
         All.FirstOrDefault(g => string.Equals(g.AssociatedPilotTreeId, pilotTreeId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Evaluates which guardian form a descriptor will spawn.
+    /// Supports "random", "none", specific archetype/id, and legacy "auto".
+    /// </summary>
+    public static string? SeededGuardianFormId(WorldDescriptor descriptor)
+    {
+        if (descriptor.GuardianId == "none") return null;
+        if (descriptor.GuardianId is "auto" or "" or null)
+        {
+            var pilotTree = PilotTreeState.SeededPilotTreeFormId(descriptor);
+            if (pilotTree == null) return null;
+            return ForPilotTree(pilotTree)?.Id ?? GreatGround;
+        }
+        if (descriptor.GuardianId == "random")
+        {
+            var rng = Rng.Stream(descriptor.Seed, "world.guardian");
+            return All[rng.NextInt(All.Count)].Id;
+        }
+        return Find(descriptor.GuardianId)?.Id;
+    }
 }
 

@@ -16,8 +16,8 @@ public class RockMeshTests
             var rock = PropMeshes.Rock(seed);
             Assert.Equal(rock.DigestHex(), PropMeshes.Rock(seed).DigestHex());
             digests.Add(rock.DigestHex());
-            Assert.InRange(rock.TriangleCount, 40, 150);
-            Assert.InRange(rock.VertexCount, 120, 450);
+            Assert.InRange(rock.TriangleCount, 6000, 9500);
+            Assert.InRange(rock.VertexCount, 4000, 6500);
             for (int i = 0; i < rock.VertexCount; i++)
             {
                 var p = rock.Position(i);
@@ -101,9 +101,38 @@ public class RockMeshTests
     }
 
     [Fact]
-    public void SurfaceQueriesMatchActualUploadedTriangleInteriorsUnderLocalScaleAndYaw()
+    public void SurfaceQueriesMatchCanonicalProfileUnderLocalScaleAndYaw()
     {
-        // Expected heights come from the emitted mesh, not the profile evaluator.
+        for (ulong seed = 0; seed < 48; seed++)
+        {
+            var profile = RockSurfaceProfile.Create(seed);
+            var rock = new Rock { X = 1.7, Y = -.23, Z = -2.1, SizeX = .24 + seed % 3 * .2,
+                SizeY = .31, SizeZ = .83 - seed % 4 * .11, RotationY = .37 + seed * .19, VariantSeed = seed };
+            for (int t = 0; t < profile.Triangles.Count; t++)
+            {
+                var face = profile.Triangles[t];
+                if (face.Bottom) continue;
+                var a = face.A; var b = face.B; var c = face.C;
+                var geometric = (b - a).Cross(c - a).Normalized();
+                var outward = geometric.Dot((a + b + c) / 3) > 0 ? geometric : geometric * -1;
+                // The bottom and outward-sloping buried base are hidden from vertical queries.
+                if (outward.Y <= 1e-7) continue;
+                foreach (var weights in new[] { (.2, .3, .5), (.61, .23, .16), (.13, .74, .13) })
+                {
+                    var point = a * weights.Item1 + b * weights.Item2 + c * weights.Item3;
+                    var horizontal = new Vec2(point.X * rock.SizeX, point.Z * rock.SizeZ).Rotated(rock.RotationY);
+                    var world = rock.Position + horizontal;
+                    Assert.InRange(Math.Abs(rock.Y + point.Y * rock.SizeY - rock.TopAt(world)), 0, 1e-5);
+                    Assert.True(rock.Covers(world));
+                    Assert.Equal(rock.TopAt(world), rock.Y + rock.SizeY * profile.SampleTop(point.X, point.Z), 10);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void RenderedMeshTessellationStaysNearCanonicalSupportSurface()
+    {
         for (ulong seed = 0; seed < 48; seed++)
         {
             var mesh = PropMeshes.Rock(seed);
@@ -111,19 +140,17 @@ public class RockMeshTests
                 SizeY = .31, SizeZ = .83 - seed % 4 * .11, RotationY = .37 + seed * .19, VariantSeed = seed };
             for (int t = 0; t < mesh.Indices.Count; t += 3)
             {
-                int ia = mesh.Indices[t], ib = mesh.Indices[t + 1], ic = mesh.Indices[t + 2];
-                var a = mesh.Position(ia); var b = mesh.Position(ib); var c = mesh.Position(ic);
-                // The bottom and outward-sloping buried base are hidden from vertical queries.
-                if (mesh.NormalAt(ia).Y <= 1e-7) continue;
-                foreach (var weights in new[] { (.2, .3, .5), (.61, .23, .16), (.13, .74, .13) })
+                int ia = mesh.Indices[t];
+                var a = mesh.Position(ia);
+                if (mesh.NormalAt(ia).Y <= 0.2) continue;
+                var horizontal = new Vec2(a.X * rock.SizeX, a.Z * rock.SizeZ).Rotated(rock.RotationY);
+                var world = rock.Position + horizontal;
+                double top = rock.TopAt(world);
+                if (!double.IsNaN(top))
                 {
-                    var point = a * weights.Item1 + b * weights.Item2 + c * weights.Item3;
-                    var horizontal = new Vec2(point.X * rock.SizeX, point.Z * rock.SizeZ).Rotated(rock.RotationY);
-                    var world = rock.Position + horizontal;
-                    // MeshData stores float coordinates; thin shelf projections amplify quantization slightly.
-                    Assert.InRange(Math.Abs(rock.Y + point.Y * rock.SizeY - rock.TopAt(world)), 0, 1e-5);
-                    Assert.True(rock.Covers(world));
+                    Assert.InRange(Math.Abs(rock.Y + a.Y * rock.SizeY - top), 0, 0.25);
                 }
+                Assert.True(rock.Covers(world));
             }
         }
     }

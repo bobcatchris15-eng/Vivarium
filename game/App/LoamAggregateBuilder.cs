@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
@@ -44,67 +45,90 @@ public static class LoamAggregateBuilder
     /// <summary>Builds clustered, partly buried soil peds over a 5 m XZ board without changing world state.</summary>
     public static Node3D Build(VivariumWorld world, int seed, Vector2? patchCenter = null, float halfExtent = BoardHalfExtent)
     {
+        Node3D? result = null;
+        foreach (bool _ in BuildBatched(world, seed, node => result = node, patchCenter, halfExtent)) { }
+        return result!;
+    }
+
+    /// <summary>Builds the same deterministic geometry incrementally; disposing before completion frees its unattached root.</summary>
+    public static IEnumerable<bool> BuildBatched(VivariumWorld world, int seed, Action<Node3D> complete,
+        Vector2? patchCenter = null, float halfExtent = BoardHalfExtent)
+    {
         ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(complete);
         if (!float.IsFinite(halfExtent) || halfExtent <= 0f || halfExtent > 2.5f)
             throw new ArgumentOutOfRangeException(nameof(halfExtent), "halfExtent must be finite and between 0 and 2.5 metres");
         Vector2 origin = patchCenter ?? Vector2.Zero;
         var root = new Node3D { Name = "LoamAggregates" };
-        var rng = new StableRandom(unchecked((ulong)(uint)seed) + 0xD1B54A32D192ED03UL);
-        var meshBuilder = new SurfaceTool();
-        meshBuilder.Begin(Mesh.PrimitiveType.Triangles);
-        var material = Material();
-
-        int aggregates = 0, triangles = 0, patchesPlaced = 0;
-        int clodBudget = PedTriangles + MaxCrumbCount * CrumbTriangles;
-        for (int patch = 0; patch < PatchCount && aggregates < MaxAggregates && triangles + clodBudget < MaxTriangles; patch++)
+        bool transferred = false;
+        try
         {
-            var anchor = new SimVec2(origin.X + rng.Range(-halfExtent * 0.77f, halfExtent * 0.77f), origin.Y + rng.Range(-halfExtent * 0.77f, halfExtent * 0.77f));
-            if (!Eligible(world, anchor, 0.12, origin, halfExtent)) continue;
-            patchesPlaced++;
-            float axis = rng.Range(0f, Mathf.Tau);
-            float patchScale = Math.Min(1f, halfExtent / BoardHalfExtent);
-            float length = rng.Range(0.22f, 0.48f) * patchScale;
-            float width = rng.Range(0.12f, 0.30f) * patchScale;
-            int count = rng.NextInt(8, 17);
-            for (int i = 0; i < count && aggregates < MaxAggregates && triangles + clodBudget < MaxTriangles; i++)
+            var rng = new StableRandom(unchecked((ulong)(uint)seed) + 0xD1B54A32D192ED03UL);
+            using var meshBuilder = new SurfaceTool();
+            meshBuilder.Begin(Mesh.PrimitiveType.Triangles);
+            var material = Material();
+
+            int aggregates = 0, triangles = 0, patchesPlaced = 0;
+            int clodBudget = PedTriangles + MaxCrumbCount * CrumbTriangles;
+            for (int patch = 0; patch < PatchCount && aggregates < MaxAggregates && triangles + clodBudget < MaxTriangles; patch++)
             {
-                // Elliptical patch placement with denser inner mass and uneven gaps at the edges.
-                float r = Mathf.Sqrt(rng.NextFloat()) * rng.Range(0.36f, 1.06f);
-                float a = rng.Range(0f, Mathf.Tau);
-                float localX = Mathf.Cos(a) * length * r;
-                float localZ = Mathf.Sin(a) * width * r;
-                double x = anchor.X + Math.Cos(axis) * localX - Math.Sin(axis) * localZ;
-                double z = anchor.Z + Math.Sin(axis) * localX + Math.Cos(axis) * localZ;
-                var center = new SimVec2(x, z);
-                float radius = rng.NextFloat() < 0.16f ? rng.Range(0.035f, 0.050f) : rng.Range(0.008f, 0.035f);
-                if (!Eligible(world, center, radius * 1.7, origin, halfExtent)) continue;
-                AddAggregate(meshBuilder, world, center, radius, ref rng, ref triangles);
-                aggregates++;
+                var anchor = new SimVec2(origin.X + rng.Range(-halfExtent * 0.77f, halfExtent * 0.77f), origin.Y + rng.Range(-halfExtent * 0.77f, halfExtent * 0.77f));
+                if (!Eligible(world, anchor, 0.12, origin, halfExtent)) continue;
+                patchesPlaced++;
+                float axis = rng.Range(0f, Mathf.Tau);
+                float patchScale = Math.Min(1f, halfExtent / BoardHalfExtent);
+                float length = rng.Range(0.22f, 0.48f) * patchScale;
+                float width = rng.Range(0.12f, 0.30f) * patchScale;
+                int count = rng.NextInt(8, 17);
+                for (int i = 0; i < count && aggregates < MaxAggregates && triangles + clodBudget < MaxTriangles; i++)
+                {
+                    // Elliptical patch placement with denser inner mass and uneven gaps at the edges.
+                    float r = Mathf.Sqrt(rng.NextFloat()) * rng.Range(0.36f, 1.06f);
+                    float a = rng.Range(0f, Mathf.Tau);
+                    float localX = Mathf.Cos(a) * length * r;
+                    float localZ = Mathf.Sin(a) * width * r;
+                    double x = anchor.X + Math.Cos(axis) * localX - Math.Sin(axis) * localZ;
+                    double z = anchor.Z + Math.Sin(axis) * localX + Math.Cos(axis) * localZ;
+                    var center = new SimVec2(x, z);
+                    float radius = rng.NextFloat() < 0.16f ? rng.Range(0.035f, 0.050f) : rng.Range(0.008f, 0.035f);
+                    if (!Eligible(world, center, radius * 1.7, origin, halfExtent)) continue;
+                    AddAggregate(meshBuilder, world, center, radius, ref rng, ref triangles);
+                    aggregates++;
+                    yield return true;
+                }
             }
-        }
 
-        root.SetMeta("seed", seed);
-        root.SetMeta("board_size_m", halfExtent * 2f);
-        root.SetMeta("patch_center_xz", origin);
-        root.SetMeta("patch_count", patchesPlaced);
-        root.SetMeta("aggregate_count", aggregates);
-        root.SetMeta("aggregate_cap", MaxAggregates);
-        root.SetMeta("aggregate_segments", PedSegments);
-        root.SetMeta("aggregate_rings", PedRings);
-        root.SetMeta("triangle_count", triangles);
-        root.SetMeta("triangle_cap", MaxTriangles);
-        if (aggregates > 0)
-        {
-            var mesh = meshBuilder.Commit();
-            mesh.SurfaceSetMaterial(0, material);
-            root.AddChild(new MeshInstance3D
+            root.SetMeta("seed", seed);
+            root.SetMeta("board_size_m", halfExtent * 2f);
+            root.SetMeta("patch_center_xz", origin);
+            root.SetMeta("patch_count", patchesPlaced);
+            root.SetMeta("aggregate_count", aggregates);
+            root.SetMeta("aggregate_cap", MaxAggregates);
+            root.SetMeta("aggregate_segments", PedSegments);
+            root.SetMeta("aggregate_rings", PedRings);
+            root.SetMeta("triangle_count", triangles);
+            root.SetMeta("triangle_cap", MaxTriangles);
+            if (aggregates > 0)
             {
-                Name = "UndercutLoamPeds",
-                Mesh = mesh,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
-            });
+                yield return true;
+                var mesh = meshBuilder.Commit();
+                mesh.SurfaceSetMaterial(0, material);
+                root.AddChild(new MeshInstance3D
+                {
+                    Name = "UndercutLoamPeds",
+                    Mesh = mesh,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+                });
+                yield return true;
+            }
+            // Ownership passes before invoking user code, which may attach the root and then throw.
+            transferred = true;
+            complete(root);
         }
-        return root;
+        finally
+        {
+            if (!transferred) root.Free();
+        }
     }
 
     /// <summary>Ground048 scan bound with normal, height and AO so the clod shell reads as mineral soil.</summary>

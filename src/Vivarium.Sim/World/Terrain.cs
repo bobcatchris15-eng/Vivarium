@@ -95,12 +95,23 @@ public sealed class Heightfield
                 dd = Vec2.Distance(p, a + ab * clampedAlong) / f.Width;
                 floor += ((f.ToBedHeight ?? floor) - floor) * clampedAlong;
             }
-            else if (f.Type == "basin") dd = Vec2.Distance(p, new Vec2(f.X, f.Z)) / f.Radius;
+            else if (f.Type == "basin")
+            {
+                double dx = p.X - f.X, dz = p.Z - f.Z;
+                double angle = Math.Atan2(dz, dx);
+                double outline = f.BasinOutline switch
+                {
+                    "bean" => 1 + .27 * Math.Cos(2 * angle) + .16 * Math.Sin(angle),
+                    "lobed" => 1 + .22 * Math.Cos(3 * angle + .4),
+                    _ => 1
+                };
+                dd = Math.Sqrt(dx * dx + dz * dz) / (f.Radius * outline);
+            }
             else continue;
             if (dd >= 1) continue;
             double shape = f.Type == "basin" ? Math.Abs(f.Amount) * dd * dd : .008 * dd * dd;
-            double shoulder = MathD.Clamp01((dd - .35) / .65);
-            double blend = f.Sharp ? 1 : 1 - shoulder * shoulder * (3 - 2 * shoulder);
+            double shoulder = f.Sharp ? MathD.Clamp01((dd - .80) / .20) : MathD.Clamp01((dd - .35) / .65);
+            double blend = 1 - shoulder * shoulder * (3 - 2 * shoulder);
             h = Math.Min(h, bank + (floor + shape - bank) * blend);
         }
         // soft clamp: compress smoothly within 15 cm of the limits, then hard-clamp

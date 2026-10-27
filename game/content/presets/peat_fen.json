@@ -48,194 +48,480 @@
       {
         "type": "basin",
         "x": 2.1,
-        "z": 0.0,
+        "z": 0,
         "radius": 1.1,
         "amount": 0.06,
         "bedHeight": -0.025
       },
       {
         "type": "basin",
-        "x": -0.8,
-        "z": -0.427,
-        "radius": 1.493,
-        "amount": 0.12,
-        "bedHeight": 0.0638
+        "x": -1.40912,
+        "z": -0.70554,
+        "radius": 0.55,
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": 0.16488,
+        "basinOutline": "bean"
       },
       {
         "type": "basin",
-        "x": 0.96,
-        "z": -0.213,
-        "radius": 1.387,
-        "amount": 0.12,
-        "bedHeight": -0.06
+        "x": -0.90044,
+        "z": -0.09959,
+        "radius": 0.65,
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": 0.13578,
+        "basinOutline": "lobed"
       },
       {
         "type": "basin",
-        "x": -1.35,
-        "z": -0.9,
+        "x": 0.08828,
+        "z": -0.28145,
         "radius": 0.6,
-        "amount": 0.1,
-        "bedHeight": 0.1038
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": 0.11763,
+        "basinOutline": "bean"
       },
       {
         "type": "basin",
-        "x": 0.1,
-        "z": -0.32,
+        "x": 1.05619,
+        "z": -0.52642,
         "radius": 0.65,
-        "amount": 0.1,
-        "bedHeight": 0.0238
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": 0.00174,
+        "basinOutline": "lobed"
       },
       {
         "type": "basin",
-        "x": 1.85,
-        "z": -0.1,
-        "radius": 0.65,
-        "amount": 0.1,
-        "bedHeight": -0.1
+        "x": 1.90912,
+        "z": -0.29446,
+        "radius": 0.55,
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": -0.24057,
+        "basinOutline": "bean"
       },
       {
         "type": "channel",
         "x": -2.027,
         "z": -1.387,
-        "toX": -1.7,
-        "toZ": -1.15,
+        "toX": -1.92099,
+        "toZ": -1.30161,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.163,
-        "toBedHeight": 0.1188
+        "bedHeight": 0.18743,
+        "toBedHeight": 0.18219
       },
       {
         "type": "channel",
-        "x": -1.7,
-        "z": -1.15,
-        "toX": -1.35,
-        "toZ": -0.9,
+        "x": -1.92099,
+        "z": -1.30161,
+        "toX": -1.81891,
+        "toZ": -1.20299,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.1188,
-        "toBedHeight": 0.1038
+        "bedHeight": 0.18219,
+        "toBedHeight": 0.1771
       },
       {
         "type": "channel",
-        "x": -1.35,
-        "z": -0.9,
-        "toX": -1.05,
-        "toZ": -0.65,
+        "x": -1.81891,
+        "z": -1.20299,
+        "toX": -1.71786,
+        "toZ": -1.09125,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.1038,
-        "toBedHeight": 0.0788
+        "bedHeight": 0.1771,
+        "toBedHeight": 0.17348
       },
       {
         "type": "channel",
-        "x": -1.05,
-        "z": -0.65,
-        "toX": -0.8,
-        "toZ": -0.427,
+        "x": -1.71786,
+        "z": -1.09125,
+        "toX": -1.61346,
+        "toZ": -0.96807,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.17348,
+        "toBedHeight": 0.17062
+      },
+      {
+        "type": "channel",
+        "x": -1.61346,
+        "z": -0.96807,
+        "toX": -1.5082,
+        "toZ": -0.83775,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.17062,
+        "toBedHeight": 0.16771
+      },
+      {
+        "type": "channel",
+        "x": -1.5082,
+        "z": -0.83775,
+        "toX": -1.40912,
+        "toZ": -0.70554,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.16771,
+        "toBedHeight": 0.16488
+      },
+      {
+        "type": "channel",
+        "x": -1.40912,
+        "z": -0.70554,
+        "toX": -1.31757,
+        "toZ": -0.57492,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.16488,
+        "toBedHeight": 0.16107
+      },
+      {
+        "type": "channel",
+        "x": -1.31757,
+        "z": -0.57492,
+        "toX": -1.22973,
+        "toZ": -0.45039,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.16107,
+        "toBedHeight": 0.15504
+      },
+      {
+        "type": "channel",
+        "x": -1.22973,
+        "z": -0.45039,
+        "toX": -1.14451,
+        "toZ": -0.33912,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.15504,
+        "toBedHeight": 0.15254
+      },
+      {
+        "type": "channel",
+        "x": -1.14451,
+        "z": -0.33912,
+        "toX": -1.03416,
+        "toZ": -0.19933,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.15254,
+        "toBedHeight": 0.1391
+      },
+      {
+        "type": "channel",
+        "x": -1.03416,
+        "z": -0.19933,
+        "toX": -0.90044,
+        "toZ": -0.09959,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.1391,
+        "toBedHeight": 0.13578
+      },
+      {
+        "type": "channel",
+        "x": -0.90044,
+        "z": -0.09959,
+        "toX": -0.76099,
+        "toZ": -0.08468,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.13578,
+        "toBedHeight": 0.13302
+      },
+      {
+        "type": "channel",
+        "x": -0.76099,
+        "z": -0.08468,
+        "toX": -0.59439,
+        "toZ": -0.10495,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.13302,
+        "toBedHeight": 0.12986
+      },
+      {
+        "type": "channel",
+        "x": -0.59439,
+        "z": -0.10495,
+        "toX": -0.42317,
+        "toZ": -0.13932,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.12986,
+        "toBedHeight": 0.12671
+      },
+      {
+        "type": "channel",
+        "x": -0.42317,
+        "z": -0.13932,
+        "toX": -0.25537,
+        "toZ": -0.17828,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.12671,
+        "toBedHeight": 0.12368
+      },
+      {
+        "type": "channel",
+        "x": -0.25537,
+        "z": -0.17828,
+        "toX": -0.08451,
+        "toZ": -0.2261,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.12368,
+        "toBedHeight": 0.12065
+      },
+      {
+        "type": "channel",
+        "x": -0.08451,
+        "z": -0.2261,
+        "toX": 0.08828,
+        "toZ": -0.28145,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.12065,
+        "toBedHeight": 0.11763
+      },
+      {
+        "type": "channel",
+        "x": 0.08828,
+        "z": -0.28145,
+        "toX": 0.26322,
+        "toZ": -0.34155,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.11763,
+        "toBedHeight": 0.11458
+      },
+      {
+        "type": "channel",
+        "x": 0.26322,
+        "z": -0.34155,
+        "toX": 0.43751,
+        "toZ": -0.4005,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.11458,
+        "toBedHeight": 0.04712
+      },
+      {
+        "type": "channel",
+        "x": 0.43751,
+        "z": -0.4005,
+        "toX": 0.60537,
+        "toZ": -0.45212,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.04712,
+        "toBedHeight": 0.01003
+      },
+      {
+        "type": "channel",
+        "x": 0.60537,
+        "z": -0.45212,
+        "toX": 0.75987,
+        "toZ": -0.49138,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.01003,
+        "toBedHeight": 0.00727
+      },
+      {
+        "type": "channel",
+        "x": 0.75987,
+        "z": -0.49138,
+        "toX": 0.90589,
+        "toZ": -0.51655,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.00727,
+        "toBedHeight": 0.00459
+      },
+      {
+        "type": "channel",
+        "x": 0.90589,
+        "z": -0.51655,
+        "toX": 1.05619,
+        "toZ": -0.52642,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.00459,
+        "toBedHeight": 0.00174
+      },
+      {
+        "type": "channel",
+        "x": 1.05619,
+        "z": -0.52642,
+        "toX": 1.22114,
+        "toZ": -0.52001,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.00174,
+        "toBedHeight": -0.0015
+      },
+      {
+        "type": "channel",
+        "x": 1.22114,
+        "z": -0.52001,
+        "toX": 1.39016,
+        "toZ": -0.49747,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.0015,
+        "toBedHeight": -0.00492
+      },
+      {
+        "type": "channel",
+        "x": 1.39016,
+        "z": -0.49747,
+        "toX": 1.54451,
+        "toZ": -0.46088,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.00492,
+        "toBedHeight": -0.23251
+      },
+      {
+        "type": "channel",
+        "x": 1.54451,
+        "z": -0.46088,
+        "toX": 1.67533,
+        "toZ": -0.41331,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.23251,
+        "toBedHeight": -0.23533
+      },
+      {
+        "type": "channel",
+        "x": 1.67533,
+        "z": -0.41331,
+        "toX": 1.79317,
+        "toZ": -0.35698,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.23533,
+        "toBedHeight": -0.23795
+      },
+      {
+        "type": "channel",
+        "x": 1.79317,
+        "z": -0.35698,
+        "toX": 1.90912,
+        "toZ": -0.29446,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.23795,
+        "toBedHeight": -0.24057
+      },
+      {
+        "type": "channel",
+        "x": 1.90912,
+        "z": -0.29446,
+        "toX": 2.0259,
+        "toZ": -0.23125,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.24057,
+        "toBedHeight": -0.24322
+      },
+      {
+        "type": "channel",
+        "x": 2.0259,
+        "z": -0.23125,
+        "toX": 2.14326,
+        "toZ": -0.16993,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.24322,
+        "toBedHeight": -0.24587
+      },
+      {
+        "type": "channel",
+        "x": 2.14326,
+        "z": -0.16993,
+        "toX": 2.26786,
+        "toZ": -0.10875,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.24587,
+        "toBedHeight": -0.24864
+      },
+      {
+        "type": "channel",
+        "x": 2.26786,
+        "z": -0.10875,
+        "toX": 2.40451,
+        "toZ": -0.04741,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.24864,
+        "toBedHeight": -0.25162
+      },
+      {
+        "type": "channel",
+        "x": 2.40451,
+        "z": -0.04741,
+        "toX": 2.55019,
+        "toZ": 0.00791,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.0788,
-        "toBedHeight": 0.0638
+        "bedHeight": -0.25162,
+        "toBedHeight": -0.25474
       },
       {
         "type": "channel",
-        "x": -0.8,
-        "z": -0.427,
-        "toX": -0.35,
-        "toZ": -0.38,
-        "width": 0.2,
-        "amount": 0.18,
-        "sharp": true,
-        "bedHeight": 0.0638,
-        "toBedHeight": 0.0388
-      },
-      {
-        "type": "channel",
-        "x": -0.35,
-        "z": -0.38,
-        "toX": 0.1,
-        "toZ": -0.32,
-        "width": 0.2,
-        "amount": 0.18,
-        "sharp": true,
-        "bedHeight": 0.0388,
-        "toBedHeight": 0.0238
-      },
-      {
-        "type": "channel",
-        "x": 0.1,
-        "z": -0.32,
-        "toX": 0.55,
-        "toZ": -0.27,
-        "width": 0.2,
-        "amount": 0.18,
-        "sharp": true,
-        "bedHeight": 0.0238,
-        "toBedHeight": -0.0012
-      },
-      {
-        "type": "channel",
-        "x": 0.55,
-        "z": -0.27,
-        "toX": 0.96,
-        "toZ": -0.213,
-        "width": 0.2,
-        "amount": 0.18,
-        "sharp": true,
-        "bedHeight": -0.0012,
-        "toBedHeight": -0.06
-      },
-      {
-        "type": "channel",
-        "x": 0.96,
-        "z": -0.213,
-        "toX": 1.45,
-        "toZ": -0.15,
-        "width": 0.2,
-        "amount": 0.18,
-        "sharp": true,
-        "bedHeight": -0.06,
-        "toBedHeight": -0.085
-      },
-      {
-        "type": "channel",
-        "x": 1.45,
-        "z": -0.15,
-        "toX": 1.85,
-        "toZ": -0.1,
-        "width": 0.2,
-        "amount": 0.18,
-        "sharp": true,
-        "bedHeight": -0.085,
-        "toBedHeight": -0.1
-      },
-      {
-        "type": "channel",
-        "x": 1.85,
-        "z": -0.1,
-        "toX": 2.25,
-        "toZ": -0.05,
-        "width": 0.2,
-        "amount": 0.18,
-        "sharp": true,
-        "bedHeight": -0.1,
-        "toBedHeight": -0.125
-      },
-      {
-        "type": "channel",
-        "x": 2.25,
-        "z": -0.05,
+        "x": 2.55019,
+        "z": 0.00791,
         "toX": 2.7,
         "toZ": 0.05,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": -0.125,
-        "toBedHeight": -0.14
+        "bedHeight": -0.25474,
+        "toBedHeight": -0.25786
       }
     ]
   },
@@ -345,26 +631,26 @@
       "species": "dewbonnet",
       "count": 6
     },
-      {
+    {
       "species": "coalspike",
       "count": 5
-      },
-      {
+    },
+    {
       "species": "glasslily",
       "count": 2
-      },
-      {
+    },
+    {
       "species": "silverweed",
       "count": 3
-      },
-      {
+    },
+    {
       "species": "bonecup",
       "count": 3
-      },
-      {
+    },
+    {
       "species": "embercup",
       "count": 6
-      }
+    }
   ],
   "starterFauna": [
     {

@@ -25,7 +25,7 @@
       },
       {
         "type": "hill",
-        "x": 2.0,
+        "x": 2,
         "z": -1.25,
         "radius": 1.6,
         "amount": 0.5
@@ -56,167 +56,511 @@
       },
       {
         "type": "basin",
-        "x": -1.4,
-        "z": -1.15,
-        "radius": 0.6,
-        "amount": 0.12,
-        "bedHeight": 1.1961
+        "x": -1.46688,
+        "z": -1.10629,
+        "radius": 0.55,
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": 1.29139,
+        "basinOutline": "bean"
       },
       {
         "type": "basin",
-        "x": -0.65,
-        "z": -0.4,
-        "radius": 0.65,
-        "amount": 0.12,
-        "bedHeight": 0.7148
+        "x": -0.91684,
+        "z": -0.22563,
+        "radius": 0.6,
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": 0.67651,
+        "basinOutline": "lobed"
       },
       {
         "type": "basin",
-        "x": 0.15,
-        "z": 0.5,
-        "radius": 0.6,
-        "amount": 0.12,
-        "bedHeight": 0.5291
+        "x": 0.12173,
+        "z": 0.51847,
+        "radius": 0.55,
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": 0.52799,
+        "basinOutline": "bean"
       },
       {
         "type": "basin",
-        "x": 1.0,
-        "z": 2.4,
-        "radius": 0.6,
-        "amount": 0.12,
-        "bedHeight": -0.15
+        "x": 1.21977,
+        "z": 2.28906,
+        "radius": 0.55,
+        "amount": 0,
+        "sharp": true,
+        "bedHeight": -0.17188,
+        "basinOutline": "lobed"
       },
       {
         "type": "channel",
         "x": -1.9,
         "z": -1.6,
-        "toX": -1.65,
-        "toZ": -1.35,
+        "toX": -1.77954,
+        "toZ": -1.46893,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 1.6333,
-        "toBedHeight": 1.4727
+        "bedHeight": 1.57668,
+        "toBedHeight": 1.42666
       },
       {
         "type": "channel",
-        "x": -1.65,
-        "z": -1.35,
-        "toX": -1.4,
-        "toZ": -1.15,
+        "x": -1.77954,
+        "z": -1.46893,
+        "toX": -1.66786,
+        "toZ": -1.33833,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.42666,
+        "toBedHeight": 1.29779
+      },
+      {
+        "type": "channel",
+        "x": -1.66786,
+        "z": -1.33833,
+        "toX": -1.5703,
+        "toZ": -1.23065,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.29779,
+        "toBedHeight": 1.29476
+      },
+      {
+        "type": "channel",
+        "x": -1.5703,
+        "z": -1.23065,
+        "toX": -1.46688,
+        "toZ": -1.10629,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.29476,
+        "toBedHeight": 1.29139
+      },
+      {
+        "type": "channel",
+        "x": -1.46688,
+        "z": -1.10629,
+        "toX": -1.39199,
+        "toZ": -0.98135,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.29139,
+        "toBedHeight": 1.26676
+      },
+      {
+        "type": "channel",
+        "x": -1.39199,
+        "z": -0.98135,
+        "toX": -1.30857,
+        "toZ": -0.83803,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.26676,
+        "toBedHeight": 1.14912
+      },
+      {
+        "type": "channel",
+        "x": -1.30857,
+        "z": -0.83803,
+        "toX": -1.21977,
+        "toZ": -0.68906,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.14912,
+        "toBedHeight": 1.02353
+      },
+      {
+        "type": "channel",
+        "x": -1.21977,
+        "z": -0.68906,
+        "toX": -1.15637,
+        "toZ": -0.57213,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 1.02353,
+        "toBedHeight": 0.68511
+      },
+      {
+        "type": "channel",
+        "x": -1.15637,
+        "z": -0.57213,
+        "toX": -1.08455,
+        "toZ": -0.45506,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.68511,
+        "toBedHeight": 0.6823
+      },
+      {
+        "type": "channel",
+        "x": -1.08455,
+        "z": -0.45506,
+        "toX": -1.00456,
+        "toZ": -0.33914,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.6823,
+        "toBedHeight": 0.67942
+      },
+      {
+        "type": "channel",
+        "x": -1.00456,
+        "z": -0.33914,
+        "toX": -0.91684,
+        "toZ": -0.22563,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.67942,
+        "toBedHeight": 0.67651
+      },
+      {
+        "type": "channel",
+        "x": -0.91684,
+        "z": -0.22563,
+        "toX": -0.82055,
+        "toZ": -0.11421,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.67651,
+        "toBedHeight": 0.67355
+      },
+      {
+        "type": "channel",
+        "x": -0.82055,
+        "z": -0.11421,
+        "toX": -0.71369,
+        "toZ": -0.00579,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.67355,
+        "toBedHeight": 0.67053
+      },
+      {
+        "type": "channel",
+        "x": -0.71369,
+        "z": -0.00579,
+        "toX": -0.59605,
+        "toZ": 0.09708,
+        "width": 0.3,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.67053,
+        "toBedHeight": 0.66749
+      },
+      {
+        "type": "channel",
+        "x": -0.59605,
+        "z": 0.09708,
+        "toX": -0.468,
+        "toZ": 0.19245,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 1.4727,
-        "toBedHeight": 1.1961
+        "bedHeight": 0.66749,
+        "toBedHeight": 0.66447
       },
       {
         "type": "channel",
-        "x": -1.4,
-        "z": -1.15,
-        "toX": -1.05,
-        "toZ": -0.8,
+        "x": -0.468,
+        "z": 0.19245,
+        "toX": -0.32929,
+        "toZ": 0.27575,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 1.1961,
-        "toBedHeight": 0.9902
+        "bedHeight": 0.66447,
+        "toBedHeight": 0.54023
       },
       {
         "type": "channel",
-        "x": -1.05,
-        "z": -0.8,
-        "toX": -0.65,
-        "toZ": -0.4,
+        "x": -0.32929,
+        "z": 0.27575,
+        "toX": -0.18193,
+        "toZ": 0.35073,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.54023,
+        "toBedHeight": 0.53417
+      },
+      {
+        "type": "channel",
+        "x": -0.18193,
+        "z": 0.35073,
+        "toX": -0.03003,
+        "toZ": 0.42798,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.53417,
+        "toBedHeight": 0.53118
+      },
+      {
+        "type": "channel",
+        "x": -0.03003,
+        "z": 0.42798,
+        "toX": 0.12173,
+        "toZ": 0.51847,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.53118,
+        "toBedHeight": 0.52799
+      },
+      {
+        "type": "channel",
+        "x": 0.12173,
+        "z": 0.51847,
+        "toX": 0.25227,
+        "toZ": 0.59873,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.52799,
+        "toBedHeight": 0.52522
+      },
+      {
+        "type": "channel",
+        "x": 0.25227,
+        "z": 0.59873,
+        "toX": 0.37953,
+        "toZ": 0.69102,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.52522,
+        "toBedHeight": 0.52228
+      },
+      {
+        "type": "channel",
+        "x": 0.37953,
+        "z": 0.69102,
+        "toX": 0.50103,
+        "toZ": 0.79217,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": 0.52228,
+        "toBedHeight": 0.51924
+      },
+      {
+        "type": "channel",
+        "x": 0.50103,
+        "z": 0.79217,
+        "toX": 0.61449,
+        "toZ": 0.89885,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.9902,
-        "toBedHeight": 0.7148
+        "bedHeight": 0.51924,
+        "toBedHeight": 0.40409
       },
       {
         "type": "channel",
-        "x": -0.65,
-        "z": -0.4,
-        "toX": -0.25,
-        "toZ": 0.05,
+        "x": 0.61449,
+        "z": 0.89885,
+        "toX": 0.718,
+        "toZ": 1.00755,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.7148,
-        "toBedHeight": 0.6798
+        "bedHeight": 0.40409,
+        "toBedHeight": 0.25707
       },
       {
         "type": "channel",
-        "x": -0.25,
-        "z": 0.05,
-        "toX": 0.15,
-        "toZ": 0.5,
+        "x": 0.718,
+        "z": 1.00755,
+        "toX": 0.82575,
+        "toZ": 1.15292,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.6798,
-        "toBedHeight": 0.5291
+        "bedHeight": 0.25707,
+        "toBedHeight": 0.10127
       },
       {
         "type": "channel",
-        "x": 0.15,
-        "z": 0.5,
-        "toX": 0.45,
-        "toZ": 1.2,
+        "x": 0.82575,
+        "z": 1.15292,
+        "toX": 0.91989,
+        "toZ": 1.30579,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.5291,
-        "toBedHeight": 0.4941
+        "bedHeight": 0.10127,
+        "toBedHeight": 0.00544
       },
       {
         "type": "channel",
-        "x": 0.45,
-        "z": 1.2,
-        "toX": 0.7,
-        "toZ": 2.05,
+        "x": 0.91989,
+        "z": 1.30579,
+        "toX": 1.00025,
+        "toZ": 1.46421,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.4941,
-        "toBedHeight": 0.0195
+        "bedHeight": 0.00544,
+        "toBedHeight": -0.0135
       },
       {
         "type": "channel",
-        "x": 0.7,
-        "z": 2.05,
-        "toX": 1.0,
-        "toZ": 2.4,
+        "x": 1.00025,
+        "z": 1.46421,
+        "toX": 1.06684,
+        "toZ": 1.62563,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": 0.0195,
-        "toBedHeight": -0.15
+        "bedHeight": -0.0135,
+        "toBedHeight": -0.02033
       },
       {
         "type": "channel",
-        "x": 1.0,
-        "z": 2.4,
-        "toX": 1.2,
-        "toZ": 2.85,
+        "x": 1.06684,
+        "z": 1.62563,
+        "toX": 1.12056,
+        "toZ": 1.78914,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": -0.15,
-        "toBedHeight": -0.185
+        "bedHeight": -0.02033,
+        "toBedHeight": -0.0237
       },
       {
         "type": "channel",
-        "x": 1.2,
-        "z": 2.85,
+        "x": 1.12056,
+        "z": 1.78914,
+        "toX": 1.16265,
+        "toZ": 1.95496,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.0237,
+        "toBedHeight": -0.16554
+      },
+      {
+        "type": "channel",
+        "x": 1.16265,
+        "z": 1.95496,
+        "toX": 1.19507,
+        "toZ": 2.12213,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.16554,
+        "toBedHeight": -0.16875
+      },
+      {
+        "type": "channel",
+        "x": 1.19507,
+        "z": 2.12213,
+        "toX": 1.21977,
+        "toZ": 2.28906,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.16875,
+        "toBedHeight": -0.17188
+      },
+      {
+        "type": "channel",
+        "x": 1.21977,
+        "z": 2.28906,
+        "toX": 1.23917,
+        "toZ": 2.45433,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.17188,
+        "toBedHeight": -0.17493
+      },
+      {
+        "type": "channel",
+        "x": 1.23917,
+        "z": 2.45433,
+        "toX": 1.25559,
+        "toZ": 2.61625,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.17493,
+        "toBedHeight": -0.19804
+      },
+      {
+        "type": "channel",
+        "x": 1.25559,
+        "z": 2.61625,
+        "toX": 1.27158,
+        "toZ": 2.77349,
+        "width": 0.28,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.19804,
+        "toBedHeight": -0.21891
+      },
+      {
+        "type": "channel",
+        "x": 1.27158,
+        "z": 2.77349,
+        "toX": 1.2891,
+        "toZ": 2.92445,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.21891,
+        "toBedHeight": -0.22879
+      },
+      {
+        "type": "channel",
+        "x": 1.2891,
+        "z": 2.92445,
+        "toX": 1.32156,
+        "toZ": 3.10873,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.22879,
+        "toBedHeight": -0.23799
+      },
+      {
+        "type": "channel",
+        "x": 1.32156,
+        "z": 3.10873,
+        "toX": 1.35644,
+        "toZ": 3.28223,
+        "width": 0.2,
+        "amount": 0.18,
+        "sharp": true,
+        "bedHeight": -0.23799,
+        "toBedHeight": -0.24325
+      },
+      {
+        "type": "channel",
+        "x": 1.35644,
+        "z": 3.28223,
         "toX": 1.4,
         "toZ": 3.45,
         "width": 0.2,
         "amount": 0.18,
         "sharp": true,
-        "bedHeight": -0.185,
-        "toBedHeight": -0.2
+        "bedHeight": -0.24325,
+        "toBedHeight": -0.24668
       }
     ]
   },
@@ -338,26 +682,26 @@
       "species": "glass_antlers",
       "count": 6
     },
-      {
+    {
       "species": "hollowcrown",
       "count": 2
-      },
-      {
+    },
+    {
       "species": "marrowbloom",
       "count": 5
-      },
-      {
+    },
+    {
       "species": "embercup",
       "count": 7
-      },
-      {
+    },
+    {
       "species": "bonecup",
       "count": 3
-      },
-      {
+    },
+    {
       "species": "silverweed",
       "count": 2
-      }
+    }
   ],
   "starterFauna": [
     {

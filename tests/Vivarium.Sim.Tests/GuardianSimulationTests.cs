@@ -20,6 +20,7 @@ public class GuardianSimulationTests
         {
             var descriptor = Content.PresetOrThrow("default").Clone();
             descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            descriptor.GuardianId = def.Id;
             var world = VivariumWorld.Create(Content, descriptor);
             var guardian = world.Guardian!;
             Assert.False(world.PilotTree!.BlocksTrunk(guardian.PositionXZ, 0.35));
@@ -47,6 +48,7 @@ public class GuardianSimulationTests
         {
             var descriptor = Content.PresetOrThrow("default").Clone();
             descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            descriptor.GuardianId = def.Id;
             var world = VivariumWorld.Create(Content, descriptor);
             var g = world.Guardian!;
             g.X = 0; g.Z = 0; g.Heading = 0;
@@ -65,6 +67,7 @@ public class GuardianSimulationTests
     {
         var descriptor = Content.PresetOrThrow("default").Clone();
         descriptor.PilotTreeId = "basinwarden";
+        descriptor.GuardianId = GuardianCatalog.Woodland;
         var world = VivariumWorld.Create(Content, descriptor);
         var guardian = world.Guardian!;
         guardian.X = world.PilotTree!.Anchor.X;
@@ -116,6 +119,7 @@ public class GuardianSimulationTests
     {
         var d = Content.PresetOrThrow("default").Clone();
         d.PilotTreeId = "basinwarden"; // broadleaf -> coati
+        d.GuardianId = GuardianCatalog.Woodland;
         var w = VivariumWorld.Create(Content, d);
         Assert.NotNull(w.Guardian);
 
@@ -148,7 +152,7 @@ public class GuardianSimulationTests
     {
         foreach (var def in GuardianCatalog.All)
         {
-            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId;
+            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId; d.GuardianId = def.Id;
             var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
             g.Position = new Vec3(0, w.GroundHeight(Vec2.Zero), 0);
             g.TargetPosition = new Vec3(.35, w.GroundHeight(new Vec2(.35, 0)), 0);
@@ -170,7 +174,7 @@ public class GuardianSimulationTests
     {
         foreach (var def in GuardianCatalog.All)
         {
-            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId;
+            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId; d.GuardianId = def.Id;
             var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
             int target = w.Grid.NearestDomainCell(Vec2.Zero); var center = w.Grid.CellCenter(target);
             var position = new Vec2(center.X - .14, center.Z);
@@ -191,7 +195,7 @@ public class GuardianSimulationTests
     [Fact]
     public void FeedingTurnsTowardFoodBeforeConsumption()
     {
-        var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = "basinwarden";
+        var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = "basinwarden"; d.GuardianId = GuardianCatalog.Woodland;
         var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
         g.Position = new Vec3(0, w.GroundHeight(Vec2.Zero), 0);
         g.TargetPosition = new Vec3(.1, w.GroundHeight(new Vec2(.1, 0)), 0);
@@ -210,6 +214,7 @@ public class GuardianSimulationTests
     {
         var d = Content.PresetOrThrow("default").Clone();
         d.PilotTreeId = "basinwarden";
+        d.GuardianId = GuardianCatalog.Woodland;
         var w = VivariumWorld.Create(Content, d);
         var g = w.Guardian!;
 
@@ -232,5 +237,93 @@ public class GuardianSimulationTests
 
         Assert.Empty(g.PendingSeeds);
         Assert.True(w.SeedBank.Lots.Count > initialSeedLots || w.Tally.SeedsDeposited > 0);
+    }
+
+    [Fact]
+    public void GuardianCanSpawnWithoutPilotTree()
+    {
+        var d = Content.PresetOrThrow("default").Clone();
+        d.PilotTreeId = "none";
+        d.GuardianId = GuardianCatalog.ArmoredForest;
+
+        var w = VivariumWorld.Create(Content, d);
+        Assert.Null(w.PilotTree);
+        Assert.NotNull(w.Guardian);
+        Assert.Equal(GuardianCatalog.ArmoredForest, w.Guardian.ArchetypeId);
+        Assert.NotNull(w.GuardianSystem.Habitat);
+        Assert.True(w.Domain.Contains(w.Guardian.PositionXZ));
+
+        // Step behavior to ensure no crashes without pilot tree
+        w.GuardianSystem.StepBehaviour(10.0);
+        Assert.True(w.Domain.Contains(w.Guardian.PositionXZ));
+    }
+
+    [Fact]
+    public void PilotTreeCanSpawnWithoutGuardian()
+    {
+        var d = Content.PresetOrThrow("default").Clone();
+        d.PilotTreeId = "gloomspire";
+        d.GuardianId = "none";
+
+        var w = VivariumWorld.Create(Content, d);
+        Assert.NotNull(w.PilotTree);
+        Assert.Null(w.Guardian);
+        Assert.Equal("gloomspire", w.PilotTree.Def.Id);
+    }
+
+    [Fact]
+    public void GuardianAndPilotTreeCanBeDifferentArchetypes()
+    {
+        var d = Content.PresetOrThrow("default").Clone();
+        d.PilotTreeId = "emberpillar"; // redwood
+        d.GuardianId = GuardianCatalog.CrestedCanopy; // hoatzin, usually with cycad
+
+        var w = VivariumWorld.Create(Content, d);
+        Assert.NotNull(w.PilotTree);
+        Assert.NotNull(w.Guardian);
+        Assert.Equal("emberpillar", w.PilotTree.Def.Id);
+        Assert.Equal(GuardianCatalog.CrestedCanopy, w.Guardian.ArchetypeId);
+        Assert.Equal("emberpillar", w.Guardian.HomeTreeId);
+    }
+
+    [Fact]
+    public void GuardianCanBeRandomIndependently()
+    {
+        var d1 = Content.PresetOrThrow("default").Clone();
+        d1.Seed = 12345678;
+        d1.PilotTreeId = "none";
+        d1.GuardianId = "random";
+
+        var w1 = VivariumWorld.Create(Content, d1);
+        Assert.Null(w1.PilotTree);
+        Assert.NotNull(w1.Guardian);
+        Assert.NotNull(GuardianCatalog.Find(w1.Guardian.ArchetypeId));
+
+        // Same seed produces same guardian
+        var d2 = Content.PresetOrThrow("default").Clone();
+        d2.Seed = 12345678;
+        d2.PilotTreeId = "gloomspire";
+        d2.GuardianId = "random";
+
+        var w2 = VivariumWorld.Create(Content, d2);
+        Assert.NotNull(w2.Guardian);
+        Assert.Equal(w1.Guardian.ArchetypeId, w2.Guardian.ArchetypeId);
+    }
+
+    [Fact]
+    public void LegacyAutoGuardianOptionResolvesToPilotTreeAssociatedGuardian()
+    {
+        var d1 = Content.PresetOrThrow("default").Clone();
+        d1.PilotTreeId = "crowncoil";
+        d1.GuardianId = "auto";
+        var w1 = VivariumWorld.Create(Content, d1);
+        Assert.NotNull(w1.Guardian);
+        Assert.Equal(GuardianCatalog.CrestedCanopy, w1.Guardian.ArchetypeId);
+
+        var d2 = Content.PresetOrThrow("default").Clone();
+        d2.PilotTreeId = "none";
+        d2.GuardianId = "auto";
+        var w2 = VivariumWorld.Create(Content, d2);
+        Assert.Null(w2.Guardian);
     }
 }

@@ -10,11 +10,13 @@ namespace Vivarium.Sim.Geometry;
 public static class TerrainMesh
 {
     /// <summary>
-    /// Subdivided authoritative terrain triangles. Geometry must match the fluid support exactly:
-    /// millimetre films cannot tolerate centimetre smoothing offsets or different diagonals.
+    /// Subdivided terrain triangles. In physical mode (renderSmoothing = false), geometry matches
+    /// fluid support exactly (< 2 µm). In render mode (renderSmoothing = true), bicubic Catmull-Rom
+    /// smoothing plus micro-relief hummocks (±3.5 mm) eliminate polygonal facet lines.
+
     /// Smooth normals soften lighting without moving the contact surface.
     /// </summary>
-    public static TopMesh BuildTop(VivariumWorld w)
+    public static TopMesh BuildTop(VivariumWorld w, bool renderSmoothing = true)
     {
         var hf = w.Terrain;
         var dom = w.Domain;
@@ -31,8 +33,8 @@ public static class TerrainMesh
         int Vertex(Vec2 p, int key = -1)
         {
             if (key >= 0 && shared.TryGetValue(key, out int existing)) return existing;
-            double h = RenderHeight(hf, p);
-            var n = RenderNormal(hf, p);
+            double h = renderSmoothing ? RenderHeight(hf, p) : hf.Height(p);
+            var n = renderSmoothing ? RenderNormal(hf, p) : hf.Normal(p);
             int idx = mesh.AddVertex(new Vec3(p.X, h, p.Z), n, 0.4, 0.3, 0.2, 1, p.X, p.Z);
             xz.Add(p);
             if (key >= 0) shared[key] = idx;
@@ -65,8 +67,9 @@ public static class TerrainMesh
     }
 
     /// <summary>The visible bed evaluates C1-continuous bicubic height with subtle micro-relief hummocks.</summary>
-    public static double RenderHeight(Heightfield hf, Vec2 p)
+    public static double RenderHeight(Heightfield hf, Vec2 p, bool smooth = true)
     {
+        if (!smooth) return hf.Height(p);
         double fx = (p.X - hf.OriginX) / hf.Step;
         double fz = (p.Z - hf.OriginZ) / hf.Step;
         int i = (int)Math.Floor(fx);

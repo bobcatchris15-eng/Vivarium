@@ -40,9 +40,37 @@ public partial class IslandRenderer : Node3D
     private byte[] _coverBytes = System.Array.Empty<byte>();
     private int[] _coverCount = System.Array.Empty<int>();
     private Vector4 _fieldRect;
+    /// <summary>Share the live habitat image; updates change colour without rebuilding consumers' geometry.</summary>
+    public void BindHabitatMaterial(ShaderMaterial material)
+    {
+        material.SetShaderParameter("field_tex", _fieldTex);
+        material.SetShaderParameter("field_rect", _fieldRect);
+    }
     /// <summary>Other materials (log bark) that read cover_tex/field_rect; refreshed with the field textures.</summary>
     public static readonly System.Collections.Generic.List<ShaderMaterial> CoverMaskConsumers = new();
     public int OverlayMode { get; set; }
+    private int _lastOverlayMode = -1;
+    private float _lastWaterTable = float.NaN;
+    public static void RegisterCoverMaskConsumer(ShaderMaterial mat)
+    {
+        if (mat != null && !CoverMaskConsumers.Contains(mat))
+            CoverMaskConsumers.Add(mat);
+    }
+    public static void UnregisterCoverMaskConsumer(ShaderMaterial mat)
+    {
+        if (mat != null)
+            CoverMaskConsumers.Remove(mat);
+    }
+    public void RefreshMaterialBindings()
+    {
+        foreach (var m in CoverMaskConsumers)
+        {
+            if (m == null) continue;
+            m.SetShaderParameter("cover_tex", _coverTex);
+            m.SetShaderParameter("field_rect", _fieldRect);
+            m.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
+        }
+    }
     private ShaderMaterial _strataMat = null!;
     private MeshInstance3D _top = null!, _walls = null!;
     private int _terrainVersion;
@@ -50,6 +78,10 @@ public partial class IslandRenderer : Node3D
     private double _sinceMeshBuild;
     private byte[] _cachedSubstrate = Array.Empty<byte>();
     private int _materialTerrainVersion = -1, _materialPropsVersion = -1;
+    public long GravelMaskBuilds { get; private set; }
+    public long GravelMaskReuses { get; private set; }
+    public long GravelMaskAuditedPixels { get; private set; }
+    public long GravelMaskAuditDifferences { get; private set; }
     private void CacheSubstrate()
     {
         if (_cachedSubstrate.Length == _w.Grid.Count && _materialTerrainVersion == _w.Terrain.Version && _materialPropsVersion == _w.Props.Version) return;
@@ -176,20 +208,37 @@ public partial class IslandRenderer : Node3D
         // sculpting: follow the heightfield at up to ~12 rebuilds per second
         if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08)
         {
-            BuildMeshes();
-            UpdateFieldTexture(true);
+            using (FrameProfiler.Measure("Island.MeshBuild"))
+            {
+                BuildMeshes();
+                UpdateFieldTexture(true);
+            }
         }
-        _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
-        _terrainMat.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
-        _strataMat.SetShaderParameter("water_table", (float)_w.Water.WaterTable);
+        using (FrameProfiler.Measure("Island.ShaderParams"))
+        {
+            if (OverlayMode != _lastOverlayMode)
+            {
+                _lastOverlayMode = OverlayMode;
+                _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
+            }
+            float wt = (float)_w.Water.WaterTable;
+            if (wt != _lastWaterTable)
+            {
+                _lastWaterTable = wt;
+                _terrainMat.SetShaderParameter("water_table", wt);
+                _strataMat.SetShaderParameter("water_table", wt);
+            }
+        }
         bool propsDirty = _propsVersion != _w.Props.Version;
-        if (!propsDirty && _accum < 1.5) return;
+        if (!propsDirty && _accum < 15.0) return;
         _accum = 0;
-        UpdateFieldTexture(true);
+        using (FrameProfiler.Measure("Island.FieldTexture"))
+            UpdateFieldTexture(updateSubstrate: propsDirty);
     }
 
     private void UpdateCoverMask()
     {
+        using var pMask = FrameProfiler.Measure("Island.CoverMask");
         var g = _w.Grid;
         int subNx = g.Nx * 4, subNz = g.Nz * 4;
         if (_coverCount.Length != subNx * subNz)
@@ -203,6 +252,7 @@ public partial class IslandRenderer : Node3D
         foreach (var layer in new[] { _w.Coverage.Mat, _w.Coverage.Crust })
             foreach (var t in layer.Tiles)
             {
+                if (t.IsEmpty()) continue;
                 int gx0 = t.Ti * Vivarium.Sim.Coverage.CoverageSpec.TileEdge, gz0 = t.Tj * Vivarium.Sim.Coverage.CoverageSpec.TileEdge;
                 for (int k = 0; k < t.Occ.Length; k++)
                 {
@@ -243,6 +293,7 @@ public partial class IslandRenderer : Node3D
                     trees.Add((plant.Position, Math.Max(0.20, plant.Radius(sp) * 0.40)));
             }
         }
+        _w.FloraSystem.RefreshCanopyShade();
         for (int c = 0; c < g.Count; c++)
         {
             int d = _nearestDomain[c];

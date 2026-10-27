@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Vivarium.Sim.Core;
@@ -61,6 +62,9 @@ public partial class ToolController : Node
     private ulong _placeCounter = 1;
     private double _nutrientRepeat;
     private Mesh? _rockGhost, _logGhost, _gravelGhost;
+    private readonly Dictionary<EntityId, MeshInstance3D> _pendingPlantGhosts = new();
+    private StandardMaterial3D? _pendingPlantMaterial;
+    public int PendingPlantGhostCount => _pendingPlantGhosts.Count;
     /// <summary>Where the pointer ray actually lands; the cursor ring is drawn here even when Hover snaps to a critter.</summary>
     private Vec3 _cursorPoint;
     /// <summary>Critter the grab circle has snapped to (none when nothing is inside it).</summary>
@@ -68,6 +72,8 @@ public partial class ToolController : Node
 
     public void Bind(VivariumWorld w)
     {
+        foreach (var ghost in _pendingPlantGhosts.Values) ghost.QueueFree();
+        _pendingPlantGhosts.Clear();
         _w = w;
         Held = EntityId.None; MovingProp = EntityId.None; SelectedSpring = EntityId.None;
         Select(WorldHit.None);
@@ -99,6 +105,11 @@ public partial class ToolController : Node
     {
         using var prof = FrameProfiler.Measure("Tools");
         if (_w == null || Session.Host == null) return;
+        foreach (var id in _pendingPlantGhosts.Keys.ToArray())
+            if (_w.Flora.Get(id) is null || Session.Flora.IsPlantPublished(id))
+            {
+                _pendingPlantGhosts[id].QueueFree(); _pendingPlantGhosts.Remove(id);
+            }
         var vp = GetViewport();
         var mouse = vp.GetMousePosition();
         bool overUi = vp.GuiGetHoveredControl() != null || !PointerEnabled;
@@ -398,7 +409,36 @@ public partial class ToolController : Node
                 }
                 break;
         }
+        if (Current == ToolKind.IntroduceFlora && r is { Ok: true } planted)
+            foreach (var id in planted.Affected) ShowPendingPlant(id);
         return r.HasValue ? Feedback(r.Value) : null;
+    }
+
+    internal void ShowPendingPlant(EntityId id)
+    {
+        var plant = _w?.Flora.Get(id);
+        if (plant is null || _pendingPlantGhosts.ContainsKey(id)) return;
+        _pendingPlantMaterial ??= new StandardMaterial3D {
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoColor = new Color(.6f, 1f, .7f, .35f),
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled
+        };
+        // Reuse a published species mesh; an inexpensive marker covers the first-ever
+        // placement while that species' geometry is still being prepared.
+        var mesh = Session.Flora.PlacementGhostMesh(plant.SpeciesId)
+            ?? new SphereMesh { Radius = .5f, Height = 1, RadialSegments = 8, Rings = 4 };
+        var bounds = mesh.GetAabb();
+        float extent = Mathf.Max(bounds.Size.X, Mathf.Max(bounds.Size.Y, bounds.Size.Z));
+        float size = (float)Math.Max(.08, plant.Radius(_w!.Content.FloraOrThrow(plant.SpeciesId)) * 2);
+        var ghost = new MeshInstance3D {
+            Name = "PendingPlant", Mesh = mesh, MaterialOverride = _pendingPlantMaterial,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Scale = Vector3.One * (size / Mathf.Max(.001f, extent))
+        };
+        AddChild(ghost);
+        ghost.GlobalPosition = new Vector3((float)plant.Position.X, (float)_w.GroundHeight(plant.Position) + size * .1f, (float)plant.Position.Z);
+        _pendingPlantGhosts.Add(id, ghost);
     }
 
     public static bool IsBrush(ToolKind k) => k is ToolKind.TerrainRaise or ToolKind.TerrainLower or ToolKind.TerrainSmooth or ToolKind.PourWater or ToolKind.DrainWater;

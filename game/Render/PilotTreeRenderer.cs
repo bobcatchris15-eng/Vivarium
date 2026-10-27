@@ -17,6 +17,8 @@ public partial class PilotTreeRenderer : Node3D
     public long UnchangedRootFootprints { get; private set; }
     private double _sinceRefresh;
     private ShaderMaterial? _material;
+    private FloraVisualProfile? _foliageProfile;
+    private ShaderMaterial? _leafMaterial;
     private bool _authoredCrown;
 public bool AuthoredCrownActive => _authoredCrown;
 
@@ -38,8 +40,17 @@ public bool AuthoredCrownActive => _authoredCrown;
             Bridge.BindSurface(_material, "bark", Bridge.Surfaces.Bark);
         }
         _material.SetShaderParameter("hex_apothem", (float)world.Domain.Apothem);
-        Tree = new MeshInstance3D { Name = "AncientPilotTree", Mesh = Bridge.ToArrayMesh(
-            PilotTreeMeshes.BuildTrunkAndCrown(world), _material) };
+        _foliageProfile = FloraVisualProfile.Synthesize(world.PilotTree.Def.Id == "basinwarden" ? "shadebell" : "embercrown");
+        var foliage = world.PilotTree.Def.FoliageColor;
+        _foliageProfile.Top = new[] { (float)foliage.X, (float)foliage.Y, (float)foliage.Z };
+        _foliageProfile.Back = new[] { (float)foliage.X * 1.12f, (float)foliage.Y * 1.10f, (float)foliage.Z * .95f };
+        // The terrarium has still air; retain authored leaf curvature without wind animation.
+        _leafMaterial = _foliageProfile.LeafMaterial(animated: false);
+        _leafMaterial.SetShaderParameter("lamina_curl_strength", 0f);
+        _leafMaterial.SetShaderParameter("clip_to_hex", true);
+        _leafMaterial.SetShaderParameter("hex_apothem", (float)world.Domain.Apothem);
+        Tree = new MeshInstance3D { Name = "AncientPilotTree", Mesh = _foliageProfile.Compile(
+            PilotTreeMeshes.BuildTrunkAndCrown(world), _material, _leafMaterial) };
         AddChild(Tree);
         Roots = new MeshInstance3D { Name = "AncientPilotRoots", Mesh = Bridge.ToArrayMesh(
             PilotTreeMeshes.BuildRoots(world), _material) };
@@ -61,8 +72,8 @@ public bool AuthoredCrownActive => _authoredCrown;
         {
             // This heavy mesh changes only when the validated crown is swapped.
             // It never needs to be rebuilt for erosion/soil edits.
-            Tree.Mesh = Bridge.ToArrayMesh(PilotTreeMeshes.BuildTrunkAndCrown(_world,
-                includeCrown: !switchToAuthored), _material, Tree.Mesh as ArrayMesh);
+            Tree.Mesh = _foliageProfile!.Compile(PilotTreeMeshes.BuildTrunkAndCrown(_world,
+                includeCrown: !switchToAuthored), _material!, _leafMaterial!);
             _authoredCrown = switchToAuthored;
         }
         if (terrainDirty)

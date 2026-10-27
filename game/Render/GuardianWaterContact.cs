@@ -23,10 +23,16 @@ public partial class GuardianWaterContact : Node3D
     public float WaterDepth { get; private set; }
     public float SurfaceElevation { get; private set; }
     public float Wetness { get; private set; }
+    /// <summary>Highest recently contacted world waterline, retained while drying.</summary>
+    public float WetHeightWorld { get; private set; } = -10000f;
+    private float _wetHeightAboveOrigin = -10000f;
     public float DisturbanceRadius { get; private set; }
     public Vector3[] RipplePositions { get; private set; } = Array.Empty<Vector3>();
 
-    public override void _Process(double delta) => UpdateContact(delta);
+    public override void _Process(double delta)
+    {
+        if (Renderer == null) UpdateContact(delta);
+    }
 
     public void UpdateContact(double delta)
     {
@@ -51,7 +57,25 @@ public partial class GuardianWaterContact : Node3D
         IsWalkingInWater = walkingInWater;
         WaterDepth = depth;
         SurfaceElevation = double.IsNaN(surfY) ? pos.Y : (float)surfY;
-        Wetness = IsInWater ? 1f : 0f;
+        // An activity name is not evidence of water at the rendered animal.
+        // SurfaceAt may return a level for a dry query, so require actual wetness
+        // and a finite surface before wetting the coat.
+        bool touchingWater = terrainWet && double.IsFinite(surfY) && depth > 0.001f;
+        if (touchingWater)
+        {
+            float contactHeight = SurfaceElevation - pos.Y;
+            _wetHeightAboveOrigin = Wetness > 0.01f ? Math.Max(_wetHeightAboveOrigin, contactHeight) : contactHeight;
+            Wetness = 1f;
+        }
+        else
+        {
+            Wetness = Math.Max(0f, Wetness - (float)Math.Clamp(delta, 0.0, 1.0) / 18f);
+            if (Wetness <= 0f) _wetHeightAboveOrigin = -10000f;
+        }
+
+        // Carry the contacted part of the coat with the moving animal. Retaining
+        // an absolute pond elevation would wet its head after walking downhill.
+        WetHeightWorld = Wetness > 0f ? pos.Y + _wetHeightAboveOrigin : -10000f;
 
         float scale = (float)(g?.Scale ?? 1.0);
 

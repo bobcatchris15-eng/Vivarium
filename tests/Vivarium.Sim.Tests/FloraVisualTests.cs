@@ -62,6 +62,28 @@ public class FloraVisualTests
             { Assert.Equal(0,m.UV2[i*2]);Assert.Equal(1,m.UV2[i*2+1]); }
     }
 
+    [Theory]
+    [InlineData("glasslily")]
+    [InlineData("blackneedle")]
+    [InlineData("marrowbloom")]
+    [InlineData("tankbloom")]
+    public void AuthoredOrgansNeverReceiveLeafPoolMaterial(string id)
+    {
+        foreach (int detail in new[] { 0, 1, 2 })
+        {
+            var mesh = OrganismMeshes.Flora(TestUtil.Content.FloraOrThrow(id), 89, visualDetail: detail);
+            var (body, leaf) = FloraVisualCompiler.Split(mesh);
+            bool IsOrgan(MeshData m, int v) => m.UV2[v * 2 + 1] > .5f
+                && m.UV2[v * 2] > 1.20f && m.UV2[v * 2] < 1.50f;
+            Assert.Contains(Enumerable.Range(0, mesh.VertexCount), v => IsOrgan(mesh, v));
+            Assert.DoesNotContain(Enumerable.Range(0, leaf.VertexCount), v => IsOrgan(leaf, v));
+            Assert.Equal(mesh.TriangleCount, body.TriangleCount + leaf.TriangleCount);
+            Assert.Equal(mesh.Indices.Distinct().Count(v => IsOrgan(mesh, v)),
+                Enumerable.Range(0, body.VertexCount).Count(v => IsOrgan(body, v)));
+            if (id == "glasslily") Assert.True(leaf.TriangleCount > 0);
+        }
+    }
+
     [Fact]
     public void EmbercrownTissueCoordinatesAreContinuousAcrossFacets()
     {

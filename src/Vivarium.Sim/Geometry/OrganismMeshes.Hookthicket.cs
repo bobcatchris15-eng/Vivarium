@@ -251,6 +251,24 @@ public static partial class OrganismMeshes
         double[] heartColour, ulong seed)
     {
         var rng = Rng.Keyed(seed, "bramble.berry", 0);
+
+        // Reflexed calyx sepals clasping the base of the berry cluster where the pedicel joins.
+        var calyxColour = new[] { 0.14, 0.22, 0.09 };
+        for (int sep = 0; sep < 5; sep++)
+        {
+            double th = sep * 2.0 * Math.PI / 5.0 + 0.35;
+            var sdir = new Vec3(Math.Cos(th), 0.22, Math.Sin(th)).Normalized();
+            var sside = Vec3.Up.Cross(sdir).Normalized();
+            var b = centre + sdir * (radius * 0.15) - Vec3.Up * (radius * 0.03);
+            var tip = centre + sdir * (radius * 0.65) + Vec3.Up * (radius * 0.10);
+            int start = m.VertexCount;
+            m.AddVertex(b - sside * (radius * 0.16), Vec3.Up, calyxColour, 1, 0, 0.5, 2.0, 0.0);
+            m.AddVertex(b + sside * (radius * 0.16), Vec3.Up, calyxColour, 1, 1, 0.5, 2.0, 0.0);
+            m.AddVertex(tip, Vec3.Up, calyxColour, 1, 0.5, 1.0, 2.0, 0.0);
+            Primitives.TriangleFacing(m, start, start + 1, start + 2, Vec3.Up);
+            Primitives.TriangleFacing(m, start, start + 2, start + 1, -Vec3.Up);
+        }
+
         int drupelets = 9;
         for (int d = 0; d < drupelets; d++)
         {
@@ -298,6 +316,24 @@ public static partial class OrganismMeshes
         double[] stamenColour, ulong seed)
     {
         var rng = Rng.Keyed(seed, "bramble.flower", 0);
+
+        // Sepals between petals under the flower receptacle.
+        var calyxColour = new[] { 0.14, 0.22, 0.09 };
+        for (int p = 0; p < 5; p++)
+        {
+            double a = p * 2.0 * Math.PI / 5.0 + Math.PI / 5.0;
+            var dir = new Vec3(Math.Cos(a), -0.15, Math.Sin(a)).Normalized();
+            var side = Vec3.Up.Cross(dir).Normalized();
+            var baseP = centre + dir * (radius * 0.12);
+            var tip = centre + dir * (radius * 0.55) - Vec3.Up * (radius * 0.08);
+            int start = m.VertexCount;
+            m.AddVertex(baseP - side * (radius * 0.14), Vec3.Up, calyxColour, 1, 0, 0.5, 2.0, 0.0);
+            m.AddVertex(baseP + side * (radius * 0.14), Vec3.Up, calyxColour, 1, 1, 0.5, 2.0, 0.0);
+            m.AddVertex(tip, Vec3.Up, calyxColour, 1, 0.5, 1.0, 2.0, 0.0);
+            Primitives.TriangleFacing(m, start, start + 1, start + 2, Vec3.Up);
+            Primitives.TriangleFacing(m, start, start + 2, start + 1, -Vec3.Up);
+        }
+
         for (int p = 0; p < 5; p++)
         {
             double a = p * 2.0 * Math.PI / 5.0 + rng.Range(-0.12, 0.12);
@@ -414,7 +450,7 @@ public static partial class OrganismMeshes
                 var p = Point(t);
                 var tangent = (Point(Math.Min(1.0, t + 0.01)) - Point(Math.Max(0.0, t - 0.01))).Normalized();
                 double leafAz = rng.Range(0.0, 2.0 * Math.PI);
-                var leafDir = new Vec3(Math.Cos(leafAz), 0, Math.Sin(leafAz));
+                var leafDir = (new Vec3(Math.Cos(leafAz), rng.Range(-0.06, 0.08), Math.Sin(leafAz))).Normalized();
                 double petLen = radius * rng.Range(0.11, 0.19);
                 var petiole = p + leafDir * petLen + Vec3.Up * (petLen * 0.30);
                 Primitives.Tube(part, new[] { p, petiole }, new[] { 0.0042, 0.0022 }, 6,
@@ -422,15 +458,18 @@ public static partial class OrganismMeshes
                 BrambleStipule(part, p, leafDir, radius * rng.Range(0.035, 0.055),
                     Primitives.Mix(oldWood, leafTop, 0.5), Rng.Mix(seed, (ulong)(k * 97 + j)));
 
-                // Five leaflets, the terminal one longest, spread like a hand.
+                // Five leaflets, the terminal one longest, spread like a hand with slight semi-random organic perturbation.
                 int leaflets = rng.NextDouble() < 0.42 ? 3 : 5;
                 for (int l = 0; l < leaflets; l++)
                 {
-                    double a = leafAz + (l - (leaflets - 1) * 0.5) * (Math.PI * 2.0 / (leaflets + 1.4));
-                    var fwd = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                    double a = leafAz + (l - (leaflets - 1) * 0.5) * (Math.PI * 2.0 / (leaflets + 1.4)) + rng.Range(-0.08, 0.08);
+                    double pitch = rng.Range(-0.11, 0.13);
+                    var fwd = (new Vec3(Math.Cos(a), pitch, Math.Sin(a))).Normalized();
                     double len = radius * (l == (leaflets - 1) / 2 ? rng.Range(0.135, 0.175) : rng.Range(0.095, 0.135));
                     double breadth = rng.Range(0.62, 0.80);
-                    var bladeNormal = (Vec3.Up * rng.Range(0.72, 0.98) + fwd * rng.Range(0.04, 0.22)).Normalized();
+                    var baseNormal = (Vec3.Up * rng.Range(0.72, 0.98) + fwd * rng.Range(0.04, 0.22)).Normalized();
+                    double rollAngle = rng.Range(-0.18, 0.18);
+                    var bladeNormal = Axis.RotateAround(baseNormal, fwd, rollAngle).Normalized();
                     var bladeSide = bladeNormal.Cross(fwd).Normalized();
                     BrambleLeaflet(part, petiole, fwd, bladeNormal, len, breadth, rows, cols,
                         BrambleTooth, Rng.Mix(seed, (ulong)(k * 613 + j * 37 + l * 11)),
@@ -468,9 +507,12 @@ public static partial class OrganismMeshes
                     for (int l = 0; l < 3; l++)
                     {
                         double la = rng.Range(0.0, 2.0 * Math.PI);
-                        var lf = new Vec3(Math.Cos(la), 0, Math.Sin(la));
+                        double pitch = rng.Range(-0.12, 0.16);
+                        var lf = (new Vec3(Math.Cos(la), pitch, Math.Sin(la))).Normalized();
+                        double rollAngle = rng.Range(-0.20, 0.20);
+                        var bladeNorm = Axis.RotateAround(Vec3.Up, lf, rollAngle).Normalized();
                         double len = radius * rng.Range(0.07, 0.11);
-                        BrambleLeaflet(part, shootTop, lf, Vec3.Up, len, 0.72, Math.Max(5, rows - 2), cols,
+                        BrambleLeaflet(part, shootTop, lf, bladeNorm, len, 0.72, Math.Max(5, rows - 2), cols,
                             BrambleTooth, Rng.Mix(seed, (ulong)(k * 191 + s * 13 + l)),
                             Primitives.Mix(leafTop, new[] { 0.30, 0.52, 0.14 }, 0.45), leafBack);
                     }
@@ -482,11 +524,27 @@ public static partial class OrganismMeshes
                 {
                     double t = rng.Range(0.42, 0.86);
                     var p = Point(t);
-                    // A short stem carries the cluster out from the cane. This is a distance, not a
-                    // direction, so it must not be normalised.
-                    var centre = p + dir * rng.Range(0.06, 0.13) - Vec3.Up * rng.Range(0.02, 0.08);
-                    Primitives.Tube(part, new[] { p, centre }, new[] { 0.0022, 0.0014 }, 5,
-                        (i, v) => (youngWood, 1, i, v, 0.0, 1.0));
+                    var tangent = (Point(Math.Min(1.0, t + 0.01)) - Point(Math.Max(0.0, t - 0.01))).Normalized();
+                    var caneSide = tangent.Cross(Vec3.Up);
+                    if (caneSide.LengthSq < 1e-4) caneSide = side;
+                    else caneSide = caneSide.Normalized();
+
+                    double sgn = (f % 2 == 0) ? 1.0 : -1.0;
+                    var outVec = (caneSide * sgn * 0.85 + dir * 0.20 - Vec3.Up * 0.35).Normalized();
+                    var caneOut = (outVec - tangent * outVec.Dot(tangent)).Normalized();
+
+                    double caneR = 0.0165 * (1.0 - 0.84 * Math.Pow(t, 0.8)) + 0.0014;
+                    var attach = p + caneOut * (caneR * 0.88);
+
+                    // A short, firm pedicel holds the cluster right off the cane.
+                    double pedicelLen = rng.Range(0.018, 0.026);
+                    var centre = attach + caneOut * pedicelLen - Vec3.Up * (pedicelLen * 0.30);
+                    var mid = (attach + centre) * 0.5 + caneOut * 0.002;
+
+                    Primitives.Tube(part, new[] { attach, mid, centre },
+                        new[] { 0.0036, 0.0028, 0.0020 }, 6,
+                        (i, v) => (youngWood, 1.0, i, v, 2.0, 0.0));
+
                     if (rng.NextDouble() < 0.5)
                         BrambleFlower(part, centre, radius * rng.Range(0.020, 0.030), petalColour, stamenColour,
                             Rng.Mix(seed, (ulong)(k * 71 + f * 7)));

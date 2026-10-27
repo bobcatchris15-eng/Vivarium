@@ -23,7 +23,19 @@ public static class LoamLitterBuilder
     public static Node3D Build(VivariumWorld world, int seed, float density = 1f, int detailStage = 2,
         Vector2? patchCenter = null, float halfExtent = BoardHalfExtent, bool respectLitterMass = false)
     {
+        Node3D? result = null;
+        foreach (bool _ in BuildBatched(world, seed, node => result = node, density, detailStage,
+                     patchCenter, halfExtent, respectLitterMass)) { }
+        return result!;
+    }
+
+    /// <summary>Builds identical litter incrementally; disposing the iterator cancels and frees unfinished work.</summary>
+    public static IEnumerable<bool> BuildBatched(VivariumWorld world, int seed, Action<Node3D> complete,
+        float density = 1f, int detailStage = 2, Vector2? patchCenter = null,
+        float halfExtent = BoardHalfExtent, bool respectLitterMass = false)
+    {
         ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(complete);
         if (!float.IsFinite(density) || density < 0f || density > 3f)
             throw new ArgumentOutOfRangeException(nameof(density), "density must be finite and between 0 and 3");
         if (detailStage < 0 || detailStage > 2)
@@ -33,176 +45,199 @@ public static class LoamLitterBuilder
         Vector2 origin = patchCenter ?? Vector2.Zero;
 
         var root = new Node3D { Name = "LoamLitter" };
-        var rng = new StableRandom(unchecked((ulong)(uint)seed) + 0x9E3779B97F4A7C15UL);
-        var leaves = new SurfaceTool();
-        leaves.Begin(Mesh.PrimitiveType.Triangles);
-        var twigs = new SurfaceTool();
-        twigs.Begin(Mesh.PrimitiveType.Triangles);
-        var duff = new SurfaceTool();
-        duff.Begin(Mesh.PrimitiveType.Triangles);
-
-        var leafMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-        leafMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
-        leafMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
-        leafMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
-        leafMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
-        leafMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
-        leafMaterial.SetShaderParameter("twig_mode", false);
-
-        var twigMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-        twigMaterial.SetShaderParameter("twig_mode", true);
-        twigMaterial.SetShaderParameter("bark_col", GD.Load<Texture2D>("res://Textures/Bark014_1K-JPG_Color.jpg"));
-        twigMaterial.SetShaderParameter("bark_nrm", GD.Load<Texture2D>("res://Textures/Bark014_1K-JPG_NormalGL.jpg"));
-        twigMaterial.SetShaderParameter("bark_rgh", GD.Load<Texture2D>("res://Textures/Bark014_1K-JPG_Roughness.jpg"));
-
-        var duffMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-        duffMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
-        duffMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
-        duffMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
-        duffMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
-        duffMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
-        duffMaterial.SetShaderParameter("duff_mode", true);
-        duffMaterial.SetShaderParameter("decay_strength", 0.72f);
-
-        int leafCount = 0, twigCountPlaced = 0, duffCount = 0;
-
-        // Local height-field stacking grid (2 cm spacing) to prevent duff and leaf cards from interpenetrating
-        int stackCells = (int)Math.Ceiling(halfExtent * 2f / 0.02f) + 1;
-        float[,] stackHeight = new float[stackCells, stackCells];
-        float stackOriginX = origin.X - halfExtent;
-        float stackOriginZ = origin.Y - halfExtent;
-
-        float QueryStack(SimVec2 p)
+        bool transferred = false;
+        try
         {
-            int gx = Math.Clamp((int)((p.X - stackOriginX) / 0.02f), 0, stackCells - 1);
-            int gz = Math.Clamp((int)((p.Z - stackOriginZ) / 0.02f), 0, stackCells - 1);
-            return stackHeight[gx, gz];
-        }
+            var rng = new StableRandom(unchecked((ulong)(uint)seed) + 0x9E3779B97F4A7C15UL);
+            using var leaves = new SurfaceTool();
+            leaves.Begin(Mesh.PrimitiveType.Triangles);
+            using var twigs = new SurfaceTool();
+            twigs.Begin(Mesh.PrimitiveType.Triangles);
+            using var duff = new SurfaceTool();
+            duff.Begin(Mesh.PrimitiveType.Triangles);
 
-        void PushStack(SimVec2 p, float radius, float delta)
-        {
-            int rCells = (int)Math.Ceiling(radius / 0.02f);
-            int cx = (int)((p.X - stackOriginX) / 0.02f);
-            int cz = (int)((p.Z - stackOriginZ) / 0.02f);
-            for (int z = Math.Max(0, cz - rCells); z <= Math.Min(stackCells - 1, cz + rCells); z++)
-            for (int x = Math.Max(0, cx - rCells); x <= Math.Min(stackCells - 1, cx + rCells); x++)
+            var leafMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
+            leafMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
+            leafMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
+            leafMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
+            leafMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
+            leafMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
+            leafMaterial.SetShaderParameter("twig_mode", false);
+
+            var twigMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
+            twigMaterial.SetShaderParameter("twig_mode", true);
+            twigMaterial.SetShaderParameter("bark_col", GD.Load<Texture2D>("res://Textures/Bark014_4K-PNG_Color.png"));
+            twigMaterial.SetShaderParameter("bark_nrm", GD.Load<Texture2D>("res://Textures/Bark014_4K-PNG_NormalGL.png"));
+            twigMaterial.SetShaderParameter("bark_rgh", GD.Load<Texture2D>("res://Textures/Bark014_4K-PNG_Roughness.png"));
+
+            var duffMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
+            duffMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
+            duffMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
+            duffMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
+            duffMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
+            duffMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
+            duffMaterial.SetShaderParameter("duff_mode", true);
+            duffMaterial.SetShaderParameter("decay_strength", 0.72f);
+
+            int leafCount = 0, twigCountPlaced = 0, duffCount = 0;
+
+            // Local height-field stacking grid (2 cm spacing) to prevent duff and leaf cards from interpenetrating
+            int stackCells = (int)Math.Ceiling(halfExtent * 2f / 0.02f) + 1;
+            float[,] stackHeight = new float[stackCells, stackCells];
+            float stackOriginX = origin.X - halfExtent;
+            float stackOriginZ = origin.Y - halfExtent;
+
+            float QueryStack(SimVec2 p)
             {
-                stackHeight[x, z] += delta;
+                int gx = Math.Clamp((int)((p.X - stackOriginX) / 0.02f), 0, stackCells - 1);
+                int gz = Math.Clamp((int)((p.Z - stackOriginZ) / 0.02f), 0, stackCells - 1);
+                return stackHeight[gx, gz];
             }
-        }
 
-        if (density > 0f)
-        {
-            int nx = Math.Max(1, (int)Math.Ceiling(halfExtent * 2 / 0.15));
-            int nz = nx;
-            double step = halfExtent * 2 / nx;
-            // Jittered low-frequency clump weights create sheltered accumulations without a tiled scatter grid.
-            int clumpCols = (int)Math.Ceiling(halfExtent * 2 / 0.45);
-            var clump = new float[clumpCols * clumpCols];
-            for (int i = 0; i < clump.Length; i++) clump[i] = rng.Range(0.20f, 1.80f);
-
-            for (int z = 0; z < nz && leafCount < HardLeafCap; z++)
-            for (int x = 0; x < nx && leafCount < HardLeafCap; x++)
+            void PushStack(SimVec2 p, float radius, float delta)
             {
-                double px = origin.X - halfExtent + (x + 0.5) * step;
-                double pz = origin.Y - halfExtent + (z + 0.5) * step;
-                int ci = Math.Clamp((int)((px - origin.X + halfExtent) / 0.45), 0, clumpCols - 1);
-                int cj = Math.Clamp((int)((pz - origin.Y + halfExtent) / 0.45), 0, clumpCols - 1);
-                float lambda = (float)(NominalPerSquareMetre * step * step) * density * clump[cj * clumpCols + ci];
-                var cellCenter = new SimVec2(px, pz);
-                if (respectLitterMass) lambda *= FineLitterCover(world, cellCenter);
-                int spawnCount = SamplePoisson(lambda, ref rng);
-                for (int k = 0; k < spawnCount && leafCount < HardLeafCap; k++)
+                int rCells = (int)Math.Ceiling(radius / 0.02f);
+                int cx = (int)((p.X - stackOriginX) / 0.02f);
+                int cz = (int)((p.Z - stackOriginZ) / 0.02f);
+                for (int z = Math.Max(0, cz - rCells); z <= Math.Min(stackCells - 1, cz + rCells); z++)
+                for (int x = Math.Max(0, cx - rCells); x <= Math.Min(stackCells - 1, cx + rCells); x++)
                 {
-                    var center = new SimVec2(px + rng.Range((float)-step * 0.5f, (float)step * 0.5f),
-                        pz + rng.Range((float)-step * 0.5f, (float)step * 0.5f));
-                    if (!world.Domain.ContainsDisc(center, 0.085) || world.Water.IsWet(center) || world.SubstrateAt(center) != Substrate.Soil)
-                        continue;
-                    if (world.PilotTree?.BlocksDisc(center, 0.055) == true || world.Props.RockAt(center) != null ||
-                        world.Props.LogAt(center) != null || world.Props.GravelAt(center) != null)
-                        continue;
-
-                    if (respectLitterMass && FineLitterCover(world, center) <= 0f) continue;
-                    bool intact = rng.NextFloat() < 0.62f;
-                    float stackLift = QueryStack(center);
-                    float overlapLift = k > 0 && rng.NextFloat() < 0.65f ? rng.Range(0.001f, 0.003f) : 0f;
-                    AddLeaf(leaves, world, center, ref rng, intact, overlapLift + stackLift);
-                    PushStack(center, intact ? 0.045f : 0.025f, 0.0012f);
-                    leafCount++;
+                    stackHeight[x, z] += delta;
                 }
             }
 
-            int targetTwigCount = respectLitterMass
-                ? 52
-                : Math.Min(52, Math.Max(0, (int)Math.Round(leafCount * 0.052)));
-            for (int i = 0; i < targetTwigCount * 4 && twigCountPlaced < targetTwigCount; i++)
+            if (density > 0f)
             {
-                var center = new SimVec2(rng.Range(origin.X - halfExtent, origin.X + halfExtent), rng.Range(origin.Y - halfExtent, origin.Y + halfExtent));
-                if (!world.Domain.ContainsDisc(center, 0.09) || world.Water.IsWet(center) || world.SubstrateAt(center) != Substrate.Soil)
-                    continue;
-                if (world.PilotTree?.BlocksDisc(center, 0.045) == true || world.Props.RockAt(center) != null ||
-                    world.Props.LogAt(center) != null || world.Props.GravelAt(center) != null)
-                    continue;
-                if (respectLitterMass && rng.NextFloat() >= CoarseLitterCover(world, center)) continue;
-                AddTwig(twigs, world, center, ref rng);
-                PushStack(center, 0.06f, 0.0025f);
-                twigCountPlaced++;
+                int nx = Math.Max(1, (int)Math.Ceiling(halfExtent * 2 / 0.15));
+                int nz = nx;
+                double step = halfExtent * 2 / nx;
+                // Jittered low-frequency clump weights create sheltered accumulations without a tiled scatter grid.
+                int clumpCols = (int)Math.Ceiling(halfExtent * 2 / 0.45);
+                var clump = new float[clumpCols * clumpCols];
+                for (int i = 0; i < clump.Length; i++) clump[i] = rng.Range(0.20f, 1.80f);
+
+                for (int z = 0; z < nz && leafCount < HardLeafCap; z++)
+                for (int x = 0; x < nx && leafCount < HardLeafCap; x++)
+                {
+                    yield return true;
+                    double px = origin.X - halfExtent + (x + 0.5) * step;
+                    double pz = origin.Y - halfExtent + (z + 0.5) * step;
+                    int ci = Math.Clamp((int)((px - origin.X + halfExtent) / 0.45), 0, clumpCols - 1);
+                    int cj = Math.Clamp((int)((pz - origin.Y + halfExtent) / 0.45), 0, clumpCols - 1);
+                    float lambda = (float)(NominalPerSquareMetre * step * step) * density * clump[cj * clumpCols + ci];
+                    var cellCenter = new SimVec2(px, pz);
+                    if (respectLitterMass) lambda *= FineLitterCover(world, cellCenter);
+                    int spawnCount = SamplePoisson(lambda, ref rng);
+                    for (int k = 0; k < spawnCount && leafCount < HardLeafCap; k++)
+                    {
+                        var center = new SimVec2(px + rng.Range((float)-step * 0.5f, (float)step * 0.5f),
+                            pz + rng.Range((float)-step * 0.5f, (float)step * 0.5f));
+                        if (!world.Domain.ContainsDisc(center, 0.085) || world.Water.IsWet(center) || world.SubstrateAt(center) != Substrate.Soil)
+                            continue;
+                        if (world.PilotTree?.BlocksDisc(center, 0.055) == true || world.Props.RockAt(center) != null ||
+                            world.Props.LogAt(center) != null || world.Props.GravelAt(center) != null)
+                            continue;
+
+                        if (respectLitterMass && FineLitterCover(world, center) <= 0f) continue;
+                        bool intact = rng.NextFloat() < 0.62f;
+                        float stackLift = QueryStack(center);
+                        float overlapLift = k > 0 && rng.NextFloat() < 0.65f ? rng.Range(0.001f, 0.003f) : 0f;
+                        AddLeaf(leaves, world, center, ref rng, intact, overlapLift + stackLift);
+                        PushStack(center, intact ? 0.045f : 0.025f, 0.0012f);
+                        leafCount++;
+                        yield return true;
+                    }
+                }
+
+                int targetTwigCount = respectLitterMass
+                    ? 52
+                    : Math.Min(52, Math.Max(0, (int)Math.Round(leafCount * 0.052)));
+                for (int i = 0; i < targetTwigCount * 4 && twigCountPlaced < targetTwigCount; i++)
+                {
+                    yield return true;
+                    var center = new SimVec2(rng.Range(origin.X - halfExtent, origin.X + halfExtent), rng.Range(origin.Y - halfExtent, origin.Y + halfExtent));
+                    if (!world.Domain.ContainsDisc(center, 0.09) || world.Water.IsWet(center) || world.SubstrateAt(center) != Substrate.Soil)
+                        continue;
+                    if (world.PilotTree?.BlocksDisc(center, 0.045) == true || world.Props.RockAt(center) != null ||
+                        world.Props.LogAt(center) != null || world.Props.GravelAt(center) != null)
+                        continue;
+                    if (respectLitterMass && rng.NextFloat() >= CoarseLitterCover(world, center)) continue;
+                    AddTwig(twigs, world, center, ref rng);
+                    PushStack(center, 0.06f, 0.0025f);
+                    twigCountPlaced++;
+                    yield return true;
+                }
+
+                if (detailStage > 0)
+                    foreach (int placed in AddDuffBatched(duff, world, seed, density, detailStage, origin,
+                                 halfExtent, respectLitterMass, QueryStack, PushStack))
+                    {
+                        duffCount = placed;
+                        yield return true;
+                    }
             }
 
-            if (detailStage > 0)
-                duffCount = AddDuff(duff, world, seed, density, detailStage, origin, halfExtent, respectLitterMass, QueryStack, PushStack);
-        }
+            root.SetMeta("seed", seed);
+            root.SetMeta("density", density);
+            root.SetMeta("board_size_m", halfExtent * 2f);
+            root.SetMeta("patch_center", origin);
+            root.SetMeta("patch_half_extent_m", halfExtent);
+            root.SetMeta("leaf_count", leafCount);
+            root.SetMeta("twig_count", twigCountPlaced);
+            root.SetMeta("detail_stage", detailStage);
+            root.SetMeta("duff_count", duffCount);
 
-        root.SetMeta("seed", seed);
-        root.SetMeta("density", density);
-        root.SetMeta("board_size_m", halfExtent * 2f);
-        root.SetMeta("patch_center", origin);
-        root.SetMeta("patch_half_extent_m", halfExtent);
-        root.SetMeta("leaf_count", leafCount);
-        root.SetMeta("twig_count", twigCountPlaced);
-        root.SetMeta("detail_stage", detailStage);
-        root.SetMeta("duff_count", duffCount);
+            yield return true;
+            if (leafCount > 0) leaves.GenerateTangents();
+            yield return true;
+            var leafMesh = leafCount > 0 ? leaves.Commit() : null;
+            if (leafMesh is not null && leafMesh.GetSurfaceCount() > 0)
+            {
+                leafMesh.SurfaceSetMaterial(0, leafMaterial);
+                root.AddChild(new MeshInstance3D
+                {
+                    Name = "CurledLeafLitter",
+                    Mesh = leafMesh,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+                });
+            }
 
-        if (leafCount > 0) leaves.GenerateTangents();
-        var leafMesh = leafCount > 0 ? leaves.Commit() : null;
-        if (leafMesh is not null && leafMesh.GetSurfaceCount() > 0)
-        {
-            leafMesh.SurfaceSetMaterial(0, leafMaterial);
-            root.AddChild(new MeshInstance3D
+            yield return true;
+            if (twigCountPlaced > 0) twigs.GenerateTangents();
+            yield return true;
+            var twigMesh = twigCountPlaced > 0 ? twigs.Commit() : null;
+            if (twigMesh is not null && twigMesh.GetSurfaceCount() > 0)
             {
-                Name = "CurledLeafLitter",
-                Mesh = leafMesh,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
-            });
-        }
-
-        if (twigCountPlaced > 0) twigs.GenerateTangents();
-        var twigMesh = twigCountPlaced > 0 ? twigs.Commit() : null;
-        if (twigMesh is not null && twigMesh.GetSurfaceCount() > 0)
-        {
-            twigMesh.SurfaceSetMaterial(0, twigMaterial);
-            root.AddChild(new MeshInstance3D
+                twigMesh.SurfaceSetMaterial(0, twigMaterial);
+                root.AddChild(new MeshInstance3D
+                {
+                    Name = "FineTwigs",
+                    Mesh = twigMesh,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+                });
+            }
+            yield return true;
+            var duffMesh = duffCount > 0 ? duff.Commit() : null;
+            if (duffMesh is not null && duffMesh.GetSurfaceCount() > 0)
             {
-                Name = "FineTwigs",
-                Mesh = twigMesh,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
-            });
+                duffMesh.SurfaceSetMaterial(0, duffMaterial);
+                root.AddChild(new MeshInstance3D
+                {
+                    Name = "DecomposedLeafDuff",
+                    Mesh = duffMesh,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+                });
+            }
+            transferred = true;
+            complete(root);
         }
-        var duffMesh = duffCount > 0 ? duff.Commit() : null;
-        if (duffMesh is not null && duffMesh.GetSurfaceCount() > 0)
+        finally
         {
-            duffMesh.SurfaceSetMaterial(0, duffMaterial);
-            root.AddChild(new MeshInstance3D
-            {
-                Name = "DecomposedLeafDuff",
-                Mesh = duffMesh,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
-            });
+            if (!transferred) root.Free();
         }
-        return root;
     }
 
-    private static int AddDuff(SurfaceTool mesh, VivariumWorld world, int seed, float density, int detailStage,
+    private static IEnumerable<int> AddDuffBatched(SurfaceTool mesh, VivariumWorld world, int seed, float density, int detailStage,
         Vector2 origin, float halfExtent, bool respectLitterMass,
         Func<SimVec2, float> queryStack, Action<SimVec2, float, float> pushStack)
     {
@@ -219,6 +254,7 @@ public static class LoamLitterBuilder
         for (int z = 0; z < cells && placed < HardDuffCap; z++)
         for (int x = 0; x < cells && placed < HardDuffCap; x++)
         {
+            yield return placed;
             double px = origin.X - halfExtent + (x + 0.5) * step;
             double pz = origin.Y - halfExtent + (z + 0.5) * step;
             var center = new SimVec2(px + rng.Range((float)-step * 0.5f, (float)step * 0.5f),
@@ -267,9 +303,10 @@ public static class LoamLitterBuilder
                 AddDuffFragment(mesh, world, p, ref rng, stackLift);
                 pushStack(p, 0.018f, 0.0006f);
                 placed++;
+                yield return placed;
             }
         }
-        return placed;
+        yield return placed;
     }
 
     private static float FineLitterCover(VivariumWorld world, SimVec2 p)
@@ -300,6 +337,7 @@ public static class LoamLitterBuilder
         // Fragmented humus flakes (cells 10..12) or decomposed remnants (cells 6..9)
         int cellIndex = rng.NextFloat() < 0.65f ? rng.NextInt(10, 12) : rng.NextInt(6, 9);
         Color tint = new(rng.Range(0.62f, 0.84f), rng.Range(0.62f, 0.79f), rng.Range(0.58f, 0.74f));
+        tint.A = (float)Math.Clamp(world.Fields.Moisture[world.Grid.NearestDomainCell(center)], 0, 1);
         var points = new Vector3[stations * across];
         var normals = new Vector3[points.Length];
         var uvs = new Vector2[points.Length];
@@ -355,6 +393,7 @@ public static class LoamLitterBuilder
         // Cells 0..5 are intact; cells 6..9 are skeletonized/decaying
         int cellIndex = intact ? rng.NextInt(0, 5) : rng.NextInt(6, 9);
         Color color = new(rng.Range(0.88f, 0.99f), rng.Range(0.88f, 0.98f), rng.Range(0.86f, 0.96f));
+        color.A = (float)Math.Clamp(world.Fields.Moisture[world.Grid.NearestDomainCell(center)], 0, 1);
         var points = new Vector3[stations * across];
         var normals = new Vector3[points.Length];
         var uvs = new Vector2[points.Length];

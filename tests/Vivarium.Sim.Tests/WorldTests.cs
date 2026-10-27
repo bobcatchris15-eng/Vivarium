@@ -227,7 +227,7 @@ public class WorldTests
         Assert.Equal(8, d.Distinct().Count());
         var m = PropMeshes.Log(3, 2.0, 0.2, 1);
         var (mn, mx) = m.Bounds();
-        Assert.InRange(mx.X - mn.X, 1.9, 2.3);      // log length preserved: recognisable as a log
+        Assert.InRange(mx.X - mn.X, 1.9, 2.45);     // log length preserved; WP-15 fracture splinters protrude past ends
         Assert.InRange(mx.Z - mn.Z, 0.3, 0.9);
     }
 
@@ -361,7 +361,9 @@ public class WorldTests
         bool hasPeelingFissures = false;
         for (int i = 0; i < m2.VertexCount; i++)
         {
-            if (m2.UV2[i * 2] == 2 && m2.UV2[i * 2 + 1] == 1 && Math.Abs(m2.Position(i).X) < 0.85)
+            // Peeling sapwood retains bark UVs/material; endgrain ID1 is reserved for fracture faces.
+            if (m2.UV2[i * 2] == 2 && m2.UV2[i * 2 + 1] == 0 && Math.Abs(m2.Position(i).X) < 0.85
+                && m2.Colors[i * 4] > 0.60 && m2.Colors[i * 4 + 1] > 0.50)
             {
                 hasPeelingFissures = true;
                 break;
@@ -396,7 +398,7 @@ public class WorldTests
         Assert.True(maxRadius > 0.22, $"Knot swelling should elevate radius above nominal 0.20, got {maxRadius:0.000}");
     }
 
-    [Fact] // regression: hollow/decayed log ends must not back-face-cull into a visible hole
+    [Fact] // regression: fracture annuli face outward; tunnel walls are validated separately
     public void LogEndCapTrianglesFaceOutwardForAllDecayClasses()
     {
         for (int decay = 0; decay <= 3; decay++)
@@ -407,12 +409,12 @@ public class WorldTests
                 double length = 2.0, radius = 0.2;
                 var m = PropMeshes.Log(seed, length, radius, decay);
 
-                // End-cap / cavity-floor vertices are tagged 1 (solid fracture face) or 2 (hollow cavity) in UV2.y.
+                // ID1 is the solid fracture face/annulus; ID2 now denotes radial tunnel walls.
                 var capIndex = new HashSet<int>();
                 for (int i = 0; i < m.VertexCount; i++)
                 {
                     double tag = m.UV2[i * 2 + 1];
-                    if (tag == 1 || tag == 2) capIndex.Add(i);
+                    if (tag == 1) capIndex.Add(i);
                 }
                 Assert.NotEmpty(capIndex);
 

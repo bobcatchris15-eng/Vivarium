@@ -141,57 +141,20 @@ public static partial class OrganismMeshes
     }
 
 
-    private static void BlueSundewRosette(MeshData m, Rng rng, double[] c1, double[] c2)
+    private static void BlueSundewRosette(MeshData m, Rng rng, double radius, double height)
     {
-        int leaves=11+rng.NextInt(4);
-        for(int k=0;k<leaves;k++)
+        var clump = new MeshData();
+        BlueSundewGeometry.AppendClump(clump, Vec3.Zero, Vec3.Up, (uint)rng.NextULong());
+        radius = Math.Max(.001, radius); height = Math.Max(.001, height);
+        for(int i=0; i<clump.VertexCount; i++)
         {
-            double a=k*2.39996+rng.Range(-.15,.15);
-            var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
-            var side=new Vec3(-dir.Z,0,dir.X);
-            var root=dir*.025+Vec3.Up*.02;
-            double reach=rng.Range(.14,.46);
-            var neck=root+dir*reach+Vec3.Up*rng.Range(.20,.42);
-            CurvedBlade(m,root,root+dir*(reach*.55)+Vec3.Up*.12,neck,side,.025,c1,c2,6,.1,1);
-            double length=rng.Range(.20,.27), width=rng.Range(.11,.16);
-            var padControl=neck+dir*(length*.5)+Vec3.Up*.035;
-            var padTip=neck+dir*length+Vec3.Up*.04;
-            Vec3 Pad(double t,double x) => CurvedBladePoint(neck,padControl,padTip,side,width,t,x,0,.8,0);
-            CurvedBlade(m,neck,neck+dir*(length*.5)+Vec3.Up*.035,neck+dir*length+Vec3.Up*.04,
-                side,width,c1,c2,10,0,.8);
-            // Long marginal glands encircle the blade; shorter glands occupy its interior.
-            int glands=23;
-            for(int d=0;d<glands;d++)
-            {
-                bool margin=d<16;
-                double t=margin?.10+.80*(d%8)/7.0:rng.Range(.18,.86);
-                double x=margin?(d<8?-1:1):rng.Range(-.65,.65);
-                var baseP=Pad(t,x);
-                var outward=(side*x+dir*((t-.5)*.6)).Normalized();
-                double h=margin?rng.Range(.055,.095):rng.Range(.025,.048);
-                var tip=baseP+outward*(margin?.025:.006)+Vec3.Up*h;
-                Primitives.Tube(m,new[]{baseP,Vec3.Lerp(baseP,tip,.55)+outward*.006,tip},
-                    new[]{.0035,.0025,.0012},6,(i,v)=>(new[]{.56,.17,.28},1,i*.5,v,0,0));
-                Primitives.Ellipsoid(m,tip,new Vec3(.008,.010,.008),3,6,
-                    (u,v)=>(new[]{.65,.86,.97},1,u,v,0,0));
-            }
+            var n=clump.NormalAt(i);
+            n=new Vec3(n.X*radius,n.Y*height,n.Z*radius).Normalized();
+            clump.Normals[i*3]=(float)n.X; clump.Normals[i*3+1]=(float)n.Y; clump.Normals[i*3+2]=(float)n.Z;
         }
-        var flowerTop=new Vec3(rng.Range(-.08,.08),.86,rng.Range(-.08,.08));
-        Primitives.Tube(m,new[]{new Vec3(0,.02,0),new Vec3(.015,.42,0),flowerTop},new[]{.012,.008,.004},6,
-            (i,v)=>(c1,1,i*.5,v,0,0));
-        for(int f=0;f<3;f++)
-        {
-            var centre=flowerTop-Vec3.Up*(f*.09)+dirForFlower(f)*.055;
-            Primitives.Tube(m,new[]{flowerTop-Vec3.Up*(f*.09),centre},new[]{.003,.001},6,(i,v)=>(c1,1,i,v,0,0));
-            for(int petal=0;petal<5;petal++)
-            {
-                var forward=dirForFlower(petal*2*Math.PI/5);
-                CurvedBlade(m,centre,centre+forward*.045+Vec3.Up*.013,centre+forward*.08,
-                    new Vec3(-forward.Z,0,forward.X),.025,new[]{.55,.73,.96},new[]{.76,.86,.98},5,0,.7,0,0);
-            }
-        }
-        static Vec3 dirForFlower(double a) => new(Math.Cos(a),0,Math.Sin(a));
+        m.Append(clump,p=>new Vec3(p.X/radius,p.Y/height,p.Z/radius));
     }
+
 }
 
 
@@ -222,6 +185,9 @@ public static partial class OrganismMeshes
         // A clover mat is hundreds of small overlapping leaflets; below its budget the near tier
         // thins the mat into scattered pads instead of a continuous sward.
         "trifold" => 160000,
+        // Dewbonnet's radial lamellae are part of the cap silhouette and underside read. Its
+        // authored full mesh measures about 200k triangles; preserve the requested dense cap.
+        "dewbonnet" => 220000,
         // A fern's near read is its pinnae: dozens of finely divided blades per frond, nine fronds
         // deep. Below its budget the near tier drops pinnae and the fern reads as a handful of
         // broad leaves instead of a feather.
@@ -233,6 +199,11 @@ public static partial class OrganismMeshes
         // a modelled blade with its own venation, a coin-border bead and a rolled edge. Below its
         // budget the near tier drops coins and the carpet opens into separate rafts.
         "coinrunner" => 160000,
+        // Fine dense-leaf shells on climbers are authored as full closed surfaces. Keep their
+        // close tier intact; thinning them to the general cap opens the foliage into sparse strips.
+        "fenhook" => 400000,
+        "spiralvine" => 120000,
+        "clinglace" => 360000,
         // A Sarracenia trap is a modelled organ: trumpet wall, throat, rolled lip, erect hood with
         // its areolate net and a fringe of crystalline needles. Below its budget the tierer drops
         // the hood fringe and the net, and the trap stops reading as a pitcher plant.
@@ -252,9 +223,9 @@ public static partial class OrganismMeshes
 
     /// <summary>Flora mesh for one detail tier. <paramref name="tieredSource"/> also selects the dedicated leaf
     /// system's own tessellation tier (visual-profile species).</summary>
-    public static MeshData FloraTier(FloraSpeciesDef sp, ulong seed, int tier, bool juvenile = false, bool tieredSource = false) =>
+    public static MeshData FloraTier(FloraSpeciesDef sp, ulong seed, int tier, bool juvenile = false, bool tieredSource = false, int farGillStations = 9, int farEmberMicroSides = 5) =>
         BuildTier(sp.Id, seed, juvenile ? 1 : 0, tieredSource, tier,
-            (t, lod) => Flora(sp, seed, juvenile, tieredSource ? t : null, lod))!;
+            (t, lod) => Flora(sp, seed, juvenile, tieredSource ? t : null, lod), farGillStations, farEmberMicroSides)!;
 
     public static MeshData? FloraFruitingTier(FloraSpeciesDef sp, ulong seed, int tier, bool tieredSource = false) =>
         BuildTier(sp.Id, seed, 2, tieredSource, tier, (t, lod) => FloraFruiting(sp, seed, tieredSource ? t : null, lod));
@@ -266,7 +237,7 @@ public static partial class OrganismMeshes
     public static MeshData ClimberNodeTipTier(FloraSpeciesDef sp, ulong seed, int tier) =>
         BuildTier(sp.Id, seed, 5, false, tier, (_, lod) => ClimberNodeTip(sp, seed, lod))!;
 
-    private static MeshData? BuildTier(string id, ulong seed, int kind, bool tiered, int tier, Func<int, FloraLodParams, MeshData?> gen)
+    private static MeshData? BuildTier(string id, ulong seed, int kind, bool tiered, int tier, Func<int, FloraLodParams, MeshData?> gen, int farGillStations = 9, int farEmberMicroSides = 5)
     {
         tier = Math.Clamp(tier, 0, FloraLodTiers - 1);
         MeshData? Make(int t, double s) => gen(t, FloraLodParams.FromScale(s)) is { } raw ? FinishTier(raw) : null;
@@ -289,7 +260,18 @@ public static partial class OrganismMeshes
             LodScaleCache[key] = s;
             return s;
         }
-        return Make(tier, S(tier));
+        double scale = S(tier);
+        // Keep the existing calibration and all non-gill geometry unchanged.
+        if (tier == 2 && ((id == "dewbonnet" && farGillStations != 9) || (id == "embercup" && farEmberMicroSides != 5)))
+        {
+            var lod = FloraLodParams.FromScale(scale) with
+            {
+                GillStations = id == "dewbonnet" ? Math.Clamp(farGillStations, 3, 9) : 9,
+                EmberMicroSides = id == "embercup" ? Math.Clamp(farEmberMicroSides, 3, 5) : 5
+            };
+            return gen(tier, lod) is { } raw ? FinishTier(raw) : null;
+        }
+        return Make(tier, scale);
     }
 
     /// <summary>Largest scale in [0, hi] whose triangle count is within <paramref name="target"/> (0 if none).</summary>

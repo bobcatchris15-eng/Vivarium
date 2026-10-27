@@ -16,7 +16,7 @@ public static class PreloadGuardians
     private static readonly HashSet<string> _pending = new();
 
     /// <summary>Begins loading the guardian scene for an archetype, if it is not already loaded.</summary>
-    public static void Begin(string archetype)
+    public static void Begin(string? archetype)
     {
         if (string.IsNullOrEmpty(archetype)) return;
         string path = $"res://assets/guardians/{archetype}/guardian.glb";

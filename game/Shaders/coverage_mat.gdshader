@@ -62,7 +62,9 @@ void fragment() {
     float rough = 0.92;
     vec3 bump = vec3(0.0);
     float ao = 1.0;
-    vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    float isShoot = 0.0;
+    if (!FRONT_FACING) NORMAL = -NORMAL;
+    vec3 wn = finite_surface_normal((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz, vec3(0.0, 1.0, 0.0));
 
     // Per-patch grain direction so fibre/lobe streaking is not axis-aligned everywhere; derived from
     // a coarse hash of world position so it stays stable per clump instead of jittering per fragment.
@@ -110,7 +112,7 @@ void fragment() {
         // A current-state kernel field: isolated growing points expand into
         // neighboring points while dark protonema persists in the valleys.
         if (u_moss_colony_nuclei > 0.01) {
-            float crown = clamp(UV2.x, 0.0, 1.0);
+            float crown = UV2.y > 0.05 ? 1.0 : clamp(UV2.x, 0.0, 1.0);
             float strength = u_moss_colony_nuclei >= 4.0 ? 1.0 : 0.45;
             c *= mix(vec3(1.0),
                 mix(vec3(0.32, 0.36, 0.31), vec3(1.13, 1.12, 0.96),
@@ -130,10 +132,16 @@ void fragment() {
         ao = mix(0.72, 1.0, smoothstep(-0.1, 0.5, fibers)) * mix(0.65, 1.0, smoothstep(0.0, 0.65, tuft_height));
         ao *= porous_occ;
         rough = clamp(mix(0.96, scan.a, 0.55), 0.80, 0.97);
-        // Light-dependent fibre scattering only: ordinary moss has no green emission.
-        BACKLIGHT = base * vec3(0.075, 0.11, 0.025) * (0.35 + 0.65 * tips) * coverMask;
-        RIM = 0.065 * tips * coverMask;
-        RIM_TINT = 0.75;
+        // Light-dependent fibre scattering and thin-phyllid gametophore transmittance.
+        // Basal mat uses subtle fibre scattering; elevated 3D gametophores catch
+        // translucent golden-green backlight and velvety grazing sheen.
+        float shootT = clamp((UV2.y - 0.05) / 0.95, 0.0, 1.0);
+        isShoot = smoothstep(0.05, 0.20, UV2.y);
+        vec3 matBacklight = base * vec3(0.075, 0.11, 0.025) * (0.35 + 0.65 * tips) * coverMask;
+        vec3 shootBacklight = base * vec3(0.28, 0.48, 0.08) * (0.35 + 0.65 * shootT);
+        BACKLIGHT = mix(matBacklight, shootBacklight, isShoot);
+        RIM = mix(0.065 * tips * coverMask, mix(0.15, 0.38, shootT), isShoot);
+        RIM_TINT = mix(0.75, 0.65, isShoot);
     } else {
         // Lichen: scanned thallus colour + high-frequency tangent-space normal and cavity AO
         // from LichenThallus.png, plus procedural Voronoi areole cracks.
@@ -170,18 +178,18 @@ void fragment() {
     c *= mix(1.05, 0.96, coverMask);
     c *= ao;
 
-    vec3 n = normalize(wn + bump * 0.5);
+    vec3 n = finite_surface_normal(wn + bump * 0.5, wn);
 
     // Colony identity under the dark grow-light rig: lift and saturate slightly so moss/lichen patches stand out
     // from the procedural ground/log moss (which is also suppressed under colonies via cover_tex).
     if (sundew_surface < 0.5) {
         float cl = dot(c, vec3(0.2126, 0.7152, 0.0722));
         c = u_pattern < 0.5
-            ? clamp(mix(vec3(cl), c, 0.88), vec3(0.0), vec3(1.0))
+            ? clamp(mix(vec3(cl), c, mix(0.88, 1.0, isShoot)), vec3(0.0), vec3(1.0))
             : clamp(mix(vec3(cl), c, 1.18) * 1.30, vec3(0.0), vec3(1.0));
     }
     ALBEDO = c;
     ROUGHNESS = sundew_surface > 0.5 || u_pattern < 0.5 ? rough : rough * 0.88;
     SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : (u_pattern < 0.5 ? 0.22 : 0.28);
-    NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+    NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(n, 0.0)).xyz, NORMAL);
 }

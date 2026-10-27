@@ -14,6 +14,45 @@ def fixture():
     return r
 
 class ReportTests(unittest.TestCase):
+    def test_measured_production_scale_and_diagnostic_reductions(self):
+        r = fixture(); r['render_settings'].update(quality=1, scale=.95)
+        self.assertFalse(v.validate(r))
+        for scale in (.75, .5, .9, 0, float('nan')):
+            r['render_settings']['scale'] = scale
+            self.assertIn('visual target resolution/scale mismatch', v.validate(r))
+        r['render_settings'].update(quality=2, scale=.95)
+        self.assertIn('visual target resolution/scale mismatch', v.validate(r))
+        r['render_settings'].update(quality=1, scale=.95, width=1520)
+        self.assertIn('visual target resolution/scale mismatch', v.validate(r))
+
+    def test_frame_boundary_windows_use_actual_coverage(self):
+        r = fixture()
+        r['frame_times']['samples_ms'] = [25.0] * 2400
+        windows = [dict(start_s=i*1.025, duration_s=1.025, frames=41, fps=40.0) for i in range(58)]
+        r['frame_times']['windows'] = windows
+        for key in ('p50_ms','p95_ms','p99_ms','p999_ms','worst_ms'): r['frame_times'][key] = 25.0
+        r['counters']['memory'] = [dict(elapsed_s=w['start_s']+w['duration_s'],working_set_bytes=1024**3,vram_bytes=1024**3) for w in windows]
+        r['cpu_timing'] = [dict(elapsed_s=w['start_s']+w['duration_s'],process_peak_ms=1,simulation_last_ms=0,scope_max_ms={}) for w in windows]
+        self.assertEqual([], v.validate(r))
+        missing_memory = copy.deepcopy(r); missing_memory['counters']['memory'].pop()
+        self.assertIn('memory series incomplete', v.validate(missing_memory))
+        r['frame_times']['windows'] = windows[:-1]
+        self.assertTrue(v.validate(r)) # A complete hidden tail still fails coverage.
+    def test_population_ready_library(self):
+        r=fixture(); r['scenario'].update(library_version=2, flora_population_ready=True)
+        self.assertEqual([], v.validate(r))
+        r['scenario']['flora_population_ready']=False
+        self.assertTrue(v.validate(r))
+    def test_viewport_gpu_samples(self):
+        r=fixture(); r['viewport_gpu_timing']=dict(available=True,samples_ms=[10,20],mean_ms=15)
+        self.assertEqual([],v.validate(r))
+        r['viewport_gpu_timing']['samples_ms']=[0,float('nan')]
+        self.assertTrue(v.validate(r))
+    def test_unavailable_viewport_gpu_is_not_zero_cost(self):
+        r=fixture(); r['viewport_gpu_timing']=dict(available=False,samples_ms=[],mean_ms=None)
+        self.assertEqual([],v.validate(r))
+        r['viewport_gpu_timing']['mean_ms']=0
+        self.assertTrue(v.validate(r))
     def test_valid_screening_fixture(self): self.assertEqual([], v.validate(fixture()))
     def test_dropped_frames(self):
         r=fixture(); r['frame_times']['samples_ms']=r['frame_times']['samples_ms'][:-600]; self.assertTrue(v.validate(r))

@@ -1,15 +1,14 @@
 import json, glob
 
-presets = glob.glob('game/content/presets/*.json')
-for p in sorted(presets):
-    with open(p) as f:
-        data = json.load(f)
-    wt = data.get('water', {}).get('waterTable', 0)
-    dia = data.get('diameter', 8)
-    channels = [f for f in data.get('terrain', {}).get('features', []) if f.get('type') == 'channel']
-    basins = [f for f in data.get('terrain', {}).get('features', []) if f.get('type') == 'basin']
-    pid = data.get('id', p)
-    bh = data.get('terrain', {}).get('baseHeight', 0)
-    sx = data.get('terrain', {}).get('slopeX', 0)
-    sz = data.get('terrain', {}).get('slopeZ', 0)
-    print(f"{pid:22} dia={dia:4.1f} wt={wt:4.2f} baseH={bh:4.2f} slopeX={sx:6.3f} slopeZ={sz:6.3f} chs={len(channels)} basins={len(basins)}")
+for p in sorted(glob.glob('game/content/presets/*.json')):
+    d = json.load(open(p))
+    id_ = d['id']
+    springs = d.get('water', {}).get('springs', [])
+    sp_parts = []
+    for s in springs:
+        sp_parts.append(f"({s['x']:.2f}, {s['z']:.2f})")
+    sp_str = ', '.join(sp_parts)
+    chs = [f for f in d.get('terrain', {}).get('features', []) if f.get('type') == 'channel' and 'bedHeight' in f]
+    pools = [f for f in d.get('terrain', {}).get('features', []) if f.get('type') == 'basin' and 'bedHeight' in f]
+    wt = d.get('water', {}).get('waterTable', 0)
+    print(f"{id_:22}: springs=[{sp_str}] | {len(chs):2} chs | {len(pools):2} pools | WT={wt}")

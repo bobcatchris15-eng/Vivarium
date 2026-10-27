@@ -5,6 +5,78 @@ namespace Vivarium.Sim.Tests;
 
 public class MapDrainageTests
 {
+    [Theory]
+    [InlineData("bayou_marsh")]
+    [InlineData("oxbow_creek")]
+    public void MultiCourseWaterPresetKeepsOrganicPoolsOnAChannel(string id)
+    {
+        var d = TestUtil.Content.PresetOrThrow(id);
+        var path = d.Terrain.Features.Where(f => f.Type == "channel" && f.BedHeight.HasValue).ToArray();
+        var pools = d.Terrain.Features.Where(f => f.BasinOutline != null).ToArray();
+        Assert.True(pools.Length >= 3);
+        foreach (var pool in pools)
+            Assert.Contains(path, f => Vec2.Distance(new(f.X, f.Z), new(pool.X, pool.Z)) < .2);
+        foreach (var spring in d.Water.Springs)
+            Assert.Contains(path, f => Vec2.Distance(new(f.X, f.Z), new(spring.X, spring.Z)) < 1e-7);
+    }
+
+    [Theory]
+    [InlineData("cascading_falls")]
+    [InlineData("woodland_vernal_pools")]
+    [InlineData("default")]
+    [InlineData("estuary_delta")]
+    [InlineData("misty_cloud_forest")]
+    [InlineData("peat_fen")]
+    public void WaterFocusedPresetHasWindingConnectedCourseAndPools(string id)
+    {
+        var d = TestUtil.Content.PresetOrThrow(id);
+        var path = d.Terrain.Features.Where(f => f.Type == "channel" && f.BedHeight.HasValue).ToArray();
+        var pools = d.Terrain.Features.Where(f => f.BasinOutline != null).ToArray();
+        Assert.True(path.Length > 2);
+        Assert.True(pools.Length >= 2);
+        var start = new Vec2(path[0].X, path[0].Z);
+        var end = new Vec2(path[^1].ToX, path[^1].ToZ);
+        var chord = end - start;
+        Assert.True(path.Max(f => Math.Abs((new Vec2(f.X, f.Z) - start).Cross(chord)) / chord.Length) > .3);
+        for (int i = 1; i < path.Length; i++)
+            Assert.True(Vec2.Distance(new(path[i-1].ToX, path[i-1].ToZ), new(path[i].X, path[i].Z)) < 1e-7);
+        foreach (var pool in pools)
+            Assert.Contains(path, f => Vec2.Distance(new(f.X, f.Z), new(pool.X, pool.Z)) < .2);
+    }
+
+    [Fact]
+    public void WhisperingCreekHasAConnectedWindingSpringCourseAndOrganicPools()
+    {
+        var d = TestUtil.Content.PresetOrThrow("creek");
+        var path = d.Terrain.Features.Where(f => f.Type == "channel" && f.BedHeight.HasValue).ToArray();
+        Assert.True(path.Length > 2);
+        var start = new Vec2(path[0].X, path[0].Z);
+        var end = new Vec2(path[^1].ToX, path[^1].ToZ);
+        var chord = end - start;
+        Assert.True(path.Max(f => Math.Abs((new Vec2(f.X, f.Z) - start).Cross(chord)) / chord.Length) > .35);
+        for (int i = 1; i < path.Length; i++)
+            Assert.True(Vec2.Distance(new(path[i-1].ToX, path[i-1].ToZ), new(path[i].X, path[i].Z)) < 1e-7);
+        Assert.Contains(d.Terrain.Features, f => f.BasinOutline == "bean");
+        Assert.Contains(d.Terrain.Features, f => f.BasinOutline == "lobed");
+        Assert.Empty(WorldDescriptor.FromJson(d.ToJson()).Validate());
+    }
+
+    [Fact]
+    public void OrganicBasinOutlineChangesFootprintWithoutChangingLegacyBasins()
+    {
+        var d = TestUtil.FlatDescriptor();
+        d.Terrain.Features.Add(new() { Type = "basin", Radius = 1, Sharp = true, Amount = 0, BedHeight = .1 });
+        var domain = new HexDomain(d.Diameter);
+        var seed = 1UL;
+        double circularX = Heightfield.RawHeight(seed, d.Terrain, 1.1, 0, domain);
+        double circularZ = Heightfield.RawHeight(seed, d.Terrain, 0, 1.1, domain);
+        d.Terrain.Features[0].BasinOutline = "bean";
+        Assert.True(Heightfield.RawHeight(seed, d.Terrain, 1.1, 0, domain) < circularX - .05);
+        Assert.Equal(circularZ, Heightfield.RawHeight(seed, d.Terrain, 0, 1.1, domain), 10);
+        d.Terrain.Features[0].BasinOutline = null;
+        Assert.DoesNotContain("BasinOutline", d.ToJson());
+    }
+
     [Fact]
     public void GradedChannelIntersectionsDoNotAddCutDepths()
     {

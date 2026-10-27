@@ -59,7 +59,7 @@ public static partial class OrganismMeshes
         BodySegment(m,new Vec3(-.429,.055,0),new Vec3(.045,.027,.068),12,24,(a,b)=>Region(.04,b,1));
         foreach(double side in new[]{-1.0,1.0})
         {
-            BodySegment(m,new Vec3(.391,.113,.123*side),new Vec3(.014,.012,.008),10,16,(a,b)=>Region(.98,b,2));
+            BodySegment(m,new Vec3(.391,.113,.123*side),new Vec3(.014,.012,.008),16,24,(a,b)=>Region(.98,b,2));
             var antenna=new Vec3(.408,.091,.052*side);
             DetailedTube(m,antenna,new[]{antenna,new Vec3(.456,.109,.094*side),new Vec3(.509,.097,.150*side),
                 new Vec3(.547,.063,.185*side),new Vec3(.580,.039,.196*side)},new[]{.013,.011,.008,.005,.0025},role:3,sides:8);
@@ -137,6 +137,17 @@ public static partial class OrganismMeshes
         BodySegment(m,head,new Vec3(.060,.037,.142),14,24,(a,b)=>Region(.94,b,1),pitch:-.7);
         foreach(double side in new[]{-1.0,1.0})
             BodySegment(m,head+new Vec3(.016,.018,.126*side),new Vec3(.010,.008,.006),8,12,(a,b)=>Region(a,b,2));
+        // Conglobation folds all seven leg pairs into the ventral opening;
+        // it does not delete the appendages when the plates close.
+        foreach(double side in new[]{-1.0,1.0}) for(int leg=0;leg<7;leg++)
+        {
+            double angle = -.70 + leg * .22;
+            var root = new Vec3(Math.Sin(angle) * .11, cy - Math.Cos(angle) * .11, .095 * side);
+            var knee = root + new Vec3(.012, -.012, -.035 * side);
+            var ankle = knee + new Vec3(-.020, .016, -.035 * side);
+            var toe = ankle + new Vec3(.012, .004, -.012 * side);
+            DetailedTube(m, root, new[]{root,knee,ankle,toe}, new[]{.010,.008,.005,.0025}, sides:8);
+        }
         NormalizeIsopodSupport(m);m.RecomputeNormals();
     }
 }

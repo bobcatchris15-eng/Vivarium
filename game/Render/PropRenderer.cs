@@ -17,6 +17,7 @@ public partial class PropRenderer : Node3D
     private readonly Dictionary<EntityId, ArrayMesh> _logMeshes = new();
     private ArrayMesh[] _pebbles = System.Array.Empty<ArrayMesh>();
     private ShaderMaterial _rockMat = null!, _logMat = null!;
+    private ShaderMaterial _pebbleMat = null!;
     private Node3D _propRoot = null!, _gravelRoot = null!;
     private readonly Dictionary<EntityId, MeshInstance3D> _placedRocks = new();
     private readonly Dictionary<EntityId, MeshInstance3D> _placedLogs = new();
@@ -32,22 +33,27 @@ public partial class PropRenderer : Node3D
         {
             _rockMat = Bridge.Shader("res://Shaders/rock.gdshader");
             Bridge.BindSurface(_rockMat, "rock", Bridge.Surfaces.Rock);
-            if (!IslandRenderer.CoverMaskConsumers.Contains(_rockMat)) IslandRenderer.CoverMaskConsumers.Add(_rockMat);
-            _rockMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
             _logMat = Bridge.Shader("res://Shaders/log.gdshader");
             Bridge.BindSurface(_logMat, "bark", Bridge.Surfaces.Bark);
             Bridge.BindSurface(_logMat, "moss", Bridge.Surfaces.Moss);
-            if (!IslandRenderer.CoverMaskConsumers.Contains(_logMat)) IslandRenderer.CoverMaskConsumers.Add(_logMat);
+            Bridge.BindSurface(_logMat, "rotten_wood", Bridge.Surfaces.RottenWood);
         }
-        if (_pebbles.Length == 0)
+        if (_pebbleMat == null || _pebbles.Length == 0)
         {
-            var pebbleMat = (ShaderMaterial)_rockMat.Duplicate();
-            pebbleMat.SetShaderParameter("lichen", 0.0f);
-            pebbleMat.SetShaderParameter("tile_metres", 0.35f);
+            _pebbleMat = (ShaderMaterial)_rockMat.Duplicate();
+            _pebbleMat.SetShaderParameter("lichen", 0.0f);
+            _pebbleMat.SetShaderParameter("tile_metres", 0.35f);
+            _pebbleMat.SetShaderParameter("pebble_mode", 1.0f);
             _pebbles = new ArrayMesh[32];
-            pebbleMat.SetShaderParameter("pebble_mode", 1.0f);
-            for (int i = 0; i < _pebbles.Length; i++) _pebbles[i] = Bridge.ToArrayMesh(PropMeshes.Pebble(1000 + (ulong)i * 7), pebbleMat);
+            for (int i = 0; i < _pebbles.Length; i++) _pebbles[i] = Bridge.ToArrayMesh(PropMeshes.Pebble(1000 + (ulong)i * 7), _pebbleMat);
         }
+        _rockMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
+        _logMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
+        _pebbleMat.SetShaderParameter("water_table", (float)w.Water.WaterTable);
+
+        IslandRenderer.RegisterCoverMaskConsumer(_rockMat);
+        IslandRenderer.RegisterCoverMaskConsumer(_logMat);
+        IslandRenderer.RegisterCoverMaskConsumer(_pebbleMat);
         _logMeshes.Clear();
         _placedRocks.Clear();
         _placedLogs.Clear();
@@ -58,8 +64,23 @@ public partial class PropRenderer : Node3D
         AddChild(_gravelRoot);
         _gravelCount = -1;
         Refresh();
+        // Props register after Island.Build during world loading; bind immediately
+        // rather than waiting for the island's periodic field refresh.
+        if (GetParent() != null)
+        {
+            foreach (var sibling in GetParent().GetChildren())
+                if (sibling is IslandRenderer island) island.RefreshMaterialBindings();
+        }
     }
 
+
+    public override void _ExitTree()
+    {
+        base._ExitTree();
+        IslandRenderer.UnregisterCoverMaskConsumer(_rockMat);
+        IslandRenderer.UnregisterCoverMaskConsumer(_logMat);
+        IslandRenderer.UnregisterCoverMaskConsumer(_pebbleMat);
+    }
     public override void _Process(double delta)
     {
         using var prof = FrameProfiler.Measure("Props");

@@ -1,4 +1,4 @@
-﻿// Dedicated thin/volumetric foliage. CUSTOM0=(seed,variant,age,flex), CUSTOM1=(attachment,length).
+// Dedicated thin/volumetric foliage. CUSTOM0=(seed,variant,age,flex), CUSTOM1=(attachment,length).
 shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/surface.gdshaderinc"
@@ -35,6 +35,8 @@ uniform vec3 bioluminescence_color = vec3(0.0);
 uniform float bioluminescence_strength = 0.0;
 uniform float night_factor = 0.0;
 uniform int emission_mask_mode = 0;
+uniform bool clip_to_hex = false;
+uniform float hex_apothem = 6.92820323;
 varying vec4 plant;
 varying vec4 blade;
 varying vec3 position_world;
@@ -45,40 +47,6 @@ vec3 turn(vec3 p, vec3 axis, float angle) {
 }
 void vertex() {
     plant = INSTANCE_CUSTOM; blade = CUSTOM0;
-    float clock = review_time >= 0. ? review_time : TIME;
-    float wind = wind_strength;
-    float poke = plant.z * .15;
-    if (wind > 0. || poke > 0.) {
-        // Hierarchical wind: branch cantilever sway with bounded displacement preserving shadow bounds
-        float phase_branch = clock * 1.25 + plant.w * 6.2831;
-        float h = max(VERTEX.y, 0.0);
-        float stem_flex = (h * h) / (1.0 + 0.35 * h);
-        float stem_amount = clamp((.012 * (wind / max(.018, 0.0001)) + poke) / max(plant_stiffness, 0.5), 0.0, 0.08);
-        vec2 branch_disp = clamp(vec2(sin(phase_branch) * 2.2, cos(phase_branch * 0.85) * 1.6) * stem_amount * stem_flex, vec2(-0.35), vec2(0.35));
-
-        // Attachment anchor CUSTOM1.xyz moves with branch sway
-        vec3 anchor = CUSTOM1.xyz;
-        float ah = max(anchor.y, 0.0);
-        float a_flex = (ah * ah) / (1.0 + 0.35 * ah);
-        vec2 a_disp = clamp(vec2(sin(phase_branch) * 2.2, cos(phase_branch * 0.85) * 1.6) * stem_amount * a_flex, vec2(-0.35), vec2(0.35));
-        vec3 animated_anchor = anchor + vec3(a_disp.x, 0.0, a_disp.y);
-
-        // Leaf blade flutter rotating around its moving attachment anchor
-        vec3 leaf_local = VERTEX - anchor;
-        float tip = smoothstep(0.02, 0.95, UV.x);
-        float leaf_phase = plant.w * 6.2831 + blade.x * 17.3;
-        vec3 wind_axis = normalize(vec3(cos(leaf_phase), 0.0, sin(leaf_phase)));
-        float leaf_wave = sin(clock * 2.6 + leaf_phase) * 0.6 + sin(clock * 5.2 + blade.x * 37.0) * 0.4;
-        float leaf_angle = leaf_wave * wind * blade.w * tip;
-        leaf_local = turn(leaf_local, wind_axis, leaf_angle);
-        VERTEX = animated_anchor + leaf_local;
-        NORMAL = normalize(turn(NORMAL, wind_axis, leaf_angle));
-
-        // Rotate normal with branch deflection
-        float d_stem = stem_amount * 2.0 * h / (1.0 + 0.35 * h);
-        vec2 dw = vec2(sin(phase_branch) * 2.2, cos(phase_branch * 0.85) * 1.6) * d_stem;
-        NORMAL = normalize(vec3(NORMAL.x - dw.x * NORMAL.y, NORMAL.y + dw.x * NORMAL.x + dw.y * NORMAL.z, NORMAL.z - dw.y * NORMAL.y));
-    }
     position_local = VERTEX;
     position_world = (MODEL_MATRIX*vec4(VERTEX,1.)).xyz;
 
@@ -87,6 +55,12 @@ vec3 detail_normal(vec3 base, vec2 uv, vec3 detail) {
     return cotangent_normal(base, position_world, uv, detail);
 }
 void fragment() {
+    if (clip_to_hex) {
+        float d = max(abs(position_world.z), 0.8660254037844386 * abs(position_world.x) + 0.5 * abs(position_world.z)) - hex_apothem;
+        if (d > 0.001) {
+            discard;
+        }
+    }
     tissue_phase_mask = UV2.y > 0.5 ? 1.0 : 0.0;
     // Invert backface normal so undersides do not render dark or inverted.
     if (!FRONT_FACING) {
@@ -171,9 +145,9 @@ void fragment() {
     vec3 slopes = normalize(vec3(
         micro.xy*normal_strength + veins.xy*vein_strength
         + lamina_curl_strength * lamina_slope, 1.));
-    vec3 wn = normalize((INV_VIEW_MATRIX*vec4(NORMAL,0.)).xyz);
+    vec3 wn = finite_surface_normal((INV_VIEW_MATRIX*vec4(NORMAL,0.)).xyz, vec3(0.0,1.0,0.0));
     vec3 mapped=detail_normal(wn,UV,slopes);
-    NORMAL=normalize((VIEW_MATRIX*vec4(mapped,0.)).xyz);
+    NORMAL=finite_surface_normal((VIEW_MATRIX*vec4(mapped,0.)).xyz, vec3(0.0,0.0,1.0));
     // Reconstruct plant-fiber orientation from true mesh UV derivatives,
     // not from the camera plane; rotate into the custom light's view frame.
     vec2 ux = dFdx(UV), uy = dFdy(UV);
@@ -194,6 +168,7 @@ void fragment() {
     // subpixel veins/folds to flash white as the camera or blade moves.
     vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
     float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
+    if (!(normal_variance >= 0.0 && normal_variance < 1e12)) normal_variance = 0.0;
     ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), .35, 1.0);
     SPECULAR=volumetric ? .45 : mix(0.35, mix(0.38, 0.50, cuticle_sheen), topf);
     float vein_thickness = clamp(anatomy.g * 0.75 + anatomy.r * 0.25, 0.0, 1.0);
@@ -237,5 +212,13 @@ void fragment() {
         BACKLIGHT = vec3(0.0);
         SPECULAR = 0.0;
         EMISSION = display;
+    }
+    ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(0.98));
+    if (tissue_light_diagnostic == 5) {
+        SSS_STRENGTH = 0.0;
+        SSS_TRANSMITTANCE_COLOR = vec4(0.0);
+        SSS_TRANSMITTANCE_DEPTH = 0.1;
+        SSS_TRANSMITTANCE_BOOST = 0.0;
+        BACKLIGHT = vec3(0.0);
     }
 }

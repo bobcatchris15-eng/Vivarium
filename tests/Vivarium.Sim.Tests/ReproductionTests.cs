@@ -91,4 +91,36 @@ public class ReproductionTests
             Assert.True(fruitMesh.TriangleCount > baseMesh.TriangleCount, $"{id} fruiting mesh did not add reproductive geometry");
         }
     }
+
+    [Fact]
+    public void WoodyFruitAreAttachedToBranchesWithoutFloatingDisplacement()
+    {
+        var w = TestUtil.DefaultWorld();
+        var woodyFruiting = new[] { "embercrown", "lanternbrush", "shadebell", "cragparasol", "lacemantle", "splitcrown", "glowbriar" };
+        foreach (string id in woodyFruiting)
+        {
+            var sp = w.Content.FloraOrThrow(id);
+            var baseMesh = OrganismMeshes.Flora(sp, 4321);
+            var fruitMesh = Assert.IsType<MeshData>(OrganismMeshes.FloraFruiting(sp, 4321));
+            Assert.True(fruitMesh.TriangleCount > baseMesh.TriangleCount, $"{id} fruiting mesh did not add reproductive geometry");
+
+            int baseVerts = baseMesh.VertexCount;
+            Assert.True(fruitMesh.VertexCount > baseVerts, $"{id} fruit mesh has no added vertices");
+
+            int addedCount = fruitMesh.VertexCount - baseVerts;
+            double maxAllowedDist = Math.Max(0.12, (sp.Reproduction?.DisplaySize ?? 0.03) * 6.0);
+            int step = Math.Max(1, addedCount / 30);
+            for (int i = baseVerts; i < fruitMesh.VertexCount; i += step)
+            {
+                var p = fruitMesh.Position(i);
+                double minDist = double.MaxValue;
+                for (int b = 0; b < baseVerts; b++)
+                {
+                    double d = (p - baseMesh.Position(b)).Length;
+                    if (d < minDist) minDist = d;
+                }
+                Assert.True(minDist <= maxAllowedDist, $"{id} added fruit vertex {p} is floating {minDist:0.000} away from closest branch (threshold {maxAllowedDist:0.000})");
+            }
+        }
+    }
 }

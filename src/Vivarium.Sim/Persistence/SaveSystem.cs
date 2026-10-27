@@ -239,6 +239,15 @@ public static class SaveSystem
             if (compat == SaveCompatibility.Current && droppedRemoved == 0 && !string.IsNullOrEmpty(m.StateDigest))
             {
                 string digest = WorldSerializer.Digest(w);
+                if (digest != m.StateDigest)
+                {
+                    // Older current-schema saves predate this optional ordinal. Verify
+                    // their original canonical representation without weakening the
+                    // stored payload checksums or the restored-state digest check.
+                    using var coverage = JsonDocument.Parse(payloads["coverage"]);
+                    if (!coverage.RootElement.TryGetProperty("AquaticStep", out _))
+                        digest = WorldSerializer.DigestOf(WorldSerializer.Serialize(w, includeAquaticStep: false));
+                }
                 if (digest != m.StateDigest) return LoadResult.Fail("save state digest mismatch after load (file damaged or content changed)", compat, m);
             }
             if (m.ContentDigest != content.ContentDigest)

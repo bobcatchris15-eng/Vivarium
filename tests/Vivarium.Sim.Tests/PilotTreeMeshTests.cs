@@ -24,7 +24,8 @@ public class PilotTreeMeshTests
             var mesh = PilotTreeMeshes.Build(world);
             Assert.Equal(mesh.DigestHex(), PilotTreeMeshes.Build(world).DigestHex());
             Assert.True(digests.Add(mesh.DigestHex()), def.Id);
-            Assert.InRange(mesh.TriangleCount, 3000, 180000);
+            // Closed 20x12 lamina shells replace single-sheet crowns; preserve every authored leaf.
+            Assert.InRange(mesh.TriangleCount, 3000, 2600000);
             Assert.Equal(mesh.VertexCount * 3, mesh.Normals.Count);
             Assert.Equal(mesh.VertexCount * 4, mesh.Colors.Count);
             Assert.Equal(mesh.VertexCount * 2, mesh.UV.Count);
@@ -43,7 +44,7 @@ public class PilotTreeMeshTests
                 Assert.InRange(a, 0, mesh.VertexCount - 1);
                 Assert.InRange(b, 0, mesh.VertexCount - 1);
                 Assert.InRange(c, 0, mesh.VertexCount - 1);
-                Assert.True((mesh.Position(b) - mesh.Position(a)).Cross(mesh.Position(c) - mesh.Position(a)).Length > 1e-10, def.Id);
+                Assert.True((mesh.Position(b) - mesh.Position(a)).Cross(mesh.Position(c) - mesh.Position(a)).Length > 1e-10, $"{def.Id} tri {i/3} at {mesh.Position(a)} {mesh.Position(b)} {mesh.Position(c)} alpha {mesh.Colors[a*4+3]}");
             }
         }
         Assert.Equal(6, digests.Count);
@@ -85,8 +86,8 @@ public class PilotTreeMeshTests
         Assert.True(structural.TriangleCount>1000);
         Assert.True(complete.TriangleCount>structural.TriangleCount);
         Assert.All(Enumerable.Range(0,structural.VertexCount),
-            i=>Assert.True(structural.Colors[i*4+3]>.9f,
-                "Only the authoritative woody trunk/roots remain"));
+            i=>Assert.True(structural.Colors[i*4+3]>.5f,
+                "Only authoritative wood and attached root gametophores remain; no crown laminae"));
         foreach(var root in world.PilotTree!.Roots.Where(p=>p.AlongSide))
         {
             var sample=root.Samples[root.Samples.Count/2];

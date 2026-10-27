@@ -74,6 +74,11 @@ public partial class SmokeRunner
             return;
         }
 
+        // Reference scenes must not move through dawn/dusk as wall-clock time
+        // changes with machine speed. Keep production exposure at fixed daylight.
+        const double referenceLightSeconds = 420;
+        Session.EnvRig.BenchmarkLightSeconds = referenceLightSeconds;
+        _facts["reference_light_seconds"] = referenceLightSeconds;
         if (FixedExposureOverride && Session.EnvRig.CameraAttributes is { } refAttr)
         {
             refAttr.AutoExposureEnabled = false;
@@ -94,6 +99,20 @@ public partial class SmokeRunner
             if (s2 - s0 > 2_000_000)
                 GD.Print($"REFERENCE_WARMUP_SLOW day={W.Clock.BioDays:0.00} step_ms={(s1 - s0) / 1000} frame_ms={(s2 - s1) / 1000}");
         }
+        while (!Session.Flora.PopulationReady)
+        {
+            Session.Flora._Process(.5);
+            await Frames(1);
+        }
+        int referenceLockedMaterials = LockReviewFoliage(Session);
+        _facts["reference_presentation"] = new
+        {
+            light_seconds = referenceLightSeconds,
+            flora_population_ready = Session.Flora.PopulationReady,
+            locked_materials = referenceLockedMaterials,
+            available_material_clocks_seconds = 0,
+            raw_shader_time_and_initial_cpu_poses_controlled = false,
+        };
         _facts["preset_bio_days"] = Math.Round(W.Clock.BioDays, 3);
         _facts["ticks"] = W.Clock.Tick;
         _facts["flora_total"] = W.Flora.Count;
@@ -338,7 +357,12 @@ public partial class SmokeRunner
         _facts["flora_visible"] = Session.Flora.Visible_;
         Check("staged species in the running world", Session.Flora.Visible_ > 0);
     }
-    private Vector3 Ground(Vec2 p) => new((float)p.X, (float)W.GroundHeight(p), (float)p.Z);
+    private Vector3 Ground(Vec2 p)
+    {
+        double h = W.GroundHeight(p);
+        if (double.IsNaN(h) || double.IsInfinity(h)) h = 0;
+        return new((float)p.X, (float)h, (float)p.Z);
+    }
 
     /// <summary>Camera at a fixed distance/elevation from a target. Starting from the preferred bearing it steps round
     /// until the eye is clear of terrain and props and has an unobstructed line to the target (deterministic).</summary>
@@ -381,6 +405,40 @@ public partial class SmokeRunner
     private List<RefScene> BuildReferenceScenes()
     {
         var list = new List<RefScene>();
+        if (Main.ArgAfter("--review-scenes")?.Contains("log_coverage") == true)
+        {
+            float Cover(Vec2 p)
+            {
+                int x = (int)Math.Floor(p.X / CoverageSpec.CellSize);
+                int z = (int)Math.Floor(p.Z / CoverageSpec.CellSize);
+                return W.Coverage.ById(CoverageLayerId.Mat).GetB(x,z)
+                    + W.Coverage.ById(CoverageLayerId.Crust).GetB(x,z);
+            }
+            var candidates = W.Props.Logs.SelectMany(log => Enumerable.Range(1,9).Select(i =>
+            {
+                var p = log.Position + log.Axis * (log.Length * (i / 10.0 - .5));
+                return new { log, p, cover = Cover(p) };
+            })).OrderByDescending(x => x.cover).ThenBy(x => x.log.Id.Value).ToList();
+            if (candidates.Count == 0) throw new InvalidOperationException("Loaded world has no fallen logs.");
+            var best = candidates[0];
+            var top = new Vector3((float)best.p.X, (float)best.log.TopAt(best.p), (float)best.p.Z);
+            list.Add(Orbit("log_coverage_top", "log", top, .38f, 32, 60));
+            list.Add(Orbit("log_coverage_far", "log", top, 1.8f, 22, 60));
+            list.Add(Orbit("log_coverage_far_reverse", "log", top, 1.8f, 22, 240));
+            list.Add(Orbit("log_coverage_distant", "log", top, 3f, 22, 60));
+            var side = new Vec2(-best.log.Axis.Z, best.log.Axis.X);
+            var ground = best.p + side * (best.log.Radius + .20);
+            list.Add(Orbit("log_coverage_ground", "ground", Ground(ground), .38f, 32, 60));
+            File.WriteAllText(Path.Combine(OutDir,"log_coverage_target.json"), JsonSerializer.Serialize(new
+            {
+                log_id = best.log.Id.Value, log_position = new[] {best.log.X,best.log.Y,best.log.Z},
+                best.log.Radius, best.log.Length, best.log.DecayClass,
+                target = new[] {top.X,top.Y,top.Z}, coverage_biomass_sum = best.cover,
+                ground_target = new[] {ground.X,ground.Z}, ground_coverage_biomass_sum = Cover(ground),
+                selection = "Highest existing Mat+Crust biomass sampled along log axes in loaded startup snapshot; no coverage added."
+            }, new JsonSerializerOptions { WriteIndented=true }));
+            return list;
+        }
         var flora = W.Flora.Items.OrderBy(f => f.Id.Value).ToList();
         string Arch(string id) => W.Content.FloraOrThrow(id).Archetype;
         double H(Vivarium.Sim.Flora.FloraIndividual f) => W.Content.FloraOrThrow(f.SpeciesId).Height;
@@ -423,7 +481,10 @@ public partial class SmokeRunner
         if (shoreCell >= 0)
         {
             var q = W.Grid.CellCenter(shoreCell);
-            var sp3 = new Vector3((float)q.X, (float)W.Water.SurfaceAt(q), (float)q.Z);
+            double surf = W.Water.SurfaceAt(q);
+            if (double.IsNaN(surf) || double.IsInfinity(surf))
+                surf = W.GroundHeight(q) + Math.Max(0.01, W.Water.OpenWaterDepth(q));
+            var sp3 = new Vector3((float)q.X, (float)surf, (float)q.Z);
             list.Add(new RefScene("water_margin", "water", sp3 + new Vector3(-0.9f, 0.45f, 0.6f), sp3 + new Vector3(0.25f, 0, 0)));
         }
         // 10 rock/soil contact, 11 log/decomposer contact

@@ -71,7 +71,19 @@ public partial class CoverageRenderer
         Color tipColor = mid.Lerp(live, 0.45f) * (0.92f + colorVariance * .13f);
         double phase = (hash & 1023) / 1023.0 * Math.PI * 2;
         Vec3 up = normal.Normalized();
-        int fans = strength >= 4 ? 9 : 5;
+        int fans = strength switch
+        {
+            >= 4 => 9,
+            3 => 7,
+            2 => 6,
+            _ => 5
+        };
+        // Construct orthonormal basis on substrate tangent plane so leaflets drape
+        // naturally across steep slopes, rocks, and curved logs without clipping substrate.
+        Vec3 tangentU = Math.Abs(up.Y) < 0.99
+            ? Vec3.Up.Cross(up).Normalized()
+            : Vec3.Right;
+        Vec3 tangentV = up.Cross(tangentU).Normalized();
         var colBase = new[] { (double)(mid.R * 0.68f), (double)(mid.G * 0.72f), (double)(mid.B * 0.59f) };
         var colTip = new[] { (double)tipColor.R, (double)tipColor.G, (double)tipColor.B };
         // Actual triangular surfaces rather than alpha-discarded cards. Random azimuth breaks
@@ -83,21 +95,22 @@ public partial class CoverageRenderer
                 ((kh & 255) / 255.0 - 0.5) * 0.45;
             double radial = reach * (0.68 + ((kh >> 8) & 255) / 255.0 * 0.60);
             double rise = h * (0.55 + ((kh >> 16) & 255) / 255.0 * 0.55);
-            var dir = new Vec3(Math.Cos(azimuth), 0.0, Math.Sin(azimuth));
-            var widthDir = new Vec3(-dir.Z, 0.0, dir.X);
+            var dir = tangentU * Math.Cos(azimuth) + tangentV * Math.Sin(azimuth);
+            var widthDir = up.Cross(dir).Normalized();
             double width = radial * 0.32;
             var basePt = foot + up * 0.0002;
             var shoulder = basePt + dir * (radial * .50) + up * (rise * 0.70);
             var tip = basePt + dir * radial + up * (rise * 0.98);
+            var leafNormal = (up * 0.85 + dir * 0.35).Normalized();
             int a = mesh.AddVertex(basePt - widthDir * (width * 0.27), up, colBase, 1.0,
-                basePt.X, basePt.Z);
+                basePt.X, basePt.Z, 1.0, 0.15);
             int b = mesh.AddVertex(basePt + widthDir * (width * 0.27), up, colBase, 1.0,
-                basePt.X, basePt.Z);
-            int c = mesh.AddVertex(shoulder - widthDir * width, up, colTip, 1.0,
-                shoulder.X, shoulder.Z);
-            int d = mesh.AddVertex(shoulder + widthDir * width, up, colTip, 1.0,
-                shoulder.X, shoulder.Z);
-            int e = mesh.AddVertex(tip, up, colTip, 1.0, tip.X, tip.Z);
+                basePt.X, basePt.Z, 1.0, 0.15);
+            int c = mesh.AddVertex(shoulder - widthDir * width, leafNormal, colTip, 1.0,
+                shoulder.X, shoulder.Z, 1.0, 0.65);
+            int d = mesh.AddVertex(shoulder + widthDir * width, leafNormal, colTip, 1.0,
+                shoulder.X, shoulder.Z, 1.0, 0.65);
+            int e = mesh.AddVertex(tip, leafNormal, colTip, 1.0, tip.X, tip.Z, 1.0, 1.0);
             Primitives.TriangleFacing(mesh, a, b, c, up);
             Primitives.TriangleFacing(mesh, b, d, c, up);
             Primitives.TriangleFacing(mesh, c, d, e, up);

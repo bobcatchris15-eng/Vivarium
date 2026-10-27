@@ -27,130 +27,286 @@ public static class PropMeshes
         new[] { 0.50, 0.48, 0.44 }, // speckled granite
     };
 
-    /// <summary>Unit rock (bounding radius ≈ 1). ~9,216-triangle Voronoi-cleaved stratified undercut boulder
-    /// with smooth area-weighted normals; cavity AO in COLOR.r, ridge exposure in COLOR.g.</summary>
+    /// <summary>High-tessellation Voronoi planar-cleaved stratified boulder with beveled edge transitions.</summary>
     public static MeshData Rock(ulong variantSeed, int detail = 3)
     {
-        // Pebble's historical weathered-fragment branch retains its exact geometry.
         if (detail == 1) return LegacyRock(variantSeed, detail);
+        var profile = RockSurfaceProfile.Create(variantSeed);
+        var palette = RockPalette[profile.Palette];
+        var mesh = new MeshData();
+        const int divisions = 9; // 81 triangles per authoritative fracture face.
 
-        var rng = Rng.Keyed(variantSeed, "rock.mesh", 0);
-        var palette = RockPalette[rng.NextInt(RockPalette.Length)];
-
-        // 14 random 3D fracture planes (Voronoi cleavage facets).
+        // Deterministic Voronoi 3D cleavage planes for this rock
+        var rng = Rng.Keyed(variantSeed, "rock.cleavage", 0);
         const int planeCount = 14;
-        var pn = new Vec3[planeCount];
-        var pd = new double[planeCount];
-        for (int k = 0; k < planeCount; k++)
+        var planeNormals = new Vec3[planeCount];
+        var planeDists = new double[planeCount];
+        var center = new Vec3(0, 0.15, 0);
+
+        // 8 steep lateral fracture joints (forming faceted polygonal silhouette)
+        for (int k = 0; k < 8; k++)
         {
-            var v = new Vec3(rng.Range(-1, 1), rng.Range(-1, 1), rng.Range(-1, 1)).Normalized();
-            if (v.LengthSq < 1e-8) v = Vec3.Up;
-            pn[k] = v;
-            pd[k] = rng.Range(0.55, 0.95);
+            double phi = 2 * Math.PI * (k + rng.Range(-0.25, 0.25)) / 8.0;
+            double tilt = rng.Range(-0.22, 0.22);
+            double ny = Math.Sin(tilt);
+            double cosTilt = Math.Cos(tilt);
+            double nx = Math.Cos(phi) * cosTilt;
+            double nz = Math.Sin(phi) * cosTilt;
+            var n = new Vec3(nx, ny, nz).Normalized();
+            planeNormals[k] = n;
+            planeDists[k] = center.Dot(n) + rng.Range(0.62, 0.78);
         }
 
-        const int lon = 96, lat = 48;
-        const int stride = lon + 1;
-        var pos = new Vec3[(lat + 1) * stride];
-
-        for (int i = 0; i <= lat; i++)
+        // 4 oblique corner fracture joints (creating dramatic diagonal cleavage facets)
+        for (int k = 0; k < 4; k++)
         {
-            double theta = Math.PI * i / lat;
-            for (int j = 0; j <= lon; j++)
-            {
-                double phi = 2 * Math.PI * j / lon;
-                double st = Math.Sin(theta), ct = Math.Cos(theta);
-                var u = new Vec3(st * Math.Cos(phi), ct, st * Math.Sin(phi));
+            double phi = 2 * Math.PI * (k + 0.5 + rng.Range(-0.2, 0.2)) / 4.0;
+            double pitch = rng.Range(0.55, 0.90);
+            double ny = Math.Sin(pitch);
+            double cosPitch = Math.Cos(pitch);
+            double nx = Math.Cos(phi) * cosPitch;
+            double nz = Math.Sin(phi) * cosPitch;
+            var n = new Vec3(nx, ny, nz).Normalized();
+            planeNormals[8 + k] = n;
+            double d = center.Dot(n) + rng.Range(0.66, 0.84);
+            // Apex at (0, 0.75, 0) must never be clipped
+            if (n.Y > 0) d = Math.Max(d, 0.75 * n.Y + 0.005);
+            planeDists[8 + k] = d;
+        }
 
-                // soft-minimum of fracture planes -> cleavage facet radius.
-                double r = double.PositiveInfinity;
-                for (int k = 0; k < planeCount; k++)
+        // 2 sub-horizontal bedding-parallel cleavage planes
+        for (int k = 0; k < 2; k++)
+        {
+            double phi = rng.Range(0, 2 * Math.PI);
+            double dip = rng.Range(0.04, 0.12);
+            double ny = Math.Cos(dip);
+            double sinDip = Math.Sin(dip);
+            double nx = Math.Cos(phi) * sinDip;
+            double nz = Math.Sin(phi) * sinDip;
+            var n = new Vec3(nx, ny, nz).Normalized();
+            planeNormals[12 + k] = n;
+            planeDists[12 + k] = Math.Max(0.75 * n.Y + 0.005, rng.Range(0.76, 0.88));
+        }
+
+        Vec3 Deform(Vec3 p, bool isBottom, bool isShelf)
+        {
+            if (isBottom) return p;
+            double groundWeight = Math.Clamp((p.Y - (-0.38)) / 0.10, 0.0, 1.0);
+            if (groundWeight <= 1e-6) return p;
+
+            const double bevelRadius = 0.045; // 4.5 cm beveled transition
+            double maxH = double.MinValue;
+            for (int k = 0; k < planeCount; k++)
+            {
+                double h = p.Dot(planeNormals[k]) - planeDists[k];
+                if (h > maxH) maxH = h;
+            }
+
+            if (maxH <= -3.0 * bevelRadius) return p;
+
+            double sumW = 0.0;
+            double sumNx = 0.0, sumNy = 0.0, sumNz = 0.0;
+            for (int k = 0; k < planeCount; k++)
+            {
+                double h = p.Dot(planeNormals[k]) - planeDists[k];
+                double w = Math.Exp((h - maxH) / bevelRadius);
+                sumW += w;
+                sumNx += w * planeNormals[k].X;
+                sumNy += w * planeNormals[k].Y;
+                sumNz += w * planeNormals[k].Z;
+            }
+
+            double smoothH = maxH + bevelRadius * Math.Log(sumW);
+            double push = (smoothH + Math.Sqrt(smoothH * smoothH + bevelRadius * bevelRadius)) * 0.5 - bevelRadius * 0.5;
+            if (push <= 1e-6) return p;
+
+            var effN = new Vec3(sumNx, sumNy, sumNz).Normalized();
+            if (isShelf)
+            {
+                // Preserve horizontal shelf orientation while cleaving lateral boundary
+                effN = new Vec3(effN.X, 0, effN.Z).Normalized();
+            }
+
+            var result = p - effN * (push * groundWeight);
+            if (result.Y > 0.75) result = new Vec3(result.X, 0.75, result.Z);
+            return result;
+        }
+
+        int faceIndex = 0;
+        foreach (var face in profile.Triangles)
+        {
+            var a = face.A; var b = face.B; var c = face.C;
+            var geometric = (b - a).Cross(c - a).Normalized();
+            var outward = geometric.Dot((a + b + c) / 3) > 0 ? geometric : geometric * -1;
+            bool isShelf = !face.Bottom && outward.Y >= 0.82;
+
+            int[,] row = new int[divisions + 1, divisions + 1];
+            for (int i = 0; i <= divisions; i++)
+                for (int j = 0; j <= divisions - i; j++)
                 {
-                    double dot = pn[k].Dot(u);
-                    if (dot <= 0.05) continue;
-                    double val = pd[k] / dot;
-                    if (double.IsInfinity(r)) r = val;
-                    else
+                    var p = (a * (divisions - i - j) + b * i + c * j) / divisions;
+                    var defP = Deform(p, face.Bottom, isShelf);
+                    row[i, j] = mesh.AddVertex(defP, outward, palette[0], palette[1], palette[2], 1.0, defP.X, defP.Z, profile.Family, 0);
+                }
+            for (int i = 0; i < divisions; i++)
+                for (int j = 0; j < divisions - i; j++)
+                {
+                    Primitives.TriangleFacing(mesh, row[i, j], row[i + 1, j], row[i, j + 1], outward);
+                    if (i + j + 1 < divisions)
+                        Primitives.TriangleFacing(mesh, row[i + 1, j], row[i + 1, j + 1], row[i, j + 1], outward);
+                }
+            faceIndex++;
+        }
+
+        // Cache initial outward normal per vertex
+        var origOutward = new Vec3[mesh.VertexCount];
+        for (int i = 0; i < mesh.VertexCount; i++) origOutward[i] = mesh.NormalAt(i);
+
+        // Recompute smooth area-weighted vertex normals across beveled edges (preserving crease angle 55 deg)
+        int triCount = mesh.Indices.Count / 3;
+        var triOutwardNormals = new Vec3[triCount];
+        var vertexTriangles = new List<int>[mesh.VertexCount];
+        for (int i = 0; i < mesh.VertexCount; i++) vertexTriangles[i] = new List<int>(4);
+
+        for (int t = 0; t < triCount; t++)
+        {
+            int i0 = mesh.Indices[t * 3];
+            int i1 = mesh.Indices[t * 3 + 1];
+            int i2 = mesh.Indices[t * 3 + 2];
+            vertexTriangles[i0].Add(t);
+            vertexTriangles[i1].Add(t);
+            vertexTriangles[i2].Add(t);
+
+            var p0 = mesh.Position(i0);
+            var p1 = mesh.Position(i1);
+            var p2 = mesh.Position(i2);
+            // Godot winding is clockwise, so outward area-weighted normal is (p2 - p0) x (p1 - p0)
+            triOutwardNormals[t] = (p2 - p0).Cross(p1 - p0);
+        }
+
+        // Spatial grouping for coincident vertices along subdivided face seams
+        var posGroups = new Dictionary<(int, int, int), List<int>>();
+        for (int i = 0; i < mesh.VertexCount; i++)
+        {
+            var p = mesh.Position(i);
+            var key = ((int)Math.Round(p.X * 1000.0), (int)Math.Round(p.Y * 1000.0), (int)Math.Round(p.Z * 1000.0));
+            if (!posGroups.TryGetValue(key, out var list))
+            {
+                list = new List<int>(4);
+                posGroups[key] = list;
+            }
+            list.Add(i);
+        }
+
+        const double cosCrease = 0.573576436; // cos(55 deg)
+
+        for (int i = 0; i < mesh.VertexCount; i++)
+        {
+            var p = mesh.Position(i);
+            var key = ((int)Math.Round(p.X * 1000.0), (int)Math.Round(p.Y * 1000.0), (int)Math.Round(p.Z * 1000.0));
+
+            var baseN = Vec3.Zero;
+            foreach (int t in vertexTriangles[i]) baseN += triOutwardNormals[t];
+            var unitBaseN = baseN.LengthSq > 1e-12 ? baseN.Normalized() : origOutward[i];
+
+            var smoothN = Vec3.Zero;
+            if (posGroups.TryGetValue(key, out var coincident))
+            {
+                foreach (int vCoincident in coincident)
+                {
+                    if ((mesh.Position(vCoincident) - p).LengthSq > 1e-6) continue;
+                    foreach (int t in vertexTriangles[vCoincident])
                     {
-                        const double kk = 8.0;
-                        r = -(1.0 / kk) * Math.Log(Math.Exp(-kk * r) + Math.Exp(-kk * val));
+                        var tn = triOutwardNormals[t];
+                        double len = tn.Length;
+                        if (len < 1e-12) continue;
+                        var unitTn = tn / len;
+                        if (unitBaseN.Dot(unitTn) >= cosCrease)
+                        {
+                            smoothN += tn;
+                        }
                     }
                 }
-                if (double.IsInfinity(r)) r = 1.0;
-                // blend with base sphere (soft min).
-                {
-                    const double kk = 8.0;
-                    r = -(1.0 / kk) * Math.Log(Math.Exp(-kk * r) + Math.Exp(-kk * 1.1));
-                }
-
-                // basal undercut erosion.
-                if (u.Y < -0.2) r *= 0.78;
-
-                // sedimentary bedding groove displacement.
-                double fbm4 = Noise.Fbm3(variantSeed, u.X * 4, u.Y * 4, u.Z * 4, 4);
-                double groove = Math.Sin(u.Y * 28.0 + fbm4 * 4.0);
-                // micro-displacement.
-                double micro = Noise.Fbm3(variantSeed, u.X * 6, u.Y * 6, u.Z * 6, 4);
-                double disp = 0.015 * groove + 0.03 * micro;
-
-                pos[i * stride + j] = u * (r + disp);
             }
-        }
 
-        int vertCount = (lat + 1) * stride;
-        var ao = new double[vertCount];
-        var ridge = new double[vertCount];
-        for (int idx = 0; idx < vertCount; idx++)
-        {
-            int i = idx / stride;
-            int j = idx % stride;
-            var sum = Vec3.Zero;
-            int deg = 0;
-            if (i > 0) { sum += pos[(i - 1) * stride + j]; deg++; }
-            if (i < lat) { sum += pos[(i + 1) * stride + j]; deg++; }
-            int jl = j > 0 ? j - 1 : lon;
-            int jr = j < lon ? j + 1 : 0;
-            sum += pos[i * stride + jl]; deg++;
-            sum += pos[i * stride + jr]; deg++;
-            var lap = (sum / deg) - pos[idx];
-            var nrm = pos[idx].Normalized();
-            double curv = lap.Dot(nrm);
-            double kcurv = Math.Clamp(curv * 4.0, -1.0, 1.0);
-            // concave (curv>0) -> lower AO; convex -> ridge.
-            ao[idx] = Math.Clamp(0.5 - 0.5 * kcurv, 0.2, 1.0);
-            ridge[idx] = Math.Clamp(0.5 + 0.5 * (-kcurv), 0.0, 1.0);
-        }
+            if (smoothN.LengthSq < 1e-12) smoothN = unitBaseN;
+            var finalNormal = smoothN.Normalized();
 
-        var mesh = new MeshData();
-        double palLum = (palette[0] + palette[1] + palette[2]) / 3.0;
-        for (int idx = 0; idx < vertCount; idx++)
-        {
-            int i = idx / stride;
-            int j = idx % stride;
-            var p = pos[idx];
-            var n = p.Normalized();
-            var color = new[] { ao[idx], ridge[idx], palLum };
-            double u = (double)j / lon;
-            double v = (double)i / lat;
-            mesh.AddVertex(p, n, color, 1.0, u, v, 0, 0);
-        }
-
-        for (int i = 0; i < lat; i++)
-        {
-            for (int j = 0; j < lon; j++)
+            // Strict outward normal guarantee: normal must have positive dot with every incident triangle outward normal
+            bool allPositive = true;
+            foreach (int t in vertexTriangles[i])
             {
-                int a = i * stride + j;
-                int b = i * stride + (j + 1);
-                int c = (i + 1) * stride + (j + 1);
-                int d = (i + 1) * stride + j;
-                var center = (pos[a] + pos[b] + pos[c] + pos[d]) / 4.0;
-                var outward = center.Normalized();
-                Primitives.TriangleFacing(mesh, a, b, c, outward);
-                Primitives.TriangleFacing(mesh, a, c, d, outward);
+                if (triOutwardNormals[t].Dot(finalNormal) <= 1e-6)
+                {
+                    allPositive = false;
+                    break;
+                }
             }
+            if (!allPositive)
+            {
+                finalNormal = unitBaseN;
+                bool baseOk = true;
+                foreach (int t in vertexTriangles[i])
+                {
+                    if (triOutwardNormals[t].Dot(finalNormal) <= 1e-6)
+                    {
+                        baseOk = false;
+                        break;
+                    }
+                }
+                if (!baseOk) finalNormal = origOutward[i];
+            }
+
+            mesh.Normals[i * 3] = (float)finalNormal.X;
+            mesh.Normals[i * 3 + 1] = (float)finalNormal.Y;
+            mesh.Normals[i * 3 + 2] = (float)finalNormal.Z;
         }
 
-        mesh.RecomputeNormals();
+        // Bake local mean curvature / concavity into vertex COLOR.r (cavity AO) and COLOR.g (ridge exposure)
+        var neighbors = new HashSet<int>[mesh.VertexCount];
+        for (int i = 0; i < mesh.VertexCount; i++) neighbors[i] = new HashSet<int>();
+        for (int t = 0; t < triCount; t++)
+        {
+            int i0 = mesh.Indices[t * 3];
+            int i1 = mesh.Indices[t * 3 + 1];
+            int i2 = mesh.Indices[t * 3 + 2];
+            neighbors[i0].Add(i1); neighbors[i0].Add(i2);
+            neighbors[i1].Add(i0); neighbors[i1].Add(i2);
+            neighbors[i2].Add(i0); neighbors[i2].Add(i1);
+        }
+
+        for (int i = 0; i < mesh.VertexCount; i++)
+        {
+            var p = mesh.Position(i);
+            var n = mesh.NormalAt(i);
+            double curvSum = 0;
+            int count = 0;
+            foreach (int adj in neighbors[i])
+            {
+                var diff = mesh.Position(adj) - p;
+                double len = diff.Length;
+                if (len > 1e-6)
+                {
+                    curvSum += diff.Dot(n) / len;
+                    count++;
+                }
+            }
+
+            double kappa = count > 0 ? curvSum / count : 0.0;
+            // kappa < 0 -> convex (ridge/edge), kappa > 0 -> concave (crevice/cavity)
+            double ridge = kappa < -0.01 ? Math.Clamp(-kappa * 2.8, 0.0, 1.0) : 0.0;
+            double cavity = kappa > 0.01 ? Math.Clamp(1.0 - kappa * 2.2, 0.45, 1.0) : 1.0;
+
+            double groundDist = p.Y - (-0.38);
+            if (groundDist < 0.15)
+            {
+                cavity *= Math.Clamp(0.55 + 0.45 * (groundDist / 0.15), 0.55, 1.0);
+            }
+
+            double layer = 0.88 + 0.12 * Math.Sin(p.Y * 19.0 + (double)(variantSeed % 11));
+            mesh.SetColor(i, cavity, ridge, layer, 1.0);
+        }
+
         return mesh;
     }
 
@@ -226,98 +382,54 @@ public static class PropMeshes
         return m;
     }
 
-    /// <summary>Render-only water-worn river cobble / angular mineral chip, ~768 triangles, smooth normals.</summary>
+    /// <summary>Dense water-worn cobble or broad-cleaved mineral chip for gravel scatter.</summary>
     public static MeshData Pebble(ulong seed)
     {
         var rng = Rng.Keyed(seed, "pebble.mesh", 0);
-        // ~25% angular chips, rest smooth water-worn cobbles.
-        bool angular = rng.NextInt(4) == 0;
+        bool chip = rng.NextInt(4) != 0;
         var pigment = PebblePalette[rng.NextInt(PebblePalette.Length)];
-
-        double rx = rng.Range(0.78, 1.05);
-        double ry = rng.Range(0.55, 0.78);
-        double rz = rng.Range(0.78, 1.05) * rng.Range(0.85, 1.0);
-
-        // optional cleavage planes for angular chips.
-        int pcount = angular ? 5 : 0;
-        var ppn = new Vec3[pcount];
-        var ppd = new double[pcount];
-        for (int k = 0; k < pcount; k++)
-        {
-            var v = new Vec3(rng.Range(-1, 1), rng.Range(-1, 1), rng.Range(-1, 1)).Normalized();
-            if (v.LengthSq < 1e-8) v = Vec3.Up;
-            ppn[k] = v;
-            ppd[k] = rng.Range(0.6, 0.9);
-        }
-
-        const int lon = 32, lat = 12;
-        const int stride = lon + 1;
-        var pos = new Vec3[(lat + 1) * stride];
-
-        for (int i = 0; i <= lat; i++)
-        {
-            double theta = Math.PI * i / lat;
-            for (int j = 0; j <= lon; j++)
-            {
-                double phi = 2 * Math.PI * j / lon;
-                double st = Math.Sin(theta), ct = Math.Cos(theta);
-                var u = new Vec3(st * Math.Cos(phi), ct, st * Math.Sin(phi));
-
-                double r = 1.0;
-                if (angular && pcount > 0)
-                {
-                    double rr = double.PositiveInfinity;
-                    for (int k = 0; k < pcount; k++)
-                    {
-                        double dot = ppn[k].Dot(u);
-                        if (dot <= 0.05) continue;
-                        double val = ppd[k] / dot;
-                        if (double.IsInfinity(rr)) rr = val;
-                        else
-                        {
-                            const double kk = 10.0;
-                            rr = -(1.0 / kk) * Math.Log(Math.Exp(-kk * rr) + Math.Exp(-kk * val));
-                        }
-                    }
-                    if (!double.IsInfinity(rr)) r = rr;
-                }
-
-                // micro displacement
-                double micro = Noise.Fbm3(seed, u.X * 5, u.Y * 5, u.Z * 5, 3);
-                double disp = (angular ? 0.04 : 0.015) * micro;
-
-                var p = new Vec3(u.X * rx * (r + disp), u.Y * ry * (r + disp), u.Z * rz * (r + disp));
-                // flatten bottom slightly
-                if (p.Y < -0.3) p = new Vec3(p.X, -0.35, p.Z);
-                pos[i * stride + j] = p;
-            }
-        }
-
+        double rx = rng.Range(0.78, 1.05), rz = rng.Range(0.78, 1.05);
+        const int sides = 32, bands = 11;
+        double[] heights = { .75, .63, .47, .28, .08, -.10, -.22, -.31, -.35, -.375, -.38 };
+        double[] radii = { .44, .66, .84, 1.0, 1.04, 1.0, .88, .70, .53, .31, .12 };
+        var sector = new double[sides + 1];
+        for (int j = 0; j < sides; j++) sector[j] = rng.Range(chip ? .88 : .96, chip ? 1.08 : 1.04);
+        sector[sides] = sector[0];
         var mesh = new MeshData();
-        int vertCount = (lat + 1) * stride;
-        for (int idx = 0; idx < vertCount; idx++)
-        {
-            var p = pos[idx];
-            var n = p.Normalized();
-            mesh.AddVertex(p, n, pigment, 1.0, 0, 0, 0, 0);
-        }
-
-        for (int i = 0; i < lat; i++)
-        {
-            for (int j = 0; j < lon; j++)
+        int[,] ring = new int[bands, sides + 1];
+        for (int i = 0; i < bands; i++)
+            for (int j = 0; j <= sides; j++)
             {
-                int a = i * stride + j;
-                int b = i * stride + (j + 1);
-                int c = (i + 1) * stride + (j + 1);
-                int d = (i + 1) * stride + j;
-                var center = (pos[a] + pos[b] + pos[c] + pos[d]) / 4.0;
-                var outward = center.Normalized();
+                double angle = 2 * Math.PI * j / sides;
+                double radius = radii[i] * sector[j];
+                var p = new Vec3(Math.Cos(angle) * rx * radius, heights[i], Math.Sin(angle) * rz * radius);
+                var n = new Vec3(p.X / (rx * rx), (i < 5 ? .45 : -.45) / .7, p.Z / (rz * rz)).Normalized();
+                ring[i, j] = mesh.AddVertex(p, n, pigment, 1, (double)j / sides, (double)i / (bands - 1));
+            }
+        for (int i = 0; i < bands - 1; i++)
+            for (int j = 0; j < sides; j++)
+            {
+                int a = ring[i, j], b = ring[i, j + 1], c = ring[i + 1, j + 1], d = ring[i + 1, j];
+                var outward = new Vec3(mesh.Position(a).X + mesh.Position(b).X, 0,
+                    mesh.Position(a).Z + mesh.Position(b).Z);
                 Primitives.TriangleFacing(mesh, a, b, c, outward);
                 Primitives.TriangleFacing(mesh, a, c, d, outward);
             }
+        // Duplicate the rim for the chip cap so the entire cleavage plane has one upward normal.
+        int topCenter = mesh.AddVertex(new Vec3(0, .75, 0), Vec3.Up, pigment, 1, 0, 0, 0, chip ? 1 : 0);
+        int bottomCenter = mesh.AddVertex(new Vec3(0, -.38, 0), Vec3.Up * -1, pigment, 1);
+        for (int j = 0; j < sides; j++)
+        {
+            int next = j + 1;
+            var ta = mesh.Position(ring[0, j]); var tb = mesh.Position(ring[0, next]);
+            int ia = mesh.AddVertex(ta, Vec3.Up, pigment, 1, ta.X, ta.Z, 0, chip ? 1 : 0);
+            int ib = mesh.AddVertex(tb, Vec3.Up, pigment, 1, tb.X, tb.Z, 0, chip ? 1 : 0);
+            Primitives.TriangleFacing(mesh, topCenter, ia, ib, Vec3.Up);
+            var ba = mesh.Position(ring[bands - 1, j]); var bb = mesh.Position(ring[bands - 1, next]);
+            int ja = mesh.AddVertex(ba, Vec3.Up * -1, pigment, 1);
+            int jb = mesh.AddVertex(bb, Vec3.Up * -1, pigment, 1);
+            Primitives.TriangleFacing(mesh, bottomCenter, jb, ja, Vec3.Up * -1);
         }
-
-        mesh.RecomputeNormals();
         return mesh;
     }
 
@@ -350,7 +462,7 @@ public static class PropMeshes
         double shearPhase = th + (end == 0 ? 0.8 : 2.4);
         double stepShear = Math.Sin(shearPhase) > 0.0 ? 0.020 * length : -0.005 * length;
         double grainA = Noise.Gradient(Rng.Mix(endSeed, 11), Math.Cos(th) * 5.0, Math.Sin(th) * 5.0);
-        double grainB = Noise.Gradient(Rng.Mix(endSeed, 37), rFrac * 8.0, th * 4.0);
+        double grainB = Noise.Gradient(Rng.Mix(endSeed, 37), rFrac * 8.0 + Math.Cos(th) * 4.0, Math.Sin(th) * 4.0);
         double fiberNoise = (0.015 * length) * (grainA * 0.65 + grainB * 0.35);
 
         double spurProtrusion = 0;
@@ -385,8 +497,8 @@ public static class PropMeshes
         var rng = Rng.Keyed(seed, "log.mesh", 0);
         ulong ns = Rng.Mix(seed, 0x106);
         var m = new MeshData();
-        int around = 28;
-        int along = Math.Max(12, (int)(length / 0.05));
+        const int around = 72;
+        int along = Math.Max(12, (int)Math.Ceiling(length / 0.015));
         double barkDepth = radius * rng.Range(0.045, 0.075) * (decay >= 3 ? 0.55 : 1);
         double taper = rng.Range(0.04, 0.14), sag = decay * 0.010 * length;
         double flatten = decay >= 3 ? 0.80 : (decay == 2 ? 0.86 : 1.0);
@@ -445,7 +557,7 @@ public static class PropMeshes
 
             for (int s = 0; s <= around; s++)
             {
-                double th = 2 * Math.PI * s / around;
+                double th = s == around ? 0 : 2 * Math.PI * s / around;
 
                 // Knot swelling and grain deflection around knots
                 double knotSwell = 0;
@@ -548,7 +660,7 @@ public static class PropMeshes
                     col = Primitives.Mix(col, moss, patch * (decay >= 3 ? 0.75 : 0.50));
                 }
 
-                m.AddVertex(p, dir, col, 1, t * length, th * rBase, decay, isPeelingFissure ? 1 : 0);
+                m.AddVertex(p, dir, col, 1, t * length, (2 * Math.PI * s / around) * rBase, decay, 0);
             }
         }
 
@@ -563,114 +675,144 @@ public static class PropMeshes
             }
         }
 
-        // Fibrous fractured ends (jagged 3D fracture planes, growth rings, splinters, or decay hollows)
+        // The cavity runs through the full axis; end annuli join the actual displaced bark edge.
+        // Material IDs: 0 bark, 1 end grain, 2 cavity (COLOR.r = AO), 3 splinter.
+        const int innerSides = 48;
+        double InnerFraction(double th) => (decay >= 3 ? 0.48 : 0.39)
+            + 0.025 * Math.Sin(th * 9 + (seed % 37));
+        Vec3 InnerPoint(double t, double th)
+        {
+            double r = RadiusAt(t) * InnerFraction(th);
+            // Long continuous heartwood ribs, with subtle axial rot waviness.
+            r *= 1 + 0.045 * Math.Sin(th * 17 + t * 2.2);
+            var c = AxisPoint(t);
+            double x = c.X;
+            if (t == 0 || t == 1)
+                x += (t == 0 ? -1 : 1) * Math.Abs(FracturedEndSplinter(seed, (int)t, InnerFraction(th), th, length, radius, decay));
+            return new Vec3(x, c.Y + Math.Cos(th) * r * flatten, c.Z + Math.Sin(th) * r);
+        }
+        int cavityStart = m.VertexCount;
+        if (decay >= 2)
+        {
+            for (int i = 0; i <= along; i++)
+            {
+                double t = (double)i / along;
+                double depth = Math.Min(t, 1 - t) * length;
+                double ao = 0.08 + 0.92 * Math.Exp(-depth / Math.Max(radius * 0.45, 0.01));
+                for (int j = 0; j <= innerSides; j++)
+                {
+                    double th = j * 2 * Math.PI / innerSides;
+                    m.AddVertex(InnerPoint(t, th), new Vec3(0, -Math.Cos(th), -Math.Sin(th)),
+                        ao, ao, ao, 1, InnerFraction(th), th, decay, 2);
+                }
+            }
+            for (int i = 0; i < along; i++)
+                for (int j = 0; j < innerSides; j++)
+                {
+                    int a = cavityStart + i * (innerSides + 1) + j, b = a + innerSides + 1;
+                    m.AddTriangle(a, a + 1, b);
+                    m.AddTriangle(a + 1, b + 1, b);
+                }
+        }
+
         for (int end = 0; end < 2; end++)
         {
-            double endSign = end == 0 ? -1.0 : 1.0;
-            var endNorm = new Vec3(endSign, 0, 0);
+            var endNorm = new Vec3(end == 0 ? -1 : 1, 0, 0);
             var cEnd = AxisPoint(end);
             double rEnd = RadiusAt(end);
-            const int rings = 3;
-
-            int rimVertexIndex(int s) => ringStart + (end == 0 ? 0 : along) * (around + 1) + s;
-
-            int prevRing = -1;
-            for (int r = rings - 1; r >= 1; r--)
+            int outerStart = ringStart + end * along * (around + 1);
+            int prev = -1;
+            const int rimRings = 6;
+            for (int r = 0; r <= (decay >= 2 ? rimRings - 1 : rimRings); r++)
             {
-                int ringBase = m.VertexCount;
-                double rFrac = (double)r / rings;
-
-                for (int s = 0; s <= around; s++)
+                int row = m.VertexCount;
+                for (int j = 0; j <= around; j++)
                 {
-                    double th = 2 * Math.PI * s / around;
-                    double splinterX = FracturedEndSplinter(seed, end, rFrac, th, length, radius, decay);
-                    double rInner = rEnd * rFrac;
-                    var p = cEnd + new Vec3(endSign * splinterX, Math.Cos(th) * rInner * flatten, Math.Sin(th) * rInner);
-
-                    if (decay >= 3 && rFrac < 0.62)
+                    double th = j * 2 * Math.PI / around;
+                    double f = (double)r / rimRings;
+                    var outside = m.Position(outerStart + j);
+                    var inside = decay >= 2 ? InnerPoint(end, th) : cEnd;
+                    // Splintered annulus, with continuous boundaries at bark and tunnel.
+                    var p = outside * (1 - f) + inside * f;
+                    p += endNorm * (Math.Sin(Math.PI * f) * radius * 0.075 * Math.Sin(th * 19 + seed % 101));
+                    double rFrac = 1 - f * (1 - (decay >= 2 ? InnerFraction(th) : 0));
+                    m.AddVertex(p, endNorm, heart, 1, rFrac, th, decay, 1);
+                }
+                if (prev >= 0)
+                    for (int j = 0; j < around; j++)
                     {
-                        var col = Primitives.Scale(cavityWood, 0.90);
-                        // Cavity floor still faces outward (toward the viewer looking into the end) with a
-                        // slight inward-radial tilt for concave shading; it must not point back into the log
-                        // or it back-face-culls and the hollow end reads as an open hole.
-                        var nrm = new Vec3(endSign * 0.7, -Math.Cos(th) * 0.5, -Math.Sin(th) * 0.5).Normalized();
-                        m.AddVertex(p, nrm, col, 1, rFrac, th, decay, 2);
+                        // Solid logs finish in a fan, avoiding collapsed centre triangles.
+                        if (decay < 2 && r == rimRings)
+                            Primitives.TriangleFacing(m, prev + j, row + j, prev + j + 1, endNorm);
+                        else
+                        {
+                            Primitives.TriangleFacing(m, prev + j, row + j, row + j + 1, endNorm);
+                            Primitives.TriangleFacing(m, prev + j, row + j + 1, prev + j + 1, endNorm);
+                        }
+                    }
+                prev = row;
+            }
+            if (decay >= 2)
+            {
+                // Zipper triangulation joins the 72-sided annulus to the 48-sided tunnel.
+                // Use the tunnel vertices themselves for the last rim row, so no radial cracks remain.
+                int cavityRow = cavityStart + end * along * (innerSides + 1);
+                int innerRow = m.VertexCount;
+                for (int q = 0; q <= innerSides; q++)
+                    m.AddVertex(m.Position(cavityRow + q), endNorm, heart, 1,
+                        InnerFraction(q * 2 * Math.PI / innerSides), q * 2 * Math.PI / innerSides, decay, 1);
+                int beforeLast = prev;
+                int j = 0, k = 0;
+                while (j < around || k < innerSides)
+                {
+                    if (j < around && (k == innerSides || (double)(j + 1) / around <= (double)(k + 1) / innerSides))
+                    {
+                        Primitives.TriangleFacing(m, beforeLast + j, innerRow + k, beforeLast + j + 1, endNorm);
+                        j++;
                     }
                     else
                     {
-                        var col = (r % 2 == 0) ? heart : Primitives.Scale(heart, 0.84);
-                        if (decay >= 3) col = Primitives.Scale(col, 0.75);
-                        m.AddVertex(p, endNorm, col, 1, rFrac, th, decay, 1);
+                        Primitives.TriangleFacing(m, beforeLast + j, innerRow + k, innerRow + k + 1, endNorm);
+                        k++;
                     }
                 }
-
-                // Whether solid heartwood or a hollow cavity floor, the fracture-plane surface faces outward
-                // (toward a viewer looking at the end); winding must never flip to -endNorm here or the
-                // hollow interior back-face-culls and the log end reads as an open hole.
-                var faceNorm = endNorm;
-                for (int s = 0; s < around; s++)
-                {
-                    int p0 = (r == rings - 1) ? rimVertexIndex(s) : (prevRing + s);
-                    int p1 = (r == rings - 1) ? rimVertexIndex(s + 1) : (prevRing + s + 1);
-                    int c0 = ringBase + s;
-                    int c1 = ringBase + s + 1;
-                    Primitives.TriangleFacing(m, p0, c0, c1, faceNorm);
-                    Primitives.TriangleFacing(m, p0, c1, p1, faceNorm);
-                }
-                prevRing = ringBase;
             }
-
-            // Central core vertex
-            double centerSplinter = FracturedEndSplinter(seed, end, 0.0, 0.0, length, radius, decay);
-            var centerPos = cEnd + new Vec3(endSign * centerSplinter, 0, 0);
-            if (decay >= 3)
+            // Six-sided tapered wood fibers; their UVs follow length and circumference.
+            int tineCount = 12 + (int)(Rng.Mix(seed, (ulong)end + 71) % 13);
+            for (int tine = 0; tine < tineCount; tine++)
             {
-                int centerIdx = m.AddVertex(centerPos, endNorm, cavityWood, 1, 0, 0, decay, 2);
-                for (int s = 0; s < around; s++)
-                {
-                    Primitives.TriangleFacing(m, centerIdx, prevRing + s, prevRing + s + 1, endNorm);
-                }
-            }
-            else
-            {
-                int centerIdx = m.AddVertex(centerPos, endNorm, Primitives.Scale(heart, 0.80), 1, 0, 0, decay, 1);
-                for (int s = 0; s < around; s++)
-                {
-                    Primitives.TriangleFacing(m, centerIdx, prevRing + s, prevRing + s + 1, endNorm);
-                }
-            }
-
-            // Protruding 3D splinter tines (fibrous wood shards extending past the fracture plane)
-            int tineCount = decay >= 3 ? 2 : 4;
-            for (int tIdx = 0; tIdx < tineCount; tIdx++)
-            {
-                ulong tSeed = Rng.Mix(seed, (ulong)end * 0x12345UL + (ulong)tIdx * 997UL);
-                double tAngle = ((tSeed % 1000) / 1000.0) * 2 * Math.PI;
-                double tRFrac = decay >= 3 ? (0.68 + ((tSeed / 1000 % 1000) / 1000.0) * 0.24) : (0.25 + ((tSeed / 1000 % 1000) / 1000.0) * 0.60);
-                double tLen = radius * (0.16 + ((tSeed / 1000000 % 1000) / 1000.0) * 0.20);
-                double tWidth = radius * 0.05;
-
-                double spX = FracturedEndSplinter(seed, end, tRFrac, tAngle, length, radius, decay);
-                var baseCenter = cEnd + new Vec3(endSign * spX, Math.Cos(tAngle) * rEnd * tRFrac * flatten, Math.Sin(tAngle) * rEnd * tRFrac);
-                var tip = baseCenter + endNorm * tLen;
-
-                var sideA = new Vec3(0, -Math.Sin(tAngle), Math.Cos(tAngle)) * tWidth;
-                var sideB = new Vec3(0, Math.Cos(tAngle) * flatten, Math.Sin(tAngle)) * tWidth;
-                var b0 = baseCenter + sideA;
-                var b1 = baseCenter - sideA * 0.5 + sideB * 0.866;
-                var b2 = baseCenter - sideA * 0.5 - sideB * 0.866;
-
-                // Tagged 3 (not 1): these are radial splinter shards, not the end-cap fracture face, and are
-                // intentionally allowed to face any outward-from-base direction rather than strictly ±axis.
-                var tineCol = Primitives.Scale(heart, 1.05);
-                int vb0 = m.AddVertex(b0, endNorm, tineCol, 1, 0, 0, decay, 3);
-                int vb1 = m.AddVertex(b1, endNorm, tineCol, 1, 0, 0, decay, 3);
-                int vb2 = m.AddVertex(b2, endNorm, tineCol, 1, 0, 0, decay, 3);
-                int vTip = m.AddVertex(tip, endNorm, Primitives.Scale(tineCol, 1.15), 1, 0, 0, decay, 3);
-
-                Primitives.TriangleFacing(m, vb0, vb1, vTip, (b0 + b1 + tip) / 3 - baseCenter);
-                Primitives.TriangleFacing(m, vb1, vb2, vTip, (b1 + b2 + tip) / 3 - baseCenter);
-                Primitives.TriangleFacing(m, vb2, vb0, vTip, (b2 + b0 + tip) / 3 - baseCenter);
+                ulong key = Rng.Mix(seed, (ulong)(end * 101 + tine + 1));
+                double th = 2 * Math.PI * tine / tineCount + (key % 1000) * 0.0003;
+                double frac = decay >= 2 ? 0.69 + (key % 100) * 0.0015 : 0.28 + (key % 100) * 0.006;
+                var baseP = cEnd + new Vec3(0, Math.Cos(th) * rEnd * frac * flatten, Math.Sin(th) * rEnd * frac);
+                baseP += endNorm * FracturedEndSplinter(seed, end, frac, th, length, radius, decay);
+                double shardLength = radius * (0.18 + (key % 1000) * 0.00035);
+                double width = radius * (0.012 + (key % 97) * 0.00022);
+                var sideA = new Vec3(0, -Math.Sin(th), Math.Cos(th));
+                var sideB = new Vec3(0, Math.Cos(th), Math.Sin(th));
+                int start = m.VertexCount;
+                for (int row = 0; row < 3; row++)
+                    for (int j = 0; j <= 6; j++)
+                    {
+                        double angle = j * 2 * Math.PI / 6;
+                        var n = sideA * Math.Cos(angle) + sideB * Math.Sin(angle);
+                        double taperShard = row == 0 ? 1 : row == 1 ? 0.52 : 0.03;
+                        var p = baseP + endNorm * (shardLength * row / 2) + n * (width * taperShard)
+                            + sideA * (row * row * width * 0.13);
+                        m.AddVertex(p, n, heart, 1, row * shardLength / 2, angle * width, decay, 3);
+                    }
+                for (int row = 0; row < 2; row++)
+                    for (int j = 0; j < 6; j++)
+                    {
+                        int a = start + row * 7 + j, b = a + 7;
+                        var outward = m.NormalAt(a);
+                        Primitives.TriangleFacing(m, a, b, a + 1, outward);
+                        Primitives.TriangleFacing(m, a + 1, b, b + 1, outward);
+                    }
+                int tip = m.AddVertex(baseP + endNorm * shardLength + sideA * (4 * width * 0.13), endNorm,
+                    heart, 1, shardLength, 0, decay, 3);
+                for (int j = 0; j < 6; j++)
+                    Primitives.TriangleFacing(m, tip, start + 14 + j, start + 15 + j, endNorm);
             }
         }
 
@@ -717,6 +859,34 @@ public static class PropMeshes
             }
         }
 
+        // Area weighting after all displacement. Weld duplicated UV seams within a material only.
+        var sums = new Dictionary<(long X, long Y, long Z, int Material), Vec3>();
+        (long, long, long, int) NormalKey(int i)
+        {
+            var p = m.Position(i);
+            return ((long)Math.Round(p.X * 1e6), (long)Math.Round(p.Y * 1e6),
+                (long)Math.Round(p.Z * 1e6), (int)m.UV2[i * 2 + 1]);
+        }
+        for (int i = 0; i < m.Indices.Count; i += 3)
+        {
+            int a = m.Indices[i], b = m.Indices[i + 1], c = m.Indices[i + 2];
+            // Godot front faces are clockwise: visible normal is the negative cross product.
+            var n = (m.Position(c) - m.Position(a)).Cross(m.Position(b) - m.Position(a));
+            foreach (int v in new[] { a, b, c })
+            {
+                var key = NormalKey(v);
+                sums.TryGetValue(key, out var total);
+                sums[key] = total + n;
+            }
+        }
+        for (int i = 0; i < m.VertexCount; i++)
+        {
+            var n = sums.TryGetValue(NormalKey(i), out var total) && total.LengthSq > 1e-20
+                ? total.Normalized() : m.NormalAt(i).Normalized();
+            m.Normals[i * 3] = (float)n.X;
+            m.Normals[i * 3 + 1] = (float)n.Y;
+            m.Normals[i * 3 + 2] = (float)n.Z;
+        }
         return m;
     }
     public readonly record struct PebbleInstance(Vec3 Position, Vec3 Scale, double RotationY, double TiltX, double TiltZ, int Variant);

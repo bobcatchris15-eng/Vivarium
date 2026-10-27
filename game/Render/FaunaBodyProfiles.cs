@@ -34,6 +34,16 @@ public static class FaunaBodyProfiles
         mat.SetShaderParameter("anim_bob", (float)a.Bob);
         mat.SetShaderParameter("anim_phase_spread", (float)a.PhaseSpread);
         mat.SetShaderParameter("anim_duty_factor", (float)a.DutyFactor);
+        // Explicit tissue optics are shared by production and previews. Keep
+        // these separate from surface_family, which describes geometry masks.
+        mat.SetShaderParameter("tissue_chitin", sp.Model is "beetle" or "isopod" or "pill_bug" or "silverfish" or "harvestman" or "springtail" ? 1f : 0f);
+        mat.SetShaderParameter("tissue_mucus", 0f);
+        mat.SetShaderParameter("tissue_aquatic", sp.Id is "emberglass_swimmer" or "glasscoil" or "glintfin" ? 1f : 0f);
+        mat.SetShaderParameter("tissue_film_nm", sp.Model switch
+        {
+            "beetle" => 340f, "isopod" or "pill_bug" => 385f,
+            "silverfish" => 305f, "harvestman" => 365f, "springtail" => 295f, _ => 350f
+        });
         // Production and review captures must use identical surface parameters.
         mat.SetShaderParameter("translucency", sp.Model is "shrimp" or "minnow" ? 0.35f : sp.Model == "moth" ? 0.07f : 0.1f);
         mat.SetShaderParameter("carapace", sp.Model switch { "isopod" => 0.15f, "triops" => 0.45f, "shrimp" => 0.35f,
@@ -43,5 +53,10 @@ public static class FaunaBodyProfiles
             "silverfish" or "beetle" => 0.7f, "triops" or "shrimp" or "minnow" => 0.1f, "moth" => 0.9f, _ => 0.6f });
         mat.SetShaderParameter("wet", sp.Model is "shrimp" or "minnow" or "triops" or "aquatic_larva" or "slug" or "worm" or "snail" ? 1.0f : 0.0f);
         mat.SetShaderParameter("scales", sp.Model is "minnow" or "silverfish" ? 1.0f : 0.0f);
+        mat.SetShaderParameter("night_factor", NightFloraMaterials.CurrentNightFactor);
+        if (sp.Id == "duskflicker" || sp.Model == "midge")
+        {
+            NightFloraMaterials.RegisterMaterial(mat);
+        }
     }
 }

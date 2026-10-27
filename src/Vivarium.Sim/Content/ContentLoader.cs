@@ -805,13 +805,14 @@ public static class ContentLoader
                 Bottom = t.Num("bottom", min: -10, max: 0), RockExposure = t.Num("rockExposure", 0.12, 0, 1),
                 Features = t.Items("features", required: false).Select(f =>
                 {
-                    f.RejectUnknown("type", "x", "z", "toX", "toZ", "radius", "amount", "width", "sharp", "bedHeight", "toBedHeight");
+                    f.RejectUnknown("type", "x", "z", "toX", "toZ", "radius", "amount", "width", "sharp", "bedHeight", "toBedHeight", "basinOutline");
                     string type = f.Str("type");
                     if (type is not ("basin" or "hill" or "channel" or "ridge")) f["type"].Error("expected basin | hill | channel | ridge");
                     return new TerrainFeature
                     {
                         Type = type, X = f.Num("x", min: -10, max: 10), Z = f.Num("z", min: -10, max: 10), ToX = f.Num("toX", 0, -10, 10), ToZ = f.Num("toZ", 0, -10, 10),
                         Radius = f.Num("radius", 2, 0.1, 10), Amount = f.Num("amount", min: -3, max: 3), Width = f.Num("width", 0.6, 0.05, 5), Sharp = f.Bool("sharp", false),
+                        BasinOutline = f.Has("basinOutline") ? f.Str("basinOutline") : null,
                         BedHeight = f.Has("bedHeight") ? f.Num("bedHeight", min: -3, max: 5) : null,
                         ToBedHeight = f.Has("toBedHeight") ? f.Num("toBedHeight", min: -3, max: 5) : null,
                     };

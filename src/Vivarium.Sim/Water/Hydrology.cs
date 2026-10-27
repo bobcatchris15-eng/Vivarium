@@ -127,14 +127,27 @@ public sealed class Hydrology
     }
 
     /// <summary>Dynamic surface-water depth only; groundwater is excluded.</summary>
-    public double DepthAt(Vec2 p) { if(Liquid!=null)return Liquid.DepthAt(p);int c = Grid.CellAt(p); return c >= 0 && Grid.InDomain(c) ? Depth[c] : 0; }
-    public double SurfaceWaterDepth(int idx) => Grid.InDomain(idx) ? (Liquid != null ? Liquid.DepthAt(Grid.CellCenter(idx)) : Depth[idx]) : 0;
+    public double DepthAt(Vec2 p)
+    {
+        double ld = Liquid != null ? Liquid.DepthAt(p) : 0;
+        int c = Grid.CellAt(p);
+        double dd = c >= 0 && Grid.InDomain(c) ? Depth[c] : 0;
+        return Math.Max(ld, dd);
+    }
+    public double SurfaceWaterDepth(int idx)
+    {
+        if (!Grid.InDomain(idx)) return 0;
+        double ld = Liquid != null ? Liquid.DepthAt(Grid.CellCenter(idx)) : 0;
+        return Math.Max(ld, Depth[idx]);
+    }
     public double SurfaceWaterDepth(Vec2 p)
     {
-        if(Liquid!=null)return Liquid.DepthAt(p);
+        double ld = Liquid != null ? Liquid.DepthAt(p) : 0;
         int c = Grid.CellAt(p);
-        if (c < 0 || !Grid.InDomain(c) || Depth[c] <= 0) return 0;
-        return Math.Max(0.0, (HydraulicBed(c) + Depth[c]) - _terrain.Height(p));
+        double bedDepth = (c >= 0 && Grid.InDomain(c) && Depth[c] > 0)
+            ? Math.Max(0.0, (HydraulicBed(c) + Depth[c]) - _terrain.Height(p))
+            : 0;
+        return Math.Max(ld, bedDepth);
     }
     public bool HasSurfaceWater(int idx) => Grid.InDomain(idx) && SurfaceWaterDepth(idx) >= 0.00005;
     public bool HasSurfaceWater(Vec2 p) => SurfaceWaterDepth(p) >= 0.00005;

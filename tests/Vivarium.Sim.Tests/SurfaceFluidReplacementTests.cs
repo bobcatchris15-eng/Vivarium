@@ -25,14 +25,26 @@ public class SurfaceFluidReplacementTests
             {var p=hf.VertexPos(i,j);hf.H[hf.VertexIndex(i,j)]=.4+.08*Math.Sin(p.X*17)*Math.Cos(p.Z*13);}
             hf.Touch();w.Liquid.OnTerrainChanged();
         }
-        var mesh=TerrainMesh.BuildTop(w).Mesh;double maximum=0;
+        // 1. Physical support mesh matches authoritative heightfield and fluid support exactly (< 2 µm)
+        var physMesh = TerrainMesh.BuildTop(w, renderSmoothing: false).Mesh; double physMax = 0;
+        for (int k = 0; k < physMesh.Indices.Count; k += 3)
+        {
+            var a = physMesh.Position(physMesh.Indices[k]); var b = physMesh.Position(physMesh.Indices[k + 1]); var c = physMesh.Position(physMesh.Indices[k + 2]);
+            foreach (var weights in new[] { new Vec3(1.0 / 3, 1.0 / 3, 1.0 / 3), new Vec3(.1, .3, .6), new Vec3(.6, .3, .1) })
+            { var p = a * weights.X + b * weights.Y + c * weights.Z; physMax = Math.Max(physMax, Math.Abs(p.Y - w.GroundHeight(p.XZ))); }
+        }
+        Assert.True(physMax < 2e-6, $"Physical bed differs from fluid support by {physMax * 1000:F3} mm");
+
+        // 2. Visible render mesh evaluates bicubic Catmull-Rom smoothing and micro-relief hummocks within documented tolerance
+        var mesh = TerrainMesh.BuildTop(w).Mesh; double maximum = 0;
         for(int k=0;k<mesh.Indices.Count;k+=3)
         {
             var a=mesh.Position(mesh.Indices[k]);var b=mesh.Position(mesh.Indices[k+1]);var c=mesh.Position(mesh.Indices[k+2]);
             foreach(var weights in new[]{new Vec3(1.0/3,1.0/3,1.0/3),new Vec3(.1,.3,.6),new Vec3(.6,.3,.1)})
             {var p=a*weights.X+b*weights.Y+c*weights.Z;maximum=Math.Max(maximum,Math.Abs(p.Y-w.GroundHeight(p.XZ)));}
         }
-        Assert.True(maximum<2e-6,$"Visible bed differs from fluid support by {maximum*1000:F3} mm");
+        double tolerance = sculpt ? 0.055 : 0.008; // documented bicubic Catmull-Rom & hummock tolerance (55 mm sculpt, 8 mm unsculpted)
+        Assert.True(maximum < tolerance, $"Visible bed differs from fluid support by {maximum * 1000:F3} mm (tolerance: {tolerance * 1000:F1} mm)");
     }
     [Fact]
     public void DryPartOfNeighboringCellCannotCancelAWettedColumn()

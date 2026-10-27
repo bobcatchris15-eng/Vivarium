@@ -184,7 +184,12 @@ public partial class FaunaPreview : Node3D
         animal.Heading = 0;
         var ph = world.FaunaSystem.PhenotypeOf(animal);
         float length = (float)(ph.BodySize * sp.VisualScale);
-        stage.AddChild(new EnvironmentRig());
+        var previewLighting = new EnvironmentRig();
+        stage.AddChild(previewLighting);
+        // This disposable inspection scene has no focus rig. Keep its live-motion
+        // subject sharp while retaining the preview EnvironmentRig exposure.
+        previewLighting.CameraAttributes.DofBlurNearEnabled = false;
+        previewLighting.CameraAttributes.DofBlurFarEnabled = false;
         var renderer = new FaunaRenderer { ProcessMode = ProcessModeEnum.Disabled };
         stage.AddChild(renderer); renderer.Build(world);
         if (sp.Model is "isopod" or "silverfish" or "salamander" or "slug" or "worm" or "harvestman")
@@ -239,6 +244,14 @@ public partial class FaunaPreview : Node3D
         }
         File.WriteAllText(Path.Combine(dir, "live-motion.json"), System.Text.Json.JsonSerializer.Serialize(new {
             fps = 30, bodyLength = length, cyclesPerBody = sp.Animation.CyclesPerBody,
+            camera_attributes = new {
+                source = "preview EnvironmentRig",
+                auto_exposure_enabled = previewLighting.CameraAttributes.AutoExposureEnabled,
+                near_dof_enabled = previewLighting.CameraAttributes.DofBlurNearEnabled,
+                far_dof_enabled = previewLighting.CameraAttributes.DofBlurFarEnabled,
+                exposure_multiplier = previewLighting.CameraAttributes.ExposureMultiplier,
+                exposure_sensitivity = previewLighting.CameraAttributes.ExposureSensitivity,
+            },
             input = "FaunaSystem + Scheduler + FaunaRenderer", visibleSupport = (sp.Model is "isopod" or "silverfish" or "salamander" or "slug" or "worm" or "harvestman") ? "64x64 mesh sampled from actual resting support; flat-plane mismatch corrected" : "flat preview plane", slowFrames = 90, fastFrames = 90, stoppedFrames = 60, trace }));
         stage.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

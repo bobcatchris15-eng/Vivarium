@@ -114,6 +114,7 @@ public partial class SurfaceFluidReview : Node3D
             boundary = b.BoundaryOutflow,
             cells = snapshot.Cells.Length,
             airborne = snapshot.Airborne.Length,
+            plunge_impacts = 0, // The restored water renderer has no overhaul impact layer.
             flora = _w.Flora.Count,
             fauna = _w.Fauna.Count,
             bioDays = _w.Clock.BioDays,

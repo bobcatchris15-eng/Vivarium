@@ -33,6 +33,8 @@ public static partial class OrganismMeshes
         int first = m.VertexCount;
         Appendage(m, points, widths, sides, region, role);
         AttachSpan(m, first, root, role, distal);
+        if (role == 1 && !distal && (path[0] - root).LengthSq < 1e-10 && path.Length >= 3)
+            RegisterFaunaJoint(m, first, sides, path);
     }
 
     private static Vec3 FaunaCurvePoint(Vec3[] path, int segment, double t)

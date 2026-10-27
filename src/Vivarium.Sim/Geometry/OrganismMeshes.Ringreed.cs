@@ -148,48 +148,66 @@ public static partial class OrganismMeshes
     /// dark scales down its outside.
     /// </summary>
     private static void ReedFiddlehead(MeshData m, Vec3 stalkTip, Vec3 axis, Vec3 forward,
-        double coilRadius, double height, Rng rng)
+        double coilRadius, double hoodHeight, Rng rng)
     {
         var up = axis.Normalized();
-        var side = up.Cross(forward);
-        if (side.LengthSq < 1e-10) side = up.Cross(new Vec3(1, 0, 0));
-        side = side.Normalized();
-        var face = up.Cross(side).Normalized();
+        var lean = forward - up * forward.Dot(up);
+        if (lean.LengthSq < 1e-10) lean = new Vec3(1, 0, 0);
+        lean = lean.Normalized();
+        var side = up.Cross(lean).Normalized();
 
-        int steps = 26;
+        // The fiddlehead stipe emerges directly from the top joint of the stalk,
+        // rises through the hollow interior of the spathe hood, emerges at its lip,
+        // and coils into a tight logarithmic crozier.
+        const int stipeSteps = 8;
+        const int coilSteps = 24;
+        const int steps = stipeSteps + coilSteps;
         var path = new Vec3[steps + 1];
         var radii = new double[steps + 1];
-        double turns = rng.Range(1.15, 1.55);
-        for (int i = 0; i <= steps; i++)
+
+        // 1. Rising stipe inside the hood up to the rim
+        double rimH = hoodHeight * 0.85;
+        double rimLean = hoodHeight * 0.42;
+        var rimPos = stalkTip + up * rimH + lean * rimLean;
+
+        for (int i = 0; i <= stipeSteps; i++)
         {
-            double s = i / (double)steps;
-            // The coil tightens as it goes and the whole thing climbs a little.
-            double r = coilRadius * Math.Exp(-1.35 * s);
-            double phi = -0.6 + s * turns * Math.PI * 2.0;
-            var centre = stalkTip + up * (height * 0.55);
-            path[i] = centre + side * (r * Math.Cos(phi)) + face * (r * Math.Sin(phi))
-                + up * (height * 0.42 * s);
-            radii[i] = coilRadius * (0.34 - 0.20 * s) + 0.0016;
+            double t = (double)i / stipeSteps;
+            path[i] = stalkTip + up * (rimH * t) + lean * (rimLean * t * t);
+            radii[i] = coilRadius * (0.42 - 0.12 * t);
         }
+
+        // 2. Coiling crozier beyond the rim
+        double turns = rng.Range(1.25, 1.55);
+        for (int i = 1; i <= coilSteps; i++)
+        {
+            double s = (double)i / coilSteps;
+            double r = coilRadius * Math.Exp(-1.45 * s);
+            double phi = s * turns * Math.PI * 2.0;
+            var offset = lean * (r * Math.Sin(phi)) + up * (r * (1.0 - Math.Cos(phi)) * 0.75) + side * (0.003 * Math.Sin(s * 3.0));
+            path[stipeSteps + i] = rimPos + offset + up * (0.015 * s);
+            radii[stipeSteps + i] = coilRadius * (0.30 - 0.18 * s) + 0.0015;
+        }
+
         Primitives.Tube(m, path, radii, 7,
             (i, v) => (Primitives.Mix(ReedFiddle, ReedFiddleScale, 0.35 + 0.4 * Math.Sin(v * 7.0)), 1, i / (double)steps, v, 0, 0));
 
-        // The scales: the small overlapping plates that cover a crozier.
+        // The scales: the small overlapping plates that cover the crozier.
         int scales = 16;
         for (int s = 0; s < scales; s++)
         {
-            double t = 0.12 + 0.84 * (s / (double)(scales - 1));
+            double t = 0.25 + 0.70 * (s / (double)(scales - 1));
             int i = Math.Min(steps, (int)(t * steps));
             var at = path[i];
             var tangent = (path[Math.Min(steps, i + 1)] - path[Math.Max(0, i - 1)]);
             if (tangent.LengthSq < 1e-12) tangent = up;
             tangent = tangent.Normalized();
             var outward = tangent.Cross(side);
-            if (outward.LengthSq < 1e-10) outward = face;
+            if (outward.LengthSq < 1e-10) outward = lean;
             outward = outward.Normalized();
             double a = s * 2.399963;
-            var dir = (side * Math.Cos(a) + face * Math.Sin(a)).Normalized();
-            double sz = radii[i] * 1.25;
+            var dir = (side * Math.Cos(a) + outward * Math.Sin(a)).Normalized();
+            double sz = radii[i] * 1.35;
             int c0 = m.AddVertex(at + dir * (sz * 0.7) - tangent * (sz * 0.7), dir, ReedFiddleScale, 1, t, 0, 0, 0);
             int c1 = m.AddVertex(at + dir * (sz * 0.7) + tangent * (sz * 0.7), dir, ReedFiddleScale, 1, t, 1, 0, 0);
             int c2 = m.AddVertex(at + dir * (sz * 1.45), dir, ReedFiddle, 1, t + 0.04, 0.5, 0, 0);
@@ -447,11 +465,9 @@ public static partial class OrganismMeshes
                 double hoodH = rng.Range(0.12, 0.16);
                 ReedSpathe(m, tip - axis * 0.014, axis, lean, radii[nodeCount] * 0.90,
                     hoodH, rng, 6, 18);
-                // The crozier sits IN the hood's mouth, so it is placed at the rim - which
-                // leans forward over the coil - rather than on the stalk's axis behind it.
-                var rimPoint = tip + axis * hoodH + lean * (hoodH * 0.55);
-                ReedFiddlehead(m, rimPoint, axis, lean,
-                    rng.Range(0.036, 0.050), rng.Range(0.12, 0.17), rng);
+                // The crozier emerges from the top joint, rises through the hood, and coils at the rim.
+                ReedFiddlehead(m, tip, axis, lean,
+                    rng.Range(0.036, 0.050), hoodH, rng);
             }
         }
     }

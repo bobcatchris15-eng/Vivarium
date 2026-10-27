@@ -95,6 +95,9 @@ public sealed class CoveragePayload
     public List<CoverageLayerPayload> Layers { get; set; } = new();
     /// <summary>Coverage rule RNG step. Null in older saves; reconstructed from the scheduler cadence.</summary>
     public long? Step { get; set; }
+    /// <summary>Aquatic recruitment ordinal. Older saves infer it from scheduled ticks.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? AquaticStep { get; set; }
     /// <summary>Per environment-grid-cell "last disturbed" time (<see cref="SubstrateStability"/>), packed doubles
     /// in <c>DomainCells</c> order. Null in saves made before G3: freshly loaded worlds default to "never disturbed".</summary>
     public string? Stability { get; set; }
@@ -130,7 +133,7 @@ public static class WorldSerializer
         Converters = { new EntityIdConverter(), new JsonStringEnumConverter() },
     };
 
-    public static SortedDictionary<string, byte[]> Serialize(VivariumWorld w)
+    public static SortedDictionary<string, byte[]> Serialize(VivariumWorld w, bool includeAquaticStep = true)
     {
         w.Liquid.CompletePending();
         var p = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
@@ -172,6 +175,7 @@ public static class WorldSerializer
         p["coverage"] = Bytes(new CoveragePayload
         {
             Step = w.CoverageSystem.StepIndex,
+            AquaticStep = includeAquaticStep ? w.AquaticSystem.StepIndex : null,
             Layers = w.Coverage.All.Select(layer => new CoverageLayerPayload
             {
                 Id = (int)layer.Id,
@@ -314,6 +318,10 @@ public static class WorldSerializer
         long inferredCoverageSteps = w.Clock.Tick < coverageSchedule.Phase
             ? 0 : (w.Clock.Tick - coverageSchedule.Phase) / coverageSchedule.Cadence + 1;
         w.CoverageSystem.RestoreStep(cp.Step ?? inferredCoverageSteps);
+        var aquaticSchedule = w.Scheduler.Systems.Single(s => s.Name == "aquatic");
+        long inferredAquaticSteps = w.Clock.Tick < aquaticSchedule.Phase
+            ? 0 : (w.Clock.Tick - aquaticSchedule.Phase) / aquaticSchedule.Cadence + 1;
+        w.AquaticSystem.RestoreStep(cp.AquaticStep ?? inferredAquaticSteps);
         foreach (var lp in cp.Layers ?? new())
         {
             var layer = w.Coverage.ById((CoverageLayerId)lp.Id);
@@ -352,7 +360,7 @@ public static class WorldSerializer
             w.Guardian = gPayload.Individual;
             w.GuardianSystem.RefreshDefinition();
         }
-        else if (w.PilotTree != null && w.Descriptor.GuardianId != "none")
+        else if (w.Descriptor.GuardianId != "none")
         {
             w.GuardianSystem.InitializeGuardian();
         }

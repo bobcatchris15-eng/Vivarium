@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
 using Vivarium.Game.Render;
@@ -24,6 +26,9 @@ public partial class SpecimenPreview : Node3D
     public bool Legacy { get; set; }
     public bool GameTier { get; set; }
     public bool Close { get; set; }
+    public bool BatchMode { get; set; }
+    public bool CoverageProductionPath { get; set; }
+    public TaskCompletionSource<bool> Finished { get; } = new();
 
     public override void _Ready() => _ = CaptureAsync();
 
@@ -37,8 +42,32 @@ public partial class SpecimenPreview : Node3D
             var environment = new EnvironmentRig { Name = "Environment" };
             AddChild(environment);
             environment.ApplyQuality(2);
+            if (BatchMode)
+            {
+                environment.BenchmarkLightSeconds = 420;
+                environment.CameraAttributes.AutoExposureEnabled = false;
+                environment.CameraAttributes.DofBlurNearEnabled = false;
+                environment.CameraAttributes.DofBlurFarEnabled = false;
+            }
             if (Lighting == "back") environment.Sun.RotationDegrees = new Vector3(-28,145,0);
             if (Lighting == "shade") { environment.Sun.LightEnergy = .22f; environment.Env.AmbientLightEnergy = .35f; }
+
+            if (CoverageProductionPath || sp.Id == "blue_sundew")
+            {
+                var fixture = await IsolatedCoverageSpecimen.BuildAsync(Content, SpeciesId, this);
+                AddChild(new MeshInstance3D { Name="NeutralCoverageGround",
+                    Mesh=new PlaneMesh { Size=new Vector2(.35f,.35f) },
+                    MaterialOverride=new StandardMaterial3D { AlbedoColor=new Color(.36f,.35f,.29f), Roughness=1f },
+                    Position=fixture.Target-Vector3.Up*.004f });
+                var coverageCamera = new Camera3D { Projection=Camera3D.ProjectionType.Orthogonal,
+                    Size=fixture.Size, Position=fixture.Target+new Vector3(.16f,.32f,.16f), Current=true,
+                    Attributes=environment.CameraAttributes };
+                AddChild(coverageCamera); coverageCamera.LookAt(fixture.Target);
+                await CaptureSequenceAsync(coverageCamera, environment, new { path="production_coverage", fixture.Stats });
+                Finished.TrySetResult(true);
+                if (!BatchMode) GetTree().Quit(0);
+                return;
+            }
 
             float groundR = Math.Max(0.18f, (float)sp.RadiusAtMax * 1.35f);
             var ground = new MeshInstance3D
@@ -91,9 +120,10 @@ public partial class SpecimenPreview : Node3D
             mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
             mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
             mat.SetShaderParameter("sway", 0.0f);
+            if (BatchMode) mat.SetShaderParameter("review_time", 0f);
             if (Phase >= 0) { mat.SetShaderParameter("sway",1f); mat.SetShaderParameter("review_time",Phase); }
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            var profile = Legacy ? null : FloraVisualProfile.Load(sp.Id);
+            var profile = Legacy ? null : FloraVisualProfile.Load(sp.Id, sp: sp);
             FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
             ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + sp.Id), 0x9E3779B97F4A7C15UL);
             // Optional screenshot of the exact budgeted mesh used by the in-game renderer,
@@ -103,6 +133,7 @@ public partial class SpecimenPreview : Node3D
                 : OrganismMeshes.Flora(sp, seed, Juvenile, profile == null ? null : Detail);
             ShaderMaterial? leaf = profile?.LeafMaterial(animated: Phase >= 0);
             if (leaf != null) { leaf.SetShaderParameter("review_time",Phase); leaf.SetShaderParameter("plant_stiffness",sp.Woody != null ? 7f : 3f); }
+            if (BatchMode && leaf != null) leaf.SetShaderParameter("review_time",0f);
             var multimesh = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
@@ -151,6 +182,20 @@ public partial class SpecimenPreview : Node3D
             camera.LookAt(target);
             if (Reverse) { var offset=camera.Position-target; camera.Position=target+new Vector3(-offset.X,offset.Y,-offset.Z); camera.LookAt(target); }
 
+            if (BatchMode)
+            {
+                var bounds=multimesh.GetAabb();
+                target=bounds.GetCenter();
+                float extent=Math.Max(.03f,Math.Max(bounds.Size.X,Math.Max(bounds.Size.Y,bounds.Size.Z)));
+                camera.Size=extent*1.55f;
+                camera.Position=target+new Vector3(1f,.7f,1f).Normalized()*Math.Max(.6f,extent*2f);
+                camera.Attributes=environment.CameraAttributes;
+                camera.LookAt(target);
+                await CaptureSequenceAsync(camera,environment,new { path="production_flora_tier", seed, triangles=mesh.TriangleCount, leaves=mesh.Leaves.Count, profile=profile!=null, bounds });
+                Finished.TrySetResult(true);
+                return;
+            }
+
             for (int i = 0; i < 90; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             Directory.CreateDirectory(OutDir);
@@ -158,12 +203,95 @@ public partial class SpecimenPreview : Node3D
             var error = GetViewport().GetTexture().GetImage().SavePng(path);
             if (error != Error.Ok) throw new IOException($"SavePng returned {error}");
             GD.Print($"SPECIMEN_OK {path} triangles={mesh.TriangleCount} leaves={mesh.Leaves.Count} tier={Detail} lighting={Lighting}");
+            Finished.TrySetResult(true);
             GetTree().Quit(0);
         }
         catch (Exception ex)
         {
             GD.PrintErr("SPECIMEN_FAILED " + ex);
-            GetTree().Quit(1);
+            Finished.TrySetResult(false);
+            if (!BatchMode) GetTree().Quit(1);
         }
+    }
+
+    private async Task CaptureSequenceAsync(Camera3D camera, EnvironmentRig environment, object geometry)
+    {
+        Directory.CreateDirectory(OutDir);
+        var viewport=GetViewport();
+        var msaa=viewport.Msaa3D; bool taa=viewport.UseTaa;
+        float size=camera.Size;
+        var captures=new System.Collections.Generic.List<object>();
+        async Task Frames(int count) { for(int i=0;i<count;i++) await ToSignal(GetTree(),SceneTree.SignalName.ProcessFrame); }
+        async Task Save(string label)
+        {
+            await Frames(3);
+            await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
+            string file=label+".png";
+            var error=viewport.GetTexture().GetImage().SavePng(Path.Combine(OutDir,file));
+            if(error!=Error.Ok) throw new IOException($"SavePng {error}");
+            captures.Add(new { file, camera_size=camera.Size, msaa=viewport.Msaa3D.ToString(), taa=viewport.UseTaa });
+        }
+        try
+        {
+            if (Main.UserArgs.Contains("--isolation-dof"))
+            {
+                // Match gameplay's focused-camera distance/transition/amount policy.
+                // Coverage fixtures look at their authored target 0.392m from the camera.
+                var attr=environment.CameraAttributes;
+                float targetDistance=CoverageProductionPath || SpeciesId=="blue_sundew" ? new Vector3(.16f,.32f,.16f).Length() : Math.Max(.1f,camera.Position.Length());
+                camera.Projection=Camera3D.ProjectionType.Perspective;
+                camera.Fov=45f;
+                foreach(bool aaOff in new[]{false,true})
+                {
+                    viewport.Msaa3D=aaOff?Viewport.Msaa.Disabled:msaa;
+                    foreach(string mode in new[]{"off","in_focus","focus_nearer","focus_farther","focus_nearer_no_jitter"})
+                    {
+                        float focus=mode.StartsWith("focus_nearer") ? targetDistance*.4f : mode=="focus_farther" ? targetDistance*1.8f : targetDistance;
+                        attr.DofBlurNearEnabled=attr.DofBlurFarEnabled=mode!="off";
+                        attr.DofBlurFarDistance=focus*1.18f;
+                        attr.DofBlurFarTransition=Math.Max(.08f,focus*.85f);
+                        attr.DofBlurNearDistance=Math.Max(.015f,focus*.78f);
+                        attr.DofBlurNearTransition=Math.Max(.01f,focus*.28f);
+                        attr.DofBlurAmount=Math.Clamp(.085f*(1-(focus-.15f)/2.8f),.015f,.085f);
+                        bool jitter=mode!="focus_nearer_no_jitter";
+                        RenderingServer.CameraAttributesSetDofBlurQuality(RenderingServer.DofBlurQuality.High,jitter);
+                        await Frames(30);
+                        for(int i=0;i<6;i++) await Save($"dof_{mode}_{(aaOff?"msaa_off":"baseline")}_{i:D2}");
+                        captures.Add(new { mode, msaa=viewport.Msaa3D.ToString(), jitter,
+                            target_distance=targetDistance, focus_distance=focus, amount=attr.DofBlurAmount,
+                            near=attr.DofBlurNearDistance, near_transition=attr.DofBlurNearTransition,
+                            far=attr.DofBlurFarDistance, far_transition=attr.DofBlurFarTransition });
+                    }
+                }
+            }
+            else
+            foreach(var view in new[]{"whole","macro"})
+            {
+                camera.Size=view=="whole" ? size : size*.4f;
+                viewport.Msaa3D=msaa;
+                await Frames(30);
+                for(int i=0;i<6;i++) await Save($"{view}_baseline_{i:D2}");
+                viewport.Msaa3D=Viewport.Msaa.Disabled;
+                await Frames(24);
+                for(int i=0;i<3;i++) await Save($"{view}_msaa_off_{i:D2}");
+            }
+        }
+        finally
+        {
+            viewport.Msaa3D=msaa; viewport.UseTaa=taa; camera.Size=size;
+            environment.CameraAttributes.DofBlurNearEnabled=false;
+            environment.CameraAttributes.DofBlurFarEnabled=false;
+            RenderingServer.CameraAttributesSetDofBlurQuality(RenderingServer.DofBlurQuality.High,true);
+        }
+        File.WriteAllText(Path.Combine(OutDir,"specimen.json"),JsonSerializer.Serialize(new {
+            species=SpeciesId, geometry, resolution=new[]{1024,1024}, light_seconds=420,
+            camera_eye=new[]{camera.Position.X,camera.Position.Y,camera.Position.Z},
+            baseline_msaa=msaa.ToString(), baseline_taa=taa, baseline_fxaa=viewport.ScreenSpaceAA.ToString(),
+            automatic_exposure=false, wind=false, material_review_seconds=0, captures,
+            scope=Main.UserArgs.Contains("--isolation-dof")
+                ? "One species only; perspective camera and fixed exposure/light. Five focus/jitter modes crossed with MSAA baseline/off, six frames each; focus thresholds follow gameplay close-focus policy. No biology advancement or performance acceptance."
+                : "One species only; authored inspection fixture, production geometry/material path; six fixed-camera baseline frames and three MSAA-off controls at each of two scales. No biological simulation advancement or gameplay/performance acceptance."
+        },new JsonSerializerOptions{WriteIndented=true}));
+        GD.Print($"ISOLATED_SPECIES_OK {SpeciesId} captures={captures.Count}");
     }
 }

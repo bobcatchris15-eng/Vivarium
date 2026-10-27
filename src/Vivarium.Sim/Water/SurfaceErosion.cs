@@ -105,7 +105,7 @@ public sealed class SurfaceErosion
                 RemovedVolume+=cut*hf.Step*hf.Step;changed++;batchChanged++;
             }
             _pending.Clear();
-            if(batchChanged>0){hf.Touch();_w.Water.RefreshBed(hf);_w.Fields.MarkLightStale();}
+            if(batchChanged>0){_w.Water.RefreshBed(hf);_w.Fields.MarkLightStale();}
         }
         return changed;
     }

@@ -284,6 +284,10 @@ public sealed class FaunaSystem
             }
             else f.Y = RestingY(sp, f.PositionXZ);
         }
+        // Loading rebuilds derived buckets from current positions. Publish the same
+        // position-current index here, or crossing a bucket boundary changes which
+        // neighbours steering/feeding can find before versus after a reload.
+        fauna.RebuildIndex();
     }
 
     /// <summary>True while a conglobating animal (pill bug) is rolled up after being disturbed.</summary>

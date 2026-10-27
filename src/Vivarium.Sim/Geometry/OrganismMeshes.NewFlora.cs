@@ -178,12 +178,15 @@ public static partial class OrganismMeshes
         double teeth = 14.0,
         double[]? midrib = null,
         double midribWidth = 0.22,
-        bool volumetric = false)
+        bool volumetric = false,
+        int? sectionSides = null)
     {
         if (length <= 1e-7 || halfWidth <= 0) return root;
 
         int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
         NewFloraBudget(m, ref rows, ref sides, minRows: 3, minSides: 5);
+        // Explicit micro-organ section override; ordinary blades retain their existing floor.
+        if (sectionSides is { } requested) sides = Math.Clamp(requested, 3, sides);
         rows = Math.Max(2, rows);
 
         var a0 = along.LengthSq > 1e-12 ? along.Normalized() : Vec3.Up;

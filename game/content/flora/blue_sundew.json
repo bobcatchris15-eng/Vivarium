@@ -4,7 +4,7 @@
   "archetype": "plant",
   "placementGroup": "waterside_aquatic",
   "role": "Distributed carnivorous sundew analogue carpeting saturated mossy soil.",
-  "description": "A rhizomatous mat threads through wet ground, carrying sticky red-green feeding pads beaded with dew and occasional startling cobalt reproductive stalks.",
+  "description": "A rhizomatous colony forms dense shrubs of small round dark-green leaves. Taller scaly stalks rise above them, ending in bright blue dewy tentacle clubs.",
   "habitat": {
     "substrates": {
       "soil": 1,

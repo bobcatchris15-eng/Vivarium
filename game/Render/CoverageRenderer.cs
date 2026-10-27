@@ -30,7 +30,7 @@ public partial class CoverageRenderer : Node3D
 
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
-    public float RebuildBudgetMs { get; set; } = 3.0f;
+    public float RebuildBudgetMs { get; set; } = 0.5f;
 
     /// <summary>Diagnostics for reference/perf capture (updated every SyncTiles).</summary>
     public int TileCount => _tiles.Count;
@@ -215,8 +215,10 @@ public partial class CoverageRenderer : Node3D
         }
 
         InitSpecies();
-        SyncTiles(immediate: false);
+        SyncTiles(immediate: true);
     }
+
+    private double _syncTimer;
 
     public override void _Process(double delta)
     {
@@ -228,7 +230,12 @@ public partial class CoverageRenderer : Node3D
         }
         if (!Visible) Visible = true;
 
-        SyncTiles(immediate: false);
+        _syncTimer += delta;
+        if (_syncTimer >= 0.25 || _inFlight.Count > 0 || _pendingRebuilds.Count > 0)
+        {
+            _syncTimer = 0;
+            SyncTiles(immediate: false);
+        }
     }
 
     private void InitSpecies()
@@ -338,9 +345,24 @@ public partial class CoverageRenderer : Node3D
             }
         }
 
+        Plane[]? frustum = null;
+        if (!immediate && Camera != null)
+        {
+            try
+            {
+                var planes = Camera.GetFrustum();
+                if (planes != null && planes.Count > 0)
+                {
+                    frustum = new Plane[planes.Count];
+                    planes.CopyTo(frustum, 0);
+                }
+            }
+            catch { }
+        }
+
         // Check tile versions and enqueue dirty / new tiles
-        EnqueueTiles(_w.Coverage.Mat);
-        EnqueueTiles(_w.Coverage.Crust);
+        EnqueueTiles(_w.Coverage.Mat, frustum, immediate);
+        EnqueueTiles(_w.Coverage.Crust, frustum, immediate);
 
         if (immediate)
         {
@@ -428,7 +450,7 @@ public partial class CoverageRenderer : Node3D
         });
     }
 
-    private void EnqueueTiles(CoverageLayer layer)
+    private void EnqueueTiles(CoverageLayer layer, Plane[]? frustum, bool immediate)
     {
         foreach (var t in layer.Tiles)
         {
@@ -437,19 +459,46 @@ public partial class CoverageRenderer : Node3D
             var key = (layer.Id, t.Ti, t.Tj);
             if (_tiles.TryGetValue(key, out var record))
             {
-                if (t.Version > record.Version && _pendingKeys.Add(key))
+                // Loaded meshes stay static while in view.
+                // Only update while culled / out of view, or on immediate (e.g. world load).
+                if (t.Version > record.Version)
                 {
-                    _pendingRebuilds.Add(key);
+                    bool inView = frustum == null || IsTileInFrustum(frustum, t.Ti, t.Tj);
+                    if ((!inView || immediate) && _pendingKeys.Add(key))
+                    {
+                        _pendingRebuilds.Add(key);
+                    }
                 }
             }
             else
             {
+                // Brand new tile: enqueue so colony appears.
                 if (_pendingKeys.Add(key))
                 {
                     _pendingRebuilds.Add(key);
                 }
             }
         }
+    }
+
+    private bool IsTileInFrustum(Plane[] frustum, int ti, int tj)
+    {
+        const int edge = CoverageSpec.TileEdge;
+        const double cs = CoverageSpec.CellSize;
+        double wx = (ti + 0.5) * edge * cs;
+        double wz = (tj + 0.5) * edge * cs;
+        double wy = _w.Terrain.Height(new Vec2(wx, wz));
+        var center = new Vector3((float)wx, (float)wy, (float)wz);
+        const float radius = 2.0f;
+
+        for (int i = 0; i < frustum.Length; i++)
+        {
+            if (frustum[i].DistanceTo(center) > radius)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>Applies an off-thread-built (or synchronously-built) mesh result to the scene tree.</summary>
@@ -486,7 +535,7 @@ public partial class CoverageRenderer : Node3D
             Name = $"Coverage_{layer.Id}_{t.Ti}_{t.Tj}",
             Mesh = mesh,
             MaterialOverride = mat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         AddChild(mi);
         _tiles[key] = new TileRecord

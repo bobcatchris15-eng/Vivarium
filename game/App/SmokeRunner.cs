@@ -308,11 +308,11 @@ public partial class SmokeRunner : Node
         await Press("StatsButton", 10);
         await Press("DebugButton", 10);
         await Press("SettingsButton", 5);
-        var q = Find<OptionButton>("QualityPicker");
+        Check("one production presentation has no quality picker", Session.Ui.FindChild("QualityPicker", true, false) == null);
         W.Clock.Paused = true;   // compare state at an identical tick
         string before = WorldSerializer.Digest(W);
-        foreach (int tier in new[] { 2, 0, 1 }) { q.Select(tier); q.EmitSignal(OptionButton.SignalName.ItemSelected, tier); await Frames(3); }
-        Check("quality changes leave simulation untouched", WorldSerializer.Digest(W) == before);
+        foreach (int tier in new[] { 2, 0, 1 }) { Session.Settings.Quality = tier; Session.ApplySettings(); Check("legacy tier uses common presentation " + tier, Session.Settings.Quality == 1); await Frames(3); }
+        Check("presentation settings leave simulation untouched", WorldSerializer.Digest(W) == before);
         W.Clock.Paused = false;
         var growth = Find<HSlider>("GrowthSpeedSlider");
         double bio0 = W.Clock.BioAcceleration;
@@ -422,6 +422,13 @@ public partial class SmokeRunner : Node
         var cam = Session.CameraRig;
         W.Clock.Paused = System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_FREEZE") == "1";
         var samples = new List<string>();
+        ulong warmupStart = Time.GetTicksMsec();
+        while (!Session.Flora.PopulationReady && Time.GetTicksMsec() - warmupStart < 120000)
+        {
+            await Frames(1);
+        }
+        GD.Print($"WARMUP_COMPLETE elapsed_ms={Time.GetTicksMsec() - warmupStart} floraReady={Session.Flora.PopulationReady}");
+        await Frames(10);
         ulong start = Time.GetTicksMsec();
         int second = 0;
         long lastTick = W.Clock.Tick;

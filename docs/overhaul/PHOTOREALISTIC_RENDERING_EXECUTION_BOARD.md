@@ -16,42 +16,42 @@ Authoritative progress record for [`PHOTOREALISTIC_RENDERING_PLAN.md`](PHOTOREAL
 | Build gate at checkpoint | `dotnet build Vivarium.sln -c Debug` → 0 errors; `dotnet build game/Vivarium.csproj -c Debug` → 0 errors |
 | Working tree at checkpoint | clean (165 MB of texture masters + guardian assets committed; 69 doc deletions accepted as intentional) |
 
-Every worker runs in its own git worktree branched from `981b14b3`, so packet work is isolated, individually revertable, and never collides on `obj/` or `bin/`.
+Historical wave workers ran in their own git worktrees branched from `981b14b3`, so packet work is isolated, individually revertable, and never collides on `obj/` or `bin/`.
 
 ---
 
-## 2. Verified packet state
+## 2. Current implementation and verification state (2026-10-24)
 
-State is **evidence-based** — each row was confirmed by reading the source, not by trusting a prior report.
+Supersedes the former foundation-only table. User authorized completion before visual review/tweaks. This campaign edits the shared main checkout under explicit file ownership; the historical wave/worktree records below are retained. Implementation presence, native verification, and subjective photographic acceptance are separate. Current-source detailed audit: `2026-10-23-rendering-plan-state-review.md`; continuation: `.clanker/tasks/rendering-completion-20261023/`.
 
-| Packet | State | Evidence in tree |
-| :--- | :--- | :--- |
-| WP-01 | **DONE** | `SdfgiEnabled/SsrEnabled/SsilEnabled`, `SsaoLightAffect 0.42`, `ShadowBias 0.0035`, `Parallel4Splits`; `project.godot` `msaa_3d=2`, `use_taa=true`, shadow size 8192 |
-| WP-02 | **DONE** | `canopy_sky` → `enclosure_backdrop(EYEDIR)`; `DaySkyContribution 0.85`; `HabitatReflectionProbe` |
-| WP-03 | **DONE** | `FogEnabled = true`, `FogAerialPerspective 0.18`, `VolumetricFogDensity 0.0045`, `_habitatMist`; night flora `ShadowEnabled`, `DualParaboloid` |
-| WP-04 | **DONE** | `CameraAttributesSetDofBlurQuality(High)`, `DofBokehShape.Circle`, exp. metering, `DofBlurFarEnabled`; `CameraRig._focusDistance`, `VIVARIUM_DISABLE_DOF` |
-| WP-05 | **DONE** | `SurfaceSet(Color, Normal, Roughness, Height, Ao)`; `_hgt`/`_ao` bound; `sample_stochastic_pbr` L70; `pom_raymarch` L149 |
-| WP-06 | **DONE** | `const int sub = 6`; `CatmullRom` + `RenderHeight`; tangents in `Bridge.ToArrayMesh`; `damp_*`/`leaf_*` sampled; 24-step POM |
-| WP-07 | **MERGED** | `BuildWalls` subdivided (8 rows, ~3 cm), layer-specific displacement (turf lip +1.2 cm, ped ±1.5, cobble ±2.2, bedding ±2.8), 12–25 rootlet tubes, `specular_schlick_ggx` + POM + rock binding + clearcoat seepage. Merged `39113eb4` |
-| WP-08 | **NOT STARTED** | `LoamSurfaceDetailRenderer` L54 still `cz-1 .. cz+1` (6 m window); `SoilDetailRenderer` L54 still `StandardMaterial3D`, all `CastShadow = Off` |
-| WP-09 | **PARTIAL** | 4K isolated atlas generated (`ForestFloorLitter_4K_*`, 6 maps) + `GenerateLitterAtlas.py`. Outstanding: `LoamLitterBuilder` still crops `ScatteredLeaves007`, no height-field stacking, no 6-seg bark twigs, no `loam_litter.gdshader` backlight. WIP commit `2512d554` |
-| WP-10 | **MERGED** | Undercut peds (0.72 waist, 16×5 rings), triplanar `soil_*` with clamp removed, real `u,v` on blades/leaves, `BankFringe` wired, shadows on. Merged `4ad9e409` |
-| WP-11 | **MERGED** | Lit Forward+ `blend_mix, depth_draw_always, cull_disabled, diffuse_burley, specular_schlick_ggx`; analytic B-spline normals; un-clamped optical path; humic absorption; `+0.055` floor removed. Merged `438b340d` |
-| WP-12 | **NOT STARTED** | No `water_caustics.gdshaderinc`; albedo-additive `caustic_pattern` still in `terrain.gdshader` |
-| WP-13 | **NOT STARTED** | No meniscus/foam; `_drops`/`_sheets` shadows off; no `plunge_impacts` |
-| WP-14 | **NOT STARTED** | 6–8 sided prisms; 16 pebble variants; gravel 140/m²; no `rock_hgt`/`rock_ao`. Fresh worktree `wp14-rocks` ready |
-| WP-15 | **NOT STARTED** | `around = 28`, no hollow tunnel, normals from undisplaced `dir` L406; `cap > 0.5` writes no normal |
-| WP-16 | **MERGED** | `CastShadow = On`, `>= 4` gate removed, 8–14 shoots/cell, UV2.y base-to-tip, POM pore space + sheen + dew glints. Merged `d0afb267` |
-| WP-17 | **NOT STARTED** | Lichen branch leaves `bump = 0.0`, `ao = 1.0` |
-| WP-18 | **NOT STARTED** | No aquatic coverage renderer; `surface_mode == 4` absent |
-| WP-19 | **DONE** | `Broadleaf` L224-225 → `rows 28/cols 16` at Tier 0; two-sided lamina |
-| WP-20 | **DONE** | `sway`/`wind_strength` `0.35` with `VIVARIUM_FREEZE_WIND`; `T_leaf` Beer-Lambert L50 |
-| WP-21 | **PARTIAL** | Bark fluting, buttresses, callus rolls and analytic normals done. Outstanding: crown still uses 5-sided `Blade` (not `Broadleaf.BuildLeaf`), no `leaf.gdshader` routing, fungi untouched (`OrganismMeshes`, `GhostbonnetGeometry`). WIP commit `5ee6cde1` |
-| WP-22 | **NOT STARTED** | `FaunaRenderer.MakeMmi` `CastShadow = Off` |
-| WP-23 | **NOT STARTED** | `fauna.gdshader` procedural noise, no SSS/thin-film |
-| WP-24 | **NOT STARTED** | Vertex-coloured `StandardMaterial3D`; single-bone vertical foot offset; CPU `ClearSurfaces()`. Fresh worktree `wp24-guardians` ready |
+| Packet | Implementation present | Verification / limits |
+| --- | --- | --- |
+| WP-01 | Fidelity settings and quality>=1 overrides | final release-world01 passes113PNG, stable source/zero errors |
+| WP-02 | HDR procedural sky plus three authored4K EXRs; probe512 configured at project level | final release-world01 passes113PNG, stable source/zero errors |
+| WP-03 | Above-water/underwater fog and shadowed night lights | final release-world01 passes113PNG, stable source/zero errors |
+| WP-04 | Focus-driven DOF, bloom, exposure | final release-world01 passes113PNG, stable source/zero errors |
+| WP-05 | Eight original ambientCG4K five-channel sets, source hashes and import caches verified | native aquatic02 loads; final release-world01 passes113PNG, stable source/zero errors |
+| WP-06 | Dense curved terrain, masks, proper camera-local POM frame and wet lobes | native aquatic02 passes |
+| WP-07 | Displaced layered strata and rootlets | final release-world01 passes113PNG, stable source/zero errors |
+| WP-08 | Whole-domain floor, loading-frame batches, shadows and fleshy fruit material response | final release-world01 passes113PNG, stable source/zero errors |
+| WP-09 | 4K isolated litter/stacking/curved4K bark twigs; real moisture in vertex alpha | final release-world01 passes113PNG, stable source/zero errors |
+| WP-10 | Undercut peds, normals/AO, groundcover UV and bankfringe | final release-world01 passes113PNG, stable source/zero errors |
+| WP-11 | Forward+ lit water, smooth fluid normals, true optical paths | native water D passes:9 PNG/80 motion JPG,8 active impacts,stable/no errors |
+| WP-12 | Shadowed chromatic caustics, underwater optics, initial/live prop field and water bindings | native water D passes:9 PNG/80 motion JPG,8 active impacts,stable/no errors |
+| WP-13 | Impact history, shared ripple/foam include, meniscus, sub-mm rising bubbles, coherent fluid clocks | native water D passes:9 PNG/80 motion JPG,8 active impacts,stable/no errors |
+| WP-14 | Highpoly rocks tied to exact canonical support;32 variants/650 per m2 gravel | 10 focused checks pass; highpoly rock faces remain coplanar to preserve exact support |
+| WP-15 | 72-side displaced logs, real48-side tunnels, fractured rims, shards, normals and POM/endgrain | 9 focused checks pass; final release-world01 passes113PNG, stable source/zero errors |
+| WP-16 | Dense3D moss shoots, draping, shadows and sheen | final release-world01 passes113PNG, stable source/zero errors |
+| WP-17 | 3D foliose/fruticose/crustose lichens | final release-world01 passes113PNG, stable source/zero errors |
+| WP-18 | All3 aquatic layers and explicit slime optics | native aquatic02:12 captures, all3 uploaded layers, stable source/world |
+| WP-19 | Closed high-detail botanical shells; revised measured budgets and retention checks | integrated focused geometry passes |
+| WP-20 | All vascular synthesized profiles,4 rebuilt2K family pools,4-order veins, wind, corrected light energy | FLORA_BAKE_OK all4 shared pools; final release-world01 passes113PNG, stable source/zero errors |
+| WP-21 | Dedicated pilot leaf material, closed leaves, layered bark,3D gills/pores/coral | 16 focused pilot/fungi checks pass |
+| WP-22 | Fauna shadows, anatomy refinements,14folded isopod legs, CUSTOM1/2 knee/ankle articulation | 19 focused fauna checks pass; 5 sharp live families pass,240 frames each |
+| WP-23 | Thinfilm chitin, mucus/SSS, aquatic stripes, compound/refracted eyes | finite Airy domain check; 5 sharp live families pass,240 frames each |
+| WP-24 | HairR/TT/TRT approximation, refracted iris, local wetness/contact uniforms; existing analytical IK preserved | guardian02 passes6 archetypes,180 images with sharp material details; no obsolete CPU reupload removal claimed |
 
-**Correction to the prior handoff:** WP-03, WP-04 and WP-11 were misreported. WP-02/03/04 are complete; WP-11 was never begun (zero file changes). The WP-07/08/21 files that showed as modified were pre-existing unrelated edits, not packet work.
+Fresh integrated focused geometry:113 passed,0 failed. One unrelated `TerrainStaysSoilEvenAtMaximumRockExposure` failure was reproduced in an archived clean e7d65714 baseline (281/1044 cells); it was excluded explicitly rather than changing ecology. Native23-spatial-material Forward+ probe passed after repairing custom-light SPECULAR stage access. Initial full-world113, dynamic water9+80motion,5 sharp fauna families240each, and guardian6archetypes180images pass native gates with stable sources and no engine errors. Final release-world01 passes113PNG. Mature reference02 passes81scenes at6.082days,380flora/86fauna,unchanged digest/stable source/zeroerrors. It fails30FPS: mean20.0, minimum1s14.0, p99 72.29ms onGTX1080 at1600x900; performance acceptance remains open. Night01 passes35PNG atlight1020,unchanged digest/stable source/zeroerrors. Implementation/native integration handoff complete; overall photographic/performance acceptance remains partial. Gallery:build/photorealism/review-2026-10-24/index.html (11 successful runs,1630PNG). Sparse dark flora flecks remain visually unaccepted: probes find finite/nonnegative/nonzero ALBEDO, changing ALBEDO alone removes them, and the precise dark-pigment/lighting/subpixel cause is not established. The clean recorded e7 baseline emits1007 shader/engine error lines under Godot4.7.1 and is excluded from historical A/B acceptance. Detailed report:2026-10-24-rendering-completion.md. Initial diagnostic world01 changed sources during capture and remains excluded.
 
 ---
 

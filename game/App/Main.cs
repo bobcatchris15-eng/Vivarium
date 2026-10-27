@@ -61,6 +61,8 @@ public partial class Main : Node3D
         if (ArgAfter("--photorealism-review") is { } photoDir)
         { AddChild(new PhotorealismReview { Content = content, OutDir = photoDir,
             ExposureSweep = UserArgs.Contains("--exposure-sweep") }); return; }
+        if (ArgAfter("--overhaul-aquatic-review") is { } aquaticOverhaulDir)
+        { AddChild(new OverhaulAquaticReview { Content = content, OutDir = aquaticOverhaulDir }); return; }
         if (ArgAfter("--material-port-review") is { } materialDir)
         { AddChild(new MaterialPortReview { Content = content, OutDir = materialDir,
             BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"), FloraModulePath = ArgAfter("--flora-module") ?? "",
@@ -87,6 +89,34 @@ public partial class Main : Node3D
             return;
         }
         if (UserArgs.Contains("--flora-bake")) { AddChild(new LeafMaterialBaker()); return; }
+        if (UserArgs.Contains("--flora-profile-check"))
+        {
+            int vascularCount = 0;
+            int nonVascularCount = 0;
+            foreach (var sp in content.Flora)
+            {
+                var profile = FloraVisualProfile.Load(sp.Id, sp: sp);
+                if (sp.Archetype == "plant" && sp.Colony == null)
+                {
+                    if (profile == null) throw new InvalidOperationException($"Vascular plant {sp.Id} missing visual profile");
+                    if (string.IsNullOrEmpty(profile.MorphologicalFamily)) throw new InvalidOperationException($"Plant {sp.Id} missing MorphologicalFamily");
+                    if (string.IsNullOrEmpty(profile.PoolSpecies)) throw new InvalidOperationException($"Plant {sp.Id} missing PoolSpecies");
+                    if (string.IsNullOrEmpty(profile.Veins)) throw new InvalidOperationException($"Plant {sp.Id} missing Veins");
+                    var mat = profile.LeafMaterial();
+                    if (mat == null) throw new InvalidOperationException($"Plant {sp.Id} failed LeafMaterial creation");
+                    GD.Print($"FLORA_PROFILE {sp.Id}: family={profile.MorphologicalFamily} pool={profile.PoolSpecies} veins={profile.Veins} volumetric={profile.Volumetric}");
+                    vascularCount++;
+                }
+                else
+                {
+                    if (profile != null) throw new InvalidOperationException($"Non-vascular organism {sp.Id} unexpectedly returned visual profile");
+                    nonVascularCount++;
+                }
+            }
+            GD.Print($"FLORA_PROFILE_CHECK_OK vascular={vascularCount} nonVascular={nonVascularCount}");
+            GetTree().Quit(0);
+            return;
+        }
         if (ArgAfter("--licenses") is { } licFile) { WriteLicenses(licFile); GetTree().Quit(0); return; }
 
         if (UserArgs.Contains("--fauna-motion-check"))
@@ -101,6 +131,8 @@ public partial class Main : Node3D
                 LiveMotion = UserArgs.Contains("--live-motion") });
             return;
         }
+        if (ArgAfter("--species-isolation-review") is { } isolationDir)
+        { AddChild(new SpeciesIsolationReview { Content=content, OutDir=isolationDir }); return; }
         if (ArgAfter("--specimen") is { } specimenId)
         {
             AddChild(new SpecimenPreview
@@ -166,6 +198,8 @@ public partial class Main : Node3D
                 if(!loaded.Ok)
                     throw new InvalidOperationException(
                         $"Explicit performance/preview world load failed: {loaded.Message}");
+                if(mode==SmokeRunner.Mode.WorldReview && Session.World!=null)
+                    Session.World.Clock.Paused=true;
             }
             else if (mode != SmokeRunner.Mode.Reload)
             {

@@ -11,7 +11,17 @@ public readonly record struct FloraLeaf(int FirstVertex, int VertexCount, int Fi
 /// 1 medium (down to ~40 px), 2 far. Every tier is a full parametric mesh; nothing is ever skipped.</summary>
 public static class FloraDetail
 {
-    public const double FullPixels = 25, MidPixels = 10;
+    public const double FullPixels = 120, MidPixels = 40;
+    // Optional distance reduction shares its first boundary with the camera's blur onset.
+    public const double DistanceMid = 6, DistanceFar = 12;
+
+    public static int SelectDistance(double depth, int previous = -1, double distanceScale = 1) => previous switch
+    {
+        0 => depth > DistanceFar * distanceScale * 1.1 ? 2 : depth > DistanceMid * distanceScale * 1.1 ? 1 : 0,
+        1 => depth < DistanceMid * distanceScale * .9 ? 0 : depth > DistanceFar * distanceScale * 1.1 ? 2 : 1,
+        2 => depth < DistanceMid * distanceScale * .9 ? 0 : depth < DistanceFar * distanceScale * .9 ? 1 : 2,
+        _ => depth >= DistanceFar * distanceScale ? 2 : depth >= DistanceMid * distanceScale ? 1 : 0,
+    };
 
     public static int Select(double pixels, int previous = -1) => previous switch
     {

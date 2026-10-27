@@ -5,6 +5,7 @@ param(
     [string]$LoadPath,
     [string]$Scenes,
     [switch]$Motion,
+    [switch]$GroundcoverResponse,
     [double]$FluidSeconds = 0,
     [switch]$WaterMotion,
     [double]$LightSeconds = 60,
@@ -46,6 +47,7 @@ try {
     if ($LoadPath) { $arguments += @('--load', $LoadPath) }
     if ($Scenes) { $arguments += @('--review-scenes', $Scenes) }
     if ($Motion) { $arguments += '--review-motion' }
+    if ($GroundcoverResponse) { $arguments += '--review-groundcover-response' }
     if ($FluidSeconds -gt 0) { $arguments += @('--review-fluid-seconds', $FluidSeconds.ToString([Globalization.CultureInfo]::InvariantCulture)) }
     if ($WaterMotion) { $arguments += '--review-water-motion' }
     $quoted = $arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }

@@ -146,24 +146,8 @@ public sealed class VivariumWorld
     /// assets while the world is still being generated. A wrong answer only
     /// costs a wasted preparation: the world decides for itself.
     /// </summary>
-    public static string? GuardianArchetypeFor(WorldDescriptor descriptor)
-    {
-        string? id;
-        if (descriptor.GuardianId is not ("auto" or "" or null))
-        {
-            if (descriptor.GuardianId == "none") return null;
-            id = descriptor.GuardianId;
-        }
-        else
-        {
-            // Without a pilot tree there is no guardian at all, which is what
-            // the guardian system decides when it initialises.
-            var pilotTree = PilotTreeState.SeededPilotTreeFormId(descriptor);
-            if (pilotTree == null) return null;
-            id = Guardians.GuardianCatalog.ForPilotTree(pilotTree)?.Id ?? Guardians.GuardianCatalog.GreatGround;
-        }
-        return Guardians.GuardianCatalog.Find(id)?.Archetype;
-    }
+    public static string? GuardianArchetypeFor(WorldDescriptor descriptor) =>
+        Guardians.GuardianCatalog.Find(Guardians.GuardianCatalog.SeededGuardianFormId(descriptor) ?? "")?.Archetype;
 
     /// <summary>Creates a complete new world: baseline, springs, props, initial fields, water, starter flora and fauna.</summary>
     public static VivariumWorld Create(ContentLibrary content, WorldDescriptor d, bool populate = true, bool warmupSurfaceWater = true)    {
@@ -248,7 +232,7 @@ public sealed class VivariumWorld
         }, phase: 13);
         Scheduler.Register("ecology.resources", Cadence.Resources, 60, Bio(Ecology.StepResources), phase: 19);
         // Keep expensive passes on separate ticks; intervals and elapsed time are unchanged.
-        Scheduler.Register("aquatic", Cadence.Flora, 65, dt => AquaticSystem.Step(dt, dt * Clock.BioAcceleration), phase: 21);
+        Scheduler.RegisterBatched("aquatic", Cadence.Flora, 65, dt => AquaticSystem.StepBatches(dt, dt * Clock.BioAcceleration), phase: 21);
         Scheduler.RegisterBatched("ecology.litter", Cadence.Litter, 66, LitterBatches, phase: 17);
         Scheduler.RegisterBatched("flora", Cadence.Flora, 70, dt => FloraSystem.StepBatches(dt * Clock.BioAcceleration), phase: 29);
         Scheduler.Register("flora.dead", Cadence.Flora, 71, Bio(DeadFloraSystem.Step), phase: 29);

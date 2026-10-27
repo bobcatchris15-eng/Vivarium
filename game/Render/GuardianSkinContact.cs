@@ -45,7 +45,12 @@ public sealed class GuardianSkinContact
     private readonly List<Candidate> _nasalCandidates = new();
     private static readonly string[] Regions = { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Tail", "Head" };
     public bool Valid { get; private set; }
-    /// <summary>When true, deformation/contact is applied via GPU shader uniforms instead of CPU mesh re-upload.</summary>
+    /// <summary>Maximum localized coat displacement in metres. CPU diagnostics
+    /// sample skeletal skin; their surface error relative to a displaced coat is
+    /// bounded by this amount. Nasal skin, eyes and armor are never GPU-displaced.</summary>
+    public const float MaximumGpuCoatDisplacement = 0.0015f;
+    /// <summary>Enables bounded coat contact in the shader. CPU skin evaluation
+    /// remains the authority for skeletal contact; it never reuploads meshes.</summary>
     public bool GpuDeformationEnabled { get; set; } = true;
     public string Diagnostic { get; private set; } = "Not initialized";
     public float MaximumRestReconstructionError { get; private set; }
@@ -546,11 +551,23 @@ public sealed class GuardianSkinContact
             // never across fit iterations or frames; the sampled geometry is identical.
             BeginEvaluation();
             foreach (var mesh in _meshes) if (!GodotObject.IsInstanceValid(mesh)) throw new InvalidOperationException("Cached mesh freed; recreate sampler");
-            float minimum = float.PositiveInfinity; var lowest = Vector3.Zero;
-            foreach (var sample in samples)
+            float bestY = float.PositiveInfinity;
+            var points = new Vector3[samples.Count];
+            for (int i = 0; i < samples.Count; i++)
             {
-                var point = EvaluateVertex(sample, false); float clearance = point.Y - supportHeight(point);
-                if (!point.IsFinite() || !float.IsFinite(clearance)) throw new InvalidOperationException("Nonfinite evaluated contact");
+                var point = EvaluateVertex(samples[i], false);
+                if (!point.IsFinite()) throw new InvalidOperationException("Nonfinite evaluated contact");
+                points[i] = point;
+                if (point.Y < bestY) bestY = point.Y;
+            }
+            float limit = bestY + LowestPointBand;
+            float minimum = float.PositiveInfinity; var lowest = Vector3.Zero;
+            for (int i = 0; i < samples.Count; i++)
+            {
+                var point = points[i];
+                if (point.Y > limit) continue;
+                float clearance = point.Y - supportHeight(point);
+                if (!float.IsFinite(clearance)) throw new InvalidOperationException("Nonfinite evaluated contact");
                 if (clearance < minimum) { minimum = clearance; lowest = point; }
             }
             return new Clearance(region, true, samples.Count, minimum, lowest);

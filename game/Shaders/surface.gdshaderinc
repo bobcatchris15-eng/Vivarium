@@ -2,7 +2,12 @@
 // Normal maps are OpenGL convention (+Y up) and imported as normal maps, so the sampled .xy is the
 // tangent-space normal in [0,1]; unpack_normal returns it in [-1,1] with z rebuilt.
 
-vec3 srgb_to_linear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
+vec3 srgb_to_linear(vec3 c) {
+    // MSAA interpolation may extrapolate vertex attributes outside their source
+    // range. mix() does not protect the unused fractional-pow branch from NaN.
+    c = max(c, vec3(0.0));
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
 
 float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float vnoise(vec2 p) {
@@ -13,6 +18,17 @@ float vnoise(vec2 p) {
 float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p *= 2.03; a *= 0.5; } return s; }
 
 vec3 unpack_normal(vec3 t) { vec2 xy = t.xy * 2.0 - 1.0; return vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy)))); }
+
+// Interpolated/derivative frames may collapse on caps or subpixel triangles.
+// Both comparisons reject non-finite values as well as zero-length vectors.
+vec3 finite_surface_normal(vec3 value, vec3 fallback) {
+    float magnitude_squared = dot(value, value);
+    if (magnitude_squared > 1e-12 && magnitude_squared < 1e12)
+        return value * inversesqrt(magnitude_squared);
+    float fallback_squared = dot(fallback, fallback);
+    return fallback_squared > 1e-12 && fallback_squared < 1e12
+        ? fallback * inversesqrt(fallback_squared) : vec3(0.0, 1.0, 0.0);
+}
 
 // Tangent-space normal back into the [0,1] encoding NORMAL_MAP expects.
 vec3 pack_normal(vec3 n) { n = normalize(n); return vec3(n.xy * 0.5 + 0.5, 1.0); }
@@ -29,7 +45,7 @@ vec3 cotangent_normal(vec3 geom_normal, vec3 p_world, vec2 uv, vec3 detail) {
     vec3 t = r1 * ux.x + r2 * uy.x;
     vec3 b = r1 * ux.y + r2 * uy.y;
     float inv = inversesqrt(max(max(dot(t, t), dot(b, b)), 1e-12));
-    return normalize(geom_normal * detail.z + (t * detail.x - b * detail.y) * inv);
+    return finite_surface_normal(geom_normal * detail.z + (t * detail.x - b * detail.y) * inv, geom_normal);
 }
 
 // Orthonormal tangent frame for cylindrical stems and branches.
@@ -45,15 +61,21 @@ vec3 stem_surface_normal(vec3 geom_normal, vec3 p_world, vec2 uv, vec3 detail) {
     vec3 r2 = cross(geom_normal, px);
     vec3 t = r1 * ux.x + r2 * uy.x;
     vec3 b = r1 * ux.y + r2 * uy.y;
-    float lt = length(t);
-    float lb = length(b);
-    vec3 T = lt > 1e-7 ? (t / lt) : normalize(cross(geom_normal, vec3(0.0, 1.0, 0.0)));
-    T = normalize(T - geom_normal * dot(geom_normal, T));
-    vec3 B = lb > 1e-7 ? (b / lb) : normalize(cross(geom_normal, T));
-    B = normalize(B - geom_normal * dot(geom_normal, B) - T * dot(T, B));
+    // Caps and subpixel stems can have singular UV derivatives. Construct a
+    // valid fallback before Gram-Schmidt; never normalize a zero projection.
+    vec3 reference = abs(geom_normal.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 fallback_t = normalize(cross(geom_normal, reference));
+    vec3 projected_t = t - geom_normal * dot(geom_normal, t);
+    float lt = length(projected_t);
+    vec3 T = lt > 1e-7 ? projected_t / lt : fallback_t;
+    vec3 projected_b = b - geom_normal * dot(geom_normal, b) - T * dot(T, b);
+    float lb = length(projected_b);
+    vec3 B = lb > 1e-7 ? projected_b / lb : cross(geom_normal, T);
     float det = ux.x * uy.y - ux.y * uy.x;
     if (det < 0.0) T = -T;
-    return normalize(geom_normal * detail.z + T * detail.x + B * detail.y);
+    vec3 mapped = geom_normal * detail.z + T * detail.x + B * detail.y;
+    float mapped_length = length(mapped);
+    return mapped_length > 1e-7 ? mapped / mapped_length : geom_normal;
 }
 
 
@@ -270,7 +292,7 @@ vec4 triplanar(sampler2D col, sampler2D nrm, sampler2D rgh, vec3 p, vec3 wn, flo
     vec3 nx = vec3(tx.z * sign(wn.x), tx.y, tx.x);
     vec3 ny = vec3(ty.x, ty.z * sign(wn.y), ty.y);
     vec3 nz = vec3(tz.x, tz.y, tz.z * sign(wn.z));
-    n_world = normalize(nx * w.x + ny * w.y + nz * w.z + wn * 0.35);
+    n_world = finite_surface_normal(nx * w.x + ny * w.y + nz * w.z + wn * 0.35, wn);
     return cx * w.x + cy * w.y + cz * w.z;
 }
 

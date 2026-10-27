@@ -25,43 +25,95 @@ public sealed class GuardianHabitat
     public IReadOnlyList<Vec2> ShallowWadingZones { get; }
     public IReadOnlyList<Vec3> ScentMarkTargets { get; }
 
-    public GuardianHabitat(PilotTreeState tree, HexDomain domain, VivariumWorld? world = null)
+    public GuardianHabitat(PilotTreeState? tree, HexDomain domain, VivariumWorld? world = null)
     {
         _world = world;
         _domain = domain;
-        RootPaths = tree.Roots;
+        RootPaths = tree?.Roots ?? (IReadOnlyList<PilotRootPath>)Array.Empty<PilotRootPath>();
 
-        // Inward normal from corner vertex
-        var outward = tree.Anchor.Normalized();
-        var inward = -outward;
+        Vec2 trunkBaseXZ;
+        double baseHeight;
+        if (tree != null)
+        {
+            // Inward normal from corner vertex
+            var outward = tree.Anchor.Normalized();
+            var inward = -outward;
 
-        // Trunk base anchor
-        var trunkBaseXZ = domain.ClampInside(tree.Anchor + inward * (tree.Def.TrunkRadius + 0.85), 0.4);
-        HomeAnchor = new Vec3(trunkBaseXZ.X, tree.BaseHeight + 0.05, trunkBaseXZ.Z);
+            // Trunk base anchor
+            trunkBaseXZ = domain.ClampInside(tree.Anchor + inward * (tree.Def.TrunkRadius + 0.85), 0.4);
+            baseHeight = tree.BaseHeight + 0.05;
+        }
+        else
+        {
+            trunkBaseXZ = Vec2.Zero;
+            if (world != null && world.Water != null && world.Grid != null &&
+                world.Water.OpenWaterDepth(world.Grid.NearestDomainCell(trunkBaseXZ)) > 0.05)
+            {
+                double bestDist = double.PositiveInfinity;
+                foreach (int cell in world.Grid.DomainCells)
+                {
+                    if (world.Water.OpenWaterDepth(cell) < 0.02)
+                    {
+                        var c = world.Grid.CellCenter(cell);
+                        double d = c.LengthSq;
+                        if (d < bestDist) { bestDist = d; trunkBaseXZ = c; }
+                    }
+                }
+            }
+            baseHeight = (world != null ? world.SurfaceHeight(trunkBaseXZ) : 0.0) + 0.05;
+        }
+        HomeAnchor = new Vec3(trunkBaseXZ.X, baseHeight, trunkBaseXZ.Z);
 
         var rest = new List<Vec3> { HomeAnchor };
 
-        // Rest sites at major root buttress forks and root shelves
-        foreach (var root in tree.Roots)
+        // Rest sites at major root buttress forks and root shelves, or open ground
+        if (tree != null)
         {
-            if (root.Samples.Count > 4)
+            foreach (var root in tree.Roots)
             {
-                var s = root.Samples[Math.Min(4, root.Samples.Count - 1)];
-                var position = domain.ClampInside(s.Position, 0.4);
-                if (!tree.BlocksTrunk(position, 0.35))
-                    rest.Add(new Vec3(position.X, s.GroundY + s.Height * 0.8, position.Z));
+                if (root.Samples.Count > 4)
+                {
+                    var s = root.Samples[Math.Min(4, root.Samples.Count - 1)];
+                    var position = domain.ClampInside(s.Position, 0.4);
+                    if (!tree.BlocksTrunk(position, 0.35))
+                        rest.Add(new Vec3(position.X, s.GroundY + s.Height * 0.8, position.Z));
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                double angle = i * Math.PI * 0.5;
+                var p = domain.ClampInside(trunkBaseXZ + new Vec2(Math.Cos(angle) * 2.0, Math.Sin(angle) * 2.0), 0.4);
+                double y = (world != null ? world.SurfaceHeight(p) : 0.0) + 0.05;
+                rest.Add(new Vec3(p.X, y, p.Z));
             }
         }
         RestSites = Array.AsReadOnly(rest.ToArray());
 
-        // Forage hotspots in rich litter zones below the canopy
+        // Forage hotspots in rich litter zones below the canopy or island terrain
         var forage = new List<Vec2>();
-        for (int i = 1; i <= 4; i++)
+        if (tree != null)
         {
-            double angle = (i * Math.PI / 5.0) - (Math.PI / 2.0);
-            var dir = new Vec2(Math.Cos(angle), Math.Sin(angle));
-            var p = tree.Anchor + inward * (tree.Def.TrunkRadius + 1.2) + dir * 0.8;
-            if (domain.Contains(p)) forage.Add(p);
+            var outward = tree.Anchor.Normalized();
+            var inward = -outward;
+            for (int i = 1; i <= 4; i++)
+            {
+                double angle = (i * Math.PI / 5.0) - (Math.PI / 2.0);
+                var dir = new Vec2(Math.Cos(angle), Math.Sin(angle));
+                var p = tree.Anchor + inward * (tree.Def.TrunkRadius + 1.2) + dir * 0.8;
+                if (domain.Contains(p)) forage.Add(p);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                double angle = i * Math.PI / 3.0;
+                var p = domain.ClampInside(trunkBaseXZ + new Vec2(Math.Cos(angle) * 2.5, Math.Sin(angle) * 2.5), 0.4);
+                if (domain.Contains(p)) forage.Add(p);
+            }
         }
         if (forage.Count == 0) forage.Add(trunkBaseXZ);
         ForageHotspots = Array.AsReadOnly(forage.ToArray());
@@ -111,19 +163,22 @@ public sealed class GuardianHabitat
 
         // Scent marking targets (HomeAnchor, root sites, tree base)
         var scentTargets = new List<Vec3> { HomeAnchor };
-        var treeBase = new Vec3(trunkBaseXZ.X, tree.BaseHeight, trunkBaseXZ.Z);
-        if ((treeBase - HomeAnchor).LengthSq > 0.01)
-            scentTargets.Add(treeBase);
-
-        foreach (var root in tree.Roots)
+        if (tree != null)
         {
-            if (root.Samples.Count > 0)
+            var treeBase = new Vec3(trunkBaseXZ.X, tree.BaseHeight, trunkBaseXZ.Z);
+            if ((treeBase - HomeAnchor).LengthSq > 0.01)
+                scentTargets.Add(treeBase);
+
+            foreach (var root in tree.Roots)
             {
-                var s = root.Samples[^1];
-                var p = domain.ClampInside(s.Position, 0.4);
-                var target = new Vec3(p.X, s.GroundY + s.Height * 0.5, p.Z);
-                if (!scentTargets.Any(l => (l - target).LengthSq < 0.25))
-                    scentTargets.Add(target);
+                if (root.Samples.Count > 0)
+                {
+                    var s = root.Samples[^1];
+                    var p = domain.ClampInside(s.Position, 0.4);
+                    var target = new Vec3(p.X, s.GroundY + s.Height * 0.5, p.Z);
+                    if (!scentTargets.Any(l => (l - target).LengthSq < 0.25))
+                        scentTargets.Add(target);
+                }
             }
         }
         foreach (var site in RestSites)

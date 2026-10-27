@@ -68,10 +68,12 @@ uniform float tile_metres = 0.82;    // physical scale of Ground048 in the integ
 uniform float soil_relief_amp = 0.012;   // retained control; aggregate detail remains shading-only
 uniform float soil_relief_freq = 26.0;   // joined organic aggregate frequency in world metres
 uniform float soil_clumps = 1.0;        // 0 skips aggregate normals on low quality tiers
+uniform float gravel_normal_strength : hint_range(0.0, 3.0, 0.05) = 1.65; // scanned pebble relief
 
 varying vec3 world_pos;
 varying vec3 v_ts;
 varying vec3 l_ts;
+varying float material_specular;
 
 vec3 ramp(float t) {
     t = clamp(t, 0.0, 1.0);
@@ -151,20 +153,17 @@ void fragment() {
     float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
     float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
 
-    // 24-step POM raymarch in tangent space on composite heightfield
+    // Keep soil relief separate from gravel. Gravel uses world-space projections
+    // below: a single top-down POM offset cannot follow those projection frames,
+    // and its old height frequency did not match the visible stones (2.4x).
     float pom_shadow = 1.0;
     float pom_height_scale = 0.025;
     vec2 displaced_uv = uv;
-    if (wGrav >= 0.95) {
-        displaced_uv = pom_raymarch(gravel_hgt, uv, v_ts, pom_height_scale, 24, pom_shadow, l_ts);
-    } else if (wGrav <= 0.05) {
-        displaced_uv = pom_raymarch(soil_hgt, uv, v_ts, pom_height_scale, 24, pom_shadow, l_ts);
-    } else {
-        float shadow_soil = 1.0, shadow_grav = 1.0;
-        vec2 uv_soil = pom_raymarch(soil_hgt, uv, v_ts, pom_height_scale, 24, shadow_soil, l_ts);
-        vec2 uv_grav = pom_raymarch(gravel_hgt, uv, v_ts, pom_height_scale, 24, shadow_grav, l_ts);
-        displaced_uv = mix(uv_soil, uv_grav, wGrav);
-        pom_shadow = mix(shadow_soil, shadow_grav, wGrav);
+    if (wGrav < 0.95) {
+        float soil_shadow = 1.0;
+        vec2 soil_uv = pom_raymarch(soil_hgt, uv, v_ts, pom_height_scale, 24, soil_shadow, l_ts);
+        displaced_uv = mix(soil_uv, uv, wGrav);
+        pom_shadow = mix(soil_shadow, 1.0, wGrav);
     }
 
     vec3 tn;
@@ -242,25 +241,41 @@ void fragment() {
         world_pert = mix(world_pert, vec3(mn.x, 0.0, -mn.y), w);
     }
     if (wGrav > 0.01) {
-        vec2 gu = displaced_uv * 2.4;
-        vec3 gn = unpack_normal(texture(gravel_nrm, gu).rgb);
-        vec4 g = vec4(texture(gravel_col, gu).rgb, texture(gravel_rgh, gu).r);
-        if (tri_blend.y < 0.95) {
-            vec2 gu_x = uv_x * 2.4;
-            vec2 gu_z = uv_z * 2.4;
-            vec4 g_x = vec4(texture(gravel_col, gu_x).rgb, texture(gravel_rgh, gu_x).r);
-            vec4 g_z = vec4(texture(gravel_col, gu_z).rgb, texture(gravel_rgh, gu_z).r);
-            g = g * tri_blend.y + g_x * tri_blend.x + g_z * tri_blend.z;
-            vec3 gn_x = unpack_normal(texture(gravel_nrm, gu_x).rgb);
-            vec3 gn_z = unpack_normal(texture(gravel_nrm, gu_z).rgb);
-            gn = normalize(gn * tri_blend.y + gn_x * tri_blend.x + gn_z * tri_blend.z);
+        // One physical frequency for every channel and axis. Remove projections
+        // nearly edge-on to the surface so elongated top texels cannot bleed down
+        // a steep bank. No top-down warp or camera-dependent displacement.
+        vec3 gp = world_pos * (2.4 / tile_scale);
+        vec3 gw = pow(max(abs(wn) - vec3(0.2), vec3(0.0)), vec3(4.0));
+        gw /= max(gw.x + gw.y + gw.z, 0.0001);
+        vec4 g = vec4(0.0);
+        vec3 gravel_normal = vec3(0.0);
+        if (gw.x > 0.0) {
+            g += vec4(texture(gravel_col, gp.zy).rgb, texture(gravel_rgh, gp.zy).r) * gw.x;
+            gravel_normal += cotangent_normal(wn, world_pos, gp.zy,
+                unpack_normal(texture(gravel_nrm, gp.zy).rgb)) * gw.x;
         }
+        if (gw.y > 0.0) {
+            g += vec4(texture(gravel_col, gp.xz).rgb, texture(gravel_rgh, gp.xz).r) * gw.y;
+            gravel_normal += cotangent_normal(wn, world_pos, gp.xz,
+                unpack_normal(texture(gravel_nrm, gp.xz).rgb)) * gw.y;
+        }
+        if (gw.z > 0.0) {
+            g += vec4(texture(gravel_col, gp.xy).rgb, texture(gravel_rgh, gp.xy).r) * gw.z;
+            gravel_normal += cotangent_normal(wn, world_pos, gp.xy,
+                unpack_normal(texture(gravel_nrm, gp.xy).rgb)) * gw.z;
+        }
+        gravel_normal = finite_surface_normal(gravel_normal, wn);
+        // Strengthen the matched pebble normal without shifting its texture
+        // coordinates or adding camera-dependent parallax. This is a surface
+        // gradient, so scaling it preserves the geometric normal on flat maps.
+        vec3 gravel_pert = (gravel_normal / max(dot(gravel_normal, wn), 0.2) - wn)
+            * gravel_normal_strength;
         g.rgb = mix(vec3(dot(g.rgb, vec3(0.3, 0.59, 0.11))), g.rgb, 0.45) * vec3(1.03, 1.0, 0.95);
         float stone_h = dot(g.rgb, vec3(0.33)) * 1.4;
         float soil_h = dot(soil.rgb, vec3(0.33));
         float w = clamp(((wGrav * 1.4 + stone_h * 0.35 - soil_h * 0.25) - 0.15) / 0.70, 0.0, 1.0);
         col = mix(col, g.rgb, w); rough = mix(rough, g.a, w);
-        world_pert = mix(world_pert, vec3(gn.x, 0.0, -gn.y), w);
+        world_pert = mix(world_pert, gravel_pert, w);
     }
     if (wSilt > 0.01) {
         // Riparian alluvial silt: fine-grained mineral sediment with gentle flow micro-ripples
@@ -348,6 +363,7 @@ void fragment() {
     SPECULAR = mix(0.35, 0.32, total_wet);
     SPECULAR = mix(SPECULAR, 0.12, smoothstep(0.006, 0.025, water_depth));
     NORMAL = normalize((VIEW_MATRIX * vec4(detail, 0.0)).xyz);
+    material_specular = SPECULAR;
 }
 
 void light() {
@@ -367,7 +383,7 @@ void light() {
         float a2 = a * a;
         float denom = ndoth * ndoth * (a2 - 1.0) + 1.0;
         float D = a2 / max(PI * denom * denom, 1e-4);
-        float F0 = SPECULAR * 0.08;
+        float F0 = material_specular * 0.08;
         float vh = max(dot(vv, h), 0.0);
         float F = F0 + (1.0 - F0) * pow(1.0 - vh, 5.0);
         float k = (ROUGHNESS + 1.0) * (ROUGHNESS + 1.0) * 0.125;

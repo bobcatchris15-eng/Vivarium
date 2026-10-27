@@ -113,6 +113,7 @@ public static class Broadleaf
         double petioleRadius = 0.004,
         double petioleKink = 0.35,
         double asymmetry = 0.0,
+        double roll = 0.0,
         double[]? undersideColor = null,
         int? detailOverride = null,
         ulong parentPartId = 0)
@@ -153,6 +154,7 @@ public static class Broadleaf
         var fwd = bladeFwd.Normalized();
         var side = fwd.Cross(up).Normalized();
         if (side.LengthSq < 1e-6) side = fwd.Cross(new Vec3(1, 0, 0)).Normalized();
+        if (roll != 0.0) side = Axis.RotateAround(side, fwd, roll).Normalized();
         var normal0 = side.Cross(fwd).Normalized();
 
         double wavyPhase = Rng.HashUnit(seed, Hash.Fnv1a64("form.broadleaf.wavy"), 0) * Math.PI * 2.0;

@@ -99,7 +99,7 @@ public sealed class FloraSystem
     /// Rebuilds the derived woody-canopy shade field. Cost is paid once per canopy state change and only touches
     /// grid cells under a bounded number of tree/shrub crowns; all ecology consumers then get O(1) bilinear samples.
     /// </summary>
-    private void RefreshCanopyShade()
+    public void RefreshCanopyShade()
     {
         RefreshWoodyCanopy();
         if (!_canopyShadeDirty) return;

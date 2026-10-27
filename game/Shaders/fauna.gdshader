@@ -27,10 +27,16 @@ uniform float scales = 0.0;     // 1 = fish scales + silvery sheen
 uniform float segment_rings = 0.0;   // body segments to mark as faint grooves along UV.x (0 = none)
 uniform float bloom = 0.5;      // waxy/dusty surface bloom: 1 = matte chalky cuticle, 0 = clean
 uniform float preview_time = -1.0; // deterministic respiration in capture tools; live uses TIME
-uniform float wet = 0.0;        // aquatic animals: a thin wet film keeps a soft sheen
+uniform float wet = 0.0;
+uniform float night_factor = 0.0;        // aquatic animals: a thin wet film keeps a soft sheen
 // Explicit opt-in: 1 dorsal arthropod cuticle, 2 Moonveil wing scales/thoracic pile.
 // Zero preserves every existing species material and all animation attributes.
 uniform int surface_family = 0;
+// Optical layers are independently bound from species identity, never region labels.
+uniform float tissue_chitin = 0.0;
+uniform float tissue_mucus = 0.0;
+uniform float tissue_aquatic = 0.0;
+uniform float tissue_film_nm = 350.0;
 
 varying vec4 genes;
 varying float region;
@@ -39,6 +45,29 @@ varying float seed;
 varying float anim_role;
 varying float motion_amount;
 varying vec3 skin_position;
+varying vec3 physical_skin_position;
+
+#include "res://Shaders/fauna_joint_ik.gdshaderinc"
+
+// Interpolated/derivative frames may collapse on caps or subpixel triangles.
+vec3 finite_surface_normal(vec3 value, vec3 fallback) {
+    float magnitude_squared = dot(value, value);
+    if (magnitude_squared > 1e-12 && magnitude_squared < 1e12)
+        return value * inversesqrt(magnitude_squared);
+    float fallback_squared = dot(fallback, fallback);
+    return fallback_squared > 1e-12 && fallback_squared < 1e12
+        ? fallback * inversesqrt(fallback_squared) : vec3(0.0, 1.0, 0.0);
+}
+
+vec3 safe_relief_gradient(vec3 rx, vec3 ry, float d_relief_x, float d_relief_y, float det) {
+    float det_mag = abs(det);
+    if (det_mag < 0.0001) return vec3(0.0);
+    vec3 grad = (rx * d_relief_x + ry * d_relief_y) * (sign(det) / det_mag);
+    float grad_len = length(grad);
+    if (grad_len > 0.15) grad *= 0.15 / grad_len;
+    return grad;
+}
+
 
 vec3 hue_rotate(vec3 c, float shift) {
     // rotate hue in YIQ space
@@ -151,6 +180,8 @@ void vertex() {
     VERTEX.z *= 1.0 + (genes.z - 0.5) * 0.07 * body_mask;
 
     skin_position = VERTEX;
+    physical_skin_position = VERTEX * vec3(length(MODEL_MATRIX[0].xyz),
+        length(MODEL_MATRIX[1].xyz), length(MODEL_MATRIX[2].xyz));
     vec3 attach = VERTEX - CUSTOM0.rgb;
     vec3 off = CUSTOM0.rgb * genes.w;
     if (CUSTOM0.a > 0.5) VERTEX = attach + off;
@@ -247,7 +278,7 @@ void vertex() {
         float radial = 1.0 + wave * anim_body_wave * (anim_body_style == 5 ? 0.12 : 0.075) * pose;
         VERTEX.y *= radial;
         VERTEX.z *= radial;
-        NORMAL = normalize(NORMAL / vec3(max(axial, 0.10), radial, radial));
+        NORMAL = finite_surface_normal(NORMAL / vec3(max(axial, 0.10), max(abs(radial), 0.01), max(abs(radial), 0.01)), NORMAL);
     }
     // 7: saltatory/hopping gait. The stance portion crouches; the remainder describes a clean airborne arc.
     else if (locomotion == 7) {
@@ -341,6 +372,33 @@ void vertex() {
         VERTEX = attach + off;
     }
 
+    // WP22: rest-chain metadata overrides the legacy rigid leg shear only
+    // where a real knee/ankle chain was authored; sensory/wing roles stay intact.
+    if (CUSTOM2.w > 0.5 && anim_role > 0.5 && anim_role < 1.5
+        && (locomotion == 3 || locomotion == 4 || locomotion == 8)) {
+        float joint_phase = cycle + longitudinal * anim_phase_spread + (side > 0.0 ? 0.5 : 0.0);
+        float joint_duty = anim_duty_factor;
+        if (locomotion == 3) {
+            if (anim_body_style == 6 || anim_body_style == 7) {
+                float pair = floor(clamp((0.26 - attach.x) / (anim_body_style == 6 ? 0.16 : 0.08), 0.0, 2.0) + 0.25);
+                joint_phase = cycle + mod(pair, 2.0) * 0.5 + (side > 0.0 ? 0.5 : 0.0);
+            } else if (anim_body_style == 3) {
+                float pair = floor(clamp((0.14 - attach.x) / 0.085, 0.0, 3.0) + 0.25);
+                joint_phase = cycle + mod(pair, 2.0) * 0.5 + (side > 0.0 ? 0.5 : 0.0);
+            }
+        } else if (locomotion == 4) {
+            joint_phase = cycle + longitudinal * anim_phase_spread + (side > 0.0 ? 0.30 : 0.0);
+        } else {
+            float fore = (toad_crawl || anim_body_style == 1) ? step(0.0, attach.x) : smoothstep(-0.05, 0.22, attach.x);
+            joint_phase = cycle + (side > 0.0 ? 0.5 : 0.0) + fore * 0.5;
+            if (anim_body_style != 1 && anim_body_style != 2) joint_phase += longitudinal * anim_phase_spread;
+            joint_duty = toad_crawl ? toad_crawl_duty : anim_duty_factor;
+        }
+        fauna_joint_ik(VERTEX, NORMAL, attach, CUSTOM0.rgb, CUSTOM1, CUSTOM2,
+            genes.w, joint_phase, joint_duty, stride,
+            anim_limb_lift * length(CUSTOM2.xyz) * 0.4 * pose);
+    }
+
     if (anim_body_style == 1) {
         float rest_time = preview_time >= 0.0 ? preview_time : TIME;
         float breath = sin(rest_time * 2.3 + seed);
@@ -365,7 +423,7 @@ void vertex() {
     if (locomotion == 7 && (anim_body_style == 2 || anim_body_style == 15)) {
         VERTEX.y *= hop_squash;
         VERTEX.z *= hop_width;
-        NORMAL = normalize(NORMAL / vec3(1.0, hop_squash, hop_width));
+        NORMAL = finite_surface_normal(NORMAL / vec3(1.0, max(abs(hop_squash), 0.01), max(abs(hop_width), 0.01)), NORMAL);
         VERTEX = rotate_z(VERTEX - vec3(0.0, 0.15, 0.0), hop_pitch) + vec3(0.0, 0.15 + hop_height, 0.0);
         NORMAL = rotate_z(NORMAL, hop_pitch);
     }
@@ -386,7 +444,7 @@ void vertex() {
         float radial = 1.0 - sin(p) * 0.028 * active * foot;
         VERTEX.z *= radial;
         VERTEX.y += sin(p) * 0.002 * active * (1.0-foot);
-        NORMAL = normalize(NORMAL / vec3(1.0, 1.0, radial));
+        NORMAL = finite_surface_normal(NORMAL / vec3(1.0, 1.0, max(abs(radial), 0.01)), NORMAL);
     }
 
     if (anim_body_style == 12 && anim_role < 3.5) {
@@ -401,7 +459,7 @@ void vertex() {
         float lateral = 1.0 - contraction * 0.055 * anim_body_wave * active * foot;
         VERTEX.z *= lateral;
         VERTEX.y += contraction * 0.004 * active * foot * smoothstep(0.001, 0.018, VERTEX.y);
-        NORMAL = normalize(NORMAL / vec3(1.0, 1.0, lateral));
+        NORMAL = finite_surface_normal(NORMAL / vec3(1.0, 1.0, max(abs(lateral), 0.01)), NORMAL);
     }
 
     if ((anim_body_style == 9 || anim_body_style == 10 || anim_body_style == 16) && anim_role < 3.5) {
@@ -470,7 +528,45 @@ float skin_noise(vec3 p) {
     return (vnoise(p.xy) + vnoise(p.yz + 17.3) + vnoise(p.zx + 31.7)) / 3.0;
 }
 
+// Two interleaved triangular lattices form the nearest hexagonal lens cell.
+// Returning the analytic cell offset permits smooth lens/cuticle slopes without
+// differentiating high-frequency value noise.
+vec2 tissue_hex_cell(vec2 p) {
+    vec2 grid = vec2(1.0, 1.7320508);
+    vec2 a = mod(p, grid) - grid * 0.5;
+    vec2 b = mod(p - grid * 0.5, grid) - grid * 0.5;
+    return dot(a, a) < dot(b, b) ? a : b;
+}
+
+// Unpolarized Airy reflectance: air -> chitin film -> hydrated protein.
+// Thickness/wavelengths are both nm, so the phase is dimensionless.
+vec3 tissue_airy(float view_cos, float thickness_nm) {
+    float n0 = 1.0, n1 = 1.56, n2 = 1.38;
+    float c0 = clamp(view_cos, 0.04, 1.0);
+    float s02 = 1.0 - c0 * c0;
+    float c1 = sqrt(max(0.0, 1.0 - s02 * n0 * n0 / (n1 * n1)));
+    float c2 = sqrt(max(0.0, 1.0 - s02 * n0 * n0 / (n2 * n2)));
+    float rs01 = (n0 * c0 - n1 * c1) / (n0 * c0 + n1 * c1);
+    float rs12 = (n1 * c1 - n2 * c2) / (n1 * c1 + n2 * c2);
+    float rp01 = (n1 * c0 - n0 * c1) / (n1 * c0 + n0 * c1);
+    float rp12 = (n2 * c1 - n1 * c2) / (n2 * c1 + n1 * c2);
+    vec3 phase = 6.2831853 * (2.0 * n1 * thickness_nm * c1) / vec3(650.0, 510.0, 475.0);
+    vec3 interference = cos(phase);
+    vec3 s_cross = vec3(2.0 * rs01 * rs12) * interference;
+    vec3 p_cross = vec3(2.0 * rp01 * rp12) * interference;
+    vec3 Rs = (vec3(rs01 * rs01 + rs12 * rs12) + s_cross)
+        / max(vec3(1.0 + rs01 * rs01 * rs12 * rs12) + s_cross, vec3(0.001));
+    vec3 Rp = (vec3(rp01 * rp01 + rp12 * rp12) + p_cross)
+        / max(vec3(1.0 + rp01 * rp01 * rp12 * rp12) + p_cross, vec3(0.001));
+    return clamp((Rs + Rp) * 0.5, vec3(0.0), vec3(1.0));
+}
+
 void fragment() {
+    // Transmission is enabled shader-wide, including species without a tissue layer.
+    // A positive depth prevents division by zero in the renderer's transmission term.
+    SSS_TRANSMITTANCE_DEPTH = 0.001;
+    SSS_TRANSMITTANCE_COLOR = vec4(0.0);
+    vec3 tissue_base_normal = NORMAL;
     vec3 base = hue_rotate(base_color, genes.x);
     float density = genes.y, contrast = genes.z;
     // markings: spots whose count follows density; contrast follows pattern strength
@@ -527,8 +623,8 @@ void fragment() {
             vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
             vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
             float det = dot(dx, rx);
-            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
-            NORMAL = normalize(NORMAL - gradient);
+            vec3 gradient = safe_relief_gradient(rx, ry, dFdx(relief), dFdy(relief), det);
+            NORMAL = finite_surface_normal(NORMAL - gradient, NORMAL);
         }
     }
     if (anim_body_style == 7) {
@@ -561,8 +657,8 @@ void fragment() {
             vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
             vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
             float det = dot(dx, rx);
-            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
-            NORMAL = normalize(NORMAL - gradient);
+            vec3 gradient = safe_relief_gradient(rx, ry, dFdx(relief), dFdy(relief), det);
+            NORMAL = finite_surface_normal(NORMAL - gradient, NORMAL);
         }
     }
     if (anim_body_style == 2) {
@@ -599,8 +695,8 @@ void fragment() {
                 col = mix(vec3(0.16, 0.095, 0.026), vec3(0.49, 0.33, 0.09), fibers);
             }
         } else if (region > 6.5 && region < 7.5) {
-            col = vec3(0.045, 0.030, 0.017);
-            rough = 0.76;
+            col = mix(skin, vec3(0.08, 0.06, 0.04), 0.5);
+            rough = 0.65;
         } else {
             // Screen derivatives turn attached object-space relief into a view-space
             // surface gradient, without UV seams or texture tangents on procedural tubes.
@@ -608,25 +704,15 @@ void fragment() {
             vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
             vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
             float det = dot(dx, rx);
-            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief))
-                * sign(det) / max(abs(det), 0.0000001);
-            NORMAL = normalize(NORMAL - gradient * (1.0 - ventral * 0.65));
+            vec3 gradient = safe_relief_gradient(rx, ry, dFdx(relief), dFdy(relief), det);
+            NORMAL = finite_surface_normal(NORMAL - gradient * (1.0 - ventral * 0.65), NORMAL);
         }
     }
     if (anim_body_style == 1) {
         vec3 p = skin_position;
         float identity = hash(genes.yz * 47.9 + vec2(8.3, 21.7));
-        float palette = floor(identity * 8.0);
-        vec3 skin = vec3(0.014, 0.021, 0.018), marking = vec3(0.88, 0.49, 0.008);
-        if (palette == 1.0) { skin = vec3(0.022, 0.042, 0.085); marking = vec3(0.10, 0.59, 0.77); }
-        else if (palette == 2.0) { skin = vec3(0.49, 0.055, 0.027); marking = vec3(0.035, 0.020, 0.016); }
-        else if (palette == 3.0) { skin = vec3(0.025, 0.018, 0.030); marking = vec3(0.81, 0.12, 0.020); }
-        else if (palette == 4.0) { skin = vec3(0.055, 0.16, 0.11); marking = vec3(0.45, 0.63, 0.21); }
-        else if (palette == 5.0) { skin = vec3(0.12, 0.034, 0.20); marking = vec3(0.47, 0.20, 0.57); }
-        else if (palette == 6.0) { skin = vec3(0.16, 0.21, 0.12); marking = vec3(0.055, 0.036, 0.020); }
-        else if (palette == 7.0) { skin = vec3(0.016, 0.017, 0.020); marking = vec3(0.65, 0.66, 0.52); }
-        skin = hue_rotate(skin, genes.x * 0.6);
-        marking = hue_rotate(marking, genes.x * 0.3);
+        vec3 skin = hue_rotate(base, genes.x * 0.2);
+        vec3 marking = hue_rotate(ornament_color, genes.x * 0.5);
         vec3 offset = vec3(seed * 0.17, seed * 0.41, seed * 0.63);
         float coarse = skin_noise(p * 17.0 + offset);
         float grain = skin_noise(p * 130.0 + offset);
@@ -656,18 +742,18 @@ void fragment() {
         rough = mix(0.35, 0.54, grain) - smoothstep(.30,.43,p.x)*.035;
         eye = (region > 1.5 && region < 2.5) || (region > 4.5 && region < 6.5);
         if (eye) {
-            col = vec3(0.007, 0.011, 0.010);
-            if (region > 4.5 && region < 5.5) col = vec3(0.15, 0.10, 0.035) * mix(0.8, 1.2, grain);
+            col = region < 2.5 ? vec3(0.13, 0.09, 0.025) : vec3(0.015, 0.012, 0.010);
+            if (region > 4.5 && region < 5.5) col = mix(vec3(0.18, 0.11, 0.03), vec3(0.55, 0.38, 0.10), grain);
         } else if (region > 6.5 && region < 7.5) {
-            col = mix(skin, vec3(0.015, 0.012, 0.01), 0.85);
+            col = mix(skin, vec3(0.07, 0.05, 0.035), 0.5);
             rough = 0.48;
         } else {
             float relief = grain * 0.00020 + pores * 0.000075 - folds * 0.00030;
             vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
             vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
             float det = dot(dx, rx);
-            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
-            NORMAL = normalize(NORMAL - gradient);
+            vec3 gradient = safe_relief_gradient(rx, ry, dFdx(relief), dFdy(relief), det);
+            NORMAL = finite_surface_normal(NORMAL - gradient, NORMAL);
         }
     }
     bool detailed = anim_body_style == 3 || anim_body_style == 4 || anim_body_style == 5
@@ -817,16 +903,18 @@ void fragment() {
         // Interpolated sole/mantle labels pass through region2. Only sensory geometry is an eye.
         eye = anim_body_style != 5 && region > 1.5 && region < 2.5 && (anim_body_style != 4 || anim_role > 2.5);
         if (eye) col = vec3(0.008, 0.011, 0.008);
-        else if (region > 6.5 && region < 7.5) { col *= 0.25; rough = 0.53; }
+        // mouth retains soft anatomical lip tone
         else {
             vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
             vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
             float det = dot(dx, rx);
-            vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
-            NORMAL = normalize(NORMAL - gradient);
+            vec3 gradient = safe_relief_gradient(rx, ry, dFdx(relief), dFdy(relief), det);
+            NORMAL = finite_surface_normal(NORMAL - gradient, NORMAL);
         }
     }
     ALBEDO = col;
+    METALLIC = 0.0;
+    SSS_STRENGTH = 0.0;
     ROUGHNESS = eye ? 0.08 : clamp(rough, 0.25, 0.95);
     SPECULAR = eye ? 0.5 : anim_body_style == 1 ? 0.42 : mix(0.3, 0.45, max(carapace, wet));
     CLEARCOAT = eye ? 0.0 : anim_body_style == 6 ? 0.025 : carapace * (1.0 - dullPatch) * 0.6;
@@ -853,9 +941,8 @@ void fragment() {
         vec3 dx = dFdx(VERTEX), dy = dFdy(VERTEX);
         vec3 rx = cross(dy, NORMAL), ry = cross(NORMAL, dx);
         float det = dot(dx, rx);
-        vec3 gradient = (rx * dFdx(relief) + ry * dFdy(relief)) * sign(det) / max(abs(det), 0.0000001);
-        gradient *= min(1.0, 0.10 / max(length(gradient), 0.000001));
-        NORMAL = normalize(NORMAL - gradient);
+        vec3 gradient = safe_relief_gradient(rx, ry, dFdx(relief), dFdy(relief), det);
+        NORMAL = finite_surface_normal(NORMAL - gradient, NORMAL);
     }
     if (surface_family == 2) {
         bool wing = anim_role > 1.5 && anim_role < 2.5
@@ -877,5 +964,162 @@ void fragment() {
             RIM = pile ? 0.11 : 0.08;
             RIM_TINT = 0.85;
         }
+    }
+    // WP23 optical tissue layers. Palette and anatomical masks above remain the
+    // pigment authority; no emission, global silver wash or animation changes.
+    bool compound_eye = eye && (anim_body_style == 3 || anim_body_style == 6
+        || anim_body_style == 7 || anim_body_style == 8 || anim_body_style == 9
+        || anim_body_style == 10 || anim_body_style == 14 || anim_body_style == 15);
+    bool amphibian_eye = false; // (anim_body_style == 1 || anim_body_style == 2) && ((region > 1.5 && region < 2.5) || (region > 4.5 && region < 6.5));
+    vec3 tissue_n = finite_surface_normal(tissue_base_normal, NORMAL);
+    vec3 tissue_axis = finite_surface_normal((VIEW_MATRIX * MODEL_MATRIX * vec4(1.0, 0.0, 0.0, 0.0)).xyz, vec3(1.0, 0.0, 0.0));
+    vec3 tissue_t = tissue_axis - tissue_n * dot(tissue_axis, tissue_n);
+    if (dot(tissue_t, tissue_t) < 0.001) {
+        tissue_axis = finite_surface_normal((VIEW_MATRIX * MODEL_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz, vec3(0.0, 1.0, 0.0));
+        tissue_t = tissue_axis - tissue_n * dot(tissue_axis, tissue_n);
+    }
+    tissue_t = finite_surface_normal(tissue_t, vec3(1.0, 0.0, 0.0));
+    vec3 tissue_b = finite_surface_normal(cross(tissue_n, tissue_t), vec3(0.0, 0.0, 1.0));
+    bool dorsal_cuticle = tissue_chitin > 0.0 && !eye && region < 1.5;
+    if (dorsal_cuticle) {
+        // 40 micrometre epicuticle cells in physical instance space. Cells fade
+        // before Nyquist instead of becoming sparkling subpixel polygons.
+        vec2 micro_coord = physical_skin_position.xz / 0.00004;
+        vec2 cell = tissue_hex_cell(micro_coord);
+        float footprint = max(length(dFdx(micro_coord)), length(dFdy(micro_coord)));
+        float resolved = 1.0 - smoothstep(0.35, 1.2, footprint);
+        float r2 = dot(cell, cell);
+        float pit = exp(-r2 * 90.0);
+        float stria = 0.5 + 0.5 * sin(skin_position.z * 240.0);
+        // Analytic height derivatives: convex cell plus recessed setal pore.
+        vec2 slope = clamp((-0.09 * cell + cell * 2.6 * pit * stria) * resolved, vec2(-0.15), vec2(0.15));
+        NORMAL = finite_surface_normal(tissue_n - tissue_t * slope.x - tissue_b * slope.y, tissue_n);
+        float thickness = clamp(tissue_film_nm + (genes.x + genes.y - 0.5) * 40.0, 280.0, 420.0);
+        vec3 film_R = tissue_airy(max(dot(NORMAL, VIEW), 0.0), thickness);
+        float mean_R = max(dot(film_R, vec3(0.2126, 0.7152, 0.0722)), 0.004);
+        vec3 structural_tint = clamp(film_R / mean_R, vec3(0.55), vec3(1.55));
+        float clean = (1.0 - dullPatch * 0.65) * tissue_chitin;
+        // Stock GGX remains in charge of illumination. A small metallic fraction
+        // carries colored structural reflectance; pigment stays dominant.
+        ALBEDO *= mix(vec3(1.0), structural_tint, clean * 0.42);
+        METALLIC = clean * clamp(mean_R * 2.5, 0.06, 0.22);
+        SPECULAR = clamp(mean_R / 0.08, 0.35, 0.70);
+        ROUGHNESS = mix(ROUGHNESS, 0.24, clean * 0.68);
+        CLEARCOAT = 0.35 * clean;
+        CLEARCOAT_ROUGHNESS = 0.18;
+    }
+    // Shell and mouth labels must not turn into wet translucent body tissue.
+    bool mucus_body = tissue_mucus > 0.0 && !eye && !amphibian_eye
+        && !(anim_body_style == 12 && region > 4.5 && region < 5.5)
+        && !(region > 6.5 && region < 7.5);
+    if (mucus_body) {
+        // Natural damp amphibian mucus: subtle wet sheen without chalky SSS blur or blown-out clearcoat
+        SSS_STRENGTH = 0.08 * tissue_mucus;
+        SSS_TRANSMITTANCE_COLOR = vec4(0.85, 0.22, 0.14, 1.0);
+        SSS_TRANSMITTANCE_DEPTH = 0.002;
+        BACKLIGHT = ALBEDO * vec3(0.20, 0.10, 0.06) * tissue_mucus;
+        CLEARCOAT = 0.35 * tissue_mucus;
+        CLEARCOAT_ROUGHNESS = 0.18;
+        SPECULAR = 0.45;
+        // Glandular relief above remains visible under the continuous mucus.
+        ROUGHNESS = clamp(ROUGHNESS, 0.35, 0.65);
+    }
+    if (tissue_aquatic > 0.0 && !eye && !(region > 6.5 && region < 7.5)) {
+        vec3 p = skin_position;
+        float stripe = (1.0 - smoothstep(0.012, 0.035, abs(p.y - 0.055)))
+            * smoothstep(0.018, 0.055, abs(p.z));
+        float platelet = 0.8 + 0.2 * sin(p.x * 240.0 + p.z * 65.0);
+        vec3 guanine = tissue_airy(max(dot(NORMAL, VIEW), 0.0), 310.0 + genes.y * 65.0);
+        guanine /= max(dot(guanine, vec3(0.2126, 0.7152, 0.0722)), 0.01);
+        ALBEDO = mix(ALBEDO, ALBEDO * clamp(guanine, vec3(0.65), vec3(1.5)), stripe * 0.45);
+        METALLIC = max(METALLIC, 0.65 * stripe * platelet);
+        ROUGHNESS = mix(ROUGHNESS, 0.12, stripe);
+        SSS_STRENGTH = max(SSS_STRENGTH, 0.45 * tissue_aquatic);
+        SSS_TRANSMITTANCE_COLOR = vec4(ALBEDO * vec3(0.85, 0.55, 0.30), 1.0);
+        SSS_TRANSMITTANCE_DEPTH = 0.004;
+        BACKLIGHT = ALBEDO * vec3(0.38, 0.20, 0.09) * tissue_aquatic;
+        // A recessed tissue lookup gives internal spine/gut silhouettes without
+        // making overlapping opaque body surfaces sort as transparent shells.
+        vec3 ray = refract(-VIEW, tissue_n, 1.0 / 1.36);
+        vec2 internal_p = p.xy + vec2(dot(ray, tissue_t), dot(ray, tissue_b)) * 0.025;
+        float axial = 1.0 - smoothstep(0.007, 0.017, abs(internal_p.y - 0.055));
+        float nodes = 0.65 + 0.35 * cos(internal_p.x * 100.0);
+        float gut = (1.0 - smoothstep(0.025, 0.050, length(internal_p - vec2(0.02, 0.045))));
+        float internal_mask = max(axial * nodes * 0.24, gut * 0.18) * tissue_aquatic;
+        if (anim_body_style == 12) {
+            vec2 shell_p = body_uv - vec2(0.5) + vec2(dot(ray, tissue_t), dot(ray, tissue_b)) * 0.03;
+            float coil_phase = length(shell_p) * 27.0 - (dot(shell_p, shell_p) > 1e-8 ? atan(shell_p.y, shell_p.x) : 0.0) * 1.4;
+            float coiled_viscera = 1.0 - smoothstep(0.13, 0.28, abs(sin(coil_phase)));
+            internal_mask = coiled_viscera * 0.16 * tissue_aquatic
+                * (region > 4.5 && region < 5.5 ? 1.0 : 0.0);
+        }
+        ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.55, 0.30, 0.22), internal_mask);
+    }
+    if (compound_eye) {
+        vec2 lens = tissue_hex_cell(body_uv * 65.0);
+        float lens_footprint = max(length(dFdx(body_uv * 65.0)), length(dFdy(body_uv * 65.0)));
+        float resolved = 1.0 - smoothstep(0.45, 1.5, lens_footprint);
+        NORMAL = finite_surface_normal(tissue_n + (tissue_t * lens.x + tissue_b * lens.y) * 0.35 * resolved, tissue_n);
+        float pseudopupil = pow(max(dot(NORMAL, VIEW), 0.0), 6.0);
+        ALBEDO = mix(vec3(0.033, 0.009, 0.007), vec3(0.003, 0.004, 0.005), pseudopupil);
+        ROUGHNESS = 0.065;
+        SPECULAR = 0.65;
+        METALLIC = 0.0;
+        CLEARCOAT = 0.45;
+        CLEARCOAT_ROUGHNESS = 0.08;
+        SSS_STRENGTH = 0.0;
+        BACKLIGHT = vec3(0.0);
+    } else if (amphibian_eye) {
+        vec2 eye_uv = body_uv - vec2(0.5);
+        vec3 view_ts = vec3(dot(VIEW, tissue_t), dot(VIEW, tissue_b), max(dot(VIEW, tissue_n), 0.05));
+        vec3 ts_v = finite_surface_normal(view_ts, vec3(0.0, 0.0, 1.0));
+        vec3 cornea_n = finite_surface_normal(vec3(eye_uv * 0.45, 1.0), vec3(0.0, 0.0, 1.0));
+        vec3 cornea_ray = refract(-ts_v, cornea_n, 1.0 / 1.376);
+        float ray_z = abs(cornea_ray.z);
+        vec2 iris_uv = eye_uv + (ray_z > 0.001 ? cornea_ray.xy * 0.08 / max(ray_z, 0.25) : vec2(0.0));
+        float iris_r = length(iris_uv);
+        float iris_angle = (dot(iris_uv, iris_uv) > 1e-8) ? atan(iris_uv.y, iris_uv.x) : 0.0;
+        float filament = 0.80 + 0.20 * sin(iris_angle * 91.0 + iris_r * 140.0);
+        vec3 iris_color = mix(vec3(0.33, 0.14, 0.025), vec3(0.58, 0.38, 0.07), genes.y) * filament;
+        float slit = smoothstep(0.045, 0.065, abs(iris_uv.x)) * (1.0 - smoothstep(0.30, 0.44, iris_r));
+        // Region6 is a separately authored pupil; preserve that geometry label.
+        if (region > 5.5 && region < 6.5) slit = 0.0;
+        ALBEDO = mix(vec3(0.003, 0.004, 0.005), iris_color, slit);
+        ROUGHNESS = 0.045;
+        SPECULAR = 0.70;
+        METALLIC = slit * 0.12;
+        CLEARCOAT = 0.45;
+        CLEARCOAT_ROUGHNESS = 0.08;
+        SSS_STRENGTH = 0.0;
+        BACKLIGHT = vec3(0.0);
+    }
+
+    // Fantastical firefly lantern (duskflicker / midge posterior abdomen):
+    // Turns on, cycles through the RGB spectrum, shuts off, and repeats.
+    if (anim_body_style == 14 && (region > 8.5 || skin_position.x < -0.16)) {
+        float butt_mask = clamp(max(step(8.5, region), smoothstep(-0.14, -0.21, skin_position.x)), 0.0, 1.0);
+        float firefly_clock = (preview_time >= 0.0 ? preview_time : TIME) + seed * 2.37;
+        float firefly_period = 3.6;
+        float cycle_t = mod(firefly_clock, firefly_period);
+
+        // Active glow window: 0.0 to 2.4s (turns on 0.0..0.4s, holds/cycles, turns off 2.0..2.4s, off 2.4..3.6s)
+        float turn_on = smoothstep(0.0, 0.4, cycle_t);
+        float shut_off = 1.0 - smoothstep(2.0, 2.4, cycle_t);
+        // During preview captures (where preview_time >= 0.0), allow previewing the lantern; live simulation strictly follows night_factor
+        float active_night = preview_time >= 0.0 ? 1.0 : night_factor;
+        float pulse = turn_on * shut_off * butt_mask * active_night;
+
+        // Traverse the continuous RGB spectrum during the active window
+        float spectrum_phase = clamp(cycle_t / 2.0, 0.0, 1.0);
+        vec3 rainbow = clamp(abs(mod(spectrum_phase * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+        rainbow = rainbow * rainbow * (3.0 - 2.0 * rainbow);
+
+        // Unlit lantern cuticle vs glowing fantastical bioluminescence
+        vec3 unlit_organ = vec3(0.24, 0.22, 0.17);
+        ALBEDO = mix(ALBEDO, mix(unlit_organ, rainbow, pulse), butt_mask);
+        EMISSION = rainbow * pulse * 4.8;
+        ROUGHNESS = mix(ROUGHNESS, 0.15, butt_mask);
+        CLEARCOAT = max(CLEARCOAT, 0.5 * butt_mask);
+        CLEARCOAT_ROUGHNESS = 0.05;
     }
 }

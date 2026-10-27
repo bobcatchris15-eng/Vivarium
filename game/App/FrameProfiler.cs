@@ -17,6 +17,11 @@ public static class FrameProfiler
     private static readonly Dictionary<string, double> _last = new();
     private static readonly Dictionary<string, double> _intervalAccum = new();
     private static readonly Dictionary<string, int> _intervalCount = new();
+    private static readonly Dictionary<string, double> _frameMax = new();
+    private static readonly Dictionary<string, double> _frameAccum = new();
+    private static readonly Dictionary<string, int> _frameCount = new();
+
+    public readonly record struct ScopeMetric(double MaxMs, double TotalMs, int Count);
 
     public readonly struct Scope : System.IDisposable
     {
@@ -59,6 +64,9 @@ public static class FrameProfiler
             _last[name] = ms;
             _intervalAccum[name] = _intervalAccum.GetValueOrDefault(name) + ms;
             _intervalCount[name] = _intervalCount.GetValueOrDefault(name) + 1;
+            if (!_frameMax.TryGetValue(name, out var fm) || ms > fm) _frameMax[name] = ms;
+            _frameAccum[name] = _frameAccum.GetValueOrDefault(name) + ms;
+            _frameCount[name] = _frameCount.GetValueOrDefault(name) + 1;
         }
     }
 
@@ -161,6 +169,22 @@ public static class FrameProfiler
     }
 
     /// <summary>Resets all recorded profiler timings.</summary>
+    public static Dictionary<string, ScopeMetric> TakeFrameScopeMetrics()
+    {
+        lock (_lock)
+        {
+            var res = new Dictionary<string, ScopeMetric>(_frameAccum.Count);
+            foreach (var (k, total) in _frameAccum)
+            {
+                res[k] = new ScopeMetric(_frameMax.GetValueOrDefault(k), total, _frameCount.GetValueOrDefault(k));
+            }
+            _frameMax.Clear();
+            _frameAccum.Clear();
+            _frameCount.Clear();
+            return res;
+        }
+    }
+
     public static void Reset()
     {
         lock (_lock)
@@ -171,6 +195,9 @@ public static class FrameProfiler
             _last.Clear();
             _intervalAccum.Clear();
             _intervalCount.Clear();
+            _frameMax.Clear();
+            _frameAccum.Clear();
+            _frameCount.Clear();
         }
     }
 }

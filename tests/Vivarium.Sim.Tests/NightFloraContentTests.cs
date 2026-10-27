@@ -11,25 +11,40 @@ public sealed class NightFloraContentTests
     private static FloraSpeciesDef Sp(string id) => TestUtil.Content.FloraOrThrow(id);
 
     [Fact]
-    public void EightSpeciesAreIndexedAndOnlyTheSevenNightSpeciesGlow()
+    public void SevenNightSpeciesGlowAndAllOtherFloraRemainUnlit()
     {
-        var ids = new[] { "plumegrass", "glowbriar", "lanternsedge", "tidebell", "siltstars", "ghostbonnet", "starmoss", "moonfern" };
-        foreach (var id in ids)
+        var glowingIds = new[] { "ghostbonnet", "glowbriar", "lanternsedge", "siltstars", "tidebell", "moonfern", "starmoss" };
+        var nonGlowingSampleIds = new[] { "plumegrass", "coinrunner", "coalspike", "embercup", "hollowcrown", "hookthicket", "snaptrap", "trifold", "veilfern" };
+
+        foreach (var id in glowingIds.Concat(nonGlowingSampleIds))
             Assert.Contains(id, TestUtil.Content.Flora.Select(x => x.Id));
 
         Assert.Equal("pampas", Sp("plumegrass").Shape);
         Assert.Contains("multiple", Sp("plumegrass").Description, StringComparison.OrdinalIgnoreCase);
-        Assert.All(ids.Skip(1).Select(Sp), species =>
+
+        Assert.All(glowingIds.Select(Sp), species =>
         {
             Assert.InRange(species.BioluminescenceStrength, double.Epsilon, 8);
             Assert.Equal(3, species.BioluminescenceColor.Length);
             Assert.All(species.BioluminescenceColor, channel => Assert.InRange(channel, 0, 1));
+            Assert.Contains("bioluminescent", species.Tags);
         });
-        Assert.Equal(0, Sp("plumegrass").BioluminescenceStrength);
 
-        // Existing content omitting the optional fields remains visually unlit.
-        Assert.Equal(0, Sp("coinrunner").BioluminescenceStrength);
-        Assert.Equal(new[] { 0.0, 0.0, 0.0 }, Sp("coinrunner").BioluminescenceColor);
+        // Non-glowing flora remain visually unlit.
+        Assert.All(nonGlowingSampleIds.Select(Sp), species =>
+        {
+            Assert.Equal(0, species.BioluminescenceStrength);
+            Assert.Equal(new[] { 0.0, 0.0, 0.0 }, species.BioluminescenceColor);
+            Assert.DoesNotContain("bioluminescent", species.Tags);
+        });
+
+        // Across all indexed flora, strictly and only the six specified species glow
+        var actualGlowing = TestUtil.Content.Flora
+            .Where(x => x.BioluminescenceStrength > 0)
+            .Select(x => x.Id)
+            .OrderBy(x => x)
+            .ToArray();
+        Assert.Equal(glowingIds.OrderBy(x => x).ToArray(), actualGlowing);
     }
 
     [Fact]

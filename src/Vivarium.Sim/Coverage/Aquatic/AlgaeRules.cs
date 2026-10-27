@@ -17,17 +17,36 @@ public static class AlgaeRules
 
     public static AlgaeStepStats Step(CoverageLayer bed, CoverageLayer floatLayer, IAquaticEnv env, AlgaeBedParams bp, AlgaeFloatParams fp, GridBounds domain, double dtDays, long step, ulong seed, double? advectionDays = null)
     {
+        AlgaeStepStats result = default;
+        foreach (bool _ in StepBatches(bed, floatLayer, env, bp, fp, domain, dtDays, step, seed, advectionDays, stats => result = stats)) { }
+        return result;
+    }
+
+    /// <summary>Yields between stages and advection preparation chunks; each operation owns its scratch.</summary>
+    public static IEnumerable<bool> StepBatches(CoverageLayer bed, CoverageLayer floatLayer, IAquaticEnv env, AlgaeBedParams bp, AlgaeFloatParams fp, GridBounds domain, double dtDays, long step, ulong seed, double? advectionDays = null, Action<AlgaeStepStats>? complete = null)
+    {
         var sw = Stopwatch.StartNew();
         StepBed(bed, floatLayer, env, bp, domain, dtDays);
-        double bedMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
+        double bedMs = sw.Elapsed.TotalMilliseconds;
+        yield return true;
+        sw.Restart();
 
         GrowFloat(floatLayer, env, fp, domain, dtDays);
-        double floatGrowMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
+        double floatGrowMs = sw.Elapsed.TotalMilliseconds;
+        yield return true;
+        sw.Restart();
 
-        int substeps = SurfaceFloatRules.Advect(floatLayer, env, domain, advectionDays ?? dtDays, windX: 0, windZ: 0);
-        double advectMs = sw.Elapsed.TotalMilliseconds;
+        int substeps = 0; double advectMs = 0;
+        using (var work = SurfaceFloatRules.AdvectBatches(floatLayer, env, domain, advectionDays ?? dtDays, 0, 0, count => substeps = count).GetEnumerator())
+        while (true)
+        {
+            sw.Restart(); bool more = work.MoveNext(); double ms = sw.Elapsed.TotalMilliseconds; advectMs += ms;
+            SurfaceFloatRules.BatchTimed?.Invoke("Aquatic.Algae.AdvectionBatch", ms);
+            if (!more) break;
+            yield return true;
+        }
 
-        return new AlgaeStepStats(bedMs, floatGrowMs, advectMs, substeps);
+        complete?.Invoke(new AlgaeStepStats(bedMs, floatGrowMs, advectMs, substeps));
     }
 
     // ------------------------------------------------------------------ §15.1 bed film: light-at-depth, nutrients, scour, detachment
@@ -40,9 +59,11 @@ public static class AlgaeRules
         // without a dictionary lookup (GetB/GetOcc/SetB/SetOcc) for every fine cell in between.
         foreach (var tile in bed.Tiles)
         {
+            if (tile.IsEmpty()) continue;
             int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
             for (int li = 0; li < CoverageTile.N; li++)
             {
+                if (tile.B[li] <= 0 && tile.Occ[li] == 0) continue;
                 int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
                 if (!d.Contains(gx, gz)) continue;
 
@@ -98,9 +119,11 @@ public static class AlgaeRules
         // See StepBed: walk allocated tiles directly instead of the full bounding rectangle.
         foreach (var tile in floatLayer.Tiles)
         {
+            if (tile.IsEmpty()) continue;
             int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
             for (int li = 0; li < CoverageTile.N; li++)
             {
+                if (tile.B[li] <= 0 && tile.Occ[li] == 0) continue;
                 int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
                 if (!d.Contains(gx, gz)) continue;
 

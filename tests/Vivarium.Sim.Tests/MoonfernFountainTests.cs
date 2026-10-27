@@ -38,7 +38,8 @@ public sealed class MoonfernFountainTests
             $"Middle tier lost too many fine pinnae: {middle.LeafSpans.Count}/{near.LeafSpans.Count}");
         Assert.True(far.LeafSpans.Count>=near.LeafSpans.Count*.7,
             $"Far tier lost feathery texture: {far.LeafSpans.Count}/{near.LeafSpans.Count}");
-        Assert.True(near.TriangleCount>middle.TriangleCount*2);
+        // WP-19 raised FloraMidRatio to 0.85 for non-destructive foliage fidelity (near is ~1.18x middle)
+        Assert.True(near.TriangleCount > middle.TriangleCount);
     }
 
     [Fact]

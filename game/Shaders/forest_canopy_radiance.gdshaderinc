@@ -63,6 +63,22 @@ float canopy_gap_mask(vec3 dir) {
     return clamp(gaps + flecks * 0.45, 0.06, 1.0);
 }
 
+vec3 canopy_solar_radiance(vec3 direction) {
+    if (direction.y < 0.0) {
+        return vec3(0.0);
+    }
+    vec3 L = length(light_direction) > 1e-4 ? normalize(light_direction) : vec3(0.0, 1.0, 0.0);
+    float NdotL = max(dot(direction, L), 0.0);
+    if (NdotL <= 0.0) {
+        return vec3(0.0);
+    }
+    float solar_disk = pow(NdotL, 512.0) * 18.0;
+    float solar_aureole = pow(NdotL, 24.0) * 2.8;
+    float solar_lobe = solar_disk + solar_aureole;
+    float gap_mask = canopy_gap_mask(direction);
+    return sun_color * sun_energy * solar_lobe * gap_mask;
+}
+
 vec3 forest_canopy_radiance(vec3 ray) {
     vec3 direction = normalize(ray);
     float y = direction.y;
@@ -97,16 +113,7 @@ vec3 forest_canopy_radiance(vec3 ray) {
     radiance += conservatory_opening * smoothstep(0.65, 0.95, y);
 
     // Sharp solar disk + circumsolar Mie aureole:
-    // pow(max(dot(direction, normalize(light_direction)), 0.0), 512.0) * 18.0 + pow(max(dot(direction, normalize(light_direction)), 0.0), 24.0) * 2.8
-    vec3 L = normalize(light_direction);
-    float NdotL = max(dot(direction, L), 0.0);
-    float solar_disk = pow(NdotL, 512.0) * 18.0;
-    float solar_aureole = pow(NdotL, 24.0) * 2.8;
-    float solar_lobe = solar_disk + solar_aureole;
-
-    // Masked by multi-scale canopy gap noise (canopy_gap_mask), so specular reflections on water
-    // and waxy leaves catch crisp, high-energy (10.0-25.0 linear) sun dapples through overhead leaves
-    vec3 solar_radiance = sun_color * sun_energy * solar_lobe * gap_mask;
+    vec3 solar_radiance = canopy_solar_radiance(direction);
     radiance += solar_radiance;
 
     return radiance * sky_energy;
@@ -115,9 +122,11 @@ vec3 forest_canopy_radiance(vec3 ray) {
 vec3 enclosure_backdrop(vec3 dir) {
     vec3 direction = normalize(dir);
     // Dark, out-of-focus smoked-slate conservatory enclosure backdrop
-    // Luminance ~ 0.018 - 0.035 linear
-    vec3 base_slate = vec3(0.019, 0.022, 0.025);
-    vec3 top_slate = vec3(0.026, 0.030, 0.034);
+    // Calibrated linear luminance: ~0.018 - 0.035 in daylight, ~0.007 - 0.012 at night
+    // Keeps auto-exposure metering stable and avoids unshaded black void
+    float daylight = clamp(sun_energy / 1.3, 0.0, 1.0);
+    vec3 base_slate = mix(vec3(0.007, 0.008, 0.010), vec3(0.019, 0.022, 0.025), daylight);
+    vec3 top_slate = mix(vec3(0.010, 0.012, 0.015), vec3(0.026, 0.030, 0.034), daylight);
 
     // Subtle vertical glass-frame gradient
     float vertical = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
@@ -127,10 +136,10 @@ vec3 enclosure_backdrop(vec3 dir) {
     float azimuth = atan(direction.x, direction.z);
     float frame = sin(azimuth * 12.0) * 0.5 + 0.5;
     frame = smoothstep(0.15, 0.85, frame);
-    color += vec3(0.003, 0.0035, 0.004) * (1.0 - frame * 0.4);
+    color += mix(vec3(0.001, 0.0012, 0.0015), vec3(0.003, 0.0035, 0.004), daylight) * (1.0 - frame * 0.4);
 
     // Soft directional light falloff
-    vec3 L = normalize(light_direction);
+    vec3 L = length(light_direction) > 1e-4 ? normalize(light_direction) : vec3(0.0, 1.0, 0.0);
     float NdotL = max(dot(direction, L), 0.0);
     float soft_falloff = pow(NdotL, 2.0) * 0.008 * sun_energy;
     color += sun_color * soft_falloff;
