@@ -79,6 +79,11 @@ public partial class IslandRenderer : Node3D
     private MeshInstance3D _top = null!, _walls = null!;
     private int _terrainVersion;
     private int _propsVersion = int.MinValue;
+    // Water-driven sub-texel channels (G silt, B stream wetness) refresh on liquid/water-table change, <= 2 Hz.
+    private long _subWaterLiquidVersion = long.MinValue;
+    private double _subWaterTable = double.NaN;
+    private double _sinceSubWater = 999;
+    private const double SubWaterInterval = 0.5;
     private double _sinceMeshBuild;
     private byte[] _cachedSubstrate = Array.Empty<byte>();
     private int _materialTerrainVersion = -1, _materialPropsVersion = -1;
@@ -211,6 +216,7 @@ public partial class IslandRenderer : Node3D
         if (_w == null) return;
         _accum += delta;
         _sinceMeshBuild += delta;
+        _sinceSubWater += delta;
         // sculpting: follow the heightfield at up to ~12 rebuilds per second
         if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08)
         {
@@ -236,6 +242,12 @@ public partial class IslandRenderer : Node3D
             }
         }
         bool propsDirty = _propsVersion != _w.Props.Version;
+        if (!propsDirty && _sinceSubWater >= SubWaterInterval
+            && (_w.Liquid.Version != _subWaterLiquidVersion || _w.Water.WaterTable != _subWaterTable))
+        {
+            using (FrameProfiler.Measure("Island.SubWater"))
+                UpdateSubWaterChannels();
+        }
         if (!propsDirty && _accum < 15.0) return;
         _accum = 0;
         using (FrameProfiler.Measure("Island.FieldTexture"))
@@ -430,6 +442,44 @@ public partial class IslandRenderer : Node3D
             }
             _subImage.SetData(subNx, subNz, false, Image.Format.Rgba8, _subBytes);
             _subTex.Update(_subImage);
+            MarkSubWaterFresh();
         }
+    }
+
+    private void MarkSubWaterFresh()
+    {
+        _subWaterLiquidVersion = _w.Liquid.Version;
+        _subWaterTable = _w.Water.WaterTable;
+        _sinceSubWater = 0;
+    }
+
+    /// <summary>Rewrites only sub-texel G (silt, from water-table depth) and B (stream wetness); R/A stay prop-cached.</summary>
+    private void UpdateSubWaterChannels()
+    {
+        var g = _w.Grid;
+        int subNx = g.Nx * 4, subNz = g.Nz * 4;
+        if (_subBytes.Length != subNx * subNz * 4 || _propCacheLen != subNx * subNz) { MarkSubWaterFresh(); return; }
+        double subStep = g.CellSize / 4.0;
+        double table = _w.Water.WaterTable;
+        for (int sj = 0; sj < subNz; sj++)
+            for (int si = 0; si < subNx; si++)
+            {
+                int so = (sj * subNx + si) * 4;
+                var p = new Vivarium.Sim.Core.Vec2(g.OriginX + (si + 0.5) * subStep, g.OriginZ + (sj + 0.5) * subStep);
+                double wtDepth = _w.Water.WaterTableDepth(p);
+                double siltFrac = Math.Clamp((wtDepth - SiltMinDepthM) / 0.015, 0.0, 1.0);
+                _subBytes[so + 1] = (byte)Math.Clamp((int)Math.Round(siltFrac * 255.0), 0, 255);
+                double streamDepth = _w.Water.SurfaceWaterDepth(p);
+                if (streamDepth > 0.0005)
+                {
+                    double surfY = _w.Terrain.Height(p) + streamDepth;
+                    double surfAboveTable = Math.Max(0.0, surfY - table);
+                    _subBytes[so + 2] = (byte)Math.Clamp((int)Math.Round(surfAboveTable * 100.0 + 1.0), 1, 255);
+                }
+                else _subBytes[so + 2] = 0;
+            }
+        _subImage.SetData(subNx, subNz, false, Image.Format.Rgba8, _subBytes);
+        _subTex.Update(_subImage);
+        MarkSubWaterFresh();
     }
 }

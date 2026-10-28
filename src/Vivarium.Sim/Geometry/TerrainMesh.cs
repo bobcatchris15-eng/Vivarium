@@ -70,6 +70,16 @@ public static class TerrainMesh
     public static double RenderHeight(Heightfield hf, Vec2 p, bool smooth = true)
     {
         if (!smooth) return hf.Height(p);
+        // Water and collision use the triangulated heightfield. Unbounded cubic
+        // overshoot can bury a shallow creek or cut holes through its banks.
+        // Keep cosmetic relief sub-millimetre; normal smoothing remains available.
+        double physical = hf.Height(p);
+        return physical + Math.Clamp(CosmeticHeight(hf, p) - physical, -.0005, .0005);
+    }
+
+    /// <summary>Unclamped bicubic + hummock surface. Shading only: never use for positions or contact.</summary>
+    private static double CosmeticHeight(Heightfield hf, Vec2 p)
+    {
         double fx = (p.X - hf.OriginX) / hf.Step;
         double fz = (p.Z - hf.OriginZ) / hf.Step;
         int i = (int)Math.Floor(fx);
@@ -90,18 +100,16 @@ public static class TerrainMesh
             0.3 * Noise.Gradient(0xDEAD_BEEFUL, p.X * 12.0, p.Z * 12.0),
             -1.0, 1.0);
 
-        // Water and collision use the triangulated heightfield. Unbounded cubic
-        // overshoot can bury a shallow creek or cut holes through its banks.
-        // Keep cosmetic relief sub-millimetre; normal smoothing remains available.
-        double physical = hf.Height(p);
-        return physical + Math.Clamp(smoothH + hummock - physical, -.0005, .0005);
+        return smoothH + hummock;
     }
 
+    // Differentiates the UNclamped cosmetic surface: differentiating the clamped RenderHeight collapses
+    // to the flat facet normal wherever the clamp saturates (faceted bands, creases at clamp release).
     public static Vec3 RenderNormal(Heightfield hf, Vec2 p)
     {
         double e = Math.Min(hf.Step * 0.25, 0.03);
-        double dx = (RenderHeight(hf, p + new Vec2(e, 0)) - RenderHeight(hf, p - new Vec2(e, 0))) / (2 * e);
-        double dz = (RenderHeight(hf, p + new Vec2(0, e)) - RenderHeight(hf, p - new Vec2(0, e))) / (2 * e);
+        double dx = (CosmeticHeight(hf, p + new Vec2(e, 0)) - CosmeticHeight(hf, p - new Vec2(e, 0))) / (2 * e);
+        double dz = (CosmeticHeight(hf, p + new Vec2(0, e)) - CosmeticHeight(hf, p - new Vec2(0, e))) / (2 * e);
         return new Vec3(-dx, 1, -dz).Normalized();
     }
 
