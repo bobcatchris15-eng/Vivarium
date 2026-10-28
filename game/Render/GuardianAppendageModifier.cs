@@ -314,6 +314,12 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             // Collision projection is the last operation in the main solve.
             // Reconcile length even when no skin sample needs a lift; otherwise
             // an obstacle can leave a stretched segment with zero penetration.
+            // For fit > 0 the points are exactly where the previous fit's
+            // post-lift pass left them; skip when already reconciled (<0.1 mm).
+            bool reconciled = fit > 0;
+            for (int i = 0; reconciled && i < lengths.Length; i++)
+                if (Math.Abs(_points[i].DistanceTo(_points[i + 1]) - lengths[i]) > 1e-4f) reconciled = false;
+            if (!reconciled)
             for (int iteration = 0; iteration < 24; iteration++)
                 for (int i = 0; i < lengths.Length; i++)
                 {
