@@ -70,7 +70,7 @@ public sealed class SurfaceLiquid
         if (_terrain == _w.Terrain.Version && _props == _w.Props.Version) return;
         // Jobs own a stable solid snapshot. Invalidation happens only after the prior job has joined.
         _solidTerrain = _w.Terrain.Snapshot();
-        if (_props != _w.Props.Version) _solidProps = JsonSerializer.Deserialize<PropSet>(JsonSerializer.Serialize(_w.Props, WorldSerializer.Json), WorldSerializer.Json)!;
+        if (_props != _w.Props.Version) _solidProps = _w.Props.Clone();
         _solidTree = _w.PilotTree; _terrain = _w.Terrain.Version; _props = _w.Props.Version; Dynamics.OnGeometryChanged();
     }
     public void OnTerrainChanged(Vec2? minimum = null, Vec2? maximum = null)

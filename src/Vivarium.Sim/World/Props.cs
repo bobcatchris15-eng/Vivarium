@@ -177,6 +177,17 @@ public sealed class PropSet
     public int Version { get; private set; }
     public void Touch() => Version++;
 
+    /// <summary>Deep copy of the serialized state (equivalent to a JSON round-trip). Version resets to 0 and derived caches are not shared.</summary>
+    public PropSet Clone()
+    {
+        var c = new PropSet();
+        foreach (var r in Rocks) c.Rocks.Add(new Rock { Id = r.Id, X = r.X, Z = r.Z, Y = r.Y, RotationY = r.RotationY, SizeX = r.SizeX, SizeY = r.SizeY, SizeZ = r.SizeZ, VariantSeed = r.VariantSeed, HabitatTags = new List<string>(r.HabitatTags) });
+        foreach (var l in Logs) c.Logs.Add(new LogProp { Id = l.Id, X = l.X, Z = l.Z, Y = l.Y, RotationY = l.RotationY, Length = l.Length, Radius = l.Radius, DecayClass = l.DecayClass, VariantSeed = l.VariantSeed, HabitatTags = new List<string>(l.HabitatTags) });
+        foreach (var g in Gravel) c.Gravel.Add(new GravelPatch { Id = g.Id, X = g.X, Z = g.Z, Radius = g.Radius, VariantSeed = g.VariantSeed });
+        foreach (var p in Props) c.Props.Add(new Prop { Id = p.Id, Kind = p.Kind, X = p.X, Y = p.Y, Z = p.Z, RotationY = p.RotationY, VariantSeed = p.VariantSeed, HabitatTags = new List<string>(p.HabitatTags), Radius = p.Radius });
+        return c;
+    }
+
     public int Count => Rocks.Count + Logs.Count + Gravel.Count + Props.Count;
 
     public void Add(Prop prop)

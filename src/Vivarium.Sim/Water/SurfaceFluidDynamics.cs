@@ -33,6 +33,7 @@ public sealed class SurfaceFluidDynamics
         public double SlopeX, SlopeZ;
     }
     private readonly Dictionary<(int X, int Z), Cell> _cells = new();
+    private readonly List<(int X, int Z)> _prune = new();
     private readonly List<FluidParticle> _air = new();
     private readonly Dictionary<ulong, double> _pending = new();
     private readonly Func<Vec2, double> _ground;
@@ -228,7 +229,13 @@ public sealed class SurfaceFluidDynamics
             double remaining = StepSeconds;
             while (remaining > 1e-12)
             {
-                double maximumDepth = _cells.Count == 0 ? 0 : _cells.Values.Max(c => c.Volume / (Spacing * Spacing));
+                double maximumDepth = 0;
+                if (_cells.Count != 0)
+                {   // Same result as Values.Max(...) without the delegate/enumerator allocation.
+                    bool first = true;
+                    foreach (var c in _cells.Values)
+                    { double d = c.Volume / (Spacing * Spacing); if (first) { maximumDepth = d; first = false; } else if (d > maximumDepth || double.IsNaN(maximumDepth)) maximumDepth = d; }
+                }
                 double dt = Math.Min(remaining, .45 * Spacing / Math.Sqrt(Gravity * Math.Max(maximumDepth, 1e-8))); Tick(dt, springs, budget, evaporation, infiltration); remaining -= dt;
             }
             Remainder = Math.Max(0, Remainder - StepSeconds); Time += StepSeconds;
@@ -392,7 +399,12 @@ public sealed class SurfaceFluidDynamics
         }
         _dirty.Clear();
         // Prune dry cache periodically; no water is discarded to satisfy a work budget.
-        if ((long)Math.Round(Time / StepSeconds) % 240 == 0) foreach (var key in _cells.Where(k => k.Value.Volume == 0 && Math.Abs(k.Value.East) + Math.Abs(k.Value.North) < 1e-14).Select(k => k.Key).ToArray()) _cells.Remove(key);
+        if ((long)Math.Round(Time / StepSeconds) % 240 == 0)
+        {
+            _prune.Clear();
+            foreach (var pair in _cells) if (pair.Value.Volume == 0 && Math.Abs(pair.Value.East) + Math.Abs(pair.Value.North) < 1e-14) _prune.Add(pair.Key);
+            foreach (var key in _prune) _cells.Remove(key);
+        }
         Version++;
     }
     private Vec2 Current((int X, int Z) key, Cell c)
