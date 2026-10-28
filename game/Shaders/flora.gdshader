@@ -410,13 +410,10 @@ void fragment() {
     float bark_spec = mix(0.42, 0.12, smoothstep(0.55, 0.92, rough));
     SPECULAR = surface_mode == 2 ? (woody_surface ? bark_spec : leaf_spec) : surface_mode == 3 ? 0.12 : 0.24;
     float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
-    float trans_clamped = clamp(actual_leaf_trans, 0.0, 0.5);
-    float vein_mass = UV2.y > .5 ?
-      (1. - smoothstep(.010,.034+fwidth(UV.y-.5),abs(UV.y-.5))) : 0.;
-    float tissue_depth = leaf_type == 4 ? 2.10 : leaf_type == 3 ? 1.25 :
-       leaf_type == 5 ? .56 : leaf_type == 2 ? .43 : .82;
-    vec3 leaf_backlight=leaf_through(c,trans_clamped,vein_mass,tissue_depth,1.-top_side);
-    BACKLIGHT = surface_mode == 2 ? (woody_surface ? vec3(0.0) : (UV2.y > 0.5 ? leaf_backlight : c * 0.02)) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    // Foliage (surface_mode 2) transmission is owned by light() in
+    // leaf_direct_light.gdshaderinc; no built-in BACKLIGHT/SSS transmittance
+    // duplicate and no residual c*0.02 leak when transmission is 0.
+    BACKLIGHT = surface_mode == 2 ? vec3(0.0) : c * (surface_mode == 3 ? 0.18 : 0.05);
     if (surface_mode == 4) {
         SSS_STRENGTH = 0.85;
         BACKLIGHT = vec3(0.65, 0.48, 0.05);
@@ -436,11 +433,6 @@ void fragment() {
         SSS_TRANSMITTANCE_COLOR = vec4(0.60, 0.83, 0.95, 1.0);
         SSS_TRANSMITTANCE_DEPTH = 0.14;
         SSS_TRANSMITTANCE_BOOST = 0.25;
-    }
-    if (surface_mode == 2 && !woody_surface && UV2.y > .5) {
-        SSS_TRANSMITTANCE_COLOR=vec4(clamp(leaf_backlight/max(c.g*.36,.015),vec3(0.),vec3(1.)),1.);
-        SSS_TRANSMITTANCE_DEPTH=mix(.60,.18,vein_mass);
-        SSS_TRANSMITTANCE_BOOST=.12;
     }
     float marked_nodule = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
     float gill_mask = step(0.5, UV2.x) * (1.0 - step(1.5, UV2.x));

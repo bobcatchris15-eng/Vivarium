@@ -86,7 +86,6 @@ void fragment() {
     ALBEDO = pigment * mix(.75, 1.0, sqrt(crown));
     ROUGHNESS = .94 + .035 * individuality;
     SPECULAR = .035;
-    BACKLIGHT = leaf_through(pigment, .28 * mix(1., .2, old_stem), anatomy, .48 + hyaline * .34, float(!FRONT_FACING));
     vec3 dndx = dFdx(NORMAL), dndy = dFdy(NORMAL);
     float variance = dot(dndx, dndx) + dot(dndy, dndy);
     ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * variance, .25)), .90, 1.0);

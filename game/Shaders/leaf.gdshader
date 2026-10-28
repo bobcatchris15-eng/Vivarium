@@ -178,13 +178,11 @@ void fragment() {
     tissue_tau = tau;
     vec3 through=leaf_through(color, actual_trans, vein_thickness,
         mix(.62, 1.35, physical.b), side) * mix(.65, 1., physical.g);
-    BACKLIGHT=through;
-    SSS_TRANSMITTANCE_COLOR=vec4(clamp(through/max(color.g*.36,.015),vec3(0.),vec3(1.)),1.);
-    SSS_TRANSMITTANCE_DEPTH=mix(.58,.20,vein_thickness)*mix(1.1,.85,physical.b);
-    SSS_TRANSMITTANCE_BOOST=.12;
+    // Direct transmission is owned by light() (leaf_direct_light.gdshaderinc);
+    // built-in BACKLIGHT/SSS_TRANSMITTANCE_* would duplicate it, so none are written.
     AO=1.-canopy_occlusion*(1.-clamp(position_local.y,0.,1.));
     AO_LIGHT_AFFECT=.2;
-    if (UV2.y < .5) { ALBEDO=srgb_to_linear(COLOR.rgb); BACKLIGHT=vec3(0.); }
+    if (UV2.y < .5) { ALBEDO=srgb_to_linear(COLOR.rgb); }
     float marked_nodule = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
     float gill_mask = step(0.5, UV2.x) * (1.0 - step(1.5, UV2.x));
     float seed_head_mask = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x));
