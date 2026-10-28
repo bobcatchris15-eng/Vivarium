@@ -56,7 +56,10 @@ private sealed class BankPatch
         }
         foreach (var (key, patch) in _bankPatches) patch.Node.Visible = Wanted(key);
         // Full footprints matter when preparing a whole patch near the view boundary.
-        rocks = _w.Props.Rocks.ToList(); logs = _w.Props.Logs.ToList(); gravel = _w.Props.Gravel.ToList();
+        // Each patch is culled below to its own bounds plus the farthest reach of any query.
+        var allRocks = _w.Props.Rocks.ToList(); var allLogs = _w.Props.Logs.ToList(); var allGravel = _w.Props.Gravel.ToList();
+        // Reach from patch centre: half-diagonal + anchor jitter + runner/leaf extent (<=~.46m) + slack.
+        double reach = Math.Sqrt(2) + _w.Grid.CellSize * Math.Sqrt(.5) + .6;
         foreach (var (key, cells) in _bankCells)
         {
             if (!Wanted(key)) continue;
@@ -69,7 +72,12 @@ private sealed class BankPatch
             }
             patch.Node.Visible = true;
             if (patch.Epoch == epoch) continue;
-            foreach (bool step in BuildBankPatchBatched(camera, false, rocks, logs, gravel, flora, cells, patch.Node))
+            var pc = new Vec2(key.X * 2 + 1, key.Z * 2 + 1);
+            var patchRocks = allRocks.Where(r => Vec2.Distance(pc, r.Position) < r.FootprintRadius + reach).ToList();
+            var patchLogs = allLogs.Where(l => l.AxisDistance(pc) < l.Radius + reach).ToList();
+            var patchGravel = allGravel.Where(g => Vec2.Distance(pc, g.Position) < g.Radius + .20 + reach).ToList();
+            var patchFlora = flora.Where(f => Vec2.Distance(pc, f.P) < f.Exclusion + reach).ToList();
+            foreach (bool step in BuildBankPatchBatched(camera, false, patchRocks, patchLogs, patchGravel, patchFlora, cells, patch.Node))
                 yield return step;
             patch.Epoch = epoch; BankPatchBuildCount++;
         }
@@ -94,6 +102,9 @@ private sealed class BankPatch
             foreach(var l in logs) if(l.AxisDistance(p)<l.Radius+radius) return "log";
             if(GravelCoverWeight(p,gravel)<=0) return "gravel";
             foreach(var f in flora) if(Vec2.Distance(p,f.P)<f.Exclusion+radius) return "flora";
+            // GravelCoverWeight ignores patches beyond Radius+.20; only those that can reach the disk matter.
+            List<GravelPatch>? nearGravel=null;
+            foreach(var g in gravel) if(Vec2.Distance(p,g.Position)<g.Radius+.20+radius) (nearGravel??=new()).Add(g);
             // Sample the entire conservative disk, including its circumference. Soil and
             // mobile-water queries use the authoritative field; no shoreline approximation.
             int rings=Math.Max(1,(int)Math.Ceiling(radius/.008));
@@ -103,7 +114,7 @@ private sealed class BankPatch
                     double a=k*Math.Tau/n;var q=p+new Vec2(Math.Cos(a),Math.Sin(a))*r;
                     // Fine leaf geometry needs the point query; coarse cells can include both dry bank and water.
                     if(_w.SubstrateAt(q)!=Substrate.Soil) return "substrate";
-                    if(GravelCoverWeight(q,gravel)<=0) return "gravel";
+                    if(nearGravel!=null&&GravelCoverWeight(q,nearGravel)<=0) return "gravel";
                     if(_w.Water.OpenWaterDepth(q)>.0003) return "water";
                     if(_w.GroundHeight(q)-_w.Terrain.Height(q)>.002) return "raised_support";
                 }
@@ -221,20 +232,25 @@ private sealed class BankPatch
             using (FrameProfiler.Measure("AmbientGround.BankNormals")) batch.RecomputeNormals();
             yield return true;
             var faceted=new MeshData();
+            // Corners whose smooth normal needs no crease correction share one vertex per source vertex.
+            var shared=new int[batch.VertexCount];Array.Fill(shared,-1);
             for(int t=0;t<batch.Indices.Count;t+=3) {
                 if (t % 768 == 0) yield return true;
                 int a=batch.Indices[t],b=batch.Indices[t+1],c=batch.Indices[t+2];
                 var n=(batch.Position(b)-batch.Position(a)).Cross(batch.Position(c)-batch.Position(a)).Normalized();
-                int first=faceted.VertexCount;
+                var corner=new int[3];int ci=0;
                 foreach(int v in new[]{a,b,c}) {
                     var smooth=batch.NormalAt(v);
                     // Preserve smooth camber except where a sharp crease reverses a normal.
-                    if(smooth.Dot(n)<.2) smooth=(smooth+n*(.2-smooth.Dot(n))).Normalized();
+                    bool bent=smooth.Dot(n)<.2;
+                    if(bent) smooth=(smooth+n*(.2-smooth.Dot(n))).Normalized();
+                    else if(shared[v]>=0){corner[ci++]=shared[v];continue;}
+                    int idx=faceted.VertexCount;if(!bent)shared[v]=idx;corner[ci++]=idx;
                     faceted.AddVertex(batch.Position(v),smooth,
                     batch.Colors[v*4],batch.Colors[v*4+1],batch.Colors[v*4+2],batch.Colors[v*4+3],
                     batch.UV[v*2],batch.UV[v*2+1],batch.UV2[v*2],batch.UV2[v*2+1]);
                 }
-                faceted.AddTriangle(first,first+1,first+2);
+                faceted.AddTriangle(corner[0],corner[1],corner[2]);
             }
             batch=faceted;
             for(int i=0;i<batch.VertexCount;i++) {
@@ -278,13 +294,15 @@ private sealed class BankPatch
                 ArrayMesh mesh;
                 using (FrameProfiler.Measure("AmbientGround.BankMeshCreate"))
                 {
-                    mesh = new ArrayMesh();
+                    // Reuse the patch's mesh resource; a fresh ArrayMesh per rebuild leaks the old RID until GC.
+                    if (target.Mesh is ArrayMesh existing) { mesh = existing; mesh.ClearSurfaces(); }
+                    else mesh = new ArrayMesh();
                     mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
                     if (_bankMaterial != null) mesh.SurfaceSetMaterial(0, _bankMaterial);
                     arrays.Dispose();
                 }
                 using (FrameProfiler.Measure("AmbientGround.BankAssignment"))
-                    target.Mesh = mesh;
+                    if (target.Mesh != mesh) target.Mesh = mesh;
             }
         } else target.Mesh=null;
         if(Main.ArgAfter("--world-review") is {} output) {
