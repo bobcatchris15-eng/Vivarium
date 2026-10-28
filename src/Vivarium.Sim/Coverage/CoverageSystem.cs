@@ -89,7 +89,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
 
     // ------------------------------------------------------------------ IMicroEnvSource / ILichenEnvSource
 
-    private readonly Dictionary<long, MicroEnv> _stepEnvCache = new();
+    private readonly ConcurrentDictionary<long, MicroEnv> _stepEnvCache = new();
     private readonly ConcurrentDictionary<long, CoverageSubstrate> _stepSubstrateCache = new();
     private readonly ConcurrentDictionary<long, (double slope, Vec2 downslope, double laplacian, bool complete)> _terrainGeoCache = new();
     private readonly ConcurrentDictionary<(int ti, int tj), List<Flora.FloraIndividual>> _stepTileFlora = new();
@@ -231,7 +231,11 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     {
         var p = CellCentre(gx, gz);
         int cell = _w.Grid.NearestDomainCell(p);
-        if (cell >= 0) _w.Litter.Deposit(p, amount);
+        if (cell < 0) return;
+        // Off-thread steps must not touch LitterSystem (main-thread owned); buffer in deterministic call order
+        // and apply on the main thread at the next tick boundary.
+        if (_bufferDetritus) _pendingDetritus.Add((p, amount));
+        else _w.Litter.Deposit(p, amount);
     }
 
     public void AddMoistureBonus(int gx, int gz, double amount)
@@ -247,6 +251,14 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
     public bool AsyncMode { get; set; } = false;
     private Task? _stepTask;
 
+    // Off-thread detritus buffer (filled only while an async task runs; drained on the main thread).
+    private readonly List<(Vec2 p, double amount)> _pendingDetritus = new();
+    private bool _bufferDetritus;
+    // Step parts requested while a task was still running; deferred (not dropped) and run in request order.
+    private readonly List<(double dt, bool mat, bool lichen)> _deferredParts = new();
+
+    /// <summary>Main-thread tick boundary: blocks on any running task, applies its buffered detritus, then runs any
+    /// deferred step parts synchronously so the world is fully caught up (used before save/teardown).</summary>
     public void WaitPending()
     {
         var task = _stepTask;
@@ -254,48 +266,73 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         {
             task.GetAwaiter().GetResult();
         }
+        DrainCompletedTask();
+        if (_deferredParts.Count > 0)
+        {
+            var parts = _deferredParts.ToArray();
+            _deferredParts.Clear();
+            foreach (var (dt, mat, lichen) in parts) RunStepPart(dt, mat, lichen, null);
+        }
+    }
+
+    /// <summary>Main thread only. If the last task finished, observe it and flush its buffered detritus in order.</summary>
+    private bool DrainCompletedTask()
+    {
+        var task = _stepTask;
+        if (task != null)
+        {
+            if (!task.IsCompleted) return false;
+            _stepTask = null;
+            _bufferDetritus = false;
+            task.GetAwaiter().GetResult(); // surface faults
+        }
+        if (_pendingDetritus.Count > 0)
+        {
+            foreach (var (p, amount) in _pendingDetritus) _w.Litter.Deposit(p, amount);
+            _pendingDetritus.Clear();
+        }
+        return true;
     }
 
     public void Step(double dtSeconds)
     {
         WaitPending();
-        RunStepPart(dtSeconds, runMat: true, runLichen: true);
+        RunStepPart(dtSeconds, runMat: true, runLichen: true, null);
     }
 
     // The game schedules these on adjacent simulation ticks. When AsyncMode is enabled,
     // each step runs on a threadpool task so the Godot main thread never hitches.
-    public void StepMat(double dtSeconds)
+    public void StepMat(double dtSeconds) => StepPart(dtSeconds, runMat: true, runLichen: false);
+
+    public void StepLichen(double dtSeconds) => StepPart(dtSeconds, runMat: false, runLichen: true);
+
+    private void StepPart(double dtSeconds, bool runMat, bool runLichen)
     {
-        if (AsyncMode)
+        if (!AsyncMode)
         {
-            if (_stepTask != null && !_stepTask.IsCompleted) return;
-            _stepTask = Task.Run(() => RunStepPart(dtSeconds, runMat: true, runLichen: false));
+            WaitPending(); // no-op unless AsyncMode was toggled off with work in flight
+            RunStepPart(dtSeconds, runMat, runLichen, null);
+            return;
         }
-        else
+        _deferredParts.Add((dtSeconds, runMat, runLichen));
+        if (!DrainCompletedTask()) return; // still running: deferred, picked up at a later tick
+        var parts = _deferredParts.ToArray();
+        _deferredParts.Clear();
+        // Hydrology's distance buffer is reused in place by later main-thread calls, so hand the task a copy.
+        var waterDist = (double[])_w.Water.DistanceToWater().Clone();
+        _bufferDetritus = true;
+        _stepTask = Task.Run(() =>
         {
-            RunStepPart(dtSeconds, runMat: true, runLichen: false);
-        }
+            foreach (var (dt, mat, lichen) in parts) RunStepPart(dt, mat, lichen, waterDist);
+        });
     }
 
-    public void StepLichen(double dtSeconds)
-    {
-        if (AsyncMode)
-        {
-            if (_stepTask != null && !_stepTask.IsCompleted) return;
-            _stepTask = Task.Run(() => RunStepPart(dtSeconds, runMat: false, runLichen: true));
-        }
-        else
-        {
-            RunStepPart(dtSeconds, runMat: false, runLichen: true);
-        }
-    }
-
-    private void RunStepPart(double dtSeconds, bool runMat, bool runLichen)
+    private void RunStepPart(double dtSeconds, bool runMat, bool runLichen, double[]? waterDist)
     {
         double dtDays = dtSeconds / SimUnits.Day;
         var phaseClock = Stopwatch.StartNew();
         _inStep = true;
-        _stepWaterDist = _w.Water.DistanceToWater();
+        _stepWaterDist = waterDist ?? _w.Water.DistanceToWater();
         double waterMs = phaseClock.Elapsed.TotalMilliseconds;
         phaseClock.Restart();
         _stepEnvCache.Clear();
