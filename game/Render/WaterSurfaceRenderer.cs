@@ -19,6 +19,11 @@ public partial class WaterSurfaceRenderer : Node3D
         public byte[] UploadBytes = new byte[TexSize * TexSize * 16];
         public float[] CachedValues = new float[TexSize * TexSize * 4];
         public float[] NewValues = new float[TexSize * TexSize * 4];
+        public const int GroundSize = (TileCells + 2) * Subdivisions + 1;
+        public float[] GroundValues = new float[GroundSize * GroundSize * 4];
+        public byte[] GroundBytes = new byte[GroundSize * GroundSize * 16];
+        public Image StateImage = Image.CreateEmpty(TexSize, TexSize, false, Image.Format.Rgbaf);
+        public Image GroundImage = Image.CreateEmpty(GroundSize, GroundSize, false, Image.Format.Rgbaf);
         public bool HasUploaded;
         public int Terrain = -1, Props = -1;
     }
@@ -58,14 +63,14 @@ public partial class WaterSurfaceRenderer : Node3D
     public void Bind(VivariumWorld world)
     {
         _w = world; _opticalTime = world.Liquid.PresentationTime; _version = -1; _snapshot = null; SurfaceUpdates = 0; TrianglesBuilt = 0; TextureUploadBytes = 0;
-        foreach (var t in _tiles.Values) { t.Node.QueueFree(); t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); }
+        foreach (var t in _tiles.Values) { t.Node.QueueFree(); t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); t.StateImage.Dispose(); t.GroundImage.Dispose(); }
         _tiles.Clear();
     }
     private static int FloorDiv(int value, int divisor) => (int)Math.Floor((double)value / divisor);
     private static ImageTexture Texture(float[] values, int width)
     { var bytes = new byte[values.Length * 4]; Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length); using var im = Image.CreateFromData(width, width, false, Image.Format.Rgbaf, bytes); return ImageTexture.CreateFromImage(im); }
-    private void Update(ImageTexture texture, float[] values, int width, byte[]? buffer = null)
-    { var bytes = buffer ?? new byte[values.Length * 4]; Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length); using var im = Image.CreateFromData(width, width, false, Image.Format.Rgbaf, bytes); texture.Update(im); TextureUploadBytes += bytes.Length; }
+    private void Update(ImageTexture texture, float[] values, int width, byte[] bytes, Image im)
+    { Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length); im.SetData(width, width, false, Image.Format.Rgbaf, bytes); texture.Update(im); TextureUploadBytes += bytes.Length; }
 
     /// <summary>Opt-in native audit, outside measurement. Includes tile halo samples and support textures.</summary>
     public (int Tiles, int Mismatches) AuditPublishedTextures()
@@ -173,11 +178,11 @@ public partial class WaterSurfaceRenderer : Node3D
                     using (FrameProfiler.Measure("LiquidSurface.TextureTransfer"))
                     {
                         (t.Previous, t.Current) = (t.Current, t.Previous);
-                        Update(t.Current, t.NewValues, TexSize, t.UploadBytes);
+                        Update(t.Current, t.NewValues, TexSize, t.UploadBytes, t.StateImage);
                         Array.Copy(t.NewValues, t.CachedValues, t.NewValues.Length);
                         if (!t.HasUploaded)
                         {
-                            Update(t.Previous, t.CachedValues, TexSize, t.UploadBytes);
+                            Update(t.Previous, t.CachedValues, TexSize, t.UploadBytes, t.StateImage);
                             t.HasUploaded = true;
                         }
                         t.Material.SetShaderParameter("previous_state", t.Previous);
@@ -194,13 +199,13 @@ public partial class WaterSurfaceRenderer : Node3D
                 {
                     using (FrameProfiler.Measure("LiquidSurface.SupportRefresh"))
                     {
-                        int n = (TileCells + 2) * Subdivisions + 1; var solid = new float[n * n * 4];
+                        int n = Tile.GroundSize; var solid = t.GroundValues;
                         for (int z = 0; z < n; z++) for (int x = 0; x < n; x++)
                         {
                             var p = new Vec2((key.Item1 * TileCells - 1 + (double)x / Subdivisions) * snapshot.Spacing, (key.Item2 * TileCells - 1 + (double)z / Subdivisions) * snapshot.Spacing); int k = (z * n + x) * 4;
                             solid[k] = (float)_w.GroundHeight(p); solid[k + 1] = (float)_w.Terrain.Height(p); solid[k + 2] = _w.Domain.Contains(p) ? 1 : 0;
                         }
-                        Update(t.Ground, solid, n); t.Terrain = _w.Terrain.Version; t.Props = _w.Props.Version;
+                        Update(t.Ground, solid, n, t.GroundBytes, t.GroundImage); t.Terrain = _w.Terrain.Version; t.Props = _w.Props.Version;
                     }
                 }
                 t.Material.SetShaderParameter("pond_level", (float)_w.Water.WaterTable);
@@ -240,7 +245,7 @@ public partial class WaterSurfaceRenderer : Node3D
     }
     public override void _ExitTree()
     {
-        foreach (var t in _tiles.Values) { t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); }
+        foreach (var t in _tiles.Values) { t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); t.StateImage.Dispose(); t.GroundImage.Dispose(); }
         _ripples?.Dispose(); _topology?.Dispose();
     }
 }
