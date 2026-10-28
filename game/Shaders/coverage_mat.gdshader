@@ -48,7 +48,7 @@ void vertex() {
 }
 
 void fragment() {
-    vec3 base = srgb_to_linear(COLOR.rgb);
+    vec3 base = srgb_to_linear(clamp(COLOR.rgb, vec3(0.0), vec3(1.0)));
     vec2 wp = world_pos.xz;
 
     // Irregular, noise-jittered edge feather: interior (alpha==1) never discards; the ~1-cell
