@@ -981,9 +981,11 @@ public partial class CoverageRenderer : Node3D
         {
             md.RecomputeNormals();
             // RecomputeNormals uses RH cross products; Godot expects clockwise front faces.
-            // Retain the outward draped normals and change only the moss sheet's index winding.
-            if (layer.Id == CoverageLayerId.Mat)
-                for (int i = 0; i < md.Indices.Count; i += 3)
+            // Retain the outward draped normals and flip index winding for every coverage sheet
+            // (moss mat and lichen crust share the same (c00,c11,c10)/(c00,c01,c11) order).
+            // Runs before the 3D structures below are appended; those emit Godot-correct winding
+            // (Primitives.* / TriangleFacing, and AddStraightTube is clockwise seen from outside).
+            for (int i = 0; i < md.Indices.Count; i += 3)
                     (md.Indices[i + 1], md.Indices[i + 2]) = (md.Indices[i + 2], md.Indices[i + 1]);
         }
 
