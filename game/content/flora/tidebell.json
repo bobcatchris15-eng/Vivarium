@@ -53,7 +53,7 @@
   },
   "competition": {
     "radius": 0.12,
-    "crowdingLimit": 6,
+    "crowdingLimit": 2.2,
     "sensitivity": 0.3
   },
   "proximity": [

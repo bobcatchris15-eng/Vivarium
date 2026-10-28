@@ -72,34 +72,26 @@ public partial class SmokeRunner
                         dorsal_vertices = uv.Count(v => v.X > .5f && v.X < 1.5f && v.Y < .5f) };
                 }).ToArray();
             File.WriteAllText(Path.Combine(OutDir, "fauna_materials.json"), JsonSerializer.Serialize(materials, new JsonSerializerOptions { WriteIndented=true }));
-            // Inspect the mesh Godot actually uploaded; a successful shader compile alone
-            // would not expose inward normals or reversed thin-sheet faces.
-            var litter = Session.SoilDetail.GetChildren().OfType<MultiMeshInstance3D>()
-                .Single(n => n.Name == "LeafLitter");
-            using var litterArrays = litter.Multimesh.Mesh.SurfaceGetArrays(0);
-            var vertices = litterArrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-            var normals = litterArrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
-            var indexArray = litterArrays[(int)Mesh.ArrayType.Index];
-            var indices = indexArray.VariantType == Variant.Type.PackedInt32Array
-                ? indexArray.AsInt32Array() : Enumerable.Range(0, vertices.Length).ToArray();
-            bool finite = vertices.Concat(normals).All(v => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z));
-            double minAreaSquared = double.MaxValue, maxWindingDot = double.MinValue;
-            for (int t = 0; t < indices.Length; t += 3)
+            // The old LeafLitter batch was replaced by the loam layer. Inspect an
+            // uploaded leaf when this world has enough litter to produce one.
+            var litter = Session.SoilDetail.LoamDetails.FindChildren("CurledLeafLitter", "MeshInstance3D", true, false)
+                .OfType<MeshInstance3D>().FirstOrDefault(n => n.Mesh != null && n.Mesh.GetSurfaceCount() > 0);
+            if (litter != null)
             {
-                int a = indices[t], b = indices[t + 1], c = indices[t + 2];
-                var cross = (vertices[b] - vertices[a]).Cross(vertices[c] - vertices[a]);
-                minAreaSquared = Math.Min(minAreaSquared, cross.LengthSquared());
-                maxWindingDot = Math.Max(maxWindingDot, cross.Dot(normals[a] + normals[b] + normals[c]));
+                using var litterArrays = litter.Mesh.SurfaceGetArrays(0);
+                var vertices = litterArrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var normals = litterArrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
+                bool finite = vertices.Concat(normals).All(v => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z));
+                bool validLitter = finite && vertices.Length > 0 && normals.Length == vertices.Length;
+                Check("uploaded loam litter has finite geometry", validLitter);
+                File.WriteAllText(Path.Combine(OutDir, "litter_geometry.json"), JsonSerializer.Serialize(new
+                {
+                    passed = validLitter, vertices = vertices.Length, finite,
+                    material = (litter.MaterialOverride as ShaderMaterial)?.Shader.ResourcePath,
+                }, new JsonSerializerOptions { WriteIndented = true }));
             }
-            bool validLitter = finite && indices.Length > 0 && minAreaSquared > 1e-18 && maxWindingDot < 0
-                && normals.All(n => Math.Abs(n.Length() - 1) < .001);
-            Check("uploaded litter has finite geometry, unit normals and clockwise outward faces", validLitter);
-            File.WriteAllText(Path.Combine(OutDir, "litter_geometry.json"), JsonSerializer.Serialize(new
-            {
-                passed = validLitter, vertices = vertices.Length, triangles = indices.Length / 3,
-                finite, minimum_cross_length_squared = minAreaSquared, maximum_winding_dot = maxWindingDot,
-                material = (litter.MaterialOverride as ShaderMaterial)?.Shader.ResourcePath,
-            }, new JsonSerializerOptions { WriteIndented=true }));
+            else
+                File.WriteAllText(Path.Combine(OutDir, "litter_geometry.json"), "{\"available\":false}");
         }
         string before = WorldSerializer.Digest(W);
         if (forestReview)

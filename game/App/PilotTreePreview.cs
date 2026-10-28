@@ -15,7 +15,7 @@ public partial class PilotTreePreview : Node3D
     public ContentLibrary Content { get; set; } = null!;
     public string TreeId { get; set; } = "all";
     public string OutDir { get; set; } = "";
-    private static readonly string[] Ids = { "gloomspire", "needlevault", "crowncoil", "emberpillar", "basinwarden", "palehollow" };
+    private static readonly string[] Ids = { "gloomspire", "needlevault", "crowncoil", "emberpillar", "basinwarden", "palehollow", "cisternvault", "cinnabarcrest", "rootcloister", "silkcascade" };
     public override void _Ready() => _ = CaptureAsync();
 
     private async Task CaptureAsync()

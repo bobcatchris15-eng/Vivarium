@@ -19,8 +19,6 @@ public partial class PilotTreeRenderer : Node3D
     private ShaderMaterial? _material;
     private FloraVisualProfile? _foliageProfile;
     private ShaderMaterial? _leafMaterial;
-    private bool _authoredCrown;
-public bool AuthoredCrownActive => _authoredCrown;
 
     public void Build(VivariumWorld world)
     {
@@ -30,7 +28,6 @@ public bool AuthoredCrownActive => _authoredCrown;
         RootMeshRebuilds = 0;
         UnchangedRootFootprints = 0;
         _sinceRefresh = 0;
-        _authoredCrown = false;
         if (Tree != null) { RemoveChild(Tree); Tree.QueueFree(); Tree = null; }
         if (Roots != null) { RemoveChild(Roots); Roots.QueueFree(); Roots = null; }
         if (world.PilotTree == null) return;
@@ -40,7 +37,8 @@ public bool AuthoredCrownActive => _authoredCrown;
             Bridge.BindSurface(_material, "bark", Bridge.Surfaces.Bark);
         }
         _material.SetShaderParameter("hex_apothem", (float)world.Domain.Apothem);
-        _foliageProfile = FloraVisualProfile.Synthesize(world.PilotTree.Def.Id == "basinwarden" ? "shadebell" : "embercrown");
+        string foliageId = world.PilotTree.Def.Id is "basinwarden" or "cisternvault" or "rootcloister" ? "shadebell" : "embercrown";
+        _foliageProfile = FloraVisualProfile.Synthesize(foliageId);
         var foliage = world.PilotTree.Def.FoliageColor;
         _foliageProfile.Top = new[] { (float)foliage.X, (float)foliage.Y, (float)foliage.Z };
         _foliageProfile.Back = new[] { (float)foliage.X * 1.12f, (float)foliage.Y * 1.10f, (float)foliage.Z * .95f };
@@ -62,20 +60,8 @@ public bool AuthoredCrownActive => _authoredCrown;
         using var timing=Vivarium.Game.App.FrameProfiler.Measure("PilotTree");
         if (_world == null || Tree == null || Roots == null) return;
         _sinceRefresh += delta;
-        // Never remove the legacy canopy until *every* authored stage and
-        // connected axis is GPU resident. On renderer failure restore legacy.
-        bool switchToAuthored = false;
-        bool transition = switchToAuthored != _authoredCrown;
         bool terrainDirty = _world.Terrain.Version != _terrainVersion && _sinceRefresh >= .25;
-        if (!transition && !terrainDirty) return;
-        if (transition)
-        {
-            // This heavy mesh changes only when the validated crown is swapped.
-            // It never needs to be rebuilt for erosion/soil edits.
-            Tree.Mesh = _foliageProfile!.Compile(PilotTreeMeshes.BuildTrunkAndCrown(_world,
-                includeCrown: !switchToAuthored), _material!, _leafMaterial!);
-            _authoredCrown = switchToAuthored;
-        }
+        if (!terrainDirty) return;
         if (terrainDirty)
         {
             // Global erosion revision is not proof that the 4cm-scale terrain

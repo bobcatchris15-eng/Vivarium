@@ -23,6 +23,15 @@ public partial class Main : Node3D
     public override async void _Ready()
     {
         UserArgs = OS.GetCmdlineUserArgs();
+        foreach (var retired in new[] { "--overhaul-aquatic-review", "--review-coverage-legacy", "--legacy-flora" })
+        {
+            if (!UserArgs.Contains(retired)) continue;
+            GD.PrintErr($"{retired} has been retired; use the current production review modes.");
+            GetTree().Quit(2);
+            return;
+        }
+        if (System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1")
+            GD.PushWarning("VIVARIUM_LEGACY_FLORA has been retired; using the production flora renderer.");
         // a display piece must not stutter: avoid blocking full garbage collections during steady running
         System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
         SetupLogging();
@@ -61,8 +70,6 @@ public partial class Main : Node3D
         if (ArgAfter("--photorealism-review") is { } photoDir)
         { AddChild(new PhotorealismReview { Content = content, OutDir = photoDir,
             ExposureSweep = UserArgs.Contains("--exposure-sweep") }); return; }
-        if (ArgAfter("--overhaul-aquatic-review") is { } aquaticOverhaulDir)
-        { AddChild(new OverhaulAquaticReview { Content = content, OutDir = aquaticOverhaulDir }); return; }
         if (ArgAfter("--material-port-review") is { } materialDir)
         { AddChild(new MaterialPortReview { Content = content, OutDir = materialDir,
             BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"), FloraModulePath = ArgAfter("--flora-module") ?? "",
@@ -146,7 +153,6 @@ public partial class Main : Node3D
                 Detail = int.TryParse(ArgAfter("--detail"), out int specimenDetail) ? Math.Clamp(specimenDetail,0,2) : 0,
                 Phase = float.TryParse(ArgAfter("--phase"), out float specimenPhase) ? specimenPhase : -1,
                 Reverse = UserArgs.Contains("--reverse"),
-                Legacy = UserArgs.Contains("--legacy-flora"),
                 GameTier = UserArgs.Contains("--game-tier"),
                 Close = UserArgs.Contains("--close"),
                 OutDir = ArgAfter("--output") ?? "build/specimens",

@@ -23,7 +23,6 @@ public partial class SpecimenPreview : Node3D
     public int Detail { get; set; }
     public float Phase { get; set; } = -1;
     public bool Reverse { get; set; }
-    public bool Legacy { get; set; }
     public bool GameTier { get; set; }
     public bool Close { get; set; }
     public bool BatchMode { get; set; }
@@ -123,7 +122,7 @@ public partial class SpecimenPreview : Node3D
             if (BatchMode) mat.SetShaderParameter("review_time", 0f);
             if (Phase >= 0) { mat.SetShaderParameter("sway",1f); mat.SetShaderParameter("review_time",Phase); }
             Bridge.BindSurface(mat, "moss", Bridge.Surfaces.Moss);
-            var profile = Legacy ? null : FloraVisualProfile.Load(sp.Id, sp: sp);
+            var profile = FloraVisualProfile.Load(sp.Id, sp: sp);
             FloraSurfaceProfiles.Bind(mat, sp, photographedLeaves: profile == null);
             ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + sp.Id), 0x9E3779B97F4A7C15UL);
             // Optional screenshot of the exact budgeted mesh used by the in-game renderer,

@@ -229,6 +229,7 @@ public sealed class FloraPopulation
 {
     public List<FloraIndividual> Items { get; } = new();
     private readonly Dictionary<EntityId, FloraIndividual> _byId = new();
+    private readonly Dictionary<string, int> _countBySpecies = new(StringComparer.Ordinal);
     public SpatialGrid<FloraIndividual> Index { get; }
     /// <summary>Changes whenever membership changes (renderer hint; not authoritative).</summary>
     public int Version { get; private set; }
@@ -237,22 +238,23 @@ public sealed class FloraPopulation
     public FloraPopulation(double halfExtent) { Index = new SpatialBuckets<FloraIndividual>(halfExtent, 0.5, f => f.Position); _indexedVersion = Version; }
 
     public int Count => Items.Count;
+    public int CountOf(string species) => _countBySpecies.GetValueOrDefault(species);
     public FloraIndividual? Get(EntityId id) => _byId.GetValueOrDefault(id);
 
     public void Add(FloraIndividual f)
     {
         if (Items.Count > 0 && Items[^1].Id.Value >= f.Id.Value) throw new InvalidOperationException("Flora must be added in ascending id order.");
-        Items.Add(f); _byId[f.Id] = f; Index.Add(f); Version++; _indexedVersion = Version;
+        Items.Add(f); _byId[f.Id] = f; _countBySpecies[f.SpeciesId] = CountOf(f.SpeciesId) + 1; Index.Add(f); Version++; _indexedVersion = Version;
     }
 
     public bool Remove(EntityId id)
     {
         if (!_byId.Remove(id, out var f)) return false;
-        Items.Remove(f); Index.Remove(f, f.Position); Version++; _indexedVersion = Version;
+        Items.Remove(f); _countBySpecies[f.SpeciesId] = Math.Max(0, CountOf(f.SpeciesId) - 1); Index.Remove(f, f.Position); Version++; _indexedVersion = Version;
         return true;
     }
 
-    public void Clear() { Items.Clear(); _byId.Clear(); Index.Clear(); Version++; _indexedVersion = Version; }
+    public void Clear() { Items.Clear(); _byId.Clear(); _countBySpecies.Clear(); Index.Clear(); Version++; _indexedVersion = Version; }
 
     /// <summary>Relocates an individual (creeping organisms) keeping the spatial index consistent.</summary>
     public void Move(FloraIndividual f, Vec2 to)

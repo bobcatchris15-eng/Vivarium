@@ -24,7 +24,7 @@ public partial class Windows : Control
     private LineEdit _saveName = null!, _seed = null!;
     private OptionButton _preset = null!;
     private OptionButton _pilotTree = null!;
-    private static readonly string[] PilotTreeIds = { "random", "none", "gloomspire", "needlevault", "crowncoil", "emberpillar", "basinwarden", "palehollow" };
+    private static readonly string[] PilotTreeIds = { "random", "none", "gloomspire", "needlevault", "crowncoil", "emberpillar", "basinwarden", "palehollow", "cisternvault", "cinnabarcrest", "rootcloister", "silkcascade" };
     private OptionButton _guardian = null!;
     private static readonly string[] GuardianIds = { "random", "none", "hoatzin_crested", "pangolin_armored", "serpent_canopy", "monitor_great", "coati_woodland", "porcupine_quilled" };
     private HSlider _diameter = null!, _relief = null!, _springFlow = null!;
@@ -319,7 +319,7 @@ public partial class Windows : Control
         _relief = UiKit.Slider("ReliefSlider", 0.2, 2.0, 0.05, 1.0, v => _reliefLabel.Text = $"×{v:0.00}");
         _springFlow = UiKit.Slider("SpringSlider", 0.0, 3.0, 0.1, 1.0, v => _springLabel.Text = v < 0.05 ? "dry (no springs)" : $"×{v:0.0}");
         _pilotTree = new OptionButton { Name = "PilotTreePicker" };
-        foreach (string label in new[] { "Random ancient tree", "None", "Gloomspire", "Needlevault", "Crowncoil", "Emberpillar", "Basinwarden", "Palehollow" }) _pilotTree.AddItem(label);
+        foreach (string label in new[] { "Random ancient tree", "None", "Gloomspire", "Needlevault", "Crowncoil", "Emberpillar", "Basinwarden", "Palehollow", "Cisternvault", "Cinnabarcrest", "Rootcloister", "Silkcascade" }) _pilotTree.AddItem(label);
         _guardian = new OptionButton { Name = "GuardianPicker" };
         foreach (string label in new[] { "Random guardian animal", "None", "Crested canopy", "Armored forest", "Canopy serpent", "Great ground", "Long-nosed woodland", "Quilled arboreal" }) _guardian.AddItem(label);
 

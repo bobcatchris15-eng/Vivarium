@@ -23,6 +23,10 @@ public static class PilotTreeCatalog
         new PilotTreeDef("emberpillar", "Emberpillar", "High redwood crown, fibrous bark and massive persistent wood", 2.0, 15, 6.2, 0.60, 0.90, 0.46, 0.19, 0.18, 0.08, 0.45, 0.65, 0.68, "small_cone", new Vec3(0.48,0.24,0.14), new Vec3(0.19,0.32,0.22)),
         new PilotTreeDef("basinwarden", "Basinwarden", "Broadleaf buttress walls, sheltered basins and rich leaf beds", 1.75, 11, 6.5, 0.24, 1.12, 0.68, 0.31, 0.12, 0.16, 0.10, 1.55, 0.72, "nut", new Vec3(0.39,0.38,0.27), new Vec3(0.26,0.39,0.16)),
         new PilotTreeDef("palehollow", "Palehollow", "Broken conifer crown, plated pale bark and fungal deadwood", 1.55, 10, 5.2, 0.47, 0.67, 0.56, 0.28, 0.08, 0.095, 0.55, 1.20, 1.0, "cone", new Vec3(0.62,0.59,0.49), new Vec3(0.26,0.34,0.26)),
+        new PilotTreeDef("cisternvault", "Cisternvault", "Swollen water-reservoir trunk beneath crown of crooked antler boughs", 2.35, 9.5, 5.6, 0.52, 0.50, 0.62, 0.48, 0.22, 0.07, 0.18, 0.55, 0.40, "capsule", new Vec3(0.50,0.44,0.38), new Vec3(0.24,0.38,0.17)),
+        new PilotTreeDef("cinnabarcrest", "Cinnabarcrest", "Dichotomous candelabra dome, cinnabar resin fissures and stiff rosette crown", 1.45, 11.5, 5.0, 0.38, 0.52, 0.88, 0.20, 0.15, 0.05, 0.30, 0.78, 0.48, "berry", new Vec3(0.42,0.32,0.27), new Vec3(0.18,0.34,0.25)),
+        new PilotTreeDef("rootcloister", "Rootcloister", "Braided aerial drop-roots, vaulted colonnades and broad epiphyte terraces", 1.85, 10.5, 5.6, 0.62, 0.72, 0.78, 0.38, 0.28, 0.15, 0.22, 1.15, 0.85, "fig", new Vec3(0.40,0.38,0.34), new Vec3(0.15,0.36,0.16)),
+        new PilotTreeDef("silkcascade", "Silkcascade", "Arching weeping limbs, cascading curtain fronds and silvered water-seeking roots", 1.40, 12.0, 5.2, 0.45, 0.58, 0.65, 0.42, 0.16, 0.11, 0.08, 1.40, 0.75, "catkin", new Vec3(0.30,0.28,0.25), new Vec3(0.26,0.40,0.26)),
     });
 
     public static PilotTreeDef? Find(string id) => All.FirstOrDefault(d => d.Id == id);
@@ -241,8 +245,15 @@ public sealed class PilotTreeState
         if (p.Y >= BaseHeight && p.Y <= top)
         {
             double t = Math.Clamp((p.Y - BaseHeight) / Def.TrunkHeight, 0, 1);
-            double radius = Def.Id == "crowncoil" ? Def.TrunkRadius * (.82 + .18 * (1-t)) * (1 + .13*Math.Exp(-t*16))
-                : Def.TrunkRadius * (.18 + .82*Math.Pow(1-t,.75)) * (1+.30*Math.Exp(-t*16));
+            double radius = Def.Id switch
+            {
+                "crowncoil" => Def.TrunkRadius * (.82 + .18 * (1 - t)) * (1 + .13 * Math.Exp(-t * 16)),
+                "cisternvault" => Def.TrunkRadius * (.68 + .54 * Math.Sin(Math.PI * Math.Pow(t, 0.72))) * (1 + .18 * Math.Exp(-t * 12)),
+                "cinnabarcrest" => Def.TrunkRadius * (.32 + .68 * Math.Pow(1 - t * 0.75, .82)) * (1 + .24 * Math.Exp(-t * 16)),
+                "rootcloister" => Def.TrunkRadius * (.28 + .72 * Math.Pow(1 - t, .65)) * (1 + .38 * Math.Exp(-t * 14)),
+                "silkcascade" => Def.TrunkRadius * (.20 + .80 * Math.Pow(1 - t, .70)) * (1 + .30 * Math.Exp(-t * 16)),
+                _ => Def.TrunkRadius * (.18 + .82 * Math.Pow(1 - t, .75)) * (1 + .30 * Math.Exp(-t * 16))
+            };
             var radial = (p.XZ - Anchor).Normalized();
             var q = Anchor + radial * radius;
             double distance = Math.Abs((p.XZ-Anchor).Length-radius);

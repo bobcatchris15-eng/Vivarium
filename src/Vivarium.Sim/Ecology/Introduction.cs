@@ -101,7 +101,7 @@ public static class Populate
             {
                 if (placed >= entry.Count) break;
                 var q = pos + new Vec2(rng.Range(-0.1, 0.1), rng.Range(-0.1, 0.1));
-                if (!w.FloraSystem.CanEstablish(sp, q, out _)) continue;
+                if (!w.FloraSystem.CanEstablish(sp, q, out _, isStarter: true)) continue;
                 var f = w.FloraSystem.Establish(sp, q, "starter", sp.MaxBiomass * rng.Range(0.3, 0.8));
                 f.Age = rng.Range(0.3, 0.9) * sp.Lifespan * 0.6;
                 f.LastSpreadAge = f.Age - rng.Range(0, 1) * sp.SpreadInterval;   // staggered first spread

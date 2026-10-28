@@ -227,7 +227,7 @@ public sealed class LitterSystem
     {
         double legacy = _world.Fields.Detritus.Values[idx];
         if (!(legacy > 0)) return;
-        FineMass[idx] += legacy;
+        FineMass[idx] = Math.Max(FineMass[idx], legacy);
         _world.Fields.Detritus[idx] = 0;
         Revision++;
     }

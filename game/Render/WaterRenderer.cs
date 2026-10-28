@@ -14,8 +14,8 @@ public partial class WaterRenderer : Node3D
     private ShaderMaterial _material=null!;
     private int _terrain=-1;
     private double _waterTable=double.NaN;
-    public double RefreshSeconds {get;set;}=.5;
-    public int TriangleCount {get;private set;}
+
+public int TriangleCount {get;private set;}
     public void Build(VivariumWorld w)
     {
         _w=w;_material??=Bridge.Shader("res://Shaders/water_stream.gdshader");_material.RenderPriority=-2;

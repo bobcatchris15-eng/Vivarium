@@ -17,9 +17,8 @@ public partial class AmbientGroundCoverRenderer
 {
     private MeshInstance3D _bankNode = null!;
     private ShaderMaterial _bankMaterial = null!;
-    private double _bankTable = double.NaN;
-    private long _bankLiquidVersion = -1;
-    private sealed class BankPatch
+
+private sealed class BankPatch
     {
         public MeshInstance3D Node = null!;
         public int Epoch = -1;
@@ -40,25 +39,8 @@ public partial class AmbientGroundCoverRenderer
             var p = _w.Grid.CellCenter(cell);
             return ((int)Math.Floor(p.X / 2), (int)Math.Floor(p.Z / 2));
         }).ToDictionary(group => group.Key, group => group.ToArray());
-        _bankTable=double.NaN; _bankLiquidVersion=-1;
     }
-    private bool BankWaterChanged()
-    {
-        long version=_w.Liquid.CaptureRenderState().Version;
-        bool changed=_bankTable!=_w.Water.WaterTable || version!=_bankLiquidVersion;
-        _bankTable=_w.Water.WaterTable; _bankLiquidVersion=version;
-        return changed;
-    }
-    private bool NearLiquid(Vec2 p)
-    {
-        foreach(double r in new[]{.16,.32,.52,.72})
-        for(int i=0;i<16;i++) {
-            double a=i*Math.Tau/16; var q=p+new Vec2(Math.Cos(a),Math.Sin(a))*r;
-            if(_w.Domain.Contains(q)&&_w.Water.OpenWaterDepth(q)>.001
-                && Math.Abs(_w.Terrain.Height(p)-_w.Terrain.Height(q))<.55) return true;
-        }
-        return false;
-    }
+
     private IEnumerable<bool> RefreshBankFringeBatched(Vector3 camera,bool haveCamera,List<Rock> rocks,List<LogProp> logs,
         List<GravelPatch> gravel,List<(Vec2 P,double Exclusion)> flora)
     {

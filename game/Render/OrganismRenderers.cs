@@ -121,7 +121,6 @@ public partial class FloraRenderer : Node3D
     }
     private IEnumerator<bool>? _build;
     private ContentLibrary? _builtContent;
-    private bool _builtLegacy;
     private readonly List<Node> _buildingNodes = new();
     // Stable per-organism ownership. No nearest-32 ranking, reassignment, or alternating light slots.
     private readonly Dictionary<EntityId,OmniLight3D> _luminousLights = new();
@@ -152,7 +151,6 @@ public partial class FloraRenderer : Node3D
     public bool HasLegacyLayer(string speciesId) => _layers.ContainsKey(speciesId);
     private readonly List<FloraSnapshotItem> _snapshot = new();
     private readonly List<DeadFloraSnapshotItem> _deadSnapshot = new();
-    private double _hardwareWaitStartClock;
     private readonly List<EntityId> _expired = new();
     private int _terrainVersion = -1;
     private int _quality = 1;
@@ -206,15 +204,13 @@ public int Quality
         Visible_ = 0; TrianglesDrawn = 0;
         PopulationReady = false;
         _w = w;
-        _hardwareWaitStartClock = _clock;
         _terrainVersion = _w.Terrain.Version;
         DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
-        bool legacy = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1";
-        if (!ReferenceEquals(_builtContent, w.Content) || _builtLegacy != legacy)
+        if (!ReferenceEquals(_builtContent, w.Content))
         {
             foreach (var c in GetChildren()) c.QueueFree();
             _layers.Clear();
-            _builtContent = w.Content; _builtLegacy = legacy;
+            _builtContent = w.Content;
         }
         // Completed geometry/materials depend on content, not world seed. Keep them through New World/load.
         foreach (var layer in _layers.Values)
@@ -235,18 +231,12 @@ public int Quality
     private void RequestMissingLayers()
     {
         if (_build != null) return;
-        // The authored hardware renderer is already authoritative for living
-        // vascular organs. Their former photographed meshes are a *fallback*,
-        // not a required second set of huge synchronous GPU uploads.
-        // Still build legacy geometry for corpses and special/non-authored
-        // species, or if source import fails / startup remains stalled.
+        // Build layers for living plants and corpses that lack one.
         var deadSpecies = _w.DeadFlora.Items.Select(p => p.SpeciesId)
             .ToHashSet(StringComparer.Ordinal);
-        bool hardwareTimedOut = _clock - _hardwareWaitStartClock > 30.0;
         var needed = _w.Flora.Items.Select(p => p.SpeciesId)
             .Concat(deadSpecies)
-            .Where(id => !_layers.ContainsKey(id) &&
-                true)
+            .Where(id => !_layers.ContainsKey(id))
             .ToHashSet(StringComparer.Ordinal);
         if (needed.Count == 0) return;
         PopulationReady = false;
@@ -329,7 +319,7 @@ public int Quality
     {
         long speciesStarted=Stopwatch.GetTimestamp();
         GD.Print("FLORA_LAYER_BUILD_BEGIN " + sp.Id);
-        var profile = System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1" ? null : FloraVisualProfile.Load(sp.Id, sp: sp);
+        var profile = FloraVisualProfile.Load(sp.Id, sp: sp);
         var mat = Bridge.Shader("res://Shaders/flora.gdshader");
         NightFloraMaterials.Bind(mat, sp);
         mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);

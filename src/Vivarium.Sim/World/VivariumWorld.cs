@@ -72,11 +72,6 @@ public sealed class VivariumWorld
     public CoverageSystem CoverageSystem { get; }
     public AquaticSystem AquaticSystem { get; }
 
-    /// <summary>
-    /// Legacy tracer API retained for old fixture tools. The game does not advance or render this system.
-    /// <see cref="Liquid"/> owns all dynamic game water; the water-table pond is hydrostatic.
-    /// </summary>
-
     /// <summary>Authoritative game liquid; persisted 3D water, independent of ecology calendar acceleration.</summary>
     public SurfaceLiquid Liquid {get;}
     /// <summary>Derived physical root-zone tendencies; never serialized as authoritative state.</summary>

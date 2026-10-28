@@ -12,29 +12,7 @@ public static partial class OrganismMeshes
 {
     private static Vec3 MidRadial(double az) => new(Math.Cos(az), 0, Math.Sin(az));
     private static readonly double[] MidBark = { 0.24, 0.21, 0.16 };
-    private static void MidStem(MeshData m, double[] bark, Vec3[] points, double baseRadius)
-    {
-        double[] r = new double[points.Length];
-        for (int i = 0; i < r.Length; i++)
-            r[i] = Math.Max(.0015, baseRadius * Math.Pow(1 - i / (double)points.Length, .95));
-        Primitives.Tube(m, points, r, m.FloraDetailLevel == 2 ? 4 : 6,
-            (i, v) => (bark, 1, i / (double)Math.Max(1, points.Length - 1), v, 0, 0));
-    }
 
-    private static void MidBlade(MeshData m, Vec3 attach, Vec3 direction, double length, double width,
-        double[] c1, double[] c2, ulong leafSeed, bool round = false, double drop = .035)
-    {
-        var dir = direction.Normalized();
-        if (dir.LengthSq < 1e-7) dir = new Vec3(1, 0, 0);
-        var side = dir.Cross(Vec3.Up).Normalized();
-        if (side.LengthSq < 1e-7) side = new Vec3(0, 0, 1);
-        var end = attach + dir * length - Vec3.Up * drop;
-        var ctrl = attach + dir * (length * .56) + Vec3.Up * (length * (round ? .06 : .09));
-        CurvedBlade(m, attach, ctrl, end, side, width, c1, c2,
-            segments: m.FloraDetailLevel == 2 ? 4 : 7,
-            twist: (Rng.HashUnit(leafSeed, 0x901UL, 0) - .5) * .24,
-            shoulder: round ? .72 : 1.10, serration: round ? 0 : .035);
-    }
 
     // Ribbed petiole with prominent longitudinal ridges and regular nodules.
     private static void MidRainshieldStem(MeshData m, Vec3[] path, double rBase, double rTip,
@@ -230,7 +208,9 @@ public static partial class OrganismMeshes
             double rTipCal = junctionCal * caliperScale;
 
             // Build ribbed petiole with longitudinal ridges and regular nodules
-            MidRainshieldStem(m, path, rBaseCal, rTipCal, petioleBaseCol, petioleTipCol,
+            // Taper the stem tip slightly below the petiole radius so the ribbed tube
+            // narrows into the short blending petiole instead of ending bluntly.
+            MidRainshieldStem(m, path, rBaseCal, rTipCal * 0.88, petioleBaseCol, petioleTipCol,
                 stemSegments, pathStations, stemNodules, stemRidges);
 
             // Leaves held mostly horizontal, but slightly tipping downward towards the leaf tip
@@ -247,18 +227,21 @@ public static partial class OrganismMeshes
             double bladeWid = bladeLen * MathD.Lerp(0.95, 1.22, u) * rng.Range(0.96, 1.05);
 
             double age = MathD.Lerp(0.25, 0.95, Math.Pow(u, 0.75));
-            double camber = MathD.Lerp(0.05, 0.035, u);
-            double midribFold = MathD.Lerp(0.04, 0.025, u);
+            // Slightly deeper camber and midrib fold so the blade reads as a curved
+            // surface rather than a wide flat sheet, and the stem can blend into it.
+            double camber = MathD.Lerp(0.09, 0.06, u);
+            double midribFold = MathD.Lerp(0.06, 0.04, u);
             double wavyMargin = MathD.Lerp(0.02, 0.035, u);
             double tipCurl = MathD.Lerp(0.03, 0.06, u);
 
             ulong leafSeed = Rng.Mix(seed, (ulong)(k * 439 + 13));
 
+            double blendPetioleLength = Math.Max(0.010, rTipCal * 1.35);
             Broadleaf.BuildLeaf(m, crown, leafFwd, bladeLen, bladeWid,
                 BroadleafOutline.OrbicularCordate, leafSeed, c1, c2,
                 age: age, camber: camber, midribFold: midribFold,
                 wavyMargin: wavyMargin, wavyFrequency: 3.2, tipCurl: tipCurl,
-                petioleLength: 0, petioleRadius: rTipCal, petioleKink: 0,
+                petioleLength: blendPetioleLength, petioleRadius: rTipCal, petioleKink: 0.18,
                 undersideColor: under, detailOverride: detail);
         }
     }

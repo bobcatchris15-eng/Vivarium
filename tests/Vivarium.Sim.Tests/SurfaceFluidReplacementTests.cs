@@ -146,12 +146,13 @@ public class SurfaceFluidReplacementTests
         Assert.Contains(fluid.CaptureRenderState().Cells,c=>c.Position.X*slopeX+c.Position.Z*slopeZ>.1&&c.Volume>1e-10);
     }
     [Fact]
-    public void AbruptUnsupportedLipStillEmitsConservedFallingWater()
+    public void CreekDropTransfersConservedVolumeWithoutEmittingParticles()
     {
-        var fluid=Fluid(p=>p.X<.10?.2:0);var budget=new WaterBudget();bool falling=false;
+        var fluid=Fluid(p=>p.X<.10?.2:0);var budget=new WaterBudget();
         for(int i=0;i<120;i++)
-        {fluid.Advance(SurfaceFluidDynamics.StepSeconds,[Source(.0001)],budget);falling|=fluid.Airborne.Any(p=>p.Stream!=0&&p.Position.X>=.1&&p.Position.Y>.1);}
-        Assert.True(falling,"Actual unsupported lip must retain free flight");Balance(fluid,budget);
+        {fluid.Advance(SurfaceFluidDynamics.StepSeconds,[Source(.0001)],budget);Assert.Empty(fluid.Airborne);}
+        Assert.Contains(fluid.CaptureRenderState().Cells,c=>c.Position.X>=.1&&c.Volume>1e-10);
+        Balance(fluid,budget);
     }
 
     [Theory][InlineData(1e-12)][InlineData(1e-9)][InlineData(1e-6)]
@@ -228,9 +229,10 @@ public class SurfaceFluidReplacementTests
         Assert.Contains(f.CaptureRenderState().Cells, c => c.Position.X > .3);
     }
     [Fact]
-    public void FallingLiquidMovesThroughAirAndLandsWithVolume()
+    public void LegacyFallingLiquidSettlesWithoutLosingSavedVolume()
     {
-        var f = Fluid(_ => 0); var b = new WaterBudget(); f.Add(new(0, .5, 0), new(.2, 0, 0), .0002);
+        var f = Fluid(_ => 0); var b = new WaterBudget();
+        f.RestoreLegacy(new([new(new(0,.5,0),new(.2,0,0),.0002,101)],new(),0,0));
         f.Advance(.1, [], b); Assert.NotEmpty(f.Airborne); Assert.All(f.Airborne, p => Assert.True(p.Position.Y < .5 && p.Position.Y > .1));
         f.Advance(.5, [], b); Assert.Empty(f.Airborne); Assert.True(f.ActiveCells > 0); Balance(f, b, .0002);
     }

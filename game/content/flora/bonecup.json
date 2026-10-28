@@ -46,12 +46,12 @@
   "spread": {
     "intervalDays": 6,
     "radius": 0.22,
-    "propagules": 6,
+    "propagules": 2,
     "minBiomassFraction": 0.4
   },
   "competition": {
     "radius": 0.14,
-    "crowdingLimit": 4.0,
+    "crowdingLimit": 2.0,
     "sensitivity": 0.4
   },
   "proximity": [

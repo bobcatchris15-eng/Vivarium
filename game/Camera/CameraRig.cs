@@ -34,9 +34,8 @@ public partial class CameraRig : Node3D
     public bool Focused { get; private set; }
     private Func<Vector3>? _focusTarget;
     private float _orbitDistance = 1.2f;
-    private float _focusDistance = 2.5f;
-    public float FocusDistance => _focusDistance;
-    private Vector3? _orbitTarget;
+
+private Vector3? _orbitTarget;
     public Vector3? OrbitTarget { get => _orbitTarget; set => _orbitTarget = value; }
     public EnvironmentRig? EnvironmentRig { get; set; }
     public WaterMediumTracker Medium { get; } = new();
@@ -241,7 +240,7 @@ public partial class CameraRig : Node3D
             }
         }
         if (World != null) Medium.Update(World, Bridge.S(GlobalPosition));
-        UpdateFocusAndDof(delta);
+        UpdateDistanceBlur();
     }
 
     private static Vector3 MoveInput()
@@ -259,23 +258,6 @@ public partial class CameraRig : Node3D
     /// <summary>World ray under a screen point (for picking against sim geometry).</summary>
     public (Vector3 Origin, Vector3 Dir) ScreenRay(Vector2 screen) => (Cam.ProjectRayOrigin(screen), Cam.ProjectRayNormal(screen));
 
-    private float GetFocalPointDistance()
-    {
-        if (_orbitTarget.HasValue)
-            return Cam.GlobalPosition.DistanceTo(_orbitTarget.Value);
-
-        if (Focused && _focusTarget != null)
-            return Cam.GlobalPosition.DistanceTo(_focusTarget());
-
-        if (World != null)
-        {
-            var hit = Vivarium.Sim.Tools.Selection.Raycast(World, Bridge.S(Cam.GlobalPosition), Bridge.S(-Cam.GlobalBasis.Z));
-            if (hit.IsHit && hit.Distance > 0.001)
-                return (float)hit.Distance;
-        }
-
-        return 2.5f;
-    }
 
     private CameraAttributesPractical? ResolveCameraAttributes()
     {
@@ -290,10 +272,8 @@ public partial class CameraRig : Node3D
         return null;
     }
 
-    private void UpdateFocusAndDof(double delta)
+    private void UpdateDistanceBlur()
     {
-        float targetDist = Mathf.Clamp(GetFocalPointDistance(), 0.06f, 18.0f);
-        _focusDistance = Mathf.Lerp(_focusDistance, targetDist, 1f - Mathf.Exp(-(float)delta * 10f));
 
         var attr = ResolveCameraAttributes();
         if (attr == null) return;

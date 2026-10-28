@@ -100,9 +100,19 @@ public sealed class AquaticSystem : IAquaticEnv
 
         if (wet != null && dtDays > 0)
         {
-            var swRecruit = System.Diagnostics.Stopwatch.StartNew();
-            RecruitAndSpread(dtDays, _step);
-            StageTimed?.Invoke("Aquatic.Step.Recruit", swRecruit.Elapsed.TotalMilliseconds);
+            double recruitMs = 0;
+            using var recruitment = RecruitAndSpreadBatches(dtDays, _step).GetEnumerator();
+            while (true)
+            {
+                long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool more = recruitment.MoveNext();
+                double ms = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                recruitMs += ms;
+                SurfaceFloatRules.BatchTimed?.Invoke("Aquatic.Recruit.Batch", ms);
+                if (!more) break;
+                yield return true;
+            }
+            StageTimed?.Invoke("Aquatic.Step.Recruit", recruitMs);
         }
         yield return true;
 
@@ -142,12 +152,16 @@ public sealed class AquaticSystem : IAquaticEnv
         StageTimed?.Invoke("Aquatic.Step.Biofilm", swBiofilm.Elapsed.TotalMilliseconds);
     }
 
-    private void RecruitAndSpread(double dtDays, long step)
+    private IEnumerable<bool> RecruitAndSpreadBatches(double dtDays, long step)
     {
         // 1. Natural recruitment into suitable wet coarse cells (e.g. spring runoff that filled pools after world creation)
         int ordinal = 0;
+        // Bound work even for dry/empty cells. Yielding does not change the visit order;
+        // the scheduler finishes this system before advancing any other simulation system.
+        int visited = 0;
         foreach (int cell in _w.Grid.DomainCells)
         {
+            if (++visited % 64 == 0) yield return true;
             if (!_w.Water.IsWet(cell)) continue;
             var c = _w.Grid.CellCenter(cell);
             var (cgx, cgz) = CoverageSpec.CellOf(c);
@@ -197,6 +211,7 @@ public sealed class AquaticSystem : IAquaticEnv
             int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
             for (int li = 0; li < CoverageTile.N; li++)
             {
+                if (++visited % 256 == 0) yield return true;
                 float b = tile.B[li];
                 if (b < 0.15f) continue;
                 int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
@@ -217,6 +232,7 @@ public sealed class AquaticSystem : IAquaticEnv
             int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
             for (int li = 0; li < CoverageTile.N; li++)
             {
+                if (++visited % 256 == 0) yield return true;
                 float b = tile.B[li];
                 if (b < 0.15f) continue;
                 int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
@@ -237,6 +253,7 @@ public sealed class AquaticSystem : IAquaticEnv
             int baseGx = tile.Ti * CoverageSpec.TileEdge, baseGz = tile.Tj * CoverageSpec.TileEdge;
             for (int li = 0; li < CoverageTile.N; li++)
             {
+                if (++visited % 256 == 0) yield return true;
                 float b = tile.B[li];
                 if (b < 0.15f) continue;
                 int gx = baseGx + li % CoverageSpec.TileEdge, gz = baseGz + li / CoverageSpec.TileEdge;
@@ -252,11 +269,20 @@ public sealed class AquaticSystem : IAquaticEnv
 
         // Apply queued spreads
         foreach (var (gx, gz, b) in _spreadDuck)
+        {
+            if (++visited % 256 == 0) yield return true;
             _w.Coverage.SurfaceFloat.SetCell(gx, gz, SurfaceFloatRules.OccupantId, b, 0, 0, 0, 0, 0);
+        }
         foreach (var (gx, gz, b) in _spreadBed)
+        {
+            if (++visited % 256 == 0) yield return true;
             _w.Coverage.AlgaeBed.SetCell(gx, gz, AlgaeRules.OccupantId, b, 0, 0, 0, 0, 0);
+        }
         foreach (var (gx, gz, b) in _spreadFloat)
+        {
+            if (++visited % 256 == 0) yield return true;
             _w.Coverage.AlgaeFloat.SetCell(gx, gz, AlgaeRules.OccupantId, b, 0, 0, 0, 0, 0);
+        }
     }
 
     private void TryQueueSpread(CoverageLayer layer, int gx, int gz, List<(int, int, float)> queue)

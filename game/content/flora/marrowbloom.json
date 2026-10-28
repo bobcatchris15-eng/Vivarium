@@ -45,7 +45,7 @@
   "spread": {
     "intervalDays": 10,
     "radius": 0.3,
-    "propagules": 4,
+    "propagules": 2,
     "minBiomassFraction": 0.45
   },
   "competition": {

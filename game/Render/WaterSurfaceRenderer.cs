@@ -15,12 +15,10 @@ public partial class WaterSurfaceRenderer : Node3D
     private sealed class Tile
     {
         public MeshInstance3D Node = null!; public ShaderMaterial Material = null!;
-        public ImageTexture Previous = null!, Current = null!, Ground = null!, PreviousSupport = null!, CurrentSupport = null!;
+        public ImageTexture Previous = null!, Current = null!, Ground = null!;
         public byte[] UploadBytes = new byte[TexSize * TexSize * 16];
         public float[] CachedValues = new float[TexSize * TexSize * 4];
-        public float[] CachedSupport = new float[TexSize * TexSize * 4];
         public float[] NewValues = new float[TexSize * TexSize * 4];
-        public float[] NewSupport = new float[TexSize * TexSize * 4];
         public bool HasUploaded;
         public int Terrain = -1, Props = -1;
     }
@@ -30,15 +28,17 @@ public partial class WaterSurfaceRenderer : Node3D
     private VivariumWorld? _w;
     public EnvironmentRig? Lighting { get; set; }
     private ArrayMesh _topology = null!;
-    private BallisticFluidRenderer _air = null!;
+    private ImageTexture _ripples = null!;
+    // Separate compiled material: the cheap variant declares no screen/depth samplers.
+    public bool CheapRefraction { get; set; } = System.Environment.GetEnvironmentVariable("VIVARIUM_WATER_REFRACTION") == "substrate";
     private long _version = -1;
-    private double _elapsed, _blendSeconds = 1.0 / 60;
+    private double _elapsed, _blendSeconds = 1.0 / 60, _opticalTime;
     private SurfaceFluidSnapshot? _snapshot;
     public int TrianglesBuilt { get; private set; }
     public long SurfaceUpdates { get; private set; }
-    public int AirborneSegments => _air.BrickCount;
+    public int AirborneSegments => 0;
     public int GridCells => _snapshot?.Cells.Length ?? 0;
-    // Report adapters only: the October 20 renderer uploads every active tile.
+    // One RGBA state per time sample; immutable terrain support is refreshed only on edits.
     public int TileCount => _tiles.Count;
     public int TilesUploaded { get; private set; }
     public int TilesCulled => 0;
@@ -53,14 +53,13 @@ public partial class WaterSurfaceRenderer : Node3D
         for (int z = 0; z < n; z++) for (int x = 0; x < n; x++) { int k = z * (n + 1) + x; indices.AddRange(new[] { k, k + 1, k + n + 2, k, k + n + 2, k + n + 1 }); }
         var arrays = new Godot.Collections.Array(); arrays.Resize((int)Mesh.ArrayType.Max); arrays[(int)Mesh.ArrayType.Vertex] = vertices.ToArray(); arrays[(int)Mesh.ArrayType.TexUV] = uv.ToArray(); arrays[(int)Mesh.ArrayType.Index] = indices.ToArray();
         _topology = new(); _topology.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        _air = new() { Name = "UnsupportedLiquid" }; AddChild(_air);
+        _ripples = MakeRippleNormal();
     }
     public void Bind(VivariumWorld world)
     {
-        _w = world; _version = -1; _snapshot = null; SurfaceUpdates = 0; TrianglesBuilt = 0; TextureUploadBytes = 0;
-        foreach (var t in _tiles.Values) { t.Node.QueueFree(); t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); t.PreviousSupport.Dispose(); t.CurrentSupport.Dispose(); }
+        _w = world; _opticalTime = world.Liquid.PresentationTime; _version = -1; _snapshot = null; SurfaceUpdates = 0; TrianglesBuilt = 0; TextureUploadBytes = 0;
+        foreach (var t in _tiles.Values) { t.Node.QueueFree(); t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); }
         _tiles.Clear();
-        _air.UpdateFluid(new(0, 0, SurfaceFluidDynamics.DefaultSpacing, [], []));
     }
     private static int FloorDiv(int value, int divisor) => (int)Math.Floor((double)value / divisor);
     private static ImageTexture Texture(float[] values, int width)
@@ -82,15 +81,13 @@ public partial class WaterSurfaceRenderer : Node3D
             if (!t.Node.Visible) continue;
             tiles++;
             var values = new float[TexSize * TexSize * 4];
-            var support = new float[values.Length];
             for (int z = 0; z < TexSize; z++) for (int x = 0; x < TexSize; x++)
             {
                 int k = (z * TexSize + x) * 4;
                 if (_cells.TryGetValue((key.Item1 * TileCells + x - 1, key.Item2 * TileCells + z - 1), out var c))
                 {
-                    values[k] = (float)c.Head; values[k + 1] = (float)c.Depth;
+                    values[k] = (float)(c.Head - c.Depth); values[k + 1] = (float)c.Depth;
                     values[k + 2] = (float)c.Velocity.X; values[k + 3] = (float)c.Velocity.Z;
-                    support[k] = (float)c.SlopeX; support[k + 1] = (float)c.SlopeZ;
                 }
             }
             bool EqualTexture(ImageTexture texture, float[] payload)
@@ -98,15 +95,16 @@ public partial class WaterSurfaceRenderer : Node3D
                 var bytes = new byte[payload.Length * 4]; Buffer.BlockCopy(payload, 0, bytes, 0, bytes.Length);
                 using var im = texture.GetImage(); return im.GetData().AsSpan().SequenceEqual(bytes);
             }
-            if (!EqualTexture(t.Current, values) || !EqualTexture(t.CurrentSupport, support)) mismatches++;
+            if (!EqualTexture(t.Current, values)) mismatches++;
         }
         return (tiles, mismatches);
     }
     private Tile MakeTile((int X, int Z) key, double spacing)
     {
-        var t = new Tile(); t.Material = Bridge.Shader("res://Shaders/surface_fluid.gdshader"); t.Material.SetShaderParameter("debug_surface", System.Environment.GetEnvironmentVariable("VIVARIUM_FLUID_DIAGNOSTIC") == "1");
+        var t = new Tile(); t.Material = Bridge.Shader(CheapRefraction ? "res://Shaders/surface_fluid_cheap.gdshader" : "res://Shaders/surface_fluid.gdshader"); t.Material.SetShaderParameter("debug_surface", System.Environment.GetEnvironmentVariable("VIVARIUM_FLUID_DIAGNOSTIC") == "1");
+        if (CheapRefraction) t.Material.SetShaderParameter("u_substrate_albedo", Bridge.LoadTex(Bridge.ResolveSurfaceSet(Bridge.Surfaces.Damp).Color));
         int groundSize=(TileCells+2)*Subdivisions+1;
-        t.PreviousSupport = Texture(t.CachedSupport, TexSize); t.CurrentSupport = Texture(t.CachedSupport, TexSize); t.Previous = Texture(t.CachedValues, TexSize); t.Current = Texture(t.CachedValues, TexSize); t.Ground = Texture(new float[groundSize*groundSize*4], groundSize);
+        t.Previous = Texture(t.CachedValues, TexSize); t.Current = Texture(t.CachedValues, TexSize); t.Ground = Texture(new float[groundSize*groundSize*4], groundSize);
         t.Node = new()
         {
             Name = $"LiquidTile_{key.X}_{key.Z}",
@@ -115,7 +113,7 @@ public partial class WaterSurfaceRenderer : Node3D
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             CustomAabb = new Aabb(new Vector3(0, -4, 0), new Vector3((float)(TileCells * spacing), 8, (float)(TileCells * spacing)))
         };
-        t.Material.SetShaderParameter("previous_state", t.Previous); t.Material.SetShaderParameter("current_state", t.Current); t.Material.SetShaderParameter("solid", t.Ground); t.Material.SetShaderParameter("previous_support", t.PreviousSupport); t.Material.SetShaderParameter("current_support", t.CurrentSupport);
+        t.Material.SetShaderParameter("previous_state", t.Previous); t.Material.SetShaderParameter("current_state", t.Current); t.Material.SetShaderParameter("solid", t.Ground); t.Material.SetShaderParameter("u_ripple_normal", _ripples);
         t.Material.SetShaderParameter("tile_origin", new Vector2((float)(key.X * TileCells * spacing), (float)(key.Z * TileCells * spacing)));
         t.Material.SetShaderParameter("tile_size", (float)(TileCells * spacing));
         t.Node.Position = new Vector3((float)(key.X * TileCells * spacing), 0, (float)(key.Z * TileCells * spacing)); AddChild(t.Node); return t;
@@ -123,7 +121,16 @@ public partial class WaterSurfaceRenderer : Node3D
     public override void _Process(double delta)
     {
         using var measure = FrameProfiler.Measure("LiquidSurface"); if (_w == null) return;
+        if (!_w.Clock.Paused) _opticalTime += delta * _w.Clock.SpeedMultiplier;
         _elapsed += delta; var snapshot = _w.Liquid.CaptureRenderState();
+        // A loaded coarse grid can refine on its first update. Recreate tile
+        // extents and support textures rather than blending incompatible grids.
+        if (_snapshot != null && snapshot.Spacing != _snapshot.Spacing)
+        {
+            double preservedOpticalTime = _opticalTime;
+            Bind(_w);
+            _opticalTime = preservedOpticalTime;
+        }
         if (snapshot.Version != _version)
         {
             long allocationStart = GC.GetAllocatedBytesForCurrentThread(); var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -149,40 +156,32 @@ public partial class WaterSurfaceRenderer : Node3D
             int uploadedCount = 0;
             foreach (var (key, t) in _tiles)
             {
-                bool visible = _active.Contains(key); t.Node.Visible = visible; if (!visible) continue;
+                bool visible = _active.Contains(key); if (visible && !t.Node.Visible) t.HasUploaded = false; t.Node.Visible = visible; if (!visible) continue;
                 using (FrameProfiler.Measure("LiquidSurface.TileFilling"))
                 {
-                    Array.Clear(t.NewSupport);
                     Array.Clear(t.NewValues);
                     for (int z = 0; z < TexSize; z++) for (int x = 0; x < TexSize; x++)
                     {
                         int cx = key.Item1 * TileCells + x - 1, cz = key.Item2 * TileCells + z - 1, k = (z * TexSize + x) * 4;
-                        if (_cells.TryGetValue((cx, cz), out var c)) { t.NewValues[k] = (float)c.Head; t.NewValues[k + 1] = (float)c.Depth; t.NewValues[k + 2] = (float)c.Velocity.X; t.NewValues[k + 3] = (float)c.Velocity.Z; t.NewSupport[k] = (float)c.SlopeX; t.NewSupport[k + 1] = (float)c.SlopeZ; }
+                        if (_cells.TryGetValue((cx, cz), out var c)) { t.NewValues[k] = (float)(c.Head - c.Depth); t.NewValues[k + 1] = (float)c.Depth; t.NewValues[k + 2] = (float)c.Velocity.X; t.NewValues[k + 3] = (float)c.Velocity.Z; }
                     }
                 }
                 bool changed = !t.HasUploaded ||
-                    !t.NewValues.AsSpan().SequenceEqual(t.CachedValues) ||
-                    !t.NewSupport.AsSpan().SequenceEqual(t.CachedSupport);
+                    !t.NewValues.AsSpan().SequenceEqual(t.CachedValues);
                 if (changed)
                 {
                     using (FrameProfiler.Measure("LiquidSurface.TextureTransfer"))
                     {
                         (t.Previous, t.Current) = (t.Current, t.Previous);
-                        (t.PreviousSupport, t.CurrentSupport) = (t.CurrentSupport, t.PreviousSupport);
                         Update(t.Current, t.NewValues, TexSize, t.UploadBytes);
-                        Update(t.CurrentSupport, t.NewSupport, TexSize, t.UploadBytes);
                         Array.Copy(t.NewValues, t.CachedValues, t.NewValues.Length);
-                        Array.Copy(t.NewSupport, t.CachedSupport, t.NewSupport.Length);
                         if (!t.HasUploaded)
                         {
                             Update(t.Previous, t.CachedValues, TexSize, t.UploadBytes);
-                            Update(t.PreviousSupport, t.CachedSupport, TexSize, t.UploadBytes);
                             t.HasUploaded = true;
                         }
                         t.Material.SetShaderParameter("previous_state", t.Previous);
                         t.Material.SetShaderParameter("current_state", t.Current);
-                        t.Material.SetShaderParameter("previous_support", t.PreviousSupport);
-                        t.Material.SetShaderParameter("current_support", t.CurrentSupport);
                         uploadedCount++;
                     }
                 }
@@ -190,8 +189,6 @@ public partial class WaterSurfaceRenderer : Node3D
                 {
                     t.Material.SetShaderParameter("previous_state", t.Current);
                     t.Material.SetShaderParameter("current_state", t.Current);
-                    t.Material.SetShaderParameter("previous_support", t.CurrentSupport);
-                    t.Material.SetShaderParameter("current_support", t.CurrentSupport);
                 }
                 if (t.Terrain != _w.Terrain.Version || t.Props != _w.Props.Version)
                 {
@@ -209,18 +206,11 @@ public partial class WaterSurfaceRenderer : Node3D
                 t.Material.SetShaderParameter("pond_level", (float)_w.Water.WaterTable);
                 t.Material.SetShaderParameter("fluid_time", (float)snapshot.Time);
             }
-            using (FrameProfiler.Measure("LiquidSurface.AirborneUpdate"))
-            {
-                UpdateAir(snapshot);
-            }
-            SurfaceUpdates++; TilesUploaded = uploadedCount; TrianglesBuilt = _active.Count * TileCells * TileCells * Subdivisions * Subdivisions * 2 + snapshot.Airborne.Length * 120;
+            SurfaceUpdates++; TilesUploaded = uploadedCount; TrianglesBuilt = _active.Count * TileCells * TileCells * Subdivisions * Subdivisions * 2;
             AllocatedBytes += GC.GetAllocatedBytesForCurrentThread() - allocationStart; LastUploadMilliseconds = watch.Elapsed.TotalMilliseconds; FrameProfiler.Record("LiquidSurface.Upload", LastUploadMilliseconds);
         }
 
-        _air.SetInterpolation(_w.Clock.Paused ? 0f : (float)Math.Min(_elapsed, .016667));
-        float opticalTime = (float)((_snapshot?.Time ?? 0) + (_w.Clock.Paused ? 0 : Math.Min(_elapsed, _blendSeconds)));
-        _air.SetTime(opticalTime);
-        if (Lighting != null) _air.SetCanopyLighting(Lighting.CanopyEnergy, Lighting.CanopyLightDirection);
+        float opticalTime = (float)_opticalTime;
         float blend = (float)Math.Clamp(_elapsed / _blendSeconds, 0, 1);
         foreach (var t in _tiles.Values) if (t.Node.Visible)
         {
@@ -232,5 +222,25 @@ public partial class WaterSurfaceRenderer : Node3D
             t.Material.SetShaderParameter("fluid_time", opticalTime);
         }
     }
-    private void UpdateAir(SurfaceFluidSnapshot snapshot) => _air.UpdateFluid(snapshot);
+    // Analytic, periodic capillary normal map. Generated once, shared by all tiles.
+    // Integer Fourier frequencies make every edge tile exactly without a noise seam.
+    private static ImageTexture MakeRippleNormal()
+    {
+        const int size = 128;
+        using var image = Image.CreateEmpty(size, size, false, Image.Format.Rgb8);
+        for (int z = 0; z < size; z++) for (int x = 0; x < size; x++)
+        {
+            double u = x * Math.Tau / size, v = z * Math.Tau / size;
+            double dx = .48 * Math.Cos(2*u+v) + .27 * Math.Cos(3*u-2*v+.7) + .12 * Math.Cos(u+5*v+1.9);
+            double dz = .24 * Math.Cos(2*u+v) - .18 * Math.Cos(3*u-2*v+.7) + .60 * Math.Cos(u+5*v+1.9);
+            var n = new Vector3((float)-dx, (float)-dz, 1).Normalized();
+            image.SetPixel(x,z,new Color(n.X*.5f+.5f,n.Y*.5f+.5f,n.Z*.5f+.5f));
+        }
+        image.GenerateMipmaps(); return ImageTexture.CreateFromImage(image);
+    }
+    public override void _ExitTree()
+    {
+        foreach (var t in _tiles.Values) { t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); }
+        _ripples?.Dispose(); _topology?.Dispose();
+    }
 }

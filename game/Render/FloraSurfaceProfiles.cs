@@ -7,7 +7,7 @@ namespace Vivarium.Game.Render;
 /// <summary>Render-only tissue palettes. Geometry and ecological species definitions remain independent.</summary>
 internal static class FloraSurfaceProfiles
 {
-    private readonly record struct LeafSurface(Vector3 Top, Vector3 Back, int Type, float Veins, float Sheen, float Transmission);
+    internal readonly record struct LeafSurface(Vector3 Top, Vector3 Back, int Type, float Veins, float Sheen, float Transmission);
 
     public static void Bind(ShaderMaterial material, FloraSpeciesDef species, bool photographedLeaves = true)
     {
@@ -64,7 +64,7 @@ internal static class FloraSurfaceProfiles
 
     // Type: 0 broadleaf, 1 fine needle, 2 fern, 3 waxy, 4 succulent, 5 grass/reed.
     // Values are linear-light reflectance targets, not the intentionally vivid simulation palette.
-    private static LeafSurface Leaf(string id) => id switch
+    internal static LeafSurface Leaf(string id) => id switch
     {
         "embercrown" => new(new(.055f, .15f, .032f), new(.09f, .19f, .055f), 0, .42f, .40f, .24f),
         "lanternbrush" => new(new(.055f, .13f, .11f), new(.09f, .20f, .12f), 0, .54f, .31f, .25f),
@@ -146,7 +146,7 @@ internal static class FloraSurfaceProfiles
         _ => null,
     };
 
-    private static (string Asset, float Repeats, float Weathering, Vector3 Tint) Bark(string id) => id switch
+    internal static (string Asset, float Repeats, float Weathering, Vector3 Tint) Bark(string id) => id switch
     {
         "embercrown" => ("Bark001", 2.8f, .34f, new(.47f, .38f, .33f)),
         "lanternbrush" => ("Bark014", 3.1f, .18f, new(.38f, .29f, .27f)),

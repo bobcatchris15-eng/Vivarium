@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$Name,
-    [ValidateSet('world','reference','guardian','fauna','water','aquatic','isolation')][string]$Mode = 'world',
+    [ValidateSet('world','reference','guardian','fauna','water','isolation')][string]$Mode = 'world',
     [string]$Species = 'coalback_beetle',
     [string]$IsolatedSpecies,
     [int]$TimeoutSeconds = 900,
@@ -16,7 +16,6 @@ param(
     [switch]$LiveRender,
     [switch]$LogFiniteProbe,
     [switch]$RebuildCheck,
-    [switch]$LegacyCoverage,
     [Nullable[double]]$LightSeconds
 )
 $ErrorActionPreference = 'Stop'
@@ -71,7 +70,6 @@ try {
         'guardian' { $launch += @('--guardian-review', $captures, '--guardian-material-review', '--guardian-coat-detail', '--guardian-surface-detail') }
         'fauna' { $launch += @('--fauna-preview', $Species, '--output', $captures, '--live-motion') }
         'water' { $launch += @('--surface-fluid-review', $captures, '--scenario', 'D', '--motion') }
-        'aquatic' { $launch += @('--overhaul-aquatic-review', $captures) }
         'isolation' { $launch += @('--species-isolation-review', $captures) }
     }
     if ($LoadSave) { $launch += @('--load', (Resolve-Path $LoadSave).Path) }
@@ -85,7 +83,6 @@ try {
     if ($LiveRender) { $launch += '--review-live-render' }
     if ($LogFiniteProbe) { $launch += '--review-log-finite' }
     if ($RebuildCheck) { $launch += '--review-rebuild-check' }
-    if ($LegacyCoverage) { $launch += '--review-coverage-legacy' }
     if ($null -ne $LightSeconds) { $launch += @('--review-light-seconds', $LightSeconds.ToString([Globalization.CultureInfo]::InvariantCulture)) }
     $quoted = $launch | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
     . (Join-Path $workspace 'scripts/common.ps1')

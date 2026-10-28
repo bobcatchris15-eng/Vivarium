@@ -13,18 +13,18 @@ public sealed record SurfaceFluidSnapshot(long Version, double Time, double Spac
     SurfaceFluidSample[] Cells, FluidParticle[] Airborne);
 
 /// <summary>
-/// Sparse conservative local-inertial finite volumes on triangulated solid support, with ballistic
-/// liquid across unsupported drops. Both representations exchange actual cubic metres in this owner.
+/// Sparse conservative damped virtual pipes on triangulated solid support.
+/// Legacy airborne parcels settle into supported storage without emitting new particles.
 /// A cell's free surface is the inverse of its geometric capacity, never an ecological depth field.
 /// </summary>
 public sealed class SurfaceFluidDynamics
 {
-    public const double StepSeconds = 1.0 / 60, DefaultSpacing = .025;
+    public const double StepSeconds = 1.0 / 60, DefaultSpacing = .0125;
     public const double ParcelVolume = .000005;
     // Wet/dry numerical tolerance: unresolved nanolitres stay stored and join later inflow. Never discarded.
     public const double MinimumResolvedVolume = 1e-12;
     public static double Radius(double volume) => .42 * Math.Cbrt(volume);
-    private const double Gravity = 9.81, Manning = .028;
+    private const double Gravity = 9.81, PipeDamping = .96, MinimumVelocityDepth = .012;
     private sealed class Cell
     {
         public double Volume, East, North, EastSection, NorthSection, Head, Minimum, Mean;
@@ -37,7 +37,7 @@ public sealed class SurfaceFluidDynamics
     private readonly Dictionary<ulong, double> _pending = new();
     private readonly Func<Vec2, double> _ground;
     private readonly HexDomain _domain;
-    private readonly List<((int, int) A, (int, int) B, double Volume, bool East, double Speed, bool Falling, double Width, double LipBed, double LipHead, double IncomingSlope)> _transfers = new();
+    private readonly List<((int, int) A, (int, int) B, double Volume, bool East)> _transfers = new();
     private readonly Dictionary<(int, int), double> _out = new();
     private readonly Dictionary<(int, int), double> _scale = new();
     private readonly HashSet<(int, int)> _dirty = new();
@@ -145,9 +145,9 @@ public sealed class SurfaceFluidDynamics
     {
         if (!p.IsFinite || !velocity.IsFinite || !double.IsFinite(volume) || volume < 0) throw new ArgumentException("Invalid liquid input");
         if (volume == 0) return;
-        // Tools pour onto the actual surface; emission and explicit airborne inputs retain their height.
-        if (p.Y > _ground(p.XZ) + .035) _air.Add(new(p, velocity, volume, source));
-        else Deposit(p.XZ, volume, velocity.XZ);
+        // New inputs enter the terrain-confined solver. Only archived parcels use the
+        // compatibility settling path; the creek model does not emit airborne water.
+        Deposit(p.XZ, volume, velocity.XZ);
         Version++;
     }
     public double AddWater(Vec2 p, double radius, double volume)
@@ -298,13 +298,7 @@ public sealed class SurfaceFluidDynamics
                 { var offset = q.XZ - Center(surfaceKey); contact = Math.Max(contact, pool.Head + pool.SlopeX * offset.X + pool.SlopeZ * offset.Z); }
                 if (q.Y <= contact + Radius(f.Volume))
                 {
-                    double splash = f.Source != ulong.MaxValue && v.Y < -.8 && f.Volume > 2e-8 ? Math.Min(f.Volume * .06, 4e-7) : 0;
-                    Deposit(q.XZ, f.Volume - splash, v.XZ);
-                    if (splash > 0) for (int drop = 0; drop < 2; drop++)
-                        {
-                            double sign = drop == 0 ? -1 : 1, volume = splash * .5; var at = q.XZ + new Vec2(0, sign * Spacing * .12);
-                            _air.Add(new(Vec3.FromXZ(at, contact + Radius(volume) * 1.1), new(v.X * .3, Math.Min(.65, -v.Y * .22), v.Z * .3 + sign * .12), volume, ulong.MaxValue));
-                        }
+                    Deposit(q.XZ, f.Volume, v.XZ);
                     landed = true; break;
                 }
             }
@@ -348,8 +342,10 @@ public sealed class SurfaceFluidDynamics
             else
             {
                 double section = Spacing * depth;
-                q = (q - Gravity * dt * section * (b.Head - a.Head) / Spacing) /
-                    (1 + Gravity * dt * Manning * Manning * Math.Abs(q) / (section * Math.Pow(depth, 4.0 / 3)));
+                // Time-based damping remains consistent when the CFL condition splits
+                // a physical tick. Flux is cubic metres per second across the wet face.
+                q = (q + Gravity * dt * section * (a.Head - b.Head) / Spacing)
+                    * Math.Pow(PipeDamping, dt / StepSeconds);
                 // CFL-bounded face speed; accumulated time is never skipped.
                 double maximum = section * Spacing / (dt * 2); q = Math.Clamp(q, -maximum, maximum);
             }
@@ -357,47 +353,23 @@ public sealed class SurfaceFluidDynamics
             // transfer, a nearly empty donor is not the cross-section of that discharge.
             if (east) { a.East = q; a.EastSection = Spacing * depth; }
             else { a.North = q; a.NorthSection = Spacing * depth; }
-            if (q == 0) continue; var from = q > 0 ? key : other; var to = q > 0 ? other : key; var donor = q > 0 ? a : b; var receiver = q > 0 ? b : a;
+            if (q == 0) continue; var from = q > 0 ? key : other; var to = q > 0 ? other : key; var donor = q > 0 ? a : b;
             if (donor.Volume <= 0) continue;
-            double amount = Math.Abs(q) * dt, speed = depth > 0 ? Math.Abs(q) / (Spacing * depth) : 0;
-            bool falling = false;double lipBed=0,lipHead=0,incomingSlope=0;
-            if(receiver.Ground[4]<donor.Ground[4]-Spacing*1.2&&receiver.Head<donor.Head-Spacing*1.2)
-            {
-                var direction=east?new Vec2(Math.Sign(q),0):new Vec2(0,Math.Sign(q));
-                var face=(Center(from)+Center(to))*.5;
-                // A continuous incline still supports liquid, however steep it is.
-                // Only a departure below the incoming solid tangent is an unsupported lip.
-                double upstream=_ground(face-direction*(Spacing*.25));
-                incomingSlope=(upstream-donor.Ground[4])/(Spacing*.25);
-                lipBed=donor.Ground[4]+incomingSlope*Spacing*.5;
-                lipHead=donor.Head+(east?donor.SlopeX:donor.SlopeZ)*Math.Sign(q)*Spacing*.5;
-                falling=lipBed+incomingSlope*Spacing*.5-receiver.Ground[4]>Spacing*1.2;
-            }
-            _transfers.Add((from, to, amount, east, q > 0 ? speed : -speed, falling, FaceWidth(a, east, head),lipBed,lipHead,incomingSlope)); _out[from] = _out.GetValueOrDefault(from) + amount;
+            double amount = Math.Abs(q) * dt;
+            _transfers.Add((from, to, amount, east));
+            _out[from] = _out.GetValueOrDefault(from) + amount;
         }
         foreach (var (key, outflow) in _out) _scale[key] = Math.Min(1, Get(key).Volume / outflow);
-        foreach (var (from, to, requested, east, speed, falling, width,lipBed,lipHead,incomingSlope) in _transfers)
+        foreach (var (from, to, requested, east) in _transfers)
         {
             var a = Get(from); var b = Get(to); double amount = requested * _scale[from]; a.Volume -= amount;
-            if(amount<=0)continue;
-            if (!_domain.Contains(Center(to))) { budget.BoundaryOutflow += amount; continue; }
-            double floor = _ground(Center(to));
-            if (!falling && floor < WaterTable) { budget.GroundwaterRecharge += amount; continue; }
-            if (falling)
-            {
-                var at = (Center(from) + Center(to)) * .5; double r = Radius(amount);
-                // Launch from the local lip, retaining the incoming terrain tangent.
-                // Cell-center elevation and horizontal-only velocity lift slope flow away from support.
-                at += east ? new Vec2(Math.Sign(speed) * Spacing * .06, 0) : new Vec2(0, Math.Sign(speed) * Spacing * .06);
-                _air.Add(new(Vec3.FromXZ(at, Math.Max(lipHead - r, lipBed + r)),
-                    east ? new Vec3(speed, Math.Abs(speed)*incomingSlope, 0) : new Vec3(0, Math.Abs(speed)*incomingSlope, speed), amount, 0, Math.Max(1e-6, width),
-                    east ? new Vec3(0, 0, 1) : new Vec3(1, 0, 0),
-                    ((ulong)(from.Item1 + 1048576) << 21) | (uint)(from.Item2 + 1048576) | (east ? 1UL << 63 : 1UL << 62)));
-            }
-            else b.Volume += amount;
-            // Limit the shared momentum alongside the transferred volume.
+            // Limit momentum for every destination, including boundary and water-table sinks.
             var face = east ? Get((Math.Min(from.Item1, to.Item1), from.Item2)) : Get((from.Item1, Math.Min(from.Item2, to.Item2)));
             if (east) face.East *= _scale[from]; else face.North *= _scale[from];
+            if (amount <= 0) continue;
+            if (!_domain.Contains(Center(to))) { budget.BoundaryOutflow += amount; continue; }
+            if (_ground(Center(to)) < WaterTable) { budget.GroundwaterRecharge += amount; continue; }
+            b.Volume += amount;
         }
         if (evaporation > 0 || infiltration > 0) foreach (var key in _cells.Keys) _dirty.Add(key);
         foreach (var key in _dirty)
@@ -430,8 +402,8 @@ public sealed class SurfaceFluidDynamics
         // Area-weighted interpolation from the staggered faces. Using the remaining
         // cell volume here creates arbitrarily large apparent currents at wet/dry fronts.
         double xArea=c.EastSection+(west?.EastSection??0), zArea=c.NorthSection+(south?.NorthSection??0);
-        return new(xArea>1e-16?(c.East+(west?.East??0))/xArea:0,
-            zArea>1e-16?(c.North+(south?.North??0))/zArea:0);
+        return new((c.East + (west?.East ?? 0)) / Math.Max(xArea, 2 * Spacing * MinimumVelocityDepth),
+            (c.North + (south?.North ?? 0)) / Math.Max(zArea, 2 * Spacing * MinimumVelocityDepth));
     }
     public SurfaceFluidSnapshot CaptureRenderState()
     {
@@ -444,6 +416,19 @@ public sealed class SurfaceFluidDynamics
     }
     public SurfaceFluidState Export() => new(_cells.Where(k => k.Value.Volume > 0 || k.Value.East != 0 || k.Value.North != 0 || k.Value.EastSection > 0 || k.Value.NorthSection > 0).OrderBy(k => k.Key.Z).ThenBy(k => k.Key.X)
         .Select(k => new SurfaceFluidCell(k.Key.X, k.Key.Z, k.Value.Volume, k.Value.East, k.Value.North, k.Value.SlopeX, k.Value.SlopeZ, k.Value.EastSection, k.Value.NorthSection)).ToArray(), _air.ToArray(), Time, Remainder, Spacing, new(_pending));
+    /// <summary>Refine after loading has validated the original save digest.</summary>
+    public void RefineResolution()
+    {
+        if (Spacing <= DefaultSpacing) return;
+        var samples = CaptureRenderState().Cells;
+        double oldSpacing = Spacing;
+        _cells.Clear(); _dirty.Clear(); Spacing = DefaultSpacing;
+        foreach (var cell in samples)
+            ImportLegacySquare(cell.Position - new Vec2(oldSpacing * .5, oldSpacing * .5),
+                oldSpacing, cell.Volume, cell.Velocity);
+        Version++;
+    }
+
     public void Restore(SurfaceFluidState state)
     {
         if (!double.IsFinite(state.Time) || state.Time < 0 || !double.IsFinite(state.Remainder) || state.Remainder < 0 ||
@@ -462,8 +447,14 @@ public sealed class SurfaceFluidDynamics
     public void RestoreLegacy(FluidState state)
     {
         if (!double.IsFinite(state.Time) || state.Time < 0 || !double.IsFinite(state.Remainder) || state.Remainder < 0) throw new InvalidDataException("Invalid legacy fluid clock");
-        foreach (var f in state.Particles) Add(f.Position, f.Velocity, f.Volume, f.Source);
+        foreach (var f in state.Particles)
+        {
+            if (!f.Position.IsFinite || !f.Velocity.IsFinite || !double.IsFinite(f.Volume) || f.Volume <= 0)
+                throw new InvalidDataException("Invalid legacy airborne liquid");
+            _air.Add(f);
+        }
         foreach (var (key, v) in state.SourceRemainders) { if (!double.IsFinite(v) || v < 0) throw new InvalidDataException("Invalid legacy source fraction"); _pending.Add(key, v); }
         Time = state.Time; Remainder = state.Remainder; Version++;
     }
 }
+

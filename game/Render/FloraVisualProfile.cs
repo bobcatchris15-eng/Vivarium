@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Godot;
@@ -68,10 +67,6 @@ public sealed class FloraVisualProfile
     public float[] BarkTint { get; set; } = { .7f, .67f, .61f };
     public string Bark { get; set; } = "Bark014";
 
-    private static readonly MethodInfo? LeafMethod =
-        typeof(FloraSurfaceProfiles).GetMethod("Leaf", BindingFlags.NonPublic | BindingFlags.Static);
-    private static readonly MethodInfo? BarkMethod =
-        typeof(FloraSurfaceProfiles).GetMethod("Bark", BindingFlags.NonPublic | BindingFlags.Static);
 
     private static bool IsNonVascularId(string id) =>
         id.Contains("moss") || id.Contains("lichen") || id.Contains("fungus") || id.EndsWith("bonnet")
@@ -214,54 +209,13 @@ public sealed class FloraVisualProfile
 
     public static FloraVisualProfile Synthesize(string id, FloraSpeciesDef? sp = null)
     {
-        Vector3 top = new(.055f, .16f, .045f);
-        Vector3 back = new(.10f, .19f, .075f);
-        int leafType = 0;
-        float veinStrength = 0.45f;
-        float sheen = 0.32f;
-        float transmission = 0.28f;
-        string barkAsset = Bridge.Surfaces.Bark;
-        Vector3 barkTint = new(.45f, .40f, .35f);
-
-        if (LeafMethod != null)
-        {
-            try
-            {
-                object leafObj = LeafMethod.Invoke(null, new object[] { id })!;
-                var t = leafObj.GetType();
-                top = (Vector3)(t.GetProperty("Top")?.GetValue(leafObj) ?? top);
-                back = (Vector3)(t.GetProperty("Back")?.GetValue(leafObj) ?? back);
-                leafType = (int)(t.GetProperty("Type")?.GetValue(leafObj) ?? leafType);
-                veinStrength = (float)(t.GetProperty("Veins")?.GetValue(leafObj) ?? veinStrength);
-                sheen = (float)(t.GetProperty("Sheen")?.GetValue(leafObj) ?? sheen);
-                transmission = (float)(t.GetProperty("Transmission")?.GetValue(leafObj) ?? transmission);
-            }
-            catch { }
-        }
-        else if (sp != null && sp.Color != null && sp.Color.Length >= 3)
-        {
-            top = new((float)sp.Color[0], (float)sp.Color[1], (float)sp.Color[2]);
-            if (sp.Color2 != null && sp.Color2.Length >= 3)
-                back = new((float)sp.Color2[0], (float)sp.Color2[1], (float)sp.Color2[2]);
-        }
-        else
-        {
-            var contentInfo = TryReadContentFlora(id);
-            if (contentInfo.col.HasValue) top = contentInfo.col.Value;
-            if (contentInfo.col2.HasValue) back = contentInfo.col2.Value;
-        }
-
-        if (BarkMethod != null)
-        {
-            try
-            {
-                object barkObj = BarkMethod.Invoke(null, new object[] { id })!;
-                var t = barkObj.GetType();
-                barkAsset = (string)(t.GetField("Item1")?.GetValue(barkObj) ?? barkAsset);
-                barkTint = (Vector3)(t.GetField("Item4")?.GetValue(barkObj) ?? barkTint);
-            }
-            catch { }
-        }
+        var leaf = FloraSurfaceProfiles.Leaf(id);
+        var bark = FloraSurfaceProfiles.Bark(id);
+        Vector3 top = leaf.Top, back = leaf.Back;
+        int leafType = leaf.Type;
+        float veinStrength = leaf.Veins, sheen = leaf.Sheen, transmission = leaf.Transmission;
+        string barkAsset = bark.Asset;
+        Vector3 barkTint = bark.Tint;
 
         string family = DetermineMorphologicalFamily(id, sp, leafType);
 

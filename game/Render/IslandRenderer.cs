@@ -404,8 +404,3 @@ public partial class IslandRenderer : Node3D
         }
     }
 }
-
-file static class HydrologyExtensions
-{
-    public static double HydraulicBed(this Vivarium.Sim.Water.Hydrology water, int idx) => water.Bed[idx];
-}

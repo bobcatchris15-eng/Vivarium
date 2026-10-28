@@ -454,11 +454,6 @@ public static class Bridge
         return tex;
     }
 
-    private static Texture2D SurfaceMap(string asset, string map)
-    {
-        string path = FindTexPath(asset, map, isRequired: true);
-        return LoadTex(path);
-    }
 
     /// <summary>The surface sets in use (one place, so notices and exports stay in sync).</summary>
     public static class Surfaces

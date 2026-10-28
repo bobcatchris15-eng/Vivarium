@@ -81,6 +81,8 @@ public sealed class SurfaceLiquid
         if (!Enabled) return;
         if (!double.IsFinite(realSeconds) || realSeconds < 0) throw new ArgumentException("Invalid mobile-water frame duration");
         if (_job?.IsCompleted == true) CompletePending();
+        if (_job == null && Dynamics.Spacing > SurfaceFluidDynamics.DefaultSpacing)
+        { CaptureGeometry(); Dynamics.RefineResolution(); Publish(); }
         if (_w.Clock.Paused) return;
         double addedSeconds = realSeconds * _w.Clock.SpeedMultiplier;
         if (addedSeconds > 0)
@@ -204,7 +206,12 @@ public sealed class SurfaceLiquid
         }
         if(depth<=0||weight<=1e-6||ground<_w.Water.WaterTable)return double.NaN;
         bool ownerWet=_samples.TryGetValue((x,z),out var owner)&&owner.Depth>1e-8;
-        if(ownerWet&&highest-lowest<=1e-6&&maxSlope<=1e-6&&maxSpeed<=1e-4)depth=Math.Max(0,headSum/weight-ground);
+        if(ownerWet&&depth>.004&&highest-lowest<=1e-6&&maxSpeed<=1e-4)depth=Math.Max(0,headSum/weight-ground);
+        // Match the rendered creek: level connected pools, volume-kernel thin films.
+        // Continuous kernel depth avoids a height jump at each nearest-cell boundary.
+        double poolBlend=Math.Clamp((depth-.004)/.008,0,1);
+        poolBlend=poolBlend*poolBlend*(3-2*poolBlend);
+        depth=depth*(1-poolBlend)+Math.Max(0,headSum/weight-ground)*poolBlend;
         return depth>1e-7?ground+depth:double.NaN;
     }
     public double DepthAt(Vec2 p) { double head = SurfaceAt(p); return double.IsNaN(head) ? 0 : Math.Max(0, head - _w.GroundHeight(p)); }

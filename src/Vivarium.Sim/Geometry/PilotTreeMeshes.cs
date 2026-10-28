@@ -89,6 +89,10 @@ public static class PilotTreeMeshes
             case "emberpillar": b.Redwood(); break;
             case "basinwarden": b.Broadleaf(); break;
             case "palehollow": b.Conifer(false, true); b.Fungi(); break;
+            case "cisternvault": b.Baobab(); break;
+            case "cinnabarcrest": b.Cinnabar(); break;
+            case "rootcloister": b.Banyan(); break;
+            case "silkcascade": b.Willow(); break;
             default: throw new ArgumentException("Unknown Pilot Tree form: " + tree.Def.Id);
         }
         return m;
@@ -123,9 +127,15 @@ public static class PilotTreeMeshes
         }
         private static double[] RGB(Vec3 color) => new[] { color.X, color.Y, color.Z };
         private Vec3 Centre(double t) => origin + Vec3.Up * (h * t);
-        private double Radius(double t) => tree.Def.Id == "crowncoil"
-            ? r * (.82 + .18 * (1-t)) * (1 + .13*Math.Exp(-t*16))
-            : r * (.18 + .82 * Math.Pow(1 - t, .75)) * (1 + .30 * Math.Exp(-t * 16));
+        private double Radius(double t) => tree.Def.Id switch
+        {
+            "crowncoil" => r * (.82 + .18 * (1 - t)) * (1 + .13 * Math.Exp(-t * 16)),
+            "cisternvault" => r * (.68 + .54 * Math.Sin(Math.PI * Math.Pow(t, 0.72))) * (1 + .18 * Math.Exp(-t * 12)),
+            "cinnabarcrest" => r * (.32 + .68 * Math.Pow(1 - t * 0.75, .82)) * (1 + .24 * Math.Exp(-t * 16)),
+            "rootcloister" => r * (.28 + .72 * Math.Pow(1 - t, .65)) * (1 + .35 * Math.Exp(-t * 14)),
+            "silkcascade" => r * (.20 + .80 * Math.Pow(1 - t, .70)) * (1 + .30 * Math.Exp(-t * 16)),
+            _ => r * (.18 + .82 * Math.Pow(1 - t, .75)) * (1 + .30 * Math.Exp(-t * 16))
+        };
 
         // Flat face normals preserve bark plate/fissure relief, with Godot winding.
         private void Face(Vec3 a, Vec3 b, Vec3 c, double[] color, double material = 1, Vec3? outward = null)
@@ -250,6 +260,7 @@ public static class PilotTreeMeshes
             double relief = flute * (.034 * fade + .014) + (fine - .5) * .008 * fade
                 + baseFlare * .030;
             if (tree.Def.Id == "crowncoil") relief *= .45; // armor dominates this bole
+            else if (tree.Def.Id == "cisternvault") relief = relief * .35 + .018 * Math.Sin(t * 18.0 + Math.Sin(a * 4.0));
             return relief;
         }
 
@@ -300,7 +311,7 @@ public static class PilotTreeMeshes
             bool pale = tree.Def.Id == "palehollow", cycad = tree.Def.Id == "crowncoil";
             // Spec density for the three fluted boles; the lighter forms keep a
             // 64x88 grid so their heavy crowns stay inside the native budget.
-            bool dense = cycad || tree.Def.Id is "gloomspire" or "emberpillar";
+            bool dense = cycad || tree.Def.Id is "gloomspire" or "emberpillar" or "cisternvault" or "rootcloister";
             int rows = dense ? 120 : 88, sides = dense ? 96 : 64;
             double startAngle = facing - Math.PI / 3;
             double sweep = 2 * Math.PI / 3;
@@ -678,8 +689,10 @@ public static class PilotTreeMeshes
             // Keep the crown's existing placement draws; geometry detail has an independent seed.
             ulong key = Rng.Mix(tree.Seed, (ulong)m.Leaves.Count + 0x50494C4FUL);
             int leafCount = m.Leaves.Count;
+            var leafOutline = tree.Def.Id is "crowncoil" or "cinnabarcrest" or "silkcascade"
+                ? BroadleafOutline.Lanceolate : (tree.Def.Id == "rootcloister" ? BroadleafOutline.Cordate : BroadleafOutline.Ovate);
             Vivarium.Sim.Geometry.Form.Broadleaf.BuildLeaf(m, baseP, axis / length,
-                length * .92, width * 2, tree.Def.Id == "crowncoil" ? BroadleafOutline.Lanceolate : BroadleafOutline.Ovate,
+                length * .92, width * 2, leafOutline,
                 key, color, Primitives.Scale(color, 1.08), camber: .20, midribFold: .16,
                 petioleLength: length * .08, petioleRadius: Math.Max(.0007, length * .005),
                 petioleKink: .12, detailOverride: 1);
@@ -989,6 +1002,213 @@ public static class PilotTreeMeshes
                 Quad(top[rings,j],bottom[rings,j],bottom[rings,j+1],top[rings,j+1],new[]{.74,.65,.47},.35,outward);
             for(int ring=0;ring<rings;ring++)foreach(int j in new[]{0,count})
                 Quad(top[ring,j],bottom[ring,j],bottom[ring+1,j],top[ring+1,j],new[]{.27,.18,.10},.35);
+        }
+
+        public void Baobab()
+        {
+            // Massive, crooked "upside-down" boughs emerging from the swollen crown table,
+            // clustered broadleaf foliage and pendulous gourd capsules on long cords.
+            int limbs = 8;
+            for (int limb = 0; limb < limbs; limb++)
+            {
+                double a = facing + (-.65 + 1.30 * limb / (limbs - 1.0)) + rng.Range(-.04, .04);
+                double t = .86 + (limb % 3) * .042 + rng.Range(-.015, .015);
+                double length = tree.Def.CanopyRadius * rng.Range(.65, .82);
+                var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                var side = new Vec3(-dir.Z, 0, dir.X);
+                var path = new Vec3[8];
+                var rad = new double[8];
+                var start = Centre(t) + dir * (Radius(t) * .62);
+                for (int i = 0; i < path.Length; i++)
+                {
+                    double q = i / 7.0;
+                    double kinkA = Math.Sin(q * 4.2 + limb * 1.7) * .08;
+                    double kinkY = Math.Cos(q * 3.5 + limb) * .08;
+                    path[i] = start + dir * (length * q) + side * (length * kinkA * q)
+                        + Vec3.Up * (length * (.42 * q + .15 * q * q) + length * kinkY * q);
+                    rad[i] = Math.Max(r * .035, r * .22 * Math.Pow(1 - q, .70));
+                }
+                Tube(path, rad, Primitives.Scale(bark, .84), 8);
+
+                for (int fork = 0; fork < 3; fork++)
+                {
+                    double q = .45 + fork * .24 + rng.Range(-.04, .04);
+                    var forkRoot = path[Math.Clamp((int)(q * 7), 0, 7)];
+                    double fa = facing + Math.Clamp(a - facing + (fork % 2 == 0 ? 1 : -1) * rng.Range(.22, .42), -Math.PI / 3 + .16, Math.PI / 3 - .16);
+                    var fdir = new Vec3(Math.Cos(fa), 0, Math.Sin(fa));
+                    double flen = length * rng.Range(.20, .30);
+                    var fmid = forkRoot + fdir * (flen * .55) + Vec3.Up * (flen * .28);
+                    var fend = forkRoot + fdir * flen + Vec3.Up * (flen * .48);
+                    Tube(new[] { forkRoot, fmid, fend }, new[] { r * .055, r * .028, r * .006 }, Primitives.Scale(bark, .82), 7);
+
+                    for (int lf = 0; lf < 6; lf++)
+                    {
+                        double la = facing + Math.Clamp(fa - facing + rng.Range(-.40, .40), -Math.PI / 3 + .14, Math.PI / 3 - .14);
+                        double pitch = rng.Range(-.35, .75);
+                        double ll = r * rng.Range(.28, .44);
+                        var ltip = fend + new Vec3(Math.Cos(la) * ll * Math.Cos(pitch), ll * Math.Sin(pitch), Math.Sin(la) * ll * Math.Cos(pitch));
+                        Blade(fend, ltip, ll * .26, Primitives.Scale(green, rng.Range(.80, 1.18)), 4);
+                    }
+
+                    if (fork == 1)
+                    {
+                        double cordLen = r * rng.Range(.40, .75);
+                        var cordTop = forkRoot - Vec3.Up * .02;
+                        var cordBot = cordTop - Vec3.Up * cordLen;
+                        Tube(new[] { cordTop, cordBot }, new[] { .006, .005 }, Primitives.Scale(bark, .70), 7);
+                        Cone(cordBot - Vec3.Up * (r * .08), new Vec3(r * .075, r * .15, r * .075), new[] { .44, .38, .22 });
+                    }
+                }
+            }
+        }
+
+        public void Cinnabar()
+        {
+            // Dichotomous candelabra umbrella canopy: primary scaffold boughs fork
+            // repeatedly to form a dense hemispherical dome crowned with stiff rosettes.
+            int primaries = 6;
+            for (int p = 0; p < primaries; p++)
+            {
+                double a = facing + (-.65 + 1.30 * p / (primaries - 1.0)) + rng.Range(-.04, .04);
+                double t0 = .68 + rng.Range(-.02, .03);
+                var dir0 = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                double r0 = Radius(t0) * .65;
+                var baseP = Centre(t0) + dir0 * r0;
+                double totalR = tree.Def.CanopyRadius * rng.Range(.68, .82);
+                double len0 = totalR * .42;
+                var fork0 = baseP + dir0 * (len0 * .85) + Vec3.Up * (h * .10);
+                Tube(new[] { baseP, Vec3.Lerp(baseP, fork0, .52) + Vec3.Up * .06, fork0 },
+                    new[] { r * .16, r * .11, r * .068 }, Primitives.Scale(bark, .85), 8);
+
+                for (int s1 = -1; s1 <= 1; s1 += 2)
+                {
+                    double a1 = facing + Math.Clamp(a - facing + s1 * .18 + rng.Range(-.03, .03), -Math.PI / 3 + .16, Math.PI / 3 - .16);
+                    var dir1 = new Vec3(Math.Cos(a1), 0, Math.Sin(a1));
+                    double len1 = totalR * .32;
+                    var fork1 = fork0 + dir1 * (len1 * .85) + Vec3.Up * (h * .08);
+                    Tube(new[] { fork0, Vec3.Lerp(fork0, fork1, .55) + Vec3.Up * .04, fork1 },
+                        new[] { r * .068, r * .044, r * .026 }, Primitives.Scale(bark, .82), 7);
+
+                    for (int s2 = -1; s2 <= 1; s2 += 2)
+                    {
+                        double a2 = facing + Math.Clamp(a1 - facing + s2 * .12 + rng.Range(-.02, .02), -Math.PI / 3 + .16, Math.PI / 3 - .16);
+                        var dir2 = new Vec3(Math.Cos(a2), 0, Math.Sin(a2));
+                        double len2 = totalR * .26;
+                        var tip = fork1 + dir2 * len2 + Vec3.Up * (h * .05);
+                        Tube(new[] { fork1, tip }, new[] { r * .026, r * .012 }, Primitives.Scale(bark, .79), 7);
+
+                        int leaves = 7;
+                        for (int lf = 0; lf < leaves; lf++)
+                        {
+                            double leafA = facing + Math.Clamp(a2 - facing + rng.Range(-.40, .40), -Math.PI / 3 + .14, Math.PI / 3 - .14);
+                            double leafPitch = rng.Range(.42, 1.05);
+                            double leafLen = r * rng.Range(.30, .48);
+                            var ldir = new Vec3(Math.Cos(leafA) * Math.Cos(leafPitch), Math.Sin(leafPitch), Math.Sin(leafA) * Math.Cos(leafPitch));
+                            var ltip = tip + ldir * leafLen;
+                            Blade(tip, ltip, leafLen * .18, Primitives.Scale(green, rng.Range(.82, 1.15)), 4);
+                        }
+
+                        Cone(tip - Vec3.Up * .02, new Vec3(r * .04, r * .06, r * .04), new[] { .74, .14, .09 });
+                    }
+                }
+            }
+        }
+
+        public void Banyan()
+        {
+            // Wide sprawling horizontal limbs with vertical aerial drop-roots forming a vaulted cloister,
+            // dense broadleaf foliage and small paired fig fruit.
+            int limbs = 8;
+            for (int limb = 0; limb < limbs; limb++)
+            {
+                double a = facing + (-.65 + 1.30 * limb / (limbs - 1.0)) + rng.Range(-.04, .04);
+                double t = .56 + (limb % 4) * .065 + rng.Range(-.018, .018);
+                double length = tree.Def.CanopyRadius * rng.Range(.68, .84);
+                var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                var start = Centre(t) + dir * (Radius(t) * .65);
+                double rise = length * .14, droop = length * .08;
+                var tip = Branch(t, a, length, rise, droop, r * .17);
+
+                for (int drop = 0; drop < 2; drop++)
+                {
+                    double q = drop == 0 ? .42 : .75;
+                    var limbPt = start + dir * (length * q) + Vec3.Up * (rise * q - droop * q * q);
+                    var groundPt = Vec3.FromXZ(limbPt.XZ, ground(limbPt.XZ));
+                    if (tree.Domain.ContainsDisc(limbPt.XZ, r * .15) && limbPt.Y > groundPt.Y + .3)
+                    {
+                        var mid = Vec3.Lerp(limbPt, groundPt, .50) + dir * (r * .03 * (drop == 0 ? 1 : -1));
+                        Tube(new[] { limbPt, mid, groundPt },
+                            new[] { r * .035, r * .042, r * .065 }, Primitives.Scale(bark, .78), 7);
+                    }
+                }
+
+                for (int twig = 0; twig < 5; twig++)
+                {
+                    double q = (twig + .6) / 5.8;
+                    var at = Vec3.Lerp(start, tip, q);
+                    double ta = facing + Math.Clamp(a - facing + (twig % 2 == 0 ? 1 : -1) * rng.Range(.28, .48), -Math.PI / 3 + .16, Math.PI / 3 - .16);
+                    var tdir = new Vec3(Math.Cos(ta), 0, Math.Sin(ta));
+                    double tl = length * rng.Range(.18, .28);
+                    var end = at + tdir * tl + Vec3.Up * (tl * .32);
+                    Tube(new[] { at, Vec3.Lerp(at, end, .5) + Vec3.Up * .06, end },
+                        new[] { r * .030, r * .015, r * .003 }, Primitives.Scale(bark, .80), 7);
+
+                    for (int lf = 0; lf < 6; lf++)
+                    {
+                        double u = (lf + .5) / 6.0;
+                        var attach = Vec3.Lerp(at, end, u);
+                        double la = facing + Math.Clamp(ta - facing + (lf % 2 == 0 ? 1 : -1) * rng.Range(.30, .60), -Math.PI / 3 + .14, Math.PI / 3 - .14);
+                        double ll = r * rng.Range(.30, .50);
+                        double pitch = rng.Range(-.50, .70);
+                        var ltip = attach + new Vec3(Math.Cos(la) * ll * Math.Cos(pitch), ll * Math.Sin(pitch), Math.Sin(la) * ll * Math.Cos(pitch));
+                        Blade(attach, ltip, ll * .28, Primitives.Scale(green, rng.Range(.78, 1.18)), 4);
+                    }
+
+                    if (twig % 2 == 0)
+                        Cone(end - Vec3.Up * (r * .05), new Vec3(r * .04, r * .05, r * .04), new[] { .52, .24, .28 });
+                }
+            }
+        }
+
+        public void Willow()
+        {
+            // High arching structural cantilever boughs with long pendulous weeping streamers
+            // and cascading linear blades trailing toward the ground.
+            int limbs = 8;
+            for (int limb = 0; limb < limbs; limb++)
+            {
+                double a = facing + (-.65 + 1.30 * limb / (limbs - 1.0)) + rng.Range(-.04, .04);
+                double t = .62 + (limb % 4) * .065 + rng.Range(-.015, .015);
+                double length = tree.Def.CanopyRadius * rng.Range(.68, .84);
+                var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+                var side = new Vec3(-dir.Z, 0, dir.X);
+                var tip = Branch(t, a, length, length * .42, length * .26, r * .16);
+
+                for (int s = 0; s < 4; s++)
+                {
+                    double q = .35 + s * .18 + rng.Range(-.04, .04);
+                    var attach = Centre(t) + dir * (Radius(t) * .65 + length * q)
+                        + Vec3.Up * (length * .42 * q - length * .26 * q * q);
+                    double hangLen = length * rng.Range(.38, .60);
+                    var sEnd = attach - Vec3.Up * hangLen + dir * (hangLen * .08) + side * (hangLen * .06 * (s % 2 == 0 ? 1 : -1));
+                    var sMid = Vec3.Lerp(attach, sEnd, .5) + dir * (hangLen * .03);
+                    Tube(new[] { attach, sMid, sEnd }, new[] { r * .018, r * .009, r * .003 }, Primitives.Scale(bark, .78), 7);
+
+                    int leaves = 6;
+                    for (int lf = 0; lf < leaves; lf++)
+                    {
+                        double u = (lf + .5) / 6.0;
+                        var lat = Vec3.Lerp(attach, sEnd, u);
+                        double la = facing + Math.Clamp(a - facing + (lf % 2 == 0 ? 1 : -1) * rng.Range(.30, .60), -Math.PI / 3 + .14, Math.PI / 3 - .14);
+                        double ll = r * rng.Range(.26, .45);
+                        var ltip = lat + new Vec3(Math.Cos(la) * ll * .4, -ll * .88, Math.Sin(la) * ll * .4);
+                        Blade(lat, ltip, ll * .20, Primitives.Scale(green, rng.Range(.80, 1.18)), 4);
+                    }
+
+                    if (s % 2 == 0)
+                        Cone(attach - Vec3.Up * .04, new Vec3(r * .03, r * .08, r * .03), new[] { .64, .58, .22 });
+                }
+            }
         }
     }
 }

@@ -90,7 +90,11 @@ public static class TerrainMesh
             0.3 * Noise.Gradient(0xDEAD_BEEFUL, p.X * 12.0, p.Z * 12.0),
             -1.0, 1.0);
 
-        return smoothH + hummock;
+        // Water and collision use the triangulated heightfield. Unbounded cubic
+        // overshoot can bury a shallow creek or cut holes through its banks.
+        // Keep cosmetic relief sub-millimetre; normal smoothing remains available.
+        double physical = hf.Height(p);
+        return physical + Math.Clamp(smoothH + hummock - physical, -.0005, .0005);
     }
 
     public static Vec3 RenderNormal(Heightfield hf, Vec2 p)

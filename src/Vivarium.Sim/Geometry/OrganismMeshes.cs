@@ -487,19 +487,6 @@ public static partial class OrganismMeshes
         foreach (var an in src.AttachmentNodes) dst.AttachmentNodes.Add(an + translate);
     }
 
-    private static void MarkBladeVertices(MeshData mesh, int start)
-    {
-        for (int i = start; i < mesh.VertexCount; i++) mesh.UV2[i * 2 + 1] = 1;
-    }
-
-    private static void MarkOvateBladeVertices(MeshData mesh, int start, Vec3 centre, Vec3 axis, double length)
-    {
-        for (int i = start; i < mesh.VertexCount; i++)
-        {
-            mesh.UV[i * 2] = (float)MathD.Clamp01(0.5 + (mesh.Position(i) - centre).Dot(axis) / length);
-            mesh.UV2[i * 2 + 1] = 1;
-        }
-    }
 
     /// <summary>Shallow cup of cambered, thick petals (cheap ThickOvateLeaflet blades) around a small centre disc, staged by
     /// <paramref name="stageT"/> in [0,1]: 0 is a near-closed upright bud, ~0.5 is fully open and splayed, and 1 is
@@ -3806,30 +3793,6 @@ public static partial class OrganismMeshes
     // Visual-break plants, carnivores, and fungi. These forms stay deterministic
     // and unit-normalized so the ordinary FloraRenderer scaling path can batch them.
 
-    private static void AddSimpleBlade(MeshData m, Vec3 root, Vec3 mid, Vec3 tip, double width, double[] baseCol, double[] tipCol)
-    {
-        var axis = tip - root;
-        var side = new Vec3(-axis.Z, 0, axis.X);
-        if (side.LengthSq < 1e-8) side = new Vec3(1, 0, 0);
-        side = side.Normalized();
-        var n = axis.Cross(side).Normalized();
-        if (n.LengthSq < 1e-8) n = Vec3.Up;
-        var l0 = root - side * (width * 0.34);
-        var r0 = root + side * (width * 0.34);
-        var lm = mid - side * width;
-        var rm = mid + side * width;
-        int a = m.AddVertex(l0, n, baseCol, 1, 0, 0, 0, 0);
-        int b = m.AddVertex(r0, n, baseCol, 1, 1, 0, 0, 0);
-        int c = m.AddVertex(lm, n, Primitives.Mix(baseCol, tipCol, 0.45), 1, 0, 0.55, 0, 0);
-        int d = m.AddVertex(rm, n, Primitives.Mix(baseCol, tipCol, 0.45), 1, 1, 0.55, 0, 0);
-        int e = m.AddVertex(tip, n, tipCol, 1, 0.5, 1, 0, 0);
-        Primitives.TriangleFacing(m, a, b, d, n);
-        Primitives.TriangleFacing(m, a, d, c, n);
-        Primitives.TriangleFacing(m, c, d, e, n);
-        Primitives.TriangleFacing(m, b, a, d, -n);
-        Primitives.TriangleFacing(m, d, a, c, -n);
-        Primitives.TriangleFacing(m, d, c, e, -n);
-    }
 
     /// <summary>
     /// Rain Jelly (Tremella / Exidia habit): moisture-responsive jelly fungus of wet deadwood and litter.
@@ -6415,124 +6378,6 @@ public static partial class OrganismMeshes
     }
 
 
-
-    private static void Isopod(MeshData m)
-    {
-        // Oniscidean isopod (woodlouse / pill bug): length 1 along +X, origin at underside center.
-        // Articulated arthropod anatomy:
-        // 1. Distinct cephalon with lateral compound eyes
-        // 2. Elbowed antennae (antenna 2)
-        // 3. 7 overlapping arched pereonite plates with articulated lateral epimera flanges
-        // 4. 5 pleonites + shield-like pleotelson
-        // 5. Ventral belly (sternites)
-        // 6. 7 pairs of jointed walking pereopods
-        // 7. Sensory uropods at rear
-
-        // --- 1. Distinct Cephalon & Lateral Compound Eyes ---
-        // Cephalon: broad, rounded anterior shield
-        BodySegment(m, new Vec3(0.36, 0.075, 0), new Vec3(0.065, 0.055, 0.150), 3, 6, (a, b) => Region(0.92, b, 1));
-
-        // Lateral compound eyes
-        foreach (double z in new[] { -1.0, 1.0 })
-        {
-            BodySegment(m, new Vec3(0.37, 0.095, 0.125 * z), new Vec3(0.018, 0.016, 0.014), 2, 4, (a, b) => Region(0.97, b, 2));
-        }
-
-        // --- 2. Elbowed Antennae ---
-        foreach (double z in new[] { -1.0, 1.0 })
-        {
-            var ant0 = new Vec3(0.40, 0.065, 0.055 * z); // socket
-            var ant1 = new Vec3(0.47, 0.082, 0.110 * z); // pedicel
-            var ant2 = new Vec3(0.55, 0.060, 0.170 * z); // elbow
-            var ant3 = new Vec3(0.62, 0.020, 0.200 * z); // flagellum tip
-            Appendage(m, new[] { ant0, ant1, ant2, ant3 }, new[] { 0.015, 0.012, 0.009, 0.005 }, 6, 4, 3);
-        }
-
-        // --- 3. Seven Overlapping Arched Pereonite Plates with Lateral Epimera Flanges ---
-        for (int s = 0; s < 7; s++)
-        {
-            double t = s / 6.0;
-            double x = 0.26 - s * 0.078;
-            double dome = Math.Sin(Math.PI * (0.15 + t * 0.70));
-            double w = 0.22 + 0.04 * dome;
-            double h = 0.085 + 0.065 * dome;
-
-            // Arched central tergite plate (tilted with pitch so trailing edge overlaps next plate)
-            BodySegment(m, new Vec3(x, 0.065, 0), new Vec3(0.048, h, w), 2, 6, (a, b) => Region(0.85 - t * 0.55, b, 1), pitch: -0.16);
-
-            // Articulated lateral epimera flanges on left and right
-            double sweep = (s >= 3 ? (s - 2) * 0.012 : 0);
-            foreach (double z in new[] { -1.0, 1.0 })
-            {
-                var epiC = new Vec3(x - sweep * 0.5, 0.038 + 0.015 * dome, (w + 0.015) * z);
-                var epiR = new Vec3(0.040 + sweep * 0.5, 0.016, 0.030);
-                BodySegment(m, epiC, epiR, 2, 3, (a, b) => Region(0.85 - t * 0.55, b, 1), pitch: -0.14);
-            }
-        }
-
-        // --- 4. Five Pleonites and Shield-like Pleotelson ---
-        for (int s = 0; s < 5; s++)
-        {
-            double t = s / 4.0;
-            double px = -0.26 - s * 0.028;
-            double pw = 0.17 - s * 0.018;
-            double ph = 0.070 - s * 0.010;
-            BodySegment(m, new Vec3(px, 0.062, 0), new Vec3(0.020, ph, pw), 2, 4, (a, b) => Region(0.26 - t * 0.15, b, 1), pitch: -0.20);
-        }
-
-        // Shield-like pleotelson
-        BodySegment(m, new Vec3(-0.42, 0.050, 0), new Vec3(0.042, 0.028, 0.065), 2, 5, (a, b) => Region(0.05, b, 1), pitch: -0.22);
-
-        // --- 5. Ventral Belly (Sternites) ---
-        BodySegment(m, new Vec3(0.0, 0.042, 0), new Vec3(0.42, 0.030, 0.18), 2, 6, (a, b) => Region(0.50, b, 3));
-
-        // --- 6. Seven Pairs of Jointed Walking Pereopods ---
-        for (int s = 0; s < 7; s++)
-        {
-            double legX = 0.26 - s * 0.078;
-            double sweep = (s - 3) * -0.012;
-            foreach (double z in new[] { -1.0, 1.0 })
-            {
-                var p0 = new Vec3(legX, 0.042, 0.13 * z);
-                var p1 = new Vec3(legX + sweep * 0.5, 0.048, 0.19 * z);
-                var p2 = new Vec3(legX + sweep, 0.024, 0.25 * z);
-                var p3 = new Vec3(legX + sweep * 1.4, 0.000, 0.28 * z);
-                Appendage(m, new[] { p0, p1, p2, p3 }, new[] { 0.014, 0.011, 0.008, 0.005 }, 6, 4);
-            }
-        }
-
-        // --- 7. Sensory Uropods at Rear ---
-        foreach (double z in new[] { -1.0, 1.0 })
-        {
-            var uro0 = new Vec3(-0.41, 0.042, 0.045 * z);
-            var uro1 = new Vec3(-0.46, 0.034, 0.075 * z);
-            var uro2 = new Vec3(-0.51, 0.024, 0.095 * z);
-            Appendage(m, new[] { uro0, uro1, uro2 }, new[] { 0.012, 0.008, 0.004 }, 6, 4, 3);
-        }
-    }
-
-    private static void Beetle(MeshData m)
-    {
-        // darkling beetle, length 1 along +X: domed fused wing cases with a centre seam, a wide pronotum, a small
-        // head with beaded antennae, and six long legs
-        Primitives.Ellipsoid(m, new Vec3(-0.1, 0.17, 0), new Vec3(0.34, 0.17, 0.2), 10, 16, (a, b) => Region(0.55 - a * 0.5, b, b > 0.3 && b < 0.7 ? 3 : 1));  // elytra
-        Primitives.Ellipsoid(m, new Vec3(-0.1, 0.335, 0), new Vec3(0.3, 0.008, 0.006), 3, 4, (a, b) => Region(0.5, b, 2));                                      // seam
-        Primitives.Ellipsoid(m, new Vec3(0.25, 0.15, 0), new Vec3(0.11, 0.1, 0.17), 8, 12, (a, b) => Region(0.8, b, 1));                                        // pronotum
-        Primitives.Ellipsoid(m, new Vec3(0.39, 0.12, 0), new Vec3(0.07, 0.06, 0.09), 6, 10, (a, b) => Region(0.95, b, 1));                                      // head
-        foreach (double z in new[] { -1.0, 1.0 })
-        {
-            Primitives.Ellipsoid(m, new Vec3(0.43, 0.14, 0.06 * z), new Vec3(0.018, 0.016, 0.015), 4, 6, (a, b) => Region(0.97, b, 2));
-            var ant = new List<Vec3> { new Vec3(0.45, 0.13, 0.05 * z) };
-            for (int k = 1; k <= 5; k++) ant.Add(ant[^1] + new Vec3(0.045, 0.012, 0.03 * z));
-            Appendage(m, ant, new[] { 0.013, 0.012, 0.013, 0.014, 0.015, 0.017 }, 4, 4, 3);
-            for (int leg = 0; leg < 3; leg++)
-            {
-                double x = 0.24 - leg * 0.16, sweep = (leg - 1) * 0.12;
-                Appendage(m, new[] { new Vec3(x, 0.07, 0.1 * z), new Vec3(x + sweep, 0.12, 0.26 * z), new Vec3(x + sweep * 1.8, 0.0, 0.34 * z) }, new[] { 0.02, 0.016, 0.01 }, 4);
-            }
-        }
-    }
-
     private static void Silverfish(MeshData m)
     {
         // silverfish, length 1 along +X: a flattened, tapering carrot of a body, long antennae forward and three long
@@ -6672,89 +6517,6 @@ public static partial class OrganismMeshes
         }
     }
 
-    private static void Salamander(MeshData m)
-    {
-        // Low, slender trunk and broad flattened head. +X is the direction of travel.
-        BodySegment(m, new Vec3(0.005, 0.102, 0), new Vec3(0.30, 0.078, 0.093), 22, 24,
-            (a, b) => Region(a, b, 1));
-        BodySegment(m, new Vec3(0.265, 0.105, 0), new Vec3(0.085, 0.056, 0.075), 12, 20,
-            (a, b) => Region(a, b, 1));
-        BodySegment(m, new Vec3(0.355, 0.105, 0), new Vec3(0.125, 0.053, 0.105), 16, 28,
-            (a, b) => Region(a, b, 1));
-        BodySegment(m, new Vec3(0.37, 0.072, 0), new Vec3(0.102, 0.024, 0.091), 12, 24,
-            (a, b) => Region(a, b, 3));
-        var mouth = new List<Vec3>();
-        for (int i = 0; i <= 24; i++)
-        {
-            double t = -1.4 + 2.8 * i / 24;
-            mouth.Add(new Vec3(0.352 + 0.118 * Math.Cos(t), 0.080 - 0.006 * Math.Cos(t), 0.100 * Math.Sin(t)));
-        }
-        Primitives.Tube(m, mouth, mouth.Select(_ => 0.0018).ToArray(), 6, (i, v) => Region(i / 24.0, v, 7));
-        foreach (double side in new[] { -1.0, 1.0 })
-        {
-            BodySegment(m, new Vec3(0.359, 0.135, 0.079 * side), new Vec3(0.032, 0.023, 0.030), 10, 18,
-                (a, b) => Region(a, b, 1));
-            BodySegment(m, new Vec3(0.367, 0.148, 0.089 * side), new Vec3(0.022, 0.017, 0.017), 10, 20,
-                (a, b) => Region(a, b, 2));
-            BodySegment(m, new Vec3(0.378, 0.149, 0.101 * side), new Vec3(0.010, 0.011, 0.008), 8, 16,
-                (a, b) => Region(a, b, 5));
-            BodySegment(m, new Vec3(0.381, 0.149, 0.107 * side), new Vec3(0.006, 0.008, 0.0035), 8, 12,
-                (a, b) => Region(a, b, 6));
-            BodySegment(m, new Vec3(0.460, 0.123, 0.043 * side), new Vec3(0.0035, 0.0022, 0.0035), 5, 8,
-                (a, b) => Region(a, b, 7));
-            foreach (bool fore in new[] { true, false })
-            {
-                var root = new Vec3(fore ? 0.205 : -0.195, 0.094, 0.064 * side);
-                var foot = new Vec3(fore ? 0.268 : -0.178, 0.018, (fore ? 0.178 : 0.195) * side);
-                var elbow = new Vec3(fore ? 0.173 : -0.285, 0.048, 0.137 * side);
-                Limb(root, new[] { root, elbow, foot }, new[] { fore ? 0.025 : 0.030, 0.022, 0.010 }, false);
-                int digits = fore ? 4 : 5;
-                for (int digit = 0; digit < digits; digit++)
-                {
-                    double spread = (digit - (digits - 1) * 0.5) * 0.013;
-                    double reach = 0.057 - Math.Abs(digit - (digits - 1) * 0.5) * 0.009;
-                    Limb(root, new[] { foot, foot + new Vec3(0.022, -0.008, spread * side),
-                        foot + new Vec3(reach, -0.013, spread * 1.65 * side) }, new[] { 0.0055, 0.004, 0.0015 }, true);
-                }
-            }
-        }
-        var tail = new List<Vec3>(); var radius = new List<double>();
-        for (int i = 0; i <= 24; i++)
-        {
-            double t = i / 24.0;
-            tail.Add(new Vec3(-0.255 - t * 0.57, 0.100 - t * 0.069, 0));
-            radius.Add(0.038 * Math.Pow(1 - t, 1.1) + 0.0018);
-        }
-        int firstTail = m.VertexCount;
-        Primitives.Tube(m, tail, radius, 18, (i, v) => Region(i / 24.0, v, 1));
-        for (int i = firstTail; i < m.VertexCount; i++) m.Positions[i * 3 + 2] *= 0.73f;
-
-        void Limb(Vec3 root, Vec3[] points, double[] radii, bool digit)
-        {
-            var path = new List<Vec3>(); var thickness = new List<double>();
-            for (int k = 0; k < points.Length - 1; k++)
-            {
-                var a = points[Math.Max(0, k - 1)]; var b = points[k];
-                var c = points[k + 1]; var d = points[Math.Min(points.Length - 1, k + 2)];
-                for (int j = 0; j < 4; j++)
-                {
-                    double t = j / 4.0;
-                    path.Add((b * 2 + (c - a) * t + (a * 2 - b * 5 + c * 4 - d) * t * t
-                        + (-a + b * 3 - c * 3 + d) * t * t * t) * 0.5);
-                    thickness.Add(MathD.Lerp(radii[k], radii[k + 1], t));
-                }
-            }
-            path.Add(points[^1]); thickness.Add(radii[^1]);
-            int first = m.VertexCount;
-            Appendage(m, path, thickness, 10);
-            for (int i = first; i < m.VertexCount; i++)
-            {
-                var offset = m.Position(i) - root;
-                m.SetColor(i, offset.X, offset.Y, offset.Z, 1);
-                if (digit) m.UV2[i * 2 + 1] = 1.25f;
-            }
-        }
-    }
 
 
 

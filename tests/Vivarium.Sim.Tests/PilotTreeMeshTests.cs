@@ -15,7 +15,7 @@ public class PilotTreeMeshTests
     }
 
     [Fact]
-    public void SixPilotFormsHaveDistinctDeterministicFiniteBoundedAnatomy()
+    public void TenPilotFormsHaveDistinctDeterministicFiniteBoundedAnatomy()
     {
         var digests = new HashSet<string>();
         foreach (var def in PilotTreeCatalog.All)
@@ -47,7 +47,7 @@ public class PilotTreeMeshTests
                 Assert.True((mesh.Position(b) - mesh.Position(a)).Cross(mesh.Position(c) - mesh.Position(a)).Length > 1e-10, $"{def.Id} tri {i/3} at {mesh.Position(a)} {mesh.Position(b)} {mesh.Position(c)} alpha {mesh.Colors[a*4+3]}");
             }
         }
-        Assert.Equal(6, digests.Count);
+        Assert.Equal(10, digests.Count);
     }
 
     [Fact]

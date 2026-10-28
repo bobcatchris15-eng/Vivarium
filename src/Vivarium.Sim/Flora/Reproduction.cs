@@ -96,7 +96,8 @@ public sealed class ReproductionSystem
 
             if (f.ReproductiveStage == PlantReproductiveStage.Dormant)
             {
-                double condition = MathD.Clamp01(f.LastReproductionSuitability) * f.BiomassFraction(sp);
+                double suitability = f.LastReproductionSuitability > 0 ? f.LastReproductionSuitability : f.LastSuitability;
+                double condition = MathD.Clamp01(suitability) * f.BiomassFraction(sp);
                 f.ReproductiveReserve += rp.ReserveRate * condition * dt;
                 if (f.ReproductiveReserve >= rp.PulseThreshold)
                 {

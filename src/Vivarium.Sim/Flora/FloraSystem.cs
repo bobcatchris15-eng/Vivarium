@@ -49,6 +49,9 @@ public sealed class FloraSystem
     private bool _canopyShadeDirty = true;
     public const string PropagationStream = "flora.propagation";
     public const double TreeAreaPerIndividual = 15.0;
+    public const double ShrubAreaPerIndividual = 4.0;
+    public const int TargetFloraCapacity = 1600;
+    public const int TargetFloraCeiling = 2000;
 
     public FloraSystem(VivariumWorld w)
     {
@@ -64,8 +67,7 @@ public sealed class FloraSystem
     /// <summary>Shared structural population budget for the whole island, not per species.</summary>
     public int WoodyPopulationCap(WoodyLayer layer)
     {
-        if (layer == WoodyLayer.Shrub) return int.MaxValue;
-        double areaPer = TreeAreaPerIndividual;
+        double areaPer = layer == WoodyLayer.Tree ? TreeAreaPerIndividual : ShrubAreaPerIndividual;
         return Math.Max(1, (int)Math.Floor(IslandAreaM2 / areaPer));
     }
 
@@ -322,7 +324,10 @@ public sealed class FloraSystem
         {
             if (n.Id == self) continue;
             var nsp = C.FloraOrThrow(n.SpeciesId);
-            crowd += PhysicalSpacePressure(contenderRadius, n.Radius(nsp),
+            // Structural canopy plants only compete with other structural canopy plants
+            if (sp.Woody != null && nsp.Woody == null) continue;
+            double relWeight = C.FloraInteractions.CompetitionWeight(sp.Id, nsp.Id);
+            crowd += relWeight * PhysicalSpacePressure(contenderRadius, n.Radius(nsp),
                 Vec2.Distance(p, n.Position), sp.CompetitionRadius, n.BiomassFraction(nsp));
         }
         return crowd;
@@ -431,7 +436,21 @@ public sealed class FloraSystem
                     }
                 }
                 f.Biomass = Math.Min(sp.MaxBiomass, b0 + grow);
-                if (!f.Fruiting) f.Health = Math.Min(1, f.Health + dt / SimUnits.Day * 0.5);   // spent sporangia don't recover
+                // Health recovery vs competition stress (self-thinning):
+                // Plants heal when within crowding tolerance; plants exceeding crowding limit face competition decline
+                double excessCrowd = Math.Max(0, crowd - sp.CrowdingLimit);
+                double sens = sp.Woody != null ? sp.CompetitionSensitivity * 0.25 : sp.CompetitionSensitivity;
+                if (excessCrowd > 0)
+                {
+                    double suppression = 1.0 - 0.5 * MathD.Clamp01(f.Biomass / Math.Max(1e-6, sp.MaxBiomass));
+                    double compDecline = excessCrowd * sens * 0.25 * suppression * (dt / SimUnits.Day);
+                    if (!f.Fruiting) f.Health = Math.Max(0, f.Health - compDecline);
+                    f.Biomass *= Math.Exp(-0.02 * sens * excessCrowd * (dt / SimUnits.Day));
+                }
+                else if (!f.Fruiting)
+                {
+                    f.Health = Math.Min(1.0, f.Health + 0.5 * (dt / SimUnits.Day));
+                }
             }
             else
             {
@@ -450,12 +469,23 @@ public sealed class FloraSystem
                 double coarse = sp.Woody == null ? 0 : litter * 0.12;
                 _w.Litter.Deposit(p, litter - coarse, coarse, footprint);
             }
-            // senescence
-            if (f.Age > sp.Lifespan * f.LifespanFactor) f.Health = Math.Max(0, f.Health - dt / SimUnits.Day);
+            // senescence & gradual late-stage natural turnover over hours
+            if (f.Age > sp.Lifespan * f.LifespanFactor)
+            {
+                f.Health = Math.Max(0, f.Health - dt / SimUnits.Day);
+            }
+            else if (f.Stage(sp) == FloraStage.Senescent)
+            {
+                f.Health = Math.Max(0, f.Health - 0.20 * (dt / SimUnits.Day));
+            }
 
             if (f.Health <= 0 || f.Biomass < sp.InitialBiomass * 0.25)
             {
-                deaths.Add((f, f.Age > sp.Lifespan * f.LifespanFactor ? "senescence" : suit.HardRefused ? "habitat" : "decline"));
+                string cause = f.Age > sp.Lifespan * f.LifespanFactor ? "senescence"
+                    : suit.HardRefused ? "habitat"
+                    : crowd > 1.0 ? "competition"
+                    : "decline";
+                deaths.Add((f, cause));
                 continue;
             }
 
@@ -486,13 +516,15 @@ public sealed class FloraSystem
             // A climber only seeds once it has found something to climb: a vine that is still searching is not
             // established, and a species made of searching runners is a lawn, not a population.
             bool seeds = sp.Climber == null || f.ClimberAttached;
+            double crowdDelay = 1.0 + Math.Max(0, crowd - 0.75) * 0.5;
             if (seeds && sp.Reproduction == null && f.Stage(sp) != FloraStage.Juvenile && f.BiomassFraction(sp) >= sp.SpreadMinBiomassFraction
-                && f.Age - f.LastSpreadAge >= sp.SpreadInterval && sp.Propagules > 0)
+                && f.Age - f.LastSpreadAge >= sp.SpreadInterval * crowdDelay && sp.Propagules > 0)
             {
                 var rng = Rng.Keyed(_w.Seed, PropagationStream, f.Id.Value, (ulong)f.SpreadCount);
                 f.SpreadCount++;
                 f.LastSpreadAge = f.Age;
-                for (int k2 = 0; k2 < sp.Propagules; k2++)
+                int propagules = crowd > 1.5 ? Math.Max(1, sp.Propagules / 2) : sp.Propagules;
+                for (int k2 = 0; k2 < propagules; k2++)
                 {
                     double ang = rng.Range(0, 2 * Math.PI), dist = sp.SpreadRadius * rng.Range(0.3, 1.0);
                     var q = p + Vec2.FromAngle(ang) * dist;
@@ -1684,33 +1716,53 @@ public sealed class FloraSystem
     }
 
     /// <summary>True when a new individual of sp may establish at q (no hard refusal, adequate suitability, not overcrowded).</summary>
-    public bool CanEstablish(FloraSpeciesDef sp, Vec2 q, out string reason)
+    public bool CanEstablish(FloraSpeciesDef sp, Vec2 q, out string reason, bool isStarter = false)
     {
         if (sp.IsCoverageSpecies)
         {
             reason = $"{sp.Name} grows on the coverage layers, not as individuals";
             return false;
         }
-        if (sp.Climber is { } climberDef)
+
+        int totalFlora = _w.Flora.Count;
+        int speciesCount = _w.Flora.CountOf(sp.Id);
+        if (!isStarter)
         {
-            int count = 0;
-            foreach (var other in _w.Flora.Items)
-                if (other.SpeciesId == sp.Id) count++;
-            if (count >= climberDef.PopulationCap)
+            // Biome carrying capacity: soft density resistance above TargetFloraCapacity (1600), hard ceiling at TargetFloraCeiling (2000)
+            if (totalFlora >= TargetFloraCeiling)
             {
-                reason = $"{sp.Name} is at its population limit ({count}/{climberDef.PopulationCap})";
+                reason = $"biome carrying ceiling reached ({totalFlora}/{TargetFloraCeiling})";
                 return false;
+            }
+
+            // Anti-monoculture cap: prevents a single species from monopolizing the biome
+            int speciesCap = Math.Max(60, (int)(TargetFloraCeiling * 0.065));
+            if (speciesCount >= speciesCap)
+            {
+                reason = $"{sp.Name} species dominance limit reached ({speciesCount}/{speciesCap})";
+                return false;
+            }
+
+            if (sp.Climber is { } climberDef && speciesCount >= climberDef.PopulationCap)
+            {
+                reason = $"{sp.Name} is at its population limit ({speciesCount}/{climberDef.PopulationCap})";
+                return false;
+            }
+
+            if (sp.Woody is { } woodyCapCheck)
+            {
+                int cap = WoodyPopulationCap(woodyCapCheck.Layer);
+                int count = WoodyPopulation(woodyCapCheck.Layer);
+                if (count >= cap)
+                {
+                    reason = $"{(woodyCapCheck.Layer == WoodyLayer.Tree ? "tree" : "shrub")} population at island carrying limit ({count}/{cap})";
+                    return false;
+                }
             }
         }
+
         if (sp.Woody is { } woody)
         {
-            int cap = WoodyPopulationCap(woody.Layer);
-            int count = WoodyPopulation(woody.Layer);
-            if (woody.Layer == WoodyLayer.Tree && count >= cap)
-            {
-                reason = $"{(woody.Layer == WoodyLayer.Tree ? "tree" : "shrub")} population at island carrying limit ({count}/{cap})";
-                return false;
-            }
             double querySpacing = C.Flora
                 .Where(candidate => candidate.Woody?.Layer == woody.Layer)
                 .Select(candidate => candidate.Woody!.MinSpacing)
@@ -1728,27 +1780,38 @@ public sealed class FloraSystem
                 return false;
             }
         }
-        // Creeping rooted carpets expand by filling real space, not by
-        // placing hundreds of overlapping full organism agents on the same
-        // square decimetre. Existing individuals remain unchanged; only a
-        // *new* propagule is refused when an established same-species crown
-        // already occupies its physical rooting site. This is local geometry,
-        // never a species-wide population cap or equilibrium enforcement.
-        if (sp.Archetype=="plant" &&
-            (sp.Tags.Contains("groundcover") || sp.Shape=="carpet"))
+        // Conspecific rooting exclusion: a propagule cannot root directly inside the living crown/footprint
+        // of an established individual of the same species.
+        if (sp.Archetype == "plant" && (sp.Tags.Contains("groundcover") || sp.Shape == "carpet"))
         {
-            double initial = MathD.Clamp01(sp.InitialBiomass/Math.Max(sp.MaxBiomass,1e-9));
-            double seedlingRadius=sp.MinRadius+
-                (sp.RadiusAtMax-sp.MinRadius)*Math.Sqrt(initial);
-            _w.Flora.Neighbours(q,sp.RadiusAtMax+seedlingRadius,_nb);
-            foreach(var existing in _nb)
+            double initial = MathD.Clamp01(sp.InitialBiomass / Math.Max(sp.MaxBiomass, 1e-9));
+            double seedlingRadius = sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(initial);
+            _w.Flora.Neighbours(q, sp.RadiusAtMax + seedlingRadius, _nb);
+            foreach (var existing in _nb)
             {
-                if(existing.SpeciesId!=sp.Id || existing.Health<=0.15)continue;
-                double occupiedRadius=Math.Min(sp.RadiusAtMax*1.18,
-                    existing.Radius(sp)*0.8+seedlingRadius*0.6);
-                if(Vec2.DistanceSq(q,existing.Position)<occupiedRadius*occupiedRadius)
+                if (existing.SpeciesId != sp.Id || existing.Health <= 0.15) continue;
+                double occupiedRadius = Math.Min(sp.RadiusAtMax * 1.18,
+                    existing.Radius(sp) * 0.8 + seedlingRadius * 0.6);
+                if (Vec2.DistanceSq(q, existing.Position) < occupiedRadius * occupiedRadius)
                 {
-                    reason=$"propagule cannot root inside living {sp.Name} carpet";
+                    reason = $"propagule cannot root inside living {sp.Name} carpet";
+                    return false;
+                }
+            }
+        }
+        else if (sp.Woody == null)
+        {
+            double initial = MathD.Clamp01(sp.InitialBiomass / Math.Max(sp.MaxBiomass, 1e-9));
+            double seedlingRadius = sp.MinRadius + (sp.RadiusAtMax - sp.MinRadius) * Math.Sqrt(initial);
+            _w.Flora.Neighbours(q, sp.RadiusAtMax + seedlingRadius, _nb);
+            foreach (var existing in _nb)
+            {
+                if (existing.SpeciesId != sp.Id || existing.Health <= 0.15) continue;
+                double occupiedRadius = Math.Min(sp.RadiusAtMax * 1.0,
+                    existing.Radius(sp) * 0.7 + seedlingRadius * 0.4);
+                if (Vec2.DistanceSq(q, existing.Position) < occupiedRadius * occupiedRadius)
+                {
+                    reason = $"propagule cannot root inside living {sp.Name}";
                     return false;
                 }
             }
@@ -1757,7 +1820,13 @@ public sealed class FloraSystem
         if (s.HardRefused) { reason = s.RefusalReason; return false; }
         if (s.EstablishmentScore < sp.MinSuitability) { reason = $"establishment habitat too poor ({s})"; return false; }
         double crowd = Crowding(sp, q, EntityId.None);
-        if (crowd >= sp.CrowdingLimit) { reason = $"too crowded ({crowd:0.00} ≥ {sp.CrowdingLimit:0.00})"; return false; }
+        double effectiveCrowdLimit = sp.CrowdingLimit;
+        if (!isStarter && totalFlora > TargetFloraCapacity)
+        {
+            double biomeDensity = (double)(totalFlora - TargetFloraCapacity) / (TargetFloraCeiling - TargetFloraCapacity);
+            effectiveCrowdLimit *= (1.0 - 0.5 * biomeDensity);
+        }
+        if (crowd >= effectiveCrowdLimit) { reason = $"too crowded ({crowd:0.00} ≥ {effectiveCrowdLimit:0.00})"; return false; }
         reason = "ok";
         return true;
     }

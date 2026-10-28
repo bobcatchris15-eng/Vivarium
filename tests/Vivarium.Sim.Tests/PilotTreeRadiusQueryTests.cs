@@ -45,6 +45,8 @@ public class PilotTreeRadiusQueryTests
     [InlineData("gloomspire",0)] [InlineData("needlevault",1)]
     [InlineData("crowncoil",2)] [InlineData("emberpillar",3)]
     [InlineData("basinwarden",4)] [InlineData("palehollow",5)]
+    [InlineData("cisternvault",0)] [InlineData("cinnabarcrest",1)]
+    [InlineData("rootcloister",2)] [InlineData("silkcascade",3)]
     public void RadiusMaskMatchesFullScanAtRootsCellBoundariesAndFallbacks(string id,int corner)
     {
         var world=TestUtil.FlatWorld(711,d=>{d.PilotTreeId=id;d.PilotTreeCorner=corner;});

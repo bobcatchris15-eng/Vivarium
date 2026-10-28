@@ -146,32 +146,6 @@ public static partial class OrganismMeshes
         }
     }
 
-    private static void Slug(MeshData m)
-    {
-        // A flattened muscular sole beneath a tapered visceral mass and oval mantle.
-        BodySegment(m, new Vec3(-0.025, 0.028, 0), new Vec3(0.46, 0.027, 0.14), 24, 28,
-            (a, b) => Region(a, b, 3));
-        BodySegment(m, new Vec3(-0.065, 0.098, 0), new Vec3(0.405, 0.092, 0.125), 28, 32,
-            (a, b) => Region(a, b, 1));
-        BodySegment(m, new Vec3(0.075, 0.155, 0), new Vec3(0.195, 0.052, 0.098), 20, 28,
-            (a, b) => Region(a, b, 5));
-        BodySegment(m, new Vec3(0.32, 0.090, 0), new Vec3(0.12, 0.060, 0.10), 16, 24,
-            (a, b) => Region(a, b, 1));
-        // Pneumostome: small breathing opening on the mantle's right side.
-        BodySegment(m, new Vec3(0.16, 0.155, 0.087), new Vec3(0.015, 0.009, 0.004), 8, 12,
-            (a, b) => Region(a, b, 7));
-        foreach (double side in new[] { -1.0, 1.0 })
-        {
-            var root = new Vec3(0.34, 0.13, 0.055 * side);
-            var tip = new Vec3(0.515, 0.268, 0.145 * side);
-            DetailedTube(m, root, new[] { root, new Vec3(0.43, 0.22, 0.115 * side), tip },
-                new[] { 0.017, 0.011, 0.007 }, region: 1, role: 3);
-            SensoryEye(m, tip, new Vec3(0.011, 0.010, 0.010), root);
-            var lower = new Vec3(0.375, 0.077, 0.060 * side);
-            DetailedTube(m, lower, new[] { lower, lower + new Vec3(0.083, 0.025, 0.060 * side),
-                lower + new Vec3(0.125, 0.010, 0.080 * side) }, new[] { 0.012, 0.006, 0.0025 }, region: 1, role: 3);
-        }
-    }
 
     private static void Millipede(MeshData m)
     {

@@ -37,21 +37,21 @@
     "maxBiomass": 0.42,
     "initialBiomass": 0.035,
     "declinePerDay": 0.85,
-    "maturityDays": 0.8,
-    "lifespanDays": 4.5,
+    "maturityDays": 2,
+    "lifespanDays": 16,
     "nutrientPerBiomass": 0.65,
     "radiusAtMax": 0.19,
     "minRadius": 0.04
   },
   "spread": {
-    "intervalDays": 3.2,
+    "intervalDays": 4,
     "radius": 0.75,
     "propagules": 2,
     "minBiomassFraction": 0.58
   },
   "competition": {
     "radius": 0.24,
-    "crowdingLimit": 1.8,
+    "crowdingLimit": 2.0,
     "sensitivity": 0.6
   },
   "proximity": [],

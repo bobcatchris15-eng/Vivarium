@@ -103,10 +103,5 @@ public static partial class OrganismMeshes
     {
         GlowbriarGeometry.Build(m, rng, c1, c2, juvenile);
     }
-    private static Vec3 SamplePolyline(IReadOnlyList<Vec3> points, double t)
-    {
-        double f = Math.Clamp(t, 0, 1) * (points.Count - 1);
-        int i = Math.Min(points.Count - 2, (int)f);
-        return Vec3.Lerp(points[i], points[i + 1], f - i);
-    }
+
 }

@@ -1,6 +1,6 @@
 {
   "neutralCompetition": 0.5,
-  "intraspecificCompetition": 1,
+  "intraspecificCompetition": 1.25,
   "relations": [
     {
       "a": "velvetweave_moss",
