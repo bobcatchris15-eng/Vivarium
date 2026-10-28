@@ -19,6 +19,43 @@ public static class LoamLitterBuilder
     private const int HardLeafCap = 5000;
     private const int HardDuffCap = 6000;
 
+    private static ShaderMaterial? _leafMat, _twigMat, _duffMat;
+    private static ShaderMaterial LeafMaterial()
+    {
+        if (_leafMat is not null && GodotObject.IsInstanceValid(_leafMat)) return _leafMat;
+            var leafMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
+            leafMaterial.SetShaderParameter("leaf_col", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Color.png"));
+            leafMaterial.SetShaderParameter("leaf_nrm", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
+            leafMaterial.SetShaderParameter("leaf_rgh", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Roughness.png"));
+            leafMaterial.SetShaderParameter("leaf_opacity", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Opacity.png"));
+            leafMaterial.SetShaderParameter("leaf_trans", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
+            leafMaterial.SetShaderParameter("twig_mode", false);
+        return _leafMat = leafMaterial;
+    }
+    private static ShaderMaterial TwigMaterial()
+    {
+        if (_twigMat is not null && GodotObject.IsInstanceValid(_twigMat)) return _twigMat;
+            var twigMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
+            twigMaterial.SetShaderParameter("twig_mode", true);
+            twigMaterial.SetShaderParameter("bark_col", Bridge.LoadTex("res://Textures/Bark014_4K-PNG_Color.png"));
+            twigMaterial.SetShaderParameter("bark_nrm", Bridge.LoadTex("res://Textures/Bark014_4K-PNG_NormalGL.png"));
+            twigMaterial.SetShaderParameter("bark_rgh", Bridge.LoadTex("res://Textures/Bark014_4K-PNG_Roughness.png"));
+        return _twigMat = twigMaterial;
+    }
+    private static ShaderMaterial DuffMaterial()
+    {
+        if (_duffMat is not null && GodotObject.IsInstanceValid(_duffMat)) return _duffMat;
+            var duffMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
+            duffMaterial.SetShaderParameter("leaf_col", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Color.png"));
+            duffMaterial.SetShaderParameter("leaf_nrm", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
+            duffMaterial.SetShaderParameter("leaf_rgh", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Roughness.png"));
+            duffMaterial.SetShaderParameter("leaf_opacity", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Opacity.png"));
+            duffMaterial.SetShaderParameter("leaf_trans", Bridge.LoadTex("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
+            duffMaterial.SetShaderParameter("duff_mode", true);
+            duffMaterial.SetShaderParameter("decay_strength", 0.72f);
+        return _duffMat = duffMaterial;
+    }
+
     /// <summary>Builds a seeded 5 m board of curled leaves, decomposed fragments, and sparse fine twigs.</summary>
     public static Node3D Build(VivariumWorld world, int seed, float density = 1f, int detailStage = 2,
         Vector2? patchCenter = null, float halfExtent = BoardHalfExtent, bool respectLitterMass = false)
@@ -56,28 +93,9 @@ public static class LoamLitterBuilder
             using var duff = new SurfaceTool();
             duff.Begin(Mesh.PrimitiveType.Triangles);
 
-            var leafMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-            leafMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
-            leafMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
-            leafMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
-            leafMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
-            leafMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
-            leafMaterial.SetShaderParameter("twig_mode", false);
-
-            var twigMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-            twigMaterial.SetShaderParameter("twig_mode", true);
-            twigMaterial.SetShaderParameter("bark_col", GD.Load<Texture2D>("res://Textures/Bark014_4K-PNG_Color.png"));
-            twigMaterial.SetShaderParameter("bark_nrm", GD.Load<Texture2D>("res://Textures/Bark014_4K-PNG_NormalGL.png"));
-            twigMaterial.SetShaderParameter("bark_rgh", GD.Load<Texture2D>("res://Textures/Bark014_4K-PNG_Roughness.png"));
-
-            var duffMaterial = Bridge.Shader("res://Shaders/loam_litter.gdshader");
-            duffMaterial.SetShaderParameter("leaf_col", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Color.png"));
-            duffMaterial.SetShaderParameter("leaf_nrm", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_NormalGL.png"));
-            duffMaterial.SetShaderParameter("leaf_rgh", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Roughness.png"));
-            duffMaterial.SetShaderParameter("leaf_opacity", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Opacity.png"));
-            duffMaterial.SetShaderParameter("leaf_trans", GD.Load<Texture2D>("res://Textures/ForestFloorLitter_4K_Transmittance.png"));
-            duffMaterial.SetShaderParameter("duff_mode", true);
-            duffMaterial.SetShaderParameter("decay_strength", 0.72f);
+            var leafMaterial = LeafMaterial();
+            var twigMaterial = TwigMaterial();
+            var duffMaterial = DuffMaterial();
 
             int leafCount = 0, twigCountPlaced = 0, duffCount = 0;
 

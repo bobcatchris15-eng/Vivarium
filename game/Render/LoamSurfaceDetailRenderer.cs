@@ -22,6 +22,7 @@ public partial class LoamSurfaceDetailRenderer : Node3D
     private List<(int X, int Z)> _domainPatches = new();
     private readonly Queue<(int X, int Z)> _dirtyPatches = new();
     private IEnumerator<bool>? _pendingBuild;
+    private (int X, int Z)? _pendingKey;
     private int _pendingTerrain, _pendingProps, _pendingQuality;
     public double MaxBuildStepMs { get; private set; }
     public int PendingPatchCount => _dirtyPatches.Count + (_pendingBuild is null ? 0 : 1);
@@ -74,6 +75,7 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         if (_dirtyPatches.TryDequeue(out var key))
         {
             _pendingTerrain = _world.Terrain.Version; _pendingProps = _world.Props.Version; _pendingQuality = Quality;
+            _pendingKey = key;
             _pendingBuild = RebuildPatchBatched(key, _world).GetEnumerator();
             ContinueBuild();
         }
@@ -177,7 +179,7 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         if (_pendingBuild is not null)
         {
             _pendingBuild.Dispose(); _pendingBuild = null;
-            centre = null;
+            if (_pendingKey is { } pk && !_dirtyPatches.Contains(pk)) _dirtyPatches.Enqueue(pk);
         }
         _editDelay = .15;
         var world = _world!;
