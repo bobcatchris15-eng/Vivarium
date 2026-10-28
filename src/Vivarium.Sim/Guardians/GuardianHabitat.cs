@@ -239,7 +239,13 @@ public sealed class GuardianHabitat
         if (_world?.Fields?.Light == null || _world.Grid == null) return true;
         int cell = _world.Grid.NearestDomainCell(pos);
         if (cell < 0) return true;
-        return _world.Fields.Light[cell] > 0.45;
+        return LightAt(cell) > 0.45;
+    }
+
+    // Canopy-aware light, matching GuardianNeeds thermoregulation.
+    private double LightAt(int cell)
+    {
+        return _world!.FloraSystem != null ? _world.FloraSystem.EffectiveLightCell(cell) : _world.Fields!.Light[cell];
     }
 
     public Vec2 NearestSunlitPoint(Vec2 pos)
@@ -251,7 +257,7 @@ public sealed class GuardianHabitat
             int bestCell = -1;
             foreach (int cell in _world.Grid.DomainCells)
             {
-                if (_world.Fields.Light[cell] > 0.45)
+                if (LightAt(cell) > 0.45)
                 {
                     var center = _world.Grid.CellCenter(cell);
                     double d = (pos - center).LengthSq;

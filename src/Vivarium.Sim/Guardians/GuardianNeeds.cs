@@ -40,7 +40,10 @@ public static class GuardianNeeds
             else
             {
                 int cell = world.Grid != null ? world.Grid.NearestDomainCell(g.PositionXZ) : -1;
-                if (cell >= 0 && world.Fields?.Light != null && world.Fields.Light[cell] > 0.45)
+                double ambientLight = cell < 0 || world.Fields?.Light == null ? 0
+                    : world.FloraSystem != null ? world.FloraSystem.EffectiveLightCell(cell)
+                    : world.Fields.Light[cell];
+                if (ambientLight > 0.45)
                 {
                     targetAmbient = 0.7;
                 }
