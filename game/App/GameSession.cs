@@ -189,7 +189,7 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         Stage("PilotTree", () => PilotTree.Build(world));
         SoilDetail.Camera = CameraRig.Cam;
         yield return "SoilDetail";
-        Stage("SoilDetail", () => SoilDetail.Build(world));
+        Stage("SoilDetail", () => SoilDetail.Build(world, Island));
         while (!SoilDetail.LoamDetails.InitializationComplete)
         {
             yield return "Forest floor";

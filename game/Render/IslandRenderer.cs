@@ -18,6 +18,10 @@ public partial class IslandRenderer : Node3D
     private ShaderMaterial _terrainMat = null!;
     private Image _fieldImage = null!;
     private ImageTexture _fieldTex = null!;
+    private ImageTexture? _paletteTex;
+    // Prop-only sub-texel caches (keyed by Props.Version + sub-grid size).
+    private double[] _propMinDist = System.Array.Empty<double>(), _propFbm = System.Array.Empty<double>(), _propContact = System.Array.Empty<double>();
+    private int _propCacheVersion = int.MinValue, _propCacheLen = -1;
     private int[] _nearestDomain = System.Array.Empty<int>();
     private double _accum = 999;
     private byte[] _bytes = System.Array.Empty<byte>();
@@ -181,7 +185,9 @@ public partial class IslandRenderer : Node3D
             var col = layers[i].Color;
             palette.SetPixel(i, 0, canonical ? natural[i] : new Color((float)col[0], (float)col[1], (float)col[2]));
         }
-        _strataMat.SetShaderParameter("layer_palette", ImageTexture.CreateFromImage(palette));
+        if (_paletteTex != null && _paletteTex.GetWidth() == layers.Count) _paletteTex.Update(palette);
+        else _paletteTex = ImageTexture.CreateFromImage(palette);
+        _strataMat.SetShaderParameter("layer_palette", _paletteTex);
         _strataMat.SetShaderParameter("layer_count", layers.Count);
     }
 
@@ -278,6 +284,50 @@ public partial class IslandRenderer : Node3D
         }
     }
 
+    private void RebuildPropCaches(int subNx, int subNz, double subStep)
+    {
+        var g = _w.Grid;
+        int n = subNx * subNz;
+        _propMinDist = new double[n]; _propFbm = new double[n]; _propContact = new double[n];
+        for (int sj = 0; sj < subNz; sj++)
+            for (int si = 0; si < subNx; si++)
+            {
+                int k = sj * subNx + si;
+                var p = new Vivarium.Sim.Core.Vec2(g.OriginX + (si + 0.5) * subStep, g.OriginZ + (sj + 0.5) * subStep);
+                double minDist = double.MaxValue;
+                for (int gi = 0; gi < _w.Props.Gravel.Count; gi++)
+                {
+                    var gr = _w.Props.Gravel[gi];
+                    double d = Vivarium.Sim.Core.Vec2.Distance(p, gr.Position) - gr.Radius;
+                    if (d < minDist) minDist = d;
+                }
+                for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
+                {
+                    var rk = _w.Props.Rocks[ri];
+                    double d = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position) - rk.FootprintRadius;
+                    if (d < minDist) minDist = d;
+                }
+                _propMinDist[k] = minDist;
+                _propFbm[k] = Vivarium.Sim.Core.Noise.Fbm(0x501UL, p.X * 5.0, p.Z * 5.0, 2) * 0.08;
+                double contact = 0;
+                for (int li = 0; li < _w.Props.Logs.Count; li++)
+                {
+                    var log = _w.Props.Logs[li];
+                    double dLog = log.AxisDistance(p);
+                    double rLog = log.Radius;
+                    if (dLog < rLog + 0.08) contact = Math.Max(contact, 1.0 - Math.Max(0.0, dLog - rLog) / 0.08);
+                }
+                for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
+                {
+                    var rk = _w.Props.Rocks[ri];
+                    double dRk = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position);
+                    double rRk = rk.FootprintRadius;
+                    if (dRk < rRk + 0.06) contact = Math.Max(contact, 1.0 - Math.Max(0.0, dRk - rRk) / 0.06);
+                }
+                _propContact[k] = contact;
+            }
+    }
+
     private void UpdateFieldTexture(bool updateSubstrate = true)
     {
         CacheSubstrate();
@@ -323,6 +373,11 @@ public partial class IslandRenderer : Node3D
             int subNx = g.Nx * 4, subNz = g.Nz * 4;
             double subStep = g.CellSize / 4.0;
             if (_subBytes.Length != subNx * subNz * 4) _subBytes = new byte[subNx * subNz * 4];
+            if (_propCacheVersion != _w.Props.Version || _propCacheLen != subNx * subNz)
+            {
+                RebuildPropCaches(subNx, subNz, subStep);
+                _propCacheVersion = _w.Props.Version; _propCacheLen = subNx * subNz;
+            }
 
             for (int sj = 0; sj < subNz; sj++)
             {
@@ -331,20 +386,8 @@ public partial class IslandRenderer : Node3D
                     int so = (sj * subNx + si) * 4;
                     var p = new Vivarium.Sim.Core.Vec2(g.OriginX + (si + 0.5) * subStep, g.OriginZ + (sj + 0.5) * subStep);
 
-                    // 1. _subBytes[so + 0] (Gravel/Rock mask): exact signed distance perturbed by 2-octave FBM noise
-                    double minDist = double.MaxValue;
-                    for (int gi = 0; gi < _w.Props.Gravel.Count; gi++)
-                    {
-                        var gr = _w.Props.Gravel[gi];
-                        double d = Vivarium.Sim.Core.Vec2.Distance(p, gr.Position) - gr.Radius;
-                        if (d < minDist) minDist = d;
-                    }
-                    for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
-                    {
-                        var rk = _w.Props.Rocks[ri];
-                        double d = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position) - rk.FootprintRadius;
-                        if (d < minDist) minDist = d;
-                    }
+                    // 1. _subBytes[so + 0] (Gravel/Rock mask): cached prop distance + FBM
+                    double minDist = _propMinDist[sj * subNx + si];
                     int cellD = g.CellAt(p);
                     if (cellD >= 0 && cellD < g.Count)
                     {
@@ -352,7 +395,7 @@ public partial class IslandRenderer : Node3D
                         if (cCode == (byte)Substrate.Gravel || cCode == (byte)Substrate.Rock)
                             minDist = Math.Min(minDist, -0.15);
                     }
-                    double fbmNoise = Vivarium.Sim.Core.Noise.Fbm(0x501UL, p.X * 5.0, p.Z * 5.0, 2) * 0.08;
+                    double fbmNoise = _propFbm[sj * subNx + si];
                     double gravSigned = -(minDist + fbmNoise);
                     _subBytes[so + 0] = (byte)Math.Clamp((int)Math.Round(Math.Clamp(gravSigned / 0.08 + 0.5, 0.0, 1.0) * 255.0), 0, 255);
 
@@ -375,26 +418,12 @@ public partial class IslandRenderer : Node3D
                     }
 
                     // 4. _subBytes[so + 3] (High-res contact AO mask): rock (6 cm), log (8 cm), root collar (12 cm)
-                    double contact = 0;
+                    double contact = _propContact[sj * subNx + si];
                     for (int ti = 0; ti < trees.Count; ti++)
                     {
                         double dTr = Vivarium.Sim.Core.Vec2.Distance(p, trees[ti].Pos);
                         double rTr = trees[ti].Radius;
                         if (dTr < rTr + 0.12) contact = Math.Max(contact, 1.0 - Math.Max(0.0, dTr - rTr) / 0.12);
-                    }
-                    for (int li = 0; li < _w.Props.Logs.Count; li++)
-                    {
-                        var log = _w.Props.Logs[li];
-                        double dLog = log.AxisDistance(p);
-                        double rLog = log.Radius;
-                        if (dLog < rLog + 0.08) contact = Math.Max(contact, 1.0 - Math.Max(0.0, dLog - rLog) / 0.08);
-                    }
-                    for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
-                    {
-                        var rk = _w.Props.Rocks[ri];
-                        double dRk = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position);
-                        double rRk = rk.FootprintRadius;
-                        if (dRk < rRk + 0.06) contact = Math.Max(contact, 1.0 - Math.Max(0.0, dRk - rRk) / 0.06);
                     }
                     _subBytes[so + 3] = (byte)Math.Clamp((int)Math.Round(contact * 255.0), 0, 255);
                 }

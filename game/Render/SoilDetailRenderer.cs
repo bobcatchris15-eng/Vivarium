@@ -36,7 +36,7 @@ public partial class SoilDetailRenderer : Node3D
     private readonly List<Transform3D> _fruitXf = new(), _bladeXf = new(), _stalkXf = new();
     private readonly List<Color> _fruitCol = new(), _bladeCol = new(), _stalkCol = new();
 
-    public void Build(VivariumWorld w)
+    public void Build(VivariumWorld w, IslandRenderer? habitat = null)
     {
         _refresh?.Dispose(); _refresh = null;
         _w = w;
@@ -47,6 +47,7 @@ public partial class SoilDetailRenderer : Node3D
         LoamDetails.Build(w);
 
         var groundCoverMat = Bridge.Shader("res://Shaders/ground_cover.gdshader");
+        habitat?.BindHabitatMaterial(groundCoverMat);
         var fruitMat = Bridge.Shader("res://Shaders/fruit.gdshader");
         _fruit = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildClod(0.011f, 11) };
         _blades = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = BuildFillerBlade(groundCoverMat) };
