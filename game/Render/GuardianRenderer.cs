@@ -70,6 +70,34 @@ public partial class GuardianRenderer : Node3D
         return (float)_w.GroundHeight(xz);
     }
 
+    static readonly string[] BodyBoneNames = { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Snout", "Body", "Body0", "Body1", "Body2", "Body3" };
+    int[] _bodyBoneIdx = new int[BodyBoneNames.Length];
+    int[] _handFootBoneIdx = System.Array.Empty<int>();
+    int _attachmentBoneIdx = -1;
+    Skeleton3D? _boneCacheSkeleton;
+    object? _boneCacheAppendage;
+    int _boneCacheCount = -1;
+
+    // Bone indices are cached per skeleton instance; refreshed if the skeleton,
+    // its bone count, or the appendage config changes.
+    void EnsureBoneCache()
+    {
+        if (_skeleton == null) return;
+        int count = _skeleton.GetBoneCount();
+        if (ReferenceEquals(_boneCacheSkeleton, _skeleton) && ReferenceEquals(_boneCacheAppendage, AppendageContact) && _boneCacheCount == count) return;
+        for (int i = 0; i < BodyBoneNames.Length; i++) _bodyBoneIdx[i] = _skeleton.FindBone(BodyBoneNames[i]);
+        var list = new System.Collections.Generic.List<int>();
+        for (int b = 0; b < count; b++)
+        {
+            string n = _skeleton.GetBoneName(b);
+            if (n.Contains("Hand") || n.Contains("Foot")) list.Add(b);
+        }
+        _handFootBoneIdx = list.ToArray();
+        _attachmentBoneIdx = AppendageContact == null ? -1
+            : _skeleton.FindBone(AppendageContact.ChainPrefix + AppendageContact.FirstTailIndex.ToString(AppendageContact.ChainIndexFormat));
+        _boneCacheSkeleton = _skeleton; _boneCacheAppendage = AppendageContact; _boneCacheCount = count;
+    }
+
     public void Build(VivariumWorld w)
     {
         _w = w;
@@ -494,12 +522,14 @@ public partial class GuardianRenderer : Node3D
             double treeReach = _w.PilotTree.Def.TrunkRadius + 3.0;
             // The old center-only .35 m simulation margin can put the long
             // muzzle into a trunk. Resolve the rendered body footprint too.
+            EnsureBoneCache();
             for (int iteration = 0; iteration < 8; iteration++)
             {
                 Vector3 correction = Vector3.Zero;
-                foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Snout", "Body", "Body0", "Body1", "Body2", "Body3" })
+                for (int bi = 0; bi < BodyBoneNames.Length; bi++)
                 {
-                    int bone = _skeleton.FindBone(name); if (bone < 0) continue;
+                    string name = BodyBoneNames[bi];
+                    int bone = _bodyBoneIdx[bi]; if (bone < 0) continue;
                     var body = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(bone).Origin;
                     if (name == "Snout" || (name == "Head" && _def?.Archetype == "great_ground"))
                         body += (_skeleton.GlobalBasis * _skeleton.GetBoneGlobalPose(bone).Basis.Y).Normalized()
@@ -513,7 +543,7 @@ public partial class GuardianRenderer : Node3D
                 // A pinned appendage cannot escape a woody core by bending
                 // distal joints. Include its attachment in root avoidance so
                 // contact does not stretch the first segment against the tree.
-                int attachment = _skeleton.FindBone(AppendageContact.ChainPrefix + AppendageContact.FirstTailIndex.ToString(AppendageContact.ChainIndexFormat));
+                int attachment = _attachmentBoneIdx;
                 if (attachment >= 0)
                 {
                     var point = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(attachment).Origin;
@@ -557,10 +587,9 @@ public partial class GuardianRenderer : Node3D
         if (_skeleton != null && LegContact == null)
         {
             float lift = 0;
-            for (int bone = 0; bone < _skeleton.GetBoneCount(); bone++)
+            EnsureBoneCache();
+            foreach (int bone in _handFootBoneIdx)
             {
-                string name = _skeleton.GetBoneName(bone);
-                if (!(name.Contains("Hand") || name.Contains("Foot"))) continue;
                 var rest = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalRest(bone).Origin;
                 var foot = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(bone).Origin;
                 // The ankle-to-sole distance is measured in the neutral mesh pose.
