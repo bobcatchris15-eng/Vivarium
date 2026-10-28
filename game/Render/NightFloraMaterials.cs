@@ -122,7 +122,8 @@ public static class NightFloraMaterials
             LightColor = tint,
             OmniRange = range,
             OmniAttenuation = 1.7f,
-            ShadowEnabled = true,
+            // The flora renderer grants shadows to a small budget of the brightest/nearest lights.
+            ShadowEnabled = false,
             ShadowBias = 0.005f,
             ShadowNormalBias = 0.08f,
             ShadowBlur = 1.5f,
@@ -141,9 +142,21 @@ public static class NightFloraMaterials
         return (float)(Smooth(660.0, 900.0, t) * (1.0 - Smooth(1140.0, 1200.0, t)));
     }
 
+    public const float MinShadowRange = 0.45f;
+    public const float MinShadowEnergy = 0.05f;
+    public static bool CanCastShadow(float range, float energy) => range >= MinShadowRange && energy >= MinShadowEnergy;
+
+    private static float _lastAppliedFactor = float.NaN;
+
     public static void SetNightFactor(float factor)
     {
         factor = Mathf.Clamp(factor, 0f, 1f);
+        // Newly registered materials/lights are given CurrentNightFactor on registration,
+        // so skipping an unchanged factor cannot leave them stale. Endpoints always apply exactly.
+        if (!float.IsNaN(_lastAppliedFactor) &&
+            (factor == _lastAppliedFactor || (Math.Abs(factor - _lastAppliedFactor) < 1e-4f && factor > 0f && factor < 1f)))
+            return;
+        _lastAppliedFactor = factor;
         CurrentNightFactor=factor;
         for (int i = Materials.Count - 1; i >= 0; i--)
         {

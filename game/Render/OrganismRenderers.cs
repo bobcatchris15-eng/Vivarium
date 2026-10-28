@@ -150,6 +150,12 @@ public partial class FloraRenderer : Node3D
     public int LoadedSpeciesCount => _layers.Count;
     public bool HasLegacyLayer(string speciesId) => _layers.ContainsKey(speciesId);
     private readonly List<FloraSnapshotItem> _snapshot = new();
+    private readonly List<(FloraSnapshotItem Plant, FloraSpeciesDef Species)> _woodySupports = new();
+    /// <summary>At most this many luminous plant lights cast shadows.</summary>
+    private const int MaxShadowCastingLights = 6;
+    private const double ShadowReselectSeconds = 0.5;
+    private long _shadowSelectedAt;
+    private bool _shadowDirty = true;
     private readonly List<DeadFloraSnapshotItem> _deadSnapshot = new();
     private readonly List<EntityId> _expired = new();
     private int _terrainVersion = -1;
@@ -654,10 +660,8 @@ public int Quality
         }
         if (supports != null && supports.Contains("woody"))
         {
-            foreach (var w in _snapshot)
+            foreach (var (w, wsp) in _woodySupports)
             {
-                var wsp = _w.Content.FloraOrThrow(w.SpeciesId);
-                if (wsp.Woody == null) continue;
                 double d = Vivarium.Sim.Core.Vec2.Distance(sp, w.Position);
                 if (d > bestD) continue;
                 bestD = d;
@@ -697,6 +701,12 @@ public int Quality
         CurrentSnapshot = snapshot;
         _snapshot.Clear();
         _snapshot.AddRange(snapshot.Flora);
+        _woodySupports.Clear();
+        foreach (var w in _snapshot)
+        {
+            var wsp = _w.Content.FloraOrThrow(w.SpeciesId);
+            if (wsp.Woody != null) _woodySupports.Add((w, wsp));
+        }
         _deadSnapshot.Clear();
         _deadSnapshot.AddRange(snapshot.DeadFlora);
         var planes = Camera?.GetFrustum(); // one native array per refresh, never one per plant
@@ -1130,6 +1140,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             if(!_luminousLights.TryGetValue(f.Id,out var light))
             {
                 light=NightFloraMaterials.CreateLightForSpecies(sp,pos);light.Name="Glow_"+f.Id.Value;AddChild(light);_luminousLights.Add(f.Id,light);
+                _shadowDirty=true;
             }
             light.Position=pos;
             float size=(float)Math.Clamp(radius/Math.Max(sp.RadiusAtMax,.01),.3,1);
@@ -1141,6 +1152,25 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         foreach(var id in _luminousLights.Keys.Where(id=>!present.Contains(id)).ToArray())
         {
             _luminousLights[id].QueueFree();_luminousLights.Remove(id);
+        }
+        // Shadow budget: only the few brightest/nearest eligible lights cast shadows,
+        // re-selected at a throttled rate (or immediately when a light was created).
+        if(_shadowDirty||System.Diagnostics.Stopwatch.GetElapsedTime(_shadowSelectedAt).TotalSeconds>=ShadowReselectSeconds)
+        {
+            _shadowSelectedAt=System.Diagnostics.Stopwatch.GetTimestamp();_shadowDirty=false;
+            var camPos=Camera.GlobalPosition;
+            var ranked=new List<(float Score,OmniLight3D Light)>();
+            foreach(var a in active)
+            {
+                if(!NightFloraMaterials.CanCastShadow(a.Range,a.Energy)){a.Light.ShadowEnabled=false;continue;}
+                ranked.Add((a.Energy/(1f+camPos.DistanceSquaredTo(a.Position)),a.Light));
+            }
+            ranked.Sort((x,y)=>y.Score.CompareTo(x.Score));
+            for(int i=0;i<ranked.Count;i++)
+            {
+                bool want=i<MaxShadowCastingLights;
+                if(ranked[i].Light.ShadowEnabled!=want)ranked[i].Light.ShadowEnabled=want;
+            }
         }
         // Nearby organisms act as a broad, gentle emitter. Every light stays on; coincident colonies
         // cannot multiply a subtle glow into an overexposed fire. Hash only source positions, not light.
@@ -1729,10 +1759,21 @@ public partial class FaunaRenderer : Node3D
         return larger;
     }
 
+    private sealed class UploadState { public float[] Copy = Array.Empty<float>(); public int Count = -1; public int Instances = -1; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MultiMesh, UploadState> _uploaded = new();
+
     private static void Upload(MultiMesh mm, float[] buf, int count)
     {
         mm.VisibleInstanceCount = count;
-        if (count > 0) mm.Buffer = buf;
+        if (count <= 0) return;
+        var st = _uploaded.GetOrCreateValue(mm);
+        int n = Math.Min(count * 16, buf.Length);
+        if (st.Count == count && st.Instances == mm.InstanceCount && st.Copy.Length == n
+            && buf.AsSpan(0, n).SequenceEqual(st.Copy)) return;
+        mm.Buffer = buf;
+        if (st.Copy.Length != n) st.Copy = new float[n];
+        Array.Copy(buf, st.Copy, n);
+        st.Count = count; st.Instances = mm.InstanceCount;
     }
 }
 
