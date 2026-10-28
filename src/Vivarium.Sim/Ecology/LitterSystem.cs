@@ -13,6 +13,8 @@ public sealed class LitterSystem
 {
     private readonly VivariumWorld _world;
     private readonly List<Flora.FloraIndividual> _nearbyDecomposers = new();
+    private readonly List<Vec2> _decomposerPos = new();
+    private int _decomposerVersion;
     public double[] FineMass { get; }
     public double[] CoarseMass { get; }
     public double[] FruitMass { get; }
@@ -94,9 +96,14 @@ public sealed class LitterSystem
         MigrateLegacyDetritus();
         bool changed = false;
         int processed = 0;
+        RebuildDecomposerPositions();
         foreach (int idx in _world.Grid.DomainCells)
         {
-            if ((processed++ & 15) == 0) yield return true;
+            if ((processed++ & 15) == 0)
+            {
+                yield return true;
+                if (_decomposerVersion != _world.Flora.Version) RebuildDecomposerPositions();
+            }
             double fine = FineMass[idx], coarse = CoarseMass[idx], fruit = FruitMass[idx];
             if (fine <= 0 && coarse <= 0 && fruit <= 0) continue;
             double moisture = _world.Fields.Moisture.Values[idx];
@@ -124,11 +131,27 @@ public sealed class LitterSystem
         if (changed) Revision++;
     }
 
+    private void RebuildDecomposerPositions()
+    {
+        _decomposerPos.Clear();
+        foreach (var f in _world.Flora.Items)
+            if (_world.Content.FloraOrThrow(f.SpeciesId).Decomposer) _decomposerPos.Add(f.Position);
+        _decomposerVersion = _world.Flora.Version;
+    }
+
     private (double Fine, double Coarse, double Fruit) DecomposerBonus(int idx)
     {
-        _nearbyDecomposers.Clear();
         var p = _world.Grid.CellCenter(idx);
-        _world.Flora.Index.Query(p, 1.2, _nearbyDecomposers);
+        // Exact prefilter: Query keeps items with DistanceSq <= r2, and only decomposers can change the result.
+        // With none in range the original loop leaves fine/coarse/fruit at 1 (clamp(1) == 1).
+        const double r = 1.2;
+        double r2 = r * r;
+        bool any = false;
+        foreach (var dp in _decomposerPos)
+            if (Vec2.DistanceSq(dp, p) <= r2) { any = true; break; }
+        if (!any) return (1, 1, 1);
+        _nearbyDecomposers.Clear();
+        _world.Flora.Index.Query(p, r, _nearbyDecomposers);
         double fine = 1, coarse = 1, fruit = 1;
         foreach (var f in _nearbyDecomposers)
         {
