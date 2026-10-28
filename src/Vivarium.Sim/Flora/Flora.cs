@@ -112,9 +112,10 @@ public sealed class ClimberSegment
     public Vec3 ClimbDir { get; set; } = Vec3.Up;
     /// <summary>The surface this node lies on.</summary>
     public ClimberSurfaceKind Support { get; set; } = ClimberSurfaceKind.Ground;
-    /// <summary>Host entity for woody supports.</summary>
+    /// <summary>Host entity: the tree, log or rock this node is bound to. Authoritative binding.</summary>
     public EntityId HostId { get; set; }
-    /// <summary>Index into the prop log or rock list; -1 otherwise.</summary>
+    /// <summary>Index into the prop log or rock list when the node was laid; -1 otherwise. Legacy: kept for save
+    /// backward compatibility and migration only; the live binding is <see cref="HostId"/>.</summary>
     public int HostIndex { get; set; } = -1;
     /// <summary>Arc length from the founder to this node, in metres.</summary>
     public double Arc { get; set; }

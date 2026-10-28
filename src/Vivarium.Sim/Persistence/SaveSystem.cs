@@ -250,6 +250,8 @@ public static class SaveSystem
                 }
                 if (digest != m.StateDigest) return LoadResult.Fail("save state digest mismatch after load (file damaged or content changed)", compat, m);
             }
+            // After the digest check (which covers the payload as saved): bind legacy index-only climber nodes to ids.
+            Flora.FloraSystem.MigrateClimberHostIds(w);
             if (m.ContentDigest != content.ContentDigest)
                 Log.Warn(LogCategory.Persistence, "Save was made with different content definitions; loading with current content.");
             Log.Info(LogCategory.Persistence, $"Loaded '{m.WorldName}' day {m.SimDays:0.0} from {path}" + (m.AppliedMigrations.Count > 0 ? $" (migrated: {string.Join(", ", m.AppliedMigrations)})" : ""));

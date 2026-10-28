@@ -87,12 +87,11 @@ public sealed class FloraSystem
         lock (_canopyLock)
         {
             if (_woodyCanopyVersion == _w.Flora.Version) return;
-            int oldCount = _woodyCanopy.Count;
             _woodyCanopy.Clear();
             foreach (var f in _w.Flora.Items)
                 if (C.FloraOrThrow(f.SpeciesId).Woody != null) _woodyCanopy.Add(f);
-            if (oldCount != _woodyCanopy.Count)
-                _canopyShadeDirty = true;
+            // Any membership change (including a same-step remove+add that keeps the count) invalidates the shade.
+            _canopyShadeDirty = true;
             _woodyCanopyVersion = _w.Flora.Version;
         }
     }
@@ -580,6 +579,7 @@ public sealed class FloraSystem
         }
         // Tree/shrub biomass changed during this step; rebuild derived shade lazily on the next light sample.
         // Empty fixture worlds keep their all-zero canopy cache indefinitely instead of clearing the whole grid.
+        RefreshWoodyCanopy();
         if (_woodyCanopy.Count > 0) _canopyShadeDirty = true;
     }
 
@@ -1412,21 +1412,61 @@ public sealed class FloraSystem
             case ClimberSurfaceKind.Log:
             {
                 var logs = _w.Props.Logs;
-                if (tip.HostIndex < 0 || tip.HostIndex >= logs.Count) { host = default; return false; }
-                host = new ClimberHost(ClimberSurfaceKind.Log, EntityId.None, tip.HostIndex, null, null, logs[tip.HostIndex], null, 0, 0, 0);
+                int i = ResolveHostIndex(tip, logs, l => l.Id);
+                if (i < 0) { host = default; return false; }
+                host = new ClimberHost(ClimberSurfaceKind.Log, logs[i].Id, i, null, null, logs[i], null, 0, 0, 0);
                 return true;
             }
             case ClimberSurfaceKind.Rock:
             {
                 var rocks = _w.Props.Rocks;
-                if (tip.HostIndex < 0 || tip.HostIndex >= rocks.Count) { host = default; return false; }
-                host = new ClimberHost(ClimberSurfaceKind.Rock, EntityId.None, tip.HostIndex, null, null, null, rocks[tip.HostIndex], 0, 0, 0);
+                int i = ResolveHostIndex(tip, rocks, r => r.Id);
+                if (i < 0) { host = default; return false; }
+                host = new ClimberHost(ClimberSurfaceKind.Rock, rocks[i].Id, i, null, null, null, rocks[i], 0, 0, 0);
                 return true;
             }
             default:
                 host = default;
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Current list index of a log/rock host. Binds by entity id so removing another prop cannot re-point the vine;
+    /// a segment without an id (pre-HostId save not yet migrated) falls back to its stored index.
+    /// </summary>
+    private static int ResolveHostIndex<T>(ClimberSegment tip, List<T> list, Func<T, EntityId> id)
+    {
+        if (!tip.HostId.IsNone)
+        {
+            for (int i = 0; i < list.Count; i++)
+                if (id(list[i]) == tip.HostId) return i;
+            return -1;
+        }
+        return tip.HostIndex >= 0 && tip.HostIndex < list.Count ? tip.HostIndex : -1;
+    }
+
+    /// <summary>
+    /// Load-time migration for saves written before log/rock climber nodes carried <see cref="ClimberSegment.HostId"/>:
+    /// maps each stored <see cref="ClimberSegment.HostIndex"/> to the id of the prop at that index in the prop list
+    /// as saved. Must run before any prop is added or removed. Returns the number of nodes migrated.
+    /// </summary>
+    public static int MigrateClimberHostIds(VivariumWorld w)
+    {
+        int n = 0;
+        foreach (var f in w.Flora.Items)
+        {
+            if (f.ClimberSegments is not { } segs) continue;
+            foreach (var s in segs)
+            {
+                if (!s.HostId.IsNone || s.HostIndex < 0) continue;
+                if (s.Support == ClimberSurfaceKind.Log && s.HostIndex < w.Props.Logs.Count)
+                { s.HostId = w.Props.Logs[s.HostIndex].Id; n++; }
+                else if (s.Support == ClimberSurfaceKind.Rock && s.HostIndex < w.Props.Rocks.Count)
+                { s.HostId = w.Props.Rocks[s.HostIndex].Id; n++; }
+            }
+        }
+        return n;
     }
 
     /// <summary>Projects a point onto a host's live surface.</summary>
@@ -1525,7 +1565,7 @@ public sealed class FloraSystem
                 if (d < best)
                 {
                     best = d; surface = s; found = true;
-                    host = new ClimberHost(ClimberSurfaceKind.Log, EntityId.None, i, null, null, l, null, 0, 0, 0);
+                    host = new ClimberHost(ClimberSurfaceKind.Log, l.Id, i, null, null, l, null, 0, 0, 0);
                 }
             }
         }
@@ -1542,7 +1582,7 @@ public sealed class FloraSystem
                 if (d < best)
                 {
                     best = d; surface = s; found = true;
-                    host = new ClimberHost(ClimberSurfaceKind.Rock, EntityId.None, i, null, null, null, r, 0, 0, 0);
+                    host = new ClimberHost(ClimberSurfaceKind.Rock, r.Id, i, null, null, null, r, 0, 0, 0);
                 }
             }
         }

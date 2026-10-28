@@ -30,7 +30,7 @@ public enum ClimberSurfaceKind : byte
 public readonly struct ClimberSurface
 {
     public ClimberSurfaceKind Kind { get; }
-    /// <summary>Host entity for woody supports; None otherwise.</summary>
+    /// <summary>Host entity (tree, log or rock); None for ground/free.</summary>
     public EntityId HostId { get; }
     /// <summary>Index into <see cref="PropSet.Logs"/> / <see cref="PropSet.Rocks"/>; -1 otherwise.</summary>
     public int HostIndex { get; }
@@ -111,27 +111,37 @@ public readonly struct ClimberSurface
             return false;
         }
         var n = perp / pl;
-        surface = new ClimberSurface(ClimberSurfaceKind.Log, EntityId.None, index,
+        surface = new ClimberSurface(ClimberSurfaceKind.Log, log.Id, index,
             centre + axis * t + n * log.Radius, n, axis);
         return true;
     }
 
-    /// <summary>Projects onto a rock, modelled as the ellipsoid the rock's footprint and height describe.</summary>
+    /// <summary>
+    /// Projects onto a rock, modelled as the ellipsoid the rock's footprint and height describe. The ellipsoid is
+    /// yawed by <see cref="Rock.RotationY"/> exactly as the renderer yaws the mesh: local +X maps to world
+    /// <c>Vec2.FromAngle(RotationY)</c> in XZ (see <see cref="Rock.Covers"/>).
+    /// </summary>
     public static bool TryRock(Vec3 p, Rock rock, int index, out ClimberSurface surface)
     {
         const double shrink = 0.92;   // matches Rock.Covers, so the vine sits on the visible stone
         var c = new Vec3(rock.X, rock.Y, rock.Z);
         var a = new Vec3(Math.Max(0.05, rock.SizeX * shrink), Math.Max(0.05, rock.SizeY), Math.Max(0.05, rock.SizeZ * shrink));
-        var q = p - c;
+        var d = p - c;
+        var lxz = d.XZ.Rotated(-rock.RotationY);
+        var q = new Vec3(lxz.X, d.Y, lxz.Z);
         double k = 1.0 / Math.Sqrt((q.X / a.X) * (q.X / a.X) + (q.Y / a.Y) * (q.Y / a.Y) + (q.Z / a.Z) * (q.Z / a.Z));
         if (!double.IsFinite(k))
         {
             surface = None;
             return false;
         }
-        var pt = c + q * k;
-        var n = new Vec3((pt.X - c.X) / (a.X * a.X), (pt.Y - c.Y) / (a.Y * a.Y), (pt.Z - c.Z) / (a.Z * a.Z)).Normalized();
-        surface = new ClimberSurface(ClimberSurfaceKind.Rock, EntityId.None, index, pt, n, Vec3.Zero);
+        var lp = q * k;
+        var ln = new Vec3(lp.X / (a.X * a.X), lp.Y / (a.Y * a.Y), lp.Z / (a.Z * a.Z)).Normalized();
+        var pxz = lp.XZ.Rotated(rock.RotationY);
+        var nxz = ln.XZ.Rotated(rock.RotationY);
+        var pt = c + new Vec3(pxz.X, lp.Y, pxz.Z);
+        var n = new Vec3(nxz.X, ln.Y, nxz.Z);
+        surface = new ClimberSurface(ClimberSurfaceKind.Rock, rock.Id, index, pt, n, Vec3.Zero);
         return true;
     }
 }
