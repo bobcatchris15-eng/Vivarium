@@ -222,6 +222,9 @@ public class GuardianSimulationTests
         int cell = w.Grid.NearestDomainCell(g.PositionXZ);
         w.Litter.DepositFruit(g.PositionXZ, 1.0);
         Assert.True(w.Litter.FruitMass[cell] > 0);
+        // Seeds now come from an actual fruiting source nearby.
+        w.Flora.Add(new Vivarium.Sim.Flora.FloraIndividual { Id = w.Ids.Next(EntityKind.Flora), SpeciesId = "shadebell",
+            X = g.PositionXZ.X + 1, Z = g.PositionXZ.Z, Biomass = 1, Health = 1, Fruiting = true });
 
         double initialEnergy = g.Energy;
         g.Activity = GuardianActivity.Feed;

@@ -566,23 +566,67 @@ public sealed class GuardianSystem
         g.Comfort = Math.Clamp(g.Comfort - 0.005 * dt, 0.0, 1.0);
 
         double energyRoom = Math.Max(0, Def!.EnergyMax - g.Energy);
-        double consumed = _world.Litter.TakeDetritus(cell, Math.Min(0.05 * dt, energyRoom / 25.0));
+        double want = Math.Min(0.05 * dt, energyRoom / 25.0);
+        var litter = _world.Litter;
+        double fruitBefore = litter.FruitMass[cell];
+        double consumed = 0;
+        if (want > 0 && PrefersFruitFirst(Def!))
+        {
+            // Diet lists fruit ahead of detritus/litter: eat fruit first.
+            consumed = Math.Min(Math.Max(0, fruitBefore), want);
+            litter.FruitMass[cell] = fruitBefore - consumed;
+            fruitBefore = litter.FruitMass[cell] + consumed;
+        }
+        if (want - consumed > 0) consumed += litter.TakeDetritus(cell, want - consumed);
+        double fruitEaten = Math.Max(0, fruitBefore - litter.FruitMass[cell]);
         if (consumed > 0)
         {
             g.Energy = Math.Min(Def!.EnergyMax, g.Energy + consumed * 25.0);
 
-            // Queue seed dispersal event: fruit consumption carries seeds
-            string seedSpecies = "shadebell";
-            g.PendingSeeds.Add(new GuardianPendingSeed
+            // Only fruit carries seeds, and only of the species that bore it.
+            string? seedSpecies = fruitEaten > 0 ? FindFruitSourceSpecies(_world.Grid.CellCenter(cell)) : null;
+            if (seedSpecies != null)
             {
-                SpeciesId = seedSpecies,
-                ViableMass = consumed * 0.08,
-                BioSecondsUntilDeposit = 600.0 // Deposited after ~10 bio-minutes
-            });
+                g.PendingSeeds.Add(new GuardianPendingSeed
+                {
+                    SpeciesId = seedSpecies,
+                    ViableMass = fruitEaten * 0.08,
+                    BioSecondsUntilDeposit = 600.0 // Deposited after ~10 bio-minutes
+                });
+            }
 
             // Soil disturbance
             _world.Litter.Deposit(g.PositionXZ, fine: 0.002, coarse: 0, radius: 0.3);
         }
+    }
+
+    private const double FruitSourceReach = 4.0;
+
+    private static bool PrefersFruitFirst(GuardianDef def)
+    {
+        int fruit = -1, other = -1;
+        for (int i = 0; i < def.PreferredDiets.Count; i++)
+        {
+            string d = def.PreferredDiets[i];
+            if (fruit < 0 && d == "fruit") fruit = i;
+            if (other < 0 && (d == "detritus" || d == "litter")) other = i;
+        }
+        return fruit >= 0 && (other < 0 || fruit < other);
+    }
+
+    /// <summary>Nearest fruiting flora to p within reach; ties by lowest EntityId. Null if none.</summary>
+    private string? FindFruitSourceSpecies(Vec2 p)
+    {
+        var near = _world.Flora.ItemsNear(p, FruitSourceReach);
+        FloraIndividual? best = null; double bestD = double.MaxValue;
+        foreach (var f in near)
+        {
+            if (!f.Fruiting) continue;
+            double d = Vec2.DistanceSq(p, f.Position);
+            if (d > FruitSourceReach * FruitSourceReach) continue;
+            if (best == null || d < bestD || (d == bestD && f.Id.Value < best.Id.Value)) { best = f; bestD = d; }
+        }
+        return best?.SpeciesId;
     }
 
     private void ExecuteBathing(GuardianIndividual g, double dt)
