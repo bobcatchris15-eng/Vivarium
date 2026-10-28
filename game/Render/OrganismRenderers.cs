@@ -79,6 +79,7 @@ public partial class FloraRenderer : Node3D
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
     public RenderDirtyRegions DirtyRegions { get; } = new(tileSize: 2.0f);
     public RenderSnapshot? CurrentSnapshot { get; private set; }
+    private object? _snapshotWorld;
     private readonly struct PlantStateRecord
     {
         public readonly Vector3 Position;
@@ -695,7 +696,9 @@ public int Quality
         // and presentation iterations do not race mutable simulation state.
         CaptureDetailCamera();
         long snapshotStarted=Stopwatch.GetTimestamp();
-        var snapshot = RenderSnapshot.Capture(_w);
+        bool reuseSnapshot = CurrentSnapshot != null && ReferenceEquals(_snapshotWorld, _w) && CurrentSnapshot.IsCurrentFor(_w);
+        var snapshot = reuseSnapshot ? CurrentSnapshot! : RenderSnapshot.Capture(_w);
+        _snapshotWorld = _w;
         _peakSnapshotMs=Math.Max(_peakSnapshotMs,
             Stopwatch.GetElapsedTime(snapshotStarted).TotalMilliseconds);
         CurrentSnapshot = snapshot;

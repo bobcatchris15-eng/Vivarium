@@ -66,6 +66,8 @@ public sealed class RenderSnapshot
         Flora = flora;
         DeadFlora = deadFlora;
         Coverage = coverage;
+        _matStep = coverage.MatStep;
+        _crustStep = coverage.CrustStep;
         Props = props;
 
         _floraById = new Dictionary<EntityId, FloraSnapshotItem>(flora.Count);
@@ -80,6 +82,21 @@ public sealed class RenderSnapshot
             _deadFloraById[deadFlora[i].Id] = deadFlora[i];
         }
     }
+
+    private readonly long _matStep, _crustStep;
+
+    /// <summary>True when no recorded input of this snapshot has changed. Flora.Version only bumps on
+    /// add/remove, so the sim tick is part of the key: Age/Biomass/Health/Fruiting advance per tick.</summary>
+    public bool IsCurrentFor(VivariumWorld w) =>
+        SimTick == w.Clock.Tick
+        && SimSeconds == w.Clock.SimSeconds
+        && TerrainVersion == w.Terrain.Version
+        && PropsVersion == w.Props.Version
+        && FloraVersion == w.Flora.Version
+        && DeadFloraVersion == w.DeadFlora.Version
+        && WaterTable == w.Water.WaterTable
+        && _matStep == w.Coverage.Mat.Step
+        && _crustStep == w.Coverage.Crust.Step;
 
     /// <summary>
     /// Captures an immutable snapshot of render-relevant simulation state on the calling thread.

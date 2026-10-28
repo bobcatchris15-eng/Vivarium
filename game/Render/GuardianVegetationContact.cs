@@ -228,7 +228,7 @@ public partial class GuardianVegetationContact : Node
             using (Vivarium.Game.App.FrameProfiler.Measure("Guardian.Vegetation.Scan"))
             if(Flora!=null)
             {
-                _scan??=Flora.GuardianContactInstances().GetEnumerator();
+                _scan??=Flora.GuardianContactInstancesNear(Focus,4f).GetEnumerator();
                 for(int i=0;i<24;i++)
                 {
                     if(!_scan.MoveNext()){_scan.Dispose();_scan=null;break;}
@@ -570,6 +570,67 @@ public partial class FloraRenderer
                 new Vector3(buffer[o+2],buffer[o+6],buffer[o+10])),
             new Vector3(buffer[o+3],buffer[o+7],buffer[o+11]));
         return true;
+    }
+
+    private sealed class GuardianBin
+    {
+        public long Revision = -1;
+        public int Count = -1;
+        public Transform3D Global;
+        public readonly Dictionary<(int, int), List<int>> Cells = new();
+    }
+    private const float GuardianBinCell = 2f;
+    private readonly Dictionary<MultiMesh, GuardianBin> _guardianBins = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Instances whose origin may lie within <paramref name="radius"/> of <paramref name="focus"/>.
+    /// Binned in 2 m world cells from the packed upload buffer (rebuilt only when that draw is re-uploaded),
+    /// so cost is O(nearby). Callers still apply the exact distance test. Draws not managed by the
+    /// pooled buffers fall back to a full walk.</summary>
+    internal IEnumerable<(MultiMeshInstance3D, int)> GuardianContactInstancesNear(Vector3 focus, float radius)
+    {
+        var draws = new List<MultiMeshInstance3D>();
+        foreach (var layer in _layers.Values)
+            foreach (var variant in layer.Variants)
+            {
+                if (variant?.Full != null) draws.Add(variant.Full);
+                if (variant?.Juvenile != null) draws.Add(variant.Juvenile);
+                if (variant?.Fruit != null) draws.Add(variant.Fruit);
+            }
+        if (_guardianBins.Count > _pooledBuffers.Count * 2 + 16) _guardianBins.Clear();
+        int cx0 = (int)MathF.Floor((focus.X - radius) / GuardianBinCell), cx1 = (int)MathF.Floor((focus.X + radius) / GuardianBinCell);
+        int cz0 = (int)MathF.Floor((focus.Z - radius) / GuardianBinCell), cz1 = (int)MathF.Floor((focus.Z + radius) / GuardianBinCell);
+        foreach (var draw in draws)
+        {
+            if (!GodotObject.IsInstanceValid(draw) || draw.Multimesh == null) continue;
+            var mm = draw.Multimesh;
+            if (!_pooledBuffers.TryGetValue(mm, out var pool))
+            {
+                int count = mm.VisibleInstanceCount < 0 ? mm.InstanceCount : mm.VisibleInstanceCount;
+                for (int index = 0; index < count; index++) yield return (draw, index);
+                continue;
+            }
+            var global = draw.GlobalTransform;
+            if (!_guardianBins.TryGetValue(mm, out var bin)) _guardianBins[mm] = bin = new GuardianBin();
+            if (bin.Revision != pool.UploadRevision || bin.Count != pool.VisibleCount || !bin.Global.IsEqualApprox(global))
+            {
+                bin.Cells.Clear();
+                var buffer = pool.Buffer;
+                int n = Math.Min(pool.VisibleCount, buffer.Length / 20);
+                for (int i = 0; i < n; i++)
+                {
+                    int o = i * 20;
+                    var world = global * new Vector3(buffer[o + 3], buffer[o + 7], buffer[o + 11]);
+                    var key = ((int)MathF.Floor(world.X / GuardianBinCell), (int)MathF.Floor(world.Z / GuardianBinCell));
+                    if (!bin.Cells.TryGetValue(key, out var list)) bin.Cells[key] = list = new List<int>();
+                    list.Add(i);
+                }
+                bin.Revision = pool.UploadRevision; bin.Count = pool.VisibleCount; bin.Global = global;
+            }
+            for (int z = cz0; z <= cz1; z++)
+                for (int x = cx0; x <= cx1; x++)
+                    if (bin.Cells.TryGetValue((x, z), out var cell))
+                        for (int k = 0; k < cell.Count; k++) yield return (draw, cell[k]);
+        }
     }
 
     internal IEnumerable<(MultiMeshInstance3D, int)> GuardianContactInstances()
