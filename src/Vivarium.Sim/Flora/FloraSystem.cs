@@ -135,6 +135,9 @@ public sealed class FloraSystem
     /// </summary>
     public void PrepareCanopyCaches() => RefreshCanopyShade();
 
+    /// <summary>Woody shrub canopy shade at a cell (0..1), as subtracted by EffectiveLightCell.</summary>
+    public double CanopyShadeCell(int cell) { RefreshCanopyShade(); return _canopyShade.Values[cell]; }
+
     public double EffectiveLightCell(int cell)
     {
         RefreshCanopyShade();

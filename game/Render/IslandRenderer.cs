@@ -232,6 +232,7 @@ public partial class IslandRenderer : Node3D
             {
                 _lastOverlayMode = OverlayMode;
                 _terrainMat.SetShaderParameter("overlay_mode", OverlayMode);
+                _accum = 999; // light channel switches between ecology and appearance values
             }
             float wt = (float)_w.Water.WaterTable;
             if (wt != _lastWaterTable)
@@ -340,6 +341,21 @@ public partial class IslandRenderer : Node3D
             }
     }
 
+    /// <summary>Habitat light for surface appearance: the ecology value without the pilot-tree canopy term,
+    /// whose shade on the ground already comes from the real-time shadow map. Woody shrub shade is kept.</summary>
+    private double AppearanceLight(int cell, Vivarium.Sim.Core.Vec2 p)
+    {
+        double light = _w.Fields.Light.Values[cell];
+        var tree = _w.PilotTree;
+        if (tree != null)
+        {
+            double canopy = 1 - tree.Def.ShadeOpacity * tree.CanopyInfluence(p);
+            if (canopy > 0.01) light = Math.Min(1.0, light / canopy);
+        }
+        double shade = _w.FloraSystem.CanopyShadeCell(cell);
+        return Math.Max(0, Math.Min(1, light - Math.Min(shade, light)));
+    }
+
     private void UpdateFieldTexture(bool updateSubstrate = true)
     {
         CacheSubstrate();
@@ -368,7 +384,7 @@ public partial class IslandRenderer : Node3D
             _bytes[o] = (byte)(Mathf.Clamp((float)f.Moisture.Values[d], 0, 1) * 255);
             _bytes[o + 1] = (byte)(code * 255 / 4);
             _bytes[o + 2] = (byte)(Mathf.Clamp((float)(f.Nutrients.Values[d] / nmax), 0, 1) * 255);
-            _bytes[o + 3] = (byte)(Mathf.Clamp((float)_w.FloraSystem.EffectiveLightCell(d), 0, 1) * 255);
+            _bytes[o + 3] = (byte)(Mathf.Clamp((float)(OverlayMode == 3 ? _w.FloraSystem.EffectiveLightCell(d) : AppearanceLight(d, p)), 0, 1) * 255);
             _litterBytes[c] = (byte)(Mathf.Clamp((float)(1.0 - System.Math.Exp(-_w.Litter.FineMass[d] * 55.0)), 0, 1) * 255);
             _ambientBytes[c] = (byte)(Mathf.Clamp((float)_w.AmbientGroundCover.Cover[d], 0, 1) * 255);
         }
