@@ -430,16 +430,87 @@ public partial class GuardianVegetationContact : Node
         var closest=new Vector3(Math.Clamp(point.X,box.Position.X,box.End.X),Math.Clamp(point.Y,box.Position.Y,box.End.Y),Math.Clamp(point.Z,box.Position.Z,box.End.Z));
         var separation=point-closest;
         if(separation.LengthSquared()>=radius*radius)return point;
-        var away=box.GetCenter()-point;away.Y=0;
+
+        var center=box.GetCenter();
+        float halfX=Math.Max(0.001f,box.Size.X*0.5f);
+        float halfZ=Math.Max(0.001f,box.Size.Z*0.5f);
+        float height=Math.Max(0.001f,box.Size.Y);
+
+        // Botanical vase profile: narrow stem clearance at ground, expanding to full canopy
+        float u=Math.Clamp((point.Y-box.Position.Y)/height,0f,1f);
+        float profile=0.22f+0.78f*MathF.Sqrt(u);
+        float plantRadiusX=halfX*profile;
+        float plantRadiusZ=halfZ*profile;
+
+        float dx=point.X-center.X;
+        float dz=point.Z-center.Z;
+        float normDist=MathF.Sqrt((dx*dx)/(plantRadiusX*plantRadiusX)+(dz*dz)/(plantRadiusZ*plantRadiusZ));
+        float effectiveRadius=0.5f*(plantRadiusX+plantRadiusZ);
+        float overlap=radius+(1.0f-normDist)*effectiveRadius;
+
+        var away=center-point;away.Y=0;
         if(away.LengthSquared()<1e-6f)away=Vector3.Right;
-        float overlap=radius-separation.Length();
-        var requested=away.Normalized()*Math.Min(.38f,overlap*2.5f);
-        if(requested.LengthSquared()>plant.Target.LengthSquared())plant.Target=requested;
+
+        if(overlap>0)
+        {
+            var requested=away.Normalized()*Math.Min(.38f,overlap*2.5f);
+            if(requested.LengthSquared()>plant.Target.LengthSquared())plant.Target=requested;
+        }
+
         if(!flexible)return point;
         // Bounds and original root are sampled together when the visible instance
         // registry updates. Avoid another native transform read for every contact.
         var root=cachedRoot?plant.Root:(plant.Draw.GlobalTransform*plant.Base).Origin;
         return PushOutOfStem(plant,box,point,radius,root,away);
+    }
+
+    /// <summary>Resolves vegetation contact along a connected capsule segment between points a and b.
+    /// Finds the closest point on the segment to each nearby plant's canopy center and evaluates contact.</summary>
+    public void ResolveCapsule(Vector3 a, Vector3 b, float radius)
+    {
+        if(!a.IsFinite()||!b.IsFinite()||!float.IsFinite(radius)||radius<=0||_plants.Count==0)return;
+        if(_contactIndexDirty)BuildContactIndex();
+
+        var mid=(a+b)*0.5f;
+        float segHalfLen=(b-a).Length()*0.5f;
+        float broadRadius=segHalfLen+radius;
+        if(broadRadius>ContactCell*32)
+        {
+            foreach(var plant in _plants.Values)
+                ResolvePlantOnSegment(plant,a,b,radius);
+            return;
+        }
+
+        UInt128 candidates=Nearby(mid,broadRadius);
+        while(candidates!=0)
+        {
+            ulong low=(ulong)candidates;
+            int index=low!=0?System.Numerics.BitOperations.TrailingZeroCount(low):64+System.Numerics.BitOperations.TrailingZeroCount((ulong)(candidates>>64));
+            candidates&=candidates-1;
+            var flat=_orderedBounds[index];
+            var segMin=new Vector3(Math.Min(a.X,b.X)-radius,Math.Min(a.Y,b.Y)-radius,Math.Min(a.Z,b.Z)-radius);
+            var segMax=new Vector3(Math.Max(a.X,b.X)+radius,Math.Max(a.Y,b.Y)+radius,Math.Max(a.Z,b.Z)+radius);
+            if(segMax.X<flat.Position.X||segMin.X>flat.End.X||
+               segMax.Y<flat.Position.Y||segMin.Y>flat.End.Y||
+               segMax.Z<flat.Position.Z||segMin.Z>flat.End.Z)
+                continue;
+
+            ResolvePlantOnSegment(_orderedPlants[index],a,b,radius);
+        }
+    }
+
+    private static void ResolvePlantOnSegment(Plant plant,Vector3 a,Vector3 b,float radius)
+    {
+        var center=plant.Bounds.GetCenter();
+        var ab=b-a;
+        float abLenSq=ab.LengthSquared();
+        float t=0f;
+        if(abLenSq>1e-8f)
+        {
+            t=Math.Clamp(((center.X-a.X)*ab.X+(center.Y-a.Y)*ab.Y+(center.Z-a.Z)*ab.Z)/abLenSq,0f,1f);
+        }
+        var closestOnSegment=a+ab*t;
+        ResolvePlant(plant,closestOnSegment,radius,false,true);
     }
 
     /// <summary>Pushes a point out of a plant's stem. This is the only part of the

@@ -78,7 +78,16 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     private long _convergenceSamples;
     public IReadOnlyList<int> ConvergenceHistogram => _convergenceHistogram;
     public long ConvergenceSamples => _convergenceSamples;
-    public void ResetContact() => _initialized = false;
+    private readonly struct BoneCapsule
+    {
+        public readonly int BoneA;
+        public readonly int BoneB;
+        public readonly float Radius;
+        public BoneCapsule(int a, int b, float r) { BoneA = a; BoneB = b; Radius = r; }
+    }
+    private BoneCapsule[] _bodyCapsules = Array.Empty<BoneCapsule>();
+    private bool _capsulesInitialized;
+    public void ResetContact() { _initialized = false; _capsulesInitialized = false; }
     public override void _ProcessModificationWithDelta(double delta)
     {
         using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian.Appendage");
@@ -87,6 +96,7 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         _solveIterations = 0; _solveSteps = 0; _vegetationQueries = 0; _treeQueries = 0; _groundQueries = 0;
         var skeleton = GetSkeleton();
         if (skeleton == null || World == null || Renderer == null) return;
+        if (Renderer.IsClimbing) return;
         if (_bones.Length == 0)
         {
             var bones = new List<int>();
@@ -400,14 +410,104 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             ContinuousBodyClearance = ContinuousBodySampleCount > 0 ? bodySkin!.Value.Minimum : 0;
             ContinuousHeadClearance = ContinuousHeadSampleCount > 0 ? headSkin!.Value.Minimum : 0;
         }
-        // Connected trunk and head volumes brush the same visible shrubs.
-        foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Body", "Body0", "Body1", "Body2", "Body3" })
-        { int bone = skeleton.FindBone(name); if (bone >= 0) Vegetation?.Resolve(transform * skeleton.GetBoneGlobalPose(bone).Origin, (name == "Head" ? .075f : BodyBrushRadius) * _scale, false); }
+        // Connected trunk, head, limb, and tail capsules brush the same visible shrubs.
+        if (Vegetation != null)
+        {
+            EnsureCapsules(skeleton);
+            for (int i = 0; i < _bodyCapsules.Length; i++)
+            {
+                var cap = _bodyCapsules[i];
+                var pA = transform * skeleton.GetBoneGlobalPose(cap.BoneA).Origin;
+                var pB = transform * skeleton.GetBoneGlobalPose(cap.BoneB).Origin;
+                Vegetation.ResolveCapsule(pA, pB, cap.Radius * _scale);
+            }
+            for (int i = 0; i < _points.Length - 1; i++)
+            {
+                float rA = StationRadius(i * 4, i, false);
+                float rB = StationRadius((i + 1) * 4, i + 1, false);
+                Vegetation.ResolveCapsule(_points[i], _points[i + 1], Math.Max(rA, rB));
+            }
+            if (_bodyCapsules.Length == 0)
+            {
+                foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Body", "Body0", "Body1", "Body2", "Body3" })
+                { int bone = skeleton.FindBone(name); if (bone >= 0) Vegetation.Resolve(transform * skeleton.GetBoneGlobalPose(bone).Origin, (name == "Head" ? .075f : BodyBrushRadius) * _scale, false); }
+            }
+        }
         FrameProfiler.Record("Guardian.Appendage.Diagnostics", System.Diagnostics.Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds);
         FrameProfiler.Record("Guardian.Appendage.Veg", _vegetationMs);
         FrameProfiler.Record("Guardian.Appendage.Tree", _treeMs);
         FrameProfiler.Record("Guardian.Appendage.Ground", _groundMs);
     }
+    private void EnsureCapsules(Skeleton3D skeleton)
+    {
+        if (_capsulesInitialized) return;
+        _capsulesInitialized = true;
+        var list = new List<BoneCapsule>();
+
+        // Spine / Torso chain
+        int pelvis = skeleton.FindBone("Pelvis");
+        int spine1 = skeleton.FindBone("Spine1");
+        int lumbar = skeleton.FindBone("Lumbar");
+        int chest = skeleton.FindBone("Chest");
+        int neck = skeleton.FindBone("Neck");
+        if (neck < 0) neck = skeleton.FindBone("Neck1");
+        int head = skeleton.FindBone("Head");
+        int snout = skeleton.FindBone("Snout");
+
+        if (pelvis >= 0 && spine1 >= 0) list.Add(new BoneCapsule(pelvis, spine1, BodyBrushRadius));
+        if (spine1 >= 0 && lumbar >= 0) list.Add(new BoneCapsule(spine1, lumbar, BodyBrushRadius));
+        if (lumbar >= 0 && chest >= 0) list.Add(new BoneCapsule(lumbar, chest, BodyBrushRadius));
+        else if (spine1 >= 0 && chest >= 0) list.Add(new BoneCapsule(spine1, chest, BodyBrushRadius));
+        else if (pelvis >= 0 && chest >= 0) list.Add(new BoneCapsule(pelvis, chest, BodyBrushRadius));
+
+        if (chest >= 0 && neck >= 0) list.Add(new BoneCapsule(chest, neck, BodyBrushRadius * 0.85f));
+        if (neck >= 0 && head >= 0) list.Add(new BoneCapsule(neck, head, 0.08f));
+        if (head >= 0 && snout >= 0) list.Add(new BoneCapsule(head, snout, 0.05f));
+
+        // Segmented body chains (e.g. serpent / monitor Body0..BodyN)
+        for (int i = 0; i < 32; i++)
+        {
+            int a = skeleton.FindBone("Body" + i);
+            int b = skeleton.FindBone("Body" + (i + 1));
+            if (a >= 0 && b >= 0) list.Add(new BoneCapsule(a, b, BodyBrushRadius));
+            else if (a < 0) break;
+        }
+        int bodyMain = skeleton.FindBone("Body");
+        int body0 = skeleton.FindBone("Body0");
+        if (bodyMain >= 0 && body0 >= 0) list.Add(new BoneCapsule(bodyMain, body0, BodyBrushRadius));
+
+        // Limbs: Front Left/Right, Hind Left/Right
+        string[] sides = { "L", "R" };
+        foreach (var s in sides)
+        {
+            // Front limbs
+            int fu = skeleton.FindBone($"Front_Upper_{s}");
+            if (fu < 0) fu = skeleton.FindBone($"FLeg_{s}");
+            int fl = skeleton.FindBone($"Front_Lower_{s}");
+            if (fl < 0) fl = skeleton.FindBone($"FShin_{s}");
+            int ff = skeleton.FindBone($"Foot_Front_{s}");
+            if (ff < 0) ff = skeleton.FindBone($"Hand_{s}");
+            if (ff < 0) ff = skeleton.FindBone($"FFoot_{s}");
+
+            if (fu >= 0 && fl >= 0) list.Add(new BoneCapsule(fu, fl, 0.07f));
+            if (fl >= 0 && ff >= 0) list.Add(new BoneCapsule(fl, ff, 0.05f));
+
+            // Hind limbs
+            int hu = skeleton.FindBone($"Hind_Upper_{s}");
+            if (hu < 0) hu = skeleton.FindBone($"HLeg_{s}");
+            int hl = skeleton.FindBone($"Hind_Lower_{s}");
+            if (hl < 0) hl = skeleton.FindBone($"HShin_{s}");
+            int hf = skeleton.FindBone($"Foot_Hind_{s}");
+            if (hf < 0) hf = skeleton.FindBone($"Foot_{s}");
+            if (hf < 0) hf = skeleton.FindBone($"HFoot_{s}");
+
+            if (hu >= 0 && hl >= 0) list.Add(new BoneCapsule(hu, hl, 0.07f));
+            if (hl >= 0 && hf >= 0) list.Add(new BoneCapsule(hl, hf, 0.05f));
+        }
+
+        _bodyCapsules = list.ToArray();
+    }
+
     private Vector3 ResolveVegetation(Vector3 point, float radius)
     {
         if (Vegetation == null) return point;

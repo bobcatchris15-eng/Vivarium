@@ -17,6 +17,7 @@ namespace Vivarium.Sim.Guardians;
 public sealed class GuardianSystem
 {
     private readonly VivariumWorld _world;
+    private GuardianClimbing? _climbing;
     public GuardianDef? Def { get; private set; }
     public GuardianHabitat? Habitat { get; private set; }
 
@@ -28,6 +29,7 @@ public sealed class GuardianSystem
 
     public void RefreshDefinition()
     {
+        _climbing = null;
         if (_world.Guardian != null)
         {
             Def = GuardianCatalog.Find(_world.Guardian.ArchetypeId);
@@ -129,6 +131,13 @@ public sealed class GuardianSystem
         var g = _world.Guardian;
         if (g == null || Def == null) return;
 
+        g.ClimbCooldown = Math.Max(0, g.ClimbCooldown - dt);
+        if (g.Activity == GuardianActivity.Climb && g.ClimbRoute.Count > 1)
+        {
+            StepClimbing(g, dt);
+            return;
+        }
+
         // Reconcile old saves as well as new spawns with the support surface.
         if (_world.PilotTree is { } tree && tree.BlocksTrunk(g.PositionXZ, 0.35))
         {
@@ -140,19 +149,28 @@ public sealed class GuardianSystem
         g.Y = _world.GroundHeight(g.PositionXZ);
         g.RngCounter++;
 
+        if (g.Activity == GuardianActivity.Explore)
+        {
+            var profile = Def.BehaviorProfile ?? new GuardianBehaviorProfile();
+            if (g.Fatigue > .65 || (1 - g.Energy / Def.EnergyMax) * profile.ForageWeight > .35 ||
+                (1 - g.Hydration) * profile.DrinkFrequency > .35 || g.Comfort < .6 ||
+                g.BodyTemperature < .35 * profile.BaskPriority)
+                SelectNextActivity(g, dt);
+        }
+
         // Execute locomotion towards TargetPosition
         ExecuteLocomotion(g, dt);
 
         switch (g.Activity)
         {
             case GuardianActivity.Drink:
-                ExecuteDrinking(g, dt);
+                if (Vec2.Distance(g.PositionXZ, new Vec2(g.TargetX, g.TargetZ)) <= .4) ExecuteDrinking(g, dt);
                 break;
             case GuardianActivity.Feed:
                 ExecuteFeeding(g, dt);
                 break;
             case GuardianActivity.Bathe:
-                ExecuteBathing(g, dt);
+                if (Vec2.Distance(g.PositionXZ, new Vec2(g.TargetX, g.TargetZ)) <= .4) ExecuteBathing(g, dt);
                 break;
             case GuardianActivity.ShakeOff:
                 // Stationary pause (1-3s), finishes bathing cycle
@@ -229,6 +247,9 @@ public sealed class GuardianSystem
         double hungerScore = (1.0 - (g.Energy / def.EnergyMax)) * profile.ForageWeight;
         double thirstScore = (1.0 - g.Hydration) * profile.DrinkFrequency;
         double discomfortScore = 1.0 - g.Comfort;
+
+        if (fatigueScore > .65 || hungerScore > .35 || thirstScore > .35 || discomfortScore > .4)
+            g.ClimbRoute.Clear();
 
         // 1. Fatigue drive: needs Rest / ReturnHome / Settle
         if (fatigueScore > 0.65)
@@ -343,61 +364,54 @@ public sealed class GuardianSystem
             return;
         }
 
-        // 7. Digging: if DigAbility > 0.8 and roll < 0.25 -> Dig
-        double roll = rng.NextDouble();
-        if (profile.DigAbility > 0.8 && roll < 0.25)
+        // With needs satisfied, keep one island destination until arrival.
+        // Idle rolls used to repeatedly replace short walks with stationary clips.
+        // An unmet need with no available resource must not reroll the route
+        // every tick. Keep traveling until arrival or the journey timeout.
+        if (g.Activity == GuardianActivity.Explore && g.ActivityDuration > 0 &&
+            Vec2.Distance(g.PositionXZ, new Vec2(g.TargetX, g.TargetZ)) > .05) return;
+        SelectRoamingTarget(g);
+    }
+
+    private void SelectRoamingTarget(GuardianIndividual g)
+    {
+        if (Def!.BehaviorProfile?.CanClimbTrunk == true && g.ClimbCooldown <= 0)
         {
-            g.Activity = GuardianActivity.Dig;
-            g.TargetPosition = g.Position;
-            g.ActivityDuration = rng.Range(4.0, 8.0);
+            g.ClimbCooldown = 60;
+            _climbing ??= new GuardianClimbing(_world);
+            if (_climbing.FindRoute(g, out ulong host) is { } route)
+            {
+                g.ClimbRoute = route; g.ClimbIndex = 1; g.ClimbReturning = false; g.ClimbHostId = host;
+                g.TargetPosition = route[0].Position;
+                g.Activity = GuardianActivity.Explore;
+                g.ActivityDuration = 10 + Vec2.Distance(g.PositionXZ, g.TargetPosition.XZ) /
+                    Math.Max(.01, Def.WalkSpeed * GuardianDef.BodySizeMultiplier) * 3;
+                return;
+            }
+        }
+        g.ClimbRoute.Clear();
+        var rng = Rng.Keyed(g.Seed, "guardian.roam", g.RngCounter);
+        double radius = _world.Domain.Radius;
+        for (int attempt = 0; attempt < 96; attempt++)
+        {
+            var point = new Vec2(rng.Range(-radius, radius), rng.Range(-radius, radius));
+            if (!_world.Domain.ContainsDisc(point, .4) ||
+                Vec2.Distance(point, g.PositionXZ) < Math.Min(2.0, radius * .4) ||
+                _world.PilotTree?.BlocksTrunk(point, .35) == true) continue;
+            int cell = _world.Grid.NearestDomainCell(point);
+            if (cell < 0 || _world.Water.OpenWaterDepth(cell) > .08) continue;
+            g.TargetPosition = new Vec3(point.X, _world.GroundHeight(point), point.Z);
+            g.Activity = GuardianActivity.Explore;
+            // Allow the journey, including trunk detours, to finish. This also
+            // supplies a bounded escape if terrain prevents progress.
+            g.ActivityDuration = 10 + Vec2.Distance(g.PositionXZ, point) /
+                Math.Max(.01, Def!.WalkSpeed * GuardianDef.BodySizeMultiplier) * 2;
             return;
         }
-
-        // 8. Curiosity / Explore / Investigate / ScentMark / Groom / Rest
-        if (roll < 0.10 && Habitat?.ScentMarkTargets.Count > 0)
-        {
-            var targetLandmark = Habitat.ScentMarkTargets[rng.NextInt(Habitat.ScentMarkTargets.Count)];
-            g.TargetPosition = targetLandmark;
-            double dist = Vec2.Distance(g.PositionXZ, new Vec2(targetLandmark.X, targetLandmark.Z));
-            g.Activity = GuardianActivity.ScentMark;
-            g.ActivityDuration = dist <= 0.4 ? rng.Range(3.0, 6.0) : rng.Range(15.0, 30.0);
-        }
-        else if (roll < 0.25)
-        {
-            g.Activity = GuardianActivity.Groom;
-            g.TargetPosition = g.Position;
-            g.ActivityDuration = rng.Range(3.0, 6.0);
-        }
-        else if (roll < 0.35)
-        {
-            g.Activity = GuardianActivity.Alert;
-            g.TargetPosition = g.Position;
-            g.ActivityDuration = rng.Range(1.0, 2.0);
-        }
-        else if (roll < 0.50 && profile.CuriosityBias > 0.8)
-        {
-            g.Activity = GuardianActivity.Investigate;
-            double invDist = rng.Range(0.8, 2.0);
-            double invAngle = rng.Range(0, Math.PI * 2);
-            var invXZ = _world.Domain.ClampInside(g.PositionXZ + new Vec2(Math.Cos(invAngle), Math.Sin(invAngle)) * invDist, 0.4);
-            g.TargetPosition = new Vec3(invXZ.X, _world.GroundHeight(invXZ), invXZ.Z);
-            g.ActivityDuration = rng.Range(6.0, 12.0);
-        }
-        else if (roll < 0.90)
-        {
-            g.Activity = GuardianActivity.Explore;
-            double wanderDist = rng.Range(1.0, 2.5);
-            double wanderAngle = rng.Range(0, Math.PI * 2);
-            var destXZ = _world.Domain.ClampInside(g.PositionXZ + new Vec2(Math.Cos(wanderAngle), Math.Sin(wanderAngle)) * wanderDist, 0.4);
-            g.TargetPosition = new Vec3(destXZ.X, _world.GroundHeight(destXZ), destXZ.Z);
-            g.ActivityDuration = rng.Range(15.0, 35.0);
-        }
-        else
-        {
-            g.Activity = GuardianActivity.Rest;
-            g.TargetPosition = g.Position;
-            g.ActivityDuration = rng.Range(4.0, 9.0);
-        }
+        // No suitable destination this pass; retry without a long idle cycle.
+        g.Activity = GuardianActivity.Rest;
+        g.TargetPosition = g.Position;
+        g.ActivityDuration = .5;
     }
 
     private int FindRichestFoodCell(Vec2 current, double radius)
@@ -537,9 +551,54 @@ public sealed class GuardianSystem
             }
             else if (g.Activity == GuardianActivity.Explore || g.Activity == GuardianActivity.Investigate)
             {
-                g.Activity = GuardianActivity.Groom;
-                g.ActivityDuration = 2.0;
+                if (g.ClimbRoute.Count > 1 && Def!.BehaviorProfile?.CanClimbTrunk == true)
+                {
+                    g.Activity = GuardianActivity.Climb;
+                    g.ClimbIndex = 1; g.ClimbReturning = false;
+                    g.ClimbNormal = Vec3.Up;
+                    g.TargetPosition = g.ClimbRoute[1].Position;
+                }
+                else SelectNextActivity(g, dt);
             }
+        }
+    }
+
+    private void StepClimbing(GuardianIndividual g, double dt)
+    {
+        var profile = Def!.BehaviorProfile!;
+        bool need = g.Fatigue > .65 || (1 - g.Energy / Def.EnergyMax) * profile.ForageWeight > .35 ||
+            (1 - g.Hydration) * profile.DrinkFrequency > .35 || g.Comfort < .6;
+        bool hostGone = g.ClimbHostId != 0 && !_world.Flora.Items.Any(f => f.Id.Value == g.ClimbHostId);
+        if ((need || hostGone) && !g.ClimbReturning)
+        {
+            g.ClimbReturning = true;
+            g.ClimbIndex = Math.Max(0, g.ClimbIndex - 1);
+        }
+        g.ClimbIndex = Math.Clamp(g.ClimbIndex, 0, g.ClimbRoute.Count - 1);
+        var next = g.ClimbRoute[g.ClimbIndex];
+        var delta = next.Position - g.Position;
+        double distance = delta.Length;
+        double step = Def.WalkSpeed * GuardianDef.BodySizeMultiplier * .65 * dt;
+        if (distance > 1e-8)
+        {
+            g.Position += delta / distance * Math.Min(step, distance);
+            g.ClimbDirection = delta / distance;
+            if (delta.XZ.LengthSq > 1e-6) g.Heading = Math.Atan2(delta.Z, delta.X);
+        }
+        g.ClimbNormal = Vec3.Lerp(g.ClimbNormal, next.Normal, Math.Min(1, dt * 5)).Normalized();
+        g.TargetPosition = next.Position;
+        g.Fatigue = MathD.Clamp01(g.Fatigue + dt * .0006);
+        if (distance <= step + .005)
+        {
+            if (g.ClimbReturning && g.ClimbIndex == 0)
+            {
+                g.ClimbRoute.Clear(); g.ClimbNormal = Vec3.Up; g.ClimbCooldown = 45;
+                g.Activity = GuardianActivity.Rest; g.ActivityDuration = 0;
+                SelectNextActivity(g, dt);
+                return;
+            }
+            if (!g.ClimbReturning && g.ClimbIndex == g.ClimbRoute.Count - 1) g.ClimbReturning = true;
+            g.ClimbIndex += g.ClimbReturning ? -1 : 1;
         }
     }
 

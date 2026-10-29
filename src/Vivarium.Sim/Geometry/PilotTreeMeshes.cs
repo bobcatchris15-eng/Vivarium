@@ -131,7 +131,7 @@ public static class PilotTreeMeshes
         {
             "crowncoil" => r * (.82 + .18 * (1 - t)) * (1 + .13 * Math.Exp(-t * 16)),
             "cisternvault" => r * (.68 + .54 * Math.Sin(Math.PI * Math.Pow(t, 0.72))) * (1 + .18 * Math.Exp(-t * 12)),
-            "cinnabarcrest" => r * (.32 + .68 * Math.Pow(1 - t * 0.75, .82)) * (1 + .24 * Math.Exp(-t * 16)),
+            "cinnabarcrest" => r * (.06 + .94 * Math.Pow(1 - t, .82)) * (1 + .24 * Math.Exp(-t * 16)),
             "rootcloister" => r * (.28 + .72 * Math.Pow(1 - t, .65)) * (1 + .35 * Math.Exp(-t * 14)),
             "silkcascade" => r * (.20 + .80 * Math.Pow(1 - t, .70)) * (1 + .30 * Math.Exp(-t * 16)),
             _ => r * (.18 + .82 * Math.Pow(1 - t, .75)) * (1 + .30 * Math.Exp(-t * 16))
@@ -313,6 +313,13 @@ public static class PilotTreeMeshes
             // 64x88 grid so their heavy crowns stay inside the native budget.
             bool dense = cycad || tree.Def.Id is "gloomspire" or "emberpillar" or "cisternvault" or "rootcloister";
             int rows = dense ? 120 : 88, sides = dense ? 96 : 64;
+            // These spreading species lose apical dominance at the main fork.
+            // Their bole ends there; the crown axes supply the remaining height.
+            double boleTop = tree.Def.Id switch
+            {
+                "cinnabarcrest" => .75, "rootcloister" => .79,
+                "silkcascade" => .84, "basinwarden" => .84, _ => 1
+            };
             double startAngle = facing - Math.PI / 3;
             double sweep = 2 * Math.PI / 3;
             double dA = .08 * sweep / sides, dT = .5 / rows;
@@ -321,7 +328,7 @@ public static class PilotTreeMeshes
             var normals = new Vec3[rows + 1, sides + 1];
             for (int i = 0; i <= rows; i++)
             {
-                double t = (double)i / rows;
+                double t = boleTop * i / rows;
                 for (int j = 0; j <= sides; j++)
                 {
                     double a = startAngle + sweep * j / sides;
@@ -345,7 +352,7 @@ public static class PilotTreeMeshes
             var ids = new int[rows + 1, sides + 1];
             for (int i = 0; i <= rows; i++)
             {
-                double t = (double)i / rows;
+                double t = boleTop * i / rows;
                 for (int j = 0; j <= sides; j++)
                 {
                     double a = startAngle + sweep * j / sides;
@@ -394,7 +401,7 @@ public static class PilotTreeMeshes
             for (int j = 0; j < sides; j++)
             {
                 int k = j + 1;
-                Face(Centre(1), rings[rows, j], rings[rows, k], Primitives.Scale(bark, .75), 0.95, Vec3.Up);
+                Face(Centre(boleTop), rings[rows, j], rings[rows, k], Primitives.Scale(bark, .75), 0.95, Vec3.Up);
                 Face(origin - Vec3.Up * .04, rings[0, k], rings[0, j], bark, 0.95, -Vec3.Up);
             }
 
@@ -406,7 +413,7 @@ public static class PilotTreeMeshes
             int cutStart1 = m.VertexCount;
             for (int i = 0; i < rows; i++)
             {
-                double t0 = (double)i / rows, t1 = (double)(i + 1) / rows;
+                double t0 = boleTop * i / rows, t1 = boleTop * (i + 1) / rows;
                 var c0 = Centre(t0);
                 var c1 = Centre(t1);
                 var p0 = rings[i, 0];
@@ -424,7 +431,7 @@ public static class PilotTreeMeshes
             int cutStart0 = m.VertexCount;
             for (int i = 0; i < rows; i++)
             {
-                double t0 = (double)i / rows, t1 = (double)(i + 1) / rows;
+                double t0 = boleTop * i / rows, t1 = boleTop * (i + 1) / rows;
                 var c0 = Centre(t0);
                 var c1 = Centre(t1);
                 var p0 = rings[i, sides];
@@ -539,48 +546,67 @@ public static class PilotTreeMeshes
             else destination.Append(m);
             m=destination;
         }
-        private Vec3 Branch(double t,double angle,double length,double rise,double droop,double radius)
+        // Every daughter axis samples the same polyline used by the woody mesh.
+        // Endpoint chords float inside/outside an arched bough, especially on old wood.
+        private static Vec3 OnAxis(IReadOnlyList<Vec3> path, double q)
+        {
+            double scaled = Math.Clamp(q, 0, 1) * (path.Count - 1);
+            int i = Math.Min((int)scaled, path.Count - 2);
+            return Vec3.Lerp(path[i], path[i + 1], scaled - i);
+        }
+
+        private double CrownAngle(int index, double spread) => facing + spread *
+            (2 * ((index * .61803398875 + phase / Tau) % 1) - 1);
+
+        private Vec3[] BranchAxis(double t,double angle,double length,double rise,double droop,double radius)
         {
             var start=Centre(t);var dir=new Vec3(Math.Cos(angle),0,Math.Sin(angle));
-            var path=new Vec3[7];var widths=new double[7];
+            var side=new Vec3(-dir.Z,0,dir.X);
+            var path=new Vec3[9];var widths=new double[9];
+            double sweep=Math.Sin(angle*3.1+t*17+phase)*length*.065;
             for(int i=0;i<path.Length;i++)
             {
                 double q=i/(double)(path.Length-1);
-                path[i]=start+dir*(Radius(t)*.65+q*length)+Vec3.Up*(rise*q-droop*q*q);
-                widths[i]=Math.Max(radius*.07,radius*Math.Pow(1-q,.85));
+                path[i]=start+dir*(Radius(t)*.65+q*length)
+                    +side*(sweep*q*q)+Vec3.Up*(rise*q-droop*q*q);
+                // A short swollen collar gives way to tapering load-bearing wood.
+                widths[i]=radius*(.045+.955*Math.Pow(1-q,1.12))*(1+.16*Math.Exp(-q*18));
             }
-            Tube(path,widths,Primitives.Scale(bark,.84));return path[^1];
+            Tube(path,widths,Primitives.Scale(bark,.84));return path;
         }
+        private Vec3 Branch(double t,double angle,double length,double rise,double droop,double radius) =>
+            BranchAxis(t,angle,length,rise,droop,radius)[^1];
 
         public void Conifer(bool spruce,bool broken)
         {
-            int levels=broken?11:spruce?14:16;
+            int levels=broken?8:spruce?12:11;
             for(int level=0;level<levels;level++)
             {
                 double t=.24+(broken?.61:.73)*(level+rng.Range(.12,.88))/levels;
-                int branches=broken?4+rng.NextInt(3):6+rng.NextInt(3);
+                int branches=broken?3+rng.NextInt(3):4+rng.NextInt(3);
                 for(int j=0;j<branches;j++)
                 {
-                    bool dead=broken&&rng.Chance(.34);
+                    bool dead=broken && (j==0 || (level>4 && rng.Chance(.45)));
                     if(broken&&rng.Chance(.12)) continue;
                     // Deliberately uneven branch insertion and angle avoid the
                     // mechanical whorl ladder while keeping crowns inside the cutaway wedge.
-                    double a=facing+rng.Range(-.92,.92)+Math.Sin(level*1.7+j*2.31)*.09;
+                    double a=CrownAngle(level*7+j,broken?.68:.88)+rng.Range(-.07,.07);
                     double heightFraction=Math.Clamp((t-.24)/.73,0,1);
-                    double crown=broken?.82-.36*heightFraction:spruce?.90-.47*heightFraction:.98-.38*heightFraction;
+                    double crown=broken?.66-.30*heightFraction:spruce?.84*Math.Pow(1-heightFraction,.72)+.08:.74*Math.Pow(1-heightFraction,.48)+.12;
                     double len=tree.Def.CanopyRadius*crown*rng.Range(.78,1.12);
                     var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));
                     // Lower limbs fall away from the bole; upper tiers turn back
                     // toward light and close the crown into a broken tapered spire.
                     double rise=len*(broken?.18:spruce?.24+.52*heightFraction:.22+.42*heightFraction);
                     double droop=len*(broken?.42:spruce?.22-.20*heightFraction:.28-.20*heightFraction);
-                    var tip=Branch(t,a,len,rise,droop,r*(.125-.045*t));
+                    var axis=BranchAxis(t,a,len,rise,droop,r*(.15-.085*heightFraction));
+                    var tip=axis[^1];
                     if(!broken)
                     {
                         for(int run=0;run<2;run++)
                         {
                             double q=run==0?.48:.80;
-                            var root=Centre(t)+dir*(Radius(t)*.65+len*q)+Vec3.Up*(rise*q-droop*q*q);
+                            var root=OnAxis(axis,q);
                             var side=dir.Cross(Vec3.Up).Normalized()*(run==0?1:-1);
                             // Sprays continue along the arm, masking its rigid
                             // scaffold and joining adjacent tier clusters.
@@ -593,15 +619,17 @@ public static class PilotTreeMeshes
                     for(int twig=1;twig<=secondaries;twig++)
                     {
                         double q=(twig+rng.Range(-.22,.22))/(secondaries+1.0);
-                        var at=Vec3.Lerp(Centre(t)+dir*Radius(t)*.65,tip,q);
+                        var at=OnAxis(axis,q);
                         for(int s=-1;s<=1;s+=2)
                         {
                             double ta=a+s*rng.Range(.62,1.24)+rng.Range(-.20,.20);
                             var td=new Vec3(Math.Cos(ta),0,Math.Sin(ta));
                             double tl=len*rng.Range(.25,.40)*(1-.16*q)+r*.12;
                             var end=at+td*tl-Vec3.Up*tl*(broken?.42:spruce?.12:.22);
-                            Tube(new[]{at,Vec3.Lerp(at,end,.55)+Vec3.Up*tl*.08,end},
-                                new[]{r*.040,r*.027,r*.012},Primitives.Scale(bark,.79),7);
+                            var twigAxis=new[]{at,Vec3.Lerp(at,end,.55)+Vec3.Up*tl*.08,end};
+                            double twigRadius=r*.045*(1-.65*q);
+                            Tube(twigAxis,
+                                new[]{twigRadius,twigRadius*.55,twigRadius*.12},Primitives.Scale(bark,.79),7);
                             if(dead) continue;
                             double sl=tl*rng.Range(.58,.84);
                             for(int spray=0;spray<2;spray++)
@@ -609,7 +637,7 @@ public static class PilotTreeMeshes
                                 double u=spray==0?.34:.88;
                                 double sideA=ta+(twig%2==0?1:-1)*(spray==0?1:-1)*rng.Range(.46,.82);
                                 var sd=new Vec3(Math.Cos(sideA),0,Math.Sin(sideA));
-                                var root=Vec3.Lerp(at,end,u);
+                                var root=OnAxis(twigAxis,u);
                                 var se=root+sd*sl-Vec3.Up*sl*(broken?.48:spruce?.15:.34);
                                 NeedleSpray(root,se,spruce);
                             }
@@ -617,19 +645,19 @@ public static class PilotTreeMeshes
                     }
                     if(spruce&&level%3==1&&j%3==0)
                     {
-                        var coneTip=Vec3.Lerp(Centre(t),tip,.72)-Vec3.Up*r*.08;
+                        var coneTip=OnAxis(axis,.72)-Vec3.Up*r*.08;
                         Cone(coneTip,new Vec3(r*.075,r*.24,r*.075),new[]{.32,.24,.13});
                     }
                 }
             }
             if(!broken)
             {
-                for(int leader=0;leader<5;leader++)
+                for(int leader=0;leader<3;leader++)
                 {
-                    double a=phase+Tau*leader/5;
+                    double a=facing+(leader-1)*.48;
                     var d=new Vec3(Math.Cos(a),0,Math.Sin(a));
                     var baseP=Centre(.88)+d*r*.08;
-                    var top=Centre(1)+d*rng.Range(.10,.23);
+                    var top=Centre(leader==1?1.06:.97)+d*rng.Range(.10,.23);
                     Tube(new[]{baseP,Vec3.Lerp(baseP,top,.56)+d*r*.05,top},
                         new[]{r*.08,r*.045,r*.008},Primitives.Scale(bark,.78),7);
                     NeedleSpray(baseP,top,spruce);
@@ -668,7 +696,7 @@ public static class PilotTreeMeshes
                     var tip=lateral+axis*size*rng.Range(.27,.42)+side*(sign*size*rng.Range(.18,.32))-Vec3.Up*size*(spruce?.16:.38);
                     // One continuous needle per side avoids doubled base faces
                     // while the curled centerline still gives each spray depth.
-                    NeedleBlade(at,tip,size*(spruce?.25:.31),Primitives.Scale(green,rng.Range(.72,1.22)));
+                    NeedleBlade(at,tip,size*(spruce?.16:.28),Primitives.Scale(green,rng.Range(.72,1.22)));
                 }
             }
         }
@@ -786,32 +814,34 @@ public static class PilotTreeMeshes
         {
             // Dense, staggered crown of arching pinnate fronds. Fronds vary in age,
             // lean and droop; each carries many paired leathery leaflets on a stout rachis.
-            for(int tier=0;tier<3;tier++) for(int f=0;f<18;f++)
+            for(int tier=0;tier<3;tier++) for(int f=0;f<13;f++)
             {
-                double a=phase+Tau*(f+tier*.37)/18+rng.Range(-.07,.07);
+                double a=phase+Tau*(f+tier*.37)/13+rng.Range(-.07,.07);
                 double age=rng.Range(.78,1.13);
-                double length=tree.Def.CanopyRadius*rng.Range(.76,1.14)*age;
+                double length=tree.Def.CanopyRadius*rng.Range(.74,1.04)*age*(tier==0?.76:1);
                 var dir=new Vec3(Math.Cos(a),0,Math.Sin(a));var side=new Vec3(-dir.Z,0,dir.X);
                 var start=Centre(.91-tier*.055)+dir*r*.16;
+                double tipFall=rng.Range(.04,tier==2?.30:.12);
+                double sweep=rng.Range(-.10,.10);
                 var path=new Vec3[19];var rad=new double[19];
                 for(int i=0;i<path.Length;i++)
                 {
                     double t=i/18.0;
                     double rise=tier==0?.94:tier==1?.66:.34;
                     double fall=tier==0?.62:tier==1?.70:.88;
-                    double arch=length*(rise*t-fall*t*t)-length*Math.Pow(t,3)*rng.Range(.02,tier==2?.28:.12);
-                    path[i]=start+dir*(length*t)+Vec3.Up*arch;
+                    double arch=length*(rise*t-fall*t*t)-length*Math.Pow(t,3)*tipFall;
+                    path[i]=start+dir*(length*t)+side*(length*sweep*t*t)+Vec3.Up*arch;
                     rad[i]=r*(.037*(1-t)+.0025);
                 }
                 Tube(path,rad,Primitives.Scale(green,.71),9,1);
                 for(int i=1;i<18;i++)
                 {
                     double t=i/18.0;
-                    double leaflet=length*(.16+.105*Math.Sin(Math.PI*t))*rng.Range(.88,1.13);
+                    double leaflet=length*(.025+.23*Math.Pow(Math.Sin(Math.PI*t),.7))*rng.Range(.88,1.13);
                     for(int sign=-1;sign<=1;sign+=2)
                     {
                         double cant=tier==0?rng.Range(-.28,.58):tier==1?rng.Range(-.48,.48):rng.Range(-.92,-.24);
-                        cant*=sign*(rng.Chance(.35)?-1:1);
+                        cant = tier==2 ? -Math.Abs(cant) : cant*.55;
                         var end=path[i]+side*(leaflet*sign)+dir*leaflet*.20+Vec3.Up*leaflet*cant;
                         // The leaflet blade grows directly from the rachis. A stalk
                         // tube at every pinna only reads as wire at normal camera scale.
@@ -848,19 +878,20 @@ public static class PilotTreeMeshes
                     new[]{r*.075,r*.047,r*.006},Primitives.Scale(bark,.72),8);
             }
             // Reiterated leaders rise above the bole rather than leaving a bare spike.
-            for(int leader=0;leader<5;leader++)
+            for(int leader=0;leader<3;leader++)
             {
-                double a=facing+(-.72+leader*.36)+rng.Range(-.10,.10);
+                double a=facing+(-.58+leader*.58)+rng.Range(-.10,.10);
                 var d=new Vec3(Math.Cos(a),0,Math.Sin(a));
                 var start=Centre(.80+rng.Range(-.035,.035))+d*r*.10;
-                var end=Centre(1.08+rng.Range(-.018,.045))+d*r*rng.Range(.48,1.12);
+                var end=Centre(1.02+leader*.065+rng.Range(-.02,.02))+d*r*rng.Range(.48,1.12);
                 var mid=Vec3.Lerp(start,end,.55)+d*r*.16;
-                Tube(new[]{start,mid,end},new[]{r*.12,r*.075,r*.016},Primitives.Scale(bark,.76),8);
+                var leaderAxis=new[]{start,mid,end};
+                Tube(leaderAxis,new[]{r*.16,r*.085,r*.012},Primitives.Scale(bark,.76),8);
                 NeedleSpray(start,end,false);
                 for(int fork=0;fork<3;fork++)
                 {
                     double q=.35+fork*.24+rng.Range(-.05,.05);
-                    var root=Vec3.Lerp(start,end,q);
+                    var root=OnAxis(leaderAxis,q);
                     double fa=a+(fork%2==0?1:-1)*rng.Range(.56,.95);
                     var fd=new Vec3(Math.Cos(fa),0,Math.Sin(fa));
                     var forkTip=root+fd*r*rng.Range(.70,1.30)+Vec3.Up*r*rng.Range(.34,.76);
@@ -872,25 +903,26 @@ public static class PilotTreeMeshes
             }
             for(int tier=0;tier<5;tier++)
             {
-                int limbs=7+tier%2;
+                int limbs=4+tier%2;
                 for(int crown=0;crown<limbs;crown++)
                 {
                     double a=facing+rng.Range(-.78,.78)+Math.Sin(tier*1.9+crown*2.3)*.12;
                     double t=.58+tier*.082+rng.Range(-.028,.028);
                     double len=tree.Def.CanopyRadius*rng.Range(.82,1.18)*(1-.10*tier);
-                    var tip=Branch(t,a,len,len*.37,len*.16,r*.105*(1-.08*tier));
+                    var axis=BranchAxis(t,a,len,len*.37,len*.16,r*.14*(1-.12*tier));
+                    var tip=axis[^1];
                     var d=new Vec3(Math.Cos(a),0,Math.Sin(a));
                     for(int run=0;run<2;run++)
                     {
                         double u=run==0?.66:.90;
-                        var root=Centre(t)+d*(Radius(t)*.65+len*u)+Vec3.Up*(len*.37*u-len*.16*u*u);
+                        var root=OnAxis(axis,u);
                         var lateral=d.Cross(Vec3.Up).Normalized()*(run==0?1:-1);
                         NeedleSpray(root,root+d*len*.12+lateral*len*.10-Vec3.Up*len*.035,false);
                     }
                     for(int twig=0;twig<5;twig++)
                     {
                         double q=(twig+.7)/5.8;
-                        var at=Vec3.Lerp(Centre(t)+d*Radius(t)*.65,tip,q);
+                        var at=OnAxis(axis,q);
                         for(int sign=-1;sign<=1;sign+=2)
                         {
                             double ta=a+sign*rng.Range(.74,1.02);
@@ -912,35 +944,36 @@ public static class PilotTreeMeshes
         {
             // Irregular, tiered crown with sweeping structural limbs, fine twigs,
             // overlapping broad blades and small fruit on outer branchlets.
-            for(int limb=0;limb<18;limb++)
+            for(int limb=0;limb<12;limb++)
             {
-                double a=facing+rng.Range(-.78,.78)+Math.Sin(limb*2.39)*.11;
-                double t=.54+(limb%8)*.052+rng.Range(-.018,.018);
+                double a=CrownAngle(limb,.86)+rng.Range(-.06,.06);
+                double t=.46+(limb%5)*.083+rng.Range(-.025,.025);
                 double tier=(t-.54)/.40;
                 double length=tree.Def.CanopyRadius*(.90-.16*tier)*rng.Range(.78,1.04);
-                var tip=Branch(t,a,length,length*rng.Range(.30,.48),length*rng.Range(.08,.24),r*.19);
+                var axis=BranchAxis(t,a,length,length*rng.Range(.38,.60),length*rng.Range(.16,.32),r*(.25-.10*tier));
                 for(int twig=0;twig<8;twig++)
                 {
-                    double q=(twig+.5)/8.5;
-                    var at=Vec3.Lerp(Centre(t),tip,q);
+                    double q=.24+.71*(twig+.5)/8;
+                    var at=OnAxis(axis,q);
                     double ta=a+(twig%2==0?1:-1)*rng.Range(.58,1.02);
                     var dir=new Vec3(Math.Cos(ta),0,Math.Sin(ta));
                     double twigLength=length*rng.Range(.20,.31);
                     var end=at+dir*twigLength+Vec3.Up*twigLength*rng.Range(.20,.47);
-                    Tube(new[]{at,Vec3.Lerp(at,end,.48)+Vec3.Up*r*.12,end},new[]{r*.035,r*.016,r*.002},Primitives.Scale(bark,.82),7);
+                    var twigAxis=new[]{at,Vec3.Lerp(at,end,.48)+Vec3.Up*r*.12,end};
+                    Tube(twigAxis,new[]{r*.060*(1-.45*q),r*.021,r*.002},Primitives.Scale(bark,.82),7);
                     for(int leaf=0;leaf<7;leaf++)
                     {
                         double u=(leaf+.5)/7.0;
-                        var attach=Vec3.Lerp(at,end,u);
+                        var attach=OnAxis(twigAxis,u);
                         double la=ta+(leaf%2==0?1:-1)*rng.Range(.72,1.18);
                         double ll=r*rng.Range(.38,.66);
-                        double pitch=rng.Range(-1.00,1.14);
+                        double pitch=rng.Range(-.38,.62);
                         var leafTip=attach+new Vec3(Math.Cos(la)*ll*Math.Cos(pitch),ll*Math.Sin(pitch),Math.Sin(la)*ll*Math.Cos(pitch))-Vec3.Up*ll*rng.Range(.02,.15);
                         Blade(attach,leafTip,ll*rng.Range(.25,.34),Primitives.Scale(green,rng.Range(.76,1.20)),5);
                         if(leaf%2==0)
                         {
                             double opposite=la+(leaf%4==0?.72:-.72);
-                            double secondPitch=rng.Range(-1.12,.96);
+                            double secondPitch=pitch+rng.Range(-.25,.25);
                             var second=attach+new Vec3(Math.Cos(opposite)*ll*.82*Math.Cos(secondPitch),ll*.82*Math.Sin(secondPitch),Math.Sin(opposite)*ll*.82*Math.Cos(secondPitch))-Vec3.Up*ll*.07;
                             Blade(attach,second,ll*.25,Primitives.Scale(green,rng.Range(.82,1.16)),5);
                         }
@@ -1011,9 +1044,9 @@ public static class PilotTreeMeshes
             int limbs = 8;
             for (int limb = 0; limb < limbs; limb++)
             {
-                double a = facing + (-.65 + 1.30 * limb / (limbs - 1.0)) + rng.Range(-.04, .04);
-                double t = .86 + (limb % 3) * .042 + rng.Range(-.015, .015);
-                double length = tree.Def.CanopyRadius * rng.Range(.65, .82);
+                double a = CrownAngle(limb, .83) + rng.Range(-.045, .045);
+                double t = .73 + (limb % 3) * .087 + rng.Range(-.025, .025);
+                double length = tree.Def.CanopyRadius * rng.Range(.48, .79);
                 var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
                 var side = new Vec3(-dir.Z, 0, dir.X);
                 var path = new Vec3[8];
@@ -1033,7 +1066,7 @@ public static class PilotTreeMeshes
                 for (int fork = 0; fork < 3; fork++)
                 {
                     double q = .45 + fork * .24 + rng.Range(-.04, .04);
-                    var forkRoot = path[Math.Clamp((int)(q * 7), 0, 7)];
+                    var forkRoot = OnAxis(path,q);
                     double fa = facing + Math.Clamp(a - facing + (fork % 2 == 0 ? 1 : -1) * rng.Range(.22, .42), -Math.PI / 3 + .16, Math.PI / 3 - .16);
                     var fdir = new Vec3(Math.Cos(fa), 0, Math.Sin(fa));
                     double flen = length * rng.Range(.20, .30);
@@ -1044,10 +1077,11 @@ public static class PilotTreeMeshes
                     for (int lf = 0; lf < 6; lf++)
                     {
                         double la = facing + Math.Clamp(fa - facing + rng.Range(-.40, .40), -Math.PI / 3 + .14, Math.PI / 3 - .14);
-                        double pitch = rng.Range(-.35, .75);
+                        double pitch = rng.Range(-.15, .65);
                         double ll = r * rng.Range(.28, .44);
-                        var ltip = fend + new Vec3(Math.Cos(la) * ll * Math.Cos(pitch), ll * Math.Sin(pitch), Math.Sin(la) * ll * Math.Cos(pitch));
-                        Blade(fend, ltip, ll * .26, Primitives.Scale(green, rng.Range(.80, 1.18)), 4);
+                        var leafBase=Vec3.Lerp(fmid,fend,.35+.65*(lf+.5)/6);
+                        var ltip = leafBase + new Vec3(Math.Cos(la) * ll * Math.Cos(pitch), ll * Math.Sin(pitch), Math.Sin(la) * ll * Math.Cos(pitch));
+                        Blade(leafBase, ltip, ll * .26, Primitives.Scale(green, rng.Range(.80, 1.18)), 4);
                     }
 
                     if (fork == 1)
@@ -1069,8 +1103,8 @@ public static class PilotTreeMeshes
             int primaries = 6;
             for (int p = 0; p < primaries; p++)
             {
-                double a = facing + (-.65 + 1.30 * p / (primaries - 1.0)) + rng.Range(-.04, .04);
-                double t0 = .68 + rng.Range(-.02, .03);
+                double a = CrownAngle(p, .78) + rng.Range(-.04, .04);
+                double t0 = .61 + (p%3)*.055 + rng.Range(-.02, .03);
                 var dir0 = new Vec3(Math.Cos(a), 0, Math.Sin(a));
                 double r0 = Radius(t0) * .65;
                 var baseP = Centre(t0) + dir0 * r0;
@@ -1082,26 +1116,26 @@ public static class PilotTreeMeshes
 
                 for (int s1 = -1; s1 <= 1; s1 += 2)
                 {
-                    double a1 = facing + Math.Clamp(a - facing + s1 * .18 + rng.Range(-.03, .03), -Math.PI / 3 + .16, Math.PI / 3 - .16);
+                    double a1 = facing + Math.Clamp(a - facing + s1 * .32 + rng.Range(-.03, .03), -Math.PI / 3 + .16, Math.PI / 3 - .16);
                     var dir1 = new Vec3(Math.Cos(a1), 0, Math.Sin(a1));
-                    double len1 = totalR * .32;
+                    double len1 = totalR * (s1<0?.37:.28);
                     var fork1 = fork0 + dir1 * (len1 * .85) + Vec3.Up * (h * .08);
                     Tube(new[] { fork0, Vec3.Lerp(fork0, fork1, .55) + Vec3.Up * .04, fork1 },
                         new[] { r * .068, r * .044, r * .026 }, Primitives.Scale(bark, .82), 7);
 
                     for (int s2 = -1; s2 <= 1; s2 += 2)
                     {
-                        double a2 = facing + Math.Clamp(a1 - facing + s2 * .12 + rng.Range(-.02, .02), -Math.PI / 3 + .16, Math.PI / 3 - .16);
+                        double a2 = facing + Math.Clamp(a1 - facing + s2 * .24 + rng.Range(-.02, .02), -Math.PI / 3 + .16, Math.PI / 3 - .16);
                         var dir2 = new Vec3(Math.Cos(a2), 0, Math.Sin(a2));
-                        double len2 = totalR * .26;
+                        double len2 = totalR * rng.Range(.20,.30);
                         var tip = fork1 + dir2 * len2 + Vec3.Up * (h * .05);
                         Tube(new[] { fork1, tip }, new[] { r * .026, r * .012 }, Primitives.Scale(bark, .79), 7);
 
                         int leaves = 7;
                         for (int lf = 0; lf < leaves; lf++)
                         {
-                            double leafA = facing + Math.Clamp(a2 - facing + rng.Range(-.40, .40), -Math.PI / 3 + .14, Math.PI / 3 - .14);
-                            double leafPitch = rng.Range(.42, 1.05);
+                            double leafA = a2 + lf * 2.399963 + rng.Range(-.12,.12);
+                            double leafPitch = .22 + .85*(lf%3)/2.0 + rng.Range(-.12,.12);
                             double leafLen = r * rng.Range(.30, .48);
                             var ldir = new Vec3(Math.Cos(leafA) * Math.Cos(leafPitch), Math.Sin(leafPitch), Math.Sin(leafA) * Math.Cos(leafPitch));
                             var ltip = tip + ldir * leafLen;
@@ -1121,43 +1155,47 @@ public static class PilotTreeMeshes
             int limbs = 8;
             for (int limb = 0; limb < limbs; limb++)
             {
-                double a = facing + (-.65 + 1.30 * limb / (limbs - 1.0)) + rng.Range(-.04, .04);
+                double a = CrownAngle(limb, .83) + rng.Range(-.045, .045);
                 double t = .56 + (limb % 4) * .065 + rng.Range(-.018, .018);
                 double length = tree.Def.CanopyRadius * rng.Range(.68, .84);
                 var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
                 var start = Centre(t) + dir * (Radius(t) * .65);
                 double rise = length * .14, droop = length * .08;
-                var tip = Branch(t, a, length, rise, droop, r * .17);
+                var axis = BranchAxis(t, a, length, rise, droop, r * .21);
 
-                for (int drop = 0; drop < 2; drop++)
+                for (int drop = 0; drop < 1+limb%3; drop++)
                 {
-                    double q = drop == 0 ? .42 : .75;
-                    var limbPt = start + dir * (length * q) + Vec3.Up * (rise * q - droop * q * q);
-                    var groundPt = Vec3.FromXZ(limbPt.XZ, ground(limbPt.XZ));
-                    if (tree.Domain.ContainsDisc(limbPt.XZ, r * .15) && limbPt.Y > groundPt.Y + .3)
+                    double q = .30 + drop*.22 + rng.Range(-.05,.05);
+                    var limbPt = OnAxis(axis,q);
+                    var footXZ=limbPt.XZ + dir.XZ*rng.Range(-.15,.25);
+                    var groundPt = Vec3.FromXZ(footXZ, ground(footXZ));
+                    if (tree.Domain.ContainsDisc(footXZ, r * .18) && limbPt.Y > groundPt.Y + .3)
                     {
-                        var mid = Vec3.Lerp(limbPt, groundPt, .50) + dir * (r * .03 * (drop == 0 ? 1 : -1));
-                        Tube(new[] { limbPt, mid, groundPt },
-                            new[] { r * .035, r * .042, r * .065 }, Primitives.Scale(bark, .78), 7);
+                        var mid = Vec3.Lerp(limbPt, groundPt, .50) + dir * (r * .16 * (drop == 0 ? 1 : -1));
+                        var heel = Vec3.Lerp(mid,groundPt,.88);
+                        double girth=rng.Range(.035,.065)*r;
+                        Tube(new[] { limbPt, mid, heel, groundPt },
+                            new[] { girth, girth*.85, girth*1.25, girth*1.85 }, Primitives.Scale(bark, .78), 7);
                     }
                 }
 
-                for (int twig = 0; twig < 5; twig++)
+                for (int twig = 0; twig < 8; twig++)
                 {
-                    double q = (twig + .6) / 5.8;
-                    var at = Vec3.Lerp(start, tip, q);
+                    double q = .20+.76*(twig + .6) / 8.8;
+                    var at = OnAxis(axis,q);
                     double ta = facing + Math.Clamp(a - facing + (twig % 2 == 0 ? 1 : -1) * rng.Range(.28, .48), -Math.PI / 3 + .16, Math.PI / 3 - .16);
                     var tdir = new Vec3(Math.Cos(ta), 0, Math.Sin(ta));
                     double tl = length * rng.Range(.18, .28);
                     var end = at + tdir * tl + Vec3.Up * (tl * .32);
-                    Tube(new[] { at, Vec3.Lerp(at, end, .5) + Vec3.Up * .06, end },
+                    var twigAxis=new[] { at, Vec3.Lerp(at, end, .5) + Vec3.Up * .06, end };
+                    Tube(twigAxis,
                         new[] { r * .030, r * .015, r * .003 }, Primitives.Scale(bark, .80), 7);
 
-                    for (int lf = 0; lf < 6; lf++)
+                    for (int lf = 0; lf < 8; lf++)
                     {
-                        double u = (lf + .5) / 6.0;
-                        var attach = Vec3.Lerp(at, end, u);
-                        double la = facing + Math.Clamp(ta - facing + (lf % 2 == 0 ? 1 : -1) * rng.Range(.30, .60), -Math.PI / 3 + .14, Math.PI / 3 - .14);
+                        double u = (lf + .5) / 8.0;
+                        var attach = OnAxis(twigAxis,u);
+                        double la = ta + (lf % 2 == 0 ? 1 : -1) * rng.Range(.65, 1.35);
                         double ll = r * rng.Range(.30, .50);
                         double pitch = rng.Range(-.50, .70);
                         var ltip = attach + new Vec3(Math.Cos(la) * ll * Math.Cos(pitch), ll * Math.Sin(pitch), Math.Sin(la) * ll * Math.Cos(pitch));
@@ -1177,28 +1215,29 @@ public static class PilotTreeMeshes
             int limbs = 8;
             for (int limb = 0; limb < limbs; limb++)
             {
-                double a = facing + (-.65 + 1.30 * limb / (limbs - 1.0)) + rng.Range(-.04, .04);
+                double a = CrownAngle(limb, .83) + rng.Range(-.045, .045);
                 double t = .62 + (limb % 4) * .065 + rng.Range(-.015, .015);
                 double length = tree.Def.CanopyRadius * rng.Range(.68, .84);
                 var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
                 var side = new Vec3(-dir.Z, 0, dir.X);
-                var tip = Branch(t, a, length, length * .42, length * .26, r * .16);
+                var axis = BranchAxis(t, a, length, length * .50, length * .36, r * .19);
 
-                for (int s = 0; s < 4; s++)
+                for (int s = 0; s < 7; s++)
                 {
-                    double q = .35 + s * .18 + rng.Range(-.04, .04);
-                    var attach = Centre(t) + dir * (Radius(t) * .65 + length * q)
-                        + Vec3.Up * (length * .42 * q - length * .26 * q * q);
-                    double hangLen = length * rng.Range(.38, .60);
+                    double q = .27 + s * .105 + rng.Range(-.025, .025);
+                    var attach = OnAxis(axis,q);
+                    double hangLen = length * rng.Range(.25, .68)*( .75+.25*q);
                     var sEnd = attach - Vec3.Up * hangLen + dir * (hangLen * .08) + side * (hangLen * .06 * (s % 2 == 0 ? 1 : -1));
-                    var sMid = Vec3.Lerp(attach, sEnd, .5) + dir * (hangLen * .03);
-                    Tube(new[] { attach, sMid, sEnd }, new[] { r * .018, r * .009, r * .003 }, Primitives.Scale(bark, .78), 7);
+                    var shoulder=attach+dir*hangLen*.13+side*hangLen*.10*(s%2==0?1:-1)-Vec3.Up*hangLen*.12;
+                    var sMid = Vec3.Lerp(shoulder, sEnd, .5) + dir * (hangLen * .04);
+                    var pendantAxis=new[] { attach, shoulder, sMid, sEnd };
+                    Tube(pendantAxis, new[] { r * .025, r*.018, r * .009, r * .002 }, Primitives.Scale(bark, .78), 7);
 
                     int leaves = 6;
                     for (int lf = 0; lf < leaves; lf++)
                     {
                         double u = (lf + .5) / 6.0;
-                        var lat = Vec3.Lerp(attach, sEnd, u);
+                        var lat = OnAxis(pendantAxis,u);
                         double la = facing + Math.Clamp(a - facing + (lf % 2 == 0 ? 1 : -1) * rng.Range(.30, .60), -Math.PI / 3 + .14, Math.PI / 3 - .14);
                         double ll = r * rng.Range(.26, .45);
                         var ltip = lat + new Vec3(Math.Cos(la) * ll * .4, -ll * .88, Math.Sin(la) * ll * .4);

@@ -50,6 +50,15 @@ public sealed class GuardianIndividual
     public double TargetZ { get; set; }
     public string HomeAttachmentId { get; set; } = "trunk_base";
 
+    // Persist the selected surface route so loading mid-climb never snaps to soil.
+    public List<GuardianClimbStep> ClimbRoute { get; set; } = new();
+    public int ClimbIndex { get; set; }
+    public bool ClimbReturning { get; set; }
+    public ulong ClimbHostId { get; set; }
+    public double ClimbCooldown { get; set; } = 20;
+    public Vec3 ClimbNormal { get; set; } = Vec3.Up;
+    public Vec3 ClimbDirection { get; set; } = Vec3.Up;
+
     // Spatial Position & Orientation
     public double X { get; set; }
     public double Y { get; set; }

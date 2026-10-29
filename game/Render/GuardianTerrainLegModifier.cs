@@ -31,7 +31,7 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
     {
         using var timing=Vivarium.Game.App.FrameProfiler.Measure("Guardian.Legs");
         var skeleton = GetSkeleton();
-        if (skeleton == null || Renderer == null) return;
+        if (skeleton == null || Renderer == null || Renderer.IsClimbing) return;
         var transform = skeleton.GlobalTransform; var inverse = transform.AffineInverse();
         MaximumReachError = 0; MaximumSolePenetration = 0;
         MaximumSkinFootPenetration = 0; SkinFootSampleCount = 0; MaximumStanceFootGap = 0; MaximumFootRetargetDistance = 0; MaximumStanceFootTravel = 0;

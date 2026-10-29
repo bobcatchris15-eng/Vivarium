@@ -26,8 +26,7 @@ public partial class FloraRenderer : Node3D
     private VivariumWorld _w = null!;
     private const int DefaultMorphVariants = 5;
     private const int MigratedMorphVariants = 12;
-    private static int MorphVariantsFor(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate" or "vine_clinglace" or "vine_spiralvine" or "vine_fenhook"
-        ? MigratedMorphVariants : DefaultMorphVariants;
+    private static int MorphVariantsFor(string shape) => FloraGeometryPlacement.MorphCount(shape);
     private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Juvenile, Tendril; public int FullTris, FruitTris, JuvenileTris, TendrilTris; public bool CanCastShadow; }
     private sealed class Layer
     {
@@ -813,22 +812,9 @@ if (!_layers.ContainsKey(sp.Id)) continue;
 
             if (isUpright)
             {
-                var fp = f.Position;
-                double e = Math.Max(_w.Grid.CellSize * 0.55, Math.Min(0.35, Math.Max(r, 0.05)));
-                double gx = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(e, 0))
-                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(e, 0));
-                double gz = _w.Fields.Light.Sample(fp + new Vivarium.Sim.Core.Vec2(0, e))
-                          - _w.Fields.Light.Sample(fp - new Vivarium.Sim.Core.Vec2(0, e));
-                double moisture = _w.Fields.Moisture.Sample(fp);
-                double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
-                double stressAngle = ((hash >> 24) % 6283) / 1000.0;
-                var growUp = new Vector3(
-                    (float)(gx * 0.62 + Math.Cos(stressAngle) * stress * 0.15),
-                    1f,
-                    (float)(gz * 0.62 + Math.Sin(stressAngle) * stress * 0.15)).Normalized();
-                yawBasis = SurfaceFrame.TiltTo(growUp) * yawBasis;
-                h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
-                r *= 1.0 + stress * 0.035;
+                var growth = FloraGeometryPlacement.Upright(_w, f.Id.Value, f.Position, f.Health, r, h);
+                yawBasis = SurfaceFrame.TiltTo(Bridge.V(growth.Up)) * yawBasis;
+                h = growth.Height; r = growth.Radius;
             }
             else if (sp.Shape != "vine" && sp.Shape != "floatleaf" && sp.Shape != "glasslily_pad")
             {

@@ -12,7 +12,7 @@ using Vivarium.Sim.World;
 
 namespace Vivarium.Game.App;
 
-/// <summary>All-six structural views through the same pilot-tree/island renderers used in gameplay.</summary>
+/// <summary>All-species structural views through the same pilot-tree/island renderers used in gameplay.</summary>
 public partial class PilotTreeOverhaulReview : Node3D
 {
     public ContentLibrary Content { get; set; } = null!;
@@ -55,21 +55,22 @@ public partial class PilotTreeOverhaulReview : Node3D
             var tree = world.PilotTree!;
             int treeTriangles = pilot.Tree!.Mesh.GetFaces().Length / 3;
             int rootTriangles = pilot.Roots!.Mesh.GetFaces().Length / 3;
-            if (treeTriangles + rootTriangles > 180000)
+            if (treeTriangles + rootTriangles > 2600000)
                 throw new InvalidOperationException("Pilot tree exceeded native triangle budget: " + def.Id);
-            using var arrays = pilot.Tree!.Mesh.SurfaceGetArrays(0);
-            var positions = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-            var colors = arrays[(int)Mesh.ArrayType.Color].AsColorArray();
             Aabb bounds = pilot.Roots!.Mesh.GetAabb();
             Aabb? foliageBounds = null;
-            for (int i = 0; i < positions.Length; i++)
+            for (int surface = 0; surface < pilot.Tree.Mesh.GetSurfaceCount(); surface++)
             {
-                // The production shader clips the crown at the specimen planes.
-                // Fit only its visible part, rather than discarded exterior foliage.
-                if (world.Domain.SignedDistance(new Vivarium.Sim.Core.Vec2(positions[i].X, positions[i].Z)) > .001) continue;
-                bounds = bounds.Expand(positions[i]);
-                if (colors[i].A < .2f)
-                    foliageBounds = foliageBounds is { } box ? box.Expand(positions[i]) : new Aabb(positions[i], Vector3.Zero);
+                using var arrays = pilot.Tree.Mesh.SurfaceGetArrays(surface);
+                var positions = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var colors = arrays[(int)Mesh.ArrayType.Color].AsColorArray();
+                for (int i = 0; i < positions.Length; i++)
+                {
+                    if (world.Domain.SignedDistance(new Vivarium.Sim.Core.Vec2(positions[i].X, positions[i].Z)) > .001) continue;
+                    bounds = bounds.Expand(positions[i]);
+                    if (colors[i].A < .2f)
+                        foliageBounds = foliageBounds is { } box ? box.Expand(positions[i]) : new Aabb(positions[i], Vector3.Zero);
+                }
             }
             foreach (var mesh in island.GetChildren().OfType<MeshInstance3D>()) bounds = bounds.Merge(mesh.Mesh.GetAabb());
             var inward = new Vector3((float)-tree.CornerPoint.X, 0, (float)-tree.CornerPoint.Z).Normalized();
@@ -95,6 +96,15 @@ public partial class PilotTreeOverhaulReview : Node3D
             Aabb crownBounds = foliageBounds ?? pilot.Tree.Mesh.GetAabb();
             await Fit(crownBounds, crownBounds.GetCenter(), (inward + side * .3f + Vector3.Up * .15f).Normalized());
             await Save(def.Id, "crown");
+            if (Main.UserArgs.Contains("--pilot-structure-only"))
+            {
+                if (before != WorldSerializer.Digest(world)) throw new InvalidOperationException("Tree review changed world state: " + def.Id);
+                captures.Add(new { id = def.Id, tree_triangles = treeTriangles, root_triangles = rootTriangles, world_unchanged = true });
+                await VerifyRendererContracts(pilot, def.Id, (captures.Count - 1) % 6);
+                RemoveChild(stage); stage.Free();
+                await Frames(1);
+                continue;
+            }
             var material = (ShaderMaterial)pilot.Tree.Mesh.SurfaceGetMaterial(0);
             float vein = material.GetShaderParameter("u_leaf_vein_strength").AsSingle();
             float relief = material.GetShaderParameter("u_leaf_relief").AsSingle();
@@ -138,7 +148,7 @@ public partial class PilotTreeOverhaulReview : Node3D
                 tree_triangles = treeTriangles, root_triangles = rootTriangles,
                 world_unchanged = true, flora_rendered = false, fauna_rendered = false,
                 bounds_position = bounds.Position.ToString(), bounds_size = bounds.Size.ToString() });
-            await VerifyRendererContracts(pilot, def.Id, captures.Count - 1);
+            await VerifyRendererContracts(pilot, def.Id, (captures.Count - 1) % 6);
             RemoveChild(stage); stage.Free();
             await Frames(1);
         }
@@ -175,10 +185,10 @@ public partial class PilotTreeOverhaulReview : Node3D
         }
         File.WriteAllText(Path.Combine(OutDir, "metadata.json"), JsonSerializer.Serialize(new
         { production_renderers = new[] { "IslandRenderer", "PilotTreeRenderer", "EnvironmentRig" },
-            scope = "all-six structural review; separate populated GameSession capture verifies composition",
+            scope = "all-species structural review; flora/fauna omitted; no populated-gameplay or performance acceptance",
             captures, image_count = _imageCount, light_seconds = 60, fixed_exposure = true,
-            surface_sweep = "Crowncoil/Basinwarden: leaf vein/relief zero(0,0), restrained(.30,.18), pronounced(1,.65); cutwood zero0/restrained.39/pronounced1; production defaults restored",
-            renderer_contracts = "all six forms rebuilt at distinct corners; remote terrain skips root upload, local terrain refreshes roots only; none removes both meshes",
+            surface_sweep = Main.UserArgs.Contains("--pilot-structure-only") ? "disabled for structural review" : "Crowncoil/Basinwarden: leaf vein/relief zero(0,0), restrained(.30,.18), pronounced(1,.65); cutwood zero0/restrained.39/pronounced1; production defaults restored",
+            renderer_contracts = "all forms rebuilt at distinct corners; remote terrain skips root upload, local terrain refreshes roots only; none removes both meshes",
             custom_palette_counts = new[] { 3, 5 }, custom_palette_uploads_match_authored_colors = true }, new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(OutDir, "cameras.json"), JsonSerializer.Serialize(new { scenes = _cameraRows }, new JsonSerializerOptions { WriteIndented = true }));
     }

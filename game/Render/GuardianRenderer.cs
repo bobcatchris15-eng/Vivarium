@@ -38,6 +38,7 @@ public partial class GuardianRenderer : Node3D
     public bool Drawn { get; private set; }
     public bool OffScreen { get; private set; }
     public Vector3 DisplayPosition => GlobalPosition;
+    public bool IsClimbing => _w?.Guardian?.Activity == GuardianActivity.Climb;
     public FloraRenderer? Vegetation { get; set; }
     public GuardianAppendageModifier? AppendageContact { get; private set; }
     public GuardianVegetationContact? ShrubContact { get; private set; }
@@ -496,7 +497,7 @@ public partial class GuardianRenderer : Node3D
             (float)(_w.GroundHeight(p - new Vec2(0, sample)) - _w.GroundHeight(p + new Vec2(0, sample)))).Normalized();
         normal = Vector3.Up.Lerp(normal, 0.45f).Normalized();
         if (ReviewSupportPlaneHeight.HasValue) normal = Vector3.Up;
-        _shownPos.Y = SupportHeight(_shownPos);
+        if (!IsClimbing) _shownPos.Y = SupportHeight(_shownPos);
         if (normal.Y > 0.4f && normal.LengthSquared() > 0.01f)
         {
             Vector3 forward = -rot.Z;
@@ -514,9 +515,21 @@ public partial class GuardianRenderer : Node3D
             }
         }
 
+        if (IsClimbing)
+        {
+            var up = Bridge.V(g.ClimbNormal).Normalized();
+            var forward = Bridge.V(g.ClimbDirection);
+            forward -= up * forward.Dot(up);
+            if (forward.LengthSquared() < 1e-6f) forward = -rot.Z - up * (-rot.Z).Dot(up);
+            if (forward.LengthSquared() > 1e-6f)
+            {
+                forward = forward.Normalized();
+                rot = new Basis(forward.Cross(up).Normalized(), up, -forward);
+            }
+        }
         GlobalTransform = new Transform3D(rot, _shownPos);
         BodyTrunkCorrection = 0;
-        if (AppendageContact != null && _skeleton != null && !ReviewSupportPlaneHeight.HasValue && ReviewGroundSample == null && _w.PilotTree != null)
+        if (!IsClimbing && AppendageContact != null && _skeleton != null && !ReviewSupportPlaneHeight.HasValue && ReviewGroundSample == null && _w.PilotTree != null)
         {
             double treeDist = Vec2.Distance(new Vec2(_shownPos.X, _shownPos.Z), _w.PilotTree.Anchor);
             double treeReach = _w.PilotTree.Def.TrunkRadius + 3.0;
@@ -584,7 +597,7 @@ public partial class GuardianRenderer : Node3D
 
         // Sample the animated feet against the same root/prop support as the sim.
         // A single height at the pelvis lets feet disappear on uneven buttresses.
-        if (_skeleton != null && LegContact == null)
+        if (!IsClimbing && _skeleton != null && LegContact == null)
         {
             float lift = 0;
             EnsureBoneCache();
@@ -607,7 +620,7 @@ public partial class GuardianRenderer : Node3D
 
         if (HeadTracker != null)
         {
-            Vector3? targetLookPoint = ResolveInterestPoint(g);
+            Vector3? targetLookPoint = IsClimbing ? GlobalPosition + Bridge.V(g.ClimbDirection) : ResolveInterestPoint(g);
             bool fast = g.Activity == GuardianActivity.Retreat || (g.Activity is GuardianActivity.Forage or GuardianActivity.Explore && _curPos.DistanceTo(_prevPos) > 1.5f);
             HeadTracker.SetTarget(targetLookPoint, g.Activity, fast);
         }
@@ -628,7 +641,7 @@ public partial class GuardianRenderer : Node3D
         // Do not add a second uniform pulse to every vertex.
         Vector3 contactSphere = Vector3.Zero;
         float contactRadius = 0f;
-        if (SkinContact is { Valid: true, GpuDeformationEnabled: true })
+        if (!IsClimbing && SkinContact is { Valid: true, GpuDeformationEnabled: true })
         {
             // One actual evaluated underside contact patch. Never inflate the
             // entire body to hide a bad foothold or an unreachable nasal target.
@@ -742,7 +755,8 @@ public partial class GuardianRenderer : Node3D
             GuardianActivity.Investigate => ResolveInvestigateAnim(g),
             GuardianActivity.Alert => HasAnim("alert") ? "alert" : "idle",
             GuardianActivity.ScentMark => HasAnim("scent_mark") ? "scent_mark" : "idle",
-            GuardianActivity.Forage or GuardianActivity.Explore or GuardianActivity.Climb or GuardianActivity.ReturnHome => "walk",
+            GuardianActivity.Climb => HasAnim("climb") ? "climb" : "walk",
+            GuardianActivity.Forage or GuardianActivity.Explore or GuardianActivity.ReturnHome => "walk",
             GuardianActivity.Retreat => HasAnim("run") ? "run" : "walk",
             _ => "idle"
         };

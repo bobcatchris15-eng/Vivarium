@@ -14,6 +14,36 @@ public class GuardianSimulationTests
     private static ContentLibrary Content => ContentLoader.Load(TestUtil.ContentSource);
 
     [Fact]
+    public void SatisfiedGuardiansKeepAnIslandDestinationAndChooseAnotherOnArrival()
+    {
+        foreach (var def in GuardianCatalog.All)
+        {
+            var descriptor = Content.PresetOrThrow("default").Clone();
+            descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            descriptor.GuardianId = def.Id;
+            var world = VivariumWorld.Create(Content, descriptor);
+            var g = world.Guardian!;
+            g.Energy = def.EnergyMax; g.Hydration = 1; g.Comfort = 1;
+            g.Fatigue = .1; g.BodyTemperature = 1; g.Arousal = 0;
+            g.ActivityDuration = 0;
+            void Step() => world.GuardianSystem.StepBehaviour(Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * .1);
+            Step();
+            Assert.Equal(GuardianActivity.Explore, g.Activity);
+            var target = g.TargetPosition;
+            Assert.True(Vec2.Distance(g.PositionXZ, new Vec2(target.X, target.Z)) >= Math.Min(2.0, world.Domain.Radius * .4) - .05);
+            for (int i = 0; i < 10; i++) Step();
+            Assert.Equal(target, g.TargetPosition);
+            g.Position = target;
+            Step();
+            Assert.Equal(GuardianActivity.Explore, g.Activity);
+            Assert.NotEqual(target, g.TargetPosition);
+            g.Energy = 0;
+            Step();
+            Assert.True(g.Activity is GuardianActivity.Forage or GuardianActivity.Feed);
+        }
+    }
+
+    [Fact]
     public void AllGuardiansSpawnOutsideTrunkAndMoveDuringFirstMinute()
     {
         foreach (var def in GuardianCatalog.All)
@@ -34,7 +64,7 @@ public class GuardianSimulationTests
                 Assert.True(moved <= def.RunSpeed * 40 / Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond + 1e-6,
                     def.Id + " exceeded its authored locomotion rate: " + moved);
                 distance += moved;
-                Assert.False(world.PilotTree.BlocksTrunk(guardian.PositionXZ, 0.35));
+                if (guardian.Activity != GuardianActivity.Climb) Assert.False(world.PilotTree.BlocksTrunk(guardian.PositionXZ, 0.35));
                 Assert.True(world.Domain.Contains(guardian.PositionXZ));
             }
             Assert.True(distance > 1.0, def.Id + " travelled only " + distance);
@@ -54,6 +84,9 @@ public class GuardianSimulationTests
             g.X = 0; g.Z = 0; g.Heading = 0;
             g.TargetPosition = new Vec3(0.5, world.GroundHeight(new Vec2(0.5, 0)), 0);
             g.Activity = GuardianActivity.Explore; g.ActivityDuration = 100;
+            // This test isolates stride rate from the need-driven interruption.
+            g.Energy = def.EnergyMax; g.Hydration = 1; g.Comfort = 1;
+            g.Fatigue = .1; g.BodyTemperature = 1; g.Arousal = 0;
             double individualScale = g.Scale;
             world.GuardianSystem.StepBehaviour(Vivarium.Sim.Time.SimClock.DefaultSimSecondsPerRealSecond * 0.1);
             Assert.Equal(def.WalkSpeed * 0.5 * 0.1, g.X, 6);
@@ -73,7 +106,7 @@ public class GuardianSimulationTests
         guardian.X = world.PilotTree!.Anchor.X;
         guardian.Z = world.PilotTree.Anchor.Z;
         world.GuardianSystem.StepBehaviour(40);
-        Assert.False(world.PilotTree.BlocksTrunk(guardian.PositionXZ, 0.35));
+        if (guardian.Activity != GuardianActivity.Climb) Assert.False(world.PilotTree.BlocksTrunk(guardian.PositionXZ, 0.35));
         Assert.Equal(world.GroundHeight(guardian.PositionXZ), guardian.Y, 6);
     }
 
@@ -81,13 +114,14 @@ public class GuardianSimulationTests
     public void CatalogMapsAllSixPilotTreesToOneToOneGuardians()
     {
         Assert.Equal(6, GuardianCatalog.All.Count);
-        Assert.Equal(6, PilotTreeCatalog.All.Count);
+        Assert.True(PilotTreeCatalog.All.Count >= 6);
 
-        foreach (var tree in PilotTreeCatalog.All)
+        foreach (var guardian in GuardianCatalog.All)
         {
-            var guardian = GuardianCatalog.ForPilotTree(tree.Id);
-            Assert.NotNull(guardian);
-            Assert.Equal(tree.Id, guardian.AssociatedPilotTreeId);
+            var tree = PilotTreeCatalog.Find(guardian.AssociatedPilotTreeId);
+            Assert.NotNull(tree);
+            Assert.Equal(guardian.AssociatedPilotTreeId, tree.Id);
+            Assert.Equal(guardian, GuardianCatalog.ForPilotTree(tree.Id));
         }
 
         Assert.Equal(GuardianCatalog.CrestedCanopy, GuardianCatalog.ForPilotTree("crowncoil")!.Id);
