@@ -3,14 +3,21 @@
   Reproducible release export (no editor clicking).
   Output: build/release/Vivarium/ (Windows bundle), build/release/Vivarium-Linux/ (Linux bundle),
           build/Vivarium-<version>-win64.zip, and build/Vivarium-<version>-linux64.zip
-  Prerequisites: .NET 8 SDK, Godot 4.7.1 mono (tools/godot or $env:VIVARIUM_GODOT), export templates 4.7.1.stable.mono.
+  Prerequisites: .NET 10 SDK (Godot editor tooling; game targets .NET 8), Godot 4.7.1 mono,
+                 export templates 4.7.1.stable.mono.
 #>
 param(
     [string]$Target = 'All',
-    [int]$TimeoutSec = 900
+    [int]$TimeoutSec = 900,
+    [string]$DotnetRoot = $env:VIVARIUM_DOTNET_ROOT
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
 Set-Location $RepoRoot
+if ($DotnetRoot) {
+    if (-not (Test-Path (Join-Path $DotnetRoot 'dotnet.exe'))) { throw "Invalid .NET SDK directory: $DotnetRoot" }
+    $env:DOTNET_ROOT = $DotnetRoot
+    $env:PATH = "$DotnetRoot;$env:PATH"
+}
 $version = Get-AppVersion
 $godot = Get-GodotExe
 $game = Join-Path $RepoRoot 'game'
@@ -69,7 +76,10 @@ Press F1 in the application for controls.
 
     $zip = Join-Path $RepoRoot "build\Vivarium-$version-win64.zip"
     Remove-Item $zip -ErrorAction SilentlyContinue
-    Compress-Archive -Path "$dest\*" -DestinationPath $zip
+    # ZipFile streams large PCK entries and supports ZIP64; Compress-Archive
+    # buffers entries and fails when a single resource pack exceeds 2 GB.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($dest, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
     $size = (Get-ChildItem $dest -Recurse | Measure-Object Length -Sum).Sum / 1MB
     Write-Host ("Exported Windows: {0} ({1:N0} MB) and {2}" -f $dest, $size, $zip) -ForegroundColor Green
 }
@@ -111,7 +121,8 @@ Press F1 in the application for controls.
 
     $zipLinux = Join-Path $RepoRoot "build\Vivarium-$version-linux64.zip"
     Remove-Item $zipLinux -ErrorAction SilentlyContinue
-    Compress-Archive -Path "$destLinux\*" -DestinationPath $zipLinux
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($destLinux, $zipLinux, [System.IO.Compression.CompressionLevel]::Optimal, $false)
     $sizeLinux = (Get-ChildItem $destLinux -Recurse | Measure-Object Length -Sum).Sum / 1MB
     Write-Host ("Exported Linux: {0} ({1:N0} MB) and {2}" -f $destLinux, $sizeLinux, $zipLinux) -ForegroundColor Green
 }

@@ -8,7 +8,7 @@ namespace Vivarium.Sim.Core;
 public static class AppVersion
 {
     public const string ProductName = "Vivarium";
-    public const string Application = "0.1.3";
+    public const string Application = "0.1.4";
 
     /// <summary>Schema 5 stores the tiled fluid solver's established-surface state. Older saves are unsupported.</summary>
     public const int SaveSchema = 5;

@@ -31,7 +31,20 @@ foreach ($dll in 'Vivarium.dll', 'Vivarium.Sim.dll') {
 function Run-Watched([string[]]$UserArgs, [string]$Name) {
     $argv = @($mode) + @('--') + @($UserArgs)
     $stdout = "$out\$Name.out.txt"; $stderr = "$out\$Name.err.txt"
-    $p = Start-Process -FilePath $exe -ArgumentList $argv -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $priorUser = $env:VIVARIUM_BENCHMARK_USER_DIR
+    $priorScenario = $env:VIVARIUM_LANDSCAPE_SCENARIO
+    try {
+        # Bridge.UserPath honors isolation for scripted landscape runs. Smoke
+        # uses the same guard without selecting the performance runner mode.
+        $env:VIVARIUM_BENCHMARK_USER_DIR = Join-Path $out 'user'
+        $env:VIVARIUM_LANDSCAPE_SCENARIO = 'release-smoke-isolation'
+        New-Item -ItemType Directory -Force $env:VIVARIUM_BENCHMARK_USER_DIR | Out-Null
+        $p = Start-Process -FilePath $exe -ArgumentList $argv -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        $null = $p.Handle
+    } finally {
+        $env:VIVARIUM_BENCHMARK_USER_DIR = $priorUser
+        $env:VIVARIUM_LANDSCAPE_SCENARIO = $priorScenario
+    }
     $connections = 0
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
