@@ -45,7 +45,8 @@ public enum GuardianActivity
 
 /// <summary>
 /// Immutable definition of a Guardian Animal archetype.
-/// Defines biological parameters, locomotion styles, dietary preferences, and Pilot Tree affinity.
+/// Defines biological parameters, locomotion styles, and dietary preferences.
+/// Guardian choice is independent of the world's Pilot Tree.
 /// </summary>
 /// <param name="BaseMetabolismRate">Energy spent per visible second at default world speed
 /// and biological acceleration 1. Faster biology multiplies energy demand; digestion uses biological seconds.</param>
@@ -53,7 +54,6 @@ public sealed record GuardianDef(
     string Id,
     string Name,
     string Archetype,
-    string AssociatedPilotTreeId,
     LocomotionMode Locomotion,
     double AdultMass,
     double VisualScale,

@@ -40,7 +40,6 @@ public class PilotFungiOverhaulTests
     }
 
     [Theory]
-    [InlineData("dewbonnet")]
     [InlineData("carrion_bell")]
     [InlineData("ghostbonnet")]
     public void LamellarFungiHaveActualVerticalGillsAndFullPileus(string id)

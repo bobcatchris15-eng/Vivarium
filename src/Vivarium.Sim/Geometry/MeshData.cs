@@ -143,7 +143,7 @@ public sealed class MeshData
 /// <see cref="LeafFraction"/> of leaf blades survive (inner/smallest dropped first).
 /// </summary>
 public sealed record FloraLodParams(double Radial = 1, double Length = 1, double Blade = 1, double LeafFraction = 1,
-    int GillStations = 9, int EmberMicroSides = 5)
+    int GillStations = 9, int EmberMicroSides = 5, int DewbonnetCapRings = 16, bool CullMinorDetails = false)
 {
     public static FloraLodParams FromScale(double s)
     {

@@ -55,13 +55,24 @@ public sealed class Heightfield
     {
         double h = t.BaseHeight + t.SlopeX * x + t.SlopeZ * z + t.Relief * Noise.Fbm(seed, x * t.NoiseScale, z * t.NoiseScale, t.Octaves);
         // fine micro-relief keeps close-up ground organic
-        h += 0.04 * Noise.Fbm(Rng.Mix(seed, 77), x * 1.7, z * 1.7, 2);
+        h += t.MicroRelief * Noise.Fbm(Rng.Mix(seed, 77), x * 1.7, z * 1.7, 2);
         var p = new Vec2(x, z);
         foreach (var f in t.Features)
         {
-            if (f.BedHeight.HasValue) continue;
+            if (f.BedHeight.HasValue || f.CutDepth.HasValue) continue;
             switch (f.Type)
             {
+                case "ledge":
+                {
+                    // Directed shelf boundary: the left side is raised by Amount.
+                    // A sharp ledge is resolved by one physical grid cell, so terrain,
+                    // rendered soil, collision and water all share the same steep face.
+                    Vec2 a = new(f.X, f.Z), edge = new Vec2(f.ToX, f.ToZ) - a;
+                    double side = edge.Cross(p - a) / edge.Length;
+                    double weight = f.Sharp ? (side >= 0 ? 1 : 0) : MathD.Clamp01(.5 + side / f.Width);
+                    h += f.Amount * weight;
+                    break;
+                }
                 case "hill":
                 case "basin":
                 {
@@ -85,7 +96,8 @@ public sealed class Heightfield
         double bank = h;
         foreach (var f in t.Features)
         {
-            if (f.BedHeight is not double floor) continue;
+            if (!f.BedHeight.HasValue && !f.CutDepth.HasValue) continue;
+            double floor = f.CutDepth is double depth ? bank - depth : f.BedHeight!.Value;
             double dd;
             if (f.Type == "channel")
             {

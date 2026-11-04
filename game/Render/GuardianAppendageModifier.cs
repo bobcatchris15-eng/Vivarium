@@ -55,6 +55,11 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     private Vector3 _lastRoot;
     private bool _initialized;
     private float _scale = 1;
+    // Frame-skipping: when the tail root hasn't moved materially, run the full
+    // constraint solve every other frame and just re-apply the previous pose on
+    // the off frame. The tail's inertia and convergence keep it visually stable.
+    private int _framesSinceFullSolve;
+    private Vector3 _lastFullSolveRoot;
     // Cost accounting for the constraint solve. The three inner costs dominate the
     // modifier, so they are timed separately instead of guessing from the total.
     private double _vegetationMs, _treeMs, _groundMs;
@@ -105,6 +110,17 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             _points = new Vector3[_bones.Length + 1]; _velocity = new Vector3[_points.Length];_iterationStart=new Vector3[_points.Length];_fixedPointReference=new Vector3[_points.Length];
         }
         if (_bones.Length < 2) return;
+        // Frame-skip the full constraint solve when the tail root is nearly stationary.
+        // On off-frames, re-apply the last solved pose; the tail's hysteresis keeps it stable.
+        var rootNow = skeleton.GetBoneGlobalPose(_bones[0]).Origin;
+        bool rootMoved = rootNow.DistanceSquaredTo(_lastFullSolveRoot) > 0.0025f; // 5cm
+        if (_framesSinceFullSolve > 0 && !rootMoved)
+        {
+            _framesSinceFullSolve++;
+            return;
+        }
+        _framesSinceFullSolve = 1;
+        _lastFullSolveRoot = rootNow;
         _supportSamples.Clear();
         if(!_constraintAuditConfigured)
         {
@@ -171,7 +187,7 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         var headPose = attachedHead >= 0 ? skeleton.GetBoneGlobalPose(attachedHead) : Transform3D.Identity;
         var jawPose = attachedJaw >= 0 ? skeleton.GetBoneGlobalPose(attachedJaw) : Transform3D.Identity;
         if (!_initialized || goals[0].DistanceSquaredTo(_lastRoot) > .25f)
-        { Array.Copy(goals, _points, goals.Length); Array.Clear(_velocity); _initialized = true; }
+        { Array.Copy(goals, _points, goals.Length); Array.Clear(_velocity); _initialized = true; _lastFullSolveRoot = goals[0]; }
         _lastRoot = goals[0];
         float dt = World.Clock.Paused ? 0 : (float)Math.Clamp(delta * World.Clock.SpeedMultiplier, 0, .08);
         // A slow frame must not multiply the solve cost. The substep size stays at
@@ -203,7 +219,7 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                 _points[i] += _velocity[i] * h;
             }
             bool auditingFixedPoint=false;
-            for (int iteration = 0; iteration < 32; iteration++)
+            for (int iteration = 0; iteration < 20; iteration++)
             {
                 _solveIterations++;
                 _points[0] = goals[0];Array.Copy(_points,_iterationStart,_points.Length);
@@ -319,7 +335,7 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                 if (attachedJaw >= 0) skeleton.SetBoneGlobalPose(attachedJaw, attachmentDelta * jawPose);
             }
         }
-        for (int fit = 0; fit < 8; fit++)
+        for (int fit = 0; fit < 5; fit++)
         {
             // Collision projection is the last operation in the main solve.
             // Reconcile length even when no skin sample needs a lift; otherwise

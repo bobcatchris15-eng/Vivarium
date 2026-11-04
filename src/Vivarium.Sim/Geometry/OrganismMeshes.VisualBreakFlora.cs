@@ -165,15 +165,15 @@ public static partial class OrganismMeshes
 /// Render-only parametric detail tiers for flora. Every tier is the same generator run with the same seed and
 /// individual form, only with coarser <see cref="FloraLodParams"/>: fewer radial sides and length rings on
 /// tubes (never below 5 sides), fewer blade segments (never below 2), and a deterministic fraction of leaf
-/// blades kept (innermost/smallest dropped first). Nothing is clustered or collapsed, so trunks and stems stay
-/// closed solid tubes at every tier. Nothing here is simulation state.
+/// blades kept (innermost/smallest dropped first). Main stems and marked essential features survive;
+/// secondary foliage and filaments are thinned on middle/far tiers. Nothing here is simulation state.
 /// </summary>
 public static partial class OrganismMeshes
 {
     public const int FloraLodTiers = 3;
     /// <summary>Hard cap on the top tier of every species.</summary>
     public const int FloraTopTriangleCap = 160000;
-    public const double FloraMidRatio = 0.85, FloraLowRatio = 0.60;
+    public const double FloraMidRatio = 0.50, FloraLowRatio = 0.18;
 
     /// <summary>
     /// Top-tier triangle cap for one species. The default holds for every form, but a species whose
@@ -185,8 +185,7 @@ public static partial class OrganismMeshes
         // A clover mat is hundreds of small overlapping leaflets; below its budget the near tier
         // thins the mat into scattered pads instead of a continuous sward.
         "trifold" => 160000,
-        // Dewbonnet's radial lamellae are part of the cap silhouette and underside read. Its
-        // authored full mesh measures about 200k triangles; preserve the requested dense cap.
+        // Keep authored cap/stipe density; underside lamellae now use a normal map.
         "dewbonnet" => 220000,
         // A fern's near read is its pinnae: dozens of finely divided blades per frond, nine fronds
         // deep. Below its budget the near tier drops pinnae and the fern reads as a handful of
@@ -211,7 +210,7 @@ public static partial class OrganismMeshes
         _ => FloraTopTriangleCap,
     };
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int), double> LodScaleCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int, bool), double> LodScaleCache = new();
 
     /// <summary>Triangle target for a tier, given the top-tier triangle count.</summary>
     public static int FloraTierBudget(int topTris, int tier) => tier switch
@@ -222,10 +221,11 @@ public static partial class OrganismMeshes
     };
 
     /// <summary>Flora mesh for one detail tier. <paramref name="tieredSource"/> also selects the dedicated leaf
-    /// system's own tessellation tier (visual-profile species).</summary>
-    public static MeshData FloraTier(FloraSpeciesDef sp, ulong seed, int tier, bool juvenile = false, bool tieredSource = false, int farGillStations = 9, int farEmberMicroSides = 5) =>
+    /// system's own tessellation tier (visual-profile species). Geometry audits can disable
+    /// <paramref name="thinMinorDetails"/> to isolate tessellation from organ selection.</summary>
+    public static MeshData FloraTier(FloraSpeciesDef sp, ulong seed, int tier, bool juvenile = false, bool tieredSource = false, int farGillStations = 9, int farEmberMicroSides = 5, int farDewbonnetCapRings = 16, bool thinMinorDetails = true) =>
         BuildTier(sp.Id, seed, juvenile ? 1 : 0, tieredSource, tier,
-            (t, lod) => Flora(sp, seed, juvenile, tieredSource ? t : null, lod), farGillStations, farEmberMicroSides)!;
+            (t, lod) => Flora(sp, seed, juvenile, tieredSource ? t : null, lod), farGillStations, farEmberMicroSides, farDewbonnetCapRings, thinMinorDetails)!;
 
     public static MeshData? FloraFruitingTier(FloraSpeciesDef sp, ulong seed, int tier, bool tieredSource = false) =>
         BuildTier(sp.Id, seed, 2, tieredSource, tier, (t, lod) => FloraFruiting(sp, seed, tieredSource ? t : null, lod));
@@ -237,13 +237,14 @@ public static partial class OrganismMeshes
     public static MeshData ClimberNodeTipTier(FloraSpeciesDef sp, ulong seed, int tier) =>
         BuildTier(sp.Id, seed, 5, false, tier, (_, lod) => ClimberNodeTip(sp, seed, lod))!;
 
-    private static MeshData? BuildTier(string id, ulong seed, int kind, bool tiered, int tier, Func<int, FloraLodParams, MeshData?> gen, int farGillStations = 9, int farEmberMicroSides = 5)
+    private static MeshData? BuildTier(string id, ulong seed, int kind, bool tiered, int tier, Func<int, FloraLodParams, MeshData?> gen, int farGillStations = 9, int farEmberMicroSides = 5, int farDewbonnetCapRings = 16, bool thinMinorDetails = true)
     {
         tier = Math.Clamp(tier, 0, FloraLodTiers - 1);
-        MeshData? Make(int t, double s) => gen(t, FloraLodParams.FromScale(s)) is { } raw ? FinishTier(raw) : null;
+        FloraLodParams Detail(int t, double s) => FloraLodParams.FromScale(s) with { CullMinorDetails = t > 0 && thinMinorDetails };
+        MeshData? Make(int t, double s) => gen(t, Detail(t, s)) is { } raw ? FinishTier(raw) : null;
         double S(int t)
         {
-            var key = (id, seed, kind, tiered, t);
+            var key = (id, seed, kind, tiered, t, thinMinorDetails);
             if (LodScaleCache.TryGetValue(key, out double cached)) return cached;
             int target;
             double hiS;
@@ -261,13 +262,14 @@ public static partial class OrganismMeshes
             return s;
         }
         double scale = S(tier);
-        // Keep the existing calibration and all non-gill geometry unchanged.
-        if (tier == 2 && ((id == "dewbonnet" && farGillStations != 9) || (id == "embercup" && farEmberMicroSides != 5)))
+        // Keep the existing calibration; override only the selected far-tier detail.
+        if (tier == 2 && ((id == "dewbonnet" && (farGillStations != 9 || farDewbonnetCapRings != 16)) || (id == "embercup" && farEmberMicroSides != 5)))
         {
-            var lod = FloraLodParams.FromScale(scale) with
+            var lod = Detail(tier, scale) with
             {
                 GillStations = id == "dewbonnet" ? Math.Clamp(farGillStations, 3, 9) : 9,
-                EmberMicroSides = id == "embercup" ? Math.Clamp(farEmberMicroSides, 3, 5) : 5
+                EmberMicroSides = id == "embercup" ? Math.Clamp(farEmberMicroSides, 3, 5) : 5,
+                DewbonnetCapRings = id == "dewbonnet" ? Math.Clamp(farDewbonnetCapRings, 4, 16) : 16
             };
             return gen(tier, lod) is { } raw ? FinishTier(raw) : null;
         }
@@ -301,113 +303,125 @@ public static partial class OrganismMeshes
     }
 
     /// <summary>Drops leaf blades beyond <see cref="FloraLodParams.LeafFraction"/> (innermost, then smallest,
-    /// first) and zero-area triangles, then compacts the mesh. Tubes are never dropped.</summary>
+    /// first) and zero-area triangles, then compacts the mesh. Main structural tubes are retained.</summary>
     private static MeshData FinishTier(MeshData src)
     {
         double keepFraction = src.Lod?.LeafFraction ?? 1;
         int nv = src.VertexCount;
         var idx = src.Indices;
-        // owner: -2 structural tube, >= 0 candidate part, -1 unassigned
-        var owner = new int[nv];
-        var essential = new bool[nv];
-        Array.Fill(owner, -1);
-        foreach (var st in src.Structural)
-            for (int v = st.FirstVertex; v < st.FirstVertex + st.VertexCount && v < nv; v++) owner[v] = -2;
-        foreach (var span in src.EssentialSpans)
-            for (int v = span.FirstVertex; v < span.FirstVertex + span.VertexCount && v < nv; v++) {owner[v] = -2;essential[v]=true;}
-        int parts = 0;
-        foreach (var ls in src.LeafSpans)
+        var owner = Array.Empty<int>();
+        var drop = Array.Empty<bool>();
+        if (src.Lod?.CullMinorDetails == true && keepFraction < 1)
         {
-            bool any = false;
-            for (int v = ls.FirstVertex; v < ls.FirstVertex + ls.VertexCount && v < nv; v++)
-                if (owner[v] == -1) { owner[v] = parts; any = true; }
-            if (any) parts++;
-        }
-        // Unrecorded small loose pieces (lobes, petals, beads) are candidates too; big ones are structure.
-        var parent = new int[nv];
-        for (int i = 0; i < nv; i++) parent[i] = i;
-        int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
-        for (int t = 0; t < idx.Count; t += 3)
-        {
-            int a = idx[t];
-            for (int j = 1; j < 3; j++)
+            // owner: -2 structural tube, >= 0 candidate part, -1 unassigned
+            owner = new int[nv];
+            var essential = new bool[nv];
+            Array.Fill(owner, -1);
+            double maxTube = src.Structural.Count > 0 ? src.Structural.Max(s => s.Radius) : 0;
+            foreach (var st in src.Structural)
+                for (int v = st.FirstVertex; v < st.FirstVertex + st.VertexCount && v < nv; v++)
+                {
+                    owner[v] = -2;
+                    bool substantialWood = st.Radius >= Math.Max(MinorTubeRadius, maxTube * .12)
+                        && src.UV2.Count > st.FirstVertex * 2 && src.UV2[st.FirstVertex * 2] == 2;
+                    if (st.Radius >= maxTube * .9 || substantialWood) essential[v] = true;
+                }
+            foreach (var span in src.EssentialSpans)
+                for (int v = span.FirstVertex; v < span.FirstVertex + span.VertexCount && v < nv; v++) {owner[v] = -2;essential[v]=true;}
+            int parts = 0;
+            foreach (var ls in src.LeafSpans)
             {
-                int b = idx[t + j];
-                if (owner[a] != -1 || owner[b] != -1) continue;
-                int ra = Find(a), rb = Find(b);
-                if (ra != rb) { if (ra < rb) parent[rb] = ra; else parent[ra] = rb; }
+                bool any = false;
+                for (int v = ls.FirstVertex; v < ls.FirstVertex + ls.VertexCount && v < nv; v++)
+                    if (owner[v] < 0 && !essential[v]) { owner[v] = parts; any = true; }
+                if (any) parts++;
             }
-        }
-        var compTris = new SortedDictionary<int, int>();
-        for (int t = 0; t < idx.Count; t += 3)
-            if (owner[idx[t]] == -1) { int r = Find(idx[t]); compTris[r] = compTris.GetValueOrDefault(r) + 1; }
-        var compPart = new Dictionary<int, int>();
-        foreach (var (root, count) in compTris)
-            if (count <= 240) compPart[root] = parts++;
-        for (int v = 0; v < nv; v++)
-            if (owner[v] == -1 && compPart.TryGetValue(Find(v), out int pp)) owner[v] = pp;
-
-        // Fine tubes are foliage, not wood: a petiole goes with the blade it carries; loose filaments, hairs
-        // and needles are candidates of their own (dropped after blades). Trunks and limbs always stay.
-        var tubePart = new HashSet<int>();
-        double maxTube = src.Structural.Count > 0 ? src.Structural.Max(s => s.Radius) : 0;
-        double minor = Math.Max(MinorTubeRadius, maxTube * 0.12);
-        // Petioles are judged before the trunkless bump, or a reed's main culm rides along with the collar after it.
-        double petiole = minor * 2;
-        // Without a real trunk every tube is a stem or shoot; the finer side branches go before the main stems.
-        if (maxTube < 0.03) minor = Math.Max(minor, maxTube * 0.6);
-        foreach (var st in src.Structural)
-        {
-            if(essential[st.FirstVertex])continue;
-            int end = st.FirstVertex + st.VertexCount;
-            int p;
-            if (st.Radius < petiole && end < nv && owner[end] >= 0) p = owner[end];
-            else if (st.Radius < minor) { p = parts++; tubePart.Add(p); }
-            else continue;
-            for (int v = st.FirstVertex; v < end && v < nv; v++) owner[v] = p;
-        }
-        var drop = new bool[Math.Max(1, parts)];
-        if (keepFraction < 1 && parts > 1)
-        {
-            var mn = new Vec3[parts]; var mx = new Vec3[parts]; var size = new int[parts];
-            for (int p = 0; p < parts; p++)
-            {
-                mn[p] = new Vec3(double.MaxValue, double.MaxValue, double.MaxValue);
-                mx[p] = new Vec3(double.MinValue, double.MinValue, double.MinValue);
-            }
+            // Unrecorded small loose pieces (lobes, petals, beads) are candidates too; big ones are structure.
+            var parent = new int[nv];
+            for (int i = 0; i < nv; i++) parent[i] = i;
+            int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
             for (int t = 0; t < idx.Count; t += 3)
             {
-                int p = owner[idx[t]];
-                if (p < 0) continue;
-                size[p]++;
-                for (int j = 0; j < 3; j++)
+                int a = idx[t];
+                for (int j = 1; j < 3; j++)
                 {
-                    var q = src.Position(idx[t + j]);
-                    mn[p] = new Vec3(Math.Min(mn[p].X, q.X), Math.Min(mn[p].Y, q.Y), Math.Min(mn[p].Z, q.Z));
-                    mx[p] = new Vec3(Math.Max(mx[p].X, q.X), Math.Max(mx[p].Y, q.Y), Math.Max(mx[p].Z, q.Z));
+                    int b = idx[t + j];
+                    if (owner[a] != -1 || owner[b] != -1) continue;
+                    int ra = Find(a), rb = Find(b);
+                    if (ra != rb) { if (ra < rb) parent[rb] = ra; else parent[ra] = rb; }
                 }
             }
-            var (bmin, bmax) = src.Bounds();
-            var c = (bmin + bmax) * 0.5; var ext = bmax - bmin;
-            double sx = Math.Max(1e-4, ext.X * 0.5), sy = Math.Max(1e-4, ext.Y * 0.5), sz = Math.Max(1e-4, ext.Z * 0.5);
-            double maxSpan = 1e-9;
-            for (int p = 0; p < parts; p++) if (size[p] > 0) maxSpan = Math.Max(maxSpan, (mx[p] - mn[p]).Length);
-            var order = Enumerable.Range(0, parts).Where(p => size[p] > 0).Select(p =>
+            var compTris = new SortedDictionary<int, int>();
+            for (int t = 0; t < idx.Count; t += 3)
+                if (owner[idx[t]] == -1) { int r = Find(idx[t]); compTris[r] = compTris.GetValueOrDefault(r) + 1; }
+            var compPart = new Dictionary<int, int>();
+            foreach (var (root, count) in compTris)
+                if (count <= 240) compPart[root] = parts++;
+            for (int v = 0; v < nv; v++)
+                if (owner[v] == -1 && compPart.TryGetValue(Find(v), out int pp)) owner[v] = pp;
+
+            // Fine tubes are foliage, not wood: a petiole goes with the blade it carries; loose filaments, hairs
+            // and needles are candidates of their own. Prefer foliage over disconnected fine wires.
+            var tubePart = new HashSet<int>();
+            double minor = Math.Max(MinorTubeRadius, maxTube * 0.12);
+            // Petioles are judged before the trunkless bump, or a reed's main culm rides along with the collar after it.
+            double petiole = minor * 2;
+            // Without a real trunk every tube is a stem or shoot; the finer side branches go before the main stems.
+            if (maxTube < 0.03) minor = Math.Max(minor, maxTube * 0.6);
+            foreach (var st in src.Structural)
             {
-                var q = (mn[p] + mx[p]) * 0.5 - c;
-                double radialExposure = Math.Sqrt(q.X / sx * (q.X / sx) + q.Z / sz * (q.Z / sz));
-                double height = Math.Clamp(q.Y / sy + 1, 0, 2);
-                double shape = (mx[p] - mn[p]).Length / maxSpan;
-                // Only Embercrown currently requests the crown-first rule.
-                // Other species retain their existing radial selection policy.
-                double importance = src.PreserveUpperCanopyOnLod
-                    ? .70 * radialExposure + 1.25 * height + .45 * shape
-                    : radialExposure + .30 * height + .50 * shape;
-                return (p, score: importance + (tubePart.Contains(p) ? 4 : 0));
-            }).OrderBy(x => x.score).ThenBy(x => x.p).ToList();
-            int dropCount = Math.Min(order.Count - 1, (int)Math.Round(order.Count * (1 - keepFraction)));
-            // WP-19: Plants never lose leaves or minor stems at distance; LOD is handled via tessellation reduction.
-            // for (int k = 0; k < dropCount; k++) drop[order[k].p] = true;
+                int end = st.FirstVertex + st.VertexCount;
+                if (owner[st.FirstVertex] >= 0 || st.Radius >= maxTube * .9 || Array.IndexOf(essential, true, st.FirstVertex, Math.Min(end, nv) - st.FirstVertex) >= 0) continue;
+                int p;
+                if (st.Radius < petiole && end < nv && owner[end] >= 0) p = owner[end];
+                else if (st.Radius < minor) { p = parts++; tubePart.Add(p); }
+                else continue;
+                for (int v = st.FirstVertex; v < end && v < nv; v++) owner[v] = p;
+            }
+            drop = new bool[Math.Max(1, parts)];
+            if (keepFraction < 1 && parts > 1)
+            {
+                var mn = new Vec3[parts]; var mx = new Vec3[parts]; var size = new int[parts];
+                for (int p = 0; p < parts; p++)
+                {
+                    mn[p] = new Vec3(double.MaxValue, double.MaxValue, double.MaxValue);
+                    mx[p] = new Vec3(double.MinValue, double.MinValue, double.MinValue);
+                }
+                for (int t = 0; t < idx.Count; t += 3)
+                {
+                    int p = owner[idx[t]];
+                    if (p < 0) continue;
+                    size[p]++;
+                    for (int j = 0; j < 3; j++)
+                    {
+                        var q = src.Position(idx[t + j]);
+                        mn[p] = new Vec3(Math.Min(mn[p].X, q.X), Math.Min(mn[p].Y, q.Y), Math.Min(mn[p].Z, q.Z));
+                        mx[p] = new Vec3(Math.Max(mx[p].X, q.X), Math.Max(mx[p].Y, q.Y), Math.Max(mx[p].Z, q.Z));
+                    }
+                }
+                var (bmin, bmax) = src.Bounds();
+                var c = (bmin + bmax) * 0.5; var ext = bmax - bmin;
+                double sx = Math.Max(1e-4, ext.X * 0.5), sy = Math.Max(1e-4, ext.Y * 0.5), sz = Math.Max(1e-4, ext.Z * 0.5);
+                double maxSpan = 1e-9;
+                for (int p = 0; p < parts; p++) if (size[p] > 0) maxSpan = Math.Max(maxSpan, (mx[p] - mn[p]).Length);
+                var order = Enumerable.Range(0, parts).Where(p => size[p] > 0).Select(p =>
+                {
+                    var q = (mn[p] + mx[p]) * 0.5 - c;
+                    double radialExposure = Math.Sqrt(q.X / sx * (q.X / sx) + q.Z / sz * (q.Z / sz));
+                    double height = Math.Clamp(q.Y / sy + 1, 0, 2);
+                    double shape = (mx[p] - mn[p]).Length / maxSpan;
+                    // Only Embercrown currently requests the crown-first rule.
+                    // Other species retain their existing radial selection policy.
+                    double importance = src.PreserveUpperCanopyOnLod
+                        ? .70 * radialExposure + 1.25 * height + .45 * shape
+                        : radialExposure + .30 * height + .50 * shape;
+                    return (p, score: importance - (tubePart.Contains(p) ? .5 : 0));
+                }).OrderBy(x => x.score).ThenBy(x => x.p).ToList();
+                int dropCount = Math.Min(order.Count - 1, (int)Math.Round(order.Count * (1 - keepFraction)));
+                // Retain exposed/large organs first; main stems and essential spans are never candidates.
+                for (int k = 0; k < dropCount; k++) drop[order[k].p] = true;
+            }
+
         }
 
         var map = new int[nv];
@@ -416,7 +430,7 @@ public static partial class OrganismMeshes
         bool c0 = nv > 0 && src.Custom0.Count >= nv * 4, c1 = nv > 0 && src.Custom1.Count >= nv * 4;
         for (int v = 0; v < nv; v++)
         {
-            if (owner[v] >= 0 && drop[owner[v]]) { map[v] = -1; continue; }
+            if (owner.Length > 0 && owner[v] >= 0 && drop[owner[v]]) { map[v] = -1; continue; }
             map[v] = dst.VertexCount;
             for (int j = 0; j < 3; j++) { dst.Positions.Add(src.Positions[v * 3 + j]); dst.Normals.Add(src.Normals[v * 3 + j]); }
             for (int j = 0; j < 4; j++) dst.Colors.Add(src.Colors[v * 4 + j]);
@@ -434,18 +448,35 @@ public static partial class OrganismMeshes
             dst.Indices.Add(a); dst.Indices.Add(b); dst.Indices.Add(cc);
         }
         triStart[triCount] = dst.Indices.Count;
+        var kept = new int[nv + 1];
+        for (int i = 0; i < nv; i++) kept[i + 1] = kept[i] + (map[i] >= 0 ? 1 : 0);
+        (int First, int Count) RemapSpan(int first, int count)
+        {
+            int begin = Math.Clamp(first, 0, nv), end = (int)Math.Min(nv, (long)begin + count);
+            return (kept[begin], kept[end] - kept[begin]);
+        }
         foreach (var leaf in src.Leaves)
         {
-            if (leaf.FirstVertex >= nv || map[leaf.FirstVertex] < 0) continue;
+            var span = RemapSpan(leaf.FirstVertex, leaf.VertexCount);
+            if (span.Count == 0) continue;
             int t0 = Math.Min(triCount, leaf.FirstIndex / 3), t1 = Math.Min(triCount, (leaf.FirstIndex + leaf.IndexCount) / 3);
-            dst.Leaves.Add(leaf with { FirstVertex = map[leaf.FirstVertex], FirstIndex = triStart[t0], IndexCount = triStart[t1] - triStart[t0] });
+            dst.Leaves.Add(leaf with { FirstVertex = span.First, VertexCount = span.Count, FirstIndex = triStart[t0], IndexCount = triStart[t1] - triStart[t0] });
         }
         foreach (var st in src.Structural)
-            if (st.FirstVertex < nv && map[st.FirstVertex] >= 0) dst.Structural.Add((map[st.FirstVertex], st.VertexCount, st.Sides, st.Radius));
+        {
+            var span = RemapSpan(st.FirstVertex, st.VertexCount);
+            if (span.Count > 0) dst.Structural.Add((span.First, span.Count, st.Sides, st.Radius));
+        }
         foreach (var ls in src.LeafSpans)
-            if (ls.FirstVertex < nv && map[ls.FirstVertex] >= 0) dst.LeafSpans.Add((map[ls.FirstVertex], ls.VertexCount));
+        {
+            var span = RemapSpan(ls.FirstVertex, ls.VertexCount);
+            if (span.Count > 0) dst.LeafSpans.Add((span.First, span.Count));
+        }
         foreach (var span in src.EssentialSpans)
-            if (span.FirstVertex < nv && map[span.FirstVertex] >= 0) dst.EssentialSpans.Add((map[span.FirstVertex], span.VertexCount));
+        {
+            var mapped = RemapSpan(span.FirstVertex, span.VertexCount);
+            if (mapped.Count > 0) dst.EssentialSpans.Add((mapped.First, mapped.Count));
+        }
         return dst;
     }
 }

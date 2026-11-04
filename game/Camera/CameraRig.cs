@@ -19,6 +19,7 @@ public partial class CameraRig : Node3D
     public double Sensitivity { get; set; } = 0.25;
     public bool InvertY { get; set; }
     public bool DistanceBlur { get; set; }
+    public float DistanceBlurAmount { get; set; } = .008f;
     public event Action<double>? SpeedChanged;
     public event Action<bool>? MediumChanged;
     /// <summary>Right button pressed and released without dragging (opens the tool wheel).</summary>
@@ -240,7 +241,7 @@ private Vector3? _orbitTarget;
             }
         }
         if (World != null) Medium.Update(World, Bridge.S(GlobalPosition));
-        UpdateDistanceBlur();
+        UpdateDistanceBlur(delta);
     }
 
     private static Vector3 MoveInput()
@@ -272,19 +273,32 @@ private Vector3? _orbitTarget;
         return null;
     }
 
-    private void UpdateDistanceBlur()
+    private void UpdateDistanceBlur(double delta)
     {
 
         var attr = ResolveCameraAttributes();
         if (attr == null) return;
 
-        // Optional distance blur starts before the reduced-detail distance band.
-        // Keep foreground, inspected plants and tool feedback sharp.
-        bool enabled = DistanceBlur && System.Environment.GetEnvironmentVariable("VIVARIUM_DISABLE_DOF") != "1";
-        attr.DofBlurFarEnabled = enabled;
-        attr.DofBlurNearEnabled = false;
-        attr.DofBlurFarDistance = (float)Vivarium.Sim.Geometry.FloraDetail.DistanceMid * .8f;
-        attr.DofBlurFarTransition = 8f;
-        attr.DofBlurAmount = enabled ? .015f : 0f;
+        float amount = float.IsFinite(DistanceBlurAmount) ? Mathf.Clamp(DistanceBlurAmount, 0, .025f) : .008f;
+        bool enabled = DistanceBlur && amount > 0 && System.Environment.GetEnvironmentVariable("VIVARIUM_DISABLE_DOF") != "1";
+        if (!enabled)
+        {
+            if (attr.DofBlurFarEnabled) attr.DofBlurFarEnabled = false;
+            if (attr.DofBlurNearEnabled) attr.DofBlurNearEnabled = false;
+            if (attr.DofBlurAmount != 0) attr.DofBlurAmount = 0;
+            return;
+        }
+        // Gentle far-only softness; a long transition avoids a conspicuous focus wall.
+        // Focusing a distant subject pushes the sharp region beyond that subject.
+        float start = (float)Vivarium.Sim.Geometry.FloraDetail.DistanceMid * .8f;
+        if (Focused) start = Math.Max(start, _orbitDistance + Math.Max(.5f, _orbitDistance * .15f));
+        float blend = 1 - MathF.Exp(-(float)Math.Max(0, delta) * 5);
+        float distance = start > attr.DofBlurFarDistance ? start : Mathf.Lerp(attr.DofBlurFarDistance, start, blend);
+        if (attr.DofBlurFarEnabled != enabled) attr.DofBlurFarEnabled = enabled;
+        if (attr.DofBlurNearEnabled) attr.DofBlurNearEnabled = false;
+        if (MathF.Abs(attr.DofBlurFarDistance - distance) > .001f) attr.DofBlurFarDistance = distance;
+        if (attr.DofBlurFarTransition != 12f) attr.DofBlurFarTransition = 12f;
+        float targetAmount = enabled ? amount : 0;
+        if (attr.DofBlurAmount != targetAmount) attr.DofBlurAmount = targetAmount;
     }
 }

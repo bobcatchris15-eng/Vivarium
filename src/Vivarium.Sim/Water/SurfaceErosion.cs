@@ -12,7 +12,8 @@ public sealed record SurfaceErosionState(SortedDictionary<int,double> Cut,
 /// These vertex budgets describe solid terrain, never a second water representation.</summary>
 public sealed class SurfaceErosion
 {
-    public bool Enabled {get;set;}=true;
+    // Automatic erosion is retired; explicit diagnostic opt-in only.
+    public bool Enabled {get;set;}=false;
     public const double MaximumCut=.03;
     public const double MaximumRate=.00012; // 7.2 mm per physical minute, at full exposure.
     public const double MinimumSpeed=.12;

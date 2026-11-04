@@ -723,7 +723,7 @@ public static class PilotTreeMeshes
                 length * .92, width * 2, leafOutline,
                 key, color, Primitives.Scale(color, 1.08), camber: .20, midribFold: .16,
                 petioleLength: length * .08, petioleRadius: Math.Max(.0007, length * .005),
-                petioleKink: .12, detailOverride: 1);
+                petioleKink: .12, detailOverride: tree.Def.Id == "rootcloister" ? 2 : 1);
             for (int k = leafCount; k < m.Leaves.Count; k++)
             {
                 var leaf = m.Leaves[k];
@@ -1152,20 +1152,22 @@ public static class PilotTreeMeshes
         {
             // Wide sprawling horizontal limbs with vertical aerial drop-roots forming a vaulted cloister,
             // dense broadleaf foliage and small paired fig fruit.
-            int limbs = 8;
+            int limbs = 14;
+            double spread = tree.CanopyRadius;
+            double leafScale = tree.Domain.Diameter / 10;
             for (int limb = 0; limb < limbs; limb++)
             {
-                double a = CrownAngle(limb, .83) + rng.Range(-.045, .045);
+                double a = facing + (-.98 + 1.96 * (limb + .5) / limbs) + rng.Range(-.045, .045);
                 double t = .56 + (limb % 4) * .065 + rng.Range(-.018, .018);
-                double length = tree.Def.CanopyRadius * rng.Range(.68, .84);
+                double length = Math.Max(.8, spread * rng.Range(.87, .97) - Radius(t) * .65);
                 var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
                 var start = Centre(t) + dir * (Radius(t) * .65);
                 double rise = length * .14, droop = length * .08;
                 var axis = BranchAxis(t, a, length, rise, droop, r * .21);
 
-                for (int drop = 0; drop < 1+limb%3; drop++)
+                for (int drop = 0; drop < 3+limb%2; drop++)
                 {
-                    double q = .30 + drop*.22 + rng.Range(-.05,.05);
+                    double q = .24 + drop*.20 + rng.Range(-.05,.05);
                     var limbPt = OnAxis(axis,q);
                     var footXZ=limbPt.XZ + dir.XZ*rng.Range(-.15,.25);
                     var groundPt = Vec3.FromXZ(footXZ, ground(footXZ));
@@ -1173,31 +1175,35 @@ public static class PilotTreeMeshes
                     {
                         var mid = Vec3.Lerp(limbPt, groundPt, .50) + dir * (r * .16 * (drop == 0 ? 1 : -1));
                         var heel = Vec3.Lerp(mid,groundPt,.88);
-                        double girth=rng.Range(.035,.065)*r;
-                        Tube(new[] { limbPt, mid, heel, groundPt },
-                            new[] { girth, girth*.85, girth*1.25, girth*1.85 }, Primitives.Scale(bark, .78), 7);
+                        double girth=rng.Range(.045,.085)*r;
+                        // A few outer piers support the spreading crown while leaving
+                        // a broad open floor. Retain all placement draws so thinning
+                        // the columns does not reshuffle the canopy or its shade.
+                        if (limb % 2 == 0 && drop == 2)
+                            Tube(new[] { limbPt, mid, heel, groundPt },
+                                new[] { girth, girth*.85, girth*1.25, girth*1.85 }, Primitives.Scale(bark, .78), 7);
                     }
                 }
 
-                for (int twig = 0; twig < 8; twig++)
+                for (int twig = 0; twig < 12; twig++)
                 {
-                    double q = .20+.76*(twig + .6) / 8.8;
+                    double q = .10+.87*(twig + .6) / 12.8;
                     var at = OnAxis(axis,q);
-                    double ta = facing + Math.Clamp(a - facing + (twig % 2 == 0 ? 1 : -1) * rng.Range(.28, .48), -Math.PI / 3 + .16, Math.PI / 3 - .16);
+                    double ta = facing + Math.Clamp(a - facing + (twig % 2 == 0 ? 1 : -1) * rng.Range(.85, 1.25), -Math.PI / 3 + .16, Math.PI / 3 - .16);
                     var tdir = new Vec3(Math.Cos(ta), 0, Math.Sin(ta));
-                    double tl = length * rng.Range(.18, .28);
+                    double tl = spread * rng.Range(.12, .20);
                     var end = at + tdir * tl + Vec3.Up * (tl * .32);
                     var twigAxis=new[] { at, Vec3.Lerp(at, end, .5) + Vec3.Up * .06, end };
                     Tube(twigAxis,
                         new[] { r * .030, r * .015, r * .003 }, Primitives.Scale(bark, .80), 7);
 
-                    for (int lf = 0; lf < 8; lf++)
+                    for (int lf = 0; lf < 12; lf++)
                     {
-                        double u = (lf + .5) / 8.0;
+                        double u = (lf + .5) / 12.0;
                         var attach = OnAxis(twigAxis,u);
                         double la = ta + (lf % 2 == 0 ? 1 : -1) * rng.Range(.65, 1.35);
-                        double ll = r * rng.Range(.30, .50);
-                        double pitch = rng.Range(-.50, .70);
+                        double ll = r * leafScale * rng.Range(.34, .53);
+                        double pitch = rng.Range(-.22, .42);
                         var ltip = attach + new Vec3(Math.Cos(la) * ll * Math.Cos(pitch), ll * Math.Sin(pitch), Math.Sin(la) * ll * Math.Cos(pitch));
                         Blade(attach, ltip, ll * .28, Primitives.Scale(green, rng.Range(.78, 1.18)), 4);
                     }

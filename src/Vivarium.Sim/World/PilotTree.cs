@@ -59,6 +59,8 @@ public sealed class PilotTreeState
     public ulong Seed { get; }
     public double BaseHeight { get; }
     public HexDomain Domain => _domain;
+    /// <summary>Rootcloister spreads with the island; its corner-centred crown reaches across roughly 70% of the hexagon.</summary>
+    public double CanopyRadius => Def.Id == "rootcloister" ? Domain.Diameter * .70 : Def.CanopyRadius;
     public IReadOnlyList<PilotRootPath> Roots { get; private set; }
     private readonly RootSegment[] _segments;
     private const double RootQueryCell=.5;
@@ -180,7 +182,7 @@ public sealed class PilotTreeState
         var state = new PilotTreeState(def, corner, rootSeed, domain, terrain);
         // Keep seeded selection when possible; only automatic placement moves away from
         // an authored drainage route. Explicit player/save corners remain authoritative.
-        var channels = descriptor.Terrain.Features.Where(f => f.Type == "channel" && f.BedHeight.HasValue).ToArray();
+        var channels = descriptor.Terrain.Features.Where(f => f.Type == "channel" && (f.BedHeight.HasValue || f.CutDepth.HasValue)).ToArray();
         if (descriptor.PilotTreeCorner < 0 && channels.Length > 0)
         {
             double ClearanceCost(PilotTreeState candidate)
@@ -346,7 +348,7 @@ public sealed class PilotTreeState
 
     public double CanopyInfluence(Vec2 p)
     {
-        double d = Vec2.Distance(p, Anchor) / Def.CanopyRadius;
+        double d = Vec2.Distance(p, Anchor) / CanopyRadius;
         if (d >= 1.3) return 0;
         double falloff = MathD.Clamp01(1 - d / 1.3);
         // Spatially fixed sunflecks, not a uniform island modifier or per-tick randomness.
@@ -367,6 +369,9 @@ public sealed class PilotTreeState
         return rise > 0.01 && p.Y < _terrain.Height(p.XZ) + rise + radius;
     }
 
+    /// <summary>Diagnostic switch for comparing the conservative empty-root rejection.</summary>
+    public bool PenetrationEmptyRootFastPath { get; set; } = true;
+
     public (Vec3 Normal, double Depth) Penetration(Vec3 p, double radius)
     {
         double trunkDistance = Vec2.Distance(p.XZ, Anchor);
@@ -379,6 +384,11 @@ public sealed class PilotTreeState
             if (top < side) return (Vec3.Up, top);
             return (Vec3.FromXZ(radial, 0), side);
         }
+        // When no expanded root footprint is nearby and the trunk test above
+        // failed, ContainsVolume cannot find any woody volume. Avoid its
+        // terrain sample and second root lookup in this common case.
+        if (PenetrationEmptyRootFastPath && TryRootQueryMask(p.XZ, radius, out ulong roots) && roots == 0)
+            return (Vec3.Up, 0);
         if (!ContainsVolume(p, radius)) return (Vec3.Up, 0);
         double h = RootSurfaceHeight(p.XZ);
         if (double.IsNaN(h)) h = _terrain.Height(p.XZ);

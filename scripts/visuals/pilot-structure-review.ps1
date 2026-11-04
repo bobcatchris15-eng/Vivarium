@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Name)
+param([Parameter(Mandatory)][string]$Name, [string]$TreeId)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 if ($Name -notmatch '^[a-z0-9-]+$') { throw 'Use a unique lowercase run name.' }
@@ -22,6 +22,7 @@ try {
     $env:VIVARIUM_BENCHMARK_USER_DIR = Join-Path $run 'user'
     . (Join-Path $repo 'scripts/common.ps1')
     $args = @('--path',(Join-Path $repo 'game'),'--log-file',(Join-Path $run 'engine.log'),'--','--pilot-overhaul-review',(Join-Path $run 'captures'),'--pilot-structure-only')
+    if ($TreeId) { $args += @('--pilot-review-id', $TreeId) }
     $quoted = $args | ForEach-Object { if ($_ -match "\s") { '"' + $_ + '"' } else { $_ } }
     $p = Start-Process (Get-GodotExe) -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $run 'stdout.log') -RedirectStandardError (Join-Path $run 'stderr.log')
     $null = $p.Handle

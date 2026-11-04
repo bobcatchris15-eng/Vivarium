@@ -44,7 +44,9 @@ vec3 cotangent_normal(vec3 geom_normal, vec3 p_world, vec2 uv, vec3 detail) {
     vec3 r1 = cross(py, geom_normal), r2 = cross(geom_normal, px);
     vec3 t = r1 * ux.x + r2 * uy.x;
     vec3 b = r1 * ux.y + r2 * uy.y;
-    float inv = inversesqrt(max(max(dot(t, t), dot(b, b)), 1e-12));
+    float scale_sq = max(dot(t, t), dot(b, b));
+    if (!(scale_sq > 1e-10 && scale_sq < 1e12)) return finite_surface_normal(geom_normal, vec3(0.0, 1.0, 0.0));
+    float inv = inversesqrt(scale_sq);
     return finite_surface_normal(geom_normal * detail.z + (t * detail.x - b * detail.y) * inv, geom_normal);
 }
 

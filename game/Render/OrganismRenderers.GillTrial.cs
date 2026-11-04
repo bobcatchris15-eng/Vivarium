@@ -46,11 +46,11 @@ public partial class FloraRenderer
             var variant = layer.Variants[v];
             ulong seed = Rng.Mix(speciesSeed, (ulong)(v % layer.MorphCount + 1) * 0x9E3779B97F4A7C15UL);
             var watch = Stopwatch.StartNew();
-            var baseline = OrganismMeshes.FloraTier(species, seed, 2, farGillStations: DistantGillStations, farEmberMicroSides: DistantEmberMicroSides);
+            var baseline = OrganismMeshes.FloraTier(species, seed, 2, farGillStations: DistantGillStations, farEmberMicroSides: DistantEmberMicroSides, farDewbonnetCapRings: DistantDewbonnetCapRings);
             if (baseline.TriangleCount != variant.FullTris) throw new InvalidOperationException("Gill baseline mismatch");
             yield return true;
             watch.Restart();
-            var candidate = OrganismMeshes.FloraTier(species, seed, 2, farGillStations: candidateStations);
+            var candidate = OrganismMeshes.FloraTier(species, seed, 2, farGillStations: candidateStations, farDewbonnetCapRings: DistantDewbonnetCapRings);
             double generationMs = watch.Elapsed.TotalMilliseconds;
             yield return true;
             watch.Restart(); Bridge.PrepareMeshUpload(candidate);
@@ -63,6 +63,32 @@ public partial class FloraRenderer
             trial.Records.Add(new { variant = v, baseline_triangles = baseline.TriangleCount,
                 candidate_triangles = candidate.TriangleCount, vertices = candidate.VertexCount,
                 generation_ms = generationMs, packing_ms = packingMs, publication_ms = publicationMs });
+            yield return true;
+        }
+    }
+    public IEnumerable<bool> PrepareCapRingTrial(GillTrial trial, int candidateRings)
+    {
+        if (!_layers.TryGetValue("dewbonnet", out var layer)) yield break;
+        if (layer.Profile != null) throw new InvalidOperationException("Cap trial expects the ordinary fungus material path");
+        var species = _w.Content.FloraOrThrow("dewbonnet");
+        ulong speciesSeed = Hash.Fnv1a64("flora.visual.dewbonnet");
+        for (int v = layer.MorphCount * 2; v < layer.Variants.Length; v++)
+        {
+            var variant = layer.Variants[v];
+            ulong seed = Rng.Mix(speciesSeed, (ulong)(v % layer.MorphCount + 1) * 0x9E3779B97F4A7C15UL);
+            var baseline = OrganismMeshes.FloraTier(species, seed, 2, farGillStations: DistantGillStations,
+                farDewbonnetCapRings: DistantDewbonnetCapRings);
+            if (baseline.TriangleCount != variant.FullTris) throw new InvalidOperationException("Cap baseline mismatch");
+            yield return true;
+            var candidate = OrganismMeshes.FloraTier(species, seed, 2, farGillStations: DistantGillStations,
+                farDewbonnetCapRings: candidateRings);
+            yield return true;
+            Bridge.PrepareMeshUpload(candidate);
+            yield return true;
+            var mesh = Bridge.ToArrayMesh(candidate, variant.Full.Multimesh.Mesh.SurfaceGetMaterial(0));
+            trial.Add(variant.Full, mesh, variant.FullTris, candidate.TriangleCount, n => variant.FullTris = n);
+            trial.Records.Add(new { species = "dewbonnet", tier = 2, variant = v,
+                baseline_triangles = baseline.TriangleCount, candidate_triangles = candidate.TriangleCount });
             yield return true;
         }
     }

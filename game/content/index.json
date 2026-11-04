@@ -105,6 +105,9 @@
     "presets/peat_fen.json",
     "presets/woodland_vernal_pools.json",
     "presets/alpine_tundra.json",
-    "presets/estuary_delta.json"
+    "presets/estuary_delta.json",
+    "presets/braided_springs.json",
+    "presets/winding_pools.json",
+    "presets/permanent_marsh.json"
   ]
 }

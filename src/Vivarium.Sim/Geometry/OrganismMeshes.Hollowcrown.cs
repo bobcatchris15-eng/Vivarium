@@ -5,23 +5,30 @@ using Vivarium.Sim.Core;
 namespace Vivarium.Sim.Geometry;
 
 /// <summary>
-/// Hollowcrown (hollowcrown_tree) high-fidelity procedural geometry.
+/// Hollowcrown (hollowcrown_tree) veteran pollard oak procedural geometry.
 ///
 /// Distinct veteran oak pollard anatomy:
-///   1. Bole architecture: A muscular, gnarly, deeply-fluted trunk with organic splayed root
-///      buttresses that flare smoothly and powerfully into the ground, plus sinuous surface root runners.
-///   2. The Great Hollow Portal: A wide, majestic Gothic arched doorway facing the front 3/4 perspective,
-///      framed by a continuous, multi-segmented rounded callus wound roll of healing cambium.
-///   3. Dedicated Interior Cavern: A spacious, smoothly concave heartwood chamber carved out of decayed
-///      punk wood, shaded with dark cavern depth and open upward to the crown chimney.
-///   4. Contoured Woodland Floor: A natural bed of dark forest humus and decaying punk wood with
-///      organic, velvety bioluminescent moss cushions (UV2.x = 1.35f, UV2.y = 1f) clustered at the threshold
-///      and wall crevices (no concentric puddles or radial stretching).
-///   5. Pollard Bolling Head: A swollen, gnarled crown collar with muscular branch knuckles where
-///      the scaffold limbs emerge, opening into a hollow chimney.
-///   6. Quercus Oak Foliage: True lobed oak blades with 3D camber, rounded lobes, deep sinuses,
-///      and pale midribs arranged in dense epicormic sprays forming a lush, majestic canopy dome.
-///   7. LOD & Essential Spans: PreserveUpperCanopyOnLod = true, essential cavity moss and scaffold
+///   1. Bole architecture: A muscular, gnarly, deeply-fluted trunk with natural veteran oak/beech
+///      silhouette: muscular basal flare, thick columnar mid-trunk, bulbous swollen bolling head
+///      with knobby knuckles matching the scaffold limbs, and heavy root buttresses.
+///   2. The Authentic Vulva-Shaped Cleft: An authentic vertical cleft spanning from a pinched
+///      lower fourchette (yBot = boleHeight * 0.06) to a pinched upper commissure (yTop = boleHeight * 0.68)
+///      with plump almond belly, subtle mid-upper waist inflection, and double-lipped callus wound-wood anatomy:
+///        - Outer labia majora rolls converging into an overarching upper callus hood and fusing below
+///          into a raised basal fourchette threshold lip cradled between front buttress roots.
+///        - Distinct inter-labial sulcus crease with deep shadow AO.
+///        - Soft, wavy inner labia minora folds tucked inside, shaded with warm living cambium / sapwood.
+///        - 100% continuous non-aliased UV seam above and below the opening (no vertical texture streak).
+///   3. Dedicated Fibrous Hollow Log Interior: Deep multi-frequency rot flutes, horizontal decay checks,
+///      cavernous basal expansion, true finite-difference 3D inward normals, internal decayed heartwood
+///      ribs and splintered septa, multi-ring rolled bolling top lip, and mounded humus floor.
+///      Shaded with UV2.x = 3.0 (Decayed Wood / Callus / Hollow Log Interior) for rich fibrous wood and rot.
+///   4. Organic Bryophyte Mats: Confluent, velvety bioluminescent moss cushions seated directly ON the inner wall
+///      and nestled into the threshold fourchette and root crevices (UV2.x = 1.35, UV2.y = 1.0).
+///   5. Pollard Bolling Joinery: 5 primary scaffold limbs launching directly from the swollen bolling knuckles
+///      with wide fluted basal branch collars (1.58x flare), forking secondary/tertiary boughs with swollen
+///      branch union collars, and Quercus lobed oak foliage sprays.
+///   6. LOD & Essential Spans: PreserveUpperCanopyOnLod = true, essential cavity moss and scaffold
 ///      limbs registered in m.EssentialSpans.
 ///
 /// The plant is authored in REAL METRES and converted with NewFloraAppendWorld.
@@ -32,16 +39,21 @@ public static partial class OrganismMeshes
     // Color Palette
     // ---------------------------------------------------------------------------------------------
 
-    // Bark & wood palette
-    private static readonly double[] HollowBarkDeep     = { 0.09, 0.07, 0.06 }; // Deep furrow/crevice shadow
+    // Bark & weathered wood palette
+    private static readonly double[] HollowBarkDeep     = { 0.09, 0.07, 0.06 }; // Deep furrow / crevice shadow
     private static readonly double[] HollowBarkDark     = { 0.16, 0.14, 0.12 }; // Weathered dark charcoal bark
     private static readonly double[] HollowBark         = { 0.30, 0.27, 0.23 }; // Grey-brown weathered oak cork
     private static readonly double[] HollowBarkPale     = { 0.50, 0.48, 0.42 }; // Lichen-mottled weather-side bark
     private static readonly double[] HollowBarkCrest    = { 0.60, 0.56, 0.48 }; // Bleached wood ridges & knots
-    private static readonly double[] HollowWoodRot      = { 0.20, 0.14, 0.09 }; // Decaying rotten punk heartwood
-    private static readonly double[] HollowWoodWarm     = { 0.32, 0.23, 0.14 }; // Warm amber heartwood decay
+
+    // Decayed heartwood, callus & living cambium palette
+    private static readonly double[] HollowWoodRot      = { 0.19, 0.13, 0.08 }; // Decaying rotten punk heartwood
+    private static readonly double[] HollowWoodWarm     = { 0.32, 0.22, 0.13 }; // Warm amber heartwood decay
     private static readonly double[] HollowWood         = { 0.46, 0.34, 0.22 }; // Living sapwood & callus body
     private static readonly double[] HollowWoodFresh    = { 0.58, 0.46, 0.30 }; // Pale callus margin highlight
+    private static readonly double[] HollowCambiumRose   = { 0.50, 0.26, 0.16 }; // Living cambium rose-amber fold
+    private static readonly double[] HollowCambiumAmber  = { 0.56, 0.38, 0.20 }; // Warm living inner labia cambium
+    private static readonly double[] HollowSulcusShadow  = { 0.06, 0.04, 0.03 }; // Inter-labial sulcus deep crease
 
     // Velvety bioluminescent moss palette
     private static readonly double[] HollowMossBase     = { 0.13, 0.28, 0.15 }; // Deep velvety shaded moss base
@@ -90,8 +102,106 @@ public static partial class OrganismMeshes
 
     private static Vec3 HollowcrownRadial(double az) => new Vec3(Math.Cos(az), 0, Math.Sin(az));
 
+    // Canonical Hollowcrown orientation & bolling knuckle angles
+    private const double HollowcrownOpenDir = Math.PI * 0.28;
+    private const double HollowcrownBaseKnuckleAz = HollowcrownOpenDir + Math.PI * 0.20;
+
+    private static double HollowcrownBollingKnuckleWeight(double th)
+    {
+        double sum = 0.0;
+        for (int k = 0; k < 5; k++)
+        {
+            double kAz = HollowcrownBaseKnuckleAz + 2.0 * Math.PI * k / 5.0;
+            double diff = Math.Abs(th - kAz);
+            if (diff > Math.PI) diff = 2.0 * Math.PI - diff;
+            sum += Math.Exp(-Math.Pow(diff / 0.28, 2.0));
+        }
+        return sum;
+    }
+
+    private static double HollowcrownTopRimY(double th, double boleHeight)
+    {
+        double kw = HollowcrownBollingKnuckleWeight(th);
+        return boleHeight * (0.91 + 0.11 * kw);
+    }
+
+    private static Vec3 HollowcrownTrunkCenter(double t, double boleHeight, double baseRadius, Vec3 basePoint)
+    {
+        double leanX = 0.05 * baseRadius * Math.Sin(Math.PI * t * 0.85);
+        double leanZ = -0.04 * baseRadius * Math.Sin(Math.PI * t * 0.70);
+        return basePoint + Vec3.Up * (boleHeight * t) + new Vec3(leanX, 0, leanZ);
+    }
+
+    private static double HollowcrownMeanOuterRadius(double t, double baseRadius)
+    {
+        double baseFlare = 1.0 + 0.35 * Math.Pow(Math.Max(0.0, 1.0 - t / 0.28), 2.2);
+        double midColumn = 0.88 + 0.08 * MathD.SmoothStep(0.72, 1.0, t);
+        return baseRadius * (baseFlare * 0.88 + midColumn * 0.12);
+    }
+
+    private static double HollowcrownOuterRadius(double t, double th, double baseRadius, double boleHeight)
+    {
+        double r = HollowcrownMeanOuterRadius(t, baseRadius);
+
+        r *= 1.0 + 0.06 * Math.Sin(8.0 * th + 0.6 * t) * (0.35 + 0.65 * (1.0 - 0.35 * t));
+        r *= 1.0 + 0.02 * Math.Sin(16.0 * th);
+
+        // Muscular bolling head & swollen knuckles matching scaffold limbs
+        if (t > 0.65)
+        {
+            double uBoll = MathD.SmoothStep(0.65, 1.0, t);
+            double kw = HollowcrownBollingKnuckleWeight(th);
+            r += baseRadius * (0.14 * uBoll + 0.34 * Math.Pow(uBoll, 1.5) * kw);
+        }
+
+        // Basal buttress flare flowing smoothly into wide root ridges
+        if (t < 0.38)
+        {
+            double flareDecay = Math.Pow(1.0 - t / 0.38, 2.2);
+            double buttressSum = 0.0;
+            for (int b = 0; b < 6; b++)
+            {
+                double bAz = b switch {
+                    0 => HollowcrownOpenDir + 0.78,
+                    1 => HollowcrownOpenDir + Math.PI * 0.52,
+                    2 => HollowcrownOpenDir + Math.PI * 0.94,
+                    3 => HollowcrownOpenDir + Math.PI * 1.36,
+                    4 => HollowcrownOpenDir + Math.PI * 1.66,
+                    _ => HollowcrownOpenDir + 2.0 * Math.PI - 0.78
+                };
+                double diff = Math.Abs(th - bAz);
+                if (diff > Math.PI) diff = 2.0 * Math.PI - diff;
+                double weight = (b == 0 || b == 5) ? 0.55 : 0.42;
+                double cosLobe = Math.Max(0.0, Math.Cos(diff * 1.85));
+                buttressSum += Math.Pow(cosLobe, 3.0) * weight;
+            }
+            r += baseRadius * buttressSum * flareDecay;
+        }
+
+        double y = t * boleHeight;
+        double yTop = 0.68 * boleHeight;
+        if (y >= yTop && y <= yTop + boleHeight * 0.14)
+        {
+            double diff = Math.Abs(th - HollowcrownOpenDir);
+            if (diff > Math.PI) diff = 2.0 * Math.PI - diff;
+            double yDecay = Math.Pow(1.0 - (y - yTop) / (boleHeight * 0.14), 1.6);
+            r += Math.Exp(-Math.Pow(diff / 0.25, 2.0)) * (baseRadius * 0.055) * yDecay;
+        }
+
+        double yBot = 0.06 * boleHeight;
+        if (y <= yBot)
+        {
+            double diff = Math.Abs(th - HollowcrownOpenDir);
+            if (diff > Math.PI) diff = 2.0 * Math.PI - diff;
+            double yDecay = Math.Pow(y / yBot, 1.4);
+            r += Math.Exp(-Math.Pow(diff / 0.28, 2.0)) * (baseRadius * 0.045) * yDecay;
+        }
+
+        return r;
+    }
+
     // ---------------------------------------------------------------------------------------------
-    // Woody Stem Builder (Fluted, gnarly branches)
+    // Woody Stem Builder (Fluted branches with parallel transport frames)
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
@@ -108,7 +218,7 @@ public static partial class OrganismMeshes
         int stations = points.Count;
         if (stations < 2 || radii.Count != stations) return;
 
-        int segments = detail == 2 ? 6 : (detail == 1 ? 8 : 10);
+        int segments = detail == 2 ? 8 : (detail == 1 ? 10 : 12);
         int startVertex = m.VertexCount;
 
         var tangents = new Vec3[stations];
@@ -205,6 +315,9 @@ public static partial class OrganismMeshes
 
                 ringNormals[i, s] = surfNorm.LengthSq > 1e-6 ? surfNorm : radialHint.Normalized();
             }
+            ringPositions[i, segments] = ringPositions[i, 0];
+            ringNormals[i, segments] = ringNormals[i, 0];
+            ringColors[i, segments] = ringColors[i, 0];
         }
 
         for (int i = 0; i < stations; i++)
@@ -231,17 +344,18 @@ public static partial class OrganismMeshes
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Genuine Watertight Hollow Bole with Open Arched Portal & Inner Cavern
+    // Genuine Watertight Hollow Bole with Vulva-Shaped Cleft & Cavity
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Builds the genuine hollow veteran oak bole:
-    /// - Wide, majestic Gothic arched doorway facing the front 3/4 camera view
-    /// - Continuous rounded callus roll (4 segments per slice) with rich cambium shading
-    /// - Dedicated, smoothly concave interior chamber with authentic punk wood textures
-    /// - Contoured, dark humus woodland floor with organic velvety moss cushions
-    /// - Muscular splayed buttresses that stay safely within the turf ground boundary
-    /// - Gnarled pollard bolling collar with hollow chimney and branch knuckles
+    /// Builds the authentic veteran oak bole:
+    /// - Vulva-shaped side cleft with double-lipped callus wound roll (outer labia, sulcus, inner labia)
+    /// - Continuous non-aliased UV seam above and below the opening
+    /// - Deeply fluted, fibrous hollow log interior with finite-difference inward normals
+    /// - Internal decayed heartwood ribs and splintered septa
+    /// - Multi-ring rolled bolling top lip rolling over knuckles into hollow
+    /// - Contoured woodland humus floor with confluent velvety moss mats
+    /// - Muscular splayed buttresses framing the cleft threshold
     /// </summary>
     private static void HollowcrownBoleAndCavity(
         MeshData m,
@@ -252,87 +366,61 @@ public static partial class OrganismMeshes
         ulong seed,
         int detail)
     {
-        // Gothic arched portal facing the front 3/4 camera (+X, +Z)
-        const double openDir = Math.PI * 0.28;
-        const double doorMaxHalfAngle = 0.58; // ~66 degree arch opening (inviting cathedral portal)
-        double doorHeight = boleHeight * 0.62; // Arch reaches 62% of bole height (~1.75m)
+        const double openDir = HollowcrownOpenDir;
+        const double doorMaxHalfAngle = 0.32; // Organic gothic-arch almond cleft (~36 degree max opening)
+        double yBot = boleHeight * 0.06;      // Lower fourchette cleft (~0.17m above root collar)
+        double yTop = boleHeight * 0.68;      // Upper apex commissure (~1.91m)
+        double cleftH = yTop - yBot;
 
-        int sectors = detail == 2 ? 24 : (detail == 1 ? 30 : 36);
-        int lowRings = detail == 2 ? 16 : (detail == 1 ? 20 : 24);
-        int highRings = detail == 2 ? 10 : (detail == 1 ? 14 : 18);
-        int totalRings = lowRings + highRings;
+        int sectors = detail switch { 2 => 24, 1 => 36, _ => 48 };
+        int botRings = detail switch { 2 => 5, 1 => 7, _ => 9 };
+        int cleftRings = detail switch { 2 => 16, 1 => 22, _ => 32 };
+        int topRings = detail switch { 2 => 10, 1 => 14, _ => 18 };
+        int totalRings = botRings + cleftRings + topRings;
+        int cSub = detail switch { 2 => 6, 1 => 8, _ => 12 };
 
-        // Buttresses placed on flanks and rear (never blocking or crowding the portal threshold)
-        var buttressAngles = new[] {
-            openDir + 0.85,
-            openDir + Math.PI * 0.55,
-            openDir + Math.PI * 0.95,
-            openDir + Math.PI * 1.35,
-            openDir + Math.PI * 1.65,
-            openDir + 2.0 * Math.PI - 0.85
-        };
-        int buttressCount = buttressAngles.Length;
         double furrowPhase = Rng.HashUnit(seed, 101, 0) * Math.PI * 2.0;
         double barkPhase = Rng.HashUnit(seed, 102, 0) * Math.PI * 2.0;
 
-        // Mean trunk radius profile without buttress flare
-        double MeanOuterRadius(double t)
-        {
-            return baseRadius * (1.05 + 0.32 * MathD.SmoothStep(0.65, 0.98, t));
-        }
+        double MeanOuterRadius(double t) => HollowcrownMeanOuterRadius(t, baseRadius);
 
-        // Exterior trunk radius with bark furrows and splayed root buttresses
-        double OuterRadius(double t, double th)
-        {
-            double r = MeanOuterRadius(t);
-            r *= 1.0 + 0.08 * Math.Sin(8.0 * th + furrowPhase + 0.5 * t) * (0.35 + 0.65 * (1.0 - 0.4 * t));
-            r *= 1.0 + 0.02 * Math.Sin(16.0 * th + barkPhase);
+        double OuterRadius(double t, double th) => HollowcrownOuterRadius(t, th, baseRadius, boleHeight);
 
-            if (t < 0.30)
-            {
-                double flareDecay = Math.Pow(1.0 - t / 0.30, 2.5);
-                double buttressSum = 0.0;
-                for (int b = 0; b < buttressCount; b++)
-                {
-                    double diff = Math.Abs(th - buttressAngles[b]);
-                    if (diff > Math.PI) diff = 2.0 * Math.PI - diff;
-                    double cosLobe = Math.Max(0.0, Math.Cos(diff * 1.8));
-                    buttressSum += Math.Pow(cosLobe, 3.2) * 0.45;
-                }
-                r += baseRadius * buttressSum * flareDecay;
-            }
-
-            return r;
-        }
-
-        // Uniform wall thickness: ~0.22 * baseRadius (~23cm thick shell, authentic veteran hollow tree)
-        double wallThickness = baseRadius * 0.22;
-
-        // Dedicated spacious interior cavern radius (smooth concave heartwood chamber)
+        // Dedicated fibrous hollow log interior radius: multi-frequency fluting sculpturing rot relief
         double InnerRadius(double t, double th)
         {
-            double rMean = MeanOuterRadius(t) - wallThickness;
-            return rMean * (1.0 + 0.025 * Math.Sin(3.0 * th + 0.5));
+            double rMean = MeanOuterRadius(t) - baseRadius * 0.25;
+            // High-frequency longitudinal ridges and splintered heartwood septa
+            double heartwoodRids = 0.09 * Math.Pow(Math.Abs(Math.Sin(14.0 * th + 0.5 * Math.Sin(4.0 * t))), 0.45)
+                                 + 0.04 * Math.Cos(22.0 * th + 1.2 * Math.Sin(6.0 * t));
+            double rotFlute = 0.10 * Math.Cos(6.0 * th + 0.4)
+                            + 0.05 * Math.Sin(11.0 * th + 1.8 * t)
+                            + 0.02 * Math.Sin(31.0 * th + 4.0 * t);
+            double checks = 0.025 * Math.Sin(t * 26.0 + 2.0 * Math.Cos(4.0 * th));
+            double basalRot = 0.10 * Math.Pow(Math.Max(0.0, 1.0 - t / 0.35), 1.8) * (1.0 + 0.4 * Math.Cos(3.0 * th));
+            return Math.Max(0.10, rMean * (1.0 + rotFlute + heartwoodRids + checks + basalRot));
         }
 
-        // Doorway half angle at vertical height y (pointed Gothic arch with smooth base flare)
-        double DoorHalfAngle(double y)
+        double VulvaHalfAngle(double u)
         {
-            if (y >= doorHeight) return 0.0;
-            double u = y / doorHeight;
-            double gothicArch = Math.Sqrt(Math.Max(0.0, 1.0 - u * u));
-            double baseFlare = 1.0 + 0.12 * Math.Pow(1.0 - u, 2.0);
-            return doorMaxHalfAngle * gothicArch * baseFlare;
+            if (u <= 0.0 || u >= 1.0) return 0.0;
+            // Smooth gothic-arch profile with C1 tangency at the commissures:
+            // Eliminates diamond silhouette, gently asymmetrical belly, taper at both commissures
+            return doorMaxHalfAngle * Math.Pow(Math.Sin(Math.PI * u), 1.35) * (1.0 + 0.28 * Math.Sin(Math.PI * (1.0 - u)) - 0.12 * Math.Sin(2.0 * Math.PI * u));
         }
 
-        Vec3 TrunkCenter(double t)
-        {
-            double leanX = 0.04 * baseRadius * Math.Sin(Math.PI * t * 0.85);
-            double leanZ = -0.03 * baseRadius * Math.Sin(Math.PI * t * 0.70);
-            return basePoint + Vec3.Up * (boleHeight * t) + new Vec3(leanX, 0, leanZ);
-        }
-
+        Vec3 TrunkCenter(double t) => HollowcrownTrunkCenter(t, boleHeight, baseRadius, basePoint);
         Vec3 CavernCenter(double t) => TrunkCenter(t);
+
+        double GetYForRing(int i, double th)
+        {
+            if (i <= botRings)
+                return yBot * (i / (double)botRings);
+            if (i <= botRings + cleftRings)
+                return yBot + cleftH * ((i - botRings) / (double)cleftRings);
+            double topFrac = (i - botRings - cleftRings) / (double)topRings;
+            return MathD.Lerp(yTop, HollowcrownTopRimY(th, boleHeight), topFrac);
+        }
 
         // -------------------------------------------------------------------------
         // 1. Grid Stations along Trunk Perimeter
@@ -344,60 +432,82 @@ public static partial class OrganismMeshes
         var outerNorms = new Vec3[totalRings + 1, sectors + 1];
         var innerNorms = new Vec3[totalRings + 1, sectors + 1];
 
+        // Compute 3D positions
         for (int i = 0; i <= totalRings; i++)
         {
-            double y = i <= lowRings
-                ? doorHeight * (i / (double)lowRings)
-                : doorHeight + (boleHeight - doorHeight) * ((i - lowRings) / (double)highRings);
-            double t = y / boleHeight;
+            double uCleft = (i - botRings) / (double)cleftRings;
+            double gap = (i >= botRings && i <= botRings + cleftRings) ? VulvaHalfAngle(uCleft) : 0.0;
 
-            double gap = DoorHalfAngle(y);
             double startAngle = openDir + gap;
             double sweepAngle = 2.0 * Math.PI - 2.0 * gap;
-
-            var cTrunk = TrunkCenter(t);
-            var cCav = CavernCenter(t);
 
             for (int j = 0; j <= sectors; j++)
             {
                 double uSec = j / (double)sectors;
                 double th = startAngle + sweepAngle * uSec;
-                var radDir = HollowcrownRadial(th);
+                double y = GetYForRing(i, th);
+                double t = y / boleHeight;
 
+                var radDir = HollowcrownRadial(th);
                 double rO = OuterRadius(t, th);
                 double rI = InnerRadius(t, th);
 
-                outerPos[i, j] = cTrunk + radDir * rO;
-                innerPos[i, j] = cCav + radDir * rI;
-
-                outerNorms[i, j] = (radDir + Vec3.Up * (0.12 - 0.24 * t)).Normalized();
-                innerNorms[i, j] = (-radDir + Vec3.Up * 0.05).Normalized();
+                outerPos[i, j] = TrunkCenter(t) + radDir * rO;
+                innerPos[i, j] = CavernCenter(t) + radDir * rI;
             }
         }
 
-        // Add Outer Vertices (Bark: UV2.x = 2.0)
+        // Compute true 3D finite-difference normals
         for (int i = 0; i <= totalRings; i++)
         {
-            double y = i <= lowRings
-                ? doorHeight * (i / (double)lowRings)
-                : doorHeight + (boleHeight - doorHeight) * ((i - lowRings) / (double)highRings);
-            double t = y / boleHeight;
+            int iPrev = Math.Max(0, i - 1);
+            int iNext = Math.Min(totalRings, i + 1);
 
-            double gap = DoorHalfAngle(y);
+            double uCleft = (i - botRings) / (double)cleftRings;
+            double gap = (i >= botRings && i <= botRings + cleftRings) ? VulvaHalfAngle(uCleft) : 0.0;
             double startAngle = openDir + gap;
             double sweepAngle = 2.0 * Math.PI - 2.0 * gap;
 
             for (int j = 0; j <= sectors; j++)
             {
-                if (i >= lowRings && j == sectors)
-                {
-                    // Closed loop above arch: last vertex shares index with first vertex
-                    outerGrid[i, j] = outerGrid[i, 0];
-                    continue;
-                }
+                int jPrev = Math.Max(0, j - 1);
+                int jNext = Math.Min(sectors, j + 1);
 
+                double th = startAngle + sweepAngle * (j / (double)sectors);
+                var radDir = HollowcrownRadial(th);
+
+                // Outer normals (point outward away from trunk)
+                var dCircO = outerPos[i, jNext] - outerPos[i, jPrev];
+                var dLongO = outerPos[iNext, j] - outerPos[iPrev, j];
+                var nO = dCircO.Cross(dLongO).Normalized();
+                if (nO.Dot(radDir) < 0) nO = -nO;
+                outerNorms[i, j] = nO.LengthSq > 1e-6 ? nO : radDir;
+
+                // Inner normals (point inward into cavern center)
+                var dCircI = innerPos[i, jNext] - innerPos[i, jPrev];
+                var dLongI = innerPos[iNext, j] - innerPos[iPrev, j];
+                var nI = dLongI.Cross(dCircI).Normalized();
+                if (nI.Dot(radDir) > 0) nI = -nI;
+                innerNorms[i, j] = nI.LengthSq > 1e-6 ? nI : -radDir;
+            }
+        }
+
+        int startOuterVertex = m.VertexCount;
+
+        // Add Outer Vertices (Bark: UV2.x = 2.0, non-aliased continuous UVs!)
+        for (int i = 0; i <= totalRings; i++)
+        {
+            double uCleft = (i - botRings) / (double)cleftRings;
+            double gap = (i >= botRings && i <= botRings + cleftRings) ? VulvaHalfAngle(uCleft) : 0.0;
+            double startAngle = openDir + gap;
+            double sweepAngle = 2.0 * Math.PI - 2.0 * gap;
+
+            for (int j = 0; j <= sectors; j++)
+            {
                 double uSec = j / (double)sectors;
                 double th = startAngle + sweepAngle * uSec;
+                double y = outerPos[i, j].Y;
+                double t = y / boleHeight;
 
                 double weather = 0.5 + 0.5 * Math.Cos(th - barkPhase);
                 var col = Primitives.Mix(HollowBarkDark, HollowBark, 0.45 + 0.40 * t);
@@ -406,42 +516,48 @@ public static partial class OrganismMeshes
                 if (flute < -0.2) col = Primitives.Mix(col, HollowBarkDeep, 0.60 * (-flute - 0.2) / 0.8);
                 else if (flute > 0.4) col = Primitives.Mix(col, HollowBarkCrest, 0.40 * (flute - 0.4) / 0.6);
 
-                double arcMeters = th * baseRadius;
+                double arcMeters = (startAngle - openDir + sweepAngle * uSec) * baseRadius;
                 outerGrid[i, j] = m.AddVertex(outerPos[i, j], outerNorms[i, j], col, 1.0, y, arcMeters, 2.0, 0.0);
             }
         }
 
-        // Inner Cavern Vertices: UV2.x = 0.0, UV2.y = 0.0 (Matte rotting heartwood, roughness 0.72, NO SPECULAR GLARE!)
+        // Add Inner Cavern Vertices (UV2.x = 3.0: Decayed Heartwood / Callus / Hollow Log Interior)
         for (int i = 0; i <= totalRings; i++)
         {
-            double y = i <= lowRings
-                ? doorHeight * (i / (double)lowRings)
-                : doorHeight + (boleHeight - doorHeight) * ((i - lowRings) / (double)highRings);
-            double t = y / boleHeight;
-
-            double gap = DoorHalfAngle(y);
+            double uCleft = (i - botRings) / (double)cleftRings;
+            double gap = (i >= botRings && i <= botRings + cleftRings) ? VulvaHalfAngle(uCleft) : 0.0;
             double startAngle = openDir + gap;
             double sweepAngle = 2.0 * Math.PI - 2.0 * gap;
 
             for (int j = 0; j <= sectors; j++)
             {
-                if (i >= lowRings && j == sectors)
-                {
-                    innerGrid[i, j] = innerGrid[i, 0];
-                    continue;
-                }
-
                 double uSec = j / (double)sectors;
-                double rotGrain = Math.Sin(3.0 * uSec * Math.PI * 2.0 + 1.0) * Math.Sin(5.0 * t + 0.5);
-                var col = Primitives.Mix(HollowWoodRot, HollowWoodWarm, 0.35 + 0.30 * rotGrain);
-                col = Primitives.Mix(col, HollowBarkDeep, 0.50 * (1.0 - t));
+                double th = startAngle + sweepAngle * uSec;
+                double y = innerPos[i, j].Y;
+                double t = y / boleHeight;
 
-                double circMeters = uSec * 2.0 * Math.PI * InnerRadius(t, 0.0);
-                innerGrid[i, j] = m.AddVertex(innerPos[i, j], innerNorms[i, j], col, 1.0, y, circMeters, 0.0, 0.0);
+                // High-frequency vertical wood-fiber striation and longitudinal rot cracks
+                double grainNoise = Math.Sin(28.0 * th + 2.0 * Math.Sin(5.0 * t)) * 0.6
+                                  + Math.Cos(42.0 * th - 3.0 * t) * 0.4;
+                double creviceFissure = Math.Pow(Math.Abs(Math.Sin(14.0 * th + 0.5 * Math.Sin(4.0 * t))), 3.0);
+
+                var charredRot = new double[] { 0.05, 0.035, 0.025 };
+                var col = Primitives.Mix(HollowWoodRot, HollowWoodWarm, 0.45 + 0.40 * grainNoise);
+                col = Primitives.Mix(col, HollowWoodFresh, 0.25 * Math.Max(0.0, grainNoise));
+                col = Primitives.Mix(charredRot, col, 1.0 - 0.65 * creviceFissure);
+
+                double cavityAo = (0.28 + 0.72 * t) * (0.65 + 0.35 * Math.Cos(th - openDir));
+                col = Primitives.Mix(HollowBarkDeep, col, cavityAo);
+
+                double circMeters = uSec * 2.0 * Math.PI * InnerRadius(t, th);
+                innerGrid[i, j] = m.AddVertex(innerPos[i, j], innerNorms[i, j], col, 1.0, y, circMeters, 3.0, 0.0);
             }
         }
 
-        // Triangulate Outer Shell
+        // Register main trunk in Structural for LOD tests
+        m.Structural.Add((startOuterVertex, m.VertexCount - startOuterVertex, sectors, baseRadius));
+
+        // Triangulate Outer Shell (Faces OUTWARD away from trunk)
         for (int i = 0; i < totalRings; i++)
         {
             for (int j = 0; j < sectors; j++)
@@ -450,12 +566,12 @@ public static partial class OrganismMeshes
                 int b = outerGrid[i, j + 1];
                 int c = outerGrid[i + 1, j];
                 int d = outerGrid[i + 1, j + 1];
-                m.AddTriangle(a, c, b);
-                m.AddTriangle(b, c, d);
+                m.AddTriangle(a, b, c);
+                m.AddTriangle(b, d, c);
             }
         }
 
-        // Triangulate Inner Cavern Shell (Faces INWARD towards cavern center)
+        // Triangulate Inner Cavern Shell (Faces INWARD towards cavity center)
         for (int i = 0; i < totalRings; i++)
         {
             for (int j = 0; j < sectors; j++)
@@ -464,143 +580,251 @@ public static partial class OrganismMeshes
                 int b = innerGrid[i, j + 1];
                 int c = innerGrid[i + 1, j];
                 int d = innerGrid[i + 1, j + 1];
-                m.AddTriangle(a, b, c);
-                m.AddTriangle(b, d, c);
+                m.AddTriangle(a, c, b);
+                m.AddTriangle(b, c, d);
             }
         }
 
         // -------------------------------------------------------------------------
-        // 2. Thickened, Rounded Callus Wood Roll Framing the Gothic Arch
+        // 2. Double-Lipped Vulva Callus Border (Outer Labia, Sulcus, Inner Labia)
         // -------------------------------------------------------------------------
-        const int cSub = 3;
-        var leftCallus = new int[lowRings + 1, cSub];
-        var rightCallus = new int[lowRings + 1, cSub];
+        var leftCallus = new int[cleftRings + 1, cSub];
+        var rightCallus = new int[cleftRings + 1, cSub];
+        var leftCallusPos = new Vec3[cleftRings + 1, cSub];
+        var rightCallusPos = new Vec3[cleftRings + 1, cSub];
 
-        for (int i = 0; i <= lowRings; i++)
+        for (int k = 0; k <= cleftRings; k++)
         {
-            double y = doorHeight * (i / (double)lowRings);
-            double gap = DoorHalfAngle(y);
-            var pOut = outerPos[i, 0];
-            var pIn = innerPos[i, 0];
-            double thick = (pOut - pIn).Length;
+            int iRing = botRings + k;
+            double uCleft = k / (double)cleftRings;
+            double gap = VulvaHalfAngle(uCleft);
 
-            // Direction tangent to the portal opening, pointing into the doorway
-            var doorInL = HollowcrownRadial(openDir + gap - Math.PI * 0.5);
+            // Left side (j = 0)
+            var pOutL = outerPos[iRing, 0];
+            var pInL = innerPos[iRing, 0];
+            double thickL = (pOutL - pInL).Length;
+            var inDirL = HollowcrownRadial(openDir + gap - Math.PI * 0.5);
+            var outNormL = HollowcrownRadial(openDir + gap);
 
-            for (int s = 0; s < cSub; s++)
-            {
-                double frac = (s + 1) / (double)(cSub + 1);
-                var pBase = Vec3.Lerp(pOut, pIn, frac);
-                double bulgeAmt = Math.Sin(Math.PI * frac) * (thick * 0.35);
-                var p = pBase + doorInL * bulgeAmt;
-                var n = (doorInL * 0.70 + (p - (pOut + pIn) * 0.5).Normalized() * 0.30).Normalized();
-
-                // Smooth gradient: mature bark -> pale fresh living callus -> dark punk wood
-                var col = frac < 0.5
-                    ? Primitives.Mix(HollowBark, HollowWoodFresh, frac * 2.0)
-                    : Primitives.Mix(HollowWoodFresh, HollowWoodRot, (frac - 0.5) * 2.0);
-
-                double u2x = (s == 0) ? 2.0 : 0.0; // outer edge bark, crest & inside matte wood
-                leftCallus[i, s] = m.AddVertex(p, n, col, 1.0, y, frac, u2x, 0.0);
-            }
-
-            var pOutR = outerPos[i, sectors];
-            var pInR = innerPos[i, sectors];
+            // Right side (j = sectors)
+            var pOutR = outerPos[iRing, sectors];
+            var pInR = innerPos[iRing, sectors];
             double thickR = (pOutR - pInR).Length;
-            var doorInR = HollowcrownRadial(openDir - gap + Math.PI * 0.5);
+            var inDirR = HollowcrownRadial(openDir - gap + Math.PI * 0.5);
+            var outNormR = HollowcrownRadial(openDir - gap);
+
+            // Crucial: scale cleftBulge by gapScale so lips never cross through each other at the tips!
+            double gapScale = Math.Min(1.0, gap / 0.16) * Math.Sin(Math.PI * uCleft);
 
             for (int s = 0; s < cSub; s++)
             {
                 double frac = (s + 1) / (double)(cSub + 1);
-                var pBase = Vec3.Lerp(pOutR, pInR, frac);
-                double bulgeAmt = Math.Sin(Math.PI * frac) * (thickR * 0.35);
-                var p = pBase + doorInR * bulgeAmt;
-                var n = (doorInR * 0.70 + (p - (pOutR + pInR) * 0.5).Normalized() * 0.30).Normalized();
 
-                var col = frac < 0.5
-                    ? Primitives.Mix(HollowBark, HollowWoodFresh, frac * 2.0)
-                    : Primitives.Mix(HollowWoodFresh, HollowWoodRot, (frac - 0.5) * 2.0);
+                // Plump, rounded, non-self-intersecting double-labia cross-section:
+                // Outer labium (labia majora): frac in [0.0, 0.45]
+                double majoraRad = frac <= 0.45 ? 0.32 * Math.Sin(Math.PI * (frac / 0.45)) : 0.0;
+                double majoraIn = frac <= 0.45 ? 0.28 * Math.Sin(Math.PI * (frac / 0.45)) : 0.0;
 
-                double u2x = (s == 0) ? 2.0 : 0.0;
-                rightCallus[i, s] = m.AddVertex(p, n, col, 1.0, y, frac, u2x, 0.0);
+                // Inner labium (labia minora): frac in [0.45, 0.92]
+                double uMinora = (frac - 0.45) / 0.47;
+                double innerWave = Math.Pow(Math.Sin(Math.PI * uCleft), 0.75)
+                                 * (0.75 + 0.35 * Math.Sin(Math.PI * Math.Pow(uCleft, 0.7)) + 0.08 * Math.Sin(5.0 * uCleft));
+                double minoraRad = (frac > 0.45 && frac <= 0.92) ? 0.22 * Math.Sin(Math.PI * uMinora) * innerWave : 0.0;
+                double minoraIn = (frac > 0.45 && frac <= 0.92) ? 0.38 * Math.Sin(Math.PI * uMinora) * innerWave : 0.0;
+
+                // Upper clitoral-hood arch and central bud/peak
+                double hoodSwell = uCleft > 0.75 ? 0.28 * Math.Pow((uCleft - 0.75) / 0.25, 1.8) * Math.Sin(Math.PI * frac) : 0.0;
+                double hoodPeak = (uCleft >= 0.82 && uCleft <= 0.96)
+                                ? 0.16 * Math.Sin(Math.PI * (uCleft - 0.82) / 0.14) * Math.Exp(-Math.Pow((frac - 0.50) / 0.18, 2.0)) : 0.0;
+
+                // Left side
+                double radSwellL = (majoraRad + minoraRad + hoodSwell) * thickL;
+                double cleftBulgeL = ((majoraIn + minoraIn) * gapScale + hoodPeak * gapScale) * thickL;
+                leftCallusPos[k, s] = Vec3.Lerp(pOutL, pInL, frac) + outNormL * radSwellL + inDirL * cleftBulgeL;
+
+                // Right side (slight organic asymmetry scaled by gapScale)
+                double radSwellR = (majoraRad + minoraRad * 0.94 + hoodSwell) * thickR;
+                double cleftBulgeR = ((majoraIn + minoraIn * 0.94) * gapScale + hoodPeak * gapScale) * thickR;
+                rightCallusPos[k, s] = Vec3.Lerp(pOutR, pInR, frac) + outNormR * radSwellR + inDirR * cleftBulgeR;
+            }
+        }
+
+        // Add callus vertices with finite-difference normals and smooth C-infinity Gaussian colors
+        for (int k = 0; k <= cleftRings; k++)
+        {
+            int iRing = botRings + k;
+            double uCleft = k / (double)cleftRings;
+            double gap = VulvaHalfAngle(uCleft);
+            double yL = outerPos[iRing, 0].Y;
+            double yR = outerPos[iRing, sectors].Y;
+
+            int kPrev = Math.Max(0, k - 1);
+            int kNext = Math.Min(cleftRings, k + 1);
+
+            var inDirL = HollowcrownRadial(openDir + gap - Math.PI * 0.5);
+            var outNormL = HollowcrownRadial(openDir + gap);
+            var inDirR = HollowcrownRadial(openDir - gap + Math.PI * 0.5);
+            var outNormR = HollowcrownRadial(openDir - gap);
+
+            double cambiumMix = Math.Sin(Math.PI * uCleft);
+            var livingCambium = Primitives.Mix(HollowCambiumRose, HollowCambiumAmber, cambiumMix);
+            livingCambium = Primitives.Mix(livingCambium, HollowWoodFresh, 0.28);
+
+            for (int s = 0; s < cSub; s++)
+            {
+                double frac = (s + 1) / (double)(cSub + 1);
+
+                // Smooth continuous Gaussian color blending
+                double wBark = Math.Exp(-Math.Pow(frac / 0.14, 2.0));
+                double wOuterCrest = Math.Exp(-Math.Pow((frac - 0.22) / 0.12, 2.0));
+                double wSulcus = Math.Exp(-Math.Pow((frac - 0.41) / 0.07, 2.0));
+                double wInnerCrest = Math.Exp(-Math.Pow((frac - 0.64) / 0.13, 2.0));
+                double wRot = Math.Pow(Math.Max(0.0, (frac - 0.55) / 0.45), 2.2);
+
+                double sumW = wBark + wOuterCrest + wSulcus + wInnerCrest + wRot + 1e-6;
+                var col = new double[3];
+                for (int c = 0; c < 3; c++)
+                {
+                    col[c] = (wBark * HollowBark[c]
+                            + wOuterCrest * HollowWoodFresh[c]
+                            + wSulcus * HollowSulcusShadow[c]
+                            + wInnerCrest * livingCambium[c]
+                            + wRot * HollowWoodRot[c]) / sumW;
+                }
+                double u2x = frac < 0.28 ? 2.0 : 3.0;
+
+                // Left callus normal
+                var pPrevSL = (s == 0) ? outerPos[iRing, 0] : leftCallusPos[k, s - 1];
+                var pNextSL = (s == cSub - 1) ? innerPos[iRing, 0] : leftCallusPos[k, s + 1];
+                var dSL = pNextSL - pPrevSL;
+                var dKL = leftCallusPos[kNext, s] - leftCallusPos[kPrev, s];
+                var nL = dSL.Cross(dKL).Normalized();
+                if (nL.Dot(outNormL + inDirL * 0.5) < 0) nL = -nL;
+                if (nL.LengthSq < 1e-6) nL = outNormL;
+
+                leftCallus[k, s] = m.AddVertex(leftCallusPos[k, s], nL, col, 1.0, yL, frac, u2x, 0.0);
+
+                // Right callus normal
+                var pPrevSR = (s == 0) ? outerPos[iRing, sectors] : rightCallusPos[k, s - 1];
+                var pNextSR = (s == cSub - 1) ? innerPos[iRing, sectors] : rightCallusPos[k, s + 1];
+                var dSR = pNextSR - pPrevSR;
+                var dKR = rightCallusPos[kNext, s] - rightCallusPos[kPrev, s];
+                var nR = dKR.Cross(dSR).Normalized();
+                if (nR.Dot(outNormR + inDirR * 0.5) < 0) nR = -nR;
+                if (nR.LengthSq < 1e-6) nR = outNormR;
+
+                rightCallus[k, s] = m.AddVertex(rightCallusPos[k, s], nR, col, 1.0, yR, frac, u2x, 0.0);
             }
         }
 
         // Triangulate left callus roll strip
-        for (int i = 0; i < lowRings; i++)
+        for (int k = 0; k < cleftRings; k++)
         {
-            m.AddTriangle(outerGrid[i, 0], outerGrid[i + 1, 0], leftCallus[i, 0]);
-            m.AddTriangle(outerGrid[i + 1, 0], leftCallus[i + 1, 0], leftCallus[i, 0]);
+            int iRing = botRings + k;
+            m.AddTriangle(outerGrid[iRing, 0], outerGrid[iRing + 1, 0], leftCallus[k, 0]);
+            m.AddTriangle(outerGrid[iRing + 1, 0], leftCallus[k + 1, 0], leftCallus[k, 0]);
 
             for (int s = 0; s < cSub - 1; s++)
             {
-                int a = leftCallus[i, s];
-                int b = leftCallus[i, s + 1];
-                int c = leftCallus[i + 1, s];
-                int d = leftCallus[i + 1, s + 1];
+                int a = leftCallus[k, s];
+                int b = leftCallus[k, s + 1];
+                int c = leftCallus[k + 1, s];
+                int d = leftCallus[k + 1, s + 1];
                 m.AddTriangle(a, c, b);
                 m.AddTriangle(c, d, b);
             }
 
             int lastS = cSub - 1;
-            m.AddTriangle(leftCallus[i, lastS], leftCallus[i + 1, lastS], innerGrid[i, 0]);
-            m.AddTriangle(leftCallus[i + 1, lastS], innerGrid[i + 1, 0], innerGrid[i, 0]);
+            m.AddTriangle(leftCallus[k, lastS], leftCallus[k + 1, lastS], innerGrid[iRing, 0]);
+            m.AddTriangle(leftCallus[k + 1, lastS], innerGrid[iRing + 1, 0], innerGrid[iRing, 0]);
         }
 
         // Triangulate right callus roll strip
-        for (int i = 0; i < lowRings; i++)
+        for (int k = 0; k < cleftRings; k++)
         {
-            m.AddTriangle(outerGrid[i, sectors], rightCallus[i, 0], outerGrid[i + 1, sectors]);
-            m.AddTriangle(outerGrid[i + 1, sectors], rightCallus[i, 0], rightCallus[i + 1, 0]);
+            int iRing = botRings + k;
+            m.AddTriangle(outerGrid[iRing, sectors], rightCallus[k, 0], outerGrid[iRing + 1, sectors]);
+            m.AddTriangle(outerGrid[iRing + 1, sectors], rightCallus[k, 0], rightCallus[k + 1, 0]);
 
             for (int s = 0; s < cSub - 1; s++)
             {
-                int a = rightCallus[i, s];
-                int b = rightCallus[i, s + 1];
-                int c = rightCallus[i + 1, s];
-                int d = rightCallus[i + 1, s + 1];
+                int a = rightCallus[k, s];
+                int b = rightCallus[k, s + 1];
+                int c = rightCallus[k + 1, s];
+                int d = rightCallus[k + 1, s + 1];
                 m.AddTriangle(a, b, c);
                 m.AddTriangle(b, d, c);
             }
 
             int lastS = cSub - 1;
-            m.AddTriangle(rightCallus[i, lastS], innerGrid[i, sectors], rightCallus[i + 1, lastS]);
-            m.AddTriangle(rightCallus[i + 1, lastS], innerGrid[i, sectors], innerGrid[i + 1, sectors]);
+            m.AddTriangle(rightCallus[k, lastS], rightCallus[k + 1, lastS], innerGrid[iRing, sectors]);
+            m.AddTriangle(rightCallus[k + 1, lastS], innerGrid[iRing + 1, sectors], innerGrid[iRing, sectors]);
         }
 
-        // Seal arch apex crest where left and right jambs join
-        for (int s = 0; s < cSub; s++)
+        // At k = 0 (fourchette threshold) and k = cleftRings (upper commissure hood apex),
+        // gap == 0 and gapScale == 0, so leftCallus and rightCallus are authored at the exact same 3D curve
+        // between pOut and pIn. They meet edge-to-edge seamlessly without overlapping double-face fan caps.
+
+        // -------------------------------------------------------------------------
+        // 3. Pollard Bolling Rolled Rim at Top of Bole (Multi-ring curved lip)
+        // -------------------------------------------------------------------------
+        int rSub = detail == 2 ? 2 : (detail == 1 ? 3 : 4);
+        var bollingGrid = new int[rSub + 1, sectors + 1];
+
+        for (int j = 0; j <= sectors; j++)
         {
-            m.AddTriangle(leftCallus[lowRings, s], outerGrid[lowRings, 0], rightCallus[lowRings, s]);
-            m.AddTriangle(leftCallus[lowRings, s], rightCallus[lowRings, s], innerGrid[lowRings, 0]);
+            bollingGrid[0, j] = outerGrid[totalRings, j];
+            bollingGrid[rSub, j] = innerGrid[totalRings, j];
         }
 
-        // -------------------------------------------------------------------------
-        // 3. Pollard Bolling Rim at Top of Bole (UV2.x = 0.0, UV2.y = 0.0 - NO VINYL GROOVES!)
-        // -------------------------------------------------------------------------
-        for (int j = 0; j < sectors; j++)
+        for (int r = 1; r < rSub; r++)
         {
-            int o0 = outerGrid[totalRings, j];
-            int o1 = outerGrid[totalRings, j + 1];
-            int i0 = innerGrid[totalRings, j];
-            int i1 = innerGrid[totalRings, j + 1];
-            m.AddTriangle(o0, o1, i0);
-            m.AddTriangle(o1, i1, i0);
+            double frac = r / (double)rSub;
+            double domeH = 0.055 * Math.Sin(Math.PI * frac); // Smooth upward roll
+            for (int j = 0; j <= sectors; j++)
+            {
+                var pO = outerPos[totalRings, j];
+                var pI = innerPos[totalRings, j];
+                var p = Vec3.Lerp(pO, pI, frac) + Vec3.Up * domeH;
+
+                double th = openDir + 2.0 * Math.PI * (j / (double)sectors);
+                var radDir = HollowcrownRadial(th);
+                var n = (radDir * Math.Cos(Math.PI * frac) + Vec3.Up * Math.Sin(Math.PI * frac)).Normalized();
+
+                var col = frac < 0.4
+                    ? Primitives.Mix(HollowBark, HollowWoodFresh, frac * 2.5)
+                    : Primitives.Mix(HollowWoodFresh, HollowWoodRot, (frac - 0.4) * 1.66);
+
+                double u2x = frac < 0.35 ? 2.0 : 3.0;
+                bollingGrid[r, j] = m.AddVertex(p, n, col, 1.0, boleHeight, th * baseRadius, u2x, 0.0);
+            }
+        }
+
+        for (int r = 0; r < rSub; r++)
+        {
+            for (int j = 0; j < sectors; j++)
+            {
+                int a = bollingGrid[r, j];
+                int b = bollingGrid[r, j + 1];
+                int c = bollingGrid[r + 1, j];
+                int d = bollingGrid[r + 1, j + 1];
+                m.AddTriangle(a, b, c);
+                m.AddTriangle(b, d, c);
+            }
         }
 
         // -------------------------------------------------------------------------
-        // 4. Contoured Cavern Basin Floor (Planar UVs, dark forest humus & punk mold)
+        // 4. Contoured Cavern Basin Floor (Rises to meet fourchette threshold)
         // -------------------------------------------------------------------------
         int floorRings = detail == 2 ? 3 : (detail == 1 ? 4 : 5);
         int floorSectors = sectors;
         var floorGrid = new int[floorRings + 1, floorSectors + 1];
 
-        var cFloor = CavernCenter(0.0) + Vec3.Up * 0.005;
+        var cFloor = CavernCenter(0.0) + Vec3.Up * 0.015;
 
         for (int fr = 0; fr <= floorRings; fr++)
         {
             double rFrac = fr / (double)floorRings;
-            double dishY = 0.005 + 0.015 * (rFrac * rFrac);
 
             for (int fs = 0; fs <= floorSectors; fs++)
             {
@@ -611,10 +835,12 @@ public static partial class OrganismMeshes
                 else
                 {
                     double uSec = fs / (double)floorSectors;
-                    double gap = DoorHalfAngle(0.0);
-                    double th = (openDir + gap) + (2.0 * Math.PI - 2.0 * gap) * uSec;
+                    double th = openDir + 2.0 * Math.PI * uSec;
 
                     double rCur = InnerRadius(0.0, th) * rFrac;
+                    double thresholdLift = yBot * 0.88 * Math.Max(0.0, Math.Cos(th - openDir));
+                    double dishY = 0.012 + (thresholdLift + 0.02 * Math.Sin(4.0 * th)) * rFrac;
+
                     var p = cFloor + Vec3.Up * dishY + HollowcrownRadial(th) * rCur;
                     var n = (Vec3.Up * 0.95 + HollowcrownRadial(th) * (0.20 * rFrac)).Normalized();
 
@@ -624,7 +850,7 @@ public static partial class OrganismMeshes
                     double uvX = (p.X - basePoint.X) * 1.2 + 0.5;
                     double uvY = (p.Z - basePoint.Z) * 1.2 + 0.5;
 
-                    floorGrid[fr, fs] = m.AddVertex(p, n, col, 1.0, uvX, uvY, 0.0, 0.0);
+                    floorGrid[fr, fs] = m.AddVertex(p, n, col, 1.0, uvX, uvY, 3.0, 0.0);
                 }
             }
         }
@@ -637,128 +863,159 @@ public static partial class OrganismMeshes
                 int b = floorGrid[fr, fs + 1];
                 int c = floorGrid[fr + 1, fs];
                 int d = floorGrid[fr + 1, fs + 1];
-                m.AddTriangle(a, b, c);
-                m.AddTriangle(b, d, c);
+                m.AddTriangle(a, c, b);
+                m.AddTriangle(b, c, d);
             }
         }
 
-        int fcVertex = m.AddVertex(cFloor, Vec3.Up, HollowBarkDeep, 1.0, 0.5, 0.5, 0.0, 0.0);
-        for (int fs = 0; fs < floorSectors; fs++)
-        {
-            m.AddTriangle(fcVertex, floorGrid[0, fs], floorGrid[0, fs + 1]);
-        }
-
         // -------------------------------------------------------------------------
-        // 5. Multi-layered Velvety Bioluminescent Moss Cushions (UV2.x = 1.35f, UV2.y = 1f)
+        // 5. Confluent Velvet Bryophyte Cushions (Hugging cavity wall crevices)
         // -------------------------------------------------------------------------
         int mossStartVertex = m.VertexCount;
 
-        // (a) Organic moss cushions clustering across the doorway threshold and callus roots
-        var doorFwd = HollowcrownRadial(openDir);
-        var doorSide = HollowcrownRadial(openDir + Math.PI * 0.5);
-
-        var threshPatches = new[] {
-            (center: cFloor + doorFwd * (baseRadius * 0.38) - doorSide * (baseRadius * 0.15) + Vec3.Up * 0.012, radS: baseRadius * 0.16, radF: baseRadius * 0.14, h: 0.018),
-            (center: cFloor + doorFwd * (baseRadius * 0.38) + doorSide * (baseRadius * 0.15) + Vec3.Up * 0.012, radS: baseRadius * 0.16, radF: baseRadius * 0.14, h: 0.018),
-            (center: cFloor + doorFwd * (baseRadius * 0.46) + doorSide * (baseRadius * 0.02) + Vec3.Up * 0.008, radS: baseRadius * 0.18, radF: baseRadius * 0.11, h: 0.012)
-        };
-
-        for (int pIdx = 0; pIdx < threshPatches.Length; pIdx++)
+        // (a) Fourchette threshold cushion: radial disc seated flush on threshold lip
         {
-            var patch = threshPatches[pIdx];
-            int tRings = 3;
-            int tSectors = 6;
-            var tGrid = new int[tRings + 1, tSectors + 1];
+            var pThresh = Vec3.Lerp(outerPos[botRings, 0], innerPos[botRings, 0], 0.55);
+            var nThresh = (HollowcrownRadial(openDir) * 0.45 + Vec3.Up * 0.89).Normalized();
+            var tThresh = HollowcrownRadial(openDir + Math.PI * 0.5);
+            var bThresh = nThresh.Cross(tThresh).Normalized();
 
-            for (int tr = 0; tr <= tRings; tr++)
+            int tRings = detail == 2 ? 3 : 4;
+            int tSectors = detail == 2 ? 8 : (detail == 1 ? 10 : 12);
+
+            double radX = baseRadius * 0.12;
+            double radY = baseRadius * 0.08;
+            double bulge = baseRadius * 0.035;
+
+            // Center vertex
+            var pCenter = pThresh + nThresh * bulge;
+            var colCenter = Primitives.Mix(HollowMossMid, HollowMossLit, 0.90);
+            int threshCenterIdx = m.AddVertex(pCenter, nThresh, colCenter, 1.0, 0.5, 0.5, 1.35, 1.0);
+
+            var tGrid = new int[tRings + 1, tSectors];
+
+            for (int r = 1; r <= tRings; r++)
             {
-                double vFrac = (tr / (double)tRings) * 2.0 - 1.0;
-                for (int ts = 0; ts <= tSectors; ts++)
-                {
-                    double hFrac = (ts / (double)tSectors) * 2.0 - 1.0;
-                    double distSq = hFrac * hFrac + vFrac * vFrac;
-                    double dome = Math.Max(0.0, 1.0 - distSq);
-                    double moundY = patch.h * Math.Pow(dome, 0.85);
+                double rFrac = r / (double)tRings;
+                double dome = Math.Max(0.0, 1.0 - rFrac * rFrac);
+                double bAmt = Math.Pow(dome, 0.75) * bulge;
 
-                    var p = patch.center + doorSide * (hFrac * patch.radS) + doorFwd * (vFrac * patch.radF) + Vec3.Up * moundY;
-                    var n = (Vec3.Up * (0.80 + 0.20 * dome) + doorSide * (hFrac * 0.30) + doorFwd * (vFrac * 0.30)).Normalized();
+                for (int s = 0; s < tSectors; s++)
+                {
+                    double ang = s * (2.0 * Math.PI / tSectors);
+                    double vx = Math.Cos(ang) * rFrac;
+                    double vy = Math.Sin(ang) * rFrac;
+
+                    var p = pThresh + tThresh * (vx * radX) + bThresh * (vy * radY) + nThresh * bAmt;
+                    var n = (nThresh * (0.65 + 0.35 * dome) + tThresh * (vx * 0.3) + bThresh * (vy * 0.3)).Normalized();
 
                     var col = Primitives.Mix(HollowMossBase, HollowMossMid, dome);
-                    col = Primitives.Mix(col, HollowMossLit, Math.Pow(dome, 2.0) * 0.90);
+                    col = Primitives.Mix(col, HollowMossLit, Math.Pow(dome, 1.8) * 0.90);
+                    col = Primitives.Mix(HollowWoodRot, col, MathD.SmoothStep(0.0, 0.20, dome));
 
-                    tGrid[tr, ts] = m.AddVertex(p, n, col, 1.0, ts / (double)tSectors, tr / (double)tRings, 1.35, 1.0);
+                    tGrid[r, s] = m.AddVertex(p, n, col, 1.0, 0.5 + vx * 0.45, 0.5 + vy * 0.45, 1.35, 1.0);
                 }
             }
 
-            for (int tr = 0; tr < tRings; tr++)
+            for (int s = 0; s < tSectors; s++)
             {
-                for (int ts = 0; ts < tSectors; ts++)
+                int nextS = (s + 1) % tSectors;
+                m.AddTriangle(threshCenterIdx, tGrid[1, nextS], tGrid[1, s]);
+            }
+
+            for (int r = 1; r < tRings; r++)
+            {
+                for (int s = 0; s < tSectors; s++)
                 {
-                    int a = tGrid[tr, ts];
-                    int b = tGrid[tr, ts + 1];
-                    int c = tGrid[tr + 1, ts];
-                    int d = tGrid[tr + 1, ts + 1];
-                    m.AddTriangle(a, b, c);
-                    m.AddTriangle(b, d, c);
+                    int nextS = (s + 1) % tSectors;
+                    int a = tGrid[r, s];
+                    int b = tGrid[r, nextS];
+                    int cIdx = tGrid[r + 1, s];
+                    int d = tGrid[r + 1, nextS];
+                    m.AddTriangle(a, b, cIdx);
+                    m.AddTriangle(b, d, cIdx);
                 }
             }
         }
 
-        // (b) Smooth rounded velvety moss cushions nestled into interior heartwood niches
-        int numCushions = detail == 2 ? 6 : (detail == 1 ? 8 : 10);
+        // (b) Velvet moss cushions: lush vertical creeping bryophyte mats climbing damp lower cavity walls
+        int numCushions = detail == 2 ? 5 : (detail == 1 ? 7 : 8);
         for (int c = 0; c < numCushions; c++)
         {
             double cFrac = (c + 0.5) / numCushions;
-            double cTh = (openDir + Math.PI) + (cFrac - 0.5) * Math.PI * 0.90;
-            double cT = 0.04 + 0.38 * Rng.HashUnit(seed, (ulong)(c * 47 + 13), 0);
+            double cTh = (openDir + Math.PI) + (cFrac - 0.5) * Math.PI * 0.72;
+            // Clustered along damp lower cavity walls and floor niches
+            double cT = 0.04 + 0.20 * cFrac + 0.04 * Rng.HashUnit(seed, (ulong)(c * 47 + 13), 0);
 
-            double rWall = InnerRadius(cT, cTh) * 0.96;
-            var cCenter = CavernCenter(cT) + HollowcrownRadial(cTh) * rWall;
-
-            var cInNorm = (-new Vec3(Math.Cos(cTh), -0.15, Math.Sin(cTh))).Normalized();
-            var cTangent = cInNorm.Cross(Vec3.Up).Normalized();
-            var cUp = cTangent.Cross(cInNorm).Normalized();
-
-            double cRadX = baseRadius * (0.09 + 0.04 * Rng.HashUnit(seed, (ulong)(c * 67 + 2), 0));
-            double cRadY = baseRadius * (0.07 + 0.04 * Rng.HashUnit(seed, (ulong)(c * 67 + 3), 0));
+            // Vertically elongated creeping bryophyte mats
+            double cRadX = baseRadius * (0.08 + 0.03 * Rng.HashUnit(seed, (ulong)(c * 67 + 2), 0));
+            double cRadY = baseRadius * (0.15 + 0.05 * Rng.HashUnit(seed, (ulong)(c * 67 + 3), 0));
             double cBulge = baseRadius * 0.038;
 
-            int cRings = detail == 2 ? 3 : 4;
-            int cCols = detail == 2 ? 4 : 5;
-            var padGrid = new int[cRings + 1, cCols + 1];
+            int numRings = detail == 2 ? 3 : 4;
+            int numSectors = detail == 2 ? 8 : (detail == 1 ? 10 : 12);
 
-            for (int cr = 0; cr <= cRings; cr++)
+            // Center vertex
+            double wallRCtr = InnerRadius(cT, cTh);
+            var wallCtr = CavernCenter(cT) + HollowcrownRadial(cTh) * wallRCtr;
+            var normCtr = -HollowcrownRadial(cTh);
+            var pCtr = wallCtr + normCtr * cBulge;
+            var colCtr = Primitives.Mix(HollowMossMid, HollowMossLit, 0.90);
+            int ctrIdx = m.AddVertex(pCtr, normCtr, colCtr, 1.0, 0.5, 0.5, 1.35, 1.0);
+
+            var padGrid = new int[numRings + 1, numSectors];
+
+            for (int r = 1; r <= numRings; r++)
             {
-                double vFrac = cr / (double)cRings;
-                double vy = (vFrac - 0.5) * 2.0;
+                double rFrac = r / (double)numRings;
+                double dome = Math.Max(0.0, 1.0 - rFrac * rFrac);
+                double bulgeAmt = Math.Pow(dome, 0.75) * cBulge;
 
-                for (int cc = 0; cc <= cCols; cc++)
+                for (int s = 0; s < numSectors; s++)
                 {
-                    double hFrac = cc / (double)cCols;
-                    double vx = (hFrac - 0.5) * 2.0;
+                    double ang = s * (2.0 * Math.PI / numSectors);
+                    double rLimit = 1.0 + 0.20 * Math.Sin(3.0 * ang + c) + 0.12 * Math.Cos(5.0 * ang);
+                    double vx = Math.Cos(ang) * rLimit * rFrac;
+                    double vy = Math.Sin(ang) * rLimit * rFrac;
 
-                    double distSq = vx * vx + vy * vy;
-                    double dome = Math.Max(0.0, 1.0 - distSq);
-                    double bulgeAmt = Math.Pow(dome, 0.75) * cBulge;
+                    double dTh = (vx * cRadX) / Math.Max(0.1, InnerRadius(cT, cTh));
+                    double tV = Math.Clamp(cT + (vy * cRadY) / boleHeight, 0.015, 0.65);
+                    double thV = cTh + dTh;
 
-                    var p = cCenter + cTangent * (vx * cRadX) + cUp * (vy * cRadY) + cInNorm * bulgeAmt;
-                    var n = (cInNorm * (0.6 + 0.4 * dome) + cTangent * vx + cUp * vy).Normalized();
+                    var wPos = CavernCenter(tV) + HollowcrownRadial(thV) * InnerRadius(tV, thV);
+                    var wNorm = -HollowcrownRadial(thV);
+
+                    // Perimeter vertices (rFrac = 1.0, dome = 0, bulgeAmt = 0) sit exactly ON the wall surface
+                    var p = wPos + wNorm * bulgeAmt;
+                    var n = (wNorm * (0.6 + 0.4 * dome)
+                           - HollowcrownRadial(thV + Math.PI * 0.5) * (vx * 0.3)
+                           + Vec3.Up * (vy * 0.3)).Normalized();
 
                     var col = Primitives.Mix(HollowMossBase, HollowMossMid, dome);
                     col = Primitives.Mix(col, HollowMossLit, Math.Pow(dome, 2.0) * 0.95);
+                    col = Primitives.Mix(HollowWoodRot, col, MathD.SmoothStep(0.0, 0.18, dome));
 
-                    padGrid[cr, cc] = m.AddVertex(p, n, col, 1.0, hFrac, vFrac, 1.35, 1.0);
+                    padGrid[r, s] = m.AddVertex(p, n, col, 1.0, 0.5 + vx * 0.45, 0.5 + vy * 0.45, 1.35, 1.0);
                 }
             }
 
-            for (int cr = 0; cr < cRings; cr++)
+            // Triangulate center fan
+            for (int s = 0; s < numSectors; s++)
             {
-                for (int cc = 0; cc < cCols; cc++)
+                int nextS = (s + 1) % numSectors;
+                m.AddTriangle(ctrIdx, padGrid[1, nextS], padGrid[1, s]);
+            }
+
+            // Triangulate concentric rings
+            for (int r = 1; r < numRings; r++)
+            {
+                for (int s = 0; s < numSectors; s++)
                 {
-                    int a = padGrid[cr, cc];
-                    int b = padGrid[cr, cc + 1];
-                    int cIdx = padGrid[cr + 1, cc];
-                    int d = padGrid[cr + 1, cc + 1];
+                    int nextS = (s + 1) % numSectors;
+                    int a = padGrid[r, s];
+                    int b = padGrid[r, nextS];
+                    int cIdx = padGrid[r + 1, s];
+                    int d = padGrid[r + 1, nextS];
                     m.AddTriangle(a, b, cIdx);
                     m.AddTriangle(b, d, cIdx);
                 }
@@ -772,40 +1029,52 @@ public static partial class OrganismMeshes
         }
 
         // -------------------------------------------------------------------------
-        // 6. Splayed Surface Root Runners Snaking Across Turf
+        // 6. Muscular Surface Anchor Roots Flowing from Buttress Flanks
         // -------------------------------------------------------------------------
-        int rootRunners = detail == 2 ? 4 : (detail == 1 ? 5 : 7);
+        int rootRunners = detail == 2 ? 4 : (detail == 1 ? 5 : 6);
         for (int r = 0; r < rootRunners; r++)
         {
-            double rAz = buttressAngles[r % buttressAngles.Length] + rng.Range(-0.15, 0.15);
+            double rAz = (r switch {
+                0 => openDir + 0.78,
+                1 => openDir + Math.PI * 0.52,
+                2 => openDir + Math.PI * 0.94,
+                3 => openDir + Math.PI * 1.36,
+                4 => openDir + Math.PI * 1.66,
+                _ => openDir + 2.0 * Math.PI - 0.78
+            }) + rng.Range(-0.06, 0.06);
+
             var rDir = HollowcrownRadial(rAz);
             var rOrtho = HollowcrownRadial(rAz + Math.PI * 0.5);
 
-            double rootLen = baseRadius * rng.Range(0.80, 1.25);
-            var pRootStart = basePoint + rDir * (baseRadius * 0.88) + Vec3.Up * (baseRadius * 0.035);
-            var pRootEnd = pRootStart + rDir * rootLen + rOrtho * rng.Range(-0.15, 0.15) * baseRadius + Vec3.Up * 0.005;
+            double rootLen = baseRadius * rng.Range(0.95, 1.30);
+            double yLaunch = boleHeight * 0.12;
+            double rLaunch = OuterRadius(0.12, rAz) * 0.60; // Deep inside trunk buttress core
+            var pCenterLaunch = TrunkCenter(0.12);
+            var pRootStart = new Vec3(pCenterLaunch.X + rDir.X * rLaunch, yLaunch, pCenterLaunch.Z + rDir.Z * rLaunch);
+            double rToe = OuterRadius(0.0, rAz) * 1.30;
+            var pRootEnd = basePoint + rDir * rToe + rOrtho * rng.Range(-0.12, 0.12) * baseRadius - Vec3.Up * 0.015;
 
-            var cRoot0 = pRootStart + (rDir * 0.85 - Vec3.Up * 0.10).Normalized() * (rootLen * 0.40);
-            var cRoot1 = pRootEnd - rDir * (rootLen * 0.35);
+            // Travel downward inside buttress flute first, then sweep smoothly outward along soil bed
+            var cRoot0 = pRootStart - Vec3.Up * (boleHeight * 0.08) + rDir * (baseRadius * 0.12);
+            var cRoot1 = pRootEnd - (rDir * 0.92 + Vec3.Up * 0.10).Normalized() * (rootLen * 0.42);
 
-            int rootStations = detail == 2 ? 4 : 5;
+            int rootStations = detail == 2 ? 5 : 6;
             var rootPath = HollowcrownSampleBezier(pRootStart, cRoot0, cRoot1, pRootEnd, rootStations);
             var rootRadii = new double[rootStations];
-            double rStart = baseRadius * rng.Range(0.11, 0.15);
-            double rEnd = baseRadius * 0.020;
+            double rStart = baseRadius * rng.Range(0.18, 0.22);
+            double rEnd = baseRadius * 0.075; // Thick muscular root sinking into soil
 
             for (int s = 0; s < rootStations; s++)
             {
                 double st = s / (double)(rootStations - 1);
-                rootRadii[s] = MathD.Lerp(rStart, rEnd, Math.Pow(st, 0.70));
+                rootRadii[s] = MathD.Lerp(rStart, rEnd, Math.Pow(st, 0.65));
             }
 
             HollowcrownWoodStem(m, rootPath, rootRadii, detail, ridges: 3, twistTotal: 0.15);
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Quercus Lobed Oak Leaf Geometry
+        // Quercus Lobed Oak Leaf Geometry
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
@@ -840,14 +1109,11 @@ public static partial class OrganismMeshes
         int leafStartVertex = m.VertexCount;
         int leafStartIndex = m.TriangleCount * 3;
 
-        // Piecewise smooth lobed width curve with 3 distinct pairs of deep rounded lobes,
-        // deep sinuses cutting 65-70% towards midrib, basal auricles, and rounded terminal lobe.
         double OakWidthProfile(double t)
         {
             if (t <= 0.0) return 0.0;
             if (t < 0.10) return 0.05 * (t / 0.10); // Slender petiole stalk
 
-            // Key landmark stations along the blade (t in 0.10 .. 1.00)
             ReadOnlySpan<double> keyT = [0.10, 0.14, 0.20, 0.35, 0.44, 0.58, 0.68, 0.82, 0.89, 0.95, 1.00];
             ReadOnlySpan<double> keyW = [0.05, 0.36, 0.18, 0.75, 0.26, 1.00, 0.32, 0.80, 0.36, 0.48, 0.00];
 
@@ -889,13 +1155,9 @@ public static partial class OrganismMeshes
 
             for (int c = 0; c < cols; c++)
             {
-                double x = (c / (double)(cols - 1)) * 2.0 - 1.0; // -1 to +1
+                double x = (c / (double)(cols - 1)) * 2.0 - 1.0;
                 double absX = Math.Abs(x);
 
-                // 3D Camber:
-                // - V-cup across lamina
-                // - Raised midrib spine
-                // - Undulating lobe margins curling upward at lobe summits
                 double cup = 0.035 * width * (absX * absX);
                 double lobeLift = (wProfile - 0.30) * (0.015 * length) * (absX * absX);
                 double midribLift = (1.0 - absX) * (0.003 * length);
@@ -904,10 +1166,8 @@ public static partial class OrganismMeshes
                 var offsetUp = nSpine * (cup + lobeLift + midribLift);
                 var p = pSpine + offsetSide + offsetUp;
 
-                // Normal with camber slope
                 var n = (nSpine * (0.90 + 0.10 * (1.0 - absX)) - sSpine * (x * 0.35)).Normalized();
 
-                // Vertex color gradient
                 var bodyCol = Primitives.Mix(colTopBase, colTopTip, t);
                 if (absX > 0.65)
                 {
@@ -920,13 +1180,10 @@ public static partial class OrganismMeshes
                     bodyCol = Primitives.Mix(bodyCol, HollowOakMidrib, midFrac * 0.40);
                 }
 
-                // UV: t along spine (0..1), (x + 1)/2 across blade (0..1)
-                // UV2.x = 0.0, UV2.y = 1.0 (Full leaf shader processing with double-sided normal inversion)
                 gridVertices[r, c] = m.AddVertex(p, n, bodyCol, 1.0, t, (x + 1.0) * 0.5, 0.0, 1.0);
             }
         }
 
-        // Triangulate thin single-surface lamina
         for (int r = 0; r < rows - 1; r++)
         {
             for (int c = 0; c < cols - 1; c++)
@@ -967,7 +1224,6 @@ public static partial class OrganismMeshes
         if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
         var norm = side.Cross(fwd).Normalized();
 
-        // 1. Terminal radiating rosette of lobed oak leaves
         int termLeaves = detail == 2 ? 4 : (detail == 1 ? 6 : 8);
         for (int l = 0; l < termLeaves; l++)
         {
@@ -985,7 +1241,6 @@ public static partial class OrganismMeshes
                 topBaseColor, topTipColor, underColor, detail);
         }
 
-        // 2. Lateral leaves staggered in spiral phyllotaxis along the sub-terminal twig
         int lateralLeaves = detail == 2 ? 3 : (detail == 1 ? 5 : 6);
         for (int ll = 0; ll < lateralLeaves; ll++)
         {
@@ -1012,8 +1267,8 @@ public static partial class OrganismMeshes
 
     /// <summary>
     /// Builds the crown:
-    /// - 5 Muscular curved cubic Bézier scaffold limbs launching from the swollen bolling head
-    /// - Smoothly forking secondary and tertiary boughs arching into a spreading canopy
+    /// - 5 Primary scaffold limbs launching directly from the swollen bolling knuckles with wide fluted branch collars
+    /// - Smoothly forking secondary and tertiary boughs with swollen fork collars arching into a spreading canopy
     /// - High-density Quercus oak foliage sprays and epicormic rosettes forming a lush dome
     /// </summary>
     private static void HollowcrownCrown(
@@ -1028,28 +1283,29 @@ public static partial class OrganismMeshes
         int detail,
         bool juvenile)
     {
-        double bollingY = boleHeight * 0.96;
-        var pBollingCenter = basePoint + Vec3.Up * bollingY;
-
         int numLimbs = juvenile ? 4 : 5;
-        double baseAz = Rng.HashUnit(seed, 201, 0) * Math.PI * 2.0;
+        double baseAz = HollowcrownBaseKnuckleAz;
 
         for (int k = 0; k < numLimbs; k++)
         {
-            double lAz = baseAz + (2.0 * Math.PI * k / numLimbs) + rng.Range(-0.12, 0.12);
+            double lAz = baseAz + (2.0 * Math.PI * k / numLimbs) + rng.Range(-0.03, 0.03);
             var outward = HollowcrownRadial(lAz);
             var ortho = HollowcrownRadial(lAz + Math.PI * 0.5);
 
-            double bollingRad = baseRadius * rng.Range(0.65, 0.76);
-            var pRoot = pBollingCenter + outward * bollingRad + Vec3.Up * rng.Range(-0.02, 0.04);
+            // Scaffold limb launches strictly from INSIDE the swollen bolling knuckle wall
+            double yKnuckle = HollowcrownTopRimY(lAz, boleHeight);
+            double rKnuckle = (HollowcrownOuterRadius(0.96, lAz, baseRadius, boleHeight)
+                             + (HollowcrownMeanOuterRadius(0.96, baseRadius) - baseRadius * 0.25)) * 0.50; // Centered in knuckle wall
+            var pCenterKnuckle = HollowcrownTrunkCenter(0.94, boleHeight, baseRadius, basePoint);
+            var pRoot = new Vec3(pCenterKnuckle.X + outward.X * rKnuckle, yKnuckle - boleHeight * 0.06, pCenterKnuckle.Z + outward.Z * rKnuckle);
 
             double limbReach = (juvenile ? 1.05 : 1.50) * rng.Range(0.92, 1.08);
             double limbRise = (juvenile ? 0.70 : 1.05) * rng.Range(0.88, 1.12);
 
             var pLimbEnd = pRoot + outward * limbReach + ortho * rng.Range(-0.15, 0.15) + Vec3.Up * limbRise;
 
-            // Continuous cubic Bézier curve: steep launch upward, graceful spreading arch outward
-            var limbStartDir = (outward * 0.35 + Vec3.Up * 0.92).Normalized();
+            // Steep launch upward, graceful spreading arch outward
+            var limbStartDir = (outward * 0.30 + Vec3.Up * 0.95).Normalized();
             var cLimb0 = pRoot + limbStartDir * (limbReach * 0.45);
             var limbEndDir = (outward * 0.85 + Vec3.Up * 0.35).Normalized();
             var cLimb1 = pLimbEnd - limbEndDir * (limbReach * 0.38);
@@ -1058,13 +1314,16 @@ public static partial class OrganismMeshes
             var limbPath = HollowcrownSampleBezier(pRoot, cLimb0, cLimb1, pLimbEnd, limbStations);
             var limbRadii = new double[limbStations];
 
-            double limbBaseR = baseRadius * (juvenile ? 0.20 : 0.26);
+            // Sized to remain nested strictly within the swollen knuckle wall (zero protruding skirt)
+            double limbBaseR = baseRadius * (juvenile ? 0.19 : 0.23);
             double limbTipR = limbBaseR * 0.34;
 
             for (int s = 0; s < limbStations; s++)
             {
                 double st = s / (double)(limbStations - 1);
-                limbRadii[s] = MathD.Lerp(limbBaseR, limbTipR, Math.Pow(st, 0.80));
+                // Modest basal collar flare that stays fully inside the knuckle
+                double collarFlare = 1.0 + 0.22 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.25), 1.8);
+                limbRadii[s] = MathD.Lerp(limbBaseR, limbTipR, Math.Pow(st, 0.80)) * collarFlare;
             }
 
             int limbStemStart = m.VertexCount;
@@ -1115,7 +1374,9 @@ public static partial class OrganismMeshes
                 for (int s = 0; s < bStations; s++)
                 {
                     double st = s / (double)(bStations - 1);
-                    bRadii[s] = MathD.Lerp(bBaseR, bTipR, st);
+                    // Swollen fork branch collar
+                    double bCollar = 1.0 + 0.38 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.20), 2.0);
+                    bRadii[s] = MathD.Lerp(bBaseR, bTipR, st) * bCollar;
                 }
 
                 int bStemStart = m.VertexCount;
@@ -1147,7 +1408,7 @@ public static partial class OrganismMeshes
                     var cTert1 = tertEnd - tertOut * (tertReach * 0.35);
 
                     var tertPath = HollowcrownSampleBezier(bMidPos, cTert0, cTert1, tertEnd, 5);
-                    var tertRadii = new[] { bBaseR * 0.45, bBaseR * 0.38, bBaseR * 0.30, bBaseR * 0.22, 0.004 };
+                    var tertRadii = new[] { bBaseR * 0.45 * 1.30, bBaseR * 0.38, bBaseR * 0.30, bBaseR * 0.22, 0.004 };
                     int tertStemStart = m.VertexCount;
                     HollowcrownWoodStem(m, tertPath, tertRadii, detail, ridges: 3, twistTotal: 0.15);
                     m.EssentialSpans.Add((tertStemStart, m.VertexCount - tertStemStart));
@@ -1177,8 +1438,8 @@ public static partial class OrganismMeshes
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The veteran oak pollard: buttressed, fluted, hollowed with bioluminescent moss,
-    /// and crowned with spreading cubic Bézier scaffold boughs and Quercus foliage.
+    /// The veteran oak pollard: buttressed, fluted, hollowed with fibrous punk heartwood & bioluminescent moss,
+    /// authentic double-lipped vulva cleft, and crowned with spreading scaffold boughs and Quercus foliage.
     /// </summary>
     private static void Hollowcrown(
         MeshData m,
@@ -1206,7 +1467,7 @@ public static partial class OrganismMeshes
         double boleHeight = height * (juvenile ? 0.58 : 0.64);
         double baseRadius = radius * (juvenile ? 0.28 : 0.38);
 
-        // 1. Bole, fluted trunk, splayed buttresses, genuine hollow cavity & bioluminescent moss
+        // 1. Bole, fluted trunk, splayed buttresses, authentic vulva cleft, hollow log interior & moss
         HollowcrownBoleAndCavity(part, Vec3.Zero, boleHeight, baseRadius, rng, seed, detail);
 
         // 2. Pollard bolling head, Bézier scaffold limbs, spreading boughs & lobed Quercus oak foliage

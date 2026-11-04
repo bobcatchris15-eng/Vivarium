@@ -27,6 +27,7 @@ varying vec3 v_ts;
 varying vec3 l_ts;
 
 varying float material_specular;
+varying float surface_wet;
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     obj_pos = VERTEX;
@@ -107,11 +108,6 @@ void fragment() {
         rough = mix(rough, 0.25, wet);
     }
 
-    vec3 sun_view = (VIEW_MATRIX * vec4(normalize(vec3(0.35, 0.85, 0.25)), 0.0)).xyz;
-    vec3 facet_n_view = normalize((VIEW_MATRIX * vec4(perturbed, 0.0)).xyz);
-    float glint = pow(max(dot(reflect(-to_eye_view, facet_n_view), normalize(sun_view)), 0.0), 96.0);
-    col += vec3(0.9, 0.95, 1.0) * glint * 0.25;
-
     ALBEDO = col;
     ROUGHNESS = rough;
     METALLIC = 0.0;
@@ -125,6 +121,7 @@ void fragment() {
         CLEARCOAT_ROUGHNESS = 0.1;
     }
     material_specular = SPECULAR;
+    surface_wet = wet;
 }
 
 void light() {
@@ -150,7 +147,17 @@ void light() {
         float G = (ndotv / max(ndotv * (1.0 - k) + k, 1e-4)) *
                  (ndotl / max(ndotl * (1.0 - k) + k, 1e-4));
         float spec = D * G * F / max(4.0 * ndotv * ndotl, 1e-4);
-        SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * spec * ndotl;
+        // Quartz-mica micro-glints gated by actual shadowed light rather than baked into unlit albedo.
+        float glint = pow(ndoth, 96.0) * 0.18;
+        float coat = 0.0;
+        if (surface_wet > 0.01) {
+            float ca2 = 0.01 * 0.01;
+            float cdenom = ndoth * ndoth * (ca2 - 1.0) + 1.0;
+            float cD = ca2 / max(PI * cdenom * cdenom, 1e-4);
+            float cF = 0.04 + 0.96 * pow(1.0 - vh, 5.0);
+            coat = surface_wet * 0.85 * cD * cF / max(4.0 * ndotv * ndotl, 1e-4);
+        }
+        SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * (spec + glint + coat) * ndotl;
     }
 
     vec2 field_uv = (world_pos.xz - field_rect.xy) / max(field_rect.zw, vec2(0.001));

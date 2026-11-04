@@ -24,6 +24,8 @@ public partial class GuardianReview : Node3D
             GetWindow().Size = Main.UserArgs.Contains("--guardian-feeding-motion") ? new Vector2I(800, 552) : new Vector2I(1100, 760);
             Engine.MaxFps = 30;
             Directory.CreateDirectory(OutDir);
+            if (Main.UserArgs.Contains("--guardian-picker-check"))
+            { RunSelectionCheck(); GetTree().Quit(); return; }
             if (Main.UserArgs.Contains("--guardian-surface-contact-review"))
             {
                 var proof = await GuardianPlantSurfaceReview.Run(this, OutDir);
@@ -39,7 +41,7 @@ public partial class GuardianReview : Node3D
                 string? species = Main.ArgAfter("--guardian-species");
                 if (species != null && !species.Split(',').Any(id => id == def.Id || id == def.Archetype)) continue;
                 var descriptor = Content.PresetOrThrow("default").Clone();
-                descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+                descriptor.PilotTreeId = Main.ArgAfter("--guardian-tree") ?? "basinwarden";
                 descriptor.GuardianId = def.Id;
                 var world = VivariumWorld.Create(Content, descriptor);
                 world.Clock.Paused = true;
@@ -597,7 +599,7 @@ public partial class GuardianReview : Node3D
         foreach (var def in definitions)
         {
             var descriptor = Content.PresetOrThrow("default").Clone();
-            descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            descriptor.PilotTreeId = Main.ArgAfter("--guardian-tree") ?? "basinwarden";
             descriptor.GuardianId = def.Id;
             var world = VivariumWorld.Create(Content, descriptor);
             world.Clock.Paused = true;

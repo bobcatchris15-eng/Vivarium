@@ -21,7 +21,7 @@ public class PersistenceTests
     public void ManifestClassifiesVersionsBeforeTouchingState()
     {
         Assert.Equal(SaveCompatibility.Current, SaveSystem.Classify(AppVersion.SaveSchema));
-        Assert.Equal(SaveCompatibility.Migratable, SaveSystem.Classify(AppVersion.SaveSchema - 1));
+        Assert.Equal(SaveCompatibility.UnsupportedOlder, SaveSystem.Classify(AppVersion.SaveSchema - 1));
         Assert.Equal(SaveCompatibility.UnsupportedNewer, SaveSystem.Classify(AppVersion.SaveSchema + 1));
         var w = Running(100);
         var path = Path.Combine(TestUtil.TempDir(), "m.vivsave");

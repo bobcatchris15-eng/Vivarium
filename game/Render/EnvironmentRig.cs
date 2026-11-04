@@ -51,7 +51,7 @@ public partial class EnvironmentRig : Node3D
     private const float GrowSunGain = 0.92f, GrowFillGain = 0.28f, GrowAmbientGain = 1.26f, GrowAmbientSky = 0.20f;
     // Selected in the populated habitat: lift shaded surfaces while retaining directional canopy light.
     // The gain follows solar energy, fading out before deep night.
-    private const float DayAmbientGain = 0.55f, DayFillGain = 1.35f;
+    private const float DayAmbientGain = 0.68f, DayFillGain = 1.38f;
     private const float DaySkyContribution = 0.85f, NightSkyContribution = .85f;
     private const float DayExposure = 1.18f, NightExposure = .92f;
     private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
@@ -123,8 +123,8 @@ public partial class EnvironmentRig : Node3D
         Clock = new DayNightClock(() => BenchmarkLightSeconds ?? _monotonic.Elapsed.TotalSeconds);
 
         Instance = this;
-        RenderingServer.CameraAttributesSetDofBlurQuality(RenderingServer.DofBlurQuality.High, true);
-        RenderingServer.CameraAttributesSetDofBlurBokehShape(RenderingServer.DofBokehShape.Circle);
+        RenderingServer.CameraAttributesSetDofBlurQuality(RenderingServer.DofBlurQuality.Low, true);
+        RenderingServer.CameraAttributesSetDofBlurBokehShape(RenderingServer.DofBokehShape.Hexagon);
 
         _sky = Bridge.Shader("res://Shaders/canopy_sky.gdshader");
         bool dofDisabled = System.Environment.GetEnvironmentVariable("VIVARIUM_DISABLE_DOF") == "1";
@@ -138,7 +138,10 @@ public partial class EnvironmentRig : Node3D
             ExposureMultiplier = 1.0f,
             ExposureSensitivity = 100.0f,
             DofBlurFarEnabled = !dofDisabled,
-            DofBlurNearEnabled = !dofDisabled,
+            DofBlurNearEnabled = false,
+            DofBlurFarDistance = (float)Vivarium.Sim.Geometry.FloraDetail.DistanceMid * .8f,
+            DofBlurFarTransition = 12f,
+            DofBlurAmount = .008f,
         };
         Env = new Environment
         {

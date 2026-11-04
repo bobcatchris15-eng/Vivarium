@@ -15,7 +15,25 @@ public sealed class SurfaceLiquid
     private SurfaceFluidSnapshot _snapshot = new(0, 0, SurfaceFluidDynamics.DefaultSpacing, [], []);
     private readonly Dictionary<(int, int), SurfaceFluidSample> _samples = new();
     private readonly Dictionary<(int, int), double> _sampleSupport = new();
-    private IReadOnlyList<FluidParticle> _contacts = [];
+    private sealed class ContactView(SurfaceFluidSnapshot state) : IReadOnlyList<FluidParticle>
+    {
+        public SurfaceFluidSnapshot State { get; } = state;
+        public int Count => State.Cells.Length + State.Airborne.Length;
+        public FluidParticle this[int index]
+        {
+            get
+            {
+                if((uint)index>=(uint)Count)throw new ArgumentOutOfRangeException(nameof(index));
+                if(index>=State.Cells.Length)return State.Airborne[index-State.Cells.Length];
+                var c=State.Cells[index];double support=c.SupportHeight??(c.Head-c.Depth);
+                return new(Vec3.FromXZ(c.Position,support+SurfaceFluidDynamics.Radius(c.Volume)),Vec3.FromXZ(c.Velocity,0),c.Volume,0);
+            }
+        }
+        public IEnumerator<FluidParticle> GetEnumerator()
+        {for(int i=0;i<Count;i++)yield return this[i];}
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()=>GetEnumerator();
+    }
+    private ContactView? _contacts;
     private double _queuedSeconds, _erosionTime;
     private readonly LinkedList<FluidInputBatch> _inputs = new();
     private Heightfield? _solidTerrain;
@@ -34,7 +52,15 @@ public sealed class SurfaceLiquid
     public double Volume => _snapshot.Cells.Sum(c => c.Volume) + _snapshot.Airborne.Sum(c => c.Volume) + _publishedFractions;
     private double _publishedFractions;
     /// <summary>Derived contact samples for erosion/diagnostics, not another volume authority.</summary>
-    public IReadOnlyList<FluidParticle> Particles => _contacts;
+    public IReadOnlyList<FluidParticle> Particles
+    {
+        get
+        {
+            var state=_snapshot;var view=_contacts;
+            if(view!=null&&ReferenceEquals(view.State,state))return view;
+            view=new(state);if(ReferenceEquals(_snapshot,state))_contacts=view;return view;
+        }
+    }
     public SurfaceLiquid(VivariumWorld world)
     { _w = world; Dynamics = new(world.Domain, Ground); Dynamics.InfiltrationFactor = p => _solidProps?.RockAt(p) != null || _solidProps?.LogAt(p) != null ? 0 : _solidProps?.GravelAt(p) != null ? .25 : 1; Erosion = new(world); }
     private double Ground(Vec2 p)
@@ -76,6 +102,8 @@ public sealed class SurfaceLiquid
     public void OnTerrainChanged(Vec2? minimum = null, Vec2? maximum = null)
     { CompletePending(); CaptureGeometry(); Publish(); }
     public void OnSolidGeometryChanged(Vec2? minimum = null, Vec2? maximum = null) => OnTerrainChanged(minimum, maximum);
+    public void OnSourcesChanged()
+    { CompletePending(); Dynamics.OnSourcesChanged(); }
     public void Advance(double realSeconds)
     {
         if (!Enabled) return;
@@ -102,7 +130,7 @@ public sealed class SurfaceLiquid
         // Split on physical-step boundaries, integrating every rate-change interval exactly.
         // A sub-step source edit cannot retroactively replace the preceding interval's input.
         var batches = new List<FluidInputBatch>();
-        while (batches.Count < 16 && _queuedSeconds + 1e-12 >= SurfaceFluidDynamics.StepSeconds)
+        while (batches.Count < 32 && _queuedSeconds + 1e-12 >= SurfaceFluidDynamics.StepSeconds)
         {
             double remaining = SurfaceFluidDynamics.StepSeconds, evaporation = 0, infiltration = 0, table = _w.Water.WaterTable;
             var integrated = new Dictionary<(ulong Id, double X, double Z), double>();
@@ -142,14 +170,15 @@ public sealed class SurfaceLiquid
     private void ObserveErosion()
     {
         long begin = System.Diagnostics.Stopwatch.GetTimestamp();
-        double elapsed = Math.Max(0, _snapshot.Time - _erosionTime); _erosionTime = _snapshot.Time; Erosion.Advance(_contacts, elapsed);
+        double elapsed = Math.Max(0, _snapshot.Time - _erosionTime); _erosionTime = _snapshot.Time;
+        if(Erosion.Enabled)Erosion.Advance(Particles,elapsed);
         StageTimed?.Invoke("Liquid.Erosion", System.Diagnostics.Stopwatch.GetElapsedTime(begin).TotalMilliseconds);
     }
     private void Publish(SurfaceFluidSnapshot? snapshot = null)
     {
         long allocationStart = GC.GetAllocatedBytesForCurrentThread();
         long stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        _snapshot = snapshot ?? Dynamics.CaptureRenderState(); _publishedFractions = Dynamics.FractionalVolume;
+        _snapshot = snapshot ?? Dynamics.CaptureRenderState(); _contacts=null; _publishedFractions = Dynamics.FractionalVolume;
         StageTimed?.Invoke("Liquid.SnapshotCapture", System.Diagnostics.Stopwatch.GetElapsedTime(stageStart).TotalMilliseconds);
         stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
         double spacing = _snapshot.Spacing;
@@ -157,14 +186,11 @@ public sealed class SurfaceLiquid
         // contact arrays remain immutable for callers holding the preceding snapshot.
         _samples.Clear();_samples.EnsureCapacity(_snapshot.Cells.Length);
         _sampleSupport.Clear();_sampleSupport.EnsureCapacity(_snapshot.Cells.Length);
-        var contacts=new FluidParticle[_snapshot.Cells.Length+_snapshot.Airborne.Length];int contactIndex=0;
         foreach(var c in _snapshot.Cells)
         {
             var key=((int)Math.Floor(c.Position.X/spacing),(int)Math.Floor(c.Position.Z/spacing));
-            double support=Ground(c.Position);_samples.Add(key,c);_sampleSupport.Add(key,support);
-            contacts[contactIndex++]=new(Vec3.FromXZ(c.Position,support+SurfaceFluidDynamics.Radius(c.Volume)),Vec3.FromXZ(c.Velocity,0),c.Volume,0);
+            double support=c.SupportHeight??Ground(c.Position);_samples.Add(key,c);_sampleSupport.Add(key,support);
         }
-        _snapshot.Airborne.CopyTo(contacts,contactIndex);_contacts=contacts;
         StageTimed?.Invoke("Liquid.QueryIndex", System.Diagnostics.Stopwatch.GetElapsedTime(stageStart).TotalMilliseconds);
         stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
         var h = _w.Water; Array.Clear(h.Depth); Array.Clear(h.FlowX); Array.Clear(h.FlowZ); Array.Clear(h.FaceFlowEast); Array.Clear(h.FaceFlowNorth);

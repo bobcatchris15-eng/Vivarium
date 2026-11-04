@@ -26,7 +26,8 @@ public sealed class WorldDescriptor
     public string PilotTreeId { get; set; } = "random";
     /// <summary>-1 selects a seeded corner; 0..5 selects an exact hexagon vertex. Edge anchors are not allowed.</summary>
     public int PilotTreeCorner { get; set; } = -1;
-    /// <summary>random | none | auto | a GuardianCatalog id. Resolved to a specific guardian archetype or none.</summary>
+    /// <summary>random | none | a GuardianCatalog id, independently of the Pilot Tree.
+    /// Legacy auto is accepted as an alias for random.</summary>
     public string GuardianId { get; set; } = "random";
     /// <summary>
     /// Biological seconds per physical simulated second. The default makes one real minute one biological day at
@@ -91,6 +92,7 @@ public sealed class WorldDescriptor
         if (!(Terrain.MaxHeight > Terrain.MinHeight)) e.Add("terrain.maxHeight must exceed terrain.minHeight");
         if (!(Terrain.Bottom < Terrain.MinHeight - 0.5)) e.Add("terrain.bottom must be at least 0.5 m below terrain.minHeight");
         if (Terrain.Octaves is < 1 or > 8) e.Add("terrain.octaves must be within [1, 8]");
+        if (!double.IsFinite(Terrain.MicroRelief) || Terrain.MicroRelief < 0 || Terrain.MicroRelief > .1) e.Add("terrain.microRelief must be within [0, 0.1] m");
         if (!(Terrain.SlopeX >= -2 && Terrain.SlopeX <= 2)) e.Add($"terrain.slopeX {Terrain.SlopeX} must be within [-2, 2]");
         if (!(Terrain.SlopeZ >= -2 && Terrain.SlopeZ <= 2)) e.Add($"terrain.slopeZ {Terrain.SlopeZ} must be within [-2, 2]");
         if (!(BioAcceleration >= MinBioAcceleration && BioAcceleration <= MaxBioAcceleration)) e.Add($"bioAcceleration {BioAcceleration} must be within [{MinBioAcceleration}, {MaxBioAcceleration}]");
@@ -105,8 +107,15 @@ public sealed class WorldDescriptor
             if (s.X * s.X + s.Z * s.Z > r * r) e.Add($"spring at ({s.X},{s.Z}) lies outside the island");
         foreach (var f in Terrain.Features)
         {
-            if (f.Type is not ("basin" or "hill" or "channel" or "ridge")) e.Add($"terrain feature type '{f.Type}' is unknown");
+            if (f.Type is not ("basin" or "hill" or "channel" or "ridge" or "ledge")) e.Add($"terrain feature type '{f.Type}' is unknown");
+            if (f.Type == "ledge" && (!double.IsFinite(f.Amount) || !double.IsFinite(f.Width) || f.Width <= 0 ||
+                !double.IsFinite(f.X) || !double.IsFinite(f.Z) || !double.IsFinite(f.ToX) || !double.IsFinite(f.ToZ) ||
+                (f.ToX-f.X)*(f.ToX-f.X)+(f.ToZ-f.Z)*(f.ToZ-f.Z) < 1e-12))
+                e.Add("ledge requires a finite nonzero boundary, finite amount and positive width");
             if (f.BasinOutline != null && (f.Type != "basin" || f.BasinOutline is not ("bean" or "lobed"))) e.Add("basinOutline must be bean or lobed on a basin");
+            if (f.CutDepth is double depth && (f.Type is not ("channel" or "basin") ||
+                !double.IsFinite(depth) || depth <= 0 || depth > 1 || f.BedHeight.HasValue || f.ToBedHeight.HasValue))
+                e.Add("cutDepth requires a channel or basin, must be within (0, 1] m and cannot be combined with absolute bed heights");
             if (f.BedHeight.HasValue)
             {
                 if (f.Type is not ("channel" or "basin")) e.Add("bedHeight is only supported for channels and basins");
@@ -123,6 +132,8 @@ public sealed class TerrainProfile
 {
     public double BaseHeight { get; set; } = 0.6;
     public double Relief { get; set; } = 0.5;
+    /// <summary>Fine ground relief in metres. Legacy descriptors retain the original 4 cm amplitude.</summary>
+    public double MicroRelief { get; set; } = .04;
     /// <summary>Linear elevation change in metres per metre of world X (negative = east side lower).</summary>
     public double SlopeX { get; set; } = 0.0;
     /// <summary>Linear elevation change in metres per metre of world Z (negative = south side lower).</summary>
@@ -155,7 +166,7 @@ public sealed class TerrainProfile
 
 public sealed class TerrainFeature
 {
-    /// <summary>basin | hill | channel | ridge</summary>
+    /// <summary>basin | hill | channel | ridge | ledge (raises the left side of the directed boundary).</summary>
     public string Type { get; set; } = "hill";
     public double X { get; set; }
     public double Z { get; set; }
@@ -173,6 +184,9 @@ public sealed class TerrainFeature
     public double? BedHeight { get; set; }
     /// <summary>Downstream floor at (ToX,ToZ). Absent means a level basin/channel.</summary>
     public double? ToBedHeight { get; set; }
+    /// <summary>Depth below uncut local ground, independent of map slope and footprint size.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? CutDepth { get; set; }
 }
 
 public sealed class WaterConfig

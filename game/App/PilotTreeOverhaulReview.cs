@@ -40,7 +40,8 @@ public partial class PilotTreeOverhaulReview : Node3D
         _camera = new Camera3D { Current = true, Fov = 44, Near = .015f, Far = 180, Attributes = rig.CameraAttributes };
         AddChild(_camera);
         var captures = new List<object>();
-        foreach (var def in PilotTreeCatalog.All)
+        string? selectedTree = Main.ArgAfter("--pilot-review-id");
+        foreach (var def in PilotTreeCatalog.All.Where(d => selectedTree == null || d.Id == selectedTree))
         {
             var desc = Content.PresetOrThrow("default");
             desc.PilotTreeId = def.Id;
@@ -76,6 +77,11 @@ public partial class PilotTreeOverhaulReview : Node3D
             var inward = new Vector3((float)-tree.CornerPoint.X, 0, (float)-tree.CornerPoint.Z).Normalized();
             var side = inward.Cross(Vector3.Up).Normalized();
             Vector3 center = bounds.GetCenter();
+            if (def.Id == "rootcloister")
+            {
+                await Fit(bounds, center, new Vector3(.001f,1,.001f).Normalized());
+                await Save(def.Id, "canopy-plan");
+            }
             foreach (int sign in new[] { 1, -1 })
             {
                 await Fit(bounds, center, (inward + side * (.50f * sign) + Vector3.Up * .25f).Normalized());
@@ -85,6 +91,16 @@ public partial class PilotTreeOverhaulReview : Node3D
             _camera.Position = root + inward * 4.7f + side * 1.8f + Vector3.Up * 2.1f;
             _camera.LookAt(root + inward * 1.0f);
             await Save(def.Id, "roots-and-strata");
+            if (def.Id == "rootcloister")
+            {
+                var floor = -tree.Anchor * .55 + tree.Anchor.Rotated(Math.PI / 2) * .16;
+                var target = tree.Anchor * .30;
+                _camera.Fov = 75;
+                _camera.Position = Bridge.V(floor, world.SurfaceHeight(floor) + 1.8);
+                _camera.LookAt(Bridge.V(target, world.SurfaceHeight(target) + .35));
+                await Save(def.Id, "under-canopy");
+                _camera.Fov = 44;
+            }
             // View an exterior face directly; the root close-up looks across the
             // top and cannot authenticate the cutaway horizon transitions.
             var edge = (world.Domain.Vertices[0] + world.Domain.Vertices[1]) * .5;
@@ -185,7 +201,8 @@ public partial class PilotTreeOverhaulReview : Node3D
         }
         File.WriteAllText(Path.Combine(OutDir, "metadata.json"), JsonSerializer.Serialize(new
         { production_renderers = new[] { "IslandRenderer", "PilotTreeRenderer", "EnvironmentRig" },
-            scope = "all-species structural review; flora/fauna omitted; no populated-gameplay or performance acceptance",
+            scope = selectedTree == null ? "all-species structural review; flora/fauna omitted; no populated-gameplay or performance acceptance"
+                : "selected-species structural review: " + selectedTree + "; flora/fauna omitted; no populated-gameplay or performance acceptance",
             captures, image_count = _imageCount, light_seconds = 60, fixed_exposure = true,
             surface_sweep = Main.UserArgs.Contains("--pilot-structure-only") ? "disabled for structural review" : "Crowncoil/Basinwarden: leaf vein/relief zero(0,0), restrained(.30,.18), pronounced(1,.65); cutwood zero0/restrained.39/pronounced1; production defaults restored",
             renderer_contracts = "all forms rebuilt at distinct corners; remote terrain skips root upload, local terrain refreshes roots only; none removes both meshes",

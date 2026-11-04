@@ -413,10 +413,8 @@ public static class Bridge
     private static string FindTexPath(string asset, string map, bool isRequired)
     {
         asset = NormalizeAsset(asset);
-        // 1. Try 4K PNG
-        string p4k = $"res://Textures/{asset}_4K-PNG_{map}.png";
-        if (FileAccess.FileExists(p4k) || ResourceLoader.Exists(p4k)) return p4k;
-
+        // 1. Try 1K first: 4K textures are overkill at 1080p and dominate VRAM
+        // and memory bandwidth. Prefer 1K, fall back to 4K only when 1K is absent.
         // 2. Try 1K PNG
         string p1kPng = $"res://Textures/{asset}_1K-JPG_{map}.png";
         if (FileAccess.FileExists(p1kPng) || ResourceLoader.Exists(p1kPng)) return p1kPng;
@@ -425,11 +423,15 @@ public static class Bridge
         string p1kJpg = $"res://Textures/{asset}_1K-JPG_{map}.jpg";
         if (FileAccess.FileExists(p1kJpg) || ResourceLoader.Exists(p1kJpg)) return p1kJpg;
 
-        // 4. Try generic {asset}_{map}.png
+        // 4. Try 4K PNG
+        string p4k = $"res://Textures/{asset}_4K-PNG_{map}.png";
+        if (FileAccess.FileExists(p4k) || ResourceLoader.Exists(p4k)) return p4k;
+
+        // 5. Try generic {asset}_{map}.png
         string pGenPng = $"res://Textures/{asset}_{map}.png";
         if (FileAccess.FileExists(pGenPng) || ResourceLoader.Exists(pGenPng)) return pGenPng;
 
-        // 5. Try generic {asset}_{map}.jpg
+        // 6. Try generic {asset}_{map}.jpg
         string pGenJpg = $"res://Textures/{asset}_{map}.jpg";
         if (FileAccess.FileExists(pGenJpg) || ResourceLoader.Exists(pGenJpg)) return pGenJpg;
 
@@ -499,7 +501,8 @@ public sealed class UserSettings
     public bool AmbientOcclusion { get; set; } = true;
     public bool VolumetricMist { get; set; } = true;
     public bool ReducedDistantPlants { get; set; } = true;
-    public bool DistanceBlur { get; set; }
+    public bool DistanceBlur { get; set; } = true;
+    public double DistanceBlurAmount { get; set; } = .008;
     public bool SimpleFoliageLighting { get; set; }
     public double RenderScale { get; set; } = .95;
     public double AutosaveMinutes { get; set; } = 5;
@@ -522,6 +525,7 @@ public sealed class UserSettings
         MouseSensitivity = Math.Clamp(double.IsFinite(MouseSensitivity) ? MouseSensitivity : 0.25, 0.02, 2.0);
         Quality = Math.Clamp(Quality, 0, 2);
         RenderScale = Math.Clamp(double.IsFinite(RenderScale) ? RenderScale : 1, 0.5, 1);
+        DistanceBlurAmount = Math.Clamp(double.IsFinite(DistanceBlurAmount) ? DistanceBlurAmount : .008, 0, .025);
         AutosaveMinutes = Math.Clamp(double.IsFinite(AutosaveMinutes) ? AutosaveMinutes : 5, 1, 60);
         UiScale = Math.Clamp(double.IsFinite(UiScale) ? UiScale : 1, 0.75, 2.0);
     }

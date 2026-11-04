@@ -21,7 +21,7 @@ public partial class SmokeRunner
         bool sessionProcessing = Session.IsProcessing();
         W.Clock.Paused = true;
         Session.SetProcess(false);
-        W.Scheduler.CompletePendingTick(); W.Liquid.CompletePending();
+        W.Scheduler.CompletePendingTick(); W.CoverageSystem.WaitPending(); W.Liquid.CompletePending();
         string before = WorldSerializer.Digest(W);
         string after = before;
         var rows = new List<object>();
@@ -39,6 +39,16 @@ public partial class SmokeRunner
         string? priorCacheControl = System.Environment.GetEnvironmentVariable("VIVARIUM_TERRAIN_CACHE_BASELINE");
         bool filterSweep = sweepKind == "filter";
         string? confirm = System.Environment.GetEnvironmentVariable("VIVARIUM_BENCHMARK_CONFIRM_FEATURE");
+        bool stemSweep = confirm == "guardian_stem_cache";
+        bool uploadSweep = confirm == "unchanged_uploads";
+        bool originalFloraReuse = Session.Flora.ReuseInstanceBuffers;
+        bool originalWaterReuse = Session.WaterFluid.ReuseUniformValues;
+        bool treeSweep = confirm == "guardian_tree_fast_path";
+        bool originalTreeFastPath = W.PilotTree?.PenetrationEmptyRootFastPath ?? false;
+        if (treeSweep && W.PilotTree == null) throw new InvalidOperationException("Guardian tree sweep requires a pilot tree");
+        var stemContact = Session.Guardian.ShrubContact;
+        bool originalStemCache = stemContact?.StemQueryCacheEnabled ?? false;
+        if (stemSweep && stemContact == null) throw new InvalidOperationException("Guardian stem sweep requires vegetation contact");
         bool controlsSweep = sweepKind == "controls";
         bool reduced = Session.Settings.ReducedDistantPlants, distanceBlur = Session.Settings.DistanceBlur,
             simpleLighting = Session.Settings.SimpleFoliageLighting, fineIndirectLighting = Session.Settings.FineIndirectLighting;
@@ -56,6 +66,7 @@ public partial class SmokeRunner
         using var gillTrial = new Vivarium.Game.Render.FloraRenderer.GillTrial();
         bool gillSweep = confirm is "far_gills_3" or "far_gills_9";
         bool emberSweep = confirm is "ember_micro_3" or "ember_micro_5";
+        bool capSweep = confirm is "far_caps_8" or "far_caps_16";
         bool singleCandidateSweep = confirm is "lod_distance_5_10" or "filter_low" or "render_95" or "far_gills_3" or "far_gills_9" or "ember_micro_3" or "ember_micro_5" or "sdfgi_off" or "gi_coarse_cells" or "gi_fine_cells" or "gi_occlusion_off" or "groundcover_off";
         bool contributionAudit = confirm == "geometry_attribution";
         if (singleCandidateSweep && !orbitSweep)
@@ -65,7 +76,8 @@ public partial class SmokeRunner
         if ((gillSweep || emberSweep) && !orbitSweep)
             poses = BuildReferenceScenes().Where(s => s.Name is "overview" or "ground_vegetation" or "water_margin" or "dense_colony" or "macro_flora").ToArray();
         if (fixedConfirmation) poses = BuildReferenceScenes().Where(s => s.Name == "ground_vegetation").ToArray();
-        var phases = orbitSweep ? confirm == "lod_options"
+        if (stemSweep || treeSweep) poses = BuildReferenceScenes().Where(s => s.Name == "overview").ToArray();
+        var phases = stemSweep || treeSweep ? new[] { "reference_start", confirm!, "reference_end" } : orbitSweep ? confirm == "lod_options"
             ? new[] { "original_start", "reduced_lod", "lod_dof", "original_end" }
             : new[] { "original_start", confirm ?? "candidate", "original_end" } : singleCandidateSweep
             ? new[] { "reference_start", confirm!, "reference_end" } : controlsSweep
@@ -88,6 +100,12 @@ public partial class SmokeRunner
                 "reference_end"
             };
         if (contributionAudit) phases = new[] { "reference" };
+        if (capSweep)
+        {
+            phases = new[] { "reference_start", confirm!, "reference_end" };
+            if (!orbitSweep) poses = BuildReferenceScenes().Where(s => s.Name is "overview" or "ground_vegetation" or "water_margin" or "dense_colony" or "macro_flora").ToArray();
+        }
+        if (uploadSweep) phases = new[] { "reference_start", "unchanged_uploads", "reference_end" };
         bool sunShadows = rig.Sun.ShadowEnabled, ssao = rig.Env.SsaoEnabled, ssil = rig.Env.SsilEnabled;
         bool sdfgi = rig.Env.SdfgiEnabled, volumeFog = rig.Env.VolumetricFogEnabled;
         bool environmentProcessing = rig.IsProcessing();
@@ -101,6 +119,12 @@ public partial class SmokeRunner
                 Check("far gill trial prepares complete replacements", gillTrial.Meshes > 0);
                 File.WriteAllText(Path.Combine(OutDir, "far-gill-audit.json"), JsonSerializer.Serialize(gillTrial.Records));
             }
+            if (capSweep)
+            {
+                foreach (bool _ in Session.Flora.PrepareCapRingTrial(gillTrial, confirm == "far_caps_8" ? 8 : 16)) await Frames(1);
+                Check("far cap trial prepares complete replacements", gillTrial.Meshes > 0);
+                File.WriteAllText(Path.Combine(OutDir, "far-cap-audit.json"), JsonSerializer.Serialize(gillTrial.Records));
+            }
             if (emberSweep)
             {
                 foreach (bool _ in Session.Flora.PrepareEmbercupTrial(gillTrial, confirm == "ember_micro_5" ? 5 : 3)) await Frames(1);
@@ -113,6 +137,17 @@ public partial class SmokeRunner
             foreach (var pose in poses)
             foreach (string phase in phases)
             {
+                if (stemSweep)
+                {
+                    stemContact!.StemQueryCacheEnabled = phase == "guardian_stem_cache";
+                    stemContact.StemQueryMaskAuditBudget = stemContact.StemQueryCacheEnabled ? 4096 : 0;
+                }
+                if (treeSweep) W.PilotTree!.PenetrationEmptyRootFastPath = phase == "guardian_tree_fast_path";
+                if (uploadSweep)
+                {
+                    Session.Flora.ReuseInstanceBuffers = phase == "unchanged_uploads";
+                    Session.WaterFluid.ReuseUniformValues = phase == "unchanged_uploads";
+                }
                 Session.CameraRig.LookAtPoint(pose.Eye, pose.Target);
                 if (orbitSweep) Session.CameraRig.LookAtPoint(new Vector3(0, 3.5f, 9), Vector3.Zero);
                 Session.Settings.Quality = quality;
@@ -142,7 +177,9 @@ public partial class SmokeRunner
                     case "far_gills_3":
                     case "far_gills_9":
                     case "ember_micro_3":
-                    case "ember_micro_5": gillTrial.Select(true); break;
+                    case "ember_micro_5":
+                    case "far_caps_8":
+                    case "far_caps_16": gillTrial.Select(true); break;
                     case "candidate": Session.Flora.ShadowMaxTier = 1; break;
                     case "reduced_lod":
                         Session.Settings.ReducedDistantPlants = true; Session.ApplySettings(); break;
@@ -243,7 +280,7 @@ public partial class SmokeRunner
                 var elapsedSamples = new List<double>();
                 var gpuElapsedSamples = new List<double>();
                 ulong start = Time.GetTicksUsec(), previous = start;
-                while (Time.GetTicksUsec() - start < (orbitSweep || fixedConfirmation ? 60_000_000UL : 5_000_000UL))
+                while (Time.GetTicksUsec() - start < (stemSweep || treeSweep ? 12_000_000UL : orbitSweep || fixedConfirmation ? 60_000_000UL : 5_000_000UL))
                 {
                     if (orbitSweep)
                     {
@@ -274,13 +311,19 @@ public partial class SmokeRunner
                         JsonSerializer.Serialize(new { total, native, rows = contributions }));
                 }
                 GD.Print($"PERF_EFFECT {phase} gpu_ms={(gpu.Count > 0 ? gpu.Average() : 0):0.000} wall_ms={wall.Average():0.000}");
+                if (stemSweep) GD.Print($"STEM_CACHE_PHASE {phase} hits={stemContact!.StemQueryCacheHits} misses={stemContact.StemQueryCacheMisses} audits={stemContact.StemQueryMaskAudits}");
                 await Screenshot("effect_" + pose.Name + "_" + phase);
                 File.WriteAllText(Path.Combine(OutDir, "gpu-effect-progress.json"), JsonSerializer.Serialize(rows));
             }
             after = WorldSerializer.Digest(W);
+            if (stemSweep) Check("guardian stem query masks match reference", stemContact!.StemQueryMaskAudits == 4096);
         }
         finally
         {
+            Session.Flora.ReuseInstanceBuffers = originalFloraReuse;
+            Session.WaterFluid.ReuseUniformValues = originalWaterReuse;
+            if (stemSweep && stemContact != null) stemContact.StemQueryCacheEnabled = originalStemCache;
+            if (treeSweep && W.PilotTree != null) W.PilotTree.PenetrationEmptyRootFastPath = originalTreeFastPath;
             gillTrial.Select(false);
             RestoreGiLayout();
             if (rig.Env.SdfgiUseOcclusion != giOcclusion) rig.Env.SdfgiUseOcclusion = giOcclusion;

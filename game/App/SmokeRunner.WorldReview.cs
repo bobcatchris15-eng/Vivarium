@@ -30,6 +30,11 @@ public partial class SmokeRunner
         double lightSeconds = double.TryParse(Main.ArgAfter("--review-light-seconds"), NumberStyles.Float,
             CultureInfo.InvariantCulture, out double requestedLight) && double.IsFinite(requestedLight) ? requestedLight : 420;
         Session.EnvRig.BenchmarkLightSeconds = lightSeconds;
+        if (Main.UserArgs.Contains("--terrain-review"))
+        {
+            await TerrainPresetReviewAsync();
+            return;
+        }
         bool forestReview = Main.UserArgs.Contains("--forest-review");
         if (forestReview) Session.EnvRig.CameraAttributes.AutoExposureEnabled = false;
         if (forestReview) await PrepareWaterImpactReview();

@@ -184,10 +184,9 @@ public partial class GuardianRenderer : Node3D
 
         if (_instance == null)
         {
-            // Fallback placeholder representation if GLB asset is unavailable
-            _instance = CreateFallbackMesh(_def);
+            _instance = GuardianStarterModel.Create(_def) ?? CreateFallbackMesh(_def);
             AddChild(_instance);
-            Log.Info(LogCategory.App, $"GuardianRenderer: Created fallback procedural representation for '{_def.Name}'");
+            Log.Info(LogCategory.App, $"GuardianRenderer: Created {(_instance is GuardianStarterModel ? "species starter model" : "fallback representation")} for '{_def.Name}'");
         }
 
         // These assets were authored Y-up inside Blender's Z-up scene. glTF
@@ -205,6 +204,9 @@ public partial class GuardianRenderer : Node3D
         ApplySurfaceMaterials(_instance);
         Mark("SurfaceMaterials");
         _groundOffset = Math.Max(0, -LowestPoint(_instance, Transform3D.Identity));
+        // The mata mata export has its support height baked into the rig. Its
+        // skinned mesh bounds do not describe the posed feet at this point.
+        if (_def.Archetype == "ruffleback" && _skeleton != null) _groundOffset = 0;
         _instance.Position += Vector3.Up * _groundOffset;
         Mark("LowestPoint");
 
@@ -337,12 +339,34 @@ public partial class GuardianRenderer : Node3D
     private static int ModeFor(string name)
     {
         string n = name.ToLowerInvariant();
+        if (n.Contains("mouth") || n.Contains("mucosa") || n.Contains("tongue") || n.Contains("nostril") || n.Contains("rhinarium") || n.Contains("nasal") || n.Contains("pad") || n.Contains("underbelly") || n.Contains("dewdrop")) return 3;
         if (n.Contains("iris") || n.Contains("eye") || n.Contains("cornea") || n.Contains("pupil")) return 4;
-        if (n.Contains("keratin") || n.Contains("scute") || n.Contains("claw") || n.Contains("horn") || n.Contains("quill") || n.Contains("tooth") || n.Contains("ivory") || n.Contains("whisker") || n.Contains("vibrissae") || n.Contains("scale") || n.Contains("labial")) return 0;
+        if (n.Contains("keratin") || n.Contains("scute") || n.Contains("claw") || n.Contains("horn") || n.Contains("quill") || n.Contains("tooth") || n.Contains("teeth") || n.Contains("incisor") || n.Contains("ivory") || n.Contains("whisker") || n.Contains("vibrissae") || n.Contains("scale") || n.Contains("labial") || n.Contains("carapace") || n.Contains("armor") || n.Contains("shell") || n.Contains("hoof") || n.Contains("bill") || n.Contains("beak")) return 0;
         if (n.Contains("bristle") || n.Contains("plumage")) return 2;
-        if (n.Contains("fur") || n.Contains("underfur") || n.Contains("underplumage") || n.Contains("crest") || n.Contains("contour") || n.Contains("buff") || n.Contains("flight") || n.Contains("streak")) return 1;
-        if (n.Contains("skin") || n.Contains("mouth") || n.Contains("tongue") || n.Contains("nasal") || n.Contains("pigment") || n.Contains("lip") || n.Contains("pbr") || n.Contains("facial")) return 3;
+        if (n.Contains("fur") || n.Contains("coat") || n.Contains("coati") || n.Contains("underfur") || n.Contains("underplumage") || n.Contains("crest") || n.Contains("contour") || n.Contains("buff") || n.Contains("flight") || n.Contains("streak")) return 1;
+        if (n.Contains("skin") || n.Contains("pigment") || n.Contains("lip") || n.Contains("pbr") || n.Contains("facial")) return 3;
         return 3;
+    }
+
+    private static Color ResolveGuardianBaseColor(string name, Color sourceColor)
+    {
+        string n = name.ToLowerInvariant();
+        if (n.Contains("pupil") || n.Contains("glosseye")) return new Color(0.01f, 0.01f, 0.012f, 1.0f);
+        // Multi-material glTF exports from Blender 5.2 drop COLOR_0 on secondary primitives,
+        // leaving detail textures unmodulated white (1,1,1). Restore authored biological tints.
+        if (sourceColor.R < 0.92f || sourceColor.G < 0.92f || sourceColor.B < 0.92f)
+            return sourceColor;
+        if (n.Contains("saigahoof")) return new Color(0.24f, 0.20f, 0.17f, sourceColor.A);
+        if (n.Contains("dewhornamberhorn")) return new Color(0.76f, 0.53f, 0.26f, sourceColor.A);
+        if (n.Contains("saiganasalskin")) return new Color(0.52f, 0.39f, 0.33f, sourceColor.A);
+        if (n.Contains("saigaearskin")) return new Color(0.68f, 0.55f, 0.46f, sourceColor.A);
+        if (n.Contains("saigaamberiris") || n.Contains("saigaeyecornea") || n.Contains("wetcornea")) return new Color(0.46f, 0.25f, 0.08f, 1.0f);
+        if (n == "horn") return new Color(0.58f, 0.50f, 0.36f, sourceColor.A);
+        if (n == "legskin") return new Color(0.30f, 0.31f, 0.33f, sourceColor.A);
+        if (n == "eye") return new Color(0.48f, 0.34f, 0.12f, 1.0f);
+        if (n.Contains("mata shell")) return new Color(0.44f, 0.32f, 0.21f, sourceColor.A);
+        if (n.Contains("mata skin") || n.Contains("mata mottled")) return new Color(0.56f, 0.44f, 0.31f, sourceColor.A);
+        return sourceColor;
     }
 
     private void ApplySurfaceMaterials(Node node)
@@ -363,10 +387,11 @@ public partial class GuardianRenderer : Node3D
                     continue;
                 }
                 var material = new ShaderMaterial { Shader = GuardianShader, ResourceName = source.ResourceName };
-                material.SetShaderParameter("mode", ModeFor(source.ResourceName));
-                material.SetShaderParameter("base_color", source.AlbedoColor);
+                int mode = ModeFor(source.ResourceName);
+                material.SetShaderParameter("mode", mode);
+                material.SetShaderParameter("base_color", ResolveGuardianBaseColor(source.ResourceName, source.AlbedoColor));
                 material.SetShaderParameter("roughness_mul", Math.Clamp(source.Roughness <= 0 ? 1f : source.Roughness, 0.05f, 1f));
-                material.SetShaderParameter("metallic", source.Metallic);
+                material.SetShaderParameter("metallic", 0f);
                 material.SetShaderParameter("specular", 0.5f);
                 if (source.AlbedoTexture != null)
                 {
@@ -666,6 +691,8 @@ public partial class GuardianRenderer : Node3D
         }
 
         // Manage animation state
+        if (_instance is GuardianStarterModel starter)
+            starter.UpdatePose(_w.Clock.Paused ? 0 : delta * _w.Clock.SpeedMultiplier, g.Activity);
         UpdateAnimationState(g);
     }
 

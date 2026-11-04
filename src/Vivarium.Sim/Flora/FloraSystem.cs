@@ -64,10 +64,12 @@ public sealed class FloraSystem
     /// <summary>Plan-view area of the regular hexagonal island.</summary>
     public double IslandAreaM2 => 3 * Math.Sqrt(3) / 2 * _w.Domain.Radius * _w.Domain.Radius;
 
-    /// <summary>Shared structural population budget for the whole island, not per species.</summary>
+    /// <summary>Shared structural population budget for the whole island, not per species.
+    /// Trees hold the area-based budget; shrubs carry no island carrying limit.</summary>
     public int WoodyPopulationCap(WoodyLayer layer)
     {
-        double areaPer = layer == WoodyLayer.Tree ? TreeAreaPerIndividual : ShrubAreaPerIndividual;
+        if (layer == WoodyLayer.Shrub) return int.MaxValue;
+        double areaPer = TreeAreaPerIndividual;
         return Math.Max(1, (int)Math.Floor(IslandAreaM2 / areaPer));
     }
 

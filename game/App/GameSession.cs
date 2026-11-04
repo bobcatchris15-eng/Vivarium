@@ -103,9 +103,10 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         GetViewport().Scaling3DScale = (float)Settings.RenderScale;
         Flora.ReducedDistantPlants = Settings.ReducedDistantPlants;
         CameraRig.DistanceBlur = Settings.DistanceBlur;
+        CameraRig.DistanceBlurAmount = (float)Settings.DistanceBlurAmount;
         Bridge.SetSimpleFoliageLighting(Settings.SimpleFoliageLighting);
         if (Settings.DistanceBlur)
-            RenderingServer.CameraAttributesSetDofBlurQuality(RenderingServer.DofBlurQuality.Medium, true);
+            RenderingServer.CameraAttributesSetDofBlurQuality(RenderingServer.DofBlurQuality.Low, true);
         Flora.Quality = Fauna.Quality = Guardian.Quality = Settings.Quality;
         SoilDetail.Quality = Settings.Quality;
         AmbientGround.Quality = Settings.Quality;

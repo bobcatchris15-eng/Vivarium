@@ -64,7 +64,7 @@ public partial class PilotTreePreview : Node3D
                 // Anchor the camera to the authoritative full pilot-tree world form.
                 Vector3 center = Bridge.V(tree.Anchor,tree.BaseHeight+tree.Def.TrunkHeight*.55);
                 float span = Math.Max((float)tree.Def.TrunkHeight,
-                    (float)tree.Def.CanopyRadius*2.0f);
+                    (float)tree.CanopyRadius*2.0f);
                 var inward = new Vector3((float)-tree.CornerPoint.X, 0, (float)-tree.CornerPoint.Z).Normalized();
                 var sideways = inward.Cross(Vector3.Up).Normalized();
                 string dir = Path.Combine(OutDir, id);

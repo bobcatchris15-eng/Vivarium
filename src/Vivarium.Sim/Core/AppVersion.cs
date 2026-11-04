@@ -10,8 +10,8 @@ public static class AppVersion
     public const string ProductName = "Vivarium";
     public const string Application = "0.1.3";
 
-    /// <summary>Schema 4 replaces mobile water with conservative fine cells/airborne state; prior worlds migrate in staging.</summary>
-    public const int SaveSchema = 4;
+    /// <summary>Schema 5 stores the tiled fluid solver's established-surface state. Older saves are unsupported.</summary>
+    public const int SaveSchema = 5;
 
     public static string Describe() => $"{ProductName} {Application} (save schema {SaveSchema})";
 }

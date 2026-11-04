@@ -29,45 +29,35 @@ public class DistantGillTests
 
     [Theory]
     [MemberData(nameof(DewbonnetSeeds))]
-    public void FarReductionPreservesEveryNonGillVertexAndTriangle(ulong seed)
+    public void DewbonnetHasSolidUndersidesAndNoGillStripsAtEveryTier(ulong seed)
     {
         var species = TestUtil.Content.FloraOrThrow("dewbonnet");
-        var expected = OrganismMeshes.FloraTier(species, seed, 2);
-        var candidate = OrganismMeshes.FloraTier(species, seed, 2, farGillStations: 3);
-        bool Gill(MeshData m, int i) => m.UV2[i * 2] == 1 && m.NormalAt(i).Y == 0;
-        int[] NonGill(MeshData m) => Enumerable.Range(0, m.VertexCount).Where(i => !Gill(m, i)).ToArray();
-        var a = NonGill(expected); var b = NonGill(candidate);
-        Assert.Equal(a.Length, b.Length);
-        for (int i = 0; i < a.Length; i++)
+        for (int tier = 0; tier < 3; tier++)
         {
-            Assert.Equal(expected.Position(a[i]), candidate.Position(b[i]));
-            Assert.Equal(expected.NormalAt(a[i]), candidate.NormalAt(b[i]));
-            for (int k = 0; k < 4; k++) Assert.Equal(expected.Colors[a[i] * 4 + k], candidate.Colors[b[i] * 4 + k]);
-            for (int k = 0; k < 2; k++)
+            var mesh = OrganismMeshes.FloraTier(species, seed, tier);
+            var underside = Enumerable.Range(0, mesh.VertexCount).Where(i => mesh.UV2[i * 2] == 1).ToArray();
+            Assert.NotEmpty(underside);
+            Assert.All(underside, i => {
+                Assert.Equal(-1, mesh.NormalAt(i).Y);
+                Assert.InRange(mesh.UV[i * 2], 0, 1);
+                Assert.InRange(mesh.UV[i * 2 + 1], 0, 16);
+            });
+            var centres = underside.Where(i => mesh.UV[i * 2 + 1] == 0).Select(mesh.Position).ToHashSet();
+            Assert.NotEmpty(centres);
+            var usedCentres = new HashSet<Vec3>();
+            for (int t = 0; t < mesh.Indices.Count; t += 3)
             {
-                Assert.Equal(expected.UV[a[i] * 2 + k], candidate.UV[b[i] * 2 + k]);
-                Assert.Equal(expected.UV2[a[i] * 2 + k], candidate.UV2[b[i] * 2 + k]);
+                var indices = mesh.Indices.Skip(t).Take(3).ToArray();
+                if (!indices.All(i => mesh.UV2[i * 2] == 1)) continue;
+                var a = mesh.Position(indices[0]); var b = mesh.Position(indices[1]); var c = mesh.Position(indices[2]);
+                Assert.True((b - a).Cross(c - a).LengthSq > 1e-20, "Solid underside must have no degenerate triangles");
+                foreach (var i in indices) if (centres.Contains(mesh.Position(i))) usedCentres.Add(mesh.Position(i));
             }
+            Assert.True(centres.SetEquals(usedCentres), "Every cap underside must close at its axis");
+            Assert.Equal(mesh.DigestHex(), OrganismMeshes.FloraTier(species, seed, tier, farGillStations: 3).DigestHex());
+            Assert.All(mesh.Positions, x => Assert.True(float.IsFinite(x)));
+            Assert.All(mesh.Indices, i => Assert.InRange(i, 0, mesh.VertexCount - 1));
         }
-        int[] NonGillTriangles(MeshData m, int[] vertices)
-        {
-            var map = Enumerable.Repeat(-1, m.VertexCount).ToArray();
-            for (int i = 0; i < vertices.Length; i++) map[vertices[i]] = i;
-            var result = new List<int>();
-            for (int i = 0; i < m.Indices.Count; i += 3)
-            {
-                int count = Enumerable.Range(0, 3).Count(j => map[m.Indices[i + j]] >= 0);
-                Assert.True(count is 0 or 3, "Gill triangles must not borrow cap/stipe vertices");
-                if (count == 3) for (int j = 0; j < 3; j++) result.Add(map[m.Indices[i + j]]);
-            }
-            return result.ToArray();
-        }
-        Assert.Equal(NonGillTriangles(expected, a), NonGillTriangles(candidate, b));
-        Assert.True(candidate.TriangleCount < expected.TriangleCount);
-        int oldGills = expected.VertexCount - a.Length, newGills = candidate.VertexCount - b.Length;
-        Assert.True(oldGills > 0);
-        Assert.Equal(0, oldGills % (36 * 10 * 4));
-        Assert.Equal(oldGills / 10 * 4, newGills);
     }
 
     [Fact]

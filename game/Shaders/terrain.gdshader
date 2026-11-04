@@ -369,7 +369,7 @@ void fragment() {
 void light() {
     vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
     vec3 wl = normalize((INV_VIEW_MATRIX * vec4(LIGHT, 0.0)).xyz);
-    vec3 vv = normalize(VIEW);
+    vec3 vv = normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz);
     float t = (review_time >= 0.0) ? review_time : TIME;
 
     float ndotl = max(dot(wn, wl), 0.0);

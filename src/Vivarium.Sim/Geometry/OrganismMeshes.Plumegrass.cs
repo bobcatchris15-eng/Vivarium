@@ -59,6 +59,31 @@ public static partial class OrganismMeshes
         int sides, int rings, Vec3? bend, double[] colour, Func<int, double, (double[] Col, double A, double U, double V, double U2, double V2)>? attr,
         double flatten = 1.0)
     {
+        if (m.Lod?.CullMinorDetails == true)
+        {
+            // Sub-millimetre silk is a ribbon at this distance; retain its endpoints and colour.
+            if (Math.Max(r0, r1) < .0005)
+            {
+                var direction = (p1 - p0).Normalized();
+                var width = direction.Cross(Vec3.Up);
+                if (width.LengthSq < 1e-12) width = direction.Cross(Vec3.Right);
+                width = width.Normalized();
+                var normal = width.Cross(direction).Normalized();
+                int ribbonStart = m.VertexCount;
+                for (int i = 0; i < 2; i++)
+                for (int side = 0; side < 2; side++)
+                {
+                    var a = attr is null ? (colour, 1.0, (double)i, (double)side, 0.0, 0.0) : attr(i, side);
+                    m.AddVertex((i == 0 ? p0 : p1) + width * ((side == 0 ? -1 : 1) * (i == 0 ? r0 : r1)),
+                        normal, a.Item1, a.Item2, a.Item3, a.Item4, a.Item5, a.Item6);
+                }
+                Primitives.TriangleFacing(m, ribbonStart, ribbonStart + 2, ribbonStart + 1, normal);
+                Primitives.TriangleFacing(m, ribbonStart + 1, ribbonStart + 2, ribbonStart + 3, normal);
+                return;
+            }
+            rings = Math.Max(1, (rings + 1) / 2);
+            sides = Math.Min(sides, 3);
+        }
         if (sides < 3) sides = 3;
         if (rings < 1) rings = 1;
         var path = new Vec3[rings + 1];

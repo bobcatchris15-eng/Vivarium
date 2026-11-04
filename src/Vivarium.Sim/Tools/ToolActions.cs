@@ -264,6 +264,7 @@ public sealed class ToolActions
         var spring = _w.Water.Springs.FirstOrDefault(s => s.Id == id);
         if (spring == null) return ToolResult.Fail("spring no longer exists");
         spring.Discharge = ClampSpringDischarge(rate);
+        _w.Liquid.OnSourcesChanged();
         return SurfaceEdit(ToolResult.Success($"spring flow {spring.Discharge * 3600000:0} L/hour", id));
     }
 
@@ -297,8 +298,8 @@ public sealed class ToolActions
         double rate = ClampSpringDischarge(discharge ?? (Cfg.SpringDischarge > 0 ? Cfg.SpringDischarge : DefaultSpringDischarge));
         var sp = new Water.Spring { Id = _w.Ids.Next(EntityKind.Spring), X = p.X, Z = p.Z, Discharge = rate };
         _w.Water.Springs.Add(sp);
-        TerrainEditing.CarveSpringHole(_w.Terrain, p);
-        _w.Water.RefreshBed(_w.Terrain);
+        // An aperture supplies water at the existing surface. Excavating a basin
+        // here traps minutes of discharge before a newly placed spring can run off.
         double bedHeight = _w.Terrain.Height(p);
         var ventProp = new Prop
         {

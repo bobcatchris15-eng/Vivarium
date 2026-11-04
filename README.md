@@ -11,7 +11,7 @@ A living, self-running miniature ecosystem on a hexagonal island. Moss and liche
 Grab the latest `Vivarium-x.y.z-win64.zip` from the [Releases](https://github.com/bobcatchris15-eng/Vivarium/releases) page, unzip it anywhere, and run `Vivarium.exe`. No installer required.
 
 - **System Requirements:** Windows 10/11 x64, Vulkan-compatible GPU (developed and tested on integrated and discrete GPUs, running Godot 4.7.1 Forward+).
-- **User Data:** Saves, preferences, and logs live in `%APPDATA%\Vivarium\`. The current world format uses **Save Schema 4**.
+- **User Data:** Saves, preferences, and logs live in `%APPDATA%\Vivarium\`. The current world format uses **Save Schema 5**; older saves are unsupported.
 
 ---
 
@@ -56,9 +56,9 @@ Grab the latest `Vivarium-x.y.z-win64.zip` from the [Releases](https://github.co
 
 ## What's in the Ecosystem
 
-The simulation contains **62 species of Flora**, **17 species of Fauna**, and **6 Ancient Guardians**, interacting in a continuous food web and nutrient cycle.
+The simulation contains **62 species of Flora**, **17 species of Fauna**, and **10 Ancient Guardians**, interacting in a continuous food web and nutrient cycle.
 
-### Ancient Guardians (6)
+### Ancient Guardians (10)
 Colossal, biomechanically articulated keystone creatures that roam the island, interact with terrain, and shape the ecological balance:
 1. **Armored Forest (`armored_forest`)**: Heavy subterranean excavator with articulated keratin scales and excavating claws (pangolin morphology).
 2. **Crested Canopy (`crested_canopy`)**: Arboreal frugivore with multi-layered plumage, horn bill, and orbital facial crests (hoatzin morphology).
@@ -66,6 +66,10 @@ Colossal, biomechanically articulated keystone creatures that roam the island, i
 4. **Canopy Serpent (`canopy_serpent`)**: Slender, arboreal predator adapted to high branches and climbing vines.
 5. **Quilled Arboreal (`quilled_arboreal`)**: Defensive canopy dweller with erectile quill coats and gripping claws.
 6. **Woodland Omnivore (`woodland_omnivore`)**: Generalist forager dispersing seeds and aerating leaf litter.
+7. **Fernback**: Thylacine-inspired guardian.
+8. **Dewhorn**: Saiga-inspired guardian.
+9. **Hushbill**: Shoebill-inspired guardian.
+10. **Ruffleback**: Mata-mata-inspired guardian.
 
 ### Flora (62 Species)
 Plants possess realistic morphology, branching architectures, phototropic orientation, and life stages:
@@ -111,30 +115,11 @@ Vivarium/
 │   └── content/            # All species, substrate layers, and presets as JSON.
 ├── tests/                  # xUnit test suites validating simulation determinism & ecology.
 ├── scripts/                # Verification, build, packaging, and diagnostic automation.
-└── docs/                   # Authoritative architecture, ADRs, product contract, and plans.
+└── docs/                   # Technical documentation and asset references.
 ```
 
 - **Simulation Authority:** `src/Vivarium.Sim` is the sole source of truth. The Godot client is strictly an observer and command dispatcher. Rendering code cannot alter simulation state or compromise determinism.
 - Detailed architecture: [docs/architecture/architecture.md](docs/architecture/architecture.md)
-- Product requirements: [docs/product/vivarium-contract.md](docs/product/vivarium-contract.md)
-
----
-
-## Active Roadmap: Photorealistic Rendering Overhaul
-
-The active engineering plan to elevate Vivarium's rendering into an uncompromising photorealistic presentation is defined in:
-
-📄 **[docs/overhaul/PHOTOREALISTIC_RENDERING_PLAN.md](docs/overhaul/PHOTOREALISTIC_RENDERING_PLAN.md)**
-
-Organized into **24 atomic Work Packets (`WP-01` through `WP-24`)** across 8 phases:
-- **Phase 1:** Engine GI (SDFGI, SSR, high-quality SSIL/SSAO), 8K cascaded shadows, HDRI sky radiance, volumetric Tyndall rays, and physical camera bokeh DOF.
-- **Phase 2:** 4K 5-channel lossless PBR texture pipeline (`Color`, `NormalGL`, `Roughness`, 16-bit `Displacement`, `AO`), 32-step Parallax Occlusion Mapping, and 3D cutaway strata.
-- **Phase 3:** High-density forest floor litter streaming, multi-layer duff, 3D soil aggregates, and bank fringe foliage.
-- **Phase 4:** Forward+ lit water with analytic B-spline normals, world-space caustics, and plunge-pool foam.
-- **Phase 5:** High-poly geological boulders, decaying hollow nurse logs, and dense riverbed gravel.
-- **Phase 6:** Photorealistic 3D gametophyte moss cushions, foliose lichens, and biofilm wetness.
-- **Phase 7:** Dual-layer chlorophyll subsurface scattering, true-thickness leaves, reaction-diffusion venation, and procedural pilot tree crown rebuild.
-- **Phase 8:** Subsurface scattering fauna, 2-bone IK guardian contact, and procedural fur/feather/scale shaders.
 
 ---
 

@@ -26,7 +26,8 @@ public partial class Windows : Control
     private OptionButton _pilotTree = null!;
     private static readonly string[] PilotTreeIds = { "random", "none", "gloomspire", "needlevault", "crowncoil", "emberpillar", "basinwarden", "palehollow", "cisternvault", "cinnabarcrest", "rootcloister", "silkcascade" };
     private OptionButton _guardian = null!;
-    private static readonly string[] GuardianIds = { "random", "none", "hoatzin_crested", "pangolin_armored", "serpent_canopy", "monitor_great", "coati_woodland", "porcupine_quilled" };
+    private static readonly string[] GuardianIds = new[] { "random", "none" }
+        .Concat(GuardianCatalog.All.Select(g => g.Id)).ToArray();
     private HSlider _diameter = null!, _relief = null!, _springFlow = null!;
     private Label _diameterLabel = null!, _reliefLabel = null!, _springLabel = null!;
     private readonly List<string> _presetIds = new();
@@ -320,8 +321,10 @@ public partial class Windows : Control
         _springFlow = UiKit.Slider("SpringSlider", 0.0, 3.0, 0.1, 1.0, v => _springLabel.Text = v < 0.05 ? "dry (no springs)" : $"×{v:0.0}");
         _pilotTree = new OptionButton { Name = "PilotTreePicker" };
         foreach (string label in new[] { "Random ancient tree", "None", "Gloomspire", "Needlevault", "Crowncoil", "Emberpillar", "Basinwarden", "Palehollow", "Cisternvault", "Cinnabarcrest", "Rootcloister", "Silkcascade" }) _pilotTree.AddItem(label);
-        _guardian = new OptionButton { Name = "GuardianPicker" };
-        foreach (string label in new[] { "Random guardian animal", "None", "Crested canopy", "Armored forest", "Canopy serpent", "Great ground", "Long-nosed woodland", "Quilled arboreal" }) _guardian.AddItem(label);
+        _guardian = new OptionButton { Name = "GuardianPicker", TooltipText = "Choose any guardian, with any pilot tree or without one." };
+        _guardian.AddItem("Random guardian animal");
+        _guardian.AddItem("None");
+        foreach (var guardian in GuardianCatalog.All) _guardian.AddItem(guardian.Name);
 
 
 
@@ -489,8 +492,14 @@ public partial class Windows : Control
         ToggleRender("FineIndirectLightingCheck", "Fine indirect lighting", s.FineIndirectLighting, b => s.FineIndirectLighting = b, "Finer detail in bounced light. Uses more GPU time, especially while moving.");
         ToggleRender("AmbientOcclusionCheck", "Contact shading", s.AmbientOcclusion, b => s.AmbientOcclusion = b, "Darkens small creases and contacts between surfaces.");
         ToggleRender("VolumetricMistCheck", "Volumetric mist", s.VolumetricMist, b => s.VolumetricMist = b, "Light through humid air and underwater haze.");
-        ToggleRender("ReducedDistantPlantsCheck", "Reduce distant plant detail", s.ReducedDistantPlants, b => s.ReducedDistantPlants = b, "Earlier mesh detail transitions beyond 6 and 12 metres. Nearby plants retain full detail.");
-        ToggleRender("DistanceBlurCheck", "Soften distant detail (depth of field)", s.DistanceBlur, b => s.DistanceBlur = b, "Optional far blur begins at 4.8 metres, before the distance detail transition. Blur adds rendering cost.");
+        ToggleRender("ReducedDistantPlantsCheck", "Reduce distant plant detail", s.ReducedDistantPlants, b => s.ReducedDistantPlants = b, "Earlier mesh detail transitions beyond 5 and 10 metres. Nearby plants retain full detail.");
+        ToggleRender("DistanceBlurCheck", "Soften distant detail (depth of field)", s.DistanceBlur, b => s.DistanceBlur = b, "Gentle background softness starts at 4 metres and increases gradually. Focused subjects remain sharp. Blur adds rendering cost.");
+        var blurValue = UiKit.Label($"{s.DistanceBlurAmount / .025 * 100:0}%");
+        var blurAmount = UiKit.Slider("DistanceBlurAmountSlider", 0, 100, 1, s.DistanceBlurAmount / .025 * 100, v =>
+        {
+            s.DistanceBlurAmount = v / 100 * .025; blurValue.Text = $"{v:0}%"; Apply();
+        });
+        body.AddChild(UiKit.Row(UiKit.Label("Background softness"), blurAmount, blurValue));
         ToggleRender("SimpleFoliageLightingCheck", "Simpler foliage lighting", s.SimpleFoliageLighting, b => s.SimpleFoliageLighting = b, "Reduces leaf lighting cost, with simpler highlights and transmission.");
         var scale = new OptionButton { Name = "RenderScalePicker", TooltipText = "Lower resolution for the 3D view. The interface stays at full resolution." };
         scale.AddItem("3D resolution: 100%"); scale.AddItem("3D resolution: 95%"); scale.AddItem("3D resolution: 75%"); scale.AddItem("3D resolution: 50%");

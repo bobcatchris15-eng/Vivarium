@@ -104,13 +104,13 @@ public static partial class OrganismMeshes
                 break;
             case "iceplant": Glassfinger(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "fern": case "veilfern":
-                // The veilfern is an ostrich fern and carries its own anatomy; other ferns, including
-                // the moonfern variant, keep the shared form kernel.
+                // Species-specific fern forms share only the ordinary fallback kernel.
                 if (sp.Id == "veilfern")
                     Veilfern(m, rng, seed, c1, c2, juvenile,
                         sp.RadiusAtMax > 0.001 ? sp.RadiusAtMax : 0.28,
                         sp.Height > 0.001 ? sp.Height : 0.30);
-                else Fern(m, rng, seed, c1, c2, juvenile, sp.Id == "moonfern");
+                else if (sp.Id == "moonfern") MoonfernSheet(m, rng, c1, c2, juvenile);
+                else Fern(m, rng, seed, c1, c2, juvenile);
                 break;
             case "vine":
                 if (sp.Id == "spiralvine") Spiralvine(m, rng, seed, c1, c2, juvenile);
@@ -2181,30 +2181,25 @@ public static partial class OrganismMeshes
 
 
     /// <summary>Arching pinnate fronds with natural fountain arch, paired pinnae, and unrolling fiddleheads.</summary>
-    private static void Fern(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile, bool moonfern = false)
+    private static void Fern(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
     {
-        // Moonfern's compact, refined Boston-fern-like fountain is an anatomical
-        // variant, not a global change to the other fern species.
-        int crownCount = moonfern ? (juvenile ? 7 + rng.NextInt(3) : 17 + rng.NextInt(3))
-            : (juvenile ? 4 + rng.NextInt(2) : 8 + rng.NextInt(3));
-        int pairs = moonfern ? (juvenile ? 14 + rng.NextInt(4) : 26 + rng.NextInt(4))
-            : (juvenile ? 8 + rng.NextInt(3) : 12 + rng.NextInt(3));
-        double frondLen = moonfern ? (juvenile ? rng.Range(0.44, 0.56) : rng.Range(0.93, 1.11))
-            : (juvenile ? rng.Range(0.50, 0.65) : rng.Range(1.05, 1.30));
-        double arch = moonfern ? rng.Range(0.88, 1.07) : rng.Range(1.05, 1.25);
-        double taper = moonfern ? rng.Range(0.88, 1.05) : rng.Range(0.70, 0.85);
-        double pinnaLen = moonfern ? rng.Range(0.124, 0.153) : rng.Range(0.20, 0.25);
-        double pinnaWid = moonfern ? rng.Range(0.019, 0.027) : rng.Range(0.038, 0.046);
-        double camber = moonfern ? rng.Range(0.07, 0.12) : rng.Range(0.10, 0.16);
-        double tilt = moonfern ? rng.Range(0.10, 0.19) : rng.Range(0.18, 0.28);
-        double subOpposite = moonfern ? rng.Range(0.15, 0.31) : rng.Range(0.25, 0.45);
+        int crownCount = juvenile ? 4 + rng.NextInt(2) : 8 + rng.NextInt(3);
+        int pairs = juvenile ? 8 + rng.NextInt(3) : 12 + rng.NextInt(3);
+        double frondLen = juvenile ? rng.Range(0.50, 0.65) : rng.Range(1.05, 1.30);
+        double arch = rng.Range(1.05, 1.25);
+        double taper = rng.Range(0.70, 0.85);
+        double pinnaLen = rng.Range(0.20, 0.25);
+        double pinnaWid = rng.Range(0.038, 0.046);
+        double camber = rng.Range(0.10, 0.16);
+        double tilt = rng.Range(0.18, 0.28);
+        double subOpposite = rng.Range(0.25, 0.45);
         double fiddlehead = juvenile ? rng.Range(0.70, 0.90) : 0.0;
 
         var p = new PinnateFrondParams(
             CrownCount: crownCount,
             PinnaePairs: pairs,
             FrondLength: frondLen,
-            RachisRadius: moonfern ? (juvenile ? 0.0052 : 0.0071) : (juvenile ? 0.008 : 0.011),
+            RachisRadius: juvenile ? 0.008 : 0.011,
             ArchCurve: arch,
             Taper: taper,
             PinnaLength: pinnaLen,
@@ -2216,8 +2211,7 @@ public static partial class OrganismMeshes
             DetailLevel: m.FloraDetailLevel ?? 0,
             StipeFlex: 0.85,
             Compound: true,
-            PetioluleLength: moonfern ? 0.0028 : 0.005,
-            FineFountain: moonfern
+            PetioluleLength: 0.005
         );
 
         var topGreen = Primitives.Mix(c1, new[] { 0.20, 0.46, 0.24 }, 0.55);
@@ -3024,7 +3018,7 @@ public static partial class OrganismMeshes
     /// - Multi-age fairy troop: young ovate bullet buttons, prime campanulate bonnets with acute central umbos,
     ///   and flared mature parasols with scalloped brims.
     /// - Radial sulcate striations (fluted ribs) running from umbo to cap margins.
-    /// - Dense underside gills with alternating lamellae (UV2.x = 1.0 triggering shader gill pattern).
+    /// - Solid underside with normal-mapped radial lamellae (UV2.x = 1.0).
     /// - Fine flexuous translucent fibrous stipes with slight basal swellings.
     /// - Substrate mycelial felt pad and radiating hyphal cords anchoring the colony into organic litter.
     /// - Authored in unit-normalized bounds [0..1] for height and radius.
@@ -3150,7 +3144,7 @@ public static partial class OrganismMeshes
             // Cap geometry with conical umbo and radial sulcate fluting
             int start = m.VertexCount;
             int around=wholeBonnets?Math.Max(8,(int)Math.Round(32*(m.Lod?.Radial??1))):32;
-            int rings=wholeBonnets?Math.Max(3,(int)Math.Round(16*(m.Lod?.Radial??1))):16;
+            int rings=wholeBonnets?Math.Max(3,(int)Math.Round(16*(m.Lod?.Radial??1))):(m.Lod?.DewbonnetCapRings??16);
             double phase = rng.Range(0, 2 * Math.PI);
             double asym = rng.Range(0.04, 0.09);
 
@@ -3205,17 +3199,17 @@ public static partial class OrganismMeshes
                 }
             }
 
-            // Underside gills
+            // Solid underside: angular/radial UVs carry the baked gill normal map.
             int under = m.VertexCount;
-            const int underRings=16;
+            int underRings=m.Lod?.DewbonnetCapRings??16;
             for (int row = 0; row <= underRings; row++)
             {
-                double f = .12 + .88 * row / underRings;
+                double f = (double)row / underRings;
                 for (int s = 0; s <= around; s++)
                 {
                     var gPos = CapPoint(f, s) + new Vec3(0, -capR * 0.030, 0);
-                    var gillCol = Primitives.Mix(c1, c2, row == 0 ? 0.55 : (s % 2 == 0 ? 0.15 : 0.40));
-                    m.AddVertex(gPos, -Vec3.Up, gillCol, 1.0, (double)s / around, row, 1.0, 0.0);
+                    var gillCol = Primitives.Mix(c1, c2, 0.48);
+                    m.AddVertex(gPos, -Vec3.Up, gillCol, 1.0, (double)s / around, row * (16.0 / underRings), 1.0, 0.0);
                 }
             }
 
@@ -3224,12 +3218,11 @@ public static partial class OrganismMeshes
             {
                 int a = under + row*(around+1) + s;
                 int c = a + around + 1;
-                Primitives.TriangleFacing(m, a, c, a + 1, -Vec3.Up);
+                // The centre row coincides at the cap axis: emit only the nondegenerate fan triangle.
+                if (row > 0) Primitives.TriangleFacing(m, a, c, a + 1, -Vec3.Up);
                 Primitives.TriangleFacing(m, a + 1, c, c + 1, -Vec3.Up);
             }
-            // True alternating primary gills and half-length lamellulae follow the pileus.
-            AddLamellarGills(m,(fraction,angle)=>CapPoint(fraction,angle*around/Math.Tau)-Vec3.Up*(capR*.035),
-                capR,Primitives.Mix(c1,c2,.48),36);
+            // Lamellae are shading only; no individual gill strips at any detail tier.
             // Close the thin striated margin between upper and lower cap shells.
             for(int j=0;j<around;j++)
             {
@@ -4869,9 +4862,12 @@ public static partial class OrganismMeshes
 
                         var pCol = Primitives.Mix(leafBase, leafTip, pT);
 
-                        Primitives.Tube(m, new[] { pAttach, pMidL, pTipL }, new[] { 0.0018, 0.0012, 0.0006 }, 3,
+                        bool coarsePinnules = m.Lod?.CullMinorDetails == true;
+                        Primitives.Tube(m, coarsePinnules ? new[] { pAttach, pTipL } : new[] { pAttach, pMidL, pTipL },
+                            coarsePinnules ? new[] { 0.0018, 0.0006 } : new[] { 0.0018, 0.0012, 0.0006 }, 3,
                             (step, u) => (pCol, 1.0, pT, u, 0, 1.0));
-                        Primitives.Tube(m, new[] { pAttach, pMidR, pTipR }, new[] { 0.0018, 0.0012, 0.0006 }, 3,
+                        Primitives.Tube(m, coarsePinnules ? new[] { pAttach, pTipR } : new[] { pAttach, pMidR, pTipR },
+                            coarsePinnules ? new[] { 0.0018, 0.0006 } : new[] { 0.0018, 0.0012, 0.0006 }, 3,
                             (step, u) => (pCol, 1.0, pT, u, 0, 1.0));
                     }
 

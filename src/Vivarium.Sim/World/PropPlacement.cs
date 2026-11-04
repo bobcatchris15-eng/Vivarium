@@ -374,7 +374,7 @@ public sealed class PropPlacement
     {
         // Authored drainage is part of the map composition. Random props may dress its banks,
         // but should not dam the default springs before the player has interacted with them.
-        foreach (var f in _w.Descriptor.Terrain.Features.Where(f => f.Type == "channel" && f.BedHeight.HasValue))
+        foreach (var f in _w.Descriptor.Terrain.Features.Where(f => f.Type == "channel" && (f.BedHeight.HasValue || f.CutDepth.HasValue)))
         {
             var a = new Vec2(f.X, f.Z); var ab = new Vec2(f.ToX, f.ToZ) - a;
             double t = ab.LengthSq > 1e-12 ? MathD.Clamp01((p-a).Dot(ab)/ab.LengthSq) : 0;

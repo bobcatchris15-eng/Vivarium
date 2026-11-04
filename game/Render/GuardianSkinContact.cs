@@ -31,6 +31,8 @@ public sealed class GuardianSkinContact
     public int ChainCachePenetratingSamples { get; private set; }
     public int ChainCacheAuditedInfluences { get; private set; }
     public float MaximumChainCacheAuditError { get; private set; }
+    private int _skinTransformAuditBudget;
+    public int SkinTransformAuditedSamples { get; private set; }
     /// <summary>Audit seam: compares the lowest point with the clearance-based one.</summary>
     public int LowestPointAuditBudget { get; set; }
     public int LowestPointAudits { get; private set; }
@@ -66,6 +68,8 @@ public sealed class GuardianSkinContact
         public float[] Weights = Array.Empty<float>();
         // Godot Skin bind poses ARE inverse binds. Do not invert again.
         public Transform3D[] InverseBinds = Array.Empty<Transform3D>();
+        public MeshScan Mesh = null!;
+        public int[] BindIndices = Array.Empty<int>();
         public Vector3 RestWorld;
         public bool[] ChainInfluences = Array.Empty<bool>();
         public float ChainDenominator;
@@ -93,6 +97,8 @@ public sealed class GuardianSkinContact
         public MeshInstance3D Mesh = null!;
         public int[] BoneOfBind = Array.Empty<int>();
         public Transform3D[] InverseBinds = Array.Empty<Transform3D>();
+        public Transform3D[] SkinTransforms = Array.Empty<Transform3D>();
+        public int[] SkinTransformStamps = Array.Empty<int>();
         public List<SurfaceScan> Surfaces = new();
         public bool Used;
     }
@@ -123,6 +129,8 @@ public sealed class GuardianSkinContact
         _continuousBody = continuousBody; _chainPrefix = chainPrefix;
         if (Array.IndexOf(Vivarium.Game.App.Main.UserArgs, "--guardian-chain-cache-audit") >= 0)
             ChainCacheAuditBudget = 32;
+        if (System.Environment.GetEnvironmentVariable("VIVARIUM_GUARDIAN_SKIN_TRANSFORM_AUDIT") == "1")
+            _skinTransformAuditBudget = 4096;
         foreach (string region in Regions) _samples[region] = new List<Sample>();
         try
         {
@@ -309,7 +317,8 @@ public sealed class GuardianSkinContact
         }
         bool used = false;
         int meshIndex = _meshScans.Count;
-        var meshScan = new MeshScan { Mesh = mesh, BoneOfBind = boneMap, InverseBinds = inverseBinds };
+        var meshScan = new MeshScan { Mesh = mesh, BoneOfBind = boneMap, InverseBinds = inverseBinds,
+            SkinTransforms = new Transform3D[boneMap.Length], SkinTransformStamps = new int[boneMap.Length] };
         _meshScans.Add(meshScan);
         for (int surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
         {
@@ -447,6 +456,7 @@ public sealed class GuardianSkinContact
             Bones = new int[surface.Influences],
             Weights = new float[surface.Influences],
             InverseBinds = new Transform3D[surface.Influences],
+            Mesh = meshScan, BindIndices = new int[surface.Influences],
             RestWorld = surface.RestWorld[candidate.Vertex]
         };
         for (int slot = 0; slot < surface.Influences; slot++)
@@ -457,6 +467,7 @@ public sealed class GuardianSkinContact
             sample.Bones[slot] = meshScan.BoneOfBind[bind];
             sample.Weights[slot] = weight;
             sample.InverseBinds[slot] = meshScan.InverseBinds[bind];
+            sample.BindIndices[slot] = bind;
         }
         cache[candidate] = sample;
         return sample;
@@ -494,7 +505,7 @@ public sealed class GuardianSkinContact
     private void BeginEvaluation()
     {
         if(_skeleton.GetBoneCount()!=_currentPoses.Length)throw new InvalidOperationException("Skeleton changed; recreate contact sampler");
-        if(_evaluation==int.MaxValue){Array.Clear(_poseStamp);_evaluation=0;}
+        if(_evaluation==int.MaxValue){Array.Clear(_poseStamp);foreach(var mesh in _meshScans)Array.Clear(mesh.SkinTransformStamps);_evaluation=0;}
         _evaluation++;_evaluationWorld=_skeleton.GlobalTransform;RequireTransform(_evaluationWorld,"current skeleton world");
     }
     private Transform3D BonePose(int bone,bool rest)
@@ -517,9 +528,65 @@ public sealed class GuardianSkinContact
         for(int i=0;i<sample.Weights.Length;i++)
         {
             if(sample.Weights[i]==0)continue;
-            local+=(BonePose(sample.Bones[i],rest)*sample.InverseBinds[i]*sample.Vertex)*sample.Weights[i];
+            Transform3D skin;
+            if (rest) skin = BonePose(sample.Bones[i], true) * sample.InverseBinds[i];
+            else
+            {
+                var mesh = sample.Mesh; int bind = sample.BindIndices[i];
+                if (mesh.SkinTransformStamps[bind] != _evaluation)
+                {
+                    mesh.SkinTransforms[bind] = BonePose(sample.Bones[i], false) * sample.InverseBinds[i];
+                    mesh.SkinTransformStamps[bind] = _evaluation;
+                }
+                skin = mesh.SkinTransforms[bind];
+            }
+            local+=(skin*sample.Vertex)*sample.Weights[i];
         }
-        return (rest?_restWorld:_evaluationWorld)*local;
+        var point = (rest?_restWorld:_evaluationWorld)*local;
+        if (!rest && _skinTransformAuditBudget > 0)
+        {
+            var reference = Vector3.Zero;
+            for (int i = 0; i < sample.Weights.Length; i++)
+                if (sample.Weights[i] != 0)
+                    reference += (_skeleton.GetBoneGlobalPose(sample.Bones[i]) * sample.InverseBinds[i] * sample.Vertex) * sample.Weights[i];
+            reference = _evaluationWorld * reference;
+            if (point != reference) throw new InvalidOperationException("Guardian skin transform cache mismatch");
+            SkinTransformAuditedSamples++;
+            if (--_skinTransformAuditBudget == 0) GD.Print($"GUARDIAN_SKIN_TRANSFORM_AUDIT_OK samples={SkinTransformAuditedSamples}");
+        }
+        return point;
+    }
+    /// <summary>Compare both evaluators on one unchanging native pose, outside frame measurements.</summary>
+    public (int Samples, int Evaluations, double ReferenceStartMs, double CachedMs, double ReferenceEndMs, int Mismatches) BenchmarkSkinTransforms()
+    {
+        var samples = new List<Sample>();
+        foreach (var region in _samples.Values) samples.AddRange(region);
+        if (!Valid || samples.Count == 0) return (0, 0, 0, 0, 0, 0);
+        Vector3 Reference(Sample sample)
+        {
+            var local = Vector3.Zero;
+            for (int i = 0; i < sample.Weights.Length; i++)
+                if (sample.Weights[i] != 0)
+                    local += (BonePose(sample.Bones[i], false) * sample.InverseBinds[i] * sample.Vertex) * sample.Weights[i];
+            return _evaluationWorld * local;
+        }
+        int mismatches = 0;
+        BeginEvaluation();
+        foreach (var sample in samples) if (EvaluateVertex(sample, false) != Reference(sample)) mismatches++;
+        const int evaluations = 200;
+        double Measure(bool cached, int count)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            for (int n = 0; n < count; n++)
+            {
+                BeginEvaluation();
+                foreach (var sample in samples) _ = cached ? EvaluateVertex(sample, false) : Reference(sample);
+            }
+            return watch.Elapsed.TotalMilliseconds;
+        }
+        Measure(false, 5); Measure(true, 5);
+        double start = Measure(false, evaluations), candidate = Measure(true, evaluations), end = Measure(false, evaluations);
+        return (samples.Count, evaluations, start, candidate, end, mismatches);
     }
     /// <summary>Compare cached and original skinning at the current, already-modified pose.
     /// This diagnostic reads the actual rig and vertices without changing animation or contact.</summary>

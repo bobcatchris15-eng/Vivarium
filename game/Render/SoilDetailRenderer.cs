@@ -29,8 +29,8 @@ public partial class SoilDetailRenderer : Node3D
     public int Quality { get; set; } = 1;
     // Fine detail reads only up close; keep the radius tight so nothing pops at a distance and so the
     // per-frame instance count (which scales with area) stays cheap.
-    private const float CullRadius = 9f;
-    private const float FadeStart = 6f;
+    private const float CullRadius = 6f;
+    private const float FadeStart = 4f;
     private Vector3 _lastCam = new(float.MaxValue, 0, 0);
 
     private readonly List<Transform3D> _fruitXf = new(), _bladeXf = new(), _stalkXf = new();

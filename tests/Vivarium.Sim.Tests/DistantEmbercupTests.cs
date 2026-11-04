@@ -30,8 +30,8 @@ public class DistantEmbercupTests
     public void AllMicrophyllsStayInPlaceAndEveryOtherOrganStaysExact(ulong seed)
     {
         var species = TestUtil.Content.FloraOrThrow("embercup");
-        var a = OrganismMeshes.FloraTier(species, seed, 2);
-        var b = OrganismMeshes.FloraTier(species, seed, 2, farEmberMicroSides: 3);
+        var a = OrganismMeshes.FloraTier(species, seed, 2, thinMinorDetails: false);
+        var b = OrganismMeshes.FloraTier(species, seed, 2, farEmberMicroSides: 3, thinMinorDetails: false);
         var la = a.LeafSpans.Where(s => a.UV2[s.FirstVertex * 2] == 0).ToArray();
         var lb = b.LeafSpans.Where(s => b.UV2[s.FirstVertex * 2] == 0).ToArray();
         Assert.NotEmpty(la); Assert.Equal(la.Length, lb.Length);

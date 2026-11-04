@@ -14,6 +14,9 @@ internal static class FloraSurfaceProfiles
         if (species.Id == "plumegrass")
             material.SetShaderParameter("pampas_plume_color", new Vector3(0.84f, 0.76f, 0.59f));
         material.SetShaderParameter("ghost_membrane", species.Id == "ghostbonnet" ? 1.0f : 0.0f);
+        material.SetShaderParameter("dewbonnet_gills", species.Id == "dewbonnet");
+        if (species.Id == "dewbonnet")
+            material.SetShaderParameter("dewbonnet_gill_normal", GD.Load<Texture2D>("res://Textures/Fungi/dewbonnet_gills_normal.png"));
         var leaf = Leaf(species.Id);
         material.SetShaderParameter("leaf_top", leaf.Top);
         material.SetShaderParameter("top_pigment", leaf.Top);

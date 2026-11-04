@@ -21,6 +21,7 @@ public partial class FernAssetReview : Node3D
     public string OutDir { get; set; } = "";
     public string AssetPath { get; set; } = "res://content/visual-lab-candidates/fern02/fern02.glb";
     public string Variant { get; set; } = "procedural";
+    public string Species { get; set; } = "veilfern";
     public string CameraReferencePath { get; set; } = "";
     private Camera3D _camera = null!;
     private EnvironmentRig _rig = null!;
@@ -63,9 +64,9 @@ public partial class FernAssetReview : Node3D
             _rig.Env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
             _rig.Env.AmbientLightColor = new Color(.72f,.79f,.85f); _rig.Env.AmbientLightEnergy = .45f; _rig.Sun.LightEnergy = 1.15f;
             _camera = new Camera3D { Current = true, Fov = 42, Near = .005f, Far = 40 }; AddChild(_camera);
-            var sp = Content.FloraOrThrow("veilfern");
-            ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual.veilfern"), 0x9E3779B97F4A7C15UL);
-            var profile = FloraVisualProfile.Load("veilfern");
+            var sp = Content.FloraOrThrow(Species);
+            ulong seed = Rng.Mix(Hash.Fnv1a64("flora.visual." + Species), 0x9E3779B97F4A7C15UL);
+            var profile = FloraVisualProfile.Load(Species, sp: sp);
             var source = OrganismMeshes.Flora(sp, seed, false, profile == null ? null : 0);
             var minimum = new Vector3(float.PositiveInfinity,float.PositiveInfinity,float.PositiveInfinity);
             var maximum = -minimum;
@@ -86,7 +87,7 @@ public partial class FernAssetReview : Node3D
                 mm.SetInstanceTransform(0,new Transform3D(Basis.Identity.Scaled(speciesScale),Vector3.Zero));
                 mm.SetInstanceColor(0,Colors.White); mm.SetInstanceCustomData(0,new Color(.5f,1f,0f,.5f));
                 AddChild(new MultiMeshInstance3D { Multimesh = mm });
-                assetReceipt = new { selected = "production veilfern", seed = seed.ToString(), source.VertexCount, nativeWind = false };
+                assetReceipt = new { selected = "production " + Species, seed = seed.ToString(), source.VertexCount, source.TriangleCount, fronds = source.LeafSpans.Count, nativeWind = false };
             }
             else
             {

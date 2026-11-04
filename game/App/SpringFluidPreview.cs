@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
 using Vivarium.Sim.Content;
@@ -24,21 +27,46 @@ public partial class SpringFluidPreview : Node3D
         {
             GetWindow().Size = new Vector2I(1280, 800);
             Directory.CreateDirectory(OutDir);
+            bool longReview=Main.UserArgs.Contains("--spring-long-review");
             var d = Content.PresetOrThrow("default");
+            d.Diameter = longReview?17:5;
+            d.PilotTreeId = "none";
+            d.Placement.Rocks = d.Placement.Logs = d.Placement.GravelPatches = 0;
+            d.Water.Springs.Clear();
+            d.Water.WaterTable = -.5;
+            d.Water.Evaporation = d.Water.Infiltration = 0;
             var w = VivariumWorld.Create(Content, d, populate: false, warmupSurfaceWater:false);
+            w.Terrain.BeginEdit();
+            for (int z = 0; z < w.Terrain.Nz; z++) for (int x = 0; x < w.Terrain.Nx; x++)
+            {
+                var p = w.Terrain.VertexPos(x, z);
+                double height=longReview?.5-.025*(p.X+6)+4*p.Z*p.Z:.4-.12*p.X+.4*p.Z*p.Z;
+                w.Terrain.H[w.Terrain.VertexIndex(x,z)]=Math.Clamp(height,w.Terrain.MinHeight,w.Terrain.MaxHeight);
+            }
+            w.Terrain.Touch(); w.Water.RefreshBed(w.Terrain); w.Liquid.OnTerrainChanged();
+            w.Clock.Paused = true;
             var session = new GameSession();
             AddChild(session);
             session.Initialize(Content, new UserSettings { Transient = true, AutosaveEnabled = false, ShowHelpOnStart = false, Quality = 1 });
             session.StartWorld(w);
             session.Ui.Visible = false;
+            session.AmbientGround.Visible = false;
+            session.SoilDetail.Visible = false;
+            session.Coverage.Visible = false;
             session.CameraRig.KeyboardBlocked = true;
             session.CameraRig.SetProcessUnhandledInput(false);
             session.Tools.SetProcess(false);
             session.Overlay.Visible = false;
 
-            var spring = w.Water.Springs[0];
+            session.Tools.SetTool(ToolKind.Spring);
+            var aperture=longReview?new Vec2(-6,0):Vec2.Zero;
+            if(longReview)session.Tools.SetSpringFlow(2000.0/3600000);
+            session.Tools.ApplyAt(new WorldHit(HitKind.Terrain, EntityId.None,
+                new Vec3(aperture.X,w.GroundHeight(aperture),aperture.Z),1));
+            var spring = w.Water.Springs.Single();
             var src = new Vec2(spring.X, spring.Z);
             GD.Print($"SPRING source=({src.X:0.000},{src.Z:0.000}) ground={w.GroundHeight(src):0.000} discharge_L_hour={spring.Discharge*3600000:0} parcel_ml={SurfaceFluidDynamics.ParcelVolume*1000000:0}");
+            var records=new List<object>();
 
             async Task Shot(string name)
             {
@@ -48,32 +76,48 @@ public partial class SpringFluidPreview : Node3D
                 var img = GetViewport().GetTexture().GetImage();
                 img.SavePng(Path.Combine(OutDir, name + ".png"));
                 GD.Print($"SPRING_SHOT {name} parcels={w.Liquid.Particles.Count} surfaceTris={session.WaterFluid.TrianglesBuilt}");
+                var state = w.Liquid.CaptureRenderState();
+                GD.Print($"SPRING_STATE {name} time={state.Time:F3} backlog={w.Liquid.BacklogSeconds:F3} litres={w.Liquid.Volume*1000:F4} reach={state.Cells.Where(c=>c.Depth>.00005).Select(c=>(c.Position-src).Length).DefaultIfEmpty(0).Max():F3}");
+                GD.Print($"SPRING_WORK {name} established={state.EstablishedCells} wet={state.Cells.Length} jobMs={w.Liquid.LastJobMilliseconds:F3}");
+                var budget=w.Water.Budget;
+                double error=w.Liquid.Volume+budget.GroundwaterRecharge+budget.BoundaryOutflow+budget.Evaporation+budget.Infiltration-budget.SpringInflow;
+                records.Add(new{name,time=state.Time,backlog=w.Liquid.BacklogSeconds,volume=w.Liquid.Volume,
+                    reach=state.Cells.Where(c=>c.Depth>.00005).Select(c=>c.Position.X-src.X).DefaultIfEmpty(0).Max(),
+                    established=state.EstablishedCells,cells=state.Cells.Length,input=budget.SpringInflow,outflow=budget.BoundaryOutflow,error});
+                File.WriteAllText(Path.Combine(OutDir,"physical.json"),JsonSerializer.Serialize(records,new JsonSerializerOptions{WriteIndented=true}));
+                if(Math.Abs(error)>1e-9)throw new Exception("Native spring water budget failed");
             }
 
             // Look down the fall line from behind and above the source, then from the side.
             var eye = new Vector3((float)src.X - 1.1f, (float)(w.GroundHeight(src) + 0.75), (float)src.Z - 0.9f);
             session.CameraRig.LookAtPoint(eye, new Vector3((float)src.X, (float)(w.GroundHeight(src) - 0.1), (float)src.Z));
+            if(longReview)session.CameraRig.LookAtPoint(new(0,18,4),new(0,.3f,0));
             await Shot("00-dry");
 
             // Freeze biological progression while the independently clocked physical liquid runs.
             w.Clock.BaseRate=0;w.Clock.Paused=false;
             ulong startMs = Time.GetTicksMsec();
-            foreach (double end in new[] { 1.5, 4.0, 8.0 })
+            foreach (double end in longReview?new[]{15.0,30,60,90,120,180}:new[] { 1.5, 4.0, 8.0 })
             {
                 while ((Time.GetTicksMsec() - startMs) / 1000.0 < end) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await Shot($"{end:0.0}s");
             }
+            if (!w.Liquid.CaptureRenderState().Cells.Any(c => c.Depth > .00005 && c.Position.X-src.X > (longReview?13.5:.2)))
+                throw new Exception("Placed spring failed to reach the required downstream extent");
+            if (w.Liquid.BacklogSeconds > .5) throw new Exception("Placed spring fluid fell behind wall time");
 
             // Close on the wetted run, looking along it.
             var far = new Vector3((float)src.X + 1.1f, (float)(w.GroundHeight(src) - 0.05), (float)src.Z + 0.9f);
             session.CameraRig.LookAtPoint(new Vector3((float)src.X, (float)(w.GroundHeight(src) + 0.28), (float)src.Z), far);
+            if(longReview)
+                session.CameraRig.LookAtPoint(new(1,(float)w.GroundHeight(new Vec2(1,0))+.45f,.15f),new(1.4f,(float)w.GroundHeight(new Vec2(1.4,0)),0));
             await Shot("90-run-close");
 
             if (w.Liquid.Particles.Count > 0)
             {
                 var p = w.Liquid.Particles[w.Liquid.Particles.Count / 2].Position;
                 var target = new Vector3((float)p.X, (float)p.Y, (float)p.Z);
-                session.CameraRig.LookAtPoint(target + new Vector3(0.35f, 0.22f, 0.20f), target);
+                session.CameraRig.LookAtPoint(target + (longReview?new Vector3(.2f,.45f,.12f):new Vector3(0.35f, 0.22f, 0.20f)), target);
                 await Shot("91-channel-side");
             }
             // Exercise the actual HUD slider signal against an existing spring.

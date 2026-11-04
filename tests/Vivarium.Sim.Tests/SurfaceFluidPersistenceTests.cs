@@ -7,10 +7,10 @@ namespace Vivarium.Sim.Tests;
 [Trait("Suite", "Persistence")]
 public class SurfaceFluidPersistenceTests
 {
-    private static string LegacyArchive(bool particles, bool corrupt = false)
+    private static string LegacyArchive(bool particles, bool corrupt = false, bool current = false)
     {
         var w = TestUtil.FlatWorld();
-        var (manifest, payloads) = SaveSystem.Snapshot(w); manifest.FormatVersion = 3;
+        var (manifest, payloads) = SaveSystem.Snapshot(w); manifest.FormatVersion = current ? AppVersion.SaveSchema : 3;
         var water = JsonSerializer.Deserialize<WaterPayload>(payloads["water"], WorldSerializer.Json)!;
         water.Fluid = null; water.FormatVersion = particles ? 3 : 2;
         if (particles) water.Liquid = new([new(new(0, .8, 0), new(.2, 0, 0), .0003, 0)], new() { { 0, .0000007 } }, 3, .004);
@@ -26,17 +26,18 @@ public class SurfaceFluidPersistenceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OldArchivesMigrateWithoutChangingTheOriginal(bool particles)
+    public void OldArchivesAreRejectedWithoutChangingTheOriginal(bool particles)
     {
-        string path = LegacyArchive(particles); var bytes = File.ReadAllBytes(path); var result = SaveSystem.Load(TestUtil.Content, path); Assert.True(result.Ok, result.Message);
-        Assert.Equal(bytes, File.ReadAllBytes(path)); Assert.Equal(SaveCompatibility.Migratable, result.Compatibility);
-        Assert.Equal(particles ? .0003007 : .012 * .25 * .25, result.World!.Liquid.Volume, 11);
-        Assert.Equal(-.8, result.World.Water.WaterTable, 12);
-        var target = Path.Combine(TestUtil.TempDir(), "new.vivsave"); Assert.True(SaveSystem.Save(result.World, target).Ok); Assert.True(SaveSystem.Load(TestUtil.Content, target).Ok);
+        string path = LegacyArchive(particles); var bytes = File.ReadAllBytes(path);
+        var result = SaveSystem.Load(TestUtil.Content, path);
+        Assert.False(result.Ok);
+        Assert.Equal(SaveCompatibility.UnsupportedOlder, result.Compatibility);
+        Assert.Null(result.World);
+        Assert.Equal(bytes, File.ReadAllBytes(path));
     }
     [Fact]
-    public void FailedMigrationRejectsCorruptInputAndLeavesItUntouched()
-    { string path = LegacyArchive(false, true); var bytes = File.ReadAllBytes(path); var result = SaveSystem.Load(TestUtil.Content, path); Assert.False(result.Ok); Assert.Contains("checksum", result.Message); Assert.Equal(bytes, File.ReadAllBytes(path)); }
+    public void CurrentSchemaRejectsCorruptInputAndLeavesItUntouched()
+    { string path = LegacyArchive(false, true, current: true); var bytes = File.ReadAllBytes(path); var result = SaveSystem.Load(TestUtil.Content, path); Assert.False(result.Ok); Assert.Contains("checksum", result.Message); Assert.Equal(bytes, File.ReadAllBytes(path)); }
     [Fact]
     public void BackloggedSourceHistoryAndItsSaveContinueAtTheOriginalRates()
     {

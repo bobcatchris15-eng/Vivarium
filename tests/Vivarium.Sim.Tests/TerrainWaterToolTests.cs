@@ -125,7 +125,7 @@ public class TerrainWaterToolTests
     }
 
     [Fact]
-    public void SpringPlacementCarvesDepressionAndUpdatesWaterBed()
+    public void SpringPlacementPreservesTerrainAndWaterBed()
     {
         var w = TestUtil.FlatWorld();
         var t = new ToolActions(w);
@@ -143,12 +143,8 @@ public class TerrainWaterToolTests
         double carvedTerrainHeight = w.Terrain.Height(p);
         double updatedBed = w.Water.Bed[cell];
 
-        // Placing a spring depresses terrain height at pos by approx 0.08m
-        Assert.True(carvedTerrainHeight < initialTerrainHeight - 0.05,
-            $"Expected terrain height to be depressed: before={initialTerrainHeight}, after={carvedTerrainHeight}");
-        // Bed is refreshed and reflects the new terrain depression
-        Assert.True(updatedBed < initialBed - 0.05,
-            $"Expected bed height to be depressed: before={initialBed}, after={updatedBed}");
+        Assert.Equal(initialTerrainHeight, carvedTerrainHeight);
+        Assert.Equal(initialBed, updatedBed);
 
         // Outside radius (radius = 0.20m), terrain is unaffected
         Assert.Equal(farHeightBefore, w.Terrain.Height(far), 9);

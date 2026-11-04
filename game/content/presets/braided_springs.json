@@ -1,0 +1,1912 @@
+{
+  "id": "braided_springs",
+  "name": "Springbraid Hollow",
+  "seed": 731921,
+  "diameter": 8,
+  "cellSize": 0.25,
+  "terrain": {
+    "baseHeight": 0.25,
+    "relief": 0.003,
+    "slopeX": 0,
+    "slopeZ": -0.065,
+    "noiseScale": 0.18,
+    "octaves": 3,
+    "minHeight": -1.1,
+    "maxHeight": 3.0,
+    "bottom": -4.0,
+    "rockExposure": 0.18,
+    "features": [
+      {
+        "type": "basin",
+        "x": -0.85,
+        "z": -2.05,
+        "radius": 0.4,
+        "amount": 0.008,
+        "sharp": true,
+        "basinOutline": "bean",
+        "cutDepth": 0.13
+      },
+      {
+        "type": "basin",
+        "x": 0.1,
+        "z": -0.3,
+        "radius": 0.55,
+        "amount": 0.008,
+        "sharp": true,
+        "basinOutline": "lobed",
+        "cutDepth": 0.13
+      },
+      {
+        "type": "basin",
+        "x": 0,
+        "z": 3.05,
+        "radius": 1.18,
+        "amount": 0.008,
+        "sharp": true,
+        "basinOutline": "lobed",
+        "cutDepth": 0.13
+      },
+      {
+        "type": "channel",
+        "x": 0.0,
+        "z": -3.1,
+        "toX": -0.06273,
+        "toZ": -3.06597,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.06273,
+        "z": -3.06597,
+        "toX": -0.15185,
+        "toZ": -3.02222,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.15185,
+        "z": -3.02222,
+        "toX": -0.25625,
+        "toZ": -2.96875,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.25625,
+        "z": -2.96875,
+        "toX": -0.36481,
+        "toZ": -2.90556,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.36481,
+        "z": -2.90556,
+        "toX": -0.46644,
+        "toZ": -2.83264,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.46644,
+        "z": -2.83264,
+        "toX": -0.55,
+        "toZ": -2.75,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.55,
+        "z": -2.75,
+        "toX": -0.6086,
+        "toZ": -2.66224,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.6086,
+        "z": -2.66224,
+        "toX": -0.66268,
+        "toZ": -2.5551,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.66268,
+        "z": -2.5551,
+        "toX": -0.71181,
+        "toZ": -2.43776,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.71181,
+        "z": -2.43776,
+        "toX": -0.75554,
+        "toZ": -2.31939,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.75554,
+        "z": -2.31939,
+        "toX": -0.79344,
+        "toZ": -2.20918,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.79344,
+        "z": -2.20918,
+        "toX": -0.82507,
+        "toZ": -2.11633,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.82507,
+        "z": -2.11633,
+        "toX": -0.85,
+        "toZ": -2.05,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.0,
+        "z": -3.1,
+        "toX": 0.04111,
+        "toZ": -3.04577,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.04111,
+        "z": -3.04577,
+        "toX": 0.09723,
+        "toZ": -2.9723,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.09723,
+        "z": -2.9723,
+        "toX": 0.16399,
+        "toZ": -2.88484,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.16399,
+        "z": -2.88484,
+        "toX": 0.23703,
+        "toZ": -2.78863,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.23703,
+        "z": -2.78863,
+        "toX": 0.31195,
+        "toZ": -2.68892,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.31195,
+        "z": -2.68892,
+        "toX": 0.3844,
+        "toZ": -2.59096,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.3844,
+        "z": -2.59096,
+        "toX": 0.45,
+        "toZ": -2.5,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.45,
+        "z": -2.5,
+        "toX": 0.5172,
+        "toZ": -2.41472,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.5172,
+        "z": -2.41472,
+        "toX": 0.59271,
+        "toZ": -2.33003,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.59271,
+        "z": -2.33003,
+        "toX": 0.66953,
+        "toZ": -2.24548,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.66953,
+        "z": -2.24548,
+        "toX": 0.74067,
+        "toZ": -2.16064,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.74067,
+        "z": -2.16064,
+        "toX": 0.79913,
+        "toZ": -2.07507,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.79913,
+        "z": -2.07507,
+        "toX": 0.8379,
+        "toZ": -1.98834,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.8379,
+        "z": -1.98834,
+        "toX": 0.85,
+        "toZ": -1.9,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.85,
+        "z": -1.9,
+        "toX": 0.82759,
+        "toZ": -1.81978,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.82759,
+        "z": -1.81978,
+        "toX": 0.77383,
+        "toZ": -1.73633,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.77383,
+        "z": -1.73633,
+        "toX": 0.69956,
+        "toZ": -1.65112,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.69956,
+        "z": -1.65112,
+        "toX": 0.61562,
+        "toZ": -1.56562,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.61562,
+        "z": -1.56562,
+        "toX": 0.53286,
+        "toZ": -1.4813,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.53286,
+        "z": -1.4813,
+        "toX": 0.46211,
+        "toZ": -1.39961,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.46211,
+        "z": -1.39961,
+        "toX": 0.41421,
+        "toZ": -1.32202,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.41421,
+        "z": -1.32202,
+        "toX": 0.4,
+        "toZ": -1.25,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.4,
+        "z": -1.25,
+        "toX": 0.43834,
+        "toZ": -1.17566,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.43834,
+        "z": -1.17566,
+        "toX": 0.52507,
+        "toZ": -1.10831,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.52507,
+        "z": -1.10831,
+        "toX": 0.63921,
+        "toZ": -1.04577,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.63921,
+        "z": -1.04577,
+        "toX": 0.75977,
+        "toZ": -0.98586,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.75977,
+        "z": -0.98586,
+        "toX": 0.86574,
+        "toZ": -0.92638,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.86574,
+        "z": -0.92638,
+        "toX": 0.93615,
+        "toZ": -0.86516,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.93615,
+        "z": -0.86516,
+        "toX": 0.95,
+        "toZ": -0.8,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.95,
+        "z": -0.8,
+        "toX": 0.91235,
+        "toZ": -0.7439,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.91235,
+        "z": -0.7439,
+        "toX": 0.83889,
+        "toZ": -0.68265,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.83889,
+        "z": -0.68265,
+        "toX": 0.73889,
+        "toZ": -0.61852,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.73889,
+        "z": -0.61852,
+        "toX": 0.6216,
+        "toZ": -0.55377,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.6216,
+        "z": -0.55377,
+        "toX": 0.4963,
+        "toZ": -0.49067,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.4963,
+        "z": -0.49067,
+        "toX": 0.37222,
+        "toZ": -0.43148,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.37222,
+        "z": -0.43148,
+        "toX": 0.25864,
+        "toZ": -0.37846,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.25864,
+        "z": -0.37846,
+        "toX": 0.16481,
+        "toZ": -0.33388,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.16481,
+        "z": -0.33388,
+        "toX": 0.1,
+        "toZ": -0.3,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.85,
+        "z": -2.05,
+        "toX": -0.84977,
+        "toZ": -1.97697,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.84977,
+        "z": -1.97697,
+        "toX": -0.8537,
+        "toZ": -1.87407,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.8537,
+        "z": -1.87407,
+        "toX": -0.85625,
+        "toZ": -1.75312,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.85625,
+        "z": -1.75312,
+        "toX": -0.85185,
+        "toZ": -1.62593,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.85185,
+        "z": -1.62593,
+        "toX": -0.83495,
+        "toZ": -1.50428,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.83495,
+        "z": -1.50428,
+        "toX": -0.8,
+        "toZ": -1.4,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.8,
+        "z": -1.4,
+        "toX": -0.75131,
+        "toZ": -1.32697,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.75131,
+        "z": -1.32697,
+        "toX": -0.68703,
+        "toZ": -1.26268,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.68703,
+        "z": -1.26268,
+        "toX": -0.61195,
+        "toZ": -1.20364,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.61195,
+        "z": -1.20364,
+        "toX": -0.5309,
+        "toZ": -1.14636,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.5309,
+        "z": -1.14636,
+        "toX": -0.44869,
+        "toZ": -1.08732,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.44869,
+        "z": -1.08732,
+        "toX": -0.37012,
+        "toZ": -1.02303,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.37012,
+        "z": -1.02303,
+        "toX": -0.3,
+        "toZ": -0.95,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.3,
+        "z": -0.95,
+        "toX": -0.23411,
+        "toZ": -0.86195,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.23411,
+        "z": -0.86195,
+        "toX": -0.16676,
+        "toZ": -0.75991,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.16676,
+        "z": -0.75991,
+        "toX": -0.10058,
+        "toZ": -0.65131,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.10058,
+        "z": -0.65131,
+        "toX": -0.03819,
+        "toZ": -0.54359,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.03819,
+        "z": -0.54359,
+        "toX": 0.01778,
+        "toZ": -0.44417,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.01778,
+        "z": -0.44417,
+        "toX": 0.06472,
+        "toZ": -0.3605,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.06472,
+        "z": -0.3605,
+        "toX": 0.1,
+        "toZ": -0.3,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.85,
+        "z": -2.05,
+        "toX": -0.91122,
+        "toZ": -2.01152,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.91122,
+        "z": -2.01152,
+        "toX": -1.00102,
+        "toZ": -1.96152,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.00102,
+        "z": -1.96152,
+        "toX": -1.10714,
+        "toZ": -1.90175,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.10714,
+        "z": -1.90175,
+        "toX": -1.21735,
+        "toZ": -1.83397,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.21735,
+        "z": -1.83397,
+        "toX": -1.31939,
+        "toZ": -1.75991,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.31939,
+        "z": -1.75991,
+        "toX": -1.40102,
+        "toZ": -1.68134,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.40102,
+        "z": -1.68134,
+        "toX": -1.45,
+        "toZ": -1.6,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.45,
+        "z": -1.6,
+        "toX": -1.45816,
+        "toZ": -1.51268,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.45816,
+        "z": -1.51268,
+        "toX": -1.43367,
+        "toZ": -1.41676,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.43367,
+        "z": -1.41676,
+        "toX": -1.38878,
+        "toZ": -1.31487,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.38878,
+        "z": -1.31487,
+        "toX": -1.33571,
+        "toZ": -1.20962,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.33571,
+        "z": -1.20962,
+        "toX": -1.28673,
+        "toZ": -1.10364,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.28673,
+        "z": -1.10364,
+        "toX": -1.25408,
+        "toZ": -0.99956,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.25408,
+        "z": -0.99956,
+        "toX": -1.25,
+        "toZ": -0.9,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.25,
+        "z": -0.9,
+        "toX": -1.28222,
+        "toZ": -0.80408,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.28222,
+        "z": -0.80408,
+        "toX": -1.34242,
+        "toZ": -0.70918,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.34242,
+        "z": -0.70918,
+        "toX": -1.4188,
+        "toZ": -0.61531,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.4188,
+        "z": -0.61531,
+        "toX": -1.49956,
+        "toZ": -0.52245,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.49956,
+        "z": -0.52245,
+        "toX": -1.57289,
+        "toZ": -0.43061,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.57289,
+        "z": -0.43061,
+        "toX": -1.62697,
+        "toZ": -0.3398,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.62697,
+        "z": -0.3398,
+        "toX": -1.65,
+        "toZ": -0.25,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.65,
+        "z": -0.25,
+        "toX": -1.64155,
+        "toZ": -0.15948,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.64155,
+        "z": -0.15948,
+        "toX": -1.61195,
+        "toZ": -0.06764,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.61195,
+        "z": -0.06764,
+        "toX": -1.5656,
+        "toZ": 0.02376,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.5656,
+        "z": 0.02376,
+        "toX": -1.50685,
+        "toZ": 0.11297,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.50685,
+        "z": 0.11297,
+        "toX": -1.44009,
+        "toZ": 0.19825,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.44009,
+        "z": 0.19825,
+        "toX": -1.36968,
+        "toZ": 0.27784,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.36968,
+        "z": 0.27784,
+        "toX": -1.3,
+        "toZ": 0.35,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.3,
+        "z": 0.35,
+        "toX": -1.22128,
+        "toZ": 0.41224,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.22128,
+        "z": 0.41224,
+        "toX": -1.12638,
+        "toZ": 0.46531,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.12638,
+        "z": 0.46531,
+        "toX": -1.02362,
+        "toZ": 0.51224,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -1.02362,
+        "z": 0.51224,
+        "toX": -0.92128,
+        "toZ": 0.55612,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.92128,
+        "z": 0.55612,
+        "toX": -0.8277,
+        "toZ": 0.6,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.8277,
+        "z": 0.6,
+        "toX": -0.75117,
+        "toZ": 0.64694,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.75117,
+        "z": 0.64694,
+        "toX": -0.7,
+        "toZ": 0.7,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.7,
+        "z": 0.7,
+        "toX": -0.6896,
+        "toZ": 0.7852,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.6896,
+        "z": 0.7852,
+        "toX": -0.7328,
+        "toZ": 0.8776,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.7328,
+        "z": 0.8776,
+        "toX": -0.7912,
+        "toZ": 0.9724,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.7912,
+        "z": 0.9724,
+        "toX": -0.8264,
+        "toZ": 1.0648,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.8264,
+        "z": 1.0648,
+        "toX": -0.8,
+        "toZ": 1.15,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.8,
+        "z": 1.15,
+        "toX": -0.7376,
+        "toZ": 1.20093,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.7376,
+        "z": 1.20093,
+        "toX": -0.64453,
+        "toZ": 1.25273,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.64453,
+        "z": 1.25273,
+        "toX": -0.53076,
+        "toZ": 1.30396,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.53076,
+        "z": 1.30396,
+        "toX": -0.40625,
+        "toZ": 1.35312,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.40625,
+        "z": 1.35312,
+        "toX": -0.28096,
+        "toZ": 1.39878,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.28096,
+        "z": 1.39878,
+        "toX": -0.16484,
+        "toZ": 1.43945,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.16484,
+        "z": 1.43945,
+        "toX": -0.06787,
+        "toZ": 1.47368,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.06787,
+        "z": 1.47368,
+        "toX": 0,
+        "toZ": 1.5,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.1,
+        "z": -0.3,
+        "toX": 0.14756,
+        "toZ": -0.24883,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.14756,
+        "z": -0.24883,
+        "toX": 0.21641,
+        "toZ": -0.17969,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.21641,
+        "z": -0.17969,
+        "toX": 0.29893,
+        "toZ": -0.09727,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.29893,
+        "z": -0.09727,
+        "toX": 0.3875,
+        "toZ": -0.00625,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.3875,
+        "z": -0.00625,
+        "toX": 0.47451,
+        "toZ": 0.08867,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.47451,
+        "z": 0.08867,
+        "toX": 0.55234,
+        "toZ": 0.18281,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.55234,
+        "z": 0.18281,
+        "toX": 0.61338,
+        "toZ": 0.27148,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.61338,
+        "z": 0.27148,
+        "toX": 0.65,
+        "toZ": 0.35,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.65,
+        "z": 0.35,
+        "toX": 0.662,
+        "toZ": 0.4572,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.662,
+        "z": 0.4572,
+        "toX": 0.636,
+        "toZ": 0.5536,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.636,
+        "z": 0.5536,
+        "toX": 0.584,
+        "toZ": 0.6464,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.584,
+        "z": 0.6464,
+        "toX": 0.518,
+        "toZ": 0.7428,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.518,
+        "z": 0.7428,
+        "toX": 0.45,
+        "toZ": 0.85,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.45,
+        "z": 0.85,
+        "toX": 0.40264,
+        "toZ": 0.92852,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.40264,
+        "z": 0.92852,
+        "toX": 0.34453,
+        "toZ": 1.01719,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.34453,
+        "z": 1.01719,
+        "toX": 0.27979,
+        "toZ": 1.11133,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.27979,
+        "z": 1.11133,
+        "toX": 0.2125,
+        "toZ": 1.20625,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.2125,
+        "z": 1.20625,
+        "toX": 0.14678,
+        "toZ": 1.29727,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.14678,
+        "z": 1.29727,
+        "toX": 0.08672,
+        "toZ": 1.37969,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.08672,
+        "z": 1.37969,
+        "toX": 0.03643,
+        "toZ": 1.44883,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.03643,
+        "z": 1.44883,
+        "toX": 0,
+        "toZ": 1.5,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.0,
+        "z": 1.5,
+        "toX": -0.02697,
+        "toZ": 1.55984,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.02697,
+        "z": 1.55984,
+        "toX": -0.06852,
+        "toZ": 1.64259,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.06852,
+        "z": 1.64259,
+        "toX": -0.11562,
+        "toZ": 1.74062,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.11562,
+        "z": 1.74062,
+        "toX": -0.15926,
+        "toZ": 1.8463,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.15926,
+        "z": 1.8463,
+        "toX": -0.19039,
+        "toZ": 1.95197,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.19039,
+        "z": 1.95197,
+        "toX": -0.2,
+        "toZ": 2.05,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.2,
+        "z": 2.05,
+        "toX": -0.1809,
+        "toZ": 2.14051,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.1809,
+        "z": 2.14051,
+        "toX": -0.13889,
+        "toZ": 2.22963,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.13889,
+        "z": 2.22963,
+        "toX": -0.08438,
+        "toZ": 2.31875,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.08438,
+        "z": 2.31875,
+        "toX": -0.02778,
+        "toZ": 2.40926,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": -0.02778,
+        "z": 2.40926,
+        "toX": 0.02049,
+        "toZ": 2.50255,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.02049,
+        "z": 2.50255,
+        "toX": 0.05,
+        "toZ": 2.6,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.05,
+        "z": 2.6,
+        "toX": 0.05845,
+        "toZ": 2.71007,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.05845,
+        "z": 2.71007,
+        "toX": 0.0537,
+        "toZ": 2.83333,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.0537,
+        "z": 2.83333,
+        "toX": 0.04063,
+        "toZ": 2.95938,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.04063,
+        "z": 2.95938,
+        "toX": 0.02407,
+        "toZ": 3.07778,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.02407,
+        "z": 3.07778,
+        "toX": 0.00891,
+        "toZ": 3.17813,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      },
+      {
+        "type": "channel",
+        "x": 0.00891,
+        "z": 3.17813,
+        "toX": 0,
+        "toZ": 3.25,
+        "width": 0.24,
+        "amount": 0.18,
+        "sharp": true,
+        "cutDepth": 0.085
+      }
+    ],
+    "microRelief": 0.002
+  },
+  "water": {
+    "waterTable": 0,
+    "springs": [
+      {
+        "x": 0,
+        "z": -3.1,
+        "dischargePerHour": 1.2
+      }
+    ],
+    "flowRate": 0.22,
+    "flowMemorySeconds": 45,
+    "flowResponseSeconds": 30,
+    "streamVelocityThreshold": 0.0001,
+    "evaporationPerDay": 0.004,
+    "infiltrationPerDay": 0.02,
+    "wetDepth": 0.008,
+    "boundaryDrop": 0.35,
+    "subSteps": 2
+  },
+  "placement": {
+    "rocks": 5,
+    "rockMinScale": 0.16,
+    "rockMaxScale": 0.68,
+    "logs": 1,
+    "logMinLength": 1.2,
+    "logMaxLength": 2.3,
+    "logMinRadius": 0.11,
+    "logMaxRadius": 0.22,
+    "gravelPatches": 2,
+    "gravelMinRadius": 0.4,
+    "gravelMaxRadius": 0.95,
+    "spacing": 0.32
+  },
+  "starterFlora": [
+    {
+      "species": "splitcrown",
+      "count": 1
+    },
+    {
+      "species": "vaultfern",
+      "count": 2
+    },
+    {
+      "species": "rainshield",
+      "count": 4
+    },
+    {
+      "species": "lacemantle",
+      "count": 2
+    },
+    {
+      "species": "brooklace",
+      "count": 6
+    },
+    {
+      "species": "velvetweave_moss",
+      "count": 8
+    },
+    {
+      "species": "pearl_cushion_moss",
+      "count": 7
+    },
+    {
+      "species": "veilfern",
+      "count": 6
+    },
+    {
+      "species": "dewbonnet",
+      "count": 6
+    },
+    {
+      "species": "fenbead",
+      "count": 4
+    },
+    {
+      "species": "frosttussock",
+      "count": 4
+    },
+    {
+      "species": "clinglace",
+      "count": 4
+    },
+    {
+      "species": "shadebell",
+      "count": 6
+    },
+    {
+      "species": "ringreed",
+      "count": 8
+    },
+    {
+      "species": "glass_antlers",
+      "count": 6
+    }
+  ],
+  "starterFauna": [
+    {
+      "species": "emberglass_swimmer",
+      "count": 3
+    },
+    {
+      "species": "ghostbristle",
+      "count": 3
+    },
+    {
+      "species": "glintfin",
+      "count": 3
+    },
+    {
+      "species": "rainspine",
+      "count": 3
+    },
+    {
+      "species": "rustcoil",
+      "count": 3
+    },
+    {
+      "species": "prismhopper",
+      "count": 3
+    }
+  ],
+  "faunaBudget": 360
+}

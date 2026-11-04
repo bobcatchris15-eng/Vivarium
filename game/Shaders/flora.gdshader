@@ -17,6 +17,8 @@ render_mode diffuse_burley, cull_disabled;
 uniform float sway = 0.0;
 uniform float stiffness = 1.0;
 uniform int surface_mode = 2;
+uniform bool dewbonnet_gills = false;
+uniform sampler2D dewbonnet_gill_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float ghost_membrane = 0.0; // Species-specific thin fungal membrane lighting, never dewbonnet
 uniform bool deform_leaf_tips = false;
 uniform float review_time = -1.0;
@@ -147,7 +149,7 @@ void fragment() {
         // fungi: matte, faintly translucent flesh; radial gill lines on undersides (UV2.x = 1) and fine
         // concentric growth zones on caps and shelves (UV.x runs from centre to rim)
         float warp = (vnoise(obj_pos.xz * 17.0 + inst.w * 9.0) - 0.5) * 0.12;
-        float gills = UV2.x > 0.5 ? 0.90 + 0.10 * smoothstep(0.35, 0.65, fract((UV.x + warp) * 31.0)) : 1.0;
+        float gills = !dewbonnet_gills && UV2.x > 0.5 ? 0.90 + 0.10 * smoothstep(0.35, 0.65, fract((UV.x + warp) * 31.0)) : 1.0;
         float zones = 0.94 + 0.09 * vnoise(vec2(UV.x * 8.0, UV.y * 5.0) + inst.w * 19.0);
         float flesh = vnoise(obj_pos.xz * 29.0 + inst.w * 11.0);
         c *= gills * zones * (0.88 + 0.16 * flesh);
@@ -155,6 +157,14 @@ void fragment() {
         c *= mix(vec3(1.0), vec3(0.76, 0.71, 0.62), cap_top * 0.82);
         c *= 1.0 - cap_top * 0.12 * smoothstep(0.70, 1.0, UV.y);
         n = normalize(wn + vec3(dFdx(flesh), 0.0, dFdy(flesh)) * colony_relief * 0.35);
+        if (dewbonnet_gills && UV2.x > 0.5 && UV2.x < 1.5) {
+            vec2 gill_uv = vec2(UV.x, UV.y / 16.0);
+            vec3 relief = texture(dewbonnet_gill_normal, gill_uv).rgb * 2.0 - 1.0;
+            float relief_mask = smoothstep(0.025, 0.12, gill_uv.y)
+                * (1.0 - smoothstep(0.96, 1.0, gill_uv.y));
+            relief = normalize(mix(vec3(0.0, 0.0, 1.0), relief, relief_mask));
+            n = surface_normal(wn, world_pos, gill_uv, relief);
+        }
         rough = UV2.x > 0.5 ? 0.93 : mix(0.80, 0.95, flesh);
         // velvety bloom: fine fibrous speckle and a soft grazing-angle sheen instead of a plastic highlight
         float fuzz = vnoise(obj_pos.xy * 140.0 + obj_pos.zy * 97.0 + inst.w * 5.0);
@@ -191,6 +201,13 @@ void fragment() {
             bark_fissure_pbr(c, bn, raw_rgh, buv, u_bark_fissures, bark_weathering, exposure,
                 cork, cork_normal, rough, cork_ao, cork_groove);
             c = cork * cork_ao;
+            if (UV2.x > 2.5) {
+                // Decayed Heartwood / Callus / Hollow Log Interior:
+                // Modulate texture luminance/detail with vertex color (srgb_to_linear(COLOR.rgb) * 1.65),
+                // preserving dark rot gradients, warm amber callus tones, and deep cavity AO.
+                c = c * srgb_to_linear(COLOR.rgb) * 1.65;
+                rough = clamp(rough, 0.84, 0.98);
+            }
             n = stem_surface_normal(wn, world_pos, buv, cork_normal);
         } else if (pitcher_tissue && UV2.y < -1.5 && UV2.y > -3.5) {
             // Trap walls and hoods carry ochre/green/brown living tissue, distinct from the flower.
@@ -408,6 +425,7 @@ void fragment() {
     // A farina-coated blade is dust, not varnish: it keeps almost no specular lobe.
     if (leaf_pattern == 7) leaf_spec = mix(leaf_spec, 0.07, 0.86);
     float bark_spec = mix(0.42, 0.12, smoothstep(0.55, 0.92, rough));
+    if (UV2.x > 2.5) bark_spec = 0.12;
     SPECULAR = surface_mode == 2 ? (woody_surface ? bark_spec : leaf_spec) : surface_mode == 3 ? 0.12 : 0.24;
     float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
     // Foliage (surface_mode 2) transmission is owned by light() in

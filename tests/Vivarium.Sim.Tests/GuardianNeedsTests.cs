@@ -13,7 +13,7 @@ public class GuardianNeedsTests
 {
     private static ContentLibrary Content => ContentLoader.Load(TestUtil.ContentSource);
 
-    private static VivariumWorld CreateWorld(string treeId = "basinwarden", string guardianId = "auto")
+    private static VivariumWorld CreateWorld(string treeId = "basinwarden", string guardianId = GuardianCatalog.Woodland)
     {
         var d = Content.PresetOrThrow("default").Clone();
         d.PilotTreeId = treeId;

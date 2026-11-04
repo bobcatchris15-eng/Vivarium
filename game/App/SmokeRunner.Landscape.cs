@@ -34,6 +34,9 @@ public partial class SmokeRunner
         Session.CameraRig.KeyboardBlocked = true;
         Session.CameraRig.SetProcessUnhandledInput(false);
         W.Clock.Paused = true;
+        W.Scheduler.CompletePendingTick();
+        W.CoverageSystem.WaitPending();
+        W.Liquid.CompletePending();
         // Exactly the same deterministic biological preparation as the reference library.
         long preparationTick = W.Clock.Tick;
         string preparation = System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_PREPARATION") ?? "mature";
@@ -42,6 +45,48 @@ public partial class SmokeRunner
         while (W.Clock.BioDays < preparationBioDays && W.Clock.Tick - preparationTick < 2_000_000)
         {
             W.Step(200); await Frames(1);
+        }
+        // A paused clock does not flush queued asynchronous coverage steps.
+        // Finish them before taking presentation snapshots or cloning this world.
+        W.CoverageSystem.WaitPending();
+        W.Liquid.CompletePending();
+        if (System.Environment.GetEnvironmentVariable("VIVARIUM_REPLAY_CHECK_ONLY") == "1")
+        {
+            // Correctness-only route: no GPU timings or fully published scene required.
+            Session.SetProcess(false);
+            string initialDigest = WorldSerializer.Digest(W);
+            var proof = await AuditLandscapeReplayAsync(initialDigest);
+            if (System.Environment.GetEnvironmentVariable("VIVARIUM_FOLIAGE_OPTIMIZATION_AUDIT") == "1")
+            {
+                var camera = Session.CameraRig;
+                bool oldBlur = camera.DistanceBlur;
+                float oldAmount = camera.DistanceBlurAmount;
+                var eye = camera.Cam.GlobalPosition;
+                var target = eye - camera.Cam.GlobalBasis.Z * 20;
+                try
+                {
+                    camera.DistanceBlur = true; camera.DistanceBlurAmount = .008f;
+                    camera.Focus(() => target, 20); camera._Process(1.0 / 60);
+                    var attr = Session.EnvRig.CameraAttributes;
+                    Check("subtle blur keeps focused subject and foreground sharp", attr.DofBlurFarEnabled
+                        && !attr.DofBlurNearEnabled && attr.DofBlurFarDistance >= 20
+                        && Math.Abs(attr.DofBlurAmount - .008f) < 1e-6f && attr.DofBlurFarTransition == 12);
+                    camera.DistanceBlur = false; camera._Process(1.0 / 60);
+                    Check("distance blur disables completely", !attr.DofBlurFarEnabled && !attr.DofBlurNearEnabled && attr.DofBlurAmount == 0);
+                }
+                finally
+                {
+                    camera.DistanceBlur = oldBlur; camera.DistanceBlurAmount = oldAmount;
+                    camera.LookAtPoint(eye, target);
+                }
+            }
+            File.WriteAllText(Path.Combine(OutDir, "same-tick-replay-check.json"), JsonSerializer.Serialize(new {
+                initial_digest = initialDigest, reload_digest = proof.Reload,
+                replay_expected_digest = proof.Expected, replay_actual_digest = proof.Actual,
+                ticks = 3, scope = "Game replay correctness only; no rendering performance claim"
+            }, new JsonSerializerOptions { WriteIndented = true }));
+            GD.Print("LANDSCAPE_REPLAY_CHECK_COMPLETE");
+            return;
         }
         // Initial mesh publication can take longer than a fixed warmup. Never
         // label a partially drawn population as steady-state render performance.
@@ -94,6 +139,11 @@ public partial class SmokeRunner
         before = WorldSerializer.Digest(W);
         FrameProfiler.TakeStructuredReport();
         FrameProfiler.Reset();
+        long floraUploadsBefore = Session.Flora.InstanceBufferUploads;
+        long floraUploadSkipsBefore = Session.Flora.InstanceBufferUploadSkips;
+        long floraUploadBytesBefore = Session.Flora.InstanceBufferUploadBytes;
+        long waterUniformWritesBefore = Session.WaterFluid.UniformWrites;
+        long waterUniformSkipsBefore = Session.WaterFluid.UniformWriteSkips;
         var measuredViewport = GetViewport().GetViewportRid();
         var measuredSettings = new { width = GetWindow().Size.X, height = GetWindow().Size.Y, renderer = RenderingServer.GetCurrentRenderingMethod(), adapter = RenderingServer.GetVideoAdapterName(), quality = Session.Settings.Quality, vsync = DisplayServer.WindowGetVsyncMode().ToString(), msaa = GetViewport().Msaa3D.ToString(), screen_aa = GetViewport().ScreenSpaceAA.ToString(), scale = GetViewport().Scaling3DScale, presentation_options = new { Session.Settings.ReducedDistantPlants, Session.Settings.DistanceBlur, Session.Settings.SimpleFoliageLighting, Session.Settings.GlobalIllumination, Session.Settings.FineIndirectLighting, Session.Settings.DynamicShadows, Session.Settings.AmbientOcclusion, Session.Settings.VolumetricMist }, indirect_lighting = new { cascades = Session.EnvRig.Env.SdfgiCascades, cell_size = Session.EnvRig.Env.SdfgiMinCellSize, max_distance = Session.EnvRig.Env.SdfgiMaxDistance }, flora_tiers = "projected-size hysteresis, optional 6m/12m distance bands", flags = CaptureRenderFlags(), display = DisplayServer.GetName() };
         RenderingServer.ViewportSetMeasureRenderTime(measuredViewport, true);
@@ -195,6 +245,11 @@ public partial class SmokeRunner
             audited_pixels = Session.Island.GravelMaskAuditedPixels, differences = Session.Island.GravelMaskAuditDifferences
         };
         var surfaceDetail = new {
+            flora_buffer_uploads = Session.Flora.InstanceBufferUploads - floraUploadsBefore,
+            flora_buffer_upload_skips = Session.Flora.InstanceBufferUploadSkips - floraUploadSkipsBefore,
+            flora_buffer_upload_bytes = Session.Flora.InstanceBufferUploadBytes - floraUploadBytesBefore,
+            water_uniform_writes = Session.WaterFluid.UniformWrites - waterUniformWritesBefore,
+            water_uniform_write_skips = Session.WaterFluid.UniformWriteSkips - waterUniformSkipsBefore,
             ambient_refreshes = Session.AmbientGround.RefreshCount - ambientRefreshesBefore,
             loam_patch_rebuilds = Session.SoilDetail.LoamDetails.RebuildCount - loamRebuildsBefore,
             ambient_instances = Session.AmbientGround.LastGroundcoverInstances,
@@ -213,11 +268,25 @@ public partial class SmokeRunner
             JsonSerializer.Serialize(raw, new { duration_seconds = measuredSeconds, render_settings = measuredSettings, samples_ms = frames, windows, memory, cpu, counters, hitch_frames = hitchFrames, digest_before = before, gpu_samples_ms = gpuFrames, render_cpu_samples_ms = renderCpuFrames, cpu_scope_per_frame_ms = scopePerFrame, terrain_cache = terrainCache, surface_detail = surfaceDetail }, new JsonSerializerOptions { WriteIndented = true });
         if (System.Environment.GetEnvironmentVariable("VIVARIUM_SURFACE_EVENT_AUDIT") == "1")
             await AuditSurfaceCacheAsync();
+        if (System.Environment.GetEnvironmentVariable("VIVARIUM_FLORA_UPLOAD_AUDIT") == "1")
+        {
+            Session.Flora.AuditInstanceUploadCache();
+            Session.WaterFluid.AuditUniformCache();
+        }
         if (System.Environment.GetEnvironmentVariable("VIVARIUM_WATER_TILE_AUDIT") == "1")
         {
             var tiles = Session.WaterFluid.AuditPublishedTextures();
             Check("water active tiles, halos and uploaded textures match reference", tiles.Tiles > 0 && tiles.Mismatches == 0);
             File.WriteAllText(Path.Combine(OutDir, "water-tile-audit.json"), JsonSerializer.Serialize(tiles, new JsonSerializerOptions { IncludeFields = true }));
+        }
+        if (System.Environment.GetEnvironmentVariable("VIVARIUM_GUARDIAN_SKIN_TRANSFORM_BENCHMARK") == "1" && Session.Guardian.SkinContact is { } skin)
+        {
+            var result = skin.BenchmarkSkinTransforms();
+            Check("guardian skin transform cache matches reference", result.Samples > 0 && result.Mismatches == 0);
+            File.WriteAllText(Path.Combine(OutDir, "guardian-skin-transform-benchmark.json"), JsonSerializer.Serialize(new {
+                samples = result.Samples, evaluations = result.Evaluations, reference_start_ms = result.ReferenceStartMs,
+                cached_ms = result.CachedMs, reference_end_ms = result.ReferenceEndMs, mismatches = result.Mismatches
+            }, new JsonSerializerOptions { WriteIndented = true }));
         }
         string after = WorldSerializer.Digest(W);
         if (System.Environment.GetEnvironmentVariable("VIVARIUM_LOAM_BATCH_AUDIT") == "1")
@@ -247,7 +316,7 @@ public partial class SmokeRunner
         int floraAfter = W.Flora.Count, faunaAfter = W.Fauna.Count;
         W.Clock.Paused = true;
         Session.SetProcess(false);
-        W.Scheduler.CompletePendingTick(); W.Liquid.CompletePending();
+        W.Scheduler.CompletePendingTick(); W.CoverageSystem.WaitPending(); W.Liquid.CompletePending();
         // Frozen counterpart for live/sculpt: digest remains invariant during camera/light/quality changes.
         string renderOnlyBefore = WorldSerializer.Digest(W);
         foreach (var s in scenes)
@@ -296,31 +365,7 @@ public partial class SmokeRunner
         Session.EnvRig.BenchmarkLightSeconds = 900; await Frames(2);
         Session.EnvRig.BenchmarkLightSeconds = 420; await Frames(2);
         string renderOnlyAfter = WorldSerializer.Digest(W);
-        var replay = WorldSerializer.Deserialize(W.Content, WorldSerializer.Serialize(W));
-        replay.CoverageSystem.AsyncMode = false;
-        W.CoverageSystem.AsyncMode = false;
-        string reloadDigest = WorldSerializer.Digest(replay);
-        Check("prepared state reload digest invariant", reloadDigest == renderOnlyAfter);
-        for (int i = 0; i < 3; i++)
-        {
-            W.Step(1); replay.Step(1);
-            Session.Settings.Quality = i; Session.ApplySettings();
-            Session.EnvRig.BenchmarkLightSeconds = 420 + i * 240;
-            Session.CameraRig.LookAtPoint(new Vector3(i, 5, 9), Vector3.Zero);
-            await Frames(2);
-        }
-        string replayExpected = WorldSerializer.Digest(replay), replayActual = WorldSerializer.Digest(W);
-        if (replayExpected != replayActual)
-        {
-            var actualParts = WorldSerializer.Serialize(W);
-            var expectedParts = WorldSerializer.Serialize(replay);
-            var differences = actualParts.Keys.Where(k => !actualParts[k].SequenceEqual(expectedParts[k])).ToArray();
-            File.WriteAllText(Path.Combine(OutDir, "replay-differences.json"), JsonSerializer.Serialize(new {
-                tick = W.Clock.Tick, differences, aquatic_actual_step = W.AquaticSystem.StepIndex,
-                aquatic_expected_step = replay.AquaticSystem.StepIndex
-            }, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        Check("render settings/camera/light preserve same-tick ecology", replayExpected == replayActual);
+        var (reloadDigest, replayExpected, replayActual) = await AuditLandscapeReplayAsync(renderOnlyAfter);
         Session.Settings.Quality = benchmarkQuality; Session.ApplySettings(); Session.EnvRig.BenchmarkLightSeconds = 420;
         var sorted = frames.OrderBy(x => x).ToArray();
         double P(double q) => sorted[Math.Min(sorted.Length - 1, (int)(sorted.Length * q))];
@@ -357,6 +402,36 @@ public partial class SmokeRunner
             Check("terrain gravel cache audit executed", terrainCache.audited_pixels > 0 && terrainCache.reuses > 0);
         if (!evolves && scenario != "sculpt") Check("measurement digest invariant", before == after);
         Check("landscape captures available", DisplayServer.GetName() != "headless" && captureIndex > 0);
+    }
+
+    private async Task<(string Reload, string Expected, string Actual)> AuditLandscapeReplayAsync(string initialDigest)
+    {
+        var replay = WorldSerializer.Deserialize(W.Content, WorldSerializer.Serialize(W));
+        replay.CoverageSystem.AsyncMode = false;
+        W.CoverageSystem.AsyncMode = false;
+        string reloadDigest = WorldSerializer.Digest(replay);
+        Check("prepared state reload digest invariant", reloadDigest == initialDigest);
+        for (int i = 0; i < 3; i++)
+        {
+            W.Step(1); replay.Step(1);
+            Session.Settings.Quality = i; Session.ApplySettings();
+            Session.EnvRig.BenchmarkLightSeconds = 420 + i * 240;
+            Session.CameraRig.LookAtPoint(new Vector3(i, 5, 9), Vector3.Zero);
+            await Frames(2);
+        }
+        string expected = WorldSerializer.Digest(replay), actual = WorldSerializer.Digest(W);
+        if (expected != actual)
+        {
+            var actualParts = WorldSerializer.Serialize(W);
+            var expectedParts = WorldSerializer.Serialize(replay);
+            var differences = actualParts.Keys.Where(k => !actualParts[k].SequenceEqual(expectedParts[k])).ToArray();
+            File.WriteAllText(Path.Combine(OutDir, "replay-differences.json"), JsonSerializer.Serialize(new {
+                tick = W.Clock.Tick, differences, aquatic_actual_step = W.AquaticSystem.StepIndex,
+                aquatic_expected_step = replay.AquaticSystem.StepIndex
+            }, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        Check("render settings/camera/light preserve same-tick ecology", expected == actual);
+        return (reloadDigest, expected, actual);
     }
 
     private async Task SettleSurfaceDetailsAsync()

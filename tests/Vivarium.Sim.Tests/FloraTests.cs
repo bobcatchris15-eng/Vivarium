@@ -506,7 +506,7 @@ public class FloraTests
         var w = TestUtil.FlatWorld(51);
         TestUtil.Condition(w, 0.55, 0.6, 1.0);
         Assert.Equal(4, w.FloraSystem.WoodyPopulationCap(WoodyLayer.Tree));   // 10 m hex ≈ 65 m² / 15
-        Assert.Equal(16, w.FloraSystem.WoodyPopulationCap(WoodyLayer.Shrub));
+        Assert.Equal(int.MaxValue, w.FloraSystem.WoodyPopulationCap(WoodyLayer.Shrub)); // shrubs carry no island carrying limit
 
         var shrub = Sp("embercrown");
         foreach (double x in new[] { -2.25, -0.75, 0.75, 2.25 })
@@ -514,8 +514,9 @@ public class FloraTests
                 w.FloraSystem.Establish(shrub, new Vec2(x, z), "budget fixture", shrub.MaxBiomass);
         Assert.Equal(16, w.FloraSystem.WoodyPopulation(WoodyLayer.Shrub));
         Assert.Equal(0, w.FloraSystem.WoodyPopulation(WoodyLayer.Tree));
-        Assert.False(w.FloraSystem.CanEstablish(Sp("lanternbrush"), new Vec2(0, 3.6), out var why));
-        Assert.Contains("carrying limit", why);
+        // Shrubs are uncapped, so another shrub is not refused for a carrying limit.
+        Assert.True(w.FloraSystem.CanEstablish(Sp("lanternbrush"), new Vec2(0, 3.6), out var why), why);
+        Assert.DoesNotContain("carrying limit", why);
     }
 
     [Fact]

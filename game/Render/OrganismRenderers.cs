@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Godot;
 using Vivarium.Game.App;
@@ -19,10 +20,11 @@ namespace Vivarium.Game.Render;
 /// </summary>
 public partial class FloraRenderer : Node3D
 {
-    // Fewer lengthwise gill segments only on the far Dewbonnet mesh.
-    // Cap silhouettes, gill counts and both closer tiers stay unchanged.
+    // Legacy diagnostic parameter; Dewbonnet gills now use a normal map at every tier.
     internal const int DistantGillStations = 3;
     internal const int DistantEmberMicroSides = 3;
+    // Far caps retain their angular rim; only radial surface tessellation changes.
+    internal const int DistantDewbonnetCapRings = 4;
     private VivariumWorld _w = null!;
     private const int DefaultMorphVariants = 5;
     private const int MigratedMorphVariants = 12;
@@ -62,10 +64,12 @@ public partial class FloraRenderer : Node3D
         }
     }
     private Vector3 _detailCameraPosition, _detailCameraForward;
+    private Vector3 _detailGuardianPosition;
     private float _detailPixels, _detailOrthoSize;
     private bool _detailOrthogonal;
     private void CaptureDetailCamera()
     {
+        _detailGuardianPosition = _w.Guardian is { } guardian ? Bridge.V(guardian.Position) : Vector3.Zero;
         if (Camera == null) return;
         _detailCameraPosition = Camera.GlobalPosition; _detailCameraForward = -Camera.GlobalBasis.Z;
         float viewport = Camera.GetViewport().GetVisibleRect().Size.Y;
@@ -73,7 +77,7 @@ public partial class FloraRenderer : Node3D
         _detailOrthoSize = Camera.Size;
         _detailPixels = _detailOrthogonal ? viewport : viewport / (2f*MathF.Tan(Mathf.DegToRad(Camera.Fov)*.5f));
     }
-    private static string MorphKey(string species, int variant) => species + "\u001f" + variant;
+    private static (string Species, int Variant) MorphKey(string species, int variant) => (species, variant);
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<EntityId, double> _wobbleStart = new();
     public RenderDirtyRegions DirtyRegions { get; } = new(tileSize: 2.0f);
@@ -227,6 +231,7 @@ public int Quality
                 variant.Full.Multimesh.InstanceCount = 0;
                 if (variant.Fruit != null) { variant.Fruit.Multimesh.VisibleInstanceCount = 0; variant.Fruit.Multimesh.InstanceCount = 0; }
                 if (variant.Juvenile != null) { variant.Juvenile.Multimesh.VisibleInstanceCount = 0; variant.Juvenile.Multimesh.InstanceCount = 0; }
+                if (variant.Tendril != null) { variant.Tendril.Multimesh.VisibleInstanceCount = 0; variant.Tendril.Multimesh.InstanceCount = 0; }
             }
             if (layer.Veins != null) { layer.Veins.Multimesh.VisibleInstanceCount = 0; layer.Veins.Multimesh.InstanceCount = 0; }
         }
@@ -361,7 +366,7 @@ public int Quality
             // Calibration and parametric tessellation are pure managed work. Never block input/rendering on them.
             tasks.Add(Task.Run(() =>
             {
-                var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null, farGillStations: DistantGillStations, farEmberMicroSides: DistantEmberMicroSides);
+                var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null, farGillStations: DistantGillStations, farEmberMicroSides: DistantEmberMicroSides, farDewbonnetCapRings: DistantDewbonnetCapRings);
                 MeshData? youngMesh = sp.Shape.StartsWith("microcanopy_", StringComparison.Ordinal) || sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
                     ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
                     : null;
@@ -545,7 +550,9 @@ public int Quality
             bool cameraChanged = Camera != null &&
                 (Camera.GlobalPosition.DistanceSquaredTo(_detailCameraPosition) > .25f ||
                  (-Camera.GlobalBasis.Z).Dot(_detailCameraForward) < .995f);
-            if (_accum < (cameraChanged ? .2 : 4.0)) return;
+            bool guardianMoved = _w.Guardian is { } guardian
+                && Bridge.V(guardian.Position).DistanceSquaredTo(_detailGuardianPosition) > .0225f;
+            if (_accum < (cameraChanged || guardianMoved ? .2 : 4.0)) return;
             _accum = 0;
             _refresh = Refresh().GetEnumerator();
         }
@@ -608,7 +615,8 @@ public int Quality
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
     }
 
-    private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _juvenile = new(), _veins = new(), _tendrils = new();
+    private readonly Dictionary<(string, int), (List<Transform3D> T, List<Color> Tint, List<Color> C)> _full = new(), _fruit = new(), _juvenile = new(), _tendrils = new();
+    private readonly Dictionary<string, (List<Transform3D> T, List<Color> Tint, List<Color> C)> _veins = new();
 
     /// <summary>
     /// Where a climber or bracket attaches: the nearest log or rock (sim angle toward it from p, its top height,
@@ -762,15 +770,7 @@ public int Quality
             foreach (var id in removed) _prevPlantStates.Remove(id);
         }
 
-        foreach (var k in _layers.Keys)
-            for (int v = 0; v < _layers[k].Variants.Length; v++)
-            {
-                var mk = MorphKey(k, v);
-                var fl = Get(_full, mk); fl.T.Clear(); fl.Tint.Clear(); fl.C.Clear();
-                var fr = Get(_fruit, mk); fr.T.Clear(); fr.Tint.Clear(); fr.C.Clear();
-                var ju = Get(_juvenile, mk); ju.T.Clear(); ju.Tint.Clear(); ju.C.Clear();
-                var td = Get(_tendrils, mk); td.T.Clear(); td.Tint.Clear(); td.C.Clear();
-            }
+        ClearBuckets(_full); ClearBuckets(_fruit); ClearBuckets(_juvenile); ClearBuckets(_tendrils);
         int visible = 0;
         long triangles = 0;
         foreach (var f in _snapshot)
@@ -1074,12 +1074,12 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             {
                 yield return true;
                 var vl = layer.Variants[v];
-                string mk = MorphKey(id, v);
+                var mk = MorphKey(id, v);
                 // Full and fruit share one upload step: a phase change never briefly draws both forms.
-                Fill(vl.Full.Multimesh, Get(_full, mk));
-                if (vl.Fruit != null) Fill(vl.Fruit.Multimesh, Get(_fruit, mk));
-                if (vl.Juvenile != null) Fill(vl.Juvenile.Multimesh, Get(_juvenile, mk));
-                if (vl.Tendril != null) Fill(vl.Tendril.Multimesh, Get(_tendrils, mk));
+                FillBucket(vl.Full.Multimesh, _full, mk);
+                if (vl.Fruit != null) FillBucket(vl.Fruit.Multimesh, _fruit, mk);
+                if (vl.Juvenile != null) FillBucket(vl.Juvenile.Multimesh, _juvenile, mk);
+                if (vl.Tendril != null) FillBucket(vl.Tendril.Multimesh, _tendrils, mk);
                 triangles += (long)PublishedCount(vl.Full.Multimesh) * vl.FullTris
                     + (vl.Fruit != null ? (long)PublishedCount(vl.Fruit.Multimesh) * vl.FruitTris : 0)
                     + (vl.Juvenile != null ? (long)PublishedCount(vl.Juvenile.Multimesh) * vl.JuvenileTris : 0)
@@ -1244,6 +1244,17 @@ if (!_layers.ContainsKey(sp.Id)) continue;
     {
         if (Camera == null) return 0;
         float bound = 2f * MathF.Sqrt(radius * radius + height * height * .25f);
+        // Keep the physical interaction neighbourhood on the authored mesh, even in a distant view.
+        // The larger exit radius prevents detail flicker as the guardian moves along a plant edge.
+        if (_w.Guardian is { } guardian)
+        {
+            float reach = (_visualTiers.GetValueOrDefault(id, -1) == 0 ? 1.3f : 1f) + bound * .5f;
+            if ((position + Vector3.Up * height * .5f).DistanceSquaredTo(Bridge.V(guardian.Position)) <= reach * reach)
+            {
+                _visualTiers[id] = 0;
+                return 0;
+            }
+        }
         Vector3 toCam = position + Vector3.Up * height * .5f - _detailCameraPosition;
         float forwardDepth = toCam.Dot(_detailCameraForward);
         float dist = toCam.Length();
@@ -1286,7 +1297,19 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         return true;
     }
 
-    private static (List<Transform3D> T, List<Color> Tint, List<Color> C) Get(Dictionary<string, (List<Transform3D>, List<Color>, List<Color>)> d, string k)
+    private static void ClearBuckets<TKey>(Dictionary<TKey, (List<Transform3D> T, List<Color> Tint, List<Color> C)> buckets) where TKey : notnull
+    {
+        foreach (var b in buckets.Values) { b.T.Clear(); b.Tint.Clear(); b.C.Clear(); }
+    }
+
+    private void FillBucket<TKey>(MultiMesh mesh, Dictionary<TKey, (List<Transform3D> T, List<Color> Tint, List<Color> C)> buckets, TKey key) where TKey : notnull
+    {
+        // Entries remain after clearing, so a previously visible bucket still submits its zero count.
+        // A missing entry has never been published and needs no lists or pooled upload buffer.
+        if (buckets.TryGetValue(key, out var data)) Fill(mesh, data);
+    }
+
+    private static (List<Transform3D> T, List<Color> Tint, List<Color> C) Get<TKey>(Dictionary<TKey, (List<Transform3D>, List<Color>, List<Color>)> d, TKey k) where TKey : notnull
     {
         if (!d.TryGetValue(k, out var v)) d[k] = v = (new List<Transform3D>(), new List<Color>(), new List<Color>());
         return v;
@@ -1298,9 +1321,12 @@ if (!_layers.ContainsKey(sp.Id)) continue;
     private sealed class PooledMultiMeshBuffer
     {
         public float[] Buffer = Array.Empty<float>();
+        private float[] _uploaded = Array.Empty<float>();
         public int Capacity;
         public int VisibleCount;
         public long UploadRevision;
+        public long SkippedUploads;
+        public long UploadedBytes;
 
         public void EnsureCapacity(MultiMesh mm, int needed)
         {
@@ -1318,20 +1344,73 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             }
         }
 
-        public void Upload(MultiMesh mm, int count)
+        public void Upload(MultiMesh mm, int count, bool reuse = true)
         {
             using var uploadProfile=FrameProfiler.Measure("Flora.BufferUpload");
+            // Compare the actual packed bytes, including transform, tint and custom
+            // data. Simulation revisions alone do not describe all visual inputs.
+            // Capacity changes invalidate native storage even if active data matches.
+            bool unchanged = count == VisibleCount && _uploaded.Length == Buffer.Length
+                && MemoryMarshal.AsBytes(Buffer.AsSpan(0, count * 20)).SequenceEqual(
+                    MemoryMarshal.AsBytes(_uploaded.AsSpan(0, count * 20)));
+            if (reuse && unchanged)
+            {
+                SkippedUploads++;
+                return;
+            }
             UploadRevision++;
             VisibleCount = count;
             mm.VisibleInstanceCount = count;
             if (count > 0)
             {
                 mm.Buffer = Buffer;
+                UploadedBytes += (long)Buffer.Length * sizeof(float);
+                if (_uploaded.Length != Buffer.Length) _uploaded = new float[Buffer.Length];
+                Buffer.AsSpan(0, count * 20).CopyTo(_uploaded);
             }
         }
     }
 
     private readonly Dictionary<MultiMesh, PooledMultiMeshBuffer> _pooledBuffers = new();
+    public bool ReuseInstanceBuffers { get; set; } = true;
+    public long InstanceBufferUploads => _pooledBuffers.Values.Sum(b => b.UploadRevision);
+    public long InstanceBufferUploadSkips => _pooledBuffers.Values.Sum(b => b.SkippedUploads);
+    public long InstanceBufferUploadBytes => _pooledBuffers.Values.Sum(b => b.UploadedBytes);
+
+    /// <summary>Native storage regression audit, outside the measured frame window.</summary>
+    public void AuditInstanceUploadCache()
+    {
+        using var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseColors = true, UseCustomData = true };
+        var cache = new PooledMultiMeshBuffer();
+        void Publish(int count, bool expectSkip)
+        {
+            long revisions = cache.UploadRevision, skips = cache.SkippedUploads;
+            cache.Upload(mm, count);
+            if (cache.UploadRevision != revisions + (expectSkip ? 0 : 1)
+                || cache.SkippedUploads != skips + (expectSkip ? 1 : 0)
+                || mm.VisibleInstanceCount != count)
+                throw new InvalidOperationException("Flora upload cache transition mismatch");
+            if (count > 0 && !MemoryMarshal.AsBytes(mm.Buffer.AsSpan(0, count * 20)).SequenceEqual(
+                    MemoryMarshal.AsBytes(cache.Buffer.AsSpan(0, count * 20))))
+                throw new InvalidOperationException("Flora upload cache native byte mismatch");
+        }
+        cache.EnsureCapacity(mm, 2);
+        for (int i = 0; i < 40; i++) cache.Buffer[i] = i * .03125f;
+        Publish(2, false); Publish(2, true);
+        foreach (int channel in new[] { 3, 12, 18 }) // position, tint, interaction custom data
+        {
+            cache.Buffer[channel] += .125f;
+            Publish(2, false); Publish(2, true);
+        }
+        Publish(1, false); Publish(1, true);
+        Publish(2, false); Publish(2, true);
+        Publish(0, false); Publish(0, true);
+        Publish(2, false);
+        cache.EnsureCapacity(mm, mm.InstanceCount + 1);
+        Publish(2, false); Publish(2, true);
+        GD.Print("FLORA_UPLOAD_CACHE_AUDIT_OK transitions=17 native_bytes=exact");
+    }
     private int PublishedCount(MultiMesh mm) => _pooledBuffers.TryGetValue(mm, out var buffer) ? buffer.VisibleCount : 0;
 
     public sealed record TriangleContribution(string Species, int Tier, int Variant, string Organ,
@@ -1405,7 +1484,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                 buf[o + 16] = c.R; buf[o + 17] = c.G; buf[o + 18] = c.B; buf[o + 19] = c.A;
             }
         }
-        pb.Upload(mm, n);
+        pb.Upload(mm, n, ReuseInstanceBuffers);
     }
 }
 

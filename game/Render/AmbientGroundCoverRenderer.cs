@@ -28,8 +28,8 @@ public partial class AmbientGroundCoverRenderer : Node3D
     private Vector3 _lastCam = new(float.MaxValue, 0, 0);
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
-    private const float CullRadius = 11.5f;
-    private const float FadeStart = 8.0f;
+    private const float CullRadius = 8.0f;
+    private const float FadeStart = 5.5f;
     public int LastGroundcoverInstances { get; private set; }
     public int LastInfluencedGridCells { get; private set; }
     public int LastFloraExclusionCandidateChecks { get; private set; }

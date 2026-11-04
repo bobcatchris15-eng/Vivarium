@@ -133,17 +133,13 @@ public class PilotTreeTests
     }
 
     [Fact]
-    public void GenuineSchemaTwoSaveMigratesWithoutAddingTree()
+    public void GenuineSchemaTwoSaveIsRejectedWithoutBuildingAWorld()
     {
         string path = Path.Combine(TestUtil.RepoRoot, "tests", "Vivarium.Sim.Tests", "Fixtures", "pilot-legacy-schema2.vivsave");
         var result = SaveSystem.Load(TestUtil.Content, path);
-        Assert.True(result.Ok, result.Message);
-        Assert.Equal(SaveCompatibility.Migratable, result.Compatibility);
-        Assert.Null(result.World!.PilotTree);
-        Assert.Equal("none", result.World.Descriptor.PilotTreeId);
-        Assert.Equal(424242UL, result.World.Seed);
-        Assert.NotEmpty(result.Manifest!.AppliedMigrations);
-        Assert.Empty(result.World.CheckInvariants());
+        Assert.False(result.Ok);
+        Assert.Equal(SaveCompatibility.UnsupportedOlder, result.Compatibility);
+        Assert.Null(result.World);
     }
     [Fact]
     public void PilotWoodSupportsLogHostsAndShrubsHaveNoCarryingCap()

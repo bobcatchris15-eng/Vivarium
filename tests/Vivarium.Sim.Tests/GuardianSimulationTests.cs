@@ -14,12 +14,42 @@ public class GuardianSimulationTests
     private static ContentLibrary Content => ContentLoader.Load(TestUtil.ContentSource);
 
     [Fact]
+    public void ApprovedRosterContainsTenDistinctSelectableGuardians()
+    {
+        Assert.Equal(10, GuardianCatalog.All.Count);
+        Assert.Equal(10, GuardianCatalog.All.Select(g => g.Id).Distinct().Count());
+        Assert.Equal(10, GuardianCatalog.All.Select(g => g.Archetype).Distinct().Count());
+        foreach (var id in new[] { GuardianCatalog.Fernback, GuardianCatalog.Dewhorn,
+            GuardianCatalog.Hushbill, GuardianCatalog.Ruffleback })
+            Assert.NotNull(GuardianCatalog.Find(id));
+    }
+
+    [Theory]
+    [InlineData(GuardianCatalog.Fernback)]
+    [InlineData(GuardianCatalog.Dewhorn)]
+    [InlineData(GuardianCatalog.Hushbill)]
+    [InlineData(GuardianCatalog.Ruffleback)]
+    public void NewGuardianSelectionSpawnsAndSurvivesSaveLoadWithoutATree(string id)
+    {
+        var descriptor = Content.PresetOrThrow("default").Clone();
+        descriptor.GuardianId = id;
+        descriptor.PilotTreeId = "none";
+        var world = VivariumWorld.Create(Content, descriptor);
+        Assert.Equal(id, world.Guardian!.ArchetypeId);
+        Assert.Equal(GuardianCatalog.Find(id)!.Archetype, VivariumWorld.GuardianArchetypeFor(descriptor));
+        var loaded = WorldSerializer.Deserialize(Content, WorldSerializer.Serialize(world));
+        Assert.Equal(id, loaded.Guardian!.ArchetypeId);
+        Assert.Equal(id, loaded.Descriptor.GuardianId);
+        Assert.Null(loaded.PilotTree);
+    }
+
+    [Fact]
     public void SatisfiedGuardiansKeepAnIslandDestinationAndChooseAnotherOnArrival()
     {
         foreach (var def in GuardianCatalog.All)
         {
             var descriptor = Content.PresetOrThrow("default").Clone();
-            descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            descriptor.PilotTreeId = "basinwarden";
             descriptor.GuardianId = def.Id;
             var world = VivariumWorld.Create(Content, descriptor);
             var g = world.Guardian!;
@@ -49,7 +79,7 @@ public class GuardianSimulationTests
         foreach (var def in GuardianCatalog.All)
         {
             var descriptor = Content.PresetOrThrow("default").Clone();
-            descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            descriptor.PilotTreeId = "basinwarden";
             descriptor.GuardianId = def.Id;
             var world = VivariumWorld.Create(Content, descriptor);
             var guardian = world.Guardian!;
@@ -77,7 +107,7 @@ public class GuardianSimulationTests
         foreach (var def in GuardianCatalog.All)
         {
             var descriptor = Content.PresetOrThrow("default").Clone();
-            descriptor.PilotTreeId = def.AssociatedPilotTreeId;
+            descriptor.PilotTreeId = "basinwarden";
             descriptor.GuardianId = def.Id;
             var world = VivariumWorld.Create(Content, descriptor);
             var g = world.Guardian!;
@@ -111,38 +141,32 @@ public class GuardianSimulationTests
     }
 
     [Fact]
-    public void CatalogMapsAllSixPilotTreesToOneToOneGuardians()
+    public void EveryGuardianCanBeSelectedWithEveryTreeOrNoTree()
     {
-        Assert.Equal(6, GuardianCatalog.All.Count);
-        Assert.True(PilotTreeCatalog.All.Count >= 6);
-
+        var descriptor = Content.PresetOrThrow("default").Clone();
         foreach (var guardian in GuardianCatalog.All)
+        foreach (var treeId in PilotTreeCatalog.All.Select(t => t.Id).Append("none").Append("random"))
         {
-            var tree = PilotTreeCatalog.Find(guardian.AssociatedPilotTreeId);
-            Assert.NotNull(tree);
-            Assert.Equal(guardian.AssociatedPilotTreeId, tree.Id);
-            Assert.Equal(guardian, GuardianCatalog.ForPilotTree(tree.Id));
+            descriptor.PilotTreeId = treeId;
+            descriptor.GuardianId = guardian.Id;
+            Assert.Empty(descriptor.Validate());
+            Assert.Equal(guardian.Id, GuardianCatalog.SeededGuardianFormId(descriptor));
+            descriptor.GuardianId = guardian.Archetype;
+            Assert.Equal(guardian.Id, GuardianCatalog.SeededGuardianFormId(descriptor));
         }
-
-        Assert.Equal(GuardianCatalog.CrestedCanopy, GuardianCatalog.ForPilotTree("crowncoil")!.Id);
-        Assert.Equal(GuardianCatalog.ArmoredForest, GuardianCatalog.ForPilotTree("gloomspire")!.Id);
-        Assert.Equal(GuardianCatalog.CanopySerpent, GuardianCatalog.ForPilotTree("needlevault")!.Id);
-        Assert.Equal(GuardianCatalog.GreatGround, GuardianCatalog.ForPilotTree("emberpillar")!.Id);
-        Assert.Equal(GuardianCatalog.Woodland, GuardianCatalog.ForPilotTree("basinwarden")!.Id);
-        Assert.Equal(GuardianCatalog.QuilledArboreal, GuardianCatalog.ForPilotTree("palehollow")!.Id);
     }
 
     [Fact]
-    public void WorldCreationSpawnsAssociatedGuardianForPilotTree()
+    public void WorldCreationSpawnsTheSelectedGuardian()
     {
         var d = Content.PresetOrThrow("default").Clone();
-        d.PilotTreeId = "emberpillar"; // redwood -> monitor lizard
-        d.GuardianId = "auto";
+        d.PilotTreeId = "emberpillar";
+        d.GuardianId = GuardianCatalog.Woodland;
 
         var w = VivariumWorld.Create(Content, d);
         Assert.NotNull(w.PilotTree);
         Assert.NotNull(w.Guardian);
-        Assert.Equal(GuardianCatalog.GreatGround, w.Guardian.ArchetypeId);
+        Assert.Equal(GuardianCatalog.Woodland, w.Guardian.ArchetypeId);
         Assert.Equal("emberpillar", w.Guardian.HomeTreeId);
         Assert.True(w.Domain.Contains(w.Guardian.PositionXZ));
         Assert.True(w.Guardian.Energy > 0);
@@ -152,7 +176,7 @@ public class GuardianSimulationTests
     public void GuardianStateSurvivesSerializationAndDeserialization()
     {
         var d = Content.PresetOrThrow("default").Clone();
-        d.PilotTreeId = "basinwarden"; // broadleaf -> coati
+        d.PilotTreeId = "basinwarden";
         d.GuardianId = GuardianCatalog.Woodland;
         var w = VivariumWorld.Create(Content, d);
         Assert.NotNull(w.Guardian);
@@ -186,7 +210,7 @@ public class GuardianSimulationTests
     {
         foreach (var def in GuardianCatalog.All)
         {
-            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId; d.GuardianId = def.Id;
+            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = "basinwarden"; d.GuardianId = def.Id;
             var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
             g.Position = new Vec3(0, w.GroundHeight(Vec2.Zero), 0);
             g.TargetPosition = new Vec3(.35, w.GroundHeight(new Vec2(.35, 0)), 0);
@@ -208,7 +232,7 @@ public class GuardianSimulationTests
     {
         foreach (var def in GuardianCatalog.All)
         {
-            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = def.AssociatedPilotTreeId; d.GuardianId = def.Id;
+            var d = Content.PresetOrThrow("default").Clone(); d.PilotTreeId = "basinwarden"; d.GuardianId = def.Id;
             var w = VivariumWorld.Create(Content, d); var g = w.Guardian!;
             int target = w.Grid.NearestDomainCell(Vec2.Zero); var center = w.Grid.CellCenter(target);
             var position = new Vec2(center.X - .14, center.Z);
@@ -313,7 +337,7 @@ public class GuardianSimulationTests
     {
         var d = Content.PresetOrThrow("default").Clone();
         d.PilotTreeId = "emberpillar"; // redwood
-        d.GuardianId = GuardianCatalog.CrestedCanopy; // hoatzin, usually with cycad
+        d.GuardianId = GuardianCatalog.CrestedCanopy;
 
         var w = VivariumWorld.Create(Content, d);
         Assert.NotNull(w.PilotTree);
@@ -348,19 +372,60 @@ public class GuardianSimulationTests
     }
 
     [Fact]
-    public void LegacyAutoGuardianOptionResolvesToPilotTreeAssociatedGuardian()
+    public void LegacyAutoGuardianOptionUsesTheSameIndependentRandomChoice()
     {
         var d1 = Content.PresetOrThrow("default").Clone();
         d1.PilotTreeId = "crowncoil";
         d1.GuardianId = "auto";
         var w1 = VivariumWorld.Create(Content, d1);
         Assert.NotNull(w1.Guardian);
-        Assert.Equal(GuardianCatalog.CrestedCanopy, w1.Guardian.ArchetypeId);
+        var expected = Content.PresetOrThrow("default").Clone();
+        expected.GuardianId = "random";
+        Assert.Equal(GuardianCatalog.SeededGuardianFormId(expected), w1.Guardian.ArchetypeId);
 
         var d2 = Content.PresetOrThrow("default").Clone();
         d2.PilotTreeId = "none";
         d2.GuardianId = "auto";
         var w2 = VivariumWorld.Create(Content, d2);
-        Assert.Null(w2.Guardian);
+        Assert.NotNull(w2.Guardian);
+        Assert.Equal(w1.Guardian.ArchetypeId, w2.Guardian.ArchetypeId);
+    }
+
+    [Fact]
+    public void RandomAndLegacySelectionIgnoreAllTreeChoicesAcrossSeeds()
+    {
+        var descriptor = Content.PresetOrThrow("default").Clone();
+        for (ulong seed = 1; seed <= 32; seed++)
+        {
+            descriptor.Seed = seed;
+            descriptor.GuardianId = "random";
+            var expected = GuardianCatalog.SeededGuardianFormId(descriptor);
+            Assert.NotNull(expected);
+            foreach (var treeId in PilotTreeCatalog.All.Select(t => t.Id).Append("none").Append("random"))
+            foreach (var selection in new[] { "random", "auto", "", null })
+            {
+                descriptor.PilotTreeId = treeId;
+                descriptor.GuardianId = selection!;
+                Assert.Equal(expected, GuardianCatalog.SeededGuardianFormId(descriptor));
+            }
+        }
+    }
+
+    [Fact]
+    public void SavedGuardianIdentitySurvivesALegacyAutoDescriptor()
+    {
+        var descriptor = Content.PresetOrThrow("default").Clone();
+        descriptor.GuardianId = "random";
+        var randomId = GuardianCatalog.SeededGuardianFormId(descriptor);
+        descriptor.GuardianId = GuardianCatalog.All.First(g => g.Id != randomId).Id;
+        descriptor.PilotTreeId = "none";
+        var world = VivariumWorld.Create(Content, descriptor);
+        world.Descriptor.GuardianId = "auto";
+
+        var loaded = WorldSerializer.Deserialize(Content, WorldSerializer.Serialize(world));
+        Assert.NotNull(loaded.Guardian);
+        Assert.Equal(world.Guardian!.Id, loaded.Guardian.Id);
+        Assert.Equal(world.Guardian.ArchetypeId, loaded.Guardian.ArchetypeId);
+        Assert.Equal(world.Guardian.ArchetypeId, loaded.GuardianSystem.Def!.Id);
     }
 }

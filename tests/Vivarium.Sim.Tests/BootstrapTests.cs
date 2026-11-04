@@ -178,7 +178,7 @@ public class BootstrapTests
             "default", "rocky_rise", "shoreline", "creek", "bayou_marsh",
             "steep_rocky_slope", "isolated_pond", "oxbow_creek", "deep_inlet",
             "misty_cloud_forest", "arid_canyon", "cascading_falls", "peat_fen",
-            "woodland_vernal_pools", "alpine_tundra", "estuary_delta"
+            "woodland_vernal_pools", "alpine_tundra", "estuary_delta", "braided_springs", "winding_pools", "permanent_marsh"
         };
         foreach (var id in expectedPresets)
         {

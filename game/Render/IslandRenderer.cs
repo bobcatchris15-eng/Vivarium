@@ -249,7 +249,7 @@ public partial class IslandRenderer : Node3D
             using (FrameProfiler.Measure("Island.SubWater"))
                 UpdateSubWaterChannels();
         }
-        if (!propsDirty && _accum < 15.0) return;
+        if (!propsDirty && _accum < 40.0) return;
         _accum = 0;
         using (FrameProfiler.Measure("Island.FieldTexture"))
             UpdateFieldTexture(updateSubstrate: propsDirty);

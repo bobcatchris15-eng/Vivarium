@@ -54,6 +54,12 @@ public partial class GuardianVegetationContact : Node
     /// tail only ever collides with a stem, so the solver's inner loop can use
     /// this index instead of testing every plant whose bounds overlap it.</summary>
     private readonly Dictionary<(int,int),UInt128> _stemCells=new();
+    private readonly Dictionary<(int,int,int,int),UInt128> _stemQueryMasks = new();
+    public bool StemQueryCacheEnabled { get; set; } = true;
+    public long StemQueryCacheHits { get; private set; }
+    public long StemQueryCacheMisses { get; private set; }
+    public int StemQueryMaskAuditBudget { get; set; }
+    public int StemQueryMaskAudits { get; private set; }
     /// <summary>Half-width of the stem index margin: the largest stem radius plus the largest contact radius.</summary>
     private const float StemMargin=.25f;
     /// <summary>How far the stem index has to reach: the widest stem plus the
@@ -335,7 +341,7 @@ public partial class GuardianVegetationContact : Node
     private void BuildContactIndex()
     {
         SpatialIndexBuilds++;
-        _contactCells.Clear();_stemCells.Clear();_widePlants=0;_allPlants=0;int index=0;
+        _contactCells.Clear();_stemCells.Clear();_stemQueryMasks.Clear();_widePlants=0;_allPlants=0;int index=0;
         // Bit order exactly matches the existing dictionary traversal. Querying
         // fewer bounds must not reorder sequential stem projections.
         foreach(var plant in _plants.Values)
@@ -379,8 +385,23 @@ public partial class GuardianVegetationContact : Node
         float extent=StemExtent;
         int x0=(int)MathF.Floor((point.X-extent)/StemCell),x1=(int)MathF.Floor((point.X+extent)/StemCell);
         int z0=(int)MathF.Floor((point.Z-extent)/StemCell),z1=(int)MathF.Floor((point.Z+extent)/StemCell);
-        UInt128 candidates=0;
-        for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)candidates|=_stemCells.GetValueOrDefault((x,z));
+        var query = (x0, x1, z0, z1);
+        UInt128 candidates;
+        if (StemQueryCacheEnabled && _stemQueryMasks.TryGetValue(query, out candidates)) StemQueryCacheHits++;
+        else
+        {
+            candidates = 0;
+            for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)candidates|=_stemCells.GetValueOrDefault((x,z));
+            StemQueryCacheMisses++;
+            if (StemQueryCacheEnabled && _stemQueryMasks.Count < 4096) _stemQueryMasks[query] = candidates;
+        }
+        if (StemQueryMaskAuditBudget > 0)
+        {
+            UInt128 referenceMask = 0;
+            for(int z=z0;z<=z1;z++)for(int x=x0;x<=x1;x++)referenceMask|=_stemCells.GetValueOrDefault((x,z));
+            if (candidates != referenceMask) throw new InvalidOperationException("Guardian stem query mask cache mismatch");
+            StemQueryMaskAuditBudget--; StemQueryMaskAudits++;
+        }
         while(candidates!=0)
         {
             ulong low=(ulong)candidates;

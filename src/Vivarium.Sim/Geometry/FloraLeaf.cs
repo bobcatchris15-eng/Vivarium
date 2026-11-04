@@ -8,12 +8,12 @@ public readonly record struct FloraLeaf(int FirstVertex, int VertexCount, int Fi
     bool Volumetric);
 
 /// <summary>Screen-size tiers (projected bounding diameter, px) with hysteresis. 0 near (>= ~120 px),
-/// 1 medium (down to ~40 px), 2 far. Every tier is a full parametric mesh; nothing is ever skipped.</summary>
+/// 1 medium (down to ~40 px), 2 far. Every organism remains represented; secondary detail is thinned.</summary>
 public static class FloraDetail
 {
     public const double FullPixels = 120, MidPixels = 40;
     // Optional distance reduction shares its first boundary with the camera's blur onset.
-    public const double DistanceMid = 6, DistanceFar = 12;
+    public const double DistanceMid = 5, DistanceFar = 10;
 
     public static int SelectDistance(double depth, int previous = -1, double distanceScale = 1) => previous switch
     {

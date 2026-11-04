@@ -54,7 +54,7 @@ public partial class Main : Node3D
         if (ArgAfter("--fern-asset-review") is { } fernDir)
         { AddChild(new FernAssetReview { Content = content, OutDir = fernDir,
             AssetPath = ArgAfter("--fern-asset") ?? "res://content/visual-lab-candidates/fern02/fern02.glb",
-            Variant = ArgAfter("--fern-variant") ?? "procedural", CameraReferencePath = ArgAfter("--fern-camera-reference") ?? "" }); return; }
+            Variant = ArgAfter("--fern-variant") ?? "procedural", Species = ArgAfter("--fern-species") ?? "veilfern", CameraReferencePath = ArgAfter("--fern-camera-reference") ?? "" }); return; }
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
         if (ArgAfter("--loam-ground-review") is { } loamDir)
         { AddChild(new LoamGroundReview { Content = content, OutDir = loamDir }); return; }

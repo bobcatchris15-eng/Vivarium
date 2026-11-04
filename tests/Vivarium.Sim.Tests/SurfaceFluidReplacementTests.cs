@@ -267,8 +267,10 @@ public class SurfaceFluidReplacementTests
     {
         var w = TestUtil.FlatWorld(); w.Water.Springs.Add(Source()); var host = new Vivarium.Sim.Time.SimHost(w);
         w.Clock.Paused = true; host.Advance(.05); Assert.Equal(0, w.Liquid.Volume);
-        w.Clock.Paused = false; host.Advance(.05); Assert.InRange(w.Liquid.PresentationTime, .04999, .05001);
-        Assert.InRange(w.Liquid.Volume, Source().Discharge * .05 - 1e-10, Source().Discharge * .05 + 1e-10);
+        w.Clock.Paused = false; host.Advance(.05);
+        Assert.InRange(w.Liquid.PresentationTime+w.Liquid.BacklogSeconds,.04999,.05001);
+        Assert.InRange(w.Liquid.BacklogSeconds,0,SurfaceFluidDynamics.StepSeconds);
+        Assert.InRange(w.Liquid.Volume,Source().Discharge*w.Liquid.PresentationTime-1e-10,Source().Discharge*w.Liquid.PresentationTime+1e-10);
     }
     [Fact]
     public void StandingPondGeometryAndShaderRemainUnchangedByMobileFlow()

@@ -99,7 +99,8 @@ public class MapDrainageTests
             var d = preset.Clone(); d.ResizeFootprint(diameter);
             Assert.Empty(d.Validate());
             var domain = new HexDomain(d.Diameter); var terrain = Heightfield.Generate(d,domain);
-            var channels = d.Terrain.Features.Where(f=>f.Type=="channel"&&f.BedHeight.HasValue).ToArray();
+            var channels = d.Terrain.Features.Where(f=>f.Type=="channel"&&(f.BedHeight.HasValue || f.CutDepth.HasValue)).ToArray();
+            if (d.Water.Springs.Count == 0) continue; // Hydrostatic marshes need no spring route.
             Assert.NotEmpty(channels);
             foreach (var source in d.Water.Springs)
             {
@@ -109,7 +110,7 @@ public class MapDrainageTests
             foreach (var f in channels)
             {
                 Assert.True(f.Sharp);
-                Assert.True(f.ToBedHeight < f.BedHeight);
+                if (!f.CutDepth.HasValue) Assert.True(f.ToBedHeight < f.BedHeight);
                 var a = new Vec2(f.X,f.Z); var ab = new Vec2(f.ToX,f.ToZ)-a;
                 int count = (int)Math.Ceiling(ab.Length/.025); double prior=terrain.Height(a);
                 for (int i=1;i<=count;i++)
@@ -117,7 +118,10 @@ public class MapDrainageTests
                     var p=a+ab*((double)i/count); if (!domain.Contains(p)) break;
                     double h=terrain.Height(p);
                     // Perched runs cannot acquire a dam. Submerged bed variation remains below the water table.
-                    Assert.True(h <= d.Water.WaterTable || h-prior<.001,$"{d.PresetId} at {diameter} m: uphill step {h-prior} at {p}");
+                    // Relative-depth pools deliberately retain water below their outlet sill.
+                    // Their depth and surrounding grade are verified separately.
+                    if (!f.CutDepth.HasValue)
+                        Assert.True(h <= d.Water.WaterTable || h-prior<.001,$"{d.PresetId} at {diameter} m: uphill step {h-prior} at {p}");
                     prior=h;
                 }
                 var end = new Vec2(f.ToX,f.ToZ);

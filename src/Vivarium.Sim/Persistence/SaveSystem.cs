@@ -39,7 +39,7 @@ public sealed class SaveManifest
     [System.Text.Json.Serialization.JsonIgnore] public List<string> AppliedMigrations { get; } = new();
 }
 
-public enum SaveCompatibility { Current, Migratable, UnsupportedNewer, UnsupportedOlder, NotASave }
+public enum SaveCompatibility { Current, UnsupportedNewer, UnsupportedOlder, NotASave }
 
 public sealed class LoadResult
 {
@@ -183,13 +183,11 @@ public static class SaveSystem
     public static SaveCompatibility Classify(int formatVersion) =>
         formatVersion == AppVersion.SaveSchema ? SaveCompatibility.Current
         : formatVersion > AppVersion.SaveSchema ? SaveCompatibility.UnsupportedNewer
-        : SaveMigrations.CanMigrate(formatVersion) ? SaveCompatibility.Migratable
         : SaveCompatibility.UnsupportedOlder;
 
     private static string Describe(int v) => Classify(v) switch
     {
         SaveCompatibility.Current => "current format",
-        SaveCompatibility.Migratable => $"older format v{v}; will be migrated to v{AppVersion.SaveSchema}",
         SaveCompatibility.UnsupportedNewer => $"made by a newer Vivarium (format v{v} > v{AppVersion.SaveSchema}); please update",
         SaveCompatibility.UnsupportedOlder => $"format v{v} is too old to migrate",
         _ => "unknown",
@@ -219,16 +217,6 @@ public static class SaveSystem
                 if (!payloads.TryGetValue(info.Name, out var bytes)) return LoadResult.Fail($"save is missing payload '{info.Name}'", compat, m);
                 if (Digest.Sha256Hex(bytes) != info.Sha256) return LoadResult.Fail($"payload '{info.Name}' is corrupt (checksum mismatch)", compat, m);
             }
-        }
-        if (compat != SaveCompatibility.Current)
-        {
-            try
-            {
-                var migrated = SaveMigrations.Migrate(m.FormatVersion, a.ManifestNode, payloads, m.AppliedMigrations);
-                payloads = migrated;
-                m.FormatVersion = AppVersion.SaveSchema;
-            }
-            catch (Exception ex) { return LoadResult.Fail($"migration from v{m.FormatVersion} failed: {ex.Message}", compat, m); }
         }
 
         try
@@ -262,54 +250,5 @@ public static class SaveSystem
             Log.Error(LogCategory.Persistence, $"Load of {path} failed validation", ex);
             return LoadResult.Fail($"save could not be loaded: {ex.Message}", compat, m);
         }
-    }
-}
-
-/// <summary>
-/// Ordered, explicit save migrations. Each step transforms payload JSON from version N to N+1.
-/// v0 → v1: v0 (pre-release) stored the clock as simSeconds (double) instead of tick (long), and fauna
-/// energy as a 0..100 percentage.
-/// </summary>
-public static class SaveMigrations
-{
-    public delegate void Step(Dictionary<string, JsonNode> payloads);
-
-    private static readonly SortedDictionary<int, (string Name, Step Apply)> Steps = new()
-    {
-        [3] = ("v3 to v4: conservative mobile liquid; import legacy volume/momentum on staged load", p => { }),
-        [2] = ("v2→v3: retain existing worlds without a Pilot Tree", p =>
-        {
-            var descriptor = p["world"]["Descriptor"]!.AsObject();
-            descriptor["PilotTreeId"] = "none";
-            descriptor["PilotTreeCorner"] = -1;
-        }),
-        [0] = ("v0→v1: clock seconds→ticks, fauna energy percent→fraction", p =>
-        {
-            var world = p["world"].AsObject();
-            if (world.TryGetPropertyValue("SimSeconds", out var secs) && secs != null)
-            {
-                world["Tick"] = (long)Math.Round(secs.GetValue<double>() / Time.SimClock.FixedStepSeconds);
-                world.Remove("SimSeconds");
-            }
-            foreach (var f in p["fauna"]["Items"]!.AsArray())
-                if (f!["EnergyPercent"] is JsonNode e) { f["Energy"] = e.GetValue<double>() / 100.0; f.AsObject().Remove("EnergyPercent"); }
-        }),
-    };
-
-    public static int Oldest => Steps.Count == 0 ? AppVersion.SaveSchema : Steps.Keys.First();
-    public static bool CanMigrate(int from) => from < AppVersion.SaveSchema && Enumerable.Range(from, AppVersion.SaveSchema - from).All(Steps.ContainsKey);
-
-    public static Dictionary<string, byte[]> Migrate(int from, JsonNode manifest, Dictionary<string, byte[]> raw, List<string> applied)
-    {
-        if (!CanMigrate(from)) throw new InvalidOperationException($"no migration path from v{from}");
-        var nodes = raw.ToDictionary(kv => kv.Key, kv => JsonNode.Parse(kv.Value) ?? throw new InvalidDataException($"payload {kv.Key} empty"));
-        for (int v = from; v < AppVersion.SaveSchema; v++)
-        {
-            var (name, apply) = Steps[v];
-            apply(nodes);
-            applied.Add(name);
-        }
-        manifest["FormatVersion"] = AppVersion.SaveSchema;
-        return nodes.ToDictionary(kv => kv.Key, kv => JsonSerializer.SerializeToUtf8Bytes(kv.Value));
     }
 }

@@ -25,15 +25,63 @@ public partial class WaterSurfaceRenderer : Node3D
         public Image StateImage = Image.CreateEmpty(TexSize, TexSize, false, Image.Format.Rgbaf);
         public Image GroundImage = Image.CreateEmpty(GroundSize, GroundSize, false, Image.Format.Rgbaf);
         public bool HasUploaded;
+        public float LastBlend = float.NaN, LastPondLevel = float.NaN,
+            LastOpticalTime = float.NaN, LastSkyEnergy = float.NaN;
+        public Vector3 LastLightDirection;
+        public bool HasLightDirection;
         public int Terrain = -1, Props = -1;
     }
     private readonly Dictionary<(int, int), Tile> _tiles = new();
+    private static readonly StringName BlendParameter = "state_blend", PondParameter = "pond_level",
+        TimeParameter = "fluid_time", SkyParameter = "sky_energy", DirectionParameter = "light_direction";
+    public long UniformWrites { get; private set; }
+    public long UniformWriteSkips { get; private set; }
+    public bool ReuseUniformValues { get; set; } = true;
+
+    private void SetScalar(Tile tile, StringName parameter, float value, ref float previous)
+    {
+        if (ReuseUniformValues && value == previous) { UniformWriteSkips++; return; }
+        tile.Material.SetShaderParameter(parameter, value);
+        previous = value;
+        UniformWrites++;
+    }
+
+    public void AuditUniformCache()
+    {
+        int checkedTiles = 0;
+        long writes = UniformWrites;
+        foreach (var tile in _tiles.Values)
+        {
+            if (!tile.Node.Visible) continue;
+            void CheckScalar(StringName parameter, ref float previous)
+            {
+                if (BitConverter.SingleToInt32Bits(tile.Material.GetShaderParameter(parameter).AsSingle())
+                    != BitConverter.SingleToInt32Bits(previous))
+                    throw new InvalidOperationException("Water uniform cache native scalar mismatch: " + parameter);
+                SetScalar(tile, parameter, previous, ref previous);
+            }
+            CheckScalar(BlendParameter, ref tile.LastBlend);
+            CheckScalar(PondParameter, ref tile.LastPondLevel);
+            CheckScalar(TimeParameter, ref tile.LastOpticalTime);
+            if (tile.HasLightDirection)
+            {
+                CheckScalar(SkyParameter, ref tile.LastSkyEnergy);
+                if (!tile.Material.GetShaderParameter(DirectionParameter).AsVector3().Equals(tile.LastLightDirection))
+                    throw new InvalidOperationException("Water uniform cache native direction mismatch");
+            }
+            checkedTiles++;
+        }
+        if (UniformWrites != writes) throw new InvalidOperationException("Water cache wrote identical uniforms");
+        GD.Print($"WATER_UNIFORM_CACHE_AUDIT_OK tiles={checkedTiles} values=exact redundant_writes=0");
+    }
     private readonly Dictionary<(int,int),SurfaceFluidSample> _cells=new();
     private readonly HashSet<(int,int)> _active=new();
     private VivariumWorld? _w;
     public EnvironmentRig? Lighting { get; set; }
     private ArrayMesh _topology = null!;
     private ImageTexture _ripples = null!;
+    private ShaderMaterial? _waterMaterialTemplate;
+    private bool _templateCheapRefraction;
     // Separate compiled material: the cheap variant declares no screen/depth samplers.
     public bool CheapRefraction { get; set; } = System.Environment.GetEnvironmentVariable("VIVARIUM_WATER_REFRACTION") == "substrate";
     private long _version = -1;
@@ -62,9 +110,16 @@ public partial class WaterSurfaceRenderer : Node3D
     }
     public void Bind(VivariumWorld world)
     {
+        PrepareWaterMaterial();
         _w = world; _opticalTime = world.Liquid.PresentationTime; _version = -1; _snapshot = null; SurfaceUpdates = 0; TrianglesBuilt = 0; TextureUploadBytes = 0;
         foreach (var t in _tiles.Values) { t.Node.QueueFree(); t.Previous.Dispose(); t.Current.Dispose(); t.Ground.Dispose(); t.StateImage.Dispose(); t.GroundImage.Dispose(); }
         _tiles.Clear();
+    }
+    private void PrepareWaterMaterial()
+    {
+        if (_waterMaterialTemplate != null && _templateCheapRefraction == CheapRefraction) return;
+        _waterMaterialTemplate = Bridge.Shader(CheapRefraction ? "res://Shaders/surface_fluid_cheap.gdshader" : "res://Shaders/surface_fluid.gdshader");
+        _templateCheapRefraction = CheapRefraction;
     }
     private static int FloorDiv(int value, int divisor) => (int)Math.Floor((double)value / divisor);
     private static ImageTexture Texture(float[] values, int width)
@@ -106,10 +161,18 @@ public partial class WaterSurfaceRenderer : Node3D
     }
     private Tile MakeTile((int X, int Z) key, double spacing)
     {
-        var t = new Tile(); t.Material = Bridge.Shader(CheapRefraction ? "res://Shaders/surface_fluid_cheap.gdshader" : "res://Shaders/surface_fluid.gdshader"); t.Material.SetShaderParameter("debug_surface", System.Environment.GetEnvironmentVariable("VIVARIUM_FLUID_DIAGNOSTIC") == "1");
+        Tile t;
+        using (FrameProfiler.Measure("LiquidSurface.TileAllocation")) t = new Tile();
+        using (FrameProfiler.Measure("LiquidSurface.TileMaterial"))
+        {
+            PrepareWaterMaterial();
+            t.Material = new ShaderMaterial { Shader = _waterMaterialTemplate!.Shader };
+        }
+        t.Material.SetShaderParameter("debug_surface", System.Environment.GetEnvironmentVariable("VIVARIUM_FLUID_DIAGNOSTIC") == "1");
         if (CheapRefraction) t.Material.SetShaderParameter("u_substrate_albedo", Bridge.LoadTex(Bridge.ResolveSurfaceSet(Bridge.Surfaces.Damp).Color));
         int groundSize=(TileCells+2)*Subdivisions+1;
-        t.Previous = Texture(t.CachedValues, TexSize); t.Current = Texture(t.CachedValues, TexSize); t.Ground = Texture(new float[groundSize*groundSize*4], groundSize);
+        using (FrameProfiler.Measure("LiquidSurface.TileTextures"))
+        { t.Previous = Texture(t.CachedValues, TexSize); t.Current = Texture(t.CachedValues, TexSize); t.Ground = Texture(new float[groundSize*groundSize*4], groundSize); }
         t.Node = new()
         {
             Name = $"LiquidTile_{key.X}_{key.Z}",
@@ -121,7 +184,9 @@ public partial class WaterSurfaceRenderer : Node3D
         t.Material.SetShaderParameter("previous_state", t.Previous); t.Material.SetShaderParameter("current_state", t.Current); t.Material.SetShaderParameter("solid", t.Ground); t.Material.SetShaderParameter("u_ripple_normal", _ripples);
         t.Material.SetShaderParameter("tile_origin", new Vector2((float)(key.X * TileCells * spacing), (float)(key.Z * TileCells * spacing)));
         t.Material.SetShaderParameter("tile_size", (float)(TileCells * spacing));
-        t.Node.Position = new Vector3((float)(key.X * TileCells * spacing), 0, (float)(key.Z * TileCells * spacing)); AddChild(t.Node); return t;
+        t.Node.Position = new Vector3((float)(key.X * TileCells * spacing), 0, (float)(key.Z * TileCells * spacing));
+        using (FrameProfiler.Measure("LiquidSurface.TileAttach")) AddChild(t.Node);
+        return t;
     }
     public override void _Process(double delta)
     {
@@ -139,7 +204,7 @@ public partial class WaterSurfaceRenderer : Node3D
         if (snapshot.Version != _version)
         {
             long allocationStart = GC.GetAllocatedBytesForCurrentThread(); var watch = System.Diagnostics.Stopwatch.StartNew();
-            _blendSeconds = Math.Clamp(_elapsed, 1.0 / 120, .15); _elapsed = 0; _snapshot = snapshot; _version = snapshot.Version;
+            _blendSeconds = Math.Clamp(_elapsed, 1.0 / 120, .5); _elapsed = 0; _snapshot = snapshot; _version = snapshot.Version;
             using (FrameProfiler.Measure("LiquidSurface.LookupPreparation"))
             {
                 var cells = _cells; cells.Clear(); cells.EnsureCapacity(snapshot.Cells.Length);
@@ -156,7 +221,8 @@ public partial class WaterSurfaceRenderer : Node3D
                     int z0 = lz == 0 ? tz - 1 : tz, z1 = lz == TileCells - 1 ? tz + 1 : tz;
                     for (int z = z0; z <= z1; z++) for (int x = x0; x <= x1; x++) active.Add((x, z));
                 }
-                foreach (var key in active) if (!_tiles.ContainsKey(key)) _tiles[key] = MakeTile(key, snapshot.Spacing);
+                using (FrameProfiler.Measure("LiquidSurface.TileCreation"))
+                    foreach (var key in active) if (!_tiles.ContainsKey(key)) _tiles[key] = MakeTile(key, snapshot.Spacing);
             }
             int uploadedCount = 0;
             foreach (var (key, t) in _tiles)
@@ -208,8 +274,6 @@ public partial class WaterSurfaceRenderer : Node3D
                         Update(t.Ground, solid, n, t.GroundBytes, t.GroundImage); t.Terrain = _w.Terrain.Version; t.Props = _w.Props.Version;
                     }
                 }
-                t.Material.SetShaderParameter("pond_level", (float)_w.Water.WaterTable);
-                t.Material.SetShaderParameter("fluid_time", (float)snapshot.Time);
             }
             SurfaceUpdates++; TilesUploaded = uploadedCount; TrianglesBuilt = _active.Count * TileCells * TileCells * Subdivisions * Subdivisions * 2;
             AllocatedBytes += GC.GetAllocatedBytesForCurrentThread() - allocationStart; LastUploadMilliseconds = watch.Elapsed.TotalMilliseconds; FrameProfiler.Record("LiquidSurface.Upload", LastUploadMilliseconds);
@@ -219,12 +283,22 @@ public partial class WaterSurfaceRenderer : Node3D
         float blend = (float)Math.Clamp(_elapsed / _blendSeconds, 0, 1);
         foreach (var t in _tiles.Values) if (t.Node.Visible)
         {
-            t.Material.SetShaderParameter("state_blend", blend);
-            t.Material.SetShaderParameter("pond_level", (float)_w.Water.WaterTable);
-            if (Lighting != null) { t.Material.SetShaderParameter("sky_energy", Lighting.CanopyEnergy); t.Material.SetShaderParameter("light_direction", Lighting.CanopyLightDirection); }
+            SetScalar(t, BlendParameter, blend, ref t.LastBlend);
+            SetScalar(t, PondParameter, (float)_w.Water.WaterTable, ref t.LastPondLevel);
+            if (Lighting != null)
+            {
+                SetScalar(t, SkyParameter, Lighting.CanopyEnergy, ref t.LastSkyEnergy);
+                var direction = Lighting.CanopyLightDirection;
+                if (!ReuseUniformValues || !t.HasLightDirection || !direction.Equals(t.LastLightDirection))
+                {
+                    t.Material.SetShaderParameter(DirectionParameter, direction);
+                    t.LastLightDirection = direction; t.HasLightDirection = true; UniformWrites++;
+                }
+                else UniformWriteSkips++;
+            }
             // Optical motion runs every displayed frame, rather than stopping between
             // asynchronous physical snapshots. It uses physical seconds and freezes on pause.
-            t.Material.SetShaderParameter("fluid_time", opticalTime);
+            SetScalar(t, TimeParameter, opticalTime, ref t.LastOpticalTime);
         }
     }
     // Analytic, periodic capillary normal map. Generated once, shared by all tiles.

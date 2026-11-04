@@ -212,6 +212,8 @@ void light() {
 
     float ndotl = max(dot(wn, wl), 0.0);
     DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * ndotl * (1.0 / PI);
+    float back_nl = max(dot(-wn, wl), 0.0);
+    DIFFUSE_LIGHT += BACKLIGHT * LIGHT_COLOR * ATTENUATION * back_nl * (1.0 / PI);
 
     if (ndotl > 0.0) {
         vec3 h = finite_surface_normal(wl + vv, wn);
