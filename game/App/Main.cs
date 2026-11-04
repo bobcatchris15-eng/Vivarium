@@ -11,8 +11,7 @@ using Vivarium.Sim.World;
 namespace Vivarium.Game.App;
 
 /// <summary>
-/// Entry point. Normal launch continues the autosaved vivarium (or grows the default one). Command-line modes
-/// (after "--"): --boot-test, --render-test DIR, --smoke DIR, --smoke-reload DIR, --perf-test DIR, --reference DIR; optional --preset NAME.
+/// Entry point. Continues the autosaved vivarium or grows the default island.
 /// </summary>
 public partial class Main : Node3D
 {
@@ -23,15 +22,6 @@ public partial class Main : Node3D
     public override async void _Ready()
     {
         UserArgs = OS.GetCmdlineUserArgs();
-        foreach (var retired in new[] { "--overhaul-aquatic-review", "--review-coverage-legacy", "--legacy-flora" })
-        {
-            if (!UserArgs.Contains(retired)) continue;
-            GD.PrintErr($"{retired} has been retired; use the current production review modes.");
-            GetTree().Quit(2);
-            return;
-        }
-        if (System.Environment.GetEnvironmentVariable("VIVARIUM_LEGACY_FLORA") == "1")
-            GD.PushWarning("VIVARIUM_LEGACY_FLORA has been retired; using the production flora renderer.");
         // a display piece must not stutter: avoid blocking full garbage collections during steady running
         System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
         SetupLogging();
@@ -49,172 +39,20 @@ public partial class Main : Node3D
             return;
         }
 
-        if (ArgAfter("--guardian-review") is { } guardianDir)
-        { AddChild(new GuardianReview { Content = content, OutDir = guardianDir }); return; }
-        if (ArgAfter("--fern-asset-review") is { } fernDir)
-        { AddChild(new FernAssetReview { Content = content, OutDir = fernDir,
-            AssetPath = ArgAfter("--fern-asset") ?? "res://content/visual-lab-candidates/fern02/fern02.glb",
-            Variant = ArgAfter("--fern-variant") ?? "procedural", Species = ArgAfter("--fern-species") ?? "veilfern", CameraReferencePath = ArgAfter("--fern-camera-reference") ?? "" }); return; }
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
-        if (ArgAfter("--loam-ground-review") is { } loamDir)
-        { AddChild(new LoamGroundReview { Content = content, OutDir = loamDir }); return; }
-        if (ArgAfter("--pilot-overhaul-review") is { } pilotOverhaulDir)
-        { AddChild(new PilotTreeOverhaulReview { Content = content, OutDir = pilotOverhaulDir }); return; }
-        if (ArgAfter("--photographic-physical-review") is { } physicalDir)
-        { AddChild(new PhotographicPhysicalReview { OutDir = physicalDir }); return; }
-        if (ArgAfter("--photographic-family-review") is { } familyDir)
-        { AddChild(new PhotographicFamilyReview { Content = content, OutDir = familyDir,
-            ProfilePath = ArgAfter("--family-profiles") ?? "", BacklightSweep = UserArgs.Contains("--backlight-sweep"), WetLayerSweep = UserArgs.Contains("--wet-layer-sweep"), LookSweep = UserArgs.Contains("--look-sweep") || UserArgs.Contains("--look-refine") || UserArgs.Contains("--substrate-refine"), LookRefinement = UserArgs.Contains("--look-refine"), SubstrateSweep = UserArgs.Contains("--substrate-refine") }); return; }
-        if (ArgAfter("--photorealism-light-review") is { } photoLightDir)
-        { AddChild(new PhotorealismLightReview { Content = content, OutDir = photoLightDir }); return; }
-        if (ArgAfter("--photorealism-review") is { } photoDir)
-        { AddChild(new PhotorealismReview { Content = content, OutDir = photoDir,
-            ExposureSweep = UserArgs.Contains("--exposure-sweep") }); return; }
-        if (ArgAfter("--material-port-review") is { } materialDir)
-        { AddChild(new MaterialPortReview { Content = content, OutDir = materialDir,
-            BaselineDir = ArgAfter("--material-baseline") ?? "", GeometryOnly = UserArgs.Contains("--geometry-only"), FloraModulePath = ArgAfter("--flora-module") ?? "",
-            RenderDocCapture = UserArgs.Contains("--renderdoc-capture"), MotionSequence = UserArgs.Contains("--motion-sequence") }); return; }
-        if(ArgAfter("--surface-fluid-review") is {} fluidReviewDir)
-        {AddChild(new SurfaceFluidReview{Content=content,OutDir=fluidReviewDir,Scenario=ArgAfter("--scenario")??"A",BenchmarkView=ArgAfter("--fluid-view")??"oblique",Video=UserArgs.Contains("--fluid-video"),Motion=UserArgs.Contains("--motion"),Benchmark=UserArgs.Contains("--benchmark"),SavePath=ArgAfter("--save"),PresetId=ArgAfter("--fluid-preset"),DisableMobileDrawing=UserArgs.Contains("--fluid-drawing-off"),DurationSeconds=double.TryParse(ArgAfter("--fluid-duration"),out var fluidDuration)?fluidDuration:0});return;}
-        if(ArgAfter("--liquid-review") is {} liquidDir)
-        {AddChild(new LiquidReview{Content=content,OutDir=liquidDir,SavePath=ArgAfter("--save"),Live=UserArgs.Contains("--live"),Motion=UserArgs.Contains("--motion"),Pool=UserArgs.Contains("--pool"),Erosion=UserArgs.Contains("--erosion")});return;}
-        if(ArgAfter("--night-lighting-review") is {} lightDir)
-        {AddChild(new NightLightingReview{Content=content,OutDir=lightDir});return;}
-        if (ArgAfter("--night-flora-review") is { } nightFloraDir)
-        {
-            AddChild(new NightFloraReview { Content = content, OutDir = nightFloraDir }); return;
-        }
-        if (UserArgs.Contains("--spring-fluid-preview"))
-        {
-            AddChild(new SpringFluidPreview {Content=content, OutDir=ArgAfter("--output") ?? "build/spring-fluid-preview"});
-            return;
-        }
-        if (ArgAfter("--pilot-tree-preview") is { } pilotId)
-        {
-            AddChild(new PilotTreePreview { Content = content, TreeId = pilotId,
-                OutDir = ArgAfter("--output") ?? "build/pilot-tree-preview" });
-            return;
-        }
-        if (UserArgs.Contains("--flora-bake")) { AddChild(new LeafMaterialBaker()); return; }
-        if (UserArgs.Contains("--flora-profile-check"))
-        {
-            int vascularCount = 0;
-            int nonVascularCount = 0;
-            foreach (var sp in content.Flora)
-            {
-                var profile = FloraVisualProfile.Load(sp.Id, sp: sp);
-                if (sp.Archetype == "plant" && sp.Colony == null)
-                {
-                    if (profile == null) throw new InvalidOperationException($"Vascular plant {sp.Id} missing visual profile");
-                    if (string.IsNullOrEmpty(profile.MorphologicalFamily)) throw new InvalidOperationException($"Plant {sp.Id} missing MorphologicalFamily");
-                    if (string.IsNullOrEmpty(profile.PoolSpecies)) throw new InvalidOperationException($"Plant {sp.Id} missing PoolSpecies");
-                    if (string.IsNullOrEmpty(profile.Veins)) throw new InvalidOperationException($"Plant {sp.Id} missing Veins");
-                    var mat = profile.LeafMaterial();
-                    if (mat == null) throw new InvalidOperationException($"Plant {sp.Id} failed LeafMaterial creation");
-                    GD.Print($"FLORA_PROFILE {sp.Id}: family={profile.MorphologicalFamily} pool={profile.PoolSpecies} veins={profile.Veins} volumetric={profile.Volumetric}");
-                    vascularCount++;
-                }
-                else
-                {
-                    if (profile != null) throw new InvalidOperationException($"Non-vascular organism {sp.Id} unexpectedly returned visual profile");
-                    nonVascularCount++;
-                }
-            }
-            GD.Print($"FLORA_PROFILE_CHECK_OK vascular={vascularCount} nonVascular={nonVascularCount}");
-            GetTree().Quit(0);
-            return;
-        }
-        if (ArgAfter("--licenses") is { } licFile) { WriteLicenses(licFile); GetTree().Quit(0); return; }
-
-        if (UserArgs.Contains("--fauna-motion-check"))
-        {
-            AddChild(new FaunaMotionCheck { Content = content, OutDir = ArgAfter("--output") ?? "build/fauna-motion-check" });
-            return;
-        }
-        if (ArgAfter("--fauna-preview") is { } faunaId)
-        {
-            AddChild(new FaunaPreview { Content = content, SpeciesId = faunaId,
-                OutDir = ArgAfter("--output") ?? "build/fauna-preview", SpeedReview = UserArgs.Contains("--speed-review"),
-                LiveMotion = UserArgs.Contains("--live-motion") });
-            return;
-        }
-        if (ArgAfter("--species-isolation-review") is { } isolationDir)
-        { AddChild(new SpeciesIsolationReview { Content=content, OutDir=isolationDir }); return; }
-        if (ArgAfter("--specimen") is { } specimenId)
-        {
-            AddChild(new SpecimenPreview
-            {
-                Name = "SpecimenPreview",
-                Content = content,
-                SpeciesId = specimenId,
-                Juvenile = UserArgs.Contains("--juvenile"),
-                Underside = UserArgs.Contains("--underside"),
-                Lighting = ArgAfter("--lighting") ?? "front",
-                Detail = int.TryParse(ArgAfter("--detail"), out int specimenDetail) ? Math.Clamp(specimenDetail,0,2) : 0,
-                Phase = float.TryParse(ArgAfter("--phase"), out float specimenPhase) ? specimenPhase : -1,
-                Reverse = UserArgs.Contains("--reverse"),
-                GameTier = UserArgs.Contains("--game-tier"),
-                Close = UserArgs.Contains("--close"),
-                OutDir = ArgAfter("--output") ?? "build/specimens",
-            });
-            return;
-        }
-        if (ArgAfter("--vine-review") is { } vineId)
-        {
-            AddChild(new VineReview
-            {
-                Name = "VineReview",
-                Content = content,
-                SpeciesId = vineId,
-                Days = float.TryParse(ArgAfter("--days"), out float vineDays) ? vineDays : 40f,
-                Seed = int.TryParse(ArgAfter("--seed"), out int vineSeed) ? vineSeed : 62,
-                Tip = UserArgs.Contains("--tip"),
-                Habitat = UserArgs.Contains("--habitat"),
-                Angle = float.TryParse(ArgAfter("--angle"), out float vineAngle) ? vineAngle : 35f,
-                Zoom = float.TryParse(ArgAfter("--zoom"), out float vineZoom) ? vineZoom : 1f,
-                OutDir = ArgAfter("--output") ?? "build/vine-review",
-            });
-            return;
-        }
+        if (ArgAfter("--licenses") is { } licenseFile) { WriteLicenses(licenseFile); GetTree().Quit(0); return; }
         var settings = UserSettings.Load();
-        string? testDir = ArgAfter("--world-review") ?? ArgAfter("--smoke") ?? ArgAfter("--smoke-reload") ?? ArgAfter("--render-test") ?? ArgAfter("--perf-test") ?? ArgAfter("--reference") ?? ArgAfter("--new-world-test") ?? (UserArgs.Contains("--species-view") ? ArgAfter("--output") ?? "build/specimens/world" : null);
         if (UserArgs.Contains("--soak")) { settings.Transient = true; settings.AutosaveEnabled = true; settings.AutosaveMinutes = 5; settings.ShowHelpOnStart = false; }
         if (UserArgs.Contains("--diagnostics-check")) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
-        if (testDir != null) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
 
         Session = new GameSession { Name = "Session" };
         AddChild(Session);
         Session.Initialize(content, settings);
-        if (testDir == null || UserArgs.Contains("--diagnostics"))
         {
             Session.Diagnostics = new LiveDiagnostics { Name = "LiveDiagnostics", Session = Session,
                 AutoStart = UserArgs.Contains("--diagnostics") || UserArgs.Contains("--diagnostics-check") || UserArgs.Contains("--soak"),
                 RequestedDirectory = ArgAfter("--diagnostics") ?? (ArgAfter("--soak") is { } soakOutput ? Path.Combine(soakOutput, "diagnostics") : null), CheckMode = UserArgs.Contains("--diagnostics-check") };
             AddChild(Session.Diagnostics);
-        }
-
-        if (testDir != null)
-        {
-            var mode = UserArgs.Contains("--world-review") ? SmokeRunner.Mode.WorldReview : UserArgs.Contains("--species-view") ? SmokeRunner.Mode.SpeciesWorld : UserArgs.Contains("--smoke") ? SmokeRunner.Mode.Smoke : UserArgs.Contains("--smoke-reload") ? SmokeRunner.Mode.Reload : UserArgs.Contains("--perf-test") ? SmokeRunner.Mode.Perf : UserArgs.Contains("--new-world-test") ? SmokeRunner.Mode.NewWorld : UserArgs.Contains("--reference") ? SmokeRunner.Mode.Reference : SmokeRunner.Mode.Render;
-            var runner = new SmokeRunner { Name = "SmokeRunner", Session = Session, OutDir = testDir, RunMode = mode, SpeciesId = ArgAfter("--species-view") ?? "" };
-            AddChild(runner);
-            if (ArgAfter("--load") is { } loadPath && File.Exists(loadPath))
-            {
-                var loaded=Session.LoadFrom(loadPath);
-                if(!loaded.Ok)
-                    throw new InvalidOperationException(
-                        $"Explicit performance/preview world load failed: {loaded.Message}");
-                if(mode==SmokeRunner.Mode.WorldReview && Session.World!=null)
-                    Session.World.Clock.Paused=true;
-            }
-            else if (mode != SmokeRunner.Mode.Reload)
-            {
-                var world = Session.CreateWorld(content.PresetOrThrow(ArgAfter("--preset") ?? "default"));
-                if (mode == SmokeRunner.Mode.WorldReview) world.Clock.Paused = true;
-                if (mode == SmokeRunner.Mode.Perf && (System.Environment.GetEnvironmentVariable("VIVARIUM_PERF_FREEZE") == "1" || System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null)) world.Clock.Paused = true;
-                Session.StartWorld(world);
-            }
-            return;
         }
 
         // Paint feedback before disk/decompression/baseline reconstruction starts.

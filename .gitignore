@@ -1,37 +1,20 @@
-# toolchain (prerequisite, see docs/architecture/adr-001-stack.md)
-tools/godot/
-# build output
-bin/
-obj/
+# Generated build and import files
+**/bin/
+**/obj/
+game/.godot/
 build/
 out/
 artifacts/
-*.user
-.vs/
-# godot
-.godot/
-*.translation
-# test output
 TestResults/
-# agent worktrees
-.claude/worktrees/
-.clanker/
-.statefulclanker/
-
-# Python diagnostic caches
-__pycache__/
-*.py[cod]
-reference/
-
-# Blender backup files
-*.blend1
-*.blend2
-
-# Temporary files
+.vs/
+*.user
 *.tmp
 *.TMP
-*.import~*
 
-# Generated review output / remote attachments
---out/
+# Local engine and SDK installations
+tools/
+
+# Local caches and attachments
+__pycache__/
+*.py[cod]
 .codex-remote-attachments/
