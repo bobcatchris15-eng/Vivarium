@@ -5,3 +5,6 @@ ts	task_id	clanker	model	n_targets	wall_s	turns	attempts	outcome	returned_bytes
 2026-11-10	a1	general-purpose	sonnet-medium	1	-	-	1	PASS	2400
 2026-11-10	a4	general-purpose	sonnet-medium	1	-	-	1	PASS	2700
 2026-11-10	b0	general-purpose	sonnet-low	2	-	-	1	PASS	2900
+2026-11-10	h3	impl-worker	sonnet-medium	4	-	-	1	PASS	700
+2026-11-10	h1	impl-worker	sonnet-medium	3	24	9	1	FAIL-NEEDS_NODE	900
+2026-11-10	h1	impl-worker	sonnet-medium	3	1780	79	2	PASS	2400
