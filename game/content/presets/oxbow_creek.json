@@ -1374,6 +1374,70 @@
     {
       "species": "ghostbonnet",
       "count": 4
+    },
+    {
+      "species": "silkgleam_moss",
+      "count": 6
+    },
+    {
+      "species": "swanfrond",
+      "count": 3
+    },
+    {
+      "species": "sceptrefern",
+      "count": 3
+    },
+    {
+      "species": "quillsedge",
+      "count": 3
+    },
+    {
+      "species": "bannerreed",
+      "count": 2
+    },
+    {
+      "species": "mistviolet",
+      "count": 3
+    },
+    {
+      "species": "fenfoam",
+      "count": 3
+    },
+    {
+      "species": "marshkettle",
+      "count": 3
+    },
+    {
+      "species": "widowspire",
+      "count": 2
+    },
+    {
+      "species": "pondstars",
+      "count": 3
+    },
+    {
+      "species": "bogfringe",
+      "count": 3
+    },
+    {
+      "species": "burrflag",
+      "count": 3
+    },
+    {
+      "species": "paddlerib",
+      "count": 3
+    },
+    {
+      "species": "barbarrow",
+      "count": 3
+    },
+    {
+      "species": "fenforge",
+      "count": 1
+    },
+    {
+      "species": "banksorrow",
+      "count": 1
     }
   ],
   "starterFauna": [

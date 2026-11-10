@@ -1,0 +1,111 @@
+{
+  "id": "moonshell_lichen",
+  "name": "Moonshell lichen",
+  "archetype": "lichen",
+  "placementGroup": "moss_lichen",
+  "role": "Pale foliose lichen of shaded bark.",
+  "description": "White-blue lobes lift like shell fragments from quiet bark, cool and faintly pearled in low light.",
+  "habitat": {
+    "substrates": {
+      "wood": 0.8,
+      "rock": 1
+    },
+    "refuseSubstrates": [
+      "soil",
+      "water",
+      "gravel"
+    ],
+    "refuseTags": [
+      "wood_rotting"
+    ],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.3,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.12,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.12
+  },
+  "growth": {
+    "ratePerDay": 0.18,
+    "maxBiomass": 0.4,
+    "initialBiomass": 0.03,
+    "declinePerDay": 0.05,
+    "maturityDays": 8,
+    "lifespanDays": 600,
+    "nutrientPerBiomass": 0.08,
+    "radiusAtMax": 0.13,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.35,
+    "propagules": 2,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.2,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.5
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.2,
+      "bonus": 0.1
+    }
+  ],
+  "litterFraction": 0.6,
+  "grazingValue": 0,
+  "lichen": {
+    "layer": "Crust",
+    "form": "foliose",
+    "substrates": [
+      "log",
+      "rock"
+    ],
+    "gravelRateMultiplier": 0,
+    "lateral": 0.006,
+    "tipBias": 4,
+    "openness": 3,
+    "minNeighbours": 3,
+    "centreDeathDays": 30,
+    "centreDeathMinD2E": 3,
+    "water": {
+      "kWet": 3,
+      "kDry": 0.4,
+      "wMin": 0.15,
+      "wOpt": 0.5
+    },
+    "light": {
+      "k": 0.22
+    },
+    "seedBiomass": 0.1,
+    "maxBiomass": 0.4
+  },
+  "visual": {
+    "shape": "moonshell_lichen",
+    "color": [
+      0.788,
+      0.831,
+      0.839
+    ],
+    "color2": [
+      0.894,
+      0.914,
+      0.902
+    ],
+    "colorVariance": 0.05,
+    "height": 0.012
+  },
+  "tags": [
+    "lichen"
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "id": "sceptrefern",
+  "name": "Sceptrefern",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Tall separated-pinnae crown of wet woodland.",
+  "description": "Widely spaced pinnae stand along each stem like the teeth of a sceptre, and the fronds hold themselves up long after rain.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.4
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.85,
+      "tolerance": 0.18
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.55,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0.02,
+    "hardMinMoisture": 0.5,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 240,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.5,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.9,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.8,
+      "bonus": 0.15
+    },
+    {
+      "target": "feature:water",
+      "radius": 1,
+      "bonus": 0.1
+    }
+  ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.025,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "sceptrefern",
+    "color": [
+      0.243,
+      0.431,
+      0.267
+    ],
+    "color2": [
+      0.498,
+      0.627,
+      0.439
+    ],
+    "colorVariance": 0.06,
+    "height": 0.85
+  },
+  "tags": [
+    "plant",
+    "fern",
+    "wetland"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.5,
+      0.44,
+      0.27
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

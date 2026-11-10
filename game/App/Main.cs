@@ -41,7 +41,21 @@ public partial class Main : Node3D
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
         if (ArgAfter("--licenses") is { } licenseFile) { WriteLicenses(licenseFile); GetTree().Quit(0); return; }
-        var settings = UserSettings.Load();
+        bool visualReview = UserArgs.Contains("--visual-review");
+        bool specimenReview = UserArgs.Contains("--specimen-review");
+        bool guardianReview = UserArgs.Contains("--guardian-review");
+        bool isReview = visualReview || specimenReview || guardianReview;
+        var settings = isReview ? new UserSettings() : UserSettings.Load();
+        if (isReview)
+        {
+            settings.Transient = true;
+            settings.AutosaveEnabled = false;
+            settings.ShowHelpOnStart = false;
+            settings.Quality = 1;
+            settings.DynamicShadows = true;
+            settings.GlobalIllumination = true;
+            settings.AmbientOcclusion = true;
+        }
         if (UserArgs.Contains("--soak")) { settings.Transient = true; settings.AutosaveEnabled = true; settings.AutosaveMinutes = 5; settings.ShowHelpOnStart = false; }
         if (UserArgs.Contains("--diagnostics-check")) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
 
@@ -69,6 +83,7 @@ public partial class Main : Node3D
         loadingLayer.AddChild(loadingPanel); AddChild(loadingLayer);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        bool worldStartSucceeded = false;
         try
         {
             if (ArgAfter("--loading-preview") is { } previewDirectory)
@@ -78,7 +93,7 @@ public partial class Main : Node3D
             }
             string autosave = ArgAfter("--load") ?? Session.AutosavePath;
             LoadResult? restored = null;
-            if ((!UserArgs.Contains("--diagnostics-check") && !UserArgs.Contains("--soak") || ArgAfter("--load") != null) && File.Exists(autosave))
+            if ((!isReview && !UserArgs.Contains("--diagnostics-check") && !UserArgs.Contains("--soak") || ArgAfter("--load") != null) && File.Exists(autosave))
                 restored = await System.Threading.Tasks.Task.Run(() => SaveSystem.Load(content, autosave));
             VivariumWorld world;
             string? saveName = null;
@@ -88,6 +103,10 @@ public partial class Main : Node3D
                 if (restored != null) Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + restored.Message);
                 loadingText.Text = "Growing a new island...";
                 var descriptor = content.PresetOrThrow(ArgAfter("--preset") ?? "default").Clone();
+                if (visualReview)
+                    descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var reviewSeed) ? reviewSeed : 804584441UL;
+                if (specimenReview)
+                    descriptor.Seed = ulong.TryParse(ArgAfter("--specimen-seed"), out var specimenSeed) ? specimenSeed : 804584441UL;
                 // The guardian's model is the largest asset in the game. Its
                 // archetype follows from the descriptor, so the load can start
                 // while the world is still being generated.
@@ -97,12 +116,15 @@ public partial class Main : Node3D
                     descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var soakSeed) ? soakSeed : 804584441UL;
                     descriptor.Name += " - bounded-work soak";
                 }
-                world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, descriptor,warmupSurfaceWater:false));
+                bool populate = !specimenReview && (!guardianReview || UserArgs.Contains("--guardian-populated"));
+                world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, descriptor, populate: populate, warmupSurfaceWater: false));
             }
+            if (isReview) world.Clock.Paused = true;
             await Session.StartWorldAsync(world, saveName, stage => {
                 progressBar.Value++;
                 loadingText.Text = world.Descriptor.Name + "\nPreparing your island - " + stage;
             });
+            worldStartSucceeded = true;
             if (ArgAfter("--loading-preview") is { } completedDirectory)
                 GetViewport().GetTexture().GetImage().SavePng(Path.Combine(completedDirectory,"preparing.png"));
             if (ArgAfter("--soak") is { } soakDirectory)
@@ -127,6 +149,63 @@ public partial class Main : Node3D
         }
         catch (Exception ex) { Log.Error(LogCategory.App, "Island loading failed", ex); ShowFatal("Island loading failed: " + ex.Message); }
         finally { loadingLayer.QueueFree(); }
+        if (isReview && !worldStartSucceeded)
+        {
+            string mode = visualReview ? "VISUAL" : specimenReview ? "SPECIMEN" : "GUARDIAN";
+            GD.PrintErr($"{mode}_REVIEW_FAILED world start did not complete.");
+            GetTree().Quit(4);
+            return;
+        }
+        if (visualReview)
+        {
+            try
+            {
+                var reviewWorld = Session.World ?? throw new InvalidOperationException("World missing after startup.");
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await VisualReviewRunner.Capture(this, Session, reviewWorld,
+                    ArgAfter("--visual-review") ?? Path.Combine(OS.GetUserDataDir(), "visual-review"));
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr("VISUAL_REVIEW_FAILED " + ex);
+                GetTree().Quit(4);
+            }
+            return;
+        }
+        if (specimenReview)
+        {
+            try
+            {
+                var specimenWorld = Session.World ?? throw new InvalidOperationException("World missing after startup.");
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await SpecimenReviewRunner.Capture(this, Session, specimenWorld,
+                    ArgAfter("--specimen-review")!, ArgAfter("--specimen-species"), ArgAfter("--specimen-seed"));
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr("SPECIMEN_REVIEW_FAILED " + ex);
+                GetTree().Quit(4);
+            }
+            return;
+        }
+        if (guardianReview)
+        {
+            try
+            {
+                var guardianWorld = Session.World ?? throw new InvalidOperationException("World missing after startup.");
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await GuardianReviewRunner.Capture(this, Session, guardianWorld, ArgAfter("--guardian-review")!, ArgAfter("--guardian-species"));
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr("GUARDIAN_REVIEW_FAILED " + ex);
+                GetTree().Quit(4);
+            }
+            return;
+        }
         if (ArgAfter("--loading-preview") is { } readyDirectory)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

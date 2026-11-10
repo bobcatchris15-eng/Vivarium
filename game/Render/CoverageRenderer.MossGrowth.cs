@@ -14,7 +14,10 @@ namespace Vivarium.Game.Render;
 /// </summary>
 public partial class CoverageRenderer
 {
-    // Opt-in while comparing against existing real GPU captures. 1=moderate, 4=extreme.
+    // 0=off, 1=curated production budget (default), 4=extreme comparison fixture.
+    // Tier 1 keeps the shader's colonization response moderate while still emitting
+    // real 3D gametophore shoots on dense, established cushions; the caller applies a
+    // stable hash stride so only roughly one in four eligible cells grows a shoot cluster.
     private static int MossMicroGrowthStrength
     {
         get
@@ -59,6 +62,8 @@ public partial class CoverageRenderer
         Color live, Color old, uint hash, float biomass, double speciesHeight,
         bool rim, int strength)
     {
+        // The caller owns density/eligibility; this floor only rejects tissue too thin
+        // to carry leaflets. Established default-tier sites are filtered before entry.
         if (strength <= 0 || biomass <= 0.03f) return;
         float mature = Math.Clamp(biomass, 0f, 1f);
         float age = MathF.Sqrt(mature);

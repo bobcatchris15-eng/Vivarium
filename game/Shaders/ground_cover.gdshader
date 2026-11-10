@@ -38,6 +38,16 @@ void vertex() {
         NORMAL = normalize(vec3(NORMAL.x, NORMAL.y - dot(slope, NORMAL.xz), NORMAL.z));
     }
     vec2 world_xz = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
+    // Micro-breeze: basal contact stays fixed while tips drift with a slow air
+    // current. review_time freezes the phase for deterministic review captures.
+    float clock = review_time >= 0.0 ? review_time : TIME;
+    float tip = clamp(VERTEX.y * 4.0, 0.0, 1.0);
+    tip = tip * tip * (3.0 - 2.0 * tip);
+    float phase = world_xz.x * 1.10 + world_xz.y * 0.80 + individuality * 6.2831853;
+    float amp = 0.0017 * mix(0.50, 1.15, clamp(sway_strength, 0.0, 1.0));
+    VERTEX.x += sin(clock * 0.63 + phase) * amp * tip;
+    VERTEX.z += cos(clock * 0.51 + phase * 1.21) * amp * 0.78 * tip;
+    world_xz = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
     habitat_uv = (world_xz - field_rect.xy) / max(field_rect.zw, vec2(.001));
     if (!instance_shape_variation) individuality = cover_hash(world_xz);
 }
@@ -46,6 +56,7 @@ void fragment() {
     tissue_fiber_view = vec3(1.0, 0.0, 0.0);
     tissue_fiber_mask = 0.0;
     tissue_phase_mask = 1.0 - clamp(old_stem, 0.0, 1.0);
+    tissue_nonleaf_mask = 0.0;
     if (!FRONT_FACING) NORMAL = -NORMAL;
     // Blades now carry real u across the width and v base-to-tip; the venation network below is
     // live rather than sampling a constant UV. Stems (UV2.y = 1) keep a mid-blade profile.
@@ -68,9 +79,9 @@ void fragment() {
     if (field_rect.z > .001 && field_rect.w > .001) habitat = texture(field_tex, habitat_uv).ra;
     float moisture = smoothstep(.08, .85, clamp(habitat.x, 0.0, 1.0));
     float exposure = smoothstep(.10, .85, clamp(habitat.y, 0.0, 1.0));
-    vec3 hue = mix(vec3(.20, .53, .58), vec3(.68, .76, .13), exposure);
-    vec3 pigment = srgb_to_linear(hue * mix(1.10, .42, moisture)) * tissue_color
-        * mix(.95, 1.05, individuality);
+    vec3 base_srgb = mix(vec3(0.28, 0.46, 0.22), vec3(0.48, 0.58, 0.20), exposure);
+    vec3 pigment = srgb_to_linear(base_srgb) * mix(1.06, 0.78, moisture) * tissue_color * mix(0.92, 1.08, individuality);
+
     // Keep the shared chlorophyll transmission lobe from painting every blade
     // the same bright green irrespective of its requested habitat pigment.
     tissue_phase_mask *= clamp(dot(pigment, vec3(.2126, .7152, .0722)) * 5.0, 0.0, .9);
@@ -80,11 +91,36 @@ void fragment() {
     float senescent = smoothstep(.48, 1.0, blade_v) * mix(.20, .70, individuality) * blade;
     pigment = mix(pigment, pigment * vec3(1.24, .97, .58), max(old_stem * .72, senescent * .45));
     pigment = mix(pigment, pigment * vec3(1.12, 1.08, .88), float(!FRONT_FACING) * .22);
-    pigment = mix(pigment * .84, pigment, smoothstep(.0, .16, blade_v));
-    float crown = clamp(baked_ao, .15, 1.0);
-    float crown_ao = mix(.45, 1.0, crown);
-    ALBEDO = pigment * mix(.75, 1.0, sqrt(crown));
-    ROUGHNESS = .94 + .035 * individuality;
+    // Basal blades emerge from damp loam: the bottom quarter warms toward olive/humus
+    // and loses value, so turf and bank fringe read as rooted rather than as dark
+    // spikes floating over warm soil.
+    float soil_contact = smoothstep(0.0, 0.26, blade_v);
+    pigment = mix(pigment * vec3(0.76, 0.68, 0.52), pigment, soil_contact);
+
+
+    float crown = clamp(baked_ao, 0.35, 1.0);
+    float crown_ao = mix(0.68, 1.0, crown);
+    ALBEDO = pigment * mix(0.84, 1.0, sqrt(crown));
+    // Sunlit blade tips are the thinnest tissue in the turf: let them transmit warm
+    // chlorophyll light instead of silhouetting to black. The shared direct-light
+    // path consumes the phase mask and optical depth directly; BACKLIGHT below is
+    // the built-in-path fallback carrying the same energy.
+    float tip_glow = smoothstep(0.45, 0.96, blade_v) * blade;
+    tissue_phase_mask = clamp(tissue_phase_mask + tip_glow * 0.55, 0.0, 1.0);
+    tissue_tau = mix(1.15, 0.22, tip_glow);
+    BACKLIGHT = pigment * vec3(0.55, 0.42, 0.10) * tip_glow * 0.55;
+    // A turf blade is a rolled shoot, not a flat fin: roll the shading normal from
+    // the midrib out to each margin so the two lanes read as a rounded cylinder.
+    float shoot = clamp(UV.x, 0.0, 1.0) * 2.0 - 1.0;
+    float round_slope = -shoot * (0.35 + 0.55 * abs(shoot)) * blade;
+    vec3 blade_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    vec3 blade_wn = finite_surface_normal(
+        (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz, vec3(0.0, 1.0, 0.0));
+    vec3 rounded = cotangent_normal(blade_wn, blade_world, UV,
+        normalize(vec3(round_slope, 0.0, 1.0)));
+    NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(rounded, 0.0)).xyz, vec3(0.0, 0.0, 1.0));
+    // Adaxial face keeps the thin waxy cuticle; abaxial face is matte and softer.
+    ROUGHNESS = mix(.90, .965, float(!FRONT_FACING)) + .03 * individuality;
     SPECULAR = .035;
     vec3 dndx = dFdx(NORMAL), dndy = dFdy(NORMAL);
     float variance = dot(dndx, dndx) + dot(dndy, dndy);

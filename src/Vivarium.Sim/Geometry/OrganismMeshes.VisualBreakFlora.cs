@@ -17,97 +17,44 @@ public static partial class OrganismMeshes
         int cols = m.FloraDetailLevel switch { 2 => 4, 1 => 6, _ => 8 };
         if (m.Lod is { } lodC) cols = Math.Max(3, (int)Math.Round(cols * lodC.Blade));
 
-        Vec3 At(double t, double x, int face) => CurvedBladePoint(root, control, tip, sideHint, width, t, x, twist, shoulder, serration, face);
-        Vec3 Normal(double t, double x, int face)
+        Vec3 At(double t, double x) => CurvedBladePoint(root, control, tip, sideHint, width, t, x, twist, shoulder, serration);
+        Vec3 Normal(double t, double x)
         {
             const double e = .002;
-            var along = At(Math.Min(1, t + e), x, face) - At(Math.Max(0, t - e), x, face);
-            var across = At(t, Math.Min(1, x + e), face) - At(t, Math.Max(-1, x - e), face);
+            var along = At(Math.Min(1, t + e), x) - At(Math.Max(0, t - e), x);
+            var across = At(t, Math.Min(1, x + e)) - At(t, Math.Max(-1, x - e));
             var normal = across.Cross(along).Normalized();
             return normal.LengthSq > 1e-8 ? normal : Vec3.Up;
         }
 
         int vertex = m.VertexCount, index = m.Indices.Count;
-        int[] rootIdx = new int[2];
-        int[] tipIdx = new int[2];
-        int[,,] gridIdx = new int[2, rows - 1, cols + 1];
 
-        for (int face = 0; face < 2; face++)
+        int start = m.VertexCount;
+        for (int r = 0; r <= rows; r++)
         {
-            double sign = face == 0 ? 1.0 : -1.0;
-            var underCol = Primitives.Mix(baseCol, new[] { 0.35, 0.48, 0.28 }, 0.42);
-            var bCol = face == 0 ? baseCol : underCol;
-            var tCol = face == 0 ? tipCol : underCol;
-
-            rootIdx[face] = m.AddVertex(At(0, 0, face), Normal(0, 0, face) * sign, bCol, 1.0, 0.0, 0.5, face, foliage);
-
-            for (int r = 1; r < rows; r++)
+            double t = (double)r / rows;
+            var col = Primitives.Mix(baseCol, tipCol, t);
+            for (int c = 0; c <= cols; c++)
             {
-                double t = (double)r / rows;
-                var rowCol = Primitives.Mix(bCol, tCol, t);
-                for (int c = 0; c <= cols; c++)
-                {
-                    double x = (double)c / cols * 2.0 - 1.0;
-                    gridIdx[face, r - 1, c] = m.AddVertex(At(t, x, face), Normal(t, x, face) * sign, rowCol, 1.0, t, (x + 1.0) * 0.5, face, foliage);
-                }
+                double x = (double)c / cols * 2.0 - 1.0;
+                var mid = At(t, x);
+                var n = Normal(t, x);
+                m.AddVertex(mid, n, col, 1.0, t, (x + 1.0) * 0.5, 0.5, foliage);
             }
+        }
 
-            tipIdx[face] = m.AddVertex(At(1, 0, face), Normal(1, 0, face) * sign, tCol, 1.0, 1.0, 0.5, face, foliage);
-
-            // Triangulation: root fan
+        int rowStride = cols + 1;
+        for (int r = 0; r < rows; r++)
+        {
             for (int c = 0; c < cols; c++)
             {
-                int va = gridIdx[face, 0, c];
-                int vb = gridIdx[face, 0, c + 1];
-                Primitives.TriangleFacing(m, rootIdx[face], va, vb, m.NormalAt(rootIdx[face]));
-            }
-
-            // Triangulation: middle quad strips
-            for (int r = 0; r < rows - 2; r++)
-            {
-                for (int c = 0; c < cols; c++)
-                {
-                    int a = gridIdx[face, r, c];
-                    int b = gridIdx[face, r, c + 1];
-                    int d = gridIdx[face, r + 1, c];
-                    int e = gridIdx[face, r + 1, c + 1];
-                    Primitives.TriangleFacing(m, a, d, b, m.NormalAt(a));
-                    Primitives.TriangleFacing(m, b, d, e, m.NormalAt(b));
-                }
-            }
-
-            // Triangulation: tip fan
-            for (int c = 0; c < cols; c++)
-            {
-                int va = gridIdx[face, rows - 2, c];
-                int vb = gridIdx[face, rows - 2, c + 1];
-                Primitives.TriangleFacing(m, va, tipIdx[face], vb, m.NormalAt(va));
+                int a = start + r * rowStride + c;
+                int b = a + rowStride;
+                var n0 = m.NormalAt(a);
+                Primitives.TriangleFacing(m, a, b, a + 1, n0.LengthSq > 1e-8 ? n0 : Vec3.Up);
+                Primitives.TriangleFacing(m, a + 1, b, b + 1, n0.LengthSq > 1e-8 ? n0 : Vec3.Up);
             }
         }
-
-        // Stitched boundary rim connecting upper and lower surfaces
-        var sampleAcross = sideHint.Normalized();
-        // Left rim (c = 0)
-        Primitives.TriangleFacing(m, rootIdx[0], rootIdx[1], gridIdx[0, 0, 0], -sampleAcross);
-        Primitives.TriangleFacing(m, rootIdx[1], gridIdx[1, 0, 0], gridIdx[0, 0, 0], -sampleAcross);
-        for (int r = 0; r < rows - 2; r++)
-        {
-            Primitives.TriangleFacing(m, gridIdx[0, r, 0], gridIdx[1, r, 0], gridIdx[0, r + 1, 0], -sampleAcross);
-            Primitives.TriangleFacing(m, gridIdx[1, r, 0], gridIdx[1, r + 1, 0], gridIdx[0, r + 1, 0], -sampleAcross);
-        }
-        Primitives.TriangleFacing(m, gridIdx[0, rows - 2, 0], gridIdx[1, rows - 2, 0], tipIdx[0], -sampleAcross);
-        Primitives.TriangleFacing(m, gridIdx[1, rows - 2, 0], tipIdx[1], tipIdx[0], -sampleAcross);
-
-        // Right rim (c = cols)
-        Primitives.TriangleFacing(m, rootIdx[0], gridIdx[0, 0, cols], rootIdx[1], sampleAcross);
-        Primitives.TriangleFacing(m, rootIdx[1], gridIdx[0, 0, cols], gridIdx[1, 0, cols], sampleAcross);
-        for (int r = 0; r < rows - 2; r++)
-        {
-            Primitives.TriangleFacing(m, gridIdx[0, r, cols], gridIdx[0, r + 1, cols], gridIdx[1, r, cols], sampleAcross);
-            Primitives.TriangleFacing(m, gridIdx[1, r, cols], gridIdx[0, r + 1, cols], gridIdx[1, r + 1, cols], sampleAcross);
-        }
-        Primitives.TriangleFacing(m, gridIdx[0, rows - 2, cols], tipIdx[0], gridIdx[1, rows - 2, cols], sampleAcross);
-        Primitives.TriangleFacing(m, gridIdx[1, rows - 2, cols], tipIdx[0], tipIdx[1], sampleAcross);
 
         if (foliage > .5) m.RecordLeaf(vertex, index, root, (tip - root).Length);
     }
@@ -133,11 +80,8 @@ public static partial class OrganismMeshes
         double teeth = 1 + serration * (2*Math.Abs(t*9-Math.Floor(t*9+.5))-.5);
         double half = width * envelope * (1 + .07*x*Math.Sin(t*5));
         double absX = Math.Abs(x);
-        double zThick = face == 0 ? 0.00018 : -0.00018;
-        double zProfile = face == 0
-            ? (0.16 * (1.0 - x * x) - 0.08 * absX)
-            : (0.16 * (1.0 - x * x) - 0.22 * (1.0 - absX));
-        return centre + across*(x*half*teeth) + up*(zThick + half * zProfile);
+        double zProfile = 0.16 * (1.0 - x * x) - 0.08 * absX;
+        return centre + across*(x*half*teeth) + up*(half * zProfile);
     }
 
 
@@ -172,8 +116,8 @@ public static partial class OrganismMeshes
 {
     public const int FloraLodTiers = 3;
     /// <summary>Hard cap on the top tier of every species.</summary>
-    public const int FloraTopTriangleCap = 160000;
-    public const double FloraMidRatio = 0.50, FloraLowRatio = 0.18;
+    public const int FloraTopTriangleCap = 96000;
+    public const double FloraMidRatio = 0.40, FloraLowRatio = 0.14;
 
     /// <summary>
     /// Top-tier triangle cap for one species. The default holds for every form, but a species whose
@@ -184,33 +128,36 @@ public static partial class OrganismMeshes
     {
         // A clover mat is hundreds of small overlapping leaflets; below its budget the near tier
         // thins the mat into scattered pads instead of a continuous sward.
-        "trifold" => 160000,
+        "trifold" => 105000,
         // Keep authored cap/stipe density; underside lamellae now use a normal map.
-        "dewbonnet" => 220000,
+        "dewbonnet" => 130000,
         // A fern's near read is its pinnae: dozens of finely divided blades per frond, nine fronds
         // deep. Below its budget the near tier drops pinnae and the fern reads as a handful of
         // broad leaves instead of a feather.
-        "veilfern" => 160000,
+        "veilfern" => 105000,
         // A bramble's near read is its prickles and its palmate leaves: without them the brake is a
         // tangle of bare wires.
-        "hookthicket" => 160000,
+        "hookthicket" => 105000,
         // The coinrunner mat is the same argument: a wide carpet of large reniform coins, each one
         // a modelled blade with its own venation, a coin-border bead and a rolled edge. Below its
         // budget the near tier drops coins and the carpet opens into separate rafts.
-        "coinrunner" => 160000,
+        "coinrunner" => 105000,
         // Fine dense-leaf shells on climbers are authored as full closed surfaces. Keep their
         // close tier intact; thinning them to the general cap opens the foliage into sparse strips.
-        "fenhook" => 400000,
-        "spiralvine" => 120000,
-        "clinglace" => 360000,
+        "fenhook" => 220000,
+        "spiralvine" => 80000,
+        "clinglace" => 200000,
         // A Sarracenia trap is a modelled organ: trumpet wall, throat, rolled lip, erect hood with
         // its areolate net and a fringe of crystalline needles. Below its budget the tierer drops
         // the hood fringe and the net, and the trap stops reading as a pitcher plant.
-        "pitcher_plant" => 160000,
+        "pitcher_plant" => 105000,
         _ => FloraTopTriangleCap,
     };
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, ulong, int, bool, int, bool), double> LodScaleCache = new();
+    /// <summary>Calibrated tier scale per species/form/tier. Deliberately keyed without the instance seed:
+    /// the calibration mesh is always generated with one canonical seed, so a single binary search serves
+    /// every morph of the species.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Id, int Kind, bool Tiered, int Tier, bool Thin), double> LodScaleCache = new();
 
     /// <summary>Triangle target for a tier, given the top-tier triangle count.</summary>
     public static int FloraTierBudget(int topTris, int tier) => tier switch
@@ -225,26 +172,28 @@ public static partial class OrganismMeshes
     /// <paramref name="thinMinorDetails"/> to isolate tessellation from organ selection.</summary>
     public static MeshData FloraTier(FloraSpeciesDef sp, ulong seed, int tier, bool juvenile = false, bool tieredSource = false, int farGillStations = 9, int farEmberMicroSides = 5, int farDewbonnetCapRings = 16, bool thinMinorDetails = true) =>
         BuildTier(sp.Id, seed, juvenile ? 1 : 0, tieredSource, tier,
-            (t, lod) => Flora(sp, seed, juvenile, tieredSource ? t : null, lod), farGillStations, farEmberMicroSides, farDewbonnetCapRings, thinMinorDetails)!;
+            (sd, t, lod) => Flora(sp, sd, juvenile, tieredSource ? t : null, lod), farGillStations, farEmberMicroSides, farDewbonnetCapRings, thinMinorDetails)!;
 
     public static MeshData? FloraFruitingTier(FloraSpeciesDef sp, ulong seed, int tier, bool tieredSource = false) =>
-        BuildTier(sp.Id, seed, 2, tieredSource, tier, (t, lod) => FloraFruiting(sp, seed, tieredSource ? t : null, lod));
+        BuildTier(sp.Id, seed, 2, tieredSource, tier, (sd, t, lod) => FloraFruiting(sp, sd, tieredSource ? t : null, lod));
 
     public static MeshData ClimberNodeTier(FloraSpeciesDef sp, ulong seed, bool attached, int tier) =>
-        BuildTier(sp.Id, seed, attached ? 3 : 4, false, tier, (_, lod) => ClimberNode(sp, seed, attached, lod))!;
+        BuildTier(sp.Id, seed, attached ? 3 : 4, false, tier, (sd, _, lod) => ClimberNode(sp, sd, attached, lod))!;
 
     /// <summary>The growing tip of a shoot, at the given detail tier.</summary>
     public static MeshData ClimberNodeTipTier(FloraSpeciesDef sp, ulong seed, int tier) =>
-        BuildTier(sp.Id, seed, 5, false, tier, (_, lod) => ClimberNodeTip(sp, seed, lod))!;
+        BuildTier(sp.Id, seed, 5, false, tier, (sd, _, lod) => ClimberNodeTip(sp, sd, lod))!;
 
-    private static MeshData? BuildTier(string id, ulong seed, int kind, bool tiered, int tier, Func<int, FloraLodParams, MeshData?> gen, int farGillStations = 9, int farEmberMicroSides = 5, int farDewbonnetCapRings = 16, bool thinMinorDetails = true)
+    private static MeshData? BuildTier(string id, ulong seed, int kind, bool tiered, int tier, Func<ulong, int, FloraLodParams, MeshData?> gen, int farGillStations = 9, int farEmberMicroSides = 5, int farDewbonnetCapRings = 16, bool thinMinorDetails = true)
     {
         tier = Math.Clamp(tier, 0, FloraLodTiers - 1);
         FloraLodParams Detail(int t, double s) => FloraLodParams.FromScale(s) with { CullMinorDetails = t > 0 && thinMinorDetails };
-        MeshData? Make(int t, double s) => gen(t, Detail(t, s)) is { } raw ? FinishTier(raw) : null;
+        MeshData? Make(ulong sd, int t, double s) => gen(sd, t, Detail(t, s)) is { } raw ? FinishTier(raw) : null;
+        // One canonical seed per species/tier: every morph measures the same mesh, so the search is shared.
+        ulong calSeed = Hash.Fnv1a64("flora.lod.cal." + id);
         double S(int t)
         {
-            var key = (id, seed, kind, tiered, t, thinMinorDetails);
+            var key = (id, kind, tiered, t, thinMinorDetails);
             if (LodScaleCache.TryGetValue(key, out double cached)) return cached;
             int target;
             double hiS;
@@ -252,12 +201,14 @@ public static partial class OrganismMeshes
             else
             {
                 double sTop = S(0);
-                var top = Make(0, sTop);
+                var top = Make(calSeed, 0, sTop);
                 if (top == null) return 0;
                 target = FloraTierBudget(top.TriangleCount, t);
-                hiS = t == 1 ? sTop : S(1);
+                // An authored floor that is already above the top-tier cap returns sTop = 0. Lower tiers can
+                // still thin organs, so they search their full range instead of collapsing onto that floor.
+                hiS = t == 1 ? (sTop > 0 ? sTop : 1) : S(1);
             }
-            double s = SearchScale(x => Make(t, x)?.TriangleCount ?? 0, target, hiS);
+            double s = SearchScale(x => Make(calSeed, t, x)?.TriangleCount ?? 0, target, hiS);
             LodScaleCache[key] = s;
             return s;
         }
@@ -271,9 +222,9 @@ public static partial class OrganismMeshes
                 EmberMicroSides = id == "embercup" ? Math.Clamp(farEmberMicroSides, 3, 5) : 5,
                 DewbonnetCapRings = id == "dewbonnet" ? Math.Clamp(farDewbonnetCapRings, 4, 16) : 16
             };
-            return gen(tier, lod) is { } raw ? FinishTier(raw) : null;
+            return gen(seed, tier, lod) is { } raw ? FinishTier(raw) : null;
         }
-        return Make(tier, scale);
+        return Make(seed, tier, scale);
     }
 
     /// <summary>Largest scale in [0, hi] whose triangle count is within <paramref name="target"/> (0 if none).</summary>

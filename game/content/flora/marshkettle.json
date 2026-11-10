@@ -1,0 +1,102 @@
+{
+  "id": "marshkettle",
+  "name": "Marshkettle",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Glossy gold cups at the edge of spring pools.",
+  "description": "Round glossy leaves hold dewdrops like coins and the first gold cups open while there is still ice in the shadows.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.5
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.9,
+      "tolerance": 0.12
+    },
+    "light": {
+      "optimum": 0.7,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.55,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0.03,
+    "hardMinMoisture": 0.6,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.24,
+    "maxBiomass": 1.0,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 200,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.24,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.8,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.6,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "marshkettle",
+    "color": [
+      0.24,
+      0.43,
+      0.24
+    ],
+    "color2": [
+      0.94,
+      0.78,
+      0.12
+    ],
+    "colorVariance": 0.06,
+    "height": 0.2
+  },
+  "tags": [
+    "plant",
+    "flowering",
+    "wet"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.35,
+      0.35,
+      0.2
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

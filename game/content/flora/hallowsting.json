@@ -1,0 +1,95 @@
+{
+  "id": "hallowsting",
+  "name": "Hallowsting",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Serrated coloniser of rich disturbed ground.",
+  "description": "Tall stalks of opposite serrated leaves cast drooping green tassels; touch one and pale welts rise and burn for an hour.",
+  "habitat": {
+    "substrates": {
+      "soil": 1
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.3
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.85,
+      "tolerance": 0.2
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.45,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.12,
+    "maxBiomass": 3.5,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.22,
+    "maturityDays": 22,
+    "lifespanDays": 350,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.5,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 9,
+    "radius": 1.3,
+    "propagules": 3,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.5,
+    "crowdingLimit": 3.0,
+    "sensitivity": 0.6
+  },
+  "proximity": [],
+  "litterFraction": 0.82,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0.08,
+  "visual": {
+    "shape": "hallowsting",
+    "color": [
+      0.18,
+      0.35,
+      0.18
+    ],
+    "color2": [
+      0.56,
+      0.75,
+      0.48
+    ],
+    "colorVariance": 0.06,
+    "height": 0.8
+  },
+  "tags": [
+    "plant",
+    "aggressive",
+    "eutrophic"
+  ],
+  "postLife": {
+    "standingDays": 7,
+    "collapseDays": 3,
+    "fallenDays": 25,
+    "advancedDays": 10,
+    "coarseFraction": 0.15,
+    "decayHalfLifeMultiplier": 0.75,
+    "standingRetention": 0.4,
+    "deadColor": [
+      0.35,
+      0.29,
+      0.16
+    ],
+    "litterColorInfluence": 0.8,
+    "dryBleach": 0.15,
+    "wetDarken": 0.15
+  }
+}

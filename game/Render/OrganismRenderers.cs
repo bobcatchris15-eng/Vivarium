@@ -28,8 +28,9 @@ public partial class FloraRenderer : Node3D
     private VivariumWorld _w = null!;
     private const int DefaultMorphVariants = 5;
     private const int MigratedMorphVariants = 12;
+    private static bool IsExpansionClimber(string shape) => shape is "shadewrap" or "bitterbine" or "trumpetbind";
     private static int MorphVariantsFor(string shape) => FloraGeometryPlacement.MorphCount(shape);
-    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Juvenile, Tendril; public int FullTris, FruitTris, JuvenileTris, TendrilTris; public bool CanCastShadow; }
+    private sealed class VariantLayer { public MultiMeshInstance3D Full = null!; public MultiMeshInstance3D? Fruit, Juvenile, Tendril; public int FullTris, FruitTris, JuvenileTris, TendrilTris; public bool CanCastShadow; public StructuralSurfaceIndex? StructuralSurface; }
     private sealed class Layer
     {
         public VariantLayer[] Variants; public MultiMeshInstance3D? Veins; public int VeinTris;
@@ -39,7 +40,7 @@ public partial class FloraRenderer : Node3D
     }
     private readonly Dictionary<EntityId, int> _visualTiers = new();
     private readonly Dictionary<EntityId, int> _distanceTiers = new();
-    private bool _reducedDistantPlants;
+    private bool _reducedDistantPlants = true;
     private double _distanceLodScale = 1;
     /// <summary>Distance band multiplier; permits matched in-world measurement without rebuilding geometry.</summary>
     public double DistanceLodScale
@@ -83,22 +84,27 @@ public partial class FloraRenderer : Node3D
     public RenderDirtyRegions DirtyRegions { get; } = new(tileSize: 2.0f);
     public RenderSnapshot? CurrentSnapshot { get; private set; }
     private object? _snapshotWorld;
-    private readonly struct PlantStateRecord
+    /// <summary>
+    /// Static-ish per-plant placement. A camera-driven refresh reuses these values; the rock/log ground
+    /// scan, surface normal, light field and moisture field are resampled only when the world changes or
+    /// roughly every 32 simulation ticks.
+    /// </summary>
+    private struct PlantPlacement
     {
-        public readonly Vector3 Position;
-        public readonly float Radius;
-        public readonly float Height;
-        public readonly float Health;
-        public readonly bool Fruiting;
-        public readonly FloraStage Stage;
-        public readonly PlantReproductiveStage ReproStage;
-
-        public PlantStateRecord(Vector3 pos, float r, float h, float health, bool fruiting, FloraStage stage, PlantReproductiveStage repro)
-        {
-            Position = pos; Radius = r; Height = h; Health = health; Fruiting = fruiting; Stage = stage; ReproStage = repro;
-        }
+        public Vec2 Position;
+        public int TerrainVersion;
+        public int PropsVersion;
+        public long SampledTick;
+        public float GroundY;
+        public Vector3 SurfaceNormal;
+        public Basis UprightBasis;
+        public FloraSpeciesDef Def;
+        public float LocalLight;
+        public float LocalMoisture;
     }
-    private readonly Dictionary<EntityId, PlantStateRecord> _prevPlantStates = new();
+    private readonly Dictionary<EntityId, PlantPlacement> _placements = new();
+    private readonly List<EntityId> _stalePlacements = new();
+    private const long PlacementResampleTicks = 32;
     private readonly HashSet<EntityId> _currentPlantIds = new();
     private double _accum = 999;
     private double _lastMissingCheck;
@@ -126,8 +132,17 @@ public partial class FloraRenderer : Node3D
     private IEnumerator<bool>? _build;
     private ContentLibrary? _builtContent;
     private readonly List<Node> _buildingNodes = new();
-    // Stable per-organism ownership. No nearest-32 ranking, reassignment, or alternating light slots.
+    // Stable per-organism ownership while a plant stays inside the active light budget.
+    // Lights outside the budget are parked in _luminousPool and reused, never accumulated.
     private readonly Dictionary<EntityId,OmniLight3D> _luminousLights = new();
+    private readonly List<OmniLight3D> _luminousPool = new();
+    private readonly List<(EntityId Id, FloraSpeciesDef Species, Vector3 Position, float Range, float Energy, float Score)> _lightCandidates = new();
+    private readonly List<(OmniLight3D Light, float Energy, Vector3 Position, float Range)> _activeLuminous = new();
+    private readonly HashSet<EntityId> _selectedLuminous = new();
+    private readonly List<EntityId> _luminousToPool = new();
+    /// <summary>At most this many bioluminescent OmniLight3D nodes are energised at once. Every
+    /// overlapping light is a full per-pixel shader pass over every lit surface in its range.</summary>
+    private const int MaxActiveLuminousLights = 28;
     public int LuminousLightCacheAuditRefreshes { get; private set; }
     public int LuminousLightCacheAuditLights { get; private set; }
     public long LuminousLightCacheAuditPairs { get; private set; }
@@ -154,6 +169,9 @@ public partial class FloraRenderer : Node3D
     public int LoadedSpeciesCount => _layers.Count;
     public bool HasLegacyLayer(string speciesId) => _layers.ContainsKey(speciesId);
     private readonly List<FloraSnapshotItem> _snapshot = new();
+    private readonly Dictionary<string, List<FloraSnapshotItem>> _veinPlants = new(StringComparer.Ordinal);
+    // Render-only corrected segment centerlines are shared by foliage and vein uploads for this refresh.
+    private readonly Dictionary<EntityId, IReadOnlyList<ClimberSegmentSnapshot>> _renderClimberSegments = new();
     private readonly List<(FloraSnapshotItem Plant, FloraSpeciesDef Species)> _woodySupports = new();
     /// <summary>At most this many luminous plant lights cast shadows.</summary>
     private const int MaxShadowCastingLights = 6;
@@ -206,9 +224,14 @@ public int Quality
         _buildingNodes.Clear();
         foreach (var light in _luminousLights.Values) light.QueueFree();
         _luminousLights.Clear();
+        foreach (var light in _luminousPool) light.QueueFree();
+        _luminousPool.Clear();
+        _lightCandidates.Clear(); _activeLuminous.Clear(); _selectedLuminous.Clear(); _luminousToPool.Clear();
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear(); _publishedPlants.Clear();
-        _pooledBuffers.Clear(); _prevPlantStates.Clear(); DirtyRegions.Clear();
+        _renderClimberSegments.Clear();
+        _pooledBuffers.Clear(); _placements.Clear(); _stalePlacements.Clear(); DirtyRegions.Clear();
         _full.Clear(); _fruit.Clear(); _juvenile.Clear(); _veins.Clear(); _tendrils.Clear();
+        _veinPlants.Clear();
         _visualTiers.Clear();
         _distanceTiers.Clear();
         Visible_ = 0; TrianglesDrawn = 0;
@@ -333,6 +356,7 @@ public int Quality
         var profile = FloraVisualProfile.Load(sp.Id, sp: sp);
         var mat = Bridge.Shader("res://Shaders/flora.gdshader");
         NightFloraMaterials.Bind(mat, sp);
+        if (sp.Shape == "ashcomb") mat.SetShaderParameter("dry_fungal_cuticle", true);
         mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
         mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
         mat.SetShaderParameter("deform_leaf_tips", MorphVariantsFor(sp.Shape) == MigratedMorphVariants);
@@ -349,9 +373,14 @@ public int Quality
             leafMat.SetShaderParameter("wind_strength", 0.0f);
         }
         var layer = new Layer(MorphVariantsFor(sp.Shape), profile);
+        bool buildsJuvenile = sp.Climber != null
+            || sp.Shape.StartsWith("microcanopy_", StringComparison.Ordinal)
+            || sp.Shape is "fern" or "veilfern" or "hookthicket_brake"
+                or "cloudtuft" or "cinderberry" or "brightknot" or "capstar_moss"
+                or "deepquill" or "mirepocket" or "pondstars" or "burrflag";
         ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
 
-        var tasks = new List<Task<(MeshData Full, MeshData? Young, MeshData? Fruit)>>();
+        var tasks = new List<Task<(MeshData Full, MeshData? Young, MeshData? Fruit, StructuralSurfaceIndex? Structural)>>();
         // Capture review policy on the publishing thread. Review hooks can use
         // Godot resources and must never be invoked by the geometry workers.
         bool prepareProfileUpload = profile != null && FloraVisualProfile.ReviewMeshTransform == null;
@@ -367,10 +396,11 @@ public int Quality
             tasks.Add(Task.Run(() =>
             {
                 var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null, farGillStations: DistantGillStations, farEmberMicroSides: DistantEmberMicroSides, farDewbonnetCapRings: DistantDewbonnetCapRings);
-                MeshData? youngMesh = sp.Shape.StartsWith("microcanopy_", StringComparison.Ordinal) || sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null
+                MeshData? youngMesh = buildsJuvenile
                     ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
                     : null;
-                var fruitMesh = OrganismMeshes.FloraFruitingTier(sp, seed, lod, tieredSource: profile != null);
+                var fruitMesh = sp.Climber != null ? null : OrganismMeshes.FloraFruitingFromBase(fullMesh, sp, seed);
+                var structural = IsContactHostShape(sp) && lod == 0 ? StructuralSurfaceIndex.Build(fullMesh) : null;
                 void Prepare(MeshData mesh)
                 {
                     if (prepareProfileUpload) FloraVisualProfile.PrepareUpload(mesh);
@@ -379,7 +409,7 @@ public int Quality
                 Prepare(fullMesh);
                 if (youngMesh != null) Prepare(youngMesh);
                 if (fruitMesh != null) Prepare(fruitMesh);
-                return (Full: fullMesh, Young: youngMesh, Fruit: fruitMesh);
+                return (Full: fullMesh, Young: youngMesh, Fruit: fruitMesh, Structural: structural);
             }));
         }
 
@@ -393,14 +423,14 @@ public int Quality
                 bool canCastShadow = sp.Colony == null && sp.Archetype is "plant" or "fungus" && sp.Height >= 0.055;
                 bool castShadow = Quality >= 1 && canCastShadow && v / layer.MorphCount <= ShadowMaxTier;
                 long uploadStart=Stopwatch.GetTimestamp();
-                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow };
+                var vl = new VariantLayer { Full = MakeMmi($"Flora_{sp.Id}_{v}", profile == null ? Bridge.ToArrayMesh(full, mat) : profile.Compile(full, mat, leafMat!), castShadow), FullTris = full.TriangleCount, CanCastShadow = canCastShadow, StructuralSurface = prepared.Structural };
                 AddChild(vl.Full); build.Nodes.Add(vl.Full);
                 double fullMs=Stopwatch.GetElapsedTime(uploadStart).TotalMilliseconds;
                 if(fullMs>25)
                     GD.Print($"FLORA_PUBLISH_SLOW species={sp.Id} variant={v} organ=full " +
                         $"ms={fullMs:0.0} verts={full.VertexCount} tris={full.TriangleCount} profile={profile!=null}");
                 yield return true;
-                if (sp.Shape.StartsWith("microcanopy_", StringComparison.Ordinal) || sp.Shape is "fern" or "veilfern" or "hookthicket_brake" || sp.Climber != null)
+                if (buildsJuvenile)
                 {
                     var young = prepared.Young!;
                     uploadStart=Stopwatch.GetTimestamp();
@@ -443,7 +473,9 @@ public int Quality
             {
                 // Persistent links joining each network node to the node it grew from (plasmodial veins or climber stems).
                 var vein = new MeshData();
-                var col = Primitives.Mix(sp.Color, sp.Color2, 0.3);
+                var col = IsExpansionClimber(sp.Shape)
+                    ? Primitives.Scale(Primitives.Mix(sp.Color, sp.Color2, 0.10), 0.64)
+                    : Primitives.Mix(sp.Color, sp.Color2, 0.30);
                 var vpath = new List<Vec3>(); var vrad = new List<double>();
                 if (sp.Climber is { } climber)
                 {
@@ -592,7 +624,7 @@ public int Quality
             return true;
 
         if (sp.Shape is "sundew_mat" or "carpet" or "cushion" or "crust" or "foliose" or "fruticose" or "capitula" or "embercup_moss"
-            or "succulent" or "iceplant")
+            or "succulent" or "iceplant" or "capstar_moss" or "cragset")
             return true;
 
         if (sp.Shape is "bonecup_fungus" or "rain_jelly" or "bracket" or "glass_antlers")
@@ -611,7 +643,7 @@ public int Quality
     {
         _build?.Dispose(); _build = null;
         _refresh?.Dispose(); _refresh = null;
-        _pooledBuffers.Clear(); _prevPlantStates.Clear(); DirtyRegions.Clear();
+        _pooledBuffers.Clear(); _placements.Clear(); _stalePlacements.Clear(); DirtyRegions.Clear();
         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear();
     }
 
@@ -711,10 +743,16 @@ public int Quality
         CurrentSnapshot = snapshot;
         _snapshot.Clear();
         _snapshot.AddRange(snapshot.Flora);
+        _renderClimberSegments.Clear();
         _woodySupports.Clear();
         foreach (var w in _snapshot)
         {
-            var wsp = _w.Content.FloraOrThrow(w.SpeciesId);
+            // A species never changes for an individual, so a cached definition stays valid even when
+            // the placement itself has expired. This keeps the catalog lookup out of routine refreshes.
+            var wsp = _placements.TryGetValue(w.Id, out var cachedPlacement)
+                && cachedPlacement.Def.Id == w.SpeciesId
+                ? cachedPlacement.Def
+                : _w.Content.FloraOrThrow(w.SpeciesId);
             if (wsp.Woody != null) _woodySupports.Add((w, wsp));
         }
         _deadSnapshot.Clear();
@@ -727,58 +765,56 @@ public int Quality
             if (_clock - start >= 1.2 || _w.Flora.Get(id) == null) _expired.Add(id);
         foreach (var id in _expired) _wobbleStart.Remove(id);
 
-        // Spatial dirty tracking with latest-wins coalescing across living plants
+        // The instance set below is fully rebuilt, so the old per-plant dirty tiles had no consumer in
+        // this renderer and only paid for dictionary writes. Keep the current id set for cache pruning.
         _currentPlantIds.Clear();
-        foreach (var f in _snapshot)
+        foreach (var f in _snapshot) _currentPlantIds.Add(f.Id);
+        if (_placements.Count > _currentPlantIds.Count + 64)
         {
-            _currentPlantIds.Add(f.Id);
-            var sp = _w.Content.FloraOrThrow(f.SpeciesId);
-            var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
-            double r = f.Radius(sp);
-            double h = sp.Colony != null
-                ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
-                : sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
-            var stage = f.Stage(sp);
-
-            if (!_prevPlantStates.TryGetValue(f.Id, out var prev))
-            {
-                DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraPopulation, snapshot.Version, _clock);
-            }
-            else
-            {
-                if (prev.Stage != stage || prev.Fruiting != f.Fruiting || prev.ReproStage != f.ReproductiveStage)
-                    DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraGeometry, snapshot.Version, _clock);
-                if (pos.DistanceSquaredTo(prev.Position) > 1e-4f || Math.Abs(r - prev.Radius) > 1e-3f || Math.Abs(h - prev.Height) > 1e-3f)
-                    DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraTransform, snapshot.Version, _clock);
-                if (Math.Abs((float)f.Health - prev.Health) > 1e-3f)
-                    DirtyRegions.MarkPoint(pos, (float)r, DirtyReason.FloraAttributes, snapshot.Version, _clock);
-            }
-            _prevPlantStates[f.Id] = new PlantStateRecord(pos, (float)r, (float)h, (float)f.Health, f.Fruiting, stage, f.ReproductiveStage);
-        }
-
-        if (_prevPlantStates.Count > _currentPlantIds.Count)
-        {
-            var removed = new List<EntityId>();
-            foreach (var (id, state) in _prevPlantStates)
-            {
-                if (!_currentPlantIds.Contains(id))
-                {
-                    DirtyRegions.MarkPoint(state.Position, state.Radius, DirtyReason.FloraPopulation, snapshot.Version, _clock);
-                    removed.Add(id);
-                }
-            }
-            foreach (var id in removed) _prevPlantStates.Remove(id);
+            _stalePlacements.Clear();
+            foreach (var id in _placements.Keys)
+                if (!_currentPlantIds.Contains(id)) _stalePlacements.Add(id);
+            foreach (var id in _stalePlacements) _placements.Remove(id);
+            _stalePlacements.Clear();
         }
 
         ClearBuckets(_full); ClearBuckets(_fruit); ClearBuckets(_juvenile); ClearBuckets(_tendrils);
+        foreach (var veinList in _veinPlants.Values) veinList.Clear();
         int visible = 0;
         long triangles = 0;
+        int terrainVersion = _w.Terrain.Version, propsVersion = _w.Props.Version;
+        long tick = _w.Clock.Tick;
         foreach (var f in _snapshot)
         {
             yield return false;
             if (_w.Flora.Get(f.Id) == null) continue;
-            var sp = _w.Content.FloraOrThrow(f.SpeciesId);
-if (!_layers.ContainsKey(sp.Id)) continue;
+            // A camera move only changes which instances are drawn. Reuse the sampled ground height,
+            // surface normal, light/moisture and species definition instead of rescanning every rock
+            // and log for every plant on every 0.2 s refresh.
+            bool cacheHit = _placements.TryGetValue(f.Id, out var placement)
+                && placement.TerrainVersion == terrainVersion
+                && placement.PropsVersion == propsVersion
+                && placement.Def.Id == f.SpeciesId
+                && placement.Position.X == f.X
+                && placement.Position.Z == f.Z
+                && tick - placement.SampledTick < PlacementResampleTicks;
+            if (!cacheHit)
+            {
+                var species = _w.Content.FloraOrThrow(f.SpeciesId);
+                placement = SamplePlantPlacement(f, species, terrainVersion, propsVersion, tick);
+                _placements[f.Id] = placement;
+            }
+            var sp = placement.Def;
+            if (!_layers.ContainsKey(sp.Id)) continue;
+            var visualLayer = _layers[sp.Id];
+            if (visualLayer.Veins != null)
+            {
+                // Group by species once here so the vein pass never rescans the whole population
+                // for each vein layer.
+                if (!_veinPlants.TryGetValue(sp.Id, out var veinList))
+                    _veinPlants[sp.Id] = veinList = new List<FloraSnapshotItem>();
+                veinList.Add(f);
+            }
             double r = f.Radius(sp);
             double h = sp.Colony != null
                 ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
@@ -787,7 +823,8 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             // radius/height curves stretch young plants vertically and would shrink a 34-degree bend.
             if (sp.Shape == "kinkcane_brake" && sp.Height > 0)
                 r = h * sp.RadiusAtMax / sp.Height;
-            var pos = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z);
+            var pos = new Vector3((float)f.X, placement.GroundY, (float)f.Z);
+            bool followsWaterDepth = sp.Shape is "pondstars" or "bogfringe" or "deepquill" or "mirepocket";
             if (sp.Shape is "floatleaf" or "glasslily_pad")
             {
                 // Pads are authored directly in metres (not the unit-XZ-radius-1 convention every other flora
@@ -801,6 +838,12 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                 double rise = double.IsNaN(surface) ? 0.05 : Math.Max(0.02, surface - pos.Y);
                 h = rise + 0.003;
             }
+            else if (followsWaterDepth)
+            {
+                double surface = _w.Water.SurfaceAt(f.Position);
+                double rise = double.IsFinite(surface) ? Math.Max(0.005, surface - pos.Y) : sp.Height;
+                h = rise + 0.003;
+            }
             if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
@@ -808,28 +851,32 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             // field: they lean slightly toward the more open side, while dry/unhealthy specimens lose some turgor
             // in a stable individual direction. This makes variation read as growth history rather than seed noise.
             var yawBasis = new Basis(Vector3.Up, yaw);
-            bool isUpright = IsUpright(sp);
+            // Surface-relative shoots share the water's horizontal frame across growth stages.
+            bool isUpright = !followsWaterDepth && IsUpright(sp);
 
             if (isUpright)
             {
-                var growth = FloraGeometryPlacement.Upright(_w, f.Id.Value, f.Position, f.Health, r, h);
-                yawBasis = SurfaceFrame.TiltTo(Bridge.V(growth.Up)) * yawBasis;
-                h = growth.Height; r = growth.Radius;
+                yawBasis = placement.UprightBasis * yawBasis;
+                double moisture = placement.LocalMoisture;
+                double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
+                h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
+                r *= 1.0 + stress * 0.035;
             }
-            else if (sp.Shape != "vine" && sp.Shape != "floatleaf" && sp.Shape != "glasslily_pad")
+            else if (!followsWaterDepth && sp.Shape is not ("vine" or "floatleaf" or "glasslily_pad"))
             {
-                var norm = SurfaceFrame.SurfaceNormal(_w, pos.X, pos.Z, Math.Clamp(r * 0.5, 0.04, 0.22));
+                var norm = placement.SurfaceNormal;
                 yawBasis = SurfaceFrame.TiltTo(norm) * yawBasis;
                 float lift = (float)Math.Min(0.006, 0.002 + h * 0.04);
                 pos += norm * lift;
-                var fp = f.Position;
-                double moisture = _w.Fields.Moisture.Sample(fp);
+                double moisture = placement.LocalMoisture;
                 double stress = MathD.Clamp01((1.0 - f.Health) * 0.7 + Math.Max(0, 0.32 - moisture) * 0.55);
                 h *= 0.93 + 0.07 * MathD.Clamp01(0.55 * f.Health + 0.45 * Math.Min(1, moisture / 0.45));
                 r *= 1.0 + stress * 0.035;
             }
             if (sp.Climber != null && f.ClimberSegments is { Count: > 1 } segs)
             {
+                segs = ProjectWoodyClimberSegments(sp, segs);
+                _renderClimberSegments[f.Id] = segs;
                 // Multi-segment climber: the stem is drawn as one tapering tube in the vein layer, and the
                 // foliage sits on the nodes. Leaves are spaced along the shoot the way they are on a real one,
                 // rather than on every internode, and the growing tip of each shoot is a bare tendril.
@@ -862,6 +909,15 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                     ClimberGrowth.StemFrame(new Vec3(fwd.X, fwd.Y, fwd.Z), new Vec3(nrm.X, nrm.Y, nrm.Z), out var sideV, out var upV);
                     var side = new Vector3((float)sideV.X, (float)sideV.Y, (float)sideV.Z);
                     var up = new Vector3((float)upV.X, (float)upV.Y, (float)upV.Z);
+                    if (seg.Attached && IsExpansionClimber(sp.Shape))
+                    {
+                        var outward = nrm - fwd * nrm.Dot(fwd);
+                        if (outward.LengthSquared() > 1e-6f)
+                        {
+                            up = outward.Normalized();
+                            side = fwd.Cross(up).Normalized();
+                        }
+                    }
                     // Mesh X = side (across the stem), Mesh Y = fwd (along the stem), Mesh Z = up (upper side)
                     var nodeBasis = new Basis(side, fwd, up);
 
@@ -889,7 +945,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             {
                 // Jelly fungi change silhouette within minutes of wetting; keep that as render-time turgor
                 // rather than manufacturing/losing authoritative biomass every weather tick.
-                double jellyMoisture = _w.Fields.Moisture.Sample(f.Position);
+                double jellyMoisture = placement.LocalMoisture;
                 double swell = MathD.Clamp01((jellyMoisture - 0.24) / 0.62);
                 r *= 0.72 + 0.58 * swell;
                 h *= 0.52 + 1.05 * swell;
@@ -915,7 +971,6 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             if (_wobbleStart.TryGetValue(f.Id, out var ws)) wobble = (float)Math.Max(0, 1 - (_clock - ws) / 1.2);
             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
             var tint = f.Tint;
-            var visualLayer = _layers[sp.Id];
             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
             int lodTier = VisualTier(f.Id, pos, (float)h, (float)r);
             variant += lodTier * visualLayer.MorphCount;
@@ -1008,21 +1063,26 @@ if (!_layers.ContainsKey(sp.Id)) continue;
             visible++;
         }
 
-        // slime-mold veins: thickness follows the biomass flowing through each link
+        // slime-mold veins: thickness follows the biomass flowing through each link. The main pass
+        // grouped plants by species, so a layer walks only its own individuals instead of rescanning
+        // the whole population once per vein layer.
         foreach (var (id, layer) in _layers)
         {
             if (layer.Veins == null) continue;
             var list = Get(_veins, id); list.T.Clear(); list.Tint.Clear(); list.C.Clear();
-            foreach (var f in _snapshot)
+            var vsp = _w.Content.FloraOrThrow(id);
+            var veinPlants = _veinPlants.TryGetValue(id, out var speciesPlants) ? speciesPlants : null;
+            if (veinPlants != null)
+            foreach (var f in veinPlants)
             {
                 yield return false;
                 if (_w.Flora.Get(f.Id) == null) continue;
-                if (f.SpeciesId != id) continue;
-                var vsp = _w.Content.FloraOrThrow(id);
 
                 // Multi-segment climber stems:
                 if (vsp.Climber != null && f.ClimberSegments is { Count: > 1 } segs)
                 {
+                    if (_renderClimberSegments.TryGetValue(f.Id, out var projected)) segs = projected;
+                    float shootRadiusScale = IsExpansionClimber(vsp.Shape) ? 0.70f : 1.0f;
                     for (int s = 0; s < segs.Count; s++)
                     {
                         var seg = segs[s];
@@ -1037,6 +1097,7 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                         // growing tip and thickens as the plant ages.
                         float cThick = (float)pSeg.Radius * (seg.Senescent ? 0.6f : 1.0f);
                         if (cThick <= 0f) cThick = (0.0028f + 0.0048f * cFrac) * (seg.Senescent ? 0.6f : 1.0f);
+                        cThick *= shootRadiusScale;
                         var cXAxis = segD;
                         var norm = new Vector3((float)seg.Normal.X, (float)seg.Normal.Y, (float)seg.Normal.Z);
                         if (norm.LengthSquared() < 1e-6f) norm = Vector3.Up; else norm = norm.Normalized();
@@ -1053,8 +1114,8 @@ if (!_layers.ContainsKey(sp.Id)) continue;
                 }
 
                 if (f.ParentId.IsNone || (CurrentSnapshot?.TryGetFlora(f.ParentId, out var parent) != true && (_w.Flora.Get(f.ParentId) is not { } wParent || (parent = new FloraSnapshotItem(wParent)).Id.IsNone))) continue;
-                var a = new Vector3((float)parent.X, (float)_w.GroundHeight(parent.Position) + 0.004f, (float)parent.Z);
-                var b = new Vector3((float)f.X, (float)_w.GroundHeight(f.Position) + 0.004f, (float)f.Z);
+                var a = new Vector3((float)parent.X, CachedGroundY(parent) + 0.004f, (float)parent.Z);
+                var b = new Vector3((float)f.X, CachedGroundY(f) + 0.004f, (float)f.Z);
                 var d = b - a;
                 if (d.Length() < 1e-4f || d.Length() > 0.6f) continue;
                 float frac = (float)Math.Sqrt(Math.Min(f.BiomassFraction(vsp), parent.BiomassFraction(vsp)));
@@ -1097,6 +1158,97 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         UpdateLuminousLights();
     }
 
+    /// <summary>
+    /// Samples everything about a plant that only changes with the substrate, light field or moisture
+    /// field: the rock/log ground scan, the local surface normal, the upright tilt, and the two field
+    /// values. Camera-only refreshes reuse the result.
+    /// </summary>
+    private PlantPlacement SamplePlantPlacement(FloraSnapshotItem f, FloraSpeciesDef sp,
+        int terrainVersion, int propsVersion, long tick)
+    {
+        var position = f.Position;
+        double radius = f.Radius(sp);
+        double height = sp.Colony != null
+            ? sp.Colony.MaxHeight * (0.15 + 0.85 * f.HeightFactor)
+            : sp.Height * (0.45 + 0.55 * Math.Sqrt(f.BiomassFraction(sp)));
+        var normal = Vector3.Up;
+        var uprightBasis = Basis.Identity;
+        if (IsUpright(sp))
+        {
+            // The shared placement routine keeps rendered plants and animal supports identical.
+            var growth = FloraGeometryPlacement.Upright(_w, f.Id.Value, position, f.Health, radius, height);
+            uprightBasis = SurfaceFrame.TiltTo(Bridge.V(growth.Up));
+        }
+        else if (sp.Shape != "vine" && sp.Shape != "floatleaf" && sp.Shape != "glasslily_pad")
+        {
+            normal = SurfaceFrame.SurfaceNormal(_w, (float)f.X, (float)f.Z,
+                Math.Clamp(radius * 0.5, 0.04, 0.22));
+        }
+        double groundY = _w.GroundHeight(position);
+        if (sp.Shape == "cradlecup" && _w.Props.LogAt(position) is { } log
+            && Math.Abs(log.TopAt(position) - groundY) < 0.002
+            && VisualLogSupport.TryTopAt(log, position, out double barkY))
+        {
+            groundY = Math.Max(_w.Terrain.Height(position), barkY);
+        }
+        return new PlantPlacement
+        {
+            Position = position,
+            TerrainVersion = terrainVersion,
+            PropsVersion = propsVersion,
+            SampledTick = tick,
+            GroundY = (float)groundY,
+            SurfaceNormal = normal,
+            UprightBasis = uprightBasis,
+            Def = sp,
+            LocalLight = (float)_w.Fields.Light.Sample(position),
+            LocalMoisture = (float)_w.Fields.Moisture.Sample(position),
+        };
+    }
+
+    private float CachedGroundY(FloraSnapshotItem item) =>
+        _placements.TryGetValue(item.Id, out var placement)
+            ? placement.GroundY
+            : (float)_w.GroundHeight(item.Position);
+
+    /// <summary>
+    /// The simulation's woody support envelope is intentionally conservative and can sit inside the
+    /// rendered bole. For the three natural climbers, move attached woody nodes just proud of that
+    /// envelope for presentation only; both foliage and stem links consume this same copied array.
+    /// </summary>
+    private IReadOnlyList<ClimberSegmentSnapshot> ProjectWoodyClimberSegments(FloraSpeciesDef vineSpecies,
+        IReadOnlyList<ClimberSegmentSnapshot> source)
+    {
+        if (!IsExpansionClimber(vineSpecies.Shape)) return source;
+        ClimberSegmentSnapshot[]? corrected = null;
+        for (int i = 0; i < source.Count; i++)
+        {
+            var segment = source[i];
+            if (!segment.Attached || segment.Support != ClimberSurfaceKind.Woody || segment.HostId.IsNone)
+                continue;
+            var host = CurrentSnapshot != null && CurrentSnapshot.TryGetFlora(segment.HostId, out var snapshotHost)
+                ? snapshotHost : default;
+            if (host.Id.IsNone) continue;
+            var hostSpecies = _w.Content.FloraOrThrow(host.SpeciesId);
+            if (hostSpecies.Woody == null) continue;
+
+            if (!TryProjectClimberNodeToHost(host, hostSpecies, segment, out var projectedPosition, out var projectedNormal)) continue;
+            corrected ??= CopySegments(source);
+            corrected[i] = new ClimberSegmentSnapshot(
+                new Vec3(projectedPosition.X, projectedPosition.Y, projectedPosition.Z),
+                new Vec3(projectedNormal.X, projectedNormal.Y, projectedNormal.Z), segment.Forward, segment.ParentIndex,
+                segment.Attached, segment.Senescent, segment.Radius, segment.Support, segment.HostId);
+        }
+        return corrected ?? source;
+    }
+
+    private static ClimberSegmentSnapshot[] CopySegments(IReadOnlyList<ClimberSegmentSnapshot> source)
+    {
+        var copy = new ClimberSegmentSnapshot[source.Count];
+        for (int i = 0; i < source.Count; i++) copy[i] = source[i];
+        return copy;
+    }
+
     private void UpdateLuminousLights()
     {
         using var lightsProfile=FrameProfiler.Measure("Flora.Lights");
@@ -1104,55 +1256,100 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         var lightTimer=System.Diagnostics.Stopwatch.GetTimestamp();
         var planes=Camera.GetFrustum();var frustum=new Plane[planes.Count];
         for(int i=0;i<planes.Count;i++)frustum[i]=planes[i];
-        var present=new HashSet<EntityId>();
-        var active=new List<(OmniLight3D Light,float Energy,Vector3 Position,float Range)>();
         // In daylight every one of these lights is invisible, so moving them and
         // re-energising them is work nobody can see. The state is refreshed when
         // night falls.
         bool night=NightFloraMaterials.CurrentNightFactor>0.00001f;
-        foreach(var f in _snapshot)
+        var camPos=Camera.GlobalPosition;
+        _lightCandidates.Clear();
+        if(night)
         {
-            var sp=_w.Content.FloraOrThrow(f.SpeciesId);
-            if(sp.BioluminescenceStrength<=0||sp.BioluminescenceColor is not {Length:>=3}||_w.Flora.Get(f.Id)==null)continue;
-            present.Add(f.Id);
-            if(!night)continue;
-            var pos=new Vector3((float)f.X,(float)_w.GroundHeight(f.Position),(float)f.Z);
-            float radius=(float)f.Radius(sp),height=(float)(sp.Height*(.45+.55*Math.Sqrt(f.BiomassFraction(sp))));
-            bool visible=FloraVisible(frustum,pos,radius,height);
-            if(!visible)
+            foreach(var f in _snapshot)
             {
-                if(_luminousLights.TryGetValue(f.Id,out var hidden))NightFloraMaterials.RegisterLight(hidden,0);
-                continue;
+                var sp=_w.Content.FloraOrThrow(f.SpeciesId);
+                if(sp.BioluminescenceStrength<=0||sp.BioluminescenceColor is not {Length:>=3}||_w.Flora.Get(f.Id)==null)continue;
+                var pos=new Vector3((float)f.X,(float)_w.GroundHeight(f.Position),(float)f.Z);
+                float radius=(float)f.Radius(sp),height=(float)(sp.Height*(.45+.55*Math.Sqrt(f.BiomassFraction(sp))));
+                if(!FloraVisible(frustum,pos,radius,height))continue;
+                float tissueHeight=sp.Id switch{"ghostbonnet"=>.56f,"lanternsedge"=>.78f,"siltstars"=>.12f,"tidebell"=>.22f,_=>.3f};
+                pos.Y+=Math.Max(.018f,height*tissueHeight);
+                float size=(float)Math.Clamp(radius/Math.Max(sp.RadiusAtMax,.01),.3,1);
+                float range=NightFloraMaterials.LightRange(sp)*MathF.Sqrt(size);
+                float energy=NightFloraMaterials.LightEnergy(sp)*size;
+                // Rank by emitted power and distance: the nearest, strongest emitters survive the budget.
+                _lightCandidates.Add((f.Id,sp,pos,range,energy,energy/(1f+camPos.DistanceSquaredTo(pos))));
             }
-            float tissueHeight=sp.Id switch{"ghostbonnet"=>.56f,"lanternsedge"=>.78f,"siltstars"=>.12f,"tidebell"=>.22f,_=>.3f};
-            pos.Y+=Math.Max(.018f,height*tissueHeight);
-            if(!_luminousLights.TryGetValue(f.Id,out var light))
+        }
+        int activeLimit=Math.Min(_lightCandidates.Count,MaxActiveLuminousLights);
+        if(_lightCandidates.Count>activeLimit)
+            _lightCandidates.Sort(static (a,b)=>b.Score.CompareTo(a.Score));
+        _activeLuminous.Clear();
+        _selectedLuminous.Clear();
+        for(int i=0;i<activeLimit;i++)
+        {
+            var c=_lightCandidates[i];
+            _selectedLuminous.Add(c.Id);
+            if(!_luminousLights.TryGetValue(c.Id,out var light))
             {
-                light=NightFloraMaterials.CreateLightForSpecies(sp,pos);light.Name="Glow_"+f.Id.Value;AddChild(light);_luminousLights.Add(f.Id,light);
+                if(_luminousPool.Count>0)
+                {
+                    int last=_luminousPool.Count-1;
+                    light=_luminousPool[last];
+                    _luminousPool.RemoveAt(last);
+                    light.Name="Glow_"+c.Id.Value;
+                }
+                else
+                {
+                    light=NightFloraMaterials.CreateLightForSpecies(c.Species,c.Position);
+                    light.Name="Glow_"+c.Id.Value;
+                    AddChild(light);
+                }
+                _luminousLights.Add(c.Id,light);
                 _shadowDirty=true;
             }
-            light.Position=pos;
-            float size=(float)Math.Clamp(radius/Math.Max(sp.RadiusAtMax,.01),.3,1);
-            light.OmniRange=NightFloraMaterials.LightRange(sp)*MathF.Sqrt(size);
+            // A pooled node may have served another species: reassert every species-dependent value.
+            if(c.Species.BioluminescenceColor is {Length:>=3} color)
+                light.LightColor=new Color((float)color[0],(float)color[1],(float)color[2]);
+            light.Position=c.Position;
+            light.OmniRange=c.Range;
+            light.OmniAttenuation=1.7f;
+            // Fade these overlapping per-pixel passes out before they blend into one flat wash.
+            light.DistanceFadeEnabled=true;
+            light.DistanceFadeBegin=6.5f;
+            light.DistanceFadeLength=2.5f;
             // Read back the native values once after setters, preserving any
             // engine clamping rather than assuming the authored values survived.
-            active.Add((light,NightFloraMaterials.LightEnergy(sp)*size,light.Position,light.OmniRange));
+            _activeLuminous.Add((light,c.Energy,light.Position,light.OmniRange));
         }
-        foreach(var id in _luminousLights.Keys.Where(id=>!present.Contains(id)).ToArray())
+        if(night)
         {
-            _luminousLights[id].QueueFree();_luminousLights.Remove(id);
+            _luminousToPool.Clear();
+            foreach(var (id,_) in _luminousLights)
+                if(!_selectedLuminous.Contains(id))_luminousToPool.Add(id);
+            foreach(var id in _luminousToPool)
+            {
+                var light=_luminousLights[id];
+                _luminousLights.Remove(id);
+                NightFloraMaterials.RegisterLight(light,0);
+                light.Visible=false;
+                light.LightEnergy=0;
+                light.ShadowEnabled=false;
+                _luminousPool.Add(light);
+            }
+            _luminousToPool.Clear();
         }
+        var active=_activeLuminous;
         // Shadow budget: only the few brightest/nearest eligible lights cast shadows,
         // re-selected at a throttled rate (or immediately when a light was created).
         if(_shadowDirty||System.Diagnostics.Stopwatch.GetElapsedTime(_shadowSelectedAt).TotalSeconds>=ShadowReselectSeconds)
         {
             _shadowSelectedAt=System.Diagnostics.Stopwatch.GetTimestamp();_shadowDirty=false;
-            var camPos=Camera.GlobalPosition;
+            var shadowCamPos=Camera.GlobalPosition;
             var ranked=new List<(float Score,OmniLight3D Light)>();
             foreach(var a in active)
             {
                 if(!NightFloraMaterials.CanCastShadow(a.Range,a.Energy)){a.Light.ShadowEnabled=false;continue;}
-                ranked.Add((a.Energy/(1f+camPos.DistanceSquaredTo(a.Position)),a.Light));
+                ranked.Add((a.Energy/(1f+shadowCamPos.DistanceSquaredTo(a.Position)),a.Light));
             }
             ranked.Sort((x,y)=>y.Score.CompareTo(x.Score));
             for(int i=0;i<ranked.Count;i++)
@@ -1246,7 +1443,11 @@ if (!_layers.ContainsKey(sp.Id)) continue;
         float bound = 2f * MathF.Sqrt(radius * radius + height * height * .25f);
         // Keep the physical interaction neighbourhood on the authored mesh, even in a distant view.
         // The larger exit radius prevents detail flicker as the guardian moves along a plant edge.
-        if (_w.Guardian is { } guardian)
+        // Only the plants around a guardian that is itself close to the camera must
+        // stay on the authored mesh. A guardian across the island no longer locks
+        // every plant near it to Tier 0 while the camera is far away.
+        if (_w.Guardian is { } guardian
+            && _detailCameraPosition.DistanceSquaredTo(_detailGuardianPosition) <= 12.25f)
         {
             float reach = (_visualTiers.GetValueOrDefault(id, -1) == 0 ? 1.3f : 1f) + bound * .5f;
             if ((position + Vector3.Up * height * .5f).DistanceSquaredTo(Bridge.V(guardian.Position)) <= reach * reach)
@@ -1531,6 +1732,11 @@ public partial class FaunaRenderer : Node3D
     private readonly Dictionary<EntityId, Track> _tracks = new();
     private double _normalClock;
     private ContentLibrary? _builtFaunaContent;
+    // Reused every frame: frustum copies, live ids and the stale-track scratch list would otherwise
+    // allocate on every render tick.
+    private Plane[] _frustumPlanes = Array.Empty<Plane>();
+    private readonly HashSet<EntityId> _seen = new();
+    private readonly List<EntityId> _stale = new();
 
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
@@ -1642,10 +1848,16 @@ public partial class FaunaRenderer : Node3D
         double renderT = (_w.Clock.Tick + _w.Scheduler.TickFraction) * Vivarium.Sim.Time.SimClock.FixedStepSeconds - behaviourInterval;
 
         var cam = Camera;
-        var camPos = cam?.GlobalPosition ?? Vector3.Zero;
         var planes = cam?.GetFrustum();
-        Plane[]? frustum = planes == null ? null : new Plane[planes.Count];
-        if (planes != null) planes.CopyTo(frustum!, 0);
+        Plane[]? frustum = null;
+        int frustumCount = 0;
+        if (planes != null)
+        {
+            frustumCount = planes.Count;
+            if (_frustumPlanes.Length != frustumCount) _frustumPlanes = new Plane[frustumCount];
+            planes.CopyTo(_frustumPlanes, 0);
+            frustum = _frustumPlanes;
+        }
         Drawn = OffScreen = 0; TrianglesDrawn = 0;
         // Reset counts but retain the previous GPU capacities. Only populate
         // an actual morph variant when one visible animal needs it; allocating
@@ -1654,22 +1866,13 @@ public partial class FaunaRenderer : Node3D
         foreach (var layer in _layers.Values)
             foreach (var vl in layer.Variants)
                 vl.HighCount = vl.CurledCount = 0;
-        var seen = new HashSet<EntityId>();
+        _seen.Clear();
         foreach (var f in _w.Fauna.Items)
         {
-            seen.Add(f.Id);
+            _seen.Add(f.Id);
             var sp = _w.Content.FaunaOrThrow(f.SpeciesId);
             var ph = _w.FaunaSystem.PhenotypeOf(f);
             var target = Bridge.V(f.Position);
-            // Skip expensive animation/ground preparation for animals clearly outside the frustum.
-            // A slack margin covers the delayed presentation position; held animals always remain visible.
-            if (frustum != null && !f.Grabbed)
-            {
-                float slack = Math.Max((float)(ph.BodySize * sp.VisualScale) * 1.5f, .05f) + .5f;
-                bool outside = false;
-                foreach (var plane in frustum) if (plane.DistanceTo(target) > slack) { outside = true; break; }
-                if (outside) { OffScreen++; continue; }
-            }
             double now = _w.Clock.SimSeconds;
             if (!_tracks.TryGetValue(f.Id, out var tr))
                 _tracks[f.Id] = tr = new Track { Prev = target, Cur = target, Shown = target, SourceShown = target, PrevT = now, CurT = now, Yaw = (float)-f.Heading };
@@ -1741,7 +1944,7 @@ public partial class FaunaRenderer : Node3D
             {
                 float radius = Math.Max(scale * 1.5f, 0.05f);
                 bool inView = true;
-                for (int pIdx = 0; pIdx < frustum.Length; pIdx++)
+                for (int pIdx = 0; pIdx < frustumCount; pIdx++)
                 {
                     if (frustum[pIdx].DistanceTo(d.Pos) > radius) { inView = false; break; }
                 }
@@ -1749,21 +1952,34 @@ public partial class FaunaRenderer : Node3D
             }
             // Walkers follow the surface; swimmers derive pitch from interpolated 3-D travel.
             // This is render-only and never feeds orientation back into ecology.
-            if ((sp.Medium != Medium.Aquatic || sp.Model == "snail") && (_normalClock - tr.NormalTime >= .12
-                || tr.NormalPosition.DistanceSquaredTo(d.Pos) > .0004f
-                || tr.NormalTerrainVersion != _w.Terrain.Version || tr.NormalPropsVersion != _w.Props.Version))
+            if (sp.Medium != Medium.Aquatic || sp.Model == "snail")
             {
-                if (sp.Model == "snail")
+                // The old 2 cm test rescanned the ground for every small camera-frame movement.
+                // Resample at the 8 Hz cadence only once the animal has actually moved 2 mm, or
+                // immediately when the substrate itself changed.
+                float ndx = d.Pos.X - tr.NormalPosition.X;
+                float ndz = d.Pos.Z - tr.NormalPosition.Z;
+                float normalDistSq = ndx * ndx + ndz * ndz;
+                bool versionsChanged = tr.NormalTerrainVersion != _w.Terrain.Version
+                    || tr.NormalPropsVersion != _w.Props.Version;
+                bool resample = tr.NormalTime == double.NegativeInfinity
+                    || versionsChanged
+                    || normalDistSq > .0004f
+                    || (_normalClock - tr.NormalTime >= .12 && normalDistSq >= 4e-6f);
+                if (resample)
                 {
-                    // Use the same submerged support as its placement, including a submerged prop.
-                    double e = Math.Max(scale * .5, .01);
-                    double Height(double x,double z) => _w.FaunaSystem.RestingY(sp,new Vec2(x,z));
-                    tr.CachedNormal = new Vector3((float)(Height(d.Pos.X-e,d.Pos.Z)-Height(d.Pos.X+e,d.Pos.Z)),
-                        (float)(2*e),(float)(Height(d.Pos.X,d.Pos.Z-e)-Height(d.Pos.X,d.Pos.Z+e))).Normalized();
+                    if (sp.Model == "snail")
+                    {
+                        // Use the same submerged support as its placement, including a submerged prop.
+                        double e = Math.Max(scale * .5, .01);
+                        double Height(double x,double z) => _w.FaunaSystem.RestingY(sp,new Vec2(x,z));
+                        tr.CachedNormal = new Vector3((float)(Height(d.Pos.X-e,d.Pos.Z)-Height(d.Pos.X+e,d.Pos.Z)),
+                            (float)(2*e),(float)(Height(d.Pos.X,d.Pos.Z-e)-Height(d.Pos.X,d.Pos.Z+e))).Normalized();
+                    }
+                    else tr.CachedNormal = SurfaceFrame.SurfaceNormal(_w, d.Pos.X, d.Pos.Z, Math.Max(scale * .5, .01));
+                    tr.NormalPosition = d.Pos; tr.NormalTime = _normalClock;
+                    tr.NormalTerrainVersion = _w.Terrain.Version; tr.NormalPropsVersion = _w.Props.Version;
                 }
-                else tr.CachedNormal = SurfaceFrame.SurfaceNormal(_w, d.Pos.X, d.Pos.Z, Math.Max(scale * .5, .01));
-                tr.NormalPosition = d.Pos; tr.NormalTime = _normalClock;
-                tr.NormalTerrainVersion = _w.Terrain.Version; tr.NormalPropsVersion = _w.Props.Version;
             }
             var upTarget = sp.Medium == Medium.Aquatic && sp.Model != "snail" ? Vector3.Up : (sp.Model == "snail" || frameDist > 1e-4f ? tr.CachedNormal : tr.Up);
             tr.Up = (tr.Up + (upTarget - tr.Up) * k).Normalized();
@@ -1795,7 +2011,7 @@ public partial class FaunaRenderer : Node3D
             // custom.w packs appendage scale, a 4-bit motion-amplitude bucket, and locomotion phase.
             // Keeping this in one channel preserves the three inherited colour/pattern traits already using xyz.
             int speedBucket = (int)Math.Round(speed01 * 15.0f);
-            buf[o + 12] = (float)ph.HueShift; buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength;
+            buf[o + 13] = (float)ph.OrnamentDensity; buf[o + 14] = (float)ph.PatternStrength;
             // Flexible bodies reserve the integer part of x for a signed bend bucket;
             // hue remains in the residual. Zero/unpacked x is also a valid straight preview pose.
             buf[o + 12] = FaunaBodyProfiles.PackHue(sp, (float)ph.HueShift, tr.Bend, tr.Toad?.IsCrawling == true);
@@ -1809,11 +2025,12 @@ public partial class FaunaRenderer : Node3D
                 if (vl.Curled != null) Upload(vl.Curled.Multimesh, vl.CurledBuf, vl.CurledCount);
                 TrianglesDrawn += (long)vl.HighCount * vl.HighTris + (long)vl.CurledCount * vl.CurledTris;
             }
-        if (_tracks.Count > seen.Count + 64)
+        if (_tracks.Count > _seen.Count + 64)
         {
-            var stale = new List<EntityId>();
-            foreach (var key in _tracks.Keys) if (!seen.Contains(key)) stale.Add(key);
-            foreach (var key in stale) _tracks.Remove(key);
+            _stale.Clear();
+            foreach (var key in _tracks.Keys) if (!_seen.Contains(key)) _stale.Add(key);
+            foreach (var key in _stale) _tracks.Remove(key);
+            _stale.Clear();
         }
     }
 

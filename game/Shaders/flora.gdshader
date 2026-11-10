@@ -16,6 +16,7 @@ render_mode diffuse_burley, cull_disabled;
 
 uniform float sway = 0.0;
 uniform float stiffness = 1.0;
+uniform bool dry_fungal_cuticle = false;
 uniform int surface_mode = 2;
 uniform bool dewbonnet_gills = false;
 uniform sampler2D dewbonnet_gill_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -30,11 +31,13 @@ uniform vec3 pampas_plume_color = vec3(0.82, 0.73, 0.54);
 uniform vec3 leaf_top = vec3(0.07, 0.16, 0.055);
 uniform vec3 leaf_back = vec3(0.14, 0.19, 0.09);
 uniform int leaf_type = 0;
+uniform int stem_family = 0;
 uniform float vein_strength = 0.5;
 uniform float cuticle_sheen = 0.3;
 // Normal-only lamina roll: stress-tested separately from silhouettes.
 uniform float lamina_curl_strength = 1.3;
 uniform float leaf_transmission = 0.25;
+uniform float canopy_occlusion = 0.52;
 uniform int leaf_pattern = 0;
 uniform bool pitcher_tissue = false;
 // 0 none, 1 pale veins, 2 silver-patterned, 3 red-purple underside (+ flushed margins).
@@ -77,15 +80,33 @@ varying vec3 world_pos;
 varying vec3 obj_pos;
 
 void vertex() {
-    inst = INSTANCE_CUSTOM;
+    bool has_custom = (abs(INSTANCE_CUSTOM.x) + abs(INSTANCE_CUSTOM.y) + abs(INSTANCE_CUSTOM.z) + abs(INSTANCE_CUSTOM.w)) > 1e-4;
+    inst = has_custom ? INSTANCE_CUSTOM : vec4(0.5, 1.0, 0.5, 0.35);
     obj_pos = VERTEX;
-    float clock = review_time >= 0.0 ? review_time : 0.0;
+    // Review captures freeze review_time; live play follows the real clock.
+    float clock = review_time >= 0.0 ? review_time : TIME;
 
     if (surface_mode == 4) {
         vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
         float phase = clock * 1.8 - wp.x * 18.0 - wp.z * 11.0;
         // Micrometre-scale streaming thickness, never translation of the colony.
         VERTEX += NORMAL * (0.00018 * sin(phase));
+    }
+
+    if (surface_mode == 2) {
+        // Micro-breeze for living foliage. Phase comes from world position plus the
+        // per-instance seed; weight is tip-based for blades and height-based for stems,
+        // so the base stays planted and only the free tissue drifts.
+        float is_leaf = step(0.5, UV2.y);
+        float tip = mix(clamp(VERTEX.y * 4.0, 0.0, 1.0), clamp(UV.x, 0.0, 1.0), is_leaf);
+        tip = tip * tip * (3.0 - 2.0 * tip);
+        vec3 wp0 = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+        float phase = wp0.x * 1.10 + wp0.z * 0.80 + inst.w * 6.2831853 + inst.x * 2.1;
+        float amp = 0.0019 * mix(0.50, 1.20, clamp(sway, 0.0, 1.0));
+        VERTEX.x += sin(clock * 0.61 + phase) * amp * tip;
+        VERTEX.z += cos(clock * 0.49 + phase * 1.17) * amp * 0.80 * tip;
+        // Tiny normal flutter only on blades, never on woody stems.
+        VERTEX += NORMAL * sin(clock * 2.55 + phase * 2.7) * 0.00055 * tip * is_leaf;
     }
 
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -98,6 +119,7 @@ void fragment() {
     tissue_fiber_mask = 0.0;
     tissue_phase_mask = surface_mode == 4 ? 0.65 :
         (surface_mode == 2 && UV2.y > .5 && UV2.x < 1.2 ? 1.0 : 0.0);
+    tissue_nonleaf_mask = surface_mode == 2 && (UV2.x > 1.5 || (UV2.y >= 0.0 && UV2.y < .5 && UV2.x < .5)) ? 1.0 : 0.0;
     // Shared light() uses optical thickness directly; slime is thin living plasmodium.
     tissue_tau = surface_mode == 4 ? 0.4 : 0.0;
     tissue_rim = 0.0;
@@ -105,6 +127,9 @@ void fragment() {
     if (!FRONT_FACING) {
         NORMAL = -NORMAL;
     }
+    // Resolvable detail distance: high-frequency epidermal noise is faded out beyond ~5 m.
+    float cam_dist = length(CAMERA_POSITION_WORLD - world_pos);
+    float micro_fade = leaf_micro_fade(CAMERA_POSITION_WORLD, world_pos);
     vec3 c = srgb_to_linear(COLOR.rgb) * (1.0 + (inst.x - 0.5) * 0.3);
     vec3 wn = finite_surface_normal((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz, vec3(0.0, 1.0, 0.0));
     vec3 n = wn;
@@ -153,7 +178,12 @@ void fragment() {
         float zones = 0.94 + 0.09 * vnoise(vec2(UV.x * 8.0, UV.y * 5.0) + inst.w * 19.0);
         float flesh = vnoise(obj_pos.xz * 29.0 + inst.w * 11.0);
         c *= gills * zones * (0.88 + 0.16 * flesh);
-        float cap_top = smoothstep(0.42, 0.76, wn.y) * (1.0 - step(0.5, UV2.x));
+        // Organ split: near-vertical authored surfaces are stipe tissue, near-horizontal
+        // ones are pileus. The gill marking (UV2.x >= 0.5) keeps the underside out of both.
+        float gill_face = step(0.5, UV2.x) * (1.0 - step(1.5, UV2.x));
+        float stipe = (1.0 - gill_face) * smoothstep(0.62, 0.18, abs(wn.y));
+        float pileus = (1.0 - gill_face) * (1.0 - stipe);
+        float cap_top = smoothstep(0.42, 0.76, wn.y) * (1.0 - gill_face);
         c *= mix(vec3(1.0), vec3(0.76, 0.71, 0.62), cap_top * 0.82);
         c *= 1.0 - cap_top * 0.12 * smoothstep(0.70, 1.0, UV.y);
         n = normalize(wn + vec3(dFdx(flesh), 0.0, dFdy(flesh)) * colony_relief * 0.35);
@@ -166,6 +196,46 @@ void fragment() {
             n = surface_normal(wn, world_pos, gill_uv, relief);
         }
         rough = UV2.x > 0.5 ? 0.93 : mix(0.80, 0.95, flesh);
+        if (pileus > 0.001) {
+            // Pileus cuticle: fine radial striation, a hygrophanous wet umbo and a thin,
+            // translucent striate margin. Cap tissue is damp radially-fibred flesh, not plastic.
+            float striate = 0.5 + 0.5 * sin(UV.y * 64.0 + vnoise(world_pos.xz * 18.0) * 2.5);
+            float striate_vis = mix(0.5, striate, micro_fade);
+            float rim = smoothstep(0.62, 1.0, UV.y);
+            float umbo = 1.0 - smoothstep(0.0, 0.42, UV.y);
+            c *= mix(1.0, 0.90 + 0.14 * striate_vis, (0.35 + 0.65 * rim) * pileus);
+            // The wet umbo holds deeper, richer pigment; the margin is thin and lit through.
+            c = mix(c, c * vec3(0.84, 0.90, 0.82), pileus * umbo * 0.35);
+            c = mix(c, c * vec3(1.08, 1.14, 1.00) + vec3(0.010, 0.012, 0.006), pileus * rim * 0.42);
+            rough = clamp(rough - pileus * (0.06 + 0.10 * rim), 0.55, 0.95);
+            // Viscid cuticular micro-relief: only resolved close to the camera.
+            if (micro_fade > 0.01) {
+                float e = 0.15;
+                float cg = vnoise(vec2(UV.y * 34.0, UV.x * 11.0) + inst.w * 21.0);
+                float cgx = vnoise(vec2((UV.y + e) * 34.0, UV.x * 11.0) + inst.w * 21.0);
+                float cgy = vnoise(vec2(UV.y * 34.0, (UV.x + e) * 11.0) + inst.w * 21.0);
+                vec2 cuticle_slope = vec2(cgx - cg, cgy - cg) * (0.55 * micro_fade * pileus);
+                n = surface_normal(n, world_pos, UV, normalize(vec3(cuticle_slope, 1.0)));
+            }
+        }
+        if (stipe > 0.001) {
+            // Stipe: long silky parallel fibres, a bruised veil ring and a dark
+            // mycelial foot so the stem grows out of the litter instead of sitting on it.
+            float fib = sin(UV.y * 90.0 + vnoise(vec2(UV.x * 9.0, inst.w * 7.0)) * 2.0);
+            float fib_vis = mix(0.5, 0.5 + 0.5 * fib, micro_fade);
+            c *= mix(1.0, 0.90 + 0.13 * fib_vis, stipe);
+            float ring = 1.0 - smoothstep(0.025, 0.075, abs(UV.x - 0.55));
+            c = mix(c, c * vec3(1.10, 0.92, 0.78), stipe * ring * 0.55);
+            float basal_stain = 1.0 - smoothstep(0.02, 0.18, UV.x);
+            c = mix(c, vec3(0.055, 0.043, 0.028), stipe * basal_stain * 0.65);
+            rough = clamp(rough + stipe * ring * 0.04, 0.60, 0.96);
+            if (micro_fade > 0.01) {
+                float f0 = vnoise(vec2(UV.y * 26.0, UV.x * 9.0) + inst.w * 13.0);
+                float f1 = vnoise(vec2((UV.y + 0.2) * 26.0, UV.x * 9.0) + inst.w * 13.0);
+                vec2 fib_slope = vec2(f1 - f0, 0.0) * (0.50 * micro_fade * stipe);
+                n = surface_normal(n, world_pos, UV, normalize(vec3(fib_slope, 1.0)));
+            }
+        }
         // velvety bloom: fine fibrous speckle and a soft grazing-angle sheen instead of a plastic highlight
         float fuzz = vnoise(obj_pos.xy * 140.0 + obj_pos.zy * 97.0 + inst.w * 5.0);
         c *= 0.9 + 0.14 * fuzz;
@@ -192,7 +262,7 @@ void fragment() {
             vec3 bark = texture(bark_col, buv).rgb;
             // Scanned species bark stays recognisable; exposure, old cracks and moss add restrained history.
             float exposure = fbm(obj_pos.xz * 1.4 + UV.x * 0.12 + inst.w * 9.0);
-            c = bark * bark_tint;
+            c = bark * bark_tint * 1.38;
             c *= mix(1.0 - bark_weathering * 0.26, 1.0 + bark_weathering * 0.09, exposure);
             vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
             float raw_rgh = texture(bark_rgh, buv).r;
@@ -200,7 +270,7 @@ void fragment() {
             float cork_ao, cork_groove;
             bark_fissure_pbr(c, bn, raw_rgh, buv, u_bark_fissures, bark_weathering, exposure,
                 cork, cork_normal, rough, cork_ao, cork_groove);
-            c = cork * cork_ao;
+            c = cork * max(cork_ao, 0.44);
             if (UV2.x > 2.5) {
                 // Decayed Heartwood / Callus / Hollow Log Interior:
                 // Modulate texture luminance/detail with vertex color (srgb_to_linear(COLOR.rgb) * 1.65),
@@ -244,8 +314,13 @@ void fragment() {
                 c = mix(c, c.gbr * 1.18, shift * 0.62);
                 rough = 0.66;
             } else if (UV2.x > 1.30 && UV2.x < 1.50) {
-                c = srgb_to_linear(COLOR.rgb);
-                rough = 0.42;
+                vec3 raw_organ = srgb_to_linear(COLOR.rgb);
+                // Compress near-white floral pigments into realistic petal reflectance (max ~0.46 linear)
+                c = raw_organ / (1.0 + raw_organ * 1.05) * 0.86;
+                float floret_cell = vnoise(obj_pos.xz * 26.0 + obj_pos.y * 19.0 + inst.w * 7.0);
+                float floret_ao = (0.70 + 0.30 * smoothstep(-0.45, 0.75, wn.y)) * (0.85 + 0.22 * floret_cell);
+                c *= mix(vec3(0.74, 0.72, 0.64), vec3(1.04, 1.02, 0.98), floret_ao);
+                rough = 0.74;
             }
         } else if (UV2.y > 0.5) {
             float along = UV.x, across = UV.y - 0.5;
@@ -253,13 +328,39 @@ void fragment() {
             vec3 actual_leaf_top = top_pigment.r >= 0.0 ? top_pigment : leaf_top;
             vec3 actual_leaf_back = back_pigment.r >= 0.0 ? back_pigment : leaf_back;
             vec3 pigment = mix(actual_leaf_top, actual_leaf_back, face);
-            float cells = vnoise(vec2(along * 24.0, across * 31.0) + inst.w * 13.0);
-            float micro = vnoise(vec2(along * 91.0, across * 105.0) + inst.w * 27.0);
-            float mid = 1.0 - smoothstep(0.006, 0.026 + fwidth(across), abs(across));
-            float pair = abs(fract(along * mix(6.0, 10.0, float(leaf_type == 2)) + inst.w * 0.13) - 0.5);
-            float branch = 1.0 - smoothstep(0.01, 0.055 + fwidth(pair), abs(pair - abs(across) * 0.46));
-            branch *= smoothstep(0.48, 0.30, abs(across));
-            float venation = (mid * 0.65 + branch * 0.35) * vein_strength;
+            // Abaxial mesophyll is paler and less waxy than the adaxial face.
+            pigment = leaf_abaxial_tint(pigment, face);
+            float basal = smoothstep(0.0, 0.12, along);
+            float cells = 0.5;
+            float micro = 0.5;
+            if (micro_fade > 0.01) {
+                cells = mix(0.5, vnoise(vec2(along * 24.0, across * 31.0) + inst.w * 13.0), micro_fade);
+                micro = mix(0.5, vnoise(vec2(along * 91.0, across * 105.0) + inst.w * 27.0), micro_fade);
+            }
+            // 1) Primary midrib, narrowing from the petiole toward the apex.
+            float mid_width = mix(0.023, 0.006, smoothstep(0.05, 0.95, along));
+            float mid = (1.0 - smoothstep(mid_width * 0.5, mid_width + fwidth(across) * 0.8, abs(across))) * basal;
+            // 2) Pinnate secondaries: they leave the midrib and arch forward toward the margin.
+            float pairs = mix(6.5, 10.0, float(leaf_type == 2));
+            float sec_phase = along * pairs - (0.45 + 0.95 * abs(across)) * abs(across);
+            float sec_line = abs(fract(sec_phase) - 0.5);
+            float sec = 1.0 - smoothstep(0.032, 0.042 + fwidth(sec_phase) * 0.9, sec_line);
+            sec *= smoothstep(0.52, 0.27, abs(across)) * basal;
+            // 3) Tertiary reticulum: sub-millimetre, so it is only evaluated close to camera.
+            float tert = 0.0;
+            if (cam_dist < 3.0) {
+                vec2 rp = vec2(along * 48.0, across * 66.0) + inst.w * 9.0;
+                float warp = vnoise(rp * 0.31 + 3.7);
+                vec2 rq = rp + vec2(warp, 1.0 - warp) * 2.2;
+                float tl = min(abs(fract(rq.x) - 0.5), abs(fract(rq.y) - 0.5));
+                tert = (1.0 - smoothstep(0.02, 0.055 + fwidth(rq.x) + fwidth(rq.y), tl))
+                    * 0.34 * basal * (1.0 - smoothstep(2.2, 3.0, cam_dist));
+            }
+            float venation = (mid * 0.62 + sec * 0.30 + tert) * vein_strength;
+            float vein_mask = clamp(mid * 0.90 + sec * 0.55 + tert * 0.40, 0.0, 1.0) * basal;
+            // Vascular tissue is optically thicker: veins attenuate transmission and read
+            // dark in silhouette while the thin mesophyll between them glows.
+            tissue_tau = leaf_vein_tau(0.62, vein_mask, face);
             float edge = smoothstep(0.36, 0.50, abs(across));
             float age = smoothstep(0.73, 1.0, along) * (0.25 + 0.75 * vnoise(vec2(inst.w * 9.0, along * 5.0)));
             c = leaf_pigment(c, pigment,
@@ -275,13 +376,13 @@ void fragment() {
             // Distal blade pigment shift, not a baked-in directional light highlight.
             if (leaf_type == 5) c *= mix(.97,1.04,smoothstep(.15,.85,along));
             float stripe = 0.5;
-            if (leaf_pattern == 0) c = mix(c, c * vec3(1.35, 1.40, 1.10), clamp(mid * 0.7 + branch * 0.3, 0.0, 1.0) * (1.0 - face) * 0.35);
+            if (leaf_pattern == 0) c = mix(c, c * vec3(1.06, 1.08, 0.98), clamp(mid * 0.7 + sec * 0.3, 0.0, 1.0) * (1.0 - face) * 0.20);
             // Each tissue family carries a different visible pigment pattern. Keep
             // the markings broad enough to survive the game's normal camera distance.
             if (leaf_pattern == 3) {
                 // Ivy-like leaves: lustrous cuticle and conspicuous pale vein fans.
-                float pale_vein = clamp(mid * 0.58 + branch * 0.42, 0.0, 1.0);
-                c = mix(c, c * vec3(1.27, 1.34, 1.14), pale_vein * (1.0 - face) * 0.42);
+                float pale_vein = clamp(mid * 0.58 + sec * 0.42, 0.0, 1.0);
+                c = mix(c, c * vec3(1.08, 1.11, 1.02), pale_vein * (1.0 - face) * 0.22);
                 c *= 0.94 + 0.12 * cells;
             } else if (leaf_pattern == 4) {
                 // Succulents: wax bloom with sparse, irregular light flecks.
@@ -294,7 +395,7 @@ void fragment() {
                 c *= 0.90 + 0.16 * stripe;
             } else if (leaf_pattern == 6) {
                 // Fern pinnules: fine branching veins and light transmitted edges.
-                c *= 0.90 + 0.14 * cells + 0.10 * branch;
+                c *= 0.90 + 0.14 * cells + 0.10 * sec;
                 c = mix(c, c * vec3(1.06, 1.13, 0.95), edge * 0.22);
             } else if (leaf_pattern == 7) {
                 // Glaucous farina (mooncoin): the blade wears a dry, dusty silver bloom rather
@@ -308,17 +409,17 @@ void fragment() {
             // saturated young leaves, and a lift so shaded foliage still reads as leaf rather than silhouette.
             float midrib = 1.0 - smoothstep(0.010, 0.034 + fwidth(across), abs(across));
             float top_face = 1.0 - face;
-            c = mix(c, c * vec3(1.19,1.24,1.13) + vec3(.002,.003,.001),midrib * top_face * .42);
-            c = mix(c, c * vec3(1.09,1.12,1.04),branch * top_face * (leaf_pattern == 5 ? .08 : .26));
+            c = mix(c, c * vec3(1.06, 1.08, 0.98) + vec3(.001, .0015, .0005), midrib * top_face * (vein_strength * 0.25));
+            c = mix(c, c * vec3(1.03, 1.05, 1.00), sec * top_face * (leaf_pattern == 5 ? .04 : (vein_strength * 0.18)));
             float young = smoothstep(0.6, 0.95, leaf_age);
             c = mix(c, c * vec3(.99,1.08,.96),young * .3);
             c *= mix(1.07, 1.0, smoothstep(0.015, 0.07, lum(c)));
             if (leaf_variegation == 1) {
-                float pv = clamp(midrib * 0.9 + branch * 0.75, 0.0, 1.0);
+                float pv = clamp(midrib * 0.9 + sec * 0.75, 0.0, 1.0);
                 c = mix(c, vec3(lum(c)) * vec3(2.5, 2.8, 2.2) + vec3(0.03, 0.04, 0.03), pv * top_face * 0.65);
             } else if (leaf_variegation == 2) {
                 float sv = smoothstep(0.42, 0.62, vnoise(vec2(along * 6.0, across * 8.0) + inst.w * 5.0));
-                sv *= smoothstep(0.44, 0.22, abs(across)) * (1.0 - midrib) * (1.0 - branch * 0.7);
+                sv *= smoothstep(0.44, 0.22, abs(across)) * (1.0 - midrib) * (1.0 - sec * 0.7);
                 c = mix(c, vec3(0.30, 0.34, 0.32), sv * top_face * 0.62);
             } else if (leaf_variegation == 3) {
                 c = mix(c, vec3(0.20, 0.025, 0.07) * (0.8 + 0.4 * cells), face * 0.85);
@@ -353,9 +454,12 @@ void fragment() {
             if (leaf_pattern == 3) ridge = venation * 0.50;
             else if (leaf_pattern == 4) ridge = venation * 0.06;
             else if (leaf_pattern == 5) ridge = venation * 0.08 + (stripe - 0.5) * 0.10;
-            else if (leaf_pattern == 6) ridge = venation * 0.24 + branch * 0.10;
+            else if (leaf_pattern == 6) ridge = venation * 0.24 + sec * 0.10;
             else if (leaf_pattern == 7) ridge = venation * 0.05;
-            ridge -= midrib * 0.10; // shallow midrib groove
+            // Two-sided vascular relief: adaxial veins are gently channeled, abaxial
+            // veins stand proud of the mesophyll, and only the top keeps a midrib groove.
+            ridge *= mix(-0.55, 1.10, face);
+            ridge -= midrib * 0.10 * (1.0 - face);
             vec2 uv_slope = leaf_uv_gradient(ridge, UV);
             float longitudinal = smoothstep(.03,.24,along) *
                 (1.0 - smoothstep(.86,.99,along));
@@ -370,7 +474,7 @@ void fragment() {
                 -uv_slope * .055 + lamina_curl_strength * lamina_curve, 1.0));
             n = surface_normal(wn, world_pos, UV, leaf_n);
             float family_rough = leaf_type == 1 ? 0.78 : leaf_type == 2 ? 0.74 : leaf_type == 3 ? 0.52 : leaf_type == 4 ? 0.46 : leaf_type == 5 ? 0.68 : 0.61;
-            rough = clamp(family_rough - 0.10 - cuticle_sheen * 0.20 * top_face + (cells - 0.5) * 0.12 + face * 0.16, 0.22, 0.95);
+            rough = clamp(family_rough - 0.10 - cuticle_sheen * 0.20 * top_face + (cells - 0.5) * 0.12 + face * 0.18, 0.22, 0.95);
             if (leaf_pattern == 3) rough = clamp(rough - 0.18 * top_face, 0.24, 0.85);
             else if (leaf_pattern == 4) rough = clamp(rough - 0.08 + (cells - 0.5) * 0.08, 0.32, 0.85);
             else if (leaf_pattern == 5) rough = clamp(rough - 0.04, 0.32, 0.92);
@@ -404,34 +508,66 @@ void fragment() {
             float node = 1.0 - smoothstep(.04, .13 + fwidth(UV.x * 2.4),
                 abs(fract(UV.x * 2.4 + inst.w * .31) - .5));
             float living_strength = clamp(u_living_stem, 0.0, 1.0);
-            c *= mix(1.0, .83 + .24 * rib - .12 * node, living_strength);
+            // Reeds show parallel epidermal fibers and occasional nodes; soft and
+            // fleshy stems keep quieter, less interrupted tissue. Filter the fine
+            // rib before it becomes subpixel to prevent a shimmering tube.
+            float fiber_phase = UV.y * 32.0;
+            float fiber_filter = 1.0 - smoothstep(.25, .75, fwidth(fiber_phase));
+            float fiber = cos(fiber_phase * 6.2831853) * fiber_filter;
+            float fiber_strength = stem_family == 1 ? .10 : stem_family == 3 ? .07 : stem_family == 2 ? .015 : .045;
+            float node_strength = stem_family == 1 ? .07 : stem_family == 3 ? .035 : .015;
+            c *= mix(1.0, .88 + .18 * rib + fiber * fiber_strength - node * node_strength, living_strength);
             vec3 shaft_normal = surface_normal(wn, world_pos, UV,
-                normalize(vec3((rib - .5) * u_living_stem * .42,
-                    node * u_living_stem * .26, 1.0)));
+                normalize(vec3(node * living_strength * node_strength,
+                    ((rib - .5) * .32 + fiber * fiber_strength * 1.4) * living_strength, 1.0)));
             n = normalize(mix(n, shaft_normal, living_strength * .68));
-            rough = leaf_type == 4 ? 0.52 : leaf_type == 5 ? 0.66 : 0.72;
+            rough = stem_family == 2 ? .56 : stem_family == 1 ? .72 : stem_family == 3 ? .78 : .70;
             rough = clamp(rough + .10 * node * living_strength, .30, .92);
+            if (stem_family == 3) {
+                c = max(c, vec3(0.026, 0.021, 0.017)) * 1.24;
+                vec2 buv = vec2(UV.y, UV.x * bark_repeats_per_metre + inst.w * 3.0);
+                vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
+                n = normalize(mix(n, stem_surface_normal(wn, world_pos, buv, bn), 0.58));
+            }
         }
     }
+    float basal_contact = smoothstep(0.0, 0.14, max(obj_pos.y, 0.0));
+    c *= mix(vec3(0.52, 0.48, 0.40), vec3(1.0), basal_contact);
     // Stress fades to a luminance-matched olive-brown; only genuinely failing tissue reads as straw.
     // Only genuinely failing tissue fades; mid-health foliage keeps its full pigment.
     float health = smoothstep(0.0, 0.28, clamp(inst.y, 0.0, 1.0));
     vec3 faded = vec3(dot(c, vec3(0.33))) * vec3(1.25, 1.05, 0.55);
     ALBEDO = mix(faded, c, 0.30 + 0.70 * health);
-    ROUGHNESS = rough;
+    ROUGHNESS = dry_fungal_cuticle ? max(rough, 0.93) : rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
+    float is_bark = woody_surface ? 1.0 : 0.0;
+    float depth_shade = clamp(1.0 - canopy_occlusion * (1.0 - clamp(obj_pos.y * 1.5, 0.0, 1.0)) * 0.75, 0.35, 1.0);
+    float ao = depth_shade * mix(0.48, 1.0, basal_contact);
+    if (surface_mode == 0 || surface_mode == 1) {
+        ao = mix(0.65, 1.0, basal_contact);
+    }
+    AO = clamp(ao, 0.20, 1.0);
+    AO_LIGHT_AFFECT = mix(0.45, 0.65, is_bark);
     float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
-    float leaf_spec = mix(0.35, mix(0.38, 0.50, cuticle_sheen), top_side);
+    float leaf_spec = mix(0.20, mix(0.38, 0.50, cuticle_sheen), top_side);
     // A farina-coated blade is dust, not varnish: it keeps almost no specular lobe.
     if (leaf_pattern == 7) leaf_spec = mix(leaf_spec, 0.07, 0.86);
     float bark_spec = mix(0.42, 0.12, smoothstep(0.55, 0.92, rough));
     if (UV2.x > 2.5) bark_spec = 0.12;
-    SPECULAR = surface_mode == 2 ? (woody_surface ? bark_spec : leaf_spec) : surface_mode == 3 ? 0.12 : 0.24;
+    SPECULAR = surface_mode == 2 ? (woody_surface ? bark_spec : leaf_spec) : surface_mode == 3 ? (dry_fungal_cuticle ? 0.0 : 0.12) : 0.24;
     float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
     // Foliage (surface_mode 2) transmission is owned by light() in
     // leaf_direct_light.gdshaderinc; no built-in BACKLIGHT/SSS transmittance
     // duplicate and no residual c*0.02 leak when transmission is 0.
     BACKLIGHT = surface_mode == 2 ? vec3(0.0) : c * (surface_mode == 3 ? 0.18 : 0.05);
+    if (surface_mode == 3 && ghost_membrane <= 0.5) {
+        // Warm fleshy subsurface glow. Fungal tissue is thin, damp and strongly
+        // translucent, so low sun reads as amber flesh rather than a matte cone.
+        BACKLIGHT = c * vec3(0.32, 0.20, 0.12);
+        SSS_STRENGTH = dry_fungal_cuticle ? 0.13 : 0.35;
+        SSS_TRANSMITTANCE_COLOR = vec4(0.42, 0.24, 0.12, 1.0);
+        SSS_TRANSMITTANCE_DEPTH = 0.22;
+    }
     if (surface_mode == 4) {
         SSS_STRENGTH = 0.85;
         BACKLIGHT = vec3(0.65, 0.48, 0.05);

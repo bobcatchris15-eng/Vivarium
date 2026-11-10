@@ -39,6 +39,23 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     private int[] _bones = Array.Empty<int>();
     private Vector3[] _points = Array.Empty<Vector3>(), _velocity = Array.Empty<Vector3>();
     private Vector3[] _iterationStart=Array.Empty<Vector3>(),_fixedPointReference=Array.Empty<Vector3>();
+    // Solver scratch, reused every call. These were reallocated per frame
+    // (poses/goals/lengths/authored goals/minimum chords) and dominated the
+    // modifier's managed allocations.
+    private Transform3D[] _poses = Array.Empty<Transform3D>();
+    private Vector3[] _goals = Array.Empty<Vector3>(), _authoredGoals = Array.Empty<Vector3>();
+    private float[] _lengths = Array.Empty<float>(), _minimumChords = Array.Empty<float>();
+    private void EnsureSolveBuffers()
+    {
+        int boneCount = _bones.Length, pointCount = _points.Length;
+        if (_poses.Length < boneCount) _poses = new Transform3D[boneCount];
+        if (_goals.Length < pointCount) _goals = new Vector3[pointCount];
+        if (_authoredGoals.Length < pointCount) _authoredGoals = new Vector3[pointCount];
+        if (_lengths.Length < boneCount) _lengths = new float[boneCount];
+        if (_minimumChords.Length < boneCount) _minimumChords = new float[boneCount];
+    }
+    // Body stations brushed when a rig has no resolved capsule chain.
+    static readonly string[] BodyBrushBones = { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Body", "Body0", "Body1", "Body2", "Body3" };
     public long ExactIterationsSkipped {get;private set;}
     public int FixedPointAuditBudget {get;set;}
     public int FixedPointAudits {get;private set;}
@@ -105,11 +122,19 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
         if (_bones.Length == 0)
         {
             var bones = new List<int>();
-            for (int i = FirstTailIndex; i <= 32; i++) { int b = skeleton.FindBone(ChainPrefix + i.ToString(ChainIndexFormat)); if (b < 0) break; bones.Add(b); }
+            int startIdx = FirstTailIndex;
+            if (startIdx == 1 && skeleton.FindBone(ChainPrefix + "0") >= 0)
+                startIdx = 0;
+            for (int i = startIdx; i <= 32; i++) { int b = skeleton.FindBone(ChainPrefix + i.ToString(ChainIndexFormat)); if (b < 0) break; bones.Add(b); }
+            if (bones.Count == 0)
+            {
+                int single = skeleton.FindBone("Tail");
+                if (single >= 0) bones.Add(single);
+            }
             _bones = bones.ToArray();
             _points = new Vector3[_bones.Length + 1]; _velocity = new Vector3[_points.Length];_iterationStart=new Vector3[_points.Length];_fixedPointReference=new Vector3[_points.Length];
         }
-        if (_bones.Length < 2) return;
+        if (_bones.Length < 1) return;
         // Frame-skip the full constraint solve when the tail root is nearly stationary.
         // On off-frames, re-apply the last solved pose; the tail's hysteresis keeps it stable.
         var rootNow = skeleton.GetBoneGlobalPose(_bones[0]).Origin;
@@ -148,18 +173,20 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             _stationGroundRadii[i*4+sample]=GroundRadius(i+t,_points.Length);
         }
         var inverse = transform.AffineInverse();
-        var poses = new Transform3D[_bones.Length];
-        var goals = new Vector3[_points.Length];
+        EnsureSolveBuffers();
+        var poses = _poses;
+        var goals = _goals;
         for (int i = 0; i < _bones.Length; i++) { poses[i] = skeleton.GetBoneGlobalPose(_bones[i]); goals[i] = transform * poses[i].Origin; }
         // Leaf joints have no child head to sample. Use the authored bone end,
         // rather than extrapolating the preceding segment across a tail hook.
         goals[^1] = goals[^2] + (transform.Basis * poses[^1].Basis.Y).Normalized() * TipSegmentLength * _scale;
-        var lengths = new float[_bones.Length];
+        var lengths = _lengths;
         for (int i = 0; i < lengths.Length; i++) lengths[i] = Math.Max(.001f, goals[i].DistanceTo(goals[i + 1]));
-        var authoredGoals = (Vector3[])goals.Clone();
+        var authoredGoals = _authoredGoals;
+        Array.Copy(goals, authoredGoals, goals.Length);
         // Authored angles and station radii are constant throughout all contact
         // iterations of this call. Keep exactly the original arithmetic/order.
-        var minimumChords=new float[lengths.Length];
+        var minimumChords = _minimumChords;
         for(int i=1;i<lengths.Length;i++)
         {
             var a=(authoredGoals[i]-authoredGoals[i-1]).Normalized();
@@ -252,6 +279,8 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
                         var hit = TreePenetration(point, radius);
                         if (hit.Depth > 0) point += new Vector3((float)hit.Normal.X, (float)hit.Normal.Y, (float)hit.Normal.Z) * (float)hit.Depth;
                     }
+                    if (ContinuousGroundedBody && point.Y > goals[i].Y)
+                        point.Y = Mathf.Lerp(point.Y, goals[i].Y, 0.35f);
                     point.Y = Math.Max(point.Y, Ground(point) + StationRadius(i*4,i,true));
                     _points[i] = point;
                 }
@@ -445,14 +474,14 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             }
             if (_bodyCapsules.Length == 0)
             {
-                foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Body", "Body0", "Body1", "Body2", "Body3" })
+                foreach (string name in BodyBrushBones)
                 { int bone = skeleton.FindBone(name); if (bone >= 0) Vegetation.Resolve(transform * skeleton.GetBoneGlobalPose(bone).Origin, (name == "Head" ? .075f : BodyBrushRadius) * _scale, false); }
             }
         }
         FrameProfiler.Record("Guardian.Appendage.Diagnostics", System.Diagnostics.Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds);
-        FrameProfiler.Record("Guardian.Appendage.Veg", _vegetationMs);
-        FrameProfiler.Record("Guardian.Appendage.Tree", _treeMs);
-        FrameProfiler.Record("Guardian.Appendage.Ground", _groundMs);
+        // The per-query vegetation/tree/ground breakdown used to be measured with a
+        // Stopwatch inside every sample; that cost more than it explained. The
+        // aggregate solve cost is carried by the Guardian.Appendage phases above.
     }
     private void EnsureCapsules(Skeleton3D skeleton)
     {
@@ -527,11 +556,10 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     private Vector3 ResolveVegetation(Vector3 point, float radius)
     {
         if (Vegetation == null) return point;
-        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var result = Vegetation.Resolve(point, radius, true);
-        _vegetationMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+        // Timed by the outer Guardian.Appendage phase; per-query stopwatch reads
+        // were costing more than the projection they measured.
         _vegetationQueries++;
-        return result;
+        return Vegetation.Resolve(point, radius, true);
     }
     /// <summary>Projects a point out of the stems near it, without resampling the
     /// plants' bend targets. The solver runs this for every constraint
@@ -540,17 +568,11 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     private Vector3 ProjectVegetation(Vector3 point, float radius)
     {
         if (Vegetation == null) return point;
-        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var result = Vegetation.ProjectStem(point, radius);
-        _vegetationMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
         _vegetationQueries++;
-        return result;
+        return Vegetation.ProjectStem(point, radius);
     }
     private float Ground(Vector3 point)
     {
-        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        try
-        {
         // In production support depends on XZ and one trunk-roof branch. Terrain,
         // props and renderer mode cannot change inside this synchronous modifier call.
         // Review callbacks may be arbitrary functions of XYZ and deliberately bypass it.
@@ -565,8 +587,6 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
             MaximumGroundCacheAuditError=Math.Max(MaximumGroundCacheAuditError,Math.Abs(height-Renderer.SupportHeight(point)));
         }
         return height;
-        }
-        finally { _groundMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds; }
     }
     private float StationRadius(int station,float originalIndex,bool ground)
     {
@@ -585,11 +605,8 @@ public partial class GuardianAppendageModifier : SkeletonModifier3D
     {
         // The immutable root footprint index is cheaper than a per-call memo
         // table here: measured exact-query reuse was only about four percent.
-        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var result = World.PilotTree!.Penetration(new Vec3(point.X,point.Y,point.Z),radius);
-        _treeMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
         _treeQueries++;
-        return result;
+        return World.PilotTree!.Penetration(new Vec3(point.X,point.Y,point.Z),radius);
     }
     private float Radius(float index, int count) => LateralRadii.Length > 0 ? ProfileRadius(LateralRadii, index, count)
         : Mathf.Lerp(RootRadius, TipRadius, Math.Clamp(index / (count - 1), 0, 1)) * _scale;

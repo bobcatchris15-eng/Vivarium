@@ -1,0 +1,103 @@
+{
+  "id": "pondstars",
+  "name": "Pondstars",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Floating star-rosettes of calm water.",
+  "description": "Tiny star rosettes drift in loose fleets at the surface and re-form within minutes wherever they are parted.",
+  "habitat": {
+    "substrates": {
+      "water": 1,
+      "soil": 0.6
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.05
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.35
+    },
+    "minWaterDepth": 0.03,
+    "maxWaterDepth": 0.5,
+    "hardMinMoisture": 0.92,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 0.8,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.3,
+    "maturityDays": 10,
+    "lifespanDays": 180,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.1,
+    "minRadius": 0.02
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.24,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.7
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.4,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.75,
+  "grazingValue": 0.1,
+  "visual": {
+    "shape": "pondstars",
+    "color": [
+      0.31,
+      0.48,
+      0.29
+    ],
+    "color2": [
+      0.66,
+      0.78,
+      0.6
+    ],
+    "colorVariance": 0.06,
+    "height": 0.02
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "floating"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.38,
+      0.22
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "id": "shadewrap",
+  "name": "Shadewrap",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Deep-shade climber clothing trunks and stone.",
+  "description": "Lobed dark leaves wrap trunks in overlapping ranks, held by roots fine as mist along the stem; whole trunks go green with it.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.8,
+      "rock": 0.6
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.28
+    },
+    "light": {
+      "optimum": 0.3,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.55,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 8,
+    "lifespanDays": 300,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.5,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.1,
+    "crowdingLimit": 4,
+    "sensitivity": 0.35
+  },
+  "proximity": [
+    {
+      "target": "embercrown",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "lanternbrush",
+      "radius": 3.0,
+      "bonus": 0.4
+    },
+    {
+      "target": "shadebell",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "ringreed",
+      "radius": 2.5,
+      "bonus": 0.35
+    }
+  ],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.015,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "shadewrap",
+    "color": [
+      0.18,
+      0.29,
+      0.18
+    ],
+    "color2": [
+      0.35,
+      0.43,
+      0.29
+    ],
+    "colorVariance": 0.06,
+    "height": 0.25
+  },
+  "tags": [
+    "plant",
+    "climber"
+  ],
+  "climber": {
+    "searchRadius": 3.2,
+    "groundSpeedPerDay": 0.18,
+    "segmentLength": 0.06,
+    "attachmentRadius": 0.16,
+    "maxUnsupportedLength": 4.5,
+    "verticalGrowthMultiplier": 2.2,
+    "nodeCap": 200,
+    "populationCap": 10,
+    "supportTypes": [
+      "woody",
+      "log",
+      "rock"
+    ],
+    "climbWeight": 1.0,
+    "driftWeight": 0.55,
+    "lightWeight": 0.25,
+    "wanderAmp": 0.45,
+    "wanderPeriod": 1.4,
+    "branchRate": 0.13,
+    "branchAngle": 68,
+    "lateralSpeed": 0.4,
+    "lateralClimb": 0.25,
+    "maxBranchOrder": 2,
+    "branchLength": 0.6,
+    "baseRadius": 0.011,
+    "stemTaper": 0.9,
+    "tipRadius": 0.0016,
+    "grabRadius": 0.1,
+    "seekRate": 0.7,
+    "stolonLength": 0.9
+  }
+}

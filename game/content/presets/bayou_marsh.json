@@ -992,6 +992,78 @@
     {
       "species": "silverweed",
       "count": 3
+    },
+    {
+      "species": "quillfeather_moss",
+      "count": 6
+    },
+    {
+      "species": "rustbellow_moss",
+      "count": 6
+    },
+    {
+      "species": "reekhorn",
+      "count": 3
+    },
+    {
+      "species": "candlecoral",
+      "count": 3
+    },
+    {
+      "species": "sceptrefern",
+      "count": 3
+    },
+    {
+      "species": "cloudtuft",
+      "count": 3
+    },
+    {
+      "species": "bannerreed",
+      "count": 2
+    },
+    {
+      "species": "sootband",
+      "count": 3
+    },
+    {
+      "species": "mistviolet",
+      "count": 3
+    },
+    {
+      "species": "hallowsting",
+      "count": 2
+    },
+    {
+      "species": "burlmantle",
+      "count": 2
+    },
+    {
+      "species": "fenfoam",
+      "count": 3
+    },
+    {
+      "species": "widowspire",
+      "count": 2
+    },
+    {
+      "species": "pondstars",
+      "count": 3
+    },
+    {
+      "species": "bogfringe",
+      "count": 3
+    },
+    {
+      "species": "bitterbine",
+      "count": 3
+    },
+    {
+      "species": "miremyrtle",
+      "count": 2
+    },
+    {
+      "species": "fenforge",
+      "count": 1
     }
   ],
   "starterFauna": [

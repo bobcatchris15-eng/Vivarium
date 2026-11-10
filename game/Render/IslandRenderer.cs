@@ -20,7 +20,9 @@ public partial class IslandRenderer : Node3D
     private ImageTexture _fieldTex = null!;
     private ImageTexture? _paletteTex;
     // Prop-only sub-texel caches (keyed by Props.Version + sub-grid size).
-    private double[] _propMinDist = System.Array.Empty<double>(), _propFbm = System.Array.Empty<double>(), _propContact = System.Array.Empty<double>();
+    // _propGravelSub: signed distance (m) from the sub-texel centre to the nearest gravel/rock edge.
+    // _propContactSub: basal contact occlusion (0..1) from rocks and logs.
+    private double[] _propGravelSub = System.Array.Empty<double>(), _propFbm = System.Array.Empty<double>(), _propContactSub = System.Array.Empty<double>();
     private int _propCacheVersion = int.MinValue, _propCacheLen = -1;
     private int[] _nearestDomain = System.Array.Empty<int>();
     private double _accum = 999;
@@ -87,6 +89,12 @@ public partial class IslandRenderer : Node3D
     private double _sinceMeshBuild;
     private byte[] _cachedSubstrate = Array.Empty<byte>();
     private int _materialTerrainVersion = -1, _materialPropsVersion = -1;
+    /// <summary>Habitat field refresh period (s). Moisture, litter and moss/silt read as live state rather than
+    /// stepping in 40 s jumps; the cost is one 16k-cell sweep plus three texture uploads every 2 s.</summary>
+    private const double FieldRefreshInterval = 2.0;
+    /// <summary>Set when a sculpt already spent the frame on a terrain mesh rebuild, so the habitat image
+    /// rebuild is deferred a frame instead of landing on the same one.</summary>
+    private bool _pendingFieldRefresh;
     public long GravelMaskBuilds { get; private set; }
     public long GravelMaskReuses { get; private set; }
     public long GravelMaskAuditedPixels { get; private set; }
@@ -115,6 +123,8 @@ public partial class IslandRenderer : Node3D
     {
         _w = w;
         _materialTerrainVersion = _materialPropsVersion = -1;
+        _propCacheVersion = int.MinValue; _propCacheLen = -1;
+        _pendingFieldRefresh = false;
         foreach (var c in GetChildren()) c.QueueFree();
 
         _terrainMat = Bridge.Shader("res://Shaders/terrain.gdshader");
@@ -217,14 +227,21 @@ public partial class IslandRenderer : Node3D
         _accum += delta;
         _sinceMeshBuild += delta;
         _sinceSubWater += delta;
+        // A sculpt currently pays for a 157k-vertex mesh rebuild in this frame; the 16k-cell habitat
+        // image rebuild waits one frame so the two never stall the same frame together.
+        if (_pendingFieldRefresh)
+        {
+            _pendingFieldRefresh = false;
+            using (FrameProfiler.Measure("Island.FieldTexture"))
+                UpdateFieldTexture(true);
+            _accum = 0;
+        }
         // sculpting: follow the heightfield at up to ~12 rebuilds per second
         if (_w.Terrain.Version != _terrainVersion && _sinceMeshBuild > 0.08)
         {
             using (FrameProfiler.Measure("Island.MeshBuild"))
-            {
                 BuildMeshes();
-                UpdateFieldTexture(true);
-            }
+            _pendingFieldRefresh = true;
         }
         using (FrameProfiler.Measure("Island.ShaderParams"))
         {
@@ -249,7 +266,7 @@ public partial class IslandRenderer : Node3D
             using (FrameProfiler.Measure("Island.SubWater"))
                 UpdateSubWaterChannels();
         }
-        if (!propsDirty && _accum < 40.0) return;
+        if (!propsDirty && _accum < FieldRefreshInterval) return;
         _accum = 0;
         using (FrameProfiler.Measure("Island.FieldTexture"))
             UpdateFieldTexture(updateSubstrate: propsDirty);
@@ -297,48 +314,117 @@ public partial class IslandRenderer : Node3D
         }
     }
 
+    /// <summary>Ramp width (m) of the gravel/rock edge mask; includes the ±FBM dither so the bbox
+    /// stamping below can never clip a texel that would have shown any cover.</summary>
+    private const double PropMaskMargin = 0.16;
+    private const double PropLogContactMargin = 0.08;
+    private const double PropRockContactMargin = 0.06;
+
+    /// <summary>Clamped sub-cell index box covering a world-space disc.</summary>
+    private static void SubCellRange(double cx, double cz, double radius, double originX, double originZ,
+        double step, int subNx, int subNz, out int si0, out int si1, out int sj0, out int sj1)
+    {
+        si0 = Math.Max(0, (int)Math.Floor((cx - radius - originX) / step));
+        si1 = Math.Min(subNx - 1, (int)Math.Floor((cx + radius - originX) / step));
+        sj0 = Math.Max(0, (int)Math.Floor((cz - radius - originZ) / step));
+        sj1 = Math.Min(subNz - 1, (int)Math.Floor((cz + radius - originZ) / step));
+    }
+
+    /// <summary>
+    /// Rebuilds the sub-texel prop masks. Each gravel patch, rock and log stamps only the clamped
+    /// (si, sj) bounding box its influence radius reaches, so the cost is proportional to the area
+    /// props actually occupy rather than 16,384 x (gravel + rocks + logs) distance tests.
+    /// </summary>
     private void RebuildPropCaches(int subNx, int subNz, double subStep)
     {
         var g = _w.Grid;
         int n = subNx * subNz;
-        _propMinDist = new double[n]; _propFbm = new double[n]; _propContact = new double[n];
+        if (_propGravelSub.Length != n)
+        {
+            _propGravelSub = new double[n];
+            _propFbm = new double[n];
+            _propContactSub = new double[n];
+        }
+        // The distance mask needs a large positive "no prop nearby" sentinel; Array.Clear's zero would
+        // read as a surface running through every texel once the FBM dither is added.
+        System.Array.Fill(_propGravelSub, double.MaxValue);
+        System.Array.Clear(_propContactSub);
+
+        // FBM dither is prop-independent: one full sweep, then all prop work is bbox-stamped.
         for (int sj = 0; sj < subNz; sj++)
+        {
+            double z = g.OriginZ + (sj + 0.5) * subStep;
+            int row = sj * subNx;
             for (int si = 0; si < subNx; si++)
+                _propFbm[row + si] = Vivarium.Sim.Core.Noise.Fbm(0x501UL, (g.OriginX + (si + 0.5) * subStep) * 5.0, z * 5.0, 2) * 0.08;
+        }
+
+        foreach (var gr in _w.Props.Gravel)
+        {
+            double r = gr.Radius;
+            SubCellRange(gr.X, gr.Z, r + PropMaskMargin, g.OriginX, g.OriginZ, subStep, subNx, subNz,
+                out int si0, out int si1, out int sj0, out int sj1);
+            for (int sj = sj0; sj <= sj1; sj++)
             {
-                int k = sj * subNx + si;
-                var p = new Vivarium.Sim.Core.Vec2(g.OriginX + (si + 0.5) * subStep, g.OriginZ + (sj + 0.5) * subStep);
-                double minDist = double.MaxValue;
-                for (int gi = 0; gi < _w.Props.Gravel.Count; gi++)
+                double dz = g.OriginZ + (sj + 0.5) * subStep - gr.Z;
+                int row = sj * subNx;
+                for (int si = si0; si <= si1; si++)
                 {
-                    var gr = _w.Props.Gravel[gi];
-                    double d = Vivarium.Sim.Core.Vec2.Distance(p, gr.Position) - gr.Radius;
-                    if (d < minDist) minDist = d;
+                    double dx = g.OriginX + (si + 0.5) * subStep - gr.X;
+                    double d = Math.Sqrt(dx * dx + dz * dz) - r;
+                    int k = row + si;
+                    if (d < _propGravelSub[k]) _propGravelSub[k] = d;
                 }
-                for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
-                {
-                    var rk = _w.Props.Rocks[ri];
-                    double d = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position) - rk.FootprintRadius;
-                    if (d < minDist) minDist = d;
-                }
-                _propMinDist[k] = minDist;
-                _propFbm[k] = Vivarium.Sim.Core.Noise.Fbm(0x501UL, p.X * 5.0, p.Z * 5.0, 2) * 0.08;
-                double contact = 0;
-                for (int li = 0; li < _w.Props.Logs.Count; li++)
-                {
-                    var log = _w.Props.Logs[li];
-                    double dLog = log.AxisDistance(p);
-                    double rLog = log.Radius;
-                    if (dLog < rLog + 0.08) contact = Math.Max(contact, 1.0 - Math.Max(0.0, dLog - rLog) / 0.08);
-                }
-                for (int ri = 0; ri < _w.Props.Rocks.Count; ri++)
-                {
-                    var rk = _w.Props.Rocks[ri];
-                    double dRk = Vivarium.Sim.Core.Vec2.Distance(p, rk.Position);
-                    double rRk = rk.FootprintRadius;
-                    if (dRk < rRk + 0.06) contact = Math.Max(contact, 1.0 - Math.Max(0.0, dRk - rRk) / 0.06);
-                }
-                _propContact[k] = contact;
             }
+        }
+
+        foreach (var rk in _w.Props.Rocks)
+        {
+            double r = rk.FootprintRadius;
+            SubCellRange(rk.X, rk.Z, r + PropMaskMargin, g.OriginX, g.OriginZ, subStep, subNx, subNz,
+                out int si0, out int si1, out int sj0, out int sj1);
+            for (int sj = sj0; sj <= sj1; sj++)
+            {
+                double dz = g.OriginZ + (sj + 0.5) * subStep - rk.Z;
+                int row = sj * subNx;
+                for (int si = si0; si <= si1; si++)
+                {
+                    double dx = g.OriginX + (si + 0.5) * subStep - rk.X;
+                    double d = Math.Sqrt(dx * dx + dz * dz);
+                    int k = row + si;
+                    double edge = d - r;
+                    if (edge < _propGravelSub[k]) _propGravelSub[k] = edge;
+                    if (d < r + PropRockContactMargin)
+                    {
+                        double contact = 1.0 - Math.Max(0.0, d - r) / PropRockContactMargin;
+                        if (contact > _propContactSub[k]) _propContactSub[k] = contact;
+                    }
+                }
+            }
+        }
+
+        foreach (var log in _w.Props.Logs)
+        {
+            double r = log.Radius;
+            SubCellRange(log.X, log.Z, log.FootprintRadius + PropLogContactMargin, g.OriginX, g.OriginZ, subStep,
+                subNx, subNz, out int si0, out int si1, out int sj0, out int sj1);
+            for (int sj = sj0; sj <= sj1; sj++)
+            {
+                double z = g.OriginZ + (sj + 0.5) * subStep;
+                int row = sj * subNx;
+                for (int si = si0; si <= si1; si++)
+                {
+                    var p = new Vivarium.Sim.Core.Vec2(g.OriginX + (si + 0.5) * subStep, z);
+                    double dLog = log.AxisDistance(p);
+                    if (dLog < r + PropLogContactMargin)
+                    {
+                        double contact = 1.0 - Math.Max(0.0, dLog - r) / PropLogContactMargin;
+                        int k = row + si;
+                        if (contact > _propContactSub[k]) _propContactSub[k] = contact;
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>Habitat light for surface appearance: the ecology value without the pilot-tree canopy term,
@@ -415,7 +501,7 @@ public partial class IslandRenderer : Node3D
                     var p = new Vivarium.Sim.Core.Vec2(g.OriginX + (si + 0.5) * subStep, g.OriginZ + (sj + 0.5) * subStep);
 
                     // 1. _subBytes[so + 0] (Gravel/Rock mask): cached prop distance + FBM
-                    double minDist = _propMinDist[sj * subNx + si];
+                    double minDist = _propGravelSub[sj * subNx + si];
                     int cellD = g.CellAt(p);
                     if (cellD >= 0 && cellD < g.Count)
                     {
@@ -445,8 +531,12 @@ public partial class IslandRenderer : Node3D
                         _subBytes[so + 2] = 0;
                     }
 
-                    // 4. _subBytes[so + 3] (High-res contact AO mask): rock (6 cm), log (8 cm), root collar (12 cm)
-                    double contact = _propContact[sj * subNx + si];
+                    // 4. _subBytes[so + 3] (High-res contact AO mask): rock (6 cm), log (8 cm), root collar (12 cm),
+                    // plus a subtle basal term where a dense litter/loam bed rests on the soil.
+                    double contact = _propContactSub[sj * subNx + si];
+                    if (cellD >= 0 && cellD < g.Count)
+                        contact = Math.Max(contact,
+                            0.40 * (1.0 - System.Math.Exp(-Math.Max(0.0, _w.Litter.FineMass[cellD]) * 55.0)));
                     for (int ti = 0; ti < trees.Count; ti++)
                     {
                         double dTr = Vivarium.Sim.Core.Vec2.Distance(p, trees[ti].Pos);

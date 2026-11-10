@@ -183,8 +183,10 @@ public static class Primitives
     }
 
     /// <summary>
-    /// Double-sided cambered leaf surface. A small longitudinal grid gives macro-visible leaves an actual curved
+    /// Single-sheet cambered leaf lamina. A small longitudinal grid gives macro-visible leaves an actual curved
     /// silhouette and changing normal instead of a perfectly planar card; UV.x runs root→tip and UV.y across.
+    /// Foliage shaders use <c>cull_disabled</c> and <c>FRONT_FACING</c>, so emitting one sheet removes the
+    /// coincident duplicate that used to z-fight and let the rasterizer decide the abaxial/adaxial face.
     /// </summary>
     public static void CurvedLeaf(MeshData m, Vec3 root, Vec3 tip, Vec3 sideHint, double halfWidth,
         double[] rootCol, double[] tipCol, double camber = 0.03, int longitudinal = 6, double asymmetry = 0)
@@ -217,36 +219,40 @@ public static class Primitives
             return root + axis * t + side * (width * x + sweep) + normal * crown;
         }
 
-        for (int face = 0; face < (m.FloraDetailLevel.HasValue ? 1 : 2); face++)
+        int start = m.VertexCount;
+        // One clean front-facing lamina. The shader renders the back with cull_disabled and flips NORMAL on
+        // !FRONT_FACING, so a second coincident sheet only doubles triangles and z-fights.
+        var faceN = normal;
+        for (int i = 0; i <= longitudinal; i++)
         {
-            var faceN = face == 0 ? normal : -normal;
-            int start = m.VertexCount;
-            for (int i = 0; i <= longitudinal; i++)
+            double t = (double)i / longitudinal;
+            double dt = 1.0 / longitudinal;
+            for (int j = 0; j <= across; j++)
             {
-                double t = (double)i / longitudinal;
-                double dt = 1.0 / longitudinal;
-                for (int j = 0; j <= across; j++)
-                {
-                    double x = j / (double)across * 2 - 1.0;
-                    var p = At(t, x);
-                    var ahead = At(Math.Min(1, t + dt), x) - At(Math.Max(0, t - dt), x);
-                    var cross = At(t, Math.Min(1, x + 0.5)) - At(t, Math.Max(-1, x - 0.5));
-                    var n = ahead.Cross(cross).Normalized();
-                    if (n.LengthSq < 1e-8) n = faceN;
-                    if (n.Dot(faceN) < 0) n = -n;
-                    var col = Mix(rootCol, tipCol, t);
-                    m.AddVertex(p, n, col, 1, t, i == 0 || i == longitudinal ? 0.5 : (x + 1) * 0.5, face, 1);
-                }
+                double x = j / (double)across * 2 - 1.0;
+                var p = At(t, x);
+                var ahead = At(Math.Min(1, t + dt), x) - At(Math.Max(0, t - dt), x);
+                var cross = At(t, Math.Min(1, x + 0.5)) - At(t, Math.Max(-1, x - 0.5));
+                var n = ahead.Cross(cross).Normalized();
+                if (n.LengthSq < 1e-8) n = faceN;
+                if (n.Dot(faceN) < 0) n = -n;
+                var col = Mix(rootCol, tipCol, t);
+                // Keep the full 0..1 cross-blade coordinate on every row: the 3D width already tapers, so
+                // collapsing the UVs to 0.5 at the base/tip only pinched venation and normal maps.
+                m.AddVertex(p, n, col, 1, t, (x + 1) * 0.5, 0, 1);
             }
-            int row = across + 1;
-            for (int i = 0; i < longitudinal; i++)
-                for (int j = 0; j < across; j++)
-                {
-                    int a = start + i * row + j, b = a + row;
-                    TriangleFacing(m, a, b, a + 1, m.NormalAt(a));
-                    TriangleFacing(m, a + 1, b, b + 1, m.NormalAt(a+1));
-                }
         }
+        int row = across + 1;
+        for (int i = 0; i < longitudinal; i++)
+            for (int j = 0; j < across; j++)
+            {
+                int a = start + i * row + j, b = a + row;
+                // Consistent front-face winding for a viewer on the +normal side:
+                // a,c,b and b,c,d. TriangleFacing preserves that winding while
+                // skipping collapsed zero-area quads at the tapered tip.
+                TriangleFacing(m, a, b, a + 1, faceN);
+                TriangleFacing(m, a + 1, b, b + 1, faceN);
+            }
         m.RecordLeaf(leafVertex,leafIndex,root,length);
     }
 
@@ -269,7 +275,7 @@ public static class Primitives
     {
         var rh = (m.Position(b) - m.Position(a)).Cross(m.Position(c) - m.Position(a));
         if (rh.LengthSq < 1e-26) return; // Collapsed blade tips are fans, not zero-area faces.
-        if (rh.Dot(visibleNormal) < 0) m.AddTriangle(a, b, c); else m.AddTriangle(a, c, b);
+        if (rh.Dot(visibleNormal) > 0) m.AddTriangle(a, b, c); else m.AddTriangle(a, c, b);
     }
 
     public static double[] Mix(double[] a, double[] b, double t) => new[] { a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t };

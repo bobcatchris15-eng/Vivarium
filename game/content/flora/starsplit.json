@@ -1,0 +1,87 @@
+{
+  "id": "starsplit",
+  "name": "Starsplit",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Star-crowned puffball of open soil.",
+  "description": "The outer skin splits into thick tan rays that lie flat on the ground while the pale heart swells and puffs above them.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "soil": 0.9,
+      "wood": 0.4
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.55,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 2
+    },
+    "nutrients": {
+      "optimum": 0.1,
+      "tolerance": 0.25
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 0.4,
+    "initialBiomass": 0.025,
+    "declinePerDay": 0.28,
+    "maturityDays": 12,
+    "lifespanDays": 70,
+    "nutrientPerBiomass": 0.32,
+    "radiusAtMax": 0.1,
+    "minRadius": 0.025
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.32,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.16,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.5
+  },
+  "proximity": [],
+  "litterFraction": 0.7,
+  "sheddingPerDay": 0.008,
+  "grazingValue": 0.12,
+  "visual": {
+    "shape": "starsplit",
+    "color": [
+      0.702,
+      0.604,
+      0.455
+    ],
+    "color2": [
+      0.878,
+      0.827,
+      0.722
+    ],
+    "colorVariance": 0.07,
+    "height": 0.06
+  },
+  "tags": [
+    "fungus",
+    "decomposer",
+    "earthstar",
+    "spore_puff"
+  ],
+  "decomposition": {
+    "radius": 0.55,
+    "fineMultiplier": 1.15,
+    "coarseMultiplier": 2.2,
+    "fruitMultiplier": 1.2
+  }
+}

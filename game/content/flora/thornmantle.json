@@ -1,0 +1,133 @@
+{
+  "id": "thornmantle",
+  "name": "Thornmantle",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Thorny thicket shrub with white blossom and crimson haws.",
+  "description": "Twigs are armed at every joint, and the thicket blossoms white for a fortnight before the crimson haws set it alight in autumn.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.45,
+      "tolerance": 0.3
+    },
+    "light": {
+      "optimum": 0.75,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.22,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.065,
+    "maxBiomass": 6.5,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.07,
+    "maturityDays": 34,
+    "lifespanDays": 1200,
+    "nutrientPerBiomass": 0.24,
+    "radiusAtMax": 0.95,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 18,
+    "radius": 1.2,
+    "propagules": 1,
+    "minBiomassFraction": 0.68
+  },
+  "competition": {
+    "radius": 0.9,
+    "crowdingLimit": 3.5,
+    "sensitivity": 0.42
+  },
+  "proximity": [
+    {
+      "target": "feature:rock",
+      "radius": 0.8,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 1.0,
+    "shadeOpacity": 0.45,
+    "minSpacing": 0.8
+  },
+  "visual": {
+    "shape": "thornmantle",
+    "color": [
+      0.243,
+      0.42,
+      0.204
+    ],
+    "color2": [
+      0.91,
+      0.941,
+      0.878
+    ],
+    "colorVariance": 0.06,
+    "height": 2.0
+  },
+  "tags": [
+    "plant",
+    "shrub",
+    "woody",
+    "thorny",
+    "thicket",
+    "fruiting"
+  ],
+  "reproduction": {
+    "form": "berry",
+    "dispersal": "animal",
+    "reservePerDay": 0.016,
+    "pulseThreshold": 0.06,
+    "maxAttachedMass": 0.14,
+    "developmentDays": 10,
+    "ripeDays": 18,
+    "cooldownDays": 24,
+    "seedFraction": 0.16,
+    "viability": 0.6,
+    "dormancyDays": 12,
+    "dispersalRadius": 0.65,
+    "fruitColor": [
+      0.85,
+      0.15,
+      0.12
+    ],
+    "displaySize": 0.01,
+    "foodValue": 1.4
+  },
+  "postLife": {
+    "standingDays": 55,
+    "collapseDays": 7,
+    "fallenDays": 145,
+    "advancedDays": 24,
+    "coarseFraction": 0.5,
+    "decayHalfLifeMultiplier": 1.45,
+    "standingRetention": 0.88,
+    "deadColor": [
+      0.47,
+      0.34,
+      0.23
+    ],
+    "litterColorInfluence": 0.62,
+    "dryBleach": 0.22,
+    "wetDarken": 0.12
+  }
+}

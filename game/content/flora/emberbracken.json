@@ -1,0 +1,96 @@
+{
+  "id": "emberbracken",
+  "name": "Emberbracken",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Stiff triangular pioneer of dry open slopes.",
+  "description": "Tough triangular fronds bronze early and stand through winter; a creeping black rhizome marches them uphill a little further each year.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.4
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.4,
+      "tolerance": 0.28
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.3,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.18,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 240,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.65,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 10,
+    "radius": 1.6,
+    "propagules": 3,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.5,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.6
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.025,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "emberbracken",
+    "color": [
+      0.478,
+      0.478,
+      0.196
+    ],
+    "color2": [
+      0.62,
+      0.41,
+      0.23
+    ],
+    "colorVariance": 0.07,
+    "height": 0.7
+  },
+  "tags": [
+    "plant",
+    "fern",
+    "xerophyte"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.55,
+      0.48,
+      0.27
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

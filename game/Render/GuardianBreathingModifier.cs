@@ -14,8 +14,6 @@ namespace Vivarium.Game.Render;
 /// </summary>
 public partial class GuardianBreathingModifier : SkeletonModifier3D
 {
-    private static readonly string[] BoneCandidates = { "Chest", "Spine1", "Pelvis", "Body", "Body0" };
-
     private readonly List<int> _boneIndices = new(4);
     private readonly List<Vector3> _restScales = new(4);
     private bool _initialized;
@@ -37,14 +35,61 @@ public partial class GuardianBreathingModifier : SkeletonModifier3D
         {
             _boneIndices.Clear();
             _restScales.Clear();
-            foreach (var name in BoneCandidates)
+
+            // 1. Prefer Chest and Spine1 first
+            int chest = skeleton.FindBone("Chest");
+            int spine1 = skeleton.FindBone("Spine1");
+            if (chest >= 0 || spine1 >= 0)
             {
-                int idx = skeleton.FindBone(name);
-                if (idx >= 0 && !_boneIndices.Contains(idx))
+                if (chest >= 0)
                 {
-                    _boneIndices.Add(idx);
-                    _restScales.Add(skeleton.GetBoneRest(idx).Basis.Scale);
-                    if (_boneIndices.Count >= 2) break;
+                    _boneIndices.Add(chest);
+                    _restScales.Add(skeleton.GetBoneRest(chest).Basis.Scale);
+                }
+                if (spine1 >= 0 && !_boneIndices.Contains(spine1))
+                {
+                    _boneIndices.Add(spine1);
+                    _restScales.Add(skeleton.GetBoneRest(spine1).Basis.Scale);
+                }
+            }
+            else
+            {
+                // 2. If neither exists, prefer Body1 and Body2 (armored_forest, fernback)
+                int body1 = skeleton.FindBone("Body1");
+                int body2 = skeleton.FindBone("Body2");
+                if (body1 >= 0 || body2 >= 0)
+                {
+                    if (body1 >= 0)
+                    {
+                        _boneIndices.Add(body1);
+                        _restScales.Add(skeleton.GetBoneRest(body1).Basis.Scale);
+                    }
+                    if (body2 >= 0 && !_boneIndices.Contains(body2))
+                    {
+                        _boneIndices.Add(body2);
+                        _restScales.Add(skeleton.GetBoneRest(body2).Basis.Scale);
+                    }
+                }
+                else
+                {
+                    // 3. Or Body ONLY if skeleton.GetBoneParent(bodyIdx) >= 0
+                    int bodyIdx = skeleton.FindBone("Body");
+                    if (bodyIdx >= 0 && skeleton.GetBoneParent(bodyIdx) >= 0)
+                    {
+                        _boneIndices.Add(bodyIdx);
+                        _restScales.Add(skeleton.GetBoneRest(bodyIdx).Basis.Scale);
+                    }
+                    else
+                    {
+                        // 4. For ruffleback (root Body), apply subtle throat/gular pumping on Neck instead
+                        int neck = skeleton.FindBone("Neck");
+                        if (neck < 0) neck = skeleton.FindBone("Neck1");
+                        if (neck >= 0)
+                        {
+                            _boneIndices.Add(neck);
+                            _restScales.Add(skeleton.GetBoneRest(neck).Basis.Scale);
+                        }
+                    }
                 }
             }
             _initialized = true;

@@ -69,6 +69,7 @@ uniform float soil_relief_amp = 0.012;   // retained control; aggregate detail r
 uniform float soil_relief_freq = 26.0;   // joined organic aggregate frequency in world metres
 uniform float soil_clumps = 1.0;        // 0 skips aggregate normals on low quality tiers
 uniform float gravel_normal_strength : hint_range(0.0, 3.0, 0.05) = 1.65; // scanned pebble relief
+uniform int pom_steps = 24;             // close-up march budget; scaled down with camera distance
 
 varying vec3 world_pos;
 varying vec3 v_ts;
@@ -94,10 +95,14 @@ vec4 smooth_field(sampler2D tex, vec2 uv) {
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    
-    vec3 view_dir_view = normalize(-VERTEX);
-    v_ts = vec3(dot(view_dir_view, TANGENT), dot(view_dir_view, BINORMAL), dot(view_dir_view, NORMAL));
-    
+
+    // True camera direction in the vertex TBN frame. The old -VERTEX pointed at
+    // the model origin, so parallax rays skewed away from the viewer everywhere
+    // except the island centre.
+    vec3 cam_local = (inverse(MODEL_MATRIX) * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz;
+    vec3 view_dir = normalize(cam_local - VERTEX);
+    v_ts = vec3(dot(view_dir, TANGENT), dot(view_dir, BINORMAL), dot(view_dir, NORMAL));
+
     vec3 sun_world = normalize(vec3(0.35, 0.75, 0.45));
     vec3 light_dir_view = normalize((VIEW_MATRIX * vec4(sun_world, 0.0)).xyz);
     l_ts = vec3(dot(light_dir_view, TANGENT), dot(light_dir_view, BINORMAL), dot(light_dir_view, NORMAL));
@@ -133,16 +138,21 @@ void fragment() {
     vec2 drift = (vec2(terrain_noise(world_pos.xz * 0.72 + vec2(6.2, 1.7)),
                        terrain_noise(world_pos.xz * 0.72 + vec2(23.7, 14.2))) - 0.5) * 0.18;
     float tile_scale = max(tile_metres, 0.2);
-    vec2 uv = world_pos.xz / tile_scale + drift;
+    float cam_dist = distance(CAMERA_POSITION_WORLD, world_pos);
+    // One low-frequency (~2.7 m cell) macro signal: organic warmth vs cool
+    // mineral silt, a slow roughness drift, and a warp that hides the 0.82 m scan.
+    float macro = vnoise(world_pos.xz * 0.37);
+    vec2 macro_shift = vec2(macro - 0.5, fract(macro * 5.31) - 0.5) * 0.10;
+    vec2 uv = world_pos.xz / tile_scale + drift + macro_shift;
     vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 
     // Slope-adaptive triplanar blending across slopes:
     vec3 tri_blend = pow(abs(wn), vec3(4.0));
     tri_blend /= max(tri_blend.x + tri_blend.y + tri_blend.z, 0.0001);
-    vec2 uv_x = vec2(world_pos.z, world_pos.y) / tile_scale + drift * 0.36;
-    vec2 uv_z = vec2(world_pos.x, world_pos.y) / tile_scale + drift * 0.36;
+    vec2 uv_x = vec2(world_pos.z, world_pos.y) / tile_scale + drift * 0.36 + macro_shift;
+    vec2 uv_z = vec2(world_pos.x, world_pos.y) / tile_scale + drift * 0.36 + macro_shift;
 
-    float dampness = clamp(mix(0.65, moisture, 0.28), 0.0, 1.0);
+    float dampness = smoothstep(0.30, 0.72, moisture);
     float stored_litter = smooth_field(litter_tex, fuv).r;
     float ambient_cover = smooth_field(ambient_tex, fuv).r;
     float colony = smooth_field(cover_tex, fuv).r;
@@ -159,11 +169,17 @@ void fragment() {
     float pom_shadow = 1.0;
     float pom_height_scale = 0.025;
     vec2 displaced_uv = uv;
-    if (wGrav < 0.95) {
+    // Preserve close inspection detail while avoiding a heightfield march when its
+    // projected relief is too small to read. Fade both displacement and shadow.
+    float pom_fade = 1.0 - smoothstep(3.0, 5.0, cam_dist);
+    if (wGrav < 0.95 && pom_fade > 0.001 && tri_blend.y > 0.25) {
         float soil_shadow = 1.0;
-        vec2 soil_uv = pom_raymarch(soil_hgt, uv, v_ts, pom_height_scale, 24, soil_shadow, l_ts);
-        displaced_uv = mix(soil_uv, uv, wGrav);
-        pom_shadow = mix(soil_shadow, 1.0, wGrav);
+        // Spend the march budget where the relief reads: full steps close up,
+        // six taps once the projected offset is sub-pixel.
+        int eff_steps = int(mix(float(pom_steps), 6.0, clamp((cam_dist - 0.8) / 3.2, 0.0, 1.0)));
+        vec2 soil_uv = pom_raymarch(soil_hgt, uv, v_ts, pom_height_scale, eff_steps, soil_shadow, l_ts);
+        displaced_uv = mix(uv, soil_uv, (1.0 - wGrav) * pom_fade);
+        pom_shadow = mix(1.0, soil_shadow, (1.0 - wGrav) * pom_fade);
     }
 
     vec3 tn;
@@ -198,8 +214,18 @@ void fragment() {
 
     if (tri_blend.y < 0.95) {
         vec3 tn_x, tn_z;
-        vec4 soil_x = sample_untiled(soil_col, soil_nrm, soil_rgh, uv_x, tn_x);
-        vec4 soil_z = sample_untiled(soil_col, soil_nrm, soil_rgh, uv_z, tn_z);
+        vec4 soil_x, soil_z;
+        if (cam_dist > 5.5) {
+            // Distant grazing slopes: the anti-tiling rotation cannot resolve, so
+            // take one direct scan lookup per axis instead of the 6-tap helper.
+            soil_x = vec4(texture(soil_col, uv_x).rgb, texture(soil_rgh, uv_x).r);
+            soil_z = vec4(texture(soil_col, uv_z).rgb, texture(soil_rgh, uv_z).r);
+            tn_x = unpack_normal(texture(soil_nrm, uv_x).rgb);
+            tn_z = unpack_normal(texture(soil_nrm, uv_z).rgb);
+        } else {
+            soil_x = sample_untiled(soil_col, soil_nrm, soil_rgh, uv_x, tn_x);
+            soil_z = sample_untiled(soil_col, soil_nrm, soil_rgh, uv_z, tn_z);
+        }
         soil = soil * tri_blend.y + soil_x * tri_blend.x + soil_z * tri_blend.z;
         vec3 pert_x = vec3(0.0, tn_x.y, -tn_x.x);
         vec3 pert_z = vec3(-tn_z.x, tn_z.y, 0.0);
@@ -210,6 +236,12 @@ void fragment() {
     vec3 col = soil.rgb;
     float rough = soil.a;
 
+    // Macro soil variation: warm organic humus versus cool mineral silt, plus a
+    // slow roughness drift that breaks the scan's repeat across the island.
+    float macro_t = smoothstep(0.30, 0.72, macro);
+    col *= mix(vec3(1.055, 1.005, 0.955), vec3(0.955, 0.99, 1.045), macro_t);
+    rough = clamp(rough + (macro - 0.5) * 0.10, 0.0, 1.0);
+
     // Joined, shallow aggregate height produces a continuous organic normal field.
     float aggregate = terrain_noise(world_pos.xz * soil_relief_freq + vec2(17.0, 31.0));
     float shoulder = terrain_noise(world_pos.xz * (soil_relief_freq * 1.83) + vec2(12.4, 9.7));
@@ -218,14 +250,17 @@ void fragment() {
         * ((smoothstep(0.36, 0.72, aggregate) - 0.43) * 0.72
             + (shoulder - 0.5) * 0.15 - smoothstep(0.70, 0.91, pore) * 0.14);
     vec3 aggregate_normal = wn;
-    if (soil_clumps > 0.5) {
+    float agg_fade = 1.0 - smoothstep(1.8, 4.5, cam_dist);
+    if (soil_clumps > 0.5 && agg_fade > 0.01) {
         vec3 px = dFdx(world_pos), py = dFdy(world_pos);
         float hx = dFdx(aggregate_height), hy = dFdy(aggregate_height);
         float det = px.x * py.z - px.z * py.x;
         float safe_det = abs(det) < 1e-10 ? (det < 0.0 ? -1e-10 : 1e-10) : det;
         float gradient_x = (hx * py.z - hy * px.z) / safe_det;
         float gradient_z = (hy * px.x - hx * py.x) / safe_det;
-        aggregate_normal = normalize(wn - vec3(gradient_x, 0.0, gradient_z));
+        // Fade the screen-derivative crumb relief out before grazing distances
+        // make its derivatives alias, but keep crisp crumbs for close inspection.
+        aggregate_normal = normalize(wn - vec3(gradient_x, 0.0, gradient_z) * agg_fade);
     }
 
     if (wMoss > 0.01) {
@@ -270,8 +305,12 @@ void fragment() {
         // gradient, so scaling it preserves the geometric normal on flat maps.
         vec3 gravel_pert = (gravel_normal / max(dot(gravel_normal, wn), 0.2) - wn)
             * gravel_normal_strength;
-        g.rgb = mix(vec3(dot(g.rgb, vec3(0.3, 0.59, 0.11))), g.rgb, 0.45) * vec3(1.03, 1.0, 0.95);
-        float stone_h = dot(g.rgb, vec3(0.33)) * 1.4;
+        // Keep the original blend-height signal independent of the visible mineral color.
+        vec3 gravel_grey = vec3(dot(g.rgb, vec3(0.3, 0.59, 0.11)));
+        float stone_h = dot(mix(gravel_grey, g.rgb, 0.45) * vec3(1.03, 1.0, 0.95), vec3(0.33)) * 1.4;
+        // Retain the photographed mineral hues; scan and tint are in linear color space.
+        g.rgb = mix(gravel_grey, g.rgb, 0.78)
+            * mix(vec3(1.08, 1.01, 0.91), vec3(0.93, 0.99, 1.08), aggregate);
         float soil_h = dot(soil.rgb, vec3(0.33));
         float w = clamp(((wGrav * 1.4 + stone_h * 0.35 - soil_h * 0.25) - 0.15) / 0.70, 0.0, 1.0);
         col = mix(col, g.rgb, w); rough = mix(rough, g.a, w);
@@ -317,7 +356,6 @@ void fragment() {
 
     col = mix(col, col * 1.06, smoothstep(0.42, 0.18, moisture) * 0.35);
     float silt_clear = 1.0 - wSilt;
-    col *= mix(1.0, 0.90, smoothstep(0.3, 0.75, moisture) * (1.0 - wMoss * 0.5) * silt_clear);
     float soil_wet = smoothstep(0.7, 1.0, moisture) * silt_clear;
 
     float gw_shore_wet = (sub.g > 0.0 && world_pos.y < water_table + 0.02) ? smoothstep(0.001, 0.02, water_table + 0.02 - world_pos.y) : 0.0;
@@ -325,14 +363,21 @@ void fragment() {
     float shore_wet = max(gw_shore_wet, surf_shore_wet) * silt_clear;
     float total_wet = clamp(max(soil_wet, shore_wet), 0.0, 1.0);
 
-    // Lekner-Dorf internal reflection darkening on albedo when saturated with water
-    if (total_wet > 0.05) {
-        col = pow(col, vec3(mix(1.0, 1.42, total_wet))) * mix(1.0, 0.58, total_wet);
-    }
-    CLEARCOAT = smoothstep(0.45, 0.92, total_wet) * 0.88;
-    CLEARCOAT_ROUGHNESS = mix(0.28, 0.04, smoothstep(0.55, 0.98, total_wet));
+    // One continuous porous-wetness curve: damp pores darken and deepen in hue
+    // progressively, then the saturated film darkens the same soil once more.
+    // The previous code stacked two separate global multiplies here, which
+    // over-darkened already-wet ground.
+    float porous_wet = dampness * (1.0 - wMoss * 0.45) * silt_clear;
+    col = pow(max(col, vec3(0.0)), vec3(mix(1.0, 1.14, porous_wet)));
+    col *= mix(1.0, 0.84, porous_wet);
+    col *= mix(1.0, 0.74, total_wet);
 
-    col *= mix(1.0, 0.88, total_wet * (1.0 - wMoss * 0.6));
+    // Capillary micro-sheen fades smoothly into the saturated water film instead
+    // of snapping from matte soil straight to a full clearcoat.
+    float capillary = smoothstep(0.30, 0.95, dampness) * (1.0 - wMoss * 0.5) * silt_clear;
+    CLEARCOAT = clamp(capillary * 0.20 + smoothstep(0.45, 0.92, total_wet) * 0.78, 0.0, 1.0);
+    CLEARCOAT_ROUGHNESS = mix(0.34, 0.05, smoothstep(0.5, 0.95, total_wet));
+
     float wet_pores = vnoise(world_pos.xz * 36.0 + vec2(11.7, 3.1));
     rough = mix(rough, mix(0.52, 0.66, wet_pores), total_wet * 0.65);
     float submerged_bed = smoothstep(0.004, 0.018, water_depth);
@@ -359,10 +404,14 @@ void fragment() {
     col *= mix(0.75, 1.0, pom_shadow);
 
     ALBEDO = col;
-    ROUGHNESS = rough;
     SPECULAR = mix(0.35, 0.32, total_wet);
     SPECULAR = mix(SPECULAR, 0.12, smoothstep(0.006, 0.025, water_depth));
     NORMAL = normalize((VIEW_MATRIX * vec4(detail, 0.0)).xyz);
+
+    // Normal-variance roughness filtering (specular anti-aliasing): keeps the
+    // aggregate/micro normal detail from sparkling at grazing angles.
+    float n_var = clamp(dot(dFdx(NORMAL), dFdx(NORMAL)) + dot(dFdy(NORMAL), dFdy(NORMAL)), 0.0, 0.25);
+    ROUGHNESS = clamp(sqrt(rough * rough + n_var * 0.5), 0.04, 1.0);
     material_specular = SPECULAR;
 }
 
@@ -394,8 +443,11 @@ void light() {
     }
 
     vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
-    vec4 sub = texture(sub_tex, fuv);
-    float water_surface_y = max(water_table, world_pos.y + sub.b * 0.25);
+    // Same water-surface elevation as the fragment stage so submerged caustics
+    // land on the shoreline that is actually rendered wet.
+    vec4 sub_light = smooth_field(sub_tex, fuv);
+    float surf_y_light = (sub_light.b > 0.0) ? (water_table + (sub_light.b * 255.0 - 1.0) / 100.0) : water_table;
+    float water_surface_y = (sub_light.b > 0.0) ? max(water_table, surf_y_light) : water_table;
     vec3 caustic = evaluate_submerged_caustics(world_pos, wn, water_surface_y, wl, t);
     DIFFUSE_LIGHT += caustic * ATTENUATION * LIGHT_COLOR;
 }

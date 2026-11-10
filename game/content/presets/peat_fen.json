@@ -650,6 +650,50 @@
     {
       "species": "embercup",
       "count": 6
+    },
+    {
+      "species": "rustbellow_moss",
+      "count": 6
+    },
+    {
+      "species": "sceptrefern",
+      "count": 3
+    },
+    {
+      "species": "cloudtuft",
+      "count": 3
+    },
+    {
+      "species": "bannerreed",
+      "count": 2
+    },
+    {
+      "species": "mistviolet",
+      "count": 3
+    },
+    {
+      "species": "marshkettle",
+      "count": 3
+    },
+    {
+      "species": "mirepocket",
+      "count": 3
+    },
+    {
+      "species": "bogfringe",
+      "count": 3
+    },
+    {
+      "species": "miremyrtle",
+      "count": 2
+    },
+    {
+      "species": "silverfelt",
+      "count": 2
+    },
+    {
+      "species": "mirespire",
+      "count": 1
     }
   ],
   "starterFauna": [

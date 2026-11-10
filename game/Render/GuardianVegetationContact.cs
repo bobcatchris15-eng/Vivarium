@@ -86,6 +86,7 @@ public partial class GuardianVegetationContact : Node
     private readonly StemData[] _orderedStems=new StemData[128];
     private UInt128 _widePlants,_allPlants;
     private bool _contactIndexDirty=true;
+    private float _indexedContactReach = float.NaN;
     public long SpatialQueries {get;private set;}
     public long SpatialCandidates {get;private set;}
     public long SpatialBroadphase {get;private set;}
@@ -174,6 +175,7 @@ public partial class GuardianVegetationContact : Node
                 if(TryDrawInfo(removed.Draw,out var removedInfo)&&removed.Index<removedInfo.Count&&removedInfo.Buffer.GetInstanceTransform(removed.Index).IsEqualApprox(removed.Applied))
                     removedInfo.Buffer.SetInstanceTransform(removed.Index,removed.Base);
                 _plants.Remove(farthest);
+                _contactIndexDirty=true;
                 // The runner-up is now the farthest of the remaining plants, so
                 // the registry does not have to be scanned again for the next
                 // registration. A registry that held a single plant has no
@@ -206,7 +208,22 @@ public partial class GuardianVegetationContact : Node
                 else if(d>_farthestDistance){_farthestKey=key;_farthestDistance=d;}
             }
         }
-        var world=info.Global*plant.Base;plant.Root=world.Origin;plant.Bounds=world*info.Bounds;_contactIndexDirty=true;
+        var world=info.Global*plant.Base;
+        var bounds=world*info.Bounds;
+        // The contact index only needs rebuilding when the plant really moved:
+        // a newly registered plant, a re-based transform, or a bend that shifted
+        // its root/bounds by more than a few millimetres.
+        if(BoundsShifted(plant.Root,plant.Bounds,world.Origin,bounds))_contactIndexDirty=true;
+        plant.Root=world.Origin;plant.Bounds=bounds;
+    }
+    /// <summary>Contact-index rebuild tolerance: 4 mm of root/bounds motion.</summary>
+    private const float IndexRebuildTolerance=.004f;
+    private static bool BoundsShifted(Vector3 oldRoot,Aabb oldBounds,Vector3 newRoot,Aabb newBounds)
+    {
+        float tolerance=IndexRebuildTolerance*IndexRebuildTolerance;
+        return oldRoot.DistanceSquaredTo(newRoot)>tolerance
+            || oldBounds.Position.DistanceSquaredTo(newBounds.Position)>tolerance
+            || oldBounds.Size.DistanceSquaredTo(newBounds.Size)>tolerance;
     }
     private ((ulong,int) Key,float Distance,(ulong,int) SecondKey,float SecondDistance) FindFarthest(float incoming)
     {
@@ -319,12 +336,16 @@ public partial class GuardianVegetationContact : Node
                 }
                 else AvoidedPoseUploads++;
                 if(fromFlora)plant.LastFloraUploadRevision=uploadRevision;
-                plant.Bounds=root*info.Bounds;plant.Target=Vector3.Zero;
+                var newBounds=root*info.Bounds;
+                if(BoundsShifted(plant.Root,plant.Bounds,root.Origin,newBounds))_contactIndexDirty=true;
+                plant.Root=root.Origin;
+                plant.Bounds=newBounds;plant.Target=Vector3.Zero;
                 if(root.Origin.DistanceSquaredTo(Focus)>25&&plant.Bend.LengthSquared()<1e-6f){info.Buffer.SetInstanceTransform(plant.Index,plant.Base);expired.Add(key);}
             }
             foreach(var key in expired)_plants.Remove(key);
+            if(expired.Count>0)_contactIndexDirty=true;
         }
-        finally{_insideFrame=false;_farthestValid=false;_contactIndexDirty=true;}
+        finally{_insideFrame=false;_farthestValid=false;}
         if(DrawFrameAuditBudget>0)
         {
             DrawFrameAuditBudget--;
@@ -341,6 +362,7 @@ public partial class GuardianVegetationContact : Node
     private void BuildContactIndex()
     {
         SpatialIndexBuilds++;
+        _indexedContactReach = ContactReach;
         _contactCells.Clear();_stemCells.Clear();_stemQueryMasks.Clear();_widePlants=0;_allPlants=0;int index=0;
         // Bit order exactly matches the existing dictionary traversal. Querying
         // fewer bounds must not reorder sequential stem projections.
@@ -368,6 +390,13 @@ public partial class GuardianVegetationContact : Node
         }
         _contactIndexDirty=false;
     }
+    /// <summary>The stem-cell margin follows <see cref="ContactReach"/>, so a changed
+    /// reach invalidates the cached stem grid even when no plant moved.</summary>
+    private void EnsureContactIndex()
+    {
+        if (_contactIndexDirty || float.IsNaN(_indexedContactReach)
+            || Mathf.Abs(ContactReach - _indexedContactReach) > 0.005f) BuildContactIndex();
+    }
 
     /// <summary>Moves a point out of the stems it overlaps, without touching the
     /// plants' bend targets. The solver calls this for every constraint
@@ -377,7 +406,7 @@ public partial class GuardianVegetationContact : Node
     public Vector3 ProjectStem(Vector3 point,float radius)
     {
         if(!point.IsFinite()||!float.IsFinite(radius)||radius<0||_plants.Count>128)return point;
-        if(_contactIndexDirty)BuildContactIndex();
+        EnsureContactIndex();
         SpatialQueries++;
         // Audit: the original full scan is the reference for the projection.
         Vector3? reference=null;
@@ -490,7 +519,7 @@ public partial class GuardianVegetationContact : Node
     public void ResolveCapsule(Vector3 a, Vector3 b, float radius)
     {
         if(!a.IsFinite()||!b.IsFinite()||!float.IsFinite(radius)||radius<=0||_plants.Count==0)return;
-        if(_contactIndexDirty)BuildContactIndex();
+        EnsureContactIndex();
 
         var mid=(a+b)*0.5f;
         float segHalfLen=(b-a).Length()*0.5f;
@@ -552,7 +581,7 @@ public partial class GuardianVegetationContact : Node
     public Vector3 Resolve(Vector3 point,float radius,bool flexible)
     {
         if(!point.IsFinite()||!float.IsFinite(radius)||radius<0||_plants.Count>128){SpatialFullScans++;return ResolveAll(point,radius,flexible);}
-        if(_contactIndexDirty)BuildContactIndex();
+        EnsureContactIndex();
         SpatialQueries++;
         long narrowStart=System.Diagnostics.Stopwatch.GetTimestamp();
         UInt128 candidates=Nearby(point,radius);

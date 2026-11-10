@@ -414,6 +414,18 @@
     {
       "species": "rain_jelly",
       "count": 6
+    },
+    {
+      "species": "deepquill",
+      "count": 3
+    },
+    {
+      "species": "mirepocket",
+      "count": 3
+    },
+    {
+      "species": "pondstars",
+      "count": 3
     }
   ],
   "starterFauna": [

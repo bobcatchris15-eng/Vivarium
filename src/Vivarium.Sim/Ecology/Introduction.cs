@@ -91,15 +91,13 @@ public static class Populate
     public static void Starters(VivariumWorld w)
     {
         var rng = Rng.Stream(w.Seed, "world.starters");
-        foreach (var entry in w.Descriptor.StarterFlora)
+        int Place(FloraSpeciesDef sp, int count)
         {
-            var sp = w.Content.FloraOrThrow(entry.Species);
-            if (sp.IsCoverageSpecies) continue; // seeded onto the coverage layers by CoverageSystem.SeedInitial
             var candidates = RankedCells(w, rng, c => { var s = w.FloraSystem.Suitability(sp, c); return s.HardRefused ? -1 : s.Score; }, sp.MinSuitability * 1.2);
             int placed = 0;
             foreach (var (pos, _) in candidates)
             {
-                if (placed >= entry.Count) break;
+                if (placed >= count) break;
                 var q = pos + new Vec2(rng.Range(-0.1, 0.1), rng.Range(-0.1, 0.1));
                 if (!w.FloraSystem.CanEstablish(sp, q, out _, isStarter: true)) continue;
                 var f = w.FloraSystem.Establish(sp, q, "starter", sp.MaxBiomass * rng.Range(0.3, 0.8));
@@ -115,7 +113,44 @@ public static class Populate
                 }
                 placed++;
             }
+            return placed;
+        }
+        var pool = w.SpeciesPool;
+        foreach (var entry in w.Descriptor.StarterFlora)
+        {
+            var sp = w.Content.FloraOrThrow(entry.Species);
+            if (sp.IsCoverageSpecies) continue; // seeded onto the coverage layers by CoverageSystem.SeedInitial
+            if (pool != null && !pool.Ids.Contains(entry.Species)) continue;
+            int placed = Place(sp, entry.Count);
             if (placed < entry.Count) Log.Warn(LogCategory.Ecology, $"Placed {placed}/{entry.Count} starter {sp.Name} (limited suitable habitat).");
+        }
+        if (pool != null)
+        {
+            var listed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in w.Descriptor.StarterFlora) listed.Add(entry.Species);
+            var extras = new List<FloraSpeciesDef>();
+            foreach (var id in pool.Ids)
+            {
+                if (listed.Contains(id)) continue;
+                var sp = w.Content.FloraById(id);
+                if (sp == null || sp.IsCoverageSpecies) continue;
+                extras.Add(sp);
+            }
+            extras.Sort((a, b) =>
+            {
+                double fa = pool.Fitness.TryGetValue(a.Id, out var x) ? x : 0;
+                double fb = pool.Fitness.TryGetValue(b.Id, out var y) ? y : 0;
+                int c = fb.CompareTo(fa);
+                if (c != 0) return c;
+                return string.CompareOrdinal(a.Id, b.Id);
+            });
+            int taken = 0;
+            foreach (var sp in extras)
+            {
+                if (taken >= 20) break;
+                Place(sp, 1);
+                taken++;
+            }
         }
         foreach (var entry in w.Descriptor.StarterFauna)
         {

@@ -74,6 +74,11 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         if (_editDelay > 0) return;
         if (_dirtyPatches.TryDequeue(out var key))
         {
+            // Soft invalidations (an edit elsewhere in the world, a quality toggle) come through the
+            // same queue as real edits. Patching is deterministic from local terrain, litter, cover
+            // and the props touching the patch, so if none of those moved since this patch was built
+            // there is nothing to rebuild and the existing geometry stays.
+            if (_patches.TryGetValue(key, out var built) && built.Stamp == PatchStamp(key)) return;
             _pendingTerrain = _world.Terrain.Version; _pendingProps = _world.Props.Version; _pendingQuality = Quality;
             _pendingKey = key;
             _pendingBuild = RebuildPatchBatched(key, _world).GetEnumerator();
@@ -111,7 +116,7 @@ public partial class LoamSurfaceDetailRenderer : Node3D
                 yield return step;
             foreach (bool step in LoamAggregateBuilder.BuildBatched(world, seed, node => patch.AddChild(node), center, PatchSize * .5f))
                 yield return step;
-            SetShadowsRecursive(patch);
+            ConfigureVisualsRecursive(patch);
             // Keep the old complete patch visible throughout preparation. Terrain/prop/quality
             // changes cancel staging. Dressing is rebuilt after edits, not ecological ticks.
             if (_patches.TryGetValue(key, out var old)) { RemoveChild(old.Node); old.Node.QueueFree(); }
@@ -152,8 +157,8 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         var litterNode = LoamLitterBuilder.Build(world, seed, Quality >= 2 ? 1.45f : .85f,
             detailStage: 2, patchCenter: center, halfExtent: PatchSize * .5f, respectLitterMass: true);
         var aggregateNode = LoamAggregateBuilder.Build(world, seed, center, PatchSize * .5f);
-        SetShadowsRecursive(litterNode);
-        SetShadowsRecursive(aggregateNode);
+        ConfigureVisualsRecursive(litterNode);
+        ConfigureVisualsRecursive(aggregateNode);
         patch.AddChild(litterNode);
         patch.AddChild(aggregateNode);
         if (old.Node is not null) { RemoveChild(old.Node); old.Node.QueueFree(); }
@@ -162,12 +167,43 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         RebuildCount++;
     }
 
-    private static void SetShadowsRecursive(Node node)
+    /// <summary>
+    /// Applies the per-layer render budget. Duff flakes are 2-5 mm: past a few metres they are
+    /// sub-pixel and never worth shadow-map triangles. Soil peds stay shadowed out to 9 m, leaf and
+    /// twig cards to 13 m, so close-up diorama fidelity is untouched while far patches cost nothing.
+    /// Self fade dissolves each layer on its own range instead of popping the whole patch.
+    /// </summary>
+    private static void ConfigureVisualsRecursive(Node node)
     {
-        if (node is GeometryInstance3D geom)
-            geom.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+        if (node is MeshInstance3D mesh)
+        {
+            string name = mesh.Name.ToString();
+            switch (name)
+            {
+                case "DecomposedLeafDuff":
+                    mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+                    ApplyVisibilityRange(mesh, 7.5f, 1.5f);
+                    break;
+                case "UndercutLoamPeds":
+                    mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+                    ApplyVisibilityRange(mesh, 9.0f, 1.5f);
+                    break;
+                case "CurledLeafLitter":
+                case "FineTwigs":
+                    mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
+                    ApplyVisibilityRange(mesh, 13.0f, 2.0f);
+                    break;
+            }
+        }
         foreach (var child in node.GetChildren())
-            SetShadowsRecursive(child);
+            ConfigureVisualsRecursive(child);
+    }
+
+    private static void ApplyVisibilityRange(GeometryInstance3D geom, float end, float margin)
+    {
+        geom.VisibilityRangeEnd = end;
+        geom.VisibilityRangeEndMargin = margin;
+        geom.VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self;
     }
 
     /// <summary>Only explicit edits queue static dressing. Ordinary litter/cover updates do no render work.</summary>
@@ -205,10 +241,17 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         }
     }
 
+    /// <summary>
+    /// Per-patch content stamp. It deliberately excludes the global terrain/prop versions: those bump
+    /// on any edit anywhere on the island, which would invalidate every patch and defeat the cache.
+    /// Instead it samples this patch's own terrain height, its litter/cover cells, and the props whose
+    /// footprint reaches it, so a sculpt or prop edit inside the patch changes the stamp while one
+    /// elsewhere leaves it untouched.
+    /// </summary>
     private long PatchStamp((int X, int Z) key)
     {
         var w = _world!;
-        long stamp = unchecked(w.Terrain.Version * 397L ^ w.Props.Version * 31L ^ Quality);
+        long stamp = unchecked(Quality);
         var g = w.Grid;
         int x0 = Math.Max(0, (int)Math.Floor((key.X * PatchSize - g.OriginX) / g.CellSize));
         int z0 = Math.Max(0, (int)Math.Floor((key.Z * PatchSize - g.OriginZ) / g.CellSize));
@@ -225,6 +268,31 @@ public partial class LoamSurfaceDetailRenderer : Node3D
                 + (long)(w.AmbientGroundCover.Cover[cell] * 8) * 17
                 + (w.Water.IsWet(cell) ? 1 : 0));
         }
+        // 7x7 terrain lattice (0.29 m spacing over the 2 m patch) quantized to 2 mm: a sculpt brush
+        // inside the patch moves at least one sample, so its dressing still rebuilds.
+        const int samples = 7;
+        const double spacing = PatchSize / samples;
+        double cx = (key.X + .5) * PatchSize, cz = (key.Z + .5) * PatchSize;
+        for (int t = 0; t < samples * samples; t++)
+        {
+            double sx = cx + (t % samples - samples / 2) * spacing;
+            double sz = cz + (t / samples - samples / 2) * spacing;
+            stamp = unchecked(stamp * 31 + (long)Math.Round(w.Terrain.Height(new Vivarium.Sim.Core.Vec2(sx, sz)) * 500.0));
+        }
+        // Props are consulted per fragment by the builders, so hash only those that can reach the patch.
+        double reach = PatchSize * 0.5 + 0.30;
+        foreach (var r in w.Props.Rocks)
+            if (Math.Abs(r.X - cx) <= reach + r.FootprintRadius && Math.Abs(r.Z - cz) <= reach + r.FootprintRadius)
+                stamp = unchecked(stamp * 31 + (long)Math.Round(r.X * 1000) * 7 + (long)Math.Round(r.Z * 1000) * 11
+                    + (long)Math.Round(r.SizeX * 2000) + (long)Math.Round(r.RotationY * 100));
+        foreach (var l in w.Props.Logs)
+            if (Math.Abs(l.X - cx) <= reach + l.FootprintRadius && Math.Abs(l.Z - cz) <= reach + l.FootprintRadius)
+                stamp = unchecked(stamp * 31 + (long)Math.Round(l.X * 1000) * 7 + (long)Math.Round(l.Z * 1000) * 11
+                    + (long)Math.Round(l.Length * 2000) + (long)Math.Round(l.Radius * 2000) + (long)Math.Round(l.RotationY * 100) + l.DecayClass);
+        foreach (var gr in w.Props.Gravel)
+            if (Math.Abs(gr.X - cx) <= reach + gr.Radius && Math.Abs(gr.Z - cz) <= reach + gr.Radius)
+                stamp = unchecked(stamp * 31 + (long)Math.Round(gr.X * 1000) * 7 + (long)Math.Round(gr.Z * 1000) * 11
+                    + (long)Math.Round(gr.Radius * 2000) + (long)gr.VariantSeed);
         return stamp;
     }
 

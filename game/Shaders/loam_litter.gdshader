@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
+render_mode cull_disabled, diffuse_burley, specular_schlick_ggx, depth_prepass_alpha;
 
 uniform sampler2D leaf_col : source_color, filter_linear_mipmap_anisotropic;
 uniform sampler2D leaf_nrm : hint_normal, filter_linear_mipmap_anisotropic;
@@ -48,12 +48,17 @@ void fragment() {
             SPECULAR = 0.16;
         }
     } else {
-        if (texture(leaf_opacity, UV).r < 0.5) discard;
+        float opacity = texture(leaf_opacity, UV).r;
+        if (opacity < 0.5) discard;
 
         vec3 scanned_leaf = texture(leaf_col, UV).rgb;
         float rgh = texture(leaf_rgh, UV).r;
         vec3 nrm = texture(leaf_nrm, UV).rgb;
         vec3 trans = texture(leaf_trans, UV).rgb;
+        // Thin alpha-silhouette margins transmit more light; back faces rest on
+        // damp duff and read darker and more matte.
+        float margin = 1.0 - smoothstep(0.5, 0.82, opacity);
+        float contact = FRONT_FACING ? 0.0 : 1.0;
 
         if (duff_mode) {
             float decay = clamp(decay_strength, 0.0, 1.0);
@@ -63,15 +68,22 @@ void fragment() {
             NORMAL_MAP = nrm;
             NORMAL_MAP_DEPTH = 0.15;
             SPECULAR = 0.10;
-            BACKLIGHT = trans * 0.22;
         } else {
             ALBEDO = scanned_leaf * vertex_tint;
             ROUGHNESS = clamp(rgh, 0.68, 0.96);
             NORMAL_MAP = nrm;
             NORMAL_MAP_DEPTH = 0.30;
             SPECULAR = 0.18;
-            BACKLIGHT = trans * 0.55;
         }
+
+        // Back-lit margins: thinner leaf tissue glows warm when the sun is behind.
+        float trans_amt = duff_mode ? 0.22 : 0.55;
+        BACKLIGHT = trans * trans_amt * (1.0 + margin * 0.85)
+            * mix(vec3(1.0), vec3(1.06, 1.0, 0.70), margin);
+        // Basal contact darkening where the leaf lies against the soil.
+        ALBEDO = mix(ALBEDO, ALBEDO * 0.62, contact * 0.55);
+        ROUGHNESS = mix(ROUGHNESS, 0.93, contact * 0.6);
+        SPECULAR *= mix(1.0, 0.45, contact * 0.6);
 
         // Moisture-driven wetting: clearcoat and internal reflection darkening
         float wet = clamp(COLOR.a, 0.0, 1.0);

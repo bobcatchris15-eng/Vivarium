@@ -8,6 +8,7 @@ using Vivarium.Sim.Core;
 using Vivarium.Sim.Fauna;
 using Vivarium.Sim.Flora;
 using Vivarium.Sim.Genetics;
+using Vivarium.Sim.Guardians;
 using Vivarium.Sim.Tools;
 using Vivarium.Sim.World;
 
@@ -71,6 +72,7 @@ public partial class Inspector : GlassPanel
         _focus.Visible = true;
         string? text = _sel.Kind switch
         {
+            HitKind.Guardian => GuardianText(w),
             HitKind.Fauna => FaunaText(w),
             HitKind.Flora => FloraText(w),
             HitKind.Rock or HitKind.Log or HitKind.Gravel => PropText(w),
@@ -88,6 +90,45 @@ public partial class Inspector : GlassPanel
         }
         _actions.Visible = true;
         _body.Text = text;
+    }
+
+    private string? GuardianText(VivariumWorld w)
+    {
+        var g = w.Guardian;
+        if (g == null) return null;
+        var def = GuardianCatalog.Find(g.ArchetypeId);
+        if (def == null) return null;
+
+        _title.Text = $"{def.Name}";
+        var sb = new StringBuilder();
+        sb.AppendLine($"[color=#9ab]{def.Archetype} · Variant: {g.VisualVariant} · {g.Temperament}[/color]");
+        sb.AppendLine($"Activity [b]{g.Activity}[/b] · Locomotion [b]{g.Locomotion}[/b] · {g.CurrentSpeed:0.00} m/s");
+
+        double energyMax = def.EnergyMax > 0 ? def.EnergyMax : 1.0;
+        double energyPct = g.Energy / energyMax;
+        sb.AppendLine($"Energy {g.Energy:0.00} ({energyPct * 100:0}%) {UiKit.Bar(energyPct)}");
+        sb.AppendLine($"Hydration {g.Hydration * 100:0}% {UiKit.Bar(g.Hydration)}");
+        sb.AppendLine($"Fatigue {g.Fatigue * 100:0}% {UiKit.Bar(g.Fatigue)}");
+        sb.AppendLine($"Comfort {g.Comfort * 100:0}% {UiKit.Bar(g.Comfort)}");
+        sb.AppendLine($"Body Temperature {g.BodyTemperature * 100:0}% {UiKit.Bar(g.BodyTemperature)}");
+        sb.AppendLine($"Arousal {g.Arousal * 100:0}% · Alertness {g.Alertness * 100:0}%");
+
+        string diets = def.PreferredDiets.Count > 0 ? string.Join(", ", def.PreferredDiets) : "None";
+        sb.AppendLine($"Diet: {diets}");
+        string lastFood = !string.IsNullOrEmpty(g.LastConsumedDiet) ? g.LastConsumedDiet : "None";
+        sb.AppendLine($"Last consumed: {lastFood}");
+
+        double nocturnalBias = def.BehaviorProfile?.NocturnalBias ?? 0.5;
+        string habit = nocturnalBias switch
+        {
+            > 0.65 => "Nocturnal",
+            < 0.35 => "Diurnal",
+            _ => "Crepuscular"
+        };
+        sb.AppendLine($"Circadian habit: {habit} (bias {nocturnalBias:0.00})");
+        sb.AppendLine($"Gut seed queue: {g.PendingSeeds.Count} viable seed load(s)");
+
+        return sb.ToString();
     }
 
     private string? FaunaText(VivariumWorld w)

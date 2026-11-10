@@ -1,0 +1,129 @@
+{
+  "id": "trumpetbind",
+  "name": "Trumpetbind",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Wood-edge twiner with tubular flowers.",
+  "description": "Opposite oval leaves march up the stem, and at each pair hangs a small cream-pink trumpet that keeps its scent until evening.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.6
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.55,
+      "tolerance": 0.28
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.6,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0.018,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.31,
+    "maxBiomass": 1.1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 7,
+    "lifespanDays": 320,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.1,
+    "crowdingLimit": 4,
+    "sensitivity": 0.4
+  },
+  "proximity": [
+    {
+      "target": "embercrown",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "lanternbrush",
+      "radius": 3.0,
+      "bonus": 0.35
+    },
+    {
+      "target": "shadebell",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "ringreed",
+      "radius": 2.5,
+      "bonus": 0.35
+    }
+  ],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.015,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "trumpetbind",
+    "color": [
+      0.31,
+      0.48,
+      0.29
+    ],
+    "color2": [
+      0.94,
+      0.88,
+      0.82
+    ],
+    "colorVariance": 0.07,
+    "height": 0.3
+  },
+  "tags": [
+    "plant",
+    "climber",
+    "scrambler"
+  ],
+  "climber": {
+    "searchRadius": 2.8,
+    "groundSpeedPerDay": 0.22,
+    "segmentLength": 0.06,
+    "attachmentRadius": 0.2,
+    "maxUnsupportedLength": 3.2,
+    "verticalGrowthMultiplier": 2.1,
+    "nodeCap": 200,
+    "populationCap": 10,
+    "supportTypes": [
+      "woody"
+    ],
+    "climbWeight": 0.9,
+    "driftWeight": 0.55,
+    "lightWeight": 0.5,
+    "wanderAmp": 0.3,
+    "wanderPeriod": 0.9,
+    "branchRate": 0.14,
+    "branchAngle": 82,
+    "lateralSpeed": 0.6,
+    "lateralClimb": 0.25,
+    "maxBranchOrder": 2,
+    "branchLength": 0.55,
+    "baseRadius": 0.016,
+    "stemTaper": 0.9,
+    "tipRadius": 0.0018,
+    "grabRadius": 0.1,
+    "seekRate": 0.75,
+    "stolonLength": 0.85
+  }
+}

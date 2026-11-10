@@ -41,6 +41,10 @@ public sealed class GuardianSkinContact
     private readonly bool _continuousBody;
     private readonly string _chainPrefix;
     private readonly Dictionary<string, List<Sample>> _samples = new();
+    /// <summary>Reusable evaluated-point buffer for <see cref="Evaluate"/>. The
+    /// solver evaluates a region several times per frame; a fresh array per call
+    /// was pure garbage. Capacity matches <see cref="MaximumSamplesPerRegion"/>.</summary>
+    private Vector3[] _evalScratch = new Vector3[MaximumSamplesPerRegion];
     private readonly HashSet<MeshInstance3D> _meshes = new();
     private readonly List<Sample> _nasalPad = new();
     private readonly List<MeshScan> _meshScans = new();
@@ -100,7 +104,6 @@ public sealed class GuardianSkinContact
         public Transform3D[] SkinTransforms = Array.Empty<Transform3D>();
         public int[] SkinTransformStamps = Array.Empty<int>();
         public List<SurfaceScan> Surfaces = new();
-        public bool Used;
     }
 
     /// <summary>A qualifying vertex, addressed by its position in the scan arrays.</summary>
@@ -127,6 +130,9 @@ public sealed class GuardianSkinContact
     {
         _skeleton = skeleton;
         _continuousBody = continuousBody; _chainPrefix = chainPrefix;
+        if (!biped && !_continuousBody && skeleton.FindBone("Hand_L") < 0 && skeleton.FindBone("FLFoot") < 0
+            && skeleton.FindBone("FrontFoot_L") < 0 && skeleton.FindBone("ForeFoot_L") < 0 && skeleton.FindBone("Fore_L") < 0)
+            biped = true;
         if (Array.IndexOf(Vivarium.Game.App.Main.UserArgs, "--guardian-chain-cache-audit") >= 0)
             ChainCacheAuditBudget = 32;
         if (System.Environment.GetEnvironmentVariable("VIVARIUM_GUARDIAN_SKIN_TRANSFORM_AUDIT") == "1")
@@ -175,8 +181,11 @@ public sealed class GuardianSkinContact
             {
                 sample.ChainInfluences = new bool[sample.Weights.Length];
                 for (int slot = 0; slot < sample.Weights.Length; slot++)
-                    if (sample.ChainInfluences[slot] = _skeleton.GetBoneName(sample.Bones[slot]).ToString().StartsWith(_chainPrefix, StringComparison.Ordinal))
+                {
+                    string bName = _skeleton.GetBoneName(sample.Bones[slot]).ToString();
+                    if (sample.ChainInfluences[slot] = (bName.StartsWith(_chainPrefix, StringComparison.Ordinal) || CanonicalRegion(bName) == "Tail"))
                         sample.ChainDenominator += sample.Weights[slot] * sample.Weights[slot];
+                }
             }
             foreach (string region in _continuousBody ? new[] { "Body", "Tail", "Head" } : biped ? new[] { "Foot_L", "Foot_R", "Body" } : new[] { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body" })
                 if (_samples[region].Count == 0)
@@ -309,7 +318,7 @@ public sealed class GuardianSkinContact
             for (int region = 0; region < 4; region++)
                 if (canonical == Regions[region]) regionMasks[bind] |= 1 << region;
             if (boneName is "Pelvis" or "Spine1" or "Chest" or "Lumbar" || boneName.StartsWith("Body", StringComparison.Ordinal)) regionMasks[bind] |= 1 << 4;
-            chainBinds[bind] = boneName.StartsWith(_chainPrefix, StringComparison.Ordinal);
+            chainBinds[bind] = boneName.StartsWith(_chainPrefix, StringComparison.Ordinal) || canonical == "Tail";
             if (chainBinds[bind]) regionMasks[bind] |= 1 << 5;
             if (boneName is "Head" or "Jaw") regionMasks[bind] |= 1 << 6;
             RequireTransform(inverseBinds[bind], $"{mesh.Name} inverse bind {bind}");
@@ -619,7 +628,9 @@ public sealed class GuardianSkinContact
             BeginEvaluation();
             foreach (var mesh in _meshes) if (!GodotObject.IsInstanceValid(mesh)) throw new InvalidOperationException("Cached mesh freed; recreate sampler");
             float bestY = float.PositiveInfinity;
-            var points = new Vector3[samples.Count];
+            if (_evalScratch.Length < samples.Count)
+                _evalScratch = new Vector3[Math.Max(MaximumSamplesPerRegion, samples.Count)];
+            var points = _evalScratch;
             for (int i = 0; i < samples.Count; i++)
             {
                 var point = EvaluateVertex(samples[i], false);
@@ -796,7 +807,14 @@ public sealed class GuardianSkinContact
         return result;
     }
     private static string CanonicalRegion(string name) => name switch
-    { "FLFoot" or "FrontFoot_L" => "Hand_L", "FRFoot" or "FrontFoot_R" => "Hand_R", "HLFoot" or "HindFoot_L" => "Foot_L", "HRFoot" or "HindFoot_R" => "Foot_R", _ => name };
+    {
+        "FLFoot" or "FrontFoot_L" or "FrontLower_L" or "FrontUpper_L" or "ForeFoot_L" or "Fore_L" or "Carpus_L" or "Hand_L" => "Hand_L",
+        "FRFoot" or "FrontFoot_R" or "FrontLower_R" or "FrontUpper_R" or "ForeFoot_R" or "Fore_R" or "Carpus_R" or "Hand_R" => "Hand_R",
+        "HLFoot" or "HindFoot_L" or "HindLower_L" or "HindUpper_L" or "Hind_L" or "HindFoot_L" or "Hock_L" or "Foot_L" => "Foot_L",
+        "HRFoot" or "HindFoot_R" or "HindLower_R" or "HindUpper_R" or "Hind_R" or "HindFoot_R" or "Hock_R" or "Foot_R" => "Foot_R",
+        "Tail" => "Tail",
+        _ => name
+    };
 
     private static void RequireTransform(Transform3D transform, string context)
     {

@@ -19,10 +19,14 @@ uniform float u_cutwood_structure = 0.78;
 varying vec3 object_position;
 varying vec3 world_position;
 varying float planar_bark_uv;
+varying vec2 v_uv2;
+varying vec4 v_color;
 
 void vertex() {
     object_position = VERTEX;
     world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    v_uv2 = UV2;
+    v_color = COLOR;
     // Roots, armor and plates use the generic world X+Z / height face UVs.
     // Cylinders and swept branches author their own circumference / length UVs.
     float planar_error = length(UV - vec2(VERTEX.x + VERTEX.z, VERTEX.y));
@@ -42,6 +46,7 @@ void fragment() {
     if (d > 0.001) {
         discard;
     }
+    float cam_dist = length(CAMERA_POSITION_WORLD - world_position);
 
     vec3 tissue = srgb_to_linear(COLOR.rgb);
     float wood = step(0.5, COLOR.a);
@@ -100,6 +105,7 @@ void fragment() {
         ROUGHNESS = clamp(0.82 + porous * 0.10, 0.80, 0.96);
         SPECULAR = 0.10;
         BACKLIGHT = vec3(0.0);
+        AO = 0.85 + 0.15 * mottling;
     } else if (COLOR.a < 0.2) {
         // Blade UVs are normalized across the lamina (U) and base-to-tip (V).
         // A soft midrib and broken oblique laterals give direction without
@@ -142,6 +148,7 @@ void fragment() {
         ROUGHNESS = clamp(0.72 + leaf_noise * 0.08 + edge * 0.07, 0.70, 0.92);
         SPECULAR = mix(0.16, 0.23, taper * (1.0 - edge));
         BACKLIGHT = tissue * 0.075;
+        AO = 0.88;
     } else {
         if (planar_bark_uv > 0.5 && wood > 0.5) {
             // Generic face UVs collapse vertical texture detail on horizontal roots
@@ -163,7 +170,37 @@ void fragment() {
             float relief=texture(bark_hgt,world_position.zy*4.0).r*aw.x+
                 texture(bark_hgt,world_position.xz*4.0).r*aw.y+texture(bark_hgt,world_position.xy*4.0).r*aw.z;
             NORMAL=pilot_bump(NORMAL,VERTEX,relief*.003);
-            AO=texture(bark_ao,world_position.xz*4.0).r;
+
+            // Triplanar ambient occlusion and deep fissure self-shadowing on roots
+            float root_bark_ao = texture(bark_ao, world_position.zy * 4.0).r * aw.x +
+                texture(bark_ao, world_position.xz * 4.0).r * aw.y +
+                texture(bark_ao, world_position.xy * 4.0).r * aw.z;
+            float root_fissure_ao = smoothstep(0.10, 0.68, relief);
+            AO = min(root_bark_ao, root_fissure_ao);
+
+            // Ground-contact dampness, humus darkening and soil embedding at buttress roots
+            float ground_h = clamp(world_position.y / 0.35, 0.0, 1.0);
+            float ground_proximity = 1.0 - smoothstep(0.0, 1.0, ground_h);
+            float moisture_noise = vnoise(world_position.xz * 6.2 + world_position.y * 3.6);
+            float dampness = ground_proximity * (0.82 + 0.38 * moisture_noise) * (1.0 - smoothstep(0.0, 0.5, v_uv2.x));
+            dampness = clamp(dampness, 0.0, 1.0);
+
+            // Damp wood absorbs light and shifts toward rich humid soil-contact bark
+            vec3 damp_darkening = vec3(0.48, 0.44, 0.38);
+            ALBEDO *= mix(vec3(1.0), damp_darkening, dampness * 0.65);
+
+            // Humus/loam contact residue at base
+            vec3 soil_col = vec3(0.045, 0.035, 0.024) * mix(vec3(0.85), scan_tint, 0.5);
+            ALBEDO = mix(ALBEDO, soil_col, smoothstep(0.60, 1.0, dampness) * 0.45);
+
+            // Dampness lowers roughness (moist organic sheen) and increases specular
+            ROUGHNESS = mix(ROUGHNESS, clamp(ROUGHNESS * 0.55, 0.34, 0.70), dampness * 0.72);
+            SPECULAR = mix(SPECULAR, 0.22, dampness * 0.60);
+
+            // Root base ground-contact occlusion embeds roots firmly into the terrain
+            float contact_ao = mix(0.38, 1.0, smoothstep(0.01, 0.32, world_position.y));
+            AO = min(AO, mix(1.0, contact_ao, dampness));
+
             BACKLIGHT = vec3(0.0);
         } else {
             vec2 grain = UV / 0.65;
@@ -172,14 +209,23 @@ void fragment() {
             float uv_det=uv_x.x*uv_y.y-uv_x.y*uv_y.x;
             vec3 ts_tangent=(dp_x*uv_y.y-dp_y*uv_x.y)*sign(uv_det);
             vec3 ts_bitangent=(-dp_x*uv_y.x+dp_y*uv_x.x)*sign(uv_det);
+            float pom_shadow = 1.0;
             if(length(ts_tangent)>1e-7 && length(ts_bitangent)>1e-7) {
                 ts_tangent=normalize(ts_tangent);
                 ts_bitangent=normalize(ts_bitangent);
                 vec3 view_ts=vec3(dot(VIEW,ts_tangent),dot(VIEW,ts_bitangent),dot(VIEW,NORMAL));
-                float pom_shadow;
-                grain=pom_raymarch(bark_hgt,grain,view_ts,bark_height_scale,16,pom_shadow,vec3(0.,0.,1.));
-                AO=pom_shadow*texture(bark_ao,grain).r;
+                // Cylindrical POM is a close-range cue: full 16 steps inside 4.5 m,
+                // then 8/4 steps, and flat bark sampling beyond 16 m.
+                if (cam_dist < 4.5) {
+                    grain=pom_raymarch(bark_hgt,grain,view_ts,bark_height_scale,16,pom_shadow,vec3(0.,0.,1.));
+                } else if (cam_dist < 9.0) {
+                    grain=pom_raymarch(bark_hgt,grain,view_ts,bark_height_scale,8,pom_shadow,vec3(0.,0.,1.));
+                } else if (cam_dist < 16.0) {
+                    grain=pom_raymarch(bark_hgt,grain,view_ts,bark_height_scale,4,pom_shadow,vec3(0.,0.,1.));
+                }
             }
+            AO = pom_shadow * texture(bark_ao, grain).r;
+
             vec3 scan = texture(bark_col, grain).rgb;
             float average = max(dot(textureLod(bark_col, vec2(0.5), 10.0).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.025);
             float micro = fbm(object_position.xz * 9.0 + vec2(object_position.y * 2.7, object_position.y * 1.3));
@@ -198,6 +244,41 @@ void fragment() {
             SPECULAR = mix(0.26, tree_bark_spec, wood);
             BACKLIGHT = tissue * (1.0 - wood) * 0.12;
 
+            // Strengthen cavity & fissure AO from cork groove and analytical fissure relief
+            float fissure_ao = clamp(cork_ao * (1.0 - cork_groove * 0.42), 0.20, 1.0);
+            AO = min(AO, fissure_ao);
+
+            bool is_branch = (v_uv2.x > 0.5) || (planar_bark_uv < 0.5 && world_position.y > 0.85);
+
+            // Ground-contact dampness at trunk buttress base
+            if (!is_branch && v_uv2.x < 0.5) {
+                float ground_h = clamp(world_position.y / 0.35, 0.0, 1.0);
+                float ground_proximity = 1.0 - smoothstep(0.0, 1.0, ground_h);
+                float moisture_noise = vnoise(world_position.xz * 5.8 + world_position.y * 4.2);
+                float trunk_damp = ground_proximity * (0.80 + 0.40 * moisture_noise);
+                trunk_damp = clamp(trunk_damp, 0.0, 1.0);
+                ALBEDO *= mix(vec3(1.0), vec3(0.50, 0.46, 0.40), trunk_damp * 0.60);
+                ROUGHNESS = mix(ROUGHNESS, clamp(ROUGHNESS * 0.58, 0.36, 0.72), trunk_damp * 0.68);
+                SPECULAR = mix(SPECULAR, 0.22, trunk_damp * 0.52);
+                float contact_ao = mix(0.42, 1.0, smoothstep(0.02, 0.32, world_position.y));
+                AO = min(AO, mix(1.0, contact_ao, trunk_damp));
+            }
+
+            // Branch crotches and under-bough interior crown self-shadowing
+            vec3 normal_world = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+            float under_bough = smoothstep(0.25, -0.60, normal_world.y);
+            if (world_position.y > 0.85) {
+                float crown_tier = smoothstep(0.85, 3.2, world_position.y);
+                float crotch_shade = under_bough * crown_tier;
+                AO *= mix(1.0, 0.45, crotch_shade);
+                ALBEDO *= mix(vec3(1.0), vec3(0.72, 0.69, 0.65), crotch_shade * 0.52);
+            }
+
+            // Junction shading from authored vertex shading (v_color)
+            float vert_lum = dot(v_color.rgb, vec3(0.2126, 0.7152, 0.0722));
+            float junction_ao = smoothstep(0.12, 0.40, vert_lum);
+            AO *= mix(0.66, 1.0, junction_ao);
+
             // Derivative tangent frame follows the cylindrical mesh UVs on trunk and branches.
             vec3 dpdx = dFdx(VERTEX), dpdy = dFdy(VERTEX);
             vec2 duvdx = dFdx(grain), duvdy = dFdy(grain);
@@ -211,4 +292,14 @@ void fragment() {
             }
         }
     }
+
+    AO = clamp(AO, 0.10, 1.0);
+    AO_LIGHT_AFFECT = 0.72;
+
+    // Specular AA: unresolved normal variance widens the specular lobe instead
+    // of letting bark relief or vein relief alias into glints at distance.
+    vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
+    float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
+    if (!(normal_variance >= 0.0 && normal_variance < 1e12)) normal_variance = 0.0;
+    ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), .30, 1.0);
 }

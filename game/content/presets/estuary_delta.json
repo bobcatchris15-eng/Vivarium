@@ -661,6 +661,42 @@
     {
       "species": "coalspike",
       "count": 3
+    },
+    {
+      "species": "bannerreed",
+      "count": 2
+    },
+    {
+      "species": "hallowsting",
+      "count": 2
+    },
+    {
+      "species": "burlmantle",
+      "count": 2
+    },
+    {
+      "species": "heddlelace",
+      "count": 3
+    },
+    {
+      "species": "widowspire",
+      "count": 2
+    },
+    {
+      "species": "deepquill",
+      "count": 3
+    },
+    {
+      "species": "burrflag",
+      "count": 3
+    },
+    {
+      "species": "paddlerib",
+      "count": 3
+    },
+    {
+      "species": "fenforge",
+      "count": 1
     }
   ],
   "starterFauna": [

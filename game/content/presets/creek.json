@@ -711,6 +711,94 @@
     {
       "species": "glass_antlers",
       "count": 6
+    },
+    {
+      "species": "quillfeather_moss",
+      "count": 6
+    },
+    {
+      "species": "wispthread_moss",
+      "count": 6
+    },
+    {
+      "species": "silkgleam_moss",
+      "count": 6
+    },
+    {
+      "species": "slickmantle",
+      "count": 6
+    },
+    {
+      "species": "capstar_moss",
+      "count": 4
+    },
+    {
+      "species": "duskpuff",
+      "count": 3
+    },
+    {
+      "species": "reekhorn",
+      "count": 3
+    },
+    {
+      "species": "cradlecup",
+      "count": 3
+    },
+    {
+      "species": "ashcomb",
+      "count": 3
+    },
+    {
+      "species": "swanfrond",
+      "count": 3
+    },
+    {
+      "species": "sceptrefern",
+      "count": 3
+    },
+    {
+      "species": "quillsedge",
+      "count": 3
+    },
+    {
+      "species": "sootband",
+      "count": 3
+    },
+    {
+      "species": "butterglint",
+      "count": 3
+    },
+    {
+      "species": "hallowsting",
+      "count": 2
+    },
+    {
+      "species": "heddlelace",
+      "count": 3
+    },
+    {
+      "species": "shadewrap",
+      "count": 3
+    },
+    {
+      "species": "bitterbine",
+      "count": 3
+    },
+    {
+      "species": "nutglade",
+      "count": 2
+    },
+    {
+      "species": "shiverleaf",
+      "count": 1
+    },
+    {
+      "species": "fenforge",
+      "count": 1
+    },
+    {
+      "species": "banksorrow",
+      "count": 1
     }
   ],
   "starterFauna": [

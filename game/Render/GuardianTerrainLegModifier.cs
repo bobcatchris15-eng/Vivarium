@@ -20,6 +20,13 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
     public float MaximumFootRetargetDistance { get; private set; }
     public float MaximumStanceFootTravel { get; private set; }
     private readonly Dictionary<int, Vector3> _previousFeet = new();
+    // Per-frame solver scratch and name tables. These were allocated every frame
+    // (a swings dictionary and four string/bool/float arrays).
+    private readonly Dictionary<int, float> _swings = new();
+    private static readonly string[] LegSides = { "L", "R" };
+    private static readonly bool[] LegFront = { true, false };
+    private static readonly string[] BodyBoneNames = { "Pelvis", "Spine1", "Chest", "Lumbar", "Body", "Body0", "Body1", "Body2", "Body3" };
+    private static readonly float[] FootProbeRadii = { .025f, .05f, .075f, .10f, .125f };
     private static string LegName(Skeleton3D skeleton, string suffix, bool front, int link)
     {
         string standard = (link == 0 ? (front ? "UpperArm_" : "Thigh_") : link == 1 ? (front ? "Forearm_" : "Shin_") : (front ? "Hand_" : "Foot_")) + suffix;
@@ -35,15 +42,37 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
         var transform = skeleton.GlobalTransform; var inverse = transform.AffineInverse();
         MaximumReachError = 0; MaximumSolePenetration = 0;
         MaximumSkinFootPenetration = 0; SkinFootSampleCount = 0; MaximumStanceFootGap = 0; MaximumFootRetargetDistance = 0; MaximumStanceFootTravel = 0;
-        var swings = new Dictionary<int, float>();
+        var swings = _swings;
+        swings.Clear();
         float bodyDrop = 0;
-        foreach (string suffix in new[] { "L", "R" }) foreach (bool front in new[] { true, false })
+        foreach (string suffix in LegSides) foreach (bool front in LegFront)
         {
             int upper = skeleton.FindBone(LegName(skeleton, suffix, front, 0));
             int lower = skeleton.FindBone(LegName(skeleton, suffix, front, 1));
             int foot = skeleton.FindBone(LegName(skeleton, suffix, front, 2));
-            if (upper < 0 || lower < 0 || foot < 0) continue;
-            var a = transform * skeleton.GetBoneGlobalPose(upper).Origin;
+            if (upper < 0 || lower < 0 || foot < 0)
+            {
+                // 2-bone limb fallback (ruffleback: Fore_L -> ForeFoot_L, Hind_L -> HindFoot_L)
+                int limb = skeleton.FindBone((front ? "Fore_" : "Hind_") + suffix);
+                int paw = skeleton.FindBone((front ? "ForeFoot_" : "HindFoot_") + suffix);
+                if (limb >= 0 && paw >= 0)
+                {
+                    var a = transform * skeleton.GetBoneGlobalPose(limb).Origin;
+                    var c = transform * skeleton.GetBoneGlobalPose(paw).Origin;
+                    var rest = transform * skeleton.GetBoneGlobalRest(paw).Origin;
+                    swings[paw] = Math.Max(0, c.Y - rest.Y);
+                    float targetY = Renderer.SupportHeight(c) + Math.Max(.01f, rest.Y - Renderer.GlobalPosition.Y) + swings[paw];
+                    var currentSkin = Renderer.SkinContact?.Evaluate(skeleton.GetBoneName(paw).ToString(), Renderer.SupportHeight);
+                    if (currentSkin.HasValue && currentSkin.Value.Valid)
+                        targetY = c.Y + swings[paw] + .001f - currentSkin.Value.Minimum;
+                    float reach = a.DistanceTo(c) - .002f;
+                    var horizontal = c - a; horizontal.Y = 0;
+                    float verticalReach = MathF.Sqrt(Math.Max(.001f, reach * reach - horizontal.LengthSquared()));
+                    bodyDrop = Math.Min(bodyDrop, targetY + verticalReach - a.Y);
+                }
+                continue;
+            }
+            else { var a = transform * skeleton.GetBoneGlobalPose(upper).Origin;
             var b = transform * skeleton.GetBoneGlobalPose(lower).Origin;
             var c = transform * skeleton.GetBoneGlobalPose(foot).Origin;
             var rest = transform * skeleton.GetBoneGlobalRest(foot).Origin;
@@ -52,15 +81,22 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
             var currentSkin = Renderer.SkinContact?.Evaluate(skeleton.GetBoneName(foot).ToString(), Renderer.SupportHeight);
             if (currentSkin.HasValue && currentSkin.Value.Valid)
                 targetY = c.Y + swings[foot] + .001f - currentSkin.Value.Minimum;
-            float reach = a.DistanceTo(b) + b.DistanceTo(c) - .002f;
+            float secondDist = b.DistanceTo(c);
+            int mid = skeleton.GetBoneParent(foot);
+            if (mid != lower && mid >= 0)
+            {
+                var m = transform * skeleton.GetBoneGlobalPose(mid).Origin;
+                secondDist = b.DistanceTo(m) + m.DistanceTo(c);
+            }
+            float reach = a.DistanceTo(b) + secondDist - .002f;
             var horizontal = c - a; horizontal.Y = 0;
             float verticalReach = MathF.Sqrt(Math.Max(.001f, reach * reach - horizontal.LengthSquared()));
-            bodyDrop = Math.Min(bodyDrop, targetY + verticalReach - a.Y);
+            bodyDrop = Math.Min(bodyDrop, targetY + verticalReach - a.Y); }
         }
         bodyDrop = Math.Max(bodyDrop, -.20f * transform.Basis.Scale.X);
         // Lower the connected body to keep all four limbs within reach, but
         // retain clearance under the chest/abdomen on visible root shelves.
-        foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Body", "Body0", "Body1", "Body2", "Body3" })
+        foreach (string name in BodyBoneNames)
         {
             int bone = skeleton.FindBone(name); if (bone < 0) continue;
             var p = transform * skeleton.GetBoneGlobalPose(bone).Origin;
@@ -71,6 +107,7 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
         int root = skeleton.FindBone("Root");
         if (root < 0) root = skeleton.FindBone("Pelvis");
         if (root < 0) root = skeleton.FindBone("Hips");
+        if (root < 0) root = skeleton.FindBone("Body");
         if (root >= 0 && bodyDrop < 0)
         {
             var pose = transform * skeleton.GetBoneGlobalPose(root);
@@ -84,6 +121,7 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
         if (Renderer.AppendageContact is { } appendage)
         {
             int attachment = skeleton.FindBone("Tail" + appendage.FirstTailIndex);
+            if (attachment < 0) attachment = skeleton.FindBone("Tail");
             if (attachment >= 0)
             {
                 var point = transform * skeleton.GetBoneGlobalPose(attachment).Origin;
@@ -99,20 +137,109 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
             BodyHeightAdjustment += lift;
         }
         MaximumBodyPenetration = 0;
-        foreach (string name in new[] { "Pelvis", "Spine1", "Chest", "Lumbar", "Body", "Body0", "Body1", "Body2", "Body3" })
+        foreach (string name in BodyBoneNames)
         {
             int bone = skeleton.FindBone(name); if (bone < 0) continue;
             var p = transform * skeleton.GetBoneGlobalPose(bone).Origin;
             MaximumBodyPenetration = Math.Max(MaximumBodyPenetration,
                 Renderer.SupportHeight(p) + .145f * transform.Basis.Scale.X - p.Y);
         }
-        foreach (string suffix in new[] { "L", "R" }) foreach (bool front in new[] { true, false })
+        foreach (string suffix in LegSides) foreach (bool front in LegFront)
         {
             int upper = skeleton.FindBone(LegName(skeleton, suffix, front, 0));
             int lower = skeleton.FindBone(LegName(skeleton, suffix, front, 1));
             int foot = skeleton.FindBone(LegName(skeleton, suffix, front, 2));
-            if (upper < 0 || lower < 0 || foot < 0) continue;
-            var aPose = transform * skeleton.GetBoneGlobalPose(upper);
+            if (upper < 0 || lower < 0 || foot < 0)
+            {
+                // 2-bone limb fallback (ruffleback)
+                int limb = skeleton.FindBone((front ? "Fore_" : "Hind_") + suffix);
+                int paw = skeleton.FindBone((front ? "ForeFoot_" : "HindFoot_") + suffix);
+                if (limb >= 0 && paw >= 0)
+                {
+                    var aPose = transform * skeleton.GetBoneGlobalPose(limb);
+                    var cPose = transform * skeleton.GetBoneGlobalPose(paw);
+                    var a = aPose.Origin; var c = cPose.Origin;
+                    var restFoot = transform * skeleton.GetBoneGlobalRest(paw).Origin;
+                    float sole = Math.Max(.01f, restFoot.Y - Renderer.GlobalPosition.Y);
+                    float swing = swings.GetValueOrDefault(paw);
+                    var target = c; target.Y = Renderer.SupportHeight(c) + sole + swing;
+                    float segLen = a.DistanceTo(c);
+
+                    if (Renderer.UseLocalFootholds)
+                    {
+                        var original = target; float reach = segLen - .002f;
+                        float error = Math.Max(0, a.DistanceTo(target) - reach);
+                        if (error > .003f || !Renderer.FootTargetAllowed(target))
+                        {
+                            float best = float.PositiveInfinity;
+                            foreach (float radius in FootProbeRadii)
+                                for (int direction = 0; direction < 16; direction++)
+                                {
+                                    float angle = direction * Mathf.Tau / 16;
+                                    var probe = original + new Vector3(MathF.Cos(angle), 0, MathF.Sin(angle)) * radius * transform.Basis.Scale.X;
+                                    if (!Renderer.FootTargetAllowed(probe)) continue;
+                                    probe.Y = Renderer.SupportHeight(probe) + sole + swing;
+                                    if (a.DistanceTo(probe) > reach) continue;
+                                    float score = new Vector2(probe.X - original.X, probe.Z - original.Z).LengthSquared() + .2f * (probe.Y - original.Y) * (probe.Y - original.Y);
+                                    if (score < best) { best = score; target = probe; }
+                                }
+                            MaximumFootRetargetDistance = Math.Max(MaximumFootRetargetDistance,
+                                new Vector2(target.X - original.X, target.Z - original.Z).Length());
+                        }
+                    }
+
+                    var aBasis = aPose.Basis; var cBasis = cPose.Basis;
+                    const int maximumFits = 8;
+                    for (int fit = 0; fit < maximumFits; fit++)
+                    {
+                        var line = target - a;
+                        float distance = Math.Clamp(line.Length(), 0.001f, segLen);
+                        var axis = line.LengthSquared() > 1e-8f ? line.Normalized() : aPose.Basis.Y.Normalized();
+                        var reached = a + axis * distance;
+
+                        aPose.Basis = Align(c - a, reached - a) * aBasis;
+                        cPose.Origin = reached;
+
+                        const float sample = .04f;
+                        var normal = new Vector3(
+                            Renderer.SupportHeight(reached - Vector3.Right * sample) - Renderer.SupportHeight(reached + Vector3.Right * sample),
+                            2 * sample,
+                            Renderer.SupportHeight(reached - Vector3.Back * sample) - Renderer.SupportHeight(reached + Vector3.Back * sample)
+                        ).Normalized();
+                        cPose.Basis = Align(Renderer.GlobalBasis.Y.Normalized(), Vector3.Up.Lerp(normal, .7f).Normalized()) * cBasis;
+
+                        skeleton.SetBoneGlobalPose(limb, inverse * aPose);
+                        skeleton.SetBoneGlobalPose(paw, inverse * cPose);
+
+                        if (Renderer.SkinContact?.Valid != true)
+                        {
+                            MaximumReachError = Math.Max(MaximumReachError, reached.DistanceTo(target));
+                            MaximumSolePenetration = Math.Max(MaximumSolePenetration, Renderer.SupportHeight(reached) + sole - reached.Y);
+                            break;
+                        }
+
+                        var skin = Renderer.SkinContact.Evaluate(skeleton.GetBoneName(paw).ToString(), Renderer.SupportHeight);
+                        if (!skin.Valid) break;
+                        float adjustment = swing + .001f - skin.Minimum;
+                        if (fit == maximumFits - 1 || Math.Abs(adjustment) < .0005f)
+                        {
+                            MaximumSkinFootPenetration = Math.Max(MaximumSkinFootPenetration, -skin.Minimum);
+                            MaximumReachError = Math.Max(MaximumReachError, reached.DistanceTo(target));
+                            MaximumSolePenetration = Math.Max(MaximumSolePenetration, Renderer.SupportHeight(reached) + sole - reached.Y);
+                            if (swing < .003f) MaximumStanceFootGap = Math.Max(MaximumStanceFootGap, skin.Minimum);
+                            if (swing < .003f && _previousFeet.TryGetValue(paw, out var previous))
+                                MaximumStanceFootTravel = Math.Max(MaximumStanceFootTravel,
+                                    new Vector2(reached.X - previous.X, reached.Z - previous.Z).Length());
+                            _previousFeet[paw] = reached;
+                            SkinFootSampleCount += skin.SampleCount;
+                            break;
+                        }
+                        target.Y += Math.Clamp(adjustment, -.12f, .12f) * .95f;
+                    }
+                }
+                continue;
+            }
+            else { var aPose = transform * skeleton.GetBoneGlobalPose(upper);
             var bPose = transform * skeleton.GetBoneGlobalPose(lower);
             var cPose = transform * skeleton.GetBoneGlobalPose(foot);
             var a = aPose.Origin; var b = bPose.Origin; var c = cPose.Origin;
@@ -121,6 +248,13 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
             float swing = swings.GetValueOrDefault(foot);
             var target = c; target.Y = Renderer.SupportHeight(c) + sole + swing;
             float first = a.DistanceTo(b), second = b.DistanceTo(c);
+            int mid = skeleton.GetBoneParent(foot);
+            bool hasMid = mid != lower && mid >= 0;
+            if (hasMid)
+            {
+                var m = transform * skeleton.GetBoneGlobalPose(mid).Origin;
+                second = b.DistanceTo(m) + m.DistanceTo(c);
+            }
             if (Renderer.UseLocalFootholds)
             {
                 // A foot on the lower side of a buttress can be unreachable
@@ -132,7 +266,7 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
                 if (error > .003f || !Renderer.FootTargetAllowed(target))
                 {
                     float best = float.PositiveInfinity;
-                    foreach (float radius in new[] { .025f, .05f, .075f, .10f, .125f })
+                    foreach (float radius in FootProbeRadii)
                         for (int direction = 0; direction < 16; direction++)
                         {
                             float angle = direction * Mathf.Tau / 16;
@@ -169,6 +303,15 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
             cPose.Basis = Align(Renderer.GlobalBasis.Y.Normalized(), Vector3.Up.Lerp(normal, .7f).Normalized()) * cBasis;
             skeleton.SetBoneGlobalPose(upper, inverse * aPose);
             skeleton.SetBoneGlobalPose(lower, inverse * bPose);
+            if (hasMid)
+            {
+                var midPose = transform * skeleton.GetBoneGlobalPose(mid);
+                float origDist = b.DistanceTo(c);
+                float t = origDist > 1e-5f ? Math.Clamp(b.DistanceTo(midPose.Origin) / origDist, 0f, 1f) : 0.8f;
+                midPose.Origin = knee.Lerp(reached, t);
+                midPose.Basis = Align(c - b, reached - knee) * midPose.Basis;
+                skeleton.SetBoneGlobalPose(mid, inverse * midPose);
+            }
             skeleton.SetBoneGlobalPose(foot, inverse * cPose);
             if (Renderer.SkinContact?.Valid != true)
             {
@@ -191,7 +334,7 @@ public partial class GuardianTerrainLegModifier : SkeletonModifier3D
                 _previousFeet[foot] = reached;
                 SkinFootSampleCount += skin.SampleCount; break;
             }
-            target.Y += Math.Clamp(adjustment, -.12f, .12f) * .95f;
+            target.Y += Math.Clamp(adjustment, -.12f, .12f) * .95f; }
             }
         }
         var bodySkin = Renderer.SkinContact?.Evaluate("Body", Renderer.SupportHeight);

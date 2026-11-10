@@ -1,0 +1,104 @@
+{
+  "id": "burrflag",
+  "name": "Burrflag",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Floating ribbon and burr of shallow margins.",
+  "description": "Long ribbons trail from the bank and end in spiked burr heads; grazing animals carry them to the next pool in their coats.",
+  "habitat": {
+    "substrates": {
+      "water": 1,
+      "soil": 0.7
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.97,
+      "tolerance": 0.1
+    },
+    "light": {
+      "optimum": 0.75,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.6,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0.3,
+    "hardMinMoisture": 0.75,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.28,
+    "maxBiomass": 1.5,
+    "initialBiomass": 0.055,
+    "declinePerDay": 0.26,
+    "maturityDays": 12,
+    "lifespanDays": 220,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.26,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.85
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.5,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.02,
+  "grazingValue": 0.18,
+  "visual": {
+    "shape": "burrflag",
+    "color": [
+      0.31,
+      0.43,
+      0.24
+    ],
+    "color2": [
+      0.56,
+      0.6,
+      0.35
+    ],
+    "colorVariance": 0.06,
+    "height": 0.55
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "emergent",
+    "reed"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.38,
+      0.22
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

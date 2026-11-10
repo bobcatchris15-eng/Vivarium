@@ -210,7 +210,7 @@ public static partial class OrganismMeshes
     {
         if (length <= 1e-4) return;
 
-        int rows = detail == 2 ? 3 : 4;
+        int rows = detail == 0 ? 8 : (detail == 1 ? 5 : 3);
         int cols = detail == 2 ? 2 : 3;
 
         var radialNorm = stemRadial.Normalized();
@@ -298,7 +298,7 @@ public static partial class OrganismMeshes
         ulong seed,
         int detail)
     {
-        int rows = detail == 2 ? 4 : 6;
+        int rows = detail == 0 ? 9 : (detail == 1 ? 6 : 4);
         int cols = detail == 2 ? 1 : 2;
         int totalCols = 2 * cols + 1;
 

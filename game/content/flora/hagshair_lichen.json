@@ -1,0 +1,98 @@
+{
+  "id": "hagshair_lichen",
+  "name": "Hagshair lichen",
+  "archetype": "lichen",
+  "placementGroup": "moss_lichen",
+  "role": "Hanging fruticose lichen of humid air.",
+  "description": "Long grey strands hang and curl from old branches, combed by the damp; in dry spells they rattle like straw.",
+  "habitat": {
+    "substrates": {
+      "wood": 1,
+      "rock": 0.4
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.55,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.5,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.06,
+      "tolerance": 0.25
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.12,
+    "maxBiomass": 0.5,
+    "initialBiomass": 0.03,
+    "declinePerDay": 0.05,
+    "maturityDays": 12,
+    "lifespanDays": 900,
+    "nutrientPerBiomass": 0.05,
+    "radiusAtMax": 0.13,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 10,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.18,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.5
+  },
+  "proximity": [],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.004,
+  "grazingValue": 0.3,
+  "lichen": {
+    "layer": "Crust",
+    "form": "fruticose",
+    "substrates": [
+      "log",
+      "rock"
+    ],
+    "gravelRateMultiplier": 0,
+    "lateral": 0.0025,
+    "centreDeathDays": 200,
+    "water": {
+      "kWet": 3,
+      "kDry": 0.4,
+      "wMin": 0.12,
+      "wOpt": 0.5
+    },
+    "light": {
+      "k": 0.22
+    },
+    "seedBiomass": 0.1,
+    "maxBiomass": 0.5
+  },
+  "visual": {
+    "shape": "hagshair_lichen",
+    "color": [
+      0.612,
+      0.659,
+      0.561
+    ],
+    "color2": [
+      0.776,
+      0.804,
+      0.729
+    ],
+    "colorVariance": 0.05,
+    "height": 0.03
+  },
+  "tags": [
+    "lichen"
+  ]
+}

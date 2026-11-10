@@ -376,14 +376,20 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                 ?? BaselineClumps, BaselineClumps, 24);
 
         foreach (var mp in _matSpecies)
+        {
+            if (_w.SpeciesPool is { } pool && !pool.Ids.Contains(mp.Name)) continue;
             SeedSpecies(_w.Coverage.Mat, mp.OccupantId, mp.SeedBiomass,
                 InitialClumps(mp.Name), MinSeparation, DiscRadiusCells,
                 p => IsMatSuitable(mp, p));
+        }
 
         foreach (var lp in _lichenSpecies)
+        {
+            if (_w.SpeciesPool is { } pool && !pool.Ids.Contains(_lichenSpeciesId[lp.OccSlot])) continue;
             SeedSpecies(_w.Coverage.Crust, lp.OccSlot, lp.SeedBiomass,
                 InitialClumps(_lichenSpeciesId[lp.OccSlot]), MinSeparation, DiscRadiusCells,
                 p => IsLichenSuitable(lp, p));
+        }
 
     }
 
@@ -494,6 +500,41 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
                 SeedClumpCells(_w.Coverage.Crust, lp.OccSlot, lp.SeedBiomass, gx0, gz0, radiusCells, q => IsLichenSuitable(lp, q));
                 return;
             }
+    }
+
+    /// <summary>Seeds a mature specimen clump of speciesId centred on p for isolated review capture: clears the
+    /// disc first, then fills every in-domain dry cell within radius with mature biomass (0.90) and wet water
+    /// (220). Deliberately skips the habitat/substrate suitability gates (IsMatSuitable/IsLichenSuitable) so
+    /// rock/wood-only lichens still produce a visible specimen clump on the (soil) review stage.</summary>
+    public void SeedMatureSpecimenClump(string speciesId, Vec2 center, double radius)
+    {
+        WaitPending();
+        ClearDisc(center, radius + 0.08);
+
+        CoverageLayer? layer = null;
+        byte occ = 0;
+        foreach (var mp in _matSpecies)
+            if (mp.Name == speciesId) { layer = _w.Coverage.Mat; occ = mp.OccupantId; break; }
+        if (layer == null)
+            foreach (var lp in _lichenSpecies)
+                if (_lichenSpeciesId[lp.OccSlot] == speciesId) { layer = _w.Coverage.Crust; occ = lp.OccSlot; break; }
+        if (layer == null) return;
+
+        int radiusCells = Math.Max(1, (int)Math.Round(radius / CoverageSpec.CellSize));
+        var (gx0, gz0) = CoverageSpec.CellOf(center);
+        for (int dz = -radiusCells; dz <= radiusCells; dz++)
+        for (int dx = -radiusCells; dx <= radiusCells; dx++)
+        {
+            double angle = Math.Atan2(dz, dx);
+            double wobble = 1.0 + 0.22 * Math.Sin(angle * 3.0 + occ * 1.7) + 0.14 * Math.Cos(angle * 5.0 + occ);
+            double rLim = radiusCells * wobble;
+            if (dx * dx + dz * dz > rLim * rLim) continue;
+            int gx = gx0 + dx, gz = gz0 + dz;
+            var cc = CellCentre(gx, gz);
+            if (!_w.Domain.ContainsDisc(cc, 0.04)) continue;
+            if (_w.Water.OpenWaterDepth(cc) >= 0.008) continue;
+            layer.SetCell(gx, gz, occ, 0.90f, 220, 0, 0, 0, 0);
+        }
     }
 
     private void SeedClumpCells(CoverageLayer layer, byte occ, double seedB, int gx0, int gz0, int radiusCells, Func<Vec2, bool> suitable)

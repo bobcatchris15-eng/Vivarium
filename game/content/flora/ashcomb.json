@@ -1,0 +1,86 @@
+{
+  "id": "ashcomb",
+  "name": "Ashcomb",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Spring honeycomb of hardwood shade.",
+  "description": "An ash-grey cap pitted like a drowned comb rides a cream stem; the pits deepen as it ripens and darken at the rim.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "soil": 1
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.62,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.5,
+      "tolerance": 2
+    },
+    "nutrients": {
+      "optimum": 0.15,
+      "tolerance": 0.25
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.4,
+    "maxBiomass": 0.5,
+    "initialBiomass": 0.025,
+    "declinePerDay": 0.55,
+    "maturityDays": 9,
+    "lifespanDays": 35,
+    "nutrientPerBiomass": 0.45,
+    "radiusAtMax": 0.09,
+    "minRadius": 0.025
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.45,
+    "propagules": 3,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.18,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.55
+  },
+  "proximity": [],
+  "litterFraction": 0.75,
+  "sheddingPerDay": 0.012,
+  "grazingValue": 0.25,
+  "visual": {
+    "shape": "ashcomb",
+    "color": [
+      0.557,
+      0.545,
+      0.486
+    ],
+    "color2": [
+      0.765,
+      0.745,
+      0.651
+    ],
+    "colorVariance": 0.06,
+    "height": 0.16
+  },
+  "tags": [
+    "fungus",
+    "decomposer",
+    "morel",
+    "spring_flush"
+  ],
+  "decomposition": {
+    "radius": 0.62,
+    "fineMultiplier": 1.2,
+    "coarseMultiplier": 2.3,
+    "fruitMultiplier": 1.3
+  }
+}

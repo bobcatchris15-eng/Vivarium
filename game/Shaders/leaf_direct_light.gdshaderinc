@@ -21,6 +21,8 @@ varying vec3 tissue_fiber_view;
 varying float tissue_fiber_mask;
 // Mask forward scatter to actual membranes; other organisms use normal BRDF.
 varying float tissue_phase_mask;
+// Explicit organ mask; unrelated consumers initialize this to zero.
+varying float tissue_nonleaf_mask;
 // Optical thickness tau and trichome rim fuzz
 varying float tissue_rim;
 varying float tissue_tau;
@@ -62,14 +64,41 @@ void process_leaf_direct_light(
     }
     float reflected = max(nl, 0.0);
     float transmitted = max(-nl, 0.0);
+    if (tissue_nonleaf_mask > .5) {
+        // Stems and bark use one broad dielectric GGX response, with no leaf
+        // wax lobe, membrane transmission, or trichome rim.
+        if (tissue_light_diagnostic != 2 && tissue_light_diagnostic != 3)
+            diffuse_light += light_color * attenuation * reflected * (1.0 / PI);
+        if (tissue_light_diagnostic != 1 && tissue_light_diagnostic != 2 && reflected > 0.0) {
+            vec3 h = finite_leaf_light_unit(l + v, n);
+            float nh = clamp(dot(n, h), 0.0, 1.0);
+            float nv = max(dot(n, v), .04);
+            float vh = clamp(dot(v, h), 0.0, 1.0);
+            float alpha = max(.045, roughness * roughness);
+            float a2 = alpha * alpha;
+            float den = nh * nh * (a2 - 1.0) + 1.0;
+            float distribution = a2 / max(PI * den * den, .0001);
+            float k = (roughness + 1.0) * (roughness + 1.0) * .125;
+            float geometry = (nv / (nv * (1.0 - k) + k)) *
+                (reflected / (reflected * (1.0 - k) + k));
+            float fresnel = .04 + .96 * pow(1.0 - vh, 5.0);
+            vec3 stem_specular = light_color * attenuation * distribution * geometry * fresnel /
+                max(4.0 * nv, .01) * specular_amount * tissue_specular_stress;
+            if (finite_leaf_light_vector(stem_specular)) specular_light += max(stem_specular, vec3(0.0));
+        }
+        return;
+    }
     if (simple_foliage_lighting) {
         // Optional inexpensive tissue response: retain directional shading,
         // coloured transmission and a broad highlight without the dual-lobe BRDF.
         float tau_simple = clamp(tissue_tau, .15, 3.0);
         vec3 through_simple = exp(-tau_simple * max(tissue_transmission_absorption, vec3(0.0)));
         float membrane = clamp(tissue_phase_mask, 0.0, 1.0);
-        diffuse_light += (vec3(reflected) + through_simple * transmitted * membrane * .6 /
-            max(albedo, vec3(.014))) * light_color * attenuation * (1.0 / PI);
+        vec3 simple_transport = mix(through_simple * 1.5, (through_simple / max(albedo, vec3(0.045))) * 0.35, 0.40) * transmitted * membrane;
+        diffuse_light += (vec3(reflected) + simple_transport) * light_color * attenuation * (1.0 / PI);
+
+
+
         vec3 half_simple = finite_leaf_light_unit(l + v, n);
         float shine = pow(max(dot(n, half_simple), 0.0), mix(64.0, 8.0, roughness));
         specular_light += light_color * attenuation * shine * reflected * specular_amount * .12;
@@ -98,7 +127,9 @@ void process_leaf_direct_light(
     float phase_mask=tissue_phase_mask>=0.0 && tissue_phase_mask<=1.0 ? tissue_phase_mask : 0.0;
     float transmission_factor = (back_cosine + phase * 0.35) * tissue_direct_transmission * phase_mask;
 
-    vec3 sss_transport = (T_leaf / max(albedo, vec3(0.014))) * transmission_factor * 12.5;
+    // Backlight transport blends harmoniously with leaf albedo so species pigment identity
+    // (such as red veilblade or silver mooncoin) is preserved, avoiding division blow-out.
+    vec3 sss_transport = mix(T_leaf * 3.2, (T_leaf / max(albedo, vec3(0.045))) * 0.38, 0.45) * transmission_factor;
 
     // BACKLIGHT is a write-only built-in output in Godot 4, so it cannot be read
     // here. When tau is unset, tissue_tau is already substituted to 0.65 above,

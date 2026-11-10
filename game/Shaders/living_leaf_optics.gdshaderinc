@@ -1,4 +1,4 @@
-﻿// Shared living-tissue optics, using linear-light reflectance rather than emission.
+// Shared living-tissue optics, using linear-light reflectance rather than emission.
 float leaf_hash(float x) { return fract(sin(x * 59.171 + 11.79) * 43758.5453); }
 vec3 leaf_pigment(vec3 vertex_tissue, vec3 species_pigment, float maturity, float identity) {
  float age=smoothstep(.18,.91,clamp(maturity,0.,1.));
@@ -27,7 +27,28 @@ float leaf_mesophyll_pattern(vec2 uv, float identity) {
  vec2 offset=vec2(identity*17.13,identity*31.79);
  float broad=vnoise(uv*vec2(3.6,4.1)+offset);
  float fine=vnoise(uv*vec2(11.5,14.7)+offset*2.37);
- return mix(.84,1.15,clamp(broad*.76+fine*.24,0.,1.));
+ return mix(.94,1.06,clamp(broad*.76+fine*.24,0.,1.));
+}
+// Abaxial (underside) lamina optics: paler, less saturated mesophyll behind a
+// thinner, softer wax layer. Shared so every foliage path agrees on which side
+// of FRONT_FACING is the botanical underside.
+vec3 leaf_abaxial_tint(vec3 reflectance, float underside) {
+ float u=clamp(underside,0.,1.);
+ float l=dot(reflectance,vec3(.2126,.7152,.0722));
+ vec3 pale=mix(vec3(l)*1.12,reflectance,.58)*vec3(1.02,1.05,.96);
+ return mix(reflectance,pale,u*.38);
+}
+// Hydraulically thicker veins transmit less light than the lamina between
+// them: the vein mask becomes optical thickness, so backlit blades show dark
+// vascular silhouettes surrounded by warm chlorophyll glow.
+float leaf_vein_tau(float base_tau,float vein_mask,float underside) {
+ float t=mix(base_tau,base_tau*3.4,clamp(vein_mask,0.,1.));
+ return mix(t,t*.82,clamp(underside,0.,1.));
+}
+// Epidermal micro-noise is only resolvable close to camera. Fading it to its
+// neutral value cuts fragment-side noise evaluations on distant foliage.
+float leaf_micro_fade(vec3 camera_position,vec3 world_position) {
+ return 1.-smoothstep(2.2,5.,length(camera_position-world_position));
 }
 // Screen derivatives of height must be transformed to UV before using a
 // tangent-space normal; otherwise texture relief varies with camera distance.

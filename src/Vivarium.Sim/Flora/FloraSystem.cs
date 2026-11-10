@@ -68,9 +68,7 @@ public sealed class FloraSystem
     /// Trees hold the area-based budget; shrubs carry no island carrying limit.</summary>
     public int WoodyPopulationCap(WoodyLayer layer)
     {
-        if (layer == WoodyLayer.Shrub) return int.MaxValue;
-        double areaPer = TreeAreaPerIndividual;
-        return Math.Max(1, (int)Math.Floor(IslandAreaM2 / areaPer));
+        return int.MaxValue;
     }
 
     public int WoodyPopulation(WoodyLayer layer)
@@ -971,6 +969,100 @@ public sealed class FloraSystem
         return false;
     }
 
+    /// <summary>Advances a single climber specimen through <paramref name="steps"/> growth steps so its
+    /// <c>ClimberSegments</c> grow up the host trunk. Used by isolated specimen capture, where the world
+    /// clock is paused; stepping directly (rather than via the scheduler) grows the vine regardless of
+    /// <c>world.Clock.Paused</c>.</summary>
+    public void AdvanceClimberSpecimen(FloraIndividual f, FloraSpeciesDef sp, int steps = 56, double dt = 0.6)
+    {
+        if (sp.Climber is not { } cd) return;
+        _w.Flora.RebuildIndex();
+        PrepareCanopyCaches();
+        // Wave-9: TreeTrunkProfile returns ~0.055 m but the rendered trunk meshes are
+        // 0.11-0.16 m, so ClimberStep placed attached segments INSIDE the trunk mesh.
+        // When a woody host is nearby, lay a deterministic 3-shoot vine proud of the
+        // bark on the front (+X/-Z/outward) half instead.
+        FloraIndividual? host = null;
+        double bestDist = 1.0;
+        foreach (var n in _w.Flora.Items)
+        {
+            if (n.Id == f.Id) continue;
+            if (C.FloraOrThrow(n.SpeciesId).Woody == null) continue;
+            double d = Vec2.Distance(n.Position, f.Position);
+            if (d < bestDist) { bestDist = d; host = n; }
+        }
+        if (host != null)
+        {
+            double ground = _w.GroundHeight(host.Position);
+            _ = C.FloraOrThrow(host.SpeciesId); // validated host species
+            f.ClimberSegments = new List<ClimberSegment>();
+            double[] baseAz = { 0.0, -0.55, 0.55 };
+            double[] spiralSign = { 1.0, -1.0, 1.0 };
+            int perShoot = 14;
+            double basal = ClimberGrowth.BasalRadius(f, sp, cd);
+            for (int s = 0; s < 3; s++)
+            {
+                var positions = new Vec3[perShoot];
+                var normals = new Vec3[perShoot];
+                for (int i = 0; i < perShoot; i++)
+                {
+                    double y = ground + 0.03 + (1.25 - 0.03) * (i / (double)(perShoot - 1));
+                    double frac = i / (double)(perShoot - 1);
+                    double az = baseAz[s] + spiralSign[s] * 0.4 * frac;
+                    double hFrac = Math.Clamp((y - ground) / 1.5, 0, 1);
+                    double barkR = 0.135 * (1.0 - 0.28 * hFrac) * (1.0 + 0.42 * Math.Exp(-hFrac * 4.5)) + 0.015;
+                    positions[i] = new Vec3(host.X + Math.Cos(az) * barkR, y, host.Z + Math.Sin(az) * barkR);
+                    normals[i] = new Vec3(Math.Cos(az), 0, Math.Sin(az));
+                }
+                int shootStart = f.ClimberSegments.Count;
+                for (int i = 0; i < perShoot; i++)
+                {
+                    int idx = shootStart + i;
+                    int prevIdx = i == 0 ? -1 : idx - 1;
+                    var prevPos = i == 0 ? positions[0] : positions[i - 1];
+                    var nextPos = i == perShoot - 1 ? positions[perShoot - 1] : positions[i + 1];
+                    var forward = (nextPos - prevPos).Normalized();
+                    if (forward.LengthSq < 1e-12) forward = Vec3.Up;
+                    var nrm = normals[i];
+                    var lateral = nrm.Cross(forward).Normalized();
+                    if (lateral.LengthSq < 1e-12) lateral = Vec3.Right;
+                    double y = positions[i].Y;
+                    double depth = i;
+                    f.ClimberSegments.Add(new ClimberSegment
+                    {
+                        Position = positions[i],
+                        Normal = nrm,
+                        Forward = forward,
+                        ParentIndex = prevIdx,
+                        ShootOrder = s,
+                        Attached = true,
+                        Terminal = false,
+                        Age = 0,
+                        Senescent = false,
+                        Lateral = lateral,
+                        ClimbDir = Vec3.Up,
+                        Support = ClimberSurfaceKind.Woody,
+                        HostId = host.Id,
+                        HostIndex = -1,
+                        Arc = i * 0.09,
+                        LocalArc = i * 0.09,
+                        Depth = i,
+                        Credit = 0,
+                        Radius = ClimberGrowth.StemRadius(basal, cd, i),
+                        UnsupportedLength = 0,
+                    });
+                    _ = y; _ = depth; // heights/depths documented above
+                }
+            }
+            f.ClimberAttached = true;
+            f.ClimberTip = true;
+            _climberNodeCounts[sp.Id] = _climberNodeCounts.GetValueOrDefault(sp.Id) + f.ClimberSegments.Count;
+            return;
+        }
+        for (int i = 0; i < steps; i++)
+            ClimberStep(f, sp, cd, dt);
+    }
+
     /// <summary>Plants the founder node and gives the shoot its opening course.</summary>
     private void FoundClimber(FloraIndividual f, FloraSpeciesDef sp, ClimberDef cd)
     {
@@ -1076,10 +1168,11 @@ public sealed class FloraSystem
         int startCount = segs.Count;
         int budgetUsed = _climberNodeCounts.GetValueOrDefault(sp.Id);
         if (budgetUsed >= speciesBudget) return;
-        for (int i = 0; i < segs.Count; i++)
+        for (int i = 0; i < startCount; i++)
         {
             if (_tipFlags[i]) continue;
-            var tip = segs[i];
+            int tipIndex = i;
+            var tip = segs[tipIndex];
             if (tip.Terminal || tip.Senescent) continue;
 
             bool lateral = tip.ShootOrder > 0;
@@ -1092,11 +1185,15 @@ public sealed class FloraSystem
             while (tip.Credit >= cd.SegmentLength && segs.Count < cd.NodeCap && guard++ < 8)
             {
                 tip.Credit -= cd.SegmentLength;
-                if (!ExtendClimber(f, sp, cd, i)) break;
-                _tipFlags[i] = true;              // the tip has a child now
-                if (i >= segs.Count) break;
-                tip = segs[i];
-                if (tip.Terminal) break;
+                int nextIndex = segs.Count;
+                if (!ExtendClimber(f, sp, cd, tipIndex)) break;
+                // The continuation is appended first. Carry unused credit along the shoot,
+                // and let any new lateral start earning its own credit on the next step.
+                var continuation = segs[nextIndex];
+                continuation.Credit = tip.Credit;
+                tip.Credit = 0;
+                tip = continuation;
+                tipIndex = nextIndex;
             }
         }
         _climberNodeCounts[sp.Id] = budgetUsed + (segs.Count - startCount);

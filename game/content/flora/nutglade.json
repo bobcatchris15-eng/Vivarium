@@ -1,0 +1,110 @@
+{
+  "id": "nutglade",
+  "name": "Nutglade",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Coppice shrub of generous hardwood edges.",
+  "description": "Round scalloped leaves cast a green shade, golden catkins dangle in rows, and the little bearded nuts come in clusters of three.",
+  "habitat": {
+    "substrates": {
+      "soil": 1
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.28
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.6,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.3,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.07,
+    "maxBiomass": 7.5,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.07,
+    "maturityDays": 30,
+    "lifespanDays": 1100,
+    "nutrientPerBiomass": 0.27,
+    "radiusAtMax": 0.85,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 18,
+    "radius": 1.2,
+    "propagules": 1,
+    "minBiomassFraction": 0.68
+  },
+  "competition": {
+    "radius": 0.9,
+    "crowdingLimit": 3.5,
+    "sensitivity": 0.42
+  },
+  "proximity": [
+    {
+      "target": "shadebell",
+      "radius": 2.0,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 0.9,
+    "shadeOpacity": 0.4,
+    "minSpacing": 0.7
+  },
+  "visual": {
+    "shape": "nutglade",
+    "color": [
+      0.306,
+      0.478,
+      0.243
+    ],
+    "color2": [
+      0.561,
+      0.659,
+      0.353
+    ],
+    "colorVariance": 0.06,
+    "height": 1.8
+  },
+  "tags": [
+    "plant",
+    "shrub",
+    "woody",
+    "coppice",
+    "mesic"
+  ],
+  "postLife": {
+    "standingDays": 55,
+    "collapseDays": 7,
+    "fallenDays": 145,
+    "advancedDays": 24,
+    "coarseFraction": 0.5,
+    "decayHalfLifeMultiplier": 1.45,
+    "standingRetention": 0.88,
+    "deadColor": [
+      0.47,
+      0.34,
+      0.23
+    ],
+    "litterColorInfluence": 0.62,
+    "dryBleach": 0.22,
+    "wetDarken": 0.12
+  }
+}

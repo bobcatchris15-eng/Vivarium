@@ -318,6 +318,66 @@
     {
       "species": "silverweed",
       "count": 3
+    },
+    {
+      "species": "rustbellow_moss",
+      "count": 6
+    },
+    {
+      "species": "sceptrefern",
+      "count": 3
+    },
+    {
+      "species": "cloudtuft",
+      "count": 3
+    },
+    {
+      "species": "bannerreed",
+      "count": 2
+    },
+    {
+      "species": "mistviolet",
+      "count": 3
+    },
+    {
+      "species": "fenfoam",
+      "count": 3
+    },
+    {
+      "species": "marshkettle",
+      "count": 3
+    },
+    {
+      "species": "widowspire",
+      "count": 2
+    },
+    {
+      "species": "mirepocket",
+      "count": 3
+    },
+    {
+      "species": "bogfringe",
+      "count": 3
+    },
+    {
+      "species": "burrflag",
+      "count": 3
+    },
+    {
+      "species": "barbarrow",
+      "count": 3
+    },
+    {
+      "species": "miremyrtle",
+      "count": 2
+    },
+    {
+      "species": "fenforge",
+      "count": 1
+    },
+    {
+      "species": "mirespire",
+      "count": 1
     }
   ],
   "starterFauna": [

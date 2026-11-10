@@ -618,6 +618,90 @@
     {
       "species": "embercup",
       "count": 5
+    },
+    {
+      "species": "rustbellow_moss",
+      "count": 6
+    },
+    {
+      "species": "stoneknot_moss",
+      "count": 6
+    },
+    {
+      "species": "pinequilt_moss",
+      "count": 6
+    },
+    {
+      "species": "hagshair_lichen",
+      "count": 6
+    },
+    {
+      "species": "sunscald_lichen",
+      "count": 6
+    },
+    {
+      "species": "ashfingers_lichen",
+      "count": 6
+    },
+    {
+      "species": "starsplit",
+      "count": 3
+    },
+    {
+      "species": "barrowbole",
+      "count": 3
+    },
+    {
+      "species": "emberbracken",
+      "count": 2
+    },
+    {
+      "species": "cloudtuft",
+      "count": 3
+    },
+    {
+      "species": "duskbristle",
+      "count": 3
+    },
+    {
+      "species": "ashwire",
+      "count": 3
+    },
+    {
+      "species": "hushclover",
+      "count": 3
+    },
+    {
+      "species": "brightknot",
+      "count": 3
+    },
+    {
+      "species": "cragset",
+      "count": 3
+    },
+    {
+      "species": "miremyrtle",
+      "count": 2
+    },
+    {
+      "species": "greywatch",
+      "count": 2
+    },
+    {
+      "species": "silverfelt",
+      "count": 2
+    },
+    {
+      "species": "moonbark",
+      "count": 1
+    },
+    {
+      "species": "mirespire",
+      "count": 1
+    },
+    {
+      "species": "witchberry",
+      "count": 1
     }
   ],
   "starterFauna": [

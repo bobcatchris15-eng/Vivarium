@@ -701,6 +701,94 @@
     {
       "species": "silverweed",
       "count": 2
+    },
+    {
+      "species": "quillfeather_moss",
+      "count": 6
+    },
+    {
+      "species": "wispthread_moss",
+      "count": 6
+    },
+    {
+      "species": "pinequilt_moss",
+      "count": 6
+    },
+    {
+      "species": "slickmantle",
+      "count": 6
+    },
+    {
+      "species": "hagshair_lichen",
+      "count": 6
+    },
+    {
+      "species": "moonshell_lichen",
+      "count": 6
+    },
+    {
+      "species": "capstar_moss",
+      "count": 4
+    },
+    {
+      "species": "duskpuff",
+      "count": 3
+    },
+    {
+      "species": "cradlecup",
+      "count": 3
+    },
+    {
+      "species": "candlecoral",
+      "count": 3
+    },
+    {
+      "species": "ashcomb",
+      "count": 3
+    },
+    {
+      "species": "barrowbole",
+      "count": 3
+    },
+    {
+      "species": "swanfrond",
+      "count": 3
+    },
+    {
+      "species": "mirrorstrap_fern",
+      "count": 3
+    },
+    {
+      "species": "duskbristle",
+      "count": 3
+    },
+    {
+      "species": "starveil",
+      "count": 3
+    },
+    {
+      "species": "hushclover",
+      "count": 3
+    },
+    {
+      "species": "shadewrap",
+      "count": 3
+    },
+    {
+      "species": "trumpetbind",
+      "count": 3
+    },
+    {
+      "species": "nutglade",
+      "count": 2
+    },
+    {
+      "species": "moonbark",
+      "count": 1
+    },
+    {
+      "species": "witchberry",
+      "count": 1
     }
   ],
   "starterFauna": [

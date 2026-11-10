@@ -54,9 +54,15 @@ void fragment() {
     vec3 light_ts = vec3(dot(to_sun, tangent_w), dot(to_sun, bitangent_w), dot(to_sun, plane_w));
     float pom_shadow = 1.0;
     vec2 displaced_uv = base_uv;
-    if (soil_parallax > 0.5) {
+    // The clod march fades between 2 m and 3.8 m and is skipped entirely beyond
+    // that: the sub-millimetre contact parallax is sub-pixel out there.
+    float pom_fade = 1.0 - smoothstep(2.0, 3.8, distance(CAMERA_POSITION_WORLD, clod_world_pos));
+    if (soil_parallax > 0.5 && pom_fade > 0.001) {
         float height_scale = clamp(soil_relief_metres, 0.0, 0.01) / tile;
-        displaced_uv = pom_raymarch(soil_hgt, base_uv, view_ts, height_scale, 14, pom_shadow, light_ts);
+        float marched_shadow = 1.0;
+        vec2 marched_uv = pom_raymarch(soil_hgt, base_uv, view_ts, height_scale, 14, marched_shadow, light_ts);
+        displaced_uv = mix(base_uv, marched_uv, pom_fade);
+        pom_shadow = mix(1.0, marched_shadow, pom_fade);
     }
     vec2 parallax_uv = displaced_uv - base_uv;
     vec3 sample_p = world_p + (tangent_w * parallax_uv.x + bitangent_w * parallax_uv.y);

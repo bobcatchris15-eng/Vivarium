@@ -84,6 +84,133 @@
       "radius": 0.7,
       "bonus": 0.1,
       "reason": "Lanternbrush holds humid shade over saturated bank moss."
+    },
+    {
+      "a": "hallowsting",
+      "b": "heddlelace",
+      "type": "compete",
+      "strength": 1.4,
+      "reason": "Both thrive on rich disturbed soil and race for the same light gap."
+    },
+    {
+      "a": "bannerreed",
+      "b": "widowspire",
+      "type": "compete",
+      "strength": 1.3,
+      "reason": "Both tower over fen margins and smother each other's shoots."
+    },
+    {
+      "a": "emberbracken",
+      "b": "thornmantle",
+      "type": "compete",
+      "strength": 1.2,
+      "reason": "Bracken mats creep over and suppress young hawthorn seedlings."
+    },
+    {
+      "a": "bannerreed",
+      "b": "quillsedge",
+      "type": "compete",
+      "strength": 1.1,
+      "reason": "Vigorous reedgrass overtops the arching sedge fountain."
+    },
+    {
+      "a": "nutglade",
+      "b": "starveil",
+      "type": "compete",
+      "strength": 0.9,
+      "reason": "Hazel leaf litter buries the spring anemone before it blooms."
+    },
+    {
+      "a": "hallowsting",
+      "b": "burlmantle",
+      "type": "compete",
+      "strength": 1.2,
+      "reason": "Both colonise rich ground, and nettle shoots outgrow young burdock leaves."
+    },
+    {
+      "a": "widowspire",
+      "b": "bogfringe",
+      "type": "compete",
+      "strength": 1.0,
+      "reason": "Loosestrife spikes shade out the floating bogbean leaves."
+    },
+    {
+      "a": "quillfeather_moss",
+      "b": "nutglade",
+      "type": "benefit",
+      "radius": 0.5,
+      "bonus": 0.12,
+      "reason": "Hazel's deep shade keeps the feathermoss damp and cool."
+    },
+    {
+      "a": "quillfeather_moss",
+      "b": "shadebell",
+      "type": "benefit",
+      "radius": 0.5,
+      "bonus": 0.1,
+      "reason": "Shadebell's canopy holds humidity over the feathered mat."
+    },
+    {
+      "a": "hagshair_lichen",
+      "b": "fenforge",
+      "type": "benefit",
+      "radius": 0.4,
+      "bonus": 0.12,
+      "reason": "Humid air and rough alder bark suit the hanging beard tufts."
+    },
+    {
+      "a": "wispthread_moss",
+      "b": "shadewrap",
+      "type": "benefit",
+      "radius": 0.4,
+      "bonus": 0.1,
+      "reason": "Ivylace-clad logs stay shaded and wet enough for threadmoss."
+    },
+    {
+      "a": "cradlecup",
+      "b": "nutglade",
+      "type": "benefit",
+      "radius": 0.3,
+      "bonus": 0.15,
+      "reason": "Rotting hazel wood feeds the tiny bird's-nest cups."
+    },
+    {
+      "a": "ashcomb",
+      "b": "moonbark",
+      "type": "benefit",
+      "radius": 0.5,
+      "bonus": 0.12,
+      "reason": "Morels flush in spring under the birch's light woody shade."
+    },
+    {
+      "a": "bogfringe",
+      "b": "rustbellow_moss",
+      "type": "benefit",
+      "radius": 0.4,
+      "bonus": 0.1,
+      "reason": "Both share the same acid peat pool and steady each other."
+    },
+    {
+      "a": "reekhorn",
+      "b": "hallowsting",
+      "type": "benefit",
+      "radius": 0.4,
+      "bonus": 0.08,
+      "reason": "Rich nettle litter feeds the stinkhorn's spring rise."
+    },
+    {
+      "a": "sunscald_lichen",
+      "b": "moonbark",
+      "type": "refuse",
+      "radius": 0.2,
+      "reason": "Sunburst lichen cannot endure the shade cast by birch crowns."
+    },
+    {
+      "a": "cragset",
+      "b": "pearl_cushion_moss",
+      "type": "refuse",
+      "radius": 0.2,
+      "reason": "Dense cushion mats smother the rock-crevice houseleek."
     }
   ]
 }

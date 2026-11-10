@@ -1,0 +1,106 @@
+{
+  "id": "swanfrond",
+  "name": "Swanfrond",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Soft bipinnate shuttlecock of rich moist shade.",
+  "description": "Pale-green fronds arch out in layered feathers, the youngest standing coiled with their frondlings tucked under them.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.5
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.72,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.42,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.35,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 240,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.45,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.9,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.8,
+      "bonus": 0.15
+    },
+    {
+      "target": "feature:water",
+      "radius": 1,
+      "bonus": 0.1
+    }
+  ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.025,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "swanfrond",
+    "color": [
+      0.306,
+      0.478,
+      0.227
+    ],
+    "color2": [
+      0.561,
+      0.69,
+      0.478
+    ],
+    "colorVariance": 0.07,
+    "height": 0.55
+  },
+  "tags": [
+    "plant",
+    "fern"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.52,
+      0.45,
+      0.28
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

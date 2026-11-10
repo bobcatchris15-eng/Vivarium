@@ -54,7 +54,8 @@ public partial class GuardianRenderer : Node3D
     public readonly System.Collections.Generic.Dictionary<string, double> BuildTimings = new();
     /// <summary>Diagnostic studio support only; null uses production terrain/root contact.</summary>
     public float? ReviewSupportPlaneHeight { get; set; }
-    public Func<Vector3, float>? ReviewGroundSample { get; set; }    public bool UseLocalFootholds => _def?.Archetype is "woodland_omnivore" or "armored_forest" or "quilled_arboreal" or "crested_canopy";
+    public Func<Vector3, float>? ReviewGroundSample { get; set; }
+    public bool UseLocalFootholds => _def?.Archetype is not "canopy_serpent";
     public bool FootTargetAllowed(Vector3 point) => _w?.PilotTree?.BlocksTrunk(new Vec2(point.X, point.Z)) != true;
     public float SupportHeight(Vector3 point)
     {
@@ -72,12 +73,31 @@ public partial class GuardianRenderer : Node3D
     }
 
     static readonly string[] BodyBoneNames = { "Pelvis", "Spine1", "Chest", "Lumbar", "Neck", "Head", "Snout", "Body", "Body0", "Body1", "Body2", "Body3" };
+    // Skin regions sampled by the trunk-avoidance solver. Hoisted: the eight
+    // iterations used to allocate a fresh string array every pass, every frame.
+    static readonly string[] LimbContactBones = { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Head" };
     int[] _bodyBoneIdx = new int[BodyBoneNames.Length];
     int[] _handFootBoneIdx = System.Array.Empty<int>();
     int _attachmentBoneIdx = -1;
     Skeleton3D? _boneCacheSkeleton;
     object? _boneCacheAppendage;
     int _boneCacheCount = -1;
+
+    // Skeleton modifiers are disabled while the guardian is frustum-culled: their
+    // constraint solves are the dominant per-frame CPU cost and nothing samples
+    // them off screen. The list is captured once per build so culling never
+    // allocates or walks the scene tree.
+    private readonly System.Collections.Generic.List<SkeletonModifier3D> _skeletonModifiers = new();
+    private bool _modifiersActive = true;
+    // Last uploaded shader parameters. Uniforms are only re-uploaded when a value
+    // actually changes; wetness/water line/contact sphere are static on most frames.
+    private bool _shaderParametersPrimed;
+    private float _lastWetness = -1f;
+    private float _lastWaterLevel = float.NegativeInfinity;
+    private Vector3 _lastContactSphere = new(float.MaxValue, float.MaxValue, float.MaxValue);
+    private float _lastContactRadius = -1f;
+    private float _lastContactDisplacement = -1f;
+    private float _lastDayNight = -1f;
 
     // Bone indices are cached per skeleton instance; refreshed if the skeleton,
     // its bone count, or the appendage config changes.
@@ -99,10 +119,27 @@ public partial class GuardianRenderer : Node3D
         _boneCacheSkeleton = _skeleton; _boneCacheAppendage = AppendageContact; _boneCacheCount = count;
     }
 
+    /// <summary>Suspends the procedural skeleton modifier stack while the guardian is
+    /// outside the camera frustum. Contact, breathing, head tracking and secondary
+    /// motion are invisible then, and their constraint solvers dominate guardian CPU.</summary>
+    private void SetSkeletonModifiersActive(bool active)
+    {
+        if (_modifiersActive == active) return;
+        _modifiersActive = active;
+        for (int i = 0; i < _skeletonModifiers.Count; i++)
+        {
+            var modifier = _skeletonModifiers[i];
+            if (GodotObject.IsInstanceValid(modifier)) modifier.Active = active;
+        }
+    }
+
     public void Build(VivariumWorld w)
     {
         _w = w;
         _guardianMaterials.Clear();
+        _skeletonModifiers.Clear();
+        _modifiersActive = true;
+        _shaderParametersPrimed = false;
         SkinContact = null;
         // Loading a guardian is the longest single stage of a world start, so the
         // individual costs are timed and reported instead of guessed at.
@@ -204,15 +241,23 @@ public partial class GuardianRenderer : Node3D
         ApplySurfaceMaterials(_instance);
         Mark("SurfaceMaterials");
         _groundOffset = Math.Max(0, -LowestPoint(_instance, Transform3D.Identity));
-        // The mata mata export has its support height baked into the rig. Its
-        // skinned mesh bounds do not describe the posed feet at this point.
-        if (_def.Archetype == "ruffleback" && _skeleton != null) _groundOffset = 0;
         _instance.Position += Vector3.Up * _groundOffset;
         Mark("LowestPoint");
 
-        // Enable and review each species as its cinematic pass is completed.
-        if (_skeleton != null && _def.Archetype is "woodland_omnivore" or "great_ground" or "armored_forest" or "quilled_arboreal" or "canopy_serpent" or "crested_canopy")
+        // Enable contact, appendage, leg IK and skin clearance across all species.
+        if (_skeleton != null)
         {
+            // Breathing, head tracking and secondary motion run BEFORE contact solvers
+            // so terrain leg contact and appendage contact evaluate final modified bone poses.
+            BreathingModifier = new GuardianBreathingModifier { Name = "GuardianBreathingModifier" };
+            _skeleton.AddChild(BreathingModifier);
+
+            HeadTracker = new GuardianHeadTracker { Name = "GuardianHeadTracker" };
+            _skeleton.AddChild(HeadTracker);
+
+            SecondaryMotion = new GuardianSecondaryMotion { Name = "GuardianSecondaryMotion" };
+            _skeleton.AddChild(SecondaryMotion);
+
             ShrubContact = new GuardianVegetationContact { Name = "GuardianShrubContact", Flora = Vegetation };
             AddChild(ShrubContact);
             if (Array.IndexOf(Main.UserArgs, "--guardian-stem-audit") >= 0) ShrubContact.BeginStemAudit(512);
@@ -250,6 +295,25 @@ public partial class GuardianRenderer : Node3D
                 AppendageContact.LateralRadii = new[] { .045f, .08f, .12f, .14f, .14f };
                 AppendageContact.GroundRadii = new[] { .018f, .014f, .010f, .006f, .004f };
             }
+            if (_def.Archetype == "fernback")
+            {
+                AppendageContact.FirstTailIndex = 0; AppendageContact.RootRadius = 0.052f; AppendageContact.TipRadius = 0.010f;
+                AppendageContact.TipSegmentLength = 0.16f; AppendageContact.BodyBrushRadius = 0.18f;
+            }
+            if (_def.Archetype == "dewhorn")
+            {
+                AppendageContact.FirstTailIndex = 1; AppendageContact.RootRadius = 0.035f; AppendageContact.TipRadius = 0.008f;
+                AppendageContact.TipSegmentLength = 0.045f; AppendageContact.BodyBrushRadius = 0.20f;
+            }
+            if (_def.Archetype == "hushbill")
+            {
+                AppendageContact.BodyBrushRadius = 0.20f;
+            }
+            if (_def.Archetype == "ruffleback")
+            {
+                AppendageContact.FirstTailIndex = 0; AppendageContact.RootRadius = 0.032f; AppendageContact.TipRadius = 0.008f;
+                AppendageContact.TipSegmentLength = 0.08f; AppendageContact.BodyBrushRadius = 0.24f;
+            }
             bool continuousBody = _def.Archetype == "canopy_serpent";
             if (continuousBody) ConfigureBoaContact(AppendageContact);
             else if (!(Array.IndexOf(Main.UserArgs, "--guardian-review") >= 0
@@ -260,23 +324,11 @@ public partial class GuardianRenderer : Node3D
             }
             _skeleton.AddChild(AppendageContact);
             Mark("ContactModifiers");
-            SkinContact = new GuardianSkinContact(_instance, _skeleton, continuousBody: continuousBody, chainPrefix: continuousBody ? "Body" : "Tail", biped: _def.Archetype == "crested_canopy");
+            SkinContact = new GuardianSkinContact(_instance, _skeleton, continuousBody: continuousBody, chainPrefix: continuousBody ? "Body" : "Tail", biped: _def.Archetype is "crested_canopy" or "hushbill");
             if (Array.IndexOf(Main.UserArgs, "--guardian-lowest-point-audit") >= 0)
                 SkinContact.LowestPointAuditBudget = 256;
             Mark("SkinContact");
             GD.Print("GUARDIAN_SKIN_CONTACT " + _def.Archetype + " valid=" + SkinContact.Valid + " " + SkinContact.Diagnostic);
-        }
-
-        if (_skeleton != null)
-        {
-            BreathingModifier = new GuardianBreathingModifier { Name = "GuardianBreathingModifier" };
-            _skeleton.AddChild(BreathingModifier);
-
-            HeadTracker = new GuardianHeadTracker { Name = "GuardianHeadTracker" };
-            _skeleton.AddChild(HeadTracker);
-
-            SecondaryMotion = new GuardianSecondaryMotion { Name = "GuardianSecondaryMotion" };
-            _skeleton.AddChild(SecondaryMotion);
         }
 
         WaterContact = new GuardianWaterContact { Name = "GuardianWaterContact", Renderer = this, World = w };
@@ -290,6 +342,13 @@ public partial class GuardianRenderer : Node3D
         _prevT = _curT - VivariumWorld.Cadence.FaunaBehaviour * Vivarium.Sim.Time.SimClock.FixedStepSeconds;
         _currentAnim = "";
         Mark("Total");
+        // Capture the completed modifier stack once for off-screen suspension.
+        _skeletonModifiers.Clear();
+        if (_skeleton != null)
+            foreach (Node child in _skeleton.GetChildren())
+                if (child is SkeletonModifier3D modifier) _skeletonModifiers.Add(modifier);
+        _modifiersActive = true;
+        _shaderParametersPrimed = false;
     }
 
     // Review only: replace a single mesh resource while retaining the original
@@ -351,7 +410,21 @@ public partial class GuardianRenderer : Node3D
     private static Color ResolveGuardianBaseColor(string name, Color sourceColor)
     {
         string n = name.ToLowerInvariant();
-        if (n.Contains("pupil") || n.Contains("glosseye")) return new Color(0.01f, 0.01f, 0.012f, 1.0f);
+        // Dedicated dark obsidian pupil meshes
+        if (n.Contains("pupil") || n.Contains("glosseye") || n.Contains("wetpupilandmouth") || n.Contains("weteyepupil"))
+            return new Color(0.01f, 0.01f, 0.012f, 1.0f);
+        if (n.Contains("eye deep umber"))
+            return new Color(0.02f, 0.015f, 0.01f, 1.0f);
+
+        // Corneal and iris eye meshes: return rich amber-gold iris tone (mode 4 shader builds dark pupil + radial fibers)
+        if (n.Contains("saigaamberiris") || n.Contains("saigaeyecornea") || n.Contains("wetcornea") || n.Contains("amberiris")
+            || n.Contains("iris amber brown") || n.Contains("eye iris") || n == "eye" || n.Contains("boaeyegold") || n.Contains("warmiris"))
+            return new Color(0.52f, 0.30f, 0.09f, 1.0f);
+
+        // Fernback coat relies on vertex color striping without albedo texture; restore warm sandy-ochre tint
+        if (n.Contains("fernback short coat"))
+            return new Color(0.76f, 0.64f, 0.48f, 1.0f);
+
         // Multi-material glTF exports from Blender 5.2 drop COLOR_0 on secondary primitives,
         // leaving detail textures unmodulated white (1,1,1). Restore authored biological tints.
         if (sourceColor.R < 0.92f || sourceColor.G < 0.92f || sourceColor.B < 0.92f)
@@ -360,10 +433,8 @@ public partial class GuardianRenderer : Node3D
         if (n.Contains("dewhornamberhorn")) return new Color(0.76f, 0.53f, 0.26f, sourceColor.A);
         if (n.Contains("saiganasalskin")) return new Color(0.52f, 0.39f, 0.33f, sourceColor.A);
         if (n.Contains("saigaearskin")) return new Color(0.68f, 0.55f, 0.46f, sourceColor.A);
-        if (n.Contains("saigaamberiris") || n.Contains("saigaeyecornea") || n.Contains("wetcornea")) return new Color(0.46f, 0.25f, 0.08f, 1.0f);
         if (n == "horn") return new Color(0.58f, 0.50f, 0.36f, sourceColor.A);
         if (n == "legskin") return new Color(0.30f, 0.31f, 0.33f, sourceColor.A);
-        if (n == "eye") return new Color(0.48f, 0.34f, 0.12f, 1.0f);
         if (n.Contains("mata shell")) return new Color(0.44f, 0.32f, 0.21f, sourceColor.A);
         if (n.Contains("mata skin") || n.Contains("mata mottled")) return new Color(0.56f, 0.44f, 0.31f, sourceColor.A);
         return sourceColor;
@@ -371,6 +442,16 @@ public partial class GuardianRenderer : Node3D
 
     private void ApplySurfaceMaterials(Node node)
     {
+        ulong seed = _w?.Guardian?.Seed ?? 0UL;
+        string variant = _w?.Guardian?.VisualVariant ?? "default";
+        ulong h = seed ^ (ulong)variant.GetHashCode();
+        h = h * 6364136223846793005UL + 1442695040888963407UL;
+        float rWarmth = ((float)((h >> 16) & 0xFFFF) / 65535f - 0.5f) * 0.12f; // ±6%
+        h = h * 6364136223846793005UL + 1442695040888963407UL;
+        float rValue = ((float)((h >> 16) & 0xFFFF) / 65535f - 0.5f) * 0.12f;  // ±6%
+        h = h * 6364136223846793005UL + 1442695040888963407UL;
+        float rRough = ((float)((h >> 16) & 0xFFFF) / 65535f - 0.5f) * 0.16f;  // ±8%
+
         if (node is MeshInstance3D mesh && mesh.Mesh != null)
         {
             for (int i = 0; i < mesh.Mesh.GetSurfaceCount(); i++)
@@ -378,19 +459,49 @@ public partial class GuardianRenderer : Node3D
                 if (mesh.GetActiveMaterial(i) is not StandardMaterial3D source) continue;
                 if (source.ResourceName.Equals("EyeHighlight", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (mesh.Mesh.GetSurfaceCount() == 1) mesh.Visible = false;
-                    else mesh.SetSurfaceOverrideMaterial(i, new StandardMaterial3D
+                    // A painted catchlight is additive light, not a solid decal.
+                    // Keep the authored highlight mesh so polished corneas retain
+                    // their specular sparkle; the shader adds a canopy reflection
+                    // underneath it (guardian_surface.gdshader, mode 4).
+                    var highlight = new StandardMaterial3D
                     {
                         Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                        AlbedoColor = new Color(0f, 0f, 0f, 0f)
-                    });
+                        BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+                        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                        AlbedoColor = new Color(1f, 0.98f, 0.94f, 0.55f)
+                    };
+                    if (source.AlbedoTexture != null) highlight.AlbedoTexture = source.AlbedoTexture;
+                    // A dedicated highlight mesh is pure added light: it must not
+                    // cast a solid shadow blob across the face.
+                    if (mesh.Mesh.GetSurfaceCount() == 1)
+                        mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+                    mesh.SetSurfaceOverrideMaterial(i, highlight);
                     continue;
                 }
                 var material = new ShaderMaterial { Shader = GuardianShader, ResourceName = source.ResourceName };
                 int mode = ModeFor(source.ResourceName);
                 material.SetShaderParameter("mode", mode);
-                material.SetShaderParameter("base_color", ResolveGuardianBaseColor(source.ResourceName, source.AlbedoColor));
-                material.SetShaderParameter("roughness_mul", Math.Clamp(source.Roughness <= 0 ? 1f : source.Roughness, 0.05f, 1f));
+
+                Color baseColor = ResolveGuardianBaseColor(source.ResourceName, source.AlbedoColor);
+                float roughness = Math.Clamp(source.Roughness <= 0 ? 1f : source.Roughness, 0.05f, 1f);
+
+                // Apply subtle individual variation to non-corneal surfaces
+                if (mode != 4)
+                {
+                    float rMul = Math.Clamp(1.0f + rWarmth + rValue, 0.85f, 1.15f);
+                    float gMul = Math.Clamp(1.0f + (rWarmth * 0.5f) + rValue, 0.85f, 1.15f);
+                    float bMul = Math.Clamp(1.0f - rWarmth + rValue, 0.85f, 1.15f);
+                    baseColor = new Color(
+                        Math.Clamp(baseColor.R * rMul, 0f, 1f),
+                        Math.Clamp(baseColor.G * gMul, 0f, 1f),
+                        Math.Clamp(baseColor.B * bMul, 0f, 1f),
+                        baseColor.A);
+                    roughness = Math.Clamp(roughness * (1.0f + rRough), 0.04f, 1f);
+                }
+
+                material.SetShaderParameter("base_color", baseColor);
+                material.SetShaderParameter("roughness_mul", roughness);
                 material.SetShaderParameter("metallic", 0f);
                 material.SetShaderParameter("specular", 0.5f);
                 if (source.AlbedoTexture != null)
@@ -407,6 +518,20 @@ public partial class GuardianRenderer : Node3D
                 {
                     material.SetShaderParameter("roughness_texture", source.RoughnessTexture);
                     material.SetShaderParameter("has_roughness_texture", true);
+                }
+                // Same channel contract as the imported material: AO darkens cavity
+                // interiors and an emission map (eye rim, bioluminescent markings)
+                // rides on top without changing the albedo response.
+                if (source.AOEnabled && source.AOTexture != null)
+                {
+                    material.SetShaderParameter("ao_texture", source.AOTexture);
+                    material.SetShaderParameter("has_ao_texture", true);
+                }
+                if (source.EmissionEnabled && source.EmissionTexture != null)
+                {
+                    material.SetShaderParameter("emission_texture", source.EmissionTexture);
+                    material.SetShaderParameter("has_emission_texture", true);
+                    material.SetShaderParameter("emission_energy", source.EmissionEnergyMultiplier);
                 }
                 mesh.SetSurfaceOverrideMaterial(i, material);
                 _guardianMaterials.Add(material);
@@ -488,7 +613,9 @@ public partial class GuardianRenderer : Node3D
             bool outside = false;
             foreach (var plane in planes)
             {
-                if (plane.DistanceTo(_shownPos) > 1.5f)
+                // Long tails extend well past the body origin; a 2.5 m bound stops
+                // the whole rig popping when only the tail tip leaves the frustum.
+                if (plane.DistanceTo(_shownPos) > 2.5f)
                 {
                     outside = true;
                     break;
@@ -497,6 +624,7 @@ public partial class GuardianRenderer : Node3D
 
             if (outside)
             {
+                SetSkeletonModifiersActive(false);
                 _instance.Visible = false;
                 OffScreen = true;
                 Drawn = false;
@@ -504,6 +632,7 @@ public partial class GuardianRenderer : Node3D
             }
         }
 
+        SetSkeletonModifiersActive(true);
         _instance.Visible = true;
         Drawn = true;
         OffScreen = false;
@@ -523,6 +652,7 @@ public partial class GuardianRenderer : Node3D
         normal = Vector3.Up.Lerp(normal, 0.45f).Normalized();
         if (ReviewSupportPlaneHeight.HasValue) normal = Vector3.Up;
         if (!IsClimbing) _shownPos.Y = SupportHeight(_shownPos);
+        if (!IsClimbing && g.VerticalOffset > 1e-4) _shownPos += Vector3.Up * (float)g.VerticalOffset;
         if (normal.Y > 0.4f && normal.LengthSquared() > 0.01f)
         {
             Vector3 forward = -rot.Z;
@@ -595,7 +725,7 @@ public partial class GuardianRenderer : Node3D
                 // ankle and torso centers remain outside. Include evaluated
                 // contact vertices before solving reachable ground targets.
                 if (SkinContact?.Valid == true && treeDist < treeReach)
-                    foreach (string region in new[] { "Hand_L", "Hand_R", "Foot_L", "Foot_R", "Body", "Head" })
+                    foreach (string region in LimbContactBones)
                     {
                         // The lowest point by ground clearance, measured the way
                         // the full evaluation measures it, without asking the
@@ -680,14 +810,34 @@ public partial class GuardianRenderer : Node3D
         }
         float daylight = EnvironmentRig.Instance?.Sun is { } sun
             ? Math.Clamp(sun.LightEnergy / 1.2f, 0f, 1f) : 1f;
-        foreach (var mat in _guardianMaterials)
+        // Only re-upload what changed. Wetness, the water line, the contact sphere
+        // and daylight are constant on most frames, and this loop runs over every
+        // guardian material.
+        bool wetDirty = Mathf.Abs(wetness - _lastWetness) > 0.0005f;
+        bool levelDirty = Mathf.Abs(waterLevel - _lastWaterLevel) > 0.0005f;
+        bool sphereDirty = _lastContactSphere.DistanceSquaredTo(contactSphere) > 2.5e-7f;
+        bool radiusDirty = Mathf.Abs(contactRadius - _lastContactRadius) > 0.0005f;
+        bool displacementDirty = Mathf.Abs(GuardianSkinContact.MaximumGpuCoatDisplacement - _lastContactDisplacement) > 0.0005f;
+        bool dayDirty = Mathf.Abs(daylight - _lastDayNight) > 0.0005f;
+        if (!_shaderParametersPrimed || wetDirty || levelDirty || sphereDirty || radiusDirty || displacementDirty || dayDirty)
         {
-            mat.SetShaderParameter("wetness", wetness);
-            mat.SetShaderParameter("water_level", waterLevel);
-            mat.SetShaderParameter("contact_sphere", contactSphere);
-            mat.SetShaderParameter("contact_radius", contactRadius);
-            mat.SetShaderParameter("contact_max_displacement", GuardianSkinContact.MaximumGpuCoatDisplacement);
-            mat.SetShaderParameter("day_night", daylight);
+            foreach (var mat in _guardianMaterials)
+            {
+                if (!_shaderParametersPrimed || wetDirty) mat.SetShaderParameter("wetness", wetness);
+                if (!_shaderParametersPrimed || levelDirty) mat.SetShaderParameter("water_level", waterLevel);
+                if (!_shaderParametersPrimed || sphereDirty) mat.SetShaderParameter("contact_sphere", contactSphere);
+                if (!_shaderParametersPrimed || radiusDirty) mat.SetShaderParameter("contact_radius", contactRadius);
+                if (!_shaderParametersPrimed || displacementDirty)
+                    mat.SetShaderParameter("contact_max_displacement", GuardianSkinContact.MaximumGpuCoatDisplacement);
+                if (!_shaderParametersPrimed || dayDirty) mat.SetShaderParameter("day_night", daylight);
+            }
+            _lastWetness = wetness;
+            _lastWaterLevel = waterLevel;
+            _lastContactSphere = contactSphere;
+            _lastContactRadius = contactRadius;
+            _lastContactDisplacement = GuardianSkinContact.MaximumGpuCoatDisplacement;
+            _lastDayNight = daylight;
+            _shaderParametersPrimed = true;
         }
 
         // Manage animation state
@@ -769,7 +919,7 @@ public partial class GuardianRenderer : Node3D
             GuardianActivity.Rest => "rest",
             GuardianActivity.Sleep => HasAnim("sleep") ? "sleep" : "rest",
             GuardianActivity.Settle => HasAnim("settle") ? "settle" : "idle",
-            GuardianActivity.Stretch => HasAnim("stretch") ? "stretch" : "idle",
+            GuardianActivity.Stretch => HasAnim("stretch") ? "stretch" : (HasAnim("bow") ? "bow" : "idle"),
             GuardianActivity.Feed => "feed",
             GuardianActivity.Drink => HasAnim("drink") ? "drink" : (HasAnim("feed") ? "feed" : "idle"),
             GuardianActivity.Bathe => HasAnim("bathe") ? "bathe" : "idle",
@@ -778,10 +928,10 @@ public partial class GuardianRenderer : Node3D
             GuardianActivity.Dig => HasAnim("dig") ? "dig" : "feed",
             GuardianActivity.Groom => HasAnim("groom_detail") ? "groom_detail" : (HasAnim("groom") ? "groom" : "idle"),
             GuardianActivity.Yawn => HasAnim("yawn") ? "yawn" : "idle",
-            GuardianActivity.Play => ResolvePlayAnim(g),
-            GuardianActivity.Investigate => ResolveInvestigateAnim(g),
+            GuardianActivity.Play => ResolvePlayAnim(g) is var p && p != "idle" ? p : (HasAnim("bow") ? "bow" : "idle"),
+            GuardianActivity.Investigate => HasAnim("look") ? "look" : ResolveInvestigateAnim(g),
             GuardianActivity.Alert => HasAnim("alert") ? "alert" : "idle",
-            GuardianActivity.ScentMark => HasAnim("scent_mark") ? "scent_mark" : "idle",
+            GuardianActivity.ScentMark => HasAnim("scent_mark") ? "scent_mark" : (HasAnim("bow") ? "bow" : "idle"),
             GuardianActivity.Climb => HasAnim("climb") ? "climb" : "walk",
             GuardianActivity.Forage or GuardianActivity.Explore or GuardianActivity.ReturnHome => "walk",
             GuardianActivity.Retreat => HasAnim("run") ? "run" : "walk",
@@ -793,7 +943,20 @@ public partial class GuardianRenderer : Node3D
 
         if (!HasAnim(targetAnim)) targetAnim = "idle";
 
-        float strideScale = targetAnim is "walk" or "slither" ? (float)(1 / Math.Max(0.1, g.Scale)) : 1;
+        float strideScale = targetAnim is "walk" or "slither" or "run" ? (float)(1 / Math.Max(0.1, g.Scale)) : 1f;
+
+        if (targetAnim is "walk" or "slither" or "run")
+        {
+            double curSpeed = g.CurrentSpeed;
+            if (curSpeed <= 0.01)
+            {
+                double span = Math.Max(1e-4, _curT - _prevT);
+                curSpeed = _curPos.DistanceTo(_prevPos) / span;
+            }
+            double authoredWalkSpeed = Math.Max(0.15, (_def?.WalkSpeed ?? 0.6) * GuardianDef.BodySizeMultiplier);
+            float speedRatio = curSpeed > 0.01 ? (float)Math.Clamp(curSpeed / authoredWalkSpeed, 0.35, 1.65) : 1.0f;
+            strideScale *= speedRatio;
+        }
 
         float activitySpeed = g.Activity switch
         {

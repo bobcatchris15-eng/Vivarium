@@ -3330,6 +3330,50 @@
     {
       "species": "glass_antlers",
       "count": 6
+    },
+    {
+      "species": "quillsedge",
+      "count": 3
+    },
+    {
+      "species": "sootband",
+      "count": 3
+    },
+    {
+      "species": "butterglint",
+      "count": 3
+    },
+    {
+      "species": "burlmantle",
+      "count": 2
+    },
+    {
+      "species": "heddlelace",
+      "count": 3
+    },
+    {
+      "species": "deepquill",
+      "count": 3
+    },
+    {
+      "species": "mirepocket",
+      "count": 3
+    },
+    {
+      "species": "pondstars",
+      "count": 3
+    },
+    {
+      "species": "paddlerib",
+      "count": 3
+    },
+    {
+      "species": "thornmantle",
+      "count": 2
+    },
+    {
+      "species": "banksorrow",
+      "count": 1
     }
   ],
   "starterFauna": [

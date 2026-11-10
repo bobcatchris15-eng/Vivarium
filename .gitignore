@@ -15,6 +15,8 @@ TestResults/
 tools/
 
 # Local caches and attachments
+/logs/
+/.clanker/
 __pycache__/
 *.py[cod]
 .codex-remote-attachments/

@@ -1,0 +1,95 @@
+{
+  "id": "heddlelace",
+  "name": "Heddlelace",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "White lace umbels on hollow stems.",
+  "description": "Hollow grooved stems thread up through feathery leaves and open white lace heads; the whole plant nods and rattles in a breeze.",
+  "habitat": {
+    "substrates": {
+      "soil": 1
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.58,
+      "tolerance": 0.28
+    },
+    "light": {
+      "optimum": 0.6,
+      "tolerance": 0.32
+    },
+    "nutrients": {
+      "optimum": 0.72,
+      "tolerance": 0.24
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.35,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.1,
+    "maxBiomass": 3.0,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.22,
+    "maturityDays": 24,
+    "lifespanDays": 380,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.45,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 11,
+    "radius": 1.2,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.5,
+    "crowdingLimit": 2.8,
+    "sensitivity": 0.6
+  },
+  "proximity": [],
+  "litterFraction": 0.82,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0.08,
+  "visual": {
+    "shape": "heddlelace",
+    "color": [
+      0.31,
+      0.48,
+      0.29
+    ],
+    "color2": [
+      0.95,
+      0.94,
+      0.89
+    ],
+    "colorVariance": 0.06,
+    "height": 0.85
+  },
+  "tags": [
+    "plant",
+    "aggressive",
+    "hedgerow"
+  ],
+  "postLife": {
+    "standingDays": 7,
+    "collapseDays": 3,
+    "fallenDays": 30,
+    "advancedDays": 12,
+    "coarseFraction": 0.2,
+    "decayHalfLifeMultiplier": 0.8,
+    "standingRetention": 0.45,
+    "deadColor": [
+      0.48,
+      0.42,
+      0.23
+    ],
+    "litterColorInfluence": 0.8,
+    "dryBleach": 0.2,
+    "wetDarken": 0.14
+  }
+}

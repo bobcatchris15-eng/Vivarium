@@ -1,0 +1,103 @@
+{
+  "id": "sootband",
+  "name": "Sootband",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Unbranched evergreen jointed rush of damp banks and shallow margins.",
+  "description": "Soot-green shafts stand in dense clumps, ringed black at every joint and ribbed from base to crown; each fertile stem ends in a blunt pale cone that stays long after the rest of the mire has gone.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.3
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.74,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.70,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.32,
+      "tolerance": 0.30
+    },
+    "maxWaterDepth": 0.03,
+    "hardMinMoisture": 0.30,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.28,
+    "maxBiomass": 1.35,
+    "initialBiomass": 0.055,
+    "declinePerDay": 0.28,
+    "maturityDays": 10,
+    "lifespanDays": 150,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.26,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.85
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.7,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.02,
+  "grazingValue": 0.18,
+  "visual": {
+    "shape": "sootband",
+    "color": [
+      0.20,
+      0.30,
+      0.20
+    ],
+    "color2": [
+      0.75,
+      0.72,
+      0.52
+    ],
+    "colorVariance": 0.06,
+    "height": 0.6
+  },
+  "tags": [
+    "plant",
+    "horsetail",
+    "riparian"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.55,
+      0.47,
+      0.28
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

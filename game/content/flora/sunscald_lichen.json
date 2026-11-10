@@ -1,0 +1,99 @@
+{
+  "id": "sunscald_lichen",
+  "name": "Sunscald lichen",
+  "archetype": "lichen",
+  "placementGroup": "moss_lichen",
+  "role": "Radiant crust of sun-baked stone.",
+  "description": "A flat mustard-orange sunburst spreads over bare rock, warm to the touch even after dusk.",
+  "habitat": {
+    "substrates": {
+      "rock": 1,
+      "gravel": 0.8
+    },
+    "refuseSubstrates": [
+      "soil",
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.3,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.95,
+      "tolerance": 0.2
+    },
+    "nutrients": {
+      "optimum": 0.05,
+      "tolerance": 0.25
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.12
+  },
+  "growth": {
+    "ratePerDay": 0.14,
+    "maxBiomass": 0.3,
+    "initialBiomass": 0.03,
+    "declinePerDay": 0.03,
+    "maturityDays": 10,
+    "lifespanDays": 900,
+    "nutrientPerBiomass": 0.05,
+    "radiusAtMax": 0.16,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 9,
+    "radius": 0.35,
+    "propagules": 2,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.2,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.4
+  },
+  "proximity": [],
+  "litterFraction": 0.6,
+  "grazingValue": 0,
+  "lichen": {
+    "layer": "Crust",
+    "form": "crustose",
+    "substrates": [
+      "rock",
+      "gravel"
+    ],
+    "gravelRateMultiplier": 0.5,
+    "lateral": 0.003,
+    "centreDeathDays": 60,
+    "water": {
+      "kWet": 3,
+      "kDry": 0.35,
+      "wMin": 0.1,
+      "wOpt": 0.4
+    },
+    "light": {
+      "k": 0.2
+    },
+    "seedBiomass": 0.1,
+    "maxBiomass": 0.3
+  },
+  "visual": {
+    "shape": "sunscald_lichen",
+    "color": [
+      0.788,
+      0.541,
+      0.118
+    ],
+    "color2": [
+      0.91,
+      0.725,
+      0.243
+    ],
+    "colorVariance": 0.07,
+    "height": 0.012
+  },
+  "tags": [
+    "lichen",
+    "pioneer"
+  ]
+}

@@ -21,6 +21,12 @@ public partial class PropRenderer : Node3D
     private Node3D _propRoot = null!, _gravelRoot = null!;
     private readonly Dictionary<EntityId, MeshInstance3D> _placedRocks = new();
     private readonly Dictionary<EntityId, MeshInstance3D> _placedLogs = new();
+    // Pebble MultiMeshes are created once per world and reused; a refresh only rewrites packed buffers.
+    private MultiMeshInstance3D[] _gravelMmis = System.Array.Empty<MultiMeshInstance3D>();
+    private MultiMesh[] _gravelMultimeshes = System.Array.Empty<MultiMesh>();
+    private List<Transform3D>[] _gravelXf = System.Array.Empty<List<Transform3D>>();
+    private float[][] _gravelBuffers = System.Array.Empty<float[]>();
+    private bool _gravelNodesReady;
     private int _gravelCount = -1;
     public int PebbleCount { get; private set; }
 
@@ -57,11 +63,13 @@ public partial class PropRenderer : Node3D
         _logMeshes.Clear();
         _placedRocks.Clear();
         _placedLogs.Clear();
+        _gravelNodesReady = false;
         foreach (var c in GetChildren()) c.QueueFree();
         _propRoot = new Node3D { Name = "Props" };
         AddChild(_propRoot);
         _gravelRoot = new Node3D { Name = "Gravel" };
         AddChild(_gravelRoot);
+        BuildGravelNodes();
         _gravelCount = -1;
         Refresh();
         // Props register after Island.Build during world loading; bind immediately
@@ -164,11 +172,59 @@ public partial class PropRenderer : Node3D
         foreach (var id in removedLogs) _placedLogs.Remove(id);
     }
 
+    /// <summary>
+    /// One MultiMesh per pebble variant, created once per world. 4-12 mm pebbles are past sub-pixel
+    /// well inside the habitat's view distance, so they take no shadow-map triangles (the terrain
+    /// contact mask and basal cavity shading stand in for their contact darkening) and fade out at
+    /// 9.5 m instead of being drawn across the whole island.
+    /// </summary>
+    private void BuildGravelNodes()
+    {
+        int variants = _pebbles.Length;
+        if (_gravelMmis.Length != variants)
+        {
+            _gravelMmis = new MultiMeshInstance3D[variants];
+            _gravelMultimeshes = new MultiMesh[variants];
+            _gravelXf = new List<Transform3D>[variants];
+            _gravelBuffers = new float[variants][];
+        }
+        for (int v = 0; v < variants; v++)
+        {
+            if (_gravelXf[v] is null) _gravelXf[v] = new List<Transform3D>();
+            else _gravelXf[v].Clear();
+            var mm = new MultiMesh
+            {
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseColors = false,
+                UseCustomData = false,
+                Mesh = _pebbles[v],
+            };
+            var mmi = new MultiMeshInstance3D
+            {
+                Name = $"Gravel_{v}",
+                Multimesh = mm,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                VisibilityRangeEnd = 9.5f,
+                VisibilityRangeEndMargin = 1.5f,
+                VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
+                Visible = false,
+            };
+            _gravelMultimeshes[v] = mm;
+            _gravelMmis[v] = mmi;
+            _gravelRoot.AddChild(mmi);
+        }
+        _gravelNodesReady = true;
+    }
+
+    /// <summary>
+    /// Rebuilds pebble placement without touching the scene tree: 32 transform lists are refilled and
+    /// each non-empty bucket becomes one 12-float-per-instance buffer upload instead of tens of
+    /// thousands of SetInstanceTransform engine calls.
+    /// </summary>
     private void RefreshGravel()
     {
-        foreach (var c in _gravelRoot.GetChildren()) c.QueueFree();
-        var byVariant = new List<Transform3D>[_pebbles.Length];
-        for (int i = 0; i < byVariant.Length; i++) byVariant[i] = new List<Transform3D>();
+        if (!_gravelNodesReady) return;
+        for (int v = 0; v < _gravelXf.Length; v++) _gravelXf[v].Clear();
         PebbleCount = 0;
         foreach (var g in _w.Props.Gravel)
             foreach (var p in PropMeshes.GravelScatter(_w, g))
@@ -177,15 +233,30 @@ public partial class PropRenderer : Node3D
                     * new Basis(Vector3.Right, (float)p.TiltX)
                     * new Basis(Vector3.Back, (float)p.TiltZ);
                 basis = basis.Scaled(Bridge.V(p.Scale));
-                byVariant[p.Variant].Add(new Transform3D(basis, Bridge.V(p.Position)));
+                _gravelXf[p.Variant].Add(new Transform3D(basis, Bridge.V(p.Position)));
                 PebbleCount++;
             }
-        for (int v = 0; v < _pebbles.Length; v++)
+        for (int v = 0; v < _gravelXf.Length; v++)
         {
-            if (byVariant[v].Count == 0) continue;
-            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = _pebbles[v], InstanceCount = byVariant[v].Count };
-            for (int i = 0; i < byVariant[v].Count; i++) mm.SetInstanceTransform(i, byVariant[v][i]);
-            _gravelRoot.AddChild(new MultiMeshInstance3D { Name = $"Gravel_{v}", Multimesh = mm, CastShadow = GeometryInstance3D.ShadowCastingSetting.On });
+            var list = _gravelXf[v];
+            int n = list.Count;
+            var mm = _gravelMultimeshes[v];
+            var mmi = _gravelMmis[v];
+            if (mm.InstanceCount != n) mm.InstanceCount = n;
+            mm.VisibleInstanceCount = n;
+            mmi.Visible = n > 0;
+            if (n == 0) continue;
+            var buf = _gravelBuffers[v];
+            if (buf is null || buf.Length != n * 12) _gravelBuffers[v] = buf = new float[n * 12];
+            for (int i = 0; i < n; i++)
+            {
+                var t = list[i];
+                int o = i * 12;
+                buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
+                buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
+                buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
+            }
+            mm.Buffer = buf;
         }
     }
 }

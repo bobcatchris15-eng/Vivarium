@@ -1,4 +1,4 @@
-namespace Vivarium.Sim.Guardians;
+﻿namespace Vivarium.Sim.Guardians;
 
 /// <summary>
 /// Personality and drive weights for a Guardian Animal archetype.
@@ -14,5 +14,14 @@ public sealed record GuardianBehaviorProfile(
     double NocturnalBias = 0.5,      // Activity timing bias (0 = diurnal, 1 = nocturnal)
     bool CanSwim = true,             // Can enter shallow wading / water areas
     bool CanClimbTrunk = false,      // Vertical trunk climbing ability
-    string PreferredRestType = "ground_curl" // "ground_curl", "tree_perch", "coil", "ball", "fork_wedge"
+    string PreferredRestType = "ground_curl", // "ground_curl", "tree_perch", "coil", "ball", "fork_wedge"
+    double Acceleration = 2.0,
+    double Deceleration = 2.8,
+    double MaxTurnRate = 2.8,
+    double MaxSlopeDegrees = 38.0,
+    double HopArcHeight = 0.0,
+    double HopCadence = 2.2,
+    bool CanDig = false,
+    double RoamRadius = 5.0,
+    double TerritoryDrive = 0.5
 );

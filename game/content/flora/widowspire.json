@@ -1,0 +1,103 @@
+{
+  "id": "widowspire",
+  "name": "Widowspire",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Tall magenta plant of marsh and streamside.",
+  "description": "Square stems carry narrow leaves and spire after spire of magenta flowers that keep their colour long after they dry standing.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.5
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.85,
+      "tolerance": 0.16
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.65,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0.05,
+    "hardMinMoisture": 0.55,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.12,
+    "maxBiomass": 3.8,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.22,
+    "maturityDays": 26,
+    "lifespanDays": 420,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.45,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 9,
+    "radius": 1.4,
+    "propagules": 3,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.5,
+    "crowdingLimit": 3.2,
+    "sensitivity": 0.6
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.9,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.82,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0.08,
+  "visual": {
+    "shape": "widowspire",
+    "color": [
+      0.31,
+      0.43,
+      0.24
+    ],
+    "color2": [
+      0.7,
+      0.23,
+      0.54
+    ],
+    "colorVariance": 0.06,
+    "height": 1.0
+  },
+  "tags": [
+    "plant",
+    "aggressive",
+    "wet"
+  ],
+  "postLife": {
+    "standingDays": 10,
+    "collapseDays": 4,
+    "fallenDays": 35,
+    "advancedDays": 14,
+    "coarseFraction": 0.25,
+    "decayHalfLifeMultiplier": 0.85,
+    "standingRetention": 0.55,
+    "deadColor": [
+      0.35,
+      0.29,
+      0.23
+    ],
+    "litterColorInfluence": 0.78,
+    "dryBleach": 0.2,
+    "wetDarken": 0.15
+  }
+}

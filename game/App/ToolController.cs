@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Fauna;
+using Vivarium.Sim.Guardians;
 using Vivarium.Sim.Tools;
 using Vivarium.Sim.World;
 
@@ -158,6 +159,13 @@ public partial class ToolController : Node
         return hit;
     }
 
+    private float GuardianMarkerRadius(GuardianIndividual g)
+    {
+        var def = GuardianCatalog.Find(g.ArchetypeId);
+        double vScale = (def?.VisualScale ?? 1.0) * g.Scale * GuardianDef.BodySizeMultiplier;
+        return (float)Math.Max(0.35, vScale * 0.7);
+    }
+
     private float FaunaMarkerRadius(FaunaIndividual f) =>
         (float)Math.Max(0.02, _w!.FaunaSystem.PhenotypeOf(f).BodySize * _w.Content.FaunaOrThrow(f.SpeciesId).VisualScale * 0.8);
 
@@ -166,6 +174,7 @@ public partial class ToolController : Node
         if (_w == null || !Selected.IsHit) return null;
         switch (Selected.Kind)
         {
+            case HitKind.Guardian: return _w.Guardian != null ? Session.Guardian.DisplayPosition : null;
             case HitKind.Fauna: return _w.Fauna.Get(Selected.Id) != null ? Session.Fauna.DisplayPosition(Selected.Id) : null;
             case HitKind.Flora: { var f = _w.Flora.Get(Selected.Id); return f == null ? null : new Vector3((float)f.X, (float)_w.GroundHeight(f.Position), (float)f.Z); }
             case HitKind.Rock or HitKind.Log or HitKind.Gravel:
@@ -182,6 +191,7 @@ public partial class ToolController : Node
         if (_w == null) return 0.1f;
         return Selected.Kind switch
         {
+            HitKind.Guardian when _w.Guardian is { } g => GuardianMarkerRadius(g),
             HitKind.Fauna when _w.Fauna.Get(Selected.Id) is { } f => FaunaMarkerRadius(f),
             HitKind.Flora when _w.Flora.Get(Selected.Id) is { } fl => (float)fl.Radius(_w.Content.FloraOrThrow(fl.SpeciesId)) * 1.1f,
             HitKind.Rock when _w.Props.Find(Selected.Id) is Rock r => (float)r.FootprintRadius * 1.1f,
@@ -202,7 +212,7 @@ public partial class ToolController : Node
         Preview = null;
         switch (Current)
         {
-            case ToolKind.Select: r = 0.06f; break;
+            case ToolKind.Select: r = Hover.Kind == HitKind.Guardian && _w.Guardian is { } g ? GuardianMarkerRadius(g) : 0.06f; break;
             case ToolKind.Grab:
                 if (!Held.IsNone) { Preview = t.ReleaseProblem(Held, p); r = 0.1f; }
                 else { Preview = Hover.Kind == HitKind.Fauna ? null : "bring a critter inside the circle"; r = (float)GrabRadius(Hover.Distance); }
@@ -248,7 +258,7 @@ public partial class ToolController : Node
                 break;
             case ToolKind.MoveProp:
                 if (!MovingProp.IsNone && _w.Props.Find(MovingProp) is { } prop)
-                    Preview = prop switch { Rock rk => _w.Placement.ValidateRock(p, rk.SizeX, rk.SizeZ, rk.Id), LogProp lg => _w.Placement.ValidateLog(p, lg.RotationY, lg.Length, lg.Radius, lg.Id), GravelPatch g => _w.Placement.ValidateGravel(p, g.Radius), _ => null };
+                    Preview = prop switch { Rock rk => _w.Placement.ValidateRock(p, rk.SizeX, rk.SizeZ, rk.Id), LogProp lg => _w.Placement.ValidateLog(p, lg.RotationY, lg.Length, lg.Radius, lg.Id), GravelPatch gp => _w.Placement.ValidateGravel(p, gp.Radius), _ => null };
                 else Preview = Hover.Kind is HitKind.Rock or HitKind.Log or HitKind.Gravel ? null : "point at a rock, log or gravel patch";
                 r = 0.2f;
                 break;
@@ -485,6 +495,11 @@ public partial class ToolController : Node
         if (!Selected.IsHit || _w == null) return;
         var sel = Selected;
         var w = _w;
+        if (sel.Kind == HitKind.Guardian)
+        {
+            Session.CameraRig.Focus(() => Session.Guardian.DisplayPosition, 0.8f);
+            return;
+        }
         Session.CameraRig.Focus(() => SelectedMarker() ?? Bridge.V(sel.Point), sel.Kind == HitKind.Fauna ? 0.25f : 0.8f);
     }
 

@@ -712,6 +712,86 @@
     {
       "species": "tankbloom",
       "count": 3
+    },
+    {
+      "species": "quillfeather_moss",
+      "count": 6
+    },
+    {
+      "species": "wispthread_moss",
+      "count": 6
+    },
+    {
+      "species": "moonshell_lichen",
+      "count": 6
+    },
+    {
+      "species": "capstar_moss",
+      "count": 4
+    },
+    {
+      "species": "duskpuff",
+      "count": 3
+    },
+    {
+      "species": "reekhorn",
+      "count": 3
+    },
+    {
+      "species": "candlecoral",
+      "count": 3
+    },
+    {
+      "species": "ashcomb",
+      "count": 3
+    },
+    {
+      "species": "swanfrond",
+      "count": 3
+    },
+    {
+      "species": "duskbristle",
+      "count": 3
+    },
+    {
+      "species": "starveil",
+      "count": 3
+    },
+    {
+      "species": "butterglint",
+      "count": 3
+    },
+    {
+      "species": "cinderberry",
+      "count": 3
+    },
+    {
+      "species": "mistviolet",
+      "count": 3
+    },
+    {
+      "species": "hushclover",
+      "count": 3
+    },
+    {
+      "species": "marshkettle",
+      "count": 3
+    },
+    {
+      "species": "bitterbine",
+      "count": 3
+    },
+    {
+      "species": "trumpetbind",
+      "count": 3
+    },
+    {
+      "species": "nutglade",
+      "count": 2
+    },
+    {
+      "species": "shiverleaf",
+      "count": 1
     }
   ],
   "starterFauna": [

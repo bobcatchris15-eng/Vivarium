@@ -13,8 +13,7 @@ public sealed class SurfaceLiquid
     private readonly VivariumWorld _w;
     private Task<(SurfaceFluidSnapshot Snapshot, WaterBudget Budget, double Ms)>? _job;
     private SurfaceFluidSnapshot _snapshot = new(0, 0, SurfaceFluidDynamics.DefaultSpacing, [], []);
-    private readonly Dictionary<(int, int), SurfaceFluidSample> _samples = new();
-    private readonly Dictionary<(int, int), double> _sampleSupport = new();
+    private Dictionary<(int, int), (SurfaceFluidSample Sample, double Support)> _samples = new();
     private sealed class ContactView(SurfaceFluidSnapshot state) : IReadOnlyList<FluidParticle>
     {
         public SurfaceFluidSnapshot State { get; } = state;
@@ -182,15 +181,16 @@ public sealed class SurfaceLiquid
         StageTimed?.Invoke("Liquid.SnapshotCapture", System.Diagnostics.Stopwatch.GetElapsedTime(stageStart).TotalMilliseconds);
         stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
         double spacing = _snapshot.Spacing;
-        // Private main-thread query index can retain its capacity. Published state and
-        // contact arrays remain immutable for callers holding the preceding snapshot.
-        _samples.Clear();_samples.EnsureCapacity(_snapshot.Cells.Length);
-        _sampleSupport.Clear();_sampleSupport.EnsureCapacity(_snapshot.Cells.Length);
+        // Publish a fresh immutable query index dictionary reference so concurrent background
+        // readers (e.g. coverage tile builders) never observe an in-flight Clear/Add race.
+        var nextSamples = new Dictionary<(int, int), (SurfaceFluidSample Sample, double Support)>(_snapshot.Cells.Length);
         foreach(var c in _snapshot.Cells)
         {
             var key=((int)Math.Floor(c.Position.X/spacing),(int)Math.Floor(c.Position.Z/spacing));
-            double support=c.SupportHeight??Ground(c.Position);_samples.Add(key,c);_sampleSupport.Add(key,support);
+            double support=c.SupportHeight??Ground(c.Position);
+            nextSamples[key]=(c,support);
         }
+        _samples = nextSamples;
         StageTimed?.Invoke("Liquid.QueryIndex", System.Diagnostics.Stopwatch.GetElapsedTime(stageStart).TotalMilliseconds);
         stageStart = System.Diagnostics.Stopwatch.GetTimestamp();
         var h = _w.Water; Array.Clear(h.Depth); Array.Clear(h.FlowX); Array.Clear(h.FlowZ); Array.Clear(h.FaceFlowEast); Array.Clear(h.FaceFlowNorth);
@@ -209,6 +209,7 @@ public sealed class SurfaceLiquid
     public double SurfaceAt(Vec2 p)
     {
         if(!_w.Domain.Contains(p))return double.NaN;
+        var samples = _samples;
         double spacing=_snapshot.Spacing,gx=p.X/spacing-.5,gz=p.Z/spacing-.5;
         int x=(int)Math.Floor(gx+.5),z=(int)Math.Floor(gz+.5);
         double ground=double.NaN,depth=0,headSum=0,weight=0,lowest=double.PositiveInfinity,highest=double.NegativeInfinity,maxSlope=0,maxSpeed=0;
@@ -217,9 +218,10 @@ public sealed class SurfaceLiquid
         for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++)
         {
             double w=Kernel(gx-x-dx)*Kernel(gz-z-dz);if(w<=0)continue;
-            if(!_samples.TryGetValue((x+dx,z+dz),out var sample)||sample.Depth<=1e-8)continue;
+            if(!samples.TryGetValue((x+dx,z+dz),out var entry)||entry.Sample.Depth<=1e-8)continue;
+            var sample=entry.Sample;
             if(double.IsNaN(ground))ground=_w.GroundHeight(p);
-            double support=_sampleSupport[(x+dx,z+dz)];
+            double support=entry.Support;
             if(support-ground>spacing*1.2&&sample.Head-ground>spacing*1.2)
             {
                 double quarter=_w.GroundHeight(sample.Position+(p-sample.Position)*.25);
@@ -231,7 +233,7 @@ public sealed class SurfaceLiquid
             maxSlope=Math.Max(maxSlope,Math.Sqrt(sample.SlopeX*sample.SlopeX+sample.SlopeZ*sample.SlopeZ));
         }
         if(depth<=0||weight<=1e-6||ground<_w.Water.WaterTable)return double.NaN;
-        bool ownerWet=_samples.TryGetValue((x,z),out var owner)&&owner.Depth>1e-8;
+        bool ownerWet=samples.TryGetValue((x,z),out var owner)&&owner.Sample.Depth>1e-8;
         if(ownerWet&&depth>.004&&highest-lowest<=1e-6&&maxSpeed<=1e-4)depth=Math.Max(0,headSum/weight-ground);
         // Match the rendered creek: level connected pools, volume-kernel thin films.
         // Continuous kernel depth avoids a height jump at each nearest-cell boundary.
@@ -242,7 +244,7 @@ public sealed class SurfaceLiquid
     }
     public double DepthAt(Vec2 p) { double head = SurfaceAt(p); return double.IsNaN(head) ? 0 : Math.Max(0, head - _w.GroundHeight(p)); }
     public Vec2 VelocityAt(Vec2 p)
-    { double s = _snapshot.Spacing; return _samples.TryGetValue(((int)Math.Floor(p.X / s), (int)Math.Floor(p.Z / s)), out var sample) ? sample.Velocity : Vec2.Zero; }
+    { var samples = _samples; double s = _snapshot.Spacing; return samples.TryGetValue(((int)Math.Floor(p.X / s), (int)Math.Floor(p.Z / s)), out var entry) ? entry.Sample.Velocity : Vec2.Zero; }
     public double WettedContactAt(Vec2 p) => Math.Clamp(DepthAt(p) / .002, 0, 1);
     public double BuoyancyAt(Vec3 p, double height) { double surface = SurfaceAt(p.XZ); return double.IsNaN(surface) ? 0 : Math.Clamp((surface - p.Y) / Math.Max(1e-8, height), 0, 1); }
     public double Add(Vec2 p, double radius, double volume)

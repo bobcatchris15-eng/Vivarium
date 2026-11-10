@@ -1,0 +1,100 @@
+{
+  "id": "hushclover",
+  "name": "Hushclover",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Shamrock-leaved clumper of acid shade.",
+  "description": "Three heart-leaves fold at dusk and open again at first light, and the small veined white flowers appear to hover well above the leaves.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.5
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.25,
+      "tolerance": 0.24
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 0.7,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 10,
+    "lifespanDays": 280,
+    "nutrientPerBiomass": 0.25,
+    "radiusAtMax": 0.13,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.25,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.7,
+      "bonus": 0.12
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "hushclover",
+    "color": [
+      0.31,
+      0.48,
+      0.29
+    ],
+    "color2": [
+      0.93,
+      0.94,
+      0.89
+    ],
+    "colorVariance": 0.06,
+    "height": 0.1
+  },
+  "tags": [
+    "plant",
+    "flowering",
+    "shade"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.54,
+      0.48,
+      0.23
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

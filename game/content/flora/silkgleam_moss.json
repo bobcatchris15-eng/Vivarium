@@ -1,0 +1,102 @@
+{
+  "id": "silkgleam_moss",
+  "name": "Silkgleam moss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Sunlit bank moss with a silken sheen.",
+  "description": "Golden-green mats on open banks catch the light like combed silk, brightest where the sun lingers longest.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.3
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.75,
+      "tolerance": 0.18
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.3,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMaxMoisture": 0.97,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.4,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.35,
+    "maturityDays": 5,
+    "lifespanDays": 120,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.28,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 3,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.5,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.05,
+    "maxHeight": 0.04,
+    "heightRule": "flat",
+    "water": {
+      "kWet": 6,
+      "kDry": 1.0,
+      "wMin": 0.3,
+      "wOpt": 0.72
+    },
+    "light": {
+      "k": 0.25,
+      "max": 0.95
+    },
+    "dormBrownDays": 2,
+    "dormDeathDays": 8,
+    "sporeRate": 0.002,
+    "moistureFeedback": 0,
+    "seedBiomass": 0.08
+  },
+  "visual": {
+    "shape": "silkgleam_moss",
+    "color": [
+      0.486,
+      0.478,
+      0.2
+    ],
+    "color2": [
+      0.725,
+      0.639,
+      0.298
+    ],
+    "colorVariance": 0.06,
+    "height": 0.04
+  },
+  "tags": [
+    "moss",
+    "groundcover"
+  ]
+}

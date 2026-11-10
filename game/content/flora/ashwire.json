@@ -1,0 +1,95 @@
+{
+  "id": "ashwire",
+  "name": "Ashwire",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Fine dry-turf grass of thin exposed soil.",
+  "description": "Ashen bristle blades form a wiry turf that stays grey-green through the dry season and turns silver in seed.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.4
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.35,
+      "tolerance": 0.28
+    },
+    "light": {
+      "optimum": 0.9,
+      "tolerance": 0.2
+    },
+    "nutrients": {
+      "optimum": 0.2,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.2,
+    "maturityDays": 10,
+    "lifespanDays": 360,
+    "nutrientPerBiomass": 0.25,
+    "radiusAtMax": 0.16,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.25,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.03,
+  "grazingValue": 0.35,
+  "visual": {
+    "shape": "ashwire",
+    "color": [
+      0.478,
+      0.541,
+      0.604
+    ],
+    "color2": [
+      0.659,
+      0.706,
+      0.69
+    ],
+    "colorVariance": 0.06,
+    "height": 0.18
+  },
+  "tags": [
+    "plant",
+    "grass",
+    "xerophyte"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.62,
+      0.6,
+      0.48
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

@@ -53,9 +53,27 @@ public partial class AmbientGroundCoverRenderer : Node3D
         habitat?.BindHabitatMaterial(mat);
         _blade = NewMultiMesh(BuildBlade(mat, true));
         _leaf = NewMultiMesh(BuildBroadleaf(mat, true));
-        // Turf this dense only reads as ground cover when it grounds itself with a contact shadow.
-        _bladeMmi = new MultiMeshInstance3D { Name = "AmbientBlades", Multimesh = _blade, CastShadow = GeometryInstance3D.ShadowCastingSetting.On };
-        _leafMmi = new MultiMeshInstance3D { Name = "AmbientTinyLeaves", Multimesh = _leaf, CastShadow = GeometryInstance3D.ShadowCastingSetting.On };
+        // These 1.5-3 cm turf fillers ground themselves with basal contact AO in
+        // ground_cover.gdshader. Casting them into the 8192 directional shadow map added
+        // millions of tiny triangles for no readable shadow, so keep them shadow-free.
+        _bladeMmi = new MultiMeshInstance3D
+        {
+            Name = "AmbientBlades",
+            Multimesh = _blade,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            VisibilityRangeEnd = 8.5f,
+            VisibilityRangeEndMargin = 1.2f,
+            VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
+        };
+        _leafMmi = new MultiMeshInstance3D
+        {
+            Name = "AmbientTinyLeaves",
+            Multimesh = _leaf,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            VisibilityRangeEnd = 8.5f,
+            VisibilityRangeEndMargin = 1.2f,
+            VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
+        };
         AddChild(_bladeMmi); AddChild(_leafMmi);
         BuildBankFringe(mat);
         habitat?.BindHabitatMaterial(_bankMaterial);
@@ -144,6 +162,11 @@ public partial class AmbientGroundCoverRenderer : Node3D
         var nearRocks = new List<Vivarium.Sim.World.Rock>();
         var nearLogs = new List<Vivarium.Sim.World.LogProp>();
         var nearGravel = new List<Vivarium.Sim.World.GravelPatch>();
+        // Conservative axis-aligned bounds, built once for the 8 m rebuild disc. The
+        // 2 cm instancing loop then rejects overwhelmingly most props with four compares
+        // before ever calling the exact (and much more expensive) Covers geometry query.
+        var nearRockBounds = new List<(Vivarium.Sim.World.Rock Prop, double MinX, double MaxX, double MinZ, double MaxZ)>();
+        var nearLogBounds = new List<(Vivarium.Sim.World.LogProp Prop, double MinX, double MaxX, double MinZ, double MaxZ)>();
         // Exact circular exclusion via 75cm spatial hash buckets, replacing
         // O(plants * anonymous foliage blades) per-instance scans.
         var floraExclusions = new AmbientCoverSpatialIndex();
@@ -155,12 +178,22 @@ public partial class AmbientGroundCoverRenderer : Node3D
         var camP = new Vivarium.Sim.Core.Vec2(cam.X, cam.Z);
 
         foreach (var r in _w.Props.Rocks)
-            if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, r.Position) <= searchRadius + r.FootprintRadius)
-                nearRocks.Add(r);
+        {
+            if (haveCam && Vivarium.Sim.Core.Vec2.Distance(camP, r.Position) > searchRadius + r.FootprintRadius)
+                continue;
+            nearRocks.Add(r);
+            nearRockBounds.Add((r, r.X - r.FootprintRadius, r.X + r.FootprintRadius,
+                r.Z - r.FootprintRadius, r.Z + r.FootprintRadius));
+        }
 
         foreach (var l in _w.Props.Logs)
-            if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, l.Position) <= searchRadius + l.Length * 0.5 + l.Radius)
-                nearLogs.Add(l);
+        {
+            double extent = l.Length * 0.5 + l.Radius;
+            if (haveCam && Vivarium.Sim.Core.Vec2.Distance(camP, l.Position) > searchRadius + extent)
+                continue;
+            nearLogs.Add(l);
+            nearLogBounds.Add((l, l.X - extent, l.X + extent, l.Z - extent, l.Z + extent));
+        }
 
         foreach (var gr in _w.Props.Gravel)
             if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, gr.Position) <= searchRadius + gr.Radius)
@@ -264,9 +297,19 @@ public partial class AmbientGroundCoverRenderer : Node3D
                 if (!_w.Domain.Contains(p) || _w.SubstrateAt(p) != Substrate.Soil || _w.Water.OpenWaterDepth(p) > 0.0003) continue;
 
                 bool excluded = false;
-                for (int ri = 0; ri < nearRocks.Count; ri++) if (nearRocks[ri].Covers(p)) { excluded = true; break; }
+                for (int ri = 0; ri < nearRockBounds.Count; ri++)
+                {
+                    var rb = nearRockBounds[ri];
+                    if (p.X < rb.MinX || p.X > rb.MaxX || p.Z < rb.MinZ || p.Z > rb.MaxZ) continue;
+                    if (rb.Prop.Covers(p)) { excluded = true; break; }
+                }
                 if (excluded) continue;
-                for (int li = 0; li < nearLogs.Count; li++) if (nearLogs[li].Covers(p)) { excluded = true; break; }
+                for (int li = 0; li < nearLogBounds.Count; li++)
+                {
+                    var lb = nearLogBounds[li];
+                    if (p.X < lb.MinX || p.X > lb.MaxX || p.Z < lb.MinZ || p.Z > lb.MaxZ) continue;
+                    if (lb.Prop.Covers(p)) { excluded = true; break; }
+                }
                 if (excluded) continue;
                 double gravelWeight = GravelCoverWeight(p, nearGravel);
                 if (rng.Next01() > gravelWeight) continue;
@@ -380,8 +423,10 @@ public partial class AmbientGroundCoverRenderer : Node3D
                 // Lanes run +side to -side so the sheet normal (and therefore the front face) points
                 // away from the clump axis, i.e. the visible outside of the blade.
                 double s = 1.0 - 2.0 * lane / lanes;                         // +1, 0, -1
-                double ridge = halfWidth * 0.85 * (1.0 - Math.Abs(s));       // raised midrib
-                double fold = -halfWidth * 0.34 * Math.Abs(s);               // folded edges: V camber
+                // A turf shoot is round, not a folded fin: a shallow dome down the
+                // midrib and a soft margin droop, matched by the shader's normal roll.
+                double ridge = halfWidth * 0.62 * (1.0 - Math.Abs(s));       // raised midrib
+                double fold = -halfWidth * 0.20 * Math.Abs(s) * Math.Abs(s); // rounded margins
                 pos[r, lane] = root + Vec3.Up * (height + ridge + fold) + lean * reach + side * (width * s);
             }
         }
@@ -466,7 +511,17 @@ public partial class AmbientGroundCoverRenderer : Node3D
             int v = r * stride + lane;
             double u = lane / (double)lanes, w = r / (double)rows;
             double ao = aoBase + (aoTip - aoBase) * w;
-            index[v] = m.AddVertex(grid[r, lane], normals[v], rgb, 1, u, w, ao, 0);
+            // Baked basal warm tint: the root collar picks up olive humus so each
+            // instance blends into the litter before the shader's own habitat tint.
+            double root = 1.0 - Math.Clamp(w / 0.30, 0.0, 1.0);
+            root *= root;
+            double[] vc =
+            {
+                rgb[0] * (1.0 - 0.16 * root),
+                rgb[1] * (1.0 - 0.22 * root),
+                rgb[2] * (1.0 - 0.34 * root),
+            };
+            index[v] = m.AddVertex(grid[r, lane], normals[v], vc, 1, u, w, ao, 0);
         }
         for (int r = 0; r < rows; r++)
         for (int lane = 0; lane < lanes; lane++)

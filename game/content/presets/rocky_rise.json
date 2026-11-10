@@ -523,6 +523,66 @@
     {
       "species": "glowbriar",
       "count": 3
+    },
+    {
+      "species": "stoneknot_moss",
+      "count": 6
+    },
+    {
+      "species": "pinequilt_moss",
+      "count": 6
+    },
+    {
+      "species": "sunscald_lichen",
+      "count": 6
+    },
+    {
+      "species": "ashfingers_lichen",
+      "count": 6
+    },
+    {
+      "species": "starsplit",
+      "count": 3
+    },
+    {
+      "species": "emberbracken",
+      "count": 2
+    },
+    {
+      "species": "mirrorstrap_fern",
+      "count": 3
+    },
+    {
+      "species": "ashwire",
+      "count": 3
+    },
+    {
+      "species": "cinderberry",
+      "count": 3
+    },
+    {
+      "species": "brightknot",
+      "count": 3
+    },
+    {
+      "species": "cragset",
+      "count": 3
+    },
+    {
+      "species": "trumpetbind",
+      "count": 3
+    },
+    {
+      "species": "thornmantle",
+      "count": 2
+    },
+    {
+      "species": "greywatch",
+      "count": 2
+    },
+    {
+      "species": "moonbark",
+      "count": 1
     }
   ],
   "starterFauna": [

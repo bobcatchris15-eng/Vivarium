@@ -1,0 +1,105 @@
+{
+  "id": "bogfringe",
+  "name": "Bogfringe",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Trifoliate rafts with fringed white flowers.",
+  "description": "Three-lobed leaves lie on still water and the white flowers open feathered like small fringes; the whole raft rises an inch as it flowers.",
+  "habitat": {
+    "substrates": {
+      "water": 1,
+      "soil": 0.8
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.06
+    },
+    "light": {
+      "optimum": 0.65,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.35,
+      "tolerance": 0.32
+    },
+    "minWaterDepth": 0.04,
+    "maxWaterDepth": 0.6,
+    "hardMinMoisture": 0.92,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 1.6,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.26,
+    "maturityDays": 12,
+    "lifespanDays": 220,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.06
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.45,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.4,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.55
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.5,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.86,
+  "sheddingPerDay": 0.016,
+  "grazingValue": 0.12,
+  "visual": {
+    "shape": "bogfringe",
+    "color": [
+      0.31,
+      0.48,
+      0.29
+    ],
+    "color2": [
+      0.94,
+      0.94,
+      0.91
+    ],
+    "colorVariance": 0.05,
+    "height": 0.14
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "floating",
+    "flowers"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.38,
+      0.22
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

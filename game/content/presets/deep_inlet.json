@@ -607,6 +607,50 @@
     {
       "species": "glass_antlers",
       "count": 6
+    },
+    {
+      "species": "wispthread_moss",
+      "count": 6
+    },
+    {
+      "species": "slickmantle",
+      "count": 6
+    },
+    {
+      "species": "hagshair_lichen",
+      "count": 6
+    },
+    {
+      "species": "moonshell_lichen",
+      "count": 6
+    },
+    {
+      "species": "cradlecup",
+      "count": 3
+    },
+    {
+      "species": "barrowbole",
+      "count": 3
+    },
+    {
+      "species": "mirrorstrap_fern",
+      "count": 3
+    },
+    {
+      "species": "starveil",
+      "count": 3
+    },
+    {
+      "species": "deepquill",
+      "count": 3
+    },
+    {
+      "species": "shadewrap",
+      "count": 3
+    },
+    {
+      "species": "witchberry",
+      "count": 1
     }
   ],
   "starterFauna": [

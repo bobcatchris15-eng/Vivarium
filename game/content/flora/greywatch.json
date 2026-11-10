@@ -1,0 +1,113 @@
+{
+  "id": "greywatch",
+  "name": "Greywatch",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Blue-green evergreen of dry rock and scree.",
+  "description": "A short fluted trunk splits into ascending limbs clothed in needle sprays; the berry-cones ripen blue-grey and stay on the wood through winter.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "rock": 0.8,
+      "gravel": 0.6
+    },
+    "refuseSubstrates": [
+      "water",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.3,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.85,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.25,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.12,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.055,
+    "maxBiomass": 5.0,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.07,
+    "maturityDays": 40,
+    "lifespanDays": 1400,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.7,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 18,
+    "radius": 1.2,
+    "propagules": 1,
+    "minBiomassFraction": 0.68
+  },
+  "competition": {
+    "radius": 0.9,
+    "crowdingLimit": 3.5,
+    "sensitivity": 0.42
+  },
+  "proximity": [
+    {
+      "target": "feature:rock",
+      "radius": 0.7,
+      "bonus": 0.3
+    }
+  ],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 0.7,
+    "shadeOpacity": 0.5,
+    "minSpacing": 0.75
+  },
+  "visual": {
+    "shape": "greywatch",
+    "color": [
+      0.243,
+      0.353,
+      0.29
+    ],
+    "color2": [
+      0.478,
+      0.604,
+      0.541
+    ],
+    "colorVariance": 0.06,
+    "height": 1.2
+  },
+  "tags": [
+    "plant",
+    "shrub",
+    "woody",
+    "evergreen",
+    "dry",
+    "rocky"
+  ],
+  "postLife": {
+    "standingDays": 55,
+    "collapseDays": 7,
+    "fallenDays": 145,
+    "advancedDays": 24,
+    "coarseFraction": 0.5,
+    "decayHalfLifeMultiplier": 1.45,
+    "standingRetention": 0.88,
+    "deadColor": [
+      0.47,
+      0.34,
+      0.23
+    ],
+    "litterColorInfluence": 0.62,
+    "dryBleach": 0.22,
+    "wetDarken": 0.12
+  }
+}

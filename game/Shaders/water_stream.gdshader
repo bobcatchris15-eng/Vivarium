@@ -64,10 +64,13 @@ void fragment() {
     vec3 world_view = normalize(CAMERA_POSITION_WORLD - water_world_position);
     vec3 reflected = reflect(-world_view, world_normal);
     float fresnel = .0204 + .9796 * pow(1.0 - clamp(dot(normal, view), 0.0, 1.0), 5.0);
-    float path = min(gap, max(.0001, depthf * .15) / cosine);
+    // True optical path length: pond depth drives Beer-Lambert absorption while the
+    // screen-depth gap keeps shoreline pixels clear over visible silt and pebbles.
+    float physical_depth = max(gap * 0.65, depthf * 0.18 / cosine);
+    float path = clamp(physical_depth, 0.0005, 0.85);
     vec3 transmitted = mobile_transmission(behind, path, 1.0);
     vec3 color = mobile_surface_color(transmitted, reflected, fresnel, 1.0);
-    ALPHA = smoothstep(.00002, .0005, gap);
+    ALPHA = smoothstep(0.00005, 0.0035, gap);
     if (cutface > .5) {
         float meniscus = depthf <= .005 ? 0.0 : 1.0 - smoothstep(0.0, .006, UV.y);
         color = mix(behind, vec3(.90, .96, 1.0), meniscus * .5);
@@ -76,6 +79,11 @@ void fragment() {
         color = behind;
         ALPHA = 1.0;
     } else {
+        // Shoreline contact: a soft meniscus band darkens the last centimetre of open
+        // water before it meets the bank, so the waterline reads as a damp edge rather
+        // than a hard cut against bright substrate.
+        float shore_contact = 1.0 - smoothstep(0.0, 0.025, gap);
+        color = mix(color, color * vec3(0.58, 0.64, 0.56), shore_contact * 0.85);
         if (water_debug == 1) color = world_normal * .5 + .5;
         if (water_debug == 2) color = transmitted;
         if (water_debug == 3) color = mobile_reflection(reflected);

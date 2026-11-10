@@ -1,0 +1,102 @@
+{
+  "id": "cloudtuft",
+  "name": "Cloudtuft",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Cottongrass of acid pool margins.",
+  "description": "Thin stems carry white tufts that hold together in wind and shine after rain; a stand of it reads as a low cloud resting on the mire.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.6
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.92,
+      "tolerance": 0.1
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.15,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0.12,
+    "hardMinMoisture": 0.65,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.38,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.3,
+    "maturityDays": 7,
+    "lifespanDays": 120,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.18,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.2,
+    "crowdingLimit": 2.8,
+    "sensitivity": 0.6
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.6,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0.35,
+  "visual": {
+    "shape": "cloudtuft",
+    "color": [
+      0.478,
+      0.541,
+      0.353
+    ],
+    "color2": [
+      0.929,
+      0.918,
+      0.851
+    ],
+    "colorVariance": 0.05,
+    "height": 0.55
+  },
+  "tags": [
+    "plant",
+    "grass",
+    "wetland"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.72,
+      0.68,
+      0.55
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Vivarium.Sim.Core;
+using Vivarium.Sim.Content; using Vivarium.Sim.Fauna; using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
 using Vivarium.Sim.Flora;
 using Vivarium.Sim.Time;
@@ -57,6 +57,58 @@ public sealed class GuardianSystem
     /// <summary>
     /// Creates or re-initializes the island's guardian deterministically.
     /// </summary>
+    private static readonly string[] VisualVariants = { "default", "warm", "umbral", "dappled", "ochre", "moss" };
+
+    /// <summary>
+    /// Player interaction hook: startles or alerts the island guardian.
+    /// Bold species enter alert posture; shy species alert or retreat.
+    /// </summary>
+    public void NotifyPoked(Vec2 sourcePos)
+    {
+        var g = _world.Guardian;
+        if (g == null || Def == null) return;
+
+        g.Alertness = 1.0;
+        g.Arousal = Math.Clamp(g.Arousal + 0.4, 0.0, 1.0);
+
+        string arch = Def.Archetype;
+        bool isBold = arch is "hushbill" or "shoebill_hushbill" or "great_ground" or "monitor_great"
+                           or "fernback" or "thylacine_fernback" or "canopy_serpent" or "serpent_canopy";
+
+        var toSource = sourcePos - g.PositionXZ;
+        if (isBold)
+        {
+            if (toSource.LengthSq > 1e-6)
+                g.Heading = Math.Atan2(toSource.Z, toSource.X);
+            g.Activity = GuardianActivity.Alert;
+            g.ActivityDuration = 2.8;
+            g.CurrentSpeed = 0.0;
+        }
+        else
+        {
+            var rng = Rng.Keyed(g.Seed, "guardian.poke", g.RngCounter++);
+            if (rng.NextDouble() < 0.5)
+            {
+                if (toSource.LengthSq > 1e-6)
+                    g.Heading = Math.Atan2(toSource.Z, toSource.X);
+                g.Activity = GuardianActivity.Alert;
+                g.ActivityDuration = 1.8;
+                g.CurrentSpeed = 0.0;
+            }
+            else
+            {
+                var away = (g.PositionXZ - sourcePos).Normalized();
+                if (away.LengthSq < 1e-6) away = Vec2.FromAngle(g.Heading);
+                var retreatPos = _world.Domain.ClampInside(g.PositionXZ + away * 2.5, 0.4);
+                g.TargetPosition = new Vec3(retreatPos.X, _world.GroundHeight(retreatPos), retreatPos.Z);
+                g.Heading = Math.Atan2(away.Z, away.X);
+                g.Activity = GuardianActivity.Retreat;
+                g.ActivityDuration = 3.0;
+                RecordVisitedSite(g, retreatPos);
+            }
+        }
+    }
+
     public GuardianIndividual? InitializeGuardian(string? archetypeOverride = null)
     {
         RefreshDefinition();
@@ -87,7 +139,7 @@ public sealed class GuardianSystem
             Seed = rng.NextULong(),
             Scale = 1.0 + rng.Range(-0.05, 0.08),
             Temperament = "inquisitive",
-            VisualVariant = "default",
+            VisualVariant = VisualVariants[rng.NextInt(VisualVariants.Length)],
             Energy = def.EnergyMax * 0.85,
             Hydration = 1.0,
             Fatigue = 0.1,
@@ -203,6 +255,8 @@ public sealed class GuardianSystem
             case GuardianActivity.Groom:
                 g.Comfort = Math.Clamp(g.Comfort + 0.08 * dt, 0.0, 1.0);
                 break;
+            case GuardianActivity.Yawn:
+                break;
             case GuardianActivity.Rest:
                 g.Fatigue = MathD.Clamp01(g.Fatigue - 0.015 * (dt / 10.0));
                 break;
@@ -221,6 +275,20 @@ public sealed class GuardianSystem
             else if (g.Activity == GuardianActivity.Sleep)
             {
                 var rng = Rng.Keyed(g.Seed, "guardian.activity", g.RngCounter);
+                if (rng.NextDouble() < 0.45)
+                {
+                    g.Activity = GuardianActivity.Yawn;
+                    g.ActivityDuration = rng.Range(2.0, 3.5);
+                }
+                else
+                {
+                    g.Activity = GuardianActivity.Stretch;
+                    g.ActivityDuration = rng.Range(2.0, 4.0);
+                }
+            }
+            else if (g.Activity == GuardianActivity.Yawn)
+            {
+                var rng = Rng.Keyed(g.Seed, "guardian.activity", g.RngCounter);
                 g.Activity = GuardianActivity.Stretch;
                 g.ActivityDuration = rng.Range(2.0, 4.0);
             }
@@ -237,25 +305,90 @@ public sealed class GuardianSystem
         }
     }
 
+    private static void RecordVisitedSite(GuardianIndividual g, Vec2 site)
+    {
+        g.RecentVisitedSites.Add(site);
+        if (g.RecentVisitedSites.Count > 6)
+        {
+            g.RecentVisitedSites.RemoveAt(0);
+        }
+    }
+
+    private static bool IsNearRecentSite(GuardianIndividual g, Vec2 candidate, double radius = 2.0)
+    {
+        double rSq = radius * radius;
+        for (int i = 0; i < g.RecentVisitedSites.Count; i++)
+        {
+            if ((candidate - g.RecentVisitedSites[i]).LengthSq < rSq) return true;
+        }
+        return false;
+    }
+
     private void SelectNextActivity(GuardianIndividual g, double dt)
     {
         var rng = Rng.Keyed(g.Seed, "guardian.activity", g.RngCounter);
         var def = Def!;
         var profile = def.BehaviorProfile ?? new GuardianBehaviorProfile();
 
+        double daylight = Math.Clamp(Math.Sin((_world.Clock.BioDays % 1.0) * Math.PI), 0.0, 1.0);
+        double nocturnal = profile.NocturnalBias;
+
         double fatigueScore = g.Fatigue;
+        if (nocturnal > 0.55)
+        {
+            if (daylight > 0.55) fatigueScore += (daylight - 0.5) * 0.35;
+            else if (daylight < 0.40) fatigueScore = Math.Max(0.0, fatigueScore - 0.25);
+        }
+        else if (nocturnal < 0.45)
+        {
+            if (daylight < 0.35) fatigueScore += (0.45 - daylight) * 0.35;
+            else if (daylight > 0.50) fatigueScore = Math.Max(0.0, fatigueScore - 0.20);
+        }
+
         double hungerScore = (1.0 - (g.Energy / def.EnergyMax)) * profile.ForageWeight;
+        if (nocturnal > 0.55 && daylight < 0.45) hungerScore *= 1.25;
+        else if (nocturnal < 0.45 && daylight > 0.45) hungerScore *= 1.25;
+
         double thirstScore = (1.0 - g.Hydration) * profile.DrinkFrequency;
         double discomfortScore = 1.0 - g.Comfort;
 
         if (fatigueScore > .65 || hungerScore > .35 || thirstScore > .35 || discomfortScore > .4)
             g.ClimbRoute.Clear();
 
-        // 1. Fatigue drive: needs Rest / ReturnHome / Settle
+        // 1. Retreat: startled / alert with low comfort retreats to cover / home
+        if (g.Alertness > 0.88 && g.Comfort < 0.45)
+        {
+            var coverSite = Habitat?.NearestRestSite(g.Position) ?? Habitat?.HomeAnchor ?? new Vec3(0, _world.GroundHeight(Vec2.Zero), 0);
+            g.Activity = GuardianActivity.Retreat;
+            g.TargetPosition = coverSite;
+            g.ActivityDuration = rng.Range(6.0, 12.0);
+            RecordVisitedSite(g, coverSite.XZ);
+            return;
+        }
+
+        // 2. Alert: elevated alertness pauses and scans surroundings
+        if (g.Alertness > 0.78)
+        {
+            g.Activity = GuardianActivity.Alert;
+            g.ActivityDuration = rng.Range(2.0, 3.5);
+            g.CurrentSpeed = 0.0;
+            return;
+        }
+
+        // 3. Yawn: waking transition from Rest / Sleep
+        if (g.Activity is GuardianActivity.Rest or GuardianActivity.Sleep && g.ConsecutiveRestCycles > 0 && rng.NextDouble() < 0.35)
+        {
+            g.Activity = GuardianActivity.Yawn;
+            g.ActivityDuration = rng.Range(2.0, 3.5);
+            g.CurrentSpeed = 0.0;
+            return;
+        }
+
+        // 4. Fatigue drive: needs Rest / ReturnHome / Settle
         if (fatigueScore > 0.65)
         {
             var restSite = Habitat?.NearestRestSite(g.Position) ?? new Vec3(0, _world.SurfaceHeight(Vec2.Zero), 0);
-            double distToRest = Vec2.Distance(g.PositionXZ, new Vec2(restSite.X, restSite.Z));
+            double distToRest = Vec2.Distance(g.PositionXZ, restSite.XZ);
             if (distToRest <= 0.4)
             {
                 g.Activity = GuardianActivity.Settle;
@@ -267,11 +400,12 @@ public sealed class GuardianSystem
                 g.Activity = GuardianActivity.ReturnHome;
                 g.TargetPosition = restSite;
                 g.ActivityDuration = rng.Range(20.0, 45.0);
+                RecordVisitedSite(g, restSite.XZ);
             }
             return;
         }
 
-        // 2. Thirst drive: needs Drink
+        // 5. Thirst drive: needs Drink
         if (thirstScore > 0.35)
         {
             var waterPoint = Habitat?.NearestWaterAccessPoint(g.PositionXZ);
@@ -283,34 +417,47 @@ public sealed class GuardianSystem
                 double dist = Vec2.Distance(g.PositionXZ, targetXZ);
                 g.Activity = GuardianActivity.Drink;
                 g.ActivityDuration = dist <= 0.4 ? rng.Range(5.0, 10.0) : rng.Range(15.0, 30.0);
+                RecordVisitedSite(g, targetXZ);
                 return;
             }
         }
 
-        // 3. Hunger drive: needs Food / Forage
+        // 6. Hunger drive: needs Food / Forage / Dig
         if (hungerScore > 0.35)
         {
-            int targetCell = FindRichestFoodCell(g.PositionXZ, 3.5);
-            if (targetCell >= 0)
+            var foodTarget = FindBestForageTarget(g, def, profile.RoamRadius);
+            if (foodTarget != null)
             {
-                var targetXZ = _world.Grid.CellCenter(targetCell);
-                double targetY = _world.GroundHeight(targetXZ);
-                g.TargetPosition = new Vec3(targetXZ.X, targetY, targetXZ.Z);
-                g.Activity = WithinFeedingReach(g) ? GuardianActivity.Feed : GuardianActivity.Forage;
+                var targetPos = foodTarget.Value;
+                g.TargetPosition = targetPos;
+                if (profile.CanDig && _world.SubstrateAt(targetPos.XZ) == Substrate.Soil && rng.NextDouble() < 0.45)
+                    g.Activity = WithinFeedingReach(g) ? GuardianActivity.Dig : GuardianActivity.Forage;
+                else
+                    g.Activity = WithinFeedingReach(g) ? GuardianActivity.Feed : GuardianActivity.Forage;
                 g.ActivityDuration = rng.Range(15.0, 30.0);
+                RecordVisitedSite(g, targetPos.XZ);
                 return;
             }
             else if (Habitat != null)
             {
                 var forageXZ = Habitat.SelectForageTarget(g.Seed, g.RngCounter);
+                if (Habitat.ForageHotspots.Count > 1 && IsNearRecentSite(g, forageXZ, 2.0))
+                {
+                    for (int i = 0; i < Habitat.ForageHotspots.Count; i++)
+                    {
+                        var cand = Habitat.ForageHotspots[i];
+                        if (!IsNearRecentSite(g, cand, 2.0)) { forageXZ = cand; break; }
+                    }
+                }
                 g.TargetPosition = new Vec3(forageXZ.X, _world.GroundHeight(forageXZ), forageXZ.Z);
                 g.Activity = GuardianActivity.Forage;
                 g.ActivityDuration = rng.Range(15.0, 30.0);
+                RecordVisitedSite(g, forageXZ);
                 return;
             }
         }
 
-        // 4. Discomfort: if > 0.65 and shallow water nearby -> Bathe; else if > 0.4 -> Groom
+        // 7. Discomfort: if > 0.65 and shallow water nearby -> Bathe; else if > 0.4 -> Groom
         if (discomfortScore > 0.65)
         {
             var wadingPoint = Habitat?.NearestWadingZone(g.PositionXZ);
@@ -322,6 +469,7 @@ public sealed class GuardianSystem
                 double dist = Vec2.Distance(g.PositionXZ, targetXZ);
                 g.Activity = GuardianActivity.Bathe;
                 g.ActivityDuration = dist <= 0.4 ? rng.Range(8.0, 15.0) : rng.Range(15.0, 30.0);
+                RecordVisitedSite(g, targetXZ);
                 return;
             }
             else
@@ -340,19 +488,47 @@ public sealed class GuardianSystem
             return;
         }
 
-        // 5. Thermoregulation: if BodyTemperature < 0.35 * BaskPriority -> Bask at sunlit point
+        // 8. Thermoregulation: if BodyTemperature < 0.35 * BaskPriority -> Bask
         if (g.BodyTemperature < 0.35 * profile.BaskPriority)
         {
-            var sunlitXZ = Habitat?.NearestSunlitPoint(g.PositionXZ) ?? g.PositionXZ;
-            double sunlitY = _world.GroundHeight(sunlitXZ);
+            var baskSite = Habitat?.NearestBaskingSite(g.Position);
+            Vec2 sunlitXZ = baskSite != null ? baskSite.Value.XZ : (Habitat?.NearestSunlitPoint(g.PositionXZ) ?? g.PositionXZ);
+            double sunlitY = baskSite != null ? baskSite.Value.Y : _world.GroundHeight(sunlitXZ);
             g.TargetPosition = new Vec3(sunlitXZ.X, sunlitY, sunlitXZ.Z);
             double dist = Vec2.Distance(g.PositionXZ, sunlitXZ);
             g.Activity = GuardianActivity.Bask;
             g.ActivityDuration = dist <= 0.4 ? rng.Range(10.0, 20.0) : rng.Range(15.0, 30.0);
+            RecordVisitedSite(g, sunlitXZ);
             return;
         }
 
-        // 6. Play: if Arousal > PlayThreshold and basic needs met -> Play
+        // 9. Scent marking: periodic territorial marking
+        if (profile.TerritoryDrive > 0.35 && (_world.Clock.BioSeconds - g.LastScentMarkBioSeconds > 180) && Habitat?.ScentMarkTargets.Count > 0)
+        {
+            var target = Habitat.ScentMarkTargets[rng.NextInt(Habitat.ScentMarkTargets.Count)];
+            g.TargetPosition = target;
+            g.Activity = GuardianActivity.ScentMark;
+            double dist = Vec2.Distance(g.PositionXZ, target.XZ);
+            g.ActivityDuration = dist <= 0.4 ? rng.Range(4.0, 8.0) : rng.Range(12.0, 25.0);
+            RecordVisitedSite(g, target.XZ);
+            return;
+        }
+
+        // 10. Investigate: moderate-high arousal investigating fauna, fruiting flora, or props
+        if ((g.Arousal > 0.4 || profile.CuriosityBias * g.Arousal > 0.35) && rng.NextDouble() < 0.65)
+        {
+            var invTarget = FindInvestigationTarget(g, profile.RoamRadius);
+            if (invTarget != null)
+            {
+                g.TargetPosition = invTarget.Value;
+                g.Activity = GuardianActivity.Investigate;
+                g.ActivityDuration = rng.Range(8.0, 16.0);
+                RecordVisitedSite(g, invTarget.Value.XZ);
+                return;
+            }
+        }
+
+        // 11. Play: if Arousal > PlayThreshold and basic needs met
         if (g.Arousal > profile.PlayThreshold)
         {
             g.Activity = GuardianActivity.Play;
@@ -361,13 +537,11 @@ public sealed class GuardianSystem
             var playXZ = _world.Domain.ClampInside(g.PositionXZ + new Vec2(Math.Cos(playAngle), Math.Sin(playAngle)) * playDist, 0.4);
             g.TargetPosition = new Vec3(playXZ.X, _world.GroundHeight(playXZ), playXZ.Z);
             g.ActivityDuration = rng.Range(5.0, 12.0);
+            RecordVisitedSite(g, playXZ);
             return;
         }
 
         // With needs satisfied, keep one island destination until arrival.
-        // Idle rolls used to repeatedly replace short walks with stationary clips.
-        // An unmet need with no available resource must not reroll the route
-        // every tick. Keep traveling until arrival or the journey timeout.
         if (g.Activity == GuardianActivity.Explore && g.ActivityDuration > 0 &&
             Vec2.Distance(g.PositionXZ, new Vec2(g.TargetX, g.TargetZ)) > .05) return;
         SelectRoamingTarget(g);
@@ -397,13 +571,13 @@ public sealed class GuardianSystem
             var point = new Vec2(rng.Range(-radius, radius), rng.Range(-radius, radius));
             if (!_world.Domain.ContainsDisc(point, .4) ||
                 Vec2.Distance(point, g.PositionXZ) < Math.Min(2.0, radius * .4) ||
-                _world.PilotTree?.BlocksTrunk(point, .35) == true) continue;
+                _world.PilotTree?.BlocksTrunk(point, .35) == true ||
+                IsNearRecentSite(g, point, 2.0)) continue;
             int cell = _world.Grid.NearestDomainCell(point);
             if (cell < 0 || _world.Water.OpenWaterDepth(cell) > .08) continue;
             g.TargetPosition = new Vec3(point.X, _world.GroundHeight(point), point.Z);
             g.Activity = GuardianActivity.Explore;
-            // Allow the journey, including trunk detours, to finish. This also
-            // supplies a bounded escape if terrain prevents progress.
+            RecordVisitedSite(g, point);
             g.ActivityDuration = 10 + Vec2.Distance(g.PositionXZ, point) /
                 Math.Max(.01, Def!.WalkSpeed * GuardianDef.BodySizeMultiplier) * 2;
             return;
@@ -412,6 +586,137 @@ public sealed class GuardianSystem
         g.Activity = GuardianActivity.Rest;
         g.TargetPosition = g.Position;
         g.ActivityDuration = .5;
+    }
+
+    private Vec3? FindInvestigationTarget(GuardianIndividual g, double radius)
+    {
+        double radiusSq = radius * radius;
+        foreach (var f in _world.Fauna.Items)
+        {
+            if (f.Grabbed) continue;
+            double dSq = (g.PositionXZ - f.PositionXZ).LengthSq;
+            if (dSq > 0.25 && dSq <= radiusSq && !IsNearRecentSite(g, f.PositionXZ, 1.5))
+            {
+                return new Vec3(f.X, f.Y, f.Z);
+            }
+        }
+        foreach (var fl in _world.Flora.Items)
+        {
+            if (!fl.Fruiting) continue;
+            double dSq = (g.PositionXZ - fl.Position).LengthSq;
+            if (dSq > 0.35 && dSq <= radiusSq && !IsNearRecentSite(g, fl.Position, 1.5))
+            {
+                return new Vec3(fl.X, _world.GroundHeight(fl.Position), fl.Z);
+            }
+        }
+        if (_world.Props != null)
+        {
+            foreach (var rk in _world.Props.Rocks)
+            {
+                double dSq = (g.PositionXZ - rk.Position).LengthSq;
+                if (dSq > 0.5 && dSq <= radiusSq && !IsNearRecentSite(g, rk.Position, 1.5))
+                {
+                    return new Vec3(rk.X, _world.GroundHeight(rk.Position), rk.Z);
+                }
+            }
+            foreach (var lg in _world.Props.Logs)
+            {
+                double dSq = (g.PositionXZ - lg.Position).LengthSq;
+                if (dSq > 0.5 && dSq <= radiusSq && !IsNearRecentSite(g, lg.Position, 1.5))
+                {
+                    return new Vec3(lg.X, _world.GroundHeight(lg.Position), lg.Z);
+                }
+            }
+        }
+        return null;
+    }
+
+    private Vec3? FindBestForageTarget(GuardianIndividual g, GuardianDef def, double radius)
+    {
+        double radiusSq = radius * radius;
+        var diets = def.PreferredDiets;
+
+        if (diets.Contains("fauna:small"))
+        {
+            FaunaIndividual? bestFauna = null;
+            double bestDistSq = radiusSq;
+            foreach (var f in _world.Fauna.Items)
+            {
+                if (f.Grabbed) continue;
+                double d = (g.PositionXZ - f.PositionXZ).LengthSq;
+                if (d < bestDistSq && !IsNearRecentSite(g, f.PositionXZ, 1.2))
+                {
+                    bestDistSq = d;
+                    bestFauna = f;
+                }
+            }
+            if (bestFauna != null)
+                return new Vec3(bestFauna.X, bestFauna.Y, bestFauna.Z);
+        }
+
+        bool wantsFoliage = diets.Contains("flora:foliage");
+        bool wantsBark = diets.Contains("flora:bark");
+        bool wantsFungus = diets.Contains("flora:fungus");
+        if (wantsFoliage || wantsBark || wantsFungus)
+        {
+            FloraIndividual? bestFlora = null;
+            double bestDistSq = radiusSq;
+            foreach (var fl in _world.Flora.Items)
+            {
+                if (fl.Biomass < 0.05) continue;
+                var species = _world.Content.FloraById(fl.SpeciesId);
+                bool isFungus = species?.Archetype == "fungus" || fl.SpeciesId.Contains("fung");
+                if (wantsFungus && isFungus)
+                {
+                    double d = (g.PositionXZ - fl.Position).LengthSq;
+                    if (d < bestDistSq && !IsNearRecentSite(g, fl.Position, 1.2))
+                    {
+                        bestDistSq = d; bestFlora = fl;
+                    }
+                }
+                else if (wantsFoliage && !isFungus)
+                {
+                    double d = (g.PositionXZ - fl.Position).LengthSq;
+                    if (d < bestDistSq && !IsNearRecentSite(g, fl.Position, 1.2))
+                    {
+                        bestDistSq = d; bestFlora = fl;
+                    }
+                }
+            }
+            if (bestFlora != null)
+                return new Vec3(bestFlora.X, _world.GroundHeight(bestFlora.Position), bestFlora.Z);
+
+            if (wantsBark && _world.Props != null)
+            {
+                foreach (var log in _world.Props.Logs)
+                {
+                    double d = (g.PositionXZ - log.Position).LengthSq;
+                    if (d < radiusSq && !IsNearRecentSite(g, log.Position, 1.2))
+                    {
+                        return new Vec3(log.X, _world.GroundHeight(log.Position), log.Z);
+                    }
+                }
+            }
+        }
+
+        if (diets.Contains("biofilm") && _world.Water != null && Habitat?.ShallowWadingZones.Count > 0)
+        {
+            var wading = Habitat.NearestWadingZone(g.PositionXZ);
+            if (wading != null && !IsNearRecentSite(g, wading.Value, 1.5))
+            {
+                return new Vec3(wading.Value.X, _world.GroundHeight(wading.Value), wading.Value.Z);
+            }
+        }
+
+        int cell = FindRichestFoodCell(g.PositionXZ, radius);
+        if (cell >= 0)
+        {
+            var cellCenter = _world.Grid.CellCenter(cell);
+            if (!IsNearRecentSite(g, cellCenter, 1.5))
+                return new Vec3(cellCenter.X, _world.GroundHeight(cellCenter), cellCenter.Z);
+        }
+
+        return null;
     }
 
     private int FindRichestFoodCell(Vec2 current, double radius)
@@ -435,9 +740,40 @@ public sealed class GuardianSystem
         return bestCell;
     }
 
+    private bool IsPositionBlocked(Vec2 p, GuardianIndividual g, GuardianBehaviorProfile profile)
+    {
+        if (!_world.Domain.ContainsDisc(p, 0.45)) return true;
+        if (_world.PilotTree != null && _world.PilotTree.BlocksTrunk(p, 0.38)) return true;
+
+        if (_world.Props != null)
+        {
+            var rock = _world.Props.RockAt(p);
+            if (rock != null)
+            {
+                bool isBaskingTarget = g.Activity == GuardianActivity.Bask &&
+                    Vec2.Distance(new Vec2(g.TargetX, g.TargetZ), rock.Position) <= rock.FootprintRadius + 0.25;
+                if (!isBaskingTarget) return true;
+            }
+
+            var log = _world.Props.LogAt(p);
+            if (log != null)
+            {
+                bool isBaskingTarget = g.Activity == GuardianActivity.Bask &&
+                    Vec2.Distance(new Vec2(g.TargetX, g.TargetZ), log.Position) <= log.FootprintRadius + 0.25;
+                if (!isBaskingTarget) return true;
+            }
+        }
+
+        if (_world.Water != null && !profile.CanSwim && _world.Water.OpenWaterDepth(p) > 0.14)
+            return true;
+
+        return false;
+    }
+
     private void ExecuteLocomotion(GuardianIndividual g, double dt)
     {
         var def = Def!;
+        var profile = def.BehaviorProfile ?? new GuardianBehaviorProfile();
         var currentXZ = g.PositionXZ;
         var targetXZ = new Vec2(g.TargetX, g.TargetZ);
         double dist = Vec2.Distance(currentXZ, targetXZ);
@@ -446,64 +782,117 @@ public sealed class GuardianSystem
         {
             g.Activity = GuardianActivity.Feed;
             g.ActivityDuration = 10.0;
+            g.CurrentSpeed = 0.0;
         }
 
         if (g.Activity == GuardianActivity.Feed)
         {
             if (WithinFeedingReach(g))
             {
-                // Plant the feet while eating; turn to the selected patch instead
-                // of sliding through a feeding animation toward its cell center.
+                g.CurrentSpeed = Math.Max(0.0, g.CurrentSpeed - profile.Deceleration * dt);
                 if (dist > 1e-6)
-                    g.Heading = TurnTowards(g.Heading, Math.Atan2(targetXZ.Z - currentXZ.Z, targetXZ.X - currentXZ.X), 2.5 * dt);
+                    g.Heading = TurnTowards(g.Heading, Math.Atan2(targetXZ.Z - currentXZ.Z, targetXZ.X - currentXZ.X), profile.MaxTurnRate * dt);
+                UpdateHopOffset(g, def, profile, dt);
                 return;
             }
-            // Old saves and displaced targets must approach before consuming.
             g.Activity = GuardianActivity.Forage;
         }
 
-        // Approach transitions for water activities: within reach (0.4m), plant feet
         if ((g.Activity == GuardianActivity.Drink || g.Activity == GuardianActivity.Bathe) && dist <= 0.4)
         {
+            g.CurrentSpeed = Math.Max(0.0, g.CurrentSpeed - profile.Deceleration * dt);
             if (dist > 1e-6)
-                g.Heading = TurnTowards(g.Heading, Math.Atan2(targetXZ.Z - currentXZ.Z, targetXZ.X - currentXZ.X), 2.5 * dt);
+                g.Heading = TurnTowards(g.Heading, Math.Atan2(targetXZ.Z - currentXZ.Z, targetXZ.X - currentXZ.X), profile.MaxTurnRate * dt);
+            UpdateHopOffset(g, def, profile, dt);
             return;
         }
 
-        // Approached target for other stationary-at-destination activities
         if ((g.Activity == GuardianActivity.Bask || g.Activity == GuardianActivity.Dig || g.Activity == GuardianActivity.ScentMark) && dist <= 0.4)
         {
+            g.CurrentSpeed = Math.Max(0.0, g.CurrentSpeed - profile.Deceleration * dt);
             if (dist > 1e-6)
-                g.Heading = TurnTowards(g.Heading, Math.Atan2(targetXZ.Z - currentXZ.Z, targetXZ.X - currentXZ.X), 2.5 * dt);
+                g.Heading = TurnTowards(g.Heading, Math.Atan2(targetXZ.Z - currentXZ.Z, targetXZ.X - currentXZ.X), profile.MaxTurnRate * dt);
+            UpdateHopOffset(g, def, profile, dt);
             return;
         }
 
-        // Strictly stationary activities: stay planted
         if (g.Activity is GuardianActivity.Rest or GuardianActivity.Sleep or GuardianActivity.Settle 
-            or GuardianActivity.Stretch or GuardianActivity.Alert or GuardianActivity.ShakeOff or GuardianActivity.Groom)
+            or GuardianActivity.Stretch or GuardianActivity.Alert or GuardianActivity.ShakeOff or GuardianActivity.Groom or GuardianActivity.Yawn)
         {
+            g.CurrentSpeed = 0.0;
+            g.VerticalOffset = Math.Max(0.0, g.VerticalOffset - dt * 0.5);
             return;
         }
 
         if (dist > 0.05)
         {
-            // Turn towards target
-            var dir = (targetXZ - currentXZ).Normalized();
-            double targetHeading = Math.Atan2(dir.Z, dir.X);
-            g.Heading = TurnTowards(g.Heading, targetHeading, 2.5 * dt);
+            double dz = targetXZ.Z - currentXZ.Z;
+            double dx = targetXZ.X - currentXZ.X;
+            double targetHeading = Math.Atan2(dz, dx);
+            double headingDiff = WrapAngle(targetHeading - g.Heading);
+            double headingError = Math.Abs(headingDiff);
 
-            // Step forward
-            double speed = g.Activity == GuardianActivity.Retreat ? def.RunSpeed : def.WalkSpeed;
-            double step = Math.Min(dist, speed * GuardianDef.BodySizeMultiplier * dt);
-            var nextXZ = currentXZ + dir * step;
+            double maxTurn = profile.MaxTurnRate * dt;
+            g.Heading = WrapAngle(g.Heading + Math.Clamp(headingDiff, -maxTurn, maxTurn));
 
-            // Island boundary containment
+            double alignFactor = Math.Clamp(1.0 - (headingError / (Math.PI * 0.75)), 0.12, 1.0);
+
+            var normal = _world.Terrain.Normal(currentXZ);
+            double slopeFactor = Math.Clamp(normal.Y, 0.35, 1.0);
+            double slopeAngleDegrees = Math.Acos(Math.Clamp(normal.Y, 0.0, 1.0)) * (180.0 / Math.PI);
+            if (slopeAngleDegrees > profile.MaxSlopeDegrees) slopeFactor *= 0.5;
+
+            double waterDepth = _world.Water != null ? _world.Water.OpenWaterDepth(currentXZ) : 0.0;
+            double waterFactor = waterDepth > 0.01 ? Math.Clamp(1.0 - (waterDepth * 2.0), 0.45, 1.0) : 1.0;
+
+            double baseSpeed = (g.Activity == GuardianActivity.Retreat ? def.RunSpeed : def.WalkSpeed) * GuardianDef.BodySizeMultiplier;
+            double desiredSpeed = baseSpeed * alignFactor * slopeFactor * waterFactor;
+
+            if (dist < 0.65)
+            {
+                double arrivalFactor = Math.Clamp(dist / 0.65, 0.15, 1.0);
+                desiredSpeed *= arrivalFactor;
+            }
+
+            if (desiredSpeed > g.CurrentSpeed)
+                g.CurrentSpeed = Math.Min(desiredSpeed, g.CurrentSpeed + profile.Acceleration * dt);
+            else
+                g.CurrentSpeed = Math.Max(desiredSpeed, g.CurrentSpeed - profile.Deceleration * dt);
+
+            double step = Math.Min(dist, g.CurrentSpeed * dt);
+            Vec2 forwardDir = Vec2.FromAngle(g.Heading);
+            Vec2 nextXZ = currentXZ + forwardDir * step;
+
+            if (IsPositionBlocked(nextXZ, g, profile))
+            {
+                double[] feelerOffsets = { 0.45, -0.45, 0.95, -0.95, 1.45, -1.45 };
+                bool feelerFound = false;
+                foreach (double offset in feelerOffsets)
+                {
+                    double feelerHeading = WrapAngle(g.Heading + offset);
+                    Vec2 feelerDir = Vec2.FromAngle(feelerHeading);
+                    Vec2 feelerXZ = currentXZ + feelerDir * step;
+                    if (!IsPositionBlocked(feelerXZ, g, profile))
+                    {
+                        nextXZ = feelerXZ;
+                        g.Heading = TurnTowards(g.Heading, feelerHeading, profile.MaxTurnRate * dt);
+                        feelerFound = true;
+                        break;
+                    }
+                }
+
+                if (!feelerFound)
+                {
+                    SelectRoamingTarget(g);
+                    g.CurrentSpeed = 0.0;
+                    UpdateHopOffset(g, def, profile, dt);
+                    return;
+                }
+            }
+
             nextXZ = _world.Domain.ClampInside(nextXZ, 0.2);
 
-            // Route tangentially around the trunk when a direct waypoint crosses it.
-            // Merely pushing back to its rim traps the animal against the same obstacle.
-            // Trunk collision avoidance
-            if (_world.PilotTree != null && _world.PilotTree.BlocksTrunk(nextXZ, 0.35))
+            if (_world.PilotTree != null && _world.PilotTree.BlocksTrunk(nextXZ, 0.38))
             {
                 var away = (currentXZ - _world.PilotTree.Anchor).Normalized();
                 var tangent = new Vec2(-away.Z, away.X);
@@ -517,19 +906,23 @@ public sealed class GuardianSystem
             g.X = nextXZ.X;
             g.Z = nextXZ.Z;
 
-            // Ground/root contact height
             double groundY = _world.GroundHeight(nextXZ);
             if (_world.PilotTree != null)
             {
                 double rootY = _world.PilotTree.RootSurfaceHeight(nextXZ);
                 if (!double.IsNaN(rootY) && rootY > groundY) groundY = rootY;
             }
+            if (_world.Props != null)
+            {
+                double propTop = _world.Props.PropTopAt(nextXZ);
+                if (!double.IsNaN(propTop) && propTop > groundY) groundY = propTop;
+            }
             g.Y = groundY;
 
-            // Locomotion fatigue accumulation
             g.Fatigue = MathD.Clamp01(g.Fatigue + 0.003 * (dt / 10.0));
 
-            // When approaching water for Drink or Bathe, transition when within reach (0.4m)
+            UpdateHopOffset(g, def, profile, dt);
+
             double remainingDist = Vec2.Distance(nextXZ, targetXZ);
             if ((g.Activity == GuardianActivity.Drink || g.Activity == GuardianActivity.Bathe) && remainingDist <= 0.4)
             {
@@ -538,7 +931,9 @@ public sealed class GuardianSystem
         }
         else
         {
-            // Reached target
+            g.CurrentSpeed = Math.Max(0.0, g.CurrentSpeed - profile.Deceleration * dt);
+            UpdateHopOffset(g, def, profile, dt);
+
             if (g.Activity == GuardianActivity.Forage)
             {
                 g.Activity = WithinFeedingReach(g) ? GuardianActivity.Feed : GuardianActivity.Groom;
@@ -549,9 +944,9 @@ public sealed class GuardianSystem
                 g.Activity = GuardianActivity.Settle;
                 g.ActivityDuration = 3.5;
             }
-            else if (g.Activity == GuardianActivity.Explore || g.Activity == GuardianActivity.Investigate)
+            else if (g.Activity == GuardianActivity.Explore || g.Activity == GuardianActivity.Investigate || g.Activity == GuardianActivity.Retreat)
             {
-                if (g.ClimbRoute.Count > 1 && Def!.BehaviorProfile?.CanClimbTrunk == true)
+                if (g.ClimbRoute.Count > 1 && profile.CanClimbTrunk)
                 {
                     g.Activity = GuardianActivity.Climb;
                     g.ClimbIndex = 1; g.ClimbReturning = false;
@@ -563,6 +958,18 @@ public sealed class GuardianSystem
         }
     }
 
+    private static void UpdateHopOffset(GuardianIndividual g, GuardianDef def, GuardianBehaviorProfile profile, double dt)
+    {
+        if (def.Locomotion == LocomotionMode.AvianPerchHop && g.CurrentSpeed > 0.05 && profile.HopArcHeight > 0)
+        {
+            g.HopPhase += dt * profile.HopCadence * Math.PI * 2.0;
+            g.VerticalOffset = Math.Abs(Math.Sin(g.HopPhase * 0.5)) * profile.HopArcHeight;
+        }
+        else
+        {
+            g.VerticalOffset = Math.Max(0.0, g.VerticalOffset - dt * 0.5);
+        }
+    }
     private void StepClimbing(GuardianIndividual g, double dt)
     {
         var profile = Def!.BehaviorProfile!;
@@ -615,23 +1022,129 @@ public sealed class GuardianSystem
         if (!WithinFeedingReach(g)) return;
         var toFood = new Vec2(g.TargetX - g.X, g.TargetZ - g.Z);
         if (toFood.LengthSq > 1e-8 && Math.Cos(Math.Atan2(toFood.Z, toFood.X) - g.Heading) < .75) return;
-        
-        // The approached patch is authoritative, including when it lies across
-        // a grid boundary. Do not eat an unrelated cell under the body instead.
+
+        var def = Def!;
+        var diets = def.PreferredDiets;
+
+        // 1. Check small fauna feeding
+        if (diets.Contains("fauna:small"))
+        {
+            FaunaIndividual? prey = null;
+            double reachSq = 1.2 * 1.2;
+            foreach (var f in _world.Fauna.Items)
+            {
+                if (f.Grabbed) continue;
+                if ((g.PositionXZ - f.PositionXZ).LengthSq <= reachSq)
+                {
+                    prey = f;
+                    break;
+                }
+            }
+            if (prey != null)
+            {
+                double energyBite = Math.Min(prey.Energy, 0.20 * dt);
+                prey.Energy -= energyBite;
+                g.Energy = Math.Min(def.EnergyMax, g.Energy + energyBite * 35.0);
+                g.Hydration = Math.Clamp(g.Hydration + 0.015 * dt, 0.0, 1.0);
+                g.LastConsumedDiet = "small fauna";
+
+                if (prey.Energy <= 0.02)
+                {
+                    int preyCell = _world.Grid.NearestDomainCell(prey.PositionXZ);
+                    if (preyCell >= 0)
+                        _world.Fields.Nutrients[preyCell] = Math.Min(1.0, _world.Fields.Nutrients[preyCell] + 0.02);
+                    _world.Litter.Deposit(prey.PositionXZ, fine: 0.01, coarse: 0.005, radius: 0.3);
+                    _world.Fauna.Remove(prey.Id);
+                }
+                return;
+            }
+        }
+
+        // 2. Check flora feeding (foliage, bark, fungus)
+        bool wantsFoliage = diets.Contains("flora:foliage");
+        bool wantsBark = diets.Contains("flora:bark");
+        bool wantsFungus = diets.Contains("flora:fungus");
+        if (wantsFoliage || wantsBark || wantsFungus)
+        {
+            FloraIndividual? plant = null;
+            double plantReachSq = 1.4 * 1.4;
+            foreach (var fl in _world.Flora.Items)
+            {
+                if (fl.Biomass < 0.05) continue;
+                if ((g.PositionXZ - fl.Position).LengthSq <= plantReachSq)
+                {
+                    plant = fl;
+                    break;
+                }
+            }
+            if (plant != null)
+            {
+                var species = _world.Content.FloraById(plant.SpeciesId);
+                bool isFungus = species?.Archetype == "fungus" || plant.SpeciesId.Contains("fung");
+                g.LastConsumedDiet = isFungus ? "woodland fungi" : "tender foliage";
+
+                if (plant.Biomass > 0.06)
+                {
+                    double bite = Math.Min(0.015 * dt, plant.Biomass * 0.08 * dt);
+                    plant.Biomass -= bite;
+                    g.Energy = Math.Min(def.EnergyMax, g.Energy + bite * 35.0);
+                    g.Hydration = Math.Clamp(g.Hydration + 0.02 * dt, 0.0, 1.0);
+                }
+
+                if (plant.Fruiting && plant.FruitLoad > 0)
+                {
+                    double fruitBite = Math.Min(plant.FruitLoad, 0.02 * dt);
+                    plant.FruitLoad -= fruitBite;
+                    g.PendingSeeds.Add(new GuardianPendingSeed
+                    {
+                        SpeciesId = plant.SpeciesId,
+                        ViableMass = fruitBite * 0.1,
+                        BioSecondsUntilDeposit = 600.0
+                    });
+                }
+                return;
+            }
+
+            if (wantsBark && _world.Props != null)
+            {
+                var log = _world.Props.LogAt(g.PositionXZ) ?? _world.Props.LogAt(new Vec2(g.TargetX, g.TargetZ));
+                if (log != null || (_world.PilotTree != null && Vec2.Distance(g.PositionXZ, _world.PilotTree.Anchor) < _world.PilotTree.Def.TrunkRadius + 1.2))
+                {
+                    g.Energy = Math.Min(def.EnergyMax, g.Energy + 0.015 * dt * 25.0);
+                    g.LastConsumedDiet = "tree bark";
+                    return;
+                }
+            }
+        }
+
+        // 3. Biofilm in shallow shoreline water
+        if (diets.Contains("biofilm") && _world.Water != null && _world.Water.OpenWaterDepth(g.PositionXZ) > 0.005)
+        {
+            int cellWater = _world.Grid.NearestDomainCell(g.PositionXZ);
+            if (cellWater >= 0)
+            {
+                double extractedBio = _world.Litter.TakeDetritus(cellWater, 0.02 * dt);
+                g.Energy = Math.Min(def.EnergyMax, g.Energy + Math.Max(extractedBio * 15.0, 0.015 * dt * 10.0));
+                g.Hydration = Math.Clamp(g.Hydration + 0.04 * dt, 0.0, 1.0);
+                g.LastConsumedDiet = "shoreline biofilm";
+                return;
+            }
+        }
+
+        // 4. Default / Litter: fallen fruit or forest detritus
         int cell = _world.Grid.NearestDomainCell(new Vec2(g.TargetX, g.TargetZ));
         if (cell < 0) return;
 
         g.Hydration = Math.Clamp(g.Hydration + 0.008 * dt, 0.0, 1.0);
         g.Comfort = Math.Clamp(g.Comfort - 0.005 * dt, 0.0, 1.0);
 
-        double energyRoom = Math.Max(0, Def!.EnergyMax - g.Energy);
+        double energyRoom = Math.Max(0, def.EnergyMax - g.Energy);
         double want = Math.Min(0.05 * dt, energyRoom / 25.0);
         var litter = _world.Litter;
         double fruitBefore = litter.FruitMass[cell];
         double consumed = 0;
-        if (want > 0 && PrefersFruitFirst(Def!))
+        if (want > 0 && PrefersFruitFirst(def))
         {
-            // Diet lists fruit ahead of detritus/litter: eat fruit first.
             consumed = Math.Min(Math.Max(0, fruitBefore), want);
             litter.FruitMass[cell] = fruitBefore - consumed;
             fruitBefore = litter.FruitMass[cell] + consumed;
@@ -640,9 +1153,9 @@ public sealed class GuardianSystem
         double fruitEaten = Math.Max(0, fruitBefore - litter.FruitMass[cell]);
         if (consumed > 0)
         {
-            g.Energy = Math.Min(Def!.EnergyMax, g.Energy + consumed * 25.0);
+            g.Energy = Math.Min(def.EnergyMax, g.Energy + consumed * 25.0);
+            g.LastConsumedDiet = fruitEaten > 0 ? "fallen fruit" : "forest detritus";
 
-            // Only fruit carries seeds, and only of the species that bore it.
             string? seedSpecies = fruitEaten > 0 ? FindFruitSourceSpecies(_world.Grid.CellCenter(cell)) : null;
             if (seedSpecies != null)
             {
@@ -650,12 +1163,15 @@ public sealed class GuardianSystem
                 {
                     SpeciesId = seedSpecies,
                     ViableMass = fruitEaten * 0.08,
-                    BioSecondsUntilDeposit = 600.0 // Deposited after ~10 bio-minutes
+                    BioSecondsUntilDeposit = 600.0
                 });
             }
 
-            // Soil disturbance
             _world.Litter.Deposit(g.PositionXZ, fine: 0.002, coarse: 0, radius: 0.3);
+        }
+        else
+        {
+            g.LastConsumedDiet = "forest detritus";
         }
     }
 
@@ -705,6 +1221,7 @@ public sealed class GuardianSystem
             if (extracted > 0)
                 g.Energy = Math.Min(Def!.EnergyMax, g.Energy + extracted * 15.0);
             _world.Litter.Deposit(g.PositionXZ, fine: 0.004 * dt, coarse: 0.002 * dt, radius: 0.35);
+            _world.Fields.Nutrients[cell] = Math.Min(1.0, _world.Fields.Nutrients[cell] + 0.004 * dt);
         }
         g.Comfort = Math.Clamp(g.Comfort - 0.01 * dt, 0.0, 1.0);
         g.Fatigue = MathD.Clamp01(g.Fatigue + 0.002 * (dt / 10.0));
@@ -737,11 +1254,21 @@ public sealed class GuardianSystem
         _world.Litter.Deposit(g.PositionXZ, fine: 0.001 * dt, coarse: 0, radius: 0.2);
     }
 
-    private static bool WithinFeedingReach(GuardianIndividual g)
+    private bool WithinFeedingReach(GuardianIndividual g)
     {
-        double reach = .4 * GuardianDef.BodySizeMultiplier * Math.Clamp(g.Scale, .5, 1.5);
-        double dx = g.X - g.TargetX, dy = g.Y - g.TargetY, dz = g.Z - g.TargetZ;
-        return dx * dx + dy * dy + dz * dz <= reach * reach;
+        double distSq = (g.Position - g.TargetPosition).LengthSq;
+        double baseReach = 0.5 * GuardianDef.BodySizeMultiplier * Math.Clamp(g.Scale, 0.5, 1.5);
+        if (distSq <= baseReach * baseReach) return true;
+
+        var def = Def;
+        if (def != null)
+        {
+            if (def.PreferredDiets.Any(d => d.StartsWith("flora:")) && distSq <= 1.4 * 1.4)
+                return true;
+            if (def.PreferredDiets.Contains("fauna:small") && distSq <= 1.2 * 1.2)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -752,13 +1279,21 @@ public sealed class GuardianSystem
     {
         var g = _world.Guardian;
         if (g == null || Def == null) return;
-        GuardianNeeds.StepMetabolism(g, Def, bioDt, _world);
+        double daylight01 = Math.Clamp(Math.Sin((_world.Clock.BioDays % 1.0) * Math.PI), 0.0, 1.0);
+        double nocturnalBias = Def.BehaviorProfile?.NocturnalBias ?? 0.3;
+        GuardianNeeds.StepMetabolism(g, Def, bioDt, _world, daylight01, nocturnalBias);
+    }
+
+    private static double WrapAngle(double a)
+    {
+        while (a > Math.PI) a -= Math.PI * 2.0;
+        while (a < -Math.PI) a += Math.PI * 2.0;
+        return a;
     }
 
     private static double TurnTowards(double current, double target, double maxTurn)
     {
-        double diff = (target - current + Math.PI) % (Math.PI * 2) - Math.PI;
-        if (diff < -Math.PI) diff += Math.PI * 2;
-        return current + Math.Clamp(diff, -maxTurn, maxTurn);
+        double diff = WrapAngle(target - current);
+        return WrapAngle(current + Math.Clamp(diff, -maxTurn, maxTurn));
     }
 }

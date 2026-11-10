@@ -1,0 +1,93 @@
+{
+  "id": "butterglint",
+  "name": "Butterglint",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Glossy gold-flowered meadow herb.",
+  "description": "The cupped petals carry a varnish so deep that each flower keeps a small bright copy of the sky.",
+  "habitat": {
+    "substrates": {
+      "soil": 1
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.6,
+      "tolerance": 0.3
+    },
+    "light": {
+      "optimum": 0.78,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.25,
+    "maxBiomass": 1.0,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 10,
+    "lifespanDays": 180,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.18,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.28,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.9
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "butterglint",
+    "color": [
+      0.31,
+      0.48,
+      0.24
+    ],
+    "color2": [
+      0.95,
+      0.81,
+      0.16
+    ],
+    "colorVariance": 0.06,
+    "height": 0.25
+  },
+  "tags": [
+    "plant",
+    "flowering",
+    "meadow"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.42,
+      0.2
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

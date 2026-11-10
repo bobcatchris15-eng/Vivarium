@@ -1,0 +1,106 @@
+{
+  "id": "mirepocket",
+  "name": "Mirepocket",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Carnivorous floater with pocketed stems.",
+  "description": "Feathery submerged stems carry little traps, each with a hinged mouth; pale yellow lipped flowers lift clear of the water to be seen.",
+  "habitat": {
+    "substrates": {
+      "water": 1,
+      "soil": 0.6
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.06
+    },
+    "light": {
+      "optimum": 0.7,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.2,
+      "tolerance": 0.3
+    },
+    "minWaterDepth": 0.12,
+    "maxWaterDepth": 0.9,
+    "hardMinMoisture": 0.95,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.34,
+    "maxBiomass": 1.1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.28,
+    "maturityDays": 12,
+    "lifespanDays": 180,
+    "nutrientPerBiomass": 0.26,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.36,
+    "propagules": 3,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.26,
+    "crowdingLimit": 3.0,
+    "sensitivity": 0.45
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.5,
+      "bonus": 0.22
+    }
+  ],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0.2,
+  "visual": {
+    "shape": "mirepocket",
+    "color": [
+      0.29,
+      0.48,
+      0.24
+    ],
+    "color2": [
+      0.94,
+      0.85,
+      0.22
+    ],
+    "colorVariance": 0.06,
+    "height": 0.3
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "submerged",
+    "carnivorous",
+    "floating"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.38,
+      0.22
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

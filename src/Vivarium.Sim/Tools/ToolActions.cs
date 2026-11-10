@@ -2,6 +2,7 @@ using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
 using Vivarium.Sim.Fauna;
+using Vivarium.Sim.Guardians;
 using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Tools;
@@ -27,7 +28,11 @@ public sealed class PokeResult
     /// <summary>Flora that should visibly wobble. Cosmetic: no ecological state is changed.</summary>
     public List<EntityId> FloraWobble { get; } = new();
     public Vec3 Point { get; init; }
-    public string Message => $"poked: {FaunaDisturbed.Count} critter(s) startled, {FloraWobble.Count} plant(s) brushed";
+    public bool GuardianDisturbed { get; set; }
+    public string? GuardianName { get; set; }
+    public string Message => GuardianDisturbed
+        ? $"poked: {FaunaDisturbed.Count} critter(s) startled, {FloraWobble.Count} plant(s) brushed, guardian {GuardianName ?? "startled"}"
+        : $"poked: {FaunaDisturbed.Count} critter(s) startled, {FloraWobble.Count} plant(s) brushed";
 }
 
 /// <summary>
@@ -185,8 +190,63 @@ public sealed class ToolActions
             bool targeted = a.Target.Kind == HitKind.Flora && a.Target.Id == f.Id;
             if (targeted || Vec2.Distance(f.Position, a.Point.XZ) <= Math.Max(radius, f.Radius(sp))) res.FloraWobble.Add(f.Id);
         }
+        if (_w.Guardian is { } g && (a.Target.Kind == HitKind.Guardian || Vec2.Distance(g.PositionXZ, a.Point.XZ) <= radius + 0.5))
+        {
+            _w.GuardianSystem.NotifyPoked(a.Point.XZ);
+            res.GuardianDisturbed = true;
+            var gDef = GuardianCatalog.Find(g.ArchetypeId);
+            res.GuardianName = gDef?.Name ?? g.ArchetypeId;
+        }
         return res;
     }
+
+    /// <summary>Poke action startling fauna and guardian in a radius.</summary>
+    public static ToolResult Poke(VivariumWorld w, Vec2 at, double radius = 1.5)
+    {
+        w.Scheduler.CompletePendingTick();
+        int startled = 0;
+        var affected = new List<EntityId>();
+        double until = w.Clock.SimSeconds + w.Content.Tools.PokeDisturbSeconds;
+        foreach (var f in w.Fauna.Items)
+        {
+            if (f.Grabbed) continue;
+            if ((f.PositionXZ - at).Length > radius) continue;
+            f.DisturbedUntil = Math.Max(f.DisturbedUntil, until);
+            f.DisturbX = at.X; f.DisturbZ = at.Z;
+            var sp = w.Content.FaunaOrThrow(f.SpeciesId);
+            affected.Add(f.Id);
+            startled++;
+            if (!sp.Conglobates)
+            {
+                var away = f.PositionXZ - at;
+                away = away.LengthSq > 1e-10 ? away.Normalized() : Vec2.FromAngle(f.Heading);
+                var q = f.PositionXZ + away * 0.04;
+                if (w.FaunaSystem.IsPassable(sp, q))
+                {
+                    f.X = q.X; f.Z = q.Z;
+                    f.Y = sp.Medium == Medium.Aquatic ? w.FaunaSystem.RestingY(sp, q, f.Pitch) : w.GroundHeight(q);
+                }
+                f.Heading = away.Angle;
+            }
+        }
+        bool guardianStartled = false;
+        string? guardianDesc = null;
+        if (w.Guardian is { } g && Vec2.Distance(g.PositionXZ, at) <= radius + 0.5)
+        {
+            w.GuardianSystem.NotifyPoked(at);
+            guardianStartled = true;
+            startled++;
+            affected.Add(g.Id);
+            var gDef = GuardianCatalog.Find(g.ArchetypeId);
+            guardianDesc = gDef?.Name ?? g.ArchetypeId;
+        }
+        string msg = guardianStartled
+            ? $"startled {startled} creature(s), including guardian {guardianDesc}"
+            : $"startled {startled} creature(s)";
+        return ToolResult.Success(msg, affected.ToArray());
+    }
+
+    public ToolResult Poke(Vec2 at, double radius = 1.5) => Poke(_w, at, radius);
 
     // ------------------------------------------------------------------ props
 

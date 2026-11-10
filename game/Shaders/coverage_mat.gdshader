@@ -50,6 +50,10 @@ void vertex() {
 void fragment() {
     vec3 base = srgb_to_linear(clamp(COLOR.rgb, vec3(0.0), vec3(1.0)));
     vec2 wp = world_pos.xz;
+    float cam_dist = length(CAMERA_POSITION_WORLD - world_pos);
+    // Micro-leaflets, clump Voronoi and derivative noise are subpixel past ~5 m.
+    float detail_lod = 1.0 - smoothstep(2.0, 5.0, cam_dist);
+    vec3 to_cam = CAMERA_POSITION_WORLD - world_pos;
 
     // Irregular, noise-jittered edge feather: interior (alpha==1) never discards; the ~1-cell
     // rim band (alpha 0.25..0.75) breaks up raggedly instead of following the cell grid.
@@ -84,30 +88,75 @@ void fragment() {
         float scan_avg = max(dot(textureLod(moss_col, vec2(0.5), 10.0).rgb,
             vec3(0.2126, 0.7152, 0.0722)), 0.05);
         c *= mix(vec3(1.0), clamp(vec3(dot(scan.rgb, vec3(0.2126, 0.7152, 0.0722)) / scan_avg), vec3(0.25), vec3(1.7)), 0.78);
-        // Moss: layered fibrous/leaflet micro-detail at ~1-3mm scale with directional grain per clump,
-        // plus tip brightening so individual shoots read instead of a flat stippled paint.
-        vec2 pg = vec2(dot(wp, grainDir), dot(wp, grainOrth));
-        float fibers = fbm(pg * vec2(3.0, 26.0));
-        float leaflets = fbm(pg * vec2(9.0, 70.0) + 11.3);
-        float stipple = hash21(floor(wp * 140.0));
-        float tips = smoothstep(0.62, 0.92, fbm(pg * vec2(6.0, 50.0) + 5.1));
-        c *= 0.82 + 0.16 * fibers + 0.14 * leaflets + 0.08 * (stipple - 0.5);
-        // Recessed shoots stay olive; thin growing tips catch chartreuse light without
-        // an additive pigment floor that makes shaded moss look self-lit.
-        c *= mix(vec3(0.91, 0.94, 0.77), vec3(1.08, 1.12, 0.88), tips);
-        // Centimetre-scale tuft cavities break up the continuous carpet's diffuse field.
-        float tuft_speck;
-        vec4 tuft = moss_clumps(wp * 45.0, tuft_speck);
-        float tuft_height = clamp(tuft.x, 0.0, 1.0);
-        c *= mix(vec3(0.56, 0.58, 0.43), vec3(1.04, 1.02, 0.88), smoothstep(0.05, 0.85, tuft_height));
+        rough = clamp(mix(0.96, scan.a, 0.55), 0.80, 0.97);
+        bump = (scan_n - wn) * 0.65;
 
-        float e = 0.01;
-        float h = fibers + leaflets * 0.6;
-        vec2 pgx = vec2(dot(wp + vec2(e, 0.0), grainDir), dot(wp + vec2(e, 0.0), grainOrth));
-        vec2 pgz = vec2(dot(wp + vec2(0.0, e), grainDir), dot(wp + vec2(0.0, e), grainOrth));
-        float dx = (fbm(pgx * vec2(3.0, 26.0)) + fbm(pgx * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
-        float dz = (fbm(pgz * vec2(3.0, 26.0)) + fbm(pgz * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
-        bump = vec3(-dx, 0.0, -dz) * 1.2 + (scan_n - wn) * 0.65 + vec3(tuft.y, 0.0, tuft.z) * 0.32;
+        vec2 pg = vec2(dot(wp, grainDir), dot(wp, grainOrth));
+        float fibers = 0.5;
+        float leaflets = 0.5;
+        float tips = 0.0;
+        float tuft_height = 0.5;
+        float tuft_speck = 0.0;
+        float porous_occ = 1.0;
+
+        // ------------------------------------------------------------------
+        // Close-range bryophyte micro-canopy: layered leaflet fibres, gametophore
+        // clumps, optical porosity and damp shoot cavities. All of it is subpixel
+        // beyond ~5 m, so it is evaluated only while detail_lod > 0.01.
+        // ------------------------------------------------------------------
+        if (detail_lod > 0.01) {
+            float d = detail_lod;
+            fibers = fbm(pg * vec2(3.0, 26.0));
+            leaflets = fbm(pg * vec2(9.0, 70.0) + 11.3);
+            float stipple = hash21(floor(wp * 140.0));
+            tips = smoothstep(0.62, 0.92, fbm(pg * vec2(6.0, 50.0) + 5.1));
+            c *= mix(vec3(1.0),
+                vec3(0.82 + 0.16 * fibers + 0.14 * leaflets + 0.08 * (stipple - 0.5)), d);
+            // Recessed shoots stay olive; thin growing tips catch chartreuse light.
+            c *= mix(vec3(1.0),
+                mix(vec3(0.91, 0.94, 0.77), vec3(1.08, 1.12, 0.88), tips), d);
+            // Centimetre-scale tuft cavities break up the continuous carpet's diffuse field.
+            vec4 tuft = moss_clumps(wp * 45.0, tuft_speck);
+            tuft_height = clamp(tuft.x, 0.0, 1.0);
+            c *= mix(vec3(1.0),
+                mix(vec3(0.56, 0.58, 0.43), vec3(1.04, 1.02, 0.88),
+                    smoothstep(0.05, 0.85, tuft_height)), d);
+
+            float e = 0.01;
+            float h = fibers + leaflets * 0.6;
+            vec2 pgx = vec2(dot(wp + vec2(e, 0.0), grainDir), dot(wp + vec2(e, 0.0), grainOrth));
+            vec2 pgz = vec2(dot(wp + vec2(0.0, e), grainDir), dot(wp + vec2(0.0, e), grainOrth));
+            float dx = (fbm(pgx * vec2(3.0, 26.0)) + fbm(pgx * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
+            float dz = (fbm(pgz * vec2(3.0, 26.0)) + fbm(pgz * vec2(9.0, 70.0) + 11.3) * 0.6) - h;
+            bump += (vec3(-dx, 0.0, -dz) * 1.2 + vec3(tuft.y, 0.0, tuft.z) * 0.32) * d;
+
+            // Optical porosity: interstitial pore cavities between gametophore
+            // clumps absorb light, so the mat reads as deep velvety shoots rather
+            // than a painted green plate.
+            float pore = smoothstep(0.58, 0.88, 1.0 - tuft_height)
+                * smoothstep(0.18, 0.62, fibers);
+            c *= mix(1.0, 0.42, pore * 0.85);
+            ao *= mix(1.0, 0.55, pore);
+
+            // Damp water film sits in the lower shoot cavities while exposed tips stay crisp.
+            float cavity_moisture = (1.0 - smoothstep(0.30, 0.85, tuft_height)) * d;
+            c *= mix(1.0, 0.86, cavity_moisture * 0.55);
+            rough = mix(rough, 0.42, cavity_moisture * 0.55);
+
+            // Aggregate a broad distribution of microscopic gametophore normals.
+            // This keeps the same subpixel appearance without sparkling geometry.
+            vec3 porous, porous_n;
+            moss_aggregate(c, wn, to_cam, wp,
+                smoothstep(.20, .78, COLOR.a), u_moss_aggregate * d,
+                porous, porous_n, porous_occ);
+            c = porous;
+            bump += (porous_n - wn) * 0.38 * d;
+        }
+
+        // Macro surface beyond 5 m: one low-frequency variation keeps the mat
+        // from flattening into a single albedo without paying for micro noise.
+        float macro = vnoise(wp * 3.2 + grainDir * 2.7);
+        c *= mix(0.93, 1.07, macro);
 
         // A current-state kernel field: isolated growing points expand into
         // neighboring points while dark protonema persists in the valleys.
@@ -119,19 +168,10 @@ void fragment() {
                     smoothstep(0.09, 0.88, crown)), strength);
         }
 
-        // Aggregate a broad distribution of microscopic gametophore normals.
-        // This keeps the same subpixel appearance without sparkling geometry.
-        vec3 porous, porous_n;
-        float porous_occ;
-        moss_aggregate(c, wn, CAMERA_POSITION_WORLD - world_pos, wp,
-            smoothstep(.20, .78, COLOR.a), u_moss_aggregate,
-            porous, porous_n, porous_occ);
-        c = porous;
-        bump += (porous_n - wn) * 0.38;
         // Crevice AO: darken low-fibre troughs between shoot clusters.
-        ao = mix(0.72, 1.0, smoothstep(-0.1, 0.5, fibers)) * mix(0.65, 1.0, smoothstep(0.0, 0.65, tuft_height));
-        ao *= porous_occ;
-        rough = clamp(mix(0.96, scan.a, 0.55), 0.80, 0.97);
+        ao = mix(0.72, 1.0, smoothstep(-0.1, 0.5, fibers))
+            * mix(0.65, 1.0, smoothstep(0.0, 0.65, tuft_height));
+        ao *= mix(1.0, porous_occ, detail_lod);
         // Light-dependent fibre scattering and thin-phyllid gametophore transmittance.
         // Basal mat uses subtle fibre scattering; elevated 3D gametophores catch
         // translucent golden-green backlight and velvety grazing sheen.
@@ -140,7 +180,10 @@ void fragment() {
         vec3 matBacklight = base * vec3(0.075, 0.11, 0.025) * (0.35 + 0.65 * tips) * coverMask;
         vec3 shootBacklight = base * vec3(0.28, 0.48, 0.08) * (0.35 + 0.65 * shootT);
         BACKLIGHT = mix(matBacklight, shootBacklight, isShoot);
-        RIM = mix(0.065 * tips * coverMask, mix(0.15, 0.38, shootT), isShoot);
+        // Grazing-angle phyllid fuzz / retroreflective velvet rim.
+        float velvet = pow(1.0 - clamp(dot(wn, normalize(to_cam)), 0.0, 1.0), 3.0) * detail_lod;
+        c *= 1.0 + velvet * 0.10;
+        RIM = mix(0.065 * tips * coverMask, mix(0.15, 0.38, shootT), isShoot) + velvet * 0.18;
         RIM_TINT = mix(0.75, 0.65, isShoot);
     } else {
         // Lichen: scanned thallus colour + high-frequency tangent-space normal and cavity AO
@@ -149,23 +192,29 @@ void fragment() {
         c *= clamp(vec3(0.42) + thallus * 1.25, vec3(0.3), vec3(1.55));
 
         float thallus_lum = dot(thallus, vec3(0.299, 0.587, 0.114));
-        float e = 0.004;
-        float hx = dot(texture(lichen_col, (wp + vec2(e, 0.0)) / 0.22).rgb, vec3(0.299, 0.587, 0.114));
-        float hz = dot(texture(lichen_col, (wp + vec2(0.0, e)) / 0.22).rgb, vec3(0.299, 0.587, 0.114));
-        bump = vec3((thallus_lum - hx) * 6.0, 0.0, (thallus_lum - hz) * 6.0);
+        float cracks = 0.0;
+        bump = vec3(0.0);
+        if (detail_lod > 0.01) {
+            float d = detail_lod;
+            float e = 0.004;
+            float hx = dot(texture(lichen_col, (wp + vec2(e, 0.0)) / 0.22).rgb, vec3(0.299, 0.587, 0.114));
+            float hz = dot(texture(lichen_col, (wp + vec2(0.0, e)) / 0.22).rgb, vec3(0.299, 0.587, 0.114));
+            bump = vec3((thallus_lum - hx) * 6.0, 0.0, (thallus_lum - hz) * 6.0) * d;
 
-        float cracks = voronoi_cracks(wp * 65.0);
-        float cx = voronoi_cracks((wp + vec2(e, 0.0)) * 65.0);
-        float cz = voronoi_cracks((wp + vec2(0.0, e)) * 65.0);
-        bump += vec3((cracks - cx) * 1.6, 0.0, (cracks - cz) * 1.6);
+            cracks = voronoi_cracks(wp * 65.0);
+            float cx = voronoi_cracks((wp + vec2(e, 0.0)) * 65.0);
+            float cz = voronoi_cracks((wp + vec2(0.0, e)) * 65.0);
+            bump += vec3((cracks - cx) * 1.6, 0.0, (cracks - cz) * 1.6) * d;
 
-        // Dusty soredia / cortex micro-roughness; waxy apothecia discs stay smooth.
-        float soredia_mask = fbm(wp * 80.0);
-        rough = mix(0.68, 0.92, soredia_mask);
-        float apothecia_mask = smoothstep(0.45, 0.75, thallus.r - thallus.g * 0.6);
-        rough = mix(rough, 0.28, apothecia_mask);
+            // Dusty soredia / cortex micro-roughness; waxy apothecia discs stay smooth.
+            float soredia_mask = fbm(wp * 80.0);
+            rough = mix(rough, mix(0.68, 0.92, soredia_mask), d);
+            float apothecia_mask = smoothstep(0.45, 0.75, thallus.r - thallus.g * 0.6);
+            rough = mix(rough, 0.28, apothecia_mask * d);
+        }
 
-        // Cavity AO: thallus height + crack crevices.
+        // Cavity AO: thallus height + crack crevices. Past ~5 m only the broad
+        // thallus luminance survives, with no Voronoi derivative samples.
         float thallus_ao = mix(0.45, 1.0, thallus_lum);
         thallus_ao *= mix(1.0, 0.35, cracks);
         ao = clamp(thallus_ao * COLOR.a, 0.15, 1.0);

@@ -94,14 +94,24 @@ vec3 forest_canopy_radiance(vec3 ray) {
     float elevation = clamp(y, 0.0, 1.0);
     vec3 base_sky = mix(sky_horizon_color, sky_top_color, pow(elevation, 0.65));
 
-    // Overhead soft-box conservatory sky opening: smoothstep(0.55, 0.92, y) * 2.2 * sky_top_color
-    vec3 conservatory_opening = smoothstep(0.55, 0.92, y) * 2.2 * sky_top_color;
+    // A pond or stream in the habitat is enclosed by dark overhanging bank earth, moss and
+    // understory foliage, not by the bright open horizon of a distant landscape. Close the
+    // grazing-angle reflection with a damp bank bowl so still water never mirrors a milky
+    // 0.73-luminance sky band at y = 0.0 .. 0.38. Only steeper upward rays open to sky.
+    float bank_dapple = canopy_noise(direction.xz / max(0.18, 0.42 + y) * 9.0);
+    vec3 bank_horizon = ground_horizon_color * 0.55;
+    vec3 bank_foliage = vec3(0.04, 0.09, 0.03) * mix(0.82, 1.18, bank_dapple);
+    vec3 bank_reflection = mix(bank_horizon, bank_foliage, smoothstep(0.0, 0.38, y));
+    base_sky = mix(bank_reflection, base_sky, smoothstep(0.45, 0.72, y));
 
-    // Rich multi-layered green foliage transmittance (vec3(0.18, 0.34, 0.11)) at mid-elevations
+    // Overhead soft-box conservatory sky opening: smoothstep(0.55, 0.92, y) * 0.85 * sky_top_color
+    vec3 conservatory_opening = smoothstep(0.55, 0.92, y) * 0.85 * sky_top_color;
+
+    // Rich multi-layered green foliage transmittance (vec3(0.06, 0.13, 0.04)) at mid-elevations
     float mid_elevation = smoothstep(0.04, 0.28, y) * smoothstep(0.92, 0.48, y);
     vec2 angular = direction.xz / max(0.18, 0.42 + y) * 5.0;
     float foliage_texture = canopy_noise(angular) * 0.65 + canopy_noise(angular * 2.3 + vec2(3.7, 8.1)) * 0.35;
-    vec3 foliage_transmittance = vec3(0.18, 0.34, 0.11);
+    vec3 foliage_transmittance = vec3(0.06, 0.13, 0.04);
     vec3 foliage_color = foliage_transmittance * mix(0.75, 1.30, foliage_texture);
 
     // Multi-scale canopy gap noise
@@ -110,7 +120,7 @@ vec3 forest_canopy_radiance(vec3 ray) {
     // Mid-elevation canopy blend: foliage transmittance where gap is small, open sky where gap is large
     vec3 canopy = mix(foliage_color, base_sky + conservatory_opening, gap_mask);
     vec3 radiance = mix(base_sky, canopy, mid_elevation);
-    radiance += conservatory_opening * smoothstep(0.65, 0.95, y);
+
 
     // Sharp solar disk + circumsolar Mie aureole:
     vec3 solar_radiance = canopy_solar_radiance(direction);

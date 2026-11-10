@@ -1,0 +1,102 @@
+{
+  "id": "mirespire",
+  "name": "Mirespire",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Sparse evergreen of bog margins.",
+  "description": "A straight red-barked spire stands over the mire with needle sprays on every limb and cones kept close to the trunk.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.4
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.75,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.8,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.2,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0.1,
+    "hardMinMoisture": 0.4,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.022,
+    "maxBiomass": 14.0,
+    "initialBiomass": 0.2,
+    "declinePerDay": 0.03,
+    "maturityDays": 80,
+    "lifespanDays": 2900,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 1.0,
+    "minRadius": 0.15
+  },
+  "spread": {
+    "intervalDays": 45,
+    "radius": 1.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.7
+  },
+  "competition": {
+    "radius": 2.0,
+    "crowdingLimit": 1.5,
+    "sensitivity": 0.3
+  },
+  "proximity": [],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "tree",
+    "canopyRadius": 1.2,
+    "shadeOpacity": 0.55,
+    "minSpacing": 1.4
+  },
+  "postLife": {
+    "standingDays": 420,
+    "collapseDays": 90,
+    "fallenDays": 260,
+    "advancedDays": 30,
+    "coarseFraction": 0.55,
+    "decayHalfLifeMultiplier": 1.35,
+    "standingRetention": 0.9,
+    "deadColor": [
+      0.45,
+      0.28,
+      0.18
+    ],
+    "litterColorInfluence": 0.8,
+    "dryBleach": 0.24,
+    "wetDarken": 0.24
+  },
+  "visual": {
+    "shape": "mirespire",
+    "color": [
+      0.18,
+      0.29,
+      0.227
+    ],
+    "color2": [
+      0.353,
+      0.478,
+      0.369
+    ],
+    "colorVariance": 0.06,
+    "height": 3.8
+  },
+  "tags": [
+    "plant",
+    "tree",
+    "woody",
+    "evergreen",
+    "bog"
+  ]
+}

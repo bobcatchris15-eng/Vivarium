@@ -1,0 +1,111 @@
+{
+  "id": "miremyrtle",
+  "name": "Miremyrtle",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Aromatic grey shrub of fen and peat.",
+  "description": "Grey-green leaves crowd slender arching stems and the catkins stand straight up before the leaves; bruised, the whole shrub perfumes the air.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.5
+    },
+    "refuseSubstrates": [
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.88,
+      "tolerance": 0.14
+    },
+    "light": {
+      "optimum": 0.65,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.25,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0.06,
+    "hardMinMoisture": 0.55,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.06,
+    "maxBiomass": 5.5,
+    "initialBiomass": 0.08,
+    "declinePerDay": 0.07,
+    "maturityDays": 36,
+    "lifespanDays": 1300,
+    "nutrientPerBiomass": 0.22,
+    "radiusAtMax": 0.5,
+    "minRadius": 0.07
+  },
+  "spread": {
+    "intervalDays": 18,
+    "radius": 1.2,
+    "propagules": 1,
+    "minBiomassFraction": 0.68
+  },
+  "competition": {
+    "radius": 0.9,
+    "crowdingLimit": 3.5,
+    "sensitivity": 0.42
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 1.0,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.018,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "shrub",
+    "canopyRadius": 0.55,
+    "shadeOpacity": 0.3,
+    "minSpacing": 0.45
+  },
+  "visual": {
+    "shape": "miremyrtle",
+    "color": [
+      0.353,
+      0.431,
+      0.29
+    ],
+    "color2": [
+      0.604,
+      0.627,
+      0.416
+    ],
+    "colorVariance": 0.06,
+    "height": 0.9
+  },
+  "tags": [
+    "plant",
+    "shrub",
+    "woody",
+    "bog",
+    "fen",
+    "aromatic"
+  ],
+  "postLife": {
+    "standingDays": 55,
+    "collapseDays": 7,
+    "fallenDays": 145,
+    "advancedDays": 24,
+    "coarseFraction": 0.5,
+    "decayHalfLifeMultiplier": 1.45,
+    "standingRetention": 0.88,
+    "deadColor": [
+      0.47,
+      0.34,
+      0.23
+    ],
+    "litterColorInfluence": 0.62,
+    "dryBleach": 0.22,
+    "wetDarken": 0.12
+  }
+}

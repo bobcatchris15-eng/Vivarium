@@ -37,7 +37,17 @@ public static class FaunaBodyProfiles
         // Explicit tissue optics are shared by production and previews. Keep
         // these separate from surface_family, which describes geometry masks.
         mat.SetShaderParameter("tissue_chitin", sp.Model is "beetle" or "isopod" or "pill_bug" or "silverfish" or "harvestman" or "springtail" ? 1f : 0f);
-        mat.SetShaderParameter("tissue_mucus", 0f);
+        // Amphibians, molluscs and annelids live under a continuous mucus film;
+        // damp-soil and semi-aquatic carapaces carry a thinner one. This selects
+        // the dual-roughness wet optics and warm backlight in fauna.gdshader.
+        mat.SetShaderParameter("tissue_mucus", sp.Model switch
+        {
+            "toad" or "salamander" or "newt" or "frog" => 0.88f,
+            "slug" or "snail" or "planarian" => 0.90f,
+            "worm" or "leech" => 0.80f,
+            "isopod" or "pill_bug" or "silverfish" or "springtail" => 0.25f,
+            _ => 0f
+        });
         mat.SetShaderParameter("tissue_aquatic", sp.Id is "emberglass_swimmer" or "glasscoil" or "glintfin" ? 1f : 0f);
         mat.SetShaderParameter("tissue_film_nm", sp.Model switch
         {

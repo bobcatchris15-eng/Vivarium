@@ -1,0 +1,103 @@
+{
+  "id": "slickmantle",
+  "name": "Slickmantle",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Thallose mat of dripping rock and bark.",
+  "description": "Flat olive tongues keep their stone perpetually glossy, even in drought, as if the rock sweated under them.",
+  "habitat": {
+    "substrates": {
+      "rock": 0.8,
+      "wood": 0.6,
+      "soil": 0.4
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.85,
+      "tolerance": 0.15
+    },
+    "light": {
+      "optimum": 0.25,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.35,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.55,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.4,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.35,
+    "maturityDays": 5,
+    "lifespanDays": 120,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.28,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 3,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.5,
+      "bonus": 0.25
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.05,
+    "maxHeight": 0.022,
+    "heightRule": "flat",
+    "water": {
+      "kWet": 7,
+      "kDry": 0.9,
+      "wMin": 0.4,
+      "wOpt": 0.82
+    },
+    "light": {
+      "k": 0.4,
+      "max": 0.7
+    },
+    "dormBrownDays": 2,
+    "dormDeathDays": 8,
+    "sporeRate": 0.002,
+    "moistureFeedback": 0,
+    "seedBiomass": 0.08
+  },
+  "visual": {
+    "shape": "slickmantle",
+    "color": [
+      0.333,
+      0.376,
+      0.227
+    ],
+    "color2": [
+      0.498,
+      0.545,
+      0.345
+    ],
+    "colorVariance": 0.05,
+    "height": 0.022
+  },
+  "tags": [
+    "moss",
+    "liverwort"
+  ]
+}

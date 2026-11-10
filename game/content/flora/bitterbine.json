@@ -1,0 +1,131 @@
+{
+  "id": "bitterbine",
+  "name": "Bitterbine",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Coarse vigorous twiner of rich ground.",
+  "description": "The bine climbs faster than it can thicken, slumping back in a tangle of papery cones that smell sharply bitter when crushed.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.5
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.7,
+      "tolerance": 0.24
+    },
+    "light": {
+      "optimum": 0.7,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.7,
+      "tolerance": 0.28
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.17,
+    "hardMinMoisture": 0.4
+  },
+  "growth": {
+    "ratePerDay": 0.34,
+    "maxBiomass": 1.25,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 7,
+    "lifespanDays": 360,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.48
+  },
+  "competition": {
+    "radius": 0.11,
+    "crowdingLimit": 4,
+    "sensitivity": 0.35
+  },
+  "proximity": [
+    {
+      "target": "embercrown",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "lanternbrush",
+      "radius": 3.0,
+      "bonus": 0.4
+    },
+    {
+      "target": "shadebell",
+      "radius": 2.5,
+      "bonus": 0.35
+    },
+    {
+      "target": "ringreed",
+      "radius": 2.5,
+      "bonus": 0.35
+    }
+  ],
+  "litterFraction": 0.8,
+  "sheddingPerDay": 0.015,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "bitterbine",
+    "color": [
+      0.42,
+      0.54,
+      0.24
+    ],
+    "color2": [
+      0.78,
+      0.72,
+      0.35
+    ],
+    "colorVariance": 0.08,
+    "height": 0.35
+  },
+  "tags": [
+    "plant",
+    "climber",
+    "sun_seeking"
+  ],
+  "climber": {
+    "searchRadius": 4,
+    "groundSpeedPerDay": 0.28,
+    "segmentLength": 0.06,
+    "attachmentRadius": 0.18,
+    "maxUnsupportedLength": 4.5,
+    "verticalGrowthMultiplier": 2.8,
+    "nodeCap": 200,
+    "populationCap": 8,
+    "supportTypes": [
+      "woody",
+      "log"
+    ],
+    "climbWeight": 1.0,
+    "driftWeight": 1.35,
+    "lightWeight": 0.7,
+    "wanderAmp": 0.16,
+    "wanderPeriod": 2.2,
+    "branchRate": 0.06,
+    "branchAngle": 38,
+    "lateralSpeed": 0.5,
+    "lateralClimb": 0.55,
+    "maxBranchOrder": 1,
+    "branchLength": 0.75,
+    "baseRadius": 0.02,
+    "stemTaper": 0.88,
+    "tipRadius": 0.0018,
+    "grabRadius": 0.1,
+    "seekRate": 0.85,
+    "stolonLength": 0.85
+  }
+}

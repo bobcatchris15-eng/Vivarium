@@ -1,0 +1,87 @@
+{
+  "id": "reekhorn",
+  "name": "Reekhorn",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Tall carrion-scented spike of wet litter.",
+  "description": "A cream horn crowned in glistening dark jelly and hung with a tattered lace skirt; its reek draws flies from across the island.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "soil": 1,
+      "wood": 0.5
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.68,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.45,
+      "tolerance": 2
+    },
+    "nutrients": {
+      "optimum": 0.2,
+      "tolerance": 0.2
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.7,
+    "maxBiomass": 0.45,
+    "initialBiomass": 0.03,
+    "declinePerDay": 0.8,
+    "maturityDays": 3,
+    "lifespanDays": 18,
+    "nutrientPerBiomass": 0.55,
+    "radiusAtMax": 0.09,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.6,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.18,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.55
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.03,
+  "grazingValue": 0.35,
+  "visual": {
+    "shape": "reekhorn",
+    "color": [
+      0.847,
+      0.796,
+      0.667
+    ],
+    "color2": [
+      0.431,
+      0.439,
+      0.251
+    ],
+    "colorVariance": 0.06,
+    "height": 0.22
+  },
+  "tags": [
+    "fungus",
+    "decomposer",
+    "stinkhorn",
+    "carrion_attractor"
+  ],
+  "decomposition": {
+    "radius": 0.5,
+    "fineMultiplier": 1.3,
+    "coarseMultiplier": 1.2,
+    "fruitMultiplier": 1.5
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "id": "rustbellow_moss",
+  "name": "Rustbellow moss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Acid-hummock moss of saturated peat.",
+  "description": "Rust-red and green mounds stand above the water film, and the hollow mat breathes water in and out with the water table.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.5
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.88,
+      "tolerance": 0.12
+    },
+    "light": {
+      "optimum": 0.62,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.12,
+      "tolerance": 0.25
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.6,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.3,
+    "maxBiomass": 0.8,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.3,
+    "maturityDays": 8,
+    "lifespanDays": 200,
+    "nutrientPerBiomass": 0.15,
+    "radiusAtMax": 0.2,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.35,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.28,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.45,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.05,
+    "maxHeight": 0.06,
+    "heightRule": "wet",
+    "water": {
+      "kWet": 8,
+      "kDry": 0.6,
+      "wMin": 0.45,
+      "wOpt": 0.85
+    },
+    "light": {
+      "k": 0.3,
+      "max": 0.9
+    },
+    "dormBrownDays": 2,
+    "dormDeathDays": 8,
+    "sporeRate": 0.002,
+    "moistureFeedback": 0,
+    "seedBiomass": 0.08
+  },
+  "visual": {
+    "shape": "rustbellow_moss",
+    "color": [
+      0.541,
+      0.294,
+      0.18
+    ],
+    "color2": [
+      0.431,
+      0.514,
+      0.282
+    ],
+    "colorVariance": 0.07,
+    "height": 0.06
+  },
+  "tags": [
+    "moss",
+    "bog"
+  ]
+}

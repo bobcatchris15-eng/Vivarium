@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Vivarium.Sim.Core;
 
@@ -81,6 +81,7 @@ public sealed class GuardianIndividual
         set { X = value.X; Y = value.Y; Z = value.Z; }
     }
 
+
     [JsonIgnore]
     public Vec2 PositionXZ => new(X, Z);
 
@@ -90,4 +91,13 @@ public sealed class GuardianIndividual
         get => new(TargetX, TargetY, TargetZ);
         set { TargetX = value.X; TargetY = value.Y; TargetZ = value.Z; }
     }
+
+
+    [JsonIgnore] public double CurrentSpeed { get; set; }
+    [JsonIgnore] public double VerticalOffset { get; set; }
+    [JsonIgnore] public double HopPhase { get; set; }
+    [JsonIgnore] public string LastConsumedDiet { get; set; } = "";
+    [JsonIgnore] public List<Vec2> RecentVisitedSites { get; set; } = new();
+
+
 }

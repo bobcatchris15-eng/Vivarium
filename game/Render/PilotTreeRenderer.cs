@@ -39,14 +39,39 @@ public partial class PilotTreeRenderer : Node3D
         _material.SetShaderParameter("hex_apothem", (float)world.Domain.Apothem);
         string foliageId = world.PilotTree.Def.Id is "basinwarden" or "cisternvault" or "rootcloister" ? "shadebell" : "embercrown";
         _foliageProfile = FloraVisualProfile.Synthesize(foliageId);
+
+        // Convert authored sRGB simulation palette to linear using SrgbToLinear() to preserve
+        // the natural green-to-red chroma ratio, avoiding washed-out grey-sage foliage.
         var foliage = world.PilotTree.Def.FoliageColor;
-        _foliageProfile.Top = new[] { (float)foliage.X, (float)foliage.Y, (float)foliage.Z };
-        _foliageProfile.Back = new[] { (float)foliage.X * 1.12f, (float)foliage.Y * 1.10f, (float)foliage.Z * .95f };
-        // The terrarium has still air; retain authored leaf curvature without wind animation.
+        var lin = new Color((float)foliage.X, (float)foliage.Y, (float)foliage.Z).SrgbToLinear();
+        var baseTint = new Vector3(lin.R, lin.G, lin.B) * 0.56f;
+        var backTint = new Vector3(
+            Mathf.Min(baseTint.X * 1.25f + 0.010f, 0.35f),
+            Mathf.Min(baseTint.Y * 1.22f + 0.015f, 0.42f),
+            Mathf.Min(baseTint.Z * 1.15f + 0.008f, 0.30f));
+
+        _foliageProfile.Top = new[] { baseTint.X, baseTint.Y, baseTint.Z };
+        _foliageProfile.Back = new[] { backTint.X, backTint.Y, backTint.Z };
+        _foliageProfile.CanopyOcclusion = 0.62f;
+        _foliageProfile.Transmission = 0.58f;
+        _foliageProfile.VeinStrength = 0.32f;
+
+        // Leaf material parameters for 3D crown layering, realistic leaf cupping, and interior shadow depth
         _leafMaterial = _foliageProfile.LeafMaterial(animated: false);
-        _leafMaterial.SetShaderParameter("lamina_curl_strength", 0f);
+        _leafMaterial.SetShaderParameter("top_pigment", baseTint);
+        _leafMaterial.SetShaderParameter("leaf_top", baseTint);
+        _leafMaterial.SetShaderParameter("back_pigment", backTint);
+        _leafMaterial.SetShaderParameter("leaf_back", backTint);
+        _leafMaterial.SetShaderParameter("lamina_curl_strength", 1.05f);
+        _leafMaterial.SetShaderParameter("canopy_occlusion", 0.62f);
+        _leafMaterial.SetShaderParameter("translucency", 0.58f);
+        _leafMaterial.SetShaderParameter("transmission", 0.58f);
+        _leafMaterial.SetShaderParameter("leaf_transmission", 0.58f);
+        _leafMaterial.SetShaderParameter("vein_contrast", 0.32f);
+        _leafMaterial.SetShaderParameter("vein_strength", 0.32f);
         _leafMaterial.SetShaderParameter("clip_to_hex", true);
         _leafMaterial.SetShaderParameter("hex_apothem", (float)world.Domain.Apothem);
+
         Tree = new MeshInstance3D { Name = "AncientPilotTree", Mesh = _foliageProfile.Compile(
             PilotTreeMeshes.BuildTrunkAndCrown(world), _material, _leafMaterial) };
         AddChild(Tree);

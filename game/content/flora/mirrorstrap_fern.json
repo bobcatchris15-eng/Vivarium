@@ -1,0 +1,107 @@
+{
+  "id": "mirrorstrap_fern",
+  "name": "Mirrorstrap fern",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Undivided glossy strap fern of shaded crevices.",
+  "description": "Broad undivided straps grow from cracks, varnished so deeply they mirror the light that reaches them; the dark midrib holds the two halves like a hinge.",
+  "habitat": {
+    "substrates": {
+      "rock": 0.9,
+      "soil": 0.7,
+      "wood": 0.4
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.62,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.28,
+      "tolerance": 0.26
+    },
+    "nutrients": {
+      "optimum": 0.45,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.22,
+    "maxBiomass": 1.2,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 240,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.28,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.9,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.8,
+      "bonus": 0.15
+    },
+    {
+      "target": "feature:water",
+      "radius": 1,
+      "bonus": 0.1
+    }
+  ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.025,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "mirrorstrap_fern",
+    "color": [
+      0.243,
+      0.361,
+      0.22
+    ],
+    "color2": [
+      0.475,
+      0.627,
+      0.416
+    ],
+    "colorVariance": 0.06,
+    "height": 0.4
+  },
+  "tags": [
+    "plant",
+    "fern",
+    "evergreen"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.45,
+      0.4,
+      0.24
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

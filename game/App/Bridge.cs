@@ -481,7 +481,16 @@ public static class Bridge
 
     public static string UserPath(string rel)
     {
-        // Scripted landscape captures must not touch player preferences, logs or saved worlds.
+        // Scripted captures use their own logs and player data.
+        int reviewIndex = System.Array.FindIndex(Main.UserArgs,
+            arg => arg is "--visual-review" or "--specimen-review" or "--guardian-review");
+        if (reviewIndex >= 0)
+        {
+            string root = reviewIndex + 1 < Main.UserArgs.Length && !Main.UserArgs[reviewIndex + 1].StartsWith("--", StringComparison.Ordinal)
+                ? Main.UserArgs[reviewIndex + 1]
+                : System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VivariumVisualReview");
+            return System.IO.Path.Combine(root, "user-data", rel);
+        }
         string? isolated = System.Array.IndexOf(Main.UserArgs, "--perf-test") >= 0 || System.Environment.GetEnvironmentVariable("VIVARIUM_LANDSCAPE_SCENARIO") != null
             ? System.Environment.GetEnvironmentVariable("VIVARIUM_BENCHMARK_USER_DIR") : null;
         return isolated != null ? System.IO.Path.Combine(isolated, rel) : ProjectSettings.GlobalizePath("user://" + rel);

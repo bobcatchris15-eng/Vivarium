@@ -1,0 +1,103 @@
+{
+  "id": "quillsedge",
+  "name": "Quillsedge",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Arching fine-bladed fountain sedge.",
+  "description": "Blades fine as quills fan out and fall back as they lengthen, and each spray carries a few small brown spikelets nodding at its tips.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.5
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.7,
+      "tolerance": 0.3
+    },
+    "light": {
+      "optimum": 0.7,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0.03,
+    "hardMinMoisture": 0.3,
+    "hardMaxMoisture": 0.97,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.28,
+    "maxBiomass": 1.35,
+    "initialBiomass": 0.055,
+    "declinePerDay": 0.28,
+    "maturityDays": 10,
+    "lifespanDays": 150,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.34,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.26,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.85
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.7,
+      "bonus": 0.18
+    }
+  ],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.02,
+  "grazingValue": 0.18,
+  "visual": {
+    "shape": "quillsedge",
+    "color": [
+      0.353,
+      0.478,
+      0.271
+    ],
+    "color2": [
+      0.62,
+      0.66,
+      0.42
+    ],
+    "colorVariance": 0.06,
+    "height": 0.5
+  },
+  "tags": [
+    "plant",
+    "sedge",
+    "riparian"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.6,
+      0.52,
+      0.32
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

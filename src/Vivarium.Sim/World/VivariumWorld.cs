@@ -41,6 +41,7 @@ public sealed class VivariumWorld
     public GuardianSystem GuardianSystem { get; }
     /// <summary>Fine coverage rasters (moss/lichen/slime), empty by default. See docs/overhaul/growth_models.md.</summary>
     public CoverageWorld Coverage { get; }
+    public FloraSpeciesPoolResult? SpeciesPool { get; private set; }
     public GenomeBank Genomes { get; } = new();
     public LineageBook Lineage { get; } = new();
     public EcologyTally Tally { get; set; } = new();
@@ -181,6 +182,8 @@ public sealed class VivariumWorld
         Mark("habitat");
         if (populate)
         {
+            // Deterministic per-seed flora mix so an island never carries the whole catalog.
+            w.SpeciesPool = FloraSpeciesPool.Select(w);
             w.CoverageSystem.SeedInitial();
             Mark("coverage");
             Populate.Starters(w);
@@ -338,6 +341,14 @@ public sealed class VivariumWorld
             if (!double.IsFinite(f.Energy) || f.Energy < 0) e.Add($"fauna {f.Id} invalid energy {f.Energy}");
             if (!Genomes.Contains(f.GenomeId)) e.Add($"fauna {f.Id} references missing genome {f.GenomeId}");
             if (f.Id.Serial > Ids.LastSerial) e.Add($"fauna {f.Id} id beyond allocator");
+        }
+        if (Guardian is { } guard)
+        {
+            if (!guard.Position.IsFinite) e.Add("guardian non-finite position");
+            else if (guard.Activity != GuardianActivity.Climb && !Domain.Contains(guard.PositionXZ)) e.Add($"guardian escaped the island at {guard.PositionXZ}");
+            if (!double.IsFinite(guard.Energy) || guard.Energy < 0) e.Add($"guardian invalid energy {guard.Energy}");
+            if (!double.IsFinite(guard.Hydration) || guard.Hydration < 0 || guard.Hydration > 1.01) e.Add($"guardian invalid hydration {guard.Hydration}");
+            if (GuardianCatalog.Find(guard.ArchetypeId) == null) e.Add($"guardian unknown archetype {guard.ArchetypeId}");
         }
         foreach (var g in Genomes.Ordered())
             foreach (var t in g.Traits)

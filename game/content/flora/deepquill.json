@@ -1,0 +1,103 @@
+{
+  "id": "deepquill",
+  "name": "Deepquill",
+  "archetype": "plant",
+  "placementGroup": "waterside_aquatic",
+  "role": "Deep-water plume of still pools.",
+  "description": "Whorls of stiff forked quills climb dark stems in deep water; the plumes sway with currents too slow for the eye to catch.",
+  "habitat": {
+    "substrates": {
+      "water": 1,
+      "soil": 0.8
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 1,
+      "tolerance": 0.05
+    },
+    "light": {
+      "optimum": 0.45,
+      "tolerance": 0.35
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.35
+    },
+    "minWaterDepth": 0.25,
+    "maxWaterDepth": 1.3,
+    "hardMinMoisture": 0.95,
+    "minSuitability": 0.16
+  },
+  "growth": {
+    "ratePerDay": 0.32,
+    "maxBiomass": 1.4,
+    "initialBiomass": 0.06,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 200,
+    "nutrientPerBiomass": 0.24,
+    "radiusAtMax": 0.22,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 5,
+    "radius": 0.45,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.22,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.65
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.6,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.8,
+  "grazingValue": 0.25,
+  "visual": {
+    "shape": "deepquill",
+    "color": [
+      0.18,
+      0.35,
+      0.27
+    ],
+    "color2": [
+      0.35,
+      0.54,
+      0.42
+    ],
+    "colorVariance": 0.05,
+    "height": 0.5
+  },
+  "tags": [
+    "plant",
+    "aquatic",
+    "submerged"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.38,
+      0.22
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

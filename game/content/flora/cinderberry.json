@@ -1,0 +1,115 @@
+{
+  "id": "cinderberry",
+  "name": "Cinderberry",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Low runner with scarlet fruit and trifoliate leaves.",
+  "description": "Red fruit sits on the ground under three-lobed leaves; the runners root as they run, and the seeds travel in fur and feathers.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "gravel": 0.4
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.45,
+      "tolerance": 0.28
+    },
+    "light": {
+      "optimum": 0.68,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.45,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.28,
+    "maxBiomass": 0.7,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.25,
+    "maturityDays": 8,
+    "lifespanDays": 250,
+    "nutrientPerBiomass": 0.18,
+    "radiusAtMax": 0.3,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 3,
+    "radius": 0.5,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 2.2,
+    "sensitivity": 0.7
+  },
+  "proximity": [],
+  "litterFraction": 0.7,
+  "grazingValue": 0.4,
+  "visual": {
+    "shape": "cinderberry",
+    "color": [
+      0.24,
+      0.43,
+      0.23
+    ],
+    "color2": [
+      0.91,
+      0.93,
+      0.89
+    ],
+    "colorVariance": 0.06,
+    "height": 0.1
+  },
+  "tags": [
+    "plant",
+    "flowering",
+    "creeper"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.48,
+      0.35,
+      0.2
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  },
+  "reproduction": {
+    "form": "berry",
+    "dispersal": "animal",
+    "reservePerDay": 0.016,
+    "pulseThreshold": 0.06,
+    "maxAttachedMass": 0.14,
+    "developmentDays": 10,
+    "ripeDays": 18,
+    "cooldownDays": 24,
+    "seedFraction": 0.16,
+    "viability": 0.6,
+    "dormancyDays": 12,
+    "dispersalRadius": 1.4,
+    "fruitColor": [
+      0.78,
+      0.12,
+      0.12
+    ],
+    "displaySize": 0.012,
+    "foodValue": 1.4
+  }
+}

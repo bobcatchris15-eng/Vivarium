@@ -1,0 +1,83 @@
+{
+  "id": "capstar_moss",
+  "name": "Capstar moss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Star-leaved tall moss ripening gold spore-capsules.",
+  "description": "Spear-straight shoots open into star-leaved heads; each fertile shoot raises a long seta and a nodding gold cap that sparks in low sun.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.5
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.7,
+      "tolerance": 0.2
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.3,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.22
+  },
+  "growth": {
+    "ratePerDay": 0.14,
+    "maxBiomass": 0.45,
+    "initialBiomass": 0.02,
+    "declinePerDay": 0.2,
+    "maturityDays": 26,
+    "lifespanDays": 90,
+    "nutrientPerBiomass": 0.16,
+    "radiusAtMax": 0.19,
+    "minRadius": 0.03
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.26,
+    "propagules": 2,
+    "minBiomassFraction": 0.45
+  },
+  "competition": {
+    "radius": 0.16,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.45
+  },
+  "proximity": [
+    {
+      "target": "feature:rock",
+      "radius": 0.5,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.6,
+  "sheddingPerDay": 0.008,
+  "grazingValue": 0.02,
+  "visual": {
+    "shape": "capstar_moss",
+    "color": [
+      0.173,
+      0.29,
+      0.157
+    ],
+    "color2": [
+      0.788,
+      0.663,
+      0.29
+    ],
+    "colorVariance": 0.07,
+    "height": 0.12
+  },
+  "tags": [
+    "moss",
+    "sporophyte"
+  ]
+}

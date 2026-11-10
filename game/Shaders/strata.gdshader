@@ -78,6 +78,7 @@ void vertex() {
 
 void fragment() {
     float along = UV.x, depth = UV.y, layer = UV2.x, inLayer = UV2.y;
+    float cam_dist = distance(CAMERA_POSITION_WORLD, world_pos);
     // This parameter is shared by both vertices at each horizon: layer i at depth 1
     // and layer i+1 at depth 0 both resolve to the same material state.
     float layerPosition = layer + inLayer;
@@ -118,7 +119,7 @@ void fragment() {
     vec2 pomSoil = uvSoil, pomGravel = uvGravel, pomRock = uvRock;
     float pomShadow = 1.0;
     float shSoil = 1.0, shGravel = 1.0, shRock = 1.0;
-    if (pom_height > 0.0001) {
+    if (pom_height > 0.0001 && cam_dist < 5.0) {
         if (wSoil > 0.02) pomSoil = pom_raymarch(soil_hgt, uvSoil, ts_view, pom_height, pom_steps, shSoil, ts_light);
         if (wGravel > 0.02) pomGravel = pom_raymarch(gravel_hgt, uvGravel, ts_view, pom_height * 0.85, pom_steps, shGravel, ts_light);
         if (wRock > 0.02) pomRock = pom_raymarch(rock_hgt, uvRock, ts_view, pom_height * 0.70, pom_steps, shRock, ts_light);
@@ -227,6 +228,12 @@ void fragment() {
     float rootOrganic = 0.88 + 0.12 * vnoise(vec2(along * 0.8, depth * 4.0) + 9.0);
     col = mix(rim_color * rootOrganic, col, smoothstep(0.0, 0.038, depth));
 
+    // Turf overhang: soft contact shadow under the living crown along the top
+    // cut rim, broken up so it never reads as an inked border.
+    float rim_shadow = (1.0 - smoothstep(0.0, 0.035, depth))
+        * (0.70 + 0.30 * vnoise(vec2(along * 1.3, 4.7)));
+    col *= mix(1.0, 0.78, rim_shadow);
+
     // Groundwater seepage: a noisy water line plus vertical damp streaks below the table. Peak clearcoat
     // is 0.65 with a much tighter lobe than the dry soil, and the albedo darkens as the pores saturate.
     float tableLine = water_table + (vnoise(vec2(along * 1.7, 7.3)) - 0.5) * 0.08;
@@ -240,11 +247,15 @@ void fragment() {
 
     ALBEDO = col;
     EMISSION = vec3(0.0);
-    ROUGHNESS = rough;
     SPECULAR = 0.5;
     CLEARCOAT = 0.65 * seep;
     CLEARCOAT_ROUGHNESS = mix(0.28, 0.05, seep);
-    AO = clamp(matAo * mix(0.55, 1.0, pomShadow), 0.0, 1.0);
+    AO = clamp(matAo * mix(0.55, 1.0, pomShadow) * mix(0.78, 1.0, rim_shadow), 0.0, 1.0);
     AO_LIGHT_AFFECT = 0.30;
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+
+    // Specular anti-aliasing: horizon detail is high-frequency, so widen the
+    // lobe where the normal varies faster than a pixel.
+    float n_var = clamp(dot(dFdx(NORMAL), dFdx(NORMAL)) + dot(dFdy(NORMAL), dFdy(NORMAL)), 0.0, 0.25);
+    ROUGHNESS = clamp(sqrt(rough * rough + n_var * 0.5), 0.04, 1.0);
 }

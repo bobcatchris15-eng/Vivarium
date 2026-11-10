@@ -372,12 +372,12 @@ public static partial class OrganismMeshes
         double yTop = boleHeight * 0.68;      // Upper apex commissure (~1.91m)
         double cleftH = yTop - yBot;
 
-        int sectors = detail switch { 2 => 24, 1 => 36, _ => 48 };
-        int botRings = detail switch { 2 => 5, 1 => 7, _ => 9 };
-        int cleftRings = detail switch { 2 => 16, 1 => 22, _ => 32 };
-        int topRings = detail switch { 2 => 10, 1 => 14, _ => 18 };
+        int sectors = detail switch { 2 => 18, 1 => 22, _ => 28 };
+        int botRings = detail switch { 2 => 4, 1 => 5, _ => 6 };
+        int cleftRings = detail switch { 2 => 14, 1 => 18, _ => 22 };
+        int topRings = detail switch { 2 => 8, 1 => 10, _ => 12 };
         int totalRings = botRings + cleftRings + topRings;
-        int cSub = detail switch { 2 => 6, 1 => 8, _ => 12 };
+        int cSub = detail switch { 2 => 4, 1 => 5, _ => 7 };
 
         double furrowPhase = Rng.HashUnit(seed, 101, 0) * Math.PI * 2.0;
         double barkPhase = Rng.HashUnit(seed, 102, 0) * Math.PI * 2.0;
@@ -768,7 +768,7 @@ public static partial class OrganismMeshes
         // -------------------------------------------------------------------------
         // 3. Pollard Bolling Rolled Rim at Top of Bole (Multi-ring curved lip)
         // -------------------------------------------------------------------------
-        int rSub = detail == 2 ? 2 : (detail == 1 ? 3 : 4);
+        int rSub = detail == 2 ? 2 : (detail == 1 ? 2 : 3);
         var bollingGrid = new int[rSub + 1, sectors + 1];
 
         for (int j = 0; j <= sectors; j++)
@@ -816,7 +816,7 @@ public static partial class OrganismMeshes
         // -------------------------------------------------------------------------
         // 4. Contoured Cavern Basin Floor (Rises to meet fourchette threshold)
         // -------------------------------------------------------------------------
-        int floorRings = detail == 2 ? 3 : (detail == 1 ? 4 : 5);
+        int floorRings = detail == 2 ? 2 : (detail == 1 ? 3 : 4);
         int floorSectors = sectors;
         var floorGrid = new int[floorRings + 1, floorSectors + 1];
 
@@ -1097,14 +1097,15 @@ public static partial class OrganismMeshes
     {
         if (length <= 1e-4 || width <= 1e-5) return;
 
-        int rows = detail == 2 ? 7 : (detail == 1 ? 9 : 12);
-        int cols = detail == 2 ? 3 : 5;
+        int rows = detail switch { 2 => 4, 1 => 4, _ => 5 };
+        int cols = detail switch { 2 => 3, 1 => 3, _ => 3 };
 
         var side = leafNormal.Cross(leafDir);
         if (side.LengthSq < 1e-6) side = leafDir.Cross(Vec3.Up);
         if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
         side = side.Normalized();
         var up = side.Cross(leafDir).Normalized();
+        if (up.Y < 0.0) { up = -up; side = -side; }
 
         int leafStartVertex = m.VertexCount;
         int leafStartIndex = m.TriangleCount * 3;
@@ -1112,10 +1113,10 @@ public static partial class OrganismMeshes
         double OakWidthProfile(double t)
         {
             if (t <= 0.0) return 0.0;
-            if (t < 0.10) return 0.05 * (t / 0.10); // Slender petiole stalk
+            if (t < 0.12) return 0.10 * (t / 0.12); // Slender petiole stalk
 
-            ReadOnlySpan<double> keyT = [0.10, 0.14, 0.20, 0.35, 0.44, 0.58, 0.68, 0.82, 0.89, 0.95, 1.00];
-            ReadOnlySpan<double> keyW = [0.05, 0.36, 0.18, 0.75, 0.26, 1.00, 0.32, 0.80, 0.36, 0.48, 0.00];
+            ReadOnlySpan<double> keyT = [0.12, 0.22, 0.38, 0.52, 0.70, 0.85, 1.00];
+            ReadOnlySpan<double> keyW = [0.15, 0.65, 0.35, 1.00, 0.45, 0.75, 0.00];
 
             for (int k = 0; k < keyT.Length - 1; k++)
             {
@@ -1166,13 +1167,15 @@ public static partial class OrganismMeshes
                 var offsetUp = nSpine * (cup + lobeLift + midribLift);
                 var p = pSpine + offsetSide + offsetUp;
 
-                var n = (nSpine * (0.90 + 0.10 * (1.0 - absX)) - sSpine * (x * 0.35)).Normalized();
+                var n = (Vec3.Up * 0.88 + nSpine * 0.30 - sSpine * (x * 0.25)).Normalized();
+                if (n.Dot(up) < 0) n = -n;
+                if (n.Y < 0.20) n = (n + Vec3.Up * 0.50).Normalized();
 
                 var bodyCol = Primitives.Mix(colTopBase, colTopTip, t);
-                if (absX > 0.65)
+                if (absX > 0.50)
                 {
-                    double marginFrac = (absX - 0.65) / 0.35;
-                    bodyCol = Primitives.Mix(bodyCol, HollowOakMargin, marginFrac * 0.50);
+                    double marginFrac = (absX - 0.50) / 0.50;
+                    bodyCol = Primitives.Mix(bodyCol, HollowOakMargin, marginFrac * 0.55);
                 }
                 else if (absX < 0.25)
                 {
@@ -1202,7 +1205,11 @@ public static partial class OrganismMeshes
     }
 
     /// <summary>
-    /// Builds a natural Quercus oak branchlet spray with radiating rosette and lateral leaves.
+    /// Builds a natural Quercus oak branchlet spray with broad radiating and lateral leaves.
+    /// Forms overlapping, billowing foliage masses.
+    /// <summary>
+    /// Builds a natural Quercus oak branchlet spray with broad radiating and lateral leaves.
+    /// Forms overlapping, billowing foliage masses (dense, layered storybook oak leaf clouds).
     /// </summary>
     private static void HollowcrownOakSpray(
         MeshData m,
@@ -1216,60 +1223,217 @@ public static partial class OrganismMeshes
     {
         var underColor = Primitives.Mix(c2, HollowOakUnder, 0.50);
         var topBaseColor = Primitives.Mix(c1, HollowOakTopBase, 0.45);
-        var topTipColor = Primitives.Mix(c1, HollowOakTopTip, 0.40);
+        var topTipColor = Primitives.Mix(c1, new[] { 0.38, 0.58, 0.24 }, 0.50); // warm golden-olive sunlit tips
 
-        var fwd = tipDir.Normalized();
+        var fwd = tipDir.LengthSq > 1e-6 ? tipDir.Normalized() : Vec3.Up;
         var up = Vec3.Up;
         var side = fwd.Cross(up).Normalized();
-        if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0);
+        if (side.LengthSq < 1e-6) side = fwd.Cross(new Vec3(1, 0, 0));
+        side = side.Normalized();
         var norm = side.Cross(fwd).Normalized();
+        if (norm.Y < 0) { norm = -norm; side = -side; }
 
-        int termLeaves = detail == 2 ? 4 : (detail == 1 ? 6 : 8);
+        // 1. Broad terminal fan of Quercus leaves radiating in a rounded dome / fan
+        int termLeaves = detail switch { 2 => 3, 1 => 5, _ => 7 };
         for (int l = 0; l < termLeaves; l++)
         {
-            double angle = 2.0 * Math.PI * l / termLeaves + Rng.HashUnit(seed, (ulong)(l * 19 + 5), 0) * 0.25;
-            double pitch = 0.52 + 0.35 * Rng.HashUnit(seed, (ulong)(l * 23 + 7), 0);
-            var rad = (side * Math.Cos(angle) + norm * Math.Sin(angle)).Normalized();
-            var lDir = (rad * Math.Sin(pitch) + fwd * Math.Cos(pitch)).Normalized();
-            var lNorm = (Vec3.Up * 0.80 + rad * 0.40).Normalized();
+            double fanFrac = (termLeaves == 1) ? 0.0 : ((double)l / (termLeaves - 1) * 2.0 - 1.0);
+            double fanAngle = fanFrac * (Math.PI * 0.55) + Rng.HashUnit(seed, (ulong)(l * 19 + 5), 0) * 0.15;
+            double pitch = 0.20 + 0.22 * Rng.HashUnit(seed, (ulong)(l * 23 + 7), 0);
 
-            double lLen = (0.24 + 0.04 * Rng.HashUnit(seed, (ulong)(l * 31 + 1), 0)) * scale;
-            double lWid = lLen * 0.52;
+            var horiz = (fwd * Math.Cos(fanAngle) + side * Math.Sin(fanAngle)).Normalized();
+            var lDir = (horiz * Math.Cos(pitch) + Vec3.Up * Math.Sin(pitch)).Normalized();
+            var lNorm = (Vec3.Up * 0.88 + horiz * 0.25).Normalized();
+
+            double lLen = (0.28 + 0.05 * Rng.HashUnit(seed, (ulong)(l * 31 + 1), 0)) * scale;
+            double lWid = lLen * 0.55;
             ulong lSeed = Rng.Mix(seed, (ulong)(l * 101 + 3));
 
             HollowcrownOakLeaf(m, tipPos, lDir, lNorm, lLen, lWid, lSeed,
                 topBaseColor, topTipColor, underColor, detail);
         }
 
-        int lateralLeaves = detail == 2 ? 3 : (detail == 1 ? 5 : 6);
-        for (int ll = 0; ll < lateralLeaves; ll++)
+        // 2. Layered lateral spur pads: short lateral side twigs, each carrying a horizontal pair/trio of leaves
+        int spurCount = detail switch { 2 => 1, 1 => 2, _ => 3 };
+        for (int sp = 0; sp < spurCount; sp++)
         {
-            double backFrac = (ll + 1) * (0.075 * scale);
-            var atPos = tipPos - fwd * backFrac;
+            double sideSign = (sp % 2 == 0) ? 1.0 : -1.0;
+            double backDist = (0.06 + sp * 0.05) * scale;
+            double sideDist = (0.05 + sp * 0.02) * scale;
+            var spurNode = tipPos - fwd * backDist + side * (sideSign * sideDist) + Vec3.Up * 0.015;
 
-            double sideSign = (ll % 2 == 0) ? 1.0 : -1.0;
-            double lAz = sideSign * (0.65 + 0.30 * Rng.HashUnit(seed, (ulong)(ll * 41 + 11), 0));
-            var latDir = (side * Math.Sin(lAz) + fwd * (0.35 + 0.25 * Math.Cos(lAz)) - Vec3.Up * 0.12).Normalized();
-            var latNorm = (Vec3.Up * 0.85 + side * (sideSign * 0.40)).Normalized();
+            int leavesOnSpur = detail switch { 2 => 2, 1 => 2, _ => 3 };
+            for (int sl = 0; sl < leavesOnSpur; sl++)
+            {
+                double spurAng = (sl - (leavesOnSpur - 1) * 0.5) * 0.45;
+                var spurHoriz = (side * (sideSign * 0.85) + fwd * (0.35 + spurAng)).Normalized();
+                double spurPitch = 0.15 + 0.18 * Rng.HashUnit(seed, (ulong)(sp * 41 + sl * 17 + 11), 0);
+                var spurLDir = (spurHoriz * Math.Cos(spurPitch) + Vec3.Up * Math.Sin(spurPitch)).Normalized();
+                var spurLNorm = (Vec3.Up * 0.90 + spurHoriz * 0.20).Normalized();
 
-            double lLen = (0.22 + 0.03 * Rng.HashUnit(seed, (ulong)(ll * 53 + 9), 0)) * scale;
-            double lWid = lLen * 0.50;
-            ulong lSeed = Rng.Mix(seed, (ulong)(ll * 211 + 17));
+                double lLen = (0.26 + 0.04 * Rng.HashUnit(seed, (ulong)(sp * 53 + sl * 37 + 9), 0)) * scale;
+                double lWid = lLen * 0.52;
+                ulong lSeed = Rng.Mix(seed, (ulong)(sp * 211 + sl * 103 + 17));
 
-            HollowcrownOakLeaf(m, atPos, latDir, latNorm, lLen, lWid, lSeed,
-                topBaseColor, topTipColor, underColor, detail);
+                HollowcrownOakLeaf(m, spurNode, spurLDir, spurLNorm, lLen, lWid, lSeed,
+                    topBaseColor, topTipColor, underColor, detail);
+            }
         }
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Crown & Pollard Bolling Scaffold Limbs & Spreading Boughs
+    // Bracket Fungi, Acorns & Pollard Bolling Scaffold Crown
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Builds the crown:
-    /// - 5 Primary scaffold limbs launching directly from the swollen bolling knuckles with wide fluted branch collars
-    /// - Smoothly forking secondary and tertiary boughs with swollen fork collars arching into a spreading canopy
-    /// - High-density Quercus oak foliage sprays and epicormic rosettes forming a lush dome
+    /// Sculpted tier of warm amber-rimmed bracket / shelf fungi (Polypore fans, UV2 = (1.25, 0.85))
+    /// clutching the bark of the bole knuckles, trunk flank, or muscular boughs.
+    /// </summary>
+    private static void HollowcrownShelfCluster(
+        MeshData m,
+        Vec3 centerPos,
+        Vec3 rad,
+        Vec3 ortho,
+        double baseRadius,
+        Rng rng,
+        int detail)
+    {
+        int shelves = detail == 2 ? 2 : (2 + rng.NextInt(2));
+        for (int s = 0; s < shelves; s++)
+        {
+            int shelfStart = m.VertexCount;
+            double sY = centerPos.Y - s * rng.Range(0.04, 0.07);
+            var shelfBase = new Vec3(centerPos.X, sY, centerPos.Z) + rad * 0.01;
+            double fanReach = baseRadius * rng.Range(0.12, 0.18) * (1.0 - s * 0.18);
+
+            int fanRings = detail == 2 ? 2 : 3;
+            int fanSecs = detail == 2 ? 4 : 6;
+            var shelfGrid = new int[fanRings + 1, fanSecs + 1];
+
+            var colAmberRim = new[] { 0.82, 0.62, 0.28 };
+            var colChestnut = new[] { 0.32, 0.18, 0.10 };
+            var colBase     = new[] { 0.20, 0.12, 0.08 };
+
+            for (int fr = 0; fr <= fanRings; fr++)
+            {
+                double rFrac = fr / (double)fanRings;
+                double dip = -fanReach * 0.15 * Math.Pow(rFrac, 1.5);
+                for (int fs = 0; fs <= fanSecs; fs++)
+                {
+                    double uSec = fs / (double)fanSecs;
+                    double ang = (uSec - 0.5) * Math.PI * 0.95;
+                    double cosA = Math.Cos(ang);
+                    double sinA = Math.Sin(ang);
+
+                    var pt = shelfBase + (rad * cosA + ortho * sinA) * (rFrac * fanReach) + Vec3.Up * dip;
+                    var n = (Vec3.Up * 0.88 + rad * (cosA * 0.35) + ortho * (sinA * 0.35)).Normalized();
+
+                    var col = Primitives.Mix(colBase, colChestnut, rFrac);
+                    col = Primitives.Mix(col, colAmberRim, Math.Pow(rFrac, 2.5));
+                    if (rFrac > 0.85) col = Primitives.Mix(col, new[] { 0.90, 0.78, 0.45 }, (rFrac - 0.85) / 0.15);
+
+                    shelfGrid[fr, fs] = m.AddVertex(pt, n, col, 1.0, rFrac, uSec, 1.25, 0.85);
+                }
+            }
+
+            for (int fr = 0; fr < fanRings; fr++)
+            {
+                for (int fs = 0; fs < fanSecs; fs++)
+                {
+                    int a = shelfGrid[fr, fs];
+                    int b = shelfGrid[fr, fs + 1];
+                    int d = shelfGrid[fr + 1, fs];
+                    int e = shelfGrid[fr + 1, fs + 1];
+                    m.AddTriangle(a, b, d);
+                    m.AddTriangle(b, e, d);
+                }
+            }
+            m.EssentialSpans.Add((shelfStart, m.VertexCount - shelfStart));
+        }
+    }
+
+    /// <summary>
+    /// Sculpted tiers of warm amber-rimmed bracket / shelf fungi (Polypore fans, UV2 = (1.25, 0.85))
+    /// growing on the gnarled bolling knuckles and trunk flank.
+    /// </summary>
+    private static void HollowcrownBracketFungi(
+        MeshData m,
+        Vec3 basePoint,
+        double boleHeight,
+        double baseRadius,
+        Rng rng,
+        int detail)
+    {
+        int numClusters = detail == 2 ? 3 : 6;
+        for (int c = 0; c < numClusters; c++)
+        {
+            double tH = (c < 3) ? rng.Range(0.72, 0.90) : rng.Range(0.35, 0.60);
+            double az = (c * (Math.Tau / numClusters) + rng.Range(-0.25, 0.25) + HollowcrownBaseKnuckleAz);
+            double cleftDiff = Math.Abs(az - HollowcrownOpenDir);
+            if (cleftDiff > Math.PI) cleftDiff = 2.0 * Math.PI - cleftDiff;
+            if (cleftDiff < 0.45) az += 0.90;
+
+            var rad = HollowcrownRadial(az);
+            var ortho = HollowcrownRadial(az + Math.PI * 0.5);
+            double rTrunk = HollowcrownOuterRadius(tH, az, baseRadius, boleHeight);
+            var centerPos = HollowcrownTrunkCenter(tH, boleHeight, baseRadius, basePoint) + rad * rTrunk;
+
+            HollowcrownShelfCluster(m, centerPos, rad, ortho, baseRadius, rng, detail);
+        }
+    }
+
+    /// <summary>
+    /// Clusters of glossy bronze-gold acorns (UV2 = (1.35, 0.90)) in textured cups (UV2 = (2.0, 0.0))
+    /// hanging among the oak leaf clusters.
+    /// </summary>
+    private static void HollowcrownAcornCluster(MeshData m, Vec3 attach, Vec3 branchDir, Rng rng, int detail)
+    {
+        int acornStart = m.VertexCount;
+        var outN = branchDir.Normalized();
+        var hangDir = (outN * 0.25 - Vec3.Up * 0.90).Normalized();
+        var flat = HollowcrownRadial(rng.Range(0, Math.Tau));
+
+        int numAcorns = 2 + rng.NextInt(2);
+        var cupCol = new[] { 0.28, 0.20, 0.13 };
+        var nutCol = new[] { 0.62, 0.44, 0.18 };
+        var nutHi  = new[] { 0.76, 0.58, 0.24 };
+
+        for (int a = 0; a < numAcorns; a++)
+        {
+            double az = a * (Math.Tau / numAcorns) + rng.Range(-0.2, 0.2);
+            var dir = (hangDir * 0.80 + flat * (Math.Cos(az) * 0.35) + branchDir.Cross(Vec3.Up) * (Math.Sin(az) * 0.35)).Normalized();
+            double stalkLen = rng.Range(0.015, 0.030);
+            var cupBase = attach + dir * stalkLen;
+
+            double cupR = rng.Range(0.010, 0.014);
+            double cupH = cupR * 0.75;
+            var nutCenter = cupBase + dir * (cupH * 0.55);
+
+            Primitives.Tube(m, new[] { cupBase, cupBase + dir * cupH }, new[] { cupR * 0.75, cupR }, 4,
+                (i, v) => (cupCol, 1.0, (double)i, v, 2.0, 0.0));
+
+            double nutR = cupR * 0.88;
+            double nutLen = nutR * rng.Range(1.35, 1.65);
+            int nutVertexStart = m.VertexCount;
+            Primitives.Ellipsoid(m, nutCenter + dir * (nutLen * 0.30), new Vec3(nutR, nutLen * 0.55, nutR), 2, 4,
+                (u, v) =>
+                {
+                    double hi = Math.Pow(Math.Max(0.0, 1.0 - u), 2.0) * 0.5 + v * 0.12;
+                    return (Primitives.Mix(nutCol, nutHi, hi), 1.0, u, v, 1.35, 0.90);
+                });
+            NewFloraMarkOrgan(m, nutVertexStart, m.VertexCount - nutVertexStart);
+        }
+        m.EssentialSpans.Add((acornStart, m.VertexCount - acornStart));
+    }
+
+    /// <summary>
+    /// Builds the ancient pollard oak crown (Quercus robur):
+    /// - Massive knurled, twisting boughs launching directly from bolling knuckles with wide flared collars (1.45x)
+    /// - Sinuous muscular boughs that cup and frame the central hollow bowl naturally
+    /// - Smooth tapering from heavy primary boughs into secondary and tertiary shoots
+    /// - Dense, lush, layered Quercus oak leaf clouds (no bottle-brush sticks!)
+    /// - Shelf / bracket fungi clutching the bark at knurled bough crotches
+    /// - Pendant clusters of bronze-gold acorns
     /// </summary>
     private static void HollowcrownCrown(
         MeshData m,
@@ -1283,99 +1447,143 @@ public static partial class OrganismMeshes
         int detail,
         bool juvenile)
     {
-        int numLimbs = juvenile ? 4 : 5;
+        int numLimbs = juvenile ? 4 : 6;
         double baseAz = HollowcrownBaseKnuckleAz;
+        int acornBudget = juvenile ? 16 : 42;
+        int acornsBuilt = 0;
 
         for (int k = 0; k < numLimbs; k++)
         {
-            double lAz = baseAz + (2.0 * Math.PI * k / numLimbs) + rng.Range(-0.03, 0.03);
+            double lAz = baseAz + (2.0 * Math.PI * k / numLimbs) + rng.Range(-0.06, 0.06);
             var outward = HollowcrownRadial(lAz);
             var ortho = HollowcrownRadial(lAz + Math.PI * 0.5);
 
-            // Scaffold limb launches strictly from INSIDE the swollen bolling knuckle wall
             double yKnuckle = HollowcrownTopRimY(lAz, boleHeight);
             double rKnuckle = (HollowcrownOuterRadius(0.96, lAz, baseRadius, boleHeight)
-                             + (HollowcrownMeanOuterRadius(0.96, baseRadius) - baseRadius * 0.25)) * 0.50; // Centered in knuckle wall
+                             + (HollowcrownMeanOuterRadius(0.96, baseRadius) - baseRadius * 0.25)) * 0.50;
             var pCenterKnuckle = HollowcrownTrunkCenter(0.94, boleHeight, baseRadius, basePoint);
-            var pRoot = new Vec3(pCenterKnuckle.X + outward.X * rKnuckle, yKnuckle - boleHeight * 0.06, pCenterKnuckle.Z + outward.Z * rKnuckle);
+            var pRoot = new Vec3(pCenterKnuckle.X + outward.X * rKnuckle, yKnuckle - boleHeight * 0.04, pCenterKnuckle.Z + outward.Z * rKnuckle);
 
-            double limbReach = (juvenile ? 1.05 : 1.50) * rng.Range(0.92, 1.08);
-            double limbRise = (juvenile ? 0.70 : 1.05) * rng.Range(0.88, 1.12);
+            // Primary knurled limb: heavy, muscular limb arching outward and framing the hollow bowl
+            double elbowReach = (juvenile ? 0.55 : 0.88) * rng.Range(0.92, 1.08);
+            double elbowRise = (juvenile ? 0.38 : 0.55) * rng.Range(0.88, 1.12);
+            var pElbow = pRoot + outward * elbowReach + ortho * rng.Range(-0.10, 0.10) + Vec3.Up * elbowRise;
 
-            var pLimbEnd = pRoot + outward * limbReach + ortho * rng.Range(-0.15, 0.15) + Vec3.Up * limbRise;
+            var limbStartDir = (outward * 0.55 + Vec3.Up * 0.80).Normalized();
+            var cLimb0 = pRoot + limbStartDir * (elbowReach * 0.42);
+            var elbowDir = (outward * 0.80 + Vec3.Up * 0.50).Normalized();
+            var cLimb1 = pElbow - elbowDir * (elbowReach * 0.36);
 
-            // Steep launch upward, graceful spreading arch outward
-            var limbStartDir = (outward * 0.30 + Vec3.Up * 0.95).Normalized();
-            var cLimb0 = pRoot + limbStartDir * (limbReach * 0.45);
-            var limbEndDir = (outward * 0.85 + Vec3.Up * 0.35).Normalized();
-            var cLimb1 = pLimbEnd - limbEndDir * (limbReach * 0.38);
-
-            int limbStations = detail == 2 ? 6 : (detail == 1 ? 8 : 10);
-            var limbPath = HollowcrownSampleBezier(pRoot, cLimb0, cLimb1, pLimbEnd, limbStations);
+            int limbStations = detail == 2 ? 4 : (detail == 1 ? 5 : 6);
+            var limbPath = HollowcrownSampleBezier(pRoot, cLimb0, cLimb1, pElbow, limbStations);
             var limbRadii = new double[limbStations];
 
-            // Sized to remain nested strictly within the swollen knuckle wall (zero protruding skirt)
-            double limbBaseR = baseRadius * (juvenile ? 0.19 : 0.23);
-            double limbTipR = limbBaseR * 0.34;
+            double limbBaseR = baseRadius * (juvenile ? 0.25 : 0.32);
+            double elbowR = limbBaseR * 0.65;
 
             for (int s = 0; s < limbStations; s++)
             {
                 double st = s / (double)(limbStations - 1);
-                // Modest basal collar flare that stays fully inside the knuckle
-                double collarFlare = 1.0 + 0.22 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.25), 1.8);
-                limbRadii[s] = MathD.Lerp(limbBaseR, limbTipR, Math.Pow(st, 0.80)) * collarFlare;
+                double collarFlare = 1.0 + 0.45 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.25), 1.8);
+                double elbowSwell = 1.0 + 0.18 * Math.Pow(Math.Max(0.0, (st - 0.70) / 0.30), 1.5);
+                limbRadii[s] = MathD.Lerp(limbBaseR, elbowR, Math.Pow(st, 0.82)) * collarFlare * elbowSwell;
             }
 
             int limbStemStart = m.VertexCount;
-            HollowcrownWoodStem(m, limbPath, limbRadii, detail, ridges: 4, twistTotal: 0.25);
+            HollowcrownWoodStem(m, limbPath, limbRadii, detail, ridges: 4, twistTotal: 0.24);
             m.EssentialSpans.Add((limbStemStart, m.VertexCount - limbStemStart));
 
-            // Terminal foliage spray at the end of the primary scaffold limb
-            var limbTipDir = HollowcrownBezierTangent(pRoot, cLimb0, cLimb1, pLimbEnd, 1.0);
-            ulong termSeed = Rng.Mix(seed, (ulong)(k * 10000 + 1));
-            HollowcrownOakSpray(m, pLimbEnd, limbTipDir, scale: juvenile ? 0.90 : 1.12,
-                termSeed, c1, c2, detail);
+            // Bracket fungi clutching the knurled bough elbow
+            if (k % 2 == 0)
+            {
+                var elbowSide = outward.Cross(Vec3.Up).Normalized();
+                HollowcrownShelfCluster(m, pElbow, outward, elbowSide, baseRadius * 0.75, rng, detail);
+            }
 
-            // Knuckle rosette right at the bolling shoulder collar
+            // Foliage right at the knuckle collar (epicormic tuft framing the bowl)
             ulong knuckleSeed = Rng.Mix(seed, (ulong)(k * 60000 + 3));
             var knuckleDir = (outward * 0.75 + Vec3.Up * 0.45).Normalized();
-            HollowcrownOakSpray(m, pRoot + knuckleDir * 0.12, knuckleDir, scale: 0.85, knuckleSeed, c1, c2, detail);
+            HollowcrownOakSpray(m, pRoot + knuckleDir * 0.16, knuckleDir, scale: 0.95, knuckleSeed, c1, c2, detail);
 
-            // ---------------------------------------------------------------------
-            // Secondary Forking Boughs
-            // ---------------------------------------------------------------------
-            int numBoughs = juvenile ? 2 : (detail == 2 ? 2 : 3);
-            for (int b = 0; b < numBoughs; b++)
+            // Foliage at the primary elbow junction
+            ulong elbowSeed = Rng.Mix(seed, (ulong)(k * 70000 + 5));
+            HollowcrownOakSpray(m, pElbow, elbowDir, scale: 1.05, elbowSeed, c1, c2, detail);
+
+            // Epicormic leafy sprouts along primary limb collar
+            int epicormics = detail == 2 ? 1 : 2;
+            for (int ep = 0; ep < epicormics; ep++)
             {
-                double bFrac = b switch { 0 => 0.40, 1 => 0.65, _ => 0.85 };
-                var bRoot = HollowcrownBezier(pRoot, cLimb0, cLimb1, pLimbEnd, bFrac);
-                var bMotherTan = HollowcrownBezierTangent(pRoot, cLimb0, cLimb1, pLimbEnd, bFrac);
+                double epFrac = 0.35 + ep * 0.30;
+                var epRoot = HollowcrownBezier(pRoot, cLimb0, cLimb1, pElbow, epFrac);
+                var epDir = (Vec3.Up * 0.82 + outward * 0.30 + ortho * ((ep % 2 == 0 ? 1 : -1) * 0.35)).Normalized();
+                HollowcrownOakSpray(m, epRoot + epDir * 0.14, epDir, scale: 0.90, Rng.Mix(seed, (ulong)(k * 80000 + ep * 300 + 17)), c1, c2, detail);
+            }
 
-                double sideSign = (b % 2 == 0) ? 1.0 : -1.0;
-                double bAz = lAz + sideSign * rng.Range(0.45, 0.78);
-                var bOut = HollowcrownRadial(bAz);
+            // -----------------------------------------------------------------
+            // 1. Lower lateral skirt bough (spreading low over bolling knuckles)
+            // -----------------------------------------------------------------
+            {
+                var lowRoot = HollowcrownBezier(pRoot, cLimb0, cLimb1, pElbow, 0.26);
+                double lowAz = lAz + rng.Range(-0.35, 0.35);
+                var lowOut = HollowcrownRadial(lowAz);
+                double lowReach = (juvenile ? 0.55 : 0.88) * rng.Range(0.88, 1.12);
+                double lowRise = rng.Range(0.06, 0.16);
+                var lowEnd = lowRoot + lowOut * lowReach + Vec3.Up * lowRise;
 
-                double bReach = (juvenile ? 0.55 : 0.85) * rng.Range(0.85, 1.15);
-                double bRise = (juvenile ? 0.25 : 0.45) * rng.Range(0.80, 1.20);
-                var bEnd = bRoot + bOut * bReach + Vec3.Up * bRise;
+                var lowC0 = lowRoot + (lowOut * 0.70 + Vec3.Up * 0.30).Normalized() * (lowReach * 0.40);
+                var lowC1 = lowEnd - (lowOut * 0.85 + Vec3.Up * 0.15).Normalized() * (lowReach * 0.35);
 
-                var bStartDir = (bMotherTan * 0.45 + bOut * 0.68 + Vec3.Up * 0.30).Normalized();
-                var cB0 = bRoot + bStartDir * (bReach * 0.40);
-                var bEndDir = (bOut * 0.85 + Vec3.Up * 0.25).Normalized();
-                var cB1 = bEnd - bEndDir * (bReach * 0.35);
+                int lowStations = detail == 2 ? 3 : 5;
+                var lowPath = HollowcrownSampleBezier(lowRoot, lowC0, lowC1, lowEnd, lowStations);
+                var lowRadii = new double[lowStations];
+                double lowBaseR = limbBaseR * 0.44;
+                double lowTipR = Math.Max(0.006, lowBaseR * 0.28);
+                for (int s = 0; s < lowStations; s++)
+                {
+                    double st = s / (double)(lowStations - 1);
+                    double collar = 1.0 + 0.34 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.24), 2.0);
+                    lowRadii[s] = MathD.Lerp(lowBaseR, lowTipR, st) * collar;
+                }
 
-                int bStations = detail == 2 ? 5 : 7;
-                var bPath = HollowcrownSampleBezier(bRoot, cB0, cB1, bEnd, bStations);
+                int lowStart = m.VertexCount;
+                HollowcrownWoodStem(m, lowPath, lowRadii, detail, ridges: 3, twistTotal: 0.18);
+                m.EssentialSpans.Add((lowStart, m.VertexCount - lowStart));
+
+                var lowTipDir = HollowcrownBezierTangent(lowRoot, lowC0, lowC1, lowEnd, 1.0);
+                ulong lowSeed = Rng.Mix(seed, (ulong)(k * 15000 + 11));
+                HollowcrownOakSpray(m, lowEnd, lowTipDir, scale: 0.98, lowSeed, c1, c2, detail);
+
+                var lowMid = HollowcrownBezier(lowRoot, lowC0, lowC1, lowEnd, 0.55);
+                var lowMidTan = HollowcrownBezierTangent(lowRoot, lowC0, lowC1, lowEnd, 0.55);
+                HollowcrownOakSpray(m, lowMid, lowMidTan, scale: 0.92, Rng.Mix(seed, (ulong)(k * 16000 + 13)), c1, c2, detail);
+            }
+
+            // -----------------------------------------------------------------
+            // 2. Outer spreading bough (arching wide and sprawling, framing canopy)
+            // -----------------------------------------------------------------
+            {
+                double outAz = lAz + rng.Range(-0.25, 0.25);
+                var outRadial = HollowcrownRadial(outAz);
+                var outSide = HollowcrownRadial(outAz + Math.PI * 0.5);
+
+                double bReach = (juvenile ? 0.75 : 1.15) * rng.Range(0.88, 1.12);
+                double bRise = (juvenile ? 0.18 : 0.35) * rng.Range(0.85, 1.15);
+                var bEnd = pElbow + outRadial * bReach + outSide * rng.Range(-0.12, 0.12) + Vec3.Up * bRise;
+
+                var bStartDir = (elbowDir * 0.40 + outRadial * 0.70 + Vec3.Up * 0.22).Normalized();
+                var cB0 = pElbow + bStartDir * (bReach * 0.42);
+                var bEndDir = (outRadial * 0.85 + Vec3.Up * 0.20).Normalized();
+                var cB1 = bEnd - bEndDir * (bReach * 0.36);
+
+                int bStations = detail == 2 ? 4 : (detail == 1 ? 5 : 6);
+                var bPath = HollowcrownSampleBezier(pElbow, cB0, cB1, bEnd, bStations);
                 var bRadii = new double[bStations];
-
-                double bBaseR = limbBaseR * 0.50;
-                double bTipR = Math.Max(0.005, bBaseR * 0.28);
-
+                double bBaseR = elbowR * 0.70;
+                double bTipR = Math.Max(0.007, bBaseR * 0.26);
                 for (int s = 0; s < bStations; s++)
                 {
                     double st = s / (double)(bStations - 1);
-                    // Swollen fork branch collar
-                    double bCollar = 1.0 + 0.38 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.20), 2.0);
+                    double bCollar = 1.0 + 0.35 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.22), 2.0);
                     bRadii[s] = MathD.Lerp(bBaseR, bTipR, st) * bCollar;
                 }
 
@@ -1383,52 +1591,121 @@ public static partial class OrganismMeshes
                 HollowcrownWoodStem(m, bPath, bRadii, detail, ridges: 3, twistTotal: 0.20);
                 m.EssentialSpans.Add((bStemStart, m.VertexCount - bStemStart));
 
-                var bTipDir = HollowcrownBezierTangent(bRoot, cB0, cB1, bEnd, 1.0);
-                ulong bSeed = Rng.Mix(seed, (ulong)(k * 20000 + b * 1000 + 7));
-                HollowcrownOakSpray(m, bEnd, bTipDir, scale: juvenile ? 0.85 : 1.05,
-                    bSeed, c1, c2, detail);
+                var bTipDir = HollowcrownBezierTangent(pElbow, cB0, cB1, bEnd, 1.0);
+                ulong bSeed = Rng.Mix(seed, (ulong)(k * 20000 + 7));
+                HollowcrownOakSpray(m, bEnd, bTipDir, scale: 1.05, bSeed, c1, c2, detail);
 
-                // Intermediate foliage spray along secondary bough
-                double midBFrac = 0.52;
-                var bMidPos = HollowcrownBezier(bRoot, cB0, cB1, bEnd, midBFrac);
-                var bMidTan = HollowcrownBezierTangent(bRoot, cB0, cB1, bEnd, midBFrac);
-                ulong midSeed = Rng.Mix(seed, (ulong)(k * 30000 + b * 2000 + 13));
-                HollowcrownOakSpray(m, bMidPos, bMidTan, scale: juvenile ? 0.80 : 0.98,
-                    midSeed, c1, c2, detail);
+                var bMidPos = HollowcrownBezier(pElbow, cB0, cB1, bEnd, 0.52);
+                var bMidTan = HollowcrownBezierTangent(pElbow, cB0, cB1, bEnd, 0.52);
+                HollowcrownOakSpray(m, bMidPos, bMidTan, scale: 0.98, Rng.Mix(seed, (ulong)(k * 30000 + 13)), c1, c2, detail);
 
-                // Tertiary branchlets in high detail
-                if (detail == 0 && !juvenile)
+                var bSubPos = HollowcrownBezier(pElbow, cB0, cB1, bEnd, 0.78);
+                var bSubTan = HollowcrownBezierTangent(pElbow, cB0, cB1, bEnd, 0.78);
+                HollowcrownOakSpray(m, bSubPos, bSubTan, scale: 0.96, Rng.Mix(seed, (ulong)(k * 32000 + 23)), c1, c2, detail);
+
+                if (!juvenile && acornsBuilt < acornBudget && rng.NextDouble() < 0.70)
                 {
-                    double tertAz = bAz - sideSign * rng.Range(0.38, 0.62);
-                    var tertOut = HollowcrownRadial(tertAz);
-                    double tertReach = 0.40 * rng.Range(0.85, 1.15);
-                    var tertEnd = bMidPos + tertOut * tertReach + Vec3.Up * rng.Range(0.08, 0.18);
+                    HollowcrownAcornCluster(m, bMidPos, bMidTan, rng, detail);
+                    acornsBuilt++;
+                }
 
-                    var cTert0 = bMidPos + (bMidTan * 0.40 + tertOut * 0.70).Normalized() * (tertReach * 0.40);
+                // Crooked tertiary branchlets on outer bough
+                int tertCount = detail == 2 ? 1 : (detail == 1 ? 2 : 3);
+                for (int ti = 0; ti < tertCount; ti++)
+                {
+                    double tFrac = ti == 0 ? 0.38 : (ti == 1 ? 0.65 : 0.85);
+                    var tRoot = HollowcrownBezier(pElbow, cB0, cB1, bEnd, tFrac);
+                    var tMotherTan = HollowcrownBezierTangent(pElbow, cB0, cB1, bEnd, tFrac);
+                    double tertSign = (ti % 2 == 0) ? 1.0 : -1.0;
+                    double tertAz = outAz + tertSign * rng.Range(0.42, 0.72);
+                    var tertOut = HollowcrownRadial(tertAz);
+                    double tertReach = 0.42 * rng.Range(0.85, 1.15);
+                    var tertEnd = tRoot + tertOut * tertReach + Vec3.Up * rng.Range(0.04, 0.16);
+
+                    var cTert0 = tRoot + (tMotherTan * 0.35 + tertOut * 0.75).Normalized() * (tertReach * 0.40);
                     var cTert1 = tertEnd - tertOut * (tertReach * 0.35);
 
-                    var tertPath = HollowcrownSampleBezier(bMidPos, cTert0, cTert1, tertEnd, 5);
-                    var tertRadii = new[] { bBaseR * 0.45 * 1.30, bBaseR * 0.38, bBaseR * 0.30, bBaseR * 0.22, 0.004 };
+                    var tertPath = HollowcrownSampleBezier(tRoot, cTert0, cTert1, tertEnd, 4);
+                    var tertRadii = new[] { bBaseR * 0.42 * 1.25, bBaseR * 0.30, bBaseR * 0.18, 0.004 };
                     int tertStemStart = m.VertexCount;
                     HollowcrownWoodStem(m, tertPath, tertRadii, detail, ridges: 3, twistTotal: 0.15);
                     m.EssentialSpans.Add((tertStemStart, m.VertexCount - tertStemStart));
 
-                    var tertDir = HollowcrownBezierTangent(bMidPos, cTert0, cTert1, tertEnd, 1.0);
-                    ulong tertSeed = Rng.Mix(seed, (ulong)(k * 40000 + b * 3000 + 29));
-                    HollowcrownOakSpray(m, tertEnd, tertDir, scale: 0.92, tertSeed, c1, c2, detail);
+                    var tertDir = HollowcrownBezierTangent(tRoot, cTert0, cTert1, tertEnd, 1.0);
+                    ulong tertSeed = Rng.Mix(seed, (ulong)(k * 40000 + ti * 100 + 29));
+                    HollowcrownOakSpray(m, tertEnd, tertDir, scale: 0.95, tertSeed, c1, c2, detail);
                 }
             }
 
-            // Epicormic leafy sprouts rising directly from the limb collar
-            int epicormics = detail == 2 ? 1 : 2;
-            for (int ep = 0; ep < epicormics; ep++)
+            // -----------------------------------------------------------------
+            // 3. Ascending inner bough (reaching up and curving gracefully over hollow bowl)
+            // -----------------------------------------------------------------
             {
-                double epFrac = 0.20 + ep * 0.18;
-                var epRoot = HollowcrownBezier(pRoot, cLimb0, cLimb1, pLimbEnd, epFrac);
-                var epDir = (Vec3.Up * 0.85 + outward * 0.30 + ortho * ((ep % 2 == 0 ? 1 : -1) * 0.30)).Normalized();
+                double inAz = lAz + rng.Range(-0.16, 0.16);
+                var inRadial = HollowcrownRadial(inAz);
+                double inReach = (juvenile ? 0.35 : 0.52) * rng.Range(0.85, 1.15);
+                double inRise = (juvenile ? 0.68 : 1.05) * rng.Range(0.88, 1.12);
+                // Curves gently inward towards the center, framing the vaulted hollow bowl
+                var inEnd = pElbow + inRadial * inReach - inRadial * 0.15 + Vec3.Up * inRise;
 
-                ulong epSeed = Rng.Mix(seed, (ulong)(k * 50000 + ep * 500 + 41));
-                HollowcrownOakSpray(m, epRoot + epDir * 0.16, epDir, scale: 0.85, epSeed, c1, c2, detail);
+                var inStartDir = (Vec3.Up * 0.80 + inRadial * 0.35).Normalized();
+                var cIn0 = pElbow + inStartDir * (inRise * 0.42);
+                var inEndDir = (Vec3.Up * 0.50 + inRadial * 0.45).Normalized();
+                var cIn1 = inEnd - inEndDir * (inRise * 0.36);
+
+                int inStations = detail == 2 ? 4 : (detail == 1 ? 5 : 6);
+                var inPath = HollowcrownSampleBezier(pElbow, cIn0, cIn1, inEnd, inStations);
+                var inRadii = new double[inStations];
+                double inBaseR = elbowR * 0.68;
+                double inTipR = Math.Max(0.006, inBaseR * 0.28);
+                for (int s = 0; s < inStations; s++)
+                {
+                    double st = s / (double)(inStations - 1);
+                    double inCollar = 1.0 + 0.34 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.22), 2.0);
+                    inRadii[s] = MathD.Lerp(inBaseR, inTipR, st) * inCollar;
+                }
+
+                int inStemStart = m.VertexCount;
+                HollowcrownWoodStem(m, inPath, inRadii, detail, ridges: 3, twistTotal: 0.20);
+                m.EssentialSpans.Add((inStemStart, m.VertexCount - inStemStart));
+
+                var inTipDir = HollowcrownBezierTangent(pElbow, cIn0, cIn1, inEnd, 1.0);
+                ulong inSeed = Rng.Mix(seed, (ulong)(k * 50000 + 43));
+                HollowcrownOakSpray(m, inEnd, inTipDir, scale: 1.08, inSeed, c1, c2, detail);
+
+                var inMidPos = HollowcrownBezier(pElbow, cIn0, cIn1, inEnd, 0.50);
+                var inMidTan = HollowcrownBezierTangent(pElbow, cIn0, cIn1, inEnd, 0.50);
+                HollowcrownOakSpray(m, inMidPos, inMidTan, scale: 0.96, Rng.Mix(seed, (ulong)(k * 55000 + 47)), c1, c2, detail);
+
+                var inSubPos = HollowcrownBezier(pElbow, cIn0, cIn1, inEnd, 0.75);
+                var inSubTan = HollowcrownBezierTangent(pElbow, cIn0, cIn1, inEnd, 0.75);
+                HollowcrownOakSpray(m, inSubPos, inSubTan, scale: 0.98, Rng.Mix(seed, (ulong)(k * 57000 + 53)), c1, c2, detail);
+
+                if (!juvenile && acornsBuilt < acornBudget && rng.NextDouble() < 0.60)
+                {
+                    HollowcrownAcornCluster(m, inMidPos, inMidTan, rng, detail);
+                    acornsBuilt++;
+                }
+
+                // Dome crest shoots arching gracefully towards center
+                int crestShoots = detail == 2 ? 1 : 2;
+                for (int cs = 0; cs < crestShoots; cs++)
+                {
+                    double crFrac = 0.58 + cs * 0.28;
+                    var crRoot = HollowcrownBezier(pElbow, cIn0, cIn1, inEnd, crFrac);
+                    var crDir = (Vec3.Up * 0.65 - inRadial * 0.40 + ortho * ((cs % 2 == 0 ? 1 : -1) * 0.35)).Normalized();
+                    double crReach = 0.32 * rng.Range(0.85, 1.15);
+                    var crEnd = crRoot + crDir * crReach;
+
+                    var crPath = new[] { crRoot, crRoot + crDir * (crReach * 0.5), crEnd };
+                    var crRadii = new[] { inBaseR * 0.38, inBaseR * 0.24, 0.005 };
+                    int crStart = m.VertexCount;
+                    HollowcrownWoodStem(m, crPath, crRadii, detail, ridges: 3, twistTotal: 0.12);
+                    m.EssentialSpans.Add((crStart, m.VertexCount - crStart));
+
+                    ulong crSeed = Rng.Mix(seed, (ulong)(k * 60000 + cs * 200 + 61));
+                    HollowcrownOakSpray(m, crEnd, crDir, scale: 0.98, crSeed, c1, c2, detail);
+                }
             }
         }
     }
@@ -1470,7 +1747,10 @@ public static partial class OrganismMeshes
         // 1. Bole, fluted trunk, splayed buttresses, authentic vulva cleft, hollow log interior & moss
         HollowcrownBoleAndCavity(part, Vec3.Zero, boleHeight, baseRadius, rng, seed, detail);
 
-        // 2. Pollard bolling head, Bézier scaffold limbs, spreading boughs & lobed Quercus oak foliage
+        // 2. Sculpted tiers of amber-rimmed bracket fungi on bolling knuckles and trunk flank
+        HollowcrownBracketFungi(part, Vec3.Zero, boleHeight, baseRadius, rng, detail);
+
+        // 3. Pollard bolling head, Bézier scaffold limbs, spreading boughs & lobed Quercus oak foliage
         HollowcrownCrown(part, Vec3.Zero, boleHeight, baseRadius, rng, seed, c1, c2, detail, juvenile);
 
         int baseVertex = m.VertexCount;

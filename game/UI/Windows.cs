@@ -203,7 +203,7 @@ public partial class Windows : Control
                 int structural = w.FloraSystem.WoodyPopulation(woody.Layer);
                 int cap = w.FloraSystem.WoodyPopulationCap(woody.Layer);
                 string layer = woody.Layer == WoodyLayer.Tree ? "trees" : "shrubs";
-                status += woody.Layer == WoodyLayer.Shrub ? $" · {structural} shrubs" : $" · {layer} {structural}/{cap}";
+                status += $" · {structural} {layer}";
             }
             label.Text = status;
             label.AddThemeColorOverride("font_color", n == 0 ? new Color(1f, 0.7f, 0.5f) : UiKit.Muted);

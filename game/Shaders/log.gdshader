@@ -58,6 +58,7 @@ float endgrain_height(vec2 uv) {
 void fragment() {
     vec3 vcol = srgb_to_linear(COLOR.rgb);
     float cap = UV2.y;
+    float cam_dist = distance(CAMERA_POSITION_WORLD, wld_pos);
     vec3 wn = finite_surface_normal((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz, vec3(0.0, 1.0, 0.0));
     if (cap > 0.5) {
         float wood_height = endgrain_height(UV);
@@ -122,8 +123,11 @@ void fragment() {
         vec3 along_world = finite_surface_normal(cross(wn, around_world), axis_world);
         vec3 view_world = finite_surface_normal((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz, wn);
         vec3 view_ts = vec3(dot(view_world, around_world), dot(view_world, along_world), dot(view_world, wn));
-        float pom_shadow;
-        uv = pom_raymarch(bark_hgt, uv, view_ts, bark_height_scale, 16, pom_shadow, vec3(0.0, 0.0, 1.0));
+        float pom_shadow = 1.0;
+        // Bark relief only reads up close; skip the 20-tap march on mid/far logs.
+        if (cam_dist < 4.5) {
+            uv = pom_raymarch(bark_hgt, uv, view_ts, bark_height_scale, 16, pom_shadow, vec3(0.0, 0.0, 1.0));
+        }
         // plain lookups (no anti-tiling rotation): the grain must stay aligned with the trunk
         vec4 bark = vec4(texture(bark_col, uv).rgb, texture(bark_rgh, uv).r);
         vec3 tn = unpack_normal(texture(bark_nrm, uv).rgb);
@@ -138,6 +142,9 @@ void fragment() {
         float vmoss = clamp((vcol.g - vcol.r) * 6.0, 0.0, 1.0);
         // sheltered damp-forest moss: upper faces, broken up by two noise octaves, creeping down the sides
         float up = wn.y;
+        // Ground contact: the underside of the log rests on damp soil, so it is
+        // darker, damper and slightly more sheened than the skyward bark.
+        float underside = smoothstep(0.35, -0.45, wn.y);
         float n1 = vnoise(obj_pos.xz * 3.1 + obj_pos.y * 1.7);
         float n2 = vnoise(obj_pos.xz * 11.0 - obj_pos.y * 5.0);
         float cover = smoothstep(-0.25 + n1 * 0.5, 0.45 + n1 * 0.3, up + (n2 - 0.5) * 0.35);
@@ -153,8 +160,10 @@ void fragment() {
         float mossy = clamp(max(vmoss, cover * 0.95) * (1.0 - smoothstep(0.05, 0.5, colony)), 0.0, 1.0);
         mossy = clamp(mossy + (h - 0.55) * 0.7 * (1.0 - mossy * mossy) - (1.0 - h) * 0.25 * mossy * (1.0 - mossy), 0.0, 1.0);
         // damp, darker bark where moss does not reach
-        vec3 barkTint = mix(vcol, vec3(0.2, 0.14, 0.09), 0.55 + 0.45 * vmoss) * 0.72;
+        vec3 barkTint = mix(vcol, vec3(0.2, 0.14, 0.09), 0.32 + 0.35 * vmoss) * 0.82;
         vec3 col = barkTint * (bark.rgb / avg) * 0.95;
+        // Weathered bark shifts subtly between cool grey and warm brown; reuse the moss breakup.
+        col *= mix(vec3(0.94, 0.98, 1.04), vec3(1.07, 1.0, 0.92), n1);
         if (UV2.x >= 1.5) {
             float rot_mix = smoothstep(1.5, 3.0, UV2.x) * (0.35 + 0.35 * vnoise(uv * 4.0));
             vec4 rot_samp = texture(rotten_wood_col, uv);
@@ -178,6 +187,10 @@ void fragment() {
         float r_plate = smoothstep(0.18, 0.88, bark.a);
         float bark_rgh_mapped = mix(0.38, 0.90, r_plate);
         float rough = mix(bark_rgh_mapped, max(moss.a, 0.85), mossy);
+        // Soil-contact darkening and capillary dampness under the resting log.
+        float ground_damp = underside * (0.55 + 0.45 * vmoss);
+        col *= mix(1.0, 0.60, ground_damp);
+        rough = mix(rough, min(rough, 0.80), ground_damp * 0.5);
         // dome normal per clump (tangent space: x around, y along)
         vec3 dn = finite_surface_normal(vec3(cl.y, cl.z, 0.0) * 0.24 + vec3(cl2.y, cl2.z, 0.0) * 0.10 + vec3(0.0, 0.0, 0.85 + 0.15 * h), vec3(0.0, 0.0, 1.0));
         float moss_relief = texture(moss_hgt, uv * 2.0 + 5.0).r;
@@ -193,13 +206,14 @@ void fragment() {
         float tips = smoothstep(0.35, 0.9, h) * mossy;
         BACKLIGHT = vec3(0.28, 0.43, 0.08) * tips * 0.35;
         AO = mix(texture(bark_ao, uv).r * fissure_ao * pom_shadow,
-            ao * texture(moss_ao, uv * 2.0 + 5.0).r, mossy);
+            ao * texture(moss_ao, uv * 2.0 + 5.0).r, mossy) * mix(1.0, 0.70, underside);
         vec3 dx = dFdx(NORMAL);
         vec3 dy = dFdy(NORMAL);
         float variance = dot(dx, dx) + dot(dy, dy);
         ROUGHNESS = clamp(sqrt(rough * rough + min(variance * 2.0, 0.25)), 0.35, 1.0);
         float log_bark_spec = mix(0.42, 0.14, smoothstep(0.55, 0.90, bark_rgh_mapped));
         SPECULAR = mix(log_bark_spec, 0.16, mossy);
+        SPECULAR = mix(SPECULAR, 0.22, underside * 0.5);   // damp soil-contact sheen
     }
     AO_LIGHT_AFFECT = 0.85;
     material_specular = SPECULAR;

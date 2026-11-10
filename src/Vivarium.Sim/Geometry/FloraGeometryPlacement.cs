@@ -8,7 +8,7 @@ namespace Vivarium.Sim.Geometry;
 /// <summary>Shared upright growth transform for rendered plants and animal supports.</summary>
 public static class FloraGeometryPlacement
 {
-    public static int MorphCount(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate" or "vine_clinglace" or "vine_spiralvine" or "vine_fenhook" ? 12 : 5;
+    public static int MorphCount(string shape) => shape is "roundleaf" or "pairedleaf" or "herb" or "trifoliate" or "vine_clinglace" or "vine_spiralvine" or "vine_fenhook" or "shadewrap" or "bitterbine" or "trumpetbind" ? 12 : 5;
 
     public static (Vec3 Up, double Radius, double Height) Upright(VivariumWorld world, ulong id, Vec2 position, double health, double radius, double height)
     {

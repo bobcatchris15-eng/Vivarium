@@ -4,7 +4,7 @@ using Vivarium.Sim.World;
 
 namespace Vivarium.Sim.Tools;
 
-public enum HitKind { None = 0, Terrain = 1, Water = 2, Gravel = 3, Log = 4, Rock = 5, Flora = 6, Fauna = 7, PilotTree = 8 }
+public enum HitKind { None = 0, Terrain = 1, Water = 2, Gravel = 3, Log = 4, Rock = 5, Flora = 6, Fauna = 7, PilotTree = 8, Guardian = 9 }
 
 public readonly record struct WorldHit(HitKind Kind, EntityId Id, Vec3 Point, double Distance)
 {
@@ -22,6 +22,9 @@ public static class Selection
 {
     public const double MaxDistance = 80;
 
+    public static WorldHit Raycast(VivariumWorld w, Vec3 origin, Vec3 direction, double maxDist, bool includeWater = false) =>
+        Raycast(w, origin, direction, includeWater);
+
     public static WorldHit Raycast(VivariumWorld w, Vec3 origin, Vec3 direction, bool includeWater = false)
     {
         var dir = direction.Normalized();
@@ -35,8 +38,8 @@ public static class Selection
         if (!double.IsInfinity(tTerrain))
         {
             var p = origin + dir * tTerrain;
-            var g = w.Props.GravelAt(p.XZ);
-            hits.Add(g != null ? new WorldHit(HitKind.Gravel, g.Id, p, tTerrain) : new WorldHit(HitKind.Terrain, EntityId.None, p, tTerrain));
+            var grv = w.Props.GravelAt(p.XZ);
+            hits.Add(grv != null ? new WorldHit(HitKind.Gravel, grv.Id, p, tTerrain) : new WorldHit(HitKind.Terrain, EntityId.None, p, tTerrain));
         }
         foreach (var r in w.Props.Rocks)
         {
@@ -54,6 +57,19 @@ public static class Selection
             if (!double.IsInfinity(t)) hits.Add(new WorldHit(HitKind.Water, EntityId.None, origin + dir * t, t));
         }
         double maxDist = Math.Min(tTerrain + 0.5, MaxDistance);
+        if (w.Guardian is { } g)
+        {
+            var def = Vivarium.Sim.Guardians.GuardianCatalog.Find(g.ArchetypeId);
+            double vScale = (def?.VisualScale ?? 1.0) * g.Scale * Vivarium.Sim.Guardians.GuardianDef.BodySizeMultiplier;
+            double hitRadius = Math.Max(0.32, vScale * 0.65);
+            var center = new Vec3(g.X, g.Y + hitRadius * 0.55, g.Z);
+            double along = (center - origin).Dot(dir);
+            if (along >= -hitRadius && along <= maxDist + hitRadius)
+            {
+                double t = RaySphere(origin, dir, center, hitRadius);
+                if (!double.IsInfinity(t)) hits.Add(new WorldHit(HitKind.Guardian, g.Id, origin + dir * t, t));
+            }
+        }
         foreach (var f in w.Flora.Items)
         {
             var sp = w.Content.FloraOrThrow(f.SpeciesId);
@@ -131,7 +147,7 @@ public static class Selection
 
     public static int Priority(HitKind k) => k switch
     {
-        HitKind.Fauna => 7, HitKind.Flora => 6, HitKind.PilotTree => 5, HitKind.Rock => 5, HitKind.Log => 4, HitKind.Gravel => 3, HitKind.Water => 2, HitKind.Terrain => 1, _ => 0,
+        HitKind.Guardian => 8, HitKind.Fauna => 7, HitKind.Flora => 6, HitKind.PilotTree => 5, HitKind.Rock => 5, HitKind.Log => 4, HitKind.Gravel => 3, HitKind.Water => 2, HitKind.Terrain => 1, _ => 0,
     };
 
     public static double RayPilotTree(VivariumWorld w, Vec3 o, Vec3 d, double maxDistance = MaxDistance)

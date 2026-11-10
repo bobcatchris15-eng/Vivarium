@@ -13,10 +13,13 @@ namespace Vivarium.Game.Render;
 /// </summary>
 public partial class GuardianHeadTracker : SkeletonModifier3D
 {
-    private const float MaxAngle = 0.785398f; // 45 degrees in radians
+    private const float MaxYaw = 0.60f; // ~34 degrees
+    private const float MaxPitch = 0.35f; // ~20 degrees
 
     private int _headBone = -1;
     private int _neckBone = -1;
+    private int _jawBone = -1;
+    private bool _jawIsSiblingOfHead;
     private bool _initialized;
 
     private float _blendWeight;
@@ -41,6 +44,8 @@ public partial class GuardianHeadTracker : SkeletonModifier3D
     public void Reset()
     {
         _initialized = false;
+        _jawBone = -1;
+        _jawIsSiblingOfHead = false;
         _blendWeight = 0;
         _currentYaw = 0;
         _currentPitch = 0;
@@ -57,10 +62,12 @@ public partial class GuardianHeadTracker : SkeletonModifier3D
             _headBone = skeleton.FindBone("Head");
             _neckBone = skeleton.FindBone("Neck");
             if (_neckBone < 0) _neckBone = skeleton.FindBone("Neck1");
+            _jawBone = skeleton.FindBone("Jaw");
+            _jawIsSiblingOfHead = _headBone >= 0 && _jawBone >= 0 && skeleton.GetBoneParent(_jawBone) != _headBone;
             _initialized = true;
         }
 
-        if (_headBone < 0) return;
+        if (_headBone < 0 || _jawIsSiblingOfHead) return;
 
         // Blends out when sleeping or walking rapidly
         bool canTrack = !IsMovingRapidly
@@ -91,13 +98,19 @@ public partial class GuardianHeadTracker : SkeletonModifier3D
             _currentPitch = Mathf.MoveToward(_currentPitch, 0f, (float)delta * 6f);
             return;
         }
+
+        if (Activity is not (GuardianActivity.Feed or GuardianActivity.Drink or GuardianActivity.Dig))
+        {
+            lookPoint.Y += 0.28f * skelTransform.Basis.Scale.X;
+        }
+
         Vector3 toTarget = lookPoint - headOrigin;
         if (toTarget.LengthSquared() < 1e-4f) return;
         Vector3 dir = toTarget.Normalized();
 
-        Vector3 bodyForward = -skelTransform.Basis.Z.Normalized();
         Vector3 bodyRight = skelTransform.Basis.X.Normalized();
-        Vector3 bodyUp = skelTransform.Basis.Y.Normalized();
+        Vector3 bodyForward = -skelTransform.Basis.Y.Normalized();
+        Vector3 bodyUp = skelTransform.Basis.Z.Normalized();
 
         float forwardDot = dir.Dot(bodyForward);
         float rightDot = dir.Dot(bodyRight);
@@ -106,9 +119,9 @@ public partial class GuardianHeadTracker : SkeletonModifier3D
         float targetYaw = MathF.Atan2(rightDot, Math.Max(0.01f, forwardDot));
         float targetPitch = MathF.Asin(Math.Clamp(upDot, -1f, 1f));
 
-        // Angle clamp (max 45 degrees yaw/pitch)
-        targetYaw = Math.Clamp(targetYaw, -MaxAngle, MaxAngle);
-        targetPitch = Math.Clamp(targetPitch, -MaxAngle, MaxAngle);
+        // Natural biological angle clamp
+        targetYaw = Math.Clamp(targetYaw, -MaxYaw, MaxYaw);
+        targetPitch = Math.Clamp(targetPitch, -MaxPitch, MaxPitch);
 
         _currentYaw = Mathf.Lerp(_currentYaw, targetYaw, (float)delta * 6.0f);
         _currentPitch = Mathf.Lerp(_currentPitch, targetPitch, (float)delta * 6.0f);
@@ -125,8 +138,8 @@ public partial class GuardianHeadTracker : SkeletonModifier3D
             float headYaw = effYaw * 0.65f;
             float headPitch = effPitch * 0.65f;
 
-            Basis neckRot = new Basis(bodyUp, -neckYaw) * new Basis(bodyRight, neckPitch);
-            Basis headRot = new Basis(bodyUp, -headYaw) * new Basis(bodyRight, headPitch);
+            Basis neckRot = new Basis(bodyUp, -neckYaw) * new Basis(bodyRight, -neckPitch);
+            Basis headRot = new Basis(bodyUp, -headYaw) * new Basis(bodyRight, -headPitch);
 
             Transform3D neckGlobal = skelTransform * skeleton.GetBoneGlobalPose(_neckBone);
             Transform3D newNeckGlobal = new Transform3D(neckRot * neckGlobal.Basis, neckGlobal.Origin);
@@ -135,12 +148,30 @@ public partial class GuardianHeadTracker : SkeletonModifier3D
             headGlobalPose = skelTransform * skeleton.GetBoneGlobalPose(_headBone);
             Transform3D newHeadGlobal = new Transform3D(headRot * headGlobalPose.Basis, headGlobalPose.Origin);
             skeleton.SetBoneGlobalPose(_headBone, inverse * newHeadGlobal);
+
+            if (_jawIsSiblingOfHead)
+            {
+                Transform3D jawGlobal = skelTransform * skeleton.GetBoneGlobalPose(_jawBone);
+                Vector3 jawOffset = jawGlobal.Origin - headGlobalPose.Origin;
+                Vector3 newJawOrigin = headGlobalPose.Origin + headRot * jawOffset;
+                Basis newJawBasis = headRot * jawGlobal.Basis;
+                skeleton.SetBoneGlobalPose(_jawBone, inverse * new Transform3D(newJawBasis, newJawOrigin));
+            }
         }
         else
         {
-            Basis headRot = new Basis(bodyUp, -effYaw) * new Basis(bodyRight, effPitch);
+            Basis headRot = new Basis(bodyUp, -effYaw) * new Basis(bodyRight, -effPitch);
             Transform3D newHeadGlobal = new Transform3D(headRot * headGlobalPose.Basis, headGlobalPose.Origin);
             skeleton.SetBoneGlobalPose(_headBone, inverse * newHeadGlobal);
+
+            if (_jawIsSiblingOfHead)
+            {
+                Transform3D jawGlobal = skelTransform * skeleton.GetBoneGlobalPose(_jawBone);
+                Vector3 jawOffset = jawGlobal.Origin - headGlobalPose.Origin;
+                Vector3 newJawOrigin = headGlobalPose.Origin + headRot * jawOffset;
+                Basis newJawBasis = headRot * jawGlobal.Basis;
+                skeleton.SetBoneGlobalPose(_jawBone, inverse * new Transform3D(newJawBasis, newJawOrigin));
+            }
         }
     }
 }

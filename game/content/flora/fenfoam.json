@@ -1,0 +1,101 @@
+{
+  "id": "fenfoam",
+  "name": "Fenfoam",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Frothy cream plumes of wet meadow.",
+  "description": "Interrupted pinnate leaves climb wine-red stems to frothy plumes; the foam holds its shape for weeks and smells sweet enough to gather.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.4
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.8,
+      "tolerance": 0.2
+    },
+    "light": {
+      "optimum": 0.68,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.6,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0.02,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.18,
+    "maxBiomass": 1.5,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 14,
+    "lifespanDays": 240,
+    "nutrientPerBiomass": 0.28,
+    "radiusAtMax": 0.45,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.9,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.35,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.75
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.8,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "fenfoam",
+    "color": [
+      0.31,
+      0.43,
+      0.24
+    ],
+    "color2": [
+      0.94,
+      0.91,
+      0.78
+    ],
+    "colorVariance": 0.06,
+    "height": 0.7
+  },
+  "tags": [
+    "plant",
+    "flowering",
+    "wet"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.42,
+      0.35,
+      0.2
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

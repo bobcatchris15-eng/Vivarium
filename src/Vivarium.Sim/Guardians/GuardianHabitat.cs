@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Vivarium.Sim.Content;
@@ -24,6 +24,7 @@ public sealed class GuardianHabitat
     public IReadOnlyList<Vec2> WaterAccessPoints { get; }
     public IReadOnlyList<Vec2> ShallowWadingZones { get; }
     public IReadOnlyList<Vec3> ScentMarkTargets { get; }
+    public List<Vec3> BaskingSites { get; } = new();
 
     public GuardianHabitat(PilotTreeState? tree, HexDomain domain, VivariumWorld? world = null)
     {
@@ -90,6 +91,27 @@ public sealed class GuardianHabitat
                 rest.Add(new Vec3(p.X, y, p.Z));
             }
         }
+        if (world?.Props != null)
+        {
+            foreach (var rock in world.Props.Rocks)
+            {
+                var shelterP = domain.ClampInside(rock.Position + new Vec2(rock.FootprintRadius + 0.35, 0), 0.3);
+                if (world.Water == null || world.Water.OpenWaterDepth(shelterP) <= 0.02)
+                {
+                    double y = world.SurfaceHeight(shelterP);
+                    rest.Add(new Vec3(shelterP.X, y, shelterP.Z));
+                }
+            }
+            foreach (var log in world.Props.Logs)
+            {
+                var shelterP = domain.ClampInside(log.Position + new Vec2(0, log.Radius + 0.35), 0.3);
+                if (world.Water == null || world.Water.OpenWaterDepth(shelterP) <= 0.02)
+                {
+                    double y = world.SurfaceHeight(shelterP);
+                    rest.Add(new Vec3(shelterP.X, y, shelterP.Z));
+                }
+            }
+        }
         RestSites = Array.AsReadOnly(rest.ToArray());
 
         // Forage hotspots in rich litter zones below the canopy or island terrain
@@ -116,7 +138,7 @@ public sealed class GuardianHabitat
             }
         }
         if (forage.Count == 0) forage.Add(trunkBaseXZ);
-        ForageHotspots = Array.AsReadOnly(forage.ToArray());
+
 
         // Water access points & shallow wading zones
         var waterAccess = new List<Vec2>();
@@ -161,6 +183,73 @@ public sealed class GuardianHabitat
         WaterAccessPoints = Array.AsReadOnly(waterAccess.ToArray());
         ShallowWadingZones = Array.AsReadOnly(wading.ToArray());
 
+        if (world?.Props != null)
+        {
+            foreach (var log in world.Props.Logs)
+            {
+                var lp = domain.ClampInside(log.Position, 0.3);
+                if (!forage.Any(f => (f - lp).LengthSq < 0.6))
+                    forage.Add(lp);
+            }
+        }
+        foreach (var w in wading)
+        {
+            if (!forage.Any(f => (f - w).LengthSq < 0.8))
+            {
+                forage.Add(w);
+                if (forage.Count >= 20) break;
+            }
+        }
+        ForageHotspots = Array.AsReadOnly(forage.ToArray());
+
+        // Basking sites (sunny tops/edges of rocks, logs, or warm high dry ground)
+        if (world?.Props != null)
+        {
+            foreach (var rock in world.Props.Rocks)
+            {
+                var p = new Vec2(rock.X, rock.Z);
+                if (domain.Contains(p) && (world.Water == null || world.Water.OpenWaterDepth(p) <= 0.01))
+                {
+                    double top = rock.TopAt(p);
+                    double y = double.IsNaN(top) ? rock.Y + rock.SizeY : top;
+                    BaskingSites.Add(new Vec3(rock.X, y, rock.Z));
+                }
+            }
+            foreach (var log in world.Props.Logs)
+            {
+                var p = new Vec2(log.X, log.Z);
+                if (domain.Contains(p) && (world.Water == null || world.Water.OpenWaterDepth(p) <= 0.01))
+                {
+                    double top = log.TopAt(p);
+                    double y = double.IsNaN(top) ? log.Y + log.Radius : top;
+                    BaskingSites.Add(new Vec3(log.X, y, log.Z));
+                }
+            }
+        }
+        if (world?.Grid != null)
+        {
+            foreach (int cell in world.Grid.DomainCells)
+            {
+                var p = world.Grid.CellCenter(cell);
+                if (world.Water == null || world.Water.OpenWaterDepth(cell) <= 0.01)
+                {
+                    if (IsSunlit(p))
+                    {
+                        double y = world.SurfaceHeight(p);
+                        if (!BaskingSites.Any(b => (b.XZ - p).LengthSq < 1.0))
+                        {
+                            BaskingSites.Add(new Vec3(p.X, y, p.Z));
+                            if (BaskingSites.Count >= 12) break;
+                        }
+                    }
+                }
+            }
+        }
+        if (BaskingSites.Count == 0)
+        {
+            BaskingSites.Add(HomeAnchor);
+        }
+
         // Scent marking targets (HomeAnchor, root sites, tree base)
         var scentTargets = new List<Vec3> { HomeAnchor };
         if (tree != null)
@@ -187,6 +276,19 @@ public sealed class GuardianHabitat
                 scentTargets.Add(site);
         }
         ScentMarkTargets = Array.AsReadOnly(scentTargets.ToArray());
+    }
+
+    public Vec3? NearestBaskingSite(Vec3 current)
+    {
+        if (BaskingSites.Count == 0) return null;
+        Vec3 best = BaskingSites[0];
+        double bestDistSq = (current - best).LengthSq;
+        for (int i = 1; i < BaskingSites.Count; i++)
+        {
+            double d = (current - BaskingSites[i]).LengthSq;
+            if (d < bestDistSq) { bestDistSq = d; best = BaskingSites[i]; }
+        }
+        return best;
     }
 
     public Vec3 NearestRestSite(Vec3 current)

@@ -24,7 +24,7 @@ public static class TerrainMesh
         var xz = new List<Vec2>();
         var shared = new Dictionary<int, int>();
 
-        const int sub = 6;
+        const int sub = 3;
         double step = hf.Step / sub;
         int nx = (hf.Nx - 1) * sub + 1;
         int nz = (hf.Nz - 1) * sub + 1;

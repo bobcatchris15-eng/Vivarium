@@ -139,9 +139,9 @@ public partial class EnvironmentRig : Node3D
             ExposureSensitivity = 100.0f,
             DofBlurFarEnabled = !dofDisabled,
             DofBlurNearEnabled = false,
-            DofBlurFarDistance = (float)Vivarium.Sim.Geometry.FloraDetail.DistanceMid * .8f,
-            DofBlurFarTransition = 12f,
-            DofBlurAmount = .008f,
+            DofBlurFarDistance = 32.0f,
+            DofBlurFarTransition = 18.0f,
+            DofBlurAmount = .004f,
         };
         Env = new Environment
         {
@@ -156,8 +156,8 @@ public partial class EnvironmentRig : Node3D
             TonemapExposure = 0.92f,
             TonemapWhite = 6f,
             AdjustmentEnabled = true,
-            AdjustmentSaturation = 0.97f,
-            AdjustmentContrast = 1.07f,
+            AdjustmentSaturation = 0.99f,
+            AdjustmentContrast = 1.09f,
             AdjustmentBrightness = 1.0f,
             GlowEnabled = true,
             GlowNormalized = true,
@@ -167,16 +167,15 @@ public partial class EnvironmentRig : Node3D
             GlowBlendMode = Environment.GlowBlendModeEnum.Softlight,
             GlowHdrThreshold = 1.15f,
             GlowHdrScale = 1.8f,
-            // Humid-air haze: gentle aerial perspective, not a fog wall. Kept very low density so
-            // organisms at normal interaction distance (0.3-3 m) stay crisp; only the far ~15 m
-            // island edge softens. Underwater blends on top of this in _Process, never replaces it.
-            FogEnabled = true,
+            // No unbounded void fog above water: the cylindrical _habitatMist FogVolume
+            // owns the bounded atmosphere inside the hexagon so distant overview shots stay crisp.
+            FogEnabled = false,
             FogLightColor = HazeFogColor,
             FogLightEnergy = 1.0f,
-            FogDensity = HazeFogDensity * 0.35f,
+            FogDensity = 0.0f,
             FogSunScatter = 0.45f,
-            FogSkyAffect = 0.15f,
-            FogAerialPerspective = 0.18f,
+            FogSkyAffect = 0.0f,
+            FogAerialPerspective = 0.0f,
             // Multi-bounce SDFGI with 5 cm probe cells covering the 10-16 m island
             SdfgiEnabled = true,
             SdfgiUseOcclusion = true,
@@ -211,13 +210,13 @@ public partial class EnvironmentRig : Node3D
             SsilSharpness = 0.95f,
             SsilNormalRejection = 1.0f,
             VolumetricFogEnabled = true,
-            VolumetricFogDensity = 0.0045f,
+            VolumetricFogDensity = 0.0f,
             VolumetricFogAlbedo = new Color(0.82f, 0.88f, 0.78f),
             VolumetricFogAnisotropy = 0.72f,
-            VolumetricFogLength = 22.0f,
+            VolumetricFogLength = 42.0f,
             VolumetricFogDetailSpread = 0.65f,
-            VolumetricFogAmbientInject = 0.25f,
-            VolumetricFogSkyAffect = 0.15f,
+            VolumetricFogAmbientInject = 0.04f,
+            VolumetricFogSkyAffect = 0.0f,
             VolumetricFogTemporalReprojectionEnabled = true,
             VolumetricFogTemporalReprojectionAmount = 0.90f,
         };
@@ -360,13 +359,13 @@ public partial class EnvironmentRig : Node3D
             _habitatMist = new FogVolume
             {
                 Name = "BoundedHabitatMist", Shape = RenderingServer.FogVolumeShape.Cylinder,
-                Material = new FogMaterial { Density = 0.014f, Albedo = new Color(0.88f, 0.92f, 0.86f), EdgeFade = 1.8f },
+                Material = new FogMaterial { Density = 0.0035f, Albedo = new Color(0.88f, 0.92f, 0.86f), EdgeFade = 1.8f },
             };
             AddChild(_habitatMist);
         }
         else if (_habitatMist.Material is FogMaterial fogMat)
         {
-            fogMat.Density = 0.014f;
+            fogMat.Density = 0.0035f;
             fogMat.Albedo = new Color(0.88f, 0.92f, 0.86f);
             fogMat.EdgeFade = 1.8f;
         }
@@ -374,8 +373,8 @@ public partial class EnvironmentRig : Node3D
         // perimeter. No atmosphere exists beyond the floating slice or in the void.
         float diameter = (float)world.Domain.Apothem * 1.78f;
         float ground = (float)world.Terrain.Height(Vivarium.Sim.Core.Vec2.Zero);
-        _habitatMist.Size = new Vector3(diameter, 3.2f, diameter);
-        _habitatMist.Position = new Vector3(0, ground + 1.5f, 0);
+        _habitatMist.Size = new Vector3(diameter, 1.85f, diameter);
+        _habitatMist.Position = new Vector3(0, ground + 0.85f, 0);
 
         var probe = GetNodeOrNull<ReflectionProbe>("HabitatReflectionProbe");
         if (probe == null)
@@ -389,9 +388,6 @@ public partial class EnvironmentRig : Node3D
                 AmbientMode = ReflectionProbe.AmbientModeEnum.Environment,
             };
             AddChild(probe);
-#pragma warning disable CS0618
-            RenderingServer.ReflectionProbeSetResolution(probe.GetBase(), 512);
-#pragma warning restore CS0618
         }
         probe.Size = new Vector3(diameter * 1.3f, 8.0f, diameter * 1.3f);
         probe.Position = new Vector3(0, ground + 2.5f, 0);
@@ -479,21 +475,21 @@ public partial class EnvironmentRig : Node3D
         _underwater = Mathf.MoveToward(_underwater, _underwaterTarget, (float)delta * 5f);
         _underwaterRect.Visible = _underwater > 0.01f;
         _underwaterMat.SetShaderParameter("strength", _underwater * 0.85f);
-        Env.FogEnabled = true;
+        Env.FogEnabled = _underwater > 0.001f;
         Env.FogLightColor = HazeFogColor.Lerp(UnderwaterFogColor, _underwater);
-        Env.FogDensity = Mathf.Lerp(HazeFogDensity * 0.35f, UnderwaterFogDensity, _underwater);
-        Env.FogAerialPerspective = Mathf.Lerp(0.18f, 0.0f, _underwater);
+        Env.FogDensity = Mathf.Lerp(0.0f, UnderwaterFogDensity, _underwater);
+        Env.FogAerialPerspective = 0.0f;
         Env.FogSunScatter = Mathf.Lerp(0.45f, 0.15f, _underwater);
         Env.VolumetricFogEnabled = Quality >= 1 && VolumetricMistEnabled;
-        Env.VolumetricFogDensity = Mathf.Lerp(0.0045f, 0.045f, _underwater);
+        Env.VolumetricFogDensity = Mathf.Lerp(0.0f, 0.045f, _underwater);
         Env.VolumetricFogAlbedo = new Color(0.82f, 0.88f, 0.78f).Lerp(UnderwaterFogColor, _underwater);
         Env.VolumetricFogAnisotropy = Mathf.Lerp(0.72f, 0.55f, _underwater);
-        Env.VolumetricFogLength = 22.0f;
+        Env.VolumetricFogLength = 42.0f;
         Env.VolumetricFogDetailSpread = 0.65f;
-        Env.VolumetricFogAmbientInject = 0.25f;
-        Env.VolumetricFogSkyAffect = 0.15f;
+        Env.VolumetricFogAmbientInject = 0.04f;
+        Env.VolumetricFogSkyAffect = 0.0f;
         Env.VolumetricFogTemporalReprojectionEnabled = true;
         Env.VolumetricFogTemporalReprojectionAmount = 0.90f;
-        Env.AdjustmentSaturation = Mathf.Lerp(0.97f, 0.94f, _underwater);
+        Env.AdjustmentSaturation = Mathf.Lerp(0.99f, 0.94f, _underwater);
     }
 }

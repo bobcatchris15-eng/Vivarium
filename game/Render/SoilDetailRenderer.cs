@@ -36,6 +36,45 @@ public partial class SoilDetailRenderer : Node3D
     private readonly List<Transform3D> _fruitXf = new(), _bladeXf = new(), _stalkXf = new();
     private readonly List<Color> _fruitCol = new(), _bladeCol = new(), _stalkCol = new();
 
+    // Snapshot of the props near the camera in a 1 m bucket grid. Place() used to rescan every rock,
+    // log and gravel patch for every candidate instance (thousands of times per rebuild); now each
+    // candidate tests only its own bucket.
+    private const double PropBucketSize = 1.0;
+    private List<PropHit>[] _propBuckets = System.Array.Empty<List<PropHit>>();
+    private double _propBucketMinX, _propBucketMinZ;
+    private int _propBucketNx, _propBucketNz;
+
+    /// <summary>Bounding disc plus the authoritative prop it came from, so the exact ellipse/segment/
+    /// irregular outline test still runs — only the candidate set is narrowed.</summary>
+    private readonly struct PropHit
+    {
+        public readonly double X, Z, Radius;
+        public readonly Vivarium.Sim.World.Rock? Rock;
+        public readonly Vivarium.Sim.World.LogProp? Log;
+        public readonly Vivarium.Sim.World.GravelPatch? Gravel;
+
+        public PropHit(Vivarium.Sim.World.Rock rock)
+        {
+            X = rock.X; Z = rock.Z; Radius = rock.FootprintRadius;
+            Rock = rock; Log = null; Gravel = null;
+        }
+
+        public PropHit(Vivarium.Sim.World.LogProp log)
+        {
+            X = log.X; Z = log.Z; Radius = log.FootprintRadius;
+            Rock = null; Log = log; Gravel = null;
+        }
+
+        public PropHit(Vivarium.Sim.World.GravelPatch gravel)
+        {
+            X = gravel.X; Z = gravel.Z; Radius = gravel.Radius;
+            Rock = null; Log = null; Gravel = gravel;
+        }
+
+        public bool Covers(Vivarium.Sim.Core.Vec2 p) =>
+            Rock is not null ? Rock.Covers(p) : Log is not null ? Log.Covers(p) : Gravel!.Covers(p);
+    }
+
     public void Build(VivariumWorld w, IslandRenderer? habitat = null)
     {
         _refresh?.Dispose(); _refresh = null;
@@ -133,6 +172,7 @@ public partial class SoilDetailRenderer : Node3D
             if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, gr.Position) <= searchRadius + gr.Radius)
                 nearGravel.Add(gr);
         }
+        BuildPropLookup(nearRocks, nearLogs, nearGravel, camPos, haveCam);
 
         // Render-only filler deliberately avoids named flora. It can borrow a little colour/silhouette character
         // from the nearest plant outside that exclusion halo, but it never participates in simulation or competition.
@@ -290,12 +330,12 @@ public partial class SoilDetailRenderer : Node3D
                 if (nearest < 1.1)
                     baseGreen = baseGreen.Lerp(neighbourTint, (float)(0.12 + 0.16 * (1.0 - nearest / 1.1)));
                 for (int k = 0; k < bladeCount; k++)
-                    Place(_bladeXf, _bladeCol, g, p, ref rng, baseGreen, 0.72f, 1.38f, DetailKind.Blade, cellTilt, nearRocks, nearLogs, nearGravel);
+                    Place(_bladeXf, _bladeCol, g, p, ref rng, baseGreen, 0.72f, 1.38f, DetailKind.Blade, cellTilt);
                 for (int k = 0; k < stalkCount; k++)
-                    Place(_stalkXf, _stalkCol, g, p, ref rng, baseGreen.Lerp(new Color(0.62f, 0.56f, 0.30f), 0.30f), 0.78f, 1.28f, DetailKind.Stalk, cellTilt, nearRocks, nearLogs, nearGravel);
+                    Place(_stalkXf, _stalkCol, g, p, ref rng, baseGreen.Lerp(new Color(0.62f, 0.56f, 0.30f), 0.30f), 0.78f, 1.28f, DetailKind.Stalk, cellTilt);
             }
 
-            for (int k = 0; k < fruitCount; k++) Place(_fruitXf, _fruitCol, g, p, ref rng, fruitTint, 0.75f, 1.45f, DetailKind.Fruit, cellTilt, nearRocks, nearLogs, nearGravel);
+            for (int k = 0; k < fruitCount; k++) Place(_fruitXf, _fruitCol, g, p, ref rng, fruitTint, 0.75f, 1.45f, DetailKind.Fruit, cellTilt);
         }
 
         yield return true;
@@ -308,7 +348,7 @@ public partial class SoilDetailRenderer : Node3D
 
     private enum DetailKind { Fruit, Blade, Stalk }
 
-    private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale, DetailKind kind, Basis cellTilt, List<Vivarium.Sim.World.Rock> nearRocks, List<Vivarium.Sim.World.LogProp> nearLogs, List<Vivarium.Sim.World.GravelPatch> nearGravel)
+    private void Place(List<Transform3D> xf, List<Color> col, GridSpec g, Vivarium.Sim.Core.Vec2 center, ref CellRng rng, Color tint, float minScale, float maxScale, DetailKind kind, Basis cellTilt)
     {
         // Triangular jitter favours the middle of each source cell but has no visible axis-aligned edge.
         float jx = (rng.Randf() + rng.Randf() - 1f) * (float)(g.CellSize * (Quality >= 2 ? 0.52 : 1.04));
@@ -316,9 +356,7 @@ public partial class SoilDetailRenderer : Node3D
         var wp = center + new Vivarium.Sim.Core.Vec2(jx, jz);
         if (!_w.Domain.Contains(wp)) return;
         if (_w.Water.IsWet(wp)) return;
-        for (int ri = 0; ri < nearRocks.Count; ri++) if (nearRocks[ri].Covers(wp)) return;
-        for (int li = 0; li < nearLogs.Count; li++) if (nearLogs[li].Covers(wp)) return;
-        for (int gi = 0; gi < nearGravel.Count; gi++) if (nearGravel[gi].Covers(wp)) return;
+        if (CoveredByProp(wp)) return;
         float y = (float)_w.Terrain.Height(wp);
         float scale = rng.RandfRange(minScale, maxScale);
         var basis = new Basis(Vector3.Up, rng.RandfRange(0, Mathf.Tau));
@@ -348,6 +386,74 @@ public partial class SoilDetailRenderer : Node3D
         xf.Add(new Transform3D(basis, new Vector3((float)wp.X, y + 0.0015f * scale, (float)wp.Z)));
         float v = rng.RandfRange(0.82f, 1.16f);
         col.Add(new Color(tint.R * v, tint.G * v, tint.B * v, tint.A));
+    }
+
+    /// <summary>
+    /// Snapshots the near props once per rebuild into a 1 m bucket grid. Each prop is inserted into
+    /// every bucket its bounding disc touches, so a candidate can test just its own bucket and still
+    /// run the exact Covers() outline test on every prop that could possibly contain it.
+    /// </summary>
+    private void BuildPropLookup(List<Vivarium.Sim.World.Rock> rocks, List<Vivarium.Sim.World.LogProp> logs,
+        List<Vivarium.Sim.World.GravelPatch> gravel, Vector3 camPos, bool haveCam)
+    {
+        if (haveCam)
+        {
+            // Jitter can push a candidate slightly past CullRadius; pad generously so no lookup misses.
+            double half = CullRadius + 2.0;
+            _propBucketMinX = camPos.X - half;
+            _propBucketMinZ = camPos.Z - half;
+            _propBucketNx = Math.Max(1, (int)Math.Ceiling(2 * half / PropBucketSize));
+            _propBucketNz = _propBucketNx;
+        }
+        else
+        {
+            var g = _w.Grid;
+            _propBucketMinX = g.OriginX;
+            _propBucketMinZ = g.OriginZ;
+            _propBucketNx = Math.Max(1, (int)Math.Ceiling(g.Nx * g.CellSize / PropBucketSize));
+            _propBucketNz = Math.Max(1, (int)Math.Ceiling(g.Nz * g.CellSize / PropBucketSize));
+        }
+
+        int n = _propBucketNx * _propBucketNz;
+        if (_propBuckets.Length != n)
+        {
+            _propBuckets = new List<PropHit>[n];
+            for (int i = 0; i < n; i++) _propBuckets[i] = new List<PropHit>();
+        }
+        else
+        {
+            for (int i = 0; i < n; i++) _propBuckets[i].Clear();
+        }
+
+        foreach (var r in rocks) InsertProp(new PropHit(r));
+        foreach (var l in logs) InsertProp(new PropHit(l));
+        foreach (var gr in gravel) InsertProp(new PropHit(gr));
+    }
+
+    private void InsertProp(in PropHit hit)
+    {
+        int bx0 = (int)Math.Floor((hit.X - hit.Radius - _propBucketMinX) / PropBucketSize);
+        int bx1 = (int)Math.Floor((hit.X + hit.Radius - _propBucketMinX) / PropBucketSize);
+        int bz0 = (int)Math.Floor((hit.Z - hit.Radius - _propBucketMinZ) / PropBucketSize);
+        int bz1 = (int)Math.Floor((hit.Z + hit.Radius - _propBucketMinZ) / PropBucketSize);
+        bx0 = Math.Max(0, bx0); bx1 = Math.Min(_propBucketNx - 1, bx1);
+        bz0 = Math.Max(0, bz0); bz1 = Math.Min(_propBucketNz - 1, bz1);
+        for (int bz = bz0; bz <= bz1; bz++)
+        for (int bx = bx0; bx <= bx1; bx++)
+            _propBuckets[bz * _propBucketNx + bx].Add(hit);
+    }
+
+    /// <summary>True when a rock, log or gravel patch covers <paramref name="p"/>. O(props in one bucket).</summary>
+    private bool CoveredByProp(Vivarium.Sim.Core.Vec2 p)
+    {
+        if (_propBuckets.Length == 0) return false;
+        int bx = (int)Math.Floor((p.X - _propBucketMinX) / PropBucketSize);
+        int bz = (int)Math.Floor((p.Z - _propBucketMinZ) / PropBucketSize);
+        if ((uint)bx >= (uint)_propBucketNx || (uint)bz >= (uint)_propBucketNz) return false;
+        var bucket = _propBuckets[bz * _propBucketNx + bx];
+        for (int i = 0; i < bucket.Count; i++)
+            if (bucket[i].Covers(p)) return true;
+        return false;
     }
 
     /// <summary>Managed per-cell RNG. Godot's RandomNumberGenerator is an engine object, so each call crosses into

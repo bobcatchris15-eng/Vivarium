@@ -1,0 +1,85 @@
+{
+  "id": "cragset",
+  "name": "Cragset",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Tight blue rosette wedged in rock.",
+  "description": "A sculpted blue-grey rosette grows perfectly set to the crack, and its children ring it in ever-smaller copies.",
+  "habitat": {
+    "substrates": {
+      "rock": 1,
+      "gravel": 0.5
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.32,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.88,
+      "tolerance": 0.22
+    },
+    "nutrients": {
+      "optimum": 0.18,
+      "tolerance": 0.28
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.12,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.2,
+    "maxBiomass": 0.8,
+    "initialBiomass": 0.04,
+    "declinePerDay": 0.2,
+    "maturityDays": 8,
+    "lifespanDays": 400,
+    "nutrientPerBiomass": 0.1,
+    "radiusAtMax": 0.12,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 6,
+    "radius": 0.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.22,
+    "crowdingLimit": 2.0,
+    "sensitivity": 0.7
+  },
+  "proximity": [
+    {
+      "target": "feature:rock",
+      "radius": 0.5,
+      "bonus": 0.1
+    }
+  ],
+  "litterFraction": 0.7,
+  "sheddingPerDay": 0.012,
+  "grazingValue": 0.3,
+  "visual": {
+    "shape": "cragset",
+    "color": [
+      0.48,
+      0.54,
+      0.48
+    ],
+    "color2": [
+      0.76,
+      0.35,
+      0.35
+    ],
+    "colorVariance": 0.06,
+    "height": 0.1
+  },
+  "tags": [
+    "plant",
+    "succulent",
+    "xerophyte"
+  ]
+}

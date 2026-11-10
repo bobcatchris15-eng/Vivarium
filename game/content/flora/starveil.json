@@ -1,0 +1,100 @@
+{
+  "id": "starveil",
+  "name": "Starveil",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "White-starred spring ephemeral of deep shade.",
+  "description": "Palmate leaves unfold under the first warm days and hold up a veil of white stars; the whole colony retreats to root before the canopy closes.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "wood": 0.4
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.65,
+      "tolerance": 0.25
+    },
+    "light": {
+      "optimum": 0.22,
+      "tolerance": 0.22
+    },
+    "nutrients": {
+      "optimum": 0.55,
+      "tolerance": 0.35
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.2,
+    "maxBiomass": 0.9,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 200,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.16,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.8,
+    "propagules": 2,
+    "minBiomassFraction": 0.6
+  },
+  "competition": {
+    "radius": 0.3,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.8,
+      "bonus": 0.12
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "starveil",
+    "color": [
+      0.24,
+      0.42,
+      0.23
+    ],
+    "color2": [
+      0.94,
+      0.95,
+      0.91
+    ],
+    "colorVariance": 0.06,
+    "height": 0.18
+  },
+  "tags": [
+    "plant",
+    "flowering",
+    "shade"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.42,
+      0.35,
+      0.2
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

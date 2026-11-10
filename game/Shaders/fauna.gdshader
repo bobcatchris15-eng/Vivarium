@@ -101,24 +101,64 @@ vec3 rotate_z(vec3 p, float a) {
     return vec3(p.x * c - p.y * s, p.x * s + p.y * c, p.z);
 }
 
-float spine_wave(float x, float theta, float pose) {
-    if (anim_family == 4) return sin(theta - x * 6.2831853 * 0.85) * anim_body_wave * 0.085 * pose;
+// Derivative of smoothstep(a, b, x): zero outside the ramp, peaking at the middle.
+float smoothstep_slope(float a, float b, float x) {
+    float t = clamp((x - a) / (b - a), 0.0, 1.0);
+    return 6.0 * t * (1.0 - t) / (b - a);
+}
+
+// Spine wave and its analytic derivative, returned as (wave, dWave/dx).
+// Each branch evaluates one sin/cos pair; the previous finite-difference slope
+// evaluated the wave three times per vertex (three sin/cos pairs).
+vec2 spine_wave_slope(float x, float theta, float pose) {
+    if (anim_family == 4) {
+        const float k = 6.2831853 * 0.85;
+        float amp = anim_body_wave * 0.085 * pose;
+        float phase = theta - x * k;
+        return vec2(sin(phase), -cos(phase) * k) * amp;
+    }
     if (anim_body_style == 1) {
+        const float k = 6.2831853 * 0.65;
         float tail = 1.0 - smoothstep(-0.65, -0.20, x);
         float trunk = 1.0 - smoothstep(0.18, 0.40, x);
-        return sin(theta - x * 6.2831853 * 0.65) * anim_body_wave * 0.036 * pose * (trunk + tail * 2.4);
+        float envelope = trunk + tail * 2.4;
+        float d_envelope = -smoothstep_slope(0.18, 0.40, x) - 2.4 * smoothstep_slope(-0.65, -0.20, x);
+        float amp = anim_body_wave * 0.036 * pose;
+        float phase = theta - x * k;
+        float s = sin(phase), c = cos(phase);
+        return vec2(s * envelope, -c * k * envelope + s * d_envelope) * amp;
     }
-    if (anim_body_style == 7) return sin(theta - x * 4.0) * anim_body_wave * 0.045 * pose;
-    if (anim_body_style == 8) return sin(theta - x * 5.0) * anim_body_wave * 0.018 * pose;
+    if (anim_body_style == 7) {
+        float amp = anim_body_wave * 0.045 * pose;
+        float phase = theta - x * 4.0;
+        return vec2(sin(phase), -cos(phase) * 4.0) * amp;
+    }
+    if (anim_body_style == 8) {
+        float amp = anim_body_wave * 0.018 * pose;
+        float phase = theta - x * 5.0;
+        return vec2(sin(phase), -cos(phase) * 5.0) * amp;
+    }
     if (anim_body_style == 11) {
         float tail = clamp(0.42 - x, 0.0, 1.2);
-        return sin(theta - x * 5.0) * anim_body_wave * 0.11 * pose * tail * tail;
+        float d_tail = (x > -0.78 && x < 0.42) ? -1.0 : 0.0;
+        float amp = anim_body_wave * 0.11 * pose;
+        float phase = theta - x * 5.0;
+        float s = sin(phase), c = cos(phase);
+        return vec2(s * tail * tail, (-c * 5.0 * tail * tail + s * 2.0 * tail * d_tail)) * amp;
     }
     if (anim_body_style == 9 || anim_body_style == 10 || anim_body_style == 16) {
         float tail = 1.0 - smoothstep(-0.4, 0.15, x);
-        return sin(theta - x * 5.0) * anim_body_wave * 0.065 * pose * tail;
+        float d_tail = -smoothstep_slope(-0.4, 0.15, x);
+        float amp = anim_body_wave * 0.065 * pose;
+        float phase = theta - x * 5.0;
+        float s = sin(phase), c = cos(phase);
+        return vec2(s * tail, -c * 5.0 * tail + s * d_tail) * amp;
     }
-    return 0.0;
+    return vec2(0.0);
+}
+
+float spine_wave(float x, float theta, float pose) {
+    return spine_wave_slope(x, theta, pose).x;
 }
 
 // Foot trajectory with an authored stance fraction: sweep backward while planted, then recover forward
@@ -163,13 +203,11 @@ void vertex() {
     anim_role = floor(UV2.y + 0.001);
     float foot_weight = clamp((UV2.y - 1.0) * 4.0, 0.0, 1.0);
     body_uv = UV;
-    seed = float(INSTANCE_ID);
     // Genetic identity is stable when MultiMesh slots are reordered by visibility/death.
-    if (anim_body_style == 2) seed = hash(genes.xy * 213.7 + genes.z * 91.3) * 97.0;
-    // y/z have no packed steering bits: pattern identity survives every turn bucket.
-    if (anim_body_style == 1 || anim_body_style == 3 || anim_body_style == 4 || anim_body_style == 5
-        || anim_body_style == 10 || anim_body_style == 12 || anim_body_style == 13 || anim_body_style == 16
-        || anim_family == 4) seed = hash(genes.yz * 289.0) * 97.0;
+    // Always derive the pattern seed from the packed individual hue/identity in
+    // INSTANCE_CUSTOM.x: INSTANCE_ID changes whenever frustum culling reorders slots,
+    // which made markings crawl across every species that was not in the old subset.
+    seed = floor(fract(abs(INSTANCE_CUSTOM.x)) * 4096.0 + 0.5) * 1.17;
     motion_amount = anim_amplitude * mix(anim_idle_motion, 1.0, speed01);
     // Distance-clock walkers retain their last support pose when stopping. Reducing
     // the wave amplitude at zero speed would pull planted toes sideways at rest.
@@ -476,7 +514,8 @@ void vertex() {
     if (bends && !((anim_body_style == 12 || anim_body_style == 10) && anim_role > 3.5)) {
         float x = CUSTOM0.a > 0.5 ? attach.x : VERTEX.x;
         float z = VERTEX.z;
-        float wave = spine_wave(x, theta, pose);
+        vec2 spine = spine_wave_slope(x, theta, pose);
+        float wave = spine.x;
         // A supporting millipede toe retains its touchdown wave position, while the
         // torso and upper leg continue their metachronal motion around it.
         if (anim_family == 4 && CUSTOM0.a > 0.5 && anim_role > 0.5 && anim_role < 1.5) {
@@ -493,7 +532,8 @@ void vertex() {
                 wave = mix(wave, planted_wave, foot_weight);
             }
         }
-        float slope = (spine_wave(x + 0.001, theta, pose) - spine_wave(x - 0.001, theta, pose)) / 0.002;
+        // Analytic dWave/dx replaces the two offset evaluations and their division.
+        float slope = spine.y;
         if ((anim_body_style == 1 || anim_family == 4) && CUSTOM0.a > 0.5 && anim_role > 0.5 && anim_role < 1.5)
             slope *= 1.0 - foot_weight; // planted toes do not roll with the trunk's axial wave
         float a = turn_bend * (x - 0.5);
@@ -561,11 +601,32 @@ vec3 tissue_airy(float view_cos, float thickness_nm) {
     return clamp((Rs + Rp) * 0.5, vec3(0.0), vec3(1.0));
 }
 
+// Analytical canopy/sky catchlight for wet corneas. A broad sky dome plus one
+// tight softbox highlight reads as a corneal reflection without probe capture.
+vec3 eye_catchlight(vec3 world_vertex, vec3 world_normal, vec3 camera_position) {
+    vec3 view_dir = normalize(camera_position - world_vertex);
+    vec3 r = reflect(-view_dir, world_normal);
+    float sky = smoothstep(-0.08, 0.92, r.y);
+    float hotspot = pow(max(dot(r, normalize(vec3(-0.34, 0.80, 0.50))), 0.0), 220.0);
+    vec3 tint = mix(vec3(0.62, 0.76, 0.95), vec3(1.0, 0.94, 0.85), clamp(r.y * 1.4, 0.0, 1.0));
+    return tint * (sky * 0.16 + hotspot * 0.85);
+}
+
 void fragment() {
+    // Double-sided wing/fin membranes: light the face the camera actually sees.
+    // With cull_disabled the back face otherwise keeps the front-face normal and
+    // shades as if lit through the membrane.
+    if (!FRONT_FACING && anim_role > 1.5) NORMAL = -NORMAL;
     // Transmission is enabled shader-wide, including species without a tissue layer.
     // A positive depth prevents division by zero in the renderer's transmission term.
     SSS_TRANSMITTANCE_DEPTH = 0.001;
     SSS_TRANSMITTANCE_COLOR = vec4(0.0);
+    vec3 world_vertex = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    float cam_dist = length(CAMERA_POSITION_WORLD - world_vertex);
+    // Sub-centimetre skin pores, setal pits and chitin grain disappear past a few
+    // metres. Fading them to their mean before they alias keeps distant insects
+    // from shimmering, and keeps near skin fully detailed.
+    float micro_lod = 1.0 - smoothstep(2.5, 4.5, cam_dist);
     vec3 tissue_base_normal = NORMAL;
     vec3 base = hue_rotate(base_color, genes.x);
     float density = genes.y, contrast = genes.z;
@@ -581,7 +642,7 @@ void fragment() {
     else if (region > 2.5 && region < 3.5) col = mix(col, col * 1.4 + vec3(0.04), 0.35); // slightly lighter belly, same hue (pure white read as a toy)
     else if (region > 3.5) col = base * 1.15 + vec3(0.02);                // limbs & fins
     // fine surface grain (chitin pits / skin) so bodies don't read as smooth plastic
-    float micro = vnoise(body_uv * vec2(90.0, 60.0) + seed * 0.37);
+    float micro = mix(0.5, vnoise(body_uv * vec2(90.0, 60.0) + seed * 0.37), micro_lod);
     col *= 0.92 + 0.16 * micro;
     if (segment_rings > 0.5 && region < 1.5) {
         float sw = (vnoise(body_uv * vec2(3.0, 1.4) + seed * 0.21) - 0.5) * 0.18;
@@ -611,7 +672,7 @@ void fragment() {
         // Matte charcoal elytra, worn high ribs and dull joint cuticle.
         // Object-space detail preserves its scale across different UV regions.
         vec3 p = skin_position;
-        float grain = skin_noise(p * 170.0 + vec3(seed));
+        float grain = mix(0.5, skin_noise(p * 170.0 + vec3(seed)), micro_lod);
         float dust = smoothstep(0.48, 0.74, skin_noise(p * 19.0 + vec3(seed * 0.31)));
         col = mix(base, vec3(0.095, 0.085, 0.072), 0.72) * mix(0.84, 1.16, grain);
         col = mix(col, vec3(0.13, 0.105, 0.072), dust * 0.18);
@@ -630,7 +691,7 @@ void fragment() {
     if (anim_body_style == 7) {
         // Fine overlapping silvery scales: dielectric cuticle with subdued pigment.
         vec3 p=skin_position;
-        float grain=skin_noise(p*210.0+vec3(seed*.31));
+        float grain=mix(0.5,skin_noise(p*210.0+vec3(seed*.31)),micro_lod);
         float tarnish=skin_noise(p*27.0+vec3(seed*.51));
         float seams=smoothstep(.38,.49,abs(fract(p.x*27.0+p.z*.9)-.5));
         col=mix(vec3(.29,.30,.29),base*.74,tarnish)*mix(.94,1.06,grain);
@@ -645,7 +706,7 @@ void fragment() {
         // region1 is the shell; the ventral membrane and joints stay duller.
         vec3 p = skin_position;
         vec3 offset = vec3(seed * 0.19, seed * 0.37, seed * 0.61);
-        float grain = skin_noise(p * 185.0 + offset);
+        float grain = mix(0.5, skin_noise(p * 185.0 + offset), micro_lod);
         float patch = smoothstep(0.46, 0.68, skin_noise(p * 24.0 + offset));
         vec3 shell = mix(base * 0.72, ornament_color * 0.80, patch * 0.44);
         col = shell * mix(0.91, 1.09, grain);
@@ -673,7 +734,7 @@ void fragment() {
         vec3 offset = vec3(seed * 0.73, seed * 0.39, seed * 0.57);
         float blotches = skin_noise(p * mix(18.0, 32.0, density) + offset);
         float mottling = skin_noise(p * 72.0 + offset);
-        float pores = skin_noise(p * 230.0 + offset);
+        float pores = mix(0.5, skin_noise(p * 230.0 + offset), micro_lod);
         float patch = smoothstep(0.48, 0.63, blotches);
         float rim = smoothstep(0.40, 0.49, blotches) - patch;
         col = skin * mix(0.91, 1.16, mottling);
@@ -715,8 +776,8 @@ void fragment() {
         vec3 marking = hue_rotate(ornament_color, genes.x * 0.5);
         vec3 offset = vec3(seed * 0.17, seed * 0.41, seed * 0.63);
         float coarse = skin_noise(p * 17.0 + offset);
-        float grain = skin_noise(p * 130.0 + offset);
-        float pores = skin_noise(p * 300.0 + offset);
+        float grain = mix(0.5, skin_noise(p * 130.0 + offset), micro_lod);
+        float pores = mix(0.5, skin_noise(p * 300.0 + offset), micro_lod);
         float warp = skin_noise(p * 8.0 + offset) - 0.5;
         float pattern = floor(hash(genes.zy * 99.7 + 3.4) * 5.0);
         float mask = 0.0;
@@ -766,8 +827,8 @@ void fragment() {
         float choice = floor(identity * 6.0);
         float variant = floor(hash(genes.zy * 99.7 + 3.4) * 4.0);
         float coarse = skin_noise(p * 19.0 + offset);
-        float grain = skin_noise(p * 140.0 + offset);
-        float pores = skin_noise(p * 330.0 + offset);
+        float grain = mix(0.5, skin_noise(p * 140.0 + offset), micro_lod);
+        float pores = mix(0.5, skin_noise(p * 330.0 + offset), micro_lod);
         vec3 skin = base, marking = ornament_color;
         float relief = 0.00012 * grain + 0.00006 * pores;
         float mask = smoothstep(0.49, 0.64, coarse);
@@ -921,12 +982,21 @@ void fragment() {
     CLEARCOAT_ROUGHNESS = mix(0.35, 0.7, micro);
     RIM = anim_body_style == 1 || anim_body_style == 2 || detailed ? 0.025 : mix(0.08, 0.2, wet);
     RIM_TINT = 0.6;
-    BACKLIGHT = vec3(translucency) * col;
+    // Thin-tissue transmission: toes, ear margins, fins and lateral body edges
+    // scatter warm light when the sun is behind them. Shrimp and larvae, whose
+    // translucent flag is already high, transmit most.
+    float thin_limb = smoothstep(0.55, 0.85, anim_role) * (1.0 - smoothstep(1.5, 2.1, anim_role));
+    float thin_fin = smoothstep(1.5, 1.9, anim_role) * (1.0 - smoothstep(2.4, 2.9, anim_role));
+    vec3 cross_section = normalize(vec3(0.0, skin_position.y, skin_position.z) + vec3(0.0, 0.0001, 0.0001));
+    float lateral_margin = pow(abs(cross_section.z), 4.0) * (1.0 - smoothstep(1.5, 2.5, anim_role));
+    float thin_tissue = clamp(thin_limb * 0.70 + thin_fin + lateral_margin * 0.45, 0.0, 1.0);
+    BACKLIGHT = col * vec3(1.0, 0.46, 0.22) * translucency
+        * mix(0.55, 1.9, thin_tissue) * (1.0 - 0.45 * night_factor);
 
     if (surface_family == 1 && region > 0.5 && region < 1.5 && anim_role < 0.5) {
         // Silverfish/isopod region 1 includes dorsal cuticle AND head. Their
         // plate UV.x is a constant body station, so it is not a root-tip mask.
-        float grain = skin_noise(skin_position * 260.0 + vec3(seed * 0.31));
+        float grain = mix(0.5, skin_noise(skin_position * 260.0 + vec3(seed * 0.31)), micro_lod);
         float ridge_phase = skin_position.z * 220.0 + sin(skin_position.x * 52.0) * 0.4;
         float resolved = 1.0 - smoothstep(0.35, 1.2, fwidth(ridge_phase));
         float ridge = (0.5 + 0.5 * sin(ridge_phase)) * resolved;
@@ -970,7 +1040,8 @@ void fragment() {
     bool compound_eye = eye && (anim_body_style == 3 || anim_body_style == 6
         || anim_body_style == 7 || anim_body_style == 8 || anim_body_style == 9
         || anim_body_style == 10 || anim_body_style == 14 || anim_body_style == 15);
-    bool amphibian_eye = false; // (anim_body_style == 1 || anim_body_style == 2) && ((region > 1.5 && region < 2.5) || (region > 4.5 && region < 6.5));
+    bool amphibian_eye = (anim_body_style == 1 || anim_body_style == 2)
+        && ((region > 1.5 && region < 2.5) || (region > 4.5 && region < 6.5));
     vec3 tissue_n = finite_surface_normal(tissue_base_normal, NORMAL);
     vec3 tissue_axis = finite_surface_normal((VIEW_MATRIX * MODEL_MATRIX * vec4(1.0, 0.0, 0.0, 0.0)).xyz, vec3(1.0, 0.0, 0.0));
     vec3 tissue_t = tissue_axis - tissue_n * dot(tissue_axis, tissue_n);
@@ -1013,16 +1084,19 @@ void fragment() {
         && !(anim_body_style == 12 && region > 4.5 && region < 5.5)
         && !(region > 6.5 && region < 7.5);
     if (mucus_body) {
-        // Natural damp amphibian mucus: subtle wet sheen without chalky SSS blur or blown-out clearcoat
-        SSS_STRENGTH = 0.08 * tissue_mucus;
+        // Amphibian/mollusc mucus: a rough hydrated epidermis under a smooth,
+        // continuous film. Keeping two lobes (CLEARCOAT) preserves glandular
+        // relief and the diffuse skin tone instead of blowing the body into one
+        // glossy plastic shell.
+        SSS_STRENGTH = 0.10 * tissue_mucus;
         SSS_TRANSMITTANCE_COLOR = vec4(0.85, 0.22, 0.14, 1.0);
         SSS_TRANSMITTANCE_DEPTH = 0.002;
-        BACKLIGHT = ALBEDO * vec3(0.20, 0.10, 0.06) * tissue_mucus;
-        CLEARCOAT = 0.35 * tissue_mucus;
-        CLEARCOAT_ROUGHNESS = 0.18;
-        SPECULAR = 0.45;
-        // Glandular relief above remains visible under the continuous mucus.
-        ROUGHNESS = clamp(ROUGHNESS, 0.35, 0.65);
+        BACKLIGHT += ALBEDO * vec3(0.24, 0.12, 0.07) * tissue_mucus;
+        CLEARCOAT = clamp(0.42 * tissue_mucus, 0.0, 0.85);
+        CLEARCOAT_ROUGHNESS = mix(0.20, 0.09, tissue_mucus);
+        SPECULAR = mix(0.42, 0.56, tissue_mucus);
+        // Keep the glandular relief visible: the film is thin, not a lacquer.
+        ROUGHNESS = clamp(ROUGHNESS * mix(1.0, 0.86, tissue_mucus), 0.26, 0.62);
     }
     if (tissue_aquatic > 0.0 && !eye && !(region > 6.5 && region < 7.5)) {
         vec3 p = skin_position;
@@ -1059,16 +1133,28 @@ void fragment() {
         vec2 lens = tissue_hex_cell(body_uv * 65.0);
         float lens_footprint = max(length(dFdx(body_uv * 65.0)), length(dFdy(body_uv * 65.0)));
         float resolved = 1.0 - smoothstep(0.45, 1.5, lens_footprint);
-        NORMAL = finite_surface_normal(tissue_n + (tissue_t * lens.x + tissue_b * lens.y) * 0.35 * resolved, tissue_n);
+        // Convex corneal dome over the ommatidial array: lenses stay resolved at
+        // close range while the whole eye still reads as a wet curved surface.
+        vec2 dome_uv = body_uv - vec2(0.5);
+        vec3 dome_n = finite_surface_normal(vec3(dome_uv * 0.9, 1.0), vec3(0.0, 0.0, 1.0));
+        NORMAL = finite_surface_normal(tissue_n
+            + (tissue_t * (lens.x + dome_n.x * 0.85) + tissue_b * (lens.y + dome_n.y * 0.85)) * 0.35 * resolved,
+            tissue_n);
         float pseudopupil = pow(max(dot(NORMAL, VIEW), 0.0), 6.0);
-        ALBEDO = mix(vec3(0.033, 0.009, 0.007), vec3(0.003, 0.004, 0.005), pseudopupil);
-        ROUGHNESS = 0.065;
-        SPECULAR = 0.65;
+        // Dark glossy ommatidia around a deeper central pseudopupil.
+        vec3 ommatidia = mix(vec3(0.030, 0.010, 0.007), vec3(0.006, 0.007, 0.008), pseudopupil);
+        ALBEDO = mix(ommatidia, vec3(0.002, 0.003, 0.004), 1.0 - resolved * 0.55);
+        ROUGHNESS = 0.055;
+        SPECULAR = 0.70;
         METALLIC = 0.0;
-        CLEARCOAT = 0.45;
-        CLEARCOAT_ROUGHNESS = 0.08;
+        CLEARCOAT = 1.0;
+        CLEARCOAT_ROUGHNESS = 0.03;
         SSS_STRENGTH = 0.0;
         BACKLIGHT = vec3(0.0);
+        float compound_fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(NORMAL, VIEW), 0.0), 5.0);
+        vec3 compound_world_n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        EMISSION += eye_catchlight(world_vertex, compound_world_n, CAMERA_POSITION_WORLD)
+            * (0.30 + 0.70 * compound_fresnel) * (1.0 - 0.55 * night_factor);
     } else if (amphibian_eye) {
         vec2 eye_uv = body_uv - vec2(0.5);
         vec3 view_ts = vec3(dot(VIEW, tissue_t), dot(VIEW, tissue_b), max(dot(VIEW, tissue_n), 0.05));
@@ -1079,19 +1165,39 @@ void fragment() {
         vec2 iris_uv = eye_uv + (ray_z > 0.001 ? cornea_ray.xy * 0.08 / max(ray_z, 0.25) : vec2(0.0));
         float iris_r = length(iris_uv);
         float iris_angle = (dot(iris_uv, iris_uv) > 1e-8) ? atan(iris_uv.y, iris_uv.x) : 0.0;
-        float filament = 0.80 + 0.20 * sin(iris_angle * 91.0 + iris_r * 140.0);
-        vec3 iris_color = mix(vec3(0.33, 0.14, 0.025), vec3(0.58, 0.38, 0.07), genes.y) * filament;
-        float slit = smoothstep(0.045, 0.065, abs(iris_uv.x)) * (1.0 - smoothstep(0.30, 0.44, iris_r));
+        float filament = 0.74 + 0.26 * sin(iris_angle * 137.0 + iris_r * 210.0);
+        // Toads are golden amber with flecks; salamanders a warmer bronze/copper.
+        vec3 iris_low = anim_body_style == 2 ? vec3(0.30, 0.135, 0.020) : vec3(0.25, 0.088, 0.030);
+        vec3 iris_high = anim_body_style == 2 ? vec3(0.88, 0.63, 0.13) : vec3(0.68, 0.35, 0.11);
+        float flecks = smoothstep(0.52, 0.90, vnoise(vec2(iris_angle * 9.0, iris_r * 27.0) + seed));
+        vec3 iris_color = mix(iris_low, iris_high, clamp(flecks * 0.75 + filament * 0.35, 0.0, 1.0));
+        // Darker limbal ring where the iris meets the sclera, brighter near the pupil.
+        iris_color *= mix(0.50, 1.12, 1.0 - smoothstep(0.18, 0.42, iris_r));
+        float pupil;
+        if (anim_body_style == 2) {
+            // Toad: wide horizontal pupil.
+            pupil = 1.0 - smoothstep(0.14, 0.24, length(vec2(iris_uv.x * 0.72, iris_uv.y * 3.0)));
+        } else {
+            // Salamander: round pupil.
+            pupil = 1.0 - smoothstep(0.10, 0.17, iris_r);
+        }
         // Region6 is a separately authored pupil; preserve that geometry label.
-        if (region > 5.5 && region < 6.5) slit = 0.0;
-        ALBEDO = mix(vec3(0.003, 0.004, 0.005), iris_color, slit);
-        ROUGHNESS = 0.045;
+        if (region > 5.5 && region < 6.5) pupil = 1.0;
+        ALBEDO = mix(iris_color, vec3(0.002, 0.003, 0.004), pupil);
+        ROUGHNESS = 0.035;
         SPECULAR = 0.70;
-        METALLIC = slit * 0.12;
-        CLEARCOAT = 0.45;
-        CLEARCOAT_ROUGHNESS = 0.08;
+        METALLIC = 0.0;
+        // Convex corneal dome: the catchlight rolls across the eye like a lens.
+        NORMAL = finite_surface_normal(tissue_n
+            + (tissue_t * cornea_n.x + tissue_b * cornea_n.y) * 0.55, tissue_n);
+        CLEARCOAT = 1.0;
+        CLEARCOAT_ROUGHNESS = 0.03;
         SSS_STRENGTH = 0.0;
         BACKLIGHT = vec3(0.0);
+        float eye_fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(NORMAL, VIEW), 0.0), 5.0);
+        vec3 eye_world_n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        EMISSION += eye_catchlight(world_vertex, eye_world_n, CAMERA_POSITION_WORLD)
+            * (0.25 + 0.75 * eye_fresnel) * (1.0 - 0.55 * night_factor);
     }
 
     // Fantastical firefly lantern (duskflicker / midge posterior abdomen):
@@ -1121,5 +1227,17 @@ void fragment() {
         ROUGHNESS = mix(ROUGHNESS, 0.15, butt_mask);
         CLEARCOAT = max(CLEARCOAT, 0.5 * butt_mask);
         CLEARCOAT_ROUGHNESS = 0.05;
+    }
+
+    // Specular anti-aliasing: subpixel relief and pore gradients must widen the
+    // highlight lobe instead of sparkling. Reads the final normal, so every
+    // material branch above benefits, and glossy wet amphibians / chitinous
+    // beetles stay stable at distance. Eyes keep their sharp corneal highlight.
+    if (!eye) {
+        vec3 normal_dx = dFdx(NORMAL);
+        vec3 normal_dy = dFdy(NORMAL);
+        float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
+        if (normal_variance > 1e-7)
+            ROUGHNESS = min(sqrt(ROUGHNESS * ROUGHNESS + min(normal_variance * 0.35, 0.30)), 0.97);
     }
 }

@@ -1,0 +1,102 @@
+{
+  "id": "mistviolet",
+  "name": "Mistviolet",
+  "archetype": "plant",
+  "placementGroup": "terrestrial",
+  "role": "Violet star of spring flushes and wet meadows.",
+  "description": "Round leaves lie flat under pale violet flowers that nod; whole patches surface for a few spring weeks and vanish beneath the summer growth.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.4
+    },
+    "refuseSubstrates": [
+      "rock",
+      "wood"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.88,
+      "tolerance": 0.14
+    },
+    "light": {
+      "optimum": 0.55,
+      "tolerance": 0.3
+    },
+    "nutrients": {
+      "optimum": 0.5,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.55,
+    "minSuitability": 0.2
+  },
+  "growth": {
+    "ratePerDay": 0.2,
+    "maxBiomass": 0.8,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 12,
+    "lifespanDays": 220,
+    "nutrientPerBiomass": 0.3,
+    "radiusAtMax": 0.12,
+    "minRadius": 0.04
+  },
+  "spread": {
+    "intervalDays": 7,
+    "radius": 0.7,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.25,
+    "crowdingLimit": 1.8,
+    "sensitivity": 0.9
+  },
+  "proximity": [
+    {
+      "target": "feature:water",
+      "radius": 0.8,
+      "bonus": 0.2
+    }
+  ],
+  "litterFraction": 0.85,
+  "grazingValue": 0,
+  "visual": {
+    "shape": "mistviolet",
+    "color": [
+      0.24,
+      0.42,
+      0.27
+    ],
+    "color2": [
+      0.48,
+      0.35,
+      0.76
+    ],
+    "colorVariance": 0.06,
+    "height": 0.14
+  },
+  "tags": [
+    "plant",
+    "flowering",
+    "wet"
+  ],
+  "postLife": {
+    "standingDays": 3,
+    "collapseDays": 2,
+    "fallenDays": 16,
+    "advancedDays": 7,
+    "coarseFraction": 0.04,
+    "decayHalfLifeMultiplier": 0.62,
+    "standingRetention": 0.2,
+    "deadColor": [
+      0.35,
+      0.42,
+      0.23
+    ],
+    "litterColorInfluence": 0.86,
+    "dryBleach": 0.1,
+    "wetDarken": 0.2
+  }
+}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Time;
 using Vivarium.Sim.World;
@@ -12,7 +12,7 @@ namespace Vivarium.Sim.Guardians;
 /// </summary>
 public static class GuardianNeeds
 {
-    public static void StepMetabolism(GuardianIndividual g, GuardianDef def, double bioDt, VivariumWorld? world)
+    public static void StepMetabolism(GuardianIndividual g, GuardianDef def, double bioDt, VivariumWorld? world, double daylight01 = 0.7, double nocturnalBias = 0.3)
     {
         if (g == null || def == null) return;
 
@@ -60,12 +60,56 @@ public static class GuardianNeeds
             g.BodyTemperature = Math.Max(targetAmbient, g.BodyTemperature - tempDrift);
         g.BodyTemperature = Math.Clamp(g.BodyTemperature, 0.0, 1.0);
 
-        // 5. Arousal: decays slowly toward 0.3 at 0.001 * bioDt / SimClock.DefaultSimSecondsPerRealSecond
-        double arousalDrift = 0.001 * bioDt / SimClock.DefaultSimSecondsPerRealSecond;
-        if (g.Arousal > 0.3)
-            g.Arousal = Math.Max(0.3, g.Arousal - arousalDrift);
-        else if (g.Arousal < 0.3)
-            g.Arousal = Math.Min(0.3, g.Arousal + arousalDrift);
+        // 5. Circadian rhythm modulation: nocturnalBias vs daylight01 modulates active fatigue and target arousal
+        double fatigueMultiplier = 1.0;
+        double targetArousal = 0.3;
+        if (nocturnalBias > 0.55)
+        {
+            if (daylight01 > 0.6)
+            {
+                fatigueMultiplier = 1.35; // accumulates 35% faster in bright daylight
+                targetArousal = 0.18;     // arousal is lower during day
+            }
+            else if (daylight01 < 0.45)
+            {
+                fatigueMultiplier = 0.75; // accumulates slower at dusk/night
+                targetArousal = 0.48;     // arousal/foraging drive rises
+            }
+        }
+        else if (nocturnalBias < 0.45)
+        {
+            if (daylight01 < 0.35)
+            {
+                fatigueMultiplier = 1.35; // accumulates faster at night
+                targetArousal = 0.18;     // lower arousal at night
+            }
+            else if (daylight01 > 0.45)
+            {
+                fatigueMultiplier = 0.80; // accumulates slower in daylight
+                targetArousal = 0.45;     // energized during daylight
+            }
+        }
+
+        bool isActive = g.Activity is not (GuardianActivity.Sleep or GuardianActivity.Rest or GuardianActivity.Settle);
+        if (isActive)
+        {
+            double basalFatigue = 0.0006 * fatigueMultiplier * bioDt / SimClock.DefaultSimSecondsPerRealSecond;
+            g.Fatigue = Math.Clamp(g.Fatigue + basalFatigue, 0.0, 1.0);
+        }
+
+        // Arousal: drifts toward targetArousal
+        double arousalDrift = 0.0015 * bioDt / SimClock.DefaultSimSecondsPerRealSecond;
+        if (g.Arousal > targetArousal)
+            g.Arousal = Math.Max(targetArousal, g.Arousal - arousalDrift);
+        else if (g.Arousal < targetArousal)
+            g.Arousal = Math.Min(targetArousal, g.Arousal + arousalDrift);
+        g.Arousal = Math.Clamp(g.Arousal, 0.0, 1.0);
+
+
+
+
+
+
         g.Arousal = Math.Clamp(g.Arousal, 0.0, 1.0);
 
         // 6. Alertness: decays toward baseline 0.2 at 0.005 * bioDt / SimClock.DefaultSimSecondsPerRealSecond
@@ -74,6 +118,15 @@ public static class GuardianNeeds
             g.Alertness = Math.Max(0.2, g.Alertness - alertDrift);
         else if (g.Alertness < 0.2)
             g.Alertness = Math.Min(0.2, g.Alertness + alertDrift);
+        g.Alertness = Math.Clamp(g.Alertness, 0.0, 1.0);
+
+        // Clamping of all physiological needs
+        g.Energy = Math.Clamp(g.Energy, 0.0, def.EnergyMax);
+        g.Hydration = Math.Clamp(g.Hydration, 0.0, 1.0);
+        g.Fatigue = Math.Clamp(g.Fatigue, 0.0, 1.0);
+        g.Comfort = Math.Clamp(g.Comfort, 0.0, 1.0);
+        g.BodyTemperature = Math.Clamp(g.BodyTemperature, 0.0, 1.0);
+        g.Arousal = Math.Clamp(g.Arousal, 0.0, 1.0);
         g.Alertness = Math.Clamp(g.Alertness, 0.0, 1.0);
 
         // 7. Seed digestion and excretion: keep existing seed digestion logic

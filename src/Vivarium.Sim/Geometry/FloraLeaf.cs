@@ -7,13 +7,14 @@ public readonly record struct FloraLeaf(int FirstVertex, int VertexCount, int Fi
     ulong Identity, Vec3 Attachment, double Length, int MaterialVariant, double Age, double Flexibility,
     bool Volumetric);
 
-/// <summary>Screen-size tiers (projected bounding diameter, px) with hysteresis. 0 near (>= ~120 px),
-/// 1 medium (down to ~40 px), 2 far. Every organism remains represented; secondary detail is thinned.</summary>
+/// <summary>Screen-size tiers (projected bounding diameter, px) with hysteresis. 0 near (>= ~210 px),
+/// 1 medium (down to ~75 px), 2 far. Every organism remains represented; secondary detail is thinned.</summary>
 public static class FloraDetail
 {
-    public const double FullPixels = 120, MidPixels = 40;
-    // Optional distance reduction shares its first boundary with the camera's blur onset.
-    public const double DistanceMid = 5, DistanceFar = 10;
+    public const double FullPixels = 210, MidPixels = 75;
+    // Distance reduction tuned to the 8 m diorama: full detail through the near
+    // interaction zone, mid by 3 m, far beyond the island's readable half-width.
+    public const double DistanceMid = 3.0, DistanceFar = 5.5;
 
     public static int SelectDistance(double depth, int previous = -1, double distanceScale = 1) => previous switch
     {

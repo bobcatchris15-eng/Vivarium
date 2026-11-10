@@ -703,7 +703,7 @@ public static class PilotTreeMeshes
 
         private void NeedleBlade(Vec3 baseP, Vec3 tip, double width, double[] color)
         {
-            CurvedBlade(baseP,tip,width,color,2,rng.Range(-.72,.72),width*rng.Range(.12,.32),rng.Range(-.12,.14),1);
+            CurvedBlade(baseP,tip,width,color,4,rng.Range(-.72,.72),width*rng.Range(.12,.32),rng.Range(-.12,.14),2);
         }
 
         // A single cull-disabled surface has a rolled, folded cross section and
@@ -780,7 +780,7 @@ public static class PilotTreeMeshes
                     if(n.LengthSq<1e-8)n=rolledNormal;
                     if(n.Dot(rolledNormal)<0)n=-n;
                     double shade=.86+.14*(1-Math.Abs(x))+.05*Math.Sin(t*Math.PI+phase);
-                    m.AddVertex(p,n,Primitives.Scale(color,shade),0,t,.5+.5*x);
+                    m.AddVertex(p, n, Primitives.Scale(color, shade), 0, t, .5 + .5 * x, 0.5, 1.0);
                 }
             }
             int row=across+1;
@@ -805,7 +805,7 @@ public static class PilotTreeMeshes
                 var p=m.Position(i)-baseP;
                 double v=Math.Clamp(p.Dot(axis)/lengthSq,0,1);
                 double u=Math.Clamp(.5+p.Dot(across)/Math.Max(1e-9,2*width*across.LengthSq),0,1);
-                m.UV[i*2]=(float)v;m.UV[i*2+1]=(float)u;
+                m.UV[i*2]=(float)v;m.UV[i*2+1]=(float)u;m.UV2[i*2]=0.5f;m.UV2[i*2+1]=1.0f;
                 m.Colors[i*4+3]=0;
             }
         }

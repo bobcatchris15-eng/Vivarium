@@ -225,7 +225,8 @@ public readonly struct FloraSnapshotItem
             for (int i = 0; i < f.ClimberSegments.Count; i++)
             {
                 var s = f.ClimberSegments[i];
-                segs[i] = new ClimberSegmentSnapshot(s.Position, s.Normal, s.Forward, s.ParentIndex, s.Attached, s.Senescent, s.Radius);
+                segs[i] = new ClimberSegmentSnapshot(s.Position, s.Normal, s.Forward, s.ParentIndex,
+                    s.Attached, s.Senescent, s.Radius, s.Support, s.HostId);
             }
             ClimberSegments = segs;
         }
@@ -257,10 +258,15 @@ public readonly struct ClimberSegmentSnapshot
     public int ParentIndex { get; }
     public bool Attached { get; }
     public bool Senescent { get; }
+    /// <summary>Support binding copied for render-only contact correction; simulation state is unchanged.</summary>
+    public ClimberSurfaceKind Support { get; }
+    public EntityId HostId { get; }
     /// <summary>Stem radius at this node, in metres. The stem tapers from the base of the plant to the growing tip.</summary>
     public double Radius { get; }
 
-    public ClimberSegmentSnapshot(Vec3 pos, Vec3 normal, Vec3 forward, int parentIdx, bool attached, bool senescent, double radius = 0)
+    public ClimberSegmentSnapshot(Vec3 pos, Vec3 normal, Vec3 forward, int parentIdx, bool attached,
+        bool senescent, double radius = 0, ClimberSurfaceKind support = ClimberSurfaceKind.Ground,
+        EntityId hostId = default)
     {
         Position = pos;
         Normal = normal;
@@ -269,6 +275,8 @@ public readonly struct ClimberSegmentSnapshot
         Attached = attached;
         Senescent = senescent;
         Radius = radius;
+        Support = support;
+        HostId = hostId;
     }
 }
 

@@ -13,7 +13,8 @@ public readonly record struct SheetParams(
     double LobeDepth = 0.0,
     double Thickness = 0.001,
     double Curl = 0.0,
-    int DetailLevel = 1);
+    int DetailLevel = 1,
+    bool FaceAxisUp = false);
 
 public static class Sheet
 {
@@ -34,48 +35,44 @@ public static class Sheet
             double hw = p.HalfWidth * Envelope(t) * LobeMod(t);
             double lateral = x * hw;
             double edge = Math.Abs(x);
-            double crown = p.Curl * t * edge * edge * p.HalfWidth * 6.0;
+            double crown = p.Curl * t * edge * edge * p.HalfWidth * 1.6;
             return f.Point + f.Side * lateral + f.Up * crown;
         }
 
-        for (int face = 0; face < 2; face++)
+        double u2 = 0.5;
+        int start = m.VertexCount;
+        for (int i = 0; i <= longitudinal; i++)
         {
-            double faceSign = face == 0 ? 1.0 : -1.0;
-            double u2 = face;
-            int start = m.VertexCount;
-            for (int i = 0; i <= longitudinal; i++)
+            double t = (double)i / longitudinal;
+            for (int j = 0; j <= acrossCols; j++)
             {
-                double t = (double)i / longitudinal;
-                for (int j = 0; j <= acrossCols; j++)
-                {
-                    double x = (double)j / acrossCols * 2 - 1;
-                    double edge = Math.Abs(x);
-                    double thickness = p.Thickness * Math.Max(0, 1 - edge);
-                    var basePos = Raw(t, x);
+                double x = (double)j / acrossCols * 2 - 1;
+                var basePos = Raw(t, x);
 
-                    const double eps = 1e-3;
-                    var ahead = Raw(Math.Min(1, t + eps), x) - Raw(Math.Max(0, t - eps), x);
-                    var cross = Raw(t, Math.Min(1, x + eps * 4)) - Raw(t, Math.Max(-1, x - eps * 4));
-                    var n = ahead.Cross(cross).Normalized();
-                    if (n.LengthSq < 1e-8) n = new Vec3(0, 1, 0);
+                const double eps = 1e-3;
+                var ahead = Raw(Math.Min(1, t + eps), x) - Raw(Math.Max(0, t - eps), x);
+                var cross = Raw(t, Math.Min(1, x + eps * 4)) - Raw(t, Math.Max(-1, x - eps * 4));
+                var n = ahead.Cross(cross).Normalized();
+                if (p.FaceAxisUp) n = -n;
+                if (n.LengthSq < 1e-8) n = p.FaceAxisUp ? Axis.Sample(frames, t).Up : Vec3.Up;
 
-                    var pos = basePos + n * (faceSign * thickness * 0.5);
-                    var faceN = face == 0 ? n : -n;
-                    var col = Primitives.Mix(baseCol, tipCol, t);
-                    m.AddVertex(pos, faceN, col, 1, t, (x + 1) * 0.5, u2, 0);
-                }
+                var pos = basePos;
+                var faceN = n;
+                var col = Primitives.Mix(baseCol, tipCol, t);
+                m.AddVertex(pos, faceN, col, 1, t, (x + 1) * 0.5, u2, 1.0);
             }
-            int row = acrossCols + 1;
-            var outward = face == 0 ? new Vec3(0, 1, 0) : new Vec3(0, -1, 0);
-            for (int i = 0; i < longitudinal; i++)
-                for (int j = 0; j < acrossCols; j++)
-                {
-                    int a = start + i * row + j, b = a + row;
-                    var n0 = m.NormalAt(a);
-                    Primitives.TriangleFacing(m, a, b, a + 1, n0.LengthSq > 1e-8 ? n0 : outward);
-                    Primitives.TriangleFacing(m, a + 1, b, b + 1, n0.LengthSq > 1e-8 ? n0 : outward);
-                }
         }
+        int row = acrossCols + 1;
+        var outward = new Vec3(0, 1, 0);
+        for (int i = 0; i < longitudinal; i++)
+            for (int j = 0; j < acrossCols; j++)
+            {
+                int a = start + i * row + j, b = a + row;
+                var n0 = m.NormalAt(a);
+                Primitives.TriangleFacing(m, a, b, a + 1, n0.LengthSq > 1e-8 ? n0 : outward);
+                Primitives.TriangleFacing(m, a + 1, b, b + 1, n0.LengthSq > 1e-8 ? n0 : outward);
+            }
+
         return m.TriangleCount - startTris;
     }
 }

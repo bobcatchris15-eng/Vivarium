@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Vivarium.Sim.Core;
@@ -51,7 +51,11 @@ public static class GuardianCatalog
                 NocturnalBias: 0.2,
                 CanSwim: false,
                 CanClimbTrunk: true,
-                PreferredRestType: "tree_perch"
+                PreferredRestType: "tree_perch",
+                HopArcHeight: 0.06,
+                HopCadence: 2.6,
+                MaxTurnRate: 3.6,
+                Acceleration: 2.6
             )
         ),
 
@@ -81,7 +85,11 @@ public static class GuardianCatalog
                 NocturnalBias: 0.8,
                 CanSwim: false,
                 CanClimbTrunk: false,
-                PreferredRestType: "ball"
+                PreferredRestType: "ball",
+                CanDig: true,
+                MaxTurnRate: 2.0,
+                Acceleration: 1.4,
+                Deceleration: 2.2
             )
         ),
 
@@ -111,7 +119,10 @@ public static class GuardianCatalog
                 NocturnalBias: 0.3,
                 CanSwim: true,
                 CanClimbTrunk: true,
-                PreferredRestType: "coil"
+                PreferredRestType: "coil",
+                MaxTurnRate: 2.4,
+                Acceleration: 1.5,
+                MaxSlopeDegrees: 48.0
             )
         ),
 
@@ -139,6 +150,9 @@ public static class GuardianCatalog
                 DigAbility: 0.6,
                 CuriosityBias: 0.8,
                 NocturnalBias: 0.1,
+                CanDig: true,
+                MaxTurnRate: 2.1,
+                Acceleration: 1.8,
                 CanSwim: true,
                 CanClimbTrunk: false,
                 PreferredRestType: "ground_curl"
@@ -168,6 +182,9 @@ public static class GuardianCatalog
                 BaskPriority: 0.3,
                 DigAbility: 1.4,
                 CuriosityBias: 1.6,
+                CanDig: true,
+                MaxTurnRate: 3.2,
+                Acceleration: 2.5,
                 NocturnalBias: 0.3,
                 CanSwim: true,
                 CanClimbTrunk: true,
@@ -201,7 +218,10 @@ public static class GuardianCatalog
                 NocturnalBias: 0.7,
                 CanSwim: false,
                 CanClimbTrunk: true,
-                PreferredRestType: "fork_wedge"
+                PreferredRestType: "fork_wedge",
+                MaxTurnRate: 2.0,
+                Acceleration: 1.4,
+                MaxSlopeDegrees: 45.0
             )
         ),
         new GuardianDef(
@@ -214,7 +234,8 @@ public static class GuardianCatalog
             Description: "A watchful thylacine with rounded ears, a heavy tapering tail, and fern-branching hindquarter stripes.",
             BehaviorProfile: new GuardianBehaviorProfile(ForageWeight: 1.1, DrinkFrequency: 0.9,
                 PlayThreshold: 0.65, BaskPriority: 0.4, DigAbility: 0.3, CuriosityBias: 1.2,
-                NocturnalBias: 0.7, CanSwim: true, CanClimbTrunk: false)),
+                NocturnalBias: 0.7, CanSwim: true, CanClimbTrunk: false,
+                CanDig: true, MaxTurnRate: 2.9, Acceleration: 2.6, Deceleration: 3.2)),
         new GuardianDef(
             Id: Dewhorn, Name: "Dewhorn (Saiga)", Archetype: "dewhorn",
             Locomotion: LocomotionMode.TerrestrialQuadruped,
@@ -225,7 +246,8 @@ public static class GuardianCatalog
             Description: "A soft-nosed saiga with slender legs and amber horns that curl inward to catch dew.",
             BehaviorProfile: new GuardianBehaviorProfile(ForageWeight: 1.3, DrinkFrequency: 1.1,
                 PlayThreshold: 0.5, BaskPriority: 0.3, DigAbility: 0.2, CuriosityBias: 1.0,
-                NocturnalBias: 0.2, CanSwim: false, CanClimbTrunk: false)),
+                NocturnalBias: 0.2, CanSwim: false, CanClimbTrunk: false,
+                MaxTurnRate: 3.0, Acceleration: 3.0, Deceleration: 3.5)),
         new GuardianDef(
             Id: Hushbill, Name: "Hushbill (Shoebill)", Archetype: "hushbill",
             Locomotion: LocomotionMode.AvianPerchHop,
@@ -236,7 +258,8 @@ public static class GuardianCatalog
             Description: "A tall, still shoebill with a sculptural bill and two curling question-mark crest feathers.",
             BehaviorProfile: new GuardianBehaviorProfile(ForageWeight: 0.9, DrinkFrequency: 1.3,
                 PlayThreshold: 0.85, BaskPriority: 0.5, DigAbility: 0.0, CuriosityBias: 0.5,
-                NocturnalBias: 0.2, CanSwim: true, CanClimbTrunk: false)),
+                NocturnalBias: 0.2, CanSwim: true, CanClimbTrunk: false,
+                HopArcHeight: 0.015, HopCadence: 1.25, MaxTurnRate: 2.2, Acceleration: 1.3)),
         new GuardianDef(
             Id: Ruffleback, Name: "Ruffleback (Mata mata)", Archetype: "ruffleback",
             Locomotion: LocomotionMode.TerrestrialQuadruped,
@@ -247,7 +270,8 @@ public static class GuardianCatalog
             Description: "A flat, rugged mata mata turtle with ribbon-curled neck fringes and a patient snorkelling nose.",
             BehaviorProfile: new GuardianBehaviorProfile(ForageWeight: 0.8, DrinkFrequency: 1.4,
                 PlayThreshold: 0.9, BaskPriority: 1.5, DigAbility: 0.1, CuriosityBias: 0.4,
-                NocturnalBias: 0.5, CanSwim: true, CanClimbTrunk: false)),
+                NocturnalBias: 0.5, CanSwim: true, CanClimbTrunk: false,
+                MaxTurnRate: 1.4, Acceleration: 0.9, Deceleration: 1.8)),
     });
 
     public static GuardianDef? Find(string id) =>

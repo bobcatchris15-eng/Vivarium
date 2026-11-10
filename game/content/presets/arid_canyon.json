@@ -719,6 +719,38 @@
     {
       "species": "blackneedle",
       "count": 3
+    },
+    {
+      "species": "stoneknot_moss",
+      "count": 6
+    },
+    {
+      "species": "sunscald_lichen",
+      "count": 6
+    },
+    {
+      "species": "ashfingers_lichen",
+      "count": 6
+    },
+    {
+      "species": "starsplit",
+      "count": 3
+    },
+    {
+      "species": "emberbracken",
+      "count": 2
+    },
+    {
+      "species": "ashwire",
+      "count": 3
+    },
+    {
+      "species": "brightknot",
+      "count": 3
+    },
+    {
+      "species": "greywatch",
+      "count": 2
     }
   ],
   "starterFauna": [

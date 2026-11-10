@@ -1,0 +1,87 @@
+{
+  "id": "barrowbole",
+  "name": "Barrowbole",
+  "archetype": "fungus",
+  "placementGroup": "decomposer",
+  "role": "Stout bolete of rich soil.",
+  "description": "A heavy brown dome like a burial mound sits over a fat stem; beneath, the pore face is cream and fine as bread.",
+  "habitat": {
+    "feeds": "detritus",
+    "substrates": {
+      "soil": 1,
+      "wood": 0.4
+    },
+    "refuseSubstrates": [
+      "water",
+      "rock"
+    ],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.66,
+      "tolerance": 0.22
+    },
+    "light": {
+      "optimum": 0.4,
+      "tolerance": 2
+    },
+    "nutrients": {
+      "optimum": 0.15,
+      "tolerance": 0.25
+    },
+    "maxWaterDepth": 0,
+    "minSuitability": 0.15
+  },
+  "growth": {
+    "ratePerDay": 0.25,
+    "maxBiomass": 0.65,
+    "initialBiomass": 0.03,
+    "declinePerDay": 0.35,
+    "maturityDays": 12,
+    "lifespanDays": 60,
+    "nutrientPerBiomass": 0.4,
+    "radiusAtMax": 0.14,
+    "minRadius": 0.035
+  },
+  "spread": {
+    "intervalDays": 8,
+    "radius": 0.5,
+    "propagules": 2,
+    "minBiomassFraction": 0.55
+  },
+  "competition": {
+    "radius": 0.2,
+    "crowdingLimit": 1.6,
+    "sensitivity": 0.6
+  },
+  "proximity": [],
+  "litterFraction": 0.85,
+  "sheddingPerDay": 0.008,
+  "grazingValue": 0.3,
+  "visual": {
+    "shape": "barrowbole",
+    "color": [
+      0.478,
+      0.322,
+      0.2
+    ],
+    "color2": [
+      0.886,
+      0.839,
+      0.706
+    ],
+    "colorVariance": 0.07,
+    "height": 0.12
+  },
+  "tags": [
+    "fungus",
+    "decomposer",
+    "bolete",
+    "mycorrhizal"
+  ],
+  "decomposition": {
+    "radius": 0.8,
+    "fineMultiplier": 1.25,
+    "coarseMultiplier": 2.5,
+    "fruitMultiplier": 1.15
+  }
+}

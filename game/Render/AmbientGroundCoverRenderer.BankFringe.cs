@@ -66,7 +66,11 @@ private sealed class BankPatch
             if (!_bankPatches.TryGetValue(key, out var patch))
             {
                 patch = new BankPatch { Node = new MeshInstance3D {
-                    Name = $"BankPatch_{key.X}_{key.Z}", CastShadow = GeometryInstance3D.ShadowCastingSetting.On
+                    Name = $"BankPatch_{key.X}_{key.Z}",
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
+                    VisibilityRangeEnd = 10.0f,
+                    VisibilityRangeEndMargin = 1.5f,
+                    VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
                 }};
                 _bankNode.AddChild(patch.Node); _bankPatches.Add(key, patch);
             }

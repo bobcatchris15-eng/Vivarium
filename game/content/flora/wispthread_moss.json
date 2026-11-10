@@ -1,0 +1,107 @@
+{
+  "id": "wispthread_moss",
+  "name": "Wispthread moss",
+  "archetype": "moss",
+  "placementGroup": "moss_lichen",
+  "role": "Wispy thread moss of wet shaded timber.",
+  "description": "Fine threadlike shoots drift in still air over sodden logs; the strands never quite dry, even under cover.",
+  "habitat": {
+    "substrates": {
+      "wood": 1,
+      "rock": 0.6,
+      "soil": 0.4
+    },
+    "refuseSubstrates": [
+      "water"
+    ],
+    "refuseTags": [
+      "bark_fresh"
+    ],
+    "moisture": {
+      "optimum": 0.8,
+      "tolerance": 0.18
+    },
+    "light": {
+      "optimum": 0.2,
+      "tolerance": 0.25
+    },
+    "nutrients": {
+      "optimum": 0.4,
+      "tolerance": 0.3
+    },
+    "maxWaterDepth": 0,
+    "hardMinMoisture": 0.5,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.35,
+    "maxBiomass": 1,
+    "initialBiomass": 0.05,
+    "declinePerDay": 0.25,
+    "maturityDays": 6,
+    "lifespanDays": 150,
+    "nutrientPerBiomass": 0.2,
+    "radiusAtMax": 0.34,
+    "minRadius": 0.05
+  },
+  "spread": {
+    "intervalDays": 4,
+    "radius": 0.45,
+    "propagules": 2,
+    "minBiomassFraction": 0.5
+  },
+  "competition": {
+    "radius": 0.35,
+    "crowdingLimit": 2.4,
+    "sensitivity": 0.8
+  },
+  "proximity": [
+    {
+      "target": "feature:log",
+      "radius": 0.6,
+      "bonus": 0.15
+    }
+  ],
+  "litterFraction": 0.8,
+  "grazingValue": 0,
+  "mat": {
+    "layer": "Mat",
+    "lateral": 0.05,
+    "maxHeight": 0.03,
+    "heightRule": "flat",
+    "water": {
+      "kWet": 7,
+      "kDry": 1.0,
+      "wMin": 0.35,
+      "wOpt": 0.78
+    },
+    "light": {
+      "k": 0.5,
+      "max": 0.7
+    },
+    "dormBrownDays": 2,
+    "dormDeathDays": 8,
+    "sporeRate": 0.002,
+    "moistureFeedback": 0,
+    "seedBiomass": 0.08
+  },
+  "visual": {
+    "shape": "wispthread_moss",
+    "color": [
+      0.18,
+      0.29,
+      0.235
+    ],
+    "color2": [
+      0.298,
+      0.42,
+      0.322
+    ],
+    "colorVariance": 0.05,
+    "height": 0.03
+  },
+  "tags": [
+    "moss",
+    "shade"
+  ]
+}

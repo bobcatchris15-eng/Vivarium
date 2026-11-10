@@ -1,0 +1,102 @@
+{
+  "id": "banksorrow",
+  "name": "Banksorrow",
+  "archetype": "plant",
+  "placementGroup": "woody",
+  "role": "Leaning silky-leaved tree of stream banks.",
+  "description": "Stems lean far out over the water and the long silky leaves trail on the surface; grounded tips rise again as new trees.",
+  "habitat": {
+    "substrates": {
+      "soil": 1,
+      "water": 0.5
+    },
+    "refuseSubstrates": [],
+    "refuseTags": [],
+    "moisture": {
+      "optimum": 0.8,
+      "tolerance": 0.2
+    },
+    "light": {
+      "optimum": 0.75,
+      "tolerance": 0.28
+    },
+    "nutrients": {
+      "optimum": 0.6,
+      "tolerance": 0.32
+    },
+    "maxWaterDepth": 0.05,
+    "hardMinMoisture": 0.45,
+    "minSuitability": 0.18
+  },
+  "growth": {
+    "ratePerDay": 0.035,
+    "maxBiomass": 10.0,
+    "initialBiomass": 0.2,
+    "declinePerDay": 0.03,
+    "maturityDays": 55,
+    "lifespanDays": 1800,
+    "nutrientPerBiomass": 0.27,
+    "radiusAtMax": 0.9,
+    "minRadius": 0.13
+  },
+  "spread": {
+    "intervalDays": 35,
+    "radius": 1.4,
+    "propagules": 2,
+    "minBiomassFraction": 0.7
+  },
+  "competition": {
+    "radius": 1.8,
+    "crowdingLimit": 1.5,
+    "sensitivity": 0.3
+  },
+  "proximity": [],
+  "litterFraction": 0.9,
+  "sheddingPerDay": 0.014,
+  "grazingValue": 0,
+  "woody": {
+    "layer": "tree",
+    "canopyRadius": 1.0,
+    "shadeOpacity": 0.4,
+    "minSpacing": 1.0
+  },
+  "postLife": {
+    "standingDays": 420,
+    "collapseDays": 90,
+    "fallenDays": 260,
+    "advancedDays": 30,
+    "coarseFraction": 0.55,
+    "decayHalfLifeMultiplier": 1.35,
+    "standingRetention": 0.9,
+    "deadColor": [
+      0.55,
+      0.47,
+      0.37
+    ],
+    "litterColorInfluence": 0.8,
+    "dryBleach": 0.24,
+    "wetDarken": 0.24
+  },
+  "visual": {
+    "shape": "banksorrow",
+    "color": [
+      0.369,
+      0.541,
+      0.353
+    ],
+    "color2": [
+      0.659,
+      0.784,
+      0.604
+    ],
+    "colorVariance": 0.07,
+    "height": 2.6
+  },
+  "tags": [
+    "plant",
+    "tree",
+    "woody",
+    "bank",
+    "fast-growing"
+  ]
+}

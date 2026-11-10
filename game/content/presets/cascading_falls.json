@@ -1361,6 +1361,22 @@
     {
       "species": "dewbonnet",
       "count": 7
+    },
+    {
+      "species": "stoneknot_moss",
+      "count": 6
+    },
+    {
+      "species": "slickmantle",
+      "count": 6
+    },
+    {
+      "species": "mirrorstrap_fern",
+      "count": 3
+    },
+    {
+      "species": "cragset",
+      "count": 3
     }
   ],
   "starterFauna": [

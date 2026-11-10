@@ -288,9 +288,10 @@ private Vector3? _orbitTarget;
             if (attr.DofBlurAmount != 0) attr.DofBlurAmount = 0;
             return;
         }
-        // Gentle far-only softness; a long transition avoids a conspicuous focus wall.
-        // Focusing a distant subject pushes the sharp region beyond that subject.
-        float start = (float)Vivarium.Sim.Geometry.FloraDetail.DistanceMid * .8f;
+        // Gentle far-only softness; keep the entire island inside the sharp focal envelope
+        // when viewing from afar, while softening distant background edges in close-up views.
+        float camOriginDist = Position.Length();
+        float start = Math.Max(6.5f, camOriginDist + 4.5f);
         if (Focused) start = Math.Max(start, _orbitDistance + Math.Max(.5f, _orbitDistance * .15f));
         float blend = 1 - MathF.Exp(-(float)Math.Max(0, delta) * 5);
         float distance = start > attr.DofBlurFarDistance ? start : Mathf.Lerp(attr.DofBlurFarDistance, start, blend);

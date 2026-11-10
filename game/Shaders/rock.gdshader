@@ -43,42 +43,102 @@ float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 void fragment() {
     vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
-    vec3 to_eye_view = normalize(-VERTEX);
+    float cam_dist = distance(CAMERA_POSITION_WORLD, world_pos);
+    bool pebble = pebble_mode > 0.5;
+    // Geometric curvature from the smooth facet normal: high on broken ridge lines
+    // and on the concave seams where two cleavage planes meet.
+    float edge_curv = clamp(length(dFdx(wn)) + length(dFdy(wn)), 0.0, 1.0);
 
     float height_scale = 0.02;
     vec2 uv = world_pos.xz / max(tile_metres, 0.001);
     vec2 displaced_uv = uv;
     float pom_shadow = 1.0;
-    if (height_scale > 0.0) {
-        displaced_uv = pom_raymarch(rock_hgt, uv, v_ts, height_scale, 16, pom_shadow, l_ts);
+    float pom_fade = 1.0 - smoothstep(3.0, 5.0, cam_dist);
+
+    // Field moisture feeds both the soil stain and the capillary damp belt.
+    float moisture = 0.0;
+    if (field_rect.z > 0.0) {
+        vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
+        moisture = texture(field_tex, clamp(fuv, vec2(0.001), vec2(0.999))).r;
     }
 
     vec3 n_ts;
-    float h_val, ao_tex;
-    vec4 pbr = sample_stochastic_pbr(rock_col, rock_nrm, rock_rgh, rock_hgt, rock_ao, displaced_uv, n_ts, h_val, ao_tex);
+    vec4 pbr = vec4(1.0);
+    float h_val = 0.5;
+    float ao_tex = 1.0;
+    vec3 pebble_col = vec3(0.5);
+
+    if (pebble) {
+        // Pebble fast path: one albedo/roughness/normal tap and no POM. The
+        // 15-tap stochastic bomb and the 28-tap march are invisible at gravel
+        // size and dominate the draw cost of every scattered stone.
+        vec3 pc = texture(rock_col, uv).rgb;
+        float pr = texture(rock_rgh, uv).r;
+        n_ts = unpack_normal(texture(rock_nrm, uv).rgb);
+        pbr = vec4(pc, pr);
+
+        // Deterministic per-stone mineral family with horizontal sediment
+        // banding, so neighbouring pebbles read as varied river/scree stone.
+        float id = hash21(inst_origin.xz * 41.7 + inst_origin.y * 7.3 + 0.5);
+        float gas = vnoise(obj_pos.xz * 170.0 + obj_pos.y * 95.0);
+        float band = 0.5 + 0.5 * sin(obj_pos.y * 34.0 + id * 6.2831853
+            + (vnoise(obj_pos.xz * 24.0) - 0.5) * 1.5);
+        vec3 warm = mix(vec3(0.46, 0.40, 0.32), vec3(0.58, 0.50, 0.39), fract(id * 5.71));
+        vec3 cool = mix(vec3(0.29, 0.31, 0.34), vec3(0.41, 0.43, 0.46), fract(id * 11.3));
+        vec3 mineral = mix(cool, warm, smoothstep(0.22, 0.82, fract(id * 3.17)));
+        mineral *= mix(vec3(0.88, 0.93, 1.02), vec3(1.08, 1.02, 0.93), band);
+        mineral *= mix(0.80, 1.15, fract(id * 17.9));
+        float pc_lum = max(lum(pc), 0.02);
+        pebble_col = mineral * (mix(vec3(pc_lum), pc, 0.55) / pc_lum);
+
+        // Fine grain micro-normal from two cheap hashes: crisp dry-stone face.
+        n_ts = finite_surface_normal(n_ts + vec3((gas - 0.5) * 0.5,
+            (vnoise(obj_pos.zy * 170.0 + 7.7) - 0.5) * 0.5, 0.0), vec3(0.0, 0.0, 1.0));
+    } else {
+        if (pom_fade > 0.001) {
+            float near_shadow = 1.0;
+            vec2 near_uv = pom_raymarch(rock_hgt, uv, v_ts, height_scale, 16, near_shadow, l_ts);
+            displaced_uv = mix(uv, near_uv, pom_fade);
+            pom_shadow = mix(1.0, near_shadow, pom_fade);
+        }
+        pbr = sample_stochastic_pbr(rock_col, rock_nrm, rock_rgh, rock_hgt, rock_ao, displaced_uv, n_ts, h_val, ao_tex);
+    }
 
     vec3 perturbed = cotangent_normal(wn, world_pos, displaced_uv, n_ts);
 
-    float avg = max(lum(textureLod(rock_col, vec2(0.5), 10.0).rgb), 0.02);
-
-    vec3 tint;
-    if (pebble_mode > 0.5) {
-        tint = srgb_to_linear(COLOR.rgb);
+    vec3 col;
+    if (pebble) {
+        // Instance tint still carries authored variation; blend it with the
+        // deterministic mineral tone so neither source crushes the other.
+        vec3 instance_tint = srgb_to_linear(COLOR.rgb);
+        col = mix(instance_tint, pebble_col, 0.65) * 0.9;
     } else {
-        tint = srgb_to_linear(vec3(0.56, 0.54, 0.52));
+        float avg = max(lum(textureLod(rock_col, vec2(0.5), 10.0).rgb), 0.02);
+        vec3 tint = srgb_to_linear(vec3(0.56, 0.54, 0.52));
         vec2 cell = inst_origin.xz * 97.0;
         float j = vnoise(cell + 2.1), k = vnoise(cell * 1.7 + 8.7);
         tint *= mix(vec3(1.04, 1.0, 0.94), vec3(0.95, 0.97, 1.0), j) * (0.85 + 0.3 * k);
+        vec3 scan = mix(vec3(lum(pbr.rgb)), pbr.rgb, 0.72) / avg;
+        col = tint * scan * 0.9;
     }
 
-    vec3 scan = mix(vec3(lum(pbr.rgb)), pbr.rgb, 0.3) / avg;
-    vec3 col = tint * scan * 0.9;
+    if (!pebble) {
+        // Damp creek stone, not chalk: deepen the value and break the flat facet
+        // read with mineral stratification aligned to object elevation rather than
+        // to the projected texture, so stacked beds run continuously up a boulder.
+        col *= 0.84;
+        float strata = 0.88 + 0.22 * vnoise(vec2(obj_pos.y * 14.0 + obj_pos.x * 2.5, obj_pos.z * 2.5));
+        col *= strata;
+    }
 
-    float cavity_ao = (pebble_mode > 0.5) ? 1.0 : COLOR.r;
-    float ridge = (pebble_mode > 0.5) ? 0.0 : COLOR.g;
-
-    col *= mix(0.55, 1.0, cavity_ao);
+    // Basal cavity: pebbles darken where the stone meets the soil; boulders keep
+    // their baked vertex cavity, strengthened by the contact stain below.
+    float basal = pebble ? smoothstep(-0.35, 0.25, obj_pos.y) : 1.0;
+    float cavity_ao = pebble ? mix(0.40, 1.0, basal) * mix(0.86, 1.0, COLOR.r) : COLOR.r;
+    float ridge = pebble ? 0.0 : COLOR.g;
+    col *= mix(0.50, 1.0, cavity_ao);
     col += ridge * 0.04;
+    if (pebble) col *= mix(0.78, 1.0, basal);
 
     float up = smoothstep(0.30, 0.88, wn.y);
     float broad = vnoise(obj_pos.xz * 2.35 + obj_pos.y * 0.8 + 3.2);
@@ -86,6 +146,19 @@ void fragment() {
     float crust = smoothstep(0.58, 0.76, broad * 0.72 + broken * 0.28) * up * lichen;
     vec3 lichenCol = mix(vec3(0.43, 0.46, 0.34), vec3(0.56, 0.52, 0.32), vnoise(obj_pos.xz * 6.7 + 5.0));
     col = mix(col, lichenCol * (0.92 + 0.14 * vnoise(world_pos.xz * 24.0)), crust * 0.58);
+
+    if (!pebble) {
+        // Facet weathering: upward crests keep a drier, lighter patina while
+        // recessed seams hold damp grime, so faceted steps stop reading as plaster.
+        float facet = smoothstep(0.02, 0.16, edge_curv);
+        float crest = smoothstep(0.45, 0.90, wn.y);
+        col *= mix(1.0, 0.86, facet * (1.0 - crest));
+        col *= 1.0 + 0.09 * facet * crest;
+        // Rain-washed top faces carry a thin mineral patina and micro-lichen film.
+        float top_patina = smoothstep(0.55, 0.95, wn.y);
+        col *= mix(1.0, 0.90, top_patina * 0.7);
+        col = mix(col, col * vec3(0.92, 0.97, 0.88), top_patina * 0.5);
+    }
 
     float foot = 1.0 - smoothstep(-0.30, 0.08, obj_pos.y);
     float stainNoise = 0.78 + 0.22 * vnoise(obj_pos.xz * 5.2 + 17.0);
@@ -95,24 +168,27 @@ void fragment() {
     float rough = mix(clamp(pbr.a, 0.48, 1.0), 0.92, crust);
     rough = mix(rough, rough * 0.7, ridge);
 
-    float moisture = 0.0;
-    if (field_rect.z > 0.0) {
-        vec2 fuv = (world_pos.xz - field_rect.xy) / field_rect.zw;
-        moisture = texture(field_tex, clamp(fuv, vec2(0.001), vec2(0.999))).r;
-    }
     float wet = 0.0;
     if (world_pos.y < water_table + 0.04) wet = smoothstep(water_table + 0.04, water_table, world_pos.y);
     wet = max(wet, moisture * 0.5);
+    // Capillary dampness wicks out of the soil and up the boulder's foot.
+    if (!pebble) wet = max(wet, foot * (0.25 + 0.55 * moisture));
     if (wet > 0.0) {
         col *= mix(1.0, 0.72, wet);
-        rough = mix(rough, 0.25, wet);
+        // A water film adds a smooth coat, but porous stone keeps its underlying roughness.
+        rough = mix(rough, min(rough, max(0.42, rough * 0.72)), wet);
     }
 
     ALBEDO = col;
-    ROUGHNESS = rough;
-    METALLIC = 0.0;
     SPECULAR = 0.3;
+    METALLIC = 0.0;
     NORMAL = normalize((VIEW_MATRIX * vec4(perturbed, 0.0)).xyz);
+
+    // Specular anti-aliasing: widen roughness where the normal changes faster
+    // than a pixel, so stochastic mineral normals do not sparkle in motion.
+    float n_var = clamp(dot(dFdx(NORMAL), dFdx(NORMAL)) + dot(dFdy(NORMAL), dFdy(NORMAL)), 0.0, 0.25);
+    ROUGHNESS = clamp(sqrt(rough * rough + n_var * 0.5), 0.04, 1.0);
+
     AO = cavity_ao * ao_tex * pom_shadow;
     AO_LIGHT_AFFECT = 0.65;
 

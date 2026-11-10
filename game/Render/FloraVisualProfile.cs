@@ -59,7 +59,7 @@ public sealed class FloraVisualProfile
     public float VeinStrength { get; set; } = .4f;
     public float Wind { get; set; } = 0.035f;
     public float TissueScale { get; set; } = 1.6f;
-    public float CanopyOcclusion { get; set; } = .15f;
+    public float CanopyOcclusion { get; set; } = 0.48f;
     public float MicroScale { get; set; } = 1f;
     public float MicroRelief { get; set; } = .025f;
     public float Striation { get; set; }
@@ -90,36 +90,36 @@ public sealed class FloraVisualProfile
             return FamilyCarnivorousPitcher;
 
         // 2. Succulents / Translucent Fleshy Leaves
-        if (leafType == 4 || lowerId is "glassfinger" or "sunstone_rosette" or "fenhook" or "fenbead" or "marrowbloom" or "starbulb" or "tidebell"
+        if (leafType == 4 || lowerId is "glassfinger" or "sunstone_rosette" or "fenhook" or "fenbead" or "marrowbloom" or "starbulb" or "tidebell" or "brightknot" or "cragset"
             || shape.Contains("succulent") || shape.Contains("iceplant") || shape.Contains("pairedleaf") || shape.Contains("bulb") || shape.Contains("stone"))
             return FamilySucculentTranslucent;
 
         // 3. Ferns & Divided Pinnae Fronds
-        if (leafType == 2 || lowerId is "veilfern" or "moonfern" or "vaultfern" or "silverweed" or "fencomb"
-            || shape.Contains("fern") || shape.Contains("milfoil") || shape.Contains("whorl"))
+        if (leafType == 2 || lowerId is "veilfern" or "moonfern" or "vaultfern" or "silverweed" or "fencomb" or "swanfrond" or "sceptrefern" or "emberbracken" or "mirrorstrap_fern"
+            || shape.Contains("fern") || shape.Contains("frond") || shape.Contains("bracken") || shape.Contains("milfoil") || shape.Contains("whorl"))
             return FamilyPinnateFern;
 
         // 4. Grasses / Reeds / Linear Blades / Sedges
-        if (leafType == 5 || lowerId is "frosttussock" or "glassrush" or "ringreed" or "veilblade" or "kinkcane" or "plumegrass" or "streamribbon" or "lanternsedge" or "coalspike" or "siltstars"
+        if (leafType == 5 || lowerId is "frosttussock" or "glassrush" or "ringreed" or "veilblade" or "kinkcane" or "plumegrass" or "streamribbon" or "lanternsedge" or "coalspike" or "siltstars" or "quillsedge" or "cloudtuft" or "duskbristle" or "bannerreed" or "sootband" or "mirrorstrap_fern"
             || shape.Contains("reed") || shape.Contains("tussock") || shape.Contains("pampas") || shape.Contains("cattail") || shape.Contains("ribbon") || shape.Contains("curtain") || shape.Contains("cane") || shape.Contains("carpet"))
             return FamilyStriateGraminoid;
 
         // 5. Acicular / Spiny / Needle
-        if (leafType == 1 || lowerId is "blackneedle" || shape.Contains("thistle") || shape.Contains("needle") || shape.Contains("spike"))
+        if (leafType == 1 || lowerId is "blackneedle" or "deepquill" or "mirepocket" or "greywatch" or "mirespire" || shape.Contains("thistle") || shape.Contains("needle") || shape.Contains("spike"))
             return FamilyAcicularNeedle;
 
         // 6. Peltate / Coin / Round Leaves
-        if (lowerId is "mooncoin" or "coinrunner" or "glasslily"
+        if (lowerId is "mooncoin" or "coinrunner" or "glasslily" or "pondstars" or "cinderberry"
             || shape.Contains("roundleaf") || shape.Contains("creeper") || shape.Contains("pad") || shape.Contains("peltate") || shape.Contains("coin"))
             return FamilyPeltateCoin;
 
         // 7. Broadleaf Climbers & Bullate Cordate Leaves
-        if (lowerId is "clinglace" or "spiralvine" or "hookthicket"
+        if (lowerId is "clinglace" or "spiralvine" or "hookthicket" or "starveil" or "butterglint" or "mistviolet" or "hushclover" or "marshkettle" or "nutglade" or "bogfringe" or "burrflag" or "paddlerib" or "barbarrow"
             || shape.Contains("vine") || shape.Contains("hookthicket") || (sp != null && sp.Climber != null) || shape.Contains("cordate"))
             return FamilyCordateBullate;
 
         // 8. Fenestrated / Dissected / Compound Foliage
-        if (lowerId is "embercrown" or "trifold" or "prismstar" or "brooklace"
+        if (lowerId is "embercrown" or "trifold" or "prismstar" or "brooklace" or "hallowsting" or "burlmantle" or "heddlelace" or "fenfoam" or "widowspire" or "witchberry"
             || shape.Contains("compound") || shape.Contains("trifoliate") || shape.Contains("herb"))
             return FamilyFenestrata;
 
@@ -302,6 +302,10 @@ public sealed class FloraVisualProfile
             _ => 0.020f
         };
 
+        bool isTree = (sp != null && sp.IsTree) || id.Contains("tree") || id.Contains("canopy");
+        bool isShrub = (sp != null && sp.IsShrub) || id.Contains("shrub") || id.Contains("brush") || id.Contains("thicket");
+        bool isGram = family == FamilyStriateGraminoid || leafType == 5;
+        float canopyOcc = isTree ? 0.62f : isShrub ? 0.54f : isGram ? 0.42f : 0.46f;
         float wind = family switch
         {
             FamilySucculentTranslucent => 0.012f,
@@ -328,7 +332,7 @@ public sealed class FloraVisualProfile
             VeinStrength = veinStrength,
             Wind = wind,
             TissueScale = tissueScale,
-            CanopyOcclusion = 0.15f,
+            CanopyOcclusion = canopyOcc,
             MicroScale = microScale,
             MicroRelief = microRelief,
             Striation = striation,
@@ -354,8 +358,12 @@ public sealed class FloraVisualProfile
 
         mat.SetShaderParameter("vein_normal", GD.Load<Texture2D>($"res://Textures/LeafPools/{veinSp}/vein_normal.png"));
         mat.SetShaderParameter("vein_mask", GD.Load<Texture2D>($"res://Textures/LeafPools/{veinSp}/vein_mask.png"));
-        mat.SetShaderParameter("top_pigment", new Vector3(Top[0], Top[1], Top[2]));
-        mat.SetShaderParameter("back_pigment", new Vector3(Back[0], Back[1], Back[2]));
+        // Lanternbrush's legacy recipe predates its blue-green tissue palette. Keep the
+        // rest of the recipe (including its pool and relief) while binding that palette.
+        var top = Species == "lanternbrush" ? FloraSurfaceProfiles.Leaf(Species).Top : new Vector3(Top[0], Top[1], Top[2]);
+        var back = Species == "lanternbrush" ? FloraSurfaceProfiles.Leaf(Species).Back : new Vector3(Back[0], Back[1], Back[2]);
+        mat.SetShaderParameter("top_pigment", top);
+        mat.SetShaderParameter("back_pigment", back);
         mat.SetShaderParameter("leaf_roughness", Roughness);
         mat.SetShaderParameter("back_roughness", BackRoughness);
         mat.SetShaderParameter("cuticle_sheen", Mathf.Clamp((0.70f - Roughness) / 0.18f, 0.05f, 0.85f));
@@ -387,6 +395,7 @@ public sealed class FloraVisualProfile
 
     public ArrayMesh Compile(MeshData source, ShaderMaterial stem, ShaderMaterial leaf)
     {
+        stem.SetShaderParameter("canopy_occlusion", CanopyOcclusion);
         var reviewTransform = ReviewMeshTransform;
         PreparedSplit split;
         if (reviewTransform != null)
