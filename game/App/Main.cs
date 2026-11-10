@@ -144,6 +144,11 @@ public partial class Main : Node3D
                     settings_transient = settings.Transient, speed = world.Clock.SpeedMultiplier
                 }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
                 GD.Print("SOAK_READY " + soakDirectory);
+                if (double.TryParse(ArgAfter("--soak-seconds"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var soakSecs) && soakSecs > 0)
+                {
+                    double soakWarm = double.TryParse(ArgAfter("--soak-warmup"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var w0) ? w0 : 90;
+                    Session.Diagnostics?.BeginSoak(soakSecs, soakWarm);
+                }
             }
             Session.Ui.Toast($"Island ready   day {world.Clock.BioDays:0.0}. Plant detail continues loading in the background.", false);
         }

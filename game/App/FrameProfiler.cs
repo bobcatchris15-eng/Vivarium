@@ -67,6 +67,12 @@ public static class FrameProfiler
             if (!_frameMax.TryGetValue(name, out var fm) || ms > fm) _frameMax[name] = ms;
             _frameAccum[name] = _frameAccum.GetValueOrDefault(name) + ms;
             _frameCount[name] = _frameCount.GetValueOrDefault(name) + 1;
+            if (_win)
+            {
+                if (!_winMax.TryGetValue(name, out var wm) || ms > wm) _winMax[name] = ms;
+                _winAccum[name] = _winAccum.GetValueOrDefault(name) + ms;
+                _winCount[name] = _winCount.GetValueOrDefault(name) + 1;
+            }
         }
     }
 
@@ -181,6 +187,29 @@ public static class FrameProfiler
             _frameMax.Clear();
             _frameAccum.Clear();
             _frameCount.Clear();
+            return res;
+        }
+    }
+
+    private static bool _win;
+    private static readonly Dictionary<string, double> _winMax = new();
+    private static readonly Dictionary<string, double> _winAccum = new();
+    private static readonly Dictionary<string, int> _winCount = new();
+
+    /// <summary>Begins accumulating per-scope mean/max over a measurement window (soak steady state).</summary>
+    public static void StartWindow()
+    {
+        lock (_lock) { _winMax.Clear(); _winAccum.Clear(); _winCount.Clear(); _win = true; }
+    }
+
+    /// <summary>Ends the window and returns per-scope max, total and call count recorded within it.</summary>
+    public static Dictionary<string, ScopeMetric> StopWindow()
+    {
+        lock (_lock)
+        {
+            _win = false;
+            var res = new Dictionary<string, ScopeMetric>(_winAccum.Count);
+            foreach (var (k, total) in _winAccum) res[k] = new ScopeMetric(_winMax.GetValueOrDefault(k), total, _winCount.GetValueOrDefault(k));
             return res;
         }
     }

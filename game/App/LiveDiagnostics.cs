@@ -28,6 +28,118 @@ public partial class LiveDiagnostics : Node
     private double _totalMs, _worst;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    // Soak benchmark (opt-in via --soak-seconds). Fixed-size state only; no per-frame allocation.
+    private bool _soakOn, _soakWindow;
+    private double _soakSeconds, _soakWarmup;
+    private ulong _soakStart, _soakWinStart;
+    private Rid _soakViewport;
+    private readonly long[] _soakHist = new long[10001]; // 0.1 ms bins up to 1000 ms
+    private long _soakFrames, _soakGpuN, _soakSamples;
+    private double _soakMs, _soakWorst, _soakGpuSum, _soakGpuMax, _soakGpuNonZero;
+    private double _soakDraws, _soakPrims, _soakNodes, _soakVideo, _soakTex, _soakBuf, _soakManaged, _soakDrawsMax;
+    private long _soakAlloc0;
+    private int _soakGc0, _soakGc1, _soakGc2;
+    private ulong _soakSampleAt;
+
+    /// <summary>Starts the soak clock (call when the world is ready). Quits the app with exit code 0 after seconds.</summary>
+    public void BeginSoak(double seconds, double warmup)
+    {
+        _soakOn = true; _soakSeconds = seconds; _soakWarmup = warmup; _soakWindow = false;
+        _soakStart = Time.GetTicksUsec(); _soakSampleAt = _soakStart;
+        try { _soakViewport = GetViewport().GetViewportRid(); RenderingServer.ViewportSetMeasureRenderTime(_soakViewport, true); } catch { }
+    }
+    private void SoakFrame(ulong now, double ms)
+    {
+        double elapsed = (now - _soakStart) / 1_000_000.0;
+        if (!_soakWindow)
+        {
+            if (elapsed < _soakWarmup) { if (elapsed >= _soakSeconds) FinishSoak(now); return; }
+            _soakWindow = true; _soakWinStart = now;
+            Array.Clear(_soakHist); _soakFrames = _soakGpuN = _soakSamples = 0;
+            _soakMs = _soakWorst = _soakGpuSum = _soakGpuMax = _soakGpuNonZero = 0;
+            _soakDraws = _soakPrims = _soakNodes = _soakVideo = _soakTex = _soakBuf = _soakManaged = _soakDrawsMax = 0;
+            _soakAlloc0 = GC.GetTotalAllocatedBytes(false);
+            _soakGc0 = GC.CollectionCount(0); _soakGc1 = GC.CollectionCount(1); _soakGc2 = GC.CollectionCount(2);
+            _soakSampleAt = now;
+            FrameProfiler.StartWindow();
+            return;
+        }
+        _soakFrames++; _soakMs += ms; if (ms > _soakWorst) _soakWorst = ms;
+        _soakHist[Math.Clamp((int)Math.Ceiling(ms * 10), 0, 10000)]++;
+        double d = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+        _soakDraws += d; if (d > _soakDrawsMax) _soakDrawsMax = d;
+        _soakPrims += Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame);
+        double gpu = RenderingServer.ViewportGetMeasuredRenderTimeGpu(_soakViewport);
+        _soakGpuN++; _soakGpuSum += gpu; if (gpu > _soakGpuMax) _soakGpuMax = gpu; if (gpu > 0) _soakGpuNonZero++;
+        if (now - _soakSampleAt >= 1_000_000)
+        {
+            _soakSampleAt = now; _soakSamples++;
+            _soakNodes += Performance.GetMonitor(Performance.Monitor.ObjectNodeCount);
+            _soakVideo += Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed);
+            _soakTex += Performance.GetMonitor(Performance.Monitor.RenderTextureMemUsed);
+            _soakBuf += Performance.GetMonitor(Performance.Monitor.RenderBufferMemUsed);
+            _soakManaged += GC.GetTotalMemory(false);
+        }
+        if (elapsed >= _soakSeconds) FinishSoak(now);
+    }
+    private double SoakPercentile(double q)
+    {
+        long target = Math.Max(1, (long)Math.Ceiling(_soakFrames * q)), count = 0;
+        for (int i = 0; i < _soakHist.Length; i++) { count += _soakHist[i]; if (count >= target) return i / 10.0; }
+        return 0;
+    }
+    private void FinishSoak(ulong now)
+    {
+        _soakOn = false;
+        var scopes = _soakWindow ? FrameProfiler.StopWindow() : new Dictionary<string, FrameProfiler.ScopeMetric>();
+        long frames = _soakFrames; double f = Math.Max(1, frames), s = Math.Max(1, _soakSamples);
+        double R(double v) => Math.Round(v, 4);
+        var scopeOut = new SortedDictionary<string, object>(StringComparer.Ordinal);
+        foreach (var (k, m) in scopes)
+            scopeOut[k] = new { mean_ms = R(m.TotalMs / Math.Max(1, m.Count)), max_ms = R(m.MaxMs), calls = m.Count, total_ms = R(m.TotalMs), mean_per_frame_ms = R(m.TotalMs / f) };
+        bool gpuOk = _soakGpuNonZero > 0;
+        double? Mem(double sum) => _soakSamples > 0 ? Math.Round(sum / s) : null;
+        var summary = new Dictionary<string, object?>
+        {
+            ["completed"] = true,
+            ["written_utc"] = DateTime.UtcNow,
+            ["soak_seconds"] = _soakSeconds, ["warmup_seconds"] = _soakWarmup,
+            ["window_seconds"] = _soakWindow ? (now - _soakWinStart) / 1_000_000.0 : 0.0,
+            ["frames"] = frames,
+            ["fps_mean"] = _soakMs > 0 ? R(1000.0 * frames / _soakMs) : null,
+            ["frame_ms_p50"] = frames > 0 ? SoakPercentile(.5) : null,
+            ["frame_ms_p95"] = frames > 0 ? SoakPercentile(.95) : null,
+            ["frame_ms_p99"] = frames > 0 ? SoakPercentile(.99) : null,
+            ["frame_ms_worst"] = frames > 0 ? R(_soakWorst) : null,
+            ["gpu_frame_ms_mean"] = gpuOk ? R(_soakGpuSum / Math.Max(1, _soakGpuN)) : null,
+            ["gpu_frame_ms_max"] = gpuOk ? R(_soakGpuMax) : null,
+            ["draw_calls"] = frames > 0 ? R(_soakDraws / f) : null,
+            ["draw_calls_max"] = frames > 0 ? _soakDrawsMax : null,
+            ["primitives"] = frames > 0 ? R(_soakPrims / f) : null,
+            ["node_count"] = Mem(_soakNodes),
+            ["video_mem_bytes"] = Mem(_soakVideo),
+            ["texture_mem_bytes"] = Mem(_soakTex),
+            ["buffer_mem_bytes"] = Mem(_soakBuf),
+            ["managed_bytes"] = Mem(_soakManaged),
+            ["gc_gen0"] = GC.CollectionCount(0) - _soakGc0,
+            ["gc_gen1"] = GC.CollectionCount(1) - _soakGc1,
+            ["gc_gen2"] = GC.CollectionCount(2) - _soakGc2,
+            ["allocated_bytes_per_frame"] = frames > 0 ? R((GC.GetTotalAllocatedBytes(false) - _soakAlloc0) / f) : null,
+            ["multimesh_instance_count"] = null,
+            ["scopes_cpu_ms"] = scopeOut,
+            ["notes"] = "Steady state excludes samples before warmup. Draw calls/primitives/GPU are per-frame means; node/memory fields are means of 1 Hz samples. Frame percentiles use 0.1 ms bins. Scope times are CPU wall time and overlap; GeometryWorker is off-thread."
+        };
+        StopRecording();
+        string path = Path.Combine(Path.GetFullPath(RequestedDirectory ?? Bridge.UserPath("diagnostics")), "perf_summary.json");
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, JsonSerializer.Serialize(summary, JsonOptions));
+            GD.Print("VIVARIUM_SOAK_OK " + path);
+            GetTree().Quit(0);
+        }
+        catch (Exception ex) { GD.PushError("Soak summary write failed: " + ex.Message); GetTree().Quit(5); }
+    }
     public override void _Ready()
     {
         ProcessPriority = 1000;
@@ -70,6 +182,7 @@ public partial class LiveDiagnostics : Node
         _histogram[Math.Clamp((int)Math.Ceiling(ms), 0, 10000)]++;
         if (ms > 33.4) _over33++;
         if (ms > 100) _over100++;
+        if (_soakOn) { SoakFrame(now, ms); if (!_soakOn) return; }
         if (now - _lastSample < 1_000_000) return;
         double interval = (now - _lastSample) / 1_000_000.0;
         _lastSample = now;
