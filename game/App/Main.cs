@@ -186,7 +186,8 @@ public partial class Main : Node3D
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 await SpecimenReviewRunner.Capture(this, Session, specimenWorld,
-                    ArgAfter("--specimen-review")!, ArgAfter("--specimen-species"), ArgAfter("--specimen-seed"));
+                    ArgAfter("--specimen-review")!, ArgAfter("--specimen-species"), ArgAfter("--specimen-seed"),
+                    ArgAfter("--specimen-kind"), UserArgs.Contains("--specimen-slope"), UserArgs.Contains("--specimen-stages"));
             }
             catch (Exception ex)
             {

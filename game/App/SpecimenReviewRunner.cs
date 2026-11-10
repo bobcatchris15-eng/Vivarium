@@ -16,8 +16,104 @@ namespace Vivarium.Game.App;
 /// <summary>Opt-in, isolated per-species specimen capture for visual review of individual flora meshes.</summary>
 public static class SpecimenReviewRunner
 {
-    private const string DefaultSpeciesList =
-        "quillfeather_moss,rustbellow_moss,wispthread_moss,silkgleam_moss,stoneknot_moss,pinequilt_moss,slickmantle,hagshair_lichen,sunscald_lichen,moonshell_lichen,ashfingers_lichen,capstar_moss,duskpuff,starsplit,reekhorn,cradlecup,candlecoral,ashcomb,barrowbole,swanfrond,sceptrefern,emberbracken,mirrorstrap_fern,quillsedge,cloudtuft,duskbristle,bannerreed,ashwire,sootband,starveil,butterglint,cinderberry,mistviolet,hushclover,hallowsting,burlmantle,heddlelace,fenfoam,marshkettle,widowspire,brightknot,cragset,deepquill,mirepocket,pondstars,bogfringe,burrflag,paddlerib,barbarrow,shadewrap,bitterbine,trumpetbind,miremyrtle,nutglade,thornmantle,greywatch,silverfelt,moonbark,shiverleaf,fenforge,banksorrow,mirespire,witchberry";
+    private sealed record ImageRec(string file, string shot, double distance_m, double time_offset_s);
+
+    private sealed class SpecimenRec
+    {
+        public string id { get; set; } = "";
+        public string name { get; set; } = "";
+        public string kind { get; set; } = "flora";
+        public string stage { get; set; } = "mature";
+        public bool slope_mode { get; set; }
+        public double slope_deg { get; set; }
+        public double[] position { get; set; } = Array.Empty<double>();
+        public double height { get; set; }
+        public double radius { get; set; }
+        public bool coverage { get; set; }
+        public bool published { get; set; }
+        public List<ImageRec> images { get; set; } = new();
+    }
+
+    private static double SlopeDeg(VivariumWorld world, Vec2 p)
+        => Math.Acos(Math.Clamp(world.Terrain.Normal(p).Y, -1.0, 1.0)) * 180.0 / Math.PI;
+
+    private static double VerticalFovRad(Main main)
+    {
+        var cam = main.GetViewport().GetCamera3D();
+        double rad = (cam != null ? cam.Fov : 75.0) * Math.PI / 180.0;
+        if (cam != null && cam.KeepAspect == Camera3D.KeepAspectEnum.Width)
+        {
+            var sz = main.GetViewport().GetVisibleRect().Size;
+            rad = 2.0 * Math.Atan(Math.Tan(rad / 2.0) / (sz.X / sz.Y));
+        }
+        return rad;
+    }
+
+    /// <summary>Distance at which an object of the given extent fills ~17.5% of frame height.</summary>
+    private static double FarDistance(Main main, double extent)
+        => extent / (0.175 * 2.0 * Math.Tan(VerticalFovRad(main) / 2.0));
+
+    private static (List<Vec2> dry, List<Vec2> wet) BuildPools(VivariumWorld world, bool slope, ulong seed)
+    {
+        var cells = world.Grid.DomainCells;
+        var dryPool = new List<Vec2>();
+        var wetPool = new List<Vec2>();
+        for (int i = 0; i < cells.Length; i += 2)
+        {
+            var p = world.Grid.CellCenter(cells[i]);
+            if (!world.Domain.ContainsDisc(p, 0.35)) continue;
+            double ground = world.Terrain.Height(p);
+            double propTop = world.Props.PropTopAt(p);
+            bool propClear = double.IsNaN(propTop) || propTop < ground + 0.02;
+            if (propClear && (world.Props.DistanceToFeature(p, "rock") < 0.5 || world.Props.DistanceToFeature(p, "log") < 0.5))
+                propClear = false;
+            bool pilotClear = world.PilotTree?.BlocksDisc(p, 0.5) != true;
+            if (!propClear || !pilotClear) continue;
+            double depth = world.Water.OpenWaterDepth(p);
+            if (depth < 0.005)
+            {
+                double ny = world.Terrain.Normal(p).Y;
+                if (!slope && ny <= 0.994) continue;
+                if (slope && ny < 0.70) continue; // cap ~45 degrees
+                if (!world.Domain.ContainsDisc(p, 0.65)) continue;
+                dryPool.Add(p);
+            }
+            else if (depth >= 0.02 && depth <= 0.9)
+            {
+                if (world.Terrain.Normal(p).Y <= 0.978) continue; // slope >= ~12 degrees
+                wetPool.Add(p);
+            }
+        }
+        var rng = Rng.Stream(seed, "specimen.review");
+        Shuffle(dryPool, rng);
+        Shuffle(wetPool, rng);
+        if (slope)
+        {
+            // Prefer cells at ~26 degrees (clear slope, not a cliff); when the terrain has no
+            // cell >= 20 degrees the steepest available come first.
+            dryPool = dryPool.OrderBy(p =>
+            {
+                double deg = SlopeDeg(world, p);
+                return deg >= 20.0 ? Math.Abs(deg - 26.0) : 1000.0 - deg;
+            }).ToList();
+        }
+        else
+        {
+            dryPool.Sort((a, b) =>
+            {
+                int c = Vec2.DistanceSq(a, Vec2.Zero).CompareTo(Vec2.DistanceSq(b, Vec2.Zero));
+                if (c != 0) return c;
+                return world.Terrain.Normal(b).Y.CompareTo(world.Terrain.Normal(a).Y);
+            });
+        }
+        return (dryPool, wetPool);
+    }
+
+    private static async Task WaitFrames(Main main, int n)
+    {
+        for (int i = 0; i < n; i++)
+            await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
 
     private static readonly HashSet<string> AquaticIds = new(StringComparer.Ordinal)
     {
@@ -34,12 +130,14 @@ public static class SpecimenReviewRunner
         public bool IsCoverage;
         public EntityId EntityId;
         public bool HasEntityId;
+        public string Stage = "mature";
         // Climbers only: the standing host specimen they are paired with (kept visible in their shots).
         public string? HostSpeciesId;
         public Vec2? HostPosition;
     }
 
-    public static async Task Capture(Main main, GameSession session, VivariumWorld world, string directory, string? speciesArg, string? seedArg)
+    public static async Task Capture(Main main, GameSession session, VivariumWorld world, string directory, string? speciesArg, string? seedArg,
+        string? kindArg = null, bool slope = false, bool stages = false)
     {
         Directory.CreateDirectory(directory);
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
@@ -75,63 +173,192 @@ public static class SpecimenReviewRunner
             seed = world.Seed;
         }
 
-        var captureIds = ParseSpeciesList(speciesArg, world.Content);
-        if (captureIds.Count == 0)
+        // Let the flora renderer finish building its per-species layers/meshes (node count stabilises).
+        {
+            int last = -1, stable = 0;
+            var sw = Stopwatch.StartNew();
+            while (sw.Elapsed.TotalSeconds < 120 && stable < 4)
+            {
+                int cnt = session.Flora.GetChildCount();
+                if (cnt > 0 && cnt == last) stable++; else stable = 0;
+                last = cnt;
+                await WaitFrames(main, 10);
+            }
+        }
+
+        string? kind = IsMissingArgValue(kindArg) ? null : kindArg!.Trim().ToLowerInvariant();
+        if (kind != null && kind != "flora" && kind != "fauna" && kind != "all")
+            throw new InvalidOperationException($"Unknown --specimen-kind '{kind}' (expected flora|fauna|all).");
+
+        var content = world.Content;
+        var floraIds = new List<string>();
+        var faunaIds = new List<string>();
+        var skipped = new List<object>();
+        if (!IsMissingArgValue(speciesArg))
+        {
+            var parts = speciesArg!.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim()).Where(s => s.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+            foreach (var id in parts)
+            {
+                bool isFlora = content.FloraById(id) != null;
+                bool isFauna = content.FaunaById(id) != null;
+                if (!isFlora && !isFauna) throw new InvalidOperationException($"Unknown species '{id}'.");
+                if (isFlora && kind != "fauna") floraIds.Add(id);
+                else if (isFauna && kind != "flora") faunaIds.Add(id);
+            }
+        }
+        else
+        {
+            if (kind != "fauna")
+                floraIds.AddRange(content.Flora.Select(f => f.Id));
+            if (kind == "fauna" || kind == "all")
+                faunaIds.AddRange(content.Fauna.Select(f => f.Id));
+        }
+        if (floraIds.Count == 0 && faunaIds.Count == 0)
             throw new InvalidOperationException("No specimen species ids were given.");
 
-        // Validate early so an unknown id fails before any placement or capture.
-        foreach (var id in captureIds.Distinct(StringComparer.Ordinal))
+        var records = new List<SpecimenRec>();
+        int fileIndex = 0;
+        if (floraIds.Count > 0)
+            fileIndex = await CaptureFloraSet(main, session, world, directory, floraIds, seed, slope, stages, records, skipped, fileIndex);
+        if (faunaIds.Count > 0)
+            fileIndex = await CaptureFaunaSet(main, session, world, directory, faunaIds, seed, slope, records, fileIndex);
+
+        var doc = new
         {
-            if (world.Content.FloraById(id) == null)
-                throw new InvalidOperationException($"Unknown flora species '{id}'.");
+            kind = kind ?? (floraIds.Count > 0 && faunaIds.Count > 0 ? "all" : faunaIds.Count > 0 ? "fauna" : "flora"),
+            slope_mode = slope,
+            stages_mode = stages,
+            image_count = records.Sum(r => r.images.Count),
+            specimens = records,
+            images = records.SelectMany(r => r.images.Select(i => new
+            {
+                i.file, species = r.id, r.kind, r.stage, slope = r.slope_mode, r.slope_deg, i.shot, i.distance_m, i.time_offset_s,
+            })).ToList(),
+            skipped,
+        };
+        File.WriteAllText(Path.Combine(directory, "specimens.json"),
+            JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
+        GD.Print("SPECIMEN_REVIEW_COMPLETE " + directory);
+        main.GetTree().Quit();
+    }
+
+    private static async Task<int> CaptureFaunaSet(Main main, GameSession session, VivariumWorld world, string directory,
+        List<string> ids, ulong seed, bool slope, List<SpecimenRec> records, int fileIndex)
+    {
+        var (dryPool, wetPool) = BuildPools(world, slope, seed);
+        string slopeSuffix = slope ? "_slope" : "";
+        // Flora is not part of a fauna portrait.
+        session.Flora.Visible = false;
+        session.Coverage.SetProcess(false);
+        session.Coverage.Visible = false;
+        session.Fauna.Visible = true;
+        world.Clock.Paused = false; // gait needs real simulated motion; one animal is alive at a time
+        try
+        {
+            foreach (var id in ids)
+            {
+                var sp = world.Content.FaunaOrThrow(id);
+                bool aquatic = sp.Medium == Medium.Aquatic && sp.Model != "snail";
+                List<Vec2> pool = aquatic ? FilterByDepth(wetPool, world, 0.15, 0.6) : dryPool;
+                if (pool.Count == 0) pool = aquatic ? wetPool : dryPool;
+                if (pool.Count == 0) throw new InvalidOperationException($"No candidate cell for fauna {id}.");
+                Vec2 cell = pool[0];
+                foreach (var c in pool)
+                    if (IsClearOfTrunkProps(world, c, 1.0)) { cell = c; break; }
+
+                var f = world.FaunaSystem.CreateFounder(sp, cell, 0.5);
+                foreach (var child in session.Fauna.GetChildren())
+                    if (child is MultiMeshInstance3D mmi)
+                        mmi.Visible = mmi.Name.ToString().StartsWith($"Fauna_{id}_", StringComparison.Ordinal);
+                await WaitFrames(main, 20);
+
+                var ph = world.FaunaSystem.PhenotypeOf(f);
+                double scale = Math.Max(0.02, ph.BodySize * sp.VisualScale);
+                double azimuth = f.Heading * 180.0 / Math.PI + 55.0;
+                double closeDist = Math.Max(1.8 * scale, 0.12);
+                double mediumDist = Math.Max(6.0 * scale, 0.4);
+                double slopeDeg = SlopeDeg(world, cell);
+                var rec = new SpecimenRec
+                {
+                    id = id, name = sp.Name, kind = "fauna", stage = "adult", slope_mode = slope, slope_deg = Math.Round(slopeDeg, 1),
+                    position = new[] { cell.X, cell.Z }, height = scale, radius = scale * 0.5, coverage = false, published = true,
+                };
+
+                async Task Follow(double dist, double elevation, string file, string shot, double tOffset)
+                {
+                    Vector3 target = default, eye = default;
+                    for (int i = 0; i < 24; i++)
+                    {
+                        var pos = session.Fauna.DisplayPosition(f.Id);
+                        target = pos + new Vector3(0, (float)(0.4 * scale), 0);
+                        eye = EyeFromAzimuthElevation(target, azimuth, elevation, dist);
+                        session.CameraRig.LookAtPoint(eye, target);
+                        await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
+                    }
+                    await main.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    main.GetViewport().GetTexture().GetImage().SavePng(Path.Combine(directory, file));
+                    rec.images.Add(new ImageRec(file, shot, Math.Round(dist, 3), tOffset));
+                }
+
+                string stem = $"{fileIndex:00}_{id}";
+                var clock = Stopwatch.StartNew();
+                await Follow(closeDist, 18.0, $"{stem}_close_a{slopeSuffix}.png", "close", 0.0);
+                // second close frame ~0.5 s later in wall time (sim runs unpaused) for motion/joint comparison
+                while (clock.Elapsed.TotalSeconds < 0.5 + 0.0) await WaitFrames(main, 1);
+                double t1 = clock.Elapsed.TotalSeconds;
+                await Follow(closeDist, 18.0, $"{stem}_close_b{slopeSuffix}.png", "close", Math.Round(t1, 2));
+                await Follow(mediumDist, 20.0, $"{stem}_medium{slopeSuffix}.png", "medium", Math.Round(clock.Elapsed.TotalSeconds, 2));
+                records.Add(rec);
+                fileIndex++;
+                world.FaunaSystem.Kill(f, "specimen-review");
+                await WaitFrames(main, 2);
+            }
         }
+        finally
+        {
+            world.Clock.Paused = true;
+        }
+        return fileIndex;
+    }
+
+    private static async Task<int> CaptureFloraSet(Main main, GameSession session, VivariumWorld world, string directory,
+        List<string> captureIds, ulong seed, bool slope, bool stages, List<SpecimenRec> records, List<object> skipped, int fileIndex)
+    {
+        session.Fauna.Visible = false;
+        // Round 1: every species at maturity. FloraRenderer builds layers lazily for species present in the world,
+        // so mesh/stage availability is only knowable after round 1 has been established and published.
+        var round1 = captureIds.Select(id => (id, "mature")).ToList();
+        fileIndex = await RunFloraRound(main, session, world, directory, round1, seed, slope, stages, records, skipped, fileIndex);
+        if (!stages) return fileIndex;
+
+        var names = session.Flora.GetChildren().Select(c => c.Name.ToString()).ToHashSet(StringComparer.Ordinal);
+        bool HasMesh(string id, string suffix)
+        {
+            string prefix = $"Flora_{id}_";
+            return names.Any(n => n.StartsWith(prefix, StringComparison.Ordinal) && n.EndsWith(suffix, StringComparison.Ordinal));
+        }
+        var round2 = new List<(string Id, string Stage)>();
+        foreach (var id in captureIds)
+        {
+            if (records.All(r => r.id != id || r.kind != "flora")) continue; // skipped in round 1
+            var s = world.Content.FloraOrThrow(id);
+            if (s.Mat != null || s.Lichen != null || s.Climber != null) continue;
+            if (HasMesh(id, "_juvenile")) round2.Add((id, "juvenile"));
+            if (HasMesh(id, "_fruit")) round2.Add((id, "fruiting"));
+        }
+        if (round2.Count > 0)
+            fileIndex = await RunFloraRound(main, session, world, directory, round2, seed, slope, stages, records, skipped, fileIndex);
+        return fileIndex;
+    }
+
+    private static async Task<int> RunFloraRound(Main main, GameSession session, VivariumWorld world, string directory,
+        List<(string Id, string Stage)> jobs, ulong seed, bool slope, bool stages, List<SpecimenRec> records, List<object> skipped, int fileIndex)
+    {
+        string slopeSuffix = slope ? "_slope" : "";
 
         // ---------------------------------------------------------------- candidate cells (stride 2)
-        var cells = world.Grid.DomainCells;
-        var dryPool = new List<Vec2>();
-        var wetPool = new List<Vec2>();
-        for (int i = 0; i < cells.Length; i += 2)
-        {
-            var p = world.Grid.CellCenter(cells[i]);
-            if (!world.Domain.ContainsDisc(p, 0.35)) continue;
-            double ground = world.Terrain.Height(p);
-            double propTop = world.Props.PropTopAt(p);
-            bool propClear = double.IsNaN(propTop) || propTop < ground + 0.02;
-            // Reject candidates within 0.5 m of ANY trunk prop (logs/rocks/pilot) for ALL species so the
-            // camera is never inside a trunk filling the frame. Climbers are the sole exception: they must
-            // sit within 0.15 m of their standing host instead (handled by SnapClimberToTrunk).
-            if (propClear && (world.Props.DistanceToFeature(p, "rock") < 0.5 || world.Props.DistanceToFeature(p, "log") < 0.5))
-                propClear = false;
-            bool pilotClear = world.PilotTree?.BlocksDisc(p, 0.5) != true;
-            if (!propClear || !pilotClear) continue;
-            double depth = world.Water.OpenWaterDepth(p);
-            // Dry stage cells: prime flat spots — slope under ~10 degrees, fully in-domain with a
-            // 0.65 m edge margin (covers coverage's 0.55 m requirement), and completely dry.
-            if (depth < 0.005)
-            {
-                if (world.Terrain.Normal(p).Y <= 0.994) continue;
-                if (!world.Domain.ContainsDisc(p, 0.65)) continue;
-                dryPool.Add(p);
-            }
-            else if (depth >= 0.02 && depth <= 0.9)
-            {
-                if (world.Terrain.Normal(p).Y <= 0.978) continue; // slope >= ~12 degrees
-                wetPool.Add(p);
-            }
-        }
-
-        var rng = Rng.Stream(seed, "specimen.review");
-        Shuffle(dryPool, rng);
-        Shuffle(wetPool, rng);
-        // Best-first ordering for the dry stage: flattest, most-central cells first, so every species
-        // gets a prime sunny flat spot near the middle of the island instead of a cliff-edge cell.
-        // Stable secondary key on the shuffled order keeps the rng shuffle as the tie-breaker.
-        dryPool.Sort((a, b) =>
-        {
-            int c = Vec2.DistanceSq(a, Vec2.Zero).CompareTo(Vec2.DistanceSq(b, Vec2.Zero));
-            if (c != 0) return c;
-            return world.Terrain.Normal(b).Y.CompareTo(world.Terrain.Normal(a).Y);
-        });
+        var (dryPool, wetPool) = BuildPools(world, slope, seed);
 
         // Placement order: coverage first (widest spacing, so their clumps never merge), then aquatic,
         // then non-climber dry vascular/fungi, and climbers LAST so each can pair with an already-placed
@@ -144,9 +371,10 @@ public static class SpecimenReviewRunner
             if (AquaticIds.Contains(id)) return 1;
             return 2;
         }
-        var assignOrder = captureIds
-            .OrderBy(PlacementRank)
-            .ThenBy(id => id, StringComparer.Ordinal)
+        var assignOrder = jobs
+            .OrderBy(j => PlacementRank(j.Id))
+            .ThenBy(j => j.Id, StringComparer.Ordinal)
+            .ThenBy(j => j.Stage == "mature" ? 0 : j.Stage == "juvenile" ? 1 : 2)
             .ToList();
 
         var chosenPositions = new List<Vec2>();
@@ -155,11 +383,21 @@ public static class SpecimenReviewRunner
         var placements = new List<Placement>();
         // Standing host trees available for climbers, in a fixed rotation so the three climbers
         // spread across the three hosts when all are captured.
+        // Pools are finite; once exhausted, cells are reused. That is safe because each specimen is
+        // captured with every other species' meshes hidden (and coverage is seeded one species at a time).
+        int reuseCounter = 0;
+        Vec2 ReuseCell(List<Vec2> p, string forId)
+        {
+            if (p.Count == 0) throw new InvalidOperationException($"No candidate cell available for {forId} (dry={dryPool.Count} wet={wetPool.Count}).");
+            return p[reuseCounter++ % p.Count];
+        }
         var hostRotation = new[] { "moonbark", "fenforge", "shiverleaf" };
         int hostCursor = 0;
 
-        foreach (var id in assignOrder)
+        foreach (var job in assignOrder)
         {
+            string id = job.Id;
+            string jobStage = job.Stage;
             var sp = world.Content.FloraOrThrow(id);
             bool aquatic = AquaticIds.Contains(id);
             bool isCoverage = sp.Mat != null || sp.Lichen != null;
@@ -180,7 +418,7 @@ public static class SpecimenReviewRunner
                 for (int k = 0; k < hostRotation.Length && host == null; k++)
                 {
                     string cand = hostRotation[(hostCursor + k) % hostRotation.Length];
-                    host = placements.FirstOrDefault(p => p.SpeciesId == cand);
+                    host = placements.FirstOrDefault(p => p.SpeciesId == cand && p.Stage == "mature");
                     if (host != null) hostCursor = (hostCursor + k + 1) % hostRotation.Length;
                 }
                 if (host != null)
@@ -208,7 +446,7 @@ public static class SpecimenReviewRunner
                 var pickedFb = FirstFitClear(fallbackPool, fallbackUsed, chosenPositions, 0.22, world, requireTrunkClear, trunkClearance)
                             ?? FirstFitClear(fallbackPool, fallbackUsed, chosenPositions, 0.10, world, requireTrunkClear, trunkClearance)
                             ?? MostIsolated(fallbackPool, fallbackUsed, chosenPositions, world, requireTrunkClear, trunkClearance)
-                            ?? throw new InvalidOperationException($"No candidate cell available for {id} (dry={dryPool.Count} wet={wetPool.Count}).");
+                            ?? ReuseCell(fallbackPool, id);
                 Vec2 actualFb = pickedFb;
                 if (SnapClimberToTrunk(world, pickedFb, sp, placements, chosenPositions) is { } snappedFb)
                     actualFb = snappedFb;
@@ -266,8 +504,7 @@ public static class SpecimenReviewRunner
                     picked = FirstFitClear(pool, used, chosenPositions, sep, world, requireTrunkClear, trunkClearance)
                            ?? FirstFitClear(pool, used, chosenPositions, sepRelaxed, world, requireTrunkClear, trunkClearance)
                            ?? MostIsolated(pool, used, chosenPositions, world, requireTrunkClear, trunkClearance);
-                    if (!picked.HasValue)
-                        throw new InvalidOperationException($"No candidate cell available for {id} (dry={dryPool.Count} wet={wetPool.Count}).");
+                    if (!picked.HasValue) picked = ReuseCell(pool, id);
                     cellPicked = picked.Value;
                 }
             }
@@ -276,8 +513,7 @@ public static class SpecimenReviewRunner
                 picked = FirstFitClear(pool, used, chosenPositions, sep, world, requireTrunkClear, trunkClearance)
                        ?? FirstFitClear(pool, used, chosenPositions, sepRelaxed, world, requireTrunkClear, trunkClearance)
                        ?? MostIsolated(pool, used, chosenPositions, world, requireTrunkClear, trunkClearance);
-                if (!picked.HasValue)
-                    throw new InvalidOperationException($"No candidate cell available for {id} (dry={dryPool.Count} wet={wetPool.Count}).");
+                if (!picked.HasValue) picked = ReuseCell(pool, id);
                 cellPicked = picked.Value;
             }
 
@@ -290,6 +526,7 @@ public static class SpecimenReviewRunner
                 Position = cellPicked,
                 IsCoverage = isCoverage,
                 HasEntityId = false,
+                Stage = jobStage,
             });
         }
 
@@ -366,8 +603,12 @@ public static class SpecimenReviewRunner
             }
             else
             {
-                var f = world.FloraSystem.Establish(pl.Species, pl.Position, "specimen", pl.Species.MaxBiomass * 0.9);
+                var f = world.FloraSystem.Establish(pl.Species, pl.Position, "specimen", pl.Species.MaxBiomass * (pl.Stage == "juvenile" ? 0.25 : 0.9));
                 f.Age = pl.Species.Lifespan * 0.5;
+                if (pl.Stage == "juvenile")
+                    f.Age = Math.Max(0.0, pl.Species.MaturityAge * 0.3);
+                else if (pl.Stage == "fruiting")
+                    f.Fruiting = true;
                 f.LastSpreadAge = -1e9;
                 pl.EntityId = f.Id;
                 pl.HasEntityId = true;
@@ -420,20 +661,43 @@ public static class SpecimenReviewRunner
         // species so its tile rebuilds for that species alone.
 
         // ---------------------------------------------------------------- capture (list order)
-        var placementQueues = new Dictionary<string, Queue<Placement>>(StringComparer.Ordinal);
+        var placementByJob = new Dictionary<(string, string), Placement>();
+        foreach (var pl in placements)
+            placementByJob[(pl.SpeciesId, pl.Stage)] = pl;
+        var skipJobs = new HashSet<(string, string)>();
         foreach (var pl in placements)
         {
-            if (!placementQueues.TryGetValue(pl.SpeciesId, out var q)) placementQueues[pl.SpeciesId] = q = new Queue<Placement>();
-            q.Enqueue(pl);
+            if (pl.IsCoverage || !pl.HasEntityId) continue;
+            string? why = !session.Flora.HasLegacyLayer(pl.SpeciesId) ? "FloraRenderer built no layer for this species"
+                : !session.Flora.IsPlantPublished(pl.EntityId) ? "established but never published by FloraRenderer within 360 s"
+                : null;
+            if (why == null) continue;
+            skipJobs.Add((pl.SpeciesId, pl.Stage));
+            skipped.Add(new { id = pl.SpeciesId, kind = "flora", stage = pl.Stage, reason = why });
         }
 
-        var jsonEntries = new List<object>(captureIds.Count);
         bool coverageWasActive = false;
-        for (int idx = 0; idx < captureIds.Count; idx++)
+        foreach (var job in jobs)
         {
-            var id = captureIds[idx];
-            var pl = placementQueues[id].Dequeue();
+            if (skipJobs.Contains((job.Id, job.Stage))) continue;
+            int idx = fileIndex++;
+            var id = job.Id;
+            var pl = placementByJob[(job.Id, job.Stage)];
             var sp = pl.Species;
+            var rec = new SpecimenRec { kind = "flora" };
+            string stageSuffix = pl.Stage == "mature" ? "" : "_" + pl.Stage;
+            string Fn(string shot) => $"{idx:00}_{id}{stageSuffix}{shot}{slopeSuffix}.png";
+            bool NameMatches(string name, string sid, string stage)
+            {
+                if (!name.StartsWith($"Flora_{sid}_", StringComparison.Ordinal)) return false;
+                if (!stages) return true;
+                return stage switch
+                {
+                    "juvenile" => name.EndsWith("_juvenile", StringComparison.Ordinal),
+                    "fruiting" => name.EndsWith("_fruit", StringComparison.Ordinal),
+                    _ => !name.EndsWith("_juvenile", StringComparison.Ordinal) && !name.EndsWith("_fruit", StringComparison.Ordinal),
+                };
+            }
 
             // Per-specimen visibility isolation: only this specimen (plus its host tree, for
             // climbers) is visible, so neighbouring specimens never occlude or photobomb it.
@@ -471,8 +735,8 @@ public static class SpecimenReviewRunner
                 else
                 {
                     string mmiName = mmi.Name.ToString();
-                    mmi.Visible = mmiName.StartsWith($"Flora_{pl.SpeciesId}_", StringComparison.Ordinal)
-                        || (pl.HostSpeciesId != null && mmiName.StartsWith($"Flora_{pl.HostSpeciesId}_", StringComparison.Ordinal));
+                    mmi.Visible = NameMatches(mmiName, pl.SpeciesId, pl.Stage)
+                        || (pl.HostSpeciesId != null && NameMatches(mmiName, pl.HostSpeciesId, "mature"));
                 }
             }
             double height;
@@ -608,7 +872,8 @@ public static class SpecimenReviewRunner
                     target = basePoint + new Vector3(0, (float)(0.45 * height), 0);
                 }
                 var eye = EyeFromAzimuthElevation(target, azimuth, elevation, dist);
-                await CaptureFrame(main, session, eye, target, Path.Combine(directory, $"{idx:00}_{id}.png"));
+                await CaptureFrame(main, session, eye, target, Path.Combine(directory, Fn("")));
+                rec.images.Add(new ImageRec(Fn(""), "plain", Math.Round(dist, 3), 0));
             }
             // Shot B (macro): 95 deg, 8 deg (trees/shrubs: crown zone, side azimuth for tall; aquatics: 55 deg down; climbers: ground runner).
             {
@@ -652,24 +917,54 @@ public static class SpecimenReviewRunner
                 }
                 if (height < 0.25 && !isClimber && !pl.IsCoverage) dist = Math.Max(dist * 0.7, 0.08);
                 var eye = EyeFromAzimuthElevation(target, azimuth, elevation, dist);
-                await CaptureFrame(main, session, eye, target, Path.Combine(directory, $"{idx:00}_{id}_macro.png"));
+                await CaptureFrame(main, session, eye, target, Path.Combine(directory, Fn("_macro")));
+                rec.images.Add(new ImageRec(Fn("_macro"), "macro", Math.Round(dist, 3), 0));
+            }
+            // Shot C (far): ordinary observation distance, specimen ~17.5% of frame height.
+            {
+                double azimuth = 35.0, elevation = 14.0;
+                Vector3 target;
+                double extent = Math.Max(height, radius * 2);
+                if (pl.IsCoverage)
+                {
+                    extent = 0.5; // the seeded clump is ~0.5 m across
+                    target = basePoint + new Vector3(0, 0.02f, 0);
+                    elevation = 30.0;
+                }
+                else if (isClimber)
+                {
+                    var hostPos = pl.HostPosition ?? pos;
+                    extent = Math.Max(extent, 1.2);
+                    target = new Vector3((float)hostPos.X, (float)(groundY + 0.58), (float)hostPos.Z);
+                    azimuth = 0.0;
+                }
+                else if (isAquatic)
+                {
+                    target = waterBase;
+                    elevation = 40.0;
+                }
+                else
+                {
+                    target = basePoint + new Vector3(0, (float)(0.5 * height), 0);
+                    if (isTreeShrub && height > 1.5) azimuth = 40.0;
+                }
+                double dist = Math.Clamp(FarDistance(main, extent), 0.5, 90.0);
+                var eye = EyeFromAzimuthElevation(target, azimuth, elevation, dist);
+                await CaptureFrame(main, session, eye, target, Path.Combine(directory, Fn("_far")));
+                rec.images.Add(new ImageRec(Fn("_far"), "far", Math.Round(dist, 3), 0));
             }
 
-            jsonEntries.Add(new
-            {
-                id = id,
-                name = sp.Name,
-                position = new[] { pos.X, pos.Z },
-                height,
-                radius,
-                coverage = pl.IsCoverage,
-                published,
-                files = new[]
-                {
-                    $"{idx:00}_{id}.png",
-                    $"{idx:00}_{id}_macro.png",
-                },
-            });
+            rec.name = sp.Name;
+            rec.id = id;
+            rec.stage = pl.Stage;
+            rec.slope_mode = slope;
+            rec.slope_deg = Math.Round(SlopeDeg(world, pos), 1);
+            rec.position = new[] { pos.X, pos.Z };
+            rec.height = height;
+            rec.radius = radius;
+            rec.coverage = pl.IsCoverage;
+            rec.published = published;
+            records.Add(rec);
         }
 
         if (coverageWasActive)
@@ -678,31 +973,13 @@ public static class SpecimenReviewRunner
             session.Coverage.SetProcess(false);
             session.Coverage.Visible = false;
         }
-
-        File.WriteAllText(Path.Combine(directory, "specimens.json"),
-            JsonSerializer.Serialize(jsonEntries, new JsonSerializerOptions { WriteIndented = true }));
-        GD.Print("SPECIMEN_REVIEW_COMPLETE " + directory);
-        main.GetTree().Quit();
+        return fileIndex;
     }
 
     private static bool IsMissingArgValue(string? arg)
     {
         if (string.IsNullOrWhiteSpace(arg)) return true;
         return arg.Contains("test-output") || arg.Contains('/') || arg.Contains('\\');
-    }
-
-    private static List<string> ParseSpeciesList(string? speciesArg, ContentLibrary content)
-    {
-        if (IsMissingArgValue(speciesArg))
-        {
-            return DefaultSpeciesList.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-        }
-        var parts = speciesArg!.Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-        // Fall back to the default list if the argument named nothing recognisable.
-        if (parts.Count == 0) return DefaultSpeciesList.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-        return parts;
     }
 
     private static void Shuffle(List<Vec2> list, Rng rng)
