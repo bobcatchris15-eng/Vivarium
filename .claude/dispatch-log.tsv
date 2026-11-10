@@ -13,3 +13,4 @@ ts	task_id	clanker	model	n_targets	wall_s	turns	attempts	outcome	returned_bytes
 2026-11-10	b2	validate-runner	haiku	0	2745	23	1	PASS	1900
 2026-11-10	F5	impl-worker	sonnet-medium	1	226	14	1	PASS	1500
 2026-11-10	F1	impl-worker	sonnet-medium	7	791	49	1	PASS	2100
+2026-11-10	F6	impl-worker	sonnet-medium	3	780	38	2	FAIL-NOVISIBLE	2600
