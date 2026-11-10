@@ -38,6 +38,7 @@ public partial class LiveDiagnostics : Node
     private double _soakMs, _soakWorst, _soakGpuSum, _soakGpuMax, _soakGpuNonZero;
     private double _soakDraws, _soakPrims, _soakNodes, _soakVideo, _soakTex, _soakBuf, _soakManaged, _soakDrawsMax;
     private long _soakAlloc0;
+    public string[] SoakHidden { get; set; } = Array.Empty<string>();
     private int _soakGc0, _soakGc1, _soakGc2;
     private ulong _soakSampleAt;
 
@@ -97,6 +98,10 @@ public partial class LiveDiagnostics : Node
         var scopeOut = new SortedDictionary<string, object>(StringComparer.Ordinal);
         foreach (var (k, m) in scopes)
             scopeOut[k] = new { mean_ms = R(m.TotalMs / Math.Max(1, m.Count)), max_ms = R(m.MaxMs), calls = m.Count, total_ms = R(m.TotalMs), mean_per_frame_ms = R(m.TotalMs / f) };
+        var (allocByScope, allocTop) = FrameProfiler.WindowAllocations();
+        var allocOut = new Dictionary<string, double>();
+        foreach (var kv in allocByScope.OrderByDescending(k => k.Value).Take(20)) allocOut[kv.Key] = R(kv.Value / f);
+        double totalAllocPerFrame = frames > 0 ? (GC.GetTotalAllocatedBytes(false) - _soakAlloc0) / f : 0;
         bool gpuOk = _soakGpuNonZero > 0;
         double? Mem(double sum) => _soakSamples > 0 ? Math.Round(sum / s) : null;
         var summary = new Dictionary<string, object?>
@@ -125,6 +130,9 @@ public partial class LiveDiagnostics : Node
             ["gc_gen1"] = GC.CollectionCount(1) - _soakGc1,
             ["gc_gen2"] = GC.CollectionCount(2) - _soakGc2,
             ["allocated_bytes_per_frame"] = frames > 0 ? R((GC.GetTotalAllocatedBytes(false) - _soakAlloc0) / f) : null,
+            ["hidden"] = SoakHidden,
+            ["alloc_bytes_per_frame_by_scope"] = allocOut,
+            ["alloc_bytes_per_frame_unscoped"] = frames > 0 ? R(totalAllocPerFrame - allocTop / f) : null,
             ["multimesh_instance_count"] = null,
             ["scopes_cpu_ms"] = scopeOut,
             ["notes"] = "Steady state excludes samples before warmup. Draw calls/primitives/GPU are per-frame means; node/memory fields are means of 1 Hz samples. Frame percentiles use 0.1 ms bins. Scope times are CPU wall time and overlap; GeometryWorker is off-thread."

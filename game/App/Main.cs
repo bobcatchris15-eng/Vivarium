@@ -147,6 +147,21 @@ public partial class Main : Node3D
                 if (double.TryParse(ArgAfter("--soak-seconds"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var soakSecs) && soakSecs > 0)
                 {
                     double soakWarm = double.TryParse(ArgAfter("--soak-warmup"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var w0) ? w0 : 90;
+                    var hidden = new System.Collections.Generic.List<string>();
+                    if (ArgAfter("--soak-hide") is { } hideArg)
+                        foreach (var raw in hideArg.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            Node? n = raw.ToLowerInvariant() switch
+                            {
+                                "island" => Session.Island, "water" => Session.Water, "waterfluid" => Session.WaterFluid,
+                                "props" => Session.Props, "pilottree" => Session.PilotTree, "soildetail" => Session.SoilDetail,
+                                "ambientground" => Session.AmbientGround, "coverage" => Session.Coverage, "flora" => Session.Flora,
+                                "fauna" => Session.Fauna, "guardian" => Session.Guardian, _ => null };
+                            if (n is Node3D n3) { n3.Visible = false; hidden.Add(raw.ToLowerInvariant()); }
+                            else GD.Print("SOAK_HIDE_UNKNOWN " + raw);
+                        }
+                    if (hidden.Count > 0) GD.Print("SOAK_HIDE " + string.Join(",", hidden));
+                    if (Session.Diagnostics != null) Session.Diagnostics.SoakHidden = hidden.ToArray();
                     Session.Diagnostics?.BeginSoak(soakSecs, soakWarm);
                 }
             }

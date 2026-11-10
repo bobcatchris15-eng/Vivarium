@@ -25,12 +25,19 @@ public static class FrameProfiler
 
     public readonly struct Scope : System.IDisposable
     {
-        private readonly string _name; private readonly long _t0;
-        public Scope(string name) { _name = name; _t0 = Stopwatch.GetTimestamp(); }
+        private readonly string _name; private readonly long _t0, _a0; private readonly bool _top;
+        public Scope(string name)
+        {
+            _name = name; _top = _depth == 0; _depth++;
+            _a0 = System.GC.GetAllocatedBytesForCurrentThread(); _t0 = Stopwatch.GetTimestamp();
+        }
         public void Dispose()
         {
             double ms = Stopwatch.GetElapsedTime(_t0).TotalMilliseconds;
+            long bytes = System.GC.GetAllocatedBytesForCurrentThread() - _a0;
+            if (_depth > 0) _depth--;
             RecordDuration(_name, ms);
+            RecordAlloc(_name, bytes, _top);
         }
     }
 
@@ -48,6 +55,26 @@ public static class FrameProfiler
     public static Dictionary<string,double> PerFrameDurations(int frames)
     {
         lock(_lock)return _accum.ToDictionary(p=>p.Key,p=>p.Value/System.Math.Max(1,frames));
+    }
+
+    [System.ThreadStatic] private static int _depth;
+    private static readonly Dictionary<string, long> _winAlloc = new();
+    private static long _winAllocTop;
+
+    private static void RecordAlloc(string name, long bytes, bool top)
+    {
+        lock (_lock)
+        {
+            if (!_win) return;
+            _winAlloc[name] = _winAlloc.GetValueOrDefault(name) + bytes;
+            if (top) _winAllocTop += bytes;
+        }
+    }
+
+    /// <summary>Bytes allocated per scope name and the top-level-only sum, for the current/last window.</summary>
+    public static (Dictionary<string, long> ByScope, long TopLevelSum) WindowAllocations()
+    {
+        lock (_lock) return (new Dictionary<string, long>(_winAlloc), _winAllocTop);
     }
 
     public static Scope Measure(string name) => new(name);
@@ -199,7 +226,7 @@ public static class FrameProfiler
     /// <summary>Begins accumulating per-scope mean/max over a measurement window (soak steady state).</summary>
     public static void StartWindow()
     {
-        lock (_lock) { _winMax.Clear(); _winAccum.Clear(); _winCount.Clear(); _win = true; }
+        lock (_lock) { _winMax.Clear(); _winAccum.Clear(); _winCount.Clear(); _winAlloc.Clear(); _winAllocTop = 0; _win = true; }
     }
 
     /// <summary>Ends the window and returns per-scope max, total and call count recorded within it.</summary>
