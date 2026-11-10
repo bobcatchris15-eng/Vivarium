@@ -76,52 +76,8 @@ public static partial class OrganismMeshes
         return pts;
     }
 
-    /// <summary>
-    /// Builds a muscular, swollen branch collar node at the trunk summit where limbs diverge,
-    /// eliminating sharp V-notches with an organic, flared fluted junction.
-    /// </summary>
-    private static void CragparasolBranchCollar(
-        MeshData m,
-        Vec3 center,
-        double radius,
-        double height,
-        int detail)
-    {
-        int collarStart = m.VertexCount;
-        int rings = detail == 2 ? 4 : (detail == 1 ? 5 : 7);
-        int sectors = detail == 2 ? 8 : (detail == 1 ? 10 : 12);
-
-        for (int r = 0; r <= rings; r++)
-        {
-            double tr = r / (double)rings;
-            double y = (tr - 0.5) * height;
-            double shape = Math.Sin(Math.PI * tr);
-            double rad = radius * (0.88 + 0.42 * shape);
-
-            for (int s = 0; s <= sectors; s++)
-            {
-                double u = s / (double)sectors;
-                double th = 2.0 * Math.PI * u;
-                double flute = 1.0 + 0.12 * Math.Cos(5.0 * th);
-                var pos = center + new Vec3(Math.Cos(th) * rad * flute, y, Math.Sin(th) * rad * flute);
-                var norm = new Vec3(Math.Cos(th), (tr - 0.5) * 0.7, Math.Sin(th)).Normalized();
-                var col = Primitives.Mix(CragBarkUnder, CragBarkAsh, tr);
-                m.AddVertex(pos, norm, col, 1.0, y * 3.0, u, 2.0, 0.0);
-            }
-        }
-
-        for (int r = 0; r < rings; r++)
-        {
-            for (int s = 0; s < sectors; s++)
-            {
-                int a = collarStart + r * (sectors + 1) + s;
-                int b = a + sectors + 1;
-                m.AddTriangle(a, a + 1, b);
-                m.AddTriangle(a + 1, b + 1, b);
-            }
-        }
-        m.Structural.Add((collarStart, m.VertexCount - collarStart, sectors, radius));
-    }
+    private static void CragparasolBranchCollar(MeshData m, Vec3 center, Vec3 tangent, double radius, double height, int detail) =>
+        Form.ForkJunction.Collar(m, center, tangent, radius, height, detail, CragBarkUnder, CragBarkAsh, 0.12, 5);
 
     /// <summary>
     /// Builds a lofted fluted stem with organic buttressing, resin seams, and smooth normals.
@@ -709,6 +665,11 @@ public static partial class OrganismMeshes
             trunkRadii[i] = MathD.Lerp(rBase, rFork, Math.Pow(t, 0.80));
         }
 
+        int numPrimaryLimbs = juvenile ? 3 : 4;
+        double primBaseR = Form.ForkJunction.ChildRadius(rFork, numPrimaryLimbs);
+        Form.ForkJunction.WidenParent(trunkPoints, trunkRadii, (pFork, primBaseR));
+        var trunkEndTan = (trunkPoints[trunkStations - 1] - trunkPoints[trunkStations - 2]).Normalized();
+
         var buttressAngles = new[] { az - 0.40, az + 1.25, az + 2.85, az + 4.60 };
         CragparasolFlutedStem(m, trunkPoints, trunkRadii, detail,
             twistTotal: 1.15, ridges: 5, rootButtress: true, buttressAngles: buttressAngles);
@@ -716,8 +677,8 @@ public static partial class OrganismMeshes
         // -------------------------------------------------------------------------
         // 2. Muscular Swollen Branch Collar at Trunk Summit
         // -------------------------------------------------------------------------
-        double collarH = rFork * 1.50;
-        CragparasolBranchCollar(m, pFork, rFork * 1.30, collarH, detail);
+        double collarH = rFork * 1.20;
+        CragparasolBranchCollar(m, pFork - trunkEndTan * (collarH * 0.25), trunkEndTan, rFork * 1.05, collarH, detail);
 
         // -------------------------------------------------------------------------
         // 3. 3-Order Dichotomous Umbrella Vault (Convex Mushroom Dome Canopy)
@@ -735,7 +696,6 @@ public static partial class OrganismMeshes
             return domeCenter.Y - (domeRise * 0.36) * Math.Pow(normR, 1.70);
         }
 
-        int numPrimaryLimbs = juvenile ? 3 : 4;
         double baseLimbAz = az + rng.Range(0.10, 0.35);
 
         var berryAttachPoints = new List<(Vec3 Pos, Vec3 Dir)>();
@@ -761,17 +721,20 @@ public static partial class OrganismMeshes
             var primPath = CragparasolSampleBezier(pFork, cPrim0, cPrim1, primEndPos, primStations);
             var primRadii = new double[primStations];
 
-            double primBaseR = rFork * 0.64;
             double primTipR = primBaseR * 0.68;
             for (int i = 0; i < primStations; i++)
             {
                 double t = i / (double)(primStations - 1);
                 primRadii[i] = MathD.Lerp(primBaseR, primTipR, t);
             }
-            CragparasolFlutedStem(m, primPath, primRadii, detail, twistTotal: 0.35, ridges: 4);
+            double boughBaseR = Form.ForkJunction.ChildRadius(primTipR, 2);
+            Form.ForkJunction.WidenParent(primPath, primRadii, (primEndPos, boughBaseR));
+            CragparasolFlutedStem(m, Form.ForkJunction.SinkStart(primPath, primBaseR), primRadii, detail, twistTotal: 0.35, ridges: 4);
 
-            // Flared branch collar at primary fork junction
-            CragparasolBranchCollar(m, primEndPos, primTipR * 1.35, primTipR * 1.5, detail);
+            // Flared branch collar at primary fork junction (rings normal to the limb's end tangent)
+            var primEndTan = (primPath[primStations - 1] - primPath[primStations - 2]).Normalized();
+            double primCollarH = primTipR * 1.2;
+            CragparasolBranchCollar(m, primEndPos - primEndTan * (primCollarH * 0.25), primEndTan, primTipR * 1.05, primCollarH, detail);
 
             // Infill foliage along primary limb
             if (detail < 2)
@@ -803,17 +766,21 @@ public static partial class OrganismMeshes
                 int boughStations = detail == 2 ? 4 : 5;
                 var boughPath = CragparasolSampleBezier(primEndPos, cBough0, cBough1, boughForkPos, boughStations);
                 var boughRadii = new double[boughStations];
-                double boughBaseR = primTipR * 0.78;
                 double boughTipR = boughBaseR * 0.68;
+                int numTips = isInner ? 2 : (detail == 2 ? 2 : 3);
+                double spurBaseR = Form.ForkJunction.ChildRadius(boughTipR, numTips);
                 for (int i = 0; i < boughStations; i++)
                 {
                     double t = i / (double)(boughStations - 1);
                     boughRadii[i] = MathD.Lerp(boughBaseR, boughTipR, t);
                 }
-                CragparasolFlutedStem(m, boughPath, boughRadii, detail, twistTotal: 0.25, ridges: 3);
+                Form.ForkJunction.WidenParent(boughPath, boughRadii, (boughForkPos, spurBaseR));
+                CragparasolFlutedStem(m, Form.ForkJunction.SinkStart(boughPath, boughBaseR), boughRadii, detail, twistTotal: 0.25, ridges: 3);
 
                 // Flared branch collar at secondary fork junction
-                CragparasolBranchCollar(m, boughForkPos, boughTipR * 1.30, boughTipR * 1.4, detail);
+                var boughEndTan = (boughPath[boughStations - 1] - boughPath[boughStations - 2]).Normalized();
+                double boughCollarH = boughTipR * 1.2;
+                CragparasolBranchCollar(m, boughForkPos - boughEndTan * (boughCollarH * 0.25), boughEndTan, boughTipR * 1.05, boughCollarH, detail);
 
                 // Infill foliage along secondary bough
                 if (detail < 2)
@@ -828,7 +795,6 @@ public static partial class OrganismMeshes
                 // -------------------------------------------------------------
                 // Inner bough produces 2 tips: 1 central dome tip + 1 mid-canopy tip
                 // Outer bough produces 2-3 tips: 2 outer rim tips (+ 1 perimeter tip)
-                int numTips = isInner ? 2 : (detail == 2 ? 2 : 3);
                 for (int tipIdx = 0; tipIdx < numTips; tipIdx++)
                 {
                     double tipR;
@@ -869,14 +835,13 @@ public static partial class OrganismMeshes
                     int spurStations = detail == 2 ? 4 : 5;
                     var spurPath = CragparasolSampleBezier(boughForkPos, cSpur0, cSpur1, pTipTarget, spurStations);
                     var spurRadii = new double[spurStations];
-                    double spurBaseR = boughTipR * 0.70;
                     double spurTipR = Math.Max(0.005, spurBaseR * 0.55);
                     for (int si = 0; si < spurStations; si++)
                     {
                         double st = si / (double)(spurStations - 1);
                         spurRadii[si] = MathD.Lerp(spurBaseR, spurTipR, st);
                     }
-                    CragparasolFlutedStem(m, spurPath, spurRadii, detail, twistTotal: 0.15, ridges: 3);
+                    CragparasolFlutedStem(m, Form.ForkJunction.SinkStart(spurPath, spurBaseR), spurRadii, detail, twistTotal: 0.15, ridges: 3);
 
                     // Terminal Rosette on the dome
                     var tipDir = CragparasolBezierTangent(boughForkPos, cSpur0, cSpur1, pTipTarget, 1.0);

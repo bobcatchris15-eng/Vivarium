@@ -1490,7 +1490,7 @@ public static partial class OrganismMeshes
             }
 
             int limbStemStart = m.VertexCount;
-            HollowcrownWoodStem(m, limbPath, limbRadii, detail, ridges: 4, twistTotal: 0.24);
+            HollowcrownWoodStem(m, Form.ForkJunction.SinkStart(limbPath, limbRadii[0]), limbRadii, detail, ridges: 4, twistTotal: 0.24);
             m.EssentialSpans.Add((limbStemStart, m.VertexCount - limbStemStart));
 
             // Bracket fungi clutching the knurled bough elbow
@@ -1546,7 +1546,7 @@ public static partial class OrganismMeshes
                 }
 
                 int lowStart = m.VertexCount;
-                HollowcrownWoodStem(m, lowPath, lowRadii, detail, ridges: 3, twistTotal: 0.18);
+                HollowcrownWoodStem(m, Form.ForkJunction.SinkStart(lowPath, lowRadii[0]), lowRadii, detail, ridges: 3, twistTotal: 0.18);
                 m.EssentialSpans.Add((lowStart, m.VertexCount - lowStart));
 
                 var lowTipDir = HollowcrownBezierTangent(lowRoot, lowC0, lowC1, lowEnd, 1.0);
@@ -1588,7 +1588,7 @@ public static partial class OrganismMeshes
                 }
 
                 int bStemStart = m.VertexCount;
-                HollowcrownWoodStem(m, bPath, bRadii, detail, ridges: 3, twistTotal: 0.20);
+                HollowcrownWoodStem(m, Form.ForkJunction.SinkStart(bPath, bRadii[0]), bRadii, detail, ridges: 3, twistTotal: 0.20);
                 m.EssentialSpans.Add((bStemStart, m.VertexCount - bStemStart));
 
                 var bTipDir = HollowcrownBezierTangent(pElbow, cB0, cB1, bEnd, 1.0);
@@ -1628,7 +1628,7 @@ public static partial class OrganismMeshes
                     var tertPath = HollowcrownSampleBezier(tRoot, cTert0, cTert1, tertEnd, 4);
                     var tertRadii = new[] { bBaseR * 0.42 * 1.25, bBaseR * 0.30, bBaseR * 0.18, 0.004 };
                     int tertStemStart = m.VertexCount;
-                    HollowcrownWoodStem(m, tertPath, tertRadii, detail, ridges: 3, twistTotal: 0.15);
+                    HollowcrownWoodStem(m, Form.ForkJunction.SinkStart(tertPath, tertRadii[0]), tertRadii, detail, ridges: 3, twistTotal: 0.15);
                     m.EssentialSpans.Add((tertStemStart, m.VertexCount - tertStemStart));
 
                     var tertDir = HollowcrownBezierTangent(tRoot, cTert0, cTert1, tertEnd, 1.0);
@@ -1666,7 +1666,7 @@ public static partial class OrganismMeshes
                 }
 
                 int inStemStart = m.VertexCount;
-                HollowcrownWoodStem(m, inPath, inRadii, detail, ridges: 3, twistTotal: 0.20);
+                HollowcrownWoodStem(m, Form.ForkJunction.SinkStart(inPath, inRadii[0]), inRadii, detail, ridges: 3, twistTotal: 0.20);
                 m.EssentialSpans.Add((inStemStart, m.VertexCount - inStemStart));
 
                 var inTipDir = HollowcrownBezierTangent(pElbow, cIn0, cIn1, inEnd, 1.0);
@@ -1700,7 +1700,7 @@ public static partial class OrganismMeshes
                     var crPath = new[] { crRoot, crRoot + crDir * (crReach * 0.5), crEnd };
                     var crRadii = new[] { inBaseR * 0.38, inBaseR * 0.24, 0.005 };
                     int crStart = m.VertexCount;
-                    HollowcrownWoodStem(m, crPath, crRadii, detail, ridges: 3, twistTotal: 0.12);
+                    HollowcrownWoodStem(m, Form.ForkJunction.SinkStart(crPath, crRadii[0]), crRadii, detail, ridges: 3, twistTotal: 0.12);
                     m.EssentialSpans.Add((crStart, m.VertexCount - crStart));
 
                     ulong crSeed = Rng.Mix(seed, (ulong)(k * 60000 + cs * 200 + 61));

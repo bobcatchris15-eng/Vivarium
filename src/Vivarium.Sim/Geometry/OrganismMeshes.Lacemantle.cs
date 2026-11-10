@@ -77,52 +77,8 @@ public static partial class OrganismMeshes
         return pts;
     }
 
-    /// <summary>
-    /// Builds an organic branch collar swelling at a branch junction,
-    /// creating a natural swollen wood collar blending boughs into trunks.
-    /// </summary>
-    private static void LacemantleBranchCollar(
-        MeshData m,
-        Vec3 center,
-        double radius,
-        double height,
-        int detail)
-    {
-        int collarStart = m.VertexCount;
-        int rings = detail == 2 ? 3 : 5;
-        int sectors = detail == 2 ? 8 : 10;
-
-        for (int r = 0; r <= rings; r++)
-        {
-            double tr = r / (double)rings;
-            double y = (tr - 0.5) * height;
-            double shape = Math.Sin(Math.PI * tr);
-            double rad = radius * (0.85 + 0.40 * shape);
-
-            for (int s = 0; s <= sectors; s++)
-            {
-                double u = s / (double)sectors;
-                double th = 2.0 * Math.PI * u;
-                double flute = 1.0 + 0.08 * Math.Cos(5.0 * th);
-                var pos = center + new Vec3(Math.Cos(th) * rad * flute, y, Math.Sin(th) * rad * flute);
-                var norm = new Vec3(Math.Cos(th), (tr - 0.5) * 0.6, Math.Sin(th)).Normalized();
-                var col = Primitives.Mix(LaceBarkPlum, LaceBarkSilver, 0.35 + 0.30 * tr);
-                m.AddVertex(pos, norm, col, 1.0, y * 3.5, u, 2.0, 0.0);
-            }
-        }
-
-        for (int r = 0; r < rings; r++)
-        {
-            for (int s = 0; s < sectors; s++)
-            {
-                int a = collarStart + r * (sectors + 1) + s;
-                int b = a + sectors + 1;
-                m.AddTriangle(a, a + 1, b);
-                m.AddTriangle(a + 1, b + 1, b);
-            }
-        }
-        m.Structural.Add((collarStart, m.VertexCount - collarStart, sectors, radius));
-    }
+    private static void LacemantleBranchCollar(MeshData m, Vec3 center, Vec3 tangent, double radius, double height, int detail) =>
+        Form.ForkJunction.Collar(m, center, tangent, radius, height, detail, LaceBarkPlum, LaceBarkSilver, 0.08, 5);
 
     /// <summary>
     /// Builds a lofted smooth silver-plum woody stem with subtle fluting and smooth normals.
@@ -615,7 +571,7 @@ public static partial class OrganismMeshes
             double st = i / (double)(branchStations - 1);
             branchRadii[i] = MathD.Lerp(boughBaseR, branchTipR, st);
         }
-        LacemantleStem(m, branchPath, branchRadii, detail);
+        LacemantleStem(m, Form.ForkJunction.SinkStart(branchPath, boughBaseR), branchRadii, detail);
 
         // Dogwood star blossom on upper bough surface
         if (detail < 2)
@@ -728,10 +684,25 @@ public static partial class OrganismMeshes
             basePoints[i] = Vec3.Lerp(pFoot, pLowFork, t);
             baseRadii[i] = MathD.Lerp(rBase, rBase * 0.88, t);
         }
+        // Fork radii (F1): children share the parent's r^2.5 budget; parent swells smoothly toward the fork
+        double forkParentR = rBase * 0.88;
+        double stem1BaseR = Form.ForkJunction.ChildRadiusShare(forkParentR, 0.60);
+        double stem2BaseR = Form.ForkJunction.ChildRadiusShare(forkParentR, 0.40);
+        Form.ForkJunction.WidenParent(basePoints, baseRadii, (pLowFork, stem1BaseR));
         LacemantleStem(m, basePoints, baseRadii, detail, rootFlare: true, flareAzimuth: swayAz);
 
-        // Organic branch collar swelling uniting the low fork
-        LacemantleBranchCollar(m, pLowFork, rBase * 1.25, lowForkH * 0.90, detail);
+        // Organic branch collar swelling uniting the low fork (rings normal to the trunk axis)
+        var baseEndTan = (basePoints[baseStations - 1] - basePoints[baseStations - 2]).Normalized();
+        LacemantleBranchCollar(m, pLowFork - baseEndTan * (lowForkH * 0.15), baseEndTan, rBase * 1.12, lowForkH * 0.60, detail);
+
+        int boughsStem1 = juvenile ? 3 : (detail == 2 ? 3 : 5);
+        int boughsStem2 = juvenile ? 2 : (detail == 2 ? 2 : 4);
+        static double LaceLocalR(double[] r, double t)
+        {
+            double f = MathD.Clamp01(t) * (r.Length - 1);
+            int i = Math.Min((int)Math.Floor(f), r.Length - 2);
+            return MathD.Lerp(r[i], r[i + 1], f - i);
+        }
 
         // -------------------------------------------------------------------------
         // 2. Co-Dominant Sinuous Trunks (Stem 1: Dominant; Stem 2: Co-Dominant)
@@ -747,14 +718,21 @@ public static partial class OrganismMeshes
         int stem1Stations = detail == 2 ? 7 : (detail == 1 ? 9 : 12);
         var stem1Path = LacemantleSampleBezier(pLowFork, cStem1_0, cStem1_1, pApex1, stem1Stations);
         var stem1Radii = new double[stem1Stations];
-        double stem1BaseR = rBase * 0.68;
         double stem1TipR = Math.Max(0.005, stem1BaseR * 0.32);
         for (int i = 0; i < stem1Stations; i++)
         {
             double t = i / (double)(stem1Stations - 1);
             stem1Radii[i] = MathD.Lerp(stem1BaseR, stem1TipR, Math.Pow(t, 0.85));
         }
-        LacemantleStem(m, stem1Path, stem1Radii, detail);
+        var stem1Forks = new (Vec3, double)[boughsStem1];
+        for (int bi = 0; bi < boughsStem1; bi++)
+        {
+            double tS = MathD.Lerp(0.22, 0.88, bi / (double)Math.Max(1, boughsStem1 - 1));
+            stem1Forks[bi] = (LacemantleBezier(pLowFork, cStem1_0, cStem1_1, pApex1, tS),
+                Form.ForkJunction.ChildRadiusShare(LaceLocalR(stem1Radii, tS), 0.30));
+        }
+        Form.ForkJunction.WidenParent(stem1Path, stem1Radii, stem1Forks);
+        LacemantleStem(m, Form.ForkJunction.SinkStart(stem1Path, stem1BaseR), stem1Radii, detail);
 
         // Stem 2: Spreads lower and wider to create the picturesque asymmetrical Japanese maple form
         double stem2Az = swayAz + Math.PI + rng.Range(-0.35, 0.35);
@@ -768,20 +746,26 @@ public static partial class OrganismMeshes
         int stem2Stations = detail == 2 ? 6 : (detail == 1 ? 8 : 10);
         var stem2Path = LacemantleSampleBezier(pLowFork, cStem2_0, cStem2_1, pApex2, stem2Stations);
         var stem2Radii = new double[stem2Stations];
-        double stem2BaseR = rBase * 0.56;
         double stem2TipR = Math.Max(0.004, stem2BaseR * 0.32);
         for (int i = 0; i < stem2Stations; i++)
         {
             double t = i / (double)(stem2Stations - 1);
             stem2Radii[i] = MathD.Lerp(stem2BaseR, stem2TipR, Math.Pow(t, 0.85));
         }
-        LacemantleStem(m, stem2Path, stem2Radii, detail);
+        var stem2Forks = new (Vec3, double)[boughsStem2];
+        for (int bi = 0; bi < boughsStem2; bi++)
+        {
+            double tS = MathD.Lerp(0.28, 0.88, bi / (double)Math.Max(1, boughsStem2 - 1));
+            stem2Forks[bi] = (LacemantleBezier(pLowFork, cStem2_0, cStem2_1, pApex2, tS),
+                Form.ForkJunction.ChildRadiusShare(LaceLocalR(stem2Radii, tS), 0.30));
+        }
+        Form.ForkJunction.WidenParent(stem2Path, stem2Radii, stem2Forks);
+        LacemantleStem(m, Form.ForkJunction.SinkStart(stem2Path, stem2BaseR), stem2Radii, detail);
 
         // -------------------------------------------------------------------------
         // 3. Asymmetrical Pagoda Tiers of Sinuous Weeping Boughs
         // -------------------------------------------------------------------------
         // Boughs on Dominant Stem 1 (4-5 staggered boughs)
-        int boughsStem1 = juvenile ? 3 : (detail == 2 ? 3 : 5);
         for (int bi = 0; bi < boughsStem1; bi++)
         {
             double tStem = MathD.Lerp(0.22, 0.88, bi / (double)Math.Max(1, boughsStem1 - 1));
@@ -793,17 +777,19 @@ public static partial class OrganismMeshes
 
             double bReach = (juvenile ? 0.50 : 0.72) * MathD.Lerp(1.05, 0.65, Math.Pow(tStem, 0.75)) * rng.Range(0.92, 1.08);
             double bDroop = rng.Range(0.03, 0.08);
-            double bBaseR = Math.Max(0.006, stem1BaseR * 0.45 * (1.0 - 0.25 * tStem));
+            double bBaseR = Math.Max(0.006, stem1Forks[bi].Item2);
 
             // Branch collar at connection
-            LacemantleBranchCollar(m, bOrigin, bBaseR * 1.30, bBaseR * 1.20, detail);
+            {
+                var bTan0 = (bOutward * 0.45 + Vec3.Up * 0.60).Normalized();
+                LacemantleBranchCollar(m, bOrigin + bTan0 * (bBaseR * 0.4), bTan0, bBaseR * 1.15, bBaseR * 1.10, detail);
+            }
 
             ulong bSeed = Rng.Mix(seed, (ulong)(bi * 10000 + 17));
             LacemantleWeepingBough(m, bOrigin, bOutward, bReach, bDroop, bBaseR, bSeed, rng, juvenile, detail);
         }
 
         // Boughs on Co-Dominant Stem 2 (3-4 staggered boughs)
-        int boughsStem2 = juvenile ? 2 : (detail == 2 ? 2 : 4);
         for (int bi = 0; bi < boughsStem2; bi++)
         {
             double tStem = MathD.Lerp(0.28, 0.88, bi / (double)Math.Max(1, boughsStem2 - 1));
@@ -814,9 +800,12 @@ public static partial class OrganismMeshes
 
             double bReach = (juvenile ? 0.44 : 0.64) * MathD.Lerp(1.00, 0.62, Math.Pow(tStem, 0.75)) * rng.Range(0.90, 1.10);
             double bDroop = rng.Range(0.025, 0.07);
-            double bBaseR = Math.Max(0.005, stem2BaseR * 0.45 * (1.0 - 0.25 * tStem));
+            double bBaseR = Math.Max(0.005, stem2Forks[bi].Item2);
 
-            LacemantleBranchCollar(m, bOrigin, bBaseR * 1.30, bBaseR * 1.20, detail);
+            {
+                var bTan0 = (bOutward * 0.45 + Vec3.Up * 0.60).Normalized();
+                LacemantleBranchCollar(m, bOrigin + bTan0 * (bBaseR * 0.4), bTan0, bBaseR * 1.15, bBaseR * 1.10, detail);
+            }
 
             ulong bSeed = Rng.Mix(seed, (ulong)(bi * 20000 + 43));
             LacemantleWeepingBough(m, bOrigin, bOutward, bReach, bDroop, bBaseR, bSeed, rng, juvenile, detail);

@@ -911,6 +911,14 @@ public static partial class OrganismMeshes
             double crotchFlare = 1.0 + 0.35 * Math.Pow(Math.Max(0.0, (st - 0.65) / 0.35), 2.0);
             mainTrunkRadii[i] = Math.Max(0.018, baseR * MathD.Lerp(1.18, 0.55, Math.Pow(st, 0.85)) * crotchFlare);
         }
+        // Fork radii (F1): parent swells smoothly toward the twin bole and scaffold boughs
+        {
+            double twinNominalR = Form.ForkJunction.ChildRadiusShare(mainTrunkRadii[(int)(0.28 * (tStations - 1))], 0.4);
+            var mainForks = new List<(Vec3, double)> { (NtbAt(mainTrunkPath, 0.28), twinNominalR) };
+            foreach (double bf in new[] { 0.38, 0.58, 0.74, 0.88 })
+                mainForks.Add((NtbAt(mainTrunkPath, bf), baseR * 0.24 * 1.5));
+            Form.ForkJunction.WidenParent(mainTrunkPath, mainTrunkRadii, mainForks.ToArray());
+        }
         NtbWood(part, mainTrunkPath, mainTrunkRadii, detail, NtbFenforgeBark, NtbFenforgeBarkLight, NtbFenforgeBarkDeep,
             ridgeFreq: 4.0, twist: 0.7, essential: true);
 
@@ -926,7 +934,7 @@ public static partial class OrganismMeshes
             double collar = 1.0 + 0.30 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.30), 2.0);
             upperBoleRadii[i] = Math.Max(0.010, baseR * MathD.Lerp(0.55, 0.14, st) * collar);
         }
-        NtbWood(part, upperBolePath, upperBoleRadii, detail, NtbFenforgeBark, NtbFenforgeBarkLight, NtbFenforgeBarkDeep,
+        NtbWood(part, Form.ForkJunction.SinkStart(upperBolePath, upperBoleRadii[0]), upperBoleRadii, detail, NtbFenforgeBark, NtbFenforgeBarkLight, NtbFenforgeBarkDeep,
             ridgeFreq: 3.5, twist: 0.6, essential: true);
 
         // Co-dominant twin bole (branches at ~28% height, leaning outward with smooth collar)
@@ -952,7 +960,7 @@ public static partial class OrganismMeshes
             double collar = 1.0 + 0.45 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.25), 2.0);
             twinRadii[i] = Math.Max(0.010, baseR * MathD.Lerp(0.50, 0.12, st) * collar);
         }
-        NtbWood(part, twinPath, twinRadii, detail, NtbFenforgeBark, NtbFenforgeBarkLight, NtbFenforgeBarkDeep,
+        NtbWood(part, Form.ForkJunction.SinkStart(twinPath, twinRadii[0]), twinRadii, detail, NtbFenforgeBark, NtbFenforgeBarkLight, NtbFenforgeBarkDeep,
             ridgeFreq: 3.5, twist: 0.6, essential: true);
 
         // 3. Spreading Scaffold Boughs with flared branch collars
@@ -1008,7 +1016,7 @@ public static partial class OrganismMeshes
                 double collar = 1.0 + 0.55 * Math.Pow(Math.Max(0.0, 1.0 - st / 0.24), 2.0);
                 bRadii[s] = Math.Max(0.005, baseR * MathD.Lerp(0.24, 0.045, Math.Pow(st, 0.85)) * collar);
             }
-            NtbWood(part, bPath, bRadii, detail, NtbFenforgeBark, NtbFenforgeBarkLight, NtbFenforgeBarkDeep,
+            NtbWood(part, Form.ForkJunction.SinkStart(bPath, bRadii[0]), bRadii, detail, NtbFenforgeBark, NtbFenforgeBarkLight, NtbFenforgeBarkDeep,
                 ridgeFreq: 3.5, twist: 0.5, essential: true);
 
             // Volumetric 3D foliage clusters along primary bough mid-to-distal section

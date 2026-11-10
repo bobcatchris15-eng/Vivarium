@@ -75,52 +75,8 @@ public static partial class OrganismMeshes
         return pts;
     }
 
-    /// <summary>
-    /// Builds an organic branch collar swelling at a branch or trunk junction,
-    /// eliminating sharp V-notches with natural wood swelling.
-    /// </summary>
-    private static void SplitcrownBranchCollar(
-        MeshData m,
-        Vec3 center,
-        double radius,
-        double height,
-        int detail)
-    {
-        int collarStart = m.VertexCount;
-        int rings = detail == 2 ? 3 : 5;
-        int sectors = detail == 2 ? 8 : 10;
-
-        for (int r = 0; r <= rings; r++)
-        {
-            double tr = r / (double)rings;
-            double y = (tr - 0.5) * height;
-            double shape = Math.Sin(Math.PI * tr);
-            double rad = radius * (0.85 + 0.38 * shape);
-
-            for (int s = 0; s <= sectors; s++)
-            {
-                double u = s / (double)sectors;
-                double th = 2.0 * Math.PI * u;
-                double flute = 1.0 + 0.10 * Math.Cos(4.0 * th);
-                var pos = center + new Vec3(Math.Cos(th) * rad * flute, y, Math.Sin(th) * rad * flute);
-                var norm = new Vec3(Math.Cos(th), (tr - 0.5) * 0.6, Math.Sin(th)).Normalized();
-                var col = Primitives.Mix(SplitBarkMid, SplitBarkPale, tr);
-                m.AddVertex(pos, norm, col, 1.0, y * 3.0, u, 2.0, 0.0);
-            }
-        }
-
-        for (int r = 0; r < rings; r++)
-        {
-            for (int s = 0; s < sectors; s++)
-            {
-                int a = collarStart + r * (sectors + 1) + s;
-                int b = a + sectors + 1;
-                m.AddTriangle(a, a + 1, b);
-                m.AddTriangle(a + 1, b + 1, b);
-            }
-        }
-        m.Structural.Add((collarStart, m.VertexCount - collarStart, sectors, radius));
-    }
+    private static void SplitcrownBranchCollar(MeshData m, Vec3 center, Vec3 tangent, double radius, double height, int detail) =>
+        Form.ForkJunction.Collar(m, center, tangent, radius, height, detail, SplitBarkMid, SplitBarkPale, 0.10, 4);
 
     /// <summary>
     /// Builds a gnarled, mossy buttressed root stool at the ground where trunks divide.
@@ -668,7 +624,7 @@ public static partial class OrganismMeshes
         SplitcrownBasalStool(m, Vec3.Zero, stoolR, stoolH, detail);
 
         // Organic shared collar transition at top of stool
-        SplitcrownBranchCollar(m, Vec3.Up * (stoolH * 0.85), stoolR * 1.15, stoolH * 0.45, detail);
+        SplitcrownBranchCollar(m, Vec3.Up * (stoolH * 0.85), Vec3.Up, stoolR * 1.15, stoolH * 0.45, detail);
 
         var podAttachPoints = new List<(Vec3 Pos, Vec3 Dir)>();
 
@@ -706,12 +662,16 @@ public static partial class OrganismMeshes
             }
 
             // Trunk collar at base connection to stool
-            SplitcrownBranchCollar(m, pTrunkBase, rBase * 1.25, rBase * 1.10, detail);
+            SplitcrownBranchCollar(m, pTrunkBase, (trunkPoints[1] - trunkPoints[0]).Normalized(), rBase * 1.25, rBase * 1.10, detail);
 
+            // Fork: parent swells smoothly toward the crown (F1); child radii follow r^2.5 conservation
+            double nominalChildR = Form.ForkJunction.ChildRadius(rFork, branchesPerTrunk);
+            Form.ForkJunction.WidenParent(trunkPoints, trunkRadii, (pFork, nominalChildR));
             SplitcrownStem(m, trunkPoints, trunkRadii, detail, isLowerTrunk: true);
 
-            // Crown collar at trunk fork summit
-            SplitcrownBranchCollar(m, pFork, rFork * 1.30, rFork * 1.20, detail);
+            // Crown collar at trunk fork summit (matched to widened parent end)
+            var trunkEndTan = (trunkPoints[trunkStations - 1] - trunkPoints[trunkStations - 2]).Normalized();
+            SplitcrownBranchCollar(m, pFork - trunkEndTan * (rFork * 0.30), trunkEndTan, rFork * 1.12, rFork * 1.00, detail);
 
             // Seed pod attach point beneath the fork
             podAttachPoints.Add((pFork - Vec3.Up * 0.02, -trOutward));
@@ -761,7 +721,7 @@ public static partial class OrganismMeshes
                 var branchPath = SplitcrownSampleBezier(pFork, cBranch0, cBranch1, pBranchEnd, branchStations);
                 var branchRadii = new double[branchStations];
 
-                double branchBaseR = rFork * rng.Range(0.55, 0.68);
+                double branchBaseR = nominalChildR * (rng.Range(0.55, 0.68) / 0.615);
                 double branchTipR = Math.Max(0.004, branchBaseR * 0.35);
 
                 for (int i = 0; i < branchStations; i++)
@@ -770,11 +730,12 @@ public static partial class OrganismMeshes
                     branchRadii[i] = MathD.Lerp(branchBaseR, branchTipR, st);
                 }
 
-                SplitcrownStem(m, branchPath, branchRadii, detail, isLowerTrunk: false);
+                var branchTan0 = (cBranch0 - pFork).Normalized();
+                SplitcrownStem(m, Form.ForkJunction.SinkStart(branchPath, branchBaseR), branchRadii, detail, isLowerTrunk: false);
 
-                // Branch collar at attachment to fork
-                SplitcrownBranchCollar(m, pFork + (cBranch0 - pFork).Normalized() * (branchBaseR * 0.8),
-                    branchBaseR * 1.25, branchBaseR * 1.10, detail);
+                // Branch collar at attachment to fork, ring plane normal to the child's first tangent
+                SplitcrownBranchCollar(m, pFork + branchTan0 * (branchBaseR * 0.5), branchTan0,
+                    branchBaseR * 1.15, branchBaseR * 1.10, detail);
 
                 // --- Whimsical Silk-Puff Pom-Pom nestled among the tiers ---
                 if (detail < 2 && (b % 2 == 1 || b == 2))

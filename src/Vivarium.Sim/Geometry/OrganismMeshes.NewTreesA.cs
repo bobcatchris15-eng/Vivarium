@@ -640,6 +640,13 @@ public static partial class OrganismMeshes
     // 1. MOONBARK (Natural Silver Birch Clump - Betula pendula)
     // Sinuous leaning clump, copper peeling scrolls, pendulous weeping withes.
     // =========================================================================
+    private static double TaLocalR(double[] r, double t)
+    {
+        double f = MathD.Clamp01(t) * (r.Length - 1);
+        int i = Math.Min((int)Math.Floor(f), r.Length - 2);
+        return MathD.Lerp(r[i], r[i + 1], f - i);
+    }
+
     private static void Moonbark(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, double radius, double height, bool juvenile)
     {
         m.PreserveUpperCanopyOnLod = true;
@@ -688,6 +695,14 @@ public static partial class OrganismMeshes
                 radii[i] = MathD.Lerp(rBase, rTop, Math.Pow(t, 0.85)) * flare;
             }
 
+            // Fork radii (F1): r^2.5 conservation caps child radii; parent swells toward each fork
+            int topBoughs = isDominant ? 2 : 1;
+            double mbR1 = Math.Min(rBase * 0.48, Form.ForkJunction.ChildRadiusShare(TaLocalR(radii, 0.62), 0.4));
+            double mbR2 = Math.Min(rBase * 0.44, Form.ForkJunction.ChildRadiusShare(TaLocalR(radii, 0.82), 0.4));
+            double mbTopR = Math.Min(rTop, Form.ForkJunction.ChildRadius(radii[stations - 1], topBoughs));
+            Form.ForkJunction.WidenParent(path, radii,
+                (TaBezier(tP0, tC0, tC1, tP1, 0.62), mbR1), (TaBezier(tP0, tC0, tC1, tP1, 0.82), mbR2));
+
             int sides = part.Lod is { } lodT ? lodT.Sides(16) : 16;
             int trunkStart = part.VertexCount;
             int stCount = stations;
@@ -708,21 +723,20 @@ public static partial class OrganismMeshes
             var forkPos1 = TaBezier(tP0, tC0, tC1, tP1, forkFrac1);
             var forkTan1 = TaBezierTangent(tP0, tC0, tC1, tP1, forkFrac1);
             double sideAz1 = trunkAz + rng.Range(0.50, 0.90) * (tIdx % 2 == 0 ? 1.0 : -1.0);
-            scaffoldBoughs.Add((forkPos1, forkTan1, sideAz1, rBase * 0.48));
+            scaffoldBoughs.Add((forkPos1, forkTan1, sideAz1, mbR1));
 
             // Upper scaffold limb peeling off at 82% trunk height
             double forkFrac2 = 0.82;
             var forkPos2 = TaBezier(tP0, tC0, tC1, tP1, forkFrac2);
             var forkTan2 = TaBezierTangent(tP0, tC0, tC1, tP1, forkFrac2);
             double sideAz2 = trunkAz - rng.Range(0.40, 0.80) * (tIdx % 2 == 0 ? 1.0 : -1.0);
-            scaffoldBoughs.Add((forkPos2, forkTan2, sideAz2, rBase * 0.44));
+            scaffoldBoughs.Add((forkPos2, forkTan2, sideAz2, mbR2));
 
             // Codominant upper scaffold boughs continuing the trunk top
-            int topBoughs = isDominant ? 2 : 1;
             for (int tb = 0; tb < topBoughs; tb++)
             {
                 double tbAz = trunkAz + (tb - (topBoughs - 1) * 0.5) * 0.80 + rng.Range(-0.15, 0.15);
-                scaffoldBoughs.Add((tP1, tanTop, tbAz, rTop));
+                scaffoldBoughs.Add((tP1, tanTop, tbAz, mbTopR));
             }
         }
 
@@ -757,7 +771,7 @@ public static partial class OrganismMeshes
             int limbSides = part.Lod is { } lodL ? lodL.Sides(8) : 8;
             int limbStart = part.VertexCount;
             int lsCount = limbStations;
-            Primitives.Tube(part, limbPath, limbRadii, limbSides,
+            Primitives.Tube(part, Form.ForkJunction.SinkStart(limbPath, limbBaseR), limbRadii, limbSides,
                 (i, v) => { double t = lsCount <= 1 ? 0 : i / (double)(lsCount - 1); return (TaMoonbarkTrunkCol(0.55 + 0.45 * t, v), 1.0, t, v, 2.0, 0.0); });
             part.EssentialSpans.Add((limbStart, part.VertexCount - limbStart));
 
@@ -812,7 +826,7 @@ public static partial class OrganismMeshes
 
             int twSides = part.Lod is { } lodW ? lodW.Sides(6) : 6;
             int twsCount = twStations;
-            Primitives.Tube(part, twPath, twRadii, twSides,
+            Primitives.Tube(part, Form.ForkJunction.SinkStart(twPath, twBaseR), twRadii, twSides,
                 (i, v) => { double t = twsCount <= 1 ? 0 : i / (double)(twsCount - 1); return (Primitives.Mix(TaMoonbarkTwig, TaMoonbarkBarkDark, t * 0.25), 1.0, t, v, 2.0, 0.0); });
 
             // Cascading airy deltoid sprays along weeping twig
@@ -901,6 +915,18 @@ public static partial class OrganismMeshes
                 radii[i] = MathD.Lerp(rBase, rTop, Math.Pow(t, 0.85)) * flare;
             }
 
+            // Fork radii (F1): r^2.5 conservation caps child radii; parent swells toward each fork
+            int forksFromTrunk = isDominant ? (juvenile ? 3 : 5) : (juvenile ? 3 : 4);
+            var slForks = new (Vec3, double)[forksFromTrunk];
+            var slForkR = new double[forksFromTrunk];
+            for (int f = 0; f < forksFromTrunk; f++)
+            {
+                double fFr = 0.42 + 0.54 * (f + 0.5) / forksFromTrunk;
+                slForkR[f] = Math.Min(rBase * 0.44, Form.ForkJunction.ChildRadiusShare(TaLocalR(radii, fFr), 0.35));
+                slForks[f] = (TaBezier(tP0, tC0, tC1, tP1, fFr), fFr < 0.90 ? slForkR[f] : 0.0);
+            }
+            Form.ForkJunction.WidenParent(path, radii, slForks);
+
             int sides = part.Lod is { } lodT ? lodT.Sides(16) : 16;
             int trunkStart = part.VertexCount;
             int stCount = stations;
@@ -909,7 +935,6 @@ public static partial class OrganismMeshes
             part.EssentialSpans.Add((trunkStart, part.VertexCount - trunkStart));
 
             // Staggered scaffold forks along the trunk with flared branch crotches
-            int forksFromTrunk = isDominant ? (juvenile ? 3 : 5) : (juvenile ? 3 : 4);
             for (int f = 0; f < forksFromTrunk; f++)
             {
                 double fFrac = 0.42 + 0.54 * (f + 0.5) / forksFromTrunk;
@@ -927,7 +952,7 @@ public static partial class OrganismMeshes
                 var cB0 = fRoot + TaNorm(fTan * 0.35 + fOut * 0.65 + Vec3.Up * 0.40, Vec3.Up) * (bLen * 0.40);
                 var cB1 = bEnd - TaNorm(fOut * 0.75 + Vec3.Up * 0.35, Vec3.Up) * (bLen * 0.34);
 
-                scaffoldBoughs.Add((fRoot, cB0, cB1, bEnd, fAz, rBase * 0.44));
+                scaffoldBoughs.Add((fRoot, cB0, cB1, bEnd, fAz, slForkR[f]));
             }
         }
 
@@ -954,7 +979,7 @@ public static partial class OrganismMeshes
             int leadSides = part.Lod is { } lodL ? lodL.Sides(8) : 8;
             int leadStart = part.VertexCount;
             int lsCount = leadStations;
-            Primitives.Tube(part, leadPath, leadRadii, leadSides,
+            Primitives.Tube(part, Form.ForkJunction.SinkStart(leadPath, limbBaseR), leadRadii, leadSides,
                 (i, v) => { double t = lsCount <= 1 ? 0 : i / (double)(lsCount - 1); return (TaShiverleafTrunkCol(0.50 + 0.50 * t, v), 1.0, t, v, 2.0, 0.0); });
             part.EssentialSpans.Add((leadStart, part.VertexCount - leadStart));
 
@@ -993,7 +1018,7 @@ public static partial class OrganismMeshes
 
             int twSides = part.Lod is { } lodW ? lodW.Sides(6) : 6;
             int twsCount = twStations;
-            Primitives.Tube(part, twPath, twRadii, twSides,
+            Primitives.Tube(part, Form.ForkJunction.SinkStart(twPath, twBaseR), twRadii, twSides,
                 (i, v) => { double t = twsCount <= 1 ? 0 : i / (double)(twsCount - 1); return (Primitives.Mix(TaShiverleafTwig, TaShiverleafBarkDark, t * 0.20), 1.0, t, v, 2.0, 0.0); });
 
             // Silky pearl-rose catkins hanging from outer twigs
@@ -1101,6 +1126,18 @@ public static partial class OrganismMeshes
             trunkRadii[i] = MathD.Lerp(rBase, rBoleTop, Math.Pow(t, 0.85)) * flare;
         }
 
+        // Fork radii (F1): children capped by r^2.5 conservation; trunk swells toward each limb fork
+        int limbCount = juvenile ? 3 : 4;
+        var wbForks = new (Vec3, double)[limbCount];
+        var wbForkR = new double[limbCount];
+        for (int k = 0; k < limbCount; k++)
+        {
+            double fT = Math.Clamp(0.42 + 0.48 * (k / (double)limbCount) + 0.04 * Math.Sin(leanAz + k * 1.7), 0.36, 0.94);
+            wbForkR[k] = Math.Min(rBoleTop * 0.72, Form.ForkJunction.ChildRadiusShare(TaLocalR(trunkRadii, fT), 0.25));
+            wbForks[k] = (TaBezier(boleP0, boleC0, boleC1, boleP1, fT), wbForkR[k]);
+        }
+        Form.ForkJunction.WidenParent(trunkPath, trunkRadii, wbForks);
+
         int trunkSides = part.Lod is { } lodT ? lodT.Sides(18) : 18;
         int trunkStart = part.VertexCount;
         int tsCount = trunkStations;
@@ -1148,7 +1185,6 @@ public static partial class OrganismMeshes
         }
 
         // 2. 4 spreading primary boughs branching at staggered heights from the trunk
-        int limbCount = juvenile ? 3 : 4;
         double baseAz = leanAz + Math.PI * 0.65;
 
         for (int k = 0; k < limbCount; k++)
@@ -1173,7 +1209,7 @@ public static partial class OrganismMeshes
 
             int limbStations = detail == 2 ? 5 : (detail == 1 ? 7 : 9);
             var limbPath = TaSampleBezier(limbRoot, limbC0, limbC1, limbEnd, limbStations);
-            double limbBaseR = rBoleTop * rng.Range(0.65, 0.78);
+            double limbBaseR = Math.Min(rBoleTop * rng.Range(0.65, 0.78), wbForkR[k]);
             double limbTipR = Math.Max(0.007, limbBaseR * 0.32);
             var limbRadii = new double[limbStations];
             for (int i = 0; i < limbStations; i++)
@@ -1187,7 +1223,7 @@ public static partial class OrganismMeshes
             int limbSides = part.Lod is { } lodL ? lodL.Sides(10) : 10;
             int limbStart = part.VertexCount;
             int lsCount = limbStations;
-            Primitives.Tube(part, limbPath, limbRadii, limbSides,
+            Primitives.Tube(part, Form.ForkJunction.SinkStart(limbPath, limbBaseR), limbRadii, limbSides,
                 (i, v) => { double t = lsCount <= 1 ? 0 : i / (double)(lsCount - 1); return (TaWitchberryTrunkCol(0.35 + 0.45 * t, v), 1.0, t, v, 2.0, 0.0); });
             part.EssentialSpans.Add((limbStart, part.VertexCount - limbStart));
             primaryLimbs.Add((limbRoot, limbC0, limbC1, limbEnd, az, limbBaseR));
@@ -1226,7 +1262,7 @@ public static partial class OrganismMeshes
                 int secSides = part.Lod is { } lodSec ? lodSec.Sides(7) : 7;
                 int secStart = part.VertexCount;
                 int scCount = secStations;
-                Primitives.Tube(part, secPath, secRadii, secSides,
+                Primitives.Tube(part, Form.ForkJunction.SinkStart(secPath, secBaseR), secRadii, secSides,
                     (i, v) => { double t = scCount <= 1 ? 0 : i / (double)(scCount - 1); return (TaWitchberryTrunkCol(0.65 + 0.35 * t, v), 1.0, t, v, 2.0, 0.0); });
                 part.EssentialSpans.Add((secStart, part.VertexCount - secStart));
                 secondaryBoughs.Add((secRoot, secC0, secC1, secEnd, secAz, secBaseR));
@@ -1256,7 +1292,7 @@ public static partial class OrganismMeshes
 
                     int shSides = part.Lod is { } lodW ? lodW.Sides(5) : 5;
                     int shsCount = shStations;
-                    Primitives.Tube(part, shPath, shRadii, shSides,
+                    Primitives.Tube(part, Form.ForkJunction.SinkStart(shPath, shBaseR), shRadii, shSides,
                         (i, v) => { double t = shsCount <= 1 ? 0 : i / (double)(shsCount - 1); return (Primitives.Mix(TaWitchberryTwig, TaWitchberryBarkDark, t * 0.25), 1.0, t, v, 2.0, 0.0); });
                     terminalShoots.Add((shEnd, TaBezierTangent(shRoot, shC0, shC1, shEnd, 1.0), secAz));
                 }
