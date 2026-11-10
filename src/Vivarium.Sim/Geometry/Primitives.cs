@@ -170,7 +170,38 @@ public static class Primitives
                 m.AddVertex(path[i] + radial * radius[i], normal, a.Col, a.A, a.U, a.V, a.U2, a.V2);
             }
         }
-        for (int i = 0; i < path.Count - 1; i++)
+        int ringCount = path.Count;
+        double rTip = Math.Abs(radius[^1]);
+        if (rTip > 1e-6)
+        {
+            // Rounded closing cap: two extra rings (0.8r at +0.25r, ~0 at +0.5r) so the tip is not a hollow ring.
+            var dirEnd = tangents[^1];
+            var sideEnd = side - dirEnd * side.Dot(dirEnd);
+            if (sideEnd.LengthSq < 1e-8) sideEnd = dirEnd.Cross(hint);
+            if (sideEnd.LengthSq < 1e-8) sideEnd = dirEnd.Cross(new Vec3(1, 0, 0));
+            sideEnd = sideEnd.Normalized();
+            var upEnd = sideEnd.Cross(dirEnd).Normalized();
+            var tip = path[^1];
+            (double Adv, double Rad, double Ang, double Dv)[] cap =
+            {
+                (0.25 * rTip, 0.8 * rTip, 0.7, 0.25 * rTip),
+                (0.5 * rTip, 0.0, Math.PI / 2, 0.5 * rTip),
+            };
+            foreach (var c in cap)
+            {
+                double ca = Math.Cos(c.Ang), sa = Math.Sin(c.Ang);
+                for (int s = 0; s <= segments; s++)
+                {
+                    double th = 2 * Math.PI * s / segments;
+                    var radial = (sideEnd * Math.Cos(th) + upEnd * Math.Sin(th)).Normalized();
+                    var normal = (radial * ca + dirEnd * sa).Normalized();
+                    var a = attr(path.Count - 1, (double)s / segments);
+                    m.AddVertex(tip + dirEnd * c.Adv + radial * c.Rad, normal, a.Col, a.A, a.U, a.V + c.Dv, a.U2, a.V2);
+                }
+            }
+            ringCount += 2;
+        }
+        for (int i = 0; i < ringCount - 1; i++)
             for (int s = 0; s < segments; s++)
             {
                 int a = start + i * (segments + 1) + s, b = a + segments + 1;
