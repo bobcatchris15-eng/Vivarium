@@ -434,11 +434,11 @@ public static partial class OrganismMeshes
             var petioleCol = Primitives.Mix(leafC1, leafC2, 0.30);
             Primitives.Tube(part, new[] { soilBase, apex }, new[] { 0.0010, 0.0007 }, 5,
                 (k, v) => (petioleCol, 1.0, k * 0.5, v, 0.0, 0.0));
-            var fanBase = Vec3.Up; // upright leaflets, apex-attached fan (NOT radiating spokes)
             for (int lf = 0; lf < 3; lf++)
             {
-                var dir = Axis.RotateAround(fanBase, Vec3.Up, lf * (Math.PI * 2.0 / 3.0) + az + rng.Range(-0.06, 0.06)).Normalized();
-                if (dir.LengthSq < 1e-6) dir = fanBase;
+                // Rotating Up about Up leaves all three directions coincident. Incline
+                // each leaflet away from the shared apex to form a trifoliate fan.
+                var dir = NewForbsAPetioleDir(lf * (Math.PI * 2.0 / 3.0) + az + rng.Range(-0.06, 0.06), 0.85);
                 NewForbsALeaflet(part, apex, dir, height * rng.Range(0.18, 0.24) * size, 0.95, // heart-leaves, matte, crowns obvious
                     BroadleafOutline.Cordate, Rng.Mix(seed, (ulong)(i * 300 + lf * 17 + 41)), leafC1, leafC2,
                     rng.Range(0.45, 0.95), 0.10, 0.01, 0.004, 0.0007, leafletDetail,
@@ -508,11 +508,9 @@ public static partial class OrganismMeshes
             var petioleCol = Primitives.Mix(leafC1, leafC2, 0.28);
             Primitives.Tube(part, new[] { soilBase, apex }, new[] { 0.0013, 0.0009 }, 5,
                 (k, v) => (petioleCol, 1.0, k * 0.5, v, 0.0, 0.0));
-            var fanBase = Vec3.Up;
             for (int lf = 0; lf < 3; lf++)
             {
-                var dir = Axis.RotateAround(fanBase, Vec3.Up, az + lf * (Math.PI * 2.0 / 3.0) + rng.Range(-0.06, 0.06)).Normalized();
-                if (dir.LengthSq < 1e-6) dir = fanBase;
+                var dir = NewForbsAPetioleDir(az + lf * (Math.PI * 2.0 / 3.0) + rng.Range(-0.06, 0.06), 0.85);
                 NewForbsALeaflet(part, apex, dir, height * rng.Range(0.20, 0.28) * size, 0.85,
                     BroadleafOutline.Ovate,
                     Rng.Mix(seed, (ulong)(i * 300 + lf * 17 + 53)), leafC1, leafC2,

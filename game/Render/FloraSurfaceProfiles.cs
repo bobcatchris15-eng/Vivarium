@@ -162,8 +162,8 @@ internal static class FloraSurfaceProfiles
         "deepquill" => new(new(.021f, .09f, .051f), new(.061f, .16f, .092f), 4, .42f, .34f, .40f),
         "mirepocket" => new(new(.04f, .12f, .026f), new(.034f, .102f, .022f), 4, .44f, .38f, .42f),
         "pondstars" => new(new(.046f, .12f, .04f), new(.138f, .20f, .112f), 4, .38f, .32f, .36f),
-        "bogfringe" => new(new(.046f, .12f, .04f), new(.039f, .102f, .034f), 4, .40f, .34f, .35f),
-        "burrflag" => new(new(.054f, .11f, .03f), new(.137f, .16f, .049f), 3, .36f, .38f, .36f),
+        "bogfringe" => new(new(.046f, .12f, .04f), new(.039f, .102f, .034f), 0, .40f, .16f, .35f),
+        "burrflag" => new(new(.054f, .11f, .03f), new(.137f, .16f, .049f), 5, .36f, .25f, .36f),
         "paddlerib" => new(new(.046f, .12f, .046f), new(.039f, .102f, .039f), 3, .44f, .36f, .33f),
         "barbarrow" => new(new(.046f, .12f, .04f), new(.039f, .102f, .034f), 3, .42f, .40f, .34f),
         // Climbers

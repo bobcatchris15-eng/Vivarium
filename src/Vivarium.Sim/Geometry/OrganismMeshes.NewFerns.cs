@@ -412,18 +412,8 @@ public static partial class OrganismMeshes
     }
 
     /// <summary>
-    /// Mirrorstrap fern: glossy UNDIVIDED straps of shaded crevices — hartstongue, not
-    /// an agave rosette. Eight to nine broad, long, flat straps (no pinnae, smooth
-    /// margins: LobeCount 0) leave the base nearly horizontal then arch firmly over
-    /// (strong Droop), so each blade reads as a varnished tongue lying flat from the
-    /// crevice, not a stiff upright V. Thin lamina (0.7 mm) removes the succulent
-    /// thickness impression; a strong dark midrib tube (0.0032 radius, 0.38x c1)
-    /// holds the two halves like a hinge, baked into the vertex colours along the
-    /// blade centre so the stripe reads as a continuous dark hinge from above.
-    /// Straps are flagged as leaf tissue (UV2.y = 1) so the shader applies the waxy,
-    /// low-roughness varnish optics instead of matte epidermis. Evergreen deep
-    /// green, lifted and scaled 1.4x; the tip is only gently lightened, never
-    /// white-hot plastic. Polish pass only: undivided form and footprint kept.
+    /// Undivided, glossy fronds with gently undulating edges and a dark, tapered midrib.
+    /// Older fronds arch around a crown of younger upright tongues.
     /// </summary>
     private static void Mirrorstrap(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, double radius, double height, bool juvenile)
     {
@@ -437,57 +427,47 @@ public static partial class OrganismMeshes
         int sheetDetail = detail switch { 0 => 4, 1 => 3, _ => 2 };
         if (m.Lod is { Blade: < 0.5 }) sheetDetail = Math.Max(1, sheetDetail - 1);
         int axisSegs = Math.Max(6, (int)Math.Round(12 * (m.Lod?.Length ?? 1)));
-        // Dark hinge midrib, ~3.2 mm radius: intentional darkness, kept from the
-        // leaf lift below so the stripe still reads near-black against the strap.
-        var midribCol = Primitives.Scale(c1, 0.38);
-        // Lifted strap pigment: mid-bright deep green base (1.4x), with a
-        // gently lightened tip (1.15x, never white-hot) for the varnish glint.
+        var midribCol = Primitives.Scale(c1, 0.70);
         var leafC1 = Primitives.Scale(Primitives.Mix(c1, c2, 0.40), 1.40);
         var strapTipCol = Primitives.Scale(
             Primitives.Mix(Primitives.Mix(c1, c2, 0.55), new[] { 1.0, 1.0, 0.92 }, 0.15), 1.15);
 
+        double spin = rng.Range(0, Math.Tau);
         for (int k = 0; k < straps; k++)
         {
-            double az = 2 * Math.PI * k / straps + rng.Range(-0.2, 0.2);
-            double len = h * 1.30 * scale * rng.Range(0.82, 1.14); // individual strap lengths break the uniform rosette read
+            double az = spin + Math.Tau * k / straps + rng.Range(-0.35, 0.35);
+            double maturity = rng.Range(0.15, 1.0);
+            double len = h * scale * MathD.Lerp(0.91, 1.48, maturity);
             var axisParams = new AxisParams(
                 Length: len,
-                BaseAngle: rng.Range(1.30, 1.55), // spread straps at varied angles across the crevice...
+                // Mature fronds bow outward under their own weight. New tongues stand within the crown.
+                BaseAngle: MathD.Lerp(0.25, 0.70, maturity),
                 BaseAzimuth: az,
-                Droop: rng.Range(1.25, 1.45), // ...then arch over (bend back across the crown)
-                PhototropicBend: 0,
-                TwistPerLength: 0,
-                WobbleAmplitude: 0.001, // smooth strap
-                WobbleFrequency: 2.0,
+                Droop: -MathD.Lerp(0.38, 1.48, maturity),
+                TwistPerLength: rng.Range(-0.8, 0.8),
                 Segments: axisSegs);
             ulong s = Rng.Mix(seed, (ulong)(k * 701 + 13));
             var sheetParams = new SheetParams(
                 axisParams,
-                HalfWidth: h * 0.195 * scale, // broad tongue strap: ~3.3:1, far wider than any grass blade (was 0.160)
-                LobeCount: 0, // undivided: smooth margins, no lobing, no pinnae
-                LobeDepth: 0.0,
-                Thickness: 0.0007, // flatter lamina: no succulent read
-                Curl: rng.Range(0.035, 0.075), // modest individual curl softens the uniform strap fan
-                DetailLevel: sheetDetail);
+                HalfWidth: len * rng.Range(0.115, 0.157),
+                LobeCount: 8,
+                LobeDepth: rng.Range(0.032, 0.070),
+                Curl: rng.Range(0.08, 0.18),
+                DetailLevel: sheetDetail,
+                FaceAxisUp: true) { TaperCurl = true };
 
             int lv = part.VertexCount;
             int li = part.Indices.Count;
             Sheet.Build(part, sheetParams, s, leafC1, strapTipCol);
-            // Flag the strap as leaf tissue so the flora shader applies the waxy
-            // low-roughness varnish optics (Sheet writes UV2.y = 0, matte
-            // epidermis). Then bake the dark hinge into the vertex colours along
-            // the blade centre (UV.y across the strap, centre 0.5), so the
-            // midrib reads from above even where the tube sits under the lamina.
-            // Polished band: slightly wider and stronger so the hinge is a
-            // continuous dark stripe, not a pale seam.
+            // The dark hinge remains visible from above and fades as the midrib narrows.
             for (int v = lv; v < part.VertexCount; v++)
             {
-                part.UV2[v * 2 + 1] = 1f;
+                double along = part.UV[v * 2];
                 double across = part.UV[v * 2 + 1] - 0.5;
                 double d = Math.Abs(across);
-                if (d < 0.19)
+                if (d < 0.14)
                 {
-                    double shadeK = (1.0 - d / 0.19) * 0.85;
+                    double shadeK = (1.0 - d / 0.14) * MathD.Lerp(0.58, 0.10, along);
                     var cur = new[] { (double)part.Colors[v * 4], (double)part.Colors[v * 4 + 1], (double)part.Colors[v * 4 + 2] };
                     var dark = Primitives.Mix(cur, midribCol, shadeK);
                     part.SetColor(v, dark[0], dark[1], dark[2], 1.0);
@@ -495,14 +475,14 @@ public static partial class OrganismMeshes
             }
             part.RecordLeaf(lv, li, Vec3.Zero, len);
 
-            // Strong dark midrib tube under the lamina, along the same axis.
             var frames = Axis.Build(axisParams, s);
             var path = new Vec3[frames.Count];
             var radii = new double[frames.Count];
             for (int i = 0; i < frames.Count; i++)
             {
-                path[i] = frames[i].Point + new Vec3(0, -0.0012, 0);
-                radii[i] = 0.0032 * (1.0 - 0.4 * (double)i / Math.Max(1, frames.Count - 1));
+                double t = (double)i / (frames.Count - 1);
+                radii[i] = MathD.Lerp(0.0022, 0.00015, t) * scale;
+                path[i] = frames[i].Point - frames[i].Up * radii[i] * 0.65;
             }
             Primitives.Tube(part, path, radii, 6,
                 (i, v) => (midribCol, 1, (double)i / Math.Max(1, frames.Count - 1), v, 0, 0));

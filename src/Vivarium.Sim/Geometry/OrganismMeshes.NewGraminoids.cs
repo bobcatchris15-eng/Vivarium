@@ -411,6 +411,13 @@ public static partial class OrganismMeshes
         }
 
         // Arching culms with nodal swellings, cauline blades, and nodding feathery banner panicles
+        double[] branchStations = detail switch
+        {
+            0 => new[] { 0.0, 0.30, 0.55, 0.80, 1.0 },
+            1 => new[] { 0.0, 0.35, 0.70, 1.0 },
+            _ => new[] { 0.0, 0.50, 1.0 }
+        };
+        int glumeCount = detail switch { 0 => 3, 1 => 2, _ => 1 };
         int nCulms = NewFloraCount(part, 5 + rng.NextInt(3));
         for (int c = 0; c < nCulms; c++)
         {
@@ -471,45 +478,47 @@ public static partial class OrganismMeshes
             var rp1 = rachisBase + Vec3.Up * (panLen * 0.34) + plumeDir * (panLen * 0.22);
             var rp2 = rachisBase + Vec3.Up * (panLen * 0.50) + plumeDir * (panLen * 0.48);
             var rp3 = rachisBase + Vec3.Up * (panLen * 0.28) + plumeDir * (panLen * 0.82);
-            var rpath = new[] { rp0, rp1, rp2, rp3 };
-            Primitives.Tube(part, rpath, new[] { 0.0018, 0.0014, 0.0010, 0.0006 }, 5, (ii, v) => (branchCol, 1, (double)ii / 3.0, v, 0, 0));
-
-            Vec3 EvalRachis(double t)
+            const int rachisStations = 9;
+            var rpath = new Vec3[rachisStations];
+            var rRadii = new double[rachisStations];
+            for (int i = 0; i < rachisStations; i++)
             {
-                double u = 1.0 - t;
-                return rp0 * (u * u * u) + rp1 * (3.0 * u * u * t) + rp2 * (3.0 * u * t * t) + rp3 * (t * t * t);
+                double t = i / (double)(rachisStations - 1);
+                rpath[i] = BezierCubic(rp0, rp1, rp2, rp3, t);
+                rRadii[i] = MathD.Lerp(0.0018, 0.0006, t);
             }
+            Primitives.Tube(part, rpath, rRadii, 5, (i, v) => (branchCol, 1, i / (double)(rachisStations - 1), v, 0, 0));
 
-            int nSpk = NewFloraCount(part, 24 + rng.NextInt(9));
+            int nSpk = NewFloraCount(part, 21 + rng.NextInt(9));
             for (int k = 0; k < nSpk; k++)
             {
                 double t = nSpk <= 1 ? 0.5 : k / (double)(nSpk - 1);
-                var at = EvalRachis(t);
+                double station = t * (rachisStations - 1);
+                int segment = Math.Min((int)station, rachisStations - 2);
+                var at = Vec3.Lerp(rpath[segment], rpath[segment + 1], station - segment);
                 double reach = panLen * (0.45 - 0.25 * t) * rng.Range(0.80, 1.15);
                 double baz = panFace + rng.Range(-0.45, 0.45);
                 var bradial = new Vec3(Math.Cos(baz), 0, Math.Sin(baz));
 
-                // 4-point curved polyline curving gracefully outward and drooping downward
                 var b0 = at;
                 var b1 = at + (bradial * 0.38 + Vec3.Up * rng.Range(0.04, 0.10)) * (reach * 0.35);
                 var b2 = at + (bradial * 0.75 - Vec3.Up * rng.Range(0.12, 0.22)) * (reach * 0.70);
                 var b3 = at + (bradial * 0.95 - Vec3.Up * rng.Range(0.45, 0.75)) * reach;
-                var bPath = new[] { b0, b1, b2, b3 };
-                Primitives.Tube(part, bPath, new[] { 0.0009, 0.00065, 0.00045, 0.0003 }, 4, (ii, v) => (branchCol, 1, (double)ii / 3.0, v, 0, 0));
+                // Place the glumes on the sampled branch itself so every spikelet stays attached.
+                var bPath = new Vec3[branchStations.Length];
+                var bRadii = new double[branchStations.Length];
+                for (int i = 0; i < branchStations.Length; i++)
+                {
+                    bPath[i] = BezierCubic(b0, b1, b2, b3, branchStations[i]);
+                    bRadii[i] = MathD.Lerp(0.0009, 0.0003, branchStations[i]);
+                }
+                Primitives.Tube(part, bPath, bRadii, 4, (i, v) => (branchCol, 1, branchStations[i], v, 0, 0));
 
-                // Slender silky nodding spikelet glumes along outer half (s = 0.55, 0.80, 1.0)
-                int glumeCount = detail switch { 2 => 1, 1 => 2, _ => 3 };
                 for (int g = 0; g < glumeCount; g++)
                 {
-                    double s = glumeCount switch
-                    {
-                        1 => 1.0,
-                        2 => g == 0 ? 0.70 : 1.0,
-                        _ => g == 0 ? 0.55 : (g == 1 ? 0.80 : 1.0)
-                    };
-                    double us = 1.0 - s;
-                    var gAttach = b0 * (us * us * us) + b1 * (3.0 * us * us * s) + b2 * (3.0 * us * s * s) + b3 * (s * s * s);
-                    var gTang = (b1 - b0) * (3.0 * us * us) + (b2 - b1) * (6.0 * us * s) + (b3 - b2) * (3.0 * s * s);
+                    int i = g + 2;
+                    var gAttach = bPath[i];
+                    var gTang = bPath[Math.Min(i + 1, bPath.Length - 1)] - bPath[i - 1];
                     if (gTang.LengthSq < 1e-8) gTang = bradial + Vec3.Down * 0.5;
 
                     double bLen = rng.Range(0.018, 0.032);
@@ -625,7 +634,8 @@ public static partial class OrganismMeshes
     }
 
     private static void NewGramSootbandShaft(MeshData m, IReadOnlyList<Vec3> path, IReadOnlyList<double> radii, double[] nodeTs,
-        double[] shaftBase, double[] shaftTip, double[] bandCol, double[] grooveCol, double[] ridgeCol, int sides, int ribs, double ribDepth, double bandWidth)
+        double[] shaftBase, double[] shaftTip, double[] bandCol, double[] grooveCol, double[] ridgeCol, int sides, int ribs, double ribDepth, double bandWidth,
+        bool capTip)
     {
         if (path.Count < 2) return;
         int effSides = sides;
@@ -675,7 +685,6 @@ public static partial class OrganismMeshes
                 var col = Primitives.Mix(ribCol, bandCol, band);
                 m.AddVertex(path[i] + radial * rr, radial, col, 1, t, (double)s / effSides, 0, 0);
             }
-            if (i > 0) { /* frame update for next ring below */ }
             if (i < path.Count - 1)
             {
                 var dir = tangents[i + 1];
@@ -699,6 +708,14 @@ public static partial class OrganismMeshes
                 m.AddTriangle(a + 1, b + 1, b);
             }
         m.Structural.Add((start, m.VertexCount - start, effSides, maxR));
+        if (capTip)
+        {
+            int rim = start + (path.Count - 1) * (effSides + 1);
+            int tip = m.VertexCount;
+            m.AddVertex(path[^1], tangents[^1], shaftTip, 1, 1, 0.5, 0, 0);
+            for (int s = 0; s < effSides; s++)
+                Primitives.TriangleFacing(m, rim + s, rim + s + 1, tip, tangents[^1]);
+        }
     }
 
     private static void NewGramSootbandCollar(MeshData m, Vec3 centre, double shaftR, double nodeR, double[] bandCol, int detail)
@@ -823,10 +840,11 @@ public static partial class OrganismMeshes
                 if (t >= 1.0) frac = 0;
                 // Radius modulation both along the stem (node swell) and around it (ribs).
                 double nodeFactor = 1.03 + 0.15 * Math.Cos(2 * Math.PI * frac);
-                radii[idx] = baseR * (1.0 - 0.30 * t) * nodeFactor;
+                double tipTaper = fertile ? 1.0 : 1.0 - 0.68 * MathD.SmoothStep(0.90, 1.0, t);
+                radii[idx] = baseR * (1.0 - 0.30 * t) * nodeFactor * tipTaper;
             }
             double bandWidth = (1.0 / nodes) * rng.Range(0.34, 0.48);
-            NewGramSootbandShaft(part, path, radii, nodeTs, shaftBase, shaftTip, bandCol, grooveCol, ridgeCol, sides, ribs, 0.34, bandWidth);
+            NewGramSootbandShaft(part, path, radii, nodeTs, shaftBase, shaftTip, bandCol, grooveCol, ridgeCol, sides, ribs, 0.34, bandWidth, capTip: !fertile);
             for (int k = 1; k < nodes; k++)
             {
                 if (rng.NextDouble() > 0.28) continue;

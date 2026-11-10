@@ -14,7 +14,11 @@ public readonly record struct SheetParams(
     double Thickness = 0.001,
     double Curl = 0.0,
     int DetailLevel = 1,
-    bool FaceAxisUp = false);
+    bool FaceAxisUp = false)
+{
+    /// <summary>Scale crosswise curl with the local width so pointed tips close cleanly.</summary>
+    public bool TaperCurl { get; init; }
+}
 
 public static class Sheet
 {
@@ -35,7 +39,8 @@ public static class Sheet
             double hw = p.HalfWidth * Envelope(t) * LobeMod(t);
             double lateral = x * hw;
             double edge = Math.Abs(x);
-            double crown = p.Curl * t * edge * edge * p.HalfWidth * 1.6;
+            double curlWidth = p.TaperCurl ? hw : p.HalfWidth;
+            double crown = p.Curl * t * edge * edge * curlWidth * 1.6;
             return f.Point + f.Side * lateral + f.Up * crown;
         }
 
