@@ -1,5 +1,5 @@
 # Vivarium overhaul — orchestrator ledger
-Updated: 2026-11-10 | HEAD: a193e6d | Graph: none | Checkpoint tag: overhaul-base
+Updated: 2026-11-10 | HEAD: 442952e | Graph: none | Checkpoint tag: overhaul-base
 
 ## Objective
 Make Vivarium physically continuous, biologically distinctive, efficient and pleasant to use, per the
@@ -18,6 +18,7 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 - D6 2026-11-10: Packets carry a `Read_Only_Context` list (sim/render files the Clanker may read, not edit). h1 attempt 1 stopped with NEEDS_NODE because impl-worker may not read outside Target_Nodes.
 - D5 2026-11-10: Wholesale botanical geometry replacement previously made visuals worse (directive). Fix
   junctions/attachments in place; replace a species' geometry only with before/after renders approved here.
+- D7 2026-11-10: Owner: editors may give any species its own material, normal map, textures or shader params. Target look is a lifelike, believable, slightly fantastical/whimsical slice of an ecosystem. Shared leaf pools/bark sets are not a constraint; weigh per-species assets against measured VRAM/draw cost.
 
 ## Tasks
 | id | targets | status | attempts | last return line |
@@ -30,6 +31,8 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 | h3 | game/App/{Main,LiveDiagnostics,FrameProfiler}.cs | DONE | 1 | PASS. soak 150s/warmup 90: 24.2 fps, p50 39.9 p95 69 ms, GPU frame 39.4 ms (GPU-bound), VRAM 4.46 GB, 8.3 MB managed alloc per frame, gc 222/204/72 in 60 s |
 | h1 | game/App/SpecimenReviewRunner.cs Main.cs | DONE | 2 | PASS, re-verified (build, boot, counts). 125/125 flora (375 png, 572 s), 17/17 fauna (51 png, 197 s), slope 25.6 deg. specimens.json is now an object. Unverified: _fruiting never produced; _juvenile not checked distinct; fauna+slope not re-run after last edit |
 | h45 | game/App/{GuardianReviewRunner,VisualReviewRunner}.cs | DONE | 1 | PASS, re-verified (build, boot, counts, sheets). Guardians 10 species x 10 shots (closeup/side/feet/feed/motion 0-5), 118 s; slope mode 18 png at 48 deg. Visual 9 scenes, near-black repick, review.json records camera + near_black_fraction. Limits: island is 8 m, so meadow/woodland shots show it small; woodland_trunks has pilot trunk column; feet/motion shots hide flora+cover layers |
+| b2 | build/overhaul/baseline2 | DONE | 1 | PASS, verified counts. flora 375, slope 375, stages 453 (10 fruiting, 16 juvenile), fauna 51, guardians 100+18, visual 9. Soak x2: 26.4/27.2 fps, p50 36 ms, p95 57-63, GPU 35 ms, 705 draws, 7.15M prims, VRAM 4.46 GB, alloc 7.6-7.8 MB/frame, gc2 82-86 per 60 s |
+| h6 | game/App/{FrameProfiler,LiveDiagnostics,Main,GameSession}.cs | DISPATCHED | 1 | sonnet/medium: --soak-hide renderer list + per-scope alloc bytes in perf_summary |
 | a5 | docs/overhaul/audit-ui-ux.md | DONE | 1 | top: U1 Tab-hide swallows clicks, U2 no Esc/blocked keys, U3 bad autosave silently replaced, U20 per-frame window relayout, U6 scale slider font-only, U7 invalid-placement reason hidden. Owner decisions: U5 U6 U13-U18 U23 U24 |
 
 ## Unverified assumptions

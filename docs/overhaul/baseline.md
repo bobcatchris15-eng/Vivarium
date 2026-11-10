@@ -69,3 +69,10 @@ Camera is the default start view and static. Samples at `perf/runN/diagnostics/*
 - Frame timing includes startup streaming unless windowed by elapsed time; visual-review fps is end-to-end, not isolated CPU/GPU.
 - Nondeterminism: world/flora generation is seeded but timings vary run to run (~+-2 fps); shader TIME animation not frozen in reviews; guardian-review dists vary slightly (skin error values differ per run).
 - Reviews write user data under `<out>/user-data`; run 3 times discarding first for perf.
+
+## Baseline2 (2026-11-10, after harness batch h1/h3/h45)
+Captures in `build/overhaul/baseline2/` (manifest: `MANIFEST.md`). Flora 375 PNG flat + 375 slope, 453 growth-stage
+(10 fruiting, 16 juvenile), fauna 51, guardians 100 (10 species x closeup/side/feet/feed/motion) + 18 slope, visual 9 scenes.
+Soak, 150 s after 90 s warmup, two runs: 26.4 / 27.2 fps, frame p50 36.1 / 35.8 ms, p95 62.6 / 57.4 ms, GPU frame 35.7 / 34.8 ms,
+705 draw calls, 7.15M primitives, VRAM 4.46 GB, managed alloc 7.80 / 7.58 MB per frame, GC gen0/1/2 235/218/82 and 238/223/86.
+This is the comparison point for all later batches.
