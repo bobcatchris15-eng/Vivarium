@@ -66,6 +66,10 @@ Sequence (one Godot user at a time, serial on main):
    RockSurfaceProfile, TerrainMesh, IslandMeshClipper (cut-face soil profile) against baseline2 visual + guardian feet shots ->
    docs/overhaul/audit-ground.md with ranked items. Then ground packets (sonnet/medium) interleaved with species packets
    (alternate 1 ground : 2 species) since files do not overlap; same accept/revise/block rule and perf check.
+   Gr0 DONE (6c80c7e): order = ground close-up capture set -> GR1 -> GR2 -> GR3 -> GR4 -> GR5 -> GR7(+GR8) -> GR6.
+   terrain.gdshader packets (GR1, GR3, GR7) strictly serial. GR2 palette proceeds under D7 (lifelike target); GR6 cosmetic part
+   only (no added rocks = no sim change); GR8 sun-direction unification deferred to owner (lighting contract).
+   S0 DONE (c6cb9c0): shared counts F5 27, F15 26, F6 21, F13 13, F1 10, F8 8, F2 6, F4 6, F10 5(+F9 1).
 Quota guard (checked with get_usage before every dispatch):
 - 5-hour window >= 85%: dispatch nothing new; background timer until reset, then resume.
 - Weekly all-models >= 30% (was 7% at start): stop for the night, ledger + worklog, wait for owner.
