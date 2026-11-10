@@ -1,1 +1,6 @@
 ts	task_id	clanker	model	n_targets	wall_s	turns	attempts	outcome	returned_bytes
+2026-11-10	a5	general-purpose	sonnet-low	1	-	-	1	PASS	1500
+2026-11-10	a3	general-purpose	sonnet-medium	1	-	-	1	PASS	2300
+2026-11-10	a2	general-purpose	sonnet-medium	1	-	-	1	PASS	2600
+2026-11-10	a1	general-purpose	sonnet-medium	1	-	-	1	PASS	2400
+2026-11-10	a4	general-purpose	sonnet-medium	1	-	-	1	PASS	2700

@@ -22,11 +22,11 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 | id | targets | status | attempts | last return line |
 |----|---------|--------|----------|------------------|
 | b0 | build/overhaul/baseline, docs/overhaul/baseline.md | DISPATCHED | 1 | |
-| a1 | docs/overhaul/audit-flora.md | DISPATCHED | 1 | |
-| a2 | docs/overhaul/audit-fauna-guardians.md | DISPATCHED | 1 | |
-| a3 | docs/overhaul/audit-ecology.md | DISPATCHED | 1 | |
-| a4 | docs/overhaul/audit-performance-architecture.md | DISPATCHED | 1 | |
-| a5 | docs/overhaul/audit-ui-ux.md | DISPATCHED | 1 | |
+| a1 | docs/overhaul/audit-flora.md | DONE | 1 | 125 species (106 MultiMesh flora, 19 coverage). top: F1 fork junctions full-radius children + open trunk top (SoftTube fillet unused), F2 single terrain sample ground contact, F3 hard LOD swaps 3m/5.5m, F4 bark UV seams/stretch, F5 Primitives.Tube no end caps (360 sites), F6 blade base zero-width + open petiole. Shared: F1-F6 F8 F10-F12 F14. All vascular share 4 leaf pools + 3 bark sets. Review runner cannot test slopes or force LOD tier |
+| a2 | docs/overhaul/audit-fauna-guardians.md | DONE | 1 | 17 fauna (own mesh builders, shader-animated), 10 guardians (skinned GLB). top: G1 clip chosen by Activity not motion (sliding), A1 fauna constant-speed random walk, G3/G4 foot slide + slope hover (G4 unconfirmed), G2 21 activities on 4 clips, G5/G6 water+veg contact, A2/A5 fauna feet rigid tilt. A0: no fauna review harness (specimen-review is flora-only) |
+| a3 | docs/overhaul/audit-ecology.md | DONE | 1 | top: E6 coverage moisture never decays (persisted), E1 fauna budget first-come lock-out, E2 predation never kills, E7 trait variance collapses, E3 nutrient loop creates mass, E12/E13 flora+ambient tick cost. Inferred from code; needs --soak to confirm. Headless Step leaves water frozen |
+| a4 | docs/overhaul/audit-performance-architecture.md | DONE | 1 | static only. SAFE: P1 env params rewritten per frame, P2 caustics in per-light light(), P3 sculpt full terrain+pond rebuild, P11/R4/R6 4K sets + dead code (GillTrial, BranchModuleLoader). DECIDE: P12 post/GI/fog stack, P13/R2 ambient cover regen ~115k pts per 2m move, R1 snapshot only used by flora + coverage thread race, R3 guardian bends written into flora MultiMesh. R9: add GPU timer, alloc bytes, instance/VRAM counters |
+| a5 | docs/overhaul/audit-ui-ux.md | DONE | 1 | top: U1 Tab-hide swallows clicks, U2 no Esc/blocked keys, U3 bad autosave silently replaced, U20 per-frame window relayout, U6 scale slider font-only, U7 invalid-placement reason hidden. Owner decisions: U5 U6 U13-U18 U23 U24 |
 
 ## Unverified assumptions
 - `--perf-test` still has a runner (only flag checks were found by grep; b0 to confirm).
