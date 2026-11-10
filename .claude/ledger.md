@@ -48,3 +48,21 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 Order: H4/H5 (guardian tight framing + motion sequence; more and better-framed
 visual-review scenes) -> full recapture as baseline2 -> perf attribution per renderer (GPU-bound, 8.3 MB/frame
 managed alloc) -> Batch 1 (F5, F1, F6, F2, F4, F8, F3). Owner decisions still open: see docs/overhaul/README.md.
+
+## OVERNIGHT PLAN 2026-11-10 (owner: "iterate through the species autonomously overnight, keep inference quota in mind")
+Sequence (one Godot user at a time, serial on main):
+1. m1 per-renderer soaks (script, no model cost) -> tabulate into docs/overhaul/baseline.md.
+2. S0 species matrix + triage (sonnet/low, vision): per-family contact sheets from baseline2 (flat, slope, stages),
+   score continuity / believability / distinctiveness 1-5 + top defect per species -> docs/overhaul/species-matrix.md, ranked worst-first.
+3. Shared junction fixes before per-species work: F5 tube end caps -> F1 fork junctions -> F6 leaf base (sonnet/medium each),
+   each validated on a 6-12 species subset, before/after sheet.
+4. Species packets, worst-first: 4-6 species sharing an OrganismMeshes file per packet (sonnet/medium). Packet carries D5 (fix in
+   place) and D7 (own materials/normal maps allowed; lifelike, slightly whimsical). Clanker captures before/after for its species
+   only and builds one comparison sheet; orchestrator reviews that one sheet. Accept -> commit + matrix row update.
+   Reject -> one revision via SendMessage; second miss -> restore by path, mark BLOCKED, move on.
+5. Every 3 accepted packets: haiku soak x2 vs baseline2; GPU frame > +5% or VRAM > +200 MB -> stop and attribute before continuing.
+Quota guard (checked with get_usage before every dispatch):
+- 5-hour window >= 85%: dispatch nothing new; background timer until reset, then resume.
+- Weekly all-models >= 30% (was 7% at start): stop for the night, ledger + worklog, wait for owner.
+- Orchestrator stays lean: no raw logs, sheets viewed at reduced scale, Clankers return one-line DSL + <=15 lines.
+Out of scope tonight: fauna/guardian species work, UI, ecology, owner-decision items.
