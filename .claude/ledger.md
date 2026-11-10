@@ -61,6 +61,11 @@ Sequence (one Godot user at a time, serial on main):
    only and builds one comparison sheet; orchestrator reviews that one sheet. Accept -> commit + matrix row update.
    Reject -> one revision via SendMessage; second miss -> restore by path, mark BLOCKED, move on.
 5. Every 3 accepted packets: haiku soak x2 vs baseline2; GPU frame > +5% or VRAM > +200 MB -> stop and attribute before continuing.
+6. Ground track (owner 2026-11-10: "ground / soil / rocks could use some visual work"): Gr0 read-only audit + triage of
+   terrain.gdshader, loam_ground/loam_litter, rock.gdshader, IslandRenderer, SoilDetailRenderer, PropRenderer/PropMeshes,
+   RockSurfaceProfile, TerrainMesh, IslandMeshClipper (cut-face soil profile) against baseline2 visual + guardian feet shots ->
+   docs/overhaul/audit-ground.md with ranked items. Then ground packets (sonnet/medium) interleaved with species packets
+   (alternate 1 ground : 2 species) since files do not overlap; same accept/revise/block rule and perf check.
 Quota guard (checked with get_usage before every dispatch):
 - 5-hour window >= 85%: dispatch nothing new; background timer until reset, then resume.
 - Weekly all-models >= 30% (was 7% at start): stop for the night, ledger + worklog, wait for owner.
