@@ -36,6 +36,7 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 | h6 | game/App/{FrameProfiler,LiveDiagnostics,Main}.cs | DONE | 1 | PASS, re-verified build+boot. --soak-hide works (flora,coverage: 6.03M->5.36M prims, GPU 33.4->31.3 ms, short runs). Alloc 7.25 MB/frame: Coverage 0.68, Session.Advance 0.61, Flora 0.55, LiquidSurface 0.06 MB; 5.3 MB (74%) outside any scope -> needs more scopes |
 | m1 | build/overhaul/m1 | DISPATCHED | 1 | haiku: per-renderer hide soaks, 2 interleaved rounds |
 | m1 | build/overhaul/m1/RESULTS.md | DONE-INVALID | 1 | GPU time jumped 34->60 ms at 17:02 mid-series: the turn-limited haiku agent's own background driver kept running alongside the orchestrator's replacement script, so two Godot soaks overlapped: r2 and r1 pilot..animals unusable. Valid r1 window vs plain 34.5: water -4.0, flora -1.5, soil -1.1, ambient +0.2, coverage +1.6 (noise ~1.5). No single renderer dominates; cost looks fixed (post/lighting/shadows) -> P12 owner item is the main lever. Rerun as m1b at end of night, control run between every config, nothing else on the machine |
+| F5 | src/Vivarium.Sim/Geometry/Primitives.cs | DONE | 1 | PASS. 2-ring rounded tip cap (0.8r@+0.25r, 0@+0.5r) in same span; build+boot ok; 12-species sheet shows no regressions but 300 px tiles cannot prove every tip closed. Side effect: fruit anchoring (OM.cs ~396) now also samples the 2 cap rings -> handle in F8. After-capture framing differed from baseline2 (subset run places specimens differently) |
 | a5 | docs/overhaul/audit-ui-ux.md | DONE | 1 | top: U1 Tab-hide swallows clicks, U2 no Esc/blocked keys, U3 bad autosave silently replaced, U20 per-frame window relayout, U6 scale slider font-only, U7 invalid-placement reason hidden. Owner decisions: U5 U6 U13-U18 U23 U24 |
 
 ## Unverified assumptions
@@ -72,6 +73,7 @@ Sequence (one Godot user at a time, serial on main):
    terrain.gdshader packets (GR1, GR3, GR7) strictly serial. GR2 palette proceeds under D7 (lifelike target); GR6 cosmetic part
    only (no added rocks = no sim change); GR8 sun-direction unification deferred to owner (lighting contract).
    S0 DONE (c6cb9c0): shared counts F5 27, F15 26, F6 21, F13 13, F1 10, F8 8, F2 6, F4 6, F10 5(+F9 1).
+Packet rule (from F5): render BEFORE captures with the exact same subset command as AFTER, before editing; baseline2 framing does not match subset runs.
 Quota guard (checked with get_usage before every dispatch):
 - 5-hour window >= 85%: dispatch nothing new; background timer until reset, then resume.
 - Weekly all-models >= 30% (was 7% at start): stop for the night, ledger + worklog, wait for owner.
