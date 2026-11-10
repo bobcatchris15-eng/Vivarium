@@ -18,6 +18,7 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 - D6 2026-11-10: Packets carry a `Read_Only_Context` list (sim/render files the Clanker may read, not edit). h1 attempt 1 stopped with NEEDS_NODE because impl-worker may not read outside Target_Nodes.
 - D5 2026-11-10: Wholesale botanical geometry replacement previously made visuals worse (directive). Fix
   junctions/attachments in place; replace a species' geometry only with before/after renders approved here.
+- D8 2026-11-10: A Clanker that hits its turn limit can leave background shells running. Before replacing its work, confirm with tasklist/ps that its jobs are gone (or TaskStop it); never start a second driver.
 - D7 2026-11-10: Owner: editors may give any species its own material, normal map, textures or shader params. Target look is a lifelike, believable, slightly fantastical/whimsical slice of an ecosystem. Shared leaf pools/bark sets are not a constraint; weigh per-species assets against measured VRAM/draw cost.
 
 ## Tasks
@@ -34,7 +35,7 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 | b2 | build/overhaul/baseline2 | DONE | 1 | PASS, verified counts. flora 375, slope 375, stages 453 (10 fruiting, 16 juvenile), fauna 51, guardians 100+18, visual 9. Soak x2: 26.4/27.2 fps, p50 36 ms, p95 57-63, GPU 35 ms, 705 draws, 7.15M prims, VRAM 4.46 GB, alloc 7.6-7.8 MB/frame, gc2 82-86 per 60 s |
 | h6 | game/App/{FrameProfiler,LiveDiagnostics,Main}.cs | DONE | 1 | PASS, re-verified build+boot. --soak-hide works (flora,coverage: 6.03M->5.36M prims, GPU 33.4->31.3 ms, short runs). Alloc 7.25 MB/frame: Coverage 0.68, Session.Advance 0.61, Flora 0.55, LiquidSurface 0.06 MB; 5.3 MB (74%) outside any scope -> needs more scopes |
 | m1 | build/overhaul/m1 | DISPATCHED | 1 | haiku: per-renderer hide soaks, 2 interleaved rounds |
-| m1 | build/overhaul/m1/RESULTS.md | DONE-INVALID | 1 | GPU time jumped 34->60 ms at 17:02 mid-series (drift, not config): r2 and r1 pilot..animals unusable. Valid r1 window vs plain 34.5: water -4.0, flora -1.5, soil -1.1, ambient +0.2, coverage +1.6 (noise ~1.5). No single renderer dominates; cost looks fixed (post/lighting/shadows) -> P12 owner item is the main lever. Rerun as m1b at end of night, control run between every config, nothing else on the machine |
+| m1 | build/overhaul/m1/RESULTS.md | DONE-INVALID | 1 | GPU time jumped 34->60 ms at 17:02 mid-series: the turn-limited haiku agent's own background driver kept running alongside the orchestrator's replacement script, so two Godot soaks overlapped: r2 and r1 pilot..animals unusable. Valid r1 window vs plain 34.5: water -4.0, flora -1.5, soil -1.1, ambient +0.2, coverage +1.6 (noise ~1.5). No single renderer dominates; cost looks fixed (post/lighting/shadows) -> P12 owner item is the main lever. Rerun as m1b at end of night, control run between every config, nothing else on the machine |
 | a5 | docs/overhaul/audit-ui-ux.md | DONE | 1 | top: U1 Tab-hide swallows clicks, U2 no Esc/blocked keys, U3 bad autosave silently replaced, U20 per-frame window relayout, U6 scale slider font-only, U7 invalid-placement reason hidden. Owner decisions: U5 U6 U13-U18 U23 U24 |
 
 ## Unverified assumptions
