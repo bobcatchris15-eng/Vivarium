@@ -107,3 +107,10 @@ Existing harness shots are too wide for ground work. Add a dedicated `--ground-r
 8. GR6 rock variety (rock.gdshader + PropMeshes.cs); more rocks needs a sim-layer owner decision.
 
 Serialize packets touching terrain.gdshader (2, 4, 7). Packets 5 and 6 are file-disjoint and can run in parallel with 3.
+
+## Added by orchestrator after GR1 (2026-11-10)
+**GR9. Hard-edged, stair-stepped material patches.** Grey gravel/rock patches, green moss patches and dark spots on the
+terrain have polygonal, cell-aligned stepped outlines with no transition (visible in every `--ground-review` bare shot,
+e.g. `litter_flat_mid_bare`, `slope_close_bare`). These dominate the ground's look more than texture tiling. Likely a
+per-cell splat/coverage mask sampled without filtering or edge noise. Fix: soft, noise-warped boundaries; bilinear or
+smoothed mask sampling. Ranked first among remaining GR items.
