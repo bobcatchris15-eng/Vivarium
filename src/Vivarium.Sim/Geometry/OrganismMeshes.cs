@@ -42,7 +42,7 @@ public static partial class OrganismMeshes
             case "creeper": Coinrunner7(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "reed":
                 if (sp.Id == "ringreed") Ringreed(m, rng, seed, c1, c2);
-                else if (sp.Id == "lanternsedge") LanternsedgeGeometry.Build(m, rng, juvenile);
+                else if (sp.Id == "lanternsedge") Lanternsedge9(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile);
                 else Glassrush(m, rng, seed, c1, c2, juvenile);
                 break;
             case "herb":
@@ -91,7 +91,7 @@ public static partial class OrganismMeshes
                 else RoundLeaf(m, rng, seed, c1, c2);
                 break;
             case "pairedleaf":
-                if (sp.Id == "fenbead") Fenbead(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height);
+                if (sp.Id == "fenbead") Fenbead9(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile);
                 else PairedLeaf(m, rng, seed, c1, c2);
                 break;
             case "floatleaf": FloatLeaf(m, rng, seed, c1, c2); break;
@@ -161,7 +161,7 @@ public static partial class OrganismMeshes
                     sp.RadiusAtMax > 0.001 ? sp.RadiusAtMax : 0.27,
                     sp.Height > 0.001 ? sp.Height : 0.20);
                 break;
-            case "rain_jelly": RainJelly(m, rng, c1, c2); break;
+            case "rain_jelly": RainJelly9(m, rng, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "carrion_bell": CarrionBell(m, rng, c1, c2); break;
             case "glass_antlers": GlassAntlers(m, rng, c1, c2); break;
             case "fruticose":
@@ -210,7 +210,7 @@ public static partial class OrganismMeshes
             case "emberbracken": Emberbracken(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "mirrorstrap_fern": Mirrorstrap(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "quillsedge": Quillsedge(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
-            case "cloudtuft": Cloudtuft(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
+            case "cloudtuft": Cloudtuft9(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "duskbristle": Duskbristle(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "bannerreed": Bannerreed(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "sootband": Sootband(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
@@ -218,7 +218,7 @@ public static partial class OrganismMeshes
             case "butterglint": Butterglint(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "mistviolet": Mistviolet(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "hushclover": Hushclover(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
-            case "cinderberry": Cinderberry(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
+            case "cinderberry": Cinderberry9(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "marshkettle": Marshkettle(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "hallowsting": Hallowsting(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "burlmantle": Burlmantle(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
@@ -402,8 +402,18 @@ public static partial class OrganismMeshes
             int vCount = st.VertexCount;
             if (sides < 3 || vCount < (sides + 1) * 2) continue;
             int numRings = vCount / (sides + 1);
-            int startRing = Math.Max(1, (int)(numRings * 0.28));
-            for (int r = startRing; r < numRings; r++)
+            // F5 closes capped tube tips with two extra rings (the last has ~zero radius); keep fruit off that cap.
+            int usableRings = numRings;
+            if (numRings >= 4)
+            {
+                var lastC = Vec3.Zero;
+                int lastStart = st.FirstVertex + (numRings - 1) * (sides + 1);
+                for (int s = 0; s < sides; s++) lastC += plant.Position(lastStart + s);
+                lastC *= (1.0 / sides);
+                if ((plant.Position(lastStart) - lastC).LengthSq < 1e-12) usableRings = numRings - 2;
+            }
+            int startRing = Math.Max(1, (int)(usableRings * 0.28));
+            for (int r = startRing; r < usableRings; r++)
             {
                 Vec3 rc = Vec3.Zero;
                 int ringStart = st.FirstVertex + r * (sides + 1);
