@@ -271,6 +271,7 @@ public static partial class OrganismMeshes
         var c2 = sp.Color2;
         var stemCol = Primitives.Mix(WoodyBarkLight, c1, 0.32);
         var leafCol = Primitives.Mix(c1, c2, 0.45);
+        if (TryClimberTipSp1(m, rng, sp.Id, c1, c2)) return m;
 
         // A slender tendril reaching forward along the stem and curling up on its upper side. It is short enough
         // to stay against the surface it is growing on, which is where a tendril belongs.
@@ -303,6 +304,7 @@ public static partial class OrganismMeshes
         var rng = Rng.Keyed(seed, "climber.node", 0);
         var c1 = sp.Color;
         var c2 = sp.Color2;
+        if (TryClimberNodeSp1(m, rng, sp.Id, c1, c2, attached)) return m;
         switch (sp.Id)
         {
             case "clinglace": ClinglaceNode(m, rng, seed, c1, c2, attached); break;
