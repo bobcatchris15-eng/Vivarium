@@ -549,85 +549,75 @@ public static partial class OrganismMeshes
         double h = Math.Max(0.02, height);
         double r = Math.Max(0.02, radius);
         double scale = juvenile ? 0.7 : 1.0;
-        // Grey-green, pulled toward c2 to kill the blue-rock read; tips pale silver.
-        // Wave-4 ×1.4 restores shader-darkened brightness; c2 silver is lifted
-        // ×1.2 so seeded tips read silver, not white flags.
-        double[] leafBase = new[] { 0.52, 0.64, 0.68 };
-        double[] leafTip = new[] { 0.74, 0.82, 0.84 };
-        double[] baseBase = Primitives.Scale(Primitives.Mix(c1, c2, 0.48), 1.4);
-        double[] baseTip = Primitives.Scale(Primitives.Mix(c1, c2, 0.70), 1.4);
-        double[] stemCol = Primitives.Scale(Primitives.Mix(c1, c2, 0.50), 1.4);
-        double[] seedBase = new[] { 0.78, 0.76, 0.68 };
-        double[] seedTip = new[] { 0.78, 0.76, 0.68 };
+        // SP2: a fountain tussock of fine grey-green blades (arching, tips silver), a straw thatch of old
+        // blades at the crown, and nodding silver seed plumes standing clear of the leaf mass.
+        double[] leafBase = new[] { 0.20, 0.40, 0.12 };
+        double[] leafTip = Primitives.Mix(new[] { 0.62, 0.74, 0.38 }, c2, 0.35);
+        double[] thatchBase = new[] { 0.40, 0.34, 0.22 };
+        double[] thatchTip = new[] { 0.66, 0.60, 0.42 };
+        double[] stemCol = Primitives.Scale(Primitives.Mix(c1, c2, 0.55), 1.2);
+        double[] seedBase = Primitives.Scale(Primitives.Mix(c2, new[] { 0.80, 0.78, 0.66 }, 0.5), 1.05);
+        double[] seedTip = Primitives.Scale(c2, 1.15);
 
-        // Wave-9 (ashwire: dense silvery-blue hemispherical cushion): 110-130
-        // fine silvery blue-grey blades (base (0.52,0.64,0.68) to tip
-        // (0.74,0.82,0.84)) fanned at 35-55 deg (pitch 0.61-0.96) so the tuft
-        // forms a dense, unmistakable hemisphere, not sparse wires.
-        int nBlades = NewFloraCount(part, 96 + rng.NextInt(13));
+        part.FloraDetailLevel = 2; // blade grid: 8 rows x 4 cols per blade
+        int nBlades = NewFloraCount(m, 84 + rng.NextInt(7));
         for (int i = 0; i < nBlades; i++)
-        {
-            int tuft = i % 3;
-            double centreAz = tuft * (2.0 * Math.PI / 3.0);
-            double az = centreAz + rng.Range(-0.75, 0.75);
-            var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
-            var across = new Vec3(-Math.Sin(az), 0, Math.Cos(az));
-            // Fanned at varied angles: small pitch from horizontal would flatten
-            // it; pitch here is from vertical, so 0.61-0.96 fans the crown.
-            double pitch = rng.Range(0.42, 0.76);
-            double len = h * scale * rng.Range(0.32, 0.54);
-            var tuftCentre = new Vec3(Math.Cos(centreAz), 0, Math.Sin(centreAz)) * (r * 0.22);
-            var root = tuftCentre + radial * (Math.Sqrt(Math.Max(0, Math.Min(1, rng.NextDouble()))) * r * 0.13) + Vec3.Up * rng.Range(0.0, 0.003);
-            var dir = (radial * Math.Sin(pitch) + Vec3.Up * Math.Cos(pitch)).Normalized();
-            var tip = root + dir * len;
-            double halfW = h * rng.Range(0.0030, 0.0042);
-            FoliageBlade.Build(part, root, tip, across, halfW, leafBase, leafTip, camber: 0.12, curl: rng.Range(0.18, 0.42), shoulder: 0.82, segments: 6);
-        }
-
-        // Dense wiry base tuft: short stiff blades hugging the ground so the
-        // turf reads layered and twiggy, never a solid dome or mound.
-        int nBase = NewFloraCount(part, 20 + rng.NextInt(9));
-        for (int i = 0; i < nBase; i++)
         {
             double az = rng.Range(0, 2 * Math.PI);
             var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
             var across = new Vec3(-Math.Sin(az), 0, Math.Cos(az));
-            double pitch = rng.Range(0.20, 0.48);
-            double len = h * scale * rng.Range(0.32, 0.55);
-            var root = radial * (Math.Sqrt(Math.Max(0, Math.Min(1, rng.NextDouble()))) * r * 0.85) + Vec3.Up * 0.001;
+            double k = rng.NextDouble();
+            double pitch = 0.10 + 0.95 * Math.Pow(k, 0.85);             // inner blades stand, outer ones fountain out
+            double len = h * scale * (0.50 + 0.50 * (1.0 - 0.55 * k) * rng.Range(0.85, 1.0));
+            var root = radial * (Math.Sqrt(rng.NextDouble()) * r * 0.10) + Vec3.Up * rng.Range(0.0, 0.003);
             var dir = (radial * Math.Sin(pitch) + Vec3.Up * Math.Cos(pitch)).Normalized();
             var tip = root + dir * len;
-            double halfW = h * rng.Range(0.0018, 0.0032);
-            FoliageBlade.Build(part, root, tip, across, halfW, baseBase, baseTip, camber: 0.10, curl: rng.Range(0.10, 0.22), shoulder: 0.85, segments: 6);
+            double halfW = rng.Range(0.0020, 0.0030) * Math.Max(0.7, h / 0.18);
+            FoliageBlade.Build(part, root, tip, across, halfW, leafBase, leafTip, camber: 0.10, curl: rng.Range(0.30, 0.60), shoulder: 0.80, segments: 6);
         }
 
-        // Wave-9: 6-8 slender silver-straw spikelet tubes (2.2 mm radius,
-        // 2.2 cm long, warm silver-straw (0.78,0.76,0.68)) nodding slightly at
-        // the tips of wiry culms (0.65-0.85h). Cylindrical spindle tubes only —
-        // no sheet bracts, so no giant white floating paddles.
-        int nSeeds = NewFloraCount(part, 6 + rng.NextInt(3));
+        int nThatch = 0;
+        for (int i = 0; i < nThatch; i++)
+        {
+            double az = rng.Range(0, 2 * Math.PI);
+            var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
+            var across = new Vec3(-Math.Sin(az), 0, Math.Cos(az));
+            double pitch = rng.Range(0.9, 1.35);
+            double len = h * scale * rng.Range(0.18, 0.32);
+            var root = radial * (rng.Range(0.01, 0.07) * r) + Vec3.Up * 0.001;
+            var tip = root + (radial * Math.Sin(pitch) + Vec3.Up * Math.Cos(pitch)).Normalized() * len;
+            FoliageBlade.Build(part, root, tip, across, rng.Range(0.0016, 0.0024), thatchBase, thatchTip, camber: 0.08, curl: 0.2, shoulder: 0.85, segments: 4);
+        }
+
+        int nSeeds = NewFloraCount(m, 7 + rng.NextInt(3));
         for (int c = 0; c < nSeeds; c++)
         {
             double az = rng.Range(0, 2 * Math.PI);
             var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
-            var foot = radial * rng.Range(0.0, r * 0.30) + Vec3.Up * 0.002;
-            double culmH = h * scale * rng.Range(0.65, 0.85);
-            var lean = radial * rng.Range(0.004, 0.014);
-            var top = foot + Vec3.Up * culmH + lean;
+            var foot = radial * rng.Range(0.0, r * 0.12) + Vec3.Up * 0.002;
+            double culmH = h * scale * rng.Range(1.0, 1.30);
+            var lean = radial * (culmH * rng.Range(0.14, 0.30));
             var path = new Vec3[4];
             for (int j = 0; j < 4; j++)
             {
                 double t = j / 3.0;
-                path[j] = foot + Vec3.Up * (culmH * t) + lean * (t + 0.3 * Math.Sin(Math.PI * t));
+                path[j] = foot + Vec3.Up * (culmH * t) + lean * (t * t);
             }
-            Primitives.Tube(part, path, new[] { 0.00110, 0.00085, 0.00060, 0.00035 }, 5, (ii, v) => (stemCol, 1, (double)ii / 3.0, v, 0, 0));
-            double spLen = rng.Range(0.026, 0.034);
-            var nodDir = (radial * 0.35 + Vec3.Up * 0.94).Normalized();
-            var spBase = top;
-            var spMid = spBase + nodDir * (spLen * 0.5);
-            var spTip = spBase + nodDir * spLen;
-            Primitives.Tube(part, new[] { spBase, spMid, spTip }, new[] { 0.0027, 0.0020, 0.0008 }, 6,
+            Primitives.Tube(part, path, new[] { 0.00130, 0.00105, 0.00085, 0.00065 }, 6, (ii, v) => (stemCol, 1, (double)ii / 3.0, v, 0, 0));
+            var top = path[3];
+            var nodDir = (radial * 0.75 + Vec3.Up * 0.55).Normalized();
+            double spLen = rng.Range(0.040, 0.052);
+            Primitives.Tube(part, new[] { top, top + nodDir * (spLen * 0.5), top + nodDir * spLen }, new[] { 0.0030, 0.0036, 0.0006 }, 6,
                 (ii, v) => (Primitives.Mix(seedBase, seedTip, (double)ii / 2.0), 1, (double)ii / 2.0, v, 0, 0));
+            // Two short side spikelets for a feathery plume.
+            for (int sb = 0; sb < 2; sb++)
+            {
+                double sgn = sb == 0 ? 1 : -1;
+                var sdir = (nodDir + new Vec3(-radial.Z, 0, radial.X) * (0.7 * sgn)).Normalized();
+                var sbase = top + nodDir * (spLen * 0.35);
+                Primitives.Tube(part, new[] { sbase, sbase + sdir * 0.018 }, new[] { 0.0020, 0.0005 }, 6,
+                    (ii, v) => (seedBase, 1, (double)ii, v, 0, 0));
+            }
         }
 
         NewFloraAppendWorld(m, part, radius, height);

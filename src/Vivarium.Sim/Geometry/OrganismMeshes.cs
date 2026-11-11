@@ -24,10 +24,10 @@ public static partial class OrganismMeshes
         switch (sp.Shape)
         {
             case "carpet":
-                if (sp.Id == "siltstars") Siltstars(m, rng, seed, c1, c2);
+                if (sp.Id == "siltstars") { SiltstarsRunners(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); }
                 else if (sp.Id == "floodlace_moss") Floodlace(m, rng, seed, c1, c2);
                 else if (sp.Id == "velvetweave_moss") Velvetweave(m, rng, seed, c1, c2);
-                else if (sp.Id == "starmoss") Starmoss(m, rng, seed, c1, c2);
+                else if (sp.Id == "starmoss") { StarmossCushion(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); }
                 else CarpetDefault(m, rng, seed, c1, c2);
                 break;
             case "cushion":
@@ -124,7 +124,7 @@ public static partial class OrganismMeshes
                 if (sp.Id == "ghostbonnet") GhostbonnetGeometry.Build(m, rng, c1, c2, juvenile);
                 else Mushrooms(m, rng, seed, c1, c2, juvenile);
                 break;
-            case "bracket": Bracket(m, rng, c1, c2); break;
+            case "bracket": { EmberfanShelves(m, rng, c1, c2); } break;
             case "epiphytic_rosette":
             case "epiphyte":
             case "rosette":
@@ -142,7 +142,7 @@ public static partial class OrganismMeshes
                     Succulent(m, rng, seed, c1, c2, juvenile);
                 break;
             case "tussock": Tussock(m, rng, seed, c1, c2, juvenile); break;
-            case "ashwire": Ashwire(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
+            case "ashwire": { Ashwire(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); } break;
             case "pampas": Plumegrass(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "kinkcane_brake": KinkcaneAlienGeometry.Build(m, rng, c1, c2, sp.Height / Math.Max(0.01, sp.RadiusAtMax)); break;
             case "veilblade_curtain": Veilblade(m, rng, seed, c1, c2); break;
@@ -186,7 +186,7 @@ public static partial class OrganismMeshes
             case "blackneedle_thistle": Blackneedle(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "starbulb_umbel": Starbulb(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "bonecup_fungus": Bonecup(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
-            case "embercup_moss": Embercup(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
+            case "embercup_moss": { EmbercupGlowCups(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); } break;
             case "hollowcrown_tree": Hollowcrown(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "tankbloom_bromeliad": Tankbloom(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "tree":
