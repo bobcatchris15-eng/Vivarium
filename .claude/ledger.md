@@ -114,3 +114,15 @@ Quota guard (checked with get_usage before every dispatch):
 - Weekly all-models >= 30% (was 7% at start): stop for the night, ledger + worklog, wait for owner.
 - Orchestrator stays lean: no raw logs, sheets viewed at reduced scale, Clankers return one-line DSL + <=15 lines.
 Out of scope tonight: fauna/guardian species work, UI, ecology, owner-decision items.
+
+## STOPPED 2026-11-11 ~03:40 (overnight run end; weekly quota ~27%, cap 30%)
+Done overnight: harness (h45 guardians/scenes, ground-review, tris census), F5 + F1 shared fixes, 14 species packets
+(65 species touched: rebuilt/fixed/trimmed; reverted: dewbonnet, vaultfern, blackneedle, burlmantle; blocked: 4 lichens),
+ground GR1, GR9, GR2, GR5 kept; GR4, GR3, GR12 reverted; GR10 deferred. Perf gates pc1-pc4 all pass:
+GPU 35.2 -> 33.4 ms, fps 26.8 -> 28.1, VRAM -160 MB, prims 7.15M -> 7.05M. m1b clean attribution recorded.
+Owner decisions waiting (docs/overhaul/README.md): P12 (post/lighting stack, ~15 ms fixed), OD-R (rocks buried), OD-W
+(shoreline vs sim height), P13/R2, R1, R3, P11, UI items.
+Next when resumed: (1) remaining species ranks 73+ (trumpetbind, bannerreed, barrowbole, coalspike, cragset ...);
+(2) perf geometry targets: pilot tree LOD (4.9 ms), water mesh density (1.55M prims), props prim count (1.06M);
+(3) lichens retry with real texture sets (D7); (4) ground track needs a scoped plan (shared water include, GR11 probe);
+(5) animals batch (G1, G3, A1, G5, A2/A5); (6) check why --specimen-tris-only hung in SP14.
