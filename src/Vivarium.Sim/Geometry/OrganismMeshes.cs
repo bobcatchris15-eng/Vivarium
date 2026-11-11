@@ -86,8 +86,8 @@ public static partial class OrganismMeshes
                 break;
             }
             case "roundleaf":
-                if (sp.Id == "mooncoin") Mooncoin(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height);
-                else if (sp.Id == "brooklace") Brooklace(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height);
+                if (sp.Id == "mooncoin") Mooncoin8(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height);
+                else if (sp.Id == "brooklace") Brooklace8(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height);
                 else RoundLeaf(m, rng, seed, c1, c2);
                 break;
             case "pairedleaf":
@@ -177,11 +177,11 @@ public static partial class OrganismMeshes
             case "microcanopy_rainshield": MidRainshield(m, rng, seed, c1, c2, juvenile); break;
             case "microcanopy_lacemantle": Lacemantle(m, rng, seed, c1, c2, juvenile); break;
             case "microcanopy_cragparasol": Cragparasol(m, rng, seed, c1, c2, juvenile); break;
-            case "ribbonweed": case "streamribbon": Streamribbon(m, rng, seed, c1, c2, juvenile); break;
+            case "ribbonweed": case "streamribbon": if (sp.Id == "streamribbon") Streamribbon8(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); else Streamribbon(m, rng, seed, c1, c2, juvenile); break;
             case "milfoil": case "fencomb": Fencomb7(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             // The 2026-10-21 new-flora set. Each carries its own anatomy; see docs/flora-new-set.md.
             case "glasslily_pad": Glasslily(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
-            case "submerged_whorl": Silverweed(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
+            case "submerged_whorl": Silverweed8(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "coalspike_cattail": Coalspike(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "marrowbloom_stem": Marrowbloom(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "blackneedle_thistle": Blackneedle(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
@@ -230,7 +230,7 @@ public static partial class OrganismMeshes
             case "pondstars": Pondstars(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "bogfringe": Bogfringe(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "burrflag": Burrflag(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
-            case "paddlerib": Paddlerib(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
+            case "paddlerib": Paddlerib8(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "barbarrow": Barbarrow(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "brightknot": Brightknot(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "cragset": Cragset(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
