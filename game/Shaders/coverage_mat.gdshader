@@ -21,6 +21,28 @@ uniform sampler2D lichen_col : source_color, filter_linear_mipmap_anisotropic, r
 varying vec3 world_pos;
 varying float sundew_surface;
 varying float sundew_dew;
+// SP3: per-species surface style for the sheet (1 floodlace, 2 pearl cushion, 3 velvetweave, 4 bogglass),
+// encoded by the C# tile builder as UV2.y = -0.5 * style. 0 = legacy generic moss.
+varying flat float mat_style;
+
+// Voronoi helper: x = distance to nearest feature, y = per-cell hash, zw = vector point -> feature.
+vec4 vor_cell(vec2 p) {
+    vec2 n = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0;
+    vec2 br = vec2(0.0);
+    float bh = 0.0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j));
+            vec2 o = vec2(hash21(n + g), hash21(n + g + vec2(37.0, 17.0)));
+            vec2 r = g + o - f;
+            float d = dot(r, r);
+            if (d < f1) { f1 = d; br = r; bh = hash21(n + g + vec2(11.0, 5.0)); }
+        }
+    }
+    return vec4(sqrt(f1), bh, br);
+}
 
 float voronoi_cracks(vec2 p) {
     vec2 n = floor(p);
@@ -45,6 +67,7 @@ void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     sundew_surface = float(UV2.y < -4.5);
     sundew_dew = UV2.x;
+    mat_style = (UV2.y < -0.25 && UV2.y > -4.0) ? floor(-UV2.y * 2.0 + 0.5) : 0.0;
 }
 
 void fragment() {
@@ -59,8 +82,20 @@ void fragment() {
     // rim band (alpha 0.25..0.75) breaks up raggedly instead of following the cell grid.
     float edgeNoise = fbm(wp * 4.0) * 0.25 + fbm(wp * 16.0) * 0.30 + fbm(wp * 70.0) * 0.45;
     float threshold = clamp(0.5 + (edgeNoise - 0.5) * 2.2, 0.05, 0.95);
-    if (COLOR.a < threshold) discard;
+    float style = mat_style;
+    bool styled = style > 0.5;
     float coverMask = smoothstep(threshold - 0.15, threshold + 0.15, COLOR.a);
+    float edge_fade = 1.0;
+    if (styled) {
+        // Soft, dithered mat edge: the sheet thins into the ground over several centimetres instead of
+        // ending on a hard cut. Hashed alpha stays in the opaque pass (no sorting, no blend cost).
+        float en = fbm(wp * 7.0) * 0.5 + fbm(wp * 31.0) * 0.5;
+        edge_fade = smoothstep(0.10, 0.92, COLOR.a + (en - 0.5) * 0.7);
+        if (edge_fade < 0.03) discard;
+        coverMask = edge_fade;
+        ALPHA = edge_fade;
+        ALPHA_HASH_SCALE = 1.0;
+    } else if (COLOR.a < threshold) discard;
 
     vec3 c = base;
     float rough = 0.92;
@@ -104,7 +139,7 @@ void fragment() {
         // clumps, optical porosity and damp shoot cavities. All of it is subpixel
         // beyond ~5 m, so it is evaluated only while detail_lod > 0.01.
         // ------------------------------------------------------------------
-        if (detail_lod > 0.01) {
+        if (detail_lod > 0.01 && !styled) {
             float d = detail_lod;
             fibers = fbm(pg * vec2(3.0, 26.0));
             leaflets = fbm(pg * vec2(9.0, 70.0) + 11.3);
@@ -160,7 +195,7 @@ void fragment() {
 
         // A current-state kernel field: isolated growing points expand into
         // neighboring points while dark protonema persists in the valleys.
-        if (u_moss_colony_nuclei > 0.01) {
+        if (u_moss_colony_nuclei > 0.01 && !styled) {
             float crown = UV2.y > 0.05 ? 1.0 : clamp(UV2.x, 0.0, 1.0);
             float strength = u_moss_colony_nuclei >= 4.0 ? 1.0 : 0.45;
             c *= mix(vec3(1.0),
@@ -185,6 +220,89 @@ void fragment() {
         c *= 1.0 + velvet * 0.10;
         RIM = mix(0.065 * tips * coverMask, mix(0.15, 0.38, shootT), isShoot) + velvet * 0.18;
         RIM_TINT = mix(0.75, 0.65, isShoot);
+
+        if (styled) {
+            float d = detail_lod;
+            float lum_base = dot(base, vec3(0.2126, 0.7152, 0.0722));
+            ao = 0.9;
+            if (style > 4.5) {
+                // Plain tissue for blades, domes and setae: soft fine grain, translucent warm backlight.
+                c *= 0.88 + 0.24 * vnoise(wp * 140.0);
+                ao = 1.0;
+                rough = 0.62;
+                RIM = 0.16; RIM_TINT = 0.5;
+                BACKLIGHT = base * vec3(0.22, 0.30, 0.06);
+            } else if (style < 1.5) {
+                // Floodlace: lacy wet sheet. Flow-aligned warped streams, fine holes that read as dark water
+                // between strands, glossy film.
+                vec2 wq = wp + 0.012 * vec2(fbm(wp * 14.0), fbm(wp * 14.0 + 7.0));
+                float stream = fbm(vec2(dot(wq, grainDir) * 9.0, dot(wq, grainOrth) * 70.0));
+                float lace = smoothstep(0.50, 0.68, fbm(wq * 38.0 + 3.0)) * d;
+                float vein = smoothstep(0.35, 0.5, abs(fbm(wq * 20.0) - 0.5) + 0.0) * d;
+                float sheetTone = 0.75 + 0.5 * vnoise(wp * 9.0 + 1.0);
+                c *= sheetTone * mix(1.0, 0.55 + 0.9 * stream, d);
+                c = mix(c, c * vec3(0.25, 0.42, 0.40), lace * 0.85);
+                c *= 1.0 - 0.18 * vein;
+                ao = mix(0.92, 0.55, lace);
+                float e2 = 0.006;
+                vec2 gx = vec2(dot(wq + vec2(e2, 0.0), grainDir), dot(wq + vec2(e2, 0.0), grainOrth));
+                vec2 gz = vec2(dot(wq + vec2(0.0, e2), grainDir), dot(wq + vec2(0.0, e2), grainOrth));
+                float h0 = stream;
+                float hx = fbm(vec2(gx.x * 9.0, gx.y * 70.0));
+                float hz = fbm(vec2(gz.x * 9.0, gz.y * 70.0));
+                bump += vec3(h0 - hx, 0.0, h0 - hz) * 1.4 * d;
+                rough = mix(0.55, 0.28, 0.5 + 0.5 * stream);
+                RIM = 0.10; RIM_TINT = 0.5;
+                BACKLIGHT = base * vec3(0.05, 0.22, 0.14);
+            } else if (style < 2.5) {
+                // Pearl cushion: tight 1.6 cm domes, dark seams, frosted pearl crowns.
+                vec4 vc = vor_cell(wp / 0.016 + 3.7);
+                float dome = 1.0 - smoothstep(0.0, 0.75, vc.x);
+                float seam = smoothstep(0.50, 0.95, vc.x);
+                float crown = 1.0 - smoothstep(0.0, 0.30, vc.x);
+                float cellTone = 0.85 + 0.3 * vc.y;
+                c *= mix(1.0, cellTone * mix(0.68, 1.12, dome), max(d, 0.25));
+                c = mix(c, vec3(0.50, 0.55, 0.40), crown * 0.45 * max(d, 0.25));
+                c *= 1.0 - 0.45 * seam * d;
+                bump += vec3(-vc.z, 0.0, -vc.w) * 0.9 * dome * d;
+                ao = mix(0.62, 1.0, 1.0 - seam * d);
+                rough = mix(0.82, 0.55, crown);
+                RIM = 0.30 * crown; RIM_TINT = 0.1;
+                BACKLIGHT = base * vec3(0.05, 0.08, 0.03);
+            } else if (style < 3.5) {
+                // Velvetweave: low combed nap, soft woven sheen, warm gold glow on grazing light.
+                float nap = fbm(vec2(dot(wp, grainDir) * 6.0, dot(wp, grainOrth) * 160.0));
+                float patch_g = vnoise(wp * 7.0 + 2.0);
+                float weave = 0.5 + 0.5 * sin(dot(wp, grainOrth) * 520.0) * sin(dot(wp, grainDir) * 160.0 + nap * 3.0);
+                c *= mix(1.0, 0.80 + 0.35 * nap + 0.06 * weave, d);
+                c = mix(c, c * vec3(1.30, 1.15, 0.65), smoothstep(0.52, 0.80, patch_g) * 0.8);
+                float ndv = clamp(dot(wn, normalize(to_cam)), 0.0, 1.0);
+                float sheen = pow(1.0 - ndv, 2.2);
+                c += base * vec3(0.55, 0.45, 0.14) * sheen * (0.4 + 0.6 * nap) * 0.7;
+                ao = 0.94;
+                rough = 0.97;
+                RIM = 0.25 + 0.3 * sheen; RIM_TINT = 0.7;
+                BACKLIGHT = base * vec3(0.18, 0.14, 0.03);
+                bump += vec3(vnoise(wp * 90.0) - 0.5, 0.0, vnoise(wp * 90.0 + 9.0) - 0.5) * 0.25 * d;
+            } else {
+                // Bogglass: wet glassy sphagnum. 2.2 cm capitula with dimpled centres, russet hollows, gloss.
+                vec4 vc = vor_cell(wp / 0.022 + 8.1);
+                float dome = 1.0 - smoothstep(0.0, 0.85, vc.x);
+                float dimple = 1.0 - smoothstep(0.0, 0.16, vc.x);
+                float gap = smoothstep(0.55, 0.95, vc.x);
+                float hollow = smoothstep(0.45, 0.72, vnoise(wp * 5.0 + 4.0));
+                c *= mix(1.0, (0.78 + 0.35 * vc.y) * mix(0.75, 1.12, dome), max(d, 0.3));
+                c = mix(c, c * vec3(1.12, 0.70, 0.55), hollow * 0.40);
+                c *= 1.0 - 0.35 * dimple * d - 0.30 * gap * d;
+                bump += vec3(-vc.z, 0.0, -vc.w) * 0.8 * dome * d;
+                ao = mix(0.7, 1.0, 1.0 - gap * d);
+                rough = mix(0.30, 0.16, dome);
+                RIM = 0.18; RIM_TINT = 0.3;
+                BACKLIGHT = base * vec3(0.30, 0.34, 0.06);
+            }
+            // Thin, wet-looking edge: fade colour toward damp ground as the sheet thins.
+            c = mix(c * 0.8, c, smoothstep(0.15, 0.85, edge_fade));
+        }
     } else {
         // Lichen: scanned thallus colour + high-frequency tangent-space normal and cavity AO
         // from LichenThallus.png, plus procedural Voronoi areole cracks.
