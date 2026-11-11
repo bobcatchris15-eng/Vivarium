@@ -193,7 +193,7 @@ public static partial class OrganismMeshes
         rows = Math.Max(4, rows);
         sides = Math.Max(5, sides);
         double[] ts = { 0.0, 0.18, 0.42, 0.68, 1.0 };
-        double[] rs = { 0.02, 0.40, 0.62, 0.74, 0.92 };
+        double[] rs = { 0.30, 0.52, 0.66, 0.76, 0.92 }; // SP11: broad seated foot
         double[] ys = { 0.0, 0.20, 0.50, 0.78, 1.0 };
         // Wave 9: warm woody cinnamon-ochre outer, pale buff inner. Base hues
         // as specified, brightened ~35% only to survive shader darkening.
@@ -276,7 +276,7 @@ public static partial class OrganismMeshes
                 double th = 2.0 * Math.PI * j / rimSteps;
                 double flute = 1.0 + 0.055 * Math.Sin(th * 7.0 + 0.4) + 0.025 * Math.Sin(th * 11.0 + 1.7);
                 rimPath.Add(centre + new Vec3(Math.Cos(th) * R * 0.92 * flute, H, Math.Sin(th) * R * 0.92 * flute));
-                rimRadii.Add(Math.Max(0.00035, R * 0.035));
+                rimRadii.Add(Math.Max(0.0005, R * 0.075)); // SP11: thicker rim
             }
             var rimCol = Primitives.Scale(c2b, 1.02);
             Primitives.Tube(part, rimPath, rimRadii, 6,
@@ -707,15 +707,16 @@ public static partial class OrganismMeshes
         // Wave 9: lid deleted — no shark-fin flap. Small raised papery warts
         // (2-3 mm) across the upper hemisphere instead.
         {
-            int warts = 8 + rng.NextInt(5); // 8-12
-            var wartCol = Primitives.Scale(c1b, 0.90);
+            // SP11: areolate/warty skin - many raised warts scaled to the body so they read at macro range.
+            int warts = detail == 0 ? 46 + rng.NextInt(10) : detail == 1 ? 24 : 12;
+            var wartCol = Primitives.Scale(c1b, 0.80);
             for (int w = 0; w < warts; w++)
             {
                 double wa = rng.Range(0, 2.0 * Math.PI);
-                double wElev = rng.Range(0.05, 0.85); // upper hemisphere (fraction of Ry above centre)
+                double wElev = rng.Range(-0.35, 0.88); // upper hemisphere + shoulders
                 double wh = Math.Sqrt(Math.Max(0.0, 1.0 - wElev * wElev));
-                var wc = new Vec3(Math.Cos(wa) * R * wh * 0.97, centreY + Ry * wElev * 0.97, Math.Sin(wa) * R * wh * 0.97);
-                double wr = rng.Range(0.001, 0.0015); // 2-3 mm wide
+                var wc = new Vec3(Math.Cos(wa) * R * wh * 1.0, centreY + Ry * wElev * 1.0, Math.Sin(wa) * R * wh * 1.0);
+                double wr = R * rng.Range(0.07, 0.115);
                 int wartFirst = part.VertexCount;
                 Primitives.Ellipsoid(part, wc, new Vec3(wr, wr * 0.75, wr), 3, 6,
                     (u, v) => (wartCol, 1.0, u, v, 0.0, 0.0));
@@ -983,33 +984,13 @@ public static partial class OrganismMeshes
             double az = phase + 2.0 * Math.PI * k / Math.Max(1, cups) + rng.Range(-0.30, 0.30);
             var dir = new Vec3(Math.Cos(az), 0, Math.Sin(az));
             // Wave 9: tight cluster within 0.10-0.32 * radius
-            double dist = cups == 1 ? 0.0 : radius * rng.Range(0.10, 0.32) * ju;
+            double dist = cups == 1 ? 0.0 : radius * rng.Range(0.30, 0.62) * ju;
             // sitting directly on the ground, thick-walled cups on the litter
-            double stalkH = 0.001;
+            double stalkH = -0.0058; // SP11: base sunk into the litter, no floating stalk
             var centre = dir * dist + Vec3.Up * stalkH;
             // Each cup 2.0-2.6 cm wide (radius 10-13 mm), Hc = 0.75 * Rc tall.
-            double Rc = rng.Range(0.010, 0.013);
+            double Rc = rng.Range(0.015, 0.019) * (juvenile ? 0.8 : 1.0); // SP11: larger cups
             double Hc = 0.75 * Rc;
-
-            // short stalk from litter to cup floor
-            {
-                var st0 = dir * dist + Vec3.Up * (-0.001);
-                var st1 = dir * dist + Vec3.Up * (stalkH * 0.5) + new Vec3(rng.Range(-0.0006, 0.0006), 0, rng.Range(-0.0006, 0.0006));
-                var st2 = centre;
-                var stalkCol = Primitives.Scale(c1, 0.82);
-                int stalkSides = detail == 0 ? 7 : detail == 1 ? 6 : 5;
-                if (m.Lod is { } lodS) stalkSides = Math.Max(5, lodS.Sides(stalkSides));
-                double stalkR = Math.Max(0.0008, Rc * 0.16);
-                Primitives.Tube(part, new[] { st0, st1, st2 }, new[] { stalkR * 1.25, stalkR, stalkR * 0.95 }, stalkSides,
-                    (i, v) =>
-                    {
-                        var col = Primitives.Mix(stalkCol, c1, (double)i / 2.0);
-                        double mottle = Math.Sin(v * 2.0 * Math.PI * 5.0 + i * 1.9) * Math.Sin(v * 2.0 * Math.PI * 8.0 - i * 2.2);
-                        col = Primitives.Mix(col, Primitives.Scale(col, 0.80), Math.Max(0.0, mottle) * 0.24);
-                        col = Primitives.Mix(col, Primitives.Scale(col, 1.05), Math.Max(0.0, -mottle) * 0.10);
-                        return (col, 1.0, (double)i / 2.0, v, 0.0, 0.0);
-                    });
-            }
 
             int cupV = part.VertexCount;
             int cupI = part.Indices.Count;
@@ -1029,7 +1010,7 @@ public static partial class OrganismMeshes
             {
                 double ea = rng.Range(0, 2.0 * Math.PI);
                 double ed = Rc * rng.Range(0.06, 0.22);
-                double er = rng.Range(0.0028, 0.0036); // 5.6-7.2 mm wide
+                double er = Rc * rng.Range(0.22, 0.27);
                 var ec = centre + new Vec3(Math.Cos(ea) * ed, er * 0.70, Math.Sin(ea) * ed);
                 // radius assigned above so the base sits against the cup floor
                 int eggFirst = part.VertexCount;

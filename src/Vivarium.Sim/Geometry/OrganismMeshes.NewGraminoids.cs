@@ -309,7 +309,7 @@ public static partial class OrganismMeshes
                 double hLen = rng.Range(0.014, 0.026);
                 var hDir = (bg.across * (0.48 * sign) + Vec3.Up * 0.22 + along * 0.30).Normalized();
                 var hTip = at + hDir * hLen;
-                Primitives.Tube(part, new[] { at, hTip }, new[] { 0.00055, 0.00014 }, 5, (ii, v) => (hairCol, 1, (double)ii, v, 0, 0));
+                Primitives.Tube(part, new[] { at, hTip }, new[] { 0.00085, 0.00022 }, 5, (ii, v) => (hairCol, 1, (double)ii, v, 0, 0));
             }
         }
 
@@ -335,7 +335,7 @@ public static partial class OrganismMeshes
                 double t = j / 3.0;
                 path[j] = Vec3.Lerp(foot, top, t) + radial * (Math.Sin(Math.PI * t) * 0.004);
             }
-            Primitives.Tube(part, path, new[] { 0.0012, 0.0011, 0.0009, 0.0006 }, 6, (ii, v) => (stemCol, 1, (double)ii / 3.0, v, 0, 0));
+            Primitives.Tube(part, path, new[] { 0.0017, 0.0015, 0.0012, 0.0009 }, 6, (ii, v) => (stemCol, 1, (double)ii / 3.0, v, 0, 0));
             int nClusters = 4 + rng.NextInt(2);
             for (int k = 0; k < nClusters; k++)
             {
@@ -345,11 +345,11 @@ public static partial class OrganismMeshes
                 var at = Vec3.Lerp(foot, top, t);
                 var branchDir = (sradial * 1.0 + Vec3.Up * rng.Range(0.20, 0.60)).Normalized();
                 var branchTip = at + branchDir * rng.Range(0.012, 0.020);
-                Primitives.Tube(part, new[] { at, branchTip }, new[] { 0.0006, 0.0004 }, 5, (ii, v) => (stemCol, 1, (double)ii, v, 0, 0));
+                Primitives.Tube(part, new[] { at, branchTip }, new[] { 0.0009, 0.0007 }, 5, (ii, v) => (stemCol, 1, (double)ii, v, 0, 0));
                 // Small starry cluster: a tiny chestnut ellipsoid puff plus 3 short rays.
                 double fr = rng.Range(0.006, 0.008);
                 int v0 = part.VertexCount;
-                var clusterCentre = branchTip + new Vec3(rng.Range(-0.002, 0.002), rng.Range(-0.001, 0.002), rng.Range(-0.002, 0.002));
+                var clusterCentre = branchTip + branchDir * (fr * 0.55); // SP11: seed head seated on the pedicel tip, not floating
                 var clusterRadii = new Vec3(fr * rng.Range(0.82, 1.12), fr * rng.Range(0.62, 0.88), fr * rng.Range(0.72, 1.08));
                 Primitives.Ellipsoid(part, clusterCentre, clusterRadii, 3, 7,
                     (u, v) => (Primitives.Mix(flowerCol, flowerTip, u), 1.0, u, v, 0.0, 0.0), pitch: rng.Range(-0.60, 0.60));

@@ -215,12 +215,12 @@ public static partial class OrganismMeshes
             for (int k = 0; k < leaves; k++)
             {
                 double az = leafAz0 + k * golden + rng.Range(-0.22, 0.22);
-                double len = rng.Range(0.010, 0.014) * hScale; // plump jelly-bean beads (~1.0-1.4 cm), crown 6-8 mm proud
-                double elev = rng.Range(0.65, 1.15); // tighter, more erect bead (~37-66 deg), not flat lettuce
+                double len = rng.Range(0.014, 0.019) * hScale; // SP11 larger; plump jelly-bean beads (~1.0-1.4 cm), crown 6-8 mm proud
+                double elev = rng.Range(0.85, 1.30); // SP11 more erect; tighter, more erect bead (~37-66 deg), not flat lettuce
                 var root = centre + new Vec3(Math.Cos(az) * 0.0015, rng.Range(0.0, 0.003), Math.Sin(az) * 0.0015);
                 // Plump jelly-bean: widthRatio 0.42-0.55 and strongly cambered
                 // (0.60-0.75) for a fat bead; near-zero curl keeps it domed.
-                NSucLeaf(part, root, az, elev, len, rng.Range(0.42, 0.55), rng.Range(0.60, 0.75),
+                NSucLeaf(part, root, az, elev, len, rng.Range(0.50, 0.64), rng.Range(0.75, 0.95),
                     leafBase, thisTip, rng, curlOverride: rng.Range(0.02, 0.05));
             }
         }

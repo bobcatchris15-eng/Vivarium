@@ -4174,6 +4174,43 @@ public static partial class OrganismMeshes
                 }
             }
 
+            // SP11: close the open cap mouth with a rolled rim band joining outer and inner skins
+            for (int j = 0; j < capSides; j++)
+            {
+                int o0 = capStart + capRings * (capSides + 1) + j;
+                int i0 = capStart + faceCount + capRings * (capSides + 1) + j;
+                double am = (j + 0.5) * Math.Tau / capSides;
+                var rn = new Vec3(Math.Cos(am), 0.0, Math.Sin(am));
+                Primitives.TriangleFacing(m, o0, o0 + 1, i0, rn);
+                Primitives.TriangleFacing(m, o0 + 1, i0 + 1, i0, rn);
+            }
+            // SP11: smooth collar sealing the stipe into the veil/cap underside (no hard join)
+            {
+                int cStart = m.VertexCount;
+                const int cSides = 24;
+                var cCol = Primitives.Mix(stalkCol, skirtCol, 0.5);
+                for (int ring = 0; ring < 3; ring++)
+                {
+                    double cr = ring == 0 ? 0.046 : ring == 1 ? 0.075 : 0.112;
+                    double cy = ring == 0 ? -0.015 : ring == 1 ? -0.045 : -0.062;
+                    for (int s = 0; s <= cSides; s++)
+                    {
+                        double th = s * Math.Tau / cSides;
+                        var cp = bell + new Vec3(Math.Cos(th) * cr, cy, Math.Sin(th) * cr);
+                        var cn = new Vec3(Math.Cos(th) * 0.5, -0.8, Math.Sin(th) * 0.5).Normalized();
+                        m.AddVertex(cp, cn, Primitives.Scale(cCol, ring == 2 ? 0.95 : 1.0), 0.95, ring / 2.0, s / (double)cSides, 0, 0);
+                    }
+                }
+                for (int ring = 0; ring < 2; ring++)
+                    for (int s = 0; s < cSides; s++)
+                    {
+                        int q = cStart + ring * (cSides + 1) + s;
+                        int nx = q + cSides + 1;
+                        Primitives.TriangleFacing(m, q, nx, q + 1, -Vec3.Up);
+                        Primitives.TriangleFacing(m, q + 1, nx, nx + 1, -Vec3.Up);
+                    }
+            }
+
             // REQUIRED by PilotFungiOverhaulTests: AddLamellarGills with 36 gills
             AddLamellarGills(m, (fraction, angle) => Pileus(fraction, angle) - Vec3.Up * 0.009, capR,
                 Primitives.Mix(c1, c2, 0.30), 36);
