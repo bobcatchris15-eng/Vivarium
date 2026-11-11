@@ -217,6 +217,14 @@ public static class SpecimenReviewRunner
         if (floraIds.Count == 0 && faunaIds.Count == 0)
             throw new InvalidOperationException("No specimen species ids were given.");
 
+        if (OS.GetCmdlineUserArgs().Contains("--specimen-tris-only"))
+        {
+            WriteTrisCensus(world, directory, floraIds);
+            GD.Print("SPECIMEN_TRIS_OK");
+            main.GetTree().Quit();
+            return;
+        }
+
         var records = new List<SpecimenRec>();
         int fileIndex = 0;
         if (floraIds.Count > 0)
@@ -241,6 +249,50 @@ public static class SpecimenReviewRunner
             JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print("SPECIMEN_REVIEW_COMPLETE " + directory);
         main.GetTree().Quit();
+    }
+
+    /// <summary>Per-species triangle census using the same mesh build path as FloraRenderer.StartSpeciesBuild (no rendering).</summary>
+    private static void WriteTrisCensus(VivariumWorld world, string directory, List<string> floraIds)
+    {
+        var rows = new System.Collections.Concurrent.ConcurrentBag<(string species, string shape, int[] tiers, int morphs, bool coverage, string? note)>();
+        System.Threading.Tasks.Parallel.ForEach(floraIds, id =>
+        {
+            var sp = world.Content.FloraOrThrow(id);
+            bool coverage = sp.Mat != null || sp.Lichen != null;
+            int morphs = Vivarium.Sim.Geometry.FloraGeometryPlacement.MorphCount(sp.Shape);
+            if (coverage)
+            {
+                rows.Add((id, sp.Shape, new[] { -1, -1, -1 }, morphs, true, "coverage-rendered; skipped"));
+                return;
+            }
+            var profile = Vivarium.Game.Render.FloraVisualProfile.Load(sp.Id, sp: sp);
+            ulong speciesSeed = Hash.Fnv1a64("flora.visual." + sp.Id);
+            var maxima = new int[Vivarium.Sim.Geometry.OrganismMeshes.FloraLodTiers];
+            for (int lod = 0; lod < maxima.Length; lod++)
+            {
+                for (int morph = 0; morph < morphs; morph++)
+                {
+                    ulong seed = Rng.Mix(speciesSeed, (ulong)(morph + 1) * 0x9E3779B97F4A7C15UL);
+                    var mesh = sp.Climber != null
+                        ? Vivarium.Sim.Geometry.OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod)
+                        : Vivarium.Sim.Geometry.OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null,
+                            farGillStations: Vivarium.Game.Render.FloraRenderer.DistantGillStations,
+                            farEmberMicroSides: Vivarium.Game.Render.FloraRenderer.DistantEmberMicroSides,
+                            farDewbonnetCapRings: Vivarium.Game.Render.FloraRenderer.DistantDewbonnetCapRings);
+                    maxima[lod] = Math.Max(maxima[lod], mesh.TriangleCount);
+                }
+            }
+            rows.Add((id, sp.Shape, maxima, morphs, false, null));
+        });
+        var sorted = rows.OrderByDescending(r => r.tiers[0]).ThenBy(r => r.species, StringComparer.Ordinal)
+            .Select(r => new
+            {
+                species = r.species, shape = r.shape,
+                tier0_tris_max = r.tiers[0], tier1_tris_max = r.tiers[1], tier2_tris_max = r.tiers[2],
+                morphs = r.morphs, coverage = r.coverage, note = r.note,
+            }).ToList();
+        File.WriteAllText(Path.Combine(directory, "tris.json"),
+            JsonSerializer.Serialize(sorted, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     private static async Task<int> CaptureFaunaSet(Main main, GameSession session, VivariumWorld world, string directory,
