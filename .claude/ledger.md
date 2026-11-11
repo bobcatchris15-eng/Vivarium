@@ -101,6 +101,8 @@ Sequence (one Godot user at a time, serial on main):
    S0 DONE (c6cb9c0): shared counts F5 27, F15 26, F6 21, F13 13, F1 10, F8 8, F2 6, F4 6, F10 5(+F9 1).
 Packet rule (from GR9/SP3): never run `python -` or an empty heredoc; write the script to a file under build/overhaul/<task>/ and run `python <file>`. Leave no python or Godot running.
 Packet rule (from F5): render BEFORE captures with the exact same subset command as AFTER, before editing; baseline2 framing does not match subset runs.
+   Ground track PAUSED 2026-11-11 after GR4/GR3/GR12 reverts and GR10 deferral: remaining ground items need wider scope
+   (shared water include, terrain heights, rock placement) or owner decisions OD-R/OD-W. Resume with a scoped plan.
 Quota guard (checked with get_usage before every dispatch):
 - 5-hour window >= 85%: dispatch nothing new; background timer until reset, then resume.
 - Weekly all-models >= 30% (was 7% at start): stop for the night, ledger + worklog, wait for owner.
