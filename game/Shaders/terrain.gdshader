@@ -116,7 +116,7 @@ void fragment() {
         vnoise(world_pos.xz * 2.1 + vec2(17.1, 3.4)),
         vnoise(world_pos.xz * 2.1 + vec2(4.3, 29.7))
     ) * 2.0 - 1.0;
-    vec2 gravel_uv = (world_pos.xz + gravel_warp * 0.13 - field_rect.xy) / field_rect.zw;
+    vec2 gravel_uv = (world_pos.xz + gravel_warp * 0.20 - field_rect.xy) / field_rect.zw;
     vec4 sub_smooth = smooth_field(sub_tex, fuv);
     vec4 sub = vec4(texture(sub_tex, gravel_uv).r, sub_smooth.g, sub_smooth.b, sub_smooth.a);
     float contact_mask = sub.a;
@@ -153,9 +153,15 @@ void fragment() {
     vec2 uv_z = vec2(world_pos.x, world_pos.y) / tile_scale + drift * 0.36 + macro_shift;
 
     float dampness = smoothstep(0.30, 0.72, moisture);
-    float stored_litter = smooth_field(litter_tex, fuv).r;
-    float ambient_cover = smooth_field(ambient_tex, fuv).r;
-    float colony = smooth_field(cover_tex, fuv).r;
+    // Noise-warped lookups of the coarse cover masks: boundaries wander instead of following cell borders.
+    vec2 cov_warp = (vec2(vnoise(world_pos.xz * 3.1 + vec2(2.9, 41.3)),
+        vnoise(world_pos.xz * 3.1 + vec2(33.7, 8.1))) - 0.5) * 0.22;
+    vec2 fuv_w = (world_pos.xz + cov_warp - field_rect.xy) / field_rect.zw;
+    float edge_n = vnoise(world_pos.xz * 9.0 + vec2(5.3, 19.9)) - 0.5;
+    float ambient_cover = smooth_field(ambient_tex, fuv_w).r + edge_n * 0.25;
+    float litter_raw = smooth_field(litter_tex, fuv_w).r;
+    float stored_litter = clamp(litter_raw + edge_n * 0.30 * smoothstep(0.0, 0.2, litter_raw), 0.0, 1.0);
+    float colony = smooth_field(cover_tex, fuv_w).r + edge_n * 0.20;
 
     // Litter collects preferentially in sheltered contact zones (root collars, logs, rocks)
     float wLeaf = (stored_litter * (1.0 + contact_mask * 0.45)) * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));

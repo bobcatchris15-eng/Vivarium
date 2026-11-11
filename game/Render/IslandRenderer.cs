@@ -503,11 +503,17 @@ public partial class IslandRenderer : Node3D
                     // 1. _subBytes[so + 0] (Gravel/Rock mask): cached prop distance + FBM
                     double minDist = _propGravelSub[sj * subNx + si];
                     int cellD = g.CellAt(p);
-                    if (cellD >= 0 && cellD < g.Count)
                     {
-                        byte cCode = _cachedSubstrate[cellD];
-                        if (cCode == (byte)Substrate.Gravel || cCode == (byte)Substrate.Rock)
-                            minDist = Math.Min(minDist, -0.15);
+                        // Bilinear (cell-centre) blend of the binary gravel/rock cell mask: replaces the
+                        // hard -0.15 step at cell borders with a ramp so outlines round off instead of stair-stepping.
+                        double fx = (p.X - g.OriginX) / g.CellSize - 0.5, fz = (p.Z - g.OriginZ) / g.CellSize - 0.5;
+                        int ci = (int)Math.Floor(fx), cj = (int)Math.Floor(fz);
+                        double tx = fx - ci, tz = fz - cj;
+                        double m00 = GravelCell(g, ci, cj), m10 = GravelCell(g, ci + 1, cj);
+                        double m01 = GravelCell(g, ci, cj + 1), m11 = GravelCell(g, ci + 1, cj + 1);
+                        double m = (m00 * (1 - tx) + m10 * tx) * (1 - tz) + (m01 * (1 - tx) + m11 * tx) * tz;
+                        double s = 0.15 * Math.Clamp(2.0 * (m - 0.42), -1.0, 1.0);
+                        minDist = Math.Min(minDist, -s);
                     }
                     double fbmNoise = _propFbm[sj * subNx + si];
                     double gravSigned = -(minDist + fbmNoise);
@@ -550,6 +556,13 @@ public partial class IslandRenderer : Node3D
             _subTex.Update(_subImage);
             MarkSubWaterFresh();
         }
+    }
+
+    private double GravelCell(Vivarium.Sim.Fields.GridSpec g, int i, int j)
+    {
+        if (i < 0 || j < 0 || i >= g.Nx || j >= g.Nz) return 0.0;
+        byte c = _cachedSubstrate[j * g.Nx + i];
+        return (c == (byte)Substrate.Gravel || c == (byte)Substrate.Rock) ? 1.0 : 0.0;
     }
 
     private void MarkSubWaterFresh()
