@@ -1090,25 +1090,38 @@ public int Quality
                         var pSeg = segs[seg.ParentIndex];
                         var pA = new Vector3((float)pSeg.Position.X, (float)pSeg.Position.Y, (float)pSeg.Position.Z);
                         var pB = new Vector3((float)seg.Position.X, (float)seg.Position.Y, (float)seg.Position.Z);
-                        var segD = pB - pA;
-                        if (segD.Length() < 1e-4f) continue;
+                        if ((pB - pA).Length() < 1e-4f) continue;
                         float cFrac = (float)Math.Sqrt(f.BiomassFraction(vsp));
                         // A climber's stem carries its own radius: it tapers from the base of the plant to the
                         // growing tip and thickens as the plant ages.
                         float cThick = (float)pSeg.Radius * (seg.Senescent ? 0.6f : 1.0f);
                         if (cThick <= 0f) cThick = (0.0028f + 0.0048f * cFrac) * (seg.Senescent ? 0.6f : 1.0f);
                         cThick *= shootRadiusScale;
-                        var cXAxis = segD;
                         var norm = new Vector3((float)seg.Normal.X, (float)seg.Normal.Y, (float)seg.Normal.Z);
                         if (norm.LengthSquared() < 1e-6f) norm = Vector3.Up; else norm = norm.Normalized();
-                        var cZAxis = cXAxis.Cross(norm);
-                        if (cZAxis.LengthSquared() < 1e-6f) cZAxis = cXAxis.Cross(Vector3.Up);
-                        cZAxis = cZAxis.Normalized() * cThick;
-                        var cYAxis = cZAxis.Cross(cXAxis).Normalized() * cThick;
-                        list.T.Add(new Transform3D(new Basis(cXAxis, cYAxis, cZAxis), pA));
-                        list.Tint.Add(f.Tint);
-                        ulong sHash = Rng.Mix(f.Id.Value, (ulong)s);
-                        list.C.Add(new Color((sHash % 1000) / 1000f, (float)(seg.Senescent ? f.Health * 0.4 : f.Health), 0, ((sHash >> 12) % 1000) / 1000f));
+                        // Attached woody stems are subdivided and each point re-projected onto the host bark so the
+                        // tube follows the trunk instead of cutting a straight chord. Runs at mesh rebuild only.
+                        int pieces = 1;
+                        if (seg.Attached && pSeg.Attached && seg.Support == ClimberSurfaceKind.Woody && !seg.HostId.IsNone)
+                            pieces = Math.Clamp((int)Math.Ceiling((pB - pA).Length() / 0.02f), 1, 6);
+                        var prev = pA;
+                        for (int k = 1; k <= pieces; k++)
+                        {
+                            Vector3 cur = pB;
+                            if (k < pieces) cur = ProjectStemPoint(pSeg, seg, (float)k / pieces, pA.Lerp(pB, (float)k / pieces));
+                            var segD = cur - prev;
+                            if (segD.Length() < 1e-5f) { prev = cur; continue; }
+                            var cXAxis = segD;
+                            var cZAxis = cXAxis.Cross(norm);
+                            if (cZAxis.LengthSquared() < 1e-6f) cZAxis = cXAxis.Cross(Vector3.Up);
+                            cZAxis = cZAxis.Normalized() * cThick;
+                            var cYAxis = cZAxis.Cross(cXAxis).Normalized() * cThick;
+                            list.T.Add(new Transform3D(new Basis(cXAxis, cYAxis, cZAxis), prev));
+                            prev = cur;
+                            list.Tint.Add(f.Tint);
+                            ulong sHash = Rng.Mix(f.Id.Value, (ulong)s);
+                            list.C.Add(new Color((sHash % 1000) / 1000f, (float)(seg.Senescent ? f.Health * 0.4 : f.Health), 0, ((sHash >> 12) % 1000) / 1000f));
+                        }
                     }
                     continue;
                 }
@@ -1219,7 +1232,7 @@ public int Quality
     private IReadOnlyList<ClimberSegmentSnapshot> ProjectWoodyClimberSegments(FloraSpeciesDef vineSpecies,
         IReadOnlyList<ClimberSegmentSnapshot> source)
     {
-        if (!IsExpansionClimber(vineSpecies.Shape)) return source;
+        if (vineSpecies.Climber == null) return source;
         ClimberSegmentSnapshot[]? corrected = null;
         for (int i = 0; i < source.Count; i++)
         {
@@ -1240,6 +1253,18 @@ public int Quality
                 segment.Attached, segment.Senescent, segment.Radius, segment.Support, segment.HostId);
         }
         return corrected ?? source;
+    }
+
+    private Vector3 ProjectStemPoint(ClimberSegmentSnapshot a, ClimberSegmentSnapshot b, float t, Vector3 fallback)
+    {
+        var host = CurrentSnapshot != null && CurrentSnapshot.TryGetFlora(b.HostId, out var h) ? h : default;
+        if (host.Id.IsNone) return fallback;
+        var hostSpecies = _w.Content.FloraOrThrow(host.SpeciesId);
+        if (hostSpecies.Woody == null) return fallback;
+        var n = new Vec3(a.Normal.X + (b.Normal.X - a.Normal.X) * t, a.Normal.Y + (b.Normal.Y - a.Normal.Y) * t, a.Normal.Z + (b.Normal.Z - a.Normal.Z) * t);
+        var synth = new ClimberSegmentSnapshot(new Vec3(fallback.X, fallback.Y, fallback.Z), n, b.Forward, b.ParentIndex,
+            true, b.Senescent, b.Radius, b.Support, b.HostId);
+        return TryProjectClimberNodeToHost(host, hostSpecies, synth, out var pos, out _) ? pos : fallback;
     }
 
     private static ClimberSegmentSnapshot[] CopySegments(IReadOnlyList<ClimberSegmentSnapshot> source)

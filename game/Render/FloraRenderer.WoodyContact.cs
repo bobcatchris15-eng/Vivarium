@@ -64,13 +64,30 @@ public partial class FloraRenderer
         // interval covers the measured support/render mismatch while avoiding canopy-wide searches.
         var rayOrigin = inverse * (worldPoint + worldNormal * 0.12f);
         var rayDirection = inverse.Basis * -worldNormal;
-        if (!surface.TryIntersect(rayOrigin, rayDirection, 0.24f, out var localPoint, out var localNormal)) return false;
+        bool fallback = false;
+        Vector3 localPoint, localNormal;
+        if (!surface.TryIntersect(rayOrigin, rayDirection, 0.24f, out localPoint, out localNormal))
+        {
+            // Fallback: cast horizontally toward the host axis (host local Y) from outside, so a node that is
+            // off the bark or whose normal misses still lands on the nearest bark. Bounded so a vine never
+            // jumps to a far tree: the node must lie within ~2.5 host radii of the axis (local units).
+            var lp = inverse * worldPoint;
+            var radial = new Vector3(lp.X, 0, lp.Z);
+            float rl = radial.Length();
+            if (rl > 1.8f || rl < 1e-4f) return false;
+            var outDir = radial / rl;
+            var origin = new Vector3(lp.X, lp.Y, lp.Z) + outDir * (3.0f - rl);
+            if (!surface.TryIntersect(origin, -outDir, 3.0f, out localPoint, out localNormal)) return false;
+            if (localNormal.Dot(outDir) < 0) localNormal = -localNormal;
+            fallback = true;
+        }
 
         var hit = transform * localPoint;
         var normalMatrix = inverse.Basis.Transposed();
         var hitNormal = (normalMatrix * localNormal).Normalized();
         if (hitNormal.LengthSquared() < 1e-8f) return false;
-        if (hitNormal.Dot(worldNormal) < 0) hitNormal = -hitNormal;
+        if (!fallback && hitNormal.Dot(worldNormal) < 0) hitNormal = -hitNormal;
+        if (fallback && (hit - worldPoint).Length() > 0.05f) return false;
         projectedPosition = hit + hitNormal * 0.004f;
         projectedNormal = hitNormal;
         return true;
