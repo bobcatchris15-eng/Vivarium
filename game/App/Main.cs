@@ -44,7 +44,8 @@ public partial class Main : Node3D
         bool visualReview = UserArgs.Contains("--visual-review");
         bool specimenReview = UserArgs.Contains("--specimen-review");
         bool guardianReview = UserArgs.Contains("--guardian-review");
-        bool isReview = visualReview || specimenReview || guardianReview;
+        bool groundReview = UserArgs.Contains("--ground-review");
+        bool isReview = visualReview || specimenReview || guardianReview || groundReview;
         var settings = isReview ? new UserSettings() : UserSettings.Load();
         if (isReview)
         {
@@ -103,7 +104,7 @@ public partial class Main : Node3D
                 if (restored != null) Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + restored.Message);
                 loadingText.Text = "Growing a new island...";
                 var descriptor = content.PresetOrThrow(ArgAfter("--preset") ?? "default").Clone();
-                if (visualReview)
+                if (visualReview || groundReview)
                     descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var reviewSeed) ? reviewSeed : 804584441UL;
                 if (specimenReview)
                     descriptor.Seed = ulong.TryParse(ArgAfter("--specimen-seed"), out var specimenSeed) ? specimenSeed : 804584441UL;
@@ -171,7 +172,7 @@ public partial class Main : Node3D
         finally { loadingLayer.QueueFree(); }
         if (isReview && !worldStartSucceeded)
         {
-            string mode = visualReview ? "VISUAL" : specimenReview ? "SPECIMEN" : "GUARDIAN";
+            string mode = visualReview ? "VISUAL" : specimenReview ? "SPECIMEN" : groundReview ? "GROUND" : "GUARDIAN";
             GD.PrintErr($"{mode}_REVIEW_FAILED world start did not complete.");
             GetTree().Quit(4);
             return;
@@ -189,6 +190,22 @@ public partial class Main : Node3D
             catch (Exception ex)
             {
                 GD.PrintErr("VISUAL_REVIEW_FAILED " + ex);
+                GetTree().Quit(4);
+            }
+            return;
+        }
+        if (groundReview)
+        {
+            try
+            {
+                var groundWorld = Session.World ?? throw new InvalidOperationException("World missing after startup.");
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await GroundReviewRunner.Capture(this, Session, groundWorld, ArgAfter("--ground-review")!);
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr("GROUND_REVIEW_FAILED " + ex);
                 GetTree().Quit(4);
             }
             return;
