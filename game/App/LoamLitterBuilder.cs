@@ -410,7 +410,16 @@ public static class LoamLitterBuilder
         float phase = rng.Range(0f, Mathf.Tau);
         // Cells 0..5 are intact; cells 6..9 are skeletonized/decaying
         int cellIndex = intact ? rng.NextInt(0, 5) : rng.NextInt(6, 9);
-        Color color = new(rng.Range(0.88f, 0.99f), rng.Range(0.88f, 0.98f), rng.Range(0.86f, 0.96f));
+        float jr = rng.Range(0.88f, 0.99f), jg = rng.Range(0.88f, 0.98f), jb = rng.Range(0.86f, 0.96f);
+        // Age class from a position hash (no extra rng draws, placement unchanged): decayed majority, recent, rare fresh.
+        uint hh = unchecked((uint)(center.X * 7919.0 + 31.0) * 73856093u ^ (uint)(center.Z * 7919.0 + 31.0) * 19349663u);
+        hh ^= hh >> 13; hh *= 0x5bd1e995u; hh ^= hh >> 15;
+        float ha = (hh & 0xFFFF) / 65535f, hv = ((hh >> 16) & 0xFFFF) / 65535f;
+        float vv = 0.82f + 0.30f * hv;
+        Color color;
+        if (!intact || ha < 0.58f) color = new(0.60f * vv * jr, 0.52f * vv * jg, 0.44f * vv * jb);      // decayed brown / grey-brown
+        else if (ha < 0.93f) color = new(0.92f * vv * jr, 0.78f * vv * jg, 0.55f * vv * jb);            // recent ochre / tan / russet
+        else color = new(0.72f * vv * jr, 0.82f * vv * jg, 0.46f * vv * jb);                              // rare fresh green-yellow
         color.A = (float)Math.Clamp(world.Fields.Moisture[world.Grid.NearestDomainCell(center)], 0, 1);
         var points = new Vector3[stations * across];
         var normals = new Vector3[points.Length];

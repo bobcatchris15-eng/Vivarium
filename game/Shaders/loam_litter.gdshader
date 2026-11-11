@@ -69,11 +69,16 @@ void fragment() {
             NORMAL_MAP_DEPTH = 0.15;
             SPECULAR = 0.10;
         } else {
-            ALBEDO = scanned_leaf * vertex_tint;
-            ROUGHNESS = clamp(rgh, 0.68, 0.96);
+            // Desaturate the scanned orange toward the terrain litter's value range; per-leaf age tint rides in vertex_tint.
+            float lum = dot(scanned_leaf, vec3(0.299, 0.587, 0.114));
+            vec3 aged = mix(vec3(lum), scanned_leaf, 0.42);
+            ALBEDO = aged * vertex_tint * 0.80;
+            // Darker rim / contact AO where the blade edge meets the floor.
+            ALBEDO *= mix(0.68, 1.0, smoothstep(0.5, 0.95, opacity));
+            ROUGHNESS = clamp(rgh + 0.10, 0.80, 1.0);
             NORMAL_MAP = nrm;
-            NORMAL_MAP_DEPTH = 0.30;
-            SPECULAR = 0.18;
+            NORMAL_MAP_DEPTH = 0.75;
+            SPECULAR = 0.07;
         }
 
         // Back-lit margins: thinner leaf tissue glows warm when the sun is behind.
