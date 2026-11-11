@@ -146,6 +146,7 @@ public static partial class OrganismMeshes
             NewFloraMarkOrgan(part, v0, part.VertexCount - v0);
         }
 
+        NaAStemTail(part, new Vec3(0, 0.004, 0), stalkCol);
         int petioles = NewFloraCount(part, 8 + rng.NextInt(3)); // Wave 9: 8-10 unmistakable trifoliate rafts
         if (juvenile) petioles = Math.Max(5, Math.Min(petioles, 6)); // 5+ rafts read even when young
         double spin = rng.Range(0, Math.Tau);

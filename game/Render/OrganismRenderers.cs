@@ -825,26 +825,39 @@ public int Quality
                 r = h * sp.RadiusAtMax / sp.Height;
             var pos = new Vector3((float)f.X, placement.GroundY, (float)f.Z);
             bool followsWaterDepth = sp.Shape is "pondstars" or "bogfringe" or "deepquill" or "mirepocket";
+            double cullH = h;
             if (sp.Shape is "floatleaf" or "glasslily_pad")
             {
-                // Pads are authored directly in metres (not the unit-XZ-radius-1 convention every other flora
-                // shape uses), so fixing the horizontal scale to 1 keeps pad size constant regardless of the
-                // individual's growth radius or local water depth. Only the vertical scale follows depth: the
-                // petiole/flower stalks are built to reach unit Y = 1, so scaling Y by (surface - ground) + a
-                // small proud offset lands every pad just above the true water surface instead of at a fixed
-                // plant height (or, worse, fractionally submerged and hidden by the water surface shader).
+                // Pads are authored directly in metres with the water surface at unit Y = 1 and the bed
+                // rhizome ~1 m below it. The scale stays 1:1:1 (no depth-driven Y stretch, which used to
+                // squash flowers and camber). The instance is dropped so its authored surface lands on the
+                // true water surface; the over-long stem simply continues underground in shallower water.
                 r = 1.0;
+                h = 1.0;
                 double surface = _w.Water.SurfaceAt(f.Position);
-                double rise = double.IsNaN(surface) ? 0.05 : Math.Max(0.02, surface - pos.Y);
-                h = rise + 0.003;
+                if (double.IsNaN(surface)) surface = pos.Y + 0.05;
+                pos.Y = (float)(surface - 1.0 + 0.003);
+                cullH = 1.5;
             }
             else if (followsWaterDepth)
             {
+                // Uniform scale: depth never stretches the head. Vertical scale follows the horizontal one at the
+                // species' authored aspect. The mesh's film level (unit Y = film) is pinned to the water surface
+                // and a long bare stem tail below the crown reaches the bed (hidden when the water is shallower).
+                double sc = sp.RadiusAtMax > 1e-6 ? r / sp.RadiusAtMax : 1.0;
+                h = sp.Height * sc;
+                double film = sp.Shape switch { "pondstars" => 1.01, "bogfringe" => 1.08, "mirepocket" => 0.95, _ => 0.9 };
                 double surface = _w.Water.SurfaceAt(f.Position);
-                double rise = double.IsFinite(surface) ? Math.Max(0.005, surface - pos.Y) : sp.Height;
-                h = rise + 0.003;
+                if (double.IsFinite(surface))
+                {
+                    double y = surface - film * h + 0.002;
+                    // Deepquill roots on the bed; it only floats off it when the water is deeper than its plume.
+                    if (sp.Shape == "deepquill") y = Math.Max(pos.Y, y);
+                    pos.Y = (float)y;
+                }
+                cullH = h * 1.7;
             }
-            if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
+            if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)cullH)) continue;
             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
             float yaw = (hash % 6283) / 1000f;
             // Mats conform to their substrate. Upright vascular plants respond to the actual local sky-openness

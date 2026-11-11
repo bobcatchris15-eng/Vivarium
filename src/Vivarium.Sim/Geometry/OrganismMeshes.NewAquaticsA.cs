@@ -27,6 +27,16 @@ public static partial class OrganismMeshes
         return (p, tan);
     }
 
+    // Bare stem tail hanging below a floating crown. Renderers pin the water film to a fixed mesh height instead of
+    // stretching the plant, so this stalk reaches whatever bed lies below; underground it is hidden by the terrain.
+    private static void NaAStemTail(MeshData part, Vec3 top, double[] col)
+    {
+        const double len = 2.5;
+        Primitives.Tube(part, new[] { top, top - Vec3.Up * (len * 0.5), top - Vec3.Up * len },
+            new[] { 0.0026, 0.0024, 0.0020 }, 5,
+            (i, v) => (col, 1, i * 0.5, v, 0, 0));
+    }
+
     // Moves a just-built organ (vertices startVertex..end) to a new anchor point.
     private static void NaAOffset(MeshData part, int startVertex, Vec3 offset)
     {
@@ -83,6 +93,7 @@ public static partial class OrganismMeshes
         var leafBase = Primitives.Scale(Primitives.Mix(c1, c2, 0.03), 1.20); // saturated plume green
         var leafTip = Primitives.Scale(Primitives.Mix(c1, c2, 0.30), 1.20); // only a mild lighten at the tips
 
+        NaAStemTail(part, new Vec3(0, 0.002, 0), stemCol);
         int stems = NewFloraCount(part, (juvenile ? 3 : 7) + rng.NextInt(juvenile ? 2 : 3)); // Wave 9: 7-9 dense adult plumes
         for (int s = 0; s < stems; s++)
         {
@@ -177,6 +188,7 @@ public static partial class OrganismMeshes
         var bladderBody = Primitives.Scale(Primitives.Mix(Primitives.Mix(c1, c2, 0.68), new[] { 0.95, 0.93, 0.66 }, 0.75), 1.40);
         var bladderMouth = Primitives.Scale(Primitives.Mix(Primitives.Mix(c1, c2, 0.30), new[] { 0.98, 0.88, 0.42 }, 0.65), 1.40);
 
+        NaAStemTail(part, new Vec3(0, 0.002, 0), stemCol);
         int stemCount = NewFloraCount(part, 3 + rng.NextInt(3)); // 3-5 tangling stems
         int totalBladders = juvenile ? 0 : 28 + rng.NextInt(9); // Wave 9: 28-36 traps total across the whole net
         int bladdersPerStem = stemCount > 0 ? totalBladders / stemCount : 0;
