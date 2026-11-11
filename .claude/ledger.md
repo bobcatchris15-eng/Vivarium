@@ -46,6 +46,7 @@ quality, overhaul UI/UX. Evidence (renders, measurements) required for every cla
 | pc1 | build/overhaul/pc1 | PASS | 1 | Perf gate after F5,F1,SP1,SP1b,SP2 vs baseline2 (2 runs each): GPU 34.2 vs 35.2 ms (-2.8%), fps 27.6 vs 26.8, p95 53.5 vs 60.0, prims 7.37M vs 7.15M (+3.1%), draws 714 vs 705, VRAM +43 MB, alloc/frame unchanged 7.8 MB. Within gate |
 | GR1 | game/Shaders/terrain.gdshader | DONE | 1 | PASS. Litter 2-lookup noise-mask anti-tiling, undisplaced UV, slope fade (wn.y 0.62-0.90); +2 taps worst case. Improvement subtle; no regressions. Bigger defect found: GR9 stair-stepped hard-edged material patches -> next ground packet |
 | GR9 | game/Render/IslandRenderer.cs, game/Shaders/terrain.gdshader | DONE-PARTIAL | 1 | Gravel edges now organic (bilinear cell mask), cover/ambient/litter masks domain-warped (+3 vnoise, no new taps). Remaining: some green moss/ambient patches still polygonal (likely CoverageRenderer.cs or loam_ground.gdshader), dark mound spots are separate meshes. Agent left a stray python.exe (malformed heredoc); it was denied permission to kill it, so owner was told rather than the orchestrator killing it |
+| SP3 | game/Render/CoverageRenderer.cs, game/Shaders/coverage_mat.gdshader, 4 flora JSON | DONE | 1 | Accepted: four mats now distinct, natural palettes, soft edges, no neon/black blobs (orchestrator viewed macro before/after). Est tris per full 32x32 tile: floodlace 13k->21k, bogglass 13k->19k, pearl 26k->25k, velvetweave 21k->14k (not measured; next perf gate). Open: capstar_moss is an instanced plant (OrganismRenderers.cs 379/627), not a mat -> later packet; velvetweave reads plain/khaki at distance; floodlace fronds low-poly cutouts. Another stray python REPL left (empty 'python -' heredoc) |
 | a5 | docs/overhaul/audit-ui-ux.md | DONE | 1 | top: U1 Tab-hide swallows clicks, U2 no Esc/blocked keys, U3 bad autosave silently replaced, U20 per-frame window relayout, U6 scale slider font-only, U7 invalid-placement reason hidden. Owner decisions: U5 U6 U13-U18 U23 U24 |
 
 ## Unverified assumptions
@@ -82,6 +83,7 @@ Sequence (one Godot user at a time, serial on main):
    terrain.gdshader packets (GR1, GR3, GR7) strictly serial. GR2 palette proceeds under D7 (lifelike target); GR6 cosmetic part
    only (no added rocks = no sim change); GR8 sun-direction unification deferred to owner (lighting contract).
    S0 DONE (c6cb9c0): shared counts F5 27, F15 26, F6 21, F13 13, F1 10, F8 8, F2 6, F4 6, F10 5(+F9 1).
+Packet rule (from GR9/SP3): never run `python -` or an empty heredoc; write the script to a file under build/overhaul/<task>/ and run `python <file>`. Leave no python or Godot running.
 Packet rule (from F5): render BEFORE captures with the exact same subset command as AFTER, before editing; baseline2 framing does not match subset runs.
 Quota guard (checked with get_usage before every dispatch):
 - 5-hour window >= 85%: dispatch nothing new; background timer until reset, then resume.
