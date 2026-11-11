@@ -3,7 +3,7 @@
 // perturbation and a groundwater clearcoat let the displaced 3D wall read as damp geology rather than paint.
 // UV = (distance along perimeter, depth below surface); UV2 = (layer index, depth within layer).
 shader_type spatial;
-render_mode diffuse_burley, specular_schlick_ggx;
+render_mode diffuse_burley, specular_schlick_ggx, ambient_light_disabled;
 
 #include "res://Shaders/surface.gdshaderinc"
 
@@ -81,25 +81,27 @@ void fragment() {
     float cam_dist = distance(CAMERA_POSITION_WORLD, world_pos);
     // This parameter is shared by both vertices at each horizon: layer i at depth 1
     // and layer i+1 at depth 0 both resolve to the same material state.
-    float layerPosition = layer + inLayer;
-    vec3 layerCol = geologic_tint(layer);
-    float layerCountMax = float(max(layer_count - 1, 0));
-    float contactNoise = vnoise(vec2(along * 0.18, depth * 0.34) + 12.4);
-    float contactWidth = mix(0.18, 0.30, contactNoise);
-    if (layer > 0.5) {
-        vec3 upperContact = mix(geologic_tint(layer - 1.0), layerCol, 0.5);
-        layerCol = mix(upperContact, layerCol, smoothstep(0.0, contactWidth, inLayer));
-    }
-    if (layer < layerCountMax) {
-        vec3 lowerContact = mix(layerCol, geologic_tint(layer + 1.0), 0.5);
-        layerCol = mix(layerCol, lowerContact, smoothstep(1.0 - contactWidth, 1.0, inLayer));
-    }
+    vec2 face = vec2(along, depth);
+    // Horizon boundaries are warped in the shader as well (function of face position only, so both vertex
+    // copies at a seam agree): uneven, never straight.
+    float hWarp = (vnoise(face * vec2(0.55, 1.9) + 3.1) - 0.5) * 0.46
+                + (vnoise(face * vec2(1.7, 4.3) + 9.7) - 0.5) * 0.16;
+    float layerPosition = layer + inLayer + hWarp * smoothstep(0.02, 0.2, depth);
+    // Soil profile palette: dark organic O/A, brown mineral subsoil, tan gravelly C, grey-brown rock.
+    vec3 hzO = vec3(0.045, 0.030, 0.020);
+    vec3 hzB = vec3(0.26, 0.170, 0.105);
+    vec3 hzC = vec3(0.34, 0.27, 0.19);
+    vec3 hzR = vec3(0.30, 0.285, 0.265);
+    vec3 layerCol = mix(hzO, hzB, smoothstep(0.62, 1.25, layerPosition));
+    layerCol = mix(layerCol, hzC, smoothstep(1.55, 2.30, layerPosition));
+    layerCol = mix(layerCol, hzR, smoothstep(2.75, 3.35, layerPosition));
+    layerCol *= mix(vec3(1.0), geologic_tint(layer) / max(lum(geologic_tint(layer)), 0.02), 0.12);
     vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 
     // Material weights: topsoil/subsoil share the soil scan, the C horizon uses gravel, and the
     // bedrock uses fractured rock. The transitions sit on the contacts, at the same layerPosition
     // value for both duplicated horizon vertices, so materials never pop across a seam.
-    float wRock = smoothstep(2.80, 3.30, layerPosition);
+    float wRock = smoothstep(2.75, 3.35, layerPosition);
     float wGravel = smoothstep(1.78, 2.22, layerPosition) * (1.0 - wRock);
     float wSoil = clamp(1.0 - wGravel - wRock, 0.0, 1.0);
 
@@ -128,7 +130,13 @@ void fragment() {
 
     vec4 soil = vec4(texture(soil_col, pomSoil).rgb, texture(soil_rgh, pomSoil).r);
     vec4 gravel = vec4(texture(gravel_col, pomGravel).rgb, texture(gravel_rgh, pomGravel).r);
-    vec4 rock = vec4(texture(rock_col, pomRock).rgb, texture(rock_rgh, pomRock).r);
+    // Rock/gravel: second lookup at another scale and rotation, blended by low-frequency noise (no visible tile).
+    float untileM = smoothstep(0.35, 0.65, vnoise(face * 0.8 + 41.0));
+    vec2 pomRock2 = rot2(pomRock * 0.77 + vec2(0.37, 0.61), 1.1);
+    vec2 pomGravel2 = rot2(pomGravel * 0.83 + vec2(0.21, 0.52), 0.7);
+    gravel = mix(gravel, vec4(texture(gravel_col, pomGravel2).rgb, texture(gravel_rgh, pomGravel2).r), untileM);
+    vec4 rock = vec4(mix(texture(rock_col, pomRock).rgb, texture(rock_col, pomRock2).rgb, untileM),
+                     mix(texture(rock_rgh, pomRock).r, texture(rock_rgh, pomRock2).r, untileM));
     vec4 t = soil * wSoil + gravel * wGravel + rock * wRock;
     float matAo = texture(soil_ao, pomSoil).r * wSoil
                 + texture(gravel_ao, pomGravel).r * wGravel
@@ -139,11 +147,9 @@ void fragment() {
                   + lum(textureLod(gravel_col, vec2(0.5), 10.0).rgb) * wGravel
                   + lum(textureLod(rock_col, vec2(0.5), 10.0).rgb) * wRock, 0.02);
     vec3 detail = t.rgb / avg;
-    layerCol = mix(vec3(lum(layerCol)), layerCol, 0.6);             // content colours are illustrative; tone them down
-    vec3 col = layerCol * mix(vec3(lum(detail)), detail, 0.45);
+    vec3 col = layerCol * mix(vec3(lum(detail)), detail, 0.12);
 
     // Fine sediment changes: warped, diffuse laminae add variation without drawing parallel stripes.
-    vec2 face = vec2(along, depth);
     vec2 broadWarp = vec2(vnoise(face * vec2(0.11, 0.28) + 2.3),
                           vnoise(face * vec2(0.13, 0.31) + 8.1)) - 0.5;
     float laminaA = vnoise(face * vec2(0.19, 1.35) + broadWarp * 1.7 + layerPosition * 3.7);
@@ -152,7 +158,7 @@ void fragment() {
     float broadDeposit = vnoise(face * vec2(0.31, 0.78) + broadWarp * 1.8 + layerPosition * 6.3);
     float mineralPatch = vnoise(face * vec2(0.62, 1.16) - broadWarp * 1.1 + 23.0);
     col *= 1.0 + banding_strength * 0.16 * lamina * min(layerPosition + 0.5, 2.0);
-    col *= mix(0.78, 1.18, smoothstep(0.20, 0.82, broadDeposit));
+    col *= mix(0.86, 1.12, smoothstep(0.20, 0.82, broadDeposit));
     col *= mix(0.92, 1.08, mineralPatch);
 
     // Gravelly clasts and sediment lenses are sparse, rounded inclusions rather than a noisy overlay.
@@ -161,16 +167,19 @@ void fragment() {
                                              vnoise(lensP * 0.31 + 17.0)) * 0.72);
     float lens = smoothstep(0.57, 0.77, lensShape) * smoothstep(0.18, 0.42, depth);
     lens *= smoothstep(0.8, 1.8, layerPosition + 0.15);
-    vec4 pebbleCells = moss_cells(face * vec2(1.55, 2.0), 0.18, 0.16);
+    vec4 pebbleCells = moss_cells(face * vec2(4.2, 5.2), 0.16, 0.14);
     float pebbleEdgeNoise = vnoise(pebbleCells.yz * 3.4 + floor(lensP) * 1.73 + 8.0);
-    float pebble = smoothstep(0.23, 0.80, pebbleCells.x + (pebbleEdgeNoise - 0.5) * 0.42)
-                 * step(0.30, fract(pebbleCells.w * 53.1))
-                 * smoothstep(0.24, 0.66, depth)
-                 * smoothstep(0.7, 1.5, layerPosition + 0.15);
-    vec3 clastTone = mix(vec3(0.16, 0.15, 0.13), vec3(0.34, 0.30, 0.24),
+    float pebble = smoothstep(0.45, 0.62, pebbleCells.x + (pebbleEdgeNoise - 0.5) * 0.25)
+                 * step(0.55, fract(pebbleCells.w * 53.1))
+                 * smoothstep(0.10, 0.30, depth)
+                 * smoothstep(0.35, 0.9, layerPosition);
+    vec3 clastTone = mix(vec3(0.13, 0.105, 0.08), vec3(0.30, 0.24, 0.17),
                          vnoise(lensP * 0.42 + 31.0));
     col = mix(col, clastTone * layerCol * 1.7, lens * 0.68);
-    col = mix(col, clastTone, pebble * 0.35);
+    col = mix(col, clastTone * (0.6 + 0.9 * fract(pebbleCells.w * 7.3)) * mix(0.55, 1.15, smoothstep(0.45, 0.95, pebbleCells.x) * (0.8 + 0.4 * pebbleCells.y)) * mix(0.8, 1.2, vnoise(face * 55.0)), pebble * 0.9);
+    // Whimsy: faint mineral glints in the stones.
+    float glint = step(0.93, hash21(floor(face * 90.0) + 3.0)) * pebble * smoothstep(0.5, 0.9, vnoise(face * 14.0));
+    col += vec3(0.55, 0.62, 0.7) * glint * 0.6;
 
     // Rootlets intrude from the surface in irregular branching-looking filaments; their coverage fades
     // quickly with depth and varies by face position instead of repeating as a decorative stripe.
@@ -193,7 +202,7 @@ void fragment() {
         rootMask = max(rootMask, max(trunk, branch));
     }
     rootMask *= 0.55 + 0.45 * vnoise(face * vec2(0.34, 0.72) + 27.0);
-    col = mix(col, col * vec3(0.36, 0.37, 0.27), rootMask * 0.62);
+    col = mix(col, mix(col * 0.5, vec3(0.30, 0.20, 0.11), 0.6), rootMask * 0.75);
 
     // A few narrow, branching weathering seams show through the deeper clay and rock.
     vec2 crackP = face * vec2(0.37, 1.62);
@@ -226,7 +235,10 @@ void fragment() {
 
     // A restrained organic-rich skin just below the living surface; low-frequency variation avoids a noisy trim.
     float rootOrganic = 0.88 + 0.12 * vnoise(vec2(along * 0.8, depth * 4.0) + 9.0);
-    col = mix(rim_color * rootOrganic, col, smoothstep(0.0, 0.038, depth));
+    vec3 litter = mix(vec3(0.20, 0.10, 0.04), vec3(0.09, 0.07, 0.03), vnoise(vec2(along * 9.0, depth * 60.0) + 5.0));
+    float litterEdge = 0.020 + 0.016 * vnoise(vec2(along * 3.1, 2.2));
+    col = mix(litter * rootOrganic, col, smoothstep(litterEdge * 0.6, litterEdge * 1.5, depth));
+    col = mix(rim_color * 0.6 * rootOrganic, col, smoothstep(0.0, 0.006, depth));
 
     // Turf overhang: soft contact shadow under the living crown along the top
     // cut rim, broken up so it never reads as an inked border.
@@ -240,15 +252,15 @@ void fragment() {
     float seep = 1.0 - smoothstep(tableLine - 0.12, tableLine + 0.02, world_pos.y);
     float streaks = vnoise(vec2(along * 6.5, max(water_table - world_pos.y, 0.0) * 0.9 + 3.0));
     seep *= mix(0.45, 1.0, smoothstep(0.22, 0.82, streaks));
-    col *= mix(vec3(1.0), vec3(0.48, 0.47, 0.44), seep * 0.72);
+    col *= mix(vec3(1.0), vec3(0.48, 0.47, 0.44), seep * 0.5);
 
     float rough = clamp(mix(t.a, 0.94, max(lens * 0.42, rootMask * 0.14)), 0.55, 1.0);
     rough = mix(rough, 0.16, seep * 0.9);
 
     ALBEDO = col;
-    EMISSION = vec3(0.0);
+    EMISSION = col * vec3(0.30, 0.31, 0.33) * mix(0.6, 1.0, matAo); // wall ambient supplied here: probe/ambient left a hard black box on this face
     SPECULAR = 0.5;
-    CLEARCOAT = 0.65 * seep;
+    CLEARCOAT = 0.3 * seep;
     CLEARCOAT_ROUGHNESS = mix(0.28, 0.05, seep);
     AO = clamp(matAo * mix(0.55, 1.0, pomShadow) * mix(0.78, 1.0, rim_shadow), 0.0, 1.0);
     AO_LIGHT_AFFECT = 0.30;
