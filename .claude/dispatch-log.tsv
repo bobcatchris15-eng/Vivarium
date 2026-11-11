@@ -23,3 +23,4 @@ ts	task_id	clanker	model	n_targets	wall_s	turns	attempts	outcome	returned_bytes
 2026-11-10	SP3	impl-worker	sonnet-medium	6	1559	72	1	PASS	3100
 2026-11-10	SP4	impl-worker	sonnet-medium	2	1851	67	2	BLOCKED-REVERTED	3000
 2026-11-10	GR4	impl-worker	sonnet-medium	2	998	23	1	REVERTED-UNVERIFIABLE	2200
+2026-11-10	SP5	impl-worker	sonnet-medium	3	753	34	1	PASS	2300
