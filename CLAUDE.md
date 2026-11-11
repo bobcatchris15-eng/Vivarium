@@ -11,7 +11,7 @@ Fast:    `dotnet build Vivarium.sln --nologo -v minimal` (≈12 s) then
          `<godot> --headless --path game -- --boot-test` → log must contain `VIVARIUM_BOOT_OK` and `invariants=0`
 Full:    Fast, plus the Probe for the touched area
 Probe:   `<godot> --path game -- --visual-review <ABS_DIR> [--seed N] [--preset NAME]`
-         `<godot> --path game -- --specimen-review <ABS_DIR> [--specimen-species ID] [--specimen-seed N]`
+         `<godot> --path game -- --specimen-review <ABS_DIR> [--specimen-species ID] [--specimen-seed N]` (add --specimen-tris-only for a triangle census)
          `<godot> --path game -- --guardian-review <ABS_DIR> [--guardian-species ID] [--guardian-populated]`
          `<godot> --path game -- --ground-review <ABS_DIR> [--seed N] [--ground-bare]`
          Windowed only (needs the GPU). One Godot window at a time. Pass ABSOLUTE dirs.

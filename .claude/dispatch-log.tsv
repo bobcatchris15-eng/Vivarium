@@ -27,3 +27,4 @@ ts	task_id	clanker	model	n_targets	wall_s	turns	attempts	outcome	returned_bytes
 2026-11-10	SP6	impl-worker	sonnet-medium	2	915	37	1	PASS	2400
 2026-11-10	GR2	impl-worker	sonnet-medium	2	332	10	1	PASS	1700
 2026-11-10	SP7	impl-worker	sonnet-medium	3	2372	56	2	PASS	2900
+2026-11-10	T0	impl-worker	sonnet-low	1	900	30	1	PASS	1700

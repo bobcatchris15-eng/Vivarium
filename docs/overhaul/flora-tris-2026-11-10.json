@@ -1,0 +1,1252 @@
+[
+  {
+    "species": "dewbonnet",
+    "shape": "mushroom_cluster",
+    "tier0_tris_max": 122646,
+    "tier1_tris_max": 90643,
+    "tier2_tris_max": 24595,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "embercrown",
+    "shape": "shrub_embercrown",
+    "tier0_tris_max": 114348,
+    "tier1_tris_max": 47952,
+    "tier2_tris_max": 16918,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "hallowsting",
+    "shape": "hallowsting",
+    "tier0_tris_max": 91362,
+    "tier1_tris_max": 23498,
+    "tier2_tris_max": 11045,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "fenfoam",
+    "shape": "fenfoam",
+    "tier0_tris_max": 90794,
+    "tier1_tris_max": 30906,
+    "tier2_tris_max": 7556,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "veilblade",
+    "shape": "veilblade_curtain",
+    "tier0_tris_max": 87818,
+    "tier1_tris_max": 34696,
+    "tier2_tris_max": 12438,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "shadebell",
+    "shape": "shrub_shadebell",
+    "tier0_tris_max": 82869,
+    "tier1_tris_max": 31053,
+    "tier2_tris_max": 10706,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "hookthicket",
+    "shape": "hookthicket_brake",
+    "tier0_tris_max": 73649,
+    "tier1_tris_max": 27989,
+    "tier2_tris_max": 9835,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "glassrush",
+    "shape": "reed",
+    "tier0_tris_max": 73441,
+    "tier1_tris_max": 30800,
+    "tier2_tris_max": 16069,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "thornmantle",
+    "shape": "thornmantle",
+    "tier0_tris_max": 70718,
+    "tier1_tris_max": 28185,
+    "tier2_tris_max": 9735,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "vaultfern",
+    "shape": "microcanopy_vaultfern",
+    "tier0_tris_max": 67914,
+    "tier1_tris_max": 27097,
+    "tier2_tris_max": 8028,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "heddlelace",
+    "shape": "heddlelace",
+    "tier0_tris_max": 66520,
+    "tier1_tris_max": 31824,
+    "tier2_tris_max": 9862,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "splitcrown",
+    "shape": "microcanopy_splitcrown",
+    "tier0_tris_max": 65824,
+    "tier1_tris_max": 22039,
+    "tier2_tris_max": 6228,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "greywatch",
+    "shape": "greywatch",
+    "tier0_tris_max": 64766,
+    "tier1_tris_max": 20186,
+    "tier2_tris_max": 8323,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "silverfelt",
+    "shape": "silverfelt",
+    "tier0_tris_max": 63384,
+    "tier1_tris_max": 20832,
+    "tier2_tris_max": 12250,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "witchberry",
+    "shape": "witchberry",
+    "tier0_tris_max": 62663,
+    "tier1_tris_max": 28960,
+    "tier2_tris_max": 26009,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "fenforge",
+    "shape": "fenforge",
+    "tier0_tris_max": 62280,
+    "tier1_tris_max": 25633,
+    "tier2_tris_max": 16943,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "veilfern",
+    "shape": "fern",
+    "tier0_tris_max": 61537,
+    "tier1_tris_max": 24641,
+    "tier2_tris_max": 8631,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "glassfinger",
+    "shape": "iceplant",
+    "tier0_tris_max": 61239,
+    "tier1_tris_max": 26112,
+    "tier2_tris_max": 11141,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "moonbark",
+    "shape": "moonbark",
+    "tier0_tris_max": 59500,
+    "tier1_tris_max": 26700,
+    "tier2_tris_max": 24730,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "kinkcane",
+    "shape": "kinkcane_brake",
+    "tier0_tris_max": 58850,
+    "tier1_tris_max": 22558,
+    "tier2_tris_max": 7367,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "pitcher_plant",
+    "shape": "pitcher_rosette",
+    "tier0_tris_max": 57902,
+    "tier1_tris_max": 22757,
+    "tier2_tris_max": 8110,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "lacemantle",
+    "shape": "microcanopy_lacemantle",
+    "tier0_tris_max": 57590,
+    "tier1_tris_max": 15244,
+    "tier2_tris_max": 2196,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "bonecup",
+    "shape": "bonecup_fungus",
+    "tier0_tris_max": 56860,
+    "tier1_tris_max": 20670,
+    "tier2_tris_max": 4790,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "cragparasol",
+    "shape": "microcanopy_cragparasol",
+    "tier0_tris_max": 56636,
+    "tier1_tris_max": 14780,
+    "tier2_tris_max": 3876,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "plumegrass",
+    "shape": "pampas",
+    "tier0_tris_max": 55843,
+    "tier1_tris_max": 22405,
+    "tier2_tris_max": 7674,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "nutglade",
+    "shape": "nutglade",
+    "tier0_tris_max": 55820,
+    "tier1_tris_max": 22914,
+    "tier2_tris_max": 9190,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "lanternbrush",
+    "shape": "shrub_lanternbrush",
+    "tier0_tris_max": 55512,
+    "tier1_tris_max": 21523,
+    "tier2_tris_max": 7980,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "deepquill",
+    "shape": "deepquill",
+    "tier0_tris_max": 54438,
+    "tier1_tris_max": 19086,
+    "tier2_tris_max": 5538,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "blackneedle",
+    "shape": "blackneedle_thistle",
+    "tier0_tris_max": 54401,
+    "tier1_tris_max": 17673,
+    "tier2_tris_max": 9727,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "glowbriar",
+    "shape": "shrub_glowbriar",
+    "tier0_tris_max": 53752,
+    "tier1_tris_max": 21641,
+    "tier2_tris_max": 7449,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "trifold",
+    "shape": "trifoliate",
+    "tier0_tris_max": 51922,
+    "tier1_tris_max": 20496,
+    "tier2_tris_max": 8232,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "brightknot",
+    "shape": "brightknot",
+    "tier0_tris_max": 51210,
+    "tier1_tris_max": 14472,
+    "tier2_tris_max": 4320,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "marrowbloom",
+    "shape": "marrowbloom_stem",
+    "tier0_tris_max": 48096,
+    "tier1_tris_max": 18294,
+    "tier2_tris_max": 5004,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "mirespire",
+    "shape": "mirespire",
+    "tier0_tris_max": 47834,
+    "tier1_tris_max": 18828,
+    "tier2_tris_max": 11398,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "miremyrtle",
+    "shape": "miremyrtle",
+    "tier0_tris_max": 46770,
+    "tier1_tris_max": 20197,
+    "tier2_tris_max": 9263,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "shiverleaf",
+    "shape": "shiverleaf",
+    "tier0_tris_max": 46572,
+    "tier1_tris_max": 18431,
+    "tier2_tris_max": 6924,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "emberbracken",
+    "shape": "emberbracken",
+    "tier0_tris_max": 45306,
+    "tier1_tris_max": 13962,
+    "tier2_tris_max": 2338,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "hushclover",
+    "shape": "hushclover",
+    "tier0_tris_max": 42456,
+    "tier1_tris_max": 16453,
+    "tier2_tris_max": 5379,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "brooklace",
+    "shape": "roundleaf",
+    "tier0_tris_max": 42040,
+    "tier1_tris_max": 16556,
+    "tier2_tris_max": 5774,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "banksorrow",
+    "shape": "banksorrow",
+    "tier0_tris_max": 41908,
+    "tier1_tris_max": 16761,
+    "tier2_tris_max": 6945,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "silverweed",
+    "shape": "submerged_whorl",
+    "tier0_tris_max": 39348,
+    "tier1_tris_max": 15158,
+    "tier2_tris_max": 5698,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "hollowcrown",
+    "shape": "hollowcrown_tree",
+    "tier0_tris_max": 39346,
+    "tier1_tris_max": 16279,
+    "tier2_tris_max": 5647,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "cinderberry",
+    "shape": "cinderberry",
+    "tier0_tris_max": 38154,
+    "tier1_tris_max": 15873,
+    "tier2_tris_max": 5134,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "snaptrap",
+    "shape": "snaptrap_rosette",
+    "tier0_tris_max": 37474,
+    "tier1_tris_max": 18665,
+    "tier2_tris_max": 4150,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "swanfrond",
+    "shape": "swanfrond",
+    "tier0_tris_max": 37124,
+    "tier1_tris_max": 10788,
+    "tier2_tris_max": 1918,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "widowspire",
+    "shape": "widowspire",
+    "tier0_tris_max": 37112,
+    "tier1_tris_max": 16366,
+    "tier2_tris_max": 5756,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "cragset",
+    "shape": "cragset",
+    "tier0_tris_max": 37068,
+    "tier1_tris_max": 11592,
+    "tier2_tris_max": 2706,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "mooncoin",
+    "shape": "roundleaf",
+    "tier0_tris_max": 36019,
+    "tier1_tris_max": 14358,
+    "tier2_tris_max": 5047,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "coalspike",
+    "shape": "coalspike_cattail",
+    "tier0_tris_max": 35695,
+    "tier1_tris_max": 13871,
+    "tier2_tris_max": 4592,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "bannerreed",
+    "shape": "bannerreed",
+    "tier0_tris_max": 32990,
+    "tier1_tris_max": 11718,
+    "tier2_tris_max": 2988,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "burlmantle",
+    "shape": "burlmantle",
+    "tier0_tris_max": 32374,
+    "tier1_tris_max": 14340,
+    "tier2_tris_max": 4704,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "ghostbonnet",
+    "shape": "mushroom_cluster",
+    "tier0_tris_max": 31938,
+    "tier1_tris_max": 12421,
+    "tier2_tris_max": 3927,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "duskbristle",
+    "shape": "duskbristle",
+    "tier0_tris_max": 31280,
+    "tier1_tris_max": 12137,
+    "tier2_tris_max": 4676,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "starbulb",
+    "shape": "starbulb_umbel",
+    "tier0_tris_max": 30914,
+    "tier1_tris_max": 12156,
+    "tier2_tris_max": 3920,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "rainshield",
+    "shape": "microcanopy_rainshield",
+    "tier0_tris_max": 30476,
+    "tier1_tris_max": 12310,
+    "tier2_tris_max": 2811,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "fenbead",
+    "shape": "pairedleaf",
+    "tier0_tris_max": 28440,
+    "tier1_tris_max": 11526,
+    "tier2_tris_max": 4012,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "cloudtuft",
+    "shape": "cloudtuft",
+    "tier0_tris_max": 27208,
+    "tier1_tris_max": 10795,
+    "tier2_tris_max": 3676,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "lanternsedge",
+    "shape": "reed",
+    "tier0_tris_max": 26890,
+    "tier1_tris_max": 10816,
+    "tier2_tris_max": 3519,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "bogfringe",
+    "shape": "bogfringe",
+    "tier0_tris_max": 24782,
+    "tier1_tris_max": 8575,
+    "tier2_tris_max": 2314,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "burrflag",
+    "shape": "burrflag",
+    "tier0_tris_max": 23512,
+    "tier1_tris_max": 7721,
+    "tier2_tris_max": 2830,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "quillsedge",
+    "shape": "quillsedge",
+    "tier0_tris_max": 23026,
+    "tier1_tris_max": 9348,
+    "tier2_tris_max": 3090,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "sootband",
+    "shape": "sootband",
+    "tier0_tris_max": 22590,
+    "tier1_tris_max": 9184,
+    "tier2_tris_max": 3277,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "mistviolet",
+    "shape": "mistviolet",
+    "tier0_tris_max": 21997,
+    "tier1_tris_max": 8521,
+    "tier2_tris_max": 2811,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "carrion_bell",
+    "shape": "carrion_bell",
+    "tier0_tris_max": 21976,
+    "tier1_tris_max": 13366,
+    "tier2_tris_max": 13366,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "paddlerib",
+    "shape": "paddlerib",
+    "tier0_tris_max": 21507,
+    "tier1_tris_max": 8813,
+    "tier2_tris_max": 2924,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "glasslily",
+    "shape": "glasslily_pad",
+    "tier0_tris_max": 20656,
+    "tier1_tris_max": 7089,
+    "tier2_tris_max": 2757,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "sceptrefern",
+    "shape": "sceptrefern",
+    "tier0_tris_max": 18230,
+    "tier1_tris_max": 5648,
+    "tier2_tris_max": 1266,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "ringreed",
+    "shape": "reed",
+    "tier0_tris_max": 16540,
+    "tier1_tris_max": 6603,
+    "tier2_tris_max": 3584,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "barbarrow",
+    "shape": "barbarrow",
+    "tier0_tris_max": 15730,
+    "tier1_tris_max": 3970,
+    "tier2_tris_max": 1391,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "starveil",
+    "shape": "starveil",
+    "tier0_tris_max": 15432,
+    "tier1_tris_max": 5992,
+    "tier2_tris_max": 2108,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "marshkettle",
+    "shape": "marshkettle",
+    "tier0_tris_max": 12871,
+    "tier1_tris_max": 4726,
+    "tier2_tris_max": 1570,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "butterglint",
+    "shape": "butterglint",
+    "tier0_tris_max": 12140,
+    "tier1_tris_max": 4661,
+    "tier2_tris_max": 1850,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "sunstone_rosette",
+    "shape": "succulent",
+    "tier0_tris_max": 11658,
+    "tier1_tris_max": 5247,
+    "tier2_tris_max": 1857,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "tidebell",
+    "shape": "pairedleaf",
+    "tier0_tris_max": 11424,
+    "tier1_tris_max": 5195,
+    "tier2_tris_max": 4325,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "mirepocket",
+    "shape": "mirepocket",
+    "tier0_tris_max": 11130,
+    "tier1_tris_max": 4800,
+    "tier2_tris_max": 2105,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "frosttussock",
+    "shape": "tussock",
+    "tier0_tris_max": 8938,
+    "tier1_tris_max": 3740,
+    "tier2_tris_max": 1374,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "tankbloom",
+    "shape": "tankbloom_bromeliad",
+    "tier0_tris_max": 8389,
+    "tier1_tris_max": 3366,
+    "tier2_tris_max": 1179,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "reekhorn",
+    "shape": "reekhorn",
+    "tier0_tris_max": 7575,
+    "tier1_tris_max": 2551,
+    "tier2_tris_max": 1050,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "glass_antlers",
+    "shape": "glass_antlers",
+    "tier0_tris_max": 6520,
+    "tier1_tris_max": 2584,
+    "tier2_tris_max": 816,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "ashwire",
+    "shape": "ashwire",
+    "tier0_tris_max": 6332,
+    "tier1_tris_max": 2531,
+    "tier2_tris_max": 947,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "moonfern",
+    "shape": "fern",
+    "tier0_tris_max": 6046,
+    "tier1_tris_max": 1867,
+    "tier2_tris_max": 1807,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "rain_jelly",
+    "shape": "rain_jelly",
+    "tier0_tris_max": 5248,
+    "tier1_tris_max": 4020,
+    "tier2_tris_max": 4020,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "candlecoral",
+    "shape": "candlecoral",
+    "tier0_tris_max": 5136,
+    "tier1_tris_max": 1560,
+    "tier2_tris_max": 515,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "mirrorstrap_fern",
+    "shape": "mirrorstrap_fern",
+    "tier0_tris_max": 4878,
+    "tier1_tris_max": 1538,
+    "tier2_tris_max": 579,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "pondstars",
+    "shape": "pondstars",
+    "tier0_tris_max": 3990,
+    "tier1_tris_max": 1554,
+    "tier2_tris_max": 488,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "cradlecup",
+    "shape": "cradlecup",
+    "tier0_tris_max": 3773,
+    "tier1_tris_max": 1230,
+    "tier2_tris_max": 555,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "emberfan_fungus",
+    "shape": "bracket",
+    "tier0_tris_max": 3770,
+    "tier1_tris_max": 3290,
+    "tier2_tris_max": 3290,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "capstar_moss",
+    "shape": "capstar_moss",
+    "tier0_tris_max": 3682,
+    "tier1_tris_max": 1482,
+    "tier2_tris_max": 639,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "coinrunner",
+    "shape": "creeper",
+    "tier0_tris_max": 3538,
+    "tier1_tris_max": 1469,
+    "tier2_tris_max": 526,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "ashcomb",
+    "shape": "ashcomb",
+    "tier0_tris_max": 3471,
+    "tier1_tris_max": 3433,
+    "tier2_tris_max": 3433,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "starmoss",
+    "shape": "carpet",
+    "tier0_tris_max": 3230,
+    "tier1_tris_max": 1273,
+    "tier2_tris_max": 454,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "mirrorleaf",
+    "shape": "floatleaf",
+    "tier0_tris_max": 2924,
+    "tier1_tris_max": 1090,
+    "tier2_tris_max": 366,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "fencomb",
+    "shape": "milfoil",
+    "tier0_tris_max": 2880,
+    "tier1_tris_max": 1150,
+    "tier2_tris_max": 402,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "streamribbon",
+    "shape": "ribbonweed",
+    "tier0_tris_max": 2716,
+    "tier1_tris_max": 1455,
+    "tier2_tris_max": 312,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "embercup",
+    "shape": "embercup_moss",
+    "tier0_tris_max": 2698,
+    "tier1_tris_max": 1084,
+    "tier2_tris_max": 417,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "siltstars",
+    "shape": "carpet",
+    "tier0_tris_max": 2622,
+    "tier1_tris_max": 1035,
+    "tier2_tris_max": 356,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "trumpetbind",
+    "shape": "trumpetbind",
+    "tier0_tris_max": 2292,
+    "tier1_tris_max": 1113,
+    "tier2_tris_max": 373,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "bitterbine",
+    "shape": "bitterbine",
+    "tier0_tris_max": 1866,
+    "tier1_tris_max": 746,
+    "tier2_tris_max": 240,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "starsplit",
+    "shape": "starsplit",
+    "tier0_tris_max": 1800,
+    "tier1_tris_max": 678,
+    "tier2_tris_max": 164,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "fenhook",
+    "shape": "vine_fenhook",
+    "tier0_tris_max": 1764,
+    "tier1_tris_max": 684,
+    "tier2_tris_max": 225,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "shadewrap",
+    "shape": "shadewrap",
+    "tier0_tris_max": 1464,
+    "tier1_tris_max": 585,
+    "tier2_tris_max": 130,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "clinglace",
+    "shape": "vine_clinglace",
+    "tier0_tris_max": 1386,
+    "tier1_tris_max": 517,
+    "tier2_tris_max": 180,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "prismstar",
+    "shape": "herb",
+    "tier0_tris_max": 778,
+    "tier1_tris_max": 341,
+    "tier2_tris_max": 139,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "barrowbole",
+    "shape": "barrowbole",
+    "tier0_tris_max": 708,
+    "tier1_tris_max": 278,
+    "tier2_tris_max": 120,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "duskpuff",
+    "shape": "duskpuff",
+    "tier0_tris_max": 592,
+    "tier1_tris_max": 280,
+    "tier2_tris_max": 280,
+    "morphs": 5,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "spiralvine",
+    "shape": "vine_spiralvine",
+    "tier0_tris_max": 498,
+    "tier1_tris_max": 185,
+    "tier2_tris_max": 87,
+    "morphs": 12,
+    "coverage": false,
+    "note": null
+  },
+  {
+    "species": "antlerlace_lichen",
+    "shape": "fruticose",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "ashfingers_lichen",
+    "shape": "ashfingers_lichen",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "blue_sundew",
+    "shape": "sundew_mat",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "bogglass_moss",
+    "shape": "capitula",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "embercrust_lichen",
+    "shape": "crust",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "floodlace_moss",
+    "shape": "carpet",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "hagshair_lichen",
+    "shape": "hagshair_lichen",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "moonshell_lichen",
+    "shape": "moonshell_lichen",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "pearl_cushion_moss",
+    "shape": "cushion",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "pinequilt_moss",
+    "shape": "pinequilt_moss",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "quillfeather_moss",
+    "shape": "quillfeather_moss",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "ruffle_lichen",
+    "shape": "foliose",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "rustbellow_moss",
+    "shape": "rustbellow_moss",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "silkgleam_moss",
+    "shape": "silkgleam_moss",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "slickmantle",
+    "shape": "slickmantle",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "stoneknot_moss",
+    "shape": "stoneknot_moss",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "sunscald_lichen",
+    "shape": "sunscald_lichen",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "velvetweave_moss",
+    "shape": "carpet",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  },
+  {
+    "species": "wispthread_moss",
+    "shape": "wispthread_moss",
+    "tier0_tris_max": -1,
+    "tier1_tris_max": -1,
+    "tier2_tris_max": -1,
+    "morphs": 5,
+    "coverage": true,
+    "note": "coverage-rendered; skipped"
+  }
+]
