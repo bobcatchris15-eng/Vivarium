@@ -39,7 +39,7 @@ public static partial class OrganismMeshes
             case "foliose":
                 RuffleLichen(m, rng, seed, c1, c2);
                 break;
-            case "creeper": Coinrunner(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
+            case "creeper": Coinrunner7(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "reed":
                 if (sp.Id == "ringreed") Ringreed(m, rng, seed, c1, c2);
                 else if (sp.Id == "lanternsedge") LanternsedgeGeometry.Build(m, rng, juvenile);
@@ -47,6 +47,7 @@ public static partial class OrganismMeshes
                 break;
             case "herb":
             {
+                if (sp.Id == "prismstar") { Prismstar7(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break; }
                 // irregular basal crown of kernel-built lanceolate leaves (cambered, midrib-folded, drooping tips,
                 // random overlapping angles/lengths, always GREEN regardless of species tint) around several
                 // leaning flower stalks, each carrying a kernel-staged cambered cup coloured with the species
@@ -177,7 +178,7 @@ public static partial class OrganismMeshes
             case "microcanopy_lacemantle": Lacemantle(m, rng, seed, c1, c2, juvenile); break;
             case "microcanopy_cragparasol": Cragparasol(m, rng, seed, c1, c2, juvenile); break;
             case "ribbonweed": case "streamribbon": Streamribbon(m, rng, seed, c1, c2, juvenile); break;
-            case "milfoil": case "fencomb": Fencomb(m, rng, seed, c1, c2, juvenile); break;
+            case "milfoil": case "fencomb": Fencomb7(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             // The 2026-10-21 new-flora set. Each carries its own anatomy; see docs/flora-new-set.md.
             case "glasslily_pad": Glasslily(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
             case "submerged_whorl": Silverweed(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height); break;
@@ -196,7 +197,7 @@ public static partial class OrganismMeshes
                 TreeSplitTrunk(m, rng, seed, c1, c2, juvenile);
                 break;
             // 2026-11 new-flora set (moss, fungi, ferns, graminoids, forbs, aquatics, succulents, shrubs, trees, vines).
-            case "capstar_moss": CapstarMoss(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
+            case "capstar_moss": CapstarMoss7(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "duskpuff": Duskpuff(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "starsplit": Starsplit(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
             case "reekhorn": Reekhorn(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); break;
