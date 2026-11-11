@@ -72,3 +72,4 @@ Species-by-species pass using the matrix; starts after Batch 1 so shared junctio
 | R3 | Move guardian–plant contact into the flora vertex shader? |
 | P11 | Drop unused 4K texture sets and unbound EXR sky maps from the repo/export? |
 | U5, U6, U13–U18, U23, U24 | Confirm-on-discard, UI scaling model, pause menu, catalogue portraits, stats shown, rebinding, look/font/icons |
+| OD-R | Rocks are small and about half-buried by sim placement (`PropPlacement.cs:179`), so they barely read in any view. Raise and/or enlarge them (sim-side placement change; affects contact/collision)? Rock surface work (GR4/GR6) waits on this. |
