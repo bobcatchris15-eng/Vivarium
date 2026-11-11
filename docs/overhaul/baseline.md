@@ -76,3 +76,24 @@ Captures in `build/overhaul/baseline2/` (manifest: `MANIFEST.md`). Flora 375 PNG
 Soak, 150 s after 90 s warmup, two runs: 26.4 / 27.2 fps, frame p50 36.1 / 35.8 ms, p95 62.6 / 57.4 ms, GPU frame 35.7 / 34.8 ms,
 705 draw calls, 7.15M primitives, VRAM 4.46 GB, managed alloc 7.80 / 7.58 MB per frame, GC gen0/1/2 235/218/82 and 238/223/86.
 This is the comparison point for all later batches.
+
+## Per-renderer GPU attribution m1b (2026-11-11, after species batches SP1-SP13)
+Method: 90 s soak after 60 s warmup per run; a control (nothing hidden) run between every hidden run; each delta is vs the
+mean of its two adjacent controls. Controls: 32.53-32.95 ms GPU (spread <= 0.37 ms), so drift is negligible.
+`build/overhaul/m1b/RESULTS.md`. Hidden = Visible=false (renderer still processes; CPU unchanged).
+
+| hidden | GPU ms saved | primitives | draws |
+|---|---|---|---|
+| pilot tree | 4.92 | 0.82M | 8 |
+| water + water surface | 3.16 | 1.55M | 85 |
+| island (terrain + cut face) | 2.58 | 0.20M | 4 |
+| flora | 2.30 | 0.68M | 243 |
+| soil detail | 1.62 | 0.47M | 73 |
+| fauna + guardian | 1.38 | 0.25M | 114 |
+| props (rocks/logs) | 1.25 | 1.06M | 44 |
+| ambient ground cover | 0.20 | 0.05M | 2 |
+| coverage mats | 0.04 | ~0 | 0 |
+
+Sum of attributable renderers ~17.5 ms of ~32.7 ms; the remaining ~15 ms is fixed per-frame cost (lighting, shadows,
+SSAO/fog/GI post stack, sky) -> owner item P12 is the largest single lever. Best geometry targets: the single pilot tree
+(4.9 ms for one object), water (3.2 ms; 1.55M prims for a small pond), props (1.06M prims for small, mostly buried rocks).
