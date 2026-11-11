@@ -16,3 +16,4 @@ ts	task_id	clanker	model	n_targets	wall_s	turns	attempts	outcome	returned_bytes
 2026-11-10	F6	impl-worker	sonnet-medium	3	780	38	2	FAIL-NOVISIBLE	2600
 2026-11-10	SP1	impl-worker	sonnet-medium	2	1258	64	1	PASS-PARTIAL	2900
 2026-11-10	SP1b	impl-worker	sonnet-medium	2	1765	46	2	PASS-PARTIAL	2400
+2026-11-10	Gc0	impl-worker	sonnet-medium	2	1240	46	1	PASS	2300
