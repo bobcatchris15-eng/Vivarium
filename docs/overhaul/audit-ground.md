@@ -114,3 +114,6 @@ terrain have polygonal, cell-aligned stepped outlines with no transition (visibl
 e.g. `litter_flat_mid_bare`, `slope_close_bare`). These dominate the ground's look more than texture tiling. Likely a
 per-cell splat/coverage mask sampled without filtering or edge noise. Fix: soft, noise-warped boundaries; bilinear or
 smoothed mask sampling. Ranked first among remaining GR items.
+**GR10. Stair-stepped water shoreline.** The pond/water surface edge follows the cell grid in hard right-angle steps
+(`--ground-review` `litter_flat_close`, GR2 captures). Needs a smooth shoreline (water mesh or shader alpha/foam edge
+from a filtered depth field). Orchestrator note 2026-11-10.
