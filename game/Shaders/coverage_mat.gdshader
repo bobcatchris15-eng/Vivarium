@@ -65,9 +65,9 @@ float voronoi_cracks(vec2 p) {
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    sundew_surface = float(UV2.y < -4.5);
+    sundew_surface = float(UV2.y < -4.9 && UV2.y > -5.1);
     sundew_dew = UV2.x;
-    mat_style = (UV2.y < -0.25 && UV2.y > -4.0) ? floor(-UV2.y * 2.0 + 0.5) : 0.0;
+    mat_style = ((UV2.y < -0.25 && UV2.y > -4.75) || (UV2.y < -5.75 && UV2.y > -8.0)) ? floor(-UV2.y * 2.0 + 0.5) : 0.0;
 }
 
 void fragment() {
@@ -225,13 +225,92 @@ void fragment() {
             float d = detail_lod;
             float lum_base = dot(base, vec3(0.2126, 0.7152, 0.0722));
             ao = 0.9;
-            if (style > 4.5) {
+            if (style > 4.5 && style < 5.5) {
                 // Plain tissue for blades, domes and setae: soft fine grain, translucent warm backlight.
                 c *= 0.88 + 0.24 * vnoise(wp * 140.0);
                 ao = 1.0;
                 rough = 0.62;
                 RIM = 0.16; RIM_TINT = 0.5;
                 BACKLIGHT = base * vec3(0.22, 0.30, 0.06);
+            } else if (style > 5.5) {
+                // SP6 mosses: subtle low-frequency shading only; the shoots and cushions are real geometry.
+                float lo = vnoise(wp * 6.0 + 1.7);
+                float mid = vnoise(wp * 23.0 + 5.3);
+                float fine = vnoise(wp * 95.0);
+                float stream = fbm(vec2(dot(wp, grainDir) * 12.0, dot(wp, grainOrth) * 110.0));
+                float ndv = clamp(dot(wn, normalize(to_cam)), 0.0, 1.0);
+                float sheen = pow(1.0 - ndv, 2.5);
+                if (style < 6.5) {
+                    // Pinequilt: dry needle-litter quilt. Soft 3 cm pillows, warm brown seams, olive-khaki nap.
+                    vec4 vc = vor_cell(wp / 0.032 + 2.3);
+                    float pillow = 1.0 - smoothstep(0.0, 0.8, vc.x);
+                    float seam = smoothstep(0.55, 1.0, vc.x);
+                    c *= (0.82 + 0.30 * lo) * mix(0.86, 1.06, pillow) * (0.90 + 0.18 * fine);
+                    c = mix(c, c * vec3(0.70, 0.52, 0.38), seam * 0.50 * max(d, 0.35));
+                    c = mix(c, c * vec3(1.15, 0.98, 0.70), smoothstep(0.55, 0.8, mid) * 0.35);
+                    bump += vec3(-vc.z, 0.0, -vc.w) * 0.45 * pillow * d;
+                    ao = mix(0.70, 1.0, 1.0 - seam * 0.8);
+                    rough = 0.90;
+                    RIM = 0.12; RIM_TINT = 0.6;
+                    BACKLIGHT = base * vec3(0.12, 0.12, 0.03);
+                } else if (style < 7.5) {
+                    // Quillfeather: sage feather felt. Fine combed streaks, cool/warm green drift.
+                    c *= (0.78 + 0.40 * stream) * (0.88 + 0.22 * lo);
+                    c = mix(c, c * vec3(0.80, 1.00, 0.92), smoothstep(0.35, 0.7, mid) * 0.5);
+                    c = mix(c, c * vec3(1.15, 1.05, 0.70), smoothstep(0.6, 0.85, lo) * 0.45);
+                    ao = 0.90;
+                    rough = 0.86;
+                    RIM = 0.18 + 0.15 * sheen; RIM_TINT = 0.7;
+                    BACKLIGHT = base * vec3(0.10, 0.20, 0.06);
+                    bump += vec3(stream - 0.5, 0.0, vnoise(wp * 80.0) - 0.5) * 0.25 * d;
+                } else if (style < 8.5) {
+                    // Rustbellow: billowing rust-brown turf, umber hollows, olive-green living fringe.
+                    float billow = vnoise(wp * 11.0 + 9.0);
+                    float hollow = smoothstep(0.30, 0.70, vnoise(wp * 5.0 + 3.0));
+                    c *= (0.70 + 0.50 * billow) * (0.88 + 0.24 * mid);
+                    c = mix(c, c * vec3(0.55, 0.40, 0.32), hollow * 0.55);
+                    c = mix(c, vec3(0.20, 0.27, 0.10) * (0.8 + 0.4 * mid), smoothstep(0.62, 0.82, lo) * 0.55);
+                    c *= 0.90 + 0.20 * fine;
+                    bump += vec3(vnoise(wp * 11.0 + 9.4) - billow, 0.0, vnoise(wp * 11.0 + 9.8) - billow) * 1.4 * d;
+                    ao = mix(0.62, 1.0, billow);
+                    rough = 0.80;
+                    RIM = 0.14; RIM_TINT = 0.45;
+                    BACKLIGHT = base * vec3(0.30, 0.12, 0.03);
+                } else if (style < 9.5) {
+                    // Silkgleam: silky gold-olive, fine combed lustre with strong grazing sheen.
+                    float comb = fbm(vec2(dot(wp, grainDir) * 4.0, dot(wp, grainOrth) * 220.0));
+                    c *= (0.74 + 0.44 * comb) * (0.90 + 0.20 * lo);
+                    c = mix(c, c * vec3(0.72, 0.85, 0.50), smoothstep(0.55, 0.85, mid) * 0.45);
+                    c += base * vec3(0.50, 0.38, 0.10) * sheen * (0.4 + 0.6 * comb);
+                    ao = 0.92;
+                    rough = 0.42;
+                    RIM = 0.30 + 0.30 * sheen; RIM_TINT = 0.8;
+                    BACKLIGHT = base * vec3(0.22, 0.18, 0.04);
+                    bump += vec3(comb - 0.5, 0.0, vnoise(wp * 140.0) - 0.5) * 0.20 * d;
+                } else if (style < 12.5) {
+                    // Stoneknot: tight grey-green knots on stone; irregular warped cells, stone showing in seams.
+                    vec2 wq = wp + 0.006 * vec2(vnoise(wp * 40.0), vnoise(wp * 40.0 + 4.0));
+                    vec4 vc = vor_cell(wq / 0.014 + 6.1);
+                    float knot = 1.0 - smoothstep(0.0, 0.8, vc.x);
+                    float seam = smoothstep(0.55, 0.98, vc.x);
+                    c *= (0.80 + 0.30 * lo) * mix(0.72, 1.10, knot) * (0.88 + 0.24 * vc.y);
+                    c = mix(c, vec3(0.28, 0.29, 0.26), seam * 0.65 * max(d, 0.3));
+                    c = mix(c, c * vec3(1.10, 1.12, 0.95) + 0.03, smoothstep(0.6, 0.85, mid) * 0.35);
+                    bump += vec3(-vc.z, 0.0, -vc.w) * 0.8 * knot * d;
+                    ao = mix(0.55, 1.0, 1.0 - seam * 0.9);
+                    rough = 0.92;
+                    RIM = 0.10; RIM_TINT = 0.3;
+                    BACKLIGHT = base * vec3(0.04, 0.08, 0.03);
+                } else {
+                    // Slickmantle: wet olive mantle. Smooth glossy film, gentle mottling, lobes carry the relief.
+                    c *= (0.80 + 0.32 * lo) * (0.92 + 0.14 * mid);
+                    c = mix(c, c * vec3(0.78, 0.92, 0.70), smoothstep(0.5, 0.8, vnoise(wp * 17.0 + 2.0)) * 0.5);
+                    ao = 0.94;
+                    rough = 0.28 + 0.2 * mid;
+                    RIM = 0.16; RIM_TINT = 0.4;
+                    BACKLIGHT = base * vec3(0.16, 0.22, 0.05);
+                    bump += vec3(vnoise(wp * 30.0) - 0.5, 0.0, vnoise(wp * 30.0 + 7.0) - 0.5) * 0.4 * d;
+                }
             } else if (style < 1.5) {
                 // Floodlace: lacy wet sheet. Flow-aligned warped streams, fine holes that read as dark water
                 // between strands, glossy film.

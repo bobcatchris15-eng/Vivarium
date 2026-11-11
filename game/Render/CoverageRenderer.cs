@@ -299,7 +299,13 @@ public partial class CoverageRenderer : Node3D
         // (b = 0.90). The double SaturateClamp above crushes these three species'
         // palettes back to dark, so pin their sheet colours to the bright targets.
         // BuildTileMesh lerps toward Color1 at high biomass, so Color1 is the sheet.
-        if (speciesId == "slickmantle") { c1 = new Color(0.42f, 0.62f, 0.24f); c2 = new Color(0.55f, 0.72f, 0.32f); }
+        // SP6: natural moss palettes pinned after the saturation pass (it pushes these toward neon).
+        if (speciesId == "slickmantle") { c1 = new Color(0.34f, 0.50f, 0.20f); c2 = new Color(0.46f, 0.60f, 0.26f); }
+        else if (speciesId == "pinequilt_moss") { c1 = new Color(0.27f, 0.31f, 0.12f); c2 = new Color(0.44f, 0.46f, 0.20f); }
+        else if (speciesId == "quillfeather_moss") { c1 = new Color(0.22f, 0.38f, 0.20f); c2 = new Color(0.42f, 0.58f, 0.32f); }
+        else if (speciesId == "rustbellow_moss") { c1 = new Color(0.34f, 0.15f, 0.08f); c2 = new Color(0.50f, 0.24f, 0.11f); }
+        else if (speciesId == "silkgleam_moss") { c1 = new Color(0.46f, 0.42f, 0.14f); c2 = new Color(0.68f, 0.60f, 0.26f); }
+        else if (speciesId == "stoneknot_moss") { c1 = new Color(0.20f, 0.28f, 0.17f); c2 = new Color(0.33f, 0.41f, 0.25f); }
         else if (speciesId == "sunscald_lichen") { c1 = new Color(0.88f, 0.56f, 0.10f); c2 = new Color(0.95f, 0.66f, 0.16f); }
         else if (speciesId == "moonshell_lichen") { c1 = new Color(0.78f, 0.88f, 0.96f); c2 = new Color(0.85f, 0.93f, 0.99f); }
     }
@@ -1122,7 +1128,7 @@ public partial class CoverageRenderer : Node3D
             double v2 = cz / (double)edge;
             // Styled SP3 mats tag their sheet with a negative UV2.y (-0.5 * style) so the shader can pick a
             // per-species surface; it also keeps the sheet from being treated as an elevated shoot.
-            if (layer.Id == CoverageLayerId.Mat && cornerStyle[cx, cz] > 0) v2 = -0.5 * cornerStyle[cx, cz];
+            if (layer.Id == CoverageLayerId.Mat && cornerStyle[cx, cz] > 0) v2 = cornerStyle[cx, cz] >= 12 ? -0.5 * (cornerStyle[cx, cz] - 12) - 6.0 : -0.5 * cornerStyle[cx, cz];
             idx =md.AddVertex(p, gn, c.R, c.G, c.B, s.CornerAlpha[cx, cz] * SlopeFade(gn), wx, wz, u2, v2);
             s.CornerIdx[cx, cz] = idx;
             return idx;
@@ -1348,7 +1354,7 @@ public partial class CoverageRenderer : Node3D
                 case CoverageFloraType.Thallus:
                     // Every cell gets lobes (3-4 per call); the offset calls add density.
                     {
-                        AppendThallusLobes(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                        if (((hash >> 24) & 255) < 190) AppendThallusLobes(md, foot, normal, shootColor, sp.Color2, hash, vigour);
                         if (((hash >> 16) & 255) < 28)
                             AppendThallusLobes(md, foot + new Vec3((((hash >> 4) & 15) / 15.0 - 0.5) * 0.008, 0, (((hash >> 12) & 15) / 15.0 - 0.5) * 0.008), normal, shootColor, sp.Color2, hash ^ 0x1B873593, vigour);
                         if (((hash >> 8) & 255) < 18)
@@ -1423,6 +1429,13 @@ public partial class CoverageRenderer : Node3D
         "pearl_cushion_moss" => 2,
         "velvetweave_moss" => 3,
         "bogglass_moss" => 4,
+        // SP6 (shader styles 6-9, 12, 13; 10-11 are skipped because UV2.y -5 is the sundew tag)
+        "pinequilt_moss" => 6,
+        "quillfeather_moss" => 7,
+        "rustbellow_moss" => 8,
+        "silkgleam_moss" => 9,
+        "stoneknot_moss" => 12,
+        "slickmantle" => 13,
         _ => 0,
     };
 
@@ -1457,9 +1470,9 @@ public partial class CoverageRenderer : Node3D
 
     /// <summary>Squat 7-sided cap (21 tris): dark rim, pale crown.</summary>
     private static void MossDome(MeshData mesh, Vec3 centre, Vec3 up, Vec3 tu, Vec3 tv, double radius, double height,
-        double[] cRim, double[] cMid, double[] cTop, double phase)
+        double[] cRim, double[] cMid, double[] cTop, double phase, int sides = 7)
     {
-        const int N = 7;
+        int N = sides;
         int tip = V(mesh, centre + up * height, up, cTop, 1);
         var mids = new int[N];
         var rims = new int[N];
@@ -1971,9 +1984,9 @@ public partial class CoverageRenderer : Node3D
         // Wave-8: olive-sage prostrate feather mat, base (0.42,0.62,0.32) to
         // tips (0.68,0.82,0.48). Harness no longer grows grass over bare
         // terrain, so fronds lie flat on the sheet instead of clearing turf.
-        var baseCol = new[] { 0.42, 0.62, 0.32 };
-        var axisCol = new[] { 0.38, 0.56, 0.29 };
-        var leafCol = new[] { 0.68, 0.82, 0.48 };
+        var baseCol = new[] { 0.26, 0.41, 0.21 };
+        var axisCol = new[] { 0.23, 0.35, 0.18 };
+        var leafCol = new[] { 0.49, 0.63, 0.35 };
 
         int frondCount = 2; // sparse rooted fans; neighboring nuclei overlap the patch
         for (int f = 0; f < frondCount; f++)
@@ -1991,8 +2004,8 @@ public partial class CoverageRenderer : Node3D
             var basePos = foot + radial * (f * 0.003);
             var mid = basePos + radial * (length * 0.5) + normal * (0.004 + ((h >> 12) & 7) * 0.00040); // 4-7 mm arch
             var tipPos = basePos + radial * length + normal * 0.003;
-            Primitives.Tube(mesh, new[] { basePos, mid, tipPos }, new[] { 0.00070, 0.00052, 0.00030 }, 6,
-                (i, vv) => (axisCol, 1, 0, 0, 0, 0));
+            // Flat ribbon rachis (3 tris) instead of a 6-sided tube.
+            MossBlade(mesh, basePos, normal, radial, length, 0.0016, 0.004 + ((h >> 12) & 7) * 0.0004, axisCol, axisCol);
 
             int pairs = 6 + (int)(((h >> 16) & 255) % 3); // 6..8 paired pinnae
             for (int p = 1; p <= pairs; p++)
@@ -2008,9 +2021,9 @@ public partial class CoverageRenderer : Node3D
                     if (pinDir.LengthSq < 1e-8) pinDir = lateral * sSign;
                     var leafSide = new Vec3(-pinDir.Z, 0, pinDir.X) * 0.0010;
                     var pinTip = node + pinDir * pinLen + normal * (0.0008 + ((hb >> 6) & 3) * 0.00020);
-                    int v0 = mesh.AddVertex(node - leafSide, normal, baseCol, 1);
-                    int v1 = mesh.AddVertex(node + leafSide, normal, baseCol, 1);
-                    int vTip = mesh.AddVertex(pinTip, normal, leafCol, 1);
+                    int v0 = mesh.AddVertex(node - leafSide, normal, baseCol, 1, 0, 0, 0, -2.5);
+                    int v1 = mesh.AddVertex(node + leafSide, normal, baseCol, 1, 0, 0, 0, -2.5);
+                    int vTip = mesh.AddVertex(pinTip, normal, leafCol, 1, 0, 0, 0, -2.5);
                     Primitives.TriangleFacing(mesh, v0, v1, vTip, normal);
                 }
             }
@@ -2019,44 +2032,36 @@ public partial class CoverageRenderer : Node3D
 
     private static void AppendTuftedShoots(MeshData mesh, Vec3 foot, Vec3 normal, Color color, Color color2, uint hash, float vigour)
     {
+        // SP6 pinequilt: upright pine-needle shoots (single triangles, no stem tubes), olive base to khaki tips.
         float v = Math.Clamp(vigour, 1.0f, 1.25f);
-        Vec3 right = Vec3.Up.Cross(normal);
-        if (right.LengthSq < 1e-8) right = new Vec3(1, 0, 0).Cross(normal);
-        if (right.LengthSq < 1e-8) right = new Vec3(0, 0, 1);
-        right = right.Normalized();
-        Vec3 fwd = normal.Cross(right).Normalized();
-
-        // Wave-8: warm khaki-olive (0.45,0.50,0.24) base to (0.68,0.66,0.34) tips.
-        var deepCol = new[] { 0.45, 0.50, 0.24 };
-        var tipCol = new[] { 0.68, 0.66, 0.34 };
-
-        int tuftCount = 2 + (int)(((hash >> 2) & 255) % 2); // 2-3 separated rooted tufts per cell
+        MossBasis(normal, out var up, out var right, out var fwd);
+        var deepCol = new[] { 0.28, 0.30, 0.12 };
+        var tipCol = new[] { 0.55, 0.52, 0.25 };
+        var rustTip = new[] { 0.52, 0.38, 0.20 };
+        int tuftCount = 2 + (int)(((hash >> 2) & 255) % 2);
         for (int tIdx = 0; tIdx < tuftCount; tIdx++)
         {
             uint h = ReliefHash(unchecked((int)hash) + tIdx * 47, tIdx * 31 + 9);
             double a0 = (h & 1023) / 1023.0 * Math.PI * 2;
-            double offR = ((h >> 8) & 255) / 255.0 * 0.006;
+            double offR = ((h >> 8) & 255) / 255.0 * 0.007;
             var basePos = foot + (right * Math.Cos(a0) + fwd * Math.Sin(a0)) * offR;
-            double height = (0.008 + ((h >> 10) & 255) / 255.0 * 0.004) * v; // 8-12 mm tufts; litter remains visible
-
-            Primitives.Tube(mesh, new[] { basePos, basePos + normal * (height * 0.4) },
-                new[] { 0.00065, 0.00048 }, 4, (i, vv) => (deepCol, 1, 0, 0, 0, 0));
-
-            int leafCount = 6 + (int)(((h >> 18) & 255) % 3); // 6..8 pointed leaves
+            double height = (0.010 + ((h >> 10) & 255) / 255.0 * 0.006) * v;
+            int leafCount = 6 + (int)(((h >> 18) & 255) % 2);
             double phase = a0 + ((h >> 6) & 15) * 0.1;
             for (int l = 0; l < leafCount; l++)
             {
                 uint hb = ReliefHash(unchecked((int)hash) + tIdx * 89 + l * 41, l * 13 + 17);
-                double a = phase + l * Math.PI * 2.0 / leafCount + ((hb & 255) / 255.0 - 0.5) * 0.22;
+                double a = phase + l * Math.PI * 2.0 / leafCount + ((hb & 255) / 255.0 - 0.5) * 0.3;
                 var leanDir = (right * Math.Cos(a) + fwd * Math.Sin(a)).Normalized();
-                if (leanDir.LengthSq < 1e-8) leanDir = right;
-                var sideVec = (right * (-Math.Sin(a)) + fwd * Math.Cos(a)) * 0.0010;
-                double leanAmt = 0.70 + ((hb >> 8) & 15) / 15.0 * 0.73; // 35-55 deg splay: star-tuft cushion
-                var leafTip = basePos + normal * height + leanDir * (height * leanAmt);
-                int v0 = mesh.AddVertex(basePos - sideVec, normal, deepCol, 1);
-                int v1 = mesh.AddVertex(basePos + sideVec, normal, deepCol, 1);
-                int vTip = mesh.AddVertex(leafTip, normal, tipCol, 1);
-                Primitives.TriangleFacing(mesh, v0, v1, vTip, normal);
+                var sideVec = (right * (-Math.Sin(a)) + fwd * Math.Cos(a)) * 0.00075;
+                double leanAmt = 0.22 + ((hb >> 8) & 15) / 15.0 * 0.40;
+                double hh = height * (0.75 + ((hb >> 12) & 7) / 7.0 * 0.40);
+                var leafTip = basePos + up * hh + leanDir * (hh * leanAmt);
+                var tc = ((hb >> 16) & 7) == 0 ? rustTip : tipCol;
+                int v0 = V(mesh, basePos - sideVec, up, deepCol);
+                int v1 = V(mesh, basePos + sideVec, up, deepCol);
+                int vTip = V(mesh, leafTip, up, tc);
+                Primitives.TriangleFacing(mesh, v0, v1, vTip, up);
             }
         }
     }
@@ -2126,14 +2131,14 @@ public partial class CoverageRenderer : Node3D
         // Wave-8: flat glossy olive tongue-lobes hugging the stone, bright
         // pale midrib stripe (0.75,0.85,0.55). Stalk lowered to 2-4 mm so
         // the tongue lies on the wet stone (harness no longer buries it).
-        double centreR = Math.Min(1.0, (color.R + (color2.R - color.R) * 0.70) * 1.80);
-        double centreG = Math.Min(1.0, (color.G + (color2.G - color.G) * 0.70) * 1.82);
-        double centreB = Math.Min(1.0, (color.B + (color2.B - color.B) * 0.70) * 1.60);
+        double centreR = Math.Min(1.0, (color.R + (color2.R - color.R) * 0.70) * 1.12);
+        double centreG = Math.Min(1.0, (color.G + (color2.G - color.G) * 0.70) * 1.12);
+        double centreB = Math.Min(1.0, (color.B + (color2.B - color.B) * 0.70) * 1.05);
         var edgeCol = new[] { color.R * 0.38, color.G * 0.42, color.B * 0.34 };
         var midribCol = new[] { 0.75, 0.85, 0.55 };
         var underCol = new[] { 0.25, 0.22, 0.18 };
 
-        int lobeCount = 3 + (int)(((hash >> 4) & 255) % 2); // 3..4 lobes
+        int lobeCount = 2 + (int)(((hash >> 4) & 255) % 2); // 2..3 lobes
         double baseAng = (hash & 1023) / 1023.0 * Math.PI * 2;
         for (int l = 0; l < lobeCount; l++)
         {
@@ -2147,13 +2152,11 @@ public partial class CoverageRenderer : Node3D
             // Wave-8: 2.5-3.5 cm tongues, 8-10 mm wide, forked/overlapping,
             // stalk only 2-4 mm so the flat lobes hug the stone.
             double len = (0.025 + ((h >> 8) & 255) / 255.0 * 0.010) * v; // 2.5-3.5 cm tongues
-            double halfW = 0.0040 + ((h >> 12) & 7) * 0.00018; // 8-10 mm wide -> halfW 4-5 mm
+            double halfW = 0.0055 + ((h >> 12) & 7) * 0.00022; // 8-10 mm wide -> halfW 4-5 mm
             var stalkTop = foot + radial * 0.0015 + normal * (0.002 + ((h >> 6) & 7) * 0.00028); // 2-4 mm stalk
-            Primitives.Tube(mesh, new[] { foot + radial * 0.0005, stalkTop },
-                new[] { 0.0009, 0.0006 }, 4, (i, vv) => (edgeCol, 1, 0, 0, 0, 0));
 
-            int segs = 5;
-            int across = 4;
+            int segs = 3;
+            int across = 2;
             int[,] U = new int[segs + 1, across + 1];
             // Wave-9 black-triangle fix: upper surface only (see AppendRuffleLobes).
             for (int i = 0; i <= segs; i++)
@@ -2172,16 +2175,16 @@ public partial class CoverageRenderer : Node3D
                     double cg = edgeCol[1] + (centreG - edgeCol[1]) * (1.0 - ef * ef);
                     double cb = edgeCol[2] + (centreB - edgeCol[2]) * (1.0 - ef * ef);
                     // Bright pale midrib stripe (0.75,0.85,0.55).
-                    double stripe = Math.Max(0, 1.0 - Math.Abs(x) / 0.45);
+                    double stripe = Math.Max(0, 1.0 - Math.Abs(x) / 0.40) * 0.55;
                     if (stripe > 0)
                     {
                         double sc = stripe * stripe;
-                        cr += (0.75 - cr) * sc * 0.95;
-                        cg += (0.85 - cg) * sc * 0.95;
-                        cb += (0.55 - cb) * sc * 0.95;
+                        cr += (0.60 - cr) * sc * 0.8;
+                        cg += (0.72 - cg) * sc * 0.8;
+                        cb += (0.40 - cb) * sc * 0.8;
                     }
                     var col = new[] { cr, cg, cb };
-                    U[i, j] = mesh.AddVertex(pos, nrm, col, 1, t, (x + 1) * 0.5);
+                    U[i, j] = mesh.AddVertex(pos, nrm, col, 1, t, (x + 1) * 0.5, 0, -2.5);
                 }
             }
             for (int i = 0; i < segs; i++)
@@ -2397,37 +2400,26 @@ public partial class CoverageRenderer : Node3D
     // while keeping the rust read against green turf.
     private static void AppendRustbellowDome(MeshData mesh, Vec3 foot, Vec3 normal, Color rust, Color green, uint hash, float vigour)
     {
+        // SP6: one low billowing hummock cap per cell (tangent-aligned, so it cannot stack into spires on
+        // slopes) plus two short olive-green living shoots at its rim.
         float v = Math.Clamp(vigour, 1.0f, 1.25f);
+        MossBasis(normal, out var up, out var tu, out var tv);
         uint shape = ReliefHash(unchecked((int)hash), 0x52B311);
-        var baseGreen = new[] { green.R * 0.62, green.G * 0.72, green.B * 0.58 };
-        var domeRust = new[] { 0.48, 0.20, 0.09 };
-        var crownRust = new[] { 0.69, 0.31, 0.13 };
-        double rx = (0.021 + ((shape >> 4) & 255) / 255.0 * 0.004) * v;
-        // Low overlapping wet hummocks: the broad footprint closes the pinched gaps
-        // between occupied cells; the flattened profile avoids repeated hard domes.
-        Primitives.Ellipsoid(mesh, foot + normal * 0.001, new Vec3(rx * 1.34, 0.0020, rx * 1.34), 4, 9,
-            (u, vv) => (baseGreen, 1, u, vv, 0, 0));
-        Primitives.Ellipsoid(mesh, foot + normal * 0.004, new Vec3(rx * 0.86, 0.0068 * v, rx * (0.78 + ((shape >> 12) & 15) * 0.012)), 5, 10,
-            (u, vv) => {
-                double top = Math.Clamp((Math.Sin(Math.PI * u) * Math.Cos(2 * Math.PI * vv) * 0.5 + 0.5), 0.0, 1.0);
-                double k = Math.Pow(top, 1.35);
-                return (new[] { domeRust[0] + (crownRust[0] - domeRust[0]) * k,
-                                domeRust[1] + (crownRust[1] - domeRust[1]) * k,
-                                domeRust[2] + (crownRust[2] - domeRust[2]) * k }, 1, u, vv, 0, 0);
-            });
-        // A few short living crests emerge from the hummock instead of a crown of beads.
-        int crestCount = 2 + (int)((shape >> 20) & 1);
-        for (int k = 0; k < crestCount; k++)
+        var rim = new[] { 0.26, 0.17, 0.07 };
+        var mid = new[] { 0.40, 0.18, 0.08 };
+        var top = new[] { 0.50, 0.25, 0.10 };
+        var olive = new[] { 0.22, 0.30, 0.11 };
+        var oliveTip = new[] { 0.38, 0.46, 0.20 };
+        double r = (0.020 + ((shape >> 4) & 255) / 255.0 * 0.005) * v;
+        double h = (0.0065 + ((shape >> 12) & 15) * 0.00028) * v;
+        double ph = ((shape >> 16) & 255) / 255.0 * 6.28;
+        MossDome(mesh, foot + up * 0.001, up, tu, tv, r, h, rim, mid, top, ph);
+        for (int k = 0; k < 2; k++)
         {
             uint hb = ReliefHash(unchecked((int)hash) + k * 31, k * 17 + 5);
             double a = (hb & 1023) / 1023.0 * Math.PI * 2;
-            double r = rx * (0.18 + ((hb >> 8) & 255) / 255.0 * 0.42);
-            var delta = new Vec3(Math.Cos(a) * r, 0, Math.Sin(a) * r);
-            var root = foot + delta + normal * 0.006;
-            var tip = root + normal * ((0.0025 + ((hb >> 12) & 7) / 7.0 * 0.0025) * v);
-            Primitives.Tube(mesh, new[] { root, tip }, new[] { 0.00045, 0.00028 }, 4, (i, vv) => (domeRust, 1, 0, 0, 0, 0));
-            Primitives.Ellipsoid(mesh, tip, new Vec3(0.0014, 0.0007, 0.0012), 3, 5,
-                (u, vv) => (crownRust, 1, u, vv, 0, 0));
+            var dir = (tu * Math.Cos(a) + tv * Math.Sin(a)).Normalized();
+            MossBlade(mesh, foot + dir * (r * 0.9) + up * 0.002, up, dir, 0.007 + ((hb >> 10) & 7) * 0.0008, 0.0022, 0.003, olive, oliveTip);
         }
     }
 
@@ -2438,86 +2430,19 @@ public partial class CoverageRenderer : Node3D
     // near-black); sheet is 12 mm (see InitSpecies).
     private static void AppendStoneknotCushion(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
     {
+        // SP6: tight knotty cushions = one 6-sided dome plus one small 5-sided knot beside it (33 tris);
+        // the grey-green knot/seam pattern comes from the sheet shader.
         float v = Math.Clamp(vigour, 1.0f, 1.25f);
-        // Wave-9: richer mossy olive-charcoal (0.24,0.38,0.22) base to
-        // (0.48,0.64,0.38) crown. Fixed palette so the cushion reads as living
-        // moss, not grey gravel. Silvery-white hyaline hair-points on top.
-        var baseCol = new[] { 0.24, 0.38, 0.22 };
-        var topCol = new[] { 0.48, 0.64, 0.38 };
-        var hairCol = new[] { 0.85, 0.90, 0.85 };
-
-        // Keep each crown as a distinct low cushion. Larger crowns stacked into
-        // shingle bands on slopes, so use a tighter footprint and align each dome
-        // to the local terrain tangent before applying its soft irregular outline.
-        double rx = 0.0155 * v, ry = 0.0055 * v;
-        Vec3 right = Vec3.Up.Cross(normal);
-        if (right.LengthSq < 1e-8) right = new Vec3(1, 0, 0).Cross(normal);
-        if (right.LengthSq < 1e-8) right = new Vec3(0, 0, 1);
-        right = right.Normalized();
-        Vec3 fwd = normal.Cross(right).Normalized();
-        int moundFirst = mesh.VertexCount;
-        var moundCentre = foot + normal * (ry * 0.92);
-        Primitives.Ellipsoid(mesh, moundCentre, new Vec3(rx, ry, rx * 0.94), 6, 10,
-            (u, vv) => {
-                double top = 1.0 - Math.Abs(u - 0.5) * 2.0;
-                var c = new[] { baseCol[0] + (topCol[0] - baseCol[0]) * top,
-                                baseCol[1] + (topCol[1] - baseCol[1]) * top,
-                                baseCol[2] + (topCol[2] - baseCol[2]) * top };
-                return (c, 1, u, vv, 0, 0);
-            });
-        // Uneven three-lobed footprint breaks the isolated coin silhouette without
-        // adding vertices; the high center stays a soft cushion, with low connected shoulders.
-        for (int vi = moundFirst; vi < mesh.VertexCount; vi++)
-        {
-            var p = mesh.Position(vi);
-            var rel = p - moundCentre;
-            // Ellipsoid coordinates are mapped onto the ground tangent so a
-            // sloping substrate cannot turn neighboring crowns into layered plates.
-            double x = rel.X;
-            double z = rel.Z;
-            double az = Math.Atan2(z, x);
-            double radialScale = 1.0 + 0.075 * Math.Cos(3.0 * az + (hash & 255) / 255.0 * 0.7)
-                + 0.025 * Math.Sin(5.0 * az + ((hash >> 8) & 255) / 255.0 * 2.0);
-            var tangent = right * rel.X + fwd * rel.Z;
-            var warped = moundCentre + tangent * radialScale + normal * (rel.Y * (0.91 + 0.05 * Math.Sin(3.0 * az + 0.4)));
-            mesh.Positions[vi * 3] = (float)warped.X;
-            mesh.Positions[vi * 3 + 1] = (float)warped.Y;
-            mesh.Positions[vi * 3 + 2] = (float)warped.Z;
-        }
-
-        // Sparse small beads remain subordinate and sit on the crown shoulders.
-        var beadCol = new[] { Math.Min(1.0, topCol[0] + 0.05), Math.Min(1.0, topCol[1] + 0.05), Math.Min(1.0, topCol[2] + 0.04) };
-        for (int k = 0; k < 3; k++)
-        {
-            uint hb = ReliefHash(unchecked((int)hash) + k * 41, k * 19 + 7);
-            double a = (hb & 1023) / 1023.0 * Math.PI * 2;
-            double r = 0.0015 + ((hb >> 8) & 255) / 255.0 * 0.0045;
-            double q = Math.Min(1.0, r / rx);
-            double h = ry * 0.92 + ry * Math.Sqrt(Math.Max(0.0, 1.0 - q * q));
-            var p = foot + (right * Math.Cos(a) + fwd * Math.Sin(a)) * r + normal * h;
-            var s = 0.0006 + ((hb >> 12) & 3) * 0.00012;
-            Primitives.Ellipsoid(mesh, p, new Vec3(s, s * 0.8, s), 3, 5,
-                (u, vv) => (beadCol, 1, u, vv, 0, 0));
-        }
-
-        // Wave-9: 6-8 short silvery-white hyaline hair-point tips (3-5 mm)
-        // rooted on top of the cushion dome.
-        var pearlCol = hairCol;
-        int hairCount = 3 + (int)((hash >> 7) & 1); // sparse hyaline tips among the beads
-        for (int p = 0; p < hairCount; p++)
-        {
-            uint hh = ReliefHash(unchecked((int)hash) + p * 37, p * 17 + 5);
-            double ha = (hh & 1023) / 1023.0 * Math.PI * 2 + p * Math.PI * 2 / hairCount;
-            double hr = ((hh >> 8) & 255) / 255.0 * rx * 0.7;
-            double hq = Math.Min(1.0, hr / rx);
-            double hDome = ry * 0.92 + ry * Math.Sqrt(Math.Max(0.0, 1.0 - hq * hq));
-            var hairBase = foot + (right * Math.Cos(ha) + fwd * Math.Sin(ha)) * hr + normal * hDome;
-            double hairLen = (0.003 + ((hh >> 12) & 7) / 7.0 * 0.002) * v; // 3-5 mm
-            var hairTip = hairBase + normal * hairLen
-                + (right * Math.Cos(ha) + fwd * Math.Sin(ha)) * (hairLen * 0.25);
-            Primitives.Tube(mesh, new[] { hairBase, hairTip }, new[] { 0.00025, 0.00012 }, 4,
-                (i, vv) => (pearlCol, 1, 0, 0, 0, 0));
-        }
+        MossBasis(normal, out var up, out var tu, out var tv);
+        var rim = new[] { 0.13, 0.19, 0.11 };
+        var mid = new[] { 0.25, 0.33, 0.19 };
+        var top = new[] { 0.40, 0.48, 0.31 };
+        uint h = ReliefHash(unchecked((int)hash), 0x57017);
+        double ph = (h & 255) / 255.0 * 6.28;
+        MossDome(mesh, foot, up, tu, tv, 0.0135 * v, 0.0060 * v, rim, mid, top, ph, 6);
+        double a = ((h >> 8) & 255) / 255.0 * 6.28;
+        var off = (tu * Math.Cos(a) + tv * Math.Sin(a)) * 0.0125;
+        MossDome(mesh, foot + off, up, tu, tv, 0.0072 * v, 0.0042 * v, rim, mid, top, ph + 0.7, 5);
     }
 
     // Silkgleam (silkgleam_moss): golden combed turf with pale tip sheen.
@@ -2525,59 +2450,24 @@ public partial class CoverageRenderer : Node3D
     // so the golden Color2 never rendered; this builder carries the gold.
     private static void AppendSilkgleamTurf(MeshData mesh, Vec3 foot, Vec3 normal, Color col1, Color col2, uint hash, float vigour)
     {
+        // SP6: fine combed silk. Seven thin low-arched ribbons (3 tris each) swept one way; gold-olive base to pale
+        // silk-gold tips. The sheet shader carries the lustre.
         float v = Math.Clamp(vigour, 1.0f, 1.25f);
-        // Wave-9: warm burnished gold-green (0.78,0.72,0.22) base to pale
-        // silk-gold (0.95,0.90,0.48) tips. Combed in one consistent direction:
-        // every shoot fans within +/-0.1 rad of a shared heading, arching low.
-        var goldBase = new[] { 0.78, 0.72, 0.22 };
-        var goldTip = new[] { 0.95, 0.90, 0.48 };
-        var setaCol = new[] { 0.50, 0.18, 0.12 };
-
-        Vec3 right = Vec3.Up.Cross(normal);
-        if (right.LengthSq < 1e-8) right = new Vec3(1, 0, 0).Cross(normal);
-        if (right.LengthSq < 1e-8) right = new Vec3(0, 0, 1);
-        right = right.Normalized();
-        Vec3 fwd = normal.Cross(right).Normalized();
-
-        // Shared comb direction from the cell hash.
+        MossBasis(normal, out var up, out var tu, out var tv);
+        var goldBase = new[] { 0.36, 0.31, 0.09 };
+        var goldTip = new[] { 0.64, 0.53, 0.20 };
         double combAng = (hash & 1023) / 1023.0 * Math.PI * 2;
-        var combDir = (right * Math.Cos(combAng) + fwd * Math.Sin(combAng)).Normalized();
-        if (combDir.LengthSq < 1e-8) combDir = right;
-        var combLat = (right * (-Math.Sin(combAng)) + fwd * Math.Cos(combAng)).Normalized();
-        if (combLat.LengthSq < 1e-8) combLat = fwd;
-
-        int shootCount = 3 + (int)((hash >> 5) & 1); // 3-4 shoots; keep open gaps between directional fans
-        for (int j = 0; j < shootCount; j++)
+        var combDir = (tu * Math.Cos(combAng) + tv * Math.Sin(combAng)).Normalized();
+        var combLat = (tu * (-Math.Sin(combAng)) + tv * Math.Cos(combAng)).Normalized();
+        for (int j = 0; j < 7; j++)
         {
             uint hb = ReliefHash(unchecked((int)hash) + j * 37, j * 23 + 3);
-            double jitter = ((hb & 255) / 255.0 - 0.5) * 0.76; // mixed-angle comb, not a row of parallel sticks
-            var dir = (combDir * Math.Cos(jitter) + combLat * Math.Sin(jitter) + normal * (0.18 + ((hb >> 20) & 15) / 15.0 * 0.22)).Normalized();
-            var basePos = foot + combLat * (((hb >> 8) & 255) / 255.0 - 0.5) * 0.006;
-            double len = (0.018 + ((hb >> 10) & 255) / 255.0 * 0.018) * v; // variable 1.8-3.6 cm shoots
-            double archH = (0.010 + ((hb >> 12) & 7) / 7.0 * 0.007) * v; // taller swept arches, still low turf
-            var mid = basePos + dir * (len * 0.5) + normal * archH + combLat * ((((hb >> 18) & 15) / 15.0 - 0.5) * 0.008);
-            var tip = basePos + dir * len + normal * (0.006 + ((hb >> 15) & 7) * 0.00055) + combLat * ((((hb >> 23) & 7) / 7.0 - 0.5) * 0.010);
-            // 1.2 mm wide ribbon/tube (radius 0.6 mm), tapering to the tip.
-            Primitives.Tube(mesh, new[] { basePos, mid, tip }, new[] { 0.00060, 0.00045, 0.00028 }, 5, (i, vv) => {
-                double tt = i / 2.0;
-                var cc = new[] { goldBase[0] + (goldTip[0] - goldBase[0]) * tt, goldBase[1] + (goldTip[1] - goldBase[1]) * tt, goldBase[2] + (goldTip[2] - goldBase[2]) * tt };
-                return (cc, 1, 0, 0, 0, 0);
-            });
-        }
-
-        // Wave-9: only 1-2 short seta wires, 10-15 mm (was 3.5-4.7 cm vertical sticks).
-        var urnCol = new[] { 0.70, 0.52, 0.20 };
-        int setaCount = 1; // one or occasional capsule per nucleus
-        for (int s = 0; s < setaCount; s++)
-        {
-            uint hs = ReliefHash(unchecked((int)hash) + 500 + s * 29, s * 11 + 7);
-            var setaBase = foot + combLat * (((hs & 255) / 255.0 - 0.5) * 0.004);
-            double height = (0.010 + ((hs >> 8) & 7) / 7.0 * 0.005) * v; // 10-15 mm
-            var wireTip = setaBase + normal * height;
-            Primitives.Tube(mesh, new[] { setaBase, wireTip }, new[] { 0.00045, 0.00030 }, 4,
-                (i, vv) => (setaCol, 1, 0, 0, 0, 0));
-            Primitives.Ellipsoid(mesh, wireTip + normal * 0.0012, new Vec3(0.0010, 0.0016, 0.0010), 3, 5,
-                (u, vv) => (urnCol, 1, u, vv, 0, 0));
+            double jitter = ((hb & 255) / 255.0 - 0.5) * 0.5;
+            var dir = (combDir * Math.Cos(jitter) + combLat * Math.Sin(jitter)).Normalized();
+            var root = foot + combLat * ((((hb >> 8) & 255) / 255.0 - 0.5) * 0.022) + combDir * ((((hb >> 16) & 255) / 255.0 - 0.5) * 0.016);
+            double len = (0.016 + ((hb >> 10) & 255) / 255.0 * 0.014) * v;
+            double rise = (0.004 + ((hb >> 12) & 7) / 7.0 * 0.004) * v;
+            MossBlade(mesh, root, up, dir, len, 0.0020, rise, goldBase, goldTip);
         }
     }
 
