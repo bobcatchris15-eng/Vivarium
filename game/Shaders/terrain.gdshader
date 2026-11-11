@@ -198,13 +198,32 @@ void fragment() {
     }
 
     // Blend leaf (ScatteredLeaves007) based on stored litter / organic horizon
-    float leaf_h = texture(leaf_hgt, displaced_uv * 1.5).r;
-    float w_leaf_h = hblend(wLeaf, leaf_h);
-    if (w_leaf_h > 0.01) {
-        vec2 lu = displaced_uv * 1.5;
-        vec4 leaf_samp = vec4(texture(leaf_col, lu).rgb, texture(leaf_rgh, lu).r);
-        vec3 leaf_n = unpack_normal(texture(leaf_nrm, lu).rgb);
-        float leaf_ao_val = texture(leaf_ao, lu).r;
+    // Litter is a flat layer lying on the soil: undisplaced UV (no POM smear), faded out on slopes,
+    // anti-tiled by blending two differently offset/rotated lookups with a low-frequency noise mask.
+    float leaf_slope = smoothstep(0.62, 0.90, wn.y);
+    float w_leaf_in = wLeaf * leaf_slope;
+    if (w_leaf_in > 0.01) {
+        vec2 lu = uv * 1.5;
+        const float lc = 0.8387, ls = 0.5446;   // 33 degree rotation
+        vec2 lu_b = vec2(lc * lu.x - ls * lu.y, ls * lu.x + lc * lu.y) * 0.83 + vec2(0.37, 0.71);
+        float lm = smoothstep(0.30, 0.70, terrain_noise(world_pos.xz * 0.9 + vec2(3.3, 8.1)));
+        vec4 la = vec4(0.0), lb = vec4(0.0);
+        vec3 na = vec3(0.0, 0.0, 1.0), nb = vec3(0.0, 0.0, 1.0);
+        if (lm < 0.999) {
+            la = vec4(texture(leaf_col, lu).rgb, texture(leaf_rgh, lu).r);
+            na = unpack_normal(texture(leaf_nrm, lu).rgb);
+        }
+        if (lm > 0.001) {
+            lb = vec4(texture(leaf_col, lu_b).rgb, texture(leaf_rgh, lu_b).r);
+            nb = unpack_normal(texture(leaf_nrm, lu_b).rgb);
+            // map the rotated-frame normal back into the shared frame (inverse rotation)
+            nb.xy = vec2(lc * nb.x + ls * nb.y, -ls * nb.x + lc * nb.y);
+        }
+        vec4 leaf_samp = mix(la, lb, lm);
+        vec3 leaf_n = normalize(mix(na, nb, lm));
+        float leaf_ao_val = (lm < 0.5) ? texture(leaf_ao, lu).r : texture(leaf_ao, lu_b).r;
+        float leaf_h = dot(leaf_samp.rgb, vec3(0.333)) * 1.2;
+        float w_leaf_h = hblend(w_leaf_in, leaf_h);
         soil = mix(soil, leaf_samp, w_leaf_h * 0.82);
         tn = normalize(mix(tn, leaf_n, w_leaf_h * 0.82));
         soil_ao_val = mix(soil_ao_val, leaf_ao_val, w_leaf_h * 0.82);
