@@ -122,3 +122,8 @@ term of `HabitatReflectionProbe` (`game/Render/EnvironmentRig.cs` ~379-393, BoxP
 not albedo or shadow. strata.gdshader now works around it (ambient disabled + emission). The probe likely darkens other
 surfaces too (e.g. the pilot trunk's dark column in `woodland_trunks`). Fix the probe extents/blend at the source, then
 remove the strata workaround. Lighting contract: overlaps owner item GR8/P12.
+**GR12. The flat glossy green "meadow" is probably the water surface.** GR3+GR7 terrain-shader changes (meadow micro-texture,
+macro variation) made ~2/255 difference; the large flat blurry green plane with specular glints in `meadow_close`,
+`far_ground` and `overview` was unchanged and appears in bare shots too. Likely the pond/water surface material
+(`water_stream.gdshader` / WaterRenderer) read as a green plastic sheet. Confirm by toggling the water renderer
+(`--soak-hide water` style hide in the ground runner) before any further meadow work. GR3/GR7 changes were reverted.
