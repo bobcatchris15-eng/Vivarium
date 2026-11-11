@@ -366,8 +366,8 @@ public static partial class OrganismMeshes
     {
         var part = new MeshData { Lod = m.Lod, FloraDetailLevel = m.FloraDetailLevel };
 
-        int rows = juvenile ? 6 : 9;
-        int cols = 5;
+        int rows = juvenile ? 4 : 5;
+        int cols = 3;
         if (m.Lod is { } lod)
         {
             rows = lod.Segments(rows, 4);
@@ -387,8 +387,8 @@ public static partial class OrganismMeshes
         // An uneven heptagonal section: a bramble cane is angular, and never quite round.
         double[] section = { 1.00, 0.80, 1.14, 0.76, 1.06, 0.84, 1.10 };
 
-        int canes = juvenile ? 7 : 12;
-        const int caneSegments = 48;
+        int canes = juvenile ? 7 : 10;
+        const int caneSegments = 22;
 
         for (int k = 0; k < canes; k++)
         {
@@ -427,7 +427,7 @@ public static partial class OrganismMeshes
             });
 
             // Prickles in rows, thickest low on the cane.
-            int prickleRows = juvenile ? 10 : 22;
+            int prickleRows = juvenile ? 8 : 8;
             for (int j = 1; j <= prickleRows; j++)
             {
                 double t = 0.04 + 0.88 * (j / (double)(prickleRows + 1));
@@ -443,17 +443,17 @@ public static partial class OrganismMeshes
             }
 
             // Foliage: palmately compound leaves on long petioles.
-            int leafNodes = juvenile ? 7 : 11;
+            int leafNodes = juvenile ? 5 : 5;
             for (int j = 2; j <= leafNodes; j++)
             {
                 double t = 0.10 + 0.80 * (j / (double)(leafNodes + 1));
                 var p = Point(t);
                 var tangent = (Point(Math.Min(1.0, t + 0.01)) - Point(Math.Max(0.0, t - 0.01))).Normalized();
                 double leafAz = rng.Range(0.0, 2.0 * Math.PI);
-                var leafDir = (new Vec3(Math.Cos(leafAz), rng.Range(-0.06, 0.08), Math.Sin(leafAz))).Normalized();
-                double petLen = radius * rng.Range(0.11, 0.19);
+                var leafDir = (new Vec3(Math.Cos(leafAz), rng.Range(-0.06, 0.08), Math.Sin(leafAz)) * 0.8 + tangent * 0.45).Normalized();
+                double petLen = radius * rng.Range(0.045, 0.075);
                 var petiole = p + leafDir * petLen + Vec3.Up * (petLen * 0.30);
-                Primitives.Tube(part, new[] { p, petiole }, new[] { 0.0042, 0.0022 }, 6,
+                Primitives.Tube(part, new[] { p, petiole }, new[] { 0.0062, 0.0030 }, 5,
                     (i, v) => (Primitives.Mix(oldWood, leafTop, 0.35), 1, i, v, 0.0, 0.0));
                 BrambleStipule(part, p, leafDir, radius * rng.Range(0.035, 0.055),
                     Primitives.Mix(oldWood, leafTop, 0.5), Rng.Mix(seed, (ulong)(k * 97 + j)));
@@ -465,7 +465,7 @@ public static partial class OrganismMeshes
                     double a = leafAz + (l - (leaflets - 1) * 0.5) * (Math.PI * 2.0 / (leaflets + 1.4)) + rng.Range(-0.08, 0.08);
                     double pitch = rng.Range(-0.11, 0.13);
                     var fwd = (new Vec3(Math.Cos(a), pitch, Math.Sin(a))).Normalized();
-                    double len = radius * (l == (leaflets - 1) / 2 ? rng.Range(0.135, 0.175) : rng.Range(0.095, 0.135));
+                    double len = radius * 1.2 * (l == (leaflets - 1) / 2 ? rng.Range(0.135, 0.175) : rng.Range(0.095, 0.135));
                     double breadth = rng.Range(0.62, 0.80);
                     var baseNormal = (Vec3.Up * rng.Range(0.72, 0.98) + fwd * rng.Range(0.04, 0.22)).Normalized();
                     double rollAngle = rng.Range(-0.18, 0.18);
@@ -494,7 +494,7 @@ public static partial class OrganismMeshes
                         new[] { 0.0032, 0.0018, 0.0008 }, 6,
                         (i, v) => (Primitives.Mix(oldWood, new[] { 0.52, 0.44, 0.28 }, 0.45), 1, i * 0.5, v, 0.0, 0.0));
                 }
-                int shoots = 2 + rng.NextInt(2);
+                int shoots = 1 + rng.NextInt(2);
                 for (int s = 0; s < shoots; s++)
                 {
                     double a = rng.Range(0.0, 2.0 * Math.PI);

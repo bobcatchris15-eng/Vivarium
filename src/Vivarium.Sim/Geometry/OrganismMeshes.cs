@@ -5367,9 +5367,9 @@ public static partial class OrganismMeshes
         var tip = root + forward * len - lNorm * (len * 0.052);
         var control = root + forward * (len * 0.50)
             + normal * (len * 0.085) + Vec3.Up * (len * 0.022);
-        int rows = m.FloraDetailLevel switch { 2 => 5, 1 => 7, _ => 9 };
-        if (m.Lod is { } lod) rows = Math.Max(4, lod.Segments(rows, m.FloraDetailLevel == 0 ? 6 : 4));
-        int across = m.FloraDetailLevel switch { 2 => 3, 1 => 4, _ => 4 };
+        int rows = m.FloraDetailLevel switch { 2 => 4, 1 => 5, _ => 6 };
+        if (m.Lod is { } lod) rows = Math.Max(4, lod.Segments(rows, 4));
+        int across = 2;
         var rootColor = top;
         var tipColor = Primitives.Mix(top, c2, 0.25);
         int leafVertex = m.VertexCount, leafIndex = m.Indices.Count;
@@ -5458,7 +5458,7 @@ public static partial class OrganismMeshes
             (i, v) => (petioleCol, 1, i / (double)stations, v, 0, 0));
 
         // 2. Dense leaflet pairs along rachis: 11 pairs closely spaced along the stem
-        int pairs = 11;
+        int pairs = 6;
         for (int j = 0; j < pairs; j++)
         {
             double t = 0.12 + 0.82 * j / (pairs - 1);
@@ -5551,9 +5551,14 @@ public static partial class OrganismMeshes
     {
         var axis = Vec3.Up;
         double baseRadius = 0.034;
+        var spindleCol = new[] { 0.42, 0.07, 0.05 };
+        // The spike rides on a short pedicel carried up out of the leaf umbrella.
+        var pedicelBase = root - Vec3.Up * 0.012;
+        root += axis * 0.050;
+        Primitives.Tube(m, new[] { pedicelBase, (pedicelBase + root) * 0.5, root },
+            new[] { 0.0075, 0.0062, 0.0058 }, 5, (i, v) => (spindleCol, 1, i / 2.0, v, 0, 0));
         var topPos = root + axis * spikeHeight;
 
-        var spindleCol = new[] { 0.42, 0.07, 0.05 };
         Primitives.Tube(m, new[] { root, (root + topPos) * 0.5, topPos },
             new[] { 0.007, 0.0045, 0.002 }, 5, (i, v) => (spindleCol, 1, i / 2.0, v, 0, 0));
 
@@ -5686,28 +5691,28 @@ public static partial class OrganismMeshes
         }
 
         // 2. Canes: 1 upright central cane + 5 to 6 outer canes that splay radially outward before rising erect
-        int outerCount = 6;
+        int outerCount = 4;
         double phase = rng.Range(0, Math.PI * 2);
 
         // Helper to add a rich, dense two-tier umbrella of compound leaves at cane top
         void AddApexUmbrella(Vec3 caneTop, double baseAngle)
         {
             // Upper tier: 6 spreading horizontal compound leaves
-            int upperCount = 6;
+            int upperCount = 4;
             for (int l = 0; l < upperCount; l++)
             {
                 double la = baseAngle + l * (Math.PI * 2.0 / upperCount) + rng.Range(-0.10, 0.10);
                 var lDir = new Vec3(Math.Cos(la), rng.Range(-0.04, 0.03), Math.Sin(la)).Normalized();
-                EmbercrownCompoundLeaf(m, caneTop - Vec3.Up * 0.012, lDir, rng.Range(0.42, 0.52), c1, c2, rng, apex: true);
+                EmbercrownCompoundLeaf(m, caneTop - Vec3.Up * 0.012, lDir, rng.Range(0.50, 0.60), c1, c2, rng, apex: true);
             }
 
             // Lower tier: 5 slightly shorter descending/weeping compound leaves staggered between upper leaves
-            int lowerCount = 5;
+            int lowerCount = 3;
             for (int l = 0; l < lowerCount; l++)
             {
                 double la = baseAngle + (l + 0.5) * (Math.PI * 2.0 / lowerCount) + rng.Range(-0.12, 0.12);
                 var lDir = (new Vec3(Math.Cos(la) * 0.85, -0.22, Math.Sin(la) * 0.85)).Normalized();
-                EmbercrownCompoundLeaf(m, caneTop - Vec3.Up * 0.035, lDir, rng.Range(0.35, 0.44), c1, c2, rng, apex: true);
+                EmbercrownCompoundLeaf(m, caneTop - Vec3.Up * 0.035, lDir, rng.Range(0.42, 0.52), c1, c2, rng, apex: true);
             }
         }
 
@@ -5722,7 +5727,7 @@ public static partial class OrganismMeshes
                 new[] {.032,.025,.018,.012},barkCol,7);
 
             // Mid-cane leaves on central cane
-            for (int mLeaf = 0; mLeaf < 3; mLeaf++)
+            for (int mLeaf = 0; mLeaf < 2; mLeaf++)
             {
                 double mt = 0.42 + mLeaf * 0.18;
                 var mPos = Vec3.Lerp(cMid1, cMid2, (mt - 0.35) / 0.35);
@@ -5756,7 +5761,7 @@ public static partial class OrganismMeshes
             var s3 = rad * (splayDist * 0.90 + tipSpread * 0.10) + Vec3.Up * rng.Range(0.48, 0.60);
             var s4 = rad * tipSpread + Vec3.Up * tipHeight;
 
-            EmbercrownSmoothCane(m,new[]{s0,s1,s2,s3,s4},
+            EmbercrownSmoothCane(m, ForkJunction.SinkStart(new[]{s0,s1,s2,s3,s4}, 0.028),
                 new[]{.028,.024,.020,.016,.011},barkCol,7);
 
             // Mid-cane foliage: 4 alternate compound leaves along upright cane section (clothes the stem in lush green)

@@ -230,7 +230,7 @@ public static partial class OrganismMeshes
     // ------------------------------------------------------------------
     private static void Hallowsting(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, double radius, double height, bool juvenile)
     {
-        var part = new MeshData { Lod = m.Lod, FloraDetailLevel = m.FloraDetailLevel, FloraVisualSeed = m.FloraVisualSeed };
+        var part = new MeshData { Lod = m.Lod, FloraDetailLevel = Math.Max(1, m.FloraDetailLevel ?? 0), FloraVisualSeed = m.FloraVisualSeed };
         double h = height * (juvenile ? 0.55 : 1.0);
         // Palette from c1 alone: no purple (or any second hue) anywhere on this species.
         // Brightened ~40% for shader compensation so stems/leaves survive wash-out.
@@ -246,7 +246,7 @@ public static partial class OrganismMeshes
 
         // Wave-9: 5-7 stems clustered at base 0.08-0.22*radius, splaying gracefully outward
         // (tops 0.25-0.48*radius, varied heights 0.60-0.95*h) — never a vertical-pole ring.
-        int stemCount = NewFloraCount(part, juvenile ? 3 : (5 + rng.NextInt(3))); // 5-7 bushy branching stems
+        int stemCount = NewFloraCount(part, juvenile ? 3 : (4 + rng.NextInt(2))); // 4-5 bushy branching stems
         var stemPaths = new List<Vec3[]>();
         var stemAz = new List<double>();
 
@@ -291,7 +291,7 @@ public static partial class OrganismMeshes
         // sticking straight out horizontally like a trellis.
         for (int s = 0; s < stemCount; s++)
         {
-            int pairsHere = juvenile ? 3 : rng.NextInt(3) + 4;
+            int pairsHere = juvenile ? 3 : rng.NextInt(2) + 3;
             for (int k = 0; k < pairsHere; k++)
             {
                 bool terminalPair = !juvenile && k == pairsHere - 1;
@@ -305,7 +305,7 @@ public static partial class OrganismMeshes
                 if (terminalPair) bladeLen *= 0.64;
                 double bladeWid = bladeLen * 0.66;
                 var outline = BroadleafOutline.Cordate;
-                int detailOverride = k < 2 ? 1 : 2;
+                int detailOverride = 2;
                 foreach (double sign in new[] { -1.0, 1.0 })
                 {
                     double az = pairAz + (sign < 0 ? 0 : Math.PI);
@@ -338,21 +338,26 @@ public static partial class OrganismMeshes
             Primitives.Tube(part, new[] { axil, mid, end }, new[] { 0.0042, 0.0029, 0.0016 }, 5,
                 (j, v) => (catkinCol, 1.0, j * 0.5, v, 0, 0));
             // Tiny bead bractlets (never large flat discs): small bead discs along the spike.
-            for (int cd = 0; cd < 7; cd++)
+            for (int cd = 0; cd < 3; cd++)
             {
-                double ct = 0.12 + 0.76 * cd / 6.0;
+                double ct = 0.12 + 0.76 * cd / 2.0;
                 ForbBDisc(part, Vec3.Lerp(axil, end, ct), 0.006, rings: 2, segments: 5, col: catkinCol);
             }
-            int bracts = NewFloraCount(part, 30 + rng.NextInt(7)); // 22â€“26 densely packed bracts on the hanging spike
+            int bracts = NewFloraCount(part, 13 + rng.NextInt(3));
             for (int b = 0; b < bracts; b++)
             {
                 double bt = 0.06 + 0.92 * (bracts <= 1 ? 0.5 : b / (double)(bracts - 1));
                 var root = Vec3.Lerp(axil, end, bt);
-                var bdir = (outward * 0.30 - Vec3.Up * 0.95).Normalized();
-                var tip = root + bdir * h * rng.Range(0.075, 0.100);
-                var hint = bdir.Cross(outward);
-                if (hint.LengthSq < 1e-10) hint = new Vec3(0, 0, 1);
-                FoliageBlade.Build(part, root, tip, hint, 0.016, catkinBase, catkinTip, camber: 0.08, curl: 0.45);
+                // Bracts spiral round the spike axis so it reads as a shaggy tassel, not a stack of slabs.
+                var spikeAxis = (end - axil).Normalized();
+                var perp = spikeAxis.Cross(Vec3.Up);
+                perp = perp.LengthSq < 1e-6 ? outward : perp.Normalized();
+                var radial = Axis.RotateAround(perp, spikeAxis, b * 2.399);
+                var bdir = (radial * 0.55 + spikeAxis * 0.85).Normalized();
+                var tip = root + bdir * h * rng.Range(0.060, 0.085);
+                var hint = bdir.Cross(spikeAxis);
+                if (hint.LengthSq < 1e-10) hint = radial.Cross(spikeAxis);
+                FoliageBlade.Build(part, root, tip, hint, 0.020, catkinBase, catkinTip, camber: 0.08, curl: 0.45);
             }
         }
 
