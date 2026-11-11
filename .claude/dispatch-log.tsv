@@ -35,3 +35,4 @@ ts	task_id	clanker	model	n_targets	wall_s	turns	attempts	outcome	returned_bytes
 2026-11-11	GR10	impl-worker	sonnet-medium	0	900	25	1	NEEDS_NODE-DEFERRED	1800
 2026-11-11	GR3	impl-worker	sonnet-medium	1	900	30	1	REVERTED-NOVISIBLE	1800
 2026-11-11	GR12	impl-worker	sonnet-medium	1	1537	46	1	REVERTED-NOTBETTER	2000
+2026-11-11	SP11	impl-worker	sonnet-medium	4	901	34	1	PASS	2300
