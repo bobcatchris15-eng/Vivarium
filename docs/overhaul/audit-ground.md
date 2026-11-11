@@ -117,3 +117,8 @@ smoothed mask sampling. Ranked first among remaining GR items.
 **GR10. Stair-stepped water shoreline.** The pond/water surface edge follows the cell grid in hard right-angle steps
 (`--ground-review` `litter_flat_close`, GR2 captures). Needs a smooth shoreline (water mesh or shader alpha/foam edge
 from a filtered depth field). Orchestrator note 2026-11-10.
+**GR11. Box-projected reflection probe darkens surfaces.** GR5 found the cut-face "soot block" was the ambient/reflection
+term of `HabitatReflectionProbe` (`game/Render/EnvironmentRig.cs` ~379-393, BoxProjection, 1.3x island diameter x 8 m),
+not albedo or shadow. strata.gdshader now works around it (ambient disabled + emission). The probe likely darkens other
+surfaces too (e.g. the pilot trunk's dark column in `woodland_trunks`). Fix the probe extents/blend at the source, then
+remove the strata workaround. Lighting contract: overlaps owner item GR8/P12.
