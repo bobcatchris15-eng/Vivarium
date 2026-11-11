@@ -469,7 +469,7 @@ public static partial class OrganismMeshes
 
         for (int k = 0; k < shoots; k++)
         {
-            double az = 2 * Math.PI * k / shoots + rng.Range(-0.26, 0.26);
+            double az = 2 * Math.PI * k / shoots + rng.Range(-0.10, 0.10);
             double reach = radius * rng.Range(0.74, 0.98);
             var path = new Vec3[segsPerShoot + 1];
             var radii = new double[segsPerShoot + 1];
@@ -480,7 +480,7 @@ public static partial class OrganismMeshes
                 double a = az + wander;
                 double r = t * reach;
                 // The shoot lifts clear of the gravel at the crown and settles onto it.
-                double y = 0.0060 * Math.Pow(1.0 - t, 2.2) + 0.0016 * Math.Sin(t * 4.1 + k);
+                double y = 0.0030 + 0.0060 * Math.Pow(1.0 - t, 2.2) + 0.0016 * Math.Sin(t * 4.1 + k);
                 path[s] = new Vec3(Math.Cos(a) * r, y, Math.Sin(a) * r);
                 // Nodes are visibly thicker than the internode beside them.
                 bool node = s >= 3 && s <= segsPerShoot - 1 && s % 2 == 1;
@@ -509,9 +509,9 @@ public static partial class OrganismMeshes
                     lastAz = la;
                     var spread = new Vec3(Math.Cos(la), 0, Math.Sin(la));
                     // The blade leaves the node across the shoot and forward, lifted a little.
-                    double tilt = rng.Range(0.10, 0.50);
+                    double tilt = rng.Range(0.16, 0.50);
                     var along = (spread * Math.Cos(tilt) + Vec3.Up * Math.Sin(tilt)
-                        + shootDir * rng.Range(0.18, 0.46)).Normalized();
+                        + shootDir * rng.Range(0.34, 0.64)).Normalized();
                     var across = Vec3.Up.Cross(along).Normalized();
                     var dorsal = along.Cross(across).Normalized();
                     // The shoot tip is the newest growth, so its blades are the smallest; the

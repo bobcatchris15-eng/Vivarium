@@ -4270,10 +4270,10 @@ public static partial class OrganismMeshes
     /// </summary>
     private static void GlassAntlers(MeshData m, Rng rng, double[] c1, double[] c2)
     {
-        var footCol = Primitives.Mix(c1, new[] { 0.24, 0.16, 0.10 }, 0.65);
+        var footCol = Primitives.Mix(c1, new[] { 0.42, 0.30, 0.18 }, 0.50);
         var bodyCol = c1;
         var tipCol = c2;
-        var subiculumCol = Primitives.Mix(c1, new[] { 0.32, 0.22, 0.14 }, 0.6);
+        var subiculumCol = Primitives.Mix(c1, new[] { 0.46, 0.34, 0.20 }, 0.45);
 
         // 1. Basal mycelial subiculum crust adhering to decaying wood
         var subRim = new List<Vec3>();
@@ -4283,7 +4283,7 @@ public static partial class OrganismMeshes
             double a = s * Math.Tau / subSides;
             subRim.Add(new Vec3(Math.Cos(a) * 0.28, -0.01, Math.Sin(a) * 0.28));
         }
-        Primitives.Fan(m, new Vec3(0, 0.02, 0), subRim, Vec3.Up, subiculumCol, footCol);
+        // (crust disc removed: it rendered as a black pit; the flared trunk feet seat the antlers instead)
 
         // Recursive antler branch builder with compressed/grooved bilateral profile
         void AntlerBranch(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 flatSide, double r0, double r1, double r2, int depth)
@@ -4301,8 +4301,9 @@ public static partial class OrganismMeshes
                 double t = (double)i / steps, u = 1.0 - t;
                 path[i] = p0 * (u * u) + p1 * (2.0 * u * t) + p2 * (t * t);
                 double r = r0 * u * u + 2.0 * r1 * u * t + r2 * t * t;
-                widths[i] = r * 1.35;
-                thiks[i] = r * 0.75;
+                double flare = depth == 0 ? 1.0 + 1.1 * Math.Exp(-t * 9.0) : 1.0;
+                widths[i] = r * 1.35 * flare;
+                thiks[i] = r * 0.75 * flare;
             }
 
             for (int i = 0; i <= steps; i++)

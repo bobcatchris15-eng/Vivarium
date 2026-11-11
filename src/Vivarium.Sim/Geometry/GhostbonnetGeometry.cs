@@ -71,14 +71,20 @@ internal static class GhostbonnetGeometry
             var neck=root+leanVec+Vec3.Up*h;
             var stemPath=new[]{root,new Vec3(root.X,.06*scale,root.Z),
                 mid,Vec3.Lerp(mid,neck,.66),neck};
-            double baseRadius=scale*rng.Range(.010,.017);
-            double topRadius=scale*rng.Range(.005,.009);
+            double baseRadius=scale*rng.Range(.010,.017)*1.30;
+            double topRadius=scale*rng.Range(.005,.009)*1.35;
             var ivory=Primitives.Mix(body,new[]{.80,.88,.91},.67);
             var baseColour=Primitives.Mix(body,new[]{.53,.63,.68},.36);
             Primitives.Tube(mesh,stemPath,
                 new[]{baseRadius*1.18,baseRadius,baseRadius*.69,topRadius*1.15,topRadius},
                 detail==2?8:16,
                 (i,v)=>(Primitives.Mix(baseColour,ivory,i/4.0),1,i*.18,v,0,0));
+
+            // Soil flare at the foot and a smooth collar under the cap, so stalk joins read as growth.
+            Primitives.Ellipsoid(mesh,root+Vec3.Up*(.002*scale),new Vec3(baseRadius*2.1,.010*scale,baseRadius*2.1),3,10,
+                (u,v)=>(baseColour,1,u,v,0,0));
+            Primitives.Ellipsoid(mesh,neck-Vec3.Up*(topRadius*1.2),new Vec3(topRadius*2.3,topRadius*2.6,topRadius*2.3),3,10,
+                (u,v)=>(ivory,1,u,v,0,0));
 
             double phase=rng.Range(0,Math.Tau);
             double offset=rng.Range(-.20,.20);

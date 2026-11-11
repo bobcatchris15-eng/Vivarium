@@ -697,6 +697,10 @@ public static partial class OrganismMeshes
         }
         LatchjawStalk(part, path, radii, 0.46, 4.4, stemColour);
 
+        // Soil flare: a low root collar so the column seats into the ground.
+        Primitives.Ellipsoid(part, new Vec3(0, 0.0, 0), new Vec3(columnRadius * 2.0, columnRadius * 0.7, columnRadius * 2.0), 4, 10,
+            (u, v) => (Primitives.Scale(stemColour, 0.80), 1.0, u, v, 0, 0));
+
         // 2. Basal sheaths: papery bracts clasping the column foot
         int sheaths = juvenile ? 5 : 9;
         for (int k = 0; k < sheaths; k++)
@@ -785,6 +789,17 @@ public static partial class OrganismMeshes
         var flowerBase = path[^1] + Vec3.Up * (columnHeight * 0.05);
         var axis = (Vec3.Up + lean * 0.2 + new Vec3(rng.Range(-0.08, 0.08), 0, rng.Range(-0.08, 0.08))).Normalized();
         double flowerRadius = height * 0.30;
+        // Flared neck: carries the stalk top up into the corolla throat so the trumpet grows out of
+        // the stem instead of sitting on a gap.
+        {
+            double topR = radii[^1];
+            double throatR = flowerRadius * 0.16;
+            var neckTop = flowerBase + axis * (flowerRadius * 1.5 * 0.10);
+            var neckMid = Vec3.Lerp(path[^1], flowerBase, 0.55);
+            Primitives.Tube(part, new[] { path[^1] - Vec3.Up * (topR * 1.5), neckMid, flowerBase, neckTop },
+                new[] { topR * 1.02, topR * 1.25, throatR * 1.12, throatR * 1.05 }, 10,
+                (i, v) => (Primitives.Mix(stemColour, petalOuter, i / 3.0), 1, i / 3.0, v, 0, 0));
+        }
         LatchjawFlower(part, flowerBase, axis, flowerRadius, petalOuter, petalInner, throatColour,
             Rng.Mix(seed, 4211));
 

@@ -36,9 +36,9 @@ public static partial class OrganismMeshes
     // ---------------------------------------------------------------------
 
     /// <summary>Wall thickness of a trap: a Sarracenia pitcher is a thin, tough tube.</summary>
-    private const double PitcherWall = 0.0011;
+    private const double PitcherWall = 0.0024;
     /// <summary>Radius of the rolled lip at the mouth.</summary>
-    private const double PitcherLip = 0.0016;
+    private const double PitcherLip = 0.0030;
     /// <summary>Depth of the throat at which the rain surface sits.</summary>
     private const double PitcherLiquidLevel = 0.30;
 
@@ -89,7 +89,7 @@ public static partial class OrganismMeshes
         Vec3 Centre(double t) => basePoint + axis * (s.Height * t) + fwd * (s.Height * 0.09 * t * t);
 
         double Radius(double t) =>
-            s.MouthRadius * (0.19 + 0.32 * Math.Sin(Math.PI * t * 0.72) + 0.56 * Math.Pow(t, 5));
+            s.MouthRadius * (0.19 + 0.32 * Math.Sin(Math.PI * t * 0.72) + 0.56 * Math.Pow(t, 5) + 0.30 * Math.Exp(-t * 16.0));
 
         /// <summary>Longitudinal vein relief: the ribs that run the length of the tube.</summary>
         double VeinRelief(double phi, double t)
@@ -353,6 +353,22 @@ public static partial class OrganismMeshes
                     if (face == 0) { Primitives.TriangleFacing(m, a, b, b + 1, m.NormalAt(a)); Primitives.TriangleFacing(m, a, b + 1, a + 1, m.NormalAt(a)); }
                     else { Primitives.TriangleFacing(m, a, b + 1, b, m.NormalAt(a)); Primitives.TriangleFacing(m, a, a + 1, b + 1, m.NormalAt(a)); }
                 }
+        }
+        // Close the free margin: a thin rolled edge joins the outer and inner sheets so the hood
+        // has thickness instead of a paper-thin open edge.
+        {
+            int hs = cols + 1;
+            int outerBase = start, innerBase = start + (phiCount + 1) * hs;
+            for (int i = 0; i < phiCount; i++)
+            {
+                int a = outerBase + i * hs + cols, b = outerBase + (i + 1) * hs + cols;
+                int c = innerBase + i * hs + cols, d = innerBase + (i + 1) * hs + cols;
+                var mid = (m.Position(a) + m.Position(b) + m.Position(c) + m.Position(d)) * 0.25;
+                var edgeN = (mid - mouthCentre);
+                edgeN = (edgeN - axis * edgeN.Dot(axis)).Normalized();
+                Primitives.TriangleFacing(m, a, b, d, edgeN);
+                Primitives.TriangleFacing(m, a, d, c, edgeN);
+            }
         }
         m.EssentialSpans.Add((start, m.VertexCount - start));
 
