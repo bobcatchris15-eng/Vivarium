@@ -839,13 +839,17 @@ public static partial class OrganismMeshes
             if (len < 1e-5) continue;
             // Wave 8 polish: rays thickened (diagnostic earthstar detail)
             double hw = len * rng.Range(0.25, 0.32);
-            double rayCamber = rng.Range(0.045, 0.075);
-            double rayCurl = rng.Range(0.012, 0.032);
+            double rayCamber = rng.Range(0.22, 0.32);
+            double rayCurl = rng.Range(0.030, 0.055);
             // per-ray matte variation: each ray dries a slightly different tan, never a uniform wash
             var rayBaseCol = Primitives.Scale(c1b, rng.Range(0.94, 1.04));
             var tipCol = Primitives.Scale(c1b, rng.Range(0.82, 0.95));
             int mark = part.VertexCount;
             Form.FoliageBlade.Build(part, root, tip, side, hw, rayBaseCol, tipCol, camber: rayCamber, curl: rayCurl, shoulder: 1.15);
+            // underside skin layer: gives the ray thickness at its edges and seats it on the receptacle
+            double skin = Math.Max(0.0012, Rb * 0.07);
+            Form.FoliageBlade.Build(part, root - Vec3.Up * skin, tip - Vec3.Up * skin * 0.6, side, hw * 0.94,
+                Primitives.Scale(rayBaseCol, 0.84), Primitives.Scale(tipCol, 0.84), camber: rayCamber * 0.9, curl: rayCurl, shoulder: 1.15);
             NewFloraMarkOrgan(part, mark, part.VertexCount - mark);
         }
 
