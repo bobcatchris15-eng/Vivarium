@@ -275,7 +275,7 @@ public static partial class OrganismMeshes
             var b1 = centre + dir * (burrR * rng.Range(1.05, 1.18));
             var b2 = centre + dir * (burrR * rng.Range(1.32, 1.55));
             var col = Primitives.Mix(strawBase, strawTip, rng.Range(0.15, 0.85));
-            Primitives.Tube(part, new[] { b0, b1, b2 }, new[] { burrR * 0.28, burrR * 0.22, 0.00008 }, 5,
+            Primitives.Tube(part, new[] { b0, b1, b2 }, new[] { burrR * 0.28, burrR * 0.22, 0.00008 }, 4,
                 (i, v) => (col, 1.0, (double)i / 2.0, v, 0.0, 0.0));
         }
         NewFloraMarkOrgan(part, v0, part.VertexCount - v0);
@@ -303,7 +303,7 @@ public static partial class OrganismMeshes
             NewFloraMarkOrgan(part, v0, part.VertexCount - v0);
         }
 
-        int tussockBlades = NewFloraCount(part, 16 + rng.NextInt(7)); // Wave 9: 16-22 upright-arching keeled blades
+        int tussockBlades = NewFloraCount(part, 14 + rng.NextInt(5)); // Wave 9: 16-22 upright-arching keeled blades
         for (int tb = 0; tb < tussockBlades; tb++)
         {
             double tAz = rng.Range(0, Math.Tau);
@@ -349,7 +349,7 @@ public static partial class OrganismMeshes
                         + Vec3.Up * (0.004 * Math.Sin(Math.PI * t));
                 }
                 NbStalk(part, stalkPath, new[] { 0.0022, 0.0019, 0.0015, 0.0012, 0.0009 }, 6, leafBase, leafTip);
-                NbBurrflagHead(part, stalkPath[^1], outward, rng, NewFloraCount(part, 16), strawBase, strawTip, 0.82);
+                NbBurrflagHead(part, stalkPath[^1], outward, rng, NewFloraCount(part, 13), strawBase, strawTip, 0.82);
             }
         }
 
@@ -384,7 +384,7 @@ public static partial class OrganismMeshes
                 var joint = at + headOut * 0.006 + tan * 0.004;
                 var centre = joint + headOut * rng.Range(0.004, 0.008) + tan * 0.003;
                 NbStalk(part, new[] { at, joint, centre }, new[] { 0.0014, 0.0010, 0.0008 }, 6, leafBase, leafTip);
-                int bracts = NewFloraCount(part, 20); // bounded pointed fruits
+                int bracts = NewFloraCount(part, 15); // bounded pointed fruits
                 NbBurrflagHead(part, centre, (outward + tan + Vec3.Up * 0.15).Normalized(), rng, bracts, strawBase, strawTip, (1.0 - 0.28 * b / Math.Max(1, burrs - 1)) * size);
             }
         }

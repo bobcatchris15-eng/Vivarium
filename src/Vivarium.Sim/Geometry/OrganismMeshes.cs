@@ -92,7 +92,7 @@ public static partial class OrganismMeshes
                 break;
             case "pairedleaf":
                 if (sp.Id == "fenbead") Fenbead9(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile);
-                else PairedLeaf(m, rng, seed, c1, c2);
+                else PairedLeaf(m, rng, seed, c1, c2, sp.Id == "tidebell");
                 break;
             case "floatleaf": FloatLeaf(m, rng, seed, c1, c2); break;
             case "capitula": BogglassMoss(m, rng, seed, c1, c2); break;
@@ -140,7 +140,7 @@ public static partial class OrganismMeshes
                 if (sp.Id.Contains("epiphyte") || sp.Id.Contains("perch"))
                     EpiphyticRosetteMesh(m, rng, seed, c1, c2, juvenile);
                 else
-                    Succulent(m, rng, seed, c1, c2, juvenile);
+                    Succulent(m, rng, seed, c1, c2, juvenile, sp.Id);
                 break;
             case "tussock": Tussock(m, rng, seed, c1, c2, juvenile); break;
             case "ashwire": { Ashwire(m, rng, seed, c1, c2, sp.RadiusAtMax, sp.Height, juvenile); } break;
@@ -790,10 +790,12 @@ public static partial class OrganismMeshes
     /// - Nodding, pendulous campanulate bell flowers held on arched pedicels above the waterline.
     /// - Deep glowing amber bioluminescent interior cavity (UV2.x = 1.8, UV2.y = 1.0).
     /// </summary>
-    private static void PairedLeaf(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2)
+    private static void PairedLeaf(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool tide = false)
     {
-        var leafBaseCol = Primitives.Mix(c1, new[] { 0.14, 0.28, 0.22 }, 0.45);
-        var leafRimCol = Primitives.Mix(c1, new[] { 0.35, 0.58, 0.45 }, 0.35);
+        // SP12 tidebell: larger, lighter leaves seated on the stem (no pointed pins), sturdier stem.
+        double tl = tide ? 1.55 : 1.0;
+        var leafBaseCol = tide ? Primitives.Mix(c1, new[] { 0.26, 0.48, 0.38 }, 0.60) : Primitives.Mix(c1, new[] { 0.14, 0.28, 0.22 }, 0.45);
+        var leafRimCol = tide ? Primitives.Mix(c1, new[] { 0.48, 0.72, 0.58 }, 0.50) : Primitives.Mix(c1, new[] { 0.35, 0.58, 0.45 }, 0.35);
         var stemCol = Primitives.Mix(c1, new[] { 0.30, 0.44, 0.25 }, 0.5);
         var calyxCol = Primitives.Mix(c1, new[] { 0.20, 0.36, 0.22 }, 0.6);
         var bellOuterCol = Primitives.Mix(c2, new[] { 0.82, 0.74, 0.45 }, 0.55);
@@ -822,7 +824,7 @@ public static partial class OrganismMeshes
             var stemFrames = Axis.Build(stemAxis, sSeed);
 
             var tmp = new MeshData { Lod = m.Lod };
-            SoftTube.Build(tmp, new SoftTubeParams(stemAxis, BaseRadius: 0.014, TipRadius: 0.007, Segments: 6), sSeed,
+            SoftTube.Build(tmp, new SoftTubeParams(stemAxis, BaseRadius: tide ? 0.020 : 0.014, TipRadius: tide ? 0.010 : 0.007, Segments: 6), sSeed,
                 (i, v) => (stemCol, 1, i, v, 0, 0));
 
             // Pairs of succulent waxy opposite leaves along nodes
@@ -831,7 +833,7 @@ public static partial class OrganismMeshes
                 double t = (double)p / (pairs + 1);
                 var f = Axis.Sample(stemFrames, t);
                 double taper = 1.0 - 0.45 * (double)p / pairs;
-                double leafLen = rng.Range(0.14, 0.20) * taper;
+                double leafLen = rng.Range(0.14, 0.20) * taper * tl;
                 double leafWid = leafLen * 0.52;
                 double leafThk = leafLen * 0.16;
 
@@ -845,7 +847,7 @@ public static partial class OrganismMeshes
                     var up = fwd.Cross(f.Tangent).Normalized() * sgn;
                     if (up.LengthSq < 1e-8) up = Vec3.Up;
                     var side = fwd.Cross(up).Normalized();
-                    var leafBase = f.Point + fwd * 0.012;
+                    var leafBase = f.Point + fwd * (tide ? 0.002 : 0.012);
 
                     // Volumetric fleshy ovate-lanceolate leaf
                     int vStart = tmp.VertexCount;
@@ -857,6 +859,7 @@ public static partial class OrganismMeshes
                     {
                         double lt = (double)s / leafSegs;
                         double w = leafWid * Math.Sin(Math.PI * Math.Pow(lt, 0.7));
+                        if (tide) w = Math.Max(w, leafWid * 0.34 * (1.0 - lt)); // seated, rounded base
                         double hCurve = -leafLen * 0.08 * lt * lt;
                         var pMid = leafBase + fwd * (leafLen * lt) + up * hCurve;
 
@@ -3573,8 +3576,10 @@ public static partial class OrganismMeshes
     /// - Color zoning: glaucous jade-green base with intense sun-stressed terracotta-crimson and bronze tips.
     /// - Mature specimens send up a fleshy bract-covered flowering thyrsus with starry coral-pink blossoms.
     /// </summary>
-    private static void Succulent(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
+    private static void Succulent(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile, string id = "")
     {
+        bool sun = id == "sunstone_rosette"; // SP12: fuller rosettes, sturdier scape
+        double sunW = sun ? 1.30 : 1.0;
         var stolonColBase = new[] { 0.42, 0.36, 0.28 };
         var stolonColTip = Primitives.Mix(c1, new[] { 0.48, 0.60, 0.45 }, 0.3);
 
@@ -3582,7 +3587,7 @@ public static partial class OrganismMeshes
         {
             // Juvenile form: single compact mother rosette with 1-2 small budding offsets
             double motherR = rng.Range(0.40, 0.52);
-            BuildRosette(m, rng, seed, new Vec3(0, 0.10, 0), motherR, 20, c1, c2);
+            BuildRosette(m, rng, seed, new Vec3(0, 0.10, 0), motherR, sun ? 30 : 20, c1, c2, sunW);
 
             int buds = 1 + rng.NextInt(2);
             for (int b = 0; b < buds; b++)
@@ -3590,7 +3595,7 @@ public static partial class OrganismMeshes
                 double bAng = b * Math.PI + rng.Range(-0.3, 0.3);
                 double bDist = motherR * rng.Range(0.65, 0.85);
                 var bCenter = new Vec3(Math.Cos(bAng) * bDist, 0.08, Math.Sin(bAng) * bDist);
-                BuildRosette(m, rng, seed + (ulong)(b * 73 + 11), bCenter, motherR * 0.38, 12, c1, c2);
+                BuildRosette(m, rng, seed + (ulong)(b * 73 + 11), bCenter, motherR * 0.38, sun ? 16 : 12, c1, c2, sunW);
             }
             return;
         }
@@ -3598,7 +3603,7 @@ public static partial class OrganismMeshes
         // Mature colony: Mother rosette + 5..7 daughter offsets on radiating stolons
         var motherCenter = new Vec3(rng.Range(-0.05, 0.05), 0.12, rng.Range(-0.05, 0.05));
         double motherRadius = rng.Range(0.44, 0.54);
-        BuildRosette(m, rng, seed, motherCenter, motherRadius, 28, c1, c2);
+        BuildRosette(m, rng, seed, motherCenter, motherRadius, sun ? 42 : 28, c1, c2, sunW);
 
         int daughterCount = 5 + rng.NextInt(3); // 5..7 offsets
         for (int d = 0; d < daughterCount; d++)
@@ -3616,8 +3621,8 @@ public static partial class OrganismMeshes
 
             // Daughter rosette
             ulong dSeed = seed + (ulong)(d * 127 + 31);
-            int dLeaves = 16 + rng.NextInt(5);
-            BuildRosette(m, rng, dSeed, daughterCenter, daughterRadius, dLeaves, c1, c2);
+            int dLeaves = (sun ? 22 : 16) + rng.NextInt(5);
+            BuildRosette(m, rng, dSeed, daughterCenter, daughterRadius, dLeaves, c1, c2, sunW);
         }
 
         // Mature flowering thyrsus / cyme (~65% chance on mature colony)
@@ -3632,7 +3637,7 @@ public static partial class OrganismMeshes
 
             // Muted wine/red-brown scape (Echeveria/Sedum-like), green at the base; never saturated red.
             var stalkColBase = Primitives.Mix(c1, new[] { 0.30, 0.40, 0.26 }, 0.5);
-            var stalkColTop = Primitives.Mix(c2, new[] { 0.36, 0.20, 0.16 }, 0.65);
+            var stalkColTop = Primitives.Mix(c2, new[] { 0.36, 0.20, 0.16 }, sun ? 0.45 : 0.65);
 
             // Slender, gently arching then nodding flower stalk (multi-point so it reads curved, not a rod).
             const int stalkPts = 8;
@@ -3646,7 +3651,7 @@ public static partial class OrganismMeshes
                 double bow = Math.Sin(t * Math.PI) * 0.10 + t * t * t * 0.14;
                 q += new Vec3(Math.Sign(leanX + 1e-6) * bow, -t * t * t * 0.10, Math.Sign(leanZ + 1e-6) * bow * 0.6);
                 stalkPath[i] = q;
-                stalkRad[i] = MathD.Lerp(0.024, 0.010, t);
+                stalkRad[i] = MathD.Lerp(0.024, 0.010, t) * (sun ? 1.6 : 1.0);
             }
             stalkTop = stalkPath[stalkPts - 1];
             Primitives.Tube(m, stalkPath, stalkRad, 5,
@@ -3724,7 +3729,7 @@ public static partial class OrganismMeshes
     }
 
     private static void BuildRosette(MeshData m, Rng rng, ulong seed, Vec3 center,
-        double rosetteRadius, int leafCount, double[] c1, double[] c2)
+        double rosetteRadius, int leafCount, double[] c1, double[] c2, double widthScale = 1.0)
     {
         double goldenAngle = 2.39996323; // 137.508 degrees
         double baseHue = rng.Range(-0.05, 0.05);
@@ -3766,7 +3771,7 @@ public static partial class OrganismMeshes
             var colM = jadeMid;
             var colT = Primitives.Mix(jadeMid, blushTip, 0.42 + 0.55 * (1.0 - rankT * 0.65));
 
-            SucculentLeaf(m, attach, dir, up, leafLen, leafWid * 0.5, leafThick, colB, colM, colT);
+            SucculentLeaf(m, attach, dir, up, leafLen, leafWid * 0.5 * widthScale, leafThick, colB, colM, colT);
         }
     }
 
