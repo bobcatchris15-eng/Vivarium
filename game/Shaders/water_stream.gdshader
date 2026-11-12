@@ -12,8 +12,14 @@ uniform float review_time = -1.0;
 varying vec3 water_world_position;
 varying float depthf;
 varying float cutface;
+varying float shore_ds;
+
+float shore_noise(vec2 p) {
+    return sin(p.x * 41.0 + sin(p.y * 29.0) * 1.7) * .5 + sin(p.y * 37.0 - p.x * 23.0) * .5;
+}
 
 void vertex() {
+    shore_ds = UV2.x;
     water_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     depthf = COLOR.a;
     cutface = step(0.5, COLOR.r);
@@ -82,6 +88,10 @@ void fragment() {
         // Shoreline contact: a soft meniscus band darkens the last centimetre of open
         // water before it meets the bank, so the waterline reads as a damp edge rather
         // than a hard cut against bright substrate.
+        // Smooth waterline: fade by the filtered bank depth (render-only), so the
+        // visible boundary follows a smooth contour rather than the terrain facets.
+        float sd = shore_ds + shore_noise(water_world_position.xz) * .003;
+        ALPHA *= smoothstep(-.004, .012, sd);
         float shore_contact = 1.0 - smoothstep(0.0, 0.025, gap);
         color = mix(color, color * vec3(0.58, 0.64, 0.56), shore_contact * 0.85);
         if (water_debug == 1) color = world_normal * .5 + .5;

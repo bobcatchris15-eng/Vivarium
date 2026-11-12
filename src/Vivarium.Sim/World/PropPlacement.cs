@@ -133,6 +133,28 @@ public sealed class PropPlacement
         return best;
     }
 
+    // Rock meshes (RockSurfaceProfile) span local y -0.38..0.75 of SizeY with the widest ring at -0.18.
+    // Seating the origin RockEmbed*SizeY above the ground leaves that bulge just below the surface, so the
+    // full body shows without a visible undercut. Ground is the lowest support around the rim (so a rock on
+    // a slope never floats on its downhill side) but never more than RockMaxSink*SizeY below the centre
+    // support (so a rock resting on another prop does not sink through it).
+    private const double RockEmbed = 0.12, RockMaxSink = 0.30;
+
+    private double RockSeatY(Vec2 p, double sx, double sy, double sz, double rotationY, Func<EntityId, bool> excluded)
+    {
+        double centre = SupportHeight(p, excluded), ground = centre;
+        double c = Math.Cos(rotationY), sn = Math.Sin(rotationY);
+        for (int i = 0; i < 8; i++)
+        {
+            double a = i * Math.PI / 4;
+            double lx = Math.Cos(a) * sx * 0.85, lz = Math.Sin(a) * sz * 0.85;
+            var q = new Vec2(p.X + lx * c - lz * sn, p.Z + lx * sn + lz * c);
+            ground = Math.Min(ground, SupportHeight(q, excluded));
+        }
+        ground = Math.Max(ground, centre - RockMaxSink * sy);
+        return ground + RockEmbed * sy;
+    }
+
     /// <summary>Number of props stacked directly beneath p (0 if resting on bare terrain).</summary>
     private int StackDepth(Vec2 p, EntityId ignore = default) => StackDepth(p, new HashSet<EntityId> { ignore });
 
@@ -176,7 +198,7 @@ public sealed class PropPlacement
             Id = _w.Ids.Next(EntityKind.Rock), X = p.X, Z = p.Z, RotationY = rotationY,
             SizeX = sx, SizeY = sy, SizeZ = sz, VariantSeed = variantSeed,
         };
-        rock.Y = SupportHeight(p) - sy * 0.25;
+        rock.Y = RockSeatY(p, sx, sy, sz, rotationY, _ => false);
         Props.Rocks.Add(rock);
         Changed($"rock {rock.Id} at {p}");
         return PlacementResult.Success(rock.Id);
@@ -215,7 +237,7 @@ public sealed class PropPlacement
             {
                 var err = ValidateRock(p, r.SizeX, r.SizeZ, id);
                 if (err != null) return PlacementResult.Fail(err);
-                r.X = p.X; r.Z = p.Z; r.Y = SupportHeight(p, id) - r.SizeY * 0.25;
+                r.X = p.X; r.Z = p.Z; r.Y = RockSeatY(p, r.SizeX, r.SizeY, r.SizeZ, r.RotationY, x => x == id);
                 break;
             }
             case LogProp l:
@@ -295,7 +317,7 @@ public sealed class PropPlacement
             if (obj is Rock r)
             {
                 pending.Remove(r.Id);
-                double ny = SupportHeight(r.Position, id => id == r.Id || pending.Contains(id)) - r.SizeY * 0.25;
+                double ny = RockSeatY(r.Position, r.SizeX, r.SizeY, r.SizeZ, r.RotationY, id => id == r.Id || pending.Contains(id));
                 if (Math.Abs(ny - r.Y) > 1e-9) any = true;
                 r.Y = ny;
             }
