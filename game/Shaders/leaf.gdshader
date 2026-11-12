@@ -15,6 +15,8 @@ uniform vec3 top_pigment = vec3(-1.0);
 uniform vec3 back_pigment = vec3(-1.0);
 uniform float tissue_albedo_mode = 0.0;
 uniform float tissue_gain = 1.0;
+// Own-pool species: saturation of the texture's own colour around its luminance (1 = as baked).
+uniform float tissue_saturation = 1.0;
 uniform float leaf_roughness = .45;
 uniform float back_roughness = .84;
 uniform float leaf_transmission = .28;
@@ -118,6 +120,7 @@ void fragment() {
         // Own-pool species: the baked texture IS the albedo (linear). Underside = same tissue
         // scaled by the species back/top pigment ratio, pulled toward its own luminance.
         vec3 own = photograph * .5 * tissue_gain;
+        own = max(mix(vec3(dot(own, vec3(.2126,.7152,.0722))), own, tissue_saturation), vec3(0.0));
         vec3 ratio = clamp(actual_back / max(actual_top, vec3(.004)), vec3(.6), vec3(1.8));
         vec3 under = own * mix(vec3(1.), ratio, .6);
         under = mix(under, vec3(dot(under, vec3(.2126,.7152,.0722))), .25) * 1.08;
@@ -132,7 +135,9 @@ void fragment() {
     // Stable organ and plant identity shift chlorophyll against warmer pigments.
     // CUSTOM0 carries a fixed per-leaf pseudo-age, not simulation age; the tip shift is subtle.
     float pigment_age = clamp(blade.z, 0.0, 1.0);
-    float pigment_shift = (seed - .5) * .18 + (pigment_age - .5) * .12;
+    // Own-pool species carry their identity in the texture: keep only a little per-leaf drift.
+    float own_tissue = step(.5, tissue_albedo_mode);
+    float pigment_shift = ((seed - .5) * .18 + (pigment_age - .5) * .12) * mix(1.0, .35, own_tissue);
     color *= vec3(1.0 + pigment_shift, 1.0 - pigment_shift * .22,
                   1.0 - pigment_shift * .65);
     float tip_age = smoothstep(.72, 1.0, UV.x) * pigment_age * .10;
@@ -191,7 +196,10 @@ void fragment() {
     // Pale midrib/veins and young-leaf freshness; lift only genuinely crushed blacks.
     color = mix(color, color*vec3(1.12,1.15,1.04)+vec3(.002,.003,.001), anatomy.r*topf*.05);
     color *= mix(1.15, 1., smoothstep(.010,.045,dot(color,vec3(.2126,.7152,.0722))));
-    if (leaf_variegation == 1) color = mix(color, vec3(dot(color,vec3(.33)))*vec3(2.5,2.8,2.2)+.03, anatomy.r*topf*.6);
+    // Top-surface variegation (1, 2) was painted over shared pools; an own-pool texture already carries
+    // its markings. Underside (3) and crystal (5) recipes are not in the texture, so they stay.
+    if (own_tissue > .5 && leaf_variegation <= 2) {}
+    else if (leaf_variegation == 1) color = mix(color, vec3(dot(color,vec3(.33)))*vec3(2.5,2.8,2.2)+.03, anatomy.r*topf*.6);
     else if (leaf_variegation == 2) color = mix(color, vec3(.30,.34,.32), smoothstep(.45,.65,texture(tissue_physical,vec3(tissue_uv*.5,layer)).b)*(1.-anatomy.r)*topf*.55);
     else if (leaf_variegation == 3) color = mix(color, vec3(.20,.025,.07)*(.8+.4*photograph.g), side*.85);
     if (volumetric) color = mix(color,srgb_to_linear(COLOR.rgb),smoothstep(.64,.99,UV.x)*.72);
@@ -263,7 +271,7 @@ void fragment() {
     float ground_contact = smoothstep(0.0, 0.14, max(v_obj_pos.y, 0.0));
     color *= mix(vec3(0.55, 0.50, 0.42), vec3(1.0), ground_contact);
     color *= mix(.93,1.07,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(.95,1.03,fract(seed*3.7)));
-    ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,.3+.7*smoothstep(0.,.45,plant.y));
+    ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,mix(.3, .78, own_tissue)+mix(.7, .22, own_tissue)*smoothstep(0.,.45,plant.y));
     // Species-specific cuticular gloss on adaxial face; rougher, paler abaxial face
     float wax = cuticle_sheen * topf;
     ROUGHNESS=clamp(mix(leaf_roughness - wax * 0.08, back_roughness + 0.08, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02, 0.20, 0.96);

@@ -368,6 +368,8 @@ public sealed class FloraVisualProfile
         bool ownPool = poolSp == Species && colorPool.GetWidth() == 512;
         mat.SetShaderParameter("tissue_albedo_mode", ownPool ? 1f : 0f);
         mat.SetShaderParameter("tissue_gain", ownPool ? OwnPoolGain(Species) : 1f);
+        // Generated masters are photographic and slightly muted; a modest lift keeps species apart at distance.
+        mat.SetShaderParameter("tissue_saturation", ownPool ? 1.25f : 1f);
         mat.SetShaderParameter("top_pigment", top);
         mat.SetShaderParameter("back_pigment", back);
         mat.SetShaderParameter("leaf_roughness", Roughness);
@@ -392,7 +394,7 @@ public sealed class FloraVisualProfile
         if (Godot.FileAccess.FileExists(path)
             && float.TryParse(Godot.FileAccess.GetFileAsString(path).Trim(), System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out float g))
-            return Mathf.Clamp(g, .2f, 1.2f);
+            return Mathf.Clamp(g, .2f, 1.4f);
         return .5f;
     }
 
