@@ -34,7 +34,7 @@ public partial class PilotTreeRenderer : Node3D
         if (_material == null)
         {
             _material = Bridge.Shader("res://Shaders/pilot_tree.gdshader");
-            Bridge.BindSurface(_material, "bark", Bridge.Surfaces.Bark);
+            Bridge.BindSurface(_material, "bark", "Bark012");
         }
         _material.SetShaderParameter("hex_apothem", (float)world.Domain.Apothem);
         string foliageId = world.PilotTree.Def.Id is "basinwarden" or "cisternvault" or "rootcloister" ? "shadebell" : "embercrown";
