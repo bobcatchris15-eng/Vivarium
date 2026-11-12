@@ -217,6 +217,299 @@
           "sha256": "97593743b9bd05ab745253de8430720b2e700f6b50a08d95a3a82325a6b142e9"
         }
       ]
+    },
+    {
+      "asset": "Bark002",
+      "url": "https://ambientcg.com/get?file=Bark002_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark002_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "c9eb76535ddabf3eab1f11be6d46e4866bacd5ed8229910a5e4e3471ba36db37"
+        },
+        {
+          "path": "game/Textures/Bark002_1K-JPG_Color.jpg",
+          "sha256": "2c149035a03f1b56001ba444d5c22ad97a191a1fe3a2b90e1fdaf5a8415ca55a"
+        },
+        {
+          "path": "game/Textures/Bark002_1K-JPG_Displacement.jpg",
+          "sha256": "3310597dbbc1b3576b3e66cfd90d04837c0c8b8ae2e91a64a08384b6cd6470fa"
+        },
+        {
+          "path": "game/Textures/Bark002_1K-JPG_NormalGL.jpg",
+          "sha256": "e3a8e0b28ca156c9c4ab89343b55394bbef590b8b8f532be9a95aaebd286377e"
+        },
+        {
+          "path": "game/Textures/Bark002_1K-JPG_Roughness.jpg",
+          "sha256": "2e2e898aec606742456bb83dd6b54079cfd26b3a88c145db9cc0cde75a6e21bf"
+        }
+      ]
+    },
+    {
+      "asset": "Bark004",
+      "url": "https://ambientcg.com/get?file=Bark004_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark004_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "d039dfcfa807a2c4915d5505eb935a1a173da5dc35edf7827a516b8911b48648"
+        },
+        {
+          "path": "game/Textures/Bark004_1K-JPG_Color.jpg",
+          "sha256": "63efa0c70f9a93edc15a3c568026066a55dc2c26de096b7b5aa327d5e9c6eee1"
+        },
+        {
+          "path": "game/Textures/Bark004_1K-JPG_Displacement.jpg",
+          "sha256": "d3032a272c5eb7331678951f4c1508b2da6c5673e1cddc968d66a6189ccb139d"
+        },
+        {
+          "path": "game/Textures/Bark004_1K-JPG_NormalGL.jpg",
+          "sha256": "197e9ba1317517433d59f327cb7c8fac04b91b27b2f54ba16a58c4b2e329a180"
+        },
+        {
+          "path": "game/Textures/Bark004_1K-JPG_Roughness.jpg",
+          "sha256": "e508b7dbf618087badc628ef6271290e5ecbe8163a2f6bc83957a1c9687b357a"
+        }
+      ]
+    },
+    {
+      "asset": "Bark005",
+      "url": "https://ambientcg.com/get?file=Bark005_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark005_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "e6920d44b7af9ad44bed718828b9f05a44830c09519e5e36e1128e609e0e9e8d"
+        },
+        {
+          "path": "game/Textures/Bark005_1K-JPG_Color.jpg",
+          "sha256": "960ce15cfe228c94b5b2199a60f0f676e34d1c6db2f00bb79740252e86f06705"
+        },
+        {
+          "path": "game/Textures/Bark005_1K-JPG_Displacement.jpg",
+          "sha256": "8644e227186cbf8ceede45188c89dc80fbe28c77f6961496add7c4990421c597"
+        },
+        {
+          "path": "game/Textures/Bark005_1K-JPG_NormalGL.jpg",
+          "sha256": "87dda0e86ebf15587c8c8eacb4e5c98f8c27cc729ae6468cc33550de0bce942b"
+        },
+        {
+          "path": "game/Textures/Bark005_1K-JPG_Roughness.jpg",
+          "sha256": "a550927c1159c0abd1b881ef53dc0bd307bad2e0e1ab548f522d631f8a9fb76e"
+        }
+      ]
+    },
+    {
+      "asset": "Bark006",
+      "url": "https://ambientcg.com/get?file=Bark006_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark006_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "50e068921883e9d03a68f732d660fd8dfb9d9b00f9d7e1a3fb832267bba9888b"
+        },
+        {
+          "path": "game/Textures/Bark006_1K-JPG_Color.jpg",
+          "sha256": "f9a3a95bcfbb92cc9615bf04d8f4e3b033ce5791d5d7c9c6a486ef6efa8b9915"
+        },
+        {
+          "path": "game/Textures/Bark006_1K-JPG_Displacement.jpg",
+          "sha256": "30b3455238ccd63857617a9b023ae52ecc5d3e6950b40c6e6c9d7bc95cce7315"
+        },
+        {
+          "path": "game/Textures/Bark006_1K-JPG_NormalGL.jpg",
+          "sha256": "77556c40964453ba50e3e24a63213b0f647556b2083f4e5409af7b98139b8f00"
+        },
+        {
+          "path": "game/Textures/Bark006_1K-JPG_Roughness.jpg",
+          "sha256": "78553f8b3bd82ed383bbc86062c60a1fb31e079b301ae07c65f14e7e3eddcbe0"
+        }
+      ]
+    },
+    {
+      "asset": "Bark007",
+      "url": "https://ambientcg.com/get?file=Bark007_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark007_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "2b5a1f0ca3291977ecf78e62cac78f86d24c146018fc97b3952e6461e6887e63"
+        },
+        {
+          "path": "game/Textures/Bark007_1K-JPG_Color.jpg",
+          "sha256": "8dc5c5ac6366c8030c96da04d77d3a42dfd52d9c806b44630618b7db97c907b5"
+        },
+        {
+          "path": "game/Textures/Bark007_1K-JPG_Displacement.jpg",
+          "sha256": "46240d4f9a427f25ccbc18496a76f343621405953e440316c4ef5069677f748c"
+        },
+        {
+          "path": "game/Textures/Bark007_1K-JPG_NormalGL.jpg",
+          "sha256": "0526a8635bab206965df578110366277e0d1e49ecde1be311c73c6d2bacbecdc"
+        },
+        {
+          "path": "game/Textures/Bark007_1K-JPG_Roughness.jpg",
+          "sha256": "f161ed84bdcc7442b8e92909028ec749656e08bf78ea5d7c8f2311a1255c4d34"
+        }
+      ]
+    },
+    {
+      "asset": "Bark008",
+      "url": "https://ambientcg.com/get?file=Bark008_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark008_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "3c76d414920916facd6945f83910618afc1c600dec678d45a8e4fca8156a47fa"
+        },
+        {
+          "path": "game/Textures/Bark008_1K-JPG_Color.jpg",
+          "sha256": "d4ad43dcbbed91df21f5929b094dc185bfd519cac0b2a30ee5f9844fc9abee23"
+        },
+        {
+          "path": "game/Textures/Bark008_1K-JPG_Displacement.jpg",
+          "sha256": "91c3950c8c84f88f714f0d30daea8796a64c31ee68055e6fcc214d6539d3be61"
+        },
+        {
+          "path": "game/Textures/Bark008_1K-JPG_NormalGL.jpg",
+          "sha256": "59a354e1617eb075bc3e0dc1a627f472d364b1a2141c3cc90f14c924860334bc"
+        },
+        {
+          "path": "game/Textures/Bark008_1K-JPG_Roughness.jpg",
+          "sha256": "3ab2520821001056d606ea81cdc493d10d3fd8979fa946626d9dc44977393c66"
+        }
+      ]
+    },
+    {
+      "asset": "Bark009",
+      "url": "https://ambientcg.com/get?file=Bark009_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark009_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "5c58691788419e28349e7c0cff5056cb0c3b2f7411fa8f33615b9d7f6f5186ac"
+        },
+        {
+          "path": "game/Textures/Bark009_1K-JPG_Color.jpg",
+          "sha256": "6fde1cecb7c179116af60dcc297ab22a6a74e3ff83de9e608bf253e18d415755"
+        },
+        {
+          "path": "game/Textures/Bark009_1K-JPG_Displacement.jpg",
+          "sha256": "f07452cef8995a924cff03cd4ad56521d934b28576ab9f42f65820b8fddc9821"
+        },
+        {
+          "path": "game/Textures/Bark009_1K-JPG_NormalGL.jpg",
+          "sha256": "9c7a85b333ad321f775914f1bcea125bb9cf028e341be944580b1c9dc61868ea"
+        },
+        {
+          "path": "game/Textures/Bark009_1K-JPG_Roughness.jpg",
+          "sha256": "9c8e236f7e1c8a4cf5934207db126eb1629c4e30bae45e35ea74f5cc3ee88119"
+        }
+      ]
+    },
+    {
+      "asset": "Bark010",
+      "url": "https://ambientcg.com/get?file=Bark010_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark010_1K-JPG_Color.jpg",
+          "sha256": "501d86f8c3aa609a964cc5fd0a7013e6b1c544384a58f0619f9bc3624076c63f"
+        },
+        {
+          "path": "game/Textures/Bark010_1K-JPG_Displacement.jpg",
+          "sha256": "ea6eb19011b4ae55e9cffd32f0b9f5bb46b714369e1f2da33f7adc9ff5cf7b9e"
+        },
+        {
+          "path": "game/Textures/Bark010_1K-JPG_NormalGL.jpg",
+          "sha256": "d5ce57d4f2bfbece0cabc972326c65afc0172a939026a1e9f0b0379f3fabfb31"
+        },
+        {
+          "path": "game/Textures/Bark010_1K-JPG_Roughness.jpg",
+          "sha256": "9db6a62f40c4466446da9980fee25252c5504b3b37fd42eaaf27080f4dbde905"
+        }
+      ]
+    },
+    {
+      "asset": "Bark012",
+      "url": "https://ambientcg.com/get?file=Bark012_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark012_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "4f695890ad517325cc00659e6e66fa9388ee6470d525b78476c643d6c4c1e3b7"
+        },
+        {
+          "path": "game/Textures/Bark012_1K-JPG_Color.jpg",
+          "sha256": "772d7a35b1d93bce6de7ad8adeabfb6cc126ba52d07b7c9103ed9a7e65dac577"
+        },
+        {
+          "path": "game/Textures/Bark012_1K-JPG_Displacement.jpg",
+          "sha256": "ba9f34d58b68e6fd5a0800ee497d3893e87d014b3afc6f4f644ec02b0f241dda"
+        },
+        {
+          "path": "game/Textures/Bark012_1K-JPG_NormalGL.jpg",
+          "sha256": "516a7c92605277d05c7fcdc8fb468572ccdba10a661da1212a10c57977d449b6"
+        },
+        {
+          "path": "game/Textures/Bark012_1K-JPG_Roughness.jpg",
+          "sha256": "65bba089b8b7589e0dd6107fe418faaaa2ededcd610de4f9c9897bde763356a9"
+        }
+      ]
+    },
+    {
+      "asset": "Bark015",
+      "url": "https://ambientcg.com/get?file=Bark015_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark015_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "f1f76bec73110050d943f42f4f51b636590239fce90aba0d3d81526c16672e78"
+        },
+        {
+          "path": "game/Textures/Bark015_1K-JPG_Color.jpg",
+          "sha256": "53017d41e31312612a0f21e5573995a501ac151464b50725a499b947c4b28f94"
+        },
+        {
+          "path": "game/Textures/Bark015_1K-JPG_Displacement.jpg",
+          "sha256": "d23c3178caae573e56c3d409c7571ee0865ed03e2d3372ea1861a21bd24447ae"
+        },
+        {
+          "path": "game/Textures/Bark015_1K-JPG_NormalGL.jpg",
+          "sha256": "0e31a6df287933022ec6e0ee83d19acf9a8de0192a7531d258a9853f1db05db3"
+        },
+        {
+          "path": "game/Textures/Bark015_1K-JPG_Roughness.jpg",
+          "sha256": "6b88ce1481f3d2c509de938cddb5626930a6b16f2ee82de788c0eae1a2d5ab34"
+        }
+      ]
+    },
+    {
+      "asset": "Bark016",
+      "url": "https://ambientcg.com/get?file=Bark016_1K-JPG.zip",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "game/Textures/Bark016_1K-JPG_AmbientOcclusion.jpg",
+          "sha256": "3f5c1f63e47d9b3acebd20975890cced6353d9ade461f4d216245b1984a8f684"
+        },
+        {
+          "path": "game/Textures/Bark016_1K-JPG_Color.jpg",
+          "sha256": "e15521cfb5132ca123cdba0229d18d27f5b797d252b2e3567efb877bbed3d6a1"
+        },
+        {
+          "path": "game/Textures/Bark016_1K-JPG_Displacement.jpg",
+          "sha256": "da98a5fa3ff319dc7aa6aad0403933e3297df88577ec8fd6adc281ffef36d581"
+        },
+        {
+          "path": "game/Textures/Bark016_1K-JPG_NormalGL.jpg",
+          "sha256": "660137ce83afbdd084be3a718e8d2b9364a2ed33d7088978b60439122275ae62"
+        },
+        {
+          "path": "game/Textures/Bark016_1K-JPG_Roughness.jpg",
+          "sha256": "44daf134b1f244f66bec8b5d401db43e06c6629adcb078ef3f7dffeb0ed28188"
+        }
+      ]
     }
   ]
 }

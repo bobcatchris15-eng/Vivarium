@@ -9,7 +9,7 @@ namespace Vivarium.Game.App;
 /// <summary>Offline deterministic physical-map authoring. Color is never interpreted as geometric height.</summary>
 public partial class LeafMaterialBaker : Node
 {
-    private const int Size = 2048;
+    private static int Size = 2048;
     public override void _Ready()
     {
         try
@@ -17,7 +17,13 @@ public partial class LeafMaterialBaker : Node
             if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("Run --flora-bake with a rendering device; headless cannot serialize GPU texture arrays.");
             string[] ids = Main.ArgAfter("--bake-species")?.Split(',')
                 ?? new[] { "glassfinger" };
-            foreach (string id in ids) Bake(id);
+            Size = int.Parse(Main.ArgAfter("--bake-size") ?? "2048");
+            if (Size != 512 && Size != 1024 && Size != 2048) throw new ArgumentException("--bake-size must be 512, 1024 or 2048");
+            int layers = int.Parse(Main.ArgAfter("--bake-layers") ?? "4");
+            if (layers < 1 || layers > 4) throw new ArgumentException("--bake-layers must be 1..4");
+            string? from = Main.ArgAfter("--bake-profile-from"), outDir = Main.ArgAfter("--bake-out");
+            bool veins = Array.IndexOf(Main.UserArgs, "--bake-veins") >= 0 || Size == 2048;
+            foreach (string id in ids) Bake(id, from ?? id, outDir ?? id, layers, veins);
             GD.Print("FLORA_BAKE_OK"); GetTree().Quit();
         }
         catch (Exception e) { GD.PrintErr("FLORA_BAKE_FAILED " + e); GetTree().Quit(1); }
@@ -64,15 +70,17 @@ public partial class LeafMaterialBaker : Node
         return (minDist1, minDist2 - minDist1);
     }
 
-    private static void Bake(string id)
+    private static void Bake(string id, string profileId, string outDir, int layers, bool veins)
     {
-        var profile = FloraVisualProfile.Load(id, includeInactive: true)!;
-        string root = $"res://Textures/LeafPools/{id}";
+        var profile = FloraVisualProfile.Load(profileId, includeInactive: true) ?? FloraVisualProfile.Synthesize(profileId);
+        string root = $"res://Textures/LeafPools/{outDir}";
         Directory.CreateDirectory(ProjectSettings.GlobalizePath(root));
+        // Compact (512) pools keep the master's own colour; --bake-normalized forces the legacy path.
+        bool keepColor = Size == 512 && Array.IndexOf(Main.UserArgs, "--bake-normalized") < 0;
         var colors = new Godot.Collections.Array<Image>();
         var normals = new Godot.Collections.Array<Image>();
         var physical = new Godot.Collections.Array<Image>();
-        for (int variant = 0; variant < 4; variant++)
+        for (int variant = 0; variant < layers; variant++)
         {
             using var master = Image.LoadFromFile(ProjectSettings.GlobalizePath($"res://Textures/LeafPools/Masters/{id}-{variant}.png"));
             if (master == null || master.IsEmpty()) throw new IOException($"Missing master {id}-{variant}");
@@ -115,10 +123,19 @@ public partial class LeafMaterialBaker : Node
                 heights[y * Size + x] = baseRelief + cellDome;
 
                 var src = TissuePixel(x, y);
+                if (keepColor)
+                {
+                    // Compact own pools: the master's colour is the species colour; the shader
+                    // reads the texture directly as linear albedo (tissue_albedo_mode).
+                    color.SetPixel(x, y, new Color(Math.Clamp(src.R, 0f, 1f), Math.Clamp(src.G, 0f, 1f), Math.Clamp(src.B, 0f, 1f)).LinearToSrgb());
+                }
+                else
+                {
                 var ratio = new Vector3(src.R / Math.Max(mean.X, .001f), src.G / Math.Max(mean.Y, .001f), src.B / Math.Max(mean.Z, .001f));
                 ratio = Vector3.One * .45f + ratio * .55f;
                 var reflectance = new Color(Math.Clamp(ratio.X * .5f, .2f, .8f), Math.Clamp(ratio.Y * .5f, .2f, .8f), Math.Clamp(ratio.Z * .5f, .2f, .8f));
                 color.SetPixel(x, y, reflectance.LinearToSrgb());
+                }
 
                 // Bake optical thickness into tissue_physical.b (opaque sclerenchyma at cell borders, translucent mesophyll in areoles)
                 float opticalThickness = Mathf.Lerp(0.32f, 0.78f, Math.Clamp(1.0f - borderD * 3.5f, 0f, 1f));
@@ -128,7 +145,7 @@ public partial class LeafMaterialBaker : Node
             colors.Add(color); normals.Add(normal); physical.Add(packed);
         }
         SavePool(root + "/color.res", colors); SavePool(root + "/normal.res", normals); SavePool(root + "/physical.res", physical);
-        BakeVeins(root, profile.Veins);
+        if (veins) BakeVeins(root, profile.Veins);
         GD.Print("FLORA_BAKED " + id);
     }
 

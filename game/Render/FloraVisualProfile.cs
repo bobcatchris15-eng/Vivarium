@@ -345,7 +345,9 @@ public sealed class FloraVisualProfile
     public ShaderMaterial LeafMaterial(bool animated = false)
     {
         var mat = Bridge.Shader("res://Shaders/leaf.gdshader");
-        mat.SetShaderParameter("tissue_color", Pool("color"));
+        var colorPool = Pool("color");
+        mat.SetShaderParameter("tissue_layers", colorPool.GetLayers());
+        mat.SetShaderParameter("tissue_color", colorPool);
         mat.SetShaderParameter("tissue_normal", Pool("normal"));
         mat.SetShaderParameter("tissue_physical", Pool("physical"));
 
@@ -362,6 +364,10 @@ public sealed class FloraVisualProfile
         // rest of the recipe (including its pool and relief) while binding that palette.
         var top = Species == "lanternbrush" ? FloraSurfaceProfiles.Leaf(Species).Top : new Vector3(Top[0], Top[1], Top[2]);
         var back = Species == "lanternbrush" ? FloraSurfaceProfiles.Leaf(Species).Back : new Vector3(Back[0], Back[1], Back[2]);
+        // Own compact pool (baked from this species' masters, colour kept): texture carries colour.
+        bool ownPool = poolSp == Species && colorPool.GetWidth() == 512;
+        mat.SetShaderParameter("tissue_albedo_mode", ownPool ? 1f : 0f);
+        mat.SetShaderParameter("tissue_gain", ownPool ? OwnPoolGain(Species) : 1f);
         mat.SetShaderParameter("top_pigment", top);
         mat.SetShaderParameter("back_pigment", back);
         mat.SetShaderParameter("leaf_roughness", Roughness);
@@ -378,6 +384,18 @@ public sealed class FloraVisualProfile
         return mat;
     }
 
+    // Brightness trim so photographed masters land at plausible foliage albedo. Written per species by
+    // build/overhaul/TX/masters2.py from the master's mean linear luminance (dark and pale tissues both stay plausible).
+    private static float OwnPoolGain(string id)
+    {
+        string path = $"res://Textures/LeafPools/{id}/tissue_gain.txt";
+        if (Godot.FileAccess.FileExists(path)
+            && float.TryParse(Godot.FileAccess.GetFileAsString(path).Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float g))
+            return Mathf.Clamp(g, .2f, 1.2f);
+        return .5f;
+    }
+
     private Texture2DArray Pool(string kind)
     {
         string poolSp = !string.IsNullOrEmpty(PoolSpecies) ? PoolSpecies : Species;
@@ -388,7 +406,7 @@ public sealed class FloraVisualProfile
         if (!Godot.FileAccess.FileExists(path))
             path = $"res://Textures/LeafPools/embercrown/{kind}.res";
         var pool = GD.Load<Texture2DArray>(path);
-        if (pool == null || (pool.GetWidth() != 1024 && pool.GetWidth() != 2048) || pool.GetLayers() != 4)
+        if (pool == null || (pool.GetWidth() != 512 && pool.GetWidth() != 1024 && pool.GetWidth() != 2048) || pool.GetLayers() < 1 || pool.GetLayers() > 4)
             throw new InvalidOperationException($"Invalid leaf pool {path}; rebuild using --flora-bake with a rendering device.");
         return pool;
     }

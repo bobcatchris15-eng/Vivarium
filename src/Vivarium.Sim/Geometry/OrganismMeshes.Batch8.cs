@@ -23,6 +23,7 @@ public static partial class OrganismMeshes
     private static void B8Ribbon(MeshData m, Vec3 root, Vec3 outDir, Vec3 flow, double len, double lean, double w0,
         double twist, double sway, double swayPhase, double[] cb, double[] ct, int rows)
     {
+        int ribV0 = m.VertexCount, ribI0 = m.Indices.Count;
         var o = new Vec3(outDir.X, 0, outDir.Z).Normalized();
         var lat = new Vec3(-o.Z, 0, o.X);
         Vec3 P(double t) => root + Vec3.Up * (len * t * (1.0 - 0.10 * t))
@@ -52,6 +53,7 @@ public static partial class OrganismMeshes
             Primitives.TriangleFacing(m, C[i], C[i + 1], R[i], n0);
             Primitives.TriangleFacing(m, R[i], C[i + 1], R[i + 1], n0);
         }
+        m.RecordLeaf(ribV0, ribI0, root, len);
     }
 
     private static void B8Flower(MeshData part, Vec3 c, Vec3 axis, int petals, double len, double rot, double[] pCol, double[] tCol, double[] eye, double eyeR)
@@ -279,6 +281,7 @@ public static partial class OrganismMeshes
     // ---------------------------------------------------------------------------------------------
     private static void B8Paddle(MeshData m, Vec3 root, Vec3 dirH, double len, double rise, double droop, double hw, double[] cb, double[] ct, int rows)
     {
+        int recV0 = m.VertexCount, recI0 = m.Indices.Count;
         var d = new Vec3(dirH.X, 0, dirH.Z).Normalized();
         var side = new Vec3(-d.Z, 0, d.X);
         Vec3 Centre(double t) => root + d * (len * 0.55 * t) + Vec3.Up * (len * (rise * t - droop * t * t));
@@ -305,6 +308,7 @@ public static partial class OrganismMeshes
             Primitives.TriangleFacing(m, C[i], C[i + 1], R[i], n0);
             Primitives.TriangleFacing(m, R[i], C[i + 1], R[i + 1], n0);
         }
+        m.RecordLeaf(recV0, recI0, root, len);
     }
 
     private static void Paddlerib8(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, double radius, double height, bool juvenile)

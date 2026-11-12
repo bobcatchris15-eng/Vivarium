@@ -175,7 +175,6 @@ public static partial class OrganismMeshes
             midrib: TankMidrib,
             midribWidth: 0.16,
             volumetric: true);
-        NewFloraMarkOrgan(m, mark, m.VertexCount - mark);
     }
 
     /// <summary>The flower spike: overlapping scarlet bracts with small flowers between them.</summary>

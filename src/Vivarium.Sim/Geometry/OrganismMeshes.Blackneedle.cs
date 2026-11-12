@@ -109,8 +109,9 @@ public static partial class OrganismMeshes
 
                 // Spine embedded solidly inside the actual tip of the curved lobe
                 var spineDir = (actualLobeTip - at).Normalized();
+                int spineMark = m.VertexCount;
                 BlackneedleSpine(m, actualLobeTip - spineDir * (lobeLen * 0.08), actualLobeTip + spineDir * (lobeLen * 0.18), 0.0013);
-                NewFloraMarkOrgan(m, mark, m.VertexCount - mark);
+                NewFloraMarkOrgan(m, spineMark, m.VertexCount - spineMark);
             }
         }
 
@@ -170,8 +171,9 @@ public static partial class OrganismMeshes
 
             // Spine embedded securely inside the wing tip
             var wingSpineDir = (actualWingTip - at).Normalized();
+            int wingSpineMark = m.VertexCount;
             BlackneedleSpine(m, actualWingTip - wingSpineDir * (len * 0.06), actualWingTip + wingSpineDir * (len * 0.14), 0.0010);
-            NewFloraMarkOrgan(m, mark, m.VertexCount - mark);
+            NewFloraMarkOrgan(m, wingSpineMark, m.VertexCount - wingSpineMark);
         }
     }
 

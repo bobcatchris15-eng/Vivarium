@@ -255,6 +255,7 @@ public static class SpecimenReviewRunner
     private static void WriteTrisCensus(VivariumWorld world, string directory, List<string> floraIds)
     {
         var rows = new System.Collections.Concurrent.ConcurrentBag<(string species, string shape, int[] tiers, int morphs, bool coverage, string? note)>();
+        var routing = new System.Collections.Concurrent.ConcurrentBag<object>();
         System.Threading.Tasks.Parallel.ForEach(floraIds, id =>
         {
             var sp = world.Content.FloraOrThrow(id);
@@ -280,6 +281,11 @@ public static class SpecimenReviewRunner
                             farEmberMicroSides: Vivarium.Game.Render.FloraRenderer.DistantEmberMicroSides,
                             farDewbonnetCapRings: Vivarium.Game.Render.FloraRenderer.DistantDewbonnetCapRings);
                     maxima[lod] = Math.Max(maxima[lod], mesh.TriangleCount);
+                    if (lod == 0 && morph == 0)
+                    {
+                        var (stemM, leafM) = Vivarium.Sim.Geometry.FloraVisualCompiler.Split(mesh);
+                        routing.Add(new { species = id, shape = sp.Shape, leaf_tris = leafM.TriangleCount, stem_tris = stemM.TriangleCount, leaf_spans = mesh.Leaves.Count });
+                    }
                 }
             }
             rows.Add((id, sp.Shape, maxima, morphs, false, null));
@@ -291,6 +297,8 @@ public static class SpecimenReviewRunner
                 tier0_tris_max = r.tiers[0], tier1_tris_max = r.tiers[1], tier2_tris_max = r.tiers[2],
                 morphs = r.morphs, coverage = r.coverage, note = r.note,
             }).ToList();
+        File.WriteAllText(Path.Combine(directory, "leaf_routing.json"),
+            JsonSerializer.Serialize(routing.OrderBy(r => ((dynamic)r).species).ToList(), new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(directory, "tris.json"),
             JsonSerializer.Serialize(sorted, new JsonSerializerOptions { WriteIndented = true }));
     }

@@ -580,6 +580,7 @@ public static partial class OrganismMeshes
         foreach (var i in src.Indices) dst.Indices.Add(baseIndex + i);
         foreach (var st in src.Structural) dst.Structural.Add((st.FirstVertex + baseIndex, st.VertexCount, st.Sides, st.Radius));
         foreach (var an in src.AttachmentNodes) dst.AttachmentNodes.Add(Rot(an) + translate);
+        if (dst.FloraDetailLevel != null) foreach (var lf in src.Leaves) dst.Leaves.Add(lf with { FirstVertex = lf.FirstVertex + baseIndex, FirstIndex = lf.FirstIndex + (dst.Indices.Count - src.Indices.Count), Attachment = Rot(lf.Attachment) + translate });
     }
 
     /// <summary>Appends <paramref name="src"/> into <paramref name="dst"/> translated by <paramref name="translate"/>
@@ -596,6 +597,7 @@ public static partial class OrganismMeshes
         foreach (var i in src.Indices) dst.Indices.Add(baseIndex + i);
         foreach (var st in src.Structural) dst.Structural.Add((st.FirstVertex + baseIndex, st.VertexCount, st.Sides, st.Radius));
         foreach (var an in src.AttachmentNodes) dst.AttachmentNodes.Add(an + translate);
+        if (dst.FloraDetailLevel != null) foreach (var lf in src.Leaves) dst.Leaves.Add(lf with { FirstVertex = lf.FirstVertex + baseIndex, FirstIndex = lf.FirstIndex + (dst.Indices.Count - src.Indices.Count), Attachment = lf.Attachment + translate });
     }
 
 
@@ -823,7 +825,7 @@ public static partial class OrganismMeshes
             ulong sSeed = Rng.Mix(seed, (ulong)(k * 211 + 11));
             var stemFrames = Axis.Build(stemAxis, sSeed);
 
-            var tmp = new MeshData { Lod = m.Lod };
+            var tmp = new MeshData { Lod = m.Lod, FloraDetailLevel = m.FloraDetailLevel, FloraVisualSeed = m.FloraVisualSeed };
             SoftTube.Build(tmp, new SoftTubeParams(stemAxis, BaseRadius: tide ? 0.020 : 0.014, TipRadius: tide ? 0.010 : 0.007, Segments: 6), sSeed,
                 (i, v) => (stemCol, 1, i, v, 0, 0));
 
@@ -1114,7 +1116,9 @@ public static partial class OrganismMeshes
             var tmp = new MeshData { Lod = m.Lod };
             OrbicularPad(tmp, lSeed, padRadius, thickness: 0.004, topCentreCol, topRimCol, bottomCol,
                 torn: isOld, tearAmp: isOld ? rng.Range(0.06, 0.12) : 0);
+            int padV0 = m.VertexCount, padI0 = m.Indices.Count;
             AppendRotatedY(m, tmp, padCentre, ang);
+            m.RecordLeaf(padV0, padI0, padCentre, padRadius * 2);
         }
 
         // 2. Emergent water-shield cup flowers held just above the water line (Y ~ 1.08)
@@ -3792,6 +3796,7 @@ public static partial class OrganismMeshes
         double length, double halfWidth, double thickness,
         double[] colBase, double[] colMid, double[] colTip)
     {
+        int recV0 = m.VertexCount, recI0 = m.Indices.Count;
         var forward = dir.Normalized();
         var side = forward.Cross(up).Normalized();
         if (side.LengthSq < 1e-4) side = forward.Cross(new Vec3(1, 0, 0)).Normalized();
@@ -3872,6 +3877,7 @@ public static partial class OrganismMeshes
             int pNext = (p + 1) % perimeter;
             Primitives.TriangleFacing(m, lastStation + p, tipIdx, lastStation + pNext, forward);
         }
+        m.RecordLeaf(recV0, recI0, attach, length);
     }
     /// <summary>
     /// Epiphytic Rosette: Spiraling vase-like crown with curving, tapering leaves flaring outward
@@ -4616,6 +4622,7 @@ public static partial class OrganismMeshes
     private static void GrassBlade(MeshData m, Vec3 b, Vec3 control, Vec3 tip, Vec3 sideHint,
         double halfWidth, double camber, double[] colBase, double[] colMid, double[] colTip)
     {
+        int grassFirstVertex = m.VertexCount, grassFirstIndex = m.Indices.Count;
         const int n = 4;
         var pts = new Vec3[n + 1];
         for (int i = 0; i <= n; i++)
@@ -4684,6 +4691,7 @@ public static partial class OrganismMeshes
                 Primitives.TriangleFacing(m, k1, rt1, rt0, nrmR);
             }
         }
+        m.RecordLeaf(grassFirstVertex, grassFirstIndex, b, (tip - b).Length);
     }
 
     /// <summary>

@@ -41,6 +41,7 @@ public partial class Main : Node3D
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
         if (ArgAfter("--licenses") is { } licenseFile) { WriteLicenses(licenseFile); GetTree().Quit(0); return; }
+        if (UserArgs.Contains("--flora-bake")) { AddChild(new LeafMaterialBaker { Name = "LeafBaker" }); return; }
         bool visualReview = UserArgs.Contains("--visual-review");
         bool specimenReview = UserArgs.Contains("--specimen-review");
         bool guardianReview = UserArgs.Contains("--guardian-review");

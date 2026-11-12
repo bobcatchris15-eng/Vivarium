@@ -312,7 +312,9 @@ public static partial class OrganismMeshes
                 for (int sgn = -1; sgn <= 1; sgn += 2)
                 {
                     var ld = (side * sgn * 0.85 + tg * 0.45 + new Vec3(0, 0.30, 0)).Normalized();
+                    int beadV0 = part.VertexCount, beadI0 = part.Indices.Count;
                     B9Spindle(part, pts[k] + ld * 0.001, ld, bl, br, beadB, beadT, 4, 7, 0, 1.1);
+                    part.RecordLeaf(beadV0, beadI0, pts[k], bl);
                 }
             }
             if (!centre && s % 2 == 0)

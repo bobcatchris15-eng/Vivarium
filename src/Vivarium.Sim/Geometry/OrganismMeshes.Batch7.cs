@@ -17,6 +17,7 @@ public static partial class OrganismMeshes
     {
         var axis = tip - root;
         double len = axis.Length;
+        int bladeV0 = m.VertexCount, bladeI0 = m.Indices.Count;
         if (len < 1e-7) return;
         var dir = axis / len;
         var side = sideHint - dir * sideHint.Dot(dir);
@@ -39,12 +40,14 @@ public static partial class OrganismMeshes
         Primitives.TriangleFacing(m, a, mm, r, n);
         Primitives.TriangleFacing(m, l, t, mm, n);
         Primitives.TriangleFacing(m, mm, t, r, n);
+        if (leaf) m.RecordLeaf(bladeV0, bladeI0, root, len);
     }
 
     /// <summary>Arching lanceolate leaf: rows+1 stations of left/mid/right, keeled; ~4*rows triangles.</summary>
     private static void B7Leaf(MeshData m, Vec3 root, Vec3 dirH, double len, double hf, double rise, double droop, double hw,
         double[] cb, double[] ct, double keel, int rows = 4)
     {
+        int leafV0 = m.VertexCount, leafI0 = m.Indices.Count;
         var d = new Vec3(dirH.X, 0, dirH.Z).Normalized();
         var side = new Vec3(-d.Z, 0, d.X);
         Vec3 Centre(double t) => root + d * (len * hf * t) + Vec3.Up * (len * (rise * t - droop * t * t));
@@ -69,6 +72,7 @@ public static partial class OrganismMeshes
             Primitives.TriangleFacing(m, C[i], C[i + 1], R[i], n0);
             Primitives.TriangleFacing(m, R[i], C[i + 1], R[i + 1], n0);
         }
+        m.RecordLeaf(leafV0, leafI0, root, len);
     }
 
     /// <summary>Surface of revolution about <paramref name="axis"/>. Profile is (radius, height along axis, colour, glow).</summary>
@@ -389,6 +393,7 @@ public static partial class OrganismMeshes
     private static void B7Coin(MeshData m, Vec3 centre, Vec3 normal, Vec3 fwd, double rad, double dish, int sides,
         double[] cCentre, double[] cRim, double wobPhase)
     {
+        int recV0 = m.VertexCount, recI0 = m.Indices.Count;
         var n0 = normal.Normalized();
         var (t1, t2) = WsFrame(n0);
         int start = m.VertexCount;
@@ -419,6 +424,7 @@ public static partial class OrganismMeshes
             Primitives.TriangleFacing(m, ringStart[0] + s, ringStart[1] + s, ringStart[0] + s2, n0);
             Primitives.TriangleFacing(m, ringStart[0] + s2, ringStart[1] + s, ringStart[1] + s2, n0);
         }
+        m.RecordLeaf(recV0, recI0, centre, rad);
     }
 
     private static void Coinrunner7(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, double radius, double height)
@@ -513,6 +519,7 @@ public static partial class OrganismMeshes
     // ---------------------------------------------------------------------------------------------
     private static void B7Comb(MeshData m, Vec3 root, Vec3 dir, Vec3 side, Vec3 lift, double len, int pairs, double toothLen, double[] cb, double[] ct)
     {
+        int recV0 = m.VertexCount, recI0 = m.Indices.Count;
         var n = dir.Cross(side).Normalized();
         if (n.Dot(lift) < 0) n = -n;
         for (int i = 0; i < pairs; i++)
@@ -534,6 +541,7 @@ public static partial class OrganismMeshes
             Primitives.TriangleFacing(m, a, b, l, n);
             Primitives.TriangleFacing(m, a, b, r, n);
         }
+        m.RecordLeaf(recV0, recI0, root, len);
     }
 
     private static void Fencomb7(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, double radius, double height, bool juvenile)

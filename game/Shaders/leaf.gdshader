@@ -13,6 +13,8 @@ uniform vec3 leaf_top = vec3(.045,.14,.045);
 uniform vec3 leaf_back = vec3(.14,.20,.09);
 uniform vec3 top_pigment = vec3(-1.0);
 uniform vec3 back_pigment = vec3(-1.0);
+uniform float tissue_albedo_mode = 0.0;
+uniform float tissue_gain = 1.0;
 uniform float leaf_roughness = .45;
 uniform float back_roughness = .84;
 uniform float leaf_transmission = .28;
@@ -25,6 +27,7 @@ uniform float vein_strength = .4;
 uniform float wind_strength = 0.0;
 uniform float plant_stiffness = 7.;
 uniform float tissue_scale = 1.6;
+uniform int tissue_layers = 4;
 uniform float canopy_occlusion = .55;
 // Shoot-level chlorophyll mottling; separate from unrelated UV texture noise.
 uniform float leaf_pigment_mottle = 0.0;
@@ -91,10 +94,11 @@ void fragment() {
     bool back = !FRONT_FACING && !volumetric;
     float side = back ? 1. : 0.;
     float seed = fract(blade.x+plant.w*.618);
-    float layer = mod(blade.y+floor(plant.w*4.),4.);
+    float tl = float(max(tissue_layers,1));
+    float layer = mod(blade.y+floor(plant.w*4.),tl);
     vec2 tissue_uv = UV*vec2(tissue_scale,tissue_scale*.7)+vec2(seed*3.13,seed*7.31);
     float blend = .12 + .18*(.5+.5*sin(UV.x*3.14159+seed*6.28));
-    float second = mod(layer+1.,4.);
+    float second = mod(layer+1.,tl);
     // Sampled early: the baked physical channels (thickness/striation) steer the
     // structural venation before the pigment is composed.
     vec4 physical = mix(texture(tissue_physical,vec3(tissue_uv,layer)),
@@ -110,6 +114,15 @@ void fragment() {
     pigment = leaf_abaxial_tint(pigment, side);
     // Photo variation plus stable organ-specific pigment clouding: avoid paint-flat laminae.
     vec3 color = pigment*mix(vec3(1.),photograph,.92);
+    if (tissue_albedo_mode > 0.5) {
+        // Own-pool species: the baked texture IS the albedo (linear). Underside = same tissue
+        // scaled by the species back/top pigment ratio, pulled toward its own luminance.
+        vec3 own = photograph * .5 * tissue_gain;
+        vec3 ratio = clamp(actual_back / max(actual_top, vec3(.004)), vec3(.6), vec3(1.8));
+        vec3 under = own * mix(vec3(1.), ratio, .6);
+        under = mix(under, vec3(dot(under, vec3(.2126,.7152,.0722))), .25) * 1.08;
+        color = mix(own, under, side);
+    }
     // High-frequency epidermal variation is only resolved close to camera; fade
     // it to its neutral value instead of paying for subpixel noise everywhere.
     if (micro_fade > 0.01) {
