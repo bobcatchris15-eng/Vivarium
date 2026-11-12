@@ -101,6 +101,7 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         EnvRig.VolumetricMistEnabled = Settings.VolumetricMist;
         EnvRig.Env.VolumetricFogEnabled &= Settings.VolumetricMist;
         GetViewport().Scaling3DScale = (float)Settings.RenderScale;
+        RenderOverrides.Apply(this, EnvRig);
         Flora.ReducedDistantPlants = Settings.ReducedDistantPlants;
         CameraRig.DistanceBlur = Settings.DistanceBlur;
         CameraRig.DistanceBlurAmount = (float)Settings.DistanceBlurAmount;

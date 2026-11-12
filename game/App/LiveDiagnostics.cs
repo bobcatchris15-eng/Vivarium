@@ -107,6 +107,7 @@ public partial class LiveDiagnostics : Node
         var summary = new Dictionary<string, object?>
         {
             ["completed"] = true,
+            ["render_overrides"] = Vivarium.Game.Render.RenderOverrides.Active,
             ["written_utc"] = DateTime.UtcNow,
             ["soak_seconds"] = _soakSeconds, ["warmup_seconds"] = _soakWarmup,
             ["window_seconds"] = _soakWindow ? (now - _soakWinStart) / 1_000_000.0 : 0.0,

@@ -480,7 +480,7 @@ public partial class EnvironmentRig : Node3D
         Env.FogDensity = Mathf.Lerp(0.0f, UnderwaterFogDensity, _underwater);
         Env.FogAerialPerspective = 0.0f;
         Env.FogSunScatter = Mathf.Lerp(0.45f, 0.15f, _underwater);
-        Env.VolumetricFogEnabled = Quality >= 1 && VolumetricMistEnabled;
+        Env.VolumetricFogEnabled = Quality >= 1 && VolumetricMistEnabled && !RenderOverrides.FogOff;
         Env.VolumetricFogDensity = Mathf.Lerp(0.0f, 0.045f, _underwater);
         Env.VolumetricFogAlbedo = new Color(0.82f, 0.88f, 0.78f).Lerp(UnderwaterFogColor, _underwater);
         Env.VolumetricFogAnisotropy = Mathf.Lerp(0.72f, 0.55f, _underwater);
@@ -491,5 +491,101 @@ public partial class EnvironmentRig : Node3D
         Env.VolumetricFogTemporalReprojectionEnabled = true;
         Env.VolumetricFogTemporalReprojectionAmount = 0.90f;
         Env.AdjustmentSaturation = Mathf.Lerp(0.99f, 0.94f, _underwater);
+    }
+}
+
+/// <summary>
+/// Experiment harness: <c>--render-override k=v[,k=v...]</c>. Absent flag = no behaviour change.
+/// Keys: fog_res=64|128|off, ssao_half=bool, gi_dynamic=bool, shadow_atlas=4096|8192,
+/// render_scale=0.75..1.0, sdfgi=off|current.
+/// </summary>
+public static class RenderOverrides
+{
+    public static readonly System.Collections.Generic.Dictionary<string, string> Applied = new();
+    private static bool _parsed, _printed, _giHooked;
+    public static bool FogOff => Applied.TryGetValue("fog_res", out var v) && v == "off";
+    private static System.Globalization.CultureInfo Inv => System.Globalization.CultureInfo.InvariantCulture;
+
+    private static void Parse()
+    {
+        if (_parsed) return; _parsed = true;
+        var args = Main.UserArgs;
+        int i = System.Array.IndexOf(args, "--render-override");
+        if (i < 0 || i + 1 >= args.Length) return;
+        foreach (var pair in args[i + 1].Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries))
+        {
+            var kv = pair.Split('=', 2);
+            string k = kv[0].ToLowerInvariant(), v = kv.Length > 1 ? kv[1].ToLowerInvariant() : "";
+            bool ok = k switch
+            {
+                "fog_res" => v is "64" or "128" or "off",
+                "ssao_half" or "gi_dynamic" => v is "true" or "false",
+                "shadow_atlas" => v is "4096" or "8192",
+                "render_scale" => float.TryParse(v, System.Globalization.NumberStyles.Float, Inv, out var f) && f >= 0.5f && f <= 1.0f,
+                "sdfgi" => v is "off" or "current",
+                _ => false
+            };
+            if (ok) Applied[k] = v; else GD.Print("RENDER_OVERRIDE_UNKNOWN " + pair);
+        }
+    }
+
+    public static System.Collections.Generic.Dictionary<string, string> Active { get { Parse(); return Applied; } }
+
+    public static void Apply(Node3D session, EnvironmentRig rig)
+    {
+        Parse();
+        if (Applied.Count == 0) return;
+        var vp = session.GetViewport();
+        foreach (var (k, v) in Applied)
+        {
+            switch (k)
+            {
+                case "fog_res":
+                    if (v == "off") rig.Env.VolumetricFogEnabled = false;
+                    else { int n = int.Parse(v, Inv); RenderingServer.EnvironmentSetVolumetricFogVolumeSize(n, n); }
+                    break;
+                case "ssao_half":
+                    // Mirrors tier-1 ApplyQuality call (Medium, 0.5, 2, 50, 300) with half_size overridden.
+                    RenderingServer.EnvironmentSetSsaoQuality(RenderingServer.EnvironmentSsaoQuality.Medium, v == "true", 0.5f, 2, 50f, 300f);
+                    break;
+                case "shadow_atlas":
+                    vp.PositionalShadowAtlasSize = int.Parse(v, Inv);
+                    break;
+                case "render_scale":
+                    vp.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
+                    vp.Scaling3DScale = float.Parse(v, Inv);
+                    break;
+                case "sdfgi":
+                    if (v == "off") rig.Env.SdfgiEnabled = false;
+                    break;
+                case "gi_dynamic":
+                    if (v == "true" && !_giHooked)
+                    {
+                        _giHooked = true;
+                        var tree = session.GetTree();
+                        SetGi(session);
+                        tree.NodeAdded += n => { if (n is MultiMeshInstance3D m && IsTarget(m)) m.GIMode = GeometryInstance3D.GIModeEnum.Dynamic; };
+                    }
+                    break;
+            }
+        }
+        if (!_printed)
+        {
+            _printed = true;
+            GD.Print("RENDER_OVERRIDE " + string.Join(",", System.Linq.Enumerable.Select(Applied, p => p.Key + "=" + p.Value)));
+        }
+    }
+
+    private static bool IsTarget(MultiMeshInstance3D m)
+    {
+        for (Node? n = m.GetParent(); n != null; n = n.GetParent())
+            if (n is FloraRenderer or FaunaRenderer or AmbientGroundCoverRenderer or SoilDetailRenderer) return true;
+        return false;
+    }
+
+    private static void SetGi(Node root)
+    {
+        if (root is MultiMeshInstance3D m && IsTarget(m)) m.GIMode = GeometryInstance3D.GIModeEnum.Dynamic;
+        foreach (var c in root.GetChildren()) SetGi(c);
     }
 }
