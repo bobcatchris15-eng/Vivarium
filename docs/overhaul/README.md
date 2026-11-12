@@ -66,7 +66,7 @@ Species-by-species pass using the matrix; starts after Batch 1 so shared junctio
 ## Needs owner decision
 | id | question |
 |---|---|
-| P12 | Reduce SSAO resolution / volumetric fog froxels / GI settings at the single quality tier? |
+| P12 | Reduce SSAO resolution / volumetric fog froxels / GI settings at the single quality tier? **RESOLVED 2026-11-12: owner chose fog 64 + 3D resolution 85%** (pc5: GPU 33.7 -> 30.6 ms, 30 fps). SDFGI and SSAO unchanged |
 | P13, R2 | Consolidate the three overlapping ground-cover systems into one? |
 | R1 | Extend `RenderSnapshot` to coverage (fixes a worker-thread race) or drop the unused dirty-region path? |
 | R3 | Move guardian–plant contact into the flora vertex shader? |

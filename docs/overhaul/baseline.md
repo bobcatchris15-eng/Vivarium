@@ -111,3 +111,17 @@ scenes per override vs base, mean abs pixel diff (noise floor ~2/255 from wind a
 | ssao half_size | -0.24 | -5 MB | none; not worth it |
 | GI mode Dynamic on MMIs | +0.15 | -16 MB | no gain |
 | shadow atlas 4096 | n/a | | already the engine default |
+
+## pc5: P12 defaults applied (2026-11-12)
+
+Owner choice: volumetric fog 64x64 froxels (was 128) and default 3D resolution 85% (was 95%). Two 150 s soaks after a discarded warm run, compared with pc4:
+
+| | pc4 | pc5 |
+|---|---|---|
+| GPU ms | 33.9 / 33.4 | 30.6 / 30.5 |
+| fps | 27.6 / 28.1 | 30.0 / 30.2 |
+| p95 frame ms | 58.1 / 53.9 | 52.5 / 53.9 |
+| VRAM GB | 4.26 / 4.30 | 4.15 / 4.12 |
+| alloc MB/frame | 7.44 / 7.42 | 7.09 / 6.96 |
+
+The combined saving (about 3.1 ms) is smaller than the two isolated tests added together (3.25 + 2.51). Captures: `build/overhaul/pc5/compare.jpg` (left P12b base, right pc5).

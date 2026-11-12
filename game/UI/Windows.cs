@@ -502,9 +502,9 @@ public partial class Windows : Control
         body.AddChild(UiKit.Row(UiKit.Label("Background softness"), blurAmount, blurValue));
         ToggleRender("SimpleFoliageLightingCheck", "Simpler foliage lighting", s.SimpleFoliageLighting, b => s.SimpleFoliageLighting = b, "Reduces leaf lighting cost, with simpler highlights and transmission.");
         var scale = new OptionButton { Name = "RenderScalePicker", TooltipText = "Lower resolution for the 3D view. The interface stays at full resolution." };
-        scale.AddItem("3D resolution: 100%"); scale.AddItem("3D resolution: 95%"); scale.AddItem("3D resolution: 75%"); scale.AddItem("3D resolution: 50%");
-        scale.Selected = s.RenderScale > .975 ? 0 : s.RenderScale > .85 ? 1 : s.RenderScale > .625 ? 2 : 3;
-        double[] renderScales = { 1, .95, .75, .5 };
+        scale.AddItem("3D resolution: 100%"); scale.AddItem("3D resolution: 85%"); scale.AddItem("3D resolution: 75%"); scale.AddItem("3D resolution: 50%");
+        scale.Selected = s.RenderScale > .925 ? 0 : s.RenderScale > .8 ? 1 : s.RenderScale > .625 ? 2 : 3;
+        double[] renderScales = { 1, .85, .75, .5 };
         scale.ItemSelected += index => { s.RenderScale = renderScales[(int)index]; Apply(); };
         body.AddChild(scale);
         body.AddChild(UiKit.Label("These settings affect presentation only; the ecosystem runs identically on every setting.", 13, UiKit.Muted, wrap: true));

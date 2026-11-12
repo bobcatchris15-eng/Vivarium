@@ -513,14 +513,14 @@ public sealed class UserSettings
     public bool DistanceBlur { get; set; } = true;
     public double DistanceBlurAmount { get; set; } = .008;
     public bool SimpleFoliageLighting { get; set; }
-    public double RenderScale { get; set; } = .95;
+    public double RenderScale { get; set; } = .85;
     public double AutosaveMinutes { get; set; } = 5;
     public bool AutosaveEnabled { get; set; } = true;
     public double UiScale { get; set; } = 1.0;
     public bool ShowHelpOnStart { get; set; } = true;
     /// <summary>Settings format; v2 moved flying speed off the mouse wheel, v3 re-runs that repair (see Load).</summary>
     public int Version { get; set; } = CurrentVersion;
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
     /// <summary>Scripted test runs set this so they never overwrite the player's settings file.</summary>
     [System.Text.Json.Serialization.JsonIgnore] public bool Transient { get; set; }
 
@@ -553,7 +553,9 @@ public sealed class UserSettings
                 // v1 used the wheel for flying speed, so scrolling to "zoom" could leave it saved at a crawl
                 // (and early test runs could save autosave=off into the player's file). The first build with this
                 // repair misread v1 files as v2 and re-saved them unrepaired, so v3 applies it once more.
-                if (s.Version < 3) { if (s.CameraSpeed < 0.5) s.CameraSpeed = 1.5; s.AutosaveEnabled = true; s.Version = CurrentVersion; }
+                if (s.Version < 3) { if (s.CameraSpeed < 0.5) s.CameraSpeed = 1.5; s.AutosaveEnabled = true; }
+                // v4: default 3D resolution moved 95% -> 85% (P12, about -2.5 ms GPU); files still on the old default follow it.
+                if (s.Version < 4) { if (Math.Abs(s.RenderScale - .95) < 1e-6) s.RenderScale = .85; s.Version = CurrentVersion; }
                 s.Clamp();
                 return s;
             }
