@@ -128,3 +128,10 @@ Next when resumed: (1) remaining species ranks 73+ (trumpetbind, bannerreed, bar
 (2) perf geometry targets: pilot tree LOD (4.9 ms), water mesh density (1.55M prims), props prim count (1.06M);
 (3) lichens retry with real texture sets (D7); (4) ground track needs a scoped plan (shared water include, GR11 probe);
 (5) animals batch (G1, G3, A1, G5, A2/A5); (6) check why --specimen-tris-only hung in SP14.
+
+## 2026-11-12 owner items
+| task | files | status | att | notes |
+|---|---|---|---|---|
+| OD-R | src/Vivarium.Sim/World/PropPlacement.cs | DONE 7667ed9 | 1 | RockSeatY: lowest rim support (8 samples at 0.85 extent) +0.12*SizeY, clamp 0.30*SizeY below centre support. Was centre -0.25*SizeY, which buried the widest ring (mesh y -0.18). Saves not migrated |
+| OD-W | WaterMesh.cs, water_stream.gdshader | DONE 7667ed9 | 1 | sonnet-medium agent. 5x5 tent-smoothed depth in UV2, 3 cm band, ALPHA *= smoothstep(-0.004, 0.012, Ds+noise). build/overhaul/ODW/compare.jpg |
+| P13 | AmbientGroundCoverRenderer.cs, ground_cover.gdshader | DONE | 2 | sonnet-medium agent. 2 m chunks generated once on approach, kept. Rebuild triggers: flora id add or remove (0.5 s scan), terrain Invalidate, per-chunk props signature, quality. Distance thinning via per-instance rank + per-frame VisibleInstanceCount prefix (VisibilityRange alone left zero-scale instances counted: 64.6 ms / 12.4M prims on attempt 1). Soak: GPU 30.08 ms (pc5 30.62), prims 7.16M (+1.6%). Open: AmbientGround scope max 8.35 ms spike at chunk start (flora index / props signature rebuild); no chunk eviction (bounded by island, ~150 KB/chunk); camera-flight case not captured. Agent left a hung `python -` which was stopped by stopping the agent |

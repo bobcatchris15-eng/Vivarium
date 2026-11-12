@@ -10,6 +10,11 @@ uniform float review_time = -1.0;
 uniform sampler2D field_tex : filter_linear, repeat_disable;
 uniform vec4 field_rect = vec4(0.0);
 uniform bool instance_shape_variation = false;
+// Only AmbientGroundCoverRenderer's chunked turf enables this: instances are generated at full
+// density once and thinned here by camera distance (stochastic per instance, shrinking to zero).
+uniform bool ambient_distance_fade = false;
+uniform float ambient_fade_start = 5.5;
+uniform float ambient_fade_end = 8.0;
 varying vec3 tissue_color;
 varying float individuality;
 varying float baked_ao;
@@ -21,6 +26,15 @@ float cover_hash(vec2 p) {
 }
 
 void vertex() {
+    if (ambient_distance_fade) {
+        vec3 root = MODEL_MATRIX[3].xyz;
+        float keep = 1.0 - (length(root.xz - CAMERA_POSITION_WORLD.xz) - ambient_fade_start)
+            / max(ambient_fade_end - ambient_fade_start, 0.001);
+        // Per-instance thinning rank is baked into the multimesh colour alpha (instances are also
+        // sorted by it, so the CPU can cull whole thinned tails with VisibleInstanceCount).
+        float rank = COLOR.a;
+        VERTEX *= clamp((keep * 1.125 - rank) * 8.0, 0.0, 1.0);
+    }
     tissue_color = srgb_to_linear(COLOR.rgb);
     baked_ao = UV2.x > .01 ? UV2.x : .94;
     // UV2.y is reserved here for the runner mesh's senescent stem tissue; existing meshes use zero.

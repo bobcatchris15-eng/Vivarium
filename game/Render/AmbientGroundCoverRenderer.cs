@@ -13,32 +13,71 @@ namespace Vivarium.Game.Render;
 /// <summary>
 /// Cheap anonymous low vegetation generated from the authoritative ambient-cover field. Instances are disposable
 /// render detail, not organisms. Habitat and neighboring cells choose colour and grass-vs-broadleaf silhouette.
+/// <para>
+/// Turf lives in 2 m world chunks, each with its own blade and leaf MultiMesh. A chunk is generated at full density
+/// the first time the camera comes near it and is then kept: camera motion never regenerates anything. Distance
+/// thinning is done per instance in ground_cover.gdshader. A chunk is regenerated (old geometry stays visible until
+/// the replacement is ready) only when a tracked plant establishes or is removed nearby, a terrain edit touches it,
+/// a rock/log/gravel patch overlapping it changes, or quality changes. Moisture, light and maturity drift are not triggers.
+/// </para>
 /// </summary>
 public partial class AmbientGroundCoverRenderer : Node3D
 {
     private VivariumWorld _w = null!;
-    private MultiMesh _blade = null!, _leaf = null!;
-    private MultiMeshInstance3D _bladeMmi = null!, _leafMmi = null!;
-    private readonly Dictionary<MultiMesh, float[]> _buffers = new();
-    private IEnumerator<bool>? _pendingRefresh;
-    private bool _dirty = true;
+    private ArrayMesh _bladeMesh = null!, _leafMesh = null!;
+    private Node3D _chunkRoot = null!;
+
+    private sealed class Chunk
+    {
+        public MultiMeshInstance3D BladeMmi = null!, LeafMmi = null!;
+        public MultiMesh Blade = null!, Leaf = null!;
+        public int Instances, BladeN, LeafN;
+        public float LastFrac = -1f;
+        public bool Dirty;
+        public int Reason;
+        public ulong PropSig;
+    }
+    private const int ReasonFlora = 0, ReasonTerrain = 1, ReasonProps = 2, ReasonQuality = 3;
+    private const float ChunkSize = 2f;
+    private readonly Dictionary<(int X, int Z), Chunk> _chunks = new();
+    private IEnumerator<bool>? _gen;
+    private (int X, int Z) _genKey;
+    private IEnumerator<bool>? _pendingBank;
+    private bool _bankDirty = true;
+    private Vector3 _lastBankCam = new(float.MaxValue, 0, 0);
     private double _editDelay;
+    private double _floraTimer;
+    private ulong _floraBuiltMs;
+    private int _pendingChunks = int.MaxValue;
+    private int _totalInstances;
+    private readonly int[] _regenByReason = new int[4];
+
+    /// <summary>Incremented once per completed chunk generation (first build or regeneration). Bank patches are not counted.</summary>
     public int RefreshCount { get; private set; }
-    public bool RefreshPending => _dirty || _pendingRefresh is not null;
-    private Vector3 _lastCam = new(float.MaxValue, 0, 0);
+    /// <summary>True while any in-range chunk is missing or dirty (or an edit is coalescing), or bank patches are pending.</summary>
+    public bool RefreshPending => _pendingChunks > 0 || _gen is not null || _bankDirty || _pendingBank is not null;
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
     private const float CullRadius = 8.0f;
     private const float FadeStart = 5.5f;
-    public int LastGroundcoverInstances { get; private set; }
+    // Chunk centre distance at which a chunk is first generated: cull radius plus one chunk diagonal (a one-chunk lead).
+    private const float GenerateRadius = CullRadius + 2.83f;
+    /// <summary>Sum of live instances over all generated chunks.</summary>
+    public int LastGroundcoverInstances => _totalInstances;
     public int LastInfluencedGridCells { get; private set; }
     public int LastFloraExclusionCandidateChecks { get; private set; }
+    public int ChunkCount => _chunks.Count;
+    public int ChunksGenerated { get; private set; }
+    public int ChunkRegenFlora => _regenByReason[ReasonFlora];
+    public int ChunkRegenTerrain => _regenByReason[ReasonTerrain];
+    public int ChunkRegenProps => _regenByReason[ReasonProps];
+    public int ChunkRegenQuality => _regenByReason[ReasonQuality];
 
     public void Build(VivariumWorld w, IslandRenderer? habitat = null)
     {
-        _pendingRefresh?.Dispose(); _pendingRefresh = null;
+        _gen?.Dispose(); _gen = null; _pendingBank?.Dispose(); _pendingBank = null;
         _w = w;
-        _buffers.Clear();
+        _chunks.Clear();
         foreach (var c in GetChildren()) c.QueueFree();
 
         // Same optical rules for ephemeral ground vegetation and persistent organisms.
@@ -51,89 +90,114 @@ public partial class AmbientGroundCoverRenderer : Node3D
         mat.SetShaderParameter("tissue_material_f0", .02f);
         mat.SetShaderParameter("tissue_direct_transmission", .20f);
         habitat?.BindHabitatMaterial(mat);
-        _blade = NewMultiMesh(BuildBlade(mat, true));
-        _leaf = NewMultiMesh(BuildBroadleaf(mat, true));
+        _bladeMesh = BuildBlade(mat, true);
+        _leafMesh = BuildBroadleaf(mat, true);
         // These 1.5-3 cm turf fillers ground themselves with basal contact AO in
         // ground_cover.gdshader. Casting them into the 8192 directional shadow map added
-        // millions of tiny triangles for no readable shadow, so keep them shadow-free.
-        _bladeMmi = new MultiMeshInstance3D
-        {
-            Name = "AmbientBlades",
-            Multimesh = _blade,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            VisibilityRangeEnd = 8.5f,
-            VisibilityRangeEndMargin = 1.2f,
-            VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
-        };
-        _leafMmi = new MultiMeshInstance3D
-        {
-            Name = "AmbientTinyLeaves",
-            Multimesh = _leaf,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            VisibilityRangeEnd = 8.5f,
-            VisibilityRangeEndMargin = 1.2f,
-            VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
-        };
-        AddChild(_bladeMmi); AddChild(_leafMmi);
+        // millions of tiny triangles for no readable shadow, so chunks are shadow-free.
+        _chunkRoot = new Node3D { Name = "AmbientChunks" };
+        AddChild(_chunkRoot);
         BuildBankFringe(mat);
         habitat?.BindHabitatMaterial(_bankMaterial);
-        _dirty = true; _editDelay = 0; RefreshCount = 0;
-        _lastCam = new(float.MaxValue, 0, 0);
+        // Turf chunks thin by camera distance in the shader; the bank fringe (a duplicate made above) does not.
+        mat.SetShaderParameter("ambient_distance_fade", true);
+        mat.SetShaderParameter("ambient_fade_start", FadeStart);
+        mat.SetShaderParameter("ambient_fade_end", CullRadius);
+        _bankMaterial.SetShaderParameter("ambient_distance_fade", false);
+
+        _bankDirty = true; _editDelay = 0; RefreshCount = 0;
+        _lastBankCam = new(float.MaxValue, 0, 0);
+        _terrainVersion = int.MinValue; _propsVersion = int.MinValue; _lastQuality = -1;
+        _pendingChunks = int.MaxValue; _totalInstances = 0; ChunksGenerated = 0;
+        Array.Clear(_regenByReason);
+        _tracked.Clear(); _floraIndex = null; _carpetIndex = null; _floraDiscs.Clear();
+        _rockBounds = null; _logBounds = null; _gravelList = null;
+        _floraTimer = 0;
     }
 
-    private static MultiMesh NewMultiMesh(ArrayMesh mesh) => new()
-    {
-        TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-        UseColors = true,
-        Mesh = mesh,
-        InstanceCount = 0,
-    };
-
     private int _terrainVersion = int.MinValue;
+    private int _propsVersion = int.MinValue;
     private int _lastQuality = -1;
     private readonly List<Transform3D> _bladeT = new();
     private readonly List<Color> _bladeC = new();
     private readonly List<Transform3D> _leafT = new();
     private readonly List<Color> _leafC = new();
+    private readonly List<float> _bladeR = new();
+    private readonly List<float> _leafR = new();
+
+    // ---- tracked flora (id -> position and the widest disc its presence can change, from the last index build)
+    private readonly Dictionary<EntityId, (Vec2 P, double Reach)> _tracked = new();
+    private AmbientCoverSpatialIndex? _floraIndex, _carpetIndex;
+    private readonly List<(Vec2 P, double Exclusion)> _floraDiscs = new();
+    private readonly List<(EntityId Id, Vec2 P, double Reach)> _scanAdded = new();
+    private readonly List<(Vec2 P, double Reach)> _scanRemoved = new();
+    private readonly HashSet<EntityId> _scanSeen = new();
+
+    // ---- props bounds (rebuilt when Props.Version changes)
+    private List<(Vivarium.Sim.World.Rock Prop, double MinX, double MaxX, double MinZ, double MaxZ)>? _rockBounds;
+    private List<(Vivarium.Sim.World.LogProp Prop, double MinX, double MaxX, double MinZ, double MaxZ)>? _logBounds;
+    private List<Vivarium.Sim.World.GravelPatch>? _gravelList;
 
     public override void _Process(double delta)
     {
-        using var timing=Vivarium.Game.App.FrameProfiler.Measure("AmbientGround");
+        using var timing = Vivarium.Game.App.FrameProfiler.Measure("AmbientGround");
         if (_w == null) return;
         bool enabled = Quality > 0;
-        _bladeMmi.Visible = _leafMmi.Visible = enabled;
+        _chunkRoot.Visible = enabled;
         if (_bankNode != null) _bankNode.Visible = enabled;
-        if (!enabled) { _pendingRefresh?.Dispose(); _pendingRefresh = null; _dirty = true; return; }
+        if (!enabled)
+        {
+            _gen?.Dispose(); _gen = null; _pendingBank?.Dispose(); _pendingBank = null;
+            _bankDirty = true; _lastQuality = Quality; _pendingChunks = int.MaxValue;
+            return;
+        }
+        double dt = delta > 0 ? delta : .016;
         var cam = Camera?.GlobalPosition ?? Vector3.Zero;
-        bool moved = cam.DistanceSquaredTo(_lastCam) > 2.0f * 2.0f;
-        bool terrainChanged = _terrainVersion != _w.Terrain.Version;
-        bool qualityChanged = _lastQuality != Quality;
-        if (terrainChanged || qualityChanged)
+        bool haveCam = Camera != null;
+
+        if (_lastQuality != Quality)
         {
-            Invalidate();
-            _terrainVersion = _w.Terrain.Version; _lastQuality = Quality;
+            _lastQuality = Quality;
+            MarkAll(ReasonQuality); _bankEpoch++; _bankDirty = true;
         }
-        _editDelay -= delta > 0 ? delta : .016;
-        if (_pendingRefresh is null && (_dirty || moved) && _editDelay <= 0)
+        if (_terrainVersion != _w.Terrain.Version) Invalidate();
+        _editDelay -= dt;
+        _floraTimer -= dt;
+        if (_floraIndex == null || _floraTimer <= 0) { _floraTimer = .5; ScanFlora(); }
+        if (_rockBounds == null || _propsVersion != _w.Props.Version) PropsChanged();
+
+        bool bankMoved = haveCam && cam.DistanceSquaredTo(_lastBankCam) > 2.0f * 2.0f;
+        if (_pendingBank is null && (_bankDirty || bankMoved) && _editDelay <= 0)
         {
-            _dirty = false; _lastCam = cam;
-            _pendingRefresh = RefreshBatched().GetEnumerator();
+            _bankDirty = false; _lastBankCam = cam;
+            _pendingBank = RefreshBankFringeBatched(cam, haveCam, new List<Vivarium.Sim.World.Rock>(),
+                new List<Vivarium.Sim.World.LogProp>(), new List<Vivarium.Sim.World.GravelPatch>(), _floraDiscs).GetEnumerator();
         }
-        if (_pendingRefresh is null) return;
+
+        // One shared 2 ms slice: turf chunks (nearest first) and bank patches, 1 ms each when both have work.
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        double chunkBudget = _pendingBank is not null ? 1.0 : 2.0;
         do
         {
-            if (!_pendingRefresh.MoveNext())
+            if (_gen == null && !StartNextChunk(cam, haveCam)) break;
+            if (!_gen!.MoveNext()) { _gen.Dispose(); _gen = null; }
+        } while (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds < chunkBudget);
+        if (_gen == null && _pendingChunks == int.MaxValue) _pendingChunks = 0;
+        ApplyDistanceLod(cam, haveCam);
+        if (_pendingBank is not null)
+        {
+            do
             {
-                _pendingRefresh.Dispose(); _pendingRefresh = null; RefreshCount++; break;
-            }
-        } while (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds < 2);
+                if (!_pendingBank.MoveNext()) { _pendingBank.Dispose(); _pendingBank = null; break; }
+            } while (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds < 2);
+        }
     }
 
-    /// <summary>Coalesce edits, keeping complete visible geometry while its replacement prepares.</summary>
+    /// <summary>Terrain edit. With a centre and finite radius only overlapping chunks go dirty, otherwise all of them.
+    /// Coalesces edits and keeps visible geometry until a replacement is ready.</summary>
     public void Invalidate(Vec2? centre = null, double radius = double.PositiveInfinity)
     {
-        _pendingRefresh?.Dispose(); _pendingRefresh = null;
+        _pendingBank?.Dispose(); _pendingBank = null;
         if (centre is { } p)
         {
             foreach (var (key, patch) in _bankPatches)
@@ -142,117 +206,236 @@ public partial class AmbientGroundCoverRenderer : Node3D
                 double z = Math.Clamp(p.Z, key.Z * 2, (key.Z + 1) * 2);
                 if (Vec2.DistanceSq(p, new(x, z)) <= radius * radius) patch.Epoch = -1;
             }
+            // 0.3 m: slope normals sample +-1 cell and instances jitter about a cell around the chunk edge.
+            if (double.IsFinite(radius)) MarkDisc(p, radius + .3, ReasonTerrain); else MarkAll(ReasonTerrain);
         }
-        else _bankEpoch++;
+        else { _bankEpoch++; MarkAll(ReasonTerrain); }
         if (_w is not null) _terrainVersion = _w.Terrain.Version;
-        _dirty = true; _editDelay = .15;
+        _bankDirty = true; _editDelay = .15;
     }
 
-    public override void _ExitTree() { _pendingRefresh?.Dispose(); _pendingRefresh = null; }
-
-    private IEnumerable<bool> RefreshBatched()
+    public override void _ExitTree()
     {
-        var g = _w.Grid;
-        var cam = Camera?.GlobalPosition ?? Vector3.Zero;
-        bool haveCam = Camera != null;
-        _bladeT.Clear(); _bladeC.Clear();
-        _leafT.Clear(); _leafC.Clear();
-        var rng = new CellRng();
+        _gen?.Dispose(); _gen = null; _pendingBank?.Dispose(); _pendingBank = null;
+    }
 
-        var nearRocks = new List<Vivarium.Sim.World.Rock>();
-        var nearLogs = new List<Vivarium.Sim.World.LogProp>();
-        var nearGravel = new List<Vivarium.Sim.World.GravelPatch>();
-        // Conservative axis-aligned bounds, built once for the 8 m rebuild disc. The
-        // 2 cm instancing loop then rejects overwhelmingly most props with four compares
-        // before ever calling the exact (and much more expensive) Covers geometry query.
-        var nearRockBounds = new List<(Vivarium.Sim.World.Rock Prop, double MinX, double MaxX, double MinZ, double MaxZ)>();
-        var nearLogBounds = new List<(Vivarium.Sim.World.LogProp Prop, double MinX, double MaxX, double MinZ, double MaxZ)>();
-        // Exact circular exclusion via 75cm spatial hash buckets, replacing
-        // O(plants * anonymous foliage blades) per-instance scans.
-        var floraExclusions = new AmbientCoverSpatialIndex();
-        var livingCarpet = new AmbientCoverSpatialIndex();
-        // Conservative single discs handed to the bank fringe; it needs the raw exclusions, not a hash.
-        var floraDiscs = new List<(Vec2 P, double Exclusion)>();
-        int exclusionCandidates=0, influencedCells=0;
-        float searchRadius = CullRadius + 2.5f;
-        var camP = new Vivarium.Sim.Core.Vec2(cam.X, cam.Z);
+    // ------------------------------------------------------------------ invalidation
 
-        foreach (var r in _w.Props.Rocks)
+    private void AbortGen() { _gen?.Dispose(); _gen = null; }
+
+    private void MarkChunk((int X, int Z) key, int reason)
+    {
+        if (_chunks.TryGetValue(key, out var ch) && !ch.Dirty) { ch.Dirty = true; ch.Reason = reason; }
+        if (_gen != null && _genKey == key) AbortGen();
+    }
+
+    private void MarkAll(int reason)
+    {
+        foreach (var ch in _chunks.Values) if (!ch.Dirty) { ch.Dirty = true; ch.Reason = reason; }
+        AbortGen();
+    }
+
+    private void MarkDisc(Vec2 c, double r, int reason)
+    {
+        int x0 = (int)Math.Floor((c.X - r) / ChunkSize), x1 = (int)Math.Floor((c.X + r) / ChunkSize);
+        int z0 = (int)Math.Floor((c.Z - r) / ChunkSize), z1 = (int)Math.Floor((c.Z + r) / ChunkSize);
+        for (int z = z0; z <= z1; z++)
+        for (int x = x0; x <= x1; x++)
         {
-            if (haveCam && Vivarium.Sim.Core.Vec2.Distance(camP, r.Position) > searchRadius + r.FootprintRadius)
-                continue;
-            nearRocks.Add(r);
-            nearRockBounds.Add((r, r.X - r.FootprintRadius, r.X + r.FootprintRadius,
-                r.Z - r.FootprintRadius, r.Z + r.FootprintRadius));
+            double nx = Math.Clamp(c.X, x * ChunkSize, (x + 1) * ChunkSize);
+            double nz = Math.Clamp(c.Z, z * ChunkSize, (z + 1) * ChunkSize);
+            if (Vec2.DistanceSq(c, new Vec2(nx, nz)) <= r * r) MarkChunk((x, z), reason);
         }
+    }
 
-        foreach (var l in _w.Props.Logs)
+    /// <summary>Cheap id-set compare every 0.5 s. A new or removed plant dirties the chunks its exclusion disc
+    /// (plus living-carpet reach for groundcover) overlaps. Growth of an existing plant never does.</summary>
+    private void ScanFlora()
+    {
+        var items = _w.Flora.Items;
+        if (_floraIndex == null) { RebuildFloraIndex(); return; }
+        bool same = items.Count == _tracked.Count;
+        if (same)
+            foreach (var plant in items)
+                if (!_tracked.ContainsKey(plant.Id)) { same = false; break; }
+        if (same) return;
+        _scanSeen.Clear(); _scanAdded.Clear(); _scanRemoved.Clear();
+        var addedIds = new List<EntityId>();
+        foreach (var plant in items)
         {
-            double extent = l.Length * 0.5 + l.Radius;
-            if (haveCam && Vivarium.Sim.Core.Vec2.Distance(camP, l.Position) > searchRadius + extent)
-                continue;
-            nearLogs.Add(l);
-            nearLogBounds.Add((l, l.X - extent, l.X + extent, l.Z - extent, l.Z + extent));
+            _scanSeen.Add(plant.Id);
+            if (!_tracked.ContainsKey(plant.Id)) addedIds.Add(plant.Id);
         }
+        foreach (var (id, t) in _tracked)
+            if (!_scanSeen.Contains(id)) _scanRemoved.Add(t);
+        RebuildFloraIndex();
+        foreach (var id in addedIds)
+            if (_tracked.TryGetValue(id, out var t)) MarkDisc(t.P, t.Reach + .3, ReasonFlora);
+        foreach (var t in _scanRemoved) MarkDisc(t.P, t.Reach + .3, ReasonFlora);
+    }
 
-        foreach (var gr in _w.Props.Gravel)
-            if (!haveCam || Vivarium.Sim.Core.Vec2.Distance(camP, gr.Position) <= searchRadius + gr.Radius)
-                nearGravel.Add(gr);
-
+    private void RebuildFloraIndex()
+    {
+        var excl = new AmbientCoverSpatialIndex();
+        var carpet = new AmbientCoverSpatialIndex();
+        _floraDiscs.Clear(); _tracked.Clear();
         foreach (var plant in _w.Flora.Items)
         {
             var sp = _w.Content.FloraOrThrow(plant.SpeciesId);
-            // The bank cache may prepare an entire patch across the view boundary.
-            // Keep all plant exclusion discs, rather than cutting them at this camera pose.
+            bool isWoody = sp.Shape == "tree" || sp.Tags.Contains("tree") || sp.Tags.Contains("woody");
+            // Keep a readable opening at each simulated plant, while allowing low
+            // anonymous cover beneath its canopy. Include the turf's leaf reach.
+            double collarR = (isWoody ?
+                Math.Clamp(plant.Radius(sp) * 0.32, 0.12, 0.28) :
+                Math.Clamp(plant.Radius(sp) * 0.65, 0.045, 0.24)) + 0.055;
+            double reach = collarR;
+            if (sp.Archetype == "plant" && sp.Tags.Contains("groundcover") && !isWoody)
             {
-                bool isWoody = sp.Shape == "tree" || sp.Tags.Contains("tree") || sp.Tags.Contains("woody");
-                // Keep a readable opening at each simulated plant, while allowing low
-                // anonymous cover beneath its canopy. Include the turf's leaf reach.
-                double collarR = (isWoody ?
-                    Math.Clamp(plant.Radius(sp) * 0.32, 0.12, 0.28) :
-                    Math.Clamp(plant.Radius(sp) * 0.65, 0.045, 0.24)) + 0.055;
-                if (sp.Archetype=="plant" && sp.Tags.Contains("groundcover") && !isWoody)
-                {
-                    // Living clonal carpets fill in between leaves as the
-                    // actual tracked plant gains biomass. These are inexpensive
-                    // anonymous turf instances, not simulated daughter plants.
-                    double maturity = plant.BiomassFraction(sp);
-                    livingCarpet.Add(plant.Position,
-                        Math.Max(0.16, plant.Radius(sp)*1.5),
-                        maturity * Math.Clamp(plant.Health,0,1));
-                }
-                floraExclusions.Add(plant.Position, collarR);
-                floraDiscs.Add((plant.Position, collarR));
+                // Living clonal carpets fill in between leaves as the
+                // actual tracked plant gains biomass. These are inexpensive
+                // anonymous turf instances, not simulated daughter plants.
+                double maturity = plant.BiomassFraction(sp);
+                double carpetR = Math.Max(0.16, plant.Radius(sp) * 1.5);
+                carpet.Add(plant.Position, carpetR, maturity * Math.Clamp(plant.Health, 0, 1));
+                reach = Math.Max(reach, carpetR);
             }
+            excl.Add(plant.Position, collarR);
+            _floraDiscs.Add((plant.Position, collarR));
+            _tracked[plant.Id] = (plant.Position, reach);
         }
+        _floraIndex = excl; _carpetIndex = carpet;
+        _floraBuiltMs = Time.GetTicksMsec();
+    }
 
-        int i0 = 0, i1 = g.Nx - 1, j0 = 0, j1 = g.Nz - 1;
+    private void PropsChanged()
+    {
+        bool first = _rockBounds == null;
+        var rocks = new List<(Vivarium.Sim.World.Rock, double, double, double, double)>();
+        foreach (var r in _w.Props.Rocks)
+            rocks.Add((r, r.X - r.FootprintRadius, r.X + r.FootprintRadius, r.Z - r.FootprintRadius, r.Z + r.FootprintRadius));
+        var logs = new List<(Vivarium.Sim.World.LogProp, double, double, double, double)>();
+        foreach (var l in _w.Props.Logs)
+        {
+            double extent = l.Length * 0.5 + l.Radius;
+            logs.Add((l, l.X - extent, l.X + extent, l.Z - extent, l.Z + extent));
+        }
+        _rockBounds = rocks; _logBounds = logs; _gravelList = new(_w.Props.Gravel);
+        _propsVersion = _w.Props.Version;
+        if (first) return;
+        AbortGen();
+        foreach (var (key, ch) in _chunks)
+        {
+            if (ch.Dirty) continue;
+            if (ChunkPropSig(key) != ch.PropSig) { ch.Dirty = true; ch.Reason = ReasonProps; }
+        }
+    }
+
+    private static ulong Fnv(ulong h, double v) => (h ^ (ulong)BitConverter.DoubleToInt64Bits(v)) * 1099511628211UL;
+
+    /// <summary>Hash of every rock/log/gravel that can touch the chunk, including its pose and size.</summary>
+    private ulong ChunkPropSig((int X, int Z) key)
+    {
+        double minX = key.X * ChunkSize - .35, maxX = (key.X + 1) * ChunkSize + .35;
+        double minZ = key.Z * ChunkSize - .35, maxZ = (key.Z + 1) * ChunkSize + .35;
+        ulong h = 14695981039346656037UL;
+        foreach (var rb in _rockBounds!)
+        {
+            if (rb.MaxX < minX || rb.MinX > maxX || rb.MaxZ < minZ || rb.MinZ > maxZ) continue;
+            var r = rb.Prop;
+            h = Fnv(h, r.Id.Value); h = Fnv(h, r.X); h = Fnv(h, r.Z); h = Fnv(h, r.Y); h = Fnv(h, r.RotationY);
+            h = Fnv(h, r.SizeX); h = Fnv(h, r.SizeY); h = Fnv(h, r.SizeZ);
+        }
+        foreach (var lb in _logBounds!)
+        {
+            if (lb.MaxX < minX || lb.MinX > maxX || lb.MaxZ < minZ || lb.MinZ > maxZ) continue;
+            var l = lb.Prop;
+            h = Fnv(h, l.Id.Value); h = Fnv(h, l.X); h = Fnv(h, l.Z); h = Fnv(h, l.Y); h = Fnv(h, l.RotationY);
+            h = Fnv(h, l.Length); h = Fnv(h, l.Radius);
+        }
+        foreach (var gr in _gravelList!)
+        {
+            double reach = gr.Radius + .2;
+            if (gr.X + reach < minX || gr.X - reach > maxX || gr.Z + reach < minZ || gr.Z - reach > maxZ) continue;
+            h = Fnv(h, gr.Id.Value); h = Fnv(h, gr.X); h = Fnv(h, gr.Z); h = Fnv(h, gr.Radius);
+        }
+        return h;
+    }
+
+    // ------------------------------------------------------------------ scheduling
+
+    /// <summary>Pick the nearest in-range chunk that is missing or dirty and start generating it.</summary>
+    private bool StartNextChunk(Vector3 cam, bool haveCam)
+    {
+        (int X, int Z) bestKey = default; double best = double.MaxValue; int pending = 0;
+        void Consider((int X, int Z) key, double d2)
+        {
+            bool have = _chunks.TryGetValue(key, out var ch);
+            if (have && !ch!.Dirty) return;
+            pending++;
+            if (have && _editDelay > 0) return; // coalesce terrain-edit bursts before regenerating
+            if (d2 < best) { best = d2; bestKey = key; }
+        }
         if (haveCam)
         {
-            i0 = Math.Max(0, (int)((cam.X - CullRadius - g.OriginX) / g.CellSize));
-            i1 = Math.Min(g.Nx - 1, (int)((cam.X + CullRadius - g.OriginX) / g.CellSize));
-            j0 = Math.Max(0, (int)((cam.Z - CullRadius - g.OriginZ) / g.CellSize));
-            j1 = Math.Min(g.Nz - 1, (int)((cam.Z + CullRadius - g.OriginZ) / g.CellSize));
+            int x0 = (int)Math.Floor((cam.X - GenerateRadius) / ChunkSize), x1 = (int)Math.Floor((cam.X + GenerateRadius) / ChunkSize);
+            int z0 = (int)Math.Floor((cam.Z - GenerateRadius) / ChunkSize), z1 = (int)Math.Floor((cam.Z + GenerateRadius) / ChunkSize);
+            for (int z = z0; z <= z1; z++)
+            for (int x = x0; x <= x1; x++)
+            {
+                if (!_bankCells.ContainsKey((x, z))) continue;
+                double dx = (x + .5) * ChunkSize - cam.X, dz = (z + .5) * ChunkSize - cam.Z;
+                double d2 = dx * dx + dz * dz;
+                if (d2 > (double)GenerateRadius * GenerateRadius) continue;
+                Consider((x, z), d2);
+            }
+        }
+        else
+        {
+            foreach (var key in _bankCells.Keys) Consider(key, 0);
+        }
+        _pendingChunks = pending;
+        if (best == double.MaxValue) return false;
+        // A stale index would leave turf inside collars of plants that have grown since the last build.
+        if (_floraIndex == null || Time.GetTicksMsec() - _floraBuiltMs > 2000) RebuildFloraIndex();
+        _genKey = bestKey;
+        _gen = GenerateChunk(bestKey, _bankCells[bestKey], ChunkPropSig(bestKey), _floraIndex!, _carpetIndex!).GetEnumerator();
+        return true;
+    }
+
+    // ------------------------------------------------------------------ generation
+
+    private IEnumerable<bool> GenerateChunk((int X, int Z) key, int[] cells, ulong sig,
+        AmbientCoverSpatialIndex floraExclusions, AmbientCoverSpatialIndex livingCarpet)
+    {
+        var g = _w.Grid;
+        _bladeT.Clear(); _bladeC.Clear();
+        _leafT.Clear(); _leafC.Clear(); _bladeR.Clear(); _leafR.Clear();
+        var rng = new CellRng();
+        int exclusionCandidates = 0, influencedCells = 0;
+
+        // Props that can touch any instance of this chunk (cells jitter about a cell around their centres).
+        double minX = key.X * ChunkSize - .35, maxX = (key.X + 1) * ChunkSize + .35;
+        double minZ = key.Z * ChunkSize - .35, maxZ = (key.Z + 1) * ChunkSize + .35;
+        var nearRockBounds = new List<(Vivarium.Sim.World.Rock Prop, double MinX, double MaxX, double MinZ, double MaxZ)>();
+        foreach (var rb in _rockBounds!)
+            if (!(rb.MaxX < minX || rb.MinX > maxX || rb.MaxZ < minZ || rb.MinZ > maxZ)) nearRockBounds.Add(rb);
+        var nearLogBounds = new List<(Vivarium.Sim.World.LogProp Prop, double MinX, double MaxX, double MinZ, double MaxZ)>();
+        foreach (var lb in _logBounds!)
+            if (!(lb.MaxX < minX || lb.MinX > maxX || lb.MaxZ < minZ || lb.MinZ > maxZ)) nearLogBounds.Add(lb);
+        var nearGravel = new List<Vivarium.Sim.World.GravelPatch>();
+        foreach (var gr in _gravelList!)
+        {
+            double reach = gr.Radius + .2;
+            if (!(gr.X + reach < minX || gr.X - reach > maxX || gr.Z + reach < minZ || gr.Z - reach > maxZ)) nearGravel.Add(gr);
         }
 
-        int stride = Quality >= 2 ? 1 : 1;
-        for (int j = j0; j <= j1; j += stride)
-        for (int i = i0; i <= i1; i += stride)
+        foreach (int idx in cells)
         {
             yield return true;
+            int i = idx % g.Nx, j = idx / g.Nx;
             if (!g.InDomain(i, j)) continue;
-            int idx = g.Index(i, j);
             double cover = _w.AmbientGroundCover.Cover[idx];
             var center = g.CellCenter(idx);
-            float distFade = 1;
-            if (haveCam)
-            {
-                float dx = (float)center.X - cam.X, dz = (float)center.Z - cam.Z;
-                float d = Mathf.Sqrt(dx * dx + dz * dz);
-                if (d > CullRadius) continue;
-                if (d > FadeStart) distFade = 1 - (d - FadeStart) / (CullRadius - FadeStart);
-                if (distFade < 0.08f) continue;
-            }
 
             var (moisture, light) = NeighbourCharacter(i, j);
             double broadleaf = MathD.Clamp(0.22 + (1 - light) * 0.34 + moisture * 0.18
@@ -263,11 +446,12 @@ public partial class AmbientGroundCoverRenderer : Node3D
             // rooted carpets accumulate biomass. Constant authored blades
             // become denser without creating extra tracked organisms.
             double establishedCarpet = livingCarpet.Influence(center);
-            if(establishedCarpet>0.02) influencedCells++;
+            if (establishedCarpet > 0.02) influencedCells++;
             // Ground fabric is continuous even where the coarse historical cover field
             // was cleared by a plant. Point exclusions below supply the actual berth.
+            // Full density: the shader thins instances by camera distance.
             int count = Math.Max(1, (int)Math.Round((Quality >= 2 ? 42 : 36)
-                * (g.CellSize * g.CellSize / .0625) * distFade * (1 + establishedCarpet * .12)));
+                * (g.CellSize * g.CellSize / .0625) * (1 + establishedCarpet * .12)));
             int columns = (int)Math.Ceiling(Math.Sqrt(count));
             int rows = (int)Math.Ceiling(count / (double)columns);
             double phaseX = rng.Next01(), phaseZ = rng.Next01();
@@ -334,22 +518,84 @@ public partial class AmbientGroundCoverRenderer : Node3D
                 // supplies only a small stable tissue variation, never a stale field sample.
                 float vary = (float)(0.88 + rng.Next01() * 0.16);
                 var col = new Color(vary, vary, vary, 1);
-                if (isLeaf) { _leafT.Add(t); _leafC.Add(col); }
-                else { _bladeT.Add(t); _bladeC.Add(col); }
+                float rank = Math.Min(0.99999f, (uint)(Rng.Mix(_w.Seed ^ 0x51EDUL, ((ulong)BitConverter.SingleToUInt32Bits(t.Origin.X) << 32) | BitConverter.SingleToUInt32Bits(t.Origin.Z)) >> 32) / 4294967296f);
+                if (isLeaf) { _leafT.Add(t); _leafC.Add(col); _leafR.Add(rank); }
+                else { _bladeT.Add(t); _bladeC.Add(col); _bladeR.Add(rank); }
             }
         }
 
-        using (FrameProfiler.Measure("AmbientGround.BladeUpload")) Fill(_blade, _bladeT, _bladeC);
-        yield return true;
-        using (FrameProfiler.Measure("AmbientGround.LeafUpload")) Fill(_leaf, _leafT, _leafC);
-        yield return true;
-        LastGroundcoverInstances = _bladeT.Count+_leafT.Count;
+        // Replacement is complete: swap it in within one frame so old geometry stays visible until now.
+        if (!_chunks.TryGetValue(key, out var chunk))
+        {
+            chunk = NewChunk(key);
+            _chunks[key] = chunk;
+            ChunksGenerated++;
+        }
+        else _regenByReason[chunk.Reason]++;
+        using (FrameProfiler.Measure("AmbientGround.BladeUpload")) FillChunk(chunk.Blade, _bladeT, _bladeC, _bladeR);
+        using (FrameProfiler.Measure("AmbientGround.LeafUpload")) FillChunk(chunk.Leaf, _leafT, _leafC, _leafR);
+        int n = _bladeT.Count + _leafT.Count;
+        _totalInstances += n - chunk.Instances;
+        chunk.Instances = n; chunk.BladeN = _bladeT.Count; chunk.LeafN = _leafT.Count; chunk.LastFrac = -1f;
+        chunk.Dirty = false; chunk.PropSig = sig;
         LastInfluencedGridCells = influencedCells;
         LastFloraExclusionCandidateChecks = exclusionCandidates;
-        // Creeping stolons and bank-fringe leaves follow the same water margins the turf avoids.
-        foreach (bool step in RefreshBankFringeBatched(cam, haveCam, nearRocks, nearLogs, nearGravel, floraDiscs))
-            yield return step;
+        RefreshCount++;
     }
+
+    /// <summary>Per-frame draw-count LOD. Instances are stored sorted by thinning rank, so the part the shader
+    /// can still show at a chunk's nearest point is a prefix; the thinned tail is not submitted at all.</summary>
+    private void ApplyDistanceLod(Vector3 cam, bool haveCam)
+    {
+        foreach (var (key, ch) in _chunks)
+        {
+            float frac = 1f;
+            if (haveCam)
+            {
+                float nx = Math.Clamp(cam.X, key.X * ChunkSize, (key.X + 1) * ChunkSize);
+                float nz = Math.Clamp(cam.Z, key.Z * ChunkSize, (key.Z + 1) * ChunkSize);
+                float dn = Mathf.Max(0f, Mathf.Sqrt((nx - cam.X) * (nx - cam.X) + (nz - cam.Z) * (nz - cam.Z)) - .15f);
+                float keep = 1f - (dn - FadeStart) / (CullRadius - FadeStart);
+                frac = Mathf.Clamp(keep * 1.125f, 0f, 1f);
+            }
+            if (Mathf.Abs(frac - ch.LastFrac) < .004f && (frac > 0f) == (ch.LastFrac > 0f)) continue;
+            ch.LastFrac = frac;
+            int b = frac >= 1f ? ch.BladeN : (int)Math.Ceiling(ch.BladeN * frac);
+            int l = frac >= 1f ? ch.LeafN : (int)Math.Ceiling(ch.LeafN * frac);
+            ch.Blade.VisibleInstanceCount = b; ch.Leaf.VisibleInstanceCount = l;
+            ch.BladeMmi.Visible = b > 0; ch.LeafMmi.Visible = l > 0;
+        }
+    }
+
+    private Chunk NewChunk((int X, int Z) key)
+    {
+        var ch = new Chunk
+        {
+            Blade = NewMultiMesh(_bladeMesh),
+            Leaf = NewMultiMesh(_leafMesh),
+        };
+        // No visibility range: ApplyDistanceLod trims the drawn prefix and hides chunks past the cull radius;
+        // the shader does the exact per-instance thinning inside that prefix.
+        ch.BladeMmi = NewChunkMmi($"Blades_{key.X}_{key.Z}", ch.Blade);
+        ch.LeafMmi = NewChunkMmi($"Leaves_{key.X}_{key.Z}", ch.Leaf);
+        _chunkRoot.AddChild(ch.BladeMmi); _chunkRoot.AddChild(ch.LeafMmi);
+        return ch;
+    }
+
+    private static MultiMeshInstance3D NewChunkMmi(string name, MultiMesh mm) => new()
+    {
+        Name = name,
+        Multimesh = mm,
+        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+    };
+
+    private static MultiMesh NewMultiMesh(ArrayMesh mesh) => new()
+    {
+        TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+        UseColors = true,
+        Mesh = mesh,
+        InstanceCount = 0,
+    };
 
     private static double GravelCoverWeight(Vec2 p, List<GravelPatch> gravel)
     {
@@ -540,35 +786,33 @@ public partial class AmbientGroundCoverRenderer : Node3D
         m.AddTriangle(a, b, c);
     }
 
-
-    private void Fill(MultiMesh mm, List<Transform3D> xf, List<Color> col)
+    private static void FillChunk(MultiMesh mm, List<Transform3D> xf, List<Color> col, List<float> rank)
     {
         int n = xf.Count;
         if (mm.InstanceCount != n) mm.InstanceCount = n;
         mm.VisibleInstanceCount = n;
         if (n == 0) return;
-        bool resized = !_buffers.TryGetValue(mm, out var buf) || buf.Length != n * 16;
-        if (resized) _buffers[mm] = buf = new float[n * 16];
-        bool changed = resized;
+        var buf = new float[n * 16];
+        var order = new int[n]; var keys = rank.ToArray();
+        for (int q = 0; q < n; q++) order[q] = q;
+        Array.Sort(keys, order); // ascending rank: the shader keeps low ranks longest, so a prefix is the visible set
+        float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
+        float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
         for (int i = 0; i < n; i++)
         {
-            var t = xf[i]; var c = col[i]; int o = i * 16;
-            if (buf![o + 0] != t.Basis.X.X || buf[o + 1] != t.Basis.Y.X || buf[o + 2] != t.Basis.Z.X || buf[o + 3] != t.Origin.X ||
-                buf[o + 4] != t.Basis.X.Y || buf[o + 5] != t.Basis.Y.Y || buf[o + 6] != t.Basis.Z.Y || buf[o + 7] != t.Origin.Y ||
-                buf[o + 8] != t.Basis.X.Z || buf[o + 9] != t.Basis.Y.Z || buf[o + 10] != t.Basis.Z.Z || buf[o + 11] != t.Origin.Z ||
-                buf[o + 12] != c.R || buf[o + 13] != c.G || buf[o + 14] != c.B)
-            {
-                changed = true;
-                buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
-                buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
-                buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
-                buf[o + 12] = c.R; buf[o + 13] = c.G; buf[o + 14] = c.B; buf[o + 15] = 1;
-            }
+            int src = order[i]; var t = xf[src]; var c = col[src]; int o = i * 16;
+            buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
+            buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
+            buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
+            buf[o + 12] = c.R; buf[o + 13] = c.G; buf[o + 14] = c.B; buf[o + 15] = keys[i];
+            minX = Math.Min(minX, t.Origin.X); maxX = Math.Max(maxX, t.Origin.X);
+            minY = Math.Min(minY, t.Origin.Y); maxY = Math.Max(maxY, t.Origin.Y);
+            minZ = Math.Min(minZ, t.Origin.Z); maxZ = Math.Max(maxZ, t.Origin.Z);
         }
-        if (changed)
-        {
-            mm.Buffer = buf;
-        }
+        mm.Buffer = buf;
+        // Instance reach: blade/leaf meshes are ~0.15 m tall at full scale plus lean and curl; pad generously.
+        mm.CustomAabb = new Aabb(new Vector3(minX - .3f, minY - .1f, minZ - .3f),
+            new Vector3(maxX - minX + .6f, maxY - minY + .45f, maxZ - minZ + .6f));
     }
 
     private struct CellRng

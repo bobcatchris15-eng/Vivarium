@@ -67,10 +67,10 @@ Species-by-species pass using the matrix; starts after Batch 1 so shared junctio
 | id | question |
 |---|---|
 | P12 | Reduce SSAO resolution / volumetric fog froxels / GI settings at the single quality tier? **RESOLVED 2026-11-12: owner chose fog 64 + 3D resolution 85%** (pc5: GPU 33.7 -> 30.6 ms, 30 fps). SDFGI and SSAO unchanged |
-| P13, R2 | Consolidate the three overlapping ground-cover systems into one? |
+| P13, R2 | **P13 RESOLVED 2026-11-12:** ambient cover is a 2 m chunk cache, rebuilt only on tracked-plant establishment or removal, terrain or prop edits, and quality change; camera moves never regenerate. R2 (merging the scatter systems) still open. |
 | R1 | Extend `RenderSnapshot` to coverage (fixes a worker-thread race) or drop the unused dirty-region path? |
 | R3 | Move guardian–plant contact into the flora vertex shader? |
 | P11 | Drop unused 4K texture sets and unbound EXR sky maps from the repo/export? |
 | U5, U6, U13–U18, U23, U24 | Confirm-on-discard, UI scaling model, pause menu, catalogue portraits, stats shown, rebinding, look/font/icons |
-| OD-R | Rocks are small and about half-buried by sim placement (`PropPlacement.cs:179`), so they barely read in any view. Raise and/or enlarge them (sim-side placement change; affects contact/collision)? Rock surface work (GR4/GR6) waits on this. |
-| OD-W | The pond shoreline steps along the cell grid because the water plane is clipped exactly to the faceted terrain, which is kept within 0.5 mm of sim height on purpose. Smoothing banks visually (TerrainMesh.RenderHeight near the waterline, a few cm) would let plants/animals on banks sit up to that much off the visible ground. Allow a small render/sim mismatch on banks, or refine the sim heightfield resolution near water instead? |
+| OD-R | **RESOLVED 2026-11-12 (7667ed9):** rocks seated with their widest band at ground (lowest rim support +0.12*SizeY). Existing saves keep stored heights until a rock is moved. Size unchanged. |
+| OD-W | **RESOLVED 2026-11-12 (7667ed9):** render-only. Pond extends 3 cm past the shore and fades by a 5x5-smoothed depth (UV2), so the edge is a smooth contour; sim heights unchanged. |
