@@ -163,8 +163,8 @@ public partial class AmbientGroundCoverRenderer : Node3D
         if (_terrainVersion != _w.Terrain.Version) Invalidate();
         _editDelay -= dt;
         _floraTimer -= dt;
-        if (_floraIndex == null || _floraTimer <= 0) { _floraTimer = .5; ScanFlora(); }
-        if (_rockBounds == null || _propsVersion != _w.Props.Version) PropsChanged();
+        if (_floraIndex == null || _floraTimer <= 0) { _floraTimer = .5; using (FrameProfiler.Measure("AmbientGround.FloraScan")) ScanFlora(); }
+        if (_rockBounds == null || _propsVersion != _w.Props.Version) using (FrameProfiler.Measure("AmbientGround.Props")) PropsChanged();
 
         bool bankMoved = haveCam && cam.DistanceSquaredTo(_lastBankCam) > 2.0f * 2.0f;
         if (_pendingBank is null && (_bankDirty || bankMoved) && _editDelay <= 0)
@@ -179,16 +179,22 @@ public partial class AmbientGroundCoverRenderer : Node3D
         double chunkBudget = _pendingBank is not null ? 1.0 : 2.0;
         do
         {
-            if (_gen == null && !StartNextChunk(cam, haveCam)) break;
+            long stepStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            int gcBefore = GC.CollectionCount(0);
+            using (FrameProfiler.Measure("AmbientGround.ChunkStart"))
+                if (_gen == null && !StartNextChunk(cam, haveCam)) break;
             if (!_gen!.MoveNext()) { _gen.Dispose(); _gen = null; }
+            double stepMs = System.Diagnostics.Stopwatch.GetElapsedTime(stepStart).TotalMilliseconds;
+            FrameProfiler.Record(GC.CollectionCount(0) != gcBefore ? "AmbientGround.ChunkStepWithGC" : "AmbientGround.ChunkStep", stepMs);
         } while (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds < chunkBudget);
         if (_gen == null && _pendingChunks == int.MaxValue) _pendingChunks = 0;
-        ApplyDistanceLod(cam, haveCam);
+        using (FrameProfiler.Measure("AmbientGround.Lod")) ApplyDistanceLod(cam, haveCam);
         if (_pendingBank is not null)
         {
             do
             {
-                if (!_pendingBank.MoveNext()) { _pendingBank.Dispose(); _pendingBank = null; break; }
+                using (FrameProfiler.Measure("AmbientGround.BankStep"))
+                    if (!_pendingBank.MoveNext()) { _pendingBank.Dispose(); _pendingBank = null; break; }
             } while (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds < 2);
         }
     }
@@ -395,8 +401,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
         }
         _pendingChunks = pending;
         if (best == double.MaxValue) return false;
-        // A stale index would leave turf inside collars of plants that have grown since the last build.
-        if (_floraIndex == null || Time.GetTicksMsec() - _floraBuiltMs > 2000) RebuildFloraIndex();
+        if (_floraIndex == null) RebuildFloraIndex();
         _genKey = bestKey;
         _gen = GenerateChunk(bestKey, _bankCells[bestKey], ChunkPropSig(bestKey), _floraIndex!, _carpetIndex!).GetEnumerator();
         return true;
@@ -525,6 +530,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
         }
 
         // Replacement is complete: swap it in within one frame so old geometry stays visible until now.
+        long swapStart = System.Diagnostics.Stopwatch.GetTimestamp();
         if (!_chunks.TryGetValue(key, out var chunk))
         {
             chunk = NewChunk(key);
@@ -541,6 +547,7 @@ public partial class AmbientGroundCoverRenderer : Node3D
         LastInfluencedGridCells = influencedCells;
         LastFloraExclusionCandidateChecks = exclusionCandidates;
         RefreshCount++;
+        FrameProfiler.Record("AmbientGround.Swap", System.Diagnostics.Stopwatch.GetElapsedTime(swapStart).TotalMilliseconds);
     }
 
     /// <summary>Per-frame draw-count LOD. Instances are stored sorted by thinning rank, so the part the shader
