@@ -97,3 +97,17 @@ mean of its two adjacent controls. Controls: 32.53-32.95 ms GPU (spread <= 0.37 
 Sum of attributable renderers ~17.5 ms of ~32.7 ms; the remaining ~15 ms is fixed per-frame cost (lighting, shadows,
 SSAO/fog/GI post stack, sky) -> owner item P12 is the largest single lever. Best geometry targets: the single pilot tree
 (4.9 ms for one object), water (3.2 ms; 1.55M prims for a small pond), props (1.06M prims for small, mostly buried rocks).
+
+## P12 render-stack experiments (2026-11-11, build/overhaul/P12b)
+Each override soaked 90 s after 60 s warmup between two plain controls (controls 33.39-33.68 ms GPU). Visual: 9 visual-review
+scenes per override vs base, mean abs pixel diff (noise floor ~2/255 from wind animation).
+
+| override | GPU ms | VRAM | visual |
+|---|---|---|---|
+| fog_res=64 (from 128) | -3.25 | -123 MB | indistinguishable (diffs at noise floor) |
+| fog off | -3.84 | -121 MB | small loss of depth haze/light shafts; only 0.6 ms more than 64 |
+| render_scale 0.85 (from 0.95, bilinear) | -2.51 | -19 MB | slightly softer image; diffs 2-4 |
+| sdfgi off | -2.20 | -292 MB | visibly flatter: foliage paler/washed, milky haze in shaded foliage (diffs 6-9 in foliage/shoreline) |
+| ssao half_size | -0.24 | -5 MB | none; not worth it |
+| GI mode Dynamic on MMIs | +0.15 | -16 MB | no gain |
+| shadow atlas 4096 | n/a | | already the engine default |
