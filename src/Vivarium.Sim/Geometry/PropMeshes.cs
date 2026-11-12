@@ -151,9 +151,12 @@ public static class PropMeshes
             for (int i = 0; i < divisions; i++)
                 for (int j = 0; j < divisions - i; j++)
                 {
-                    Primitives.TriangleFacing(mesh, row[i, j], row[i + 1, j], row[i, j + 1], outward);
+                    // TriangleFacing makes (b-a)x(c-a) point along its normal, i.e. counter-clockwise seen
+                    // from that side; Godot front faces are clockwise (and the normal pass below assumes
+                    // clockwise), so emit against the inward normal to make the outer surface front-facing.
+                    Primitives.TriangleFacing(mesh, row[i, j], row[i + 1, j], row[i, j + 1], outward * -1);
                     if (i + j + 1 < divisions)
-                        Primitives.TriangleFacing(mesh, row[i + 1, j], row[i + 1, j + 1], row[i, j + 1], outward);
+                        Primitives.TriangleFacing(mesh, row[i + 1, j], row[i + 1, j + 1], row[i, j + 1], outward * -1);
                 }
             faceIndex++;
         }
