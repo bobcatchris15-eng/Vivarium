@@ -61,7 +61,14 @@ public sealed class MoistureBonusField
     public double[] ExportDomainValues()
     {
         var a = new double[Grid.DomainCells.Length];
-        for (int k = 0; k < a.Length; k++) a[k] = Values[Grid.DomainCells[k]];
+        if (a.Length == Values.Length)
+        {
+            Array.Copy(Values, a, a.Length);
+        }
+        else
+        {
+            for (int k = 0; k < a.Length; k++) a[k] = Values[Grid.DomainCells[k]];
+        }
         return a;
     }
 
