@@ -194,6 +194,8 @@ coherent ecology. No compatibility value in saves/APIs/engine. Experiments under
 | R0a | (read-only) flora/render audit | DONE | 1 | see RD7; glowbriar 54k, moonfern 6k, shadebell 83k, embercrown 114k tier0 tris; island default 16 m hex, metres, Y-up |
 | R0b | (read-only) sim/ground/light audit | DONE | 1 | see RD8 |
 | I0 | src/Vivarium.Sim/Repr/Contracts.cs, experiments/representation_rebuild/selftest | DONE abc4f3a | 1 | orchestrator; builds clean |
-| H0 | game/Repr/Harness/**, Main.cs args | DISPATCHED | 1 | sonnet-medium; only Godot user |
-| P1 | src/Vivarium.Sim/Repr/Plant/** | DISPATCHED | 1 | haiku; glowbriar/moonfern/shadebell graphs + assembly compiler |
+| H0 | game/Repr/Harness/**, Main.cs args | DONE bffadab | 1 | PASS, orchestrator viewed wide.png. Probe scene (15 draws, 85k prims) = 12.9 ms GPU, 2.66 GB VRAM -> fixed stack dominates. BuildLegacyFlora re-runs the renderer recipe (no wind/tint/fruit). First shot alloc/max suspect (warm-up). --seed only sets ctx.WorldSeed |
+| L0 | game/Repr/Harness (env overrides), game/Repr/Light, experiments/.../L0-fixed-cost.md | DISPATCHED | 1 | sonnet-low; holds Godot (35-launch matrix) |
+| P1 | src/Vivarium.Sim/Repr/Plant/** | DONE 5cc795c | 1 | 10/10 self tests (re-run by orchestrator). organs/descBytes/flat tris d0: glowbriar 601/56 kB/48k (wood 27.7k, too heavy), moonfern 88/8 kB/7.9k, shadebell 319/30 kB/28.8k. Not done: fern croziers, axis radius growth, spatial hash. NOT yet seen rendered |
+| P3 | game/Repr/Plant/**, PlantCompiler fixes | DISPATCHED | 1 | sonnet-medium; phase 1 code only, phase 2 captures when L0 frees Godot (SendMessage) |
 | S1 | src/Vivarium.Sim/Repr/Substrate/** | DISPATCHED | 1 | haiku; layered substrate + conservative water |
