@@ -88,6 +88,7 @@ public static class ReprReviewRunner
         if (demos.Count == 0) throw new InvalidOperationException("No repr demos found.");
 
         var vp = main.GetViewport();
+        var envResult = ReprEnv.Apply(session, vp, Main.ArgAfter("--repr-env"));
         var vpRid = vp.GetViewportRid();
         RenderingServer.ViewportSetMeasureRenderTime(vpRid, true);
         var cam = session.CameraRig.Cam;
@@ -98,6 +99,8 @@ public static class ReprReviewRunner
             resolution = new[] { (int)vp.GetVisibleRect().Size.X, (int)vp.GetVisibleRect().Size.Y },
             window = new[] { DisplayServer.WindowGetSize().X, DisplayServer.WindowGetSize().Y },
             render_scale = vp.Scaling3DScale,
+            max_fps = Engine.MaxFps,
+            vsync = DisplayServer.WindowGetVsyncMode().ToString(),
             quality = session.Settings.Quality,
             godot = Engine.GetVersionInfo()["string"].ToString(),
         };
@@ -186,6 +189,8 @@ public static class ReprReviewRunner
                     eye = new[] { shot.Eye.X, shot.Eye.Y, shot.Eye.Z }, target = new[] { shot.Target.X, shot.Target.Y, shot.Target.Z },
                     fov_deg = shot.FovDeg, day_fraction = shot.DayFraction, cycle_seconds = R(seconds, 2),
                     frames = N,
+                    fps_actual = R(N * 1000.0 / Math.Max(1e-6, ms.Sum()), 2),
+                    gpu_busy_fraction = gpuMean is double gm ? R(gm * (N * 1000.0 / Math.Max(1e-6, ms.Sum())) / 1000.0, 4) : (double?)null,
                     frame_ms_p50 = R(Pct(sorted, 0.50)), frame_ms_p95 = R(Pct(sorted, 0.95)), frame_ms_max = R(sorted[^1]),
                     gpu_frame_ms_mean = gpuMean, gpu_samples_nonzero = gpuNz.Length,
                     draw_calls = R(draws.Average(), 1), primitives = R(prims.Average(), 0), objects = R(objs.Average(), 1),
@@ -200,7 +205,7 @@ public static class ReprReviewRunner
             demo.ApplyVariant(null);
             var demoReport = new
             {
-                demo = demo.Name, seed, machine, build_ms = R(buildMs, 1), settle_frames = settle,
+                demo = demo.Name, seed, machine, env_overrides = envResult, build_ms = R(buildMs, 1), settle_frames = settle,
                 managed_bytes_per_frame_baseline = R(baseline, 0), shots = shotsOut,
             };
             File.WriteAllText(Path.Combine(demoDir, "report.json"), JsonSerializer.Serialize(demoReport, new JsonSerializerOptions { WriteIndented = true }));
@@ -210,7 +215,7 @@ public static class ReprReviewRunner
             await Frames(main, 10);
         }
 
-        File.WriteAllText(Path.Combine(directory, "report.json"), JsonSerializer.Serialize(new { seed, machine, demos = index, log }, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(directory, "report.json"), JsonSerializer.Serialize(new { seed, machine, env_overrides = envResult, demos = index, log }, new JsonSerializerOptions { WriteIndented = true }));
         GD.Print("REPR_REVIEW_COMPLETE " + directory);
         main.GetTree().Quit();
     }
