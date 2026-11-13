@@ -179,7 +179,7 @@ public sealed class MeshBorderTest : IReprSelfTest
                 if (dz < bestDz) { bestDz = dz; bestY = fy; }
             }
             if (bestDz > 0.006) return $"no fine vertex near coarse border z={z:F4}";
-            if (Math.Abs(bestY - y) > 0.005) // orchestrator 2026-11-13: fine mesh carries a relief octave the coarse one fades out; 5 mm is below one coarse step return $"coarse border z={z:F4} is {Math.Abs(bestY - y) * 1000:F2} mm from fine surface";
+            if (Math.Abs(bestY - y) > 0.005 /* orchestrator 2026-11-13: fine mesh carries a relief octave the coarse fades out */) return $"coarse border z={z:F4} is {Math.Abs(bestY - y) * 1000:F2} mm from fine surface";
         }
         return null;
     }
