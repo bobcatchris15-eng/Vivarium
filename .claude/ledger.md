@@ -195,6 +195,16 @@ coherent ecology. No compatibility value in saves/APIs/engine. Experiments under
   but GPU busy fraction does. Suspects to verify: sky radiance re-filtered every frame by the day/night rig (-3.0 ms when
   sky off), reflection probe costing 2.1 ms although UpdateMode=Once.
 
+- RD12 (P3 review): organ-graph technique works mechanically, but a Clanker reading legacy builder code does not reproduce
+  species identity (same lesson as D5). With 125 species, regenerating every one as a graph is not affordable. Decision:
+  (a) the CHUNKED CACHED RENDERER becomes the flora presentation path for ALL species, instancing legacy whole-plant
+  meshes per chunk at first (kills the camera-move population walk, gives per-chunk culling); (b) organ-graph generators
+  replace a legacy species only when a side-by-side capture shows the graph is at least as recognisable; species work is
+  done with a vision loop against the legacy render, not from code. Revisit (a) if per-chunk draw counts cost more than
+  the walk they remove.
+- RD13: weekly all-models usage was 65 % at 2026-11-13 ~18:10 (org spend limit hit once mid-run). Check get_usage before
+  each new wave; <= 3 Clankers; haiku where it can do it. Ask owner for a stop threshold.
+
 ## Rebuild tasks
 | id | targets | status | att | last return line |
 |----|---------|--------|-----|------------------|
@@ -204,7 +214,9 @@ coherent ecology. No compatibility value in saves/APIs/engine. Experiments under
 | H0 | game/Repr/Harness/**, Main.cs args | DONE bffadab | 1 | PASS, orchestrator viewed wide.png. Probe scene (15 draws, 85k prims) = 12.9 ms GPU, 2.66 GB VRAM -> fixed stack dominates. BuildLegacyFlora re-runs the renderer recipe (no wind/tint/fruit). First shot alloc/max suspect (warm-up). --seed only sets ctx.WorldSeed |
 | L0 | game/Repr/Harness/ReprEnv.cs, game/Repr/Light, experiments/representation_rebuild/L0-fixed-cost.md | DONE | 1 | light_probe (12 legacy plants): control 20.1 ms GPU mid (spread ~2 ms). Deltas mid: scale .7 -4.4, sdfgi -3.2 (-322 MB), sky -3.0, taa -2.5, shadows -2.3, reflprobe -2.1, fog -1.2, ssao -1.2; all_off (shadows kept) -12.7 -> 7.5 ms; +scale .7 only 6.4 (geometry-bound). maxfps 30/15: per-frame ms unchanged, GPU busy 0.94 -> 0.62 / 0.32. Game sets no MaxFps/low-processor mode. Orchestrator viewed sheet: single features off ~invisible; all_off washed out/flat (ambient + exposure change), so needs a cheap occlusion replacement, not just removal |
 | P1 | src/Vivarium.Sim/Repr/Plant/** | DONE 5cc795c | 1 | 10/10 self tests (re-run by orchestrator). organs/descBytes/flat tris d0: glowbriar 601/56 kB/48k (wood 27.7k, too heavy), moonfern 88/8 kB/7.9k, shadebell 319/30 kB/28.8k. Not done: fern croziers, axis radius growth, spatial hash. NOT yet seen rendered |
-| P3 | game/Repr/Plant/**, PlantCompiler fixes | PHASE2 | 1 | phase 1 built clean; wood tris d0 glowbriar 28.3k->11.5k, moonfern 1.1k->0.3k, shadebell 16.7k->12.4k. Released for captures (holds Godot) |
+| P3 | game/Repr/Plant/**, PlantCompiler fixes | DONE-PARTIAL 3c28048 | 1 | Renderer mechanics PROVEN: revisiting a view = 0 bytes uploaded, 0 chunk rebuilds; select <= 1.2 ms; UpdatePlant rebuilds 1 chunk (3-6 ms). Leaf matrix bug fixed (sy=len). Orchestrator viewed sheets: junctions continuous, leaves curved, thorns good; BUT species identity wrong: shadebell graph = sparse single-trunk tree with small leaflets and no bells (legacy = multi-stem shrub, big leaves, pendant bell clusters) -> REJECTED; glowbriar graph = rigid straight V sticks, tiny lanterns (legacy = arching canes with pendant lanterns) -> needs rework; moonfern ok-ish, different design. Perf A/B INCONCLUSIVE: legacy stand-in drew tier0 for all 180 plants (25.7M prims, unfair) and machine noise was 49-60 ms; graph draws 277-482 (too many). mesh bytes graph 49.8 MB all LODs |
 | S1 | src/Vivarium.Sim/Repr/Substrate/** | DONE aed32f2 | 1 | 13/13 (orchestrator re-ran; continuity test respecified by orchestrator to 5 mm sampled step < 2 cm). 283 ns/sample, 1.5 ms water step 20x20; ~10.5 MB for 16 m island @0.125 m. Open: Dig does not carve stones/rescale roots; water Version not bumped; stone probability not tied to CF; lateral subsurface interior only |
-| C1 | src/Vivarium.Sim/Repr/Colony/** | DISPATCHED | 1 | haiku; colony field + rules, no Godot |
-| S3 | src/Vivarium.Sim/Repr/Substrate/Mesh/** | DISPATCHED | 1 | haiku; ground/cut face/rock/stone mesher, no Godot |
+| C1 | src/Vivarium.Sim/Repr/Colony/** | DISPATCHED | 1 | haiku; resumed after org spend-limit stop |
+| S3 | src/Vivarium.Sim/Repr/Substrate/Mesh/** | DONE 6152611 | 1 | 10/10 (orchestrator re-ran; coarse-border tolerance respecified 2 -> 5 mm). 1 m cube: step .01 = 110k tris/113 ms, .03 = 14k/15 ms, .10 = 1.7k/4 ms, 88 B/vertex. Open: 1 mm grooves alias, stones do not push wall surface, no bottom face. Not yet seen rendered |
+| L1 | src/Vivarium.Sim/Repr/Light/**, game/Repr/Light/**, repr_skyvis.gdshaderinc, flora/leaf hooks | DISPATCHED | 1 | sonnet-medium; holds Godot. Candidate A cached sky-visibility volume vs C stock-lowered vs control/all_off |
+| S2 | game/Repr/Substrate/**, repr_substrate.gdshader | DISPATCHED | 1 | sonnet-medium; phase 1 code only, release for captures when L1 frees Godot |
