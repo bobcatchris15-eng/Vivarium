@@ -205,6 +205,13 @@ coherent ecology. No compatibility value in saves/APIs/engine. Experiments under
 - RD13: weekly all-models usage was 65 % at 2026-11-13 ~18:10 (org spend limit hit once mid-run). Check get_usage before
   each new wave; <= 3 Clankers; haiku where it can do it. Ask owner for a stop threshold.
 
+- RD14 (owner 2026-11-13, amends RD12b and RD3): species identity need not be preserved; species are fictional
+  niche-occupiers. Acceptance for a graph plant = reads as believable and lifelike and fits its niche, and species stay
+  distinguishable from each other. So P3's shadebell is not rejected for being a different plant; it and glowbriar fail on
+  lifelikeness instead (sparse/no flowers; rigid straight sticks, tiny lanterns). Graph generators can therefore be
+  designed per niche/growth form (a family of forms with trait parameters) rather than one hand-matched generator per
+  legacy species: far cheaper for 125 species. RD12a (chunked renderer for everything) stands.
+
 ## Rebuild tasks
 | id | targets | status | att | last return line |
 |----|---------|--------|-----|------------------|
