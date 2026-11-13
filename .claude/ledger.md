@@ -166,8 +166,34 @@ coherent ecology. No compatibility value in saves/APIs/engine. Experiments under
   cards, no curl/thickness/venation relief, faceted broadleaf; canopy density itself is good. So S and leaf-organ quality
   outrank triangle trimming (T0: hiding all flora saves only 2.3 ms).
 
+- RD6: Owner (2026-11-13): end goal is an always-on ambient display glanced at occasionally on low-power hardware (860M ok as
+  target). Optimise sustained power/heat: cached slow-changing representations, low steady GPU+CPU load, frame pacing when
+  little moves, no long-run memory/backlog growth, good from a static or slowly drifting camera for hours. A capped frame rate
+  at low GPU utilisation beats high uncapped fps (orchestrator interpretation). Adds weight to workstream L (15 ms fixed stack).
+- RD7 (R0a): flora = 1 world-spanning MultiMesh per (species, morph x 3 LOD) per organ, 15-36 baked whole-plant variants per
+  species, seeded per species only (no world seed, individuals differ by transform/tint/morph). Camera move re-traverses the
+  whole population every 0.2 s and refills every bucket (memcmp skips unchanged uploads). Leaves are pure geometry, no alpha.
+  RenderDirtyRegions is write-only; FoliageAccommodation is unused; pilot tree has no LOD (0.82M prims, 4.9 ms).
+
+- RD8 (R0b): ground is unrelated 2D fields at 0.25 m cells; moisture is a 0..1 index not tied to water volume; no plant
+  water uptake; "hydrology" scheduled system is empty; no conservation invariant (nutrient loop creates mass, coverage
+  moisture never decays); strata = 4 global bands, cut face reads no sim state; rocks are props unrelated to substrate.
+  Coverage = per-cell occupancy raster at 2 cm, one mesh per 32x32 tile, commits on main thread (25 ms spikes, unmeasured
+  cause). Sim scheduled systems run on the main thread, 6 ms wall budget. Lighting tier 1: 4096 atlas 2 splits, SDFGI 4
+  cascades, SSAO, vol fog, TAA, up to 28 omni (6 shadowed).
+- RD9: Contracts published in src/Vivarium.Sim/Repr/Contracts.cs (orchestrator-owned). New code lives in
+  src/Vivarium.Sim/Repr/<Plant|Substrate|Colony|Light|Ecology> (pure C#) and game/Repr/<...> (Godot). Headless checks:
+  `dotnet run --project experiments/representation_rebuild/selftest -- <filter>`. Captures: `--repr-review <dir>` (H0).
+- RD10 engine: experiments run inside Godot Forward+ first, because no Rust/C++ toolchain is installed, C: has 15 GB free,
+  and the measured cost is ~15 ms fixed post/lighting + renderers that are replaceable in place. Sim-side Repr code is
+  engine-agnostic so a custom renderer stays possible. Revisit if P3/L1 cannot get under ~16 ms GPU inside Godot.
+
 ## Rebuild tasks
 | id | targets | status | att | last return line |
 |----|---------|--------|-----|------------------|
-| R0a | (read-only) flora/render audit | DISPATCHED | 1 | haiku Explore |
-| R0b | (read-only) sim/ground/light audit | DISPATCHED | 1 | haiku Explore |
+| R0a | (read-only) flora/render audit | DONE | 1 | see RD7; glowbriar 54k, moonfern 6k, shadebell 83k, embercrown 114k tier0 tris; island default 16 m hex, metres, Y-up |
+| R0b | (read-only) sim/ground/light audit | DONE | 1 | see RD8 |
+| I0 | src/Vivarium.Sim/Repr/Contracts.cs, experiments/representation_rebuild/selftest | DONE abc4f3a | 1 | orchestrator; builds clean |
+| H0 | game/Repr/Harness/**, Main.cs args | DISPATCHED | 1 | sonnet-medium; only Godot user |
+| P1 | src/Vivarium.Sim/Repr/Plant/** | DISPATCHED | 1 | haiku; glowbriar/moonfern/shadebell graphs + assembly compiler |
+| S1 | src/Vivarium.Sim/Repr/Substrate/** | DISPATCHED | 1 | haiku; layered substrate + conservative water |
