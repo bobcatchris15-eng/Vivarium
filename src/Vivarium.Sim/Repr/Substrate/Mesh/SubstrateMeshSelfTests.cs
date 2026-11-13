@@ -230,31 +230,53 @@ public sealed class MeshRockJoinTest : IReprSelfTest
         var s = SubstrateTestKit.Cube();
         var set = SubstrateMesher.Build(s, MeshTestKit.Whole(s), 0.01, true);
         if (set.Rock.VertexCount == 0) return "no rock outcrop mesh";
-        var mb = new MeshBuilder(s, 0.01);
         var ground = new HashSet<(float, float, float)>();
         for (int v = 0; v < set.Ground.VertexCount; v++)
         {
             var p = set.Ground.Position(v);
             ground.Add(((float)p.X, (float)p.Y, (float)p.Z));
         }
+        // Every rock vertex that lies on the soil/rock contact (contact function zero) has a bit-identical ground twin.
         int joins = 0;
         for (int v = 0; v < set.Rock.VertexCount; v++)
         {
             var p = set.Rock.Position(v);
-            if (mb.KindAtXZ(p.X, p.Z) != 2) continue;
+            if (Math.Abs(s.ContactFunction(new Vec2(p.X, p.Z))) > 1e-7) continue;
             joins++;
-            if (!ground.Contains(((float)p.X, (float)p.Y, (float)p.Z))) return $"rock border vertex ({p.X},{p.Z}) has no ground twin";
+            if (!ground.Contains(((float)p.X, (float)p.Y, (float)p.Z))) return $"rock contact vertex ({p.X},{p.Z}) has no ground twin";
         }
-        if (joins == 0) return "no soil/rock interface vertices";
-        for (int t = 0; t < set.Ground.TriangleCount; t++)
+        if (joins < 20) return $"only {joins} soil/rock contact vertices";
+        // The contact is clipped, not column-aligned: ground triangles stay on the soil side of the continuous contact.
+        int bad = 0, tris = set.Ground.TriangleCount;
+        for (int t = 0; t < tris; t++)
         {
             int a = set.Ground.Indices[3 * t], b = set.Ground.Indices[3 * t + 1], c = set.Ground.Indices[3 * t + 2];
             double cx = (set.Ground.Position(a).X + set.Ground.Position(b).X + set.Ground.Position(c).X) / 3;
             double cz = (set.Ground.Position(a).Z + set.Ground.Position(b).Z + set.Ground.Position(c).Z) / 3;
-            int col = s.ColumnAt(new Vec2(cx, cz));
-            if (col >= 0 && s.IsOutcrop(col)) return "ground triangle inside outcrop cells";
+            if (s.IsOutcropAt(new Vec2(cx, cz))) bad++;
         }
-        return null;
+        if (bad > 0.002 * tris) return $"{bad} of {tris} ground triangles lie on the rock side of the contact";
+        // and rock triangles on the rock side
+        int badR = 0, trisR = set.Rock.TriangleCount;
+        for (int t = 0; t < trisR; t++)
+        {
+            int a = set.Rock.Indices[3 * t], b = set.Rock.Indices[3 * t + 1], c = set.Rock.Indices[3 * t + 2];
+            double cx = (set.Rock.Position(a).X + set.Rock.Position(b).X + set.Rock.Position(c).X) / 3;
+            double cz = (set.Rock.Position(a).Z + set.Rock.Position(b).Z + set.Rock.Position(c).Z) / 3;
+            if (!s.IsOutcropAt(new Vec2(cx, cz))) badR++;
+        }
+        if (badR > 0.002 * trisR) return $"{badR} of {trisR} rock triangles lie on the soil side of the contact";
+        // sub-column contact: some contact vertices are not on a column corner/edge midpoint pattern (x or z not multiple of 5 cm)
+        int off = 0;
+        for (int v = 0; v < set.Rock.VertexCount; v++)
+        {
+            var p = set.Rock.Position(v);
+            if (Math.Abs(s.ContactFunction(new Vec2(p.X, p.Z))) > 1e-7) continue;
+            double fx = p.X / s.Cell, fz = p.Z / s.Cell;
+            if (Math.Abs(fx - Math.Round(fx)) > 0.02 && Math.Abs(fz - Math.Round(fz)) > 0.02) off++;
+            else if (Math.Abs(fx - Math.Round(fx)) > 0.02 || Math.Abs(fz - Math.Round(fz)) > 0.02) off++;
+        }
+        return off < joins / 2 ? "contact vertices sit on column edges" : null;
     }
 }
 
@@ -383,7 +405,7 @@ public sealed class MeshRefreshWaterTest : IReprSelfTest
         var c0 = m.Custom0.ToArray();
         for (int v = 0; v < m.VertexCount; v++)
             if (m.Position(v).X < 0.3) { wetBefore += c0[4 * v]; wetN++; }
-        s.Water.Step(3600, _ => 10e-3 / 3600.0, 0, 0);
+        for (int k = 0; k < 6; k++) s.Water.Step(3600, _ => 10e-3 / 3600.0, 0, 0);   // 6 h: soils start at field capacity, so the top layer needs time to rise
         SubstrateMesher.RefreshWater(s, m);
         for (int i = 0; i < before.Length; i++)
             if (before[i] != m.Positions[i]) return "RefreshWater moved a vertex";

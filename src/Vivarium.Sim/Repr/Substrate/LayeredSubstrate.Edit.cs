@@ -5,11 +5,15 @@ using Vivarium.Sim.Core;
 namespace Vivarium.Sim.Repr;
 
 /// Material removed by excavation (m3). SolidM3 is indexed by (int)Horizon (Litter..Bedrock); WaterM3 is the
-/// liquid that was in the removed pore space and film.
+/// liquid that was in the removed pore space; RootMetres is fine-root length that was in the removed volume;
+/// StonesRemoved counts stones whose centre was inside an excavation (their volume is moved from the horizon
+/// they sat in to Bedrock in SolidM3, so SolidTotal still equals the geometric volume removed).
 public sealed class ExcavationLedger
 {
     public readonly double[] SolidM3 = new double[6];
     public double WaterM3;
+    public double RootMetres;
+    public int StonesRemoved;
     public double SolidTotal
     {
         get { double s = 0; for (int i = 1; i < 6; i++) s += SolidM3[i]; return s; }
@@ -18,6 +22,44 @@ public sealed class ExcavationLedger
 
 public sealed partial class LayeredSubstrate
 {
+    private readonly struct Excavation
+    {
+        public readonly double X, Y, Z, R, R2, SimSeconds;
+        public Excavation(Vec3 c, double r, double t) { X = c.X; Y = c.Y; Z = c.Z; R = r; R2 = r * r; SimSeconds = t; }
+    }
+
+    private readonly List<Excavation> _exc = new();
+    private readonly List<int>?[] _excAt;
+    private readonly HashSet<ulong> _removedStones = new();
+
+    /// Number of excavations applied so far.
+    public int ExcavationCount => _exc.Count;
+
+    /// Current height at a point: the undisturbed height lowered by every excavation sphere that is open to the sky.
+    internal double CurHeight(int col, double x, double z, double und)
+    {
+        var l = _excAt[col];
+        if (l == null) return und;
+        double h = und;
+        for (int k = 0; k < l.Count; k++)
+        {
+            var e = _exc[l[k]];
+            double dx = x - e.X, dz = z - e.Z, q = e.R2 - dx * dx - dz * dz;
+            if (q <= 0) continue;
+            double lower = e.Y - Math.Sqrt(q);
+            if (lower < h) h = lower;
+        }
+        return h;
+    }
+
+    /// Soil layer boundaries (depth below the undisturbed surface) at a node: Litter, Humus, Mineral, Weathered bottoms.
+    private void NodeBounds(int i, int j, Span<double> b)
+    {
+        int i0 = Math.Min(Nx - 1, i), j0 = Math.Min(Nz - 1, j);
+        Profile(i0, j0, i - i0, j - j0, out double T, out double f1, out double f2, out double f3);
+        b[0] = T * f1; b[1] = T * f2; b[2] = T * f3; b[3] = T;
+    }
+
     /// Deposits fine roots: a smooth exponential-with-depth distribution inside a horizontal disk, down to
     /// min(depth, soil). Total root length deposited equals metresOfRoot exactly (on the node grid).
     public void AddRootDensity(Vec3 centre, double radius, double depth, double metresOfRoot)
@@ -31,6 +73,7 @@ public sealed partial class LayeredSubstrate
         var mass = new double[3 * NodeCount];
         var thick = new double[3 * NodeCount];
         double norm = 0;
+        Span<double> nb = stackalloc double[4];
         for (int i = i0; i <= i1; i++)
             for (int j = j0; j <= j1; j++)
             {
@@ -39,12 +82,13 @@ public sealed partial class LayeredSubstrate
                 double r2 = dx * dx + dz * dz;
                 if (r2 >= r2max) continue;
                 double hw = (1 - r2 / r2max) * (1 - r2 / r2max);
-                double dmax = Math.Min(depth, NB[4 * n + 3]);
+                NodeBounds(i, j, nb);
+                double dmax = Math.Min(depth, nb[3]);
                 if (dmax <= 0) continue;
                 for (int b = 0; b < 3; b++)
                 {
-                    double top = b == 0 ? 0 : NB[4 * n + b];
-                    double bot = NB[4 * n + b + 1];
+                    double top = b == 0 ? 0 : nb[b];
+                    double bot = nb[b + 1];
                     top = Math.Min(top, dmax); bot = Math.Min(bot, dmax);
                     double t = bot - top;
                     if (t <= 1e-9) continue;
@@ -61,71 +105,107 @@ public sealed partial class LayeredSubstrate
         }
     }
 
-    /// Excavates a sphere. Each node under the sphere is lowered to the sphere bottom where the sphere opens to
-    /// the sky; the removed thickness of each horizon is booked to Ledger. Publishes one DirtyRecord.
+    /// Mean fine-root density (m/m3) of the column's corner nodes for soil layer l.
+    private double ColumnRoot(int c, int l)
+    {
+        int ci = c / Nz, cj = c % Nz;
+        int n00 = ci * NodesZ + cj, n01 = n00 + 1, n10 = n00 + NodesZ, n11 = n10 + 1;
+        int band = l < 2 ? 0 : (l == 2 ? 1 : 2);
+        return 0.25 * (NRoot[n00 * 3 + band] + NRoot[n01 * 3 + band] + NRoot[n10 * 3 + band] + NRoot[n11 * 3 + band]);
+    }
+
+    /// Excavates a sphere. The sphere is recorded analytically: Height(p) = min(undisturbed, lower sphere surface),
+    /// and what a bowl exposes is the undisturbed horizon at that depth. Material removed (integrated by
+    /// quadrature against the profile) is booked to Ledger; roots and stones inside are removed and booked;
+    /// stones only cut by the sphere stay. Publishes one DirtyRecord (bounds = the sphere AABB).
     public void Dig(Vec3 c, double r, double simSeconds)
     {
         if (!(r > 0)) return;
-        double r2 = r * r;
-        int i0 = Math.Max(0, (int)Math.Floor((c.X - r - Ox) / Cell)), i1 = Math.Min(Nx, (int)Math.Ceiling((c.X + r - Ox) / Cell));
-        int j0 = Math.Max(0, (int)Math.Floor((c.Z - r - Oz) / Cell)), j1 = Math.Min(Nz, (int)Math.Ceiling((c.Z + r - Oz) / Cell));
-        var delta = new double[NodeCount];
-        bool any = false;
-        for (int i = i0; i <= i1; i++)
-            for (int j = j0; j <= j1; j++)
-            {
-                double dx = Ox + i * Cell - c.X, dz = Oz + j * Cell - c.Z;
-                double q = r2 - dx * dx - dz * dz;
-                if (q <= 0) continue;
-                int n = i * NodesZ + j;
-                double lower = c.Y - Math.Sqrt(q);
-                if (lower < NSurf[n]) { delta[n] = NSurf[n] - lower; any = true; }
-            }
-        if (!any) return;
-
-        // Book removed material per column from the four corner nodes (exact for the bilinear surface).
-        var touched = new List<int>();
-        for (int ci = Math.Max(0, i0 - 1); ci <= Math.Min(Nx - 1, i1); ci++)
-            for (int cj = Math.Max(0, j0 - 1); cj <= Math.Min(Nz - 1, j1); cj++)
-            {
-                int cc = ci * Nz + cj;
-                int n00 = ci * NodesZ + cj, n01 = n00 + 1, n10 = n00 + NodesZ, n11 = n10 + 1;
-                double d0 = 0, d1 = 0, d2 = 0, d3 = 0, dBed = 0;
-                foreach (int n in new[] { n00, n01, n10, n11 })
-                {
-                    double dl = delta[n];
-                    if (dl <= 0) continue;
-                    double prev = 0;
-                    double[] rem = new double[4];
-                    for (int l = 0; l < 4; l++)
-                    {
-                        double bl = NB[4 * n + l];
-                        rem[l] = Math.Min(bl, dl) - Math.Min(prev, dl);
-                        prev = bl;
-                    }
-                    d0 += 0.25 * rem[0]; d1 += 0.25 * rem[1]; d2 += 0.25 * rem[2]; d3 += 0.25 * rem[3];
-                    dBed += 0.25 * (dl - Math.Min(NB[4 * n + 3], dl));
-                }
-                if (d0 == 0 && d1 == 0 && d2 == 0 && d3 == 0 && dBed == 0) continue;
-                Ledger.SolidM3[1] += d0 * CellArea;
-                Ledger.SolidM3[2] += d1 * CellArea;
-                Ledger.SolidM3[3] += d2 * CellArea;
-                Ledger.SolidM3[4] += d3 * CellArea;
-                Ledger.SolidM3[5] += dBed * CellArea;
-                Ledger.WaterM3 += (Water.Theta[4 * cc] * d0 + Water.Theta[4 * cc + 1] * d1
-                                 + Water.Theta[4 * cc + 2] * d2 + Water.Theta[4 * cc + 3] * d3) * CellArea;
-                touched.Add(cc);
-            }
-
-        // Lower the nodes (monotone: boundaries move up by the same amount, never below the surface).
-        for (int n = 0; n < NodeCount; n++)
+        int i0 = Math.Max(0, (int)Math.Floor((c.X - r - Ox) / Cell)), i1 = Math.Min(Nx - 1, (int)Math.Floor((c.X + r - Ox) / Cell));
+        int j0 = Math.Max(0, (int)Math.Floor((c.Z - r - Oz) / Cell)), j1 = Math.Min(Nz - 1, (int)Math.Floor((c.Z + r - Oz) / Cell));
+        if (i1 < i0 || j1 < j0) return;
+        var cols = new List<int>();
+        for (int i = i0; i <= i1; i++) for (int j = j0; j <= j1; j++) cols.Add(i * Nz + j);
+        var oldH = new double[cols.Count * 4];
+        var oldS = new double[cols.Count];
+        var tmp = new double[4];
+        for (int k = 0; k < cols.Count; k++)
         {
-            double dl = delta[n];
-            if (dl <= 0) continue;
-            NSurf[n] = (float)(NSurf[n] - dl);
-            for (int l = 0; l < 4; l++) NB[4 * n + l] = (float)Math.Max(0, NB[4 * n + l] - dl);
+            QuadColumn(cols[k], tmp, out oldS[k]);
+            for (int l = 0; l < 4; l++) oldH[4 * k + l] = tmp[l];
         }
-        foreach (int cc in touched) RefreshColumn(cc);
+
+        // stones with their centre inside the sphere go (found before the sphere exists)
+        var gone = new List<Stone>();
+        foreach (var st in StonesIn(Aabb.Around(c, r)))
+        {
+            double dx = st.Centre.X - c.X, dy = st.Centre.Y - c.Y, dz = st.Centre.Z - c.Z;
+            if (dx * dx + dy * dy + dz * dz < r * r) gone.Add(st);
+        }
+
+        int idx = _exc.Count;
+        _exc.Add(new Excavation(c, r, simSeconds));
+        foreach (int cc in cols) (_excAt[cc] ??= new List<int>()).Add(idx);
+
+        var newH = new double[cols.Count * 4];
+        var newS = new double[cols.Count];
+        double totalRemoved = 0;
+        for (int k = 0; k < cols.Count; k++)
+        {
+            QuadColumn(cols[k], tmp, out newS[k]);
+            for (int l = 0; l < 4; l++) newH[4 * k + l] = tmp[l];
+            totalRemoved += oldS[k] - newS[k];
+        }
+        if (totalRemoved * CellArea <= 1e-15)
+        {
+            // the sphere is wholly in air: nothing was removed, undo
+            _exc.RemoveAt(idx);
+            foreach (int cc in cols) { var li = _excAt[cc]!; li.Remove(idx); if (li.Count == 0) _excAt[cc] = null; }
+            return;
+        }
+
+        for (int k = 0; k < cols.Count; k++)
+        {
+            int cc = cols[k];
+            double soil = 0;
+            for (int l = 0; l < 4; l++)
+            {
+                double d = Math.Max(0, oldH[4 * k + l] - newH[4 * k + l]);
+                soil += d;
+                Ledger.SolidM3[l + 1] += d * CellArea;
+                Ledger.WaterM3 += Water.Theta[4 * cc + l] * d * CellArea;
+                Ledger.RootMetres += ColumnRoot(cc, l) * d * CellArea;
+                ColH[4 * cc + l] = newH[4 * k + l];
+            }
+            double total = Math.Max(0, oldS[k] - newS[k]);
+            Ledger.SolidM3[5] += Math.Max(0, total - soil) * CellArea;
+            ColSurf[cc] = newS[k];
+        }
+
+        foreach (var st in gone)
+        {
+            _removedStones.Add(st.Id);
+            Ledger.StonesRemoved++;
+            double v = 4.0 / 3.0 * Math.PI * st.Semi.X * st.Semi.Y * st.Semi.Z;
+            double und = UndisturbedHeight(new Vec2(st.Centre.X, st.Centre.Z));
+            int layer = 0;
+            if (double.IsFinite(und))
+            {
+                double d = und - st.Centre.Y;
+                for (int lev = 1; lev <= 4; lev++)
+                {
+                    double bd = HorizonBoundaryDepth(new Vec2(st.Centre.X, st.Centre.Z), lev);
+                    if (d < bd) { layer = lev - 1; break; }
+                    layer = 4;
+                }
+            }
+            if (layer < 4)
+            {
+                double take = Math.Min(v, Ledger.SolidM3[layer + 1]);
+                Ledger.SolidM3[layer + 1] -= take;
+                Ledger.SolidM3[5] += take;
+            }
+        }
 
         _version++;
         DirtyLog.Publish(new DirtyRecord(Aabb.Around(c, r),

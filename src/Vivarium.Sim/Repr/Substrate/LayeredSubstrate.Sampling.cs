@@ -14,27 +14,34 @@ public sealed partial class LayeredSubstrate
         Locate(fx, fz, out int i0, out int j0, out double tx, out double tz);
         int n00 = i0 * NodesZ + j0, n01 = n00 + 1, n10 = n00 + NodesZ, n11 = n10 + 1;
         int c = i0 * Nz + j0;
-        double surf = Bil(NSurf, n00, n01, n10, n11, tx, tz);
-        if (p.Y > surf)
-        {
-            s.Horizon = p.Y <= surf + Water.Standing[c] ? Horizon.Water : Horizon.Void;
-            return s;
-        }
-        double w00 = (1 - tx) * (1 - tz), w01 = (1 - tx) * tz, w10 = tx * (1 - tz), w11 = tx * tz;
-        double b1 = Bil(NB, 4 * n00, 4 * n01, 4 * n10, 4 * n11, tx, tz);
-        double b2 = Bil(NB, 4 * n00 + 1, 4 * n01 + 1, 4 * n10 + 1, 4 * n11 + 1, tx, tz);
-        double b3 = Bil(NB, 4 * n00 + 2, 4 * n01 + 2, 4 * n10 + 2, 4 * n11 + 2, tx, tz);
-        double b4 = Bil(NB, 4 * n00 + 3, 4 * n01 + 3, 4 * n10 + 3, 4 * n11 + 3, tx, tz);
-        double d = surf - p.Y;
+        double und = Profile(i0, j0, tx, tz, out double T, out double f1, out double f2, out double f3);
+        double cur = _excAt[c] == null ? und : CurHeight(c, p.X, p.Z, und);
+        bool stoneCol = ColStoneSurf[c] > 0 || ColStoneDeep[c] > 0;
 
         int h;
-        if (d >= -0.03 && d <= b4 + 0.03 && b4 > 0 && InStone(p)) h = 4;     // buried stone: rock body
-        else if (d < b1) h = 0;
-        else if (d < b2) h = 1;
-        else if (d < b3) h = 2;
-        else if (d < b4) h = 3;
-        else h = 4;
+        if (p.Y > cur)
+        {
+            // Open air, or a stone that survives an excavation / protrudes through the surface.
+            if (stoneCol && p.Y <= und + StoneReach && InStone(p, p.Y <= und)) h = 4;
+            else
+            {
+                s.Horizon = p.Y <= cur + Water.Standing[c] ? Horizon.Water : Horizon.Void;
+                return s;
+            }
+        }
+        else
+        {
+            double d = und - p.Y;               // depth below the UNDISTURBED surface
+            if (T <= 0) h = 4;
+            else if (d < T * f1) h = 0;
+            else if (d < T * f2) h = 1;
+            else if (d < T * f3) h = 2;
+            else if (d < T) h = 3;
+            else h = 4;
+            if (h < 4 && stoneCol && d <= T + 0.03 && InStone(p, true)) h = 4;     // buried stone: rock body
+        }
 
+        double w00 = (1 - tx) * (1 - tz), w01 = (1 - tx) * tz, w10 = tx * (1 - tz), w11 = tx * tz;
         int a00 = (n00 * Hc + h) * TabStride, a01 = (n01 * Hc + h) * TabStride;
         int a10 = (n10 * Hc + h) * TabStride, a11 = (n11 * Hc + h) * TabStride;
         s.Solid = true;
