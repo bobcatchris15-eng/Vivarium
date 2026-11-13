@@ -1,0 +1,176 @@
+using System;
+using System.Collections.Generic;
+using Vivarium.Sim.Core;
+
+namespace Vivarium.Sim.Repr.Plant;
+
+/// <summary>
+/// Exposes a prefix of a plan at a given age. Organ k's geometry is a pure function of its design, so organs
+/// present at one age are bit-identical at any later age (only Maturity, Health, and the exposed sub-curve /
+/// flat length change).
+///
+/// Axis growth: the exposed curve is the design sub-curve s in [0, f], f = Maturity, re-parameterised to [0,1].
+/// Start never moves; End and EndTangent are the sub-curve's end. Children attach at design parameter AttachT,
+/// so the parent surface point of a child is parentCurve(AttachT / parent.Maturity) (see PlantGrowth.SurfaceParam).
+/// Flat organs: End = Start + dir * length * f, half width scales with f, thickness is constant.
+/// </summary>
+public static class PlantGrowth
+{
+    /// <summary>Number of plan items emerged by age (items are sorted by emergence).</summary>
+    public static int CountAt(PlantPlan plan, double age)
+    {
+        var items = plan.Items;
+        int lo = 0, hi = items.Count;
+        while (lo < hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (items[mid].Emerge <= age) lo = mid + 1; else hi = mid;
+        }
+        return lo;
+    }
+
+    /// <summary>Whole-plant size factor from vigour (applied to every position and radius).</summary>
+    public static double SizeFactor(double vigour) => 0.9 + 0.2 * Math.Clamp(vigour, 0, 1);
+
+    public static Organ[] Materialize(PlantPlan plan, double age, double vigour)
+    {
+        double g = SizeFactor(vigour);
+        float health = (float)(0.8 + 0.2 * Math.Clamp(vigour, 0, 1));
+        int n = CountAt(plan, age);
+        var organs = new Organ[n];
+        for (int i = 0; i < n; i++)
+        {
+            var it = plan.Items[i];
+            double m = it.Dur > 0 ? (age - it.Emerge) / it.Dur : 1.0;
+            double f = PlantMath.Smooth(m);
+            var o = new Organ
+            {
+                Parent = it.Parent, Type = it.Type, Tissue = it.Tissue, Flags = it.Flags, ShapeId = it.ShapeId,
+                Order = it.Order, AttachT = (float)it.AttachT, Up = it.Up, Maturity = (float)f, Health = health,
+                Seed = it.Seed,
+            };
+            if (it.IsFlat)
+            {
+                var dir = it.T0;
+                var start = it.P0 * g;
+                o.Start = start;
+                o.End = start + (it.P1 - it.P0) * (f * g);
+                o.StartTangent = dir;
+                o.EndTangent = dir;
+                o.RadiusStart = (float)(it.R0 * f * g);
+                o.RadiusEnd = (float)(it.R1 * g);
+            }
+            else
+            {
+                var p0 = it.P0 * g;
+                var t0 = it.T0 * g;
+                var p1 = it.P1 * g;
+                var t1 = it.T1 * g;
+                o.Start = p0;
+                o.StartTangent = t0 * f;
+                o.End = PlantMath.Hermite(p0, t0, p1, t1, f);
+                o.EndTangent = PlantMath.HermiteD(p0, t0, p1, t1, f) * f;
+                o.RadiusStart = (float)(it.R0 * g);
+                o.RadiusEnd = (float)((it.R0 + (it.R1 - it.R0) * f) * g);
+            }
+            organs[i] = o;
+        }
+        return organs;
+    }
+}
+
+/// <summary>
+/// Base for the three species generators. Design is cached per (worldSeed, plantId); Grow re-materialises
+/// the exposed prefix, so Grow(a) followed by Grow(b) equals Grow(b) from scratch.
+/// </summary>
+public abstract class PlanGenerator : IPlantGenerator
+{
+    /// <summary>Age used by Create (a few organs visible).</summary>
+    public const double SeedlingAge = 0.2;
+    public const double DefaultVigour = 0.5;
+
+    private readonly object _gate = new();
+    private readonly Dictionary<(ulong, ulong), PlantPlan> _plans = new();
+
+    public abstract string SpeciesId { get; }
+
+    /// <summary>Builds the species design with the builder; shapes and organs are added here.</summary>
+    protected abstract void Design(PlanBuilder b);
+
+    public PlantPlan PlanFor(ulong worldSeed, ulong plantId)
+    {
+        lock (_gate)
+        {
+            if (_plans.TryGetValue((worldSeed, plantId), out var cached)) return cached;
+            var b = new PlanBuilder(worldSeed, plantId);
+            Design(b);
+            var plan = b.Finish(SpeciesId);
+            if (_plans.Count > 256) _plans.Clear();
+            _plans[(worldSeed, plantId)] = plan;
+            return plan;
+        }
+    }
+
+    public PlantDescriptor Create(ulong worldSeed, ulong plantId)
+    {
+        var plan = PlanFor(worldSeed, plantId);
+        var d = new PlantDescriptor
+        {
+            PlantId = plantId, WorldSeed = worldSeed, SpeciesId = SpeciesId, StructureVersion = 1,
+            Shapes = plan.Shapes,
+            Organs = PlantGrowth.Materialize(plan, SeedlingAge, DefaultVigour),
+        };
+        Summarize(d);
+        return d;
+    }
+
+    public bool Grow(PlantDescriptor plant, double age01, double vigour, ISubstrate? substrate)
+    {
+        var plan = PlanFor(plant.WorldSeed, plant.PlantId);
+        double age = Math.Clamp(age01, 0, 1);
+        var organs = PlantGrowth.Materialize(plan, age, vigour);
+        bool topology = organs.Length != plant.Organs.Length;
+        plant.Organs = organs;
+        plant.Shapes = plan.Shapes;
+        if (topology) plant.StructureVersion++; else plant.GrowthVersion++;
+        plant.Aggregates = Array.Empty<FoliageAggregate>();
+        Summarize(plant);
+        return topology;
+    }
+
+    /// <summary>Fills the ecological summaries and local bounds from the graph.</summary>
+    public static void Summarize(PlantDescriptor d)
+    {
+        double leaf = 0, wood = 0, height = 0, crown = 0;
+        var mn = new Vec3(double.MaxValue, double.MaxValue, double.MaxValue);
+        var mx = new Vec3(double.MinValue, double.MinValue, double.MinValue);
+        foreach (var o in d.Organs)
+        {
+            double rad = Math.Max(o.RadiusStart, o.RadiusEnd);
+            foreach (var p in new[] { o.Start, o.End })
+            {
+                mn = new Vec3(Math.Min(mn.X, p.X - rad), Math.Min(mn.Y, p.Y - rad), Math.Min(mn.Z, p.Z - rad));
+                mx = new Vec3(Math.Max(mx.X, p.X + rad), Math.Max(mx.Y, p.Y + rad), Math.Max(mx.Z, p.Z + rad));
+                height = Math.Max(height, p.Y + rad);
+                crown = Math.Max(crown, Math.Sqrt(p.X * p.X + p.Z * p.Z) + rad);
+            }
+            double len = (o.End - o.Start).Length;
+            if (o.Type is OrganType.Leaf or OrganType.Leaflet) leaf += PlantCompiler.FlatArea(o);
+            else if (o.Type is OrganType.Axis or OrganType.Petiole)
+            {
+                double rm = 0.5 * (o.RadiusStart + o.RadiusEnd);
+                wood += Math.PI * rm * rm * len;
+            }
+        }
+        if (d.Organs.Length == 0)
+        {
+            mn = Vec3.Zero;
+            mx = Vec3.Zero;
+        }
+        d.LeafArea = leaf;
+        d.WoodVolume = wood;
+        d.Height = height;
+        d.CrownRadius = crown;
+        d.LocalBounds = new Aabb(mn, mx);
+    }
+}

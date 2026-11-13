@@ -149,6 +149,14 @@ public enum OrganFlags : ushort { None = 0, Dormant = 1, Dead = 2, Emissive = 4,
 /// (direction * length scale) and tapers RadiusStart -> RadiusEnd. For Leaf/Leaflet/Flower/Fruit, Start is
 /// the attachment point ON the parent surface, StartTangent the outward direction, End the tip, and
 /// ShapeId indexes PlantDescriptor.Shapes. AttachT is the parametric position (0..1) along the parent axis.
+/// Clarifications adopted from P1 (2026-11-13):
+///  * AttachT is a DESIGN parameter fixed for life, measured along the parent's full-grown curve. For an
+///    Axis, Maturity is the exposed fraction of that design curve, so the attachment point on a growing
+///    parent is parentCurve(AttachT / parent.Maturity). This keeps Start fixed while the parent extends.
+///  * For an Axis, Up is the radial reference (outward from its parent), not a free frame hint.
+///  * Descriptor colours are linear. A compiler targeting a shader that linearises vertex COLOR must
+///    encode to sRGB itself; that is a cache concern, not a state concern.
+///  * Vigour must be constant per plant across Grow calls (it scales the whole design).
 public struct Organ
 {
     public int Parent;                // -1 for the root axis
