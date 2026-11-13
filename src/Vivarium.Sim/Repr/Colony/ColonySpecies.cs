@@ -9,10 +9,10 @@ public sealed record ColonySpecies(
     string Id,
     ColonyKind Kind,
     double MaxThickness,          // m
-    double MaxBiomass,            // kg dry / m2
+    double MaxBiomass,            // kg dry / m2 of covered ground (intensity cap)
     double GrowthRate,            // 1/day at ideal conditions
     double SpreadRate,            // m/day front advance at ideal conditions
-    double MoistureOptimum,       // top-layer saturation 0..1 at which growth is ideal
+    double MoistureOptimum,       // moisture 0..1 at which growth is ideal
     double MoistureTolerance,     // gaussian sigma of the moisture response
     double DesiccationToleranceDays, // days of dryness beyond which a cell goes dormant
     double LightOptimum,          // 0..1
@@ -29,28 +29,27 @@ public sealed record ColonySpecies(
     Vec3 ColourDry,               // linear rgb
     Vec3 ColourWet)
 {
-    /// Substrate affinity for a material: weighted by the material class and multiplied by ColonizationCapacity.
-    public double SubstrateResponse(SubstrateSample m)
+    /// Substrate affinity for a surface: class weights, times a capacity multiplier.
+    /// The multiplier is min(1, capacity / 0.5): the substrate gives litter-covered soil only ~0.15, and a plain
+    /// product would leave every soil surface unviable for moss (accepted deviation, see ColonySystem docs).
+    public double SubstrateResponse(Horizon horizon, bool sandy, double capacity)
     {
-        double w = 0, sum = 0;
-        // Rock: bedrock horizon or stones; soil classes by horizon; humus/litter/sand by composition.
-        double rock = m.Horizon == Horizon.Bedrock ? 1 : 0;
-        double humus = m.Horizon == Horizon.Humus ? 1 : 0;
-        double litter = m.Horizon == Horizon.Litter ? 1 : 0;
-        double soil = (m.Horizon == Horizon.MineralSoil || m.Horizon == Horizon.Weathered) ? 1 : 0;
-        double sand = m.Sand > 0.6f && soil > 0 ? 1 : 0;
+        double rock = horizon == Horizon.Bedrock ? 1 : 0;
+        double humus = horizon == Horizon.Humus ? 1 : 0;
+        double litter = horizon == Horizon.Litter ? 1 : 0;
+        double soil = (horizon == Horizon.MineralSoil || horizon == Horizon.Weathered) ? 1 : 0;
+        double sand = sandy && soil > 0 ? 1 : 0;
         double wood = 0; // no wood surfaces in the substrate yet
         double[] weights = { AffinityRock, AffinitySoil, AffinityHumus, AffinityLitter, AffinitySand, AffinityWood };
         double[] classes = { rock, soil, humus, litter, sand, wood };
+        double w = 0, sum = 0;
         for (int i = 0; i < weights.Length; i++)
         {
             w += weights[i] * classes[i];
             sum += classes[i];
         }
         double cls = sum > 0 ? w / sum : 0;
-        // Capacity multiplier saturates at 0.5: the substrate gives litter-covered soil only ~0.15, and the raw
-        // product would make every soil surface unviable for moss (deviation from a plain multiplier, see report).
-        return MathD.Clamp01(cls * Math.Min(1.0, m.ColonizationCapacity / 0.5));
+        return MathD.Clamp01(cls * Math.Min(1.0, capacity / 0.5));
     }
 
     public static ColonySpecies CushionMoss => new(
@@ -65,7 +64,7 @@ public sealed record ColonySpecies(
         "feather_moss", ColonyKind.Moss, MaxThickness: 0.012, MaxBiomass: 0.45, GrowthRate: 0.10, SpreadRate: 0.009,
         MoistureOptimum: 0.9, MoistureTolerance: 0.2, DesiccationToleranceDays: 4,
         LightOptimum: 0.15, LightTolerance: 0.25,
-        AffinityRock: 0.3, AffinitySoil: 0.7, AffinityHumus: 1.0, AffinityLitter: 0.6, AffinitySand: 0.0, AffinityWood: 0.5,
+        AffinityRock: 0.3, AffinitySoil: 0.7, AffinityHumus: 1.0, AffinityLitter: 1.0, AffinitySand: 0.0, AffinityWood: 0.5,
         SlopeTolerance: 0.4, CompetitiveHeight: 0.012, WaterHolding: 2.0,
         ColourDry: new Vec3(0.30, 0.32, 0.12), ColourWet: new Vec3(0.08, 0.30, 0.07));
 

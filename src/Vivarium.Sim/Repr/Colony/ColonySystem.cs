@@ -9,13 +9,29 @@ public readonly record struct ColonyOccupantSample(string SpeciesId, double Cove
 
 public sealed record ColonyCellSample(IReadOnlyList<ColonyOccupantSample> Occupants);
 
-/// Attached surface colonies as per-cell state on the ground lattice. Mass is conserved: every change is
-/// either a live <-> litter transfer in the same cell, a growth/deposit input, or an output (dead pool,
-/// decomposition). Budget "colony_biomass_kg" reports the closed balance.
+/// Attached surface colonies as per-cell state on the ground lattice.
+///
+/// Conservation: every change is a live <-> litter transfer in the same cell (internal), a growth or deposit input
+/// (In), or a dead-pool / decomposition output (Out). Budget "colony_biomass_kg" closes to 1e-9 relative.
+///
+/// Coverage relaxes toward clamp(1.4 x suitability, 0, 1) (growth rate when rising, 0.05/day when retreating), so
+/// marginal habitat stays patchy. Biomass is intensity (kg per covered m2, capped at MaxBiomass) times coverage.
+///
+/// Moisture (colony-side rule, the substrate is not written):
+///  * soil cells: top-layer saturation + 0.7 x clamp(water / 0.2 mm), water = film + ponded;
+///  * bare-rock cells: max( clamp(water / 0.1 mm), 0.7 x mean top-layer saturation of soil within +-10 cm,
+///    0.35 x (1 - light) ). Seepage from adjacent soil and shade humidity make rock next to wet soil or in shade damp;
+///    rock in the open, far from soil, stays dry.
+///
+/// Litter: deposited into cells as litter occupants (coverage 0.5 x mass, thickness 1 cm per kg/m2); decomposes at
+/// (0.005 + 0.05 x moisture)/day; decomposed mass is booked Out and kept per cell for soil organic matter.
+///
+/// Dirty publishing: a tile publishes a Coverage DirtyRecord when the summed |dCoverage| since its last publish
+/// reaches 0.02 (a conservative per-tile approximation of "0.02 in any cell"; thickness is not tracked).
 public sealed class ColonySystem
 {
     public const double Day = 86400.0;
-    private const double DryMoisture = 0.15;        // top-layer moisture below this counts as dry
+    private const double DryMoisture = 0.15;
     private const double LitterSuppressThickness = 0.03;
     private const double MinCover = 1e-4;
     private const double MinMass = 1e-7;
@@ -24,6 +40,10 @@ public sealed class ColonySystem
     private const double SpreadDonorCover = 0.05;
     private const double SeedCover = 0.9;
     private const double NewArrivalCover = 0.25;
+    private const double RetreatRate = 0.05;          // 1/day coverage retreat when suitability falls
+    private const double TargetPerSuit = 1.4;         // equilibrium coverage = clamp(1.4 x suitability)
+    private const double UnitSeconds = 600.0;         // ushort age/dryness unit
+    private const double SeepHalfWidth = 0.10;        // m, soil seepage search half-width
     private static readonly (int Dx, int Dz)[] Dirs =
     {
         (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1),
@@ -48,7 +68,7 @@ public sealed class ColonySystem
     public double SimSeconds => _simTime;
     /// Biomass that left the colony entirely (kg, cumulative).
     public double DeadPool => _deadPool;
-    /// Decomposed litter mass (kg, cumulative). Soil organic matter can receive this later.
+    /// Decomposed litter mass (kg, cumulative).
     public double DecomposedTotal => _decomposed;
     /// Cells whose habitat cache was refreshed by the most recent Step (substrate dirty records).
     public int LastRefreshCount { get; private set; }
@@ -94,18 +114,17 @@ public sealed class ColonySystem
                 if (d > radius) continue;
                 var t = _field.GetOrCreateCell(ix, iz, out int cell);
                 EnsureHabitat(t, cell, ix, iz);
-                if (!t.Usable[cell]) continue;
+                if (!t.Has(cell, ColonyTile.FUsable)) continue;
                 double suit = Suitability(sid, t, cell, Moisture(t, cell));
                 if (suit <= 0) continue;
                 double f = d / radius;
                 double c = Math.Max(0.05, SeedCover * (1 - f * f));
-                double intensity = sp.MaxBiomass * 0.3 * suit;
-                _pendingIn += Colonize(t, cell, sid, suit, intensity, c);
+                _pendingIn += Colonize(t, cell, sid, suit, sp.MaxBiomass * 0.3 * suit, c);
             }
         RecheckRims();
     }
 
-    /// Deposits litter (kg dry) uniformly over the cells inside the disc. Conserved: stored rises by exactly kgDry.
+    /// Deposits litter (kg dry) uniformly over the usable cells inside the disc. Stored rises by exactly kgDry.
     public void DepositLitter(Vec2 at, double radius, double kgDry)
     {
         if (!(kgDry > 0)) return;
@@ -121,13 +140,13 @@ public sealed class ColonySystem
                 if (Vec2.Distance(_field.CellCentre(ix, iz), at) > radius) continue;
                 var t = _field.GetOrCreateCell(ix, iz, out int cell);
                 EnsureHabitat(t, cell, ix, iz);
-                if (t.Usable[cell]) cells.Add((t, cell));
+                if (t.Has(cell, ColonyTile.FUsable)) cells.Add((t, cell));
             }
         if (cells.Count == 0)
         {
             var t0 = _field.GetOrCreateCell(cx, cz, out int c0);
             EnsureHabitat(t0, c0, cx, cz);
-            if (!t0.Usable[c0]) return;
+            if (!t0.Has(c0, ColonyTile.FUsable)) return;
             cells.Add((t0, c0));
         }
         double perCell = kgDry / (cells.Count * _cellArea);
@@ -181,11 +200,11 @@ public sealed class ColonySystem
         double a = 0;
         foreach (var t in _field.Tiles)
             for (int k = 0; k < 2 * ColonyTile.N; k++)
-                if (t.Species[k] == sid) a += t.Coverage[k] * _cellArea;
+                if (t.Species[k] == sid) a += t.Cover(k) * _cellArea;
         return a;
     }
 
-    /// Biomass (kg) of one species, live only.
+    /// Biomass (kg) of one species.
     public double Biomass(string speciesId)
     {
         int sid = SpeciesIndex(speciesId);
@@ -203,11 +222,8 @@ public sealed class ColonySystem
         get { int n = 0; foreach (var t in _field.Tiles) n += t.Rim.Count; return n; }
     }
 
-    /// Rough per-cell memory of the arrays in one tile (bytes), for the cost report.
-    public static double BytesPerAllocatedCell =>
-        2 * (1 + 10 * 8 + 1 + 8)  // occupants: species, 10 doubles, dormant, +8 for LastBiomass rounding
-        + (1 + 1 + 1 + 4 + 96 + 4 * 8 + 1)  // steady, usable, habitat valid, column, habitat sample, height/steep/light/decomposed
-        + 2 * 16 * 8;                        // spread accumulators and jitter
+    /// Dense bytes per allocated cell (exact sum of the packed arrays). Sparse rim state is extra.
+    public const int DenseBytesPerCell = 2 * (1 + 2 + 8 + 2 + 1 + 2 + 2 + 1) + (1 + 1 + 1 + 1 + 1 + 4);
 
     /// Connected components (8-neighbour) of one species as contract patches. Cell keys go into SurfaceIds.
     public IReadOnlyList<SurfaceColonyPatch> ExtractPatches(string speciesId)
@@ -277,9 +293,9 @@ public sealed class ColonySystem
                 {
                     int k = cell * 2 + slot, sid = t.Species[k];
                     if (sid == 0) continue;
-                    cov[sid] += w * t.Coverage[k];
-                    thk[sid] += w * t.Thickness[k];
-                    hlt[sid] += w * t.Coverage[k] * t.Health[k];
+                    cov[sid] += w * t.Cover(k);
+                    thk[sid] += w * t.Thick(k);
+                    hlt[sid] += w * t.Cover(k) * t.Health(k);
                 }
             }
         var list = new List<ColonyOccupantSample>();
@@ -289,7 +305,7 @@ public sealed class ColonySystem
         return new ColonyCellSample(list);
     }
 
-    /// Water the colony could hold (m), per cell: sum(thickness * waterHolding * coverage). Reported only.
+    /// Water the colony could hold (m) at p: sum(thickness x waterHolding x coverage). Reported only, never written.
     public double RetainedWater(Vec2 p)
     {
         var (ix, iz) = _field.CellOf(p);
@@ -305,7 +321,7 @@ public sealed class ColonySystem
         return s;
     }
 
-    /// Cumulative decomposed litter in a cell (kg).
+    /// Cumulative decomposed litter in the cell at p (kg).
     public double DecomposedAt(Vec2 p)
     {
         var (ix, iz) = _field.CellOf(p);
@@ -313,32 +329,46 @@ public sealed class ColonySystem
         return t == null ? 0 : t.Decomposed[cell];
     }
 
-    // ------------------------------------------------------------------ habitat
+    /// Colony-side moisture (0..1) of the cell containing p; 0 if unallocated. Diagnostic only.
+    public double MoistureAt(Vec2 p)
+    {
+        var (ix, iz) = _field.CellOf(p);
+        var t = _field.FindCell(ix, iz, out int cell);
+        return t == null ? 0 : Moisture(t, cell);
+    }
+
+    // ------------------------------------------------------------------ habitat and moisture
+
+    private static byte Q8(double v) => (byte)Math.Floor(MathD.Clamp01(v) * 255);
+    private static ushort QU(double v) => (ushort)Math.Min(65535, Math.Max(0, Math.Round(v)));
 
     private void RefreshCell(ColonyTile t, int cell, int ix, int iz)
     {
         var p = _field.CellCentre(ix, iz);
-        t.HabitatValid[cell] = true;
+        t.SetFlag(cell, ColonyTile.FValid, true);
         double h = _sub.Height(p);
         int c = double.IsFinite(h) ? _sub.ColumnAt(p) : -1;
         if (c < 0)
         {
-            t.Usable[cell] = false; t.Column[cell] = -1; t.Height[cell] = 0; t.Light[cell] = 0;
+            t.SetFlag(cell, ColonyTile.FUsable, false);
+            t.SetFlag(cell, ColonyTile.FSandy, false);
             return;
         }
-        t.Usable[cell] = true;
-        t.Column[cell] = c;
-        t.Habitat[cell] = _sub.SampleSubstrate(new Vec3(p.X, h - 1e-4, p.Z));
-        t.Height[cell] = h;
-        t.Steepness[cell] = _sub.ColumnSteepness(c);
-        t.Light[cell] = _light(new Vec3(p.X, h + 0.01, p.Z));
+        var m = _sub.SampleSubstrate(new Vec3(p.X, h - 1e-4, p.Z));
+        t.SetFlag(cell, ColonyTile.FUsable, true);
+        bool soil = m.Horizon == Horizon.MineralSoil || m.Horizon == Horizon.Weathered;
+        t.SetFlag(cell, ColonyTile.FSandy, soil && m.Sand > 0.6f);
+        t.Horizon[cell] = (byte)m.Horizon;
+        t.CapacityQ[cell] = Q8(m.ColonizationCapacity);
+        t.SlopeQ[cell] = Q8(_sub.ColumnSteepness(c));
+        t.LightQ[cell] = Q8(_light(new Vec3(p.X, h + 0.01, p.Z)));
         t.MinY = Math.Min(t.MinY, h);
         t.MaxY = Math.Max(t.MaxY, h);
     }
 
     private void EnsureHabitat(ColonyTile t, int cell, int ix, int iz)
     {
-        if (!t.HabitatValid[cell]) RefreshCell(t, cell, ix, iz);
+        if (!t.Has(cell, ColonyTile.FValid)) RefreshCell(t, cell, ix, iz);
     }
 
     /// Only the cells inside a substrate change's bounds are refreshed; untouched regions are not revisited.
@@ -371,41 +401,67 @@ public sealed class ColonySystem
         foreach (var t in _field.Tiles)
             for (int cell = 0; cell < ColonyTile.N; cell++)
             {
-                if (!t.Usable[cell]) continue;
+                if (!t.Has(cell, ColonyTile.FUsable)) continue;
                 ColonyField.CellCoords(t, cell, out int ix, out int iz);
                 var p = _field.CellCentre(ix, iz);
-                t.Light[cell] = _light(new Vec3(p.X, t.Height[cell] + 0.01, p.Z));
+                double h = _sub.Height(p);
+                t.LightQ[cell] = Q8(_light(new Vec3(p.X, h + 0.01, p.Z)));
             }
     }
 
-    /// Moisture 0..1 from the column's top-layer saturation plus free film and standing water (live from the substrate).
+    /// Moisture 0..1 at a cell. See the class notes for the rock and soil rules.
     private double Moisture(ColonyTile t, int cell)
     {
-        int c = t.Column[cell];
-        if (c < 0) return 0;
+        ColonyField.CellCoords(t, cell, out int ix, out int iz);
+        var p = _field.CellCentre(ix, iz);
+        int col = _sub.ColumnAt(p);
+        if (col < 0) return 0;
         var w = _sub.Water;
-        double sat = w.TopSaturation(c);
-        double wet = (w.Film[c] + w.Standing[c]) / 0.0002;
-        return MathD.Clamp01(sat + 0.7 * MathD.Clamp01(wet));
+        double water = w.Film[col] + w.Standing[col];
+        if (t.Horizon[cell] == (byte)Horizon.Bedrock)
+        {
+            double film = MathD.Clamp01(water / 0.0001);
+            double seep = 0.7 * SoilSaturationNear(p);
+            double shade = 0.5 * (1 - t.Light(cell));
+            return MathD.Clamp01(film + seep + shade); // orchestrator 2026-11-13: additive (shaded rock beside damp soil is damp), was max()
+        }
+        double sat = w.TopSaturation(col);
+        return MathD.Clamp01(sat + 0.7 * MathD.Clamp01(water / 0.0002));
+    }
+
+    /// Mean top-layer saturation of soil (non-outcrop) columns on a 5 x 5 grid spanning +-10 cm around p.
+    private double SoilSaturationNear(Vec2 p)
+    {
+        double sum = 0; int n = 0;
+        double step = SeepHalfWidth / 2;
+        for (int i = -2; i <= 2; i++)
+            for (int j = -2; j <= 2; j++)
+            {
+                int col = _sub.ColumnAt(new Vec2(p.X + i * step, p.Z + j * step));
+                if (col < 0 || _sub.IsOutcrop(col)) continue;
+                sum += _sub.Water.TopSaturation(col);
+                n++;
+            }
+        return n > 0 ? sum / n : 0;
     }
 
     private double Suitability(int sid, ColonyTile t, int cell, double moist)
     {
         var sp = _species[sid - 1];
-        if (!t.Usable[cell]) return 0;
+        if (!t.Has(cell, ColonyTile.FUsable)) return 0;
         double moistR = MathD.Preference(moist, sp.MoistureOptimum, sp.MoistureTolerance);
         double shade = MathD.Clamp01(1 - LitterThickness(t, cell) / LitterSuppressThickness);
-        double lightR = MathD.Preference(t.Light[cell] * shade, sp.LightOptimum, sp.LightTolerance);
-        double sub = sp.SubstrateResponse(t.Habitat[cell]);
-        double slope = 1.0 / (1.0 + Math.Pow(t.Steepness[cell] / Math.Max(1e-6, sp.SlopeTolerance), 2));
+        double lightR = MathD.Preference(t.Light(cell) * shade, sp.LightOptimum, sp.LightTolerance);
+        double sub = sp.SubstrateResponse((Horizon)t.Horizon[cell], t.Has(cell, ColonyTile.FSandy), t.Capacity(cell));
+        double slope = 1.0 / (1.0 + Math.Pow(t.Slope(cell) / Math.Max(1e-6, sp.SlopeTolerance), 2));
         return MathD.Clamp01(moistR * lightR * sub * slope);
     }
 
     // ------------------------------------------------------------------ occupancy helpers
 
     private static bool HasLive(ColonyTile t, int cell, int sid) =>
-        (t.Species[cell * 2] == sid && t.Coverage[cell * 2] > 1e-3) ||
-        (t.Species[cell * 2 + 1] == sid && t.Coverage[cell * 2 + 1] > 1e-3);
+        (t.Species[cell * 2] == sid && t.Cover(cell * 2) > 1e-3) ||
+        (t.Species[cell * 2 + 1] == sid && t.Cover(cell * 2 + 1) > 1e-3);
 
     private static int FreeSlot(ColonyTile t, int cell)
     {
@@ -429,7 +485,7 @@ public sealed class ColonySystem
         return -1;
     }
 
-    private double CoverTotal(ColonyTile t, int cell) => t.Coverage[cell * 2] + t.Coverage[cell * 2 + 1];
+    private double CoverTotal(ColonyTile t, int cell) => t.Cover(cell * 2) + t.Cover(cell * 2 + 1);
 
     private double LitterThickness(ColonyTile t, int cell)
     {
@@ -437,7 +493,7 @@ public sealed class ColonySystem
         for (int s = 0; s < 2; s++)
         {
             int k = cell * 2 + s, sid = t.Species[k];
-            if (sid != 0 && _species[sid - 1].Kind == ColonyKind.Litter) sum += t.Thickness[k];
+            if (sid != 0 && _species[sid - 1].Kind == ColonyKind.Litter) sum += t.Thick(k);
         }
         return sum;
     }
@@ -448,18 +504,34 @@ public sealed class ColonySystem
         for (int s = 0; s < 2; s++)
         {
             int k = cell * 2 + s, sid = t.Species[k];
-            if (sid != 0) sum += t.Thickness[k] * _species[sid - 1].WaterHolding * t.Coverage[k];
+            if (sid != 0) sum += t.Thick(k) * _species[sid - 1].WaterHolding * t.Cover(k);
         }
         return sum;
     }
 
+    /// Writes coverage quantised by rounding; never lets the two occupants of a cell exceed 1 together.
+    private static void SetCover(ColonyTile t, int k, double c)
+    {
+        int q = (int)Math.Round(MathD.Clamp01(c) * 65535);
+        int oq = t.CoverQ[k ^ 1];
+        if (q + oq > 65535) q = 65535 - oq;
+        int old = t.CoverQ[k];
+        t.CoverQ[k] = (ushort)q;
+        t.ChangeSinceCheck += Math.Abs(q - old) / 65535.0;
+    }
+
+    private static void SetThick(ColonyTile t, int k, double metres) =>
+        t.ThickUm[k] = (ushort)Math.Min(65535, Math.Max(0, Math.Round(metres * 1e6)));
+
     private void Clear(ColonyTile t, int cell, int slot)
     {
         int k = cell * 2 + slot;
+        t.ChangeSinceCheck += t.Cover(k);
         t.Species[k] = 0;
-        t.Coverage[k] = 0; t.Biomass[k] = 0; t.Thickness[k] = 0; t.Health[k] = 0; t.FrontAge[k] = 0;
-        t.Dryness[k] = 0; t.Dormant[k] = false; t.LastSuit[k] = 0; t.LastBiomass[k] = 0;
-        t.Steady[cell] = false;
+        t.CoverQ[k] = 0; t.Biomass[k] = 0; t.ThickUm[k] = 0; t.HealthQ[k] = 0;
+        t.AgeU[k] = 0; t.DryU[k] = 0; t.SuitQ[k] = 0;
+        t.SetDormant(k, false);
+        t.SetFlag(cell, ColonyTile.FSteady, false);
     }
 
     private void TouchCell(ColonyTile t, int cell)
@@ -468,7 +540,7 @@ public sealed class ColonySystem
         for (int dx = -1; dx <= 1; dx++)
             for (int dz = -1; dz <= 1; dz++)
                 _check.Add(ColonyField.CellKey(ix + dx, iz + dz));
-        t.Steady[cell] = false;
+        t.SetFlag(cell, ColonyTile.FSteady, false);
     }
 
     private void AddLitter(ColonyTile t, int cell, int slot, double amount)
@@ -477,15 +549,16 @@ public sealed class ColonySystem
         if (t.Species[k] == 0)
         {
             t.Species[k] = (byte)_litterSid;
-            t.Health[k] = 1; t.FrontAge[k] = 0; t.Dryness[k] = 0; t.Dormant[k] = false;
+            t.HealthQ[k] = 255; t.AgeU[k] = 0; t.DryU[k] = 0;
+            t.SetDormant(k, false);
         }
         t.Biomass[k] += amount;
-        t.Coverage[k] = Math.Max(0, Math.Min(1 - t.Coverage[cell * 2 + (1 - slot)], 0.5 * t.Biomass[k]));
-        t.Thickness[k] = 0.01 * t.Biomass[k];
-        t.Steady[cell] = false;
+        SetCover(t, k, Math.Min(1 - t.Cover(k ^ 1), 0.5 * t.Biomass[k]));
+        SetThick(t, k, 0.01 * t.Biomass[k]);
+        t.SetFlag(cell, ColonyTile.FSteady, false);
     }
 
-    /// Moves biomass that left a live occupant into the cell's litter (internal) or, with no room, to the dead pool (Out).
+    /// Moves biomass that left a live occupant into the cell's litter (internal), or to the dead pool (Out) if there is no room.
     private void RouteToLitter(ColonyTile t, int cell, double amount)
     {
         if (!(amount > 0)) return;
@@ -500,7 +573,7 @@ public sealed class ColonySystem
         AddLitter(t, cell, s, amount);
     }
 
-    /// Litter slot for a deposit; evicts the weakest live occupant if the cell is full (its mass becomes litter).
+    /// Litter slot for a deposit; evicts the weakest live occupant when the cell is full (its mass becomes litter).
     private int EnsureLitterSlot(ColonyTile t, int cell)
     {
         int s = SlotOfKind(t, cell, ColonyKind.Litter);
@@ -521,7 +594,7 @@ public sealed class ColonySystem
         {
             int k = cell * 2 + s, sid = t.Species[k];
             if (sid == 0 || _species[sid - 1].Kind == ColonyKind.Litter) continue;
-            double sc = _species[sid - 1].CompetitiveHeight * t.Health[k] * t.LastSuit[k];
+            double sc = _species[sid - 1].CompetitiveHeight * t.Health(k) * (t.SuitQ[k] / 255.0);
             if (sc < ws) { ws = sc; weak = s; }
         }
         return weak;
@@ -540,9 +613,9 @@ public sealed class ColonySystem
             for (int cell = 0; cell < ColonyTile.N; cell++)
             {
                 if (t.Species[cell * 2] == 0 && t.Species[cell * 2 + 1] == 0) continue;
-                if (t.Steady[cell])
+                if (t.Has(cell, ColonyTile.FSteady))
                 {
-                    if (sweep) Physiology(t, cell, dt * 8);  // steady cells: every 8th step with dt x 8
+                    if (sweep) Physiology(t, cell, dt * 8);   // steady cells: every 8th step with dt x 8
                 }
                 else Physiology(t, cell, dt);
             }
@@ -551,7 +624,7 @@ public sealed class ColonySystem
             {
                 if (t.Species[cell * 2] == 0 && t.Species[cell * 2 + 1] == 0) continue;
                 occ++;
-                if (t.Steady[cell]) st++;
+                if (t.Has(cell, ColonyTile.FSteady)) st++;
             }
             t.Occupied = occ;
             t.SteadyCount = st;
@@ -561,6 +634,7 @@ public sealed class ColonySystem
     private void Physiology(ColonyTile t, int cell, double dt)
     {
         double dayF = dt / Day;
+        double stepU = dt / UnitSeconds;
         double moist = Moisture(t, cell);
         bool anyLive = false, allSteady = true;
         for (int slot = 0; slot < 2; slot++)
@@ -570,45 +644,49 @@ public sealed class ColonySystem
             var sp = _species[sid - 1];
             if (sp.Kind == ColonyKind.Litter) { DecomposeLitter(t, cell, slot, moist, dayF); continue; }
 
-            double other = t.Coverage[cell * 2 + (1 - slot)];
+            double other = t.Cover(k ^ 1);
             double suit = Suitability(sid, t, cell, moist);
-            double C = t.Coverage[k], B = t.Biomass[k];
-            double I = C > 1e-12 ? B / C : 0;
-            double tolS = sp.DesiccationToleranceDays * Day;
-            t.Dryness[k] = moist < DryMoisture ? t.Dryness[k] + dt : Math.Max(0, t.Dryness[k] - 2 * dt);
-            t.Dormant[k] = t.Dryness[k] > tolS;
+            double C = t.Cover(k), B = t.Biomass[k];
+            double I = C > 1e-9 ? B / C : 0;
+
+            // dryness (600 s units, saturating); dormancy beyond the desiccation tolerance
+            double dryU = t.DryU[k];
+            double newDry = moist < DryMoisture ? dryU + stepU : Math.Max(0, dryU - 2 * stepU);
+            t.DryU[k] = QU(newDry);
+            double tolU = sp.DesiccationToleranceDays * 86400.0 / UnitSeconds;
+            bool dormant = t.DryU[k] > tolU;
+            t.SetDormant(k, dormant);
 
             double gain = 0, loss = 0, Cn = C;
-            if (t.Dormant[k])
+            if (dormant)
             {
-                if (t.Dryness[k] > 2 * tolS) loss += B * DieRate(sp) * dayF;
+                if (t.DryU[k] > 2 * tolU) loss += B * DieRate(sp) * dayF;
             }
             else
             {
-                double dC;
-                if (suit >= 0.05)
-                    dC = Math.Min(sp.GrowthRate * suit * C * (1 - C) * dayF, Math.Max(0, 1 - C - other));
-                else
-                    dC = -0.05 * C * dayF;                    // unhospitable: coverage retreats
+                double target = MathD.Clamp01(TargetPerSuit * suit);
+                double rate = (target >= C ? sp.GrowthRate : RetreatRate) * dayF;
+                double dC = (target - C) * Math.Min(1, rate);
                 Cn = C + dC;
-                if (dC > 0) gain += dC * I;                   // newly covered ground takes the donor intensity
-                else loss += -dC * I;
+                if (dC > 0) gain += dC * I;                  // newly covered ground takes donor intensity
+                else loss += -dC * I;                        // coverage given up takes its mass with it
 
                 double Bm = B + gain - loss;
                 double Istar = sp.MaxBiomass * suit;
-                double Ip = Cn > 1e-12 ? Bm / Cn : 0;
+                double Ip = Cn > 1e-9 ? Bm / Cn : 0;
                 if (Istar > 1e-12 && Ip < Istar) gain += sp.GrowthRate * Bm * (1 - Ip / Istar) * dayF;
                 else if (Ip > Istar) loss += DecayRate(sp) * Math.Max(0, Bm - Cn * Istar) * dayF;
             }
 
             loss = Math.Min(loss, B + gain);
             double Bn = B + gain - loss;
+            double massChange = Math.Abs(gain - loss);
             _inKg += gain * _cellArea;
-            RouteToLitter(t, cell, loss);                     // live -> litter (same cell) or dead pool
+            RouteToLitter(t, cell, loss);                    // live -> litter (same cell) or dead pool (Out)
             t.Biomass[k] = Bn;
-            Cn = Math.Max(0, Math.Min(1 - other, Cn));
+            SetCover(t, k, Math.Min(1 - other, Cn));
 
-            if (Cn < MinCover)
+            if (t.Cover(k) < MinCover)
             {
                 double rem = t.Biomass[k];
                 Clear(t, cell, slot);
@@ -616,20 +694,22 @@ public sealed class ColonySystem
                 RouteToLitter(t, cell, rem);
                 continue;
             }
-            t.Coverage[k] = Cn;
-            double target = t.Dormant[k] ? 0 : suit;
-            t.Health[k] += (target - t.Health[k]) * Math.Min(1, 2 * dayF);
-            t.Thickness[k] = sp.MaxThickness * Math.Min(1, (Bn / Cn) / sp.MaxBiomass);
-            t.FrontAge[k] += dt;
 
-            double dS = Math.Abs(suit - t.LastSuit[k]), dB = Math.Abs(Bn - t.LastBiomass[k]);
-            bool steady = dS < 0.005 && dB < 0.005 * Math.Max(Bn, 1e-12);
-            t.LastSuit[k] = suit;
-            t.LastBiomass[k] = Bn;
+            double cov = t.Cover(k);
+            double h = t.Health(k);
+            double hTarget = dormant ? 0 : suit;
+            t.HealthQ[k] = Q8(h + (hTarget - h) * Math.Min(1, 2 * dayF));
+            SetThick(t, k, sp.MaxThickness * Math.Min(1, (Bn / cov) / sp.MaxBiomass));
+            t.AgeU[k] = QU(t.AgeU[k] + stepU);
+
+            bool steady = Math.Abs(suit - t.SuitQ[k] / 255.0) < 0.005
+                       && massChange < 0.005 * Math.Max(Bn, 1e-9)
+                       && Math.Abs(Cn - C) < 0.005 * Math.Max(C, 0.01);
+            t.SuitQ[k] = Q8(suit);
             anyLive = true;
             allSteady &= steady;
         }
-        t.Steady[cell] = anyLive && allSteady && !t.Rim.Contains(cell);
+        t.SetFlag(cell, ColonyTile.FSteady, anyLive && allSteady && !t.Rim.ContainsKey(cell));
     }
 
     private void DecomposeLitter(ColonyTile t, int cell, int slot, double moist, double dayF)
@@ -640,22 +720,22 @@ public sealed class ColonySystem
         double loss = Math.Min(B, B * kd);
         double Bn = B - loss;
         double kg = loss * _cellArea;
-        _decomposed += kg; t.Decomposed[cell] += kg; _outKg += kg;
+        _decomposed += kg; t.Decomposed[cell] += (float)kg; _outKg += kg;
         if (Bn < MinMass)
         {
             double rem = Bn * _cellArea;
-            _decomposed += rem; t.Decomposed[cell] += rem; _outKg += rem;
+            _decomposed += rem; t.Decomposed[cell] += (float)rem; _outKg += rem;
             Clear(t, cell, slot);
             return;
         }
         t.Biomass[k] = Bn;
-        t.Coverage[k] = Math.Max(0, Math.Min(1 - t.Coverage[cell * 2 + (1 - slot)], 0.5 * Bn));
-        t.Thickness[k] = 0.01 * Bn;
+        SetCover(t, k, Math.Min(1 - t.Cover(k ^ 1), 0.5 * Bn));
+        SetThick(t, k, 0.01 * Bn);
     }
 
     // ------------------------------------------------------------------ spread and competition
 
-    /// Newcomer of species sid arrives in a cell with coverage dC at donor intensity. Returns mass placed (kg).
+    /// Newcomer of species sid arrives with coverage dC at donor intensity. Returns mass placed (kg).
     private double Colonize(ColonyTile t, int cell, int sid, double suit, double intensity, double dC)
     {
         var sp = _species[sid - 1];
@@ -667,30 +747,30 @@ public sealed class ColonySystem
             return add > 0 ? Place(t, cell, same, sid, add, intensity, suit) : 0;
         }
         int fs = FreeSlot(t, cell);
-        if (fs >= 0 && free > 0)
+        if (fs >= 0)
         {
             double add = Math.Min(dC, free);
-            return Place(t, cell, fs, sid, add, intensity, suit);
+            return add > 0 ? Place(t, cell, fs, sid, add, intensity, suit) : 0;
         }
-        if (fs >= 0) return 0;
         // Full cell: the weakest live occupant loses coverage in proportion to the score difference.
         int weak = WeakestLive(t, cell);
         if (weak < 0) return 0;
         int kw = cell * 2 + weak;
         var wsp = _species[t.Species[kw] - 1];
         double newScore = sp.CompetitiveHeight * suit;
-        double weakScore = wsp.CompetitiveHeight * t.Health[kw] * t.LastSuit[kw];
+        double weakScore = wsp.CompetitiveHeight * t.Health(kw) * (t.SuitQ[kw] / 255.0);
         if (newScore <= weakScore) return 0;
         double rate = (newScore - weakScore) / newScore;
-        double Cw = t.Coverage[kw];
-        double Iw = Cw > 1e-12 ? t.Biomass[kw] / Cw : 0;
+        double Cw = t.Cover(kw);
+        double Iw = Cw > 1e-9 ? t.Biomass[kw] / Cw : 0;
         double take = Math.Min(Cw, dC * rate);
         if (take <= 0) return 0;
         double lost = take * Iw;
-        t.Coverage[kw] = Cw - take;
-        t.Biomass[kw] = (Cw - take) * Iw;
+        SetCover(t, kw, Cw - take);
+        t.Biomass[kw] = t.Cover(kw) * Iw;
+        lost = (Cw - t.Cover(kw)) * Iw;                       // quantised removal actually taken
         TouchCell(t, cell);
-        if (t.Coverage[kw] < MinCover)
+        if (t.Cover(kw) < MinCover)
         {
             double rem = t.Biomass[kw];
             Clear(t, cell, weak);
@@ -710,14 +790,16 @@ public sealed class ColonySystem
         if (t.Species[k] == 0)
         {
             t.Species[k] = (byte)sid;
-            t.Coverage[k] = 0; t.Biomass[k] = 0; t.Thickness[k] = 0;
-            t.Health[k] = 0.5; t.FrontAge[k] = 0; t.Dryness[k] = 0; t.Dormant[k] = false;
-            t.LastSuit[k] = suit; t.LastBiomass[k] = 0;
+            t.Biomass[k] = 0; t.CoverQ[k] = 0; t.ThickUm[k] = 0;
+            t.HealthQ[k] = Q8(0.5); t.AgeU[k] = 0; t.DryU[k] = 0;
+            t.SetDormant(k, false);
+            t.SuitQ[k] = Q8(suit);
         }
         double m = add * intensity;
-        t.Coverage[k] += add;
+        SetCover(t, k, t.Cover(k) + add);
         t.Biomass[k] += m;
-        t.Thickness[k] = sp.MaxThickness * Math.Min(1, (t.Biomass[k] / t.Coverage[k]) / sp.MaxBiomass);
+        double cov = t.Cover(k);
+        SetThick(t, k, sp.MaxThickness * Math.Min(1, (cov > 1e-9 ? t.Biomass[k] / cov : 0) / sp.MaxBiomass));
         TouchCell(t, cell);
         return m * _cellArea;
     }
@@ -729,35 +811,34 @@ public sealed class ColonySystem
         foreach (var t in tiles)
         {
             if (t.Rim.Count == 0) continue;
-            var rims = new int[t.Rim.Count];
-            t.Rim.CopyTo(rims);
+            var rims = t.Rim.Keys.ToArray();
             Array.Sort(rims);
             foreach (int cell in rims)
             {
-                if (!t.Rim.Contains(cell)) continue;
+                if (!t.Rim.TryGetValue(cell, out var acc)) continue;
                 ColonyField.CellCoords(t, cell, out int ix, out int iz);
                 for (int slot = 0; slot < 2; slot++)
                 {
                     int k = cell * 2 + slot, sid = t.Species[k];
                     if (sid == 0 || _species[sid - 1].Kind == ColonyKind.Litter) continue;
-                    if (t.Coverage[k] < SpreadDonorCover) continue;
+                    if (t.Cover(k) < SpreadDonorCover) continue;
                     var sp = _species[sid - 1];
-                    double intensity = t.Biomass[k] / t.Coverage[k];
+                    double intensity = t.Biomass[k] / t.Cover(k);
                     for (int d = 0; d < Dirs.Length; d++)
                     {
                         var (dx, dz) = Dirs[d];
                         var nt = _field.GetOrCreateCell(ix + dx, iz + dz, out int ncell);
                         EnsureHabitat(nt, ncell, ix + dx, iz + dz);
-                        if (!nt.Usable[ncell]) continue;
+                        if (!nt.Has(ncell, ColonyTile.FUsable)) continue;
                         double suitN = Suitability(sid, nt, ncell, Moisture(nt, ncell));
                         if (suitN <= 0) continue;
-                        int idx = (cell * 2 + slot) * 8 + d;
-                        if (t.Jitter[idx] == 0)
-                            t.Jitter[idx] = 0.8 + 0.4 * ReprId.Unit(ReprId.Hash(_seed, (ulong)ColonyField.CellKey(ix, iz), (ulong)(slot * 8 + d)), 0x7A11);
-                        double spacing = _cell * (dx != 0 && dz != 0 ? Sqrt2 : 1.0) * t.Jitter[idx];
-                        t.Spread[idx] += sp.SpreadRate * suitN * dayF;
-                        if (t.Spread[idx] < spacing) continue;
-                        t.Spread[idx] -= spacing;
+                        int idx = slot * 8 + d;
+                        double jitter = 0.8 + 0.4 * ReprId.Unit(
+                            ReprId.Hash(_seed, (ulong)ColonyField.CellKey(ix, iz), (ulong)idx), 0x7A11);
+                        double spacing = _cell * (dx != 0 && dz != 0 ? Sqrt2 : 1.0) * jitter;
+                        acc[idx] += sp.SpreadRate * suitN * dayF;
+                        if (acc[idx] < spacing) continue;
+                        acc[idx] -= spacing;
                         _inKg += Colonize(nt, ncell, sid, suitN, intensity, NewArrivalCover);
                     }
                 }
@@ -778,14 +859,14 @@ public sealed class ColonySystem
             {
                 int sid = t.Species[cell * 2 + slot];
                 if (sid == 0 || _species[sid - 1].Kind == ColonyKind.Litter) continue;
-                if (t.Coverage[cell * 2 + slot] <= 1e-3) continue;
+                if (t.Cover(cell * 2 + slot) <= 1e-3) continue;
                 foreach (var (dx, dz) in Dirs)
                 {
                     var nt = _field.FindCell(ix + dx, iz + dz, out int nc);
                     if (nt == null || !HasLive(nt, nc, sid)) { isRim = true; break; }
                 }
             }
-            if (isRim) t.Rim.Add(cell);
+            if (isRim) { if (!t.Rim.ContainsKey(cell)) t.Rim[cell] = new double[16]; }
             else t.Rim.Remove(cell);
         }
         _check.Clear();
@@ -797,13 +878,8 @@ public sealed class ColonySystem
     {
         foreach (var t in _field.Tiles)
         {
-            bool changed = false;
-            for (int k = 0; k < 2 * ColonyTile.N && !changed; k++)
-                changed = Math.Abs(t.Coverage[k] - t.PubCoverage[k]) > VisibleChange
-                       || Math.Abs(t.Thickness[k] - t.PubThickness[k]) > VisibleChange;
-            if (!changed) continue;
-            Array.Copy(t.Coverage, t.PubCoverage, t.Coverage.Length);
-            Array.Copy(t.Thickness, t.PubThickness, t.Thickness.Length);
+            if (t.ChangeSinceCheck < VisibleChange) continue;
+            t.ChangeSinceCheck = 0;
             t.Version++;
             DirtyLog.Publish(new DirtyRecord(_field.TileBounds(t), DirtyDomain.Coverage, t.Version, "grow", _simTime));
         }
@@ -823,18 +899,18 @@ public sealed class ColonySystem
             long key = comp[i];
             int ix = ColonyField.CellX(key), iz = ColonyField.CellZ(key);
             var t = _field.FindCell(ix, iz, out int cell)!;
-            int slot = SlotOf(t, cell, sid);
-            int k = cell * 2 + slot;
+            int k = cell * 2 + SlotOf(t, cell, sid);
             ids[i] = unchecked((ulong)key);
-            cov[i] = (float)t.Coverage[k]; thk[i] = (float)t.Thickness[k]; bio[i] = (float)t.Biomass[k];
-            hlt[i] = (float)t.Health[k]; age[i] = (float)t.FrontAge[k];
-            area += t.Coverage[k] * _cellArea;
+            cov[i] = (float)t.Cover(k); thk[i] = (float)t.Thick(k); bio[i] = (float)t.Biomass[k];
+            hlt[i] = (float)t.Health(k); age[i] = (float)(t.AgeU[k] * UnitSeconds);
+            area += t.Cover(k) * _cellArea;
             mass += t.Biomass[k] * _cellArea;
             version = Math.Max(version, t.Version);
             var p = _field.CellCentre(ix, iz);
+            double h = _sub.Height(p);
             x0 = Math.Min(x0, p.X - _cell / 2); x1 = Math.Max(x1, p.X + _cell / 2);
             z0 = Math.Min(z0, p.Z - _cell / 2); z1 = Math.Max(z1, p.Z + _cell / 2);
-            y0 = Math.Min(y0, t.Height[cell]); y1 = Math.Max(y1, t.Height[cell]);
+            y0 = Math.Min(y0, h); y1 = Math.Max(y1, h);
         }
         return new SurfaceColonyPatch
         {

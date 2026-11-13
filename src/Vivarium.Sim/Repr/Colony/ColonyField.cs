@@ -4,58 +4,65 @@ using Vivarium.Sim.Core;
 
 namespace Vivarium.Sim.Repr;
 
-/// One 32 x 32 block of colony cells, allocated on first occupancy. Occupant arrays are indexed
-/// cell * 2 + slot (two occupants per cell); cell arrays are indexed by cell = lx + lz * Side.
-/// Biomass is kg dry per m2 OF GROUND CELL (coverage already included), so cell mass = Biomass * cellArea.
+/// One 32 x 32 block of colony cells, allocated on first occupancy. Dense storage is packed to 47 bytes per cell:
+/// occupant arrays (2 per cell, index cell * 2 + slot) hold species, coverage (ushort, x/65535), biomass (double,
+/// kg dry per m2 of ground cell: exact so budgets close), thickness (ushort micrometres), health (byte),
+/// front age and dryness (ushort, 600 s units, saturating), last suitability (byte). Per cell: flags, horizon,
+/// capacity, slope, light (bytes) and cumulative decomposed litter (float). Rim spread accumulators are sparse.
 public sealed class ColonyTile
 {
     public const int Side = 32;
     public const int N = Side * Side;
 
+    public const byte FUsable = 1, FValid = 2, FSteady = 4, FSandy = 8, FDorm0 = 16, FDorm1 = 32;
+
     public readonly int Tx, Tz;
     public ulong Version;
-
-    // occupants (2 per cell)
-    public readonly byte[] Species = new byte[2 * N];      // 0 = none, else species index + 1
-    public readonly double[] Coverage = new double[2 * N]; // 0..1 fraction of the cell
-    public readonly double[] Biomass = new double[2 * N];  // kg dry / m2 of cell
-    public readonly double[] Thickness = new double[2 * N];
-    public readonly double[] Health = new double[2 * N];
-    public readonly double[] FrontAge = new double[2 * N]; // sim-seconds since arrival
-    public readonly double[] Dryness = new double[2 * N];  // sim-seconds of continuous dryness (decays when wet)
-    public readonly bool[] Dormant = new bool[2 * N];
-    public readonly double[] LastSuit = new double[2 * N];
-    public readonly double[] LastBiomass = new double[2 * N];
-    public readonly double[] PubCoverage = new double[2 * N];  // last published values (dirty threshold)
-    public readonly double[] PubThickness = new double[2 * N];
-
-    // per cell
-    public readonly bool[] Steady = new bool[N];
-    public readonly bool[] Usable = new bool[N];
-    public readonly bool[] HabitatValid = new bool[N];
-    public readonly int[] Column = new int[N];
-    public readonly SubstrateSample[] Habitat = new SubstrateSample[N];
-    public readonly double[] Height = new double[N];
-    public readonly double[] Steepness = new double[N];
-    public readonly double[] Light = new double[N];
-    public readonly double[] Decomposed = new double[N];   // cumulative kg decomposed in the cell (for soil organic matter)
-
-    // spread accumulators and jitter per (cell, slot, direction)
-    public readonly double[] Spread = new double[16 * N];
-    public readonly double[] Jitter = new double[16 * N];
-
-    public readonly HashSet<int> Rim = new();
-    public int Occupied, SteadyCount;
+    /// Coverage change accumulated since the last publish (sum of |dC| over cells; publish when >= threshold).
+    public double ChangeSinceCheck;
     public double MinY = double.MaxValue, MaxY = double.MinValue;
 
-    public ColonyTile(int tx, int tz)
+    // occupants
+    public readonly byte[] Species = new byte[2 * N];
+    public readonly ushort[] CoverQ = new ushort[2 * N];
+    public readonly double[] Biomass = new double[2 * N];
+    public readonly ushort[] ThickUm = new ushort[2 * N];
+    public readonly byte[] HealthQ = new byte[2 * N];
+    public readonly ushort[] AgeU = new ushort[2 * N];
+    public readonly ushort[] DryU = new ushort[2 * N];
+    public readonly byte[] SuitQ = new byte[2 * N];
+
+    // per cell
+    public readonly byte[] Flags = new byte[N];
+    public readonly byte[] Horizon = new byte[N];
+    public readonly byte[] CapacityQ = new byte[N];
+    public readonly byte[] SlopeQ = new byte[N];
+    public readonly byte[] LightQ = new byte[N];
+    public readonly float[] Decomposed = new float[N];
+
+    /// Sparse rim state: cell -> spread accumulators (metres) indexed slot * 8 + direction.
+    public readonly Dictionary<int, double[]> Rim = new();
+
+    public int Occupied, SteadyCount;
+
+    public ColonyTile(int tx, int tz) { Tx = tx; Tz = tz; }
+
+    public double Cover(int k) => CoverQ[k] / 65535.0;
+    public double Health(int k) => HealthQ[k] / 255.0;
+    public double Thick(int k) => ThickUm[k] * 1e-6;
+    public double Light(int cell) => LightQ[cell] / 255.0;
+    public double Slope(int cell) => SlopeQ[cell] / 255.0;
+    public double Capacity(int cell) => CapacityQ[cell] / 255.0;
+    public bool Has(int cell, byte flag) => (Flags[cell] & flag) != 0;
+    public void SetFlag(int cell, byte flag, bool on)
     {
-        Tx = tx; Tz = tz;
-        Array.Fill(Column, -1);
+        if (on) Flags[cell] |= flag; else Flags[cell] &= (byte)~flag;
     }
+    public bool Dormant(int k) => (Flags[k >> 1] & ((k & 1) == 0 ? FDorm0 : FDorm1)) != 0;
+    public void SetDormant(int k, bool on) => SetFlag(k >> 1, (k & 1) == 0 ? FDorm0 : FDorm1, on);
 }
 
-/// Read-only view of a tile's raw arrays (for rendering later). Occupant arrays use index cell * 2 + slot.
+/// Read-only view of a tile for rendering later. Occupant accessors take k = cell * 2 + slot.
 public sealed class ColonyTileView
 {
     private readonly ColonyTile _t;
@@ -63,15 +70,14 @@ public sealed class ColonyTileView
     public int Tx => _t.Tx;
     public int Tz => _t.Tz;
     public ulong Version => _t.Version;
-    public IReadOnlyList<byte> Species => _t.Species;
-    public IReadOnlyList<double> Coverage => _t.Coverage;
-    public IReadOnlyList<double> Biomass => _t.Biomass;
-    public IReadOnlyList<double> Thickness => _t.Thickness;
-    public IReadOnlyList<double> Health => _t.Health;
-    public IReadOnlyList<double> FrontAge => _t.FrontAge;
-    public IReadOnlyList<bool> Dormant => _t.Dormant;
-    public IReadOnlyList<double> Decomposed => _t.Decomposed;
-    public IReadOnlyList<bool> Steady => _t.Steady;
+    public byte Species(int k) => _t.Species[k];
+    public double Coverage(int k) => _t.Cover(k);
+    public double Biomass(int k) => _t.Biomass[k];
+    public double Thickness(int k) => _t.Thick(k);
+    public double Health(int k) => _t.Health(k);
+    public bool Dormant(int k) => _t.Dormant(k);
+    public bool Steady(int cell) => _t.Has(cell, ColonyTile.FSteady);
+    public double Decomposed(int cell) => _t.Decomposed[cell];
 }
 
 /// Sparse lattice over the ground plane. Cell (ix, iz) covers [ix*cell, (ix+1)*cell) in X and Z.
@@ -95,6 +101,7 @@ public sealed class ColonyField
     public static int CellX(long key) => (int)(key >> 32);
     public static int CellZ(long key) => (int)(uint)(key & 0xFFFFFFFFL);
     public static int FloorDiv(int a, int b) => a >= 0 ? a / b : -((-a + b - 1) / b);
+    public static int CellIndex(int lx, int lz) => lx + lz * ColonyTile.Side;
 
     public (int Ix, int Iz) CellOf(Vec2 p) => ((int)Math.Floor(p.X / CellSize), (int)Math.Floor(p.Z / CellSize));
     public Vec2 CellCentre(int ix, int iz) => new((ix + 0.5) * CellSize, (iz + 0.5) * CellSize);
@@ -112,8 +119,6 @@ public sealed class ColonyField
         }
         return t;
     }
-
-    public static int CellIndex(int lx, int lz) => lx + lz * ColonyTile.Side;
 
     /// Tile and cell index for a global cell, or null if its tile is not allocated.
     public ColonyTile? FindCell(int ix, int iz, out int cell)
@@ -141,8 +146,9 @@ public sealed class ColonyField
     {
         double x0 = t.Tx * ColonyTile.Side * CellSize, z0 = t.Tz * ColonyTile.Side * CellSize;
         double x1 = x0 + ColonyTile.Side * CellSize, z1 = z0 + ColonyTile.Side * CellSize;
-        double y0 = t.MinY <= t.MaxY ? t.MinY - 0.02 : 0;
-        double y1 = t.MinY <= t.MaxY ? t.MaxY + 0.06 : 0.1;
+        bool hasY = t.MinY <= t.MaxY;
+        double y0 = hasY ? t.MinY - 0.02 : 0;
+        double y1 = hasY ? t.MaxY + 0.06 : 0.1;
         return new Aabb(new Vec3(x0, y0, z0), new Vec3(x1, y1, z1));
     }
 }
