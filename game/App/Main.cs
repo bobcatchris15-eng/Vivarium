@@ -46,7 +46,8 @@ public partial class Main : Node3D
         bool specimenReview = UserArgs.Contains("--specimen-review");
         bool guardianReview = UserArgs.Contains("--guardian-review");
         bool groundReview = UserArgs.Contains("--ground-review");
-        bool isReview = visualReview || specimenReview || guardianReview || groundReview;
+        bool reprReview = UserArgs.Contains("--repr-review");
+        bool isReview = visualReview || specimenReview || guardianReview || groundReview || reprReview;
         var settings = isReview ? new UserSettings() : UserSettings.Load();
         if (isReview)
         {
@@ -118,7 +119,7 @@ public partial class Main : Node3D
                     descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var soakSeed) ? soakSeed : 804584441UL;
                     descriptor.Name += " - bounded-work soak";
                 }
-                bool populate = !specimenReview && (!guardianReview || UserArgs.Contains("--guardian-populated"));
+                bool populate = !specimenReview && !reprReview && (!guardianReview || UserArgs.Contains("--guardian-populated"));
                 world = await System.Threading.Tasks.Task.Run(() => VivariumWorld.Create(content, descriptor, populate: populate, warmupSurfaceWater: false));
             }
             if (isReview) world.Clock.Paused = true;
@@ -173,7 +174,7 @@ public partial class Main : Node3D
         finally { loadingLayer.QueueFree(); }
         if (isReview && !worldStartSucceeded)
         {
-            string mode = visualReview ? "VISUAL" : specimenReview ? "SPECIMEN" : groundReview ? "GROUND" : "GUARDIAN";
+            string mode = visualReview ? "VISUAL" : specimenReview ? "SPECIMEN" : groundReview ? "GROUND" : reprReview ? "REPR" : "GUARDIAN";
             GD.PrintErr($"{mode}_REVIEW_FAILED world start did not complete.");
             GetTree().Quit(4);
             return;
@@ -225,6 +226,23 @@ public partial class Main : Node3D
             catch (Exception ex)
             {
                 GD.PrintErr("SPECIMEN_REVIEW_FAILED " + ex);
+                GetTree().Quit(4);
+            }
+            return;
+        }
+        if (reprReview)
+        {
+            try
+            {
+                var reprWorld = Session.World ?? throw new InvalidOperationException("World missing after startup.");
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await Vivarium.Repr.ReprReviewRunner.Capture(this, Session, reprWorld,
+                    ArgAfter("--repr-review")!, ArgAfter("--repr-demo"), ArgAfter("--seed"));
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr("REPR_REVIEW_FAILED " + ex);
                 GetTree().Quit(4);
             }
             return;
