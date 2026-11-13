@@ -249,3 +249,6 @@ coherent ecology. No compatibility value in saves/APIs/engine. Experiments under
 
 ### P2g recovery verdict
 Rejected after direct visual review of baseline/candidate: fern remained crystalline and shrubs became detached leaf clumps with higher geometry. Complete source/evidence preserved in experiments/representation_rebuild/rejected/P2g. Owned production plant paths restored to accepted HEAD; diff empty. Worker explicit isolated baseline plant checks: 10/10. INT-F now proceeds with cached legacy whole-plant assemblies per RD12a. This is a negative experimental result, not completion of a new species geometry rollout.
+
+### INT-L infrastructure checkpoint
+Terra isolated cache infrastructure passed four light checks and independent scoped re-review after fixing FIFO starvation, cancellation/resource bounds and fault replay. Full solution compiled. Production lighting remains stock; world feed/controller/rig/GPU validation are next. Project cap30 verified in a windowed soil demo report (max_fps30, frame p50~33.3ms); this is pacing evidence, not a lighting speedup.

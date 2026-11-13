@@ -4,6 +4,7 @@
 // through the extinction grid and stores sky visibility, bent normal and 6 directional openness values.
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Vivarium.Sim.Core;
 
@@ -74,7 +75,7 @@ public sealed class OcclusionVolume : ILightTransportField
     /// Bytes of one packed RGBA8 volume.
     public long PackedBytes => VoxelCount * 4;
 
-    public OcclusionVolume(Aabb bounds, double voxelSize = 0.10, double traceDistance = 3.0)
+    public OcclusionVolume(Aabb bounds, double voxelSize = 0.10, double traceDistance = 3.0, CancellationToken cancellation = default)
     {
         if (voxelSize <= 0) throw new ArgumentException("voxelSize");
         _d = voxelSize; _inv = 1.0 / voxelSize; _trace = traceDistance; _min = bounds.Min;
@@ -84,7 +85,7 @@ public sealed class OcclusionVolume : ILightTransportField
         Bounds = new Aabb(bounds.Min, new Vec3(_min.X + _nx * _d, _min.Y + _ny * _d, _min.Z + _nz * _d));
         _ext = new long[VoxelCount];
         _baked = new float[VoxelCount * Stride];
-        for (long i = 0; i < VoxelCount; i++) SetOpen(i);
+        for (long i = 0; i < VoxelCount; i++) { if ((i & 4095) == 0) cancellation.ThrowIfCancellationRequested(); SetOpen(i); }
     }
 
     private void SetOpen(long i)
@@ -120,7 +121,7 @@ public sealed class OcclusionVolume : ILightTransportField
     /// Deposits triangle area into voxels: extinction += area / voxelVolume * opacityPerArea. May be called several
     /// times with the same sourceId (accumulates). Positions are x,y,z float triplets; transform is row-major 3x4
     /// (12 doubles: m00 m01 m02 tx, m10 .. ty, m20 .. tz) or null for identity. Returns the touched bounds.
-    public Aabb AddTriangles(ulong sourceId, float[] positions, int[] indices, double[]? transform, double opacityPerArea)
+    public Aabb AddTriangles(ulong sourceId, float[] positions, int[] indices, double[]? transform, double opacityPerArea, CancellationToken cancellation = default)
     {
         if (!_sources.TryGetValue(sourceId, out var src)) _sources[sourceId] = src = new Source();
         var acc = new Dictionary<int, double>();
@@ -129,6 +130,7 @@ public sealed class OcclusionVolume : ILightTransportField
         Span<double> v = stackalloc double[9];
         for (int t = 0; t + 2 < indices.Length; t += 3)
         {
+            cancellation.ThrowIfCancellationRequested();
             for (int k = 0; k < 3; k++)
             {
                 int pi = indices[t + k] * 3;
@@ -148,14 +150,18 @@ public sealed class OcclusionVolume : ILightTransportField
             double a = area / ((double)n * n);
             // n^2 sub-triangles of equal area, deposited at their centroids.
             for (int i = 0; i < n; i++)
+            {
+                cancellation.ThrowIfCancellationRequested();
                 for (int j = 0; j < n - i; j++)
                 {
                     DepositAt(acc, v, (i + 1.0 / 3) / n, (j + 1.0 / 3) / n, a, opacityPerArea, vvol);
                     if (j < n - i - 1) DepositAt(acc, v, (i + 2.0 / 3) / n, (j + 2.0 / 3) / n, a, opacityPerArea, vvol);
                 }
+            }
         }
         foreach (var (idx, sigma) in acc)
         {
+            cancellation.ThrowIfCancellationRequested();
             long add = (long)Math.Round(Math.Min(sigma, MaxSigma) * FixedScale);
             if (add == 0) continue;
             _ext[idx] += add;
@@ -202,17 +208,17 @@ public sealed class OcclusionVolume : ILightTransportField
     }
 
     /// Removes everything a source deposited; returns the bounds it touched (null if unknown id).
-    public Aabb? Remove(ulong sourceId)
+    public Aabb? Remove(ulong sourceId, CancellationToken cancellation = default)
     {
         if (!_sources.Remove(sourceId, out var src)) return null;
-        foreach (var (idx, amt) in src.Voxels) _ext[idx] -= amt;
+        foreach (var (idx, amt) in src.Voxels) { cancellation.ThrowIfCancellationRequested(); _ext[idx] -= amt; }
         return SourceBounds(src);
     }
 
     // ------------------------------------------------------------------ bake
 
     /// Bake every voxel.
-    public void BakeAll() => BakeBox(0, _nx - 1, 0, _ny - 1, 0, _nz - 1);
+    public void BakeAll(CancellationToken cancellation = default) => BakeBox(0, _nx - 1, 0, _ny - 1, 0, _nz - 1, cancellation);
 
     /// Bake the voxels inside region; with expand (default) the region is grown by TraceDistance + one voxel so
     /// neighbours whose light changed are included. Voxels outside the box are left bit-identical.
@@ -233,15 +239,18 @@ public sealed class OcclusionVolume : ILightTransportField
     public long BakedVoxelCounter { get; private set; }
     public Aabb SnapshotBounds(ulong sourceId) => _sources.TryGetValue(sourceId, out var s) ? SourceBounds(s) : new Aabb(_min, _min);
 
-    private void BakeBox(int x0, int x1, int y0, int y1, int z0, int z1)
+    private void BakeBox(int x0, int x1, int y0, int y1, int z0, int z1, CancellationToken cancellation = default)
     {
         LastBakeBox = (x0, x1, y0, y1, z0, z1);
         LastBakeVoxels = (long)(x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
         BakedVoxelCounter += LastBakeVoxels;
-        Parallel.For(z0, z1 + 1, z =>
+        Parallel.For(z0, z1 + 1, new ParallelOptions { CancellationToken = cancellation }, z =>
         {
             for (int y = y0; y <= y1; y++)
+            {
+                cancellation.ThrowIfCancellationRequested();
                 for (int x = x0; x <= x1; x++) BakeOne(x, y, z);
+            }
         });
         _version++;
     }
@@ -284,12 +293,14 @@ public sealed class OcclusionVolume : ILightTransportField
         _baked[o + 9] = (float)((T[5] + T[6] + T[7] + T[8]) * 0.25);                                                      // up-low (ring 20 mean)
     }
 
-    public void Invalidate(IReadOnlyList<DirtyRecord> records)
+    public void Invalidate(IReadOnlyList<DirtyRecord> records) => Invalidate(records, default);
+    public void Invalidate(IReadOnlyList<DirtyRecord> records, CancellationToken cancellation)
     {
         // Merge overlapping expanded boxes so shared voxels are baked once.
         var boxes = new List<(int x0, int x1, int y0, int y1, int z0, int z1)>();
         foreach (var r in records)
         {
+            cancellation.ThrowIfCancellationRequested();
             if ((r.Domain & (DirtyDomain.Light | DirtyDomain.Geometry | DirtyDomain.Vegetation)) == 0) continue;
             if (!r.Bounds.Intersects(Bounds)) continue;
             double e = _trace + _d;
@@ -308,7 +319,7 @@ public sealed class OcclusionVolume : ILightTransportField
             }
             boxes.Add(b);
         }
-        foreach (var b in boxes) BakeBox(b.x0, b.x1, b.y0, b.y1, b.z0, b.z1);
+        foreach (var b in boxes) BakeBox(b.x0, b.x1, b.y0, b.y1, b.z0, b.z1, cancellation);
     }
 
     // ------------------------------------------------------------------ sampling
@@ -341,8 +352,8 @@ public sealed class OcclusionVolume : ILightTransportField
     // width = nx, height = nz, depth = ny (one Image per Y layer).
 
     /// (bentNormal.xyz * 0.5 + 0.5, skyVisibility) for the whole volume.
-    public byte[] PackRgba8(out int nx, out int ny, out int nz)
-        => PackRegion(new Aabb(Bounds.Min, Bounds.Max), 0, out _, out _, out _, out nx, out ny, out nz);
+    public byte[] PackRgba8(out int nx, out int ny, out int nz, CancellationToken cancellation = default)
+        => PackRegion(new Aabb(Bounds.Min, Bounds.Max), 0, out _, out _, out _, out nx, out ny, out nz, cancellation);
 
     /// Open0..3 (+X,-X,+Z,-Z at 55 deg elevation) for the whole volume.
     public byte[] PackOpenRgba8(out int nx, out int ny, out int nz)
@@ -350,7 +361,7 @@ public sealed class OcclusionVolume : ILightTransportField
 
     /// Pack the voxels intersecting region. volume 0 = bent normal + visibility, 1 = Open0..3. Outputs the
     /// voxel origin and size of the packed sub-box.
-    public byte[] PackRegion(Aabb region, int volume, out int x0, out int y0, out int z0, out int nx, out int ny, out int nz)
+    public byte[] PackRegion(Aabb region, int volume, out int x0, out int y0, out int z0, out int nx, out int ny, out int nz, CancellationToken cancellation = default)
     {
         x0 = Math.Max(0, (int)Math.Floor((region.Min.X - _min.X) * _inv)); int x1 = Math.Min(_nx - 1, (int)Math.Ceiling((region.Max.X - _min.X) * _inv) - 1);
         y0 = Math.Max(0, (int)Math.Floor((region.Min.Y - _min.Y) * _inv)); int y1 = Math.Min(_ny - 1, (int)Math.Ceiling((region.Max.Y - _min.Y) * _inv) - 1);
@@ -359,6 +370,8 @@ public sealed class OcclusionVolume : ILightTransportField
         var bytes = new byte[(long)nx * ny * nz * 4];
         int w = 0;
         for (int y = y0; y <= y1; y++)
+        {
+            cancellation.ThrowIfCancellationRequested();
             for (int z = z0; z <= z1; z++)
                 for (int x = x0; x <= x1; x++)
                 {
@@ -375,6 +388,7 @@ public sealed class OcclusionVolume : ILightTransportField
                         bytes[w++] = Q(_baked[o + 4]); bytes[w++] = Q(_baked[o + 5]); bytes[w++] = Q(_baked[o + 6]); bytes[w++] = Q(_baked[o + 7]);
                     }
                 }
+        }
         return bytes;
     }
 

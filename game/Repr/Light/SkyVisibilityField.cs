@@ -75,6 +75,9 @@ public sealed partial class SkyVisibilityField : Node
     public static SkyVisibilityField Create(Vivarium.Sim.Repr.Aabb bounds, double voxel)
         => new() { Name = "SkyVisibilityField", Volume = new OcclusionVolume(bounds, voxel) };
 
+    /// <summary>GPU-only binding for volumes owned by a CPU worker.</summary>
+    public static SkyVisibilityField CreateUploader() => new() { Name = "SkyVisibilityField" };
+
     public void SetStrength(float s)
     {
         Strength = s;
@@ -84,8 +87,15 @@ public sealed partial class SkyVisibilityField : Node
     /// <summary>Pack the whole volume and (re)upload it. The Godot 3D texture API replaces all layers.</summary>
     public void Upload()
     {
-        var sw = Stopwatch.StartNew();
         var bytes = Volume.PackRgba8(out int nx, out int ny, out int nz);
+        UploadPacked(bytes, nx, ny, nz, Volume.Bounds, Volume.VoxelSize);
+    }
+
+    /// <summary>Upload a completed CPU-worker snapshot on the Godot thread.</summary>
+    public void UploadPacked(byte[] bytes, int nx, int ny, int nz, Vivarium.Sim.Repr.Aabb bounds, double voxel)
+    {
+        var sw = Stopwatch.StartNew();
+        if (bytes.LongLength != (long)nx * ny * nz * 4) throw new ArgumentException("Invalid sky visibility volume size", nameof(bytes));
         var layers = new Godot.Collections.Array<Image>();
         int layerBytes = nx * nz * 4;
         for (int y = 0; y < ny; y++)
@@ -96,17 +106,19 @@ public sealed partial class SkyVisibilityField : Node
         }
         if (_tex == null || nx != _nx || ny != _ny || nz != _nz)
         {
-            _tex = new ImageTexture3D();
-            _tex.Create(Image.Format.Rgba8, nx, nz, ny, false, layers);
+            var tex = new ImageTexture3D();
+            var error = tex.Create(Image.Format.Rgba8, nx, nz, ny, false, layers);
+            if (error != Error.Ok) { tex.Dispose(); throw new InvalidOperationException($"Sky visibility texture creation failed: {error}"); }
+            _tex = tex;
             _nx = nx; _ny = ny; _nz = nz;
             RenderingServer.GlobalShaderParameterSet("repr_skyvis_tex", _tex);
         }
         else _tex.Update(layers);
-        var b = Volume.Bounds;
+        var b = bounds;
         RenderingServer.GlobalShaderParameterSet("repr_skyvis_origin", new Vector3((float)b.Min.X, (float)b.Min.Y, (float)b.Min.Z));
         RenderingServer.GlobalShaderParameterSet("repr_skyvis_inv_size",
             new Vector3((float)(1.0 / (b.Max.X - b.Min.X)), (float)(1.0 / (b.Max.Y - b.Min.Y)), (float)(1.0 / (b.Max.Z - b.Min.Z))));
-        RenderingServer.GlobalShaderParameterSet("repr_skyvis_voxel", (float)Volume.VoxelSize);
+        RenderingServer.GlobalShaderParameterSet("repr_skyvis_voxel", (float)voxel);
         LastUploadBytes = bytes.LongLength; TotalUploadBytes += LastUploadBytes; Uploads++;
         LastUploadMs = sw.Elapsed.TotalMilliseconds;
     }
