@@ -13,6 +13,7 @@ render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/moss_aggregate.gdshaderinc"
 #include "res://Shaders/living_leaf_optics.gdshaderinc"
 #include "res://Shaders/leaf_direct_light.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform float sway = 0.0;
 uniform float stiffness = 1.0;
@@ -548,6 +549,10 @@ void fragment() {
     }
     AO = clamp(ao, 0.20, 1.0);
     AO_LIGHT_AFFECT = mix(0.45, 0.65, is_bark);
+    if (repr_skyvis_strength > 0.0) { // L1 cached occlusion (default off)
+        AO *= repr_sky_visibility(world_pos, wn);
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+    }
     float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
     float leaf_spec = mix(0.20, mix(0.38, 0.50, cuticle_sheen), top_side);
     // A farina-coated blade is dust, not varnish: it keeps almost no specular lobe.

@@ -4,6 +4,7 @@ render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/living_leaf_optics.gdshaderinc"
 #include "res://Shaders/leaf_direct_light.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 uniform sampler2DArray tissue_color : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2DArray tissue_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2DArray tissue_physical : filter_linear_mipmap_anisotropic, repeat_enable;
@@ -310,6 +311,10 @@ void fragment() {
     float ao = basal_ao * furrow_ao * mix(0.55, 1.0, ground_contact);
     AO = clamp(ao * canopy_depth, 0.16, 1.0);
     AO_LIGHT_AFFECT = mix(0.55, 0.78, is_pilot_crown);
+    if (repr_skyvis_strength > 0.0) { // L1 cached occlusion (default off)
+        AO *= repr_sky_visibility(position_world, wn);
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+    }
     if (UV2.y < .5 && COLOR.a > .5) {
         ALBEDO=srgb_to_linear(COLOR.rgb);
         NORMAL=finite_surface_normal((VIEW_MATRIX*vec4(wn,0.)).xyz, vec3(0.0,0.0,1.0));

@@ -48,3 +48,26 @@ anti_aliasing/quality/use_taa=true
 lights_and_shadows/positional_shadow/atlas_size=8192
 environment/sdfgi/probe_ray_count=4
 environment/sdfgi/frames_to_converge=1
+
+[shader_globals]
+
+repr_skyvis_tex={
+"type": "sampler3D",
+"value": ""
+}
+repr_skyvis_origin={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+repr_skyvis_inv_size={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}
+repr_skyvis_strength={
+"type": "float",
+"value": 0.0
+}
+repr_skyvis_voxel={
+"type": "float",
+"value": 0.1
+}
