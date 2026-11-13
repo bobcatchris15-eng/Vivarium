@@ -150,9 +150,11 @@ public static class ReprReviewRunner
             if (selectedShots.Count == 0) throw new InvalidOperationException($"No shots selected for {demo.Name}: {shotArg}");
             var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var shotsOut = new List<object>();
-            foreach (var shot in selectedShots)
+            foreach (var shot in demo.Shots)
             {
+                // Preserve every logical state/LOD transition even when capturing a subset.
                 demo.ApplyVariant(shot.Variant);
+                if (requestedShots != null && !requestedShots.Contains(shot.Name)) continue;
                 double seconds = shot.DayFraction is float f ? Math.Clamp(f, 0f, 0.99999f) * DayNightClock.CycleSeconds : DefaultSeconds;
                 bool timeChanged = Math.Abs(session.EnvRig.BenchmarkLightSeconds!.Value - seconds) > 1e-6;
                 session.EnvRig.BenchmarkLightSeconds = seconds;

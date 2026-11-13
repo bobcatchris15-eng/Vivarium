@@ -30,3 +30,4 @@ Six demos: three plants and attached junctions/growth; living soil cube/dig; col
 - Fresh substrate filter: 18 tests, failed0 (on recovery DLL). Timing during parallel work is correctness evidence only.
 - Recovery colony filter: 12 tests, failed0; wet-route ratio remains weak (1.11), and interior/lichen appearance is queued for C2.
 - Targeted capture filter: six requested candidate views generated and runner exited cleanly; default whole-set capture remains available.
+- Targeted capture correction: initial subset skipped stateful ApplyVariant calls and misaligned soil LOD shot names; now every logical transition runs before screenshot filtering. Corrected run build/overhaul/S2b/baseline-corrected generated8 selected views, log names align, exit0. Earlier S2b/baseline is invalid for state/LOD comparisons.

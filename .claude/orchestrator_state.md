@@ -25,3 +25,11 @@ Fresh pre-takeover dotnet build: exit 0, 9 warnings. Historical task statuses in
 - Targeted capture filter exercised: candidate report has exactly six requested shots and exits REPR_REVIEW_COMPLETE.
 - Recovery substrate checks 18/18 and colony 12/12 pass on explicit isolated DLL; weak colony wet-route ratio remains 1.11 and is not accepted as strong ecological proof.
 - dotnet run artifacts-path is stale-output hazard; use build then explicit DLL.
+
+## Active wave after 823ee6d
+- flora_chunks (Terra): production INT-F first slice landed, all-world draw records/camera selection; chunk locality still incomplete, GPU probe pending. Own OrganismRenderers/FloraRenderer.*.
+- light_production (Terra): production controller/rig/shaders/Main/GameSession; Stock remains default until matched A/B. Consumes all-world flora source API from flora_chunks.
+- ecology (Terra): fix round1 independent review findings in build/reviews/E1-review.md; no ecology commit yet. Nondefault grids, local terrain state continuity/save side effects, first infiltration delta require corrections. Eight author checks and 90day diagnostic runs passed but did not cover these.
+- Independent lighting infrastructure review fixed FIFO/cancellation/fault replay; approved and committed823ee6d.
+- Root corrected --repr-shots state-order bug: all logical ApplyVariant calls must execute before filtering screenshots; post-fix soil log names now align and requested8 captures complete. Shader cap30 runtime verified.
+- Next queued: E rereview, S2b material/relief/litter look (current top remains camouflage wallpaper, cut face nearblack and outcrop cartoon cracks); C2 moss/lichen appearance; production substrate/colony integration; real paced perf/backlog and final six demos.
