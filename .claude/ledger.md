@@ -142,3 +142,32 @@ Next when resumed: (1) remaining species ranks 73+ (trumpetbind, bannerreed, bar
 | BK1 | FloraSurfaceProfiles.cs, PilotTreeRenderer.cs | DONE | 1 | 27 species across 14 bark sets, pilot tree Bark012 (lit trunk shot not verified: woodland_trunks is backlit). Duplicates left among minor species (002 x3, 006/007/008 x2). hollowcrown, barrowbole still default bark |
 | TX5 | leaf.gdshader, FloraVisualProfile.cs, LeafPools/*/tissue_gain.txt | DONE | 1 | Textures strengthened for own pools (drift x0.35, var 1/2 off, desat floor .78, sat 1.25, gain .03+.55L). Visibly stronger: frosttussock blue-silver, embercrown, cragset, sunstone, hushclover. butterglint pool removed (petal master on leaves); marrowbloom keeps petal-white pool. Not soaked (shader cost unchanged) |
 | RK | PropMeshes.cs | DONE | 1 | Rock winding inverted (TriangleFacing = CCW from normal side; Godot front = CW). Fixed for Rock() only; LegacyRock (detail 1) and other TriangleFacing users (logs/gravel/vents, all cull_back) not audited. New look: faceted grey stone, slightly saucer-like (wide band near ground, flat cap) -> rock shape follow-up (GR4/GR6) |
+
+# REPRESENTATION REBUILD (new effort, 2026-11-13) — supersedes the overhaul plan above
+Brief: `C:\Users\chris\Downloads\Vivarium_Fundamental_Rearchitecture_Fable52_Plan.md` (workstreams P/S/C/L/E, engine decision, 6 demos).
+Objective: rebuild Vivarium around state-first representations (organ-graph plants, layered substrate, attached colonies,
+cached light transport, aggregated ecology): more photoreal at normal viewing distance, less total CPU/GPU/RAM, causally
+coherent ecology. No compatibility value in saves/APIs/engine. Experiments under `experiments/representation_rebuild/`.
+
+## Rebuild decisions
+- RD1: Owner (2026-11-13): no fresh baseline capture. Baseline = existing recorded runs: pc5 soak (GPU 30.5 ms, 30 fps,
+  p95 53 ms, 693 draws, 7.05M prims, VRAM 4.1 GB, 7 MB/frame alloc), m1b attribution (pilot tree 4.9 ms, water 3.2, island 2.6,
+  flora 2.3, soil 1.6, fauna 1.4, props 1.25; ~15 ms fixed post/lighting), P12b stack table, captures build/overhaul/pc5/visual,
+  RK/after, baseline2. Target code from those.
+- RD2: Brief says GTX1080/Pascal; the only machine here is the Radeon 860M iGPU (Vulkan 1.4, Ryzen AI 7 350, 31 GB).
+  Design to the stricter intersection (compute + ordinary instancing, no mesh shaders/work graphs/RT on critical path);
+  all measurements are 860M and say so. No GTX1080 number may be claimed.
+- RD3: Supersedes D5 (fix-in-place only). Wholesale replacement allowed, but each replaced species needs a before/after
+  capture judged by the orchestrator; D5's lesson (fixed tri caps strip visible structure) still applies.
+- RD4: Clanker tier unchanged (D4): haiku default, sonnet low/medium at choke points. 2-3 parallel, disjoint paths, one
+  Godot window at a time (D3). No worktrees/PR/CI. Disk: C: has ~15 GB free.
+- RD5 (orchestrator read of pc5/RK captures): weakest visuals are (a) ground: faceted terrain, decal-smear litter, saucer
+  rocks, stepped pond bank, opaque green water, wallpaper cut face with disc pebbles; (b) leaves: flat hard-edged polygon
+  cards, no curl/thickness/venation relief, faceted broadleaf; canopy density itself is good. So S and leaf-organ quality
+  outrank triangle trimming (T0: hiding all flora saves only 2.3 ms).
+
+## Rebuild tasks
+| id | targets | status | att | last return line |
+|----|---------|--------|-----|------------------|
+| R0a | (read-only) flora/render audit | DISPATCHED | 1 | haiku Explore |
+| R0b | (read-only) sim/ground/light audit | DISPATCHED | 1 | haiku Explore |
