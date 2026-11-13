@@ -61,11 +61,19 @@ public static class PlantCompiler
         detail = Math.Clamp(detail, 0, 2);
         var a = new PlantAssembly();
         var inst = new List<OrganInstance>();
+        bool[]? hasChild = null;
+        if (detail == 2)
+        {
+            hasChild = new bool[p.Organs.Length];
+            for (int i = 0; i < p.Organs.Length; i++) if (p.Organs[i].Parent >= 0) hasChild[p.Organs[i].Parent] = true;
+        }
         for (int i = 0; i < p.Organs.Length; i++)
         {
             var o = p.Organs[i];
             if (o.Type is OrganType.Axis or OrganType.Petiole)
             {
+                // Detail 2: drop childless hair-thin twigs (< 1.5 mm); anything carrying an organ is kept.
+                if (hasChild != null && o.Type == OrganType.Axis && o.RadiusStart < 0.0015f && !hasChild[i]) continue;
                 SweepAxis(a.Wood, p, i, detail);
             }
             else if (IsFlat(o.Type) && o.RadiusStart > 1e-6f && (o.End - o.Start).LengthSq > 1e-12)
@@ -147,7 +155,7 @@ public static class PlantCompiler
         else
         {
             sx = rs / ProfileMax(s);
-            sy = 1.0;
+            sy = len;   // unit-shape Y (midrib arc, cupping, ridge) is in unit-length space, so it scales with length like Z
         }
         var zl = z * len;
         return new OrganInstance
@@ -212,16 +220,27 @@ public static class PlantCompiler
         var t0 = o.StartTangent;
         var t1 = o.EndTangent;
         double t0len = t0.Length;
-        double sMin = dExt > 0 && t0len > 1e-9 ? -Math.Min(0.5, dExt / t0len) : 0;
-        double seg = detail == 0 ? 0.02 : detail == 1 ? 0.035 : 0.06;
-        int nSeg = Math.Clamp((int)Math.Ceiling(len / seg), 2, detail == 0 ? 14 : 8);
-        int nRad = detail == 0 ? (o.Order <= 1 ? 10 : 6) : detail == 1 ? (o.Order <= 1 ? 6 : 4) : (o.Order <= 1 ? 4 : 3);
+        double sMin = dExt > 0 && t0len > 1e-9 && rs >= 0.0015 && detail < 2 ? -Math.Min(0.5, dExt / t0len) : 0;
+        // Radial sides from the axis radius in metres; length segments from curvature (not from length).
+        int nRad = WoodSides(rs, detail);
+        double maxBend = detail == 0 ? 12.0 : detail == 1 ? 24.0 : 45.0;
+        double bend = TotalBendDeg(p0, t0, p1, t1);
+        // Minimum 2 length segments for axes longer than 4 cm (8 cm at detail 1); short straight stubs and petioles use 1.
+        int minSeg = detail == 2 ? 1 : len > (detail == 0 ? 0.04 : 0.08) ? 2 : 1;
+        int nSeg = Math.Clamp((int)Math.Ceiling(bend / maxBend), minSeg, detail == 0 ? 24 : 12);
 
-        // Sample list: optional sink sample, then s = 0..1.
+        // Sample list: optional sink sample, then s = 0..1 (plus one flare sample near a thick parent junction).
+        var sList = new List<double>();
+        for (int k = 0; k <= nSeg; k++) sList.Add(k / (double)nSeg);
+        if (dExt > 0 && detail < 2 && rs >= 0.002 && len > 5 * rs)
+        {
+            double sf = Math.Min(0.5, 2.5 * rs / len);
+            if (sf > 0.02 && sf < 0.9 / nSeg) sList.Add(sf);
+            sList.Sort();
+        }
         var samples = new List<(Vec3 P, Vec3 T, double R, double D)>();
         if (sMin < 0) AddSample(samples, p0, t0, p1, t1, sMin, rs, re, flare, len, true);
-        for (int k = 0; k <= nSeg; k++) AddSample(samples, p0, t0, p1, t1, k / (double)nSeg, rs, re, flare, len, false);
-
+        foreach (double sv in sList) AddSample(samples, p0, t0, p1, t1, sv, rs, re, flare, len, false);
         var rgb = WoodRgb(o.Tissue, o.Order);
         bool woody = o.Tissue is Tissue.Wood or Tissue.Bark;
         double u2x = woody ? 2.0 : 0.0;
@@ -234,8 +253,8 @@ public static class PlantCompiler
             var nk = PlantMath.SafeNormal(nPrev - tN * nPrev.Dot(tN), PlantMath.Perpendicular(tN));
             nPrev = nk;
             var bk = tN.Cross(nk);
-            rings[k] = new int[nRad];
-            for (int j = 0; j < nRad; j++)
+            rings[k] = new int[nRad + 1];   // seam vertex duplicated so UV.y runs 0..1 without a smeared quad
+            for (int j = 0; j <= nRad; j++)
             {
                 double th = Math.Tau * j / nRad;
                 var dv = nk * Math.Cos(th) + bk * Math.Sin(th);
@@ -252,11 +271,12 @@ public static class PlantCompiler
         var bL = tip.Cross(nL);
         double rEnd = last.R;
         int[] prev = rings[^1];
-        for (int q = 1; q <= 2; q++)
+        int capRings = detail == 0 ? (nRad >= 6 ? 2 : 0) : detail == 1 ? (nRad >= 6 ? 1 : 0) : 0;
+        for (int q = 1; q <= capRings; q++)
         {
-            double phi = q / 3.0 * Math.PI / 2;
-            var cur = new int[nRad];
-            for (int j = 0; j < nRad; j++)
+            double phi = q / (capRings + 1.0) * Math.PI / 2;
+            var cur = new int[nRad + 1];
+            for (int j = 0; j <= nRad; j++)
             {
                 double th = Math.Tau * j / nRad;
                 var dv = nL * Math.Cos(th) + bL * Math.Sin(th);
@@ -270,9 +290,36 @@ public static class PlantCompiler
         int apex = m.AddVertex(last.P + tip * rEnd, tip, rgb[0], rgb[1], rgb[2], 1, last.D, 0, u2x, 0);
         for (int j = 0; j < nRad; j++)
         {
-            int jn = (j + 1) % nRad;
-            m.AddTriangle(prev[j], prev[jn], apex);
+            m.AddTriangle(prev[j], prev[j + 1], apex);
         }
+    }
+
+    /// <summary>Radial side count from axis radius (m) and detail.</summary>
+    public static int WoodSides(double radius, int detail)
+    {
+        int cls = radius >= 0.008 ? 3 : radius >= 0.003 ? 2 : radius >= 0.001 ? 1 : 0;   // 3=thick .. 0=hair
+        return detail switch
+        {
+            0 => cls switch { 3 => 8, 2 => 6, 1 => 4, _ => 3 },
+            1 => cls switch { 3 => 6, 2 => 4, _ => 3 },
+            _ => cls >= 3 ? 4 : 3,
+        };
+    }
+
+    /// <summary>Total turning angle (degrees) of the Hermite curve, summed over 8 spans.</summary>
+    private static double TotalBendDeg(Vec3 p0, Vec3 t0, Vec3 p1, Vec3 t1)
+    {
+        double sum = 0;
+        var prev = PlantMath.SafeNormal(PlantMath.HermiteD(p0, t0, p1, t1, 0), p1 - p0);
+        for (int i = 1; i <= 8; i++)
+        {
+            var cur = PlantMath.HermiteD(p0, t0, p1, t1, i / 8.0);
+            if (cur.LengthSq < 1e-18) continue;
+            cur = cur.Normalized();
+            sum += Math.Acos(Math.Clamp(prev.Dot(cur), -1, 1)) * 180.0 / Math.PI;
+            prev = cur;
+        }
+        return sum;
     }
 
     private static void AddSample(List<(Vec3 P, Vec3 T, double R, double D)> list, Vec3 p0, Vec3 t0, Vec3 p1, Vec3 t1,
@@ -296,10 +343,10 @@ public static class PlantCompiler
 
     private static void Strip(MeshData m, int[] a, int[] b)
     {
-        int n = a.Length;
+        int n = a.Length - 1;
         for (int j = 0; j < n; j++)
         {
-            int jn = (j + 1) % n;
+            int jn = j + 1;
             m.AddTriangle(a[j], b[j], a[jn]);
             m.AddTriangle(a[jn], b[j], b[jn]);
         }
