@@ -1,0 +1,129 @@
+using System;
+using Vivarium.Sim.Core;
+
+namespace Vivarium.Sim.Repr.Plant.Forms;
+
+/// <summary>
+/// Shared organ shapes for the form generators. Leaf outlines are half-width profiles (base to tip, normalised by the
+/// compiler); the aspect ratio is carried by the organ's half width, not by the profile. For Flower/Fruit shapes
+/// VenationClass holds the <see cref="FlowerShape"/> index and SerrationFreq/Serration the petal count and lobe depth.
+/// For leaf shapes VenationClass is 0 pinnate, 1 palmate/radiate, 2 parallel.
+/// </summary>
+public static class FormShapes
+{
+    public static double LanceolateProfile(double t) => Math.Pow(Math.Sin(Math.PI * Math.Pow(t, 0.72)), 0.85);
+    public static double OvateProfile(double t) => Math.Pow(Math.Sin(Math.PI * Math.Pow(t, 0.6)), 0.7);
+    public static double CordateProfile(double t) => Math.Pow(Math.Sin(Math.PI * Math.Pow(t, 0.42)), 0.62);
+    public static double OrbicularProfile(double t) => Math.Pow(Math.Max(0, 1 - (2 * t - 1) * (2 * t - 1)), 0.45);
+    public static double LinearProfile(double t) =>
+        t < 0.04 ? Math.Sqrt(t / 0.04) : 1.0 - 0.9 * Math.Pow(Math.Max(0, (t - 0.55) / 0.45), 1.7);
+    public static double StrapProfile(double t) =>
+        Math.Min(1.0, 0.45 + 3.0 * t) * (1.0 - Math.Pow(Math.Max(0, (t - 0.72) / 0.28), 2.0) * 0.95);
+    public static double PalmateProfile(double t) =>
+        Math.Pow(Math.Sin(Math.PI * Math.Pow(t, 0.5)), 0.6) * (1.0 + 0.30 * Math.Sin(Math.PI * (4.4 * t - 0.2)) * Math.Min(1, t * 4));
+    public static double PinnaProfile(double t) =>
+        Math.Pow(Math.Sin(Math.PI * Math.Pow(t, 0.8)), 0.8) * (1.0 + 0.14 * Math.Cos(Math.Tau * 6.5 * t) * Math.Min(1, t * 3));
+
+    private static double Profile(LeafArchetype a, double t) => a switch
+    {
+        LeafArchetype.Lanceolate => LanceolateProfile(t),
+        LeafArchetype.Ovate => OvateProfile(t),
+        LeafArchetype.Cordate => CordateProfile(t),
+        LeafArchetype.Peltate or LeafArchetype.Orbicular => OrbicularProfile(t),
+        LeafArchetype.Linear => LinearProfile(t),
+        LeafArchetype.Strap => StrapProfile(t),
+        LeafArchetype.Palmate => PalmateProfile(t),
+        LeafArchetype.FernFrond => PinnaProfile(t),
+        _ => OvateProfile(t),      // Pinnate: the leaflets are ovate/lanceolate; see Leaflet()
+    };
+
+    private static int Venation(LeafArchetype a) => a switch
+    {
+        LeafArchetype.Cordate or LeafArchetype.Peltate or LeafArchetype.Orbicular or LeafArchetype.Palmate => 1,
+        LeafArchetype.Linear or LeafArchetype.Strap => 2,
+        _ => 0,
+    };
+
+    /// <summary>Half width / length for an archetype and the trait aspect (aspect = width / length).</summary>
+    public static double HalfWidthRatio(FormTraits t) => 0.5 * t.LeafAspect;
+
+    public static Vec3 Lerp(Vec3 a, Vec3 b, double f) => a + (b - a) * f;
+
+    /// <summary>Whole-blade leaf shape. variant 0..2 perturbs curl/twist/wave; young uses the young tint.</summary>
+    public static OrganShape Leaf(FormTraits t, string name, int variant, bool young, double jitter)
+    {
+        var a = t.Leaf == LeafArchetype.Pinnate ? LeafArchetype.Ovate : t.Leaf;
+        double vf = variant == 0 ? 0.75 : variant == 1 ? 1.0 : 1.3;
+        double tw = variant == 0 ? -0.10 : variant == 1 ? 0.04 : 0.12;
+        var ad = t.LeafAdaxial * (1.0 + jitter);
+        var ab = t.LeafAbaxial * (1.0 + jitter);
+        if (young) { ad = Lerp(ad, t.LeafYoung, 0.55); ab = Lerp(ab, t.LeafYoung, 0.45); }
+        return new OrganShape
+        {
+            Name = name, Type = OrganType.Leaf,
+            WidthProfile = PlantShapes.Profile(x => Profile(a, x), 13),
+            LengthToWidth = (float)(1.0 / Math.Max(0.02, t.LeafAspect)),
+            MidribCurl = (float)(t.LeafCurl * vf), CrossCurl = (float)(t.LeafCup * (0.8 + 0.2 * variant)),
+            Twist = (float)tw, EdgeWave = (float)(t.LeafEdgeWave * vf), EdgeWaveFreq = 4.5f + variant,
+            Serration = (float)t.LeafSerration, SerrationFreq = 9f,
+            Thickness = 0.0004f, VenationClass = Venation(a),
+            ColorAdaxial = ad, ColorAbaxial = ab,
+            Transmission = young ? 0.5f : 0.32f, Roughness = 0.5f, Wax = 0.2f,
+        };
+    }
+
+    /// <summary>Leaflet of a compound leaf or a fern pinna.</summary>
+    public static OrganShape Leaflet(FormTraits t, string name, int variant, bool young, double jitter, bool fern)
+    {
+        double vf = variant == 0 ? 0.8 : variant == 1 ? 1.0 : 1.25;
+        var ad = t.LeafAdaxial * (1.0 + jitter);
+        var ab = t.LeafAbaxial * (1.0 + jitter);
+        if (young) { ad = Lerp(ad, t.LeafYoung, 0.55); ab = Lerp(ab, t.LeafYoung, 0.45); }
+        return new OrganShape
+        {
+            Name = name, Type = OrganType.Leaflet,
+            WidthProfile = PlantShapes.Profile(x => fern ? PinnaProfile(x) : LanceolateProfile(Math.Pow(x, 0.9)), 13),
+            LengthToWidth = fern ? 4.0f : 2.6f,
+            MidribCurl = (float)((fern ? 0.55 : t.LeafCurl) * vf), CrossCurl = (float)(t.LeafCup * 0.9),
+            Twist = (float)(0.06 * (variant - 1)), EdgeWave = (float)(t.LeafEdgeWave * vf), EdgeWaveFreq = 6f,
+            Serration = (float)t.LeafSerration, SerrationFreq = 9f,
+            Thickness = 0.0004f, VenationClass = 0,
+            ColorAdaxial = ad, ColorAbaxial = ab,
+            Transmission = young ? 0.5f : 0.4f, Roughness = 0.55f,
+        };
+    }
+
+    /// <summary>Grass or sedge blade variant: long, strongly arched, optionally folded and twisted.</summary>
+    public static OrganShape Blade(FormTraits t, string name, double curl, double fold, double twist, bool young, double jitter)
+    {
+        var ad = t.LeafAdaxial * (1.0 + jitter);
+        var ab = t.LeafAbaxial * (1.0 + jitter);
+        if (young) { ad = Lerp(ad, t.LeafYoung, 0.5); ab = Lerp(ab, t.LeafYoung, 0.4); }
+        return new OrganShape
+        {
+            Name = name, Type = OrganType.Leaf,
+            WidthProfile = PlantShapes.Profile(x => t.Leaf == LeafArchetype.Strap ? StrapProfile(x) : LinearProfile(x), 13),
+            LengthToWidth = 40f,
+            MidribCurl = (float)curl, CrossCurl = (float)fold, Twist = (float)twist,
+            EdgeWave = 0.004f, EdgeWaveFreq = 3f,
+            Thickness = 0.0003f, VenationClass = 2,
+            ColorAdaxial = ad, ColorAbaxial = ab, Transmission = 0.35f, Roughness = 0.45f, Wax = 0.3f,
+        };
+    }
+
+    /// <summary>Flower or fruit body. Unit space: base at the origin, length 1 along +Z, mouth radius 0.5.</summary>
+    public static OrganShape Flower(FormTraits t, string name, FlowerShape shape, bool fruit, Vec3 c1, Vec3 c2)
+    {
+        double lobes = shape switch { FlowerShape.Star => 5, FlowerShape.Cup => 5, FlowerShape.Bell => 5, FlowerShape.Lantern => 5, _ => 0 };
+        double depth = shape switch { FlowerShape.Star => 0.55, FlowerShape.Cup => 0.18, FlowerShape.Bell => 0.07, FlowerShape.Lantern => 0.10, _ => 0 };
+        return new OrganShape
+        {
+            Name = name, Type = fruit ? OrganType.Fruit : OrganType.Flower,
+            LengthToWidth = shape switch { FlowerShape.Bell => 1.3f, FlowerShape.Capsule => 2.2f, FlowerShape.Catkin => 6f, FlowerShape.Star => 0.6f, _ => 1.0f },
+            Thickness = 0.0005f, VenationClass = (int)shape,
+            SerrationFreq = (float)lobes, Serration = (float)depth,
+            ColorAdaxial = c1, ColorAbaxial = c2,
+            Transmission = 0.5f, Roughness = 0.4f, Wax = 0.25f,
+        };
+    }
+}

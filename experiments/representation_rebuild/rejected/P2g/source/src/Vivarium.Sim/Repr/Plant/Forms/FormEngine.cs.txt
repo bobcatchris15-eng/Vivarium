@@ -1,0 +1,706 @@
+using System;
+using System.Collections.Generic;
+using Vivarium.Sim.Core;
+
+namespace Vivarium.Sim.Repr.Plant.Forms;
+
+/// <summary>Tropism and load parameters of one axis (radians).</summary>
+internal sealed class AxisSpec
+{
+    public double SetPoint, SetRate, PhotoK, PhotoFrom = 0.55, Sag, Wander, Twist;
+}
+
+internal enum SiteKind { Branch, Leaf, Thorn, Infl, PinnaPair, Blade }
+
+/// <summary>Something attached to segment Seg of an axis at local parameter T.</summary>
+internal sealed class Site
+{
+    public int Seg;
+    public double T, Az, S, A;
+    public SiteKind Kind;
+    public Ax? Child;
+    public int Slot;
+}
+
+/// <summary>An axis (stem, branch, twig, frond rachis) as a chain of internode segments; designed in memory first.</summary>
+internal sealed class Ax
+{
+    public ulong Id;
+    public int Order;
+    public double Length;
+    public int NSeg;
+    public double[] SegLen = Array.Empty<double>();
+    public double[] CumFrac = Array.Empty<double>();
+    public Tissue Tissue = Tissue.Wood;
+    public OrganType Type = OrganType.Axis;
+    public double Time = 0.3, EmergeBase, Lag;
+    public AxisSpec Spec = new();
+    public bool Root, LeafBearing, FlowerHost, CanBranch = true;
+    public double LeafLoad, SagMul = 1.0, BranchStart = 0.2, BranchEnd = 1.0, BranchProbMul = 1.0, Coil, BaseRadiusMul = 1.0;
+    public int BranchesPerNode = 1;
+    public double RTip, RBase;
+    public double[] NodeR = Array.Empty<double>();
+    public double[] LoadLen = Array.Empty<double>();
+    public List<Site> Sites = new();
+    public Vec3 D0 = Vec3.Up;
+    public double AttachT;
+    public int[] Gen = Array.Empty<int>();
+    public Func<double, double>? LateralLength;   // absolute lateral length by position (trees)
+    public Ax? Parent;
+    public int ParentSeg;
+    public int TerminalLeafSeg = -1;
+    public Vec3 RootPoint = Vec3.Zero;
+    public Vec3? StartDir;
+}
+
+/// <summary>
+/// Shared machinery of the form generators: hashed per-axis randomness (structure is a pure function of identity, so
+/// calibration scales never reshuffle it), internode segmentation, pipe-model radii, the tropism walk, and emitters for
+/// leaves, compound leaves, thorns and inflorescences. A design is built in three phases: topology (Ax tree), radii,
+/// then emission into the PlanBuilder.
+/// </summary>
+internal sealed class FormCtx
+{
+    public readonly PlanBuilder B;
+    public readonly FormTraits T;
+    public readonly string Species;
+    public double LenScale = 1.0, AreaScale = 1.0, Density = 1.0;
+    public readonly ulong RootId;
+    public readonly double IndScale;
+    public double MainLen = 1.0;
+    public readonly List<Ax> All = new();
+    public ushort[] LeafShapes = Array.Empty<ushort>();       // [variant + 3 * young]
+    public ushort[] LeafletShapes = Array.Empty<ushort>();
+    public ushort FlowerShapeId, PedicelDummy;
+    public ushort[] BladeShapes = Array.Empty<ushort>();
+    public int LeafCount;
+    public int ThornBudget = 150;
+
+    public FormCtx(PlanBuilder b, FormTraits t, string species)
+    {
+        B = b; T = t; Species = species;
+        RootId = ReprId.Hash(b.WorldSeed, b.PlantId, 0xF0F0F0F0UL);
+        IndScale = 1.0 + (U(RootId, 7) * 2 - 1) * t.SizeVariance;
+    }
+
+    public double LeafLinear => Math.Sqrt(AreaScale);
+
+    // ------------------------------------------------------------------ randomness
+
+    public static double U(ulong id, uint salt) => ReprId.Unit(id, salt);
+    public static double Ur(ulong id, uint salt, double lo, double hi) => lo + (hi - lo) * ReprId.Unit(id, salt);
+    public static double Gauss(ulong id, uint salt)
+    {
+        double u1 = Math.Max(1e-9, ReprId.Unit(id, salt)), u2 = ReprId.Unit(id, salt + 1);
+        return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(Math.Tau * u2);
+    }
+    public static ulong Child(ulong id, int a, int b = 0) => Rng.Mix(id, (ulong)(a * 64 + b + 1) * 0x9E3779B97F4A7C15UL);
+
+    public static double Rad(double deg) => deg * Math.PI / 180.0;
+
+    // ------------------------------------------------------------------ shapes
+
+    public void MakeShapes()
+    {
+        double jit = (U(RootId, 11) * 2 - 1) * T.ColourVariance;
+        var leaves = new List<ushort>();
+        for (int young = 0; young < 2; young++)
+            for (int v = 0; v < 3; v++)
+            {
+                var shape = T.Leaf == LeafArchetype.Pinnate
+                    ? FormShapes.Leaflet(T, $"{Species}_leaflet{v}{(young == 1 ? "y" : "")}", v, young == 1, jit, false)
+                    : FormShapes.Leaf(T, $"{Species}_leaf{v}{(young == 1 ? "y" : "")}", v, young == 1, jit);
+                leaves.Add(B.AddShape(shape));
+            }
+        LeafShapes = leaves.ToArray();
+    }
+
+    public ushort AddFlowerShape(bool fruit)
+    {
+        var c1 = T.AsFruit ? T.FruitColour : T.FlowerColour;
+        var c2 = T.AsFruit ? T.FruitColour * 0.7 : T.FlowerColour2;
+        return B.AddShape(FormShapes.Flower(T, $"{Species}_{(fruit ? "fruit" : "flower")}", T.Flower, fruit, c1, c2));
+    }
+
+    // ------------------------------------------------------------------ axes
+
+    public Ax NewAxis(ulong id, int order, double length, double internode, Tissue tissue, double time, Ax? parent, int parentSeg)
+    {
+        var a = new Ax { Id = id, Order = order, Length = length, Tissue = tissue, Time = time, Parent = parent, ParentSeg = parentSeg };
+        a.Spec = SpecFor(order);
+        // internode profile: short near the base and tip, longest mid-axis
+        var lens = new List<double>();
+        double cum = 0;
+        int guard = 0;
+        while (cum < length - 1e-6 && guard++ < 60)
+        {
+            double s = cum / length;
+            double f = MathD.Lerp(1.0, T.InternodeTipFactor, s) * (s < 0.1 ? 0.8 : 1.0) * Ur(id, (uint)(200 + guard), 0.85, 1.15);
+            double l = Math.Min(internode * f, length - cum);
+            if (length - cum - l < 0.4 * internode * f) l = length - cum;
+            lens.Add(l);
+            cum += l;
+        }
+        a.SegLen = lens.ToArray();
+        a.NSeg = a.SegLen.Length;
+        a.CumFrac = new double[a.NSeg];
+        double c = 0;
+        for (int i = 0; i < a.NSeg; i++) { c += a.SegLen[i]; a.CumFrac[i] = c / length; }
+        a.TerminalLeafSeg = -1;
+        All.Add(a);
+        return a;
+    }
+
+    public AxisSpec SpecFor(int order)
+    {
+        var sp = T.GravSetPointDeg;
+        return new AxisSpec
+        {
+            SetPoint = Rad(sp[Math.Min(order, sp.Length - 1)]),
+            SetRate = T.GravRate,
+            PhotoK = T.PhotoK,
+            Sag = T.Sag,
+            Wander = Rad(T.WanderDeg),
+        };
+    }
+
+    public double TipRadius(int order) => Math.Max(0.00035, T.TipRadiusM * Math.Pow(0.82, Math.Max(0, order - 1)));
+
+    /// <summary>Pipe-model radii, bottom of the tree last: children first, then taper law floored by the sum of child cross sections.</summary>
+    public void ComputeRadii(Ax a)
+    {
+        foreach (var s in a.Sites) if (s.Kind == SiteKind.Branch && s.Child != null) ComputeRadii(s.Child);
+        int n = a.NSeg;
+        a.RTip = TipRadius(a.Order);
+        double c = T.StemBaseRadiusM / Math.Pow(Math.Max(0.2, MainLen), 1.25);
+        a.RBase = Math.Max(a.RTip * 1.6, c * Math.Pow(a.Length, 1.25)) * a.BaseRadiusMul;
+        a.NodeR = new double[n + 1];
+        a.LoadLen = new double[n + 1];
+        var childArea = new double[n];
+        var childLen = new double[n];
+        foreach (var s in a.Sites)
+        {
+            if (s.Kind != SiteKind.Branch || s.Child == null) continue;
+            childArea[s.Seg] += s.Child.NodeR[0] * s.Child.NodeR[0];
+            childLen[s.Seg] += s.Child.Length * 0.45 + s.Child.LoadLen[0];
+        }
+        double r2 = a.RTip * a.RTip, load = 0;
+        a.NodeR[n] = a.RTip;
+        for (int k = n - 1; k >= 0; k--)
+        {
+            double sFrac = k == 0 ? 0.0 : a.CumFrac[k - 1];
+            double taper = a.RTip + (a.RBase - a.RTip) * Math.Pow(1.0 - sFrac, T.TaperExp);
+            r2 += childArea[k];
+            double r = Math.Max(Math.Sqrt(r2), taper);
+            // keep the chain monotone and let the taper dominate where the pipe sum is small
+            r = Math.Max(r, a.NodeR[k + 1] * 1.002);
+            r2 = r * r;
+            a.NodeR[k] = r;
+            load += childLen[k];
+            a.LoadLen[k] = load;
+        }
+        a.LoadLen[n] = 0;
+        if (a.Root)
+        {
+            for (int k = 0; k <= n; k++)
+            {
+                double sFrac = k == 0 ? 0 : a.CumFrac[k - 1];
+                a.NodeR[k] *= 1.0 + T.BaseFlare * Math.Exp(-sFrac / 0.08);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ geometry helpers
+
+    public static Vec3 DirFrom(double el, double az) => new(Math.Cos(el) * Math.Cos(az), Math.Sin(el), Math.Cos(el) * Math.Sin(az));
+
+    /// <summary>Unit vector perpendicular to tangent t at azimuth az; az = 0 is the "upward-most" radial.</summary>
+    public static Vec3 Radial(Vec3 t, double az)
+    {
+        var rf = Math.Abs(t.Y) < 0.92 ? Vec3.Up : Vec3.Right;
+        var u = PlantMath.SafeNormal(rf - t * rf.Dot(t), PlantMath.Perpendicular(t));
+        var v = t.Cross(u);
+        return u * Math.Cos(az) + v * Math.Sin(az);
+    }
+
+    public void Walk(Ax a, Vec3 p0, Vec3 d0, Vec3[] pos, Vec3[] dir)
+    {
+        int n = a.NSeg;
+        pos[0] = p0;
+        d0 = PlantMath.SafeNormal(d0, Vec3.Up);
+        dir[0] = d0;
+        double el = Math.Asin(Math.Clamp(d0.Y, -1, 1)), az = Math.Atan2(d0.Z, d0.X);
+        double wEl = 0, wAz = 0;
+        var sp = a.Spec;
+        for (int k = 0; k < n; k++)
+        {
+            double L = a.SegLen[k];
+            double s1 = a.CumFrac[k];
+            double dl = L / a.Length;
+            el += (sp.SetPoint - el) * Math.Min(0.9, sp.SetRate * dl * 3.0);
+            if (s1 > sp.PhotoFrom)
+                el += sp.PhotoK * ((s1 - sp.PhotoFrom) / (1.0 - sp.PhotoFrom)) * dl * 3.0;
+            double r = Math.Max(a.NodeR[k + 1], 0.0006);
+            double lrem = a.Length * (1.0 - s1) + 0.5 * L + a.LoadLen[k + 1];
+            double sag = sp.Sag * a.SagMul * 1.5e-5 * lrem * L / (r * r) * Math.Max(0, Math.Cos(el)) * (1.0 + a.LeafLoad);
+            el -= Math.Min(sag, 0.14);
+            uint salt = (uint)(600 + 4 * k);
+            wEl = 0.55 * wEl + 0.45 * Gauss(a.Id, salt);
+            wAz = 0.55 * wAz + 0.45 * Gauss(a.Id, salt + 2);
+            el += wEl * sp.Wander;
+            az += wAz * sp.Wander * 1.4 + sp.Twist * dl;
+            el = Math.Clamp(el, -1.4, 1.52);
+            if (pos[k].Y < 0.05 && !a.Root) el = Math.Max(el, 0.1);      // do not dive into the ground
+            dir[k + 1] = DirFrom(el, az);
+            pos[k + 1] = pos[k] + PlantMath.SafeNormal(dir[k] + dir[k + 1], dir[k]) * (L * 0.996);
+        }
+    }
+
+    // ------------------------------------------------------------------ populate (branching, thorns, leaves)
+
+    public static double SizeGradient(double s) => 0.42 + 0.58 * Math.Exp(-Math.Pow((s - 0.42) / 0.38, 2));
+
+    private double PhylloStep(int node) => T.Phyllotaxy switch
+    {
+        Phyllotaxy.Alternate137 => Rad(137.508),
+        Phyllotaxy.Distichous => Math.PI,
+        Phyllotaxy.Decussate => Math.PI / 2,
+        _ => Math.PI / Math.Max(2, T.WhorlN),
+    };
+
+    private int LeavesPerNode => T.Phyllotaxy switch { Phyllotaxy.Decussate => 2, Phyllotaxy.Whorled => Math.Max(2, T.WhorlN), _ => 1 };
+
+    /// <summary>Adds branch, thorn and leaf sites to an axis (recursively creating laterals).</summary>
+    public void Populate(Ax a, double thornRate = 0)
+    {
+        double azNode = U(a.Id, 1) * Math.Tau;
+        int perNode = LeavesPerNode;
+        bool canGrow = a.Order < T.BranchOrders;
+        double thornCarry = 0;
+        for (int k = 0; k < a.NSeg; k++)
+        {
+            double s = a.CumFrac[k] - 0.5 * a.SegLen[k] / a.Length;
+            azNode += PhylloStep(k);
+            double tl = 0.15 + 0.7 * U(a.Id, (uint)(1000 + k));   // local attachment parameter within the segment
+
+            if (canGrow && a.CanBranch && s >= a.BranchStart && s <= a.BranchEnd)
+            {
+                double p = MathD.Lerp(T.BranchProbBase, T.BranchProbTip, s) * a.BranchProbMul;
+                for (int slot = 0; slot < a.BranchesPerNode; slot++)
+                {
+                    double u = U(a.Id, (uint)(2000 + k * 4 + slot));
+                    if (u >= p) continue;
+                    double az = azNode + slot * Math.PI + Ur(a.Id, (uint)(3000 + k), -0.4, 0.4);
+                    var ch = MakeLateral(a, k, s, az, slot);
+                    if (ch == null) continue;
+                    a.Sites.Add(new Site { Seg = k, T = tl, Az = az, S = s, Kind = SiteKind.Branch, Child = ch, Slot = slot });
+                }
+            }
+
+            if (thornRate > 0 && a.Order <= 2 && ThornBudget > 0)
+            {
+                thornCarry += thornRate * a.SegLen[k] * (a.Order <= 1 ? 1.0 : 0.3);
+                while (thornCarry >= 1.0 && ThornBudget > 0)
+                {
+                    thornCarry -= 1.0;
+                    ThornBudget--;
+                    a.Sites.Add(new Site { Seg = k, T = tl, Az = azNode + Ur(a.Id, (uint)(4000 + k), 0, Math.Tau), S = s, Kind = SiteKind.Thorn });
+                }
+            }
+
+            if (a.LeafBearing && T.LeafDensity > 0)
+            {
+                double dens = T.LeafDensity * Density * (1.0 - T.LeafClusterTips * 0.7 + T.LeafClusterTips * 1.4 * s);
+                bool last = k == a.NSeg - 1;
+                for (int i = 0; i < perNode; i++)
+                {
+                    double u = U(a.Id, (uint)(5000 + k * 8 + i));
+                    if (u >= dens && !last) continue;
+                    double az = azNode + i * Math.Tau / perNode;
+                    a.Sites.Add(new Site { Seg = k, T = tl, Az = az, S = s, Kind = SiteKind.Leaf, Slot = i });
+                }
+            }
+        }
+    }
+
+    private Ax? MakeLateral(Ax p, int seg, double s, double az, int slot)
+    {
+        double len;
+        ulong id = Child(p.Id, seg, slot);
+        if (p.LateralLength != null) len = p.LateralLength(s) * Ur(id, 1, 0.75, 1.25);
+        else
+        {
+            double prof = Math.Pow(Math.Max(0.0, 1.0 - s), 0.8) * 0.85 + 0.15;
+            len = p.Length * T.LateralLengthFactor * (1.0 - 0.45 * T.ApicalDominance) * prof * Ur(id, 1, 0.65, 1.35);
+        }
+        if (U(id, 2) < 0.07) len *= 0.35;            // an aborted / suppressed branch
+        if (len < 0.05 * Math.Max(0.5, IndScale)) return null;
+        int order = p.Order + 1;
+        double internode = T.InternodeM * (order >= 2 ? 0.6 : 0.9);
+        var tissue = order <= 1 ? (T.BarkTissue ? Tissue.Bark : Tissue.Wood) : order == 2 ? Tissue.Wood : Tissue.Green;
+        double time = order == 1 ? 0.40 : order == 2 ? 0.30 : 0.22;
+        var ch = NewAxis(id, order, len, internode, tissue, time, p, seg);
+        ch.LeafBearing = order >= T.LeafMinOrder;
+        ch.LeafLoad = ch.LeafBearing ? 0.6 : 0.0;
+        ch.Lag = 0.02 + 0.03 * U(id, 3);
+        Populate(ch);
+        return ch;
+    }
+
+    // ------------------------------------------------------------------ emission
+
+    /// <summary>Emits an axis chain and everything attached to it. d0 is the world start direction.</summary>
+    public void Emit(Ax a, int parentGen, Vec3 d0, double emergeBase)
+    {
+        int n = a.NSeg;
+        var pos = new Vec3[n + 1];
+        var dir = new Vec3[n + 1];
+        Vec3 p0 = parentGen < 0 ? a.RootPoint : B.SurfacePoint(parentGen, a.AttachT, d0);
+        Walk(a, p0, d0, pos, dir);
+        a.Gen = new int[n];
+        double dur = a.Time / n;
+        double fac = 1.0;
+        if (parentGen >= 0)
+        {
+            double rp = B.RadiusAt(parentGen, a.AttachT);
+            if (a.NodeR[0] > 0.84 * rp) fac = 0.84 * rp / a.NodeR[0];
+        }
+        ushort order = (ushort)a.Order;
+        for (int k = 0; k < n; k++)
+        {
+            int par = k == 0 ? parentGen : a.Gen[k - 1];
+            double eb = k == 0 ? emergeBase : 0;
+            a.Gen[k] = B.AddCurve(par, k == 0 ? a.AttachT : 1.0, k > 0, pos[k + 1], false, dir[k], dir[k + 1], a.SegLen[k],
+                a.NodeR[k] * fac, a.NodeR[k + 1] * fac, order, a.Tissue, eb, dur, OrganFlags.None, a.Type, a.Coil);
+        }
+        foreach (var st in a.Sites) EmitSite(a, st, dir);
+    }
+
+    private void EmitSite(Ax a, Site st, Vec3[] dir)
+    {
+        int gen = a.Gen[st.Seg];
+        var (segEm, segDur) = B.Timing(gen);
+        double eBase = segEm + segDur * 0.5;
+        var tan = B.TangentAt(gen, st.T);
+        switch (st.Kind)
+        {
+            case SiteKind.Branch:
+            {
+                var ch = st.Child!;
+                double alpha = Rad(Math.Clamp(T.BranchAngleDeg + Gauss(ch.Id, 5) * T.BranchAngleSdDeg, 18, 100));
+                var rad = Radial(tan, st.Az);
+                var d = tan * Math.Cos(alpha) + rad * Math.Sin(alpha);
+                d = PlantMath.SafeNormal(d + Vec3.Up * 0.12, d);
+                if (ch.StartDir.HasValue) d = ch.StartDir.Value;
+                ch.AttachT = st.T;
+                Emit(ch, gen, d, eBase + ch.Lag);
+                break;
+            }
+            case SiteKind.Leaf:
+                EmitLeaf(a, st, gen, tan, eBase);
+                break;
+            case SiteKind.Thorn:
+            {
+                var rad = Radial(tan, st.Az);
+                var d = PlantMath.SafeNormal(rad * 0.85 + tan * 0.15 + Vec3.Up * 0.1, rad);
+                double len = Ur(a.Id, (uint)(7000 + st.Seg), 0.012, 0.022);
+                B.AddAxis(gen, st.T, d, len, Vec3.Down * 0.9 - d * 0.3, 0.0030, 0.00025, (ushort)(a.Order + 3), Tissue.Bark,
+                    eBase + 0.03, 0.10);
+                break;
+            }
+            case SiteKind.Infl:
+                EmitInflorescence(a, st, gen, tan, eBase);
+                break;
+            case SiteKind.PinnaPair:
+                EmitPinnaPair(a, st, gen, tan, segEm + segDur + 0.004);
+                break;
+        }
+    }
+
+    // ------------------------------------------------------------------ fern pinnae
+
+    public double FrondLength;
+    public int PinnaSegments;
+
+    private void EmitPinnaPair(Ax a, Site st, int gen, Vec3 tan, double eBase)
+    {
+        ulong id = Child(a.Id, st.Seg, 300);
+        double s = st.S;
+        double sp = Math.Clamp((s - 0.1) / 0.9, 0, 1);
+        double prof = Math.Max(0.22, Math.Pow(Math.Sin(Math.PI * Math.Pow(sp, 0.75)), 0.85));
+        double plen = FrondLength * 0.19 * prof * Ur(id, 1, 0.88, 1.12) * LeafLinear;
+        int young = s > 0.82 ? 1 : 0;
+        var side0 = PlantMath.SafeNormal(Vec3.Up.Cross(tan), PlantMath.Perpendicular(tan));
+        if (st.A > 0.5)
+        {
+            // terminal pinna continuing the rachis
+            int shT = LeafletShapes[1 + 3 * young];
+            B.AddFlat(gen, 0.985, PlantMath.SafeNormal(tan + Vec3.Up * 0.1, tan), plen * 0.9, plen * 0.45 * T.LeafAspect, 0.0004,
+                OrganType.Leaflet, (ushort)shT, (ushort)(a.Order + 2), eBase, 0.12);
+            return;
+        }
+        for (int sg = -1; sg <= 1; sg += 2)
+        {
+            var d = PlantMath.SafeNormal(tan * 0.55 + side0 * (0.85 * sg) + Vec3.Up * 0.14, side0);
+            int v = (int)(U(id, (uint)(10 + (sg + 1) / 2)) * 3) % 3;
+            double pl = plen * Ur(id, (uint)(14 + (sg + 1) / 2), 0.93, 1.07);
+            B.AddFlat(gen, st.T, d, pl, pl * 0.5 * T.LeafAspect, 0.0004, OrganType.Leaflet, LeafletShapes[v + 3 * young],
+                (ushort)(a.Order + 2), eBase + 0.02 * U(id, 20), 0.13, OrganFlags.None, Ur(id, (uint)(22 + (sg + 1) / 2), -0.25, 0.25));
+        }
+    }
+
+    // ------------------------------------------------------------------ blades (grass, sedge, strap)
+
+    /// <summary>One long arched blade on parent axis gen. dir is the initial direction; hint orients the adaxial face.</summary>
+    public void EmitBlade(int parentGen, double t, double az, double elev, double len, double width, ushort shape,
+        ushort order, double emerge, double dur, double roll)
+    {
+        var outH = PlantMath.Horizontal(az);
+        var dir = outH * Math.Cos(elev) + Vec3.Up * Math.Sin(elev);
+        var hint = PlantMath.SafeNormal(Vec3.Up * 0.5 - outH * 0.5, Vec3.Up);
+        B.AddFlat(parentGen, t, dir, len, width * 0.5, 0.0003, OrganType.Leaf, shape, order, emerge, dur, OrganFlags.None, roll, hint);
+    }
+
+    // ------------------------------------------------------------------ leaves
+
+    public void EmitLeaf(Ax a, Site st, int gen, Vec3 tan, double eBase)
+    {
+        ulong id = Child(a.Id, st.Seg, 100 + st.Slot);
+        double g = SizeGradient(st.S);
+        double lin = LeafLinear;
+        double sv = Ur(id, 1, 0.82, 1.18);
+        var rad = Radial(tan, st.Az);
+        int young = st.S > 0.8 ? 1 : 0;
+        int variant = (int)(U(id, 2) * 3) % 3;
+        LeafCount++;
+        if (T.Leaf == LeafArchetype.Pinnate)
+        {
+            EmitCompound(a, st, gen, tan, rad, g * sv, id, eBase, young);
+            return;
+        }
+        double len = T.LeafLengthM * lin * g * sv * IndScale;
+        double petLen = Math.Max(0.004, T.PetioleM * Math.Sqrt(lin) * (0.55 + 0.9 * g) * Ur(id, 3, 0.8, 1.2));
+        double a1 = Rad(Ur(id, 4, 42, 70));
+        var pd = tan * Math.Cos(a1) + rad * Math.Sin(a1);
+        pd = PlantMath.SafeNormal(pd + Vec3.Up * 0.35, pd);
+        double rP0 = Math.Clamp(0.0007 + 0.016 * petLen, 0.0006, 0.0028);
+        var bend = Vec3.Down * Math.Min(1.0, 0.15 + T.LeafDroop * 2.2 * petLen / 0.05 * 0.25);
+        int ped = B.AddAxis(gen, st.T, pd, petLen, bend, rP0, rP0 * 0.6, (ushort)(a.Order + 1), Tissue.Green,
+            eBase + 0.01 * U(id, 5), 0.07, OrganFlags.None, OrganType.Petiole);
+        var outH = new Vec3(rad.X + pd.X, 0, rad.Z + pd.Z);
+        outH = PlantMath.SafeNormal(outH, PlantMath.Horizontal(st.Az));
+        double elev = Rad(T.LeafElevDeg + Ur(id, 6, -14, 14)) - T.LeafDroop * Math.Clamp(len / 0.12, 0.3, 2.0) * Rad(24);
+        var dirL = outH * Math.Cos(elev) + Vec3.Up * Math.Sin(elev);
+        B.AddFlat(ped, 1.0, dirL, len, len * 0.5 * T.LeafAspect, 0.0004, OrganType.Leaf, LeafShapes[variant + 3 * young],
+            (ushort)(a.Order + 2), eBase + 0.05 + 0.02 * U(id, 7), 0.13, OrganFlags.None, Ur(id, 8, -0.3, 0.3));
+    }
+
+    private void EmitCompound(Ax a, Site st, int gen, Vec3 tan, Vec3 rad, double gs, ulong id, double eBase, int young)
+    {
+        double total = T.LeafLengthM * LeafLinear * gs * IndScale;
+        double a1 = Rad(Ur(id, 4, 40, 65));
+        var pd = tan * Math.Cos(a1) + rad * Math.Sin(a1);
+        pd = PlantMath.SafeNormal(pd + Vec3.Up * 0.45, pd);
+        double rP0 = Math.Clamp(0.0009 + 0.010 * total, 0.0008, 0.0030);
+        var bend = Vec3.Down * Math.Min(1.4, 0.35 + T.LeafDroop * 2.0 * total / 0.2 * 0.5);
+        int rach = B.AddAxis(gen, st.T, pd, total, bend, rP0, rP0 * 0.35, (ushort)(a.Order + 1), Tissue.Green,
+            eBase + 0.01 * U(id, 5), 0.10, OrganFlags.None, OrganType.Petiole);
+        int pairs = Math.Max(1, (T.Leaflets - 1) / 2);
+        var side0 = PlantMath.SafeNormal(Vec3.Up.Cross(pd), rad);
+        for (int i = 0; i < pairs; i++)
+        {
+            double f = pairs == 1 ? 0.6 : i / (double)(pairs - 1);
+            double tt = 0.28 + 0.64 * f;
+            double prof = 0.62 + 0.38 * Math.Sin(Math.PI * (i + 1.0) / (pairs + 1.0));
+            double lf = total * 0.46 * prof * Ur(id, (uint)(20 + i), 0.88, 1.12);
+            var tn = B.TangentAt(rach, tt);
+            var side = PlantMath.SafeNormal(Vec3.Up.Cross(tn), side0);
+            ushort sh = LeafShapes[((int)(U(id, (uint)(40 + i)) * 3) % 3) + 3 * (tt > 0.85 ? young : 0)];
+            for (int sg = -1; sg <= 1; sg += 2)
+            {
+                var d = PlantMath.SafeNormal(tn * 0.5 + side * (0.85 * sg) + Vec3.Up * 0.25, side);
+                B.AddFlat(rach, tt, d, lf, lf * 0.5 * T.LeafAspect, 0.0004, OrganType.Leaflet, sh, (ushort)(a.Order + 2),
+                    eBase + 0.06 + 0.1 * f, 0.12, OrganFlags.None, Ur(id, (uint)(60 + i * 2 + (sg + 1) / 2), -0.25, 0.25));
+            }
+        }
+        // terminal leaflet
+        double lt = total * 0.5;
+        var te = B.EndDir(rach);
+        B.AddFlat(rach, 1.0, PlantMath.SafeNormal(te + Vec3.Up * 0.2, te), lt, lt * 0.5 * T.LeafAspect, 0.0004,
+            OrganType.Leaflet, LeafShapes[1 + 3 * young], (ushort)(a.Order + 2), eBase + 0.15, 0.12);
+    }
+
+    // ------------------------------------------------------------------ inflorescences
+
+    public static int FlowersPer(InflorescenceType t) => t switch
+    {
+        InflorescenceType.Solitary => 1,
+        InflorescenceType.Raceme => 10,
+        InflorescenceType.PendantRaceme => 7,
+        InflorescenceType.PendantCluster => 5,
+        InflorescenceType.Umbel => 11,
+        InflorescenceType.Spike => 14,
+        InflorescenceType.Catkin => 2,
+        _ => 0,
+    };
+
+    /// <summary>Picks host segments on flower-host axes so that roughly FlowerCount flowers result.</summary>
+    public void PlaceInflorescences(Func<Ax, bool>? hostFilter = null)
+    {
+        if (T.Inflorescence == InflorescenceType.None) return;
+        var hosts = new List<(Ax A, int Seg)>();
+        foreach (var a in All)
+        {
+            if (!a.FlowerHost || a.NSeg < 1) continue;
+            if (hostFilter != null && !hostFilter(a)) continue;
+            hosts.Add((a, a.NSeg - 1));
+            if (a.NSeg >= 4 && T.Inflorescence is InflorescenceType.PendantCluster or InflorescenceType.Catkin or InflorescenceType.Solitary)
+                hosts.Add((a, a.NSeg / 2));
+        }
+        int per = FlowersPer(T.Inflorescence);
+        int want = Math.Clamp((int)Math.Round(T.FlowerCount / (double)per), 1, Math.Max(1, hosts.Count));
+        // deterministic selection: rank by hash
+        var order = new List<(double Key, int Idx)>();
+        for (int i = 0; i < hosts.Count; i++) order.Add((U(hosts[i].A.Id, (uint)(8000 + hosts[i].Seg)), i));
+        order.Sort((x, y) => x.Key.CompareTo(y.Key));
+        for (int i = 0; i < want && i < order.Count; i++)
+        {
+            var (a, seg) = hosts[order[i].Idx];
+            bool terminal = seg == a.NSeg - 1;
+            a.Sites.Add(new Site
+            {
+                Seg = seg, T = terminal ? 0.92 : 0.5, Az = Ur(a.Id, (uint)(8100 + seg), 0, Math.Tau), S = a.CumFrac[seg],
+                Kind = SiteKind.Infl, A = terminal ? 1 : 0,
+            });
+        }
+    }
+
+    private double FlowerEmerge(ulong id, double eBase) => Math.Max(eBase + 0.1, 0.52 + 0.3 * U(id, 9001));
+
+    public void EmitInflorescence(Ax a, Site st, int gen, Vec3 tan, double eBase)
+    {
+        ulong id = Child(a.Id, st.Seg, 900);
+        var flowerShape = FlowerShapeId;
+        bool pendant = T.Inflorescence is InflorescenceType.PendantRaceme or InflorescenceType.PendantCluster or InflorescenceType.Catkin
+                       || T.Flower is FlowerShape.Bell or FlowerShape.Lantern;
+        bool terminal = st.A > 0.5;
+        var rad = Radial(tan, st.Az);
+        double eF = FlowerEmerge(id, eBase);
+        var flags = T.Emissive ? OrganFlags.Emissive : OrganFlags.None;
+        var fl = T.AsFruit ? OrganType.Fruit : OrganType.Flower;
+        var sh0 = B.ShapeAt(flowerShape);
+        double ltw = Math.Max(0.3, sh0.LengthToWidth);
+        double size = T.FlowerSizeM * IndScale;
+
+        void PlaceFlower(int parent, double t, Vec3 dir, double sz, double e, int k)
+        {
+            sz *= Ur(id, (uint)(9100 + k), 0.85, 1.15);
+            B.AddFlat(parent, t, dir, sz, 0.5 * sz / ltw, 0.0006, fl, flowerShape, (ushort)(a.Order + 4), e, 0.15, flags,
+                Ur(id, (uint)(9200 + k), -0.4, 0.4));
+        }
+
+        switch (T.Inflorescence)
+        {
+            case InflorescenceType.Solitary:
+            {
+                var d = terminal ? PlantMath.SafeNormal(tan + Vec3.Up * 0.2, tan) : PlantMath.SafeNormal(rad * 0.7 + Vec3.Up * 0.5, rad);
+                double len = T.PeduncleM * Ur(id, 1, 0.8, 1.2);
+                var bend = pendant ? Vec3.Down * 1.5 : Vec3.Up * 0.2;
+                int pe = B.AddAxis(gen, st.T, d, len, bend, 0.0012, 0.0009, (ushort)(a.Order + 1), Tissue.Green, eF - 0.05, 0.12);
+                var fd = pendant ? PlantMath.SafeNormal(Vec3.Down * 0.9 + rad * 0.2, Vec3.Down) : PlantMath.SafeNormal(B.EndDir(pe) + Vec3.Up * 0.3, Vec3.Up);
+                PlaceFlower(pe, 1.0, fd, size, eF, 0);
+                break;
+            }
+            case InflorescenceType.Raceme:
+            case InflorescenceType.PendantRaceme:
+            case InflorescenceType.Spike:
+            {
+                int n = Math.Clamp((int)Math.Round(FlowersPer(T.Inflorescence) * Ur(id, 2, 0.8, 1.25)), 3, 22);
+                bool pend = T.Inflorescence == InflorescenceType.PendantRaceme;
+                bool spike = T.Inflorescence == InflorescenceType.Spike;
+                double len = (T.PeduncleM + (spike ? 0.0 : n * 0.012)) * Ur(id, 3, 0.85, 1.2);
+                var d = terminal ? PlantMath.SafeNormal(tan + Vec3.Up * 0.3, tan) : PlantMath.SafeNormal(rad * 0.6 + Vec3.Up * 0.8, rad);
+                var bend = pend ? Vec3.Down * 1.7 : Vec3.Up * 0.1 + rad * 0.25;
+                if (pend) d = PlantMath.SafeNormal(rad * 0.7 + Vec3.Up * 0.5, rad);
+                int rach = B.AddAxis(gen, st.T, d, len, bend, 0.0014, 0.0007, (ushort)(a.Order + 1), Tissue.Green, eF - 0.06, 0.14);
+                double az0 = Ur(id, 4, 0, Math.Tau);
+                for (int i = 0; i < n; i++)
+                {
+                    double f = (i + 0.5) / n;
+                    double tt = 0.18 + 0.82 * f;
+                    double az = az0 + i * Rad(137.5);
+                    var tn = B.TangentAt(rach, tt);
+                    var r2 = Radial(tn, az);
+                    double sz = size * MathD.Lerp(1.0, 0.65, f);
+                    double e = eF + 0.05 * f;
+                    if (spike)
+                    {
+                        var dd = PlantMath.SafeNormal(r2 * 0.8 + tn * 0.45, r2);
+                        PlaceFlower(rach, tt, dd, sz, e, i);
+                    }
+                    else
+                    {
+                        var pdir = pend ? PlantMath.SafeNormal(r2 * 0.5 + Vec3.Down * 0.8, Vec3.Down) : PlantMath.SafeNormal(r2 * 0.9 + Vec3.Up * 0.4, r2);
+                        int pdl = B.AddAxis(rach, tt, pdir, T.PedicelM * Ur(id, (uint)(10 + i), 0.8, 1.2) * MathD.Lerp(1, 0.7, f),
+                            pend ? Vec3.Down * 0.8 : Vec3.Up * 0.1, 0.0008, 0.0006, (ushort)(a.Order + 2), Tissue.Green, e - 0.04, 0.10);
+                        var fd = pend || pendant ? PlantMath.SafeNormal(Vec3.Down * 0.9 + r2 * 0.25, Vec3.Down)
+                                                 : PlantMath.SafeNormal(r2 * 0.6 + Vec3.Up * 0.7, Vec3.Up);
+                        PlaceFlower(pdl, 1.0, fd, sz, e, i);
+                    }
+                }
+                break;
+            }
+            case InflorescenceType.PendantCluster:
+            {
+                int n = Math.Clamp((int)Math.Round(FlowersPer(T.Inflorescence) * Ur(id, 2, 0.7, 1.3)), 3, 8);
+                var d = PlantMath.SafeNormal(rad * 0.9 + Vec3.Up * 0.2, rad);
+                int pe = B.AddAxis(gen, st.T, d, T.PeduncleM * Ur(id, 3, 0.7, 1.2), Vec3.Down * 1.0, 0.0013, 0.0009,
+                    (ushort)(a.Order + 1), Tissue.Green, eF - 0.06, 0.12);
+                for (int i = 0; i < n; i++)
+                {
+                    double az = Ur(id, (uint)(20 + i), 0, Math.Tau);
+                    var pdir = PlantMath.SafeNormal(PlantMath.Horizontal(az) * 0.7 + Vec3.Down * 0.6, Vec3.Down);
+                    double tt = 0.55 + 0.45 * i / Math.Max(1, n - 1);
+                    int pdl = B.AddAxis(pe, tt, pdir, T.PedicelM * Ur(id, (uint)(30 + i), 0.8, 1.25), Vec3.Down * 0.9, 0.0008, 0.0006,
+                        (ushort)(a.Order + 2), Tissue.Green, eF - 0.04 + 0.03 * i / n, 0.10);
+                    var fd = PlantMath.SafeNormal(Vec3.Down * 0.93 + PlantMath.Horizontal(az) * 0.2, Vec3.Down);
+                    PlaceFlower(pdl, 1.0, fd, size, eF + 0.02 * i / n, i);
+                }
+                break;
+            }
+            case InflorescenceType.Umbel:
+            {
+                int n = Math.Clamp((int)Math.Round(FlowersPer(T.Inflorescence) * Ur(id, 2, 0.8, 1.3)), 6, 18);
+                var d = terminal ? PlantMath.SafeNormal(tan + Vec3.Up * 0.4, tan) : PlantMath.SafeNormal(Vec3.Up * 0.9 + rad * 0.3, Vec3.Up);
+                int pe = B.AddAxis(gen, st.T, d, T.PeduncleM * Ur(id, 3, 0.85, 1.2), rad * 0.15, 0.0015, 0.0010,
+                    (ushort)(a.Order + 1), Tissue.Green, eF - 0.07, 0.14);
+                var top = B.EndDir(pe);
+                for (int i = 0; i < n; i++)
+                {
+                    double az = i * Rad(137.5) + Ur(id, 4, 0, 1);
+                    double phi = Rad(Ur(id, (uint)(20 + i), 20, 68));
+                    var ring = Radial(top, az);
+                    var pdir = PlantMath.SafeNormal(top * Math.Cos(phi) + ring * Math.Sin(phi), top);
+                    int pdl = B.AddAxis(pe, 1.0, pdir, T.PedicelM * Ur(id, (uint)(30 + i), 0.8, 1.2), pdir * 0.05 + Vec3.Down * 0.15,
+                        0.0007, 0.0005, (ushort)(a.Order + 2), Tissue.Green, eF - 0.04, 0.10);
+                    PlaceFlower(pdl, 1.0, PlantMath.SafeNormal(pdir + top * 0.3, pdir), size, eF + 0.02, i);
+                }
+                break;
+            }
+            case InflorescenceType.Catkin:
+            {
+                int n = Math.Clamp((int)Math.Round(FlowersPer(T.Inflorescence) * Ur(id, 2, 0.8, 1.6)), 1, 4);
+                for (int i = 0; i < n; i++)
+                {
+                    double az = st.Az + i * 1.9;
+                    var r2 = Radial(tan, az);
+                    var d = PlantMath.SafeNormal(r2 * 0.8 + Vec3.Up * 0.2, r2);
+                    int pe = B.AddAxis(gen, Math.Clamp(st.T + 0.12 * i, 0.1, 0.95), d, T.PedicelM * Ur(id, (uint)(10 + i), 0.8, 1.3), Vec3.Down * 1.2,
+                        0.0010, 0.0008, (ushort)(a.Order + 1), Tissue.Green, eF - 0.05, 0.10);
+                    PlaceFlower(pe, 1.0, PlantMath.SafeNormal(Vec3.Down * 0.95 + r2 * 0.15, Vec3.Down), size * Ur(id, (uint)(40 + i), 0.85, 1.2), eF, i);
+                }
+                break;
+            }
+        }
+    }
+}

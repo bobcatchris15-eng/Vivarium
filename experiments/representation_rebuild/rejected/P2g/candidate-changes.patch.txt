@@ -1,0 +1,7 @@
+Candidate changes relative to source snapshot (the source snapshot retains the recovered implementation plus leaf-cap removal and demo spacing):
+
+* FormEngine.Populate: for MultiStemShrub only, emit six leaf subnodes per structural segment. The original per-node loop became nested over sub=0..5, using slot=sub*perNode+i, U(Child(a.Id,k,slot),5000), azNode+sub*PhylloStep(sub)+i*Tau/perNode, attachment (sub+0.5)/6, and the same density threshold. Other forms retained the original single-site loop.
+* FormGenerator.Design: do not apply areaScale calibration to FernRosette or MultiStemShrub.
+* PlantCompiler.BuildLamina: use L=10/8/6 at details 0/1/2, and W=4 for palmate detail 0, otherwise 2.
+
+These changes are intentionally described separately because they were rejected after the candidate screenshots. They are not applied to the restored production code.

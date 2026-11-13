@@ -1,0 +1,467 @@
+using System;
+using System.Collections.Generic;
+using Vivarium.Sim.Core;
+
+namespace Vivarium.Sim.Repr.Plant.Forms;
+
+/// <summary>
+/// Maps a species (its visual Shape string plus size and colour values read by the game) to a growth form and a trait
+/// preset. The sim side never reads files: the caller passes the values in. Per-species variation (leaf size and
+/// aspect, branch angle, internode, sag, wander, phyllotaxy tie-break, colour tint) is derived deterministically from
+/// the species id hash inside the preset's plausible ranges.
+///
+/// Shape -> form mapping (Shape = visual.shape of game/content/flora/*.json). Implemented forms only; anything else
+/// returns false and the legacy mesh stays.
+///   MultiStemShrub : shrub_glowbriar shrub_shadebell shrub_embercrown shrub_lanternbrush greywatch hookthicket_brake
+///                    miremyrtle nutglade silverfelt thornmantle microcanopy_splitcrown
+///   SingleTrunkTree: banksorrow fenforge hollowcrown_tree mirespire moonbark shiverleaf witchberry microcanopy_lacemantle
+///   FernRosette    : fern (moonfern, veilfern) sceptrefern swanfrond emberbracken mirrorstrap_fern
+///   Forb           : blackneedle_thistle hallowsting heddlelace widowspire marrowbloom_stem fenfoam butterglint
+///   Graminoid      : tussock pampas quillsedge cloudtuft bannerreed coalspike_cattail veilblade_curtain ashwire
+///                    duskbristle reed (glassrush lanternsedge ringreed) sootband ribbonweed
+/// Not implemented (legacy stays): carpet, cushion, crust, foliose, fruticose, capitula and the other mosses/lichens,
+/// all fungi (mushroom_cluster, bracket, ...), creeping mats (creeper, roundleaf, trifoliate, iceplant, sundew_mat,
+/// pairedleaf, floatleaf, glasslily_pad, milfoil, submerged_whorl), climbers (vine_*, trumpetbind, bitterbine,
+/// shadewrap), rosettes (herb, succulent, tankbloom_bromeliad, pitcher_rosette, snaptrap_rosette, starbulb_umbel,
+/// burlmantle, cragset, ...), kinkcane_brake, microcanopy_cragparasol/rainshield/vaultfern, paddlerib, barbarrow,
+/// burrflag, deepquill, mirepocket, starveil, mistviolet, marshkettle, hushclover, etc.
+/// </summary>
+public static class SpeciesFormCatalog
+{
+    private static readonly Dictionary<string, GrowthForm> FormOfShape = new()
+    {
+        ["shrub_glowbriar"] = GrowthForm.MultiStemShrub, ["shrub_shadebell"] = GrowthForm.MultiStemShrub,
+        ["shrub_embercrown"] = GrowthForm.MultiStemShrub, ["shrub_lanternbrush"] = GrowthForm.MultiStemShrub,
+        ["greywatch"] = GrowthForm.MultiStemShrub, ["hookthicket_brake"] = GrowthForm.MultiStemShrub,
+        ["miremyrtle"] = GrowthForm.MultiStemShrub, ["nutglade"] = GrowthForm.MultiStemShrub,
+        ["silverfelt"] = GrowthForm.MultiStemShrub, ["thornmantle"] = GrowthForm.MultiStemShrub,
+        ["microcanopy_splitcrown"] = GrowthForm.MultiStemShrub,
+        ["banksorrow"] = GrowthForm.SingleTrunkTree, ["fenforge"] = GrowthForm.SingleTrunkTree,
+        ["hollowcrown_tree"] = GrowthForm.SingleTrunkTree, ["mirespire"] = GrowthForm.SingleTrunkTree,
+        ["moonbark"] = GrowthForm.SingleTrunkTree, ["shiverleaf"] = GrowthForm.SingleTrunkTree,
+        ["witchberry"] = GrowthForm.SingleTrunkTree, ["microcanopy_lacemantle"] = GrowthForm.SingleTrunkTree,
+        ["fern"] = GrowthForm.FernRosette, ["sceptrefern"] = GrowthForm.FernRosette, ["swanfrond"] = GrowthForm.FernRosette,
+        ["emberbracken"] = GrowthForm.FernRosette, ["mirrorstrap_fern"] = GrowthForm.FernRosette,
+        ["blackneedle_thistle"] = GrowthForm.Forb, ["hallowsting"] = GrowthForm.Forb, ["heddlelace"] = GrowthForm.Forb,
+        ["widowspire"] = GrowthForm.Forb, ["marrowbloom_stem"] = GrowthForm.Forb, ["fenfoam"] = GrowthForm.Forb,
+        ["butterglint"] = GrowthForm.Forb,
+        ["tussock"] = GrowthForm.Graminoid, ["pampas"] = GrowthForm.Graminoid, ["quillsedge"] = GrowthForm.Graminoid,
+        ["cloudtuft"] = GrowthForm.Graminoid, ["bannerreed"] = GrowthForm.Graminoid, ["coalspike_cattail"] = GrowthForm.Graminoid,
+        ["veilblade_curtain"] = GrowthForm.Graminoid, ["ashwire"] = GrowthForm.Graminoid, ["duskbristle"] = GrowthForm.Graminoid,
+        ["reed"] = GrowthForm.Graminoid, ["sootband"] = GrowthForm.Graminoid, ["ribbonweed"] = GrowthForm.Graminoid,
+    };
+
+    /// <summary>Shape strings handled by this catalog.</summary>
+    public static IReadOnlyCollection<string> MappedShapes => FormOfShape.Keys;
+
+    public static bool TryGetForm(string shape, out GrowthForm form) => FormOfShape.TryGetValue(shape, out form);
+
+    private static ulong IdHash(string id)
+    {
+        ulong h = 1469598103934665603UL;
+        foreach (char ch in id) h = (h ^ ch) * 1099511628211UL;
+        return h;
+    }
+
+    /// <param name="colour">json visual.color (sRGB 0..1)</param>
+    /// <param name="colour2">json visual.color2 (sRGB 0..1)</param>
+    /// <param name="glow">json bioluminescenceColor, or null / black if the species does not glow</param>
+    public static bool TryGetTraits(string speciesId, string shape, double heightM, double radiusM, double[] colour, double[] colour2,
+        double[]? glow, out FormTraits traits)
+    {
+        traits = null!;
+        if (!FormOfShape.TryGetValue(shape, out var form)) return false;
+        var t = Preset(speciesId, shape, form);
+        ulong h = IdHash(speciesId);
+        double r(uint salt) => ReprId.Unit(h, salt);
+        double v(uint salt, double spread) => 1.0 + (r(salt) * 2 - 1) * spread;
+
+        var leafAd = PlantShapes.Srgb(colour[0], colour[1], colour[2]);
+        var accent = PlantShapes.Srgb(colour2[0], colour2[1], colour2[2]);
+        bool accentFlower = shape is "thornmantle" or "widowspire" or "heddlelace" or "bannerreed" or "tussock" or "ashwire";
+        bool accentFruit = shape is "witchberry";
+        // color2 is the lighter foliage (underside) for most species, but the flower/fruit/straw accent for a few
+        var leafAb = accentFlower || accentFruit ? FormShapes.Lerp(leafAd, PlantShapes.Srgb(0.62, 0.78, 0.5), 0.35) : accent;
+        bool glowing = glow != null && (glow[0] + glow[1] + glow[2]) > 0.05;
+        t = t with
+        {
+            HeightM = Math.Max(0.03, heightM),
+            CrownRadiusM = Math.Max(0.03, radiusM),
+            LeafAdaxial = leafAd,
+            LeafAbaxial = leafAb,
+            LeafYoung = FormShapes.Lerp(leafAb, PlantShapes.Srgb(0.62, 0.78, 0.38), 0.4),
+            BranchAngleDeg = t.BranchAngleDeg * v(1, 0.12),
+            InternodeM = t.InternodeM * v(2, 0.15),
+            LeafLengthM = t.LeafLengthM * v(3, 0.10),
+            LeafAspect = Math.Clamp(t.LeafAspect * v(4, 0.10), 0.03, 1.1),
+            Sag = t.Sag * v(5, 0.15),
+            WanderDeg = t.WanderDeg * v(6, 0.2),
+            LeafElevDeg = t.LeafElevDeg + (r(7) * 2 - 1) * 6,
+            LeafCurl = t.LeafCurl * v(8, 0.15),
+            ColourVariance = 0.04 + 0.06 * r(9),
+            Emissive = t.Emissive || glowing && t.Inflorescence != InflorescenceType.None,
+        };
+        if (accentFlower) t = t with { FlowerColour = accent, FlowerColour2 = accent * 0.7 };
+        if (accentFruit) t = t with { FruitColour = accent, FlowerColour = accent };
+        if (glowing && t.Inflorescence != InflorescenceType.None)
+        {
+            var g = PlantShapes.Srgb(glow![0], glow[1], glow[2]);
+            t = t with { FlowerColour = g, FlowerColour2 = leafAb * 0.9 };
+        }
+        if (t.Phyllotaxy is Phyllotaxy.Alternate137 or Phyllotaxy.Distichous && r(10) < 0.25 && form != GrowthForm.FernRosette)
+            t = t with { Phyllotaxy = t.Phyllotaxy == Phyllotaxy.Alternate137 ? Phyllotaxy.Distichous : Phyllotaxy.Alternate137 };
+        if (form == GrowthForm.MultiStemShrub || form == GrowthForm.Forb)
+            t = t with { StemMax = Math.Max(t.StemMin, t.StemMax + (r(11) < 0.5 ? 0 : 1)) };
+        traits = t;
+        return true;
+    }
+
+    public static IPlantGenerator CreateGenerator(string speciesId, FormTraits traits) => traits.Form switch
+    {
+        GrowthForm.MultiStemShrub => new MultiStemShrubGenerator(speciesId, traits),
+        GrowthForm.SingleTrunkTree => new SingleTrunkTreeGenerator(speciesId, traits),
+        GrowthForm.FernRosette => new FernRosetteGenerator(speciesId, traits),
+        GrowthForm.Forb => new ForbGenerator(speciesId, traits),
+        GrowthForm.Graminoid => new GraminoidGenerator(speciesId, traits),
+        _ => throw new NotSupportedException($"growth form {traits.Form} is not implemented"),
+    };
+
+    // ------------------------------------------------------------------ presets
+
+    private static Vec3 S(double r, double g, double b) => PlantShapes.Srgb(r, g, b);
+
+    private static FormTraits Preset(string id, string shape, GrowthForm form) => form switch
+    {
+        GrowthForm.MultiStemShrub => Shrub(id, shape),
+        GrowthForm.SingleTrunkTree => Tree(id, shape),
+        GrowthForm.FernRosette => Fern(id, shape),
+        GrowthForm.Forb => Forb(id, shape),
+        _ => Grass(id, shape),
+    };
+
+    private static FormTraits Shrub(string id, string shape)
+    {
+        var b = new FormTraits
+        {
+            Form = GrowthForm.MultiStemShrub, StemMin = 4, StemMax = 6, BranchOrders = 3, BranchAngleDeg = 50, BranchAngleSdDeg = 12,
+            InternodeM = 0.09, GravSetPointDeg = new double[] { 80, 38, 28, 22 }, GravRate = 0.3, PhotoK = 0.12, Sag = 1.0,
+            WanderDeg = 7, LeaderElevDeg = 64, StemBaseRadiusM = 0.0085, TipRadiusM = 0.0012, LeafMinOrder = 2,
+            LeafAreaIndex = 2.4, LeafDensity = 0.85, LeafClusterTips = 0.45, BranchProbBase = 0.12, BranchProbTip = 0.5,
+            LateralLengthFactor = 0.36, ApicalDominance = 0.35,
+        };
+        switch (shape)
+        {
+            case "shrub_glowbriar":
+                return b with
+                {
+                    StemMin = 4, StemMax = 6, LeaderElevDeg = 62, Sag = 1.15, ThornsPerM = 16, Phyllotaxy = Phyllotaxy.Decussate,
+                    Leaf = LeafArchetype.Lanceolate, LeafLengthM = 0.10, LeafAspect = 0.34, PetioleM = 0.018, LeafCurl = 0.3,
+                    LeafAreaIndex = 2.5, BarkTissue = true,
+                    Inflorescence = InflorescenceType.PendantCluster, Flower = FlowerShape.Lantern, FlowerCount = 24, FlowerSizeM = 0.036,
+                    PeduncleM = 0.05, PedicelM = 0.03, Emissive = true,
+                    FlowerColour = S(0.36, 0.9, 0.66), FlowerColour2 = S(0.2, 0.6, 0.5),
+                };
+            case "shrub_shadebell":
+                return b with
+                {
+                    StemMin = 3, StemMax = 5, LeaderElevDeg = 76, Sag = 0.55, InternodeM = 0.12, Phyllotaxy = Phyllotaxy.Alternate137,
+                    BranchAngleDeg = 55, LateralLengthFactor = 0.32,
+                    Leaf = LeafArchetype.Cordate, LeafLengthM = 0.17, LeafAspect = 0.78, PetioleM = 0.07, LeafDroop = 0.45, LeafElevDeg = 22,
+                    LeafAreaIndex = 2.8, LeafCurl = 0.12, LeafCup = 0.2, BarkTissue = false,
+                    Inflorescence = InflorescenceType.PendantCluster, Flower = FlowerShape.Bell, FlowerCount = 40, FlowerSizeM = 0.034,
+                    PeduncleM = 0.06, PedicelM = 0.04,
+                    FlowerColour = S(0.92, 0.89, 0.80), FlowerColour2 = S(0.85, 0.48, 0.44), StemBaseRadiusM = 0.012,
+                };
+            case "shrub_embercrown":
+                return b with
+                {
+                    StemMin = 4, StemMax = 7, LeaderElevDeg = 78, Sag = 0.5, WanderDeg = 11, InternodeM = 0.11, BranchAngleDeg = 46,
+                    Leaf = LeafArchetype.Pinnate, Leaflets = 9, LeafLengthM = 0.24, LeafAspect = 0.5, PetioleM = 0.03, LeafDroop = 0.5,
+                    LeafAreaIndex = 2.0, LeafDensity = 0.55, LateralLengthFactor = 0.28, BranchOrders = 2, LeafMinOrder = 1, BarkTissue = true,
+                    Inflorescence = InflorescenceType.Raceme, Flower = FlowerShape.Capsule, AsFruit = true, FlowerCount = 24, FlowerSizeM = 0.045,
+                    PeduncleM = 0.05, PedicelM = 0.02, FruitColour = S(0.85, 0.22, 0.12), Emissive = true,
+                };
+            case "shrub_lanternbrush":
+                return b with
+                {
+                    StemMin = 4, StemMax = 6, LeaderElevDeg = 58, Sag = 1.5, GravRate = 0.25, Phyllotaxy = Phyllotaxy.Alternate137,
+                    Leaf = LeafArchetype.Ovate, LeafLengthM = 0.13, LeafAspect = 0.52, PetioleM = 0.025, LeafAreaIndex = 2.4,
+                    BarkTissue = false, StemBaseRadiusM = 0.009,
+                    Inflorescence = InflorescenceType.PendantCluster, Flower = FlowerShape.Lantern, AsFruit = true, FlowerCount = 22,
+                    FlowerSizeM = 0.045, PeduncleM = 0.05, PedicelM = 0.035, FruitColour = S(0.78, 0.9, 0.85),
+                };
+            case "greywatch":
+                return b with
+                {
+                    StemMin = 2, StemMax = 4, LeaderElevDeg = 72, Sag = 0.55, InternodeM = 0.07, BranchAngleDeg = 42,
+                    Leaf = LeafArchetype.Linear, LeafLengthM = 0.06, LeafAspect = 0.07, PetioleM = 0.002, LeafAreaIndex = 3.2,
+                    LeafDensity = 1.0, LeafClusterTips = 0.7, LeafElevDeg = 40, LeafDroop = 0.2, LeafCurl = 0.18, LeafCup = 0.0,
+                    Phyllotaxy = Phyllotaxy.Alternate137, BarkTissue = true, LateralLengthFactor = 0.4, BranchProbBase = 0.3, BranchProbTip = 0.5,
+                    Inflorescence = InflorescenceType.PendantCluster, Flower = FlowerShape.BerryCluster, AsFruit = true, FlowerCount = 18,
+                    FlowerSizeM = 0.016, PeduncleM = 0.02, PedicelM = 0.014, FruitColour = S(0.5, 0.6, 0.72),
+                };
+            case "hookthicket_brake":
+                return b with
+                {
+                    StemMin = 6, StemMax = 9, LeaderElevDeg = 56, Sag = 1.6, GravRate = 0.2, ThornsPerM = 20, InternodeM = 0.1, BranchAngleDeg = 52,
+                    Leaf = LeafArchetype.Pinnate, Leaflets = 5, LeafLengthM = 0.12, LeafAspect = 0.55, PetioleM = 0.015, LeafSerration = 0.05,
+                    LeafAreaIndex = 3.0, BarkTissue = true,
+                };
+            case "miremyrtle":
+                return b with
+                {
+                    StemMin = 5, StemMax = 8, LeaderElevDeg = 68, Sag = 0.95, InternodeM = 0.05, BranchAngleDeg = 44, Phyllotaxy = Phyllotaxy.Alternate137,
+                    Leaf = LeafArchetype.Lanceolate, LeafLengthM = 0.045, LeafAspect = 0.3, PetioleM = 0.004, LeafAreaIndex = 3.0, LeafDensity = 1.0,
+                    LeafClusterTips = 0.3, LeafCurl = 0.2, BarkTissue = true, StemBaseRadiusM = 0.0055,
+                    Inflorescence = InflorescenceType.Spike, Flower = FlowerShape.Capsule, AsFruit = false, FlowerCount = 40, FlowerSizeM = 0.012,
+                    PeduncleM = 0.04, FlowerColour = S(0.78, 0.7, 0.52), FlowerColour2 = S(0.5, 0.42, 0.3),
+                };
+            case "nutglade":
+                return b with
+                {
+                    StemMin = 5, StemMax = 8, LeaderElevDeg = 72, Sag = 0.7, InternodeM = 0.1, BranchAngleDeg = 50,
+                    Leaf = LeafArchetype.Orbicular, LeafLengthM = 0.09, LeafAspect = 0.85, PetioleM = 0.02, LeafSerration = 0.035, LeafAreaIndex = 2.7,
+                    LeafElevDeg = 28, Phyllotaxy = Phyllotaxy.Distichous,
+                    Inflorescence = InflorescenceType.Catkin, Flower = FlowerShape.Catkin, FlowerCount = 24, FlowerSizeM = 0.075, PedicelM = 0.012,
+                    FlowerColour = S(0.88, 0.72, 0.28), FlowerColour2 = S(0.6, 0.45, 0.2),
+                };
+            case "silverfelt":
+                return b with
+                {
+                    StemMin = 4, StemMax = 7, LeaderElevDeg = 42, Sag = 0.8, GravRate = 0.2, InternodeM = 0.045, BranchAngleDeg = 55,
+                    Leaf = LeafArchetype.Ovate, LeafLengthM = 0.045, LeafAspect = 0.55, PetioleM = 0.004, LeafAreaIndex = 3.0, LeafDensity = 1.0,
+                    BarkTissue = true, StemBaseRadiusM = 0.0065, LeafClusterTips = 0.35,
+                    Inflorescence = InflorescenceType.Spike, Flower = FlowerShape.Capsule, FlowerCount = 30, FlowerSizeM = 0.02, PeduncleM = 0.03,
+                    FlowerColour = S(0.85, 0.85, 0.82), FlowerColour2 = S(0.6, 0.6, 0.58),
+                };
+            case "thornmantle":
+                return b with
+                {
+                    StemMin = 5, StemMax = 8, LeaderElevDeg = 62, Sag = 1.1, ThornsPerM = 26, InternodeM = 0.07, BranchAngleDeg = 58,
+                    BranchProbBase = 0.2, BranchProbTip = 0.6, WanderDeg = 10,
+                    Leaf = LeafArchetype.Ovate, LeafLengthM = 0.05, LeafAspect = 0.6, PetioleM = 0.008, LeafSerration = 0.05, LeafAreaIndex = 2.6, BarkTissue = true,
+                    Inflorescence = InflorescenceType.Umbel, Flower = FlowerShape.Star, FlowerCount = 70, FlowerSizeM = 0.022, PeduncleM = 0.025, PedicelM = 0.02,
+                    FlowerColour = S(0.97, 0.96, 0.94), FlowerColour2 = S(0.9, 0.88, 0.8),
+                };
+            default: // microcanopy_splitcrown
+                return b with
+                {
+                    StemMin = 2, StemMax = 3, LeaderElevDeg = 74, Sag = 0.6, InternodeM = 0.14, BranchAngleDeg = 48, BranchOrders = 3,
+                    Leaf = LeafArchetype.Pinnate, Leaflets = 9, LeafLengthM = 0.22, LeafAspect = 0.45, PetioleM = 0.04, LeafDroop = 0.55,
+                    LeafAreaIndex = 1.9, LeafDensity = 0.7, BarkTissue = true, StemBaseRadiusM = 0.02, LateralLengthFactor = 0.42, LeafClusterTips = 0.8,
+                };
+        }
+    }
+
+    private static FormTraits Tree(string id, string shape)
+    {
+        var b = new FormTraits
+        {
+            Form = GrowthForm.SingleTrunkTree, BranchOrders = 3, BranchAngleDeg = 58, BranchAngleSdDeg = 12, InternodeM = 0.1,
+            GravSetPointDeg = new double[] { 88, 18, 22, 20 }, GravRate = 0.3, PhotoK = 0.7, Sag = 0.9, WanderDeg = 6,
+            StemBaseRadiusM = 0.07, TipRadiusM = 0.0014, TaperExp = 0.95, BaseFlare = 0.45, BarkTissue = true, LeafMinOrder = 2,
+            LeafAreaIndex = 1.8, LeafDensity = 0.85, LeafClusterTips = 0.5, BranchProbBase = 0.15, BranchProbTip = 0.45,
+            LateralLengthFactor = 0.38, ApicalDominance = 0.6, StemMin = 1, StemMax = 1,
+            Leaf = LeafArchetype.Ovate, LeafLengthM = 0.1, LeafAspect = 0.5, PetioleM = 0.025,
+        };
+        switch (shape)
+        {
+            case "banksorrow":
+                return b with
+                {
+                    Sag = 1.5, GravRate = 0.2, LeafLengthM = 0.2, LeafAspect = 0.13, Leaf = LeafArchetype.Lanceolate, PetioleM = 0.01, LeafDroop = 1.2,
+                    LeafAreaIndex = 1.8, ApicalDominance = 0.3, BranchAngleDeg = 62, LeafCurl = 0.5, LeafElevDeg = 5, StemBaseRadiusM = 0.05,
+                };
+            case "fenforge":
+                return b with
+                {
+                    LeafLengthM = 0.11, LeafAspect = 0.55, Phyllotaxy = Phyllotaxy.Alternate137, LeafAreaIndex = 1.9, ApicalDominance = 0.5, Sag = 1.1,
+                    Inflorescence = InflorescenceType.Catkin, Flower = FlowerShape.Catkin, FlowerCount = 40, FlowerSizeM = 0.07, PedicelM = 0.014,
+                    FlowerColour = S(0.45, 0.38, 0.28), FlowerColour2 = S(0.3, 0.25, 0.2), StemBaseRadiusM = 0.09,
+                };
+            case "hollowcrown_tree":
+                return b with
+                {
+                    LeafLengthM = 0.13, LeafAspect = 0.8, Leaf = LeafArchetype.Cordate, PetioleM = 0.05, ApicalDominance = 0.15, LateralLengthFactor = 0.45,
+                    BranchOrders = 3, BranchProbBase = 0.1, BranchProbTip = 0.35, Sag = 0.7, StemBaseRadiusM = 0.14, BaseFlare = 0.8, LeafAreaIndex = 1.7,
+                    LeafClusterTips = 0.8, WanderDeg = 8,
+                };
+            case "mirespire":
+                return b with
+                {
+                    Leaf = LeafArchetype.Linear, LeafLengthM = 0.07, LeafAspect = 0.05, PetioleM = 0.002, LeafDensity = 1.0, LeafAreaIndex = 2.4, ApicalDominance = 0.95,
+                    BranchAngleDeg = 80, Sag = 0.8, GravSetPointDeg = new double[] { 88, 4, 6, 6 }, LeafClusterTips = 0.7, LateralLengthFactor = 0.3,
+                    BranchProbBase = 0.2, BranchProbTip = 0.5, LeafElevDeg = 20, LeafCup = 0, StemBaseRadiusM = 0.06,
+                    Inflorescence = InflorescenceType.Solitary, Flower = FlowerShape.Capsule, AsFruit = true, FlowerCount = 16, FlowerSizeM = 0.035, PeduncleM = 0.012,
+                    FruitColour = S(0.45, 0.32, 0.22),
+                };
+            case "moonbark":
+                return b with
+                {
+                    Leaf = LeafArchetype.Lanceolate, LeafLengthM = 0.1, LeafAspect = 0.32, LeafAreaIndex = 1.5, ApicalDominance = 0.45, Sag = 0.8, WanderDeg = 8,
+                    LeafClusterTips = 0.7, StemBaseRadiusM = 0.055, LeafCurl = 0.35,
+                };
+            case "shiverleaf":
+                return b with
+                {
+                    Leaf = LeafArchetype.Orbicular, LeafLengthM = 0.08, LeafAspect = 0.95, PetioleM = 0.06, LeafAreaIndex = 2.0, Phyllotaxy = Phyllotaxy.Alternate137,
+                    ApicalDominance = 0.55, LeafDroop = 0.6, LeafClusterTips = 0.6, StemBaseRadiusM = 0.045, LeafElevDeg = 22, LeafSerration = 0.02,
+                };
+            case "witchberry":
+                return b with
+                {
+                    Leaf = LeafArchetype.Pinnate, Leaflets = 7, LeafLengthM = 0.2, LeafAspect = 0.4, PetioleM = 0.03, LeafAreaIndex = 1.7, LeafDensity = 0.6,
+                    ApicalDominance = 0.4, LeafDroop = 0.5, LeafClusterTips = 0.8,
+                    Inflorescence = InflorescenceType.Umbel, Flower = FlowerShape.BerryCluster, AsFruit = true, FlowerCount = 90, FlowerSizeM = 0.016,
+                    PeduncleM = 0.04, PedicelM = 0.035, FruitColour = S(0.85, 0.12, 0.1), StemBaseRadiusM = 0.06,
+                };
+            default: // microcanopy_lacemantle: tiered whorls
+                return b with
+                {
+                    Leaf = LeafArchetype.Pinnate, Leaflets = 11, LeafLengthM = 0.15, LeafAspect = 0.3, PetioleM = 0.02, LeafAreaIndex = 2.0, LeafDensity = 0.7,
+                    Phyllotaxy = Phyllotaxy.Whorled, WhorlN = 3, ApicalDominance = 0.85, BranchAngleDeg = 78, Sag = 1.0, LeafClusterTips = 0.9,
+                    GravSetPointDeg = new double[] { 88, 6, 10, 10 }, BranchProbBase = 0.5, BranchProbTip = 0.5, BranchOrders = 2, LeafMinOrder = 2,
+                    StemBaseRadiusM = 0.035, LateralLengthFactor = 0.3,
+                };
+        }
+    }
+
+    private static FormTraits Fern(string id, string shape)
+    {
+        var b = new FormTraits
+        {
+            Form = GrowthForm.FernRosette, Leaf = LeafArchetype.FernFrond, FrondMin = 6, FrondMax = 9, PinnaPairs = 13, FrondLengthM = 0.45,
+            LeafAspect = 0.26, LeafAreaIndex = 2.6, GravRate = 0.9, Sag = 1.0, WanderDeg = 4, StemBaseRadiusM = 0.0032, TipRadiusM = 0.0005,
+            TaperExp = 1.0, InternodeTipFactor = 0.85, LeafCurl = 0.5, LeafCup = 0.3, LeafEdgeWave = 0.03, LeafSerration = 0.05, LeafElevDeg = 20,
+            LeafAdaxial = S(0.19, 0.34, 0.39),
+        };
+        switch (shape)
+        {
+            case "fern":
+                if (id == "veilfern")
+                    return b with { FrondMin = 7, FrondMax = 10, PinnaPairs = 15, FrondLengthM = 0.34, LeafAspect = 0.22, Sag = 1.2, LeafAreaIndex = 2.2, StemBaseRadiusM = 0.0022 };
+                return b with { FrondMin = 3, FrondMax = 5, PinnaPairs = 14, FrondLengthM = 0.5, LeafAspect = 0.3, Sag = 1.1, LeafAreaIndex = 2.3, StemBaseRadiusM = 0.0045,
+                    Inflorescence = InflorescenceType.None };
+            case "sceptrefern":
+                return b with { FrondMin = 4, FrondMax = 6, PinnaPairs = 8, FrondLengthM = 0.9, LeafAspect = 0.2, Sag = 0.55, GravRate = 0.45, LeafAreaIndex = 1.6, StemBaseRadiusM = 0.0055,
+                    LeafCurl = 0.35 };
+            case "swanfrond":
+                return b with { FrondMin = 7, FrondMax = 10, PinnaPairs = 17, FrondLengthM = 0.6, LeafAspect = 0.28, Sag = 1.35, GravRate = 1.0, LeafAreaIndex = 3.0, StemBaseRadiusM = 0.0034 };
+            case "emberbracken":
+                return b with { FrondMin = 3, FrondMax = 5, PinnaPairs = 10, FrondLengthM = 0.85, LeafAspect = 0.34, Sag = 0.6, GravRate = 0.6, LeafAreaIndex = 1.8, StemBaseRadiusM = 0.0048,
+                    LeafSerration = 0.08, LeafCurl = 0.3 };
+            default: // mirrorstrap_fern
+                return b with { StrapFronds = true, Leaf = LeafArchetype.Strap, FrondMin = 5, FrondMax = 8, PinnaPairs = 1, FrondLengthM = 0.07, BladeLengthM = 0.38, BladeWidthM = 0.075,
+                    BladeCurl = 0.7, LeafAreaIndex = 2.2, Sag = 0.6, StemBaseRadiusM = 0.0035, LeafCurl = 0.4 };
+        }
+    }
+
+    private static FormTraits Forb(string id, string shape)
+    {
+        var b = new FormTraits
+        {
+            Form = GrowthForm.Forb, StemMin = 2, StemMax = 4, BranchOrders = 2, BranchAngleDeg = 48, BranchAngleSdDeg = 11, InternodeM = 0.06,
+            GravSetPointDeg = new double[] { 85, 55, 50, 45 }, GravRate = 0.3, PhotoK = 0.4, Sag = 0.45, WanderDeg = 9, LeaderElevDeg = 70,
+            StemBaseRadiusM = 0.0035, TipRadiusM = 0.0007, TaperExp = 0.9, BaseFlare = 0.2, LeafMinOrder = 1, LeafAreaIndex = 1.8, LeafDensity = 0.9,
+            LeafClusterTips = 0.1, BranchProbBase = 0.0, BranchProbTip = 0.45, LateralLengthFactor = 0.28, ApicalDominance = 0.7, Leaf = LeafArchetype.Lanceolate,
+            LeafLengthM = 0.08, LeafAspect = 0.35, PetioleM = 0.015, LeafElevDeg = 35, LeafDroop = 0.4, LeafCurl = 0.35,
+        };
+        switch (shape)
+        {
+            case "blackneedle_thistle":
+                return b with { StemMin = 1, StemMax = 3, LeafLengthM = 0.16, LeafAspect = 0.28, LeafSerration = 0.1, ThornsPerM = 30, InternodeM = 0.07,
+                    LeafAbaxial = S(0.78, 0.8, 0.78), Inflorescence = InflorescenceType.Solitary, Flower = FlowerShape.Star, FlowerCount = 4, FlowerSizeM = 0.06,
+                    PeduncleM = 0.03, FlowerColour = S(0.55, 0.3, 0.85), FlowerColour2 = S(0.4, 0.28, 0.2), LeafAreaIndex = 1.6, Sag = 0.35, LeafElevDeg = 40 };
+            case "hallowsting":
+                return b with { StemMin = 2, StemMax = 4, Phyllotaxy = Phyllotaxy.Decussate, Leaf = LeafArchetype.Ovate, LeafLengthM = 0.1, LeafAspect = 0.55,
+                    LeafSerration = 0.07, InternodeM = 0.075, PetioleM = 0.02, LeafAreaIndex = 2.2,
+                    Inflorescence = InflorescenceType.PendantRaceme, Flower = FlowerShape.Capsule, FlowerCount = 24, FlowerSizeM = 0.022, PeduncleM = 0.05,
+                    PedicelM = 0.012, FlowerColour = S(0.55, 0.75, 0.4), FlowerColour2 = S(0.4, 0.6, 0.3) };
+            case "heddlelace":
+                return b with { StemMin = 2, StemMax = 3, Leaf = LeafArchetype.Pinnate, Leaflets = 9, LeafLengthM = 0.2, LeafAspect = 0.4, InternodeM = 0.12,
+                    LeafAreaIndex = 1.9, LeafDensity = 0.5, LeafMinOrder = 1,
+                    Inflorescence = InflorescenceType.Umbel, Flower = FlowerShape.Star, FlowerCount = 40, FlowerSizeM = 0.02, PeduncleM = 0.07, PedicelM = 0.04,
+                    FlowerColour = S(0.98, 0.98, 0.96), FlowerColour2 = S(0.85, 0.88, 0.8), StemBaseRadiusM = 0.0045 };
+            case "widowspire":
+                return b with { StemMin = 3, StemMax = 5, Phyllotaxy = Phyllotaxy.Decussate, Leaf = LeafArchetype.Lanceolate, LeafLengthM = 0.09, LeafAspect = 0.16,
+                    InternodeM = 0.09, LeafAreaIndex = 1.6, PetioleM = 0.004,
+                    Inflorescence = InflorescenceType.Spike, Flower = FlowerShape.Star, FlowerCount = 60, FlowerSizeM = 0.022, PeduncleM = 0.14,
+                    FlowerColour = S(0.82, 0.18, 0.6), FlowerColour2 = S(0.6, 0.12, 0.45) };
+            case "marrowbloom_stem":
+                return b with { StemMin = 3, StemMax = 6, LeafDensity = 0, LeafAreaIndex = 0, InternodeM = 0.05, LeaderElevDeg = 78, Sag = 0.8,
+                    LeafAdaxial = S(0.85, 0.85, 0.78), LeafAbaxial = S(0.9, 0.9, 0.84),
+                    Inflorescence = InflorescenceType.Solitary, Flower = FlowerShape.Bell, FlowerCount = 5, FlowerSizeM = 0.03, PeduncleM = 0.02,
+                    FlowerColour = S(0.88, 0.9, 0.86), FlowerColour2 = S(0.78, 0.82, 0.78), StemBaseRadiusM = 0.0022 };
+            case "fenfoam":
+                return b with { StemMin = 2, StemMax = 4, Leaf = LeafArchetype.Pinnate, Leaflets = 7, LeafLengthM = 0.16, LeafAspect = 0.45, InternodeM = 0.1,
+                    LeafAreaIndex = 1.8, LeafDensity = 0.55,
+                    Inflorescence = InflorescenceType.Spike, Flower = FlowerShape.BerryCluster, FlowerCount = 120, FlowerSizeM = 0.014, PeduncleM = 0.12,
+                    FlowerColour = S(0.96, 0.92, 0.8), FlowerColour2 = S(0.9, 0.85, 0.7), StemBaseRadiusM = 0.0042 };
+            default: // butterglint
+                return b with { StemMin = 3, StemMax = 6, LeafLengthM = 0.05, LeafAspect = 0.5, Leaf = LeafArchetype.Ovate, InternodeM = 0.04, LeafAreaIndex = 1.6,
+                    Inflorescence = InflorescenceType.Solitary, Flower = FlowerShape.Cup, FlowerCount = 8, FlowerSizeM = 0.032, PeduncleM = 0.03,
+                    FlowerColour = S(0.98, 0.82, 0.18), FlowerColour2 = S(0.9, 0.62, 0.1), StemBaseRadiusM = 0.0018, LeaderElevDeg = 62, Sag = 0.6 };
+        }
+    }
+
+    private static FormTraits Grass(string id, string shape)
+    {
+        var b = new FormTraits
+        {
+            Form = GrowthForm.Graminoid, Leaf = LeafArchetype.Linear, BladeMin = 32, BladeMax = 52, BladeLengthM = 0.4, BladeWidthM = 0.008, BladeCurl = 0.9,
+            CulmMin = 3, CulmMax = 6, LeafAreaIndex = 3.0, StemBaseRadiusM = 0.0018, TipRadiusM = 0.0006, TaperExp = 0.9, WanderDeg = 6, GravRate = 0.5, Sag = 0.15,
+            InternodeM = 0.08, LeafAdaxial = S(0.2, 0.34, 0.22), LeafAbaxial = S(0.38, 0.52, 0.34),
+        };
+        switch (shape)
+        {
+            case "tussock":
+                return b with { BladeMin = 40, BladeMax = 66, BladeLengthM = 0.3, BladeWidthM = 0.0035, BladeCurl = 1.2, LeafAreaIndex = 3.4,
+                    Inflorescence = InflorescenceType.Spike, Flower = FlowerShape.Capsule, CulmMin = 3, CulmMax = 5, FlowerSizeM = 0.014, FlowerCount = 40,
+                    PeduncleM = 0.03, FlowerColour = S(0.75, 0.78, 0.82), FlowerColour2 = S(0.5, 0.55, 0.6) };
+            case "pampas":
+                return b with { BladeMin = 24, BladeMax = 36, BladeLengthM = 0.6, BladeWidthM = 0.012, BladeCurl = 0.9, LeafAreaIndex = 2.0,
+                    Inflorescence = InflorescenceType.Raceme, Flower = FlowerShape.BerryCluster, CulmMin = 3, CulmMax = 5, FlowerSizeM = 0.045, FlowerCount = 50,
+                    PeduncleM = 0.2, PedicelM = 0.02, FlowerColour = S(0.92, 0.86, 0.68), FlowerColour2 = S(0.8, 0.74, 0.55) };
+            case "quillsedge":
+                return b with { BladeMin = 50, BladeMax = 80, BladeLengthM = 0.55, BladeWidthM = 0.0035, BladeCurl = 1.55, LeafAreaIndex = 3.2,
+                    Inflorescence = InflorescenceType.PendantRaceme, Flower = FlowerShape.Capsule, CulmMin = 3, CulmMax = 5, FlowerSizeM = 0.018, FlowerCount = 30,
+                    PeduncleM = 0.04, PedicelM = 0.012, FlowerColour = S(0.45, 0.32, 0.2), FlowerColour2 = S(0.3, 0.22, 0.14) };
+            case "cloudtuft":
+                return b with { BladeMin = 16, BladeMax = 26, BladeLengthM = 0.3, BladeWidthM = 0.003, BladeCurl = 1.0, LeafAreaIndex = 1.4,
+                    Inflorescence = InflorescenceType.Solitary, Flower = FlowerShape.BerryCluster, CulmMin = 6, CulmMax = 10, FlowerSizeM = 0.035, FlowerCount = 8,
+                    PeduncleM = 0.02, FlowerColour = S(0.97, 0.97, 0.98), FlowerColour2 = S(0.88, 0.9, 0.93) };
+            case "bannerreed":
+                return b with { BladeMin = 22, BladeMax = 34, BladeLengthM = 0.95, BladeWidthM = 0.022, BladeCurl = 0.75, LeafAreaIndex = 2.4,
+                    Inflorescence = InflorescenceType.PendantRaceme, Flower = FlowerShape.Capsule, CulmMin = 3, CulmMax = 5, FlowerSizeM = 0.02, FlowerCount = 50,
+                    PeduncleM = 0.1, PedicelM = 0.016, FlowerColour = S(0.88, 0.84, 0.7), FlowerColour2 = S(0.7, 0.66, 0.52), StemBaseRadiusM = 0.0035 };
+            case "coalspike_cattail":
+                return b with { BladeMin = 16, BladeMax = 26, BladeLengthM = 1.2, BladeWidthM = 0.026, BladeCurl = 0.55, LeafAreaIndex = 2.6, StemBaseRadiusM = 0.0045,
+                    Inflorescence = InflorescenceType.Solitary, Flower = FlowerShape.Catkin, AsFruit = true, CulmMin = 6, CulmMax = 10, FlowerSizeM = 0.11, FlowerCount = 8,
+                    PeduncleM = 0.015, FruitColour = S(0.08, 0.07, 0.07), FlowerColour = S(0.08, 0.07, 0.07), FlowerColour2 = S(0.5, 0.2, 0.6) };
+            case "veilblade_curtain":
+                return b with { BladeMin = 28, BladeMax = 42, BladeLengthM = 2.0, BladeWidthM = 0.026, BladeCurl = 1.35, LeafAreaIndex = 2.2,
+                    Inflorescence = InflorescenceType.Spike, Flower = FlowerShape.Capsule, CulmMin = 2, CulmMax = 4, FlowerSizeM = 0.014, FlowerCount = 30,
+                    PeduncleM = 0.1, FlowerColour = S(0.6, 0.62, 0.45), FlowerColour2 = S(0.4, 0.42, 0.3) };
+            case "ashwire":
+                return b with { BladeMin = 60, BladeMax = 90, BladeLengthM = 0.2, BladeWidthM = 0.002, BladeCurl = 1.0, LeafAreaIndex = 3.4,
+                    Inflorescence = InflorescenceType.Spike, Flower = FlowerShape.Capsule, CulmMin = 4, CulmMax = 7, FlowerSizeM = 0.01, FlowerCount = 40,
+                    PeduncleM = 0.02, FlowerColour = S(0.82, 0.84, 0.86), FlowerColour2 = S(0.6, 0.62, 0.64) };
+            case "duskbristle":
+                return b with { BladeMin = 26, BladeMax = 40, BladeLengthM = 0.3, BladeWidthM = 0.007, BladeCurl = 1.0, LeafAreaIndex = 2.6 };
+            case "sootband":
+                return b with { BladeMin = 14, BladeMax = 22, BladeLengthM = 0.6, BladeWidthM = 0.011, BladeCurl = 0.25, LeafAreaIndex = 1.8,
+                    Inflorescence = InflorescenceType.Solitary, Flower = FlowerShape.Capsule, AsFruit = true, CulmMin = 4, CulmMax = 7, FlowerSizeM = 0.035, FlowerCount = 8,
+                    PeduncleM = 0.01, FruitColour = S(0.82, 0.78, 0.62), LeafAdaxial = S(0.18, 0.26, 0.18) };
+            case "ribbonweed":
+                return b with { BladeMin = 24, BladeMax = 38, BladeLengthM = 0.6, BladeWidthM = 0.012, BladeCurl = 0.7, LeafAreaIndex = 2.4 };
+            default: // reed: glassrush, lanternsedge, ringreed
+                if (id == "lanternsedge")
+                    return b with { BladeMin = 18, BladeMax = 28, BladeLengthM = 0.5, BladeWidthM = 0.008, BladeCurl = 0.7, LeafAreaIndex = 2.0,
+                        Inflorescence = InflorescenceType.Umbel, Flower = FlowerShape.Lantern, AsFruit = true, CulmMin = 3, CulmMax = 5, FlowerSizeM = 0.02,
+                        FlowerCount = 30, PeduncleM = 0.05, PedicelM = 0.03, Emissive = true, FruitColour = S(0.6, 1.0, 0.8) };
+                if (id == "ringreed")
+                    return b with { BladeMin = 14, BladeMax = 22, BladeLengthM = 0.5, BladeWidthM = 0.006, BladeCurl = 0.3, LeafAreaIndex = 1.6 };
+                return b with { BladeMin = 16, BladeMax = 26, BladeLengthM = 0.3, BladeWidthM = 0.009, BladeCurl = 0.8, LeafAreaIndex = 2.0 };
+        }
+    }
+}

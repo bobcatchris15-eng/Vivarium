@@ -6,7 +6,7 @@ Tech stack: Godot 4.7.1 .NET Forward+, .NET 8 simulation, Radeon 860M verificati
 Spec: brief.md, refined by .claude/ledger.md RD1–RD16. User authorized autonomous execution and Terra workers.
 
 ## Recovery and implementation milestones
-- [ ] P2g: finish Forms/catalog/attachment/growth tests and plant_forms capture; preserve plausible full canopy density at all detail levels. Own src/Vivarium.Sim/Repr/Plant and game/Repr/Plant.
+- [x] P2g recovery decision: test and render recovered Forms/catalog. REJECTED for worse quality/higher geometry; source and paired evidence archived, accepted Plant baseline restored (10 tests pass). Production uses existing meshes under INT-F; no new-form rollout claimed.
 - [ ] E1/E2: finish WorldSubstrate, weather, uptake, water ledger and production world hooks; prove coupled/uncoupled 90-day diversity, conservation, timestep behavior and bounded cost. Own Ecology, FloraSystem, VivariumWorld and selftest/Eco*.
 - [ ] INT-L: Stock/Cached real-scene mode for fair comparison, continuously interpolated time tables, terrain/plant-fed occlusion and dirty rebake, 30 fps cap, lighting probes and real-soak comparisons. Own EnvironmentRig, settings, shaders and game/Repr/Light.
 - [ ] S2b: replace rejected graphic soil look with scanned material-led relief, attached litter, natural wetness and outcrop/dig geometry; fixed-camera soil_cube captures and cost. Own Substrate state/render paths once ecology interface stable.

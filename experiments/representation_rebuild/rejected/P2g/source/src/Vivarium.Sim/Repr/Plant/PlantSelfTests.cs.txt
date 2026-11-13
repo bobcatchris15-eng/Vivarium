@@ -1,0 +1,543 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry;
+using Vivarium.Sim.Repr.Plant.Forms;
+
+namespace Vivarium.Sim.Repr.Plant;
+
+/// <summary>One trait preset used by the tests: a real species of each growth form with its json sizes and colours.</summary>
+internal sealed record TestPreset(string Id, string Shape, double H, double R, double[] C1, double[] C2, double[]? Glow, GrowthForm Form);
+
+internal static class PlantTestKit
+{
+    public static readonly TestPreset[] Presets =
+    {
+        new("glowbriar", "shrub_glowbriar", 1.12, 0.95, new[] { 0.12, 0.28, 0.27 }, new[] { 0.32, 0.58, 0.47 }, new[] { 0.36, 1.0, 0.68 }, GrowthForm.MultiStemShrub),
+        new("shadebell", "shrub_shadebell", 2.35, 1.0, new[] { 0.14, 0.32, 0.23 }, new[] { 0.31, 0.51, 0.34 }, null, GrowthForm.MultiStemShrub),
+        new("thornmantle", "thornmantle", 2.0, 1.0, new[] { 0.243, 0.42, 0.204 }, new[] { 0.91, 0.941, 0.878 }, null, GrowthForm.MultiStemShrub),
+        new("moonbark", "moonbark", 3.4, 1.3, new[] { 0.369, 0.541, 0.29 }, new[] { 0.659, 0.784, 0.471 }, null, GrowthForm.SingleTrunkTree),
+        new("mirespire", "mirespire", 3.8, 1.2, new[] { 0.18, 0.29, 0.227 }, new[] { 0.353, 0.478, 0.369 }, null, GrowthForm.SingleTrunkTree),
+        new("witchberry", "witchberry", 2.8, 1.1, new[] { 0.243, 0.42, 0.243 }, new[] { 0.722, 0.353, 0.29 }, null, GrowthForm.SingleTrunkTree),
+        new("moonfern", "fern", 0.46, 0.28, new[] { 0.19, 0.34, 0.39 }, new[] { 0.46, 0.67, 0.72 }, new[] { 0.72, 0.84, 1.0 }, GrowthForm.FernRosette),
+        new("swanfrond", "swanfrond", 0.55, 0.45, new[] { 0.306, 0.478, 0.227 }, new[] { 0.561, 0.69, 0.478 }, null, GrowthForm.FernRosette),
+        new("emberbracken", "emberbracken", 0.7, 0.65, new[] { 0.478, 0.478, 0.196 }, new[] { 0.62, 0.41, 0.23 }, null, GrowthForm.FernRosette),
+        new("hallowsting", "hallowsting", 0.8, 0.5, new[] { 0.18, 0.35, 0.18 }, new[] { 0.56, 0.75, 0.48 }, null, GrowthForm.Forb),
+        new("heddlelace", "heddlelace", 0.85, 0.45, new[] { 0.31, 0.48, 0.29 }, new[] { 0.95, 0.94, 0.89 }, null, GrowthForm.Forb),
+        new("widowspire", "widowspire", 1.0, 0.45, new[] { 0.31, 0.43, 0.24 }, new[] { 0.7, 0.23, 0.54 }, null, GrowthForm.Forb),
+        new("frosttussock", "tussock", 0.22, 0.16, new[] { 0.36, 0.55, 0.6 }, new[] { 0.8, 0.74, 0.5 }, null, GrowthForm.Graminoid),
+        new("bannerreed", "bannerreed", 1.1, 0.5, new[] { 0.306, 0.431, 0.243 }, new[] { 0.78, 0.66, 0.48 }, null, GrowthForm.Graminoid),
+        new("coalspike", "coalspike_cattail", 1.34, 0.42, new[] { 0.13, 0.31, 0.15 }, new[] { 0.42, 0.5, 0.24 }, null, GrowthForm.Graminoid),
+    };
+
+    public static IEnumerable<TestPreset> Of(GrowthForm f) => Presets.Where(p => p.Form == f);
+
+    public static FormGenerator Gen(TestPreset p, out FormTraits t)
+    {
+        if (!SpeciesFormCatalog.TryGetTraits(p.Id, p.Shape, p.H, p.R, p.C1, p.C2, p.Glow, out t))
+            throw new InvalidOperationException("no traits for " + p.Id);
+        return (FormGenerator)SpeciesFormCatalog.CreateGenerator(p.Id, t);
+    }
+
+    public static FormGenerator Gen(TestPreset p) => Gen(p, out _);
+
+    public static PlantDescriptor Grown(FormGenerator g, ulong world, ulong id, double age = 1.0)
+    {
+        var d = g.Create(world, id);
+        g.Grow(d, age, 0.5, null);
+        return d;
+    }
+
+    public static List<double> Sig(Organ[] organs)
+    {
+        var s = new List<double>(organs.Length * 24);
+        foreach (var o in organs)
+        {
+            s.Add(o.Parent); s.Add((double)o.Type); s.Add((double)o.Tissue); s.Add((double)o.Flags);
+            s.Add(o.ShapeId); s.Add(o.Order); s.Add(o.AttachT);
+            foreach (var v in new[] { o.Start, o.End, o.StartTangent, o.EndTangent, o.Up })
+            { s.Add(v.X); s.Add(v.Y); s.Add(v.Z); }
+            s.Add(o.RadiusStart); s.Add(o.RadiusEnd); s.Add(o.Maturity); s.Add(o.Health); s.Add(o.Seed);
+        }
+        return s;
+    }
+
+    public static int FlatCount(PlantDescriptor d) => d.Organs.Count(o => o.Type is OrganType.Leaf or OrganType.Leaflet);
+
+    /// <summary>Axis chains: each is the list of organ indices of one stem/branch/frond from its first internode to its last.</summary>
+    public static List<int[]> Chains(PlantDescriptor d)
+    {
+        var next = new int[d.Organs.Length];
+        Array.Fill(next, -1);
+        for (int i = 0; i < d.Organs.Length; i++)
+            if (PlantCompiler.IsContinuation(d, i)) next[d.Organs[i].Parent] = i;
+        var res = new List<int[]>();
+        for (int i = 0; i < d.Organs.Length; i++)
+        {
+            var o = d.Organs[i];
+            if (o.Type != OrganType.Axis || PlantCompiler.IsContinuation(d, i)) continue;
+            var l = new List<int> { i };
+            for (int k = next[i]; k >= 0; k = next[k]) l.Add(k);
+            res.Add(l.ToArray());
+        }
+        return res;
+    }
+
+    public static double ArcLen(PlantDescriptor d, int[] chain) => chain.Sum(i => PlantCompiler.ArcLength(d.Organs[i]));
+
+    public static double Elev(Vec3 v) => Math.Asin(Math.Clamp(v.Normalized().Y, -1, 1));
+
+    public static (double Mean, double Cv) Stats(IEnumerable<double> xs)
+    {
+        var a = xs.ToArray();
+        if (a.Length == 0) return (0, 0);
+        double m = a.Average();
+        double sd = Math.Sqrt(a.Sum(x => (x - m) * (x - m)) / a.Length);
+        return (m, Math.Abs(m) > 1e-12 ? sd / Math.Abs(m) : 0);
+    }
+}
+
+public sealed class PlantDeterminismSelfTest : IReprSelfTest
+{
+    public string Name => "plant.determinism";
+
+    public string? Run()
+    {
+        foreach (var p in PlantTestKit.Presets)
+        {
+            var g1 = PlantTestKit.Gen(p);
+            var g2 = PlantTestKit.Gen(p);
+            var a = g1.Create(7, 1);
+            var b = g2.Create(7, 1);
+            if (!PlantTestKit.Sig(a.Organs).SequenceEqual(PlantTestKit.Sig(b.Organs))) return $"{p.Id}: same seed gives different seedling";
+            var c = g1.Create(7, 2);
+            if (PlantTestKit.Sig(a.Organs).SequenceEqual(PlantTestKit.Sig(c.Organs))) return $"{p.Id}: different plantId gives identical seedling";
+            g1.Grow(a, 1.0, 0.5, null);
+            g2.Grow(b, 1.0, 0.5, null);
+            if (!PlantTestKit.Sig(a.Organs).SequenceEqual(PlantTestKit.Sig(b.Organs))) return $"{p.Id}: grown plants differ for same seed";
+        }
+        return null;
+    }
+}
+
+public sealed class PlantMonotoneGrowthSelfTest : IReprSelfTest
+{
+    public string Name => "plant.monotone";
+
+    public string? Run()
+    {
+        foreach (var p in PlantTestKit.Presets)
+        {
+            var stepped = PlantTestKit.Gen(p);
+            var a = stepped.Create(7, 3);
+            for (int k = 1; k <= 10; k++) stepped.Grow(a, k / 10.0, 0.5, null);
+            var jump = PlantTestKit.Gen(p);
+            var bb = jump.Create(7, 3);
+            jump.Grow(bb, 1.0, 0.5, null);
+            if (!PlantTestKit.Sig(a.Organs).SequenceEqual(PlantTestKit.Sig(bb.Organs))) return $"{p.Id}: ten steps to 1.0 differ from one jump to 1.0";
+
+            var midGen = PlantTestKit.Gen(p);
+            var mid = midGen.Create(7, 3);
+            midGen.Grow(mid, 0.5, 0.5, null);
+            if (mid.Organs.Length == 0 || mid.Organs.Length > a.Organs.Length) return $"{p.Id}: organ count at 0.5 is {mid.Organs.Length} vs {a.Organs.Length} at 1.0";
+            for (int j = 0; j < mid.Organs.Length; j++)
+            {
+                var m = mid.Organs[j];
+                var f = a.Organs[j];
+                if (m.Parent != f.Parent || m.AttachT != f.AttachT || m.Seed != f.Seed || m.Type != f.Type) return $"{p.Id}: organ {j} identity changed between 0.5 and 1.0";
+                if ((m.Start - f.Start).Length > 1e-3) return $"{p.Id}: organ {j} Start moved {(m.Start - f.Start).Length * 1000:0.00} mm between 0.5 and 1.0";
+                if (f.Maturity + 1e-6f < m.Maturity) return $"{p.Id}: organ {j} Maturity decreased";
+            }
+        }
+        return null;
+    }
+}
+
+public sealed class PlantAttachmentSelfTest : IReprSelfTest
+{
+    public string Name => "plant.attachment";
+
+    public string? Run()
+    {
+        foreach (var p in PlantTestKit.Presets)
+        {
+            var g = PlantTestKit.Gen(p);
+            for (int step = 1; step <= 100; step++)
+            {
+            double age = step / 100.0;
+            var d = g.Create(11, 5);
+            g.Grow(d, age, 0.5, null);
+            for (int j = 0; j < d.Organs.Length; j++)
+            {
+                var o = d.Organs[j];
+                if (o.Parent < 0) continue;
+                var q = d.Organs[o.Parent];
+                if (q.Type != OrganType.Axis && q.Type != OrganType.Petiole) return $"{p.Id}: organ {j} parent is not an axis";
+                if (q.Maturity < o.AttachT - 1e-3f) return $"{p.Id}: organ {j} emerged before its attachment point was exposed";
+                double u = Math.Clamp(o.AttachT / Math.Max(q.Maturity, 1e-6f), 0, 1);
+                var c = PlantMath.Hermite(q.Start, q.StartTangent, q.End, q.EndTangent, u);
+                double r = q.RadiusStart + (q.RadiusEnd - q.RadiusStart) * u;
+                double dist = (o.Start - c).Length;
+                bool cont = PlantCompiler.IsContinuation(d, j);
+                if (cont)
+                {
+                    if (dist > 1e-3) return $"{p.Id}: continuation {j} starts {dist * 1000:0.0} mm from its parent's end";
+                    if (Math.Abs(o.RadiusStart - q.RadiusEnd) > 0.05 * q.RadiusEnd + 1e-4) return $"{p.Id}: continuation {j} radius jumps {o.RadiusStart * 1000:0.00} vs {q.RadiusEnd * 1000:0.00} mm";
+                    var ta = q.EndTangent.Normalized();
+                    var tb = o.StartTangent.Normalized();
+                    if (o.StartTangent.LengthSq > 1e-16 && q.EndTangent.LengthSq > 1e-16 && ta.Dot(tb) < 0.8) return $"{p.Id}: continuation {j} kinks {Math.Acos(Math.Clamp(ta.Dot(tb), -1, 1)) * 57.3:0} deg at age {age:0.00}";
+                    continue;
+                }
+                if (Math.Abs(dist - r) > 1e-3) return $"{p.Id}: organ {j} Start is {dist * 1000:0.0} mm from parent centreline, radius {r * 1000:0.0} mm";
+                if (o.Type is OrganType.Axis or OrganType.Petiole && o.RadiusStart > 0.85 * r + 1e-6)
+                    return $"{p.Id}: axis {j} radius {o.RadiusStart * 1000:0.00} mm exceeds 0.85 of parent";
+            }
+            }
+        }
+        return null;
+    }
+}
+
+public sealed class PlantSanitySelfTest : IReprSelfTest
+{
+    public string Name => "plant.sanity";
+
+    private static (int Lo, int Hi) Range(GrowthForm f) => f switch
+    {
+        GrowthForm.MultiStemShrub => (250, 4500),
+        GrowthForm.SingleTrunkTree => (500, 7000),
+        GrowthForm.FernRosette => (60, 1800),
+        GrowthForm.Forb => (60, 2200),
+        _ => (50, 1500),
+    };
+
+    public string? Run()
+    {
+        foreach (var p in PlantTestKit.Presets)
+        {
+            var g = PlantTestKit.Gen(p, out var t);
+            var d = PlantTestKit.Grown(g, 3, 9);
+            var (lo, hi) = Range(p.Form);
+            if (d.Organs.Length < lo || d.Organs.Length > hi) return $"{p.Id}: organ count {d.Organs.Length} outside [{lo}, {hi}]";
+            foreach (var o in d.Organs)
+            {
+                if (!o.Start.IsFinite || !o.End.IsFinite || !o.Up.IsFinite || !o.StartTangent.IsFinite || !o.EndTangent.IsFinite) return $"{p.Id}: non-finite organ vector";
+                if (!float.IsFinite(o.RadiusStart) || !float.IsFinite(o.RadiusEnd) || o.RadiusStart < 0 || o.RadiusEnd < 0) return $"{p.Id}: invalid radius";
+                if (o.Maturity < 0 || o.Maturity > 1.0001f) return $"{p.Id}: Maturity out of range";
+                if (o.Maturity < 0.999f) return $"{p.Id}: organ not fully mature at age 1 (Maturity {o.Maturity:0.000})";
+                foreach (var q in new[] { o.Start, o.End })
+                {
+                    var b = d.LocalBounds;
+                    if (q.X < b.Min.X - 1e-9 || q.Y < b.Min.Y - 1e-9 || q.Z < b.Min.Z - 1e-9 || q.X > b.Max.X + 1e-9 || q.Y > b.Max.Y + 1e-9 || q.Z > b.Max.Z + 1e-9)
+                        return $"{p.Id}: organ endpoint outside LocalBounds";
+                }
+            }
+            if (t.LeafAreaIndex > 0 && !(d.LeafArea > 0)) return $"{p.Id}: LeafArea not positive";
+            if (!(d.WoodVolume > 0)) return $"{p.Id}: WoodVolume not positive";
+            double hr = d.Height / p.H, cr = d.CrownRadius / p.R;
+            if (hr < 0.7 || hr > 1.4) return $"{p.Id}: height {d.Height:0.00} m is {hr:0.00} of the trait {p.H} m";
+            if (cr < 0.5 || cr > 1.9) return $"{p.Id}: crown {d.CrownRadius:0.00} m is {cr:0.00} of the trait {p.R} m";
+        }
+        return null;
+    }
+}
+
+public sealed class PlantCompilerSelfTest : IReprSelfTest
+{
+    public string Name => "plant.compiler";
+
+    public string? Run()
+    {
+        foreach (var p in PlantTestKit.Presets)
+        {
+            var g = PlantTestKit.Gen(p);
+            var d = PlantTestKit.Grown(g, 21, 4);
+            int lastFlat = -1;
+            for (int detail = 0; detail <= 2; detail++)
+            {
+                var a = PlantCompiler.Compile(d, detail);
+                if (a.WoodTriangles != a.Wood.TriangleCount) return $"{p.Id}: WoodTriangles mismatch";
+                if (a.Wood.TriangleCount == 0) return $"{p.Id}: no wood at detail {detail}";
+                var shapes = d.Shapes.Select(s => PlantCompiler.BuildShapeMesh(s, detail)).ToArray();
+                var flat = PlantCompiler.Flatten(d, a, shapes);
+                if (flat.Indices.Count % 3 != 0) return $"{p.Id}: index count not a multiple of 3";
+                foreach (int ix in flat.Indices) if (ix < 0 || ix >= flat.VertexCount) return $"{p.Id}: index {ix} out of range";
+                int degenerate = 0;
+                for (int v = 0; v < flat.VertexCount; v++)
+                {
+                    var n = flat.NormalAt(v);
+                    if (!n.IsFinite) return $"{p.Id}: non-finite normal";
+                    if (n.LengthSq < 0.25) degenerate++;
+                }
+                if (degenerate > 0) return $"{p.Id}: {degenerate} degenerate normals at detail {detail}";
+                if (detail == 0 && d.Aggregates.Length == 0 && d.LeafArea > 0) return $"{p.Id}: no foliage aggregates";
+                if (detail > 0 && flat.TriangleCount >= lastFlat) return $"{p.Id}: detail {detail} not lighter than {detail - 1}";
+                lastFlat = flat.TriangleCount;
+            }
+        }
+        return null;
+    }
+}
+
+public sealed class PlantDistinctnessSelfTest : IReprSelfTest
+{
+    public string Name => "plant.distinct";
+
+    public string? Run()
+    {
+        foreach (var form in new[] { GrowthForm.MultiStemShrub, GrowthForm.SingleTrunkTree, GrowthForm.FernRosette, GrowthForm.Forb, GrowthForm.Graminoid })
+        {
+            var ps = PlantTestKit.Of(form).ToArray();
+            var ratio = new double[ps.Length];
+            var leaves = new int[ps.Length];
+            for (int i = 0; i < ps.Length; i++)
+            {
+                var d = PlantTestKit.Grown(PlantTestKit.Gen(ps[i]), 5, 2);
+                ratio[i] = d.Height / Math.Max(d.CrownRadius, 1e-6);
+                leaves[i] = PlantTestKit.FlatCount(d);
+            }
+            for (int a = 0; a < ps.Length; a++)
+                for (int b = a + 1; b < ps.Length; b++)
+                {
+                    if (leaves[a] == leaves[b]) return $"{ps[a].Id} and {ps[b].Id} have the same leaf count";
+                    if (Math.Abs(ratio[a] - ratio[b]) < 0.05) return $"{ps[a].Id} and {ps[b].Id} have the same crown ratio";
+                }
+        }
+        return null;
+    }
+}
+
+/// <summary>Lifelikeness proxies. Failure messages name the preset and the measured value.</summary>
+public sealed class PlantLifelikeSelfTest : IReprSelfTest
+{
+    public string Name => "plant.lifelike";
+
+    public string? Run()
+    {
+        foreach (var p in PlantTestKit.Presets)
+        {
+            var g = PlantTestKit.Gen(p, out var t);
+            var d = PlantTestKit.Grown(g, 31, 6);
+            string? r = Straightness(p, d) ?? Droop(p, d) ?? Variation(p, d) ?? Lai(p, t, g, d) ?? Individuals(p, g) ?? Pipe(p, d) ?? Flowers(p, d);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    private static string? Straightness(TestPreset p, PlantDescriptor d)
+    {
+        var ratios = new List<double>();
+        foreach (var ch in PlantTestKit.Chains(d))
+        {
+            double arc = PlantTestKit.ArcLen(d, ch);
+            if (arc < 0.15) continue;
+            double chord = (d.Organs[ch[^1]].End - d.Organs[ch[0]].Start).Length;
+            ratios.Add(chord / arc);
+        }
+        if (ratios.Count == 0) return p.Form == GrowthForm.Graminoid && d.Shapes.All(s => s.MidribCurl >= 0.2) ? null : $"{p.Id}: no axis longer than 15 cm";
+        double mean = ratios.Average();
+        return mean < 0.985 ? null : $"{p.Id}: mean chord/arc {mean:0.0000} over {ratios.Count} axes (needs < 0.985)";
+    }
+
+    private static string? Droop(TestPreset p, PlantDescriptor d)
+    {
+        if (p.Form is not (GrowthForm.MultiStemShrub or GrowthForm.FernRosette)) return null;
+        var diffs = new List<double>();
+        foreach (var ch in PlantTestKit.Chains(d))
+        {
+            if (d.Organs[ch[0]].Order != 1 || PlantTestKit.ArcLen(d, ch) < 0.25 || ch.Length < 4) continue;
+            double tip = PlantTestKit.Elev(d.Organs[ch[^1]].EndTangent);
+            var mo = d.Organs[ch[ch.Length / 2]];
+            double mid = PlantTestKit.Elev(mo.StartTangent);
+            diffs.Add(mid - tip);
+        }
+        if (diffs.Count == 0) return $"{p.Id}: no primary axes to test droop";
+        double mean = diffs.Average();
+        int drooping = diffs.Count(x => x > 0);
+        return mean > 0.04 && drooping >= diffs.Count * 0.6 ? null : $"{p.Id}: tip droop mean {mean * 57.3:0.0} deg, {drooping}/{diffs.Count} axes droop";
+    }
+
+    private static string? Variation(TestPreset p, PlantDescriptor d)
+    {
+        // branch angles: child axes of order >= 2; else leaflet/blade angles against their parent axis
+        var angles = new List<double>();
+        for (int i = 0; i < d.Organs.Length; i++)
+        {
+            var o = d.Organs[i];
+            if (o.Parent < 0 || PlantCompiler.IsContinuation(d, i)) continue;
+            var q = d.Organs[o.Parent];
+            if (q.Type != OrganType.Axis) continue;
+            bool axisChild = o.Type == OrganType.Axis && o.Order >= 2;
+            if (!axisChild) continue;
+            var tq = PlantMath.HermiteD(q.Start, q.StartTangent, q.End, q.EndTangent, Math.Clamp(o.AttachT / Math.Max(q.Maturity, 1e-6f), 0, 1)).Normalized();
+            angles.Add(Math.Acos(Math.Clamp(tq.Dot(o.StartTangent.Normalized()), -1, 1)));
+        }
+        if (angles.Count < 6)
+        {
+            angles.Clear();
+            for (int i = 0; i < d.Organs.Length; i++)
+            {
+                var o = d.Organs[i];
+                if (o.Parent < 0 || !(o.Type is OrganType.Leaf or OrganType.Leaflet)) continue;
+                var q = d.Organs[o.Parent];
+                if (q.Type != OrganType.Axis) continue;
+                if (p.Form == GrowthForm.Graminoid) { angles.Add(Math.Acos(Math.Clamp((o.End - o.Start).Normalized().Y, -1, 1))); continue; }
+                var tq = PlantMath.HermiteD(q.Start, q.StartTangent, q.End, q.EndTangent, Math.Clamp(o.AttachT / Math.Max(q.Maturity, 1e-6f), 0, 1)).Normalized();
+                angles.Add(Math.Acos(Math.Clamp(tq.Dot((o.End - o.Start).Normalized()), -1, 1)));
+            }
+        }
+        var (_, cv) = PlantTestKit.Stats(angles);
+        if (angles.Count < 6 || cv <= 0.08) return $"{p.Id}: branch angle CV {cv * 100:0.0}% over {angles.Count} samples (needs > 8%)";
+        var sizes = d.Organs.Where(o => o.Type is OrganType.Leaf or OrganType.Leaflet).Select(o => (o.End - o.Start).Length);
+        var (_, lcv) = PlantTestKit.Stats(sizes);
+        if (d.LeafArea > 0 && lcv <= 0.10) return $"{p.Id}: leaf length CV {lcv * 100:0.0}% (needs > 10%)";
+        return null;
+    }
+
+    private static string? Lai(TestPreset p, FormTraits t, FormGenerator g, PlantDescriptor d)
+    {
+        double lai = d.LeafArea / g.CrownArea;
+        if (t.LeafAreaIndex <= 0) return d.LeafArea < 0.002 ? null : $"{p.Id}: leafless species has {d.LeafArea:0.000} m2 of leaf";
+        double err = Math.Abs(lai - t.LeafAreaIndex) / t.LeafAreaIndex;
+        return err <= 0.25 ? null : $"{p.Id}: LAI {lai:0.00} vs target {t.LeafAreaIndex:0.00} ({err * 100:0}% off)";
+    }
+
+    private static string? Individuals(TestPreset p, FormGenerator g)
+    {
+        var heights = new HashSet<int>();
+        var counts = new HashSet<int>();
+        for (ulong id = 1; id <= 8; id++)
+        {
+            var d = PlantTestKit.Grown(g, 77, id);
+            heights.Add((int)Math.Round(d.Height * 100));
+            counts.Add(d.Organs.Length);
+        }
+        return heights.Count >= 5 && counts.Count >= 6 ? null : $"{p.Id}: 8 individuals give {heights.Count} distinct heights, {counts.Count} organ counts";
+    }
+
+    private static string? Pipe(TestPreset p, PlantDescriptor d)
+    {
+        var kids = new Dictionary<int, double>();
+        for (int i = 0; i < d.Organs.Length; i++)
+        {
+            var o = d.Organs[i];
+            if (o.Type != OrganType.Axis || o.Parent < 0 || PlantCompiler.IsContinuation(d, i) || d.Organs[o.Parent].Type != OrganType.Axis) continue;
+            kids[o.Parent] = kids.GetValueOrDefault(o.Parent) + (double)o.RadiusStart * o.RadiusStart;
+        }
+        int forks = 0, bad = 0;
+        double worst = 0;
+        foreach (var (q, sum) in kids)
+        {
+            var o = d.Organs[q];
+            double below = (double)o.RadiusStart * o.RadiusStart, above = (double)o.RadiusEnd * o.RadiusEnd;
+            if (sum < 0.25 * below) continue;      // only significant forks
+            forks++;
+            double err = Math.Abs(below - (above + sum)) / below;
+            worst = Math.Max(worst, err);
+            if (err > 0.30) bad++;
+        }
+        return bad == 0 ? null : $"{p.Id}: {bad}/{forks} significant forks violate the pipe model by > 30% (worst {worst * 100:0}%)";
+    }
+
+    private static string? Flowers(TestPreset p, PlantDescriptor d)
+    {
+        int n = 0;
+        for (int i = 0; i < d.Organs.Length; i++)
+        {
+            var o = d.Organs[i];
+            if (o.Type is not (OrganType.Flower or OrganType.Fruit)) continue;
+            n++;
+            int j = o.Parent, hops = 0;
+            bool sawAxis = false;
+            while (j >= 0)
+            {
+                var q = d.Organs[j];
+                if (q.Type is not (OrganType.Axis or OrganType.Petiole)) return $"{p.Id}: flower {i} attachment chain passes through a {q.Type}";
+                if (q.Type == OrganType.Axis) sawAxis = true;
+                j = q.Parent;
+                if (++hops > 400) return $"{p.Id}: flower {i} chain too long";
+            }
+            if (!sawAxis || hops < 2) return $"{p.Id}: flower {i} not attached through real axes";
+        }
+        return null;
+    }
+}
+
+/// <summary>Always passes. Name carries the measured footprint of one form (3 presets).</summary>
+public abstract class PlantFootprintSelfTestBase : IReprSelfTest
+{
+    private string _name;
+    private readonly GrowthForm _form;
+    protected PlantFootprintSelfTestBase(GrowthForm form) { _form = form; _name = $"plant.footprint {form} (not run)"; }
+    public string Name => _name;
+
+    public string? Run()
+    {
+        var sb = new StringBuilder($"plant.footprint {_form}:");
+        foreach (var p in PlantTestKit.Of(_form)) sb.Append("\n    ").Append(PlantFootprint.Measure(PlantTestKit.Gen(p), p));
+        _name = sb.ToString();
+        return null;
+    }
+}
+
+public sealed class PlantFootprintShrubSelfTest : PlantFootprintSelfTestBase { public PlantFootprintShrubSelfTest() : base(GrowthForm.MultiStemShrub) { } }
+public sealed class PlantFootprintTreeSelfTest : PlantFootprintSelfTestBase { public PlantFootprintTreeSelfTest() : base(GrowthForm.SingleTrunkTree) { } }
+public sealed class PlantFootprintFernSelfTest : PlantFootprintSelfTestBase { public PlantFootprintFernSelfTest() : base(GrowthForm.FernRosette) { } }
+public sealed class PlantFootprintForbSelfTest : PlantFootprintSelfTestBase { public PlantFootprintForbSelfTest() : base(GrowthForm.Forb) { } }
+public sealed class PlantFootprintGraminoidSelfTest : PlantFootprintSelfTestBase { public PlantFootprintGraminoidSelfTest() : base(GrowthForm.Graminoid) { } }
+
+internal static class PlantFootprint
+{
+    public static string Measure(FormGenerator g, TestPreset p)
+    {
+        var d = PlantTestKit.Grown(g, 1, 1);
+        var a0 = PlantCompiler.Compile(d, 0);
+        int flat0 = PlantCompiler.Flatten(d, a0, d.Shapes.Select(s => PlantCompiler.BuildShapeMesh(s, 0)).ToArray()).TriangleCount;
+        var a1 = PlantCompiler.Compile(d, 1);
+        int flat1 = PlantCompiler.Flatten(d, a1, d.Shapes.Select(s => PlantCompiler.BuildShapeMesh(s, 1)).ToArray()).TriangleCount;
+        var a2 = PlantCompiler.Compile(d, 2);
+        int flat2 = PlantCompiler.Flatten(d, a2, d.Shapes.Select(s => PlantCompiler.BuildShapeMesh(s, 2)).ToArray()).TriangleCount;
+        string K(int n) => n >= 1000 ? $"{n / 1000.0:0.0}k" : n.ToString();
+        int flowers = d.Organs.Count(o => o.Type is OrganType.Flower or OrganType.Fruit);
+        return $"{p.Id,-13} H={d.Height:0.00} R={d.CrownRadius:0.00} organs={d.Organs.Length} desc={PlantCompiler.DescriptorBytes(d) / 1024.0:0.0}kB " +
+               $"wood={K(a0.WoodTriangles)}/{K(a1.WoodTriangles)}/{K(a2.WoodTriangles)} leafInst={a0.Instances.Length - flowers} flowers={flowers} " +
+               $"tris d0/d1/d2={K(flat0)}/{K(flat1)}/{K(flat2)} LAI={d.LeafArea / g.CrownArea:0.00}(target {g.Traits.LeafAreaIndex:0.0}) leafArea={d.LeafArea:0.00}m2";
+    }
+}
+
+/// <summary>Exports OBJ and organ CSV dumps of every preset (mature, 40 % and 20 % age) for offline viewing.</summary>
+public sealed class PlantExportSelfTest : IReprSelfTest
+{
+    public string Name => "plant.export";
+
+    public string? Run()
+    {
+        const string dir = "C:/Misc/Vivarium/build/overhaul/P2g/export";
+        Directory.CreateDirectory(dir);
+        foreach (var p in PlantTestKit.Presets)
+        {
+            var g = PlantTestKit.Gen(p);
+            foreach (var (age, tag) in new[] { (1.0, "age100"), (0.4, "age040"), (0.2, "age020") })
+            {
+                var d = g.Create(1, 1);
+                var shapes = d.Shapes.Select(s => PlantCompiler.BuildShapeMesh(s, 0)).ToArray();
+                g.Grow(d, age, 0.5, null);
+                var a = PlantCompiler.Compile(d, 0);
+                if (age == 1.0) PlantObjExport.WriteObj(PlantCompiler.Flatten(d, a, shapes), $"{dir}/{p.Id}_{tag}.obj");
+                var sb = new StringBuilder("i,parent,type,order,sx,sy,sz,ex,ey,ez,r0,r1,uy,mat\n");
+                for (int i = 0; i < d.Organs.Length; i++)
+                {
+                    var o = d.Organs[i];
+                    sb.AppendFormat(CultureInfo.InvariantCulture, "{0},{1},{2},{3},{4:0.####},{5:0.####},{6:0.####},{7:0.####},{8:0.####},{9:0.####},{10:0.#####},{11:0.#####},{12:0.###},{13:0.###}\n",
+                        i, o.Parent, (int)o.Type, o.Order, o.Start.X, o.Start.Y, o.Start.Z, o.End.X, o.End.Y, o.End.Z, o.RadiusStart, o.RadiusEnd, o.Up.Y, o.Maturity);
+                }
+                File.WriteAllText($"{dir}/{p.Id}_{tag}.csv", sb.ToString());
+            }
+        }
+        return null;
+    }
+}

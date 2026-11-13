@@ -1,0 +1,159 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Godot;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Repr;
+using Vivarium.Sim.Repr.Plant.Forms;
+
+namespace Vivarium.Repr;
+
+/// <summary>
+/// P2g: growth-form generators vs legacy. Per species, on its own matte ground, left to right:
+/// the legacy plant, then three graph individuals (plantIds 1..3, age 1.0). Shots: row (all four), close (graph
+/// individual 2 filling the frame), macro (35 cm from an inflorescence or a leafy junction), young (ages 0.2 / 0.5 /
+/// 1.0 of individual 2 side by side). Variants: "main" (legacy + graph row) and "young".
+/// </summary>
+public sealed class PlantFormsDemo : IReprDemo
+{
+    public string Name => "plant_forms";
+
+    public static readonly string[] Species =
+    {
+        "glowbriar", "shadebell", "embercrown", "thornmantle", "moonbark", "witchberry",
+        "moonfern", "swanfrond", "hallowsting", "widowspire", "frosttussock", "coalspike",
+    };
+
+    private readonly List<ReprShot> _shots = new();
+    public IReadOnlyList<ReprShot> Shots => _shots;
+
+    private readonly List<Node3D> _legacy = new();
+    private PlantAssemblyRenderer _main = null!, _young = null!;
+
+    private const float FovDeg = 40f;
+    private static readonly float TanHalfV = MathF.Tan(Mathf.DegToRad(FovDeg * 0.5f));
+    private const float Aspect = 16f / 9f;
+
+    public void Build(Node3D root, ReprDemoContext ctx)
+    {
+        PlantDemoKit.Bind(ctx);
+        var main = new List<Vivarium.Sim.Repr.PlantDescriptor>();
+        var young = new List<Vivarium.Sim.Repr.PlantDescriptor>();
+        int idx = 0;
+        foreach (string sp in Species)
+        {
+            if (!PlantDemoKit.TryTraits(ctx, sp, out var traits)) { ctx.Log($"plant_forms: {sp} has no growth form, skipped"); continue; }
+            // Keep neighbouring species out of the wide row cameras, including the largest tree crowns.
+            var o = new Vector3(idx++ * 100f, 0, 0);
+
+            // measure individuals first so the layout and cameras come from descriptor bounds
+            var probe = new List<Vivarium.Sim.Repr.PlantDescriptor>();
+            for (uint k = 1; k <= 3; k++) probe.Add(PlantDemoKit.Make(ctx.WorldSeed, sp, k, 1.0, 1.0, Vector3.Zero));
+            float H = Math.Max(0.05f, probe.Max(PlantDemoKit.HeightOf));
+            float R = Math.Max(0.05f, probe.Max(PlantDemoKit.CrownOf));
+            float spacing = 2.0f * R + 0.12f * H + 0.1f;
+            float X(int k) => (k - 1.5f) * spacing;          // k = 0 legacy, 1..3 graph individuals
+            float W = 4f * spacing;
+            root.AddChild(PlantDemoKit.Ground(o, Math.Max(3f, W + 1.5f)));
+
+            var legacy = ctx.BuildLegacyFlora(sp);
+            if (legacy != null) { legacy.Position = o + new Vector3(X(0), 0, 0); root.AddChild(legacy); _legacy.Add(legacy); }
+
+            Vivarium.Sim.Repr.PlantDescriptor? ind2 = null;
+            for (uint k = 1; k <= 3; k++)
+            {
+                var d = PlantDemoKit.Make(ctx.WorldSeed, sp, k, 1.0, 1.0, o + new Vector3(X((int)k), 0, 0));
+                main.Add(d);
+                if (k == 2) ind2 = d;
+            }
+            // ages 0.2 / 0.5 / 1.0 of individual 2
+            float sy = Math.Max(1.2f * R, 0.35f * H) + 0.1f;
+            double[] ages = { 0.2, 0.5, 1.0 };
+            for (int a = 0; a < 3; a++)
+                young.Add(PlantDemoKit.Make(ctx.WorldSeed, sp, 2, ages[a], 1.0, o + new Vector3((a - 1) * 2.0f * sy, 0, 0)));
+
+            float H2 = PlantDemoKit.HeightOf(ind2!), R2 = PlantDemoKit.CrownOf(ind2!);
+            ctx.Log($"plant_forms: {sp} form={traits.Form} H={H:0.00} R={R:0.00} organs={ind2!.Organs.Length} spacing={spacing:0.00}");
+
+            // ---- row
+            float Dr = Math.Max(0.5f * W / (TanHalfV * Aspect), 1.15f * H / (2f * TanHalfV)) + 0.55f * R;
+            var rowTarget = o + new Vector3(0, 0.45f * H, 0);
+            _shots.Add(new ReprShot($"{sp}_row", o + new Vector3(0, 0.55f * H, Dr), rowTarget, FovDeg, 90, "main"));
+
+            // ---- close: individual 2 filling the frame
+            var c2 = o + new Vector3(X(2), 0, 0);
+            float Dc = Math.Max(0.58f * H2 / TanHalfV, 0.62f * 2f * R2 / (TanHalfV * Aspect)) + 0.35f * R2;
+            _shots.Add(new ReprShot($"{sp}_close", c2 + new Vector3(0, 0.55f * H2, Dc), c2 + new Vector3(0, 0.5f * H2, 0), FovDeg, 90, "main"));
+
+            // ---- macro
+            var (target, found) = MacroTarget(ind2!, H2);
+            var tw = c2 + target;
+            var eye = tw + new Vector3(0.35f, 0.2f, 0.9f).Normalized() * 0.35f;
+            ctx.Log($"plant_forms: {sp} macro target {target} inflorescence={found}");
+            _shots.Add(new ReprShot($"{sp}_macro", eye, tw, FovDeg, 90, "main"));
+
+            // ---- young
+            float Wy = 4.4f * sy;
+            float Dy = Math.Max(0.5f * Wy / (TanHalfV * Aspect), 1.1f * H2 / (2f * TanHalfV)) + 0.5f * R2;
+            _shots.Add(new ReprShot($"{sp}_young", o + new Vector3(0, 0.55f * H2, Dy), o + new Vector3(0, 0.45f * H2, 0), FovDeg, 90, "young"));
+        }
+
+        _main = PlantDemoKit.NewRenderer(ctx, "Main"); _main.CommitsPerFrame = 64;
+        _young = PlantDemoKit.NewRenderer(ctx, "Young"); _young.CommitsPerFrame = 64;
+        root.AddChild(_main); root.AddChild(_young);
+        _main.SetPlants(main);
+        _young.SetPlants(young);
+        ApplyVariant("main");
+    }
+
+    /// <summary>Plant-local point to frame in the macro shot: the flower/fruit with the most leaves nearby, else a leafy junction.</summary>
+    private static (Vector3, bool) MacroTarget(Vivarium.Sim.Repr.PlantDescriptor p, float H)
+    {
+        var leaves = new List<Vec3>();
+        foreach (var o in p.Organs) if (o.Type is OrganType.Leaf or OrganType.Leaflet) leaves.Add(o.Start);
+        int best = -1, bestN = -1;
+        for (int i = 0; i < p.Organs.Length; i++)
+        {
+            var o = p.Organs[i];
+            if (o.Type is not (OrganType.Flower or OrganType.Fruit)) continue;
+            if (o.Start.Y < 0.2 * H) continue;
+            int n = 0;
+            foreach (var l in leaves) if ((l - o.Start).LengthSq < 0.12 * 0.12) n++;
+            if (n > bestN) { bestN = n; best = i; }
+        }
+        if (best >= 0)
+        {
+            var s = p.Organs[best].Start;
+            return (new Vector3((float)s.X, (float)s.Y, (float)s.Z), true);
+        }
+        var kids = new int[p.Organs.Length];
+        for (int i = 0; i < p.Organs.Length; i++)
+            if (p.Organs[i].Parent >= 0 && p.Organs[i].Type is OrganType.Leaf or OrganType.Leaflet or OrganType.Petiole)
+                kids[p.Organs[i].Parent]++;
+        int bj = -1;
+        for (int i = 0; i < p.Organs.Length; i++)
+        {
+            var o = p.Organs[i];
+            if (o.Type != OrganType.Axis || o.Start.Y < 0.25 * H || o.Start.Y > 0.9 * H) continue;
+            if (bj < 0 || kids[i] > kids[bj]) bj = i;
+        }
+        if (bj < 0) return (new Vector3(0, 0.5f * H, 0), false);
+        var a = p.Organs[bj];
+        var q = a.Start + (a.End - a.Start) * 0.4;
+        return (new Vector3((float)q.X, (float)q.Y, (float)q.Z), false);
+    }
+
+    public void ApplyVariant(string? variant)
+    {
+        bool young = variant == "young";
+        foreach (var l in _legacy) l.Visible = !young;
+        _main.Visible = !young;
+        _young.Visible = young;
+    }
+
+    public void Tick(double dt)
+    {
+        var active = _young.Visible ? _young : _main;
+        if (active.IsVisibleInTree() && active.PendingBuilds > 0) active.Drain();
+    }
+}

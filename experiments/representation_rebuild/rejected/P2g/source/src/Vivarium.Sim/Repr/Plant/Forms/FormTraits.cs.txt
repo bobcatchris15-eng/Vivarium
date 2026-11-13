@@ -1,0 +1,131 @@
+using System;
+using Vivarium.Sim.Core;
+
+namespace Vivarium.Sim.Repr.Plant.Forms;
+
+public enum GrowthForm
+{
+    MultiStemShrub, SingleTrunkTree, FernRosette, HerbRosette, Forb, Graminoid,
+    CreepingMat, Climber, SucculentRosette, AquaticEmergent,
+}
+
+public enum Phyllotaxy { Alternate137, Distichous, Decussate, Whorled }
+
+public enum LeafArchetype { Lanceolate, Ovate, Cordate, Peltate, Linear, Pinnate, Palmate, FernFrond, Orbicular, Strap }
+
+public enum InflorescenceType { None, Solitary, Raceme, PendantRaceme, PendantCluster, Umbel, Spike, Catkin }
+
+public enum FlowerShape { Bell = 0, Cup = 1, Star = 2, Lantern = 3, BerryCluster = 4, Capsule = 5, Catkin = 6 }
+
+/// <summary>
+/// Botanical parameters of a growth form. All lengths are metres, all angles degrees unless the name says Rad.
+/// Colours are LINEAR rgb. Generators read this record only; nothing here is a file or a species name.
+/// </summary>
+public sealed record FormTraits
+{
+    public GrowthForm Form { get; init; } = GrowthForm.MultiStemShrub;
+
+    // ---- size
+    public double HeightM { get; init; } = 1.2;
+    public double CrownRadiusM { get; init; } = 0.7;
+    public int StemMin { get; init; } = 4;
+    public int StemMax { get; init; } = 6;
+    /// <summary>0 = side branches as long as the leader (bushy), 1 = strong leader, short laterals.</summary>
+    public double ApicalDominance { get; init; } = 0.4;
+
+    // ---- branching
+    public int BranchOrders { get; init; } = 3;
+    public double BranchAngleDeg { get; init; } = 52;
+    public double BranchAngleSdDeg { get; init; } = 12;
+    /// <summary>Internode length at mid-axis; internodes shrink to InternodeTipFactor of this at the tip.</summary>
+    public double InternodeM { get; init; } = 0.09;
+    public double InternodeTipFactor { get; init; } = 0.55;
+    public Phyllotaxy Phyllotaxy { get; init; } = Phyllotaxy.Alternate137;
+    public int WhorlN { get; init; } = 3;
+    /// <summary>Probability that a node of an axis carries a side branch: lerp(Base, Tip, position along the axis).</summary>
+    public double BranchProbBase { get; init; } = 0.15;
+    public double BranchProbTip { get; init; } = 0.45;
+    /// <summary>Lateral length relative to its parent, at the base of the parent.</summary>
+    public double LateralLengthFactor { get; init; } = 0.35;
+
+    // ---- tropisms (elevation = angle above horizontal)
+    /// <summary>Gravitropic set-point elevation per branching order 0..3 (degrees); the last value repeats.</summary>
+    public double[] GravSetPointDeg { get; init; } = { 80, 28, 22, 20 };
+    public double GravRate { get; init; } = 0.35;
+    /// <summary>Phototropic up-bend near the tip (0..1).</summary>
+    public double PhotoK { get; init; } = 0.45;
+    /// <summary>Droop under own load; 1 = typical flexible shrub cane.</summary>
+    public double Sag { get; init; } = 1.0;
+    /// <summary>Smooth random direction walk per internode (degrees).</summary>
+    public double WanderDeg { get; init; } = 7;
+    /// <summary>Initial elevation of the main axes (degrees).</summary>
+    public double LeaderElevDeg { get; init; } = 66;
+
+    // ---- wood
+    public double StemBaseRadiusM { get; init; } = 0.0085;
+    public double TipRadiusM { get; init; } = 0.0012;
+    public double TaperExp { get; init; } = 1.1;
+    public double BaseFlare { get; init; } = 0.25;
+    public bool BarkTissue { get; init; } = false;
+    /// <summary>Recurved thorns per metre of primary axis (0 = none).</summary>
+    public double ThornsPerM { get; init; } = 0;
+
+    // ---- leaf
+    public LeafArchetype Leaf { get; init; } = LeafArchetype.Lanceolate;
+    public double LeafLengthM { get; init; } = 0.10;
+    /// <summary>Blade width / length.</summary>
+    public double LeafAspect { get; init; } = 0.35;
+    public double PetioleM { get; init; } = 0.02;
+    public int Leaflets { get; init; } = 5;
+    public double LeafDroop { get; init; } = 0.3;
+    public double LeafElevDeg { get; init; } = 30;
+    /// <summary>Probability a node of a leaf-bearing axis carries a leaf (before the tip-cluster weighting).</summary>
+    public double LeafDensity { get; init; } = 0.8;
+    public double LeafAreaIndex { get; init; } = 2.4;
+    /// <summary>0 = leaves spread evenly along twigs, 1 = leaves concentrated at the twig ends.</summary>
+    public double LeafClusterTips { get; init; } = 0.4;
+    /// <summary>Lowest branching order that carries leaves.</summary>
+    public int LeafMinOrder { get; init; } = 2;
+    public double LeafEdgeWave { get; init; } = 0.02;
+    public double LeafSerration { get; init; } = 0.0;
+    public double LeafCurl { get; init; } = 0.25;
+    public double LeafCup { get; init; } = 0.2;
+
+    // ---- reproduction
+    public InflorescenceType Inflorescence { get; init; } = InflorescenceType.None;
+    public FlowerShape Flower { get; init; } = FlowerShape.Bell;
+    public int FlowerCount { get; init; } = 30;
+    public double FlowerSizeM { get; init; } = 0.028;
+    public double PeduncleM { get; init; } = 0.08;
+    public double PedicelM { get; init; } = 0.035;
+    public bool Emissive { get; init; } = false;
+    /// <summary>If true the reproductive organs are Fruit organs (berries, capsules) instead of Flower.</summary>
+    public bool AsFruit { get; init; } = false;
+
+    // ---- form-specific
+    public int FrondMin { get; init; } = 5;
+    public int FrondMax { get; init; } = 9;
+    public int PinnaPairs { get; init; } = 12;
+    public double FrondLengthM { get; init; } = 0.45;
+    public bool StrapFronds { get; init; } = false;
+    public int BladeMin { get; init; } = 28;
+    public int BladeMax { get; init; } = 48;
+    public double BladeLengthM { get; init; } = 0.4;
+    public double BladeWidthM { get; init; } = 0.008;
+    public double BladeCurl { get; init; } = 0.8;
+    public int CulmMin { get; init; } = 3;
+    public int CulmMax { get; init; } = 7;
+
+    // ---- colours (linear)
+    public Vec3 LeafAdaxial { get; init; } = PlantShapes.Srgb(0.14, 0.32, 0.22);
+    public Vec3 LeafAbaxial { get; init; } = PlantShapes.Srgb(0.30, 0.52, 0.36);
+    public Vec3 LeafYoung { get; init; } = PlantShapes.Srgb(0.45, 0.68, 0.35);
+    public Vec3 StemColour { get; init; } = PlantShapes.Srgb(0.30, 0.42, 0.22);
+    public Vec3 BarkColour { get; init; } = PlantShapes.Srgb(0.34, 0.28, 0.22);
+    public Vec3 FlowerColour { get; init; } = PlantShapes.Srgb(0.9, 0.85, 0.7);
+    public Vec3 FlowerColour2 { get; init; } = PlantShapes.Srgb(0.8, 0.5, 0.45);
+    public Vec3 FruitColour { get; init; } = PlantShapes.Srgb(0.7, 0.2, 0.15);
+    /// <summary>Per-individual colour spread (0..0.3) and size spread (0..0.3).</summary>
+    public double ColourVariance { get; init; } = 0.06;
+    public double SizeVariance { get; init; } = 0.1;
+}

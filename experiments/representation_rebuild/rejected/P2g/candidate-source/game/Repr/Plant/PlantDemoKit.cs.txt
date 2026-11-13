@@ -1,0 +1,77 @@
+using System;
+using System.Collections.Generic;
+using Godot;
+using Vivarium.Sim.Content;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Repr;
+using Vivarium.Sim.Repr.Plant;
+using Vivarium.Sim.Repr.Plant.Forms;
+
+namespace Vivarium.Repr;
+
+/// <summary>Shared helpers for the P3 plant demos.</summary>
+internal static class PlantDemoKit
+{
+    public static readonly string[] Species = { "glowbriar", "moonfern", "shadebell" };
+
+    private static ReprDemoContext? _ctx;
+    private static readonly Dictionary<string, IPlantGenerator?> Gens = new();
+
+    /// <summary>Gives the kit access to the species definitions (the sim side never reads files).</summary>
+    public static void Bind(ReprDemoContext ctx) { _ctx = ctx; Gens.Clear(); }
+
+    /// <summary>Form traits for a species from its json definition; false if its Shape has no implemented growth form.</summary>
+    public static bool TryTraits(ReprDemoContext ctx, string species, out FormTraits traits)
+    {
+        traits = null!;
+        var def = ctx.World.Content.FloraById(species);
+        if (def == null) return false;
+        double radius = def.Woody != null && def.Woody.CanopyRadius > 0 ? def.Woody.CanopyRadius : def.RadiusAtMax;
+        return SpeciesFormCatalog.TryGetTraits(species, def.Shape, def.Height, radius, def.Color, def.Color2, def.BioluminescenceColor, out traits);
+    }
+
+    public static IPlantGenerator Generator(string species)
+    {
+        if (Gens.TryGetValue(species, out var g) && g != null) return g;
+        if (_ctx == null || !TryTraits(_ctx, species, out var t)) throw new InvalidOperationException($"no growth form for '{species}' (call PlantDemoKit.Bind first)");
+        g = SpeciesFormCatalog.CreateGenerator(species, t);
+        Gens[species] = g;
+        return g;
+    }
+
+    public static PlantDescriptor Make(ulong worldSeed, string species, ulong plantId, double age, double vigour, Vector3 pos, double yaw = 0, double scale = 1)
+    {
+        var g = Generator(species);
+        var p = g.Create(worldSeed, plantId);
+        g.Grow(p, age, vigour, null);
+        p.Position = new Vec3(pos.X, pos.Y, pos.Z);
+        p.Yaw = yaw;
+        p.Scale = scale;
+        return p;
+    }
+
+    public static PlantAssemblyRenderer NewRenderer(ReprDemoContext ctx, string name)
+    {
+        return new PlantAssemblyRenderer { Name = name, MaterialProvider = ctx.LegacyFloraMaterial };
+    }
+
+    public static MeshInstance3D Ground(Vector3 centre, float size)
+    {
+        var matte = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.52f, 0.46f), Roughness = 1f, Metallic = 0f };
+        return new MeshInstance3D { Name = "Ground", Position = centre, Mesh = new PlaneMesh { Size = new Vector2(size, size) }, MaterialOverride = matte };
+    }
+
+    public static float HeightOf(PlantDescriptor p)
+    {
+        double h = p.Height;
+        if (h < 0.01) foreach (var o in p.Organs) h = Math.Max(h, Math.Max(o.Start.Y, o.End.Y));
+        return (float)h;
+    }
+
+    public static float CrownOf(PlantDescriptor p)
+    {
+        double r = p.CrownRadius;
+        if (r < 0.01) foreach (var o in p.Organs) r = Math.Max(r, Math.Max(Math.Sqrt(o.End.X * o.End.X + o.End.Z * o.End.Z), Math.Sqrt(o.Start.X * o.Start.X + o.Start.Z * o.Start.Z)));
+        return (float)r;
+    }
+}

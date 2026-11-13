@@ -1,0 +1,228 @@
+{
+  "demo": "plant_forms",
+  "seed": 804584441,
+  "machine": {
+    "adapter": "AMD Radeon(TM) 860M Graphics",
+    "resolution": [
+      1600,
+      900
+    ],
+    "window": [
+      1600,
+      900
+    ],
+    "render_scale": 0.85,
+    "max_fps": 30,
+    "vsync": "Disabled",
+    "quality": 1,
+    "godot": "4.7.1-stable (official)"
+  },
+  "env_overrides": {
+    "Requested": {},
+    "Applied": [],
+    "Skipped": []
+  },
+  "build_ms": 4300.6,
+  "settle_frames": 30,
+  "managed_bytes_per_frame_baseline": 1351,
+  "shots": [
+    {
+      "shot": "glowbriar_close_main",
+      "name": "glowbriar_close",
+      "variant": "main",
+      "png": "glowbriar_close_main.png",
+      "eye": [
+        1.3598993,
+        0.6368661,
+        2.7310467
+      ],
+      "target": [
+        1.3598993,
+        0.5789692,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 90,
+      "fps_actual": 30.68,
+      "gpu_busy_fraction": 0.5256,
+      "frame_ms_p50": 33.332,
+      "frame_ms_p95": 33.384,
+      "frame_ms_max": 34.35,
+      "gpu_frame_ms_mean": 17.132,
+      "gpu_samples_nonzero": 90,
+      "draw_calls": 71,
+      "primitives": 471102,
+      "objects": 71,
+      "video_mem_mb": 2747.9,
+      "managed_bytes_per_frame_raw": 449338,
+      "managed_bytes_per_frame_net": 447987
+    },
+    {
+      "shot": "glowbriar_macro_main",
+      "name": "glowbriar_macro",
+      "variant": "main",
+      "png": "glowbriar_macro_main.png",
+      "eye": [
+        1.7024807,
+        0.32110605,
+        -0.3997497
+      ],
+      "target": [
+        1.5782608,
+        0.25012323,
+        -0.71917236
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 90,
+      "fps_actual": 30.68,
+      "gpu_busy_fraction": 0.5561,
+      "frame_ms_p50": 33.333,
+      "frame_ms_p95": 33.366,
+      "frame_ms_max": 34.922,
+      "gpu_frame_ms_mean": 18.126,
+      "gpu_samples_nonzero": 90,
+      "draw_calls": 27,
+      "primitives": 275154,
+      "objects": 27,
+      "video_mem_mb": 2749.5,
+      "managed_bytes_per_frame_raw": 1561,
+      "managed_bytes_per_frame_net": 210
+    },
+    {
+      "shot": "shadebell_close_main",
+      "name": "shadebell_close",
+      "variant": "main",
+      "png": "shadebell_close_main.png",
+      "eye": [
+        102.12581,
+        1.2169532,
+        4.337464
+      ],
+      "target": [
+        102.12581,
+        1.106321,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 90,
+      "fps_actual": 30.68,
+      "gpu_busy_fraction": 0.4246,
+      "frame_ms_p50": 33.334,
+      "frame_ms_p95": 33.362,
+      "frame_ms_max": 34.218,
+      "gpu_frame_ms_mean": 13.84,
+      "gpu_samples_nonzero": 90,
+      "draw_calls": 51,
+      "primitives": 247688,
+      "objects": 51,
+      "video_mem_mb": 2751.2,
+      "managed_bytes_per_frame_raw": 1558,
+      "managed_bytes_per_frame_net": 207
+    },
+    {
+      "shot": "shadebell_macro_main",
+      "name": "shadebell_macro",
+      "variant": "main",
+      "png": "shadebell_macro_main.png",
+      "eye": [
+        102.72837,
+        1.0726455,
+        1.393429
+      ],
+      "target": [
+        102.60415,
+        1.0016627,
+        1.0740063
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 90,
+      "fps_actual": 30.68,
+      "gpu_busy_fraction": 0.5881,
+      "frame_ms_p50": 33.333,
+      "frame_ms_p95": 33.367,
+      "frame_ms_max": 34.126,
+      "gpu_frame_ms_mean": 19.169,
+      "gpu_samples_nonzero": 90,
+      "draw_calls": 41,
+      "primitives": 392544,
+      "objects": 41,
+      "video_mem_mb": 2752.5,
+      "managed_bytes_per_frame_raw": 1558,
+      "managed_bytes_per_frame_net": 207
+    },
+    {
+      "shot": "moonfern_close_main",
+      "name": "moonfern_close",
+      "variant": "main",
+      "png": "moonfern_close_main.png",
+      "eye": [
+        600.97125,
+        0.17980385,
+        1.7880304
+      ],
+      "target": [
+        600.97125,
+        0.16345803,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 90,
+      "fps_actual": 30.68,
+      "gpu_busy_fraction": 0.3798,
+      "frame_ms_p50": 33.334,
+      "frame_ms_p95": 33.359,
+      "frame_ms_max": 34.946,
+      "gpu_frame_ms_mean": 12.379,
+      "gpu_samples_nonzero": 90,
+      "draw_calls": 61,
+      "primitives": 50239,
+      "objects": 61,
+      "video_mem_mb": 2752.7,
+      "managed_bytes_per_frame_raw": 1558,
+      "managed_bytes_per_frame_net": 207
+    },
+    {
+      "shot": "moonfern_macro_main",
+      "name": "moonfern_macro",
+      "variant": "main",
+      "png": "moonfern_macro_main.png",
+      "eye": [
+        601.6217,
+        0.1956032,
+        -0.058572203
+      ],
+      "target": [
+        601.4975,
+        0.12462039,
+        -0.37799487
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 90,
+      "fps_actual": 30.68,
+      "gpu_busy_fraction": 0.3752,
+      "frame_ms_p50": 33.333,
+      "frame_ms_p95": 33.941,
+      "frame_ms_max": 42.316,
+      "gpu_frame_ms_mean": 12.23,
+      "gpu_samples_nonzero": 90,
+      "draw_calls": 24,
+      "primitives": 32679,
+      "objects": 24,
+      "video_mem_mb": 2752.9,
+      "managed_bytes_per_frame_raw": 1547,
+      "managed_bytes_per_frame_net": 196
+    }
+  ]
+}

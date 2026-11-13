@@ -1,0 +1,123 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Godot;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Repr;
+
+namespace Vivarium.Repr;
+
+/// <summary>
+/// A/B of one specimen per species: legacy whole-plant mesh vs the graph plant through PlantAssemblyRenderer.
+/// Variants: legacy | graph (age 1.0, plant id 1) | young (age 0.4) | indiv (plant ids 1..4 side by side).
+/// Each species lives on its own 4x4 m matte ground quad (stage), 10 m apart along X.
+/// </summary>
+public sealed class PlantSpecimensDemo : IReprDemo
+{
+    public string Name => "plant_specimens";
+
+    private readonly List<ReprShot> _shots = new();
+    public IReadOnlyList<ReprShot> Shots => _shots;
+
+    private readonly List<Node3D> _legacy = new();
+    private PlantAssemblyRenderer _graph = null!, _young = null!, _indiv = null!;
+    private PlantAssemblyRenderer? _active;
+
+    public void Build(Node3D root, ReprDemoContext ctx)
+    {
+        PlantDemoKit.Bind(ctx);
+        var mature = new List<PlantDescriptor>();
+        var young = new List<PlantDescriptor>();
+        var indiv = new List<PlantDescriptor>();
+
+        for (int i = 0; i < PlantDemoKit.Species.Length; i++)
+        {
+            string sp = PlantDemoKit.Species[i];
+            var o = new Vector3(i * 10f, 0, 0);
+            root.AddChild(PlantDemoKit.Ground(o, 4f));
+
+            var legacy = ctx.BuildLegacyFlora(sp);
+            if (legacy != null) { legacy.Position = o; root.AddChild(legacy); _legacy.Add(legacy); }
+
+            var m = PlantDemoKit.Make(ctx.WorldSeed, sp, 1, 1.0, 1.0, o);
+            mature.Add(m);
+            young.Add(PlantDemoKit.Make(ctx.WorldSeed, sp, 1, 0.4, 1.0, o));
+            float H = PlantDemoKit.HeightOf(m), R = PlantDemoKit.CrownOf(m);
+            float sp4 = Math.Min(1.7f * R, 0.9f);
+            for (uint k = 0; k < 4; k++)
+                indiv.Add(PlantDemoKit.Make(ctx.WorldSeed, sp, 1 + k, 1.0, 1.0, o + new Vector3((k - 1.5f) * sp4, 0, 0)));
+
+            ctx.Log($"plant_specimens: {sp} H={H:0.000} m crown={R:0.000} m organs={m.Organs.Length}");
+
+            // ---- cameras (identical for legacy and graph)
+            var target = o + new Vector3(0, 0.5f * H, 0);
+            float D = Math.Max(1.6f * H, 2.6f * R + 0.3f);
+            _shots.Add(new ReprShot($"{sp}_whole", o + new Vector3(0, 0.62f * H, D), target, 40f, 90, "legacy"));
+            _shots.Add(new ReprShot($"{sp}_whole", o + new Vector3(0, 0.62f * H, D), target, 40f, 90, "graph"));
+
+            var (jt, ok) = FindJunction(m, H);
+            var jw = o + jt;
+            var macroEye = jw + new Vector3(0.35f, 0.18f, 0.9f).Normalized() * 0.35f;
+            ctx.Log($"plant_specimens: {sp} macro junction at {jt} found={ok}");
+            _shots.Add(new ReprShot($"{sp}_macro", macroEye, jw, 40f, 90, "legacy"));
+            _shots.Add(new ReprShot($"{sp}_macro", macroEye, jw, 40f, 90, "graph"));
+
+            var underEye = o + new Vector3(0.1f * H, 0.06f, 0.45f * H + 0.15f);
+            var underTarget = o + new Vector3(0, 0.7f * H, 0);
+            _shots.Add(new ReprShot($"{sp}_under", underEye, underTarget, 55f, 90, "legacy"));
+            _shots.Add(new ReprShot($"{sp}_under", underEye, underTarget, 55f, 90, "graph"));
+
+            _shots.Add(new ReprShot($"{sp}_age040", o + new Vector3(0, 0.62f * H, D), target, 40f, 90, "young"));
+            float W = 3 * sp4 + 2 * R;
+            float Di = Math.Max(1.6f * H, 0.9f * W);
+            _shots.Add(new ReprShot($"{sp}_individuals", o + new Vector3(0, 0.55f * H, Di), o + new Vector3(0, 0.45f * H, 0), 40f, 90, "indiv"));
+        }
+
+        _graph = PlantDemoKit.NewRenderer(ctx, "Graph"); _graph.CommitsPerFrame = 64;
+        _young = PlantDemoKit.NewRenderer(ctx, "Young"); _young.CommitsPerFrame = 64;
+        _indiv = PlantDemoKit.NewRenderer(ctx, "Indiv"); _indiv.CommitsPerFrame = 64;
+        root.AddChild(_graph); root.AddChild(_young); root.AddChild(_indiv);
+        _graph.SetPlants(mature);
+        _young.SetPlants(young);
+        _indiv.SetPlants(indiv);
+        ApplyVariant("graph");
+    }
+
+    /// <summary>A mid-height order>=1 axis that carries several petioles/leaves; returns a point a quarter along it.</summary>
+    private static (Vector3, bool) FindJunction(PlantDescriptor p, float H)
+    {
+        var kids = new int[p.Organs.Length];
+        for (int i = 0; i < p.Organs.Length; i++)
+            if (p.Organs[i].Parent >= 0 && p.Organs[i].Type is OrganType.Leaf or OrganType.Leaflet or OrganType.Petiole or OrganType.Flower)
+                kids[p.Organs[i].Parent]++;
+        int best = -1;
+        for (int i = 0; i < p.Organs.Length; i++)
+        {
+            var o = p.Organs[i];
+            if (o.Type != OrganType.Axis || o.Order < 1) continue;
+            if (o.Start.Y < 0.3 * H || o.Start.Y > 0.85 * H) continue;
+            if (kids[i] >= 3) { best = i; break; }
+            if (best < 0 || kids[i] > kids[best]) best = i;
+        }
+        if (best < 0) return (new Vector3(0, 0.5f * H, 0), false);
+        var a = p.Organs[best];
+        var q = a.Start + (a.End - a.Start) * 0.3;
+        return (new Vector3((float)q.X, (float)q.Y, (float)q.Z), kids[best] >= 3);
+    }
+
+    public void ApplyVariant(string? variant)
+    {
+        bool legacy = variant == "legacy";
+        foreach (var l in _legacy) l.Visible = legacy;
+        _graph.Visible = !legacy && variant is null or "graph";
+        _young.Visible = variant == "young";
+        _indiv.Visible = variant == "indiv";
+        _active = _graph.Visible ? _graph : _young.Visible ? _young : _indiv.Visible ? _indiv : null;
+    }
+
+    public void Tick(double dt)
+    {
+        // Harness settling only: wait for the lazy background builds so a capture never races them.
+        if (_active != null && _active.IsVisibleInTree() && _active.PendingBuilds > 0) _active.Drain();
+    }
+}

@@ -143,9 +143,14 @@ public static class ReprReviewRunner
                 last = now; settle++;
             }
 
+            string? shotArg = Main.ArgAfter("--repr-shots");
+            var requestedShots = string.IsNullOrWhiteSpace(shotArg) ? null :
+                shotArg.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var selectedShots = requestedShots == null ? demo.Shots : demo.Shots.Where(s => requestedShots.Contains(s.Name)).ToArray();
+            if (selectedShots.Count == 0) throw new InvalidOperationException($"No shots selected for {demo.Name}: {shotArg}");
             var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var shotsOut = new List<object>();
-            foreach (var shot in demo.Shots)
+            foreach (var shot in selectedShots)
             {
                 demo.ApplyVariant(shot.Variant);
                 double seconds = shot.DayFraction is float f ? Math.Clamp(f, 0f, 0.99999f) * DayNightClock.CycleSeconds : DefaultSeconds;

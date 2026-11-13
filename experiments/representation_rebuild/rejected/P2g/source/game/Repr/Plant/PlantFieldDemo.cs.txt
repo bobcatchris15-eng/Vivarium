@@ -1,0 +1,200 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using Godot;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Repr;
+using Vivarium.Sim.Repr.Plant;
+
+namespace Vivarium.Repr;
+
+/// <summary>
+/// 180 plants (60 per species) on a 12x12 m ground. "graph" = PlantAssemblyRenderer. "legacy" = the same positions,
+/// yaws and an age-derived scale drawn the way the game does it: one MultiMesh per species with the legacy top-tier
+/// (lod 0, morph 0) whole-plant mesh. Limits of the stand-in: a single morph per species (the game rotates through 15-36
+/// morphs and 3 LODs per species), no per-LOD swapping, one world-spanning MultiMesh per species (so no per-chunk
+/// culling, as in the game), and the legacy scale is a size heuristic (0.5 + 0.5 * normalised age), not the
+/// graph plant's own size, so absolute plant sizes differ between variants.
+/// Variants: legacy | graph | orbit (graph, camera driven by Tick) ; the *_revisit shots repeat near/mid/far to prove that
+/// returning to a seen view uploads nothing and rebuilds nothing.
+/// </summary>
+public sealed class PlantFieldDemo : IReprDemo
+{
+    public string Name => "plant_field";
+
+    private readonly List<ReprShot> _shots = new();
+    public IReadOnlyList<ReprShot> Shots => _shots;
+
+    private const int PerSpecies = 60;
+    private static readonly Vector3 Centre = new(6f, 0.4f, 6f);
+
+    private ReprDemoContext _ctx = null!;
+    private PlantAssemblyRenderer _graph = null!;
+    private readonly List<MultiMeshInstance3D> _legacy = new();
+    private readonly List<PlantDescriptor> _plants = new();
+    private readonly List<double> _ages = new();
+
+    private long _lastUp, _lastRebuild;
+    private int _shotIdx;
+    private bool _orbit, _drain;
+    private double _orbitAngle;
+    private string? _lastVariant;
+
+    public void Build(Node3D root, ReprDemoContext ctx)
+    {
+        PlantDemoKit.Bind(ctx);
+        _ctx = ctx;
+        root.AddChild(PlantDemoKit.Ground(new Vector3(6, 0, 6), 12f));
+
+        // ---- deterministic best-candidate scatter
+        var pts = new List<Vector2>();
+        for (int i = 0; i < 3 * PerSpecies; i++)
+        {
+            ulong h = ReprId.Hash(ctx.WorldSeed, 90000UL + (ulong)i, 1);
+            Vector2 best = default; double bestD = -1;
+            for (int a = 0; a < 30; a++)
+            {
+                var c = new Vector2((float)ReprId.Range(h, (uint)(10 + a * 2), 0.4, 11.6), (float)ReprId.Range(h, (uint)(11 + a * 2), 0.4, 11.6));
+                double dmin = double.MaxValue;
+                foreach (var q in pts) dmin = Math.Min(dmin, c.DistanceTo(q));
+                if (dmin > bestD) { bestD = dmin; best = c; }
+            }
+            pts.Add(best);
+        }
+
+        // ---- graph descriptors
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < pts.Count; i++)
+        {
+            ulong h = ReprId.Hash(ctx.WorldSeed, 90000UL + (ulong)i, 2);
+            string sp = PlantDemoKit.Species[i % 3];
+            double age = ReprId.Range(h, 3, 0.4, 1.0);
+            double yaw = ReprId.Range(h, 4, 0, Math.Tau);
+            _plants.Add(PlantDemoKit.Make(ctx.WorldSeed, sp, 1000UL + (ulong)i, age, 1.0, new Vector3(pts[i].X, 0, pts[i].Y), yaw));
+            _ages.Add(age);
+        }
+        double descMs = sw.Elapsed.TotalMilliseconds;
+
+        _graph = PlantDemoKit.NewRenderer(ctx, "Graph");
+        root.AddChild(_graph);
+        sw.Restart();
+        _graph.SetPlants(_plants);
+        double setMs = sw.Elapsed.TotalMilliseconds;
+        ctx.Log($"plant_field: 180 plants: descriptors (Create+Grow) {descMs:0.0} ms, SetPlants {setMs:0.0} ms (build ms), chunks={_graph.ChunkCount}, organs={_plants.Sum(p => p.Organs.Length)}");
+
+        // ---- legacy stand-in
+        long legacyBytes = 0;
+        for (int s = 0; s < 3; s++)
+        {
+            string sp = PlantDemoKit.Species[s];
+            var holder = ctx.BuildLegacyFlora(sp);
+            var src = holder?.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault();
+            if (src == null) { ctx.Log($"plant_field: legacy {sp} unavailable"); continue; }
+            var mesh = src.Multimesh.Mesh;
+            legacyBytes += PlantMeshStats.MeshBytes(mesh);
+            var baseScale = src.Multimesh.GetInstanceTransform(0).Basis.Scale;
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = mesh, InstanceCount = PerSpecies };
+            int n = 0;
+            for (int i = s; i < _plants.Count; i += 3, n++)
+            {
+                var p = _plants[i];
+                float sc = (float)(0.5 + 0.5 * (_ages[i] - 0.4) / 0.6);
+                var basis = new Basis(Vector3.Up, (float)p.Yaw) * Basis.FromScale(baseScale * sc);
+                mm.SetInstanceTransform(n, new Transform3D(basis, new Vector3((float)p.Position.X, 0, (float)p.Position.Z)));
+                mm.SetInstanceColor(n, Colors.White);
+                ulong hh = ReprId.Hash(ctx.WorldSeed, p.PlantId, 7);
+                mm.SetInstanceCustomData(n, new Color((float)ReprId.Unit(hh, 1), 1f, 0f, (float)ReprId.Unit(hh, 2)));
+            }
+            var mmi = new MultiMeshInstance3D { Name = "Legacy_" + sp, Multimesh = mm, CastShadow = src.CastShadow, Visible = false };
+            root.AddChild(mmi);
+            _legacy.Add(mmi);
+            holder!.Free();
+        }
+        long graphMeshBytes0 = _graph.MeshBytes;
+        ctx.Log($"plant_field: legacy top-tier mesh bytes (3 species, lod0 morph0) = {legacyBytes}");
+
+        // ---- shots
+        var near = (new Vector3(1.5f, 1.2f, 1.5f), Centre);
+        var mid = (new Vector3(7f, 3f, 7f), Centre);
+        var far = (new Vector3(16f, 7f, 16f), Centre);
+        foreach (var (name, cam) in new[] { ("near", near), ("mid", mid), ("far", far) })
+            _shots.Add(new ReprShot(name, cam.Item1, cam.Item2, 40f, 180, "legacy"));
+        foreach (var (name, cam) in new[] { ("near", near), ("mid", mid), ("far", far) })
+            _shots.Add(new ReprShot(name, cam.Item1, cam.Item2, 40f, 180, "graph"));
+        _shots.Add(new ReprShot("orbit", far.Item1, far.Item2, 40f, 180, "orbit"));
+        foreach (var (name, cam) in new[] { ("near_revisit", near), ("mid_revisit", mid), ("far_revisit", far) })
+            _shots.Add(new ReprShot(name, cam.Item1, cam.Item2, 40f, 180, "graph"));
+
+        ApplyVariant("graph");
+        _shotIdx = 0;   // the initial call is not a shot
+        _lastVariant = null;
+    }
+
+    private void LogCounters(string label)
+    {
+        long up = _graph.InstanceBytesUploaded, rb = _graph.ChunkRebuilds;
+        var sh = _graph.ShownDetailCounts();
+        _ctx.Log($"plant_field counters after [{label}]: uploadedBytes+{up - _lastUp} (cum {up}), chunkRebuilds+{rb - _lastRebuild} (cum {rb}), " +
+                 $"selectLastUs={_graph.LastSelectMicroseconds:0.0}, selectMaxUs={_graph.MaxSelectMicroseconds:0.0}, selects={_graph.SelectCount}, " +
+                 $"shownDetail[d0,d1,d2]=[{sh[0]},{sh[1]},{sh[2]}], meshBytes={_graph.MeshBytes}, pending={_graph.PendingBuilds}");
+        _lastUp = up; _lastRebuild = rb;
+    }
+
+    public void ApplyVariant(string? variant)
+    {
+        // The runner calls this before each shot; counters since the previous call belong to the previous shot.
+        if (_graph != null && _shotIdx > 0 && _shotIdx <= _shots.Count && _lastVariant != "legacy")
+            LogCounters($"{_shots[_shotIdx - 1].Name}/{_lastVariant}");
+        if (variant != null) _shotIdx++;
+        _lastVariant = variant;
+
+        if (variant == null)
+        {
+            ReportUpdateCost();
+            variant = "graph";
+        }
+        bool legacy = variant == "legacy";
+        foreach (var l in _legacy) l.Visible = legacy;
+        _graph.Visible = !legacy;
+        _orbit = variant == "orbit";
+        _drain = variant == "graph";
+        if (_orbit) _orbitAngle = Math.PI / 4;
+    }
+
+    private bool _updateReported;
+
+    private void ReportUpdateCost()
+    {
+        if (_updateReported) return;
+        _updateReported = true;
+        var gen = PlantDemoKit.Generator(_plants[0].SpeciesId);
+        double age = Math.Min(1.0, _ages[0] + 0.05);
+        long rb0 = _graph.ChunkRebuilds;
+        var sw = Stopwatch.StartNew();
+        gen.Grow(_plants[0], age, 1.0, null);
+        double growMs = sw.Elapsed.TotalMilliseconds;
+        sw.Restart();
+        _graph.UpdatePlant(_plants[0]);
+        double updMs = sw.Elapsed.TotalMilliseconds;
+        sw.Restart();
+        _graph.Drain();
+        double drainMs = sw.Elapsed.TotalMilliseconds;
+        _ctx.Log($"plant_field: grow one plant ({_plants[0].SpeciesId}, age {_ages[0]:0.00}->{age:0.00}) Grow {growMs:0.00} ms; UpdatePlant main-thread {updMs:0.000} ms; " +
+                 $"rebuild+commit of its chunk (blocking drain) {drainMs:0.0} ms; chunk builds committed {_graph.ChunkRebuilds - rb0}; other chunks untouched");
+    }
+
+    public void Tick(double dt)
+    {
+        if (_orbit)
+        {
+            _orbitAngle += dt * 0.35;
+            var eye = new Vector3(6f + 13f * (float)Math.Cos(_orbitAngle), 5f, 6f + 13f * (float)Math.Sin(_orbitAngle));
+            _ctx.Session.CameraRig.LookAtPoint(eye, Centre);
+        }
+        else if (_drain && _graph.IsVisibleInTree() && _graph.PendingBuilds > 0)
+        {
+            _graph.Drain();   // harness settling only: capture must not race lazy builds
+        }
+    }
+}

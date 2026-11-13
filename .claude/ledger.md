@@ -246,3 +246,6 @@ coherent ecology. No compatibility value in saves/APIs/engine. Experiments under
 - All three last Claude workers terminated with quota errors: INT-L before implementation; P2g and E1 with partial uncommitted source. Historical DISPATCHED did not mean running.
 - Recovery validation: solution build exit 0 (9 warnings), headless boot VIVARIUM_BOOT_OK invariants=0. Existing accepted commits through 72a6234 pushed to origin/main.
 - Recovery probes found plant distinct/lifelike/sanity failures and low leaf-area density; ecology filter had zero discovered tests. Neither partial task is accepted. Terra workers own corrections and evidence.
+
+### P2g recovery verdict
+Rejected after direct visual review of baseline/candidate: fern remained crystalline and shrubs became detached leaf clumps with higher geometry. Complete source/evidence preserved in experiments/representation_rebuild/rejected/P2g. Owned production plant paths restored to accepted HEAD; diff empty. Worker explicit isolated baseline plant checks: 10/10. INT-F now proceeds with cached legacy whole-plant assemblies per RD12a. This is a negative experimental result, not completion of a new species geometry rollout.
