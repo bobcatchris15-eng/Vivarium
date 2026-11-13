@@ -29,6 +29,24 @@ public static class ReprEnv
     public static readonly Dictionary<int, float> AmbientC = new() { [5] = 0.074f, [25] = 0.074f, [50] = 0.083f, [72] = 0.135f, [90] = 0.61f };
     /// <summary>Fixed exposure multiplier per DayFraction (x100), calibrated to the control's auto-exposure result.</summary>
     public static readonly Dictionary<int, float> FixedExposure = new() { [5] = 1.95f, [25] = 1.94f, [50] = 1.94f, [72] = 1.93f, [90] = 1.85f };
+    // ---- L1b shaping (candidate A2): shader shape uniforms, bounce, ambient tint
+    public static float ShapeExp = 1f, ShapeFloor = 0f, ShapeThin = 0f, GroundExp = 1f, GroundFloor = 0f, BounceGain = 0f, BounceWood = 1f;
+    /// <summary>Bounce colour (linear, relative to the ambient energy): warm ground-brown. The control's probe-lit bounce is the same in
+    /// scenes with a dark brown and a pale ground, so it is a constant, not derived from the demo's ground albedo.</summary>
+    public static Vector3? BounceColOverride;
+    public static float BounceK = 1f;
+    /// <summary>plant_specimens_lit: shift the whole stage row along X (m) so a stage sits inside the reflection probe volume.</summary>
+    public static float StageShift;
+    public static Vector3 AmbTint = Vector3.One;
+    public static Vector3 BounceCol => (BounceColOverride ?? new Vector3(0.40f, 0.19f, 0.08f)) * BounceK;
+    public static Vivarium.Repr.SkyVisibilityField? ActiveField;
+    public static Vector4 FoliageShape => new(ShapeExp, ShapeFloor, ShapeThin, BounceWood);
+    public static Vector4 GroundShape => new(GroundExp, GroundFloor, 0f, 0f);
+    /// <summary>Ambient energy multiplier per DayFraction (x100) for candidate A2 (sky reflections off, bounce on).</summary>
+    public static readonly Dictionary<int, float> AmbientA2 = new() { [5] = 0.8f, [25] = 0.8f, [50] = 0.8f, [72] = 1.17f, [90] = 4.6f };
+    /// <summary>Bounce gain per DayFraction (x100) for A2: the control's probe was captured in daylight, so its warm bounce on the flowers stays at night.</summary>
+    public static readonly Dictionary<int, float> BounceA2 = new() { [5] = 0.6f, [25] = 0.6f, [50] = 0.6f, [72] = 1.2f, [90] = 1.3f };
+    public static bool BounceTable;
     private static ReprEnvDriver? _driver;
 
     private static ReprEnvDriver Driver(EnvironmentRig rig)
@@ -46,6 +64,7 @@ public static class ReprEnv
         var skipped = new List<string>();
         var order = new List<string>();
         SkyVis = false; SkyVisVoxel = 0.10f; SkyVisStrength = 1f; SkyVisLeaf = 1f; Frames = 0; Dyn = false; ShotFilter = null; SunShots = new();
+        ShapeExp = 1f; ShapeFloor = 0f; ShapeThin = 0f; GroundExp = 1f; GroundFloor = 0f; BounceGain = 0f; BounceWood = 1f; BounceTable = false; BounceColOverride = null; BounceK = 1f; StageShift = 0f; AmbTint = Vector3.One; ActiveField = null;
         if (!string.IsNullOrWhiteSpace(spec))
             foreach (var pair in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
@@ -60,6 +79,8 @@ public static class ReprEnv
             {
                 "a" => new[] { "sdfgi=0", "ssao=0", "amb_src=color", "aa=fxaa", "fog=1", "sky_static=1", "reflprobe_static=1", "exposure=fixed", "skyvis=1",
                                "skyvis_strength=" + CandAStrength.ToString(Inv), "ambient_scale=autoa" },
+                "a2" => new[] { "sdfgi=0", "ssao=0", "amb_src=color", "refl_src=disabled", "aa=fxaa", "fog=1", "sky_static=1", "reflprobe_static=1", "exposure=fixed", "skyvis=1",
+                                "skyvis_strength=1", "skyvis_exp=0.5", "skyvis_floor=0.25", "skyvis_thin=1", "ground_exp=1", "ground_floor=0", "bounce=autoa2", "bounce_wood=0.5", "ambient_scale=autoa2" },
                 "c" => new[] { "sdfgi=0", "ssao=1", "amb_src=color", "aa=fxaa", "sky_static=1", "reflprobe_static=1", "exposure=fixed", "ambient_scale=autoc" },
                 _ => Array.Empty<string>(),
             };
@@ -146,6 +167,22 @@ public static class ReprEnv
             case "skyvis_voxel": SkyVisVoxel = float.Parse(v, Inv); Ok($"skyvis_voxel={v}"); return true;
             case "skyvis_strength": SkyVisStrength = float.Parse(v, Inv); Ok($"skyvis_strength={v}"); return true;
             case "skyvis_leaf": SkyVisLeaf = float.Parse(v, Inv); Ok($"skyvis_leaf={v}"); return true;
+            case "skyvis_exp": ShapeExp = float.Parse(v, Inv); Ok($"skyvis_exp={v}"); return true;
+            case "skyvis_floor": ShapeFloor = float.Parse(v, Inv); Ok($"skyvis_floor={v}"); return true;
+            case "skyvis_thin": ShapeThin = float.Parse(v, Inv); Ok($"skyvis_thin={v}"); return true;
+            case "ground_exp": GroundExp = float.Parse(v, Inv); Ok($"ground_exp={v}"); return true;
+            case "ground_floor": GroundFloor = float.Parse(v, Inv); Ok($"ground_floor={v}"); return true;
+            case "bounce":
+                if (v == "autoa2") { BounceTable = true; BounceGain = 1f; } else BounceGain = float.Parse(v, Inv);
+                Driver(rig); Ok($"bounce={v}"); return true;
+            case "bounce_a2":
+                foreach (var kvp in v.Split('+', StringSplitOptions.RemoveEmptyEntries)) { var q = kvp.Split(':'); BounceA2[int.Parse(q[0], Inv)] = float.Parse(q[1], Inv); }
+                Ok($"bounce_a2={v}"); return true;
+            case "bounce_wood": BounceWood = float.Parse(v, Inv); Ok($"bounce_wood={v}"); return true;
+            case "ps_shift": StageShift = float.Parse(v, Inv); Ok($"ps_shift={v}"); return true;
+            case "bounce_k": BounceK = float.Parse(v, Inv); Ok($"bounce_k={v}"); return true;
+            case "bounce_col": BounceColOverride = Rgb(v); Ok($"bounce_col={v}"); return true;
+            case "amb_tint": AmbTint = Rgb(v); Driver(rig); Ok($"amb_tint={v}"); return true;
             case "frames": Frames = int.Parse(v, Inv); Ok($"frames={v}"); return true;
             case "dyn": Dyn = on; Ok($"dyn={v}"); return true;
             case "shots": ShotFilter = new HashSet<string>(v.Split('+', StringSplitOptions.RemoveEmptyEntries)); Ok($"shots={v}"); return true;
@@ -153,14 +190,15 @@ public static class ReprEnv
                 foreach (var f in v.Split('+', StringSplitOptions.RemoveEmptyEntries)) SunShots.Add(float.Parse(f, Inv));
                 Ok($"sunshots={v}"); return true;
             case "ambient_scale":
-                if (v is "autoa" or "autoc") { Driver(rig).AmbientTable = v == "autoa" ? AmbientA : AmbientC; Ok($"ambient_scale={v} (per-DayFraction table, applied after the rig)"); }
+                if (v is "autoa" or "autoc" or "autoa2") { Driver(rig).AmbientTable = v == "autoa" ? AmbientA : v == "autoa2" ? AmbientA2 : AmbientC; Ok($"ambient_scale={v} (per-DayFraction table, applied after the rig)"); }
                 else { Driver(rig).AmbientScale = float.Parse(v, Inv); Ok($"ambient_scale={v} (applied after the rig ambient energy)"); }
                 return true;
-            case "ambient_a": case "ambient_c":
-                foreach (var kvp in v.Split('+', StringSplitOptions.RemoveEmptyEntries)) { var q = kvp.Split(':'); (k == "ambient_a" ? AmbientA : AmbientC)[int.Parse(q[0], Inv)] = float.Parse(q[1], Inv); }
+            case "ambient_a": case "ambient_c": case "ambient_a2":
+                foreach (var kvp in v.Split('+', StringSplitOptions.RemoveEmptyEntries)) { var q = kvp.Split(':'); (k == "ambient_a" ? AmbientA : k == "ambient_a2" ? AmbientA2 : AmbientC)[int.Parse(q[0], Inv)] = float.Parse(q[1], Inv); }
                 Ok($"{k}={v}"); return true;
             case "exposure":
                 {
+                    if (v == "auto") { Ok("exposure=auto (rig auto exposure kept)"); return true; }
                     var d = Driver(rig);
                     rig.CameraAttributes.AutoExposureEnabled = false;
                     if (v == "fixed") { d.UseExposureTable = true; Ok("exposure=fixed (auto exposure off; per-DayFraction table)"); }
@@ -183,6 +221,13 @@ public static class ReprEnv
             case "maxfps": Engine.MaxFps = int.Parse(v, Inv); Ok($"maxfps={v}"); return true;
         }
         return false;
+    }
+
+    private static Vector3 Rgb(string v)
+    {
+        var q = v.Split(':');
+        if (q.Length != 3) throw new ArgumentException("expected r:g:b");
+        return new Vector3(float.Parse(q[0], Inv), float.Parse(q[1], Inv), float.Parse(q[2], Inv));
     }
 
     /// <summary>Reflection probe variants, joined with '+': noshadow, nobox, noambient, interior, static (= the chosen fix).</summary>
@@ -277,6 +322,18 @@ internal partial class ReprEnvDriver : Node
             Env.AmbientLightEnergy *= AmbientTable[best];
         }
         else if (AmbientScale != 1f) Env.AmbientLightEnergy *= AmbientScale;
+        if (ReprEnv.AmbTint != Vector3.One) { var c = Env.AmbientLightColor; Env.AmbientLightColor = new Color(c.R * ReprEnv.AmbTint.X, c.G * ReprEnv.AmbTint.Y, c.B * ReprEnv.AmbTint.Z); }
+        if (ReprEnv.ActiveField != null && ReprEnv.BounceGain > 0f)
+        {
+            float gain = ReprEnv.BounceGain;
+            if (ReprEnv.BounceTable)
+            {
+                int key = (int)Math.Round((Rig.BenchmarkLightSeconds ?? 60.0) / 1200.0 * 100.0);
+                int best = -1; foreach (var k in ReprEnv.BounceA2.Keys) if (best < 0 || Math.Abs(k - key) < Math.Abs(best - key)) best = k;
+                gain *= ReprEnv.BounceA2[best];
+            }
+            ReprEnv.ActiveField.PushBounce(ReprEnv.BounceCol * (Env.AmbientLightEnergy * gain));
+        }
         if (UseExposureTable || ExposureConst != null)
         {
             float m = ExposureConst ?? 1f;

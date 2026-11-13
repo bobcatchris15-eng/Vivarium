@@ -106,6 +106,10 @@ public sealed class LightProbeDemo : IReprDemo
         _field.Upload();
         double upMs = sw.Elapsed.TotalMilliseconds;
         _field.SetStrength(ReprEnv.SkyVisStrength);
+        foreach (var gm in new[] { ground, rock }) if (gm is ShaderMaterial gsm) _field.RegisterGround(gsm);
+        _field.CollectMaterials(root, false);   // flora materials: shaped AO + bounce
+        _field.SetShapes(ReprEnv.FoliageShape, ReprEnv.GroundShape);
+        ReprEnv.ActiveField = _field;
         ctx.Log(string.Format(CultureInfo.InvariantCulture,
             "skyvis: voxel={0} grid={1}x{2}x{3} voxels={4} tris={5} deposit={6:0.0}ms full_bake={7:0.0}ms upload={8:0.0}ms ({9} bytes) cpu={10:0.0}MB records={11:0.0}MB texture={12:0.0}MB strength={13}",
             v.VoxelSize, v.Nx, v.Ny, v.Nz, v.VoxelCount, tris, depositMs, bakeMs, upMs, _field.LastUploadBytes,

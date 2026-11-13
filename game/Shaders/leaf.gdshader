@@ -311,8 +311,10 @@ void fragment() {
     float ao = basal_ao * furrow_ao * mix(0.55, 1.0, ground_contact);
     AO = clamp(ao * canopy_depth, 0.16, 1.0);
     AO_LIGHT_AFFECT = mix(0.55, 0.78, is_pilot_crown);
+    float repr_ao = 1.0;
     if (repr_skyvis_strength > 0.0) { // L1 cached occlusion (default off)
-        AO *= repr_sky_visibility(position_world, wn);
+        repr_ao = repr_sky_ao(position_world, wn, UV2.y >= .5);
+        AO *= repr_ao;
         AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
     }
     if (UV2.y < .5 && COLOR.a > .5) {
@@ -352,6 +354,7 @@ void fragment() {
         EMISSION = display;
     }
     ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(0.98));
+    if (repr_skyvis_strength > 0.0) EMISSION += repr_sky_bounce(ALBEDO, wn, repr_ao, UV2.y >= .5); // L1b bounce (default off)
     if (tissue_light_diagnostic == 5) {
         SSS_STRENGTH = 0.0;
         SSS_TRANSMITTANCE_COLOR = vec4(0.0);

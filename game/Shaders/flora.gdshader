@@ -549,8 +549,10 @@ void fragment() {
     }
     AO = clamp(ao, 0.20, 1.0);
     AO_LIGHT_AFFECT = mix(0.45, 0.65, is_bark);
+    float repr_ao = 1.0;
     if (repr_skyvis_strength > 0.0) { // L1 cached occlusion (default off)
-        AO *= repr_sky_visibility(world_pos, wn);
+        repr_ao = repr_sky_ao(world_pos, wn, surface_mode == 2 && !woody_surface);
+        AO *= repr_ao;
         AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
     }
     float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
@@ -649,6 +651,7 @@ void fragment() {
     // Photographic/color modulation changes reflectance, never emission.
     // Bright plume/scan ratios must remain inside the diffuse energy budget.
     ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(0.98));
+    if (repr_skyvis_strength > 0.0) EMISSION += repr_sky_bounce(ALBEDO, wn, repr_ao, surface_mode == 2 && !woody_surface); // L1b bounce (default off)
     if (tissue_light_diagnostic == 5) {
         SSS_STRENGTH = 0.0;
         SSS_TRANSMITTANCE_COLOR = vec4(0.0);

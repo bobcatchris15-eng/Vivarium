@@ -23,6 +23,55 @@ public sealed partial class SkyVisibilityField : Node
     private ImageTexture3D? _tex;
     private int _nx, _ny, _nz;
 
+    // ---- L1b shaping: per-material uniforms (repr_skyvis_shape / repr_skyvis_bounce), see repr_skyvis.gdshaderinc
+    private readonly List<ShaderMaterial> _foliage = new(), _ground = new();
+    private readonly HashSet<ulong> _seen = new();
+    private Vector3 _bounce = Vector3.Zero;
+    public int FoliageMaterialCount => _foliage.Count;
+
+    /// <summary>Register every ShaderMaterial (MaterialOverride, surface override, mesh surface) under <paramref name="root"/>.
+    /// Uniforms a shader does not declare are ignored, so any material may be registered.</summary>
+    public void CollectMaterials(Node3D root, bool ground)
+    {
+        var stack = new Stack<Node>(); stack.Push(root);
+        while (stack.Count > 0)
+        {
+            var n = stack.Pop();
+            if (n is GeometryInstance3D g)
+            {
+                Add(g.MaterialOverride, ground);
+                if (g is MeshInstance3D mi && mi.Mesh != null)
+                    for (int i = 0; i < mi.Mesh.GetSurfaceCount(); i++) Add(mi.GetSurfaceOverrideMaterial(i) ?? mi.Mesh.SurfaceGetMaterial(i), ground);
+                else if (g is MultiMeshInstance3D mm && mm.Multimesh?.Mesh is Mesh m)
+                    for (int i = 0; i < m.GetSurfaceCount(); i++) Add(m.SurfaceGetMaterial(i), ground);
+            }
+            foreach (var c in n.GetChildren()) stack.Push(c);
+        }
+    }
+
+    public void RegisterGround(ShaderMaterial m) => Add(m, true);
+
+    private void Add(Material? m, bool ground)
+    {
+        if (m is not ShaderMaterial sm || !_seen.Add(sm.GetInstanceId())) return;
+        (ground ? _ground : _foliage).Add(sm);
+    }
+
+    /// <summary>shape = (extra exponent, visibility floor, thin tissue sees both sides 0/1, unused).</summary>
+    public void SetShapes(Vector4 foliage, Vector4 ground)
+    {
+        foreach (var m in _foliage) m.SetShaderParameter("repr_skyvis_shape", foliage);
+        foreach (var m in _ground) m.SetShaderParameter("repr_skyvis_shape", ground);
+    }
+
+    /// <summary>Bounce light (linear colour x energy) for foliage materials; skipped when it did not move by more than 1 %.</summary>
+    public void PushBounce(Vector3 c)
+    {
+        if ((c - _bounce).Length() <= 0.01f * Math.Max(0.02f, _bounce.Length())) return;
+        _bounce = c;
+        foreach (var m in _foliage) m.SetShaderParameter("repr_skyvis_bounce", c);
+    }
+
     public static SkyVisibilityField Create(Vivarium.Sim.Repr.Aabb bounds, double voxel)
         => new() { Name = "SkyVisibilityField", Volume = new OcclusionVolume(bounds, voxel) };
 
@@ -144,8 +193,9 @@ void fragment() {
     ROUGHNESS = rough;
     if (repr_skyvis_strength > 0.0) {
         vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
-        AO = repr_sky_visibility(wpos, wn);
+        AO = repr_sky_ao(wpos, wn, false);
         AO_LIGHT_AFFECT = REPR_SKYVIS_LIGHT_AFFECT;
+        EMISSION = repr_sky_bounce(ALBEDO, wn, AO, false);
     }
 }";
 
