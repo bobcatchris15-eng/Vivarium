@@ -101,27 +101,25 @@ public sealed class SubstrateHorizonOrderTest : IReprSelfTest
 public sealed class SubstrateContinuityTest : IReprSelfTest
 {
     public string Name => "substrate.continuity";
+    // Orchestrator decision (2026-11-13): steep boundaries are legitimate (a bedrock knoll rises at 60-70 deg),
+    // stair steps are not. So test the SAMPLED function at 5 mm spacing: between adjacent samples a boundary
+    // may move at most 2 cm (about 76 deg). A per-column step would show as a multi-cm jump at one sample.
     public string? Run()
     {
         var s = SubstrateTestKit.Cube();
+        var b = s.Bounds;
+        const double step = 0.005;
         for (int level = 1; level <= 4; level++)
         {
-            for (int j = 0; j < s.Nz; j++)
+            for (double z = b.Min.Z + 0.03; z < b.Max.Z - 0.03; z += 0.05)
             {
-                double prevD = double.NaN, prev2D = double.NaN; Vec2 prevXZ = default;
-                for (int i = 0; i < s.Nx; i++)
+                double prevD = double.NaN;
+                for (double x = b.Min.X + 0.03; x < b.Max.X - 0.03; x += step)
                 {
-                    int c = i * s.Nz + j;
-                    if (s.IsOutcrop(c)) { prevD = double.NaN; prev2D = double.NaN; continue; }
-                    var xz = s.ColumnCentre(c);
-                    double d = s.HorizonBoundaryDepth(xz, level);
-                    // Orchestrator decision (2026-11-13): a dipping boundary is legitimate, a stair step is not.
-                    // Bound the slope loosely (3 cm per 5 cm column) and the SECOND difference (2 cm; bedrock knolls bend ~1 cm per column).
-                    if (!double.IsNaN(d) && !double.IsNaN(prevD) && Math.Abs(d - prevD) >= 0.03)
-                        return $"boundary {level} jumps {Math.Abs(d - prevD) * 100:0.00} cm between columns at x={prevXZ.X:0.00}..{xz.X:0.00}, z={xz.Z:0.00}";
-                    if (!double.IsNaN(d) && !double.IsNaN(prevD) && !double.IsNaN(prev2D) && Math.Abs(d - 2 * prevD + prev2D) >= 0.02)
-                        return $"boundary {level} kinks {Math.Abs(d - 2 * prevD + prev2D) * 100:0.00} cm at x={prevXZ.X:0.00}, z={xz.Z:0.00}";
-                    prev2D = prevD; prevD = d; prevXZ = xz;
+                    double d = s.HorizonBoundaryDepth(new Vec2(x, z), level);
+                    if (!double.IsNaN(d) && !double.IsNaN(prevD) && Math.Abs(d - prevD) >= 0.02)
+                        return $"boundary {level} steps {Math.Abs(d - prevD) * 100:0.00} cm within 5 mm at x={x:0.000}, z={z:0.00}";
+                    prevD = d;
                 }
             }
         }
