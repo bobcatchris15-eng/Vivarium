@@ -27,7 +27,7 @@ namespace Vivarium.Repr;
 /// </summary>
 public sealed partial class SubstrateRenderer : Node3D
 {
-    private const int Parts = 4; // Ground, CutFaces, Rock, Stones == shader kind 0..3
+    private const int Parts = 5; // Ground, CutFaces, Rock, Stones, Litter == shader kind 0..4
 
     public double TileSize = 0.5;
     public readonly double[] Steps = { 0.01, 0.03, 0.10 };
@@ -208,7 +208,7 @@ public sealed partial class SubstrateRenderer : Node3D
         {
             var m = new ShaderMaterial { Shader = shader };
             m.SetShaderParameter("kind", (float)k);
-            m.SetShaderParameter("water_enabled", k == 0 || k == 2 ? 1f : 0f);
+            m.SetShaderParameter("water_enabled", k != 1 ? 1f : 0f);
             m.SetShaderParameter("water_rect", new Vector4((float)_ox, (float)_oz, (float)(1.0 / (_ncx * _cell)), (float)(1.0 / (_ncz * _cell))));
             m.SetShaderParameter("bed_normal", new Vector3((float)bed.X, (float)bed.Y, (float)bed.Z));
             for (int i = 0; i < 4; i++)
@@ -325,6 +325,7 @@ public sealed partial class SubstrateRenderer : Node3D
         b.P[1] = PackMesh(set.CutFaces);
         b.P[2] = PackMesh(set.Rock);
         b.P[3] = PackMesh(set.Stones);
+        b.P[4] = PackMesh(set.Litter);
         b.Cut = set.CutFaces.VertexCount > 0 ? set.CutFaces : null;
         b.Tris = set.Triangles;
         b.Ms = sw.Elapsed.TotalMilliseconds;
@@ -438,7 +439,13 @@ public sealed partial class SubstrateRenderer : Node3D
         {
             var p = b.P[k];
             if (p == null) continue;
-            var mi = new MeshInstance3D { Name = k switch { 0 => "Ground", 1 => "Cut", 2 => "Rock", _ => "Stones" }, Mesh = MakeMesh(p), MaterialOverride = _mats[k] };
+            var mi = new MeshInstance3D
+            {
+                Name = k switch { 0 => "Ground", 1 => "Cut", 2 => "Rock", 3 => "Stones", _ => "Litter" },
+                Mesh = MakeMesh(p),
+                MaterialOverride = _mats[k],
+                CastShadow = k == 4 ? GeometryInstance3D.ShadowCastingSetting.Off : GeometryInstance3D.ShadowCastingSetting.On,
+            };
             nl.Holder.AddChild(mi);
             nl.Inst[k] = mi;
             nl.Bytes[k] = p.Bytes;

@@ -36,6 +36,7 @@ public sealed class SubstrateMeshSet
     public MeshData CutFaces = new();
     public MeshData Rock = new();
     public MeshData Stones = new();
+    public MeshData Litter = new();
     public int Triangles;
     public double Step;
     public int Subdivisions;
@@ -45,7 +46,7 @@ public sealed class SubstrateMeshSet
 
 public static class SubstrateMesher
 {
-    /// Builds the four meshes for the cells whose centres lie in region (XZ). step is metres between vertices.
+    /// Builds the meshes for the cells whose centres lie in region (XZ). step is metres between vertices.
     public static SubstrateMeshSet Build(LayeredSubstrate s, Aabb region, double step, bool includeCutFaces)
     {
         if (s == null) throw new ArgumentNullException(nameof(s));
@@ -64,7 +65,7 @@ public static class SubstrateMesher
             double x = Math.Min(Math.Max(p.X, s.Ox), s.Ox + s.Nx * s.Cell);
             double z = Math.Min(Math.Max(p.Z, s.Oz), s.Oz + s.Nz * s.Cell);
             double h = s.Height(new Vec2(x, z));
-            double sat = s.SampleSubstrate(new Vec3(x, Math.Min(p.Y, h - 0.003), z)).Saturation;
+            double sat = s.SampleMatrix(new Vec3(x, Math.Min(p.Y, h - 0.003), z)).Saturation;
             int c = s.ColumnAt(new Vec2(x, z));
             double film = c < 0 ? 0 : s.Water.Film[c];
             m.Custom0[4 * i] = (float)sat;
@@ -143,8 +144,31 @@ internal sealed class MeshBuilder
     private double Z(long J) => _oz + J * _hz;
     private double Clx(double x) => Math.Min(Math.Max(x, _ox), _ox + _w);
     private double Clz(double z) => Math.Min(Math.Max(z, _oz), _oz + _d);
-    private double HeightAt(double x, double z) => _s.Height(new Vec2(Clx(x), Clz(z)));
-    private SubstrateSample MatAt(double x, double y, double z) => _s.SampleSubstrate(new Vec3(Clx(x), y, Clz(z)));
+    private double RawHeightAt(double x, double z) => _s.Height(new Vec2(Clx(x), Clz(z)));
+
+    private double HeightAt(double x, double z)
+    {
+        double h0 = RawHeightAt(x, z);
+        double r = 1.4 * _step;
+        if (r > 0.025) return h0;
+        // Bevel the 90-degree equator lip of spherical excavations across ~1.4 * step so circular bowls don't stair-step on the square grid.
+        // Far from any excavation (> r + 1.4 * step), nearExc is false and HeightAt returns h0 bit-identically.
+        double u0 = _s.UndisturbedHeight(new Vec2(Clx(x), Clz(z)));
+        double hP = RawHeightAt(x + r, z), hM = RawHeightAt(x - r, z);
+        double hQ = RawHeightAt(x, z + r), hN = RawHeightAt(x, z - r);
+        bool nearExc = (u0 - h0) > 1e-5
+                    || (_s.UndisturbedHeight(new Vec2(Clx(x + r), Clz(z))) - hP) > 1e-5
+                    || (_s.UndisturbedHeight(new Vec2(Clx(x - r), Clz(z))) - hM) > 1e-5
+                    || (_s.UndisturbedHeight(new Vec2(Clx(x), Clz(z + r))) - hQ) > 1e-5
+                    || (_s.UndisturbedHeight(new Vec2(Clx(x), Clz(z - r))) - hN) > 1e-5;
+        if (!nearExc) return h0;
+        double hNE = RawHeightAt(x + r, z + r), hNW = RawHeightAt(x - r, z + r);
+        double hSE = RawHeightAt(x + r, z - r), hSW = RawHeightAt(x - r, z - r);
+        return 0.28 * h0 + 0.11 * (hP + hM + hQ + hN) + 0.07 * (hNE + hNW + hSE + hSW);
+    }
+
+    private SubstrateSample MatAt(double x, double y, double z, bool surfaceSoilOnly = false) =>
+        _s.SampleMatrix(new Vec3(Clx(x), y, Clz(z)), surfaceSoilOnly);
 
     /// Contact function g = soilSurface - bedrock at a ground point: soil where g > 0.
     private double G(double x, double z) => _s.ContactFunction(new Vec2(Clx(x), Clz(z)));
@@ -166,6 +190,17 @@ internal sealed class MeshBuilder
         double gx = (HeightAt(x + h, z) - HeightAt(x - h, z)) / (2 * h);
         double gz = (HeightAt(x, z + h) - HeightAt(x, z - h)) / (2 * h);
         return new Vec3(-gx, 1, -gz).Normalized();
+    }
+
+    private Vec3 SurfaceNormalAt(double x, double z, int kind)
+    {
+        double h1 = 0.5 * _step;
+        double gx1 = (TopY(x + h1, z, kind, out _, out _) - TopY(x - h1, z, kind, out _, out _)) / (2 * h1);
+        double gz1 = (TopY(x, z + h1, kind, out _, out _) - TopY(x, z - h1, kind, out _, out _)) / (2 * h1);
+        double h2 = Math.Min(1.6 * _step, 0.022);
+        double gx2 = (TopY(x + h2, z, kind, out _, out _) - TopY(x - h2, z, kind, out _, out _)) / (2 * h2);
+        double gz2 = (TopY(x, z + h2, kind, out _, out _) - TopY(x, z - h2, kind, out _, out _)) / (2 * h2);
+        return new Vec3(-(0.55 * gx1 + 0.45 * gx2), 1, -(0.55 * gz1 + 0.45 * gz2)).Normalized();
     }
 
     /// Point where the contact function changes sign on the lattice edge between two points of opposite sign,
@@ -200,9 +235,13 @@ internal sealed class MeshBuilder
     private double GroundRelief(double x, double z, double agg)
     {
         double a = Math.Max(agg, 0.0005);
-        double l1 = 4 * a, l2 = 12 * a;
-        return 0.3 * a * (0.6 * Fade(l1) * Noise.Gradient(_seedA, x / l1, z / l1)
-                        + 0.4 * Fade(l2) * Noise.Gradient(_seedB, x / l2, z / l2));
+        double l1 = Math.Max(4 * a, 0.065), l2 = Math.Max(12 * a, 0.13);
+        double micro = 0.25 * a * (0.6 * Fade(l1) * Noise.Gradient(_seedA, x / l1, z / l1)
+                                 + 0.4 * Fade(l2) * Noise.Gradient(_seedB, x / l2, z / l2));
+        // Mesoscale clod and root-hummock relief (wavelengths >= 0.14 m are identical at step 0.01 and 0.03).
+        double meso = 0.0035 * Fade(0.14) * Noise.Gradient(_seedA ^ 0x9E3779B97F4A7C15UL, x / 0.14, z / 0.14)
+                    + 0.0050 * Fade(0.28) * Noise.Gradient(_seedB ^ 0xBF58476D1CE4E5B9UL, x / 0.28, z / 0.28);
+        return micro + meso;
     }
 
     private static double Saw(double t) => (t - Math.Floor(t)) - 0.5;
@@ -217,7 +256,7 @@ internal sealed class MeshBuilder
         {
             double q = p.Dot(_joint[f]) / _jointS[f];
             double dd = Math.Abs(q - Math.Round(q)) * _jointS[f];
-            g -= _jointD[f] * Math.Exp(-(dd * dd) / (0.001 * 0.001));
+            g -= _jointD[f] * 0.65 * Math.Exp(-(dd * dd) / (0.0045 * 0.0045));
         }
         return g;
     }
@@ -230,13 +269,18 @@ internal sealed class MeshBuilder
         double g = G(x, z);
         if (kind == 0)
         {
-            double t = _s.SoilThicknessAt(new Vec2(Clx(x), Clz(z)));
-            mat = MatAt(x, h - Math.Min(0.003, 0.4 * Math.Max(t, 0)), z);   // soil material right up to the feather edge
-            return h + GroundRelief(x, z, mat.AggregateDiameter) * MathD.SmoothStep(0, 0.01, g);
+            double und = _s.UndisturbedHeight(new Vec2(Clx(x), Clz(z)));
+            bool unexcavated = (und - h) < 0.005;
+            mat = MatAt(x, h - 0.002, z, surfaceSoilOnly: unexcavated);
+            return h + GroundRelief(x, z, mat.AggregateDiameter) * MathD.SmoothStep(0, 0.012, g);
         }
-        mat = MatAt(x, h - 0.003, z);
-        double rw = MathD.SmoothStep(0, 0.01, -g);
-        return h + rw * (LedgeAt(new Vec3(x, h, z)) + GroovesAt(new Vec3(x, h, z)));
+        mat = MatAt(x, h - 0.003, z, surfaceSoilOnly: false);
+        mat.Horizon = Horizon.Bedrock;
+        mat.Organic = 0;
+        double rw = MathD.SmoothStep(0, 0.012, -g);
+        var p0 = new Vec3(x, h, z);
+        double crag = 0.0045 * Fade(0.14) * (Noise.Value3(_seedA ^ 0x517CC1B727220A95UL, x / 0.11, h / 0.07, z / 0.11) - 0.5);
+        return h + rw * (LedgeAt(p0) + GroovesAt(p0) + crag);
     }
 
     // ------------------------------------------------------------ attributes and emission
@@ -245,25 +289,31 @@ internal sealed class MeshBuilder
     {
         Vec3 hue = m.MineralHue;
         double org = m.Organic, sand = m.Sand;
-        Vec3 mineral = hue * ((0.7 + 0.5 * sand) * (1 - 0.55 * org));
+        Vec3 mineral = hue * ((0.52 + 0.34 * sand) * (1 - 0.52 * org));
+        double patch = 0.90 + 0.20 * Noise.Value3(0x3141592653589793UL, p.X * 6.5, p.Y * 6.5, p.Z * 6.5);
         Vec3 c;
         switch (m.Horizon)
         {
             case Horizon.Litter:
-                c = Vec3.Lerp(mineral, new Vec3(0.24, 0.14, 0.06), 0.9);
+                c = Vec3.Lerp(mineral * 0.55, new Vec3(0.135, 0.092, 0.058), 0.88) * patch;
                 break;
             case Horizon.Humus:
-                c = Vec3.Lerp(mineral, new Vec3(0.06, 0.045, 0.03), 0.85);
+                c = Vec3.Lerp(mineral * 0.50, new Vec3(0.102, 0.072, 0.047), 0.86) * patch;
                 break;
             case Horizon.Weathered:
-            case Horizon.Bedrock:
             {
                 double band = 0.92 + 0.08 * Math.Sin(2 * Math.PI * p.Dot(bed) / 0.04);
-                c = hue * band;
+                c = Vec3.Lerp(hue * 0.50, new Vec3(0.24, 0.18, 0.125), 0.58) * band * patch;
+                break;
+            }
+            case Horizon.Bedrock:
+            {
+                double band = 0.90 + 0.10 * Math.Sin(2 * Math.PI * p.Dot(bed) / 0.038);
+                c = (hue * 0.55) * band * (0.92 + 0.16 * Noise.Value3(0x2718281828459045UL, p.X * 9.0, p.Y * 9.0, p.Z * 9.0));
                 break;
             }
             default:
-                c = mineral;
+                c = Vec3.Lerp(mineral * 0.65, new Vec3(0.21, 0.15, 0.098), 0.64) * patch;
                 break;
         }
         return new Vec3(MathD.Clamp01(c.X), MathD.Clamp01(c.Y), MathD.Clamp01(c.Z));
@@ -311,17 +361,20 @@ internal sealed class MeshBuilder
     {
         double y = TopY(x, z, kind, out _, out var mat);
         var p = new Vec3(x, y, z);
-        return Emit(m, p, NormalAt(x, z), Albedo(mat, p, _bed), mat, FilmAt(x, z), x, z, (double)mat.Horizon, 0);
+        return Emit(m, p, SurfaceNormalAt(x, z, kind), Albedo(mat, p, _bed), mat, FilmAt(x, z), x, z, (double)mat.Horizon, 0);
     }
 
-    /// Vertex on the soil/rock contact. No relief; identical position in every mesh that uses it.
-    private int CrossVertex(MeshData m, Dictionary<(long, long, long, long), int> map, long Ia, long Ja, long Ib, long Jb)
+    /// Vertex on the soil/rock contact. No relief; identical position and attributes in every mesh that uses it.
+    private int CrossVertex(MeshData m, Dictionary<(long, long, long, long), int> map, long Ia, long Ja, long Ib, long Jb, int side)
     {
+        _ = side;
         if (Ia > Ib || (Ia == Ib && Ja > Jb)) { (Ia, Ib) = (Ib, Ia); (Ja, Jb) = (Jb, Ja); }
         var key = (Ia, Ja, Ib, Jb);
         if (map.TryGetValue(key, out int id)) return id;
         var cp = Crossing(Ia, Ja, Ib, Jb);
-        var mat = MatAt(cp.X, cp.Y - 0.001, cp.Z);
+        double und = _s.UndisturbedHeight(new Vec2(Clx(cp.X), Clz(cp.Z)));
+        bool unexcavated = (und - cp.Y) < 0.005;
+        var mat = MatAt(cp.X, cp.Y - 0.002, cp.Z, surfaceSoilOnly: unexcavated);
         var p = new Vec3(cp.X, cp.Y, cp.Z);
         id = Emit(m, p, NormalAt(cp.X, cp.Z), Albedo(mat, p, _bed), mat, FilmAt(cp.X, cp.Z), cp.X, cp.Z, (double)mat.Horizon, 0);
         map[key] = id;
@@ -351,7 +404,10 @@ internal sealed class MeshBuilder
                     var m = kind == 0 ? ground : rock; var map = kind == 0 ? mapG : mapR;
                     int a = TopVertex(m, map, li[0], lj[0], kind), b = TopVertex(m, map, li[1], lj[1], kind);
                     int c = TopVertex(m, map, li[2], lj[2], kind), d = TopVertex(m, map, li[3], lj[3], kind);
-                    Tri(m, a, b, c); Tri(m, a, c, d);
+                    double dAC = Math.Abs(m.Position(a).Y - m.Position(c).Y);
+                    double dBD = Math.Abs(m.Position(b).Y - m.Position(d).Y);
+                    if (dBD < dAC - 1e-5) { Tri(m, a, b, d); Tri(m, b, c, d); }
+                    else { Tri(m, a, b, c); Tri(m, a, c, d); }
                     continue;
                 }
                 int n = 0, ncross = 0;
@@ -372,12 +428,12 @@ internal sealed class MeshBuilder
                         int prev = ent[(s0 + n - 1) % n];
                         if (prev < 4) continue;                      // not the first corner of its run
                         var poly = new List<int>();
-                        poly.Add(CrossId(m, cm, prev - 4, li, lj));
+                        poly.Add(CrossId(m, cm, prev - 4, li, lj, side));
                         int p = s0;
                         while (true)
                         {
                             int q = ent[p];
-                            if (q >= 4) { poly.Add(CrossId(m, cm, q - 4, li, lj)); break; }
+                            if (q >= 4) { poly.Add(CrossId(m, cm, q - 4, li, lj, side)); break; }
                             poly.Add(TopVertex(m, map, li[q], lj[q], side));
                             p = (p + 1) % n;
                         }
@@ -390,16 +446,16 @@ internal sealed class MeshBuilder
                     double gc = G(X(I0) + 0.5 * _hx, Z(J0) + 0.5 * _hz);
                     int side = gc > 0 ? 0 : 1;
                     var m = side == 0 ? ground : rock; var cm = side == 0 ? crG : crR;
-                    int a = CrossId(m, cm, 0, li, lj), b = CrossId(m, cm, 1, li, lj), c = CrossId(m, cm, 2, li, lj), d = CrossId(m, cm, 3, li, lj);
+                    int a = CrossId(m, cm, 0, li, lj, side), b = CrossId(m, cm, 1, li, lj, side), c = CrossId(m, cm, 2, li, lj, side), d = CrossId(m, cm, 3, li, lj, side);
                     Tri(m, a, b, c); Tri(m, a, c, d);
                 }
             }
     }
 
-    private int CrossId(MeshData m, Dictionary<(long, long, long, long), int> cm, int edge, long[] li, long[] lj)
+    private int CrossId(MeshData m, Dictionary<(long, long, long, long), int> cm, int edge, long[] li, long[] lj, int side)
     {
         int a = edge, b = (edge + 1) & 3;
-        return CrossVertex(m, cm, li[a], lj[a], li[b], lj[b]);
+        return CrossVertex(m, cm, li[a], lj[a], li[b], lj[b], side);
     }
 
     // ------------------------------------------------------------ walls
@@ -500,7 +556,7 @@ internal sealed class MeshBuilder
             }
             cols.Add((X(I), Z(J), LatticeTopY(I, J)));
         }
-        List<int> prevIds = null; List<double> prevYs = null;
+        List<int>? prevIds = null; List<double>? prevYs = null;
         double start = alongZ ? cols[0].Z : cols[0].X;
         for (int k = 0; k < cols.Count; k++)
         {
@@ -508,7 +564,7 @@ internal sealed class MeshBuilder
             var ids = new List<int>(); var ys = new List<double>();
             double along = Math.Abs((alongZ ? z : x) - start);
             Column(m, x, z, yTop, _yBot, ox, oz, k == 0 || k == cols.Count - 1, along, ids, ys);
-            if (prevIds != null) Zip(m, prevIds, prevYs, ids, ys);
+            if (prevIds != null && prevYs != null) Zip(m, prevIds, prevYs, ids, ys);
             prevIds = ids; prevYs = ys;
         }
     }
@@ -524,12 +580,13 @@ internal sealed class MeshBuilder
         double px = -ez / len, pz = ex / len;
         double mx = 0.5 * (xa + xb), mz = 0.5 * (za + zb), h = 0.5 * _step;
         if (HeightAt(mx + px * h, mz + pz * h) > HeightAt(mx - px * h, mz - pz * h)) { px = -px; pz = -pz; }
-        // (px, pz) now points toward the lower ground, i.e. out of the solid.
-        double yBot = Math.Min(ya, yb);
+        // Place the sub-surface excavation strip strictly below min(ya, yb) so it never pokes above the Ground bowl rim.
+        double yTopStrip = Math.Min(ya, yb) - 0.002;
+        double yBotStrip = Math.Max(_yBot + 0.002, yTopStrip - Math.Max(0.042, Math.Abs(ya - yb) + 0.02));
         var ia = new List<int>(); var sa = new List<double>();
         var ib = new List<int>(); var sb = new List<double>();
-        Column(m, xa, za, ya, yBot, px, pz, true, 0, ia, sa);
-        Column(m, xb, zb, yb, yBot, px, pz, true, len, ib, sb);
+        Column(m, xa, za, yTopStrip, yBotStrip, px, pz, true, 0, ia, sa);
+        Column(m, xb, zb, yTopStrip, yBotStrip, px, pz, true, len, ib, sb);
         Zip(m, ia, sa, ib, sb);
     }
 
@@ -555,7 +612,7 @@ internal sealed class MeshBuilder
             }
     }
 
-    // ------------------------------------------------------------ stones
+    // ------------------------------------------------------------ stones & 3D litter
 
     private static (Vec3[] V, int[] F) Icosphere(int level)
     {
@@ -599,7 +656,7 @@ internal sealed class MeshBuilder
 
     private void BuildStones(SubstrateMeshSet set, Aabb region, bool cut)
     {
-        var (dirs, faces) = Icosphere(_step <= 0.03 ? 1 : 0);
+        var (dirs, faces) = Icosphere(_step <= 0.015 ? 2 : _step <= 0.04 ? 1 : 0);
         const double pad = 0.12;
         double w = _ox + _w, dEdge = _oz + _d;
         var pos = new Vec3[dirs.Length];
@@ -614,7 +671,8 @@ internal sealed class MeshBuilder
             for (int i = 0; i < dirs.Length; i++)
             {
                 Vec3 d = dirs[i];
-                double r = 1 + 0.08 * Noise.Value3(hs, d.X * 2.2, d.Y * 2.2, d.Z * 2.2);
+                double r = 1 + 0.11 * (Noise.Value3(hs, d.X * 2.4, d.Y * 2.4, d.Z * 2.4) - 0.35)
+                             + 0.05 * (Noise.Value3(hs ^ 0xA5A5A5A5UL, d.X * 5.2, d.Y * 5.2, d.Z * 5.2) - 0.5);
                 Vec3 local = new Vec3(d.X * st.Semi.X * r, d.Y * st.Semi.Y * r, d.Z * st.Semi.Z * r);
                 pos[i] = c + st.AxisA * local.X + st.AxisB * local.Y + st.AxisC * local.Z;
                 if (pos[i].Y > HeightAt(pos[i].X, pos[i].Z)) visible = true;
@@ -623,12 +681,16 @@ internal sealed class MeshBuilder
                                     || c.Z - _oz <= 1.2 * maxSemi || dEdge - c.Z <= 1.2 * maxSemi);
             if (!visible && !nearWall) continue;
 
-            var mat = _s.SampleSubstrate(c);
-            Vec3 hue = mat.MineralHue.LengthSq > 1e-6 ? mat.MineralHue : _s.ParentHue;
-            mat.Horizon = Horizon.Bedrock;
-            mat.Organic = 0;
-            double jit = (ReprId.Unit(hs, 7) - 0.5) * 0.06;
-            var alb = new Vec3(hue.X * (1 + jit), hue.Y * (1 + jit * 0.8), hue.Z * (1 + jit * 0.6));
+            var soilMat = _s.SampleMatrix(c);
+            Vec3 hue = soilMat.MineralHue.LengthSq > 1e-6 ? soilMat.MineralHue : _s.ParentHue;
+            soilMat.Horizon = Horizon.Bedrock;
+            soilMat.Organic = 0;
+            double toneVar = 0.42 + 0.24 * ReprId.Unit(hs, 7);
+            double warmVar = (ReprId.Unit(hs, 11) - 0.5) * 0.08;
+            var alb = new Vec3(
+                MathD.Clamp01(hue.X * toneVar + warmVar),
+                MathD.Clamp01(hue.Y * toneVar + warmVar * 0.5),
+                MathD.Clamp01(hue.Z * toneVar - warmVar * 0.4));
             int first = set.Stones.VertexCount;
             var ids = new int[dirs.Length];
             for (int i = 0; i < dirs.Length; i++)
@@ -637,11 +699,162 @@ internal sealed class MeshBuilder
                 Vec3 nl = new Vec3(d.X / st.Semi.X, d.Y / st.Semi.Y, d.Z / st.Semi.Z);
                 Vec3 n = (st.AxisA * nl.X + st.AxisB * nl.Y + st.AxisC * nl.Z).Normalized();
                 double hgt = HeightAt(pos[i].X, pos[i].Z);
-                ids[i] = Emit(set.Stones, pos[i], n, alb, mat, FilmAt(c.X, c.Z),
+                ids[i] = Emit(set.Stones, pos[i], n, alb, soilMat, FilmAt(c.X, c.Z),
                     pos[i].X, pos[i].Z, 5, Math.Max(0, hgt - pos[i].Y));
             }
             for (int i = 0; i < faces.Length; i += 3) Tri(set.Stones, ids[faces[i]], ids[faces[i + 1]], ids[faces[i + 2]]);
             set.StoneSpans.Add((st, first, dirs.Length));
+        }
+    }
+
+    /// Attached 3D forest-floor litter geometry (curled fallen leaf fragments and woody twigs resting on the topsoil).
+    private void BuildLitter(MeshData m, Aabb region)
+    {
+        if (_step > 0.04) return;
+        double cell = _step <= 0.015 ? 0.024 : 0.048;
+        int gx0 = (int)Math.Floor((region.Min.X - _ox) / cell);
+        int gx1 = (int)Math.Ceiling((region.Max.X - _ox) / cell);
+        int gz0 = (int)Math.Floor((region.Min.Z - _oz) / cell);
+        int gz1 = (int)Math.Ceiling((region.Max.Z - _oz) / cell);
+        ulong seedL = Rng.Mix(_s.Seed, Hash.Fnv1a64("mesh-3d-litter"));
+
+        bool IsUndisturbedSoil(double x, double z)
+        {
+            if (G(x, z) <= 0.018) return false;
+            double hLoc = HeightAt(x, z);
+            double undLoc = _s.UndisturbedHeight(new Vec2(Clx(x), Clz(z)));
+            return (undLoc - hLoc) < 0.0025;
+        }
+
+        for (int gx = gx0; gx < gx1; gx++)
+        {
+            for (int gz = gz0; gz < gz1; gz++)
+            {
+                ulong hc = ReprId.Hash(seedL, (ulong)(uint)gx, (ulong)(uint)gz);
+                double cx = _ox + (gx + 0.14 + 0.72 * ReprId.Unit(hc, 1)) * cell;
+                double cz = _oz + (gz + 0.14 + 0.72 * ReprId.Unit(hc, 2)) * cell;
+                if (cx < region.Min.X || cx >= region.Max.X || cz < region.Min.Z || cz >= region.Max.Z) continue;
+                if (cx < _ox + 0.012 || cx > _ox + _w - 0.012 || cz < _oz + 0.012 || cz > _oz + _d - 0.012) continue;
+
+                // Ensure the entire leaf/twig footprint sits on undisturbed soil (never overhanging an excavation rim)
+                const double footR = 0.022;
+                if (!IsUndisturbedSoil(cx, cz) ||
+                    !IsUndisturbedSoil(cx - footR, cz) || !IsUndisturbedSoil(cx + footR, cz) ||
+                    !IsUndisturbedSoil(cx, cz - footR) || !IsUndisturbedSoil(cx, cz + footR))
+                    continue;
+
+                double h = HeightAt(cx, cz);
+                var mat = MatAt(cx, h - 0.002, cz, surfaceSoilOnly: true);
+
+                // Cluster litter naturally into organic drifts and rock-base hollows, leaving ~45% dark crumbly loam exposed
+                double drift = 0.55 * Noise.Value3(seedL ^ 0x9E3779B9UL, cx / 0.19, 0.0, cz / 0.19)
+                             + 0.45 * Noise.Value3(seedL ^ 0xBF58476DUL, cx / 0.08, 0.0, cz / 0.08);
+                double rockRunoff = 1.0 - Math.Clamp(G(cx, cz) / 0.09, 0.0, 1.0);
+                double cluster = MathD.SmoothStep(0.32, 0.72, drift + 0.25 * rockRunoff);
+                double prob = Math.Clamp((mat.Organic - 0.18) * 1.95 * (0.28 + 0.72 * cluster), 0.0, 0.78);
+                if (ReprId.Unit(hc, 3) > prob) continue;
+
+                double ang = ReprId.Unit(hc, 4) * 2.0 * Math.PI;
+                var dir = new Vec2(Math.Cos(ang), Math.Sin(ang));
+                var side = new Vec2(-dir.Z, dir.X);
+                double cy0 = TopY(cx, cz, 0, out _, out _);
+                Vec3 nSurf = SurfaceNormalAt(cx, cz, 0);
+                double slopeX = -nSurf.X / Math.Max(nSurf.Y, 0.25);
+                double slopeZ = -nSurf.Z / Math.Max(nSurf.Y, 0.25);
+                double film = FilmAt(cx, cz);
+
+                bool isTwig = ReprId.Unit(hc, 5) > 0.70;
+                if (!isTwig)
+                {
+                    // Curled 3D decaying forest leaf / duff fragment (9 vertices, 8 triangles, rounded ovate silhouette)
+                    double len = 0.009 + 0.015 * ReprId.Unit(hc, 6);
+                    double wid = (0.30 + 0.20 * ReprId.Unit(hc, 7)) * len;
+                    double curl = 0.0010 + 0.0020 * ReprId.Unit(hc, 8);
+
+                    double pSel = ReprId.Unit(hc, 9);
+                    Vec3 leafAlb = pSel < 0.38
+                        ? new Vec3(0.125, 0.078, 0.044)  // deep decaying mahogany oak
+                        : pSel < 0.74
+                            ? new Vec3(0.095, 0.064, 0.038) // dark humic chestnut duff
+                            : new Vec3(0.142, 0.098, 0.054); // weathered russet-olive leaf
+                    double shade = 0.82 + 0.34 * ReprId.Unit(hc, 10);
+                    leafAlb = new Vec3(
+                        MathD.Clamp01(leafAlb.X * shade),
+                        MathD.Clamp01(leafAlb.Y * shade),
+                        MathD.Clamp01(leafAlb.Z * shade));
+
+                    int EmitLeafPt(double along, double across, double lift, double tiltSide, double tiltFwd, double uLocal, double vLocal)
+                    {
+                        double dx = dir.X * (along * len) + side.X * (across * wid);
+                        double dz = dir.Z * (along * len) + side.Z * (across * wid);
+                        double px = cx + dx, pz = cz + dz;
+                        double pyGround = TopY(px, pz, 0, out _, out _);
+                        double pyTangent = cy0 + slopeX * dx + slopeZ * dz;
+                        double py = Math.Max(pyGround, pyTangent) + lift;
+                        var vn = new Vec3(
+                            nSurf.X + side.X * tiltSide + dir.X * tiltFwd,
+                            nSurf.Y,
+                            nSurf.Z + side.Z * tiltSide + dir.Z * tiltFwd).Normalized();
+                        return Emit(m, new Vec3(px, py, pz), vn, leafAlb, mat, film, uLocal, vLocal, 6.0, Math.Abs(across));
+                    }
+
+                    int vBase = EmitLeafPt(-0.50, 0.0, 0.0005, 0.0, -0.15, 0.0, 0.0);
+                    int vLowL = EmitLeafPt(-0.22, -0.78, curl * 0.65, -0.28, -0.05, -0.78, 0.25);
+                    int vLowR = EmitLeafPt(-0.22, 0.78, curl * 0.68, 0.28, -0.05, 0.78, 0.25);
+                    int vMidL = EmitLeafPt(0.02, -1.0, curl * 0.90, -0.34, 0.04, -1.0, 0.52);
+                    int vMidC = EmitLeafPt(0.0, 0.0, curl * 0.32, 0.0, 0.04, 0.0, 0.50);
+                    int vMidR = EmitLeafPt(0.02, 1.0, curl * 0.95, 0.34, 0.04, 1.0, 0.52);
+                    int vUpL = EmitLeafPt(0.28, -0.68, curl * 0.88, -0.26, 0.14, -0.68, 0.78);
+                    int vUpR = EmitLeafPt(0.28, 0.68, curl * 0.88, 0.26, 0.14, 0.68, 0.78);
+                    int vTip = EmitLeafPt(0.50, 0.0, curl * 1.05, 0.0, 0.28, 0.0, 1.0);
+
+                    Tri(m, vBase, vLowL, vMidC);
+                    Tri(m, vBase, vMidC, vLowR);
+                    Tri(m, vLowL, vMidL, vMidC);
+                    Tri(m, vMidC, vMidR, vLowR);
+                    Tri(m, vMidL, vUpL, vMidC);
+                    Tri(m, vMidC, vUpR, vMidR);
+                    Tri(m, vUpL, vTip, vMidC);
+                    Tri(m, vMidC, vTip, vUpR);
+                }
+                else
+                {
+                    // 3D woody twig / bark sliver (6 vertices, 4 triangles) resting on the forest floor
+                    double len = 0.018 + 0.028 * ReprId.Unit(hc, 6);
+                    double rad = 0.0010 + 0.0013 * ReprId.Unit(hc, 7);
+                    double arch = 0.0007 + 0.0015 * ReprId.Unit(hc, 8);
+                    double shade = 0.78 + 0.34 * ReprId.Unit(hc, 9);
+                    var barkAlb = new Vec3(0.088 * shade, 0.060 * shade, 0.038 * shade);
+
+                    int EmitTwigPt(double along, double across, double lift, double tiltSide, double uLocal, double vLocal)
+                    {
+                        double bow = (1.0 - 4.0 * along * along) * 0.0022;
+                        double dx = dir.X * (along * len) + side.X * (across * rad + bow);
+                        double dz = dir.Z * (along * len) + side.Z * (across * rad + bow);
+                        double px = cx + dx, pz = cz + dz;
+                        double pyGround = TopY(px, pz, 0, out _, out _);
+                        double pyTangent = cy0 + slopeX * dx + slopeZ * dz;
+                        double py = Math.Max(pyGround, pyTangent) + lift + (1.0 - 4.0 * along * along) * arch;
+                        var vn = new Vec3(
+                            nSurf.X + side.X * tiltSide,
+                            nSurf.Y,
+                            nSurf.Z + side.Z * tiltSide).Normalized();
+                        return Emit(m, new Vec3(px, py, pz), vn, barkAlb, mat, film, uLocal, vLocal, 7.0, Math.Abs(across));
+                    }
+
+                    int aL = EmitTwigPt(-0.5, -1.0, 0.0003, -0.55, -1.0, 0.0);
+                    int aC = EmitTwigPt(-0.5, 0.0, rad * 1.15, 0.0, 0.0, 0.0);
+                    int aR = EmitTwigPt(-0.5, 1.0, 0.0003, 0.55, 1.0, 0.0);
+                    int bL = EmitTwigPt(0.5, -0.85, 0.0003, -0.55, -1.0, 1.0);
+                    int bC = EmitTwigPt(0.5, 0.0, rad * 1.05, 0.0, 0.0, 1.0);
+                    int bR = EmitTwigPt(0.5, 0.85, 0.0003, 0.55, 1.0, 1.0);
+
+                    Tri(m, aL, bL, aC);
+                    Tri(m, aC, bL, bC);
+                    Tri(m, aC, bC, aR);
+                    Tri(m, aR, bC, bR);
+                }
+            }
         }
     }
 
@@ -659,9 +872,10 @@ internal sealed class MeshBuilder
             BuildTops(set.Ground, set.Rock, cx0, cx1, cz0, cz1);
             if (includeCutFaces) CutFaces(set.CutFaces, cx0, cx1, cz0, cz1);
             BuildStones(set, region, includeCutFaces);
+            BuildLitter(set.Litter, region);
         }
         set.Triangles = set.Ground.TriangleCount + set.CutFaces.TriangleCount
-                      + set.Rock.TriangleCount + set.Stones.TriangleCount;
+                      + set.Rock.TriangleCount + set.Stones.TriangleCount + set.Litter.TriangleCount;
         return set;
     }
 }

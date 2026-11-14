@@ -22,6 +22,7 @@ internal static class MeshTestKit
         yield return ("cutfaces", set.CutFaces);
         yield return ("rock", set.Rock);
         yield return ("stones", set.Stones);
+        yield return ("litter", set.Litter);
     }
 
     public static ulong HashMesh(MeshData m)
@@ -433,7 +434,7 @@ public sealed class MeshCostTest : IReprSelfTest
             var sw = Stopwatch.StartNew();
             var set = SubstrateMesher.Build(SubstrateTestKit.Cube(), MeshTestKit.Whole(SubstrateTestKit.Cube()), step, true);
             long ms = sw.ElapsedMilliseconds;
-            int verts = set.Ground.VertexCount + set.CutFaces.VertexCount + set.Rock.VertexCount + set.Stones.VertexCount;
+            int verts = set.Ground.VertexCount + set.CutFaces.VertexCount + set.Rock.VertexCount + set.Stones.VertexCount + set.Litter.VertexCount;
             long floats = 0;
             foreach (var (_, m) in MeshTestKit.Meshes(set))
                 floats += m.Positions.Count + m.Normals.Count + m.Colors.Count + m.UV.Count + m.UV2.Count + m.Custom0.Count + m.Custom1.Count;
