@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Vivarium.Sim.Core;
 
 namespace Vivarium.Sim.Repr;
@@ -22,7 +23,7 @@ public sealed partial class LayeredSubstrate
         if (p.Y > cur)
         {
             // Open air, or a stone that survives an excavation / protrudes through the surface.
-            if (stoneCol && p.Y <= und + StoneReach && InStone(p, p.Y <= und)) h = 4;
+            if (stoneCol && p.Y <= und + StoneReach && InStone(p, und, T * f2, p.Y <= und)) h = 4;
             else
             {
                 s.Horizon = p.Y <= cur + Water.Standing[c] ? Horizon.Water : Horizon.Void;
@@ -38,30 +39,31 @@ public sealed partial class LayeredSubstrate
             else if (d < T * f3) h = 2;
             else if (d < T) h = 3;
             else h = 4;
-            if (h < 4 && stoneCol && d <= T + 0.03 && InStone(p, true)) h = 4;     // buried stone: rock body
+            if (h < 4 && stoneCol && d <= T + 0.03 && InStone(p, und, T * f2, true)) h = 4;     // buried stone: rock body
         }
 
         double w00 = (1 - tx) * (1 - tz), w01 = (1 - tx) * tz, w10 = tx * (1 - tz), w11 = tx * tz;
         int a00 = (n00 * Hc + h) * TabStride, a01 = (n01 * Hc + h) * TabStride;
         int a10 = (n10 * Hc + h) * TabStride, a11 = (n11 * Hc + h) * TabStride;
+        float[] tab = NTab;
         s.Solid = true;
         s.Horizon = (Horizon)(h + 1);
-        s.CoarseFragments = (float)Bi(NTab, a00 + F_CF, a01 + F_CF, a10 + F_CF, a11 + F_CF, w00, w01, w10, w11);
-        s.Sand = (float)Bi(NTab, a00 + F_SAND, a01 + F_SAND, a10 + F_SAND, a11 + F_SAND, w00, w01, w10, w11);
-        s.Silt = (float)Bi(NTab, a00 + F_SILT, a01 + F_SILT, a10 + F_SILT, a11 + F_SILT, w00, w01, w10, w11);
-        s.Clay = (float)Bi(NTab, a00 + F_CLAY, a01 + F_CLAY, a10 + F_CLAY, a11 + F_CLAY, w00, w01, w10, w11);
-        s.Organic = (float)Bi(NTab, a00 + F_ORG, a01 + F_ORG, a10 + F_ORG, a11 + F_ORG, w00, w01, w10, w11);
-        s.Porosity = (float)Bi(NTab, a00 + F_PHI, a01 + F_PHI, a10 + F_PHI, a11 + F_PHI, w00, w01, w10, w11);
-        s.AggregateDiameter = (float)Bi(NTab, a00 + F_AGG, a01 + F_AGG, a10 + F_AGG, a11 + F_AGG, w00, w01, w10, w11);
-        s.Compaction = (float)Bi(NTab, a00 + F_COMP, a01 + F_COMP, a10 + F_COMP, a11 + F_COMP, w00, w01, w10, w11);
-        s.Strength = (float)Bi(NTab, a00 + F_STR, a01 + F_STR, a10 + F_STR, a11 + F_STR, w00, w01, w10, w11);
-        s.FieldCapacity = (float)Bi(NTab, a00 + F_FC, a01 + F_FC, a10 + F_FC, a11 + F_FC, w00, w01, w10, w11);
-        s.WiltingPoint = (float)Bi(NTab, a00 + F_WP, a01 + F_WP, a10 + F_WP, a11 + F_WP, w00, w01, w10, w11);
-        s.ColonizationCapacity = (float)Bi(NTab, a00 + F_COL, a01 + F_COL, a10 + F_COL, a11 + F_COL, w00, w01, w10, w11);
+        s.CoarseFragments = (float)(w00 * tab[a00 + F_CF] + w01 * tab[a01 + F_CF] + w10 * tab[a10 + F_CF] + w11 * tab[a11 + F_CF]);
+        s.Sand = (float)(w00 * tab[a00 + F_SAND] + w01 * tab[a01 + F_SAND] + w10 * tab[a10 + F_SAND] + w11 * tab[a11 + F_SAND]);
+        s.Silt = (float)(w00 * tab[a00 + F_SILT] + w01 * tab[a01 + F_SILT] + w10 * tab[a10 + F_SILT] + w11 * tab[a11 + F_SILT]);
+        s.Clay = (float)(w00 * tab[a00 + F_CLAY] + w01 * tab[a01 + F_CLAY] + w10 * tab[a10 + F_CLAY] + w11 * tab[a11 + F_CLAY]);
+        s.Organic = (float)(w00 * tab[a00 + F_ORG] + w01 * tab[a01 + F_ORG] + w10 * tab[a10 + F_ORG] + w11 * tab[a11 + F_ORG]);
+        s.Porosity = (float)(w00 * tab[a00 + F_PHI] + w01 * tab[a01 + F_PHI] + w10 * tab[a10 + F_PHI] + w11 * tab[a11 + F_PHI]);
+        s.AggregateDiameter = (float)(w00 * tab[a00 + F_AGG] + w01 * tab[a01 + F_AGG] + w10 * tab[a10 + F_AGG] + w11 * tab[a11 + F_AGG]);
+        s.Compaction = (float)(w00 * tab[a00 + F_COMP] + w01 * tab[a01 + F_COMP] + w10 * tab[a10 + F_COMP] + w11 * tab[a11 + F_COMP]);
+        s.Strength = (float)(w00 * tab[a00 + F_STR] + w01 * tab[a01 + F_STR] + w10 * tab[a10 + F_STR] + w11 * tab[a11 + F_STR]);
+        s.FieldCapacity = (float)(w00 * tab[a00 + F_FC] + w01 * tab[a01 + F_FC] + w10 * tab[a10 + F_FC] + w11 * tab[a11 + F_FC]);
+        s.WiltingPoint = (float)(w00 * tab[a00 + F_WP] + w01 * tab[a01 + F_WP] + w10 * tab[a10 + F_WP] + w11 * tab[a11 + F_WP]);
+        s.ColonizationCapacity = (float)(w00 * tab[a00 + F_COL] + w01 * tab[a01 + F_COL] + w10 * tab[a10 + F_COL] + w11 * tab[a11 + F_COL]);
         s.MineralHue = new Vec3(
-            Bi(NTab, a00 + F_HR, a01 + F_HR, a10 + F_HR, a11 + F_HR, w00, w01, w10, w11),
-            Bi(NTab, a00 + F_HG, a01 + F_HG, a10 + F_HG, a11 + F_HG, w00, w01, w10, w11),
-            Bi(NTab, a00 + F_HB, a01 + F_HB, a10 + F_HB, a11 + F_HB, w00, w01, w10, w11));
+            w00 * tab[a00 + F_HR] + w01 * tab[a01 + F_HR] + w10 * tab[a10 + F_HR] + w11 * tab[a11 + F_HR],
+            w00 * tab[a00 + F_HG] + w01 * tab[a01 + F_HG] + w10 * tab[a10 + F_HG] + w11 * tab[a11 + F_HG],
+            w00 * tab[a00 + F_HB] + w01 * tab[a01 + F_HB] + w10 * tab[a10 + F_HB] + w11 * tab[a11 + F_HB]);
 
         if (h == 4)
         {
@@ -77,11 +79,12 @@ public sealed partial class LayeredSubstrate
 
         int band = h < 2 ? 0 : h == 2 ? 1 : h == 3 ? 2 : -1;
         if (band >= 0)
-            s.FineRootDensity = (float)Bi(NRoot, n00 * 3 + band, n01 * 3 + band, n10 * 3 + band, n11 * 3 + band, w00, w01, w10, w11);
+            s.FineRootDensity = (float)(w00 * NRoot[n00 * 3 + band] + w01 * NRoot[n01 * 3 + band] + w10 * NRoot[n10 * 3 + band] + w11 * NRoot[n11 * 3 + band]);
         return s;
     }
 
     /// Bilinear blend of one field across four node-table entries (weights sum to 1).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double Bi(float[] t, int i00, int i01, int i10, int i11, double w00, double w01, double w10, double w11) =>
         w00 * t[i00] + w01 * t[i01] + w10 * t[i10] + w11 * t[i11];
 

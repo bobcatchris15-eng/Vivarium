@@ -219,9 +219,17 @@ public sealed class FloraSystem
         double oxygen = 1, topsoil = 0, oxygenFactor = 1, depthFactor = 1;
         if (soilRooted && (sp.Oxygen.HasValue || sp.TopsoilDepth.HasValue))
         {
-            _w.RootZone.EnsureCurrent();
-            oxygen = _w.RootZone.OxygenAt(p, moisture);
-            topsoil = _w.RootZone.RetainedTopsoilDepth.Sample(p);
+            if (_w.WorldSubstrate is { Coupled: true } ws)
+            {
+                oxygen = ws.OxygenAt(p, moisture);
+                topsoil = ws.TopsoilDepthAt(p);
+            }
+            else
+            {
+                _w.RootZone.EnsureCurrent();
+                oxygen = _w.RootZone.OxygenAt(p, moisture);
+                topsoil = _w.RootZone.RetainedTopsoilDepth.Sample(p);
+            }
             if (sp.Oxygen is { } o) oxygenFactor = o.Eval(oxygen);
             if (sp.TopsoilDepth is { } d) depthFactor = d.Eval(topsoil);
         }
@@ -434,6 +442,8 @@ public sealed class FloraSystem
                     {
                         double got = _w.Fields.Nutrients.Take(cell, need);
                         grow *= need > 1e-15 ? got / need : 1;
+                        if (_w.WorldSubstrate is { Coupled: true } ws && !sp.UnlimitedWaterDepth)
+                            grow *= ws.RootWaterFactor(p);
                         _w.Tally.NutrientsUptake += got;
                     }
                 }

@@ -14,6 +14,8 @@ public sealed class SubstrateSpec
     public Func<Vec2, double> DrainagePotential = _ => 0.5; // 0 waterlogged .. 1 free draining
     public Func<Vec2, double> OrganicInput = _ => 0.5;      // kg/m2/yr litter fall proxy 0..1
     public double Depth = 1.0;                       // m modelled below the lowest surface point
+    public double MaxLatticeSpacing = 0.01;          // m fine bedrock lattice target spacing
+    public Func<Vec2, double>? BedrockDepth;         // optional local depth to bedrock (m below surface); null uses analytic cube plane/knoll
 
     /// Test cube: 1 x 1 m footprint, 1 m deep. Gentle 8 degree slope along X, a small hollow,
     /// drainage gradient across X (wet side at low X, dry side at high X), organic input higher on the wet side.

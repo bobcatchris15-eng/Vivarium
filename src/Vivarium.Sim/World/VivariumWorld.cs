@@ -77,6 +77,8 @@ public sealed class VivariumWorld
     public SurfaceLiquid Liquid {get;}
     /// <summary>Derived physical root-zone tendencies; never serialized as authoritative state.</summary>
     public RootZoneEnvironment RootZone { get; }
+    /// <summary>Authoritative layered substrate, mist weather, root uptake, and water conservation ledger.</summary>
+    public Repr.WorldSubstrate WorldSubstrate { get; }
 
     /// <summary>Tick cadences (10 s ticks). Documented in docs/architecture/architecture.md.</summary>
     public static class Cadence
@@ -126,6 +128,7 @@ public sealed class VivariumWorld
         GuardianSystem = new GuardianSystem(this);
 
         Liquid = new SurfaceLiquid(this);
+        WorldSubstrate = new Repr.WorldSubstrate(this);
         RegisterSystems();
     }
 
@@ -173,7 +176,11 @@ public sealed class VivariumWorld
         w.Liquid.Enable();
         if(warmupSurfaceWater&&w.Water.Springs.Count>0)w.Liquid.AdvancePhysical(5);
         Mark("water");
-        for (int i = 0; i < 48; i++) w.Water.CoupleMoisture(w.Fields.Moisture, content.Ecology, 1800, w.Fields.Scratch, w.RootZone);
+        double preWarmupInfiltration = w.Water.Budget.Infiltration;
+        for (int i = 0; i < 8; i++) w.WorldSubstrate.Step(1800);
+        for (int i = 0; i < 16; i++) w.WorldSubstrate.CoupleToFields(1800);
+        w.Water.Budget.Infiltration = preWarmupInfiltration;
+        w.WorldSubstrate.ResetLedger();
         Mark("moisture");
         w.PilotTree?.CoupleHabitat(w, SimUnits.Day);
         foreach (int idx in w.Grid.DomainCells) w.Fields.Detritus[idx] = content.Ecology.DetritusMax * 0.05;
@@ -191,6 +198,8 @@ public sealed class VivariumWorld
             w.GuardianSystem.InitializeGuardian();
             Mark("guardian");
         }
+        w.WorldSubstrate.SyncRoots(force: true);
+        w.WorldSubstrate.ResetLedger();
         w.AmbientGroundCover.InitializeFromHabitat();
         Mark("groundcover");
         w.CreationTimings = timings;
@@ -212,7 +221,7 @@ public sealed class VivariumWorld
         Scheduler.Register("environment", Cadence.Environment, 50, dt =>
         {
             long started = System.Diagnostics.Stopwatch.GetTimestamp();
-            Water.CoupleMoisture(Fields.Moisture, eco, dt, Fields.Scratch, RootZone);
+            WorldSubstrate.Step(dt);
             EnvironmentMoistureMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             if (EnvironmentMoistureMs > WorstEnvironmentMoistureMs) WorstEnvironmentMoistureMs = EnvironmentMoistureMs;
             started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -325,6 +334,8 @@ public sealed class VivariumWorld
         if (!Fields.AllFinite()) e.Add("environment field contains non-finite values");
         if (!Litter.AllFinite()) e.Add("litter contains negative or non-finite mass");
         if (!Water.AllFinite()) e.Add("water depth contains negative or non-finite values");
+        if (!WorldSubstrate.TotalWaterLedger.Closed(1e-5 + 1e-6 * WorldSubstrate.InitialStoredWater))
+            e.Add($"world substrate water ledger not closed (residual {WorldSubstrate.TotalWaterLedger.Residual:E2} m3)");
         var seen = new HashSet<EntityId>();
         foreach (var f in Flora.Items)
         {

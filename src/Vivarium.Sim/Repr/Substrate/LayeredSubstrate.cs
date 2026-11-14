@@ -117,8 +117,9 @@ public sealed partial class LayeredSubstrate : ISubstrate
         ColStoneDeep = new double[ColumnCount];
         _excAt = new List<int>?[ColumnCount];
 
-        // fine lattice: about 1 cm, capped in memory (falls back toward the node spacing on very large domains)
-        int fl = Math.Max(1, (int)Math.Ceiling(Cell / 0.01 - 1e-9));
+        // fine lattice: about MaxLatticeSpacing (default 1 cm), capped in memory
+        double targetLattice = Math.Max(0.005, spec.MaxLatticeSpacing);
+        int fl = Math.Max(1, (int)Math.Ceiling(Cell / targetLattice - 1e-9));
         while (fl > 1 && (long)(Nx * fl + 1) * (Nz * fl + 1) > 12_000_000) fl--;
         Fl = fl; Lnz = Nz * Fl + 1;
         BL = new float[(Nx * Fl + 1) * Lnz];
@@ -198,7 +199,9 @@ public sealed partial class LayeredSubstrate : ISubstrate
     /// (weathering smooths buried relief) so deep soils do not carry rock texture.
     private double BedrockAnalytic(double x, double z, double sSoil)
     {
-        double low = BedrockLow(x, z);
+        double low = _spec.BedrockDepth != null
+            ? sSoil - Math.Max(0, _spec.BedrockDepth(new Vec2(x, z)))
+            : BedrockLow(x, z);
         double w = 1 - MathD.SmoothStep(0.12, 0.40, sSoil - low);
         if (w <= 0) return low;
         double ridged = 0.5 * Ridge(_ridgeSeed, x, z, 0.35) + 0.3 * Ridge(Rng.Mix(_ridgeSeed, 1), x, z, 0.15)

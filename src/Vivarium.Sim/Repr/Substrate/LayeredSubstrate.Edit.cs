@@ -60,6 +60,72 @@ public sealed partial class LayeredSubstrate
         b[0] = T * f1; b[1] = T * f2; b[2] = T * f3; b[3] = T;
     }
 
+    /// Clears all fine-root density across the substrate nodes.
+    public void ClearRoots() => Array.Clear(NRoot, 0, NRoot.Length);
+
+    /// Synchronises node surface heights and column geometry where the underlying surface height function
+    /// has changed (e.g. local terrain sculpting), preserving water, roots and excavations on untouched columns
+    /// and conserving water volume on modified columns. Returns the number of columns updated.
+    public int SyncSurface(double simSeconds)
+    {
+        var changedCols = new HashSet<int>();
+        double xMin = double.MaxValue, xMax = double.MinValue;
+        double yMin = double.MaxValue, yMax = double.MinValue;
+        double zMin = double.MaxValue, zMax = double.MinValue;
+        for (int i = 0; i <= Nx; i++)
+        {
+            for (int j = 0; j <= Nz; j++)
+            {
+                int n = i * NodesZ + j;
+                double x = Ox + i * Cell, z = Oz + j * Cell;
+                double s = _spec.SurfaceHeight(new Vec2(x, z));
+                if (Math.Abs(s - NSurf[n]) <= 1e-7) continue;
+                double oldS = NSurf[n];
+                BuildNode(n, x, z);
+                xMin = Math.Min(xMin, x - Cell); xMax = Math.Max(xMax, x + Cell);
+                yMin = Math.Min(yMin, Math.Min(oldS, s) - _spec.Depth); yMax = Math.Max(yMax, Math.Max(oldS, s) + 0.25);
+                zMin = Math.Min(zMin, z - Cell); zMax = Math.Max(zMax, z + Cell);
+                for (int ci = Math.Max(0, i - 1); ci <= Math.Min(Nx - 1, i); ci++)
+                    for (int cj = Math.Max(0, j - 1); cj <= Math.Min(Nz - 1, j); cj++)
+                        changedCols.Add(ci * Nz + cj);
+            }
+        }
+        if (changedCols.Count == 0) return 0;
+
+        Span<double> oldWater = stackalloc double[4];
+        foreach (int c in changedCols)
+        {
+            for (int l = 0; l < 4; l++)
+                oldWater[l] = Water.Theta[4 * c + l] * ColH[4 * c + l];
+            RefreshColumn(c, init: true);
+            double exfiltrated = 0;
+            for (int l = 0; l < 4; l++)
+            {
+                double h = ColH[4 * c + l];
+                double w = oldWater[l];
+                if (h <= 1e-9)
+                {
+                    Water.Theta[4 * c + l] = 0;
+                    exfiltrated += w;
+                }
+                else
+                {
+                    double cap = ColPhi[4 * c + l] * h;
+                    double keep = Math.Min(w, cap);
+                    Water.Theta[4 * c + l] = keep / h;
+                    exfiltrated += Math.Max(0, w - keep);
+                }
+            }
+            if (exfiltrated > 0) Water.Standing[c] += exfiltrated;
+        }
+        _version++;
+        DirtyLog.Publish(new DirtyRecord(
+            new Aabb(new Vec3(Math.Max(Ox, xMin), yMin, Math.Max(Oz, zMin)),
+                     new Vec3(Math.Min(Ox + Nx * Cell, xMax), yMax, Math.Min(Oz + Nz * Cell, zMax))),
+            DirtyDomain.Geometry | DirtyDomain.SoilMaterial | DirtyDomain.Water, _version, "sculpt", simSeconds));
+        return changedCols.Count;
+    }
+
     /// Deposits fine roots: a smooth exponential-with-depth distribution inside a horizontal disk, down to
     /// min(depth, soil). Total root length deposited equals metresOfRoot exactly (on the node grid).
     public void AddRootDensity(Vec3 centre, double radius, double depth, double metresOfRoot)

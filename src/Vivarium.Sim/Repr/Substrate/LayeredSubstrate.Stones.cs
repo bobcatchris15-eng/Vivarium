@@ -133,14 +133,22 @@ public sealed partial class LayeredSubstrate
     /// True if the point lies inside a stone (surface-set or buried).
     public bool IsInStone(Vec3 p) => InStone(p, true);
 
-    internal bool InStone(Vec3 p, bool deep)
+    internal bool InStone(Vec3 p, bool deep) => InStone(p, double.NaN, 0, deep);
+
+    internal bool InStone(Vec3 p, double undAtP, double dMinDeepAtP, bool deep)
     {
         long x0 = (long)Math.Floor((p.X - StoneReach) / StoneCell), x1 = (long)Math.Floor((p.X + StoneReach) / StoneCell);
         long z0 = (long)Math.Floor((p.Z - StoneReach) / StoneCell), z1 = (long)Math.Floor((p.Z + StoneReach) / StoneCell);
-        for (long ix = x0; ix <= x1; ix++)
-            for (long iz = z0; iz <= z1; iz++)
-                if (TrySurfaceStone(ix, iz, true, p, out Stone st) && Contains(st, p)) return true;
+        // Surface stones sit within ~2*StoneReach of the undisturbed surface (even across a neighbouring stone cell slope).
+        if (double.IsNaN(undAtP) || p.Y >= undAtP - 2.5 * StoneReach)
+        {
+            for (long ix = x0; ix <= x1; ix++)
+                for (long iz = z0; iz <= z1; iz++)
+                    if (TrySurfaceStone(ix, iz, true, p, out Stone st) && Contains(st, p)) return true;
+        }
         if (!deep || _pDeepMax <= 0) return false;
+        // Deep stones sit below T*f2; allow a generous margin for slope/thickness change across StoneCell.
+        if (!double.IsNaN(undAtP) && p.Y > undAtP - dMinDeepAtP + 1.5 * StoneReach) return false;
         long y0 = (long)Math.Floor((p.Y - StoneReach) / StoneCell), y1 = (long)Math.Floor((p.Y + StoneReach) / StoneCell);
         for (long ix = x0; ix <= x1; ix++)
             for (long iy = y0; iy <= y1; iy++)

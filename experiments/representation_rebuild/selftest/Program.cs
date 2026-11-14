@@ -8,6 +8,11 @@ var tests = typeof(IReprSelfTest).Assembly.GetTypes()
     .Select(t => (IReprSelfTest)Activator.CreateInstance(t)!)
     .Where(t => filter == null || t.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
     .OrderBy(t => t.Name).ToList();
+if (tests.Count == 0)
+{
+    Console.WriteLine($"REPR_SELFTEST_NO_MATCH filter={filter ?? "<none>"}");
+    return 2;
+}
 int failed = 0;
 foreach (var t in tests)
 {

@@ -54,6 +54,8 @@ public sealed class WaterPayload
     public string Depth { get; set; } = "";
     public string? FaceFlowEast { get; set; }
     public string? FaceFlowNorth { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SubstrateWater { get; set; }
     public WaterBudget Budget { get; set; } = new();
 }
 
@@ -165,7 +167,9 @@ public static class WorldSerializer
         {
             FormatVersion = w.Liquid.Enabled?4:2, Fluid=w.Liquid.Enabled?w.Liquid.CaptureState():null,
             Erosion=w.Liquid.Erosion.Capture(),
-            Depth = Pack(depth), FaceFlowEast = Pack(flowE), FaceFlowNorth = Pack(flowN), Budget = w.Water.Budget
+            Depth = Pack(depth), FaceFlowEast = Pack(flowE), FaceFlowNorth = Pack(flowN),
+            SubstrateWater = Pack(w.WorldSubstrate.ExportWaterState()),
+            Budget = w.Water.Budget
         });
         p["litter"] = Bytes(new LitterPayload
         {
@@ -369,6 +373,8 @@ public static class WorldSerializer
             Log.Warn(LogCategory.Persistence, $"Save migration dropped {dropped} entr{(dropped == 1 ? "y" : "ies")} of removed flora species ({string.Join(", ", RemovedFloraSpecies.OrderBy(s => s, StringComparer.Ordinal))}).");
 
         Validate(w);
+        w.WorldSubstrate.RestoreWaterState(wa.SubstrateWater != null ? Unpack(wa.SubstrateWater, "substrate water") : null);
+        w.WorldSubstrate.SyncRoots(force: true);
         w.Fields.RecomputeLight(w.Terrain, w.Props, w.PilotTree);
         return w;
     }
