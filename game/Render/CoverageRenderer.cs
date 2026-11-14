@@ -41,9 +41,13 @@ public partial class CoverageRenderer : Node3D
     private sealed class TileRecord
     {
         public long Version = -1;
+        public CoverageRenderRevisionStamp RevisionStamp = null!;
         public MeshInstance3D MeshInstance = null!;
         public ArrayMesh Mesh = null!;
     }
+
+    private sealed record TileBuildResult(MeshData? Mesh, CoverageRenderSnapshot Snapshot,
+        int TerrainVersion, int PropsVersion);
 
     private enum CoverageFloraType : byte
     {
@@ -122,10 +126,15 @@ public partial class CoverageRenderer : Node3D
     private readonly Dictionary<(CoverageLayerId layer, int ti, int tj), ulong> _inViewDirtySince = new();
     private const ulong InViewRebuildCooldownMs = 2500;
     private int _lastTerrainVersion = int.MinValue;
+    private int _lastPropsVersion = int.MinValue;
+    private Heightfield? _buildTerrain;
+    private PropSet? _buildProps;
+    private int _buildTerrainVersion = int.MinValue;
+    private int _buildPropsVersion = int.MinValue;
 
     // Off-thread mesh build pipeline: tasks run pure geometry generation (no Godot API);
     // results are committed to MeshInstance3D/ArrayMesh on the main thread only.
-    private readonly Dictionary<(CoverageLayerId layer, int ti, int tj), Task<MeshData?>> _inFlight = new();
+    private readonly Dictionary<(CoverageLayerId layer, int ti, int tj), Task<TileBuildResult?>> _inFlight = new();
     private const int MaxConcurrentBuilds = 4;
 
 
@@ -473,60 +482,92 @@ public partial class CoverageRenderer : Node3D
         if (_w == null) return;
 
         int terrainVersion = _w.Terrain.Version;
-        bool worldChanged = terrainVersion != _lastTerrainVersion;
-        _lastTerrainVersion = terrainVersion;
-
-        // Discard MeshInstance3D nodes for tiles that become empty or are freed
-        _toRemove.Clear();
-        foreach (var (key, record) in _tiles)
+        int propsVersion = _w.Props.Version;
+        bool worldChanged = terrainVersion != _lastTerrainVersion || propsVersion != _lastPropsVersion;
+        if (!RefreshBuildEnvironment(terrainVersion, propsVersion)) return;
+        if (DiscoverTileChanges(immediate, worldChanged))
         {
-            var layer = _w.Coverage.ById(key.layer);
-            if (!layer.TryGetTile(key.ti, key.tj, out var tile) || tile == null || tile.IsEmpty())
-            {
-                _toRemove.Add(key);
-            }
-        }
-        for (int i = 0; i < _toRemove.Count; i++)
-        {
-            var key = _toRemove[i];
-            if (_tiles.TryGetValue(key, out var record))
-            {
-                record.MeshInstance.QueueFree();
-                RemoveChild(record.MeshInstance);
-                _tiles.Remove(key);
-            }
-            _inViewDirtySince.Remove(key);
+            _lastTerrainVersion = terrainVersion;
+            _lastPropsVersion = propsVersion;
         }
 
-        Plane[]? frustum = null;
-        if (!immediate && Camera != null)
+        ProcessPendingTiles(immediate);
+    }
+
+    private bool DiscoverTileChanges(bool immediate, bool worldChanged)
+    {
+        // Only inspect live occupancy while both terrestrial layers are stable. If biology
+        // is active, keep the existing presentation and still poll outstanding builds below.
+        var mat = _w.Coverage.Mat;
+        var crust = _w.Coverage.Crust;
+        if (!mat.TryBeginRenderCommit()) return false;
+        if (!crust.TryBeginRenderCommit()) { mat.EndRenderCommit(); return false; }
+        try
         {
-            try
+            // Discard MeshInstance3D nodes for tiles that become empty or are freed
+            _toRemove.Clear();
+            foreach (var (key, record) in _tiles)
             {
-                var planes = Camera.GetFrustum();
-                if (planes != null && planes.Count > 0)
+                var layer = _w.Coverage.ById(key.layer);
+                if (!layer.TryGetTile(key.ti, key.tj, out var tile) || tile == null || tile.IsEmpty())
                 {
-                    frustum = new Plane[planes.Count];
-                    planes.CopyTo(frustum, 0);
+                    _toRemove.Add(key);
                 }
             }
-            catch { }
-        }
+            for (int i = 0; i < _toRemove.Count; i++)
+            {
+                var key = _toRemove[i];
+                if (_tiles.TryGetValue(key, out var record))
+                {
+                    record.MeshInstance.QueueFree();
+                    RemoveChild(record.MeshInstance);
+                    _tiles.Remove(key);
+                }
+                _inViewDirtySince.Remove(key);
+            }
 
-        // Allow one visible tile through per sync when the out-of-view work queue is
-        // empty, so foreground growth cannot be starved by a permanently visible tile.
-        int inViewAllowance = 0;
-        if (!immediate && frustum != null && _pendingRebuilds.Count == 0
-            && !HasDirtyOutOfViewTiles(_w.Coverage.Mat, frustum)
-            && !HasDirtyOutOfViewTiles(_w.Coverage.Crust, frustum))
+            Plane[]? frustum = null;
+            if (!immediate && Camera != null)
+            {
+                try
+                {
+                    var planes = Camera.GetFrustum();
+                    if (planes != null && planes.Count > 0)
+                    {
+                        frustum = new Plane[planes.Count];
+                        planes.CopyTo(frustum, 0);
+                    }
+                }
+                catch { }
+            }
+
+            // Allow one visible tile through per sync when the out-of-view work queue is
+            // empty, so foreground growth cannot be starved by a permanently visible tile.
+            int inViewAllowance = 0;
+            if (!immediate && frustum != null && _pendingRebuilds.Count == 0
+                && !HasDirtyOutOfViewTiles(_w.Coverage.Mat, frustum)
+                && !HasDirtyOutOfViewTiles(_w.Coverage.Crust, frustum))
+            {
+                inViewAllowance = 1;
+            }
+
+            // Check tile versions and enqueue dirty / new tiles
+            EnqueueTiles(_w.Coverage.Mat, frustum, immediate, worldChanged, ref inViewAllowance);
+            EnqueueTiles(_w.Coverage.Crust, frustum, immediate, worldChanged, ref inViewAllowance);
+            // Keep in-flight keys until their results are observed, even if the source was removed.
+            _pendingKeys.RemoveWhere(key => !_inFlight.ContainsKey(key) &&
+                (!_w.Coverage.ById(key.layer).TryGetTile(key.ti, key.tj, out var tile) || tile == null || tile.IsEmpty()));
+            return true;
+        }
+        finally
         {
-            inViewAllowance = 1;
+            crust.EndRenderCommit();
+            mat.EndRenderCommit();
         }
+    }
 
-        // Check tile versions and enqueue dirty / new tiles
-        EnqueueTiles(_w.Coverage.Mat, frustum, immediate, worldChanged, ref inViewAllowance);
-        EnqueueTiles(_w.Coverage.Crust, frustum, immediate, worldChanged, ref inViewAllowance);
-
+    private void ProcessPendingTiles(bool immediate)
+    {
         if (immediate)
         {
             // Startup build: no budget slicing, no async offload — process everything now,
@@ -534,15 +575,21 @@ public partial class CoverageRenderer : Node3D
             for (int i = 0; i < _pendingRebuilds.Count; i++)
             {
                 var key = _pendingRebuilds[i];
-                _pendingKeys.Remove(key);
                 var layer = _w.Coverage.ById(key.layer);
-                if (layer.TryGetTile(key.ti, key.tj, out var tile) && tile != null && !tile.IsEmpty())
+                if (layer.TryGetTile(key.ti, key.tj, out var tile) && tile != null)
                 {
-                    var md = BuildTileMesh(layer, tile);
-                    CommitTile(layer, tile, key, md);
+                    if (TryCaptureBuild(layer, tile, out var snapshot, out int capturedTerrain, out int capturedProps))
+                    {
+                        var md = BuildTileMesh(snapshot!.Layer, snapshot.Tile, _buildTerrain!, _buildProps!);
+                        var result = new TileBuildResult(md, snapshot, capturedTerrain, capturedProps);
+                        if (TryCommitBuildResult(layer, tile, key, result))
+                        {
+                            _pendingKeys.Remove(key);
+                        }
+                    }
                 }
             }
-            _pendingRebuilds.Clear();
+            _pendingRebuilds.RemoveAll(k => !_pendingKeys.Contains(k));
             return;
         }
 
@@ -564,14 +611,18 @@ public partial class CoverageRenderer : Node3D
             if (_inFlight.ContainsKey(key)) continue;
 
             var layer = _w.Coverage.ById(key.layer);
-            if (!layer.TryGetTile(key.ti, key.tj, out var tile) || tile == null || tile.IsEmpty())
+            if (!layer.TryGetTile(key.ti, key.tj, out var tile) || tile == null)
             {
                 continue;
             }
-            _inFlight[key] = Task.Run<MeshData?>(() => {
-                var mesh = BuildTileMesh(layer,tile);
+            if (!TryCaptureBuild(layer, tile, out var buildSnapshot, out int buildTerrainVersion, out int buildPropsVersion))
+                continue;
+            var buildTerrain = _buildTerrain!;
+            var buildProps = _buildProps!;
+            _inFlight[key] = Task.Run<TileBuildResult?>(() => {
+                var mesh = BuildTileMesh(buildSnapshot!.Layer, buildSnapshot.Tile, buildTerrain, buildProps);
                 if (mesh != null) Bridge.PrepareMeshUpload(mesh);
-                return mesh;
+                return new TileBuildResult(mesh, buildSnapshot, buildTerrainVersion, buildPropsVersion);
             });
             slots--;
         }
@@ -584,10 +635,17 @@ public partial class CoverageRenderer : Node3D
             if (!_inFlight.TryGetValue(key, out var task) || !task.IsCompleted) continue;
 
             _inFlight.Remove(key);
-            _pendingKeys.Remove(key);
             var layer = _w.Coverage.ById(key.layer);
             layer.TryGetTile(key.ti, key.tj, out var tile);
-            CommitTile(layer, tile, key, task.Result);
+            var result = task.Result;
+            if (result != null && TryCommitBuildResult(layer, tile, key, result))
+            {
+                _pendingKeys.Remove(key);
+            }
+            else if (tile == null)
+            {
+                _pendingKeys.Remove(key);
+            }
 
             if (Stopwatch.GetElapsedTime(started).TotalMilliseconds >= RebuildBudgetMs)
                 break;
@@ -596,6 +654,51 @@ public partial class CoverageRenderer : Node3D
         // Drop committed/obsolete keys from the pending list; anything still in
         // flight or not yet reached stays for a later frame.
         _pendingRebuilds.RemoveAll(k => !_pendingKeys.Contains(k));
+    }
+
+    private bool RefreshBuildEnvironment(int terrainVersion, int propsVersion)
+    {
+        if (_buildTerrain != null && _buildProps != null &&
+            _buildTerrainVersion == terrainVersion && _buildPropsVersion == propsVersion) return true;
+
+        // The simulation does not mutate terrain/props through renderer APIs. Capture immutable copies
+        // on the main thread and publish only if neither source changed during copying.
+        var terrain = _w.Terrain.Snapshot();
+        var props = _w.Props.Clone();
+        if (_w.Terrain.Version != terrainVersion || _w.Props.Version != propsVersion) return false;
+        // Rock.TopAt lazily creates a deterministic surface profile. Warm cloned profiles before
+        // sharing this render-only prop snapshot among concurrent geometry workers.
+        foreach (var rock in props.Rocks) _ = rock.TopAt(rock.Position);
+        _buildTerrain = terrain;
+        _buildProps = props;
+        _buildTerrainVersion = terrainVersion;
+        _buildPropsVersion = propsVersion;
+        return true;
+    }
+
+    private bool TryCaptureBuild(CoverageLayer layer, CoverageTile tile, out CoverageRenderSnapshot? snapshot,
+        out int terrainVersion, out int propsVersion)
+    {
+        snapshot = null;
+        terrainVersion = _w.Terrain.Version;
+        propsVersion = _w.Props.Version;
+        if (terrainVersion != _buildTerrainVersion || propsVersion != _buildPropsVersion) return false;
+        if (!CoverageRenderSnapshot.TryCapture(layer, tile.Ti, tile.Tj, out snapshot)) return false;
+        return terrainVersion == _w.Terrain.Version && propsVersion == _w.Props.Version;
+    }
+
+    private bool TryCommitBuildResult(CoverageLayer layer, CoverageTile? tile,
+        (CoverageLayerId layer, int ti, int tj) key, TileBuildResult result)
+    {
+        if (!layer.TryBeginRenderCommit()) return false;
+        try
+        {
+            if (!result.Snapshot.IsCurrent(_w.Terrain.Version, result.TerrainVersion,
+                _w.Props.Version, result.PropsVersion)) return false;
+            CommitTile(layer, tile, key, result);
+            return true;
+        }
+        finally { layer.EndRenderCommit(); }
     }
 
     private void OrderPendingByCameraDistance()
@@ -624,7 +727,7 @@ public partial class CoverageRenderer : Node3D
             var key = (layer.Id, t.Ti, t.Tj);
             if (_tiles.TryGetValue(key, out var record))
             {
-                if (t.Version <= record.Version)
+                if (!worldChanged && t.Version <= record.Version && record.RevisionStamp.IsCurrent())
                 {
                     _inViewDirtySince.Remove(key);
                     continue;
@@ -675,7 +778,8 @@ public partial class CoverageRenderer : Node3D
         {
             if (t.IsEmpty()) continue;
             var key = (layer.Id, t.Ti, t.Tj);
-            if (!_tiles.TryGetValue(key, out var record) || t.Version <= record.Version) continue;
+            if (!_tiles.TryGetValue(key, out var record) ||
+                (t.Version <= record.Version && record.RevisionStamp.IsCurrent())) continue;
             if (!IsTileInFrustum(frustum, t.Ti, t.Tj)) return true;
         }
         return false;
@@ -702,11 +806,12 @@ public partial class CoverageRenderer : Node3D
     }
 
     /// <summary>Applies an off-thread-built (or synchronously-built) mesh result to the scene tree.</summary>
-    private void CommitTile(CoverageLayer layer, CoverageTile? tile, (CoverageLayerId layer, int ti, int tj) key, MeshData? md)
+    private void CommitTile(CoverageLayer layer, CoverageTile? tile, (CoverageLayerId layer, int ti, int tj) key, TileBuildResult? result)
     {
-        _inViewDirtySince.Remove(key);
-        if (tile == null || tile.IsEmpty() || md == null || md.VertexCount == 0 || md.TriangleCount == 0)
+        var md = result?.Mesh;
+        if (tile == null || tile.IsEmpty() || result == null || md == null || md.VertexCount == 0 || md.TriangleCount == 0)
         {
+            _inViewDirtySince.Remove(key);
             if (_tiles.TryGetValue(key, out var stale))
             {
                 stale.MeshInstance.QueueFree();
@@ -718,15 +823,16 @@ public partial class CoverageRenderer : Node3D
 
         if (_tiles.TryGetValue(key, out var rec))
         {
-            RebuildTile(layer, tile, rec, md);
+            RebuildTile(layer, tile, rec, md, result.Snapshot);
         }
         else
         {
-            CreateTile(layer, tile, key, md);
+            CreateTile(layer, tile, key, md, result.Snapshot);
         }
+        _inViewDirtySince.Remove(key);
     }
 
-    private void CreateTile(CoverageLayer layer, CoverageTile t, (CoverageLayerId layer, int ti, int tj) key, MeshData md)
+    private void CreateTile(CoverageLayer layer, CoverageTile t, (CoverageLayerId layer, int ti, int tj) key, MeshData md, CoverageRenderSnapshot snapshot)
     {
         var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial)
             : (Material)(layer.Id == CoverageLayerId.Crust ? _crustMaterial : _matMaterial);
@@ -741,14 +847,15 @@ public partial class CoverageRenderer : Node3D
         AddChild(mi);
         _tiles[key] = new TileRecord
         {
-            Version = t.Version,
+            Version = snapshot.SourceVersion,
+            RevisionStamp = snapshot.RevisionStamp,
             Mesh = mesh,
             MeshInstance = mi,
         };
         TrianglesBuilt += md.TriangleCount;
     }
 
-    private void RebuildTile(CoverageLayer layer, CoverageTile t, TileRecord record, MeshData md)
+    private void RebuildTile(CoverageLayer layer, CoverageTile t, TileRecord record, MeshData md, CoverageRenderSnapshot snapshot)
     {
         var mat = DebugMode ? (layer.Id == CoverageLayerId.Crust ? _debugCrustMaterial : _debugMatMaterial)
             : (Material)(layer.Id == CoverageLayerId.Crust ? _crustMaterial : _matMaterial);
@@ -756,7 +863,8 @@ public partial class CoverageRenderer : Node3D
         record.MeshInstance.Mesh = record.Mesh;
         record.MeshInstance.MaterialOverride = mat;
         ConfigureCoverageInstance(record.MeshInstance);
-        record.Version = t.Version;
+        record.Version = snapshot.SourceVersion;
+        record.RevisionStamp = snapshot.RevisionStamp;
         TrianglesBuilt += md.TriangleCount;
     }
 
@@ -839,12 +947,12 @@ public partial class CoverageRenderer : Node3D
         return boundedThickness * (0.70f + 0.30f * pillow);
     }
 
-    private MeshData BuildTileMesh(CoverageLayer layer, CoverageTile t)
+    private MeshData BuildTileMesh(CoverageLayer layer, CoverageTile t, Heightfield terrain, PropSet props)
     {
         var scratch = RentScratch();
         try
         {
-            return BuildTileMeshCore(layer, t, scratch);
+            return BuildTileMeshCore(layer, t, scratch, terrain, props);
         }
         finally
         {
@@ -852,7 +960,7 @@ public partial class CoverageRenderer : Node3D
         }
     }
 
-    private MeshData BuildTileMeshCore(CoverageLayer layer, CoverageTile t, ScratchBuffers s)
+    private MeshData BuildTileMeshCore(CoverageLayer layer, CoverageTile t, ScratchBuffers s, Heightfield terrain, PropSet props)
     {
         const int edge = CoverageSpec.TileEdge;
         const double cs = CoverageSpec.CellSize;
@@ -1038,7 +1146,7 @@ public partial class CoverageRenderer : Node3D
 
         List<Rock>? localRocks = null;
         List<LogProp>? localLogs = null;
-        foreach (var r in _w.Props.Rocks)
+        foreach (var r in props.Rocks)
         {
             if (r.X + r.FootprintRadius >= tileMinX && r.X - r.FootprintRadius <= tileMaxX &&
                 r.Z + r.FootprintRadius >= tileMinZ && r.Z - r.FootprintRadius <= tileMaxZ)
@@ -1047,7 +1155,7 @@ public partial class CoverageRenderer : Node3D
                 localRocks.Add(r);
             }
         }
-        foreach (var l in _w.Props.Logs)
+        foreach (var l in props.Logs)
         {
             if (l.X + l.FootprintRadius >= tileMinX && l.X - l.FootprintRadius <= tileMaxX &&
                 l.Z + l.FootprintRadius >= tileMinZ && l.Z - l.FootprintRadius <= tileMaxZ)
@@ -1060,7 +1168,7 @@ public partial class CoverageRenderer : Node3D
 
         double TileGroundHeight(Vec2 wp)
         {
-            double h = _w.Terrain.Height(wp);
+            double h = terrain.Height(wp);
             if (!hasLocalProps) return h;
             double best = double.NaN;
             if (localRocks != null)
@@ -1078,9 +1186,9 @@ public partial class CoverageRenderer : Node3D
         Vec3 TileGroundNormal(double wx, double wz, double gy)
         {
             var wp = new Vec2(wx, wz);
-            if (!hasLocalProps) return _w.Terrain.Normal(wp);
-            double th = _w.Terrain.Height(wp);
-            if (Math.Abs(gy - th) < 0.001) return _w.Terrain.Normal(wp);
+            if (!hasLocalProps) return terrain.Normal(wp);
+            double th = terrain.Height(wp);
+            if (Math.Abs(gy - th) < 0.001) return terrain.Normal(wp);
             const double step = CoverageSpec.CellSize * 0.5;
             double hL = TileGroundHeight(new Vec2(wx - step, wz));
             double hR = TileGroundHeight(new Vec2(wx + step, wz));
@@ -1221,9 +1329,9 @@ public partial class CoverageRenderer : Node3D
             if (hagshairNearCell && localLogs != null)
             {
                 var centre = new Vec2((t.Ti * edge + lx + 0.5) * cs, (t.Tj * edge + lz + 0.5) * cs);
-                double terrain = _w.Terrain.Height(centre);
+                double ground = terrain.Height(centre);
                 for (int li = 0; li < localLogs.Count; li++)
-                    if (VisualLogSupport.TryTopAt(localLogs[li], centre, out double top) && top > terrain + 0.003)
+                    if (VisualLogSupport.TryTopAt(localLogs[li], centre, out double top) && top > ground + 0.003)
                     { refineHagshairLog = true; break; }
             }
             AddSurfaceTriangle(c00, c11, c10, refineHagshairLog: refineHagshairLog);
@@ -1369,7 +1477,7 @@ public partial class CoverageRenderer : Node3D
                     {
                         var wp = new Vec2(wx, wz);
                         double bestLogTop = gy;
-                        double terrainY = _w.Terrain.Height(wp);
+                        double terrainY = terrain.Height(wp);
                         LogProp? supportedLog = null;
                         foreach (var log in localLogs)
                         {
@@ -1390,7 +1498,7 @@ public partial class CoverageRenderer : Node3D
                                 {
                                     var shoulder2 = host.Position + axis2 * along + side2 * (sideSign * host.Radius * shoulderSin);
                                     if (!VisualLogSupport.TryTopAt(host, shoulder2, out double shoulderY) ||
-                                        shoulderY <= _w.Terrain.Height(shoulder2) + 0.004) continue;
+                                        shoulderY <= terrain.Height(shoulder2) + 0.004) continue;
                                     double shoulderCos = Math.Sqrt(1.0 - shoulderSin * shoulderSin);
                                     var barkNormal = new Vec3(side2.X * sideSign * shoulderSin, shoulderCos, side2.Z * sideSign * shoulderSin).Normalized();
                                     var barkRoot = new Vec3(shoulder2.X, shoulderY, shoulder2.Z) + barkNormal * 0.001;

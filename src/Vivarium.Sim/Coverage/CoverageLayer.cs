@@ -1,3 +1,5 @@
+using System.Linq;
+using System.Threading;
 using Vivarium.Sim.Core;
 
 namespace Vivarium.Sim.Coverage;
@@ -103,6 +105,11 @@ public sealed class CoverageLayer
     public long Step { get; private set; }
 
     private readonly SortedDictionary<(int ti, int tj), CoverageTile> _tiles = new();
+    private readonly object _tileMapGate = new();
+    private readonly object _renderEpochGate = new();
+    private bool _writerActive;
+    private int _renderReaders;
+    private long _writeEpoch;
 
     public CoverageLayer(CoverageLayerId id, ulong worldSeed)
     {
@@ -110,22 +117,86 @@ public sealed class CoverageLayer
         WorldSeed = worldSeed;
     }
 
-    public int TileCount => _tiles.Count;
+    public int TileCount { get { lock (_tileMapGate) return _tiles.Count; } }
+
+    /// <summary>Marks the exclusive async biology mutation window without holding a lock over its work.</summary>
+    internal void BeginWriter()
+    {
+        lock (_renderEpochGate)
+        {
+            while (_renderReaders != 0) Monitor.Wait(_renderEpochGate);
+            if (_writerActive) throw new InvalidOperationException("Coverage layer already has an active writer.");
+            _writerActive = true;
+            _writeEpoch++; // odd while the writer owns this layer
+        }
+    }
+
+    internal void EndWriter()
+    {
+        lock (_renderEpochGate)
+        {
+            _writeEpoch++; // publish all writes before making the layer readable
+            _writerActive = false;
+            Monitor.PulseAll(_renderEpochGate);
+        }
+    }
+
+    internal bool TryGetStableWriteEpoch(out long epoch)
+    {
+        lock (_renderEpochGate)
+        {
+            epoch = _writeEpoch;
+            return !_writerActive && (epoch & 1) == 0;
+        }
+    }
+
+    /// <summary>Short read lease preventing an async biology writer from starting during renderer publication.</summary>
+    public bool TryBeginRenderCommit()
+    {
+        lock (_renderEpochGate)
+        {
+            if (_writerActive) return false;
+            _renderReaders++;
+            return true;
+        }
+    }
+
+    public void EndRenderCommit()
+    {
+        lock (_renderEpochGate)
+        {
+            if (_renderReaders <= 0) throw new InvalidOperationException("Coverage render commit lease underflow.");
+            _renderReaders--;
+            if (_renderReaders == 0) Monitor.PulseAll(_renderEpochGate);
+        }
+    }
 
     /// <summary>All allocated tiles, in deterministic (ti, tj) order.</summary>
-    public IEnumerable<CoverageTile> Tiles => _tiles.Values;
+    public IEnumerable<CoverageTile> Tiles { get { lock (_tileMapGate) return _tiles.Values.ToArray(); } }
 
-    public bool TryGetTile(int ti, int tj, out CoverageTile? tile) => _tiles.TryGetValue((ti, tj), out tile);
+    public bool TryGetTile(int ti, int tj, out CoverageTile? tile)
+    {
+        lock (_tileMapGate) return _tiles.TryGetValue((ti, tj), out tile);
+    }
 
     /// <summary>Allocates the tile on first write (§1.1); returns the existing tile otherwise.</summary>
     public CoverageTile GetOrCreateTile(int ti, int tj)
     {
-        if (!_tiles.TryGetValue((ti, tj), out var t))
+        lock (_tileMapGate)
         {
-            t = new CoverageTile(ti, tj);
-            _tiles[(ti, tj)] = t;
+            if (!_tiles.TryGetValue((ti, tj), out var t))
+            {
+                t = new CoverageTile(ti, tj);
+                _tiles[(ti, tj)] = t;
+            }
+            return t;
         }
-        return t;
+    }
+
+    /// <summary>Installs a copied tile into a disposable render-input layer.</summary>
+    internal void ReplaceSnapshotTile(CoverageTile tile)
+    {
+        lock (_tileMapGate) _tiles[(tile.Ti, tile.Tj)] = tile;
     }
 
     // ------------------------------------------------------------------ cell access (live buffer)
@@ -133,13 +204,13 @@ public sealed class CoverageLayer
     public byte GetOcc(int gx, int gz)
     {
         var (ti, tj) = CoverageSpec.TileOf(gx, gz);
-        return _tiles.TryGetValue((ti, tj), out var t) ? t.Occ[CoverageSpec.LocalIndex(gx, gz)] : (byte)0;
+        return TryGetTile(ti, tj, out var t) ? t!.Occ[CoverageSpec.LocalIndex(gx, gz)] : (byte)0;
     }
 
     public float GetB(int gx, int gz)
     {
         var (ti, tj) = CoverageSpec.TileOf(gx, gz);
-        return _tiles.TryGetValue((ti, tj), out var t) ? t.B[CoverageSpec.LocalIndex(gx, gz)] : 0f;
+        return TryGetTile(ti, tj, out var t) ? t!.B[CoverageSpec.LocalIndex(gx, gz)] : 0f;
     }
 
     /// <summary>Sets occupant and marks the owning tile dirty (allocating it if necessary).</summary>
@@ -180,29 +251,29 @@ public sealed class CoverageLayer
     /// <summary>Copies live Occ/B into each active tile's snapshot. Neighbour reads during the step use the snapshot.</summary>
     public void BeginStep()
     {
-        foreach (var t in _tiles.Values) t.Snapshot();
+        foreach (var t in Tiles) t.Snapshot();
     }
 
     /// <summary>Previous-step occupant at (gx, gz), crossing tile borders transparently. 0 (empty) outside any tile.</summary>
     public byte SnapshotOcc(int gx, int gz)
     {
         var (ti, tj) = CoverageSpec.TileOf(gx, gz);
-        if (!_tiles.TryGetValue((ti, tj), out var t) || t.SnapOcc == null) return 0;
-        return t.SnapOcc[CoverageSpec.LocalIndex(gx, gz)];
+        if (!TryGetTile(ti, tj, out var t) || t!.SnapOcc == null) return 0;
+        return t!.SnapOcc[CoverageSpec.LocalIndex(gx, gz)];
     }
 
     /// <summary>Previous-step biomass at (gx, gz), crossing tile borders transparently. 0 outside any tile.</summary>
     public float SnapshotB(int gx, int gz)
     {
         var (ti, tj) = CoverageSpec.TileOf(gx, gz);
-        if (!_tiles.TryGetValue((ti, tj), out var t) || t.SnapB == null) return 0f;
-        return t.SnapB[CoverageSpec.LocalIndex(gx, gz)];
+        if (!TryGetTile(ti, tj, out var t) || t!.SnapB == null) return 0f;
+        return t!.SnapB[CoverageSpec.LocalIndex(gx, gz)];
     }
 
     // ------------------------------------------------------------------ active set / iteration (§1.5)
 
     /// <summary>Tiles with any Rim/Front/non-steady cell, in deterministic order. Marked externally by rules.</summary>
-    public IEnumerable<CoverageTile> ActiveTiles => _tiles.Values.Where(t => t.Active);
+    public IEnumerable<CoverageTile> ActiveTiles => Tiles.Where(t => t.Active);
 
     public void MarkActive(int ti, int tj) => GetOrCreateTile(ti, tj).Active = true;
 
@@ -222,31 +293,34 @@ public sealed class CoverageLayer
     public void Advance()
     {
         Step++;
-        var toRemove = new List<(int, int)>();
-        foreach (var (key, t) in _tiles)
+        lock (_tileMapGate)
         {
-            if (t.IsEmpty())
+            var toRemove = new List<(int, int)>();
+            foreach (var (key, t) in _tiles)
             {
-                t.EmptySteps++;
-                if (t.EmptySteps > CoverageSpec.FreeAfterEmptySteps) toRemove.Add(key);
+                if (t.IsEmpty())
+                {
+                    t.EmptySteps++;
+                    if (t.EmptySteps > CoverageSpec.FreeAfterEmptySteps) toRemove.Add(key);
+                }
+                else
+                {
+                    t.EmptySteps = 0;
+                }
             }
-            else
-            {
-                t.EmptySteps = 0;
-            }
+            foreach (var key in toRemove) _tiles.Remove(key);
         }
-        foreach (var key in toRemove) _tiles.Remove(key);
     }
 
     // ------------------------------------------------------------------ render/change contract (§11)
 
     public IEnumerable<TileView> ChangedTiles(long sinceVersion) =>
-        _tiles.Values.Where(t => t.Version > sinceVersion).Select(t => new TileView(t));
+        Tiles.Where(t => t.Version > sinceVersion).Select(t => new TileView(t));
 
     // ------------------------------------------------------------------ persistence support (§9)
 
     /// <summary>Snapshot of every allocated tile's raw cell arrays, in deterministic tile-key order.</summary>
-    public IEnumerable<CoverageTile> ExportTiles() => _tiles.Values;
+    public IEnumerable<CoverageTile> ExportTiles() => Tiles;
 
     /// <summary>Rebuilds a tile from saved arrays. Used by <c>WorldSerializer</c>; not for general use.</summary>
     public void ImportTile(int ti, int tj, byte[] occ, float[] b, byte[] w, ushort[] age, byte[] dorm, byte[] flags, byte[] d2e,
@@ -262,8 +336,8 @@ public sealed class CoverageLayer
             SkippedPhysiologySteps = skippedPhysiologySteps,
             EnvMoistureCache = envMoistureCache,
         };
-        _tiles[(ti, tj)] = t;
+        lock (_tileMapGate) _tiles[(ti, tj)] = t;
     }
 
-    public void Clear() => _tiles.Clear();
+    public void Clear() { lock (_tileMapGate) _tiles.Clear(); }
 }

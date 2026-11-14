@@ -342,11 +342,21 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         try
         {
             if (runMat && _matSpecies.Count > 0)
-                LastMatStats = MatRules.Step(_w.Coverage.Mat, this, _matSpecies, dtDays, _step, _w.Seed, this);
+            {
+                var layer = _w.Coverage.Mat;
+                layer.BeginWriter();
+                try { LastMatStats = MatRules.Step(layer, this, _matSpecies, dtDays, _step, _w.Seed, this); }
+                finally { layer.EndWriter(); }
+            }
             double matMs = phaseClock.Elapsed.TotalMilliseconds;
             phaseClock.Restart();
             if (runLichen && _lichenSpecies.Count > 0)
-                LastLichenStats = LichenRules.Step(_w.Coverage.Crust, this, _lichenSpecies, dtDays, _step, _w.Seed);
+            {
+                var layer = _w.Coverage.Crust;
+                layer.BeginWriter();
+                try { LastLichenStats = LichenRules.Step(layer, this, _lichenSpecies, dtDays, _step, _w.Seed); }
+                finally { layer.EndWriter(); }
+            }
             LastPhaseTimes = (waterMs, matMs, phaseClock.Elapsed.TotalMilliseconds);
             if (runLichen) _step++;
         }
