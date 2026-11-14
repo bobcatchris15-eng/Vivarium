@@ -49,6 +49,31 @@ public static class VisualReviewRunner
         if (!session.Flora.PopulationReady)
             throw new InvalidOperationException($"Flora population did not become ready within {floraSettleTimer.Elapsed.TotalSeconds:0.0}s; published {session.Flora.LoadedSpeciesCount}/{world.Content.Flora.Count} species.");
         var shots = SceneBuilder.Build(main, world);
+        string? cameraManifest = Main.ArgAfter("--review-camera-manifest");
+        string? cameraManifestHash = null;
+        if (cameraManifest != null)
+        {
+            cameraManifest = Path.GetFullPath(cameraManifest);
+            byte[] manifestBytes = File.ReadAllBytes(cameraManifest);
+            cameraManifestHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(manifestBytes));
+            using var manifest = JsonDocument.Parse(manifestBytes);
+            if (manifest.RootElement.GetProperty("seed").GetUInt64() != world.Seed)
+                throw new InvalidOperationException("Camera manifest seed does not match the review world.");
+            var captures = manifest.RootElement.GetProperty("captures");
+            static Vector3 ReadPosition(JsonElement element)
+            {
+                if (element.GetArrayLength() != 3) throw new InvalidOperationException("Camera position must have three values.");
+                var result = new Vector3(element[0].GetSingle(), element[1].GetSingle(), element[2].GetSingle());
+                if (!result.IsFinite()) throw new InvalidOperationException("Camera position must be finite.");
+                return result;
+            }
+            for (int i = 0; i < shots.Count; i++)
+            {
+                var capture = captures.GetProperty(shots[i].Name);
+                shots[i] = shots[i] with { Eye = ReadPosition(capture.GetProperty("camera_position")),
+                    Target = ReadPosition(capture.GetProperty("camera_target")), Light = capture.GetProperty("daylight_seconds").GetDouble() };
+            }
+        }
         foreach (var shot in shots)
         {
             session.EnvRig.BenchmarkLightSeconds = shot.Light;
@@ -80,7 +105,7 @@ public static class VisualReviewRunner
             await main.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             var image = main.GetViewport().GetTexture().GetImage();
             var eyeUsed = shot.Eye; double blackFrac = BlackFraction(image); int repicks = 0;
-            while (blackFrac > 0.15 && repicks < 4)
+            while (cameraManifest == null && blackFrac > 0.15 && repicks < 4)
             {
                 repicks++;
                 var cand = shot.Target + (eyeUsed - shot.Target) * 1.3f;
@@ -125,6 +150,9 @@ public static class VisualReviewRunner
         {
             renderer = RenderingServer.GetCurrentRenderingMethod(),
             adapter = RenderingServer.GetVideoAdapterName(),
+            assembly_id = typeof(VisualReviewRunner).Module.ModuleVersionId,
+            camera_manifest = cameraManifest,
+            camera_manifest_sha256 = cameraManifestHash,
             lighting_mode = session.EnvRig.LightingMode,
             light_cache_uploads = session.LightCache.CompletedUploads,
             light_cache_sources = session.LightCache.TrackedSourceCount,

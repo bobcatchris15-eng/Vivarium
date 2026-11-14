@@ -1,0 +1,128 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+using Godot;
+using Vivarium.Game.Render;
+using Vivarium.Sim.World;
+
+namespace Vivarium.Game.App;
+
+/// <summary>Exercises the actual production flora renderer with a paused world and repeat camera orbit.</summary>
+public static class FloraCacheReviewRunner
+{
+    private readonly record struct Counters(long Visits, long Builds, long Bytes, long Selections, int Chunks)
+    {
+        public static Counters Read(FloraRenderer flora) => new(flora.FloraPopulationVisits,
+            flora.FloraChunksRebuilt, flora.FloraUploadBytes, flora.FloraCameraSelections, flora.FloraChunkCount);
+    }
+
+    private static async Task Frames(Main main, int count)
+    {
+        for (int i = 0; i < count; i++)
+            await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    public static async Task Capture(Main main, GameSession session, VivariumWorld world, string directory)
+    {
+        directory = Path.GetFullPath(directory);
+        Directory.CreateDirectory(directory);
+        world.Clock.Paused = true;
+        session.CameraRig.SetProcess(false);
+        session.Tools.SetProcess(false);
+        session.Ui.Visible = false;
+        session.Overlay.Visible = false;
+        session.EnvRig.BenchmarkLightSeconds = 60;
+        DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
+        var viewport = main.GetViewport();
+        var viewportRid = viewport.GetViewportRid();
+        RenderingServer.ViewportSetMeasureRenderTime(viewportRid, true);
+
+        var wait = Stopwatch.StartNew();
+        while (!session.Flora.PopulationReady || (session.EnvRig.IsCachedLighting && session.LightCache.CompletedUploads == 0))
+        {
+            if (wait.Elapsed.TotalSeconds > 240)
+                throw new InvalidOperationException("Production flora/light cache did not become ready in 240 seconds.");
+            await Frames(main, 1);
+        }
+        var scene = SceneBuilder.Build(main, world).First(s => s.Name == "foliage_terrain");
+        float radius = Math.Max(2f, scene.Eye.DistanceTo(scene.Target));
+        var cameras = new List<Vector3>();
+        foreach (float scale in new[] { 1f, 2f, 4f })
+            for (int step = 0; step < 12; step++)
+            {
+                float theta = step * Mathf.Tau / 12f;
+                cameras.Add(scene.Target + new Vector3(Mathf.Cos(theta), .38f, Mathf.Sin(theta)) * radius * scale);
+            }
+        session.CameraRig.Cam.Fov = 55;
+
+        // Visit all levels once before asserting that returning to those views is cache-only.
+        foreach (var eye in cameras)
+        {
+            session.CameraRig.LookAtPoint(eye, scene.Target);
+            await Frames(main, 36);
+        }
+        var before = Counters.Read(session.Flora);
+        long allocationStart = GC.GetTotalAllocatedBytes(false);
+        var intervals = new List<double>();
+        var gpu = new List<double>();
+        var records = new List<object>();
+        long previous = Stopwatch.GetTimestamp();
+        for (int cameraIndex = 0; cameraIndex < cameras.Count; cameraIndex++)
+        {
+            session.CameraRig.LookAtPoint(cameras[cameraIndex], scene.Target);
+            for (int frame = 0; frame < 36; frame++)
+            {
+                await Frames(main, 1);
+                long now = Stopwatch.GetTimestamp();
+                intervals.Add(Stopwatch.GetElapsedTime(previous, now).TotalMilliseconds);
+                previous = now;
+                double measuredGpu = RenderingServer.ViewportGetMeasuredRenderTimeGpu(viewportRid);
+                if (measuredGpu > 0) gpu.Add(measuredGpu);
+            }
+            if (cameraIndex % 6 == 0)
+            {
+                await main.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                viewport.GetTexture().GetImage().SavePng(Path.Combine(directory, $"orbit_{cameraIndex:00}.png"));
+                previous = Stopwatch.GetTimestamp();
+            }
+            records.Add(new { index = cameraIndex, eye = new[] { cameras[cameraIndex].X, cameras[cameraIndex].Y, cameras[cameraIndex].Z },
+                counters = Counters.Read(session.Flora), visible_instances = session.Flora.Visible_, triangles = session.Flora.TrianglesDrawn });
+        }
+        long allocatedBytes = GC.GetTotalAllocatedBytes(false) - allocationStart;
+        var after = Counters.Read(session.Flora);
+        int orbitFloraCount = world.Flora.Count;
+        var orbitSpeciesCounts = world.Flora.Items.GroupBy(p => p.SpeciesId).ToDictionary(g => g.Key, g => g.Count());
+        double orbitVideoMemory = Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed);
+        var sorted = intervals.Order().ToArray();
+        double Percentile(double q) => sorted[Math.Clamp((int)Math.Ceiling(sorted.Length * q) - 1, 0, sorted.Length - 1)];
+        bool passed = after.Visits == before.Visits && after.Builds == before.Builds && after.Bytes == before.Bytes
+            && after.Chunks == before.Chunks && after.Selections > before.Selections;
+        object? mutationProbe = null;
+        string? mutationError = null;
+        try { mutationProbe = FloraMutationProbe.Run(session, world); }
+        catch (Exception ex) { mutationError = ex.ToString(); passed = false; GD.PrintErr(mutationError); }
+        File.WriteAllText(Path.Combine(directory, "report.json"), JsonSerializer.Serialize(new
+        {
+            passed, adapter = RenderingServer.GetVideoAdapterName(), seed = world.Seed, flora = orbitFloraCount,
+            species_counts = orbitSpeciesCounts,
+            assembly_id = typeof(FloraCacheReviewRunner).Module.ModuleVersionId,
+            lighting_mode = session.EnvRig.LightingMode, max_fps = Engine.MaxFps,
+            resolution = new[] { (int)viewport.GetVisibleRect().Size.X, (int)viewport.GetVisibleRect().Size.Y },
+            counter_before = before, counter_after = after,
+            population_visits = after.Visits - before.Visits, chunk_rebuilds = after.Builds - before.Builds,
+            upload_bytes = after.Bytes - before.Bytes, camera_selections = after.Selections - before.Selections,
+            frame_ms_p50 = Percentile(.5), frame_ms_p95 = Percentile(.95), frame_ms_p99 = Percentile(.99),
+            gpu_frame_ms_mean = gpu.Count == 0 ? (double?)null : gpu.Average(),
+            allocated_bytes_per_frame_raw = allocatedBytes / (double)intervals.Count,
+            video_mem_bytes = orbitVideoMemory, cameras = records,
+            mutation_probe = mutationProbe, mutation_error = mutationError,
+            notes = "Paused production world. A complete first orbit warms caches; the repeated orbit must visit no population records, build no chunks and upload no flora instance bytes. Frame intervals include CPU, GPU and other production renderers. Shader TIME animation continues. Mutation checks run after all camera measurements and do not enter their metrics."
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        GD.Print((passed ? "FLORA_CACHE_REVIEW_OK " : "FLORA_CACHE_REVIEW_FAILED ") + directory);
+        main.GetTree().Quit(passed ? 0 : 4);
+    }
+}

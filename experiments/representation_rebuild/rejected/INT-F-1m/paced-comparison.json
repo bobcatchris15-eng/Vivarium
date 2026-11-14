@@ -1,0 +1,205 @@
+{
+  "notes": [
+    "One paired 180-second observation, warmup 120 seconds, cap 30; no repeated/interleaved acceptance claim.",
+    "Frozen control game DLL vs working candidate game DLL; both load the same current Sim DLL.",
+    "Candidate also includes the independently checked coverage snapshot fix; this is a stack comparison.",
+    "Per-second startup p95 maxima below are not pooled frame percentiles."
+  ],
+  "candidate": {
+    "fps_mean": 29.1307,
+    "frame_ms_p50": 33.2,
+    "frame_ms_p95": 51.8,
+    "frame_ms_p99": 110.5,
+    "frame_ms_worst": 125.423,
+    "gpu_frame_ms_mean": 9.2429,
+    "gpu_frame_ms_max": 32.05,
+    "allocated_bytes_per_frame": 6827843.3684,
+    "draw_calls": 826.5543,
+    "primitives": 7122905.357,
+    "video_mem_bytes": 2127415764,
+    "node_count": 3403,
+    "gc_gen0": 347,
+    "gc_gen1": 275,
+    "gc_gen2": 83,
+    "flora_cache_start": {
+      "ready": true,
+      "ever_presented": true,
+      "loaded_species": 62,
+      "requested_species": 62,
+      "layer_build_active": false,
+      "recipe_workers_outstanding": 0,
+      "chunks": 42,
+      "population_visits": 39248,
+      "chunk_rebuilds": 1764,
+      "upload_bytes": 10680800,
+      "tick": 2016,
+      "flora": 178,
+      "backlog_sim_seconds": 1.851527999999938
+    },
+    "flora_cache_end": {
+      "ready": true,
+      "ever_presented": true,
+      "loaded_species": 63,
+      "requested_species": 63,
+      "layer_build_active": false,
+      "recipe_workers_outstanding": 0,
+      "chunks": 44,
+      "population_visits": 51747,
+      "chunk_rebuilds": 2397,
+      "upload_bytes": 17756320,
+      "tick": 3022,
+      "flora": 199,
+      "backlog_sim_seconds": 8.885623999999915
+    },
+    "flora_not_ready_frames": 125,
+    "scopes": {
+      "Flora": {
+        "mean_ms": 0.1513,
+        "max_ms": 10.3608,
+        "calls": 1748,
+        "total_ms": 264.4536,
+        "mean_per_frame_ms": 0.1513
+      },
+      "Flora.RefreshSteps": {
+        "mean_ms": 4.1153,
+        "max_ms": 10.3447,
+        "calls": 53,
+        "total_ms": 218.111,
+        "mean_per_frame_ms": 0.1248
+      },
+      "Flora.LayerBuildStep": {
+        "mean_ms": 0.3402,
+        "max_ms": 1.9355,
+        "calls": 49,
+        "total_ms": 16.6714,
+        "mean_per_frame_ms": 0.0095
+      },
+      "Flora.RecipeWorker": {
+        "mean_ms": 47.2462,
+        "max_ms": 70.7524,
+        "calls": 15,
+        "total_ms": 708.6924,
+        "mean_per_frame_ms": 0.4054
+      },
+      "Coverage": {
+        "mean_ms": 4.1201,
+        "max_ms": 93.3262,
+        "calls": 1748,
+        "total_ms": 7201.9686,
+        "mean_per_frame_ms": 4.1201
+      },
+      "Guardian.Vegetation": {
+        "mean_ms": 0.7906,
+        "max_ms": 10.9918,
+        "calls": 1748,
+        "total_ms": 1381.9715,
+        "mean_per_frame_ms": 0.7906
+      },
+      "Session.Advance": {
+        "mean_ms": 1.4651,
+        "max_ms": 17.7733,
+        "calls": 1748,
+        "total_ms": 2561.0673,
+        "mean_per_frame_ms": 1.4651
+      }
+    },
+    "raw_final_sample": {
+      "tick": 3009,
+      "flora": 199,
+      "fauna": 77,
+      "backlog_sim_seconds": 0.8149919999999078,
+      "primitives": 7223995
+    },
+    "startup_25_to_75_seconds": {
+      "sample_count": 49,
+      "fps_weighted": 28.632103731385897,
+      "worst_per_second_p95_ms": 139.808,
+      "worst_frame_ms": 203.696,
+      "note": "Approximate boundaries from launch/diagnostic timestamps, one-second samples."
+    }
+  },
+  "control": {
+    "fps_mean": 29.1249,
+    "frame_ms_p50": 33.2,
+    "frame_ms_p95": 51.8,
+    "frame_ms_p99": 107.8,
+    "frame_ms_worst": 120.175,
+    "gpu_frame_ms_mean": 8.6268,
+    "gpu_frame_ms_max": 31.843,
+    "allocated_bytes_per_frame": 6838131.4645,
+    "draw_calls": 765.4457,
+    "primitives": 7123212.7963,
+    "video_mem_bytes": 2126903940,
+    "node_count": 2680,
+    "gc_gen0": 312,
+    "gc_gen1": 239,
+    "gc_gen2": 77,
+    "flora_cache_start": null,
+    "flora_cache_end": null,
+    "flora_not_ready_frames": null,
+    "scopes": {
+      "Flora": {
+        "mean_ms": 0.1116,
+        "max_ms": 22.1599,
+        "calls": 1748,
+        "total_ms": 195.0471,
+        "mean_per_frame_ms": 0.1116
+      },
+      "Flora.RefreshSteps": null,
+      "Flora.LayerBuildStep": null,
+      "Flora.RecipeWorker": null,
+      "Coverage": {
+        "mean_ms": 3.9156,
+        "max_ms": 93.895,
+        "calls": 1748,
+        "total_ms": 6844.4326,
+        "mean_per_frame_ms": 3.9156
+      },
+      "Guardian.Vegetation": {
+        "mean_ms": 0.7726,
+        "max_ms": 9.2314,
+        "calls": 1748,
+        "total_ms": 1350.5863,
+        "mean_per_frame_ms": 0.7726
+      },
+      "Session.Advance": {
+        "mean_ms": 1.4062,
+        "max_ms": 18.0997,
+        "calls": 1748,
+        "total_ms": 2458.0951,
+        "mean_per_frame_ms": 1.4062
+      }
+    },
+    "raw_final_sample": {
+      "tick": 3010,
+      "flora": 199,
+      "fauna": 77,
+      "backlog_sim_seconds": 2.357935999999839,
+      "primitives": 7223863
+    },
+    "startup_25_to_75_seconds": {
+      "sample_count": 49,
+      "fps_weighted": 28.75624894831785,
+      "worst_per_second_p95_ms": 131.248,
+      "worst_frame_ms": 131.248,
+      "note": "Approximate boundaries from launch/diagnostic timestamps, one-second samples."
+    }
+  },
+  "percent_change": {
+    "fps_mean": 0.01991423146516791,
+    "frame_ms_p50": 0.0,
+    "frame_ms_p95": 0.0,
+    "frame_ms_p99": 2.504638218923927,
+    "frame_ms_worst": 4.366964842937393,
+    "gpu_frame_ms_mean": 7.141697964482785,
+    "gpu_frame_ms_max": 0.6500643783563076,
+    "allocated_bytes_per_frame": -0.15045186179016845,
+    "draw_calls": 7.983401043339855,
+    "primitives": -0.004316020155392675,
+    "video_mem_bytes": 0.024064274383728268,
+    "node_count": 26.97761194029851,
+    "gc_gen0": 11.217948717948723,
+    "gc_gen1": 15.062761506276146,
+    "gc_gen2": 7.792207792207795
+  }
+}

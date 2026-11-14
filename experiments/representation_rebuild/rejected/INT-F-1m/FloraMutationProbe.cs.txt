@@ -1,0 +1,132 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Vivarium.Game.Render;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Flora;
+using Vivarium.Sim.World;
+
+namespace Vivarium.Game.App;
+
+/// <summary>Transient, paused-world mutation checks against the production flora renderer.</summary>
+public static class FloraMutationProbe
+{
+    private static (int X, int Z) Key(double x, double z) =>
+        ((int)Math.Floor(x / FloraRenderer.FloraChunkSizeMetres), (int)Math.Floor(z / FloraRenderer.FloraChunkSizeMetres));
+    private static (int X, int Z) Key(FloraIndividual plant) => Key(plant.X, plant.Z);
+    private static string Label((int X, int Z) key) => $"{key.X},{key.Z}";
+    private static HashSet<(int X, int Z)> Changes(IReadOnlyDictionary<(int X, int Z), long> before,
+        IReadOnlyDictionary<(int X, int Z), long> after) => before.Keys.Concat(after.Keys)
+        .Where(k => !before.TryGetValue(k, out var a) || !after.TryGetValue(k, out var b) || a != b).ToHashSet();
+    private static HashSet<(int X, int Z)> Dependents(VivariumWorld world, EntityId id) => world.Flora.Items
+        .Where(p => p.ParentId == id || (p.ClimberSegments != null && p.ClimberSegments.Any(s => s.HostId == id)))
+        .Select(Key).ToHashSet();
+
+    public static object Run(GameSession session, VivariumWorld world)
+    {
+        if (!world.Clock.Paused) throw new InvalidOperationException("Flora mutation probe requires a paused world.");
+        var renderer = session.Flora;
+        if (!renderer.PopulationReady) throw new InvalidOperationException("Flora mutation probe requires a complete population.");
+        IReadOnlyDictionary<(int X, int Z), long> Snapshot() => renderer.FloraChunkBuildCounts;
+        void Refresh() { world.Clock.Tick++; renderer.Rebuild(); }
+        renderer.RebuildAllFloraChunks();
+        var initial = Snapshot(); Refresh(); var controlAfter = Snapshot();
+        var continuous = Changes(initial, controlAfter);
+        var keys = controlAfter.Keys.ToHashSet();
+        if (keys.Count < 3) throw new InvalidOperationException("Flora mutation probe requires at least three occupied chunks.");
+        var referencedHosts = new HashSet<EntityId>();
+        foreach (var plant in world.Flora.Items)
+        {
+            if (!plant.ParentId.IsNone) referencedHosts.Add(plant.ParentId);
+            if (plant.ClimberSegments != null)
+                foreach (var segment in plant.ClimberSegments) if (!segment.HostId.IsNone) referencedHosts.Add(segment.HostId);
+        }
+        // Prefer a host with a real dependency when the current world provides one.
+        var subject = world.Flora.Items.OrderByDescending(p => referencedHosts.Contains(p.Id)).FirstOrDefault(p =>
+        {
+            var sp = world.Content.FloraOrThrow(p.SpeciesId);
+            if (sp.Climber != null || !p.ParentId.IsNone || p.ClimberSegments is { Count: > 0 } ||
+                sp.Shape is "floatleaf" or "glasslily_pad" or "pondstars" or "bogfringe" or "deepquill" or "mirepocket" ||
+                continuous.Contains(Key(p)) || !renderer.HasLegacyLayer(p.SpeciesId)) return false;
+            var used = Dependents(world, p.Id); used.Add(Key(p)); used.UnionWith(continuous);
+            return keys.Except(used).Count() >= 2;
+        }) ?? throw new InvalidOperationException("No non-water, non-climber flora fixture has two unrelated stable chunks.");
+        var guardianRepublish = renderer.AuditGuardianRepublish();
+        int guardianContactSources = renderer.AuditGuardianContactSources(
+            new Godot.Vector3((float)subject.X, 0, (float)subject.Z), 4f);
+        var originalPosition = subject.Position;
+        double originalBiomass = subject.Biomass;
+        var subjectStart = Key(subject);
+        var dependents = Dependents(world, subject.Id);
+        var excluded = new HashSet<(int X, int Z)>(dependents) { subjectStart }; excluded.UnionWith(continuous);
+        var target = world.Flora.Items.FirstOrDefault(p => !excluded.Contains(Key(p)) &&
+            !world.Flora.Items.Any(other => Key(other) == Key(p) && other.SpeciesId == subject.SpeciesId))
+            ?? throw new InvalidOperationException("No isolated target chunk without the subject species for node-lifecycle probe.");
+        var targetPosition = target.Position;
+        var targetKey = Key(target);
+        var existingSpecies = world.Flora.Items.Where(p => Key(p) == targetKey).Select(p => p.SpeciesId).ToHashSet(StringComparer.Ordinal);
+        existingSpecies.Add(subject.SpeciesId); // subject is moved here before the birth
+        var birthTemplate = world.Flora.Items.FirstOrDefault(p =>
+        {
+            var sp = world.Content.FloraOrThrow(p.SpeciesId);
+            return !existingSpecies.Contains(p.SpeciesId) && renderer.HasLegacyLayer(p.SpeciesId) &&
+                sp.Climber == null && p.ParentId.IsNone && p.ClimberSegments is not { Count: > 0 } &&
+                sp.Shape is not ("floatleaf" or "glasslily_pad" or "pondstars" or "bogfringe" or "deepquill" or "mirepocket");
+        }) ?? throw new InvalidOperationException("No distinct loaded species for node-lifecycle birth fixture.");
+        var unrelated = keys.Except(excluded).First(k => k != targetKey);
+        var cases = new List<object>();
+        FloraIndividual? born = null;
+        object Check(string name, IReadOnlyDictionary<(int X, int Z), long> before,
+            HashSet<(int X, int Z)> required)
+        {
+            var after = Snapshot(); var changed = Changes(before, after);
+            var allowed = new HashSet<(int X, int Z)>(required); allowed.UnionWith(continuous);
+            var unexpected = changed.Except(allowed).ToArray();
+            var missing = required.Except(changed).ToArray();
+            if (unexpected.Length != 0 || missing.Length != 0 || changed.Contains(unrelated))
+                throw new InvalidOperationException($"{name} cache locality failure: changed=[{string.Join(";", changed.Select(Label))}] required=[{string.Join(";", required.Select(Label))}] continuous=[{string.Join(";", continuous.Select(Label))}] unexpected=[{string.Join(";", unexpected.Select(Label))}] missing=[{string.Join(";", missing.Select(Label))}] unrelated={Label(unrelated)}");
+            return new { name, changed_chunks = changed.Select(Label).Order().ToArray(), required_chunks = required.Select(Label).Order().ToArray(),
+                continuous_chunks = continuous.Select(Label).Order().ToArray(), unaffected_chunk = Label(unrelated), rebuild_count = changed.Count };
+        }
+        try
+        {
+            var before = Snapshot();
+            subject.Biomass = originalBiomass + Math.Max(.001, Math.Abs(originalBiomass) * .1);
+            Refresh(); var expected = new HashSet<(int X, int Z)>(dependents) { subjectStart };
+            cases.Add(Check("growth", before, expected));
+
+            before = Snapshot(); world.Flora.Move(subject, targetPosition); Refresh();
+            expected = new HashSet<(int X, int Z)>(dependents) { subjectStart, targetKey };
+            cases.Add(Check("move", before, expected));
+
+            born = new FloraIndividual { Id = world.Ids.Next(EntityKind.Flora), SpeciesId = birthTemplate.SpeciesId,
+                X = targetPosition.X, Z = targetPosition.Z, Age = birthTemplate.Age, Biomass = birthTemplate.Biomass,
+                Health = birthTemplate.Health, LifespanFactor = birthTemplate.LifespanFactor, Fruiting = birthTemplate.Fruiting,
+                ReproductiveStage = birthTemplate.ReproductiveStage, FruitLoad = birthTemplate.FruitLoad,
+                HeightFactor = birthTemplate.HeightFactor, MergeFactor = birthTemplate.MergeFactor, Tint = birthTemplate.Tint != null ? (double[])birthTemplate.Tint.Clone() : new[] { 1.0, 1.0, 1.0 } };
+            int nodesBeforeBirth = renderer.FloraCacheNodeCount;
+            before = Snapshot(); world.Flora.Add(born); Refresh();
+            cases.Add(Check("birth", before, new HashSet<(int X, int Z)> { targetKey }));
+            int nodesAfterBirth = renderer.FloraCacheNodeCount;
+            if (nodesAfterBirth <= nodesBeforeBirth)
+                throw new InvalidOperationException($"Birth did not create a distinct node fixture: before={nodesBeforeBirth} after={nodesAfterBirth}.");
+
+            before = Snapshot(); if (!world.Flora.Remove(born.Id)) throw new InvalidOperationException("Probe birth disappeared before removal.");
+            born = null; Refresh();
+            cases.Add(Check("removal", before, new HashSet<(int X, int Z)> { targetKey }));
+            int nodesAfterRemoval = renderer.FloraCacheNodeCount;
+            if (nodesAfterRemoval != nodesBeforeBirth)
+                throw new InvalidOperationException($"Removed flora retained cache nodes: before={nodesBeforeBirth} after_birth={nodesAfterBirth} after_removal={nodesAfterRemoval}.");
+            return new { passed = true, guardian_republish = guardianRepublish, guardian_contact_sources = guardianContactSources, cache_nodes_before_birth = nodesBeforeBirth,
+                cache_nodes_after_birth = nodesAfterBirth, cache_nodes_after_removal = nodesAfterRemoval, subject = subject.Id.Value, subject_species = subject.SpeciesId,
+                chunk_size_metres = FloraRenderer.FloraChunkSizeMetres, continuous_chunks = continuous.Select(Label).Order().ToArray(),
+                dependency_chunks = dependents.Select(Label).Order().ToArray(), cases = cases.ToArray() };
+        }
+        finally
+        {
+            if (born != null) world.Flora.Remove(born.Id);
+            world.Flora.Move(subject, originalPosition); subject.Biomass = originalBiomass;
+            Refresh();
+        }
+    }
+}

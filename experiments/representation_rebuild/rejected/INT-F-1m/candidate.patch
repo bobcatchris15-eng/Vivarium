@@ -1,0 +1,1017 @@
+diff --git a/game/App/LiveDiagnostics.cs b/game/App/LiveDiagnostics.cs
+index 18ca67d4..4830a576 100644
+--- a/game/App/LiveDiagnostics.cs
++++ b/game/App/LiveDiagnostics.cs
+@@ -41,6 +41,25 @@ public partial class LiveDiagnostics : Node
+     public string[] SoakHidden { get; set; } = Array.Empty<string>();
+     private int _soakGc0, _soakGc1, _soakGc2;
+     private ulong _soakSampleAt;
++    private object? _soakFloraStart;
++    private long _soakFloraNotReadyFrames;
++
++    private object FloraCacheState() => new
++    {
++        ready = Session.Flora.PopulationReady,
++        ever_presented = Session.Flora.EverPresentedPopulation,
++        loaded_species = Session.Flora.LoadedSpeciesCount,
++        requested_species = Session.Flora.RequestedSpeciesCount,
++        layer_build_active = Session.Flora.FloraLayerBuildActive,
++        recipe_workers_outstanding = Session.Flora.FloraRecipeWorkersOutstanding,
++        chunks = Session.Flora.FloraChunkCount,
++        population_visits = Session.Flora.FloraPopulationVisits,
++        chunk_rebuilds = Session.Flora.FloraChunksRebuilt,
++        upload_bytes = Session.Flora.FloraUploadBytes,
++        tick = Session.World!.Clock.Tick,
++        flora = Session.World.Flora.Count,
++        backlog_sim_seconds = Session.World.Scheduler.Backlog
++    };
+ 
+     /// <summary>Starts the soak clock (call when the world is ready). Quits the app with exit code 0 after seconds.</summary>
+     public void BeginSoak(double seconds, double warmup)
+@@ -62,10 +81,13 @@ public partial class LiveDiagnostics : Node
+             _soakAlloc0 = GC.GetTotalAllocatedBytes(false);
+             _soakGc0 = GC.CollectionCount(0); _soakGc1 = GC.CollectionCount(1); _soakGc2 = GC.CollectionCount(2);
+             _soakSampleAt = now;
++            _soakFloraStart = FloraCacheState();
++            _soakFloraNotReadyFrames = 0;
+             FrameProfiler.StartWindow();
+             return;
+         }
+         _soakFrames++; _soakMs += ms; if (ms > _soakWorst) _soakWorst = ms;
++        if (!Session.Flora.PopulationReady) _soakFloraNotReadyFrames++;
+         _soakHist[Math.Clamp((int)Math.Ceiling(ms * 10), 0, 10000)]++;
+         double d = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+         _soakDraws += d; if (d > _soakDrawsMax) _soakDrawsMax = d;
+@@ -138,6 +160,9 @@ public partial class LiveDiagnostics : Node
+             ["gc_gen2"] = GC.CollectionCount(2) - _soakGc2,
+             ["allocated_bytes_per_frame"] = frames > 0 ? R((GC.GetTotalAllocatedBytes(false) - _soakAlloc0) / f) : null,
+             ["hidden"] = SoakHidden,
++            ["flora_cache_start"] = _soakFloraStart,
++            ["flora_cache_end"] = FloraCacheState(),
++            ["flora_not_ready_frames"] = _soakFloraNotReadyFrames,
+             ["alloc_bytes_per_frame_by_scope"] = allocOut,
+             ["alloc_bytes_per_frame_unscoped"] = frames > 0 ? R(totalAllocPerFrame - allocTop / f) : null,
+             ["multimesh_instance_count"] = null,
+diff --git a/game/App/Main.cs b/game/App/Main.cs
+index f797d2ec..c9211390 100644
+--- a/game/App/Main.cs
++++ b/game/App/Main.cs
+@@ -47,7 +47,8 @@ public partial class Main : Node3D
+         bool guardianReview = UserArgs.Contains("--guardian-review");
+         bool groundReview = UserArgs.Contains("--ground-review");
+         bool reprReview = UserArgs.Contains("--repr-review");
+-        bool isReview = visualReview || specimenReview || guardianReview || groundReview || reprReview;
++        bool floraCacheReview = UserArgs.Contains("--flora-cache-review");
++        bool isReview = visualReview || specimenReview || guardianReview || groundReview || reprReview || floraCacheReview;
+         var settings = isReview ? new UserSettings() : UserSettings.Load();
+         if (isReview)
+         {
+@@ -108,7 +109,7 @@ public partial class Main : Node3D
+                 if (restored != null) Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + restored.Message);
+                 loadingText.Text = "Growing a new island...";
+                 var descriptor = content.PresetOrThrow(ArgAfter("--preset") ?? "default").Clone();
+-                if (visualReview || groundReview)
++                if (visualReview || groundReview || floraCacheReview)
+                     descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var reviewSeed) ? reviewSeed : 804584441UL;
+                 if (specimenReview)
+                     descriptor.Seed = ulong.TryParse(ArgAfter("--specimen-seed"), out var specimenSeed) ? specimenSeed : 804584441UL;
+@@ -198,6 +199,21 @@ public partial class Main : Node3D
+             }
+             return;
+         }
++        if (floraCacheReview)
++        {
++            try
++            {
++                await FloraCacheReviewRunner.Capture(this, Session,
++                    Session.World ?? throw new InvalidOperationException("World missing after startup."),
++                    ArgAfter("--flora-cache-review")!);
++            }
++            catch (Exception ex)
++            {
++                GD.PrintErr("FLORA_CACHE_REVIEW_FAILED " + ex);
++                GetTree().Quit(4);
++            }
++            return;
++        }
+         if (groundReview)
+         {
+             try
+diff --git a/game/App/VisualReviewRunner.cs b/game/App/VisualReviewRunner.cs
+index 65f26828..94bb6f1c 100644
+--- a/game/App/VisualReviewRunner.cs
++++ b/game/App/VisualReviewRunner.cs
+@@ -49,8 +49,36 @@ public static class VisualReviewRunner
+         if (!session.Flora.PopulationReady)
+             throw new InvalidOperationException($"Flora population did not become ready within {floraSettleTimer.Elapsed.TotalSeconds:0.0}s; published {session.Flora.LoadedSpeciesCount}/{world.Content.Flora.Count} species.");
+         var shots = SceneBuilder.Build(main, world);
++        string? cameraManifest = Main.ArgAfter("--review-camera-manifest");
++        string? cameraManifestHash = null;
++        if (cameraManifest != null)
++        {
++            cameraManifest = Path.GetFullPath(cameraManifest);
++            byte[] manifestBytes = File.ReadAllBytes(cameraManifest);
++            cameraManifestHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(manifestBytes));
++            using var manifest = JsonDocument.Parse(manifestBytes);
++            if (manifest.RootElement.GetProperty("seed").GetUInt64() != world.Seed)
++                throw new InvalidOperationException("Camera manifest seed does not match the review world.");
++            var captures = manifest.RootElement.GetProperty("captures");
++            static Vector3 ReadPosition(JsonElement element)
++            {
++                if (element.GetArrayLength() != 3) throw new InvalidOperationException("Camera position must have three values.");
++                var result = new Vector3(element[0].GetSingle(), element[1].GetSingle(), element[2].GetSingle());
++                if (!result.IsFinite()) throw new InvalidOperationException("Camera position must be finite.");
++                return result;
++            }
++            for (int i = 0; i < shots.Count; i++)
++            {
++                var capture = captures.GetProperty(shots[i].Name);
++                shots[i] = shots[i] with { Eye = ReadPosition(capture.GetProperty("camera_position")),
++                    Target = ReadPosition(capture.GetProperty("camera_target")), Light = capture.GetProperty("daylight_seconds").GetDouble() };
++            }
++        }
+         foreach (var shot in shots)
+         {
++            long floraVisitsBefore = session.Flora.FloraPopulationVisits;
++            long floraBuildsBefore = session.Flora.FloraChunksRebuilt;
++            long floraBytesBefore = session.Flora.FloraUploadBytes;
+             session.EnvRig.BenchmarkLightSeconds = shot.Light;
+             session.CameraRig.LookAtPoint(shot.Eye, shot.Target);
+             var frames = new List<double>(240);
+@@ -80,7 +108,7 @@ public static class VisualReviewRunner
+             await main.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+             var image = main.GetViewport().GetTexture().GetImage();
+             var eyeUsed = shot.Eye; double blackFrac = BlackFraction(image); int repicks = 0;
+-            while (blackFrac > 0.15 && repicks < 4)
++            while (cameraManifest == null && blackFrac > 0.15 && repicks < 4)
+             {
+                 repicks++;
+                 var cand = shot.Target + (eyeUsed - shot.Target) * 1.3f;
+@@ -117,6 +145,10 @@ public static class VisualReviewRunner
+                 camera_repicks = repicks,
+                 planned_camera_position = new[] { shot.Eye.X, shot.Eye.Y, shot.Eye.Z },
+                 camera_target = new[] { shot.Target.X, shot.Target.Y, shot.Target.Z },
++                flora_population_visits = session.Flora.FloraPopulationVisits - floraVisitsBefore,
++                flora_chunks_rebuilt = session.Flora.FloraChunksRebuilt - floraBuildsBefore,
++                flora_upload_bytes = session.Flora.FloraUploadBytes - floraBytesBefore,
++                flora_chunk_count = session.Flora.FloraChunkCount,
+                 viewport = new[] { image.GetWidth(), image.GetHeight() },
+                 screenshot = shot.Name + ".png"
+             };
+@@ -125,6 +157,9 @@ public static class VisualReviewRunner
+         {
+             renderer = RenderingServer.GetCurrentRenderingMethod(),
+             adapter = RenderingServer.GetVideoAdapterName(),
++            assembly_id = typeof(VisualReviewRunner).Module.ModuleVersionId,
++            camera_manifest = cameraManifest,
++            camera_manifest_sha256 = cameraManifestHash,
+             lighting_mode = session.EnvRig.LightingMode,
+             light_cache_uploads = session.LightCache.CompletedUploads,
+             light_cache_sources = session.LightCache.TrackedSourceCount,
+diff --git a/game/Render/GuardianVegetationContact.cs b/game/Render/GuardianVegetationContact.cs
+index 97b3cbee..2cf6ae2a 100644
+--- a/game/Render/GuardianVegetationContact.cs
++++ b/game/Render/GuardianVegetationContact.cs
+@@ -136,6 +136,20 @@ public partial class GuardianVegetationContact : Node
+     {
+         StemAuditBudget=budget;
+     }
++    // An upload can reorder a packed buffer without changing the draw/index key. Treat
++    // every revision change as a new contact identity, even when its transform matches.
++    // The next contact solve can then establish a fresh target for the current plant.
++    private void ReconcileFloraRevision(Plant plant, DrawInfo info)
++    {
++        if (Flora == null || !Flora.TryGuardianBaseTransform(plant.Draw, plant.Index, out var source, out long revision) ||
++            plant.LastFloraUploadRevision == revision) return;
++        plant.Base = source; plant.Applied = source;
++        plant.Bend = Vector3.Zero; plant.Target = Vector3.Zero;
++        var root = info.Global * source;
++        plant.Root = root.Origin; plant.Bounds = root * info.Bounds;
++        plant.LastFloraUploadRevision = revision;
++        _contactIndexDirty = true; _farthestValid = false;
++    }
+     private void Register(MultiMeshInstance3D draw,int index,Transform3D transform,DrawInfo info)
+     {
+         var key=(draw.GetInstanceId(),index);
+@@ -208,6 +222,7 @@ public partial class GuardianVegetationContact : Node
+                 else if(d>_farthestDistance){_farthestKey=key;_farthestDistance=d;}
+             }
+         }
++        ReconcileFloraRevision(plant, info);
+         var world=info.Global*plant.Base;
+         var bounds=world*info.Bounds;
+         // The contact index only needs rebuilding when the plant really moved:
+@@ -291,6 +306,14 @@ public partial class GuardianVegetationContact : Node
+             foreach(var (key,plant) in _plants)
+             {
+                 if(!TryDrawInfo(plant.Draw,out var info)||plant.Index>=info.Count){expired.Add(key);continue;}
++                if (Flora != null && (!Flora.IsGuardianContactTierCurrent(plant.Draw) ||
++                    !Flora.IsGuardianContactSlotCurrent(plant.Draw, plant.Index)))
++                {
++                    if (info.Buffer.GetInstanceTransform(plant.Index).IsEqualApprox(plant.Applied))
++                        info.Buffer.SetInstanceTransform(plant.Index, plant.Base);
++                    expired.Add(key); continue;
++                }
++                ReconcileFloraRevision(plant, info);
+                 if(plant.Target.LengthSquared()<1e-8f && plant.Bend.LengthSquared()<1e-8f && plant.Applied.IsEqualApprox(plant.Base))
+                 {
+                     AvoidedPoseUploads++;
+@@ -608,6 +631,56 @@ public partial class GuardianVegetationContact : Node
+         SpatialNarrowMs+=System.Diagnostics.Stopwatch.GetElapsedTime(afterBroad).TotalMilliseconds;
+         return point;
+     }
++    /// <summary>Exercises real pooled publications, slot reuse and native transforms on a temporary draw.</summary>
++    internal static object RunRepublishAudit(FloraRenderer flora, MultiMeshInstance3D draw, Action<Transform3D[]> publish)
++    {
++        var contact = new GuardianVegetationContact { Flora = flora, Focus = new Vector3(1000, 0, 1000) };
++        var a = new Transform3D(Basis.Identity, new Vector3(1000, .1f, 1000));
++        var b = new Transform3D(Basis.Identity, new Vector3(1000.2f, .1f, 1000));
++        var c = new Transform3D(Basis.Identity, new Vector3(1000.4f, .1f, 1000));
++        try
++        {
++            publish(new[] { a, b });
++            contact.Register(draw, 0); contact.Register(draw, 1);
++            var key0 = (draw.GetInstanceId(), 0); var key1 = (draw.GetInstanceId(), 1);
++            if (!contact._plants.TryGetValue(key0, out var first) || !contact._plants.TryGetValue(key1, out var second))
++                throw new InvalidOperationException("Guardian republish audit could not register both source slots.");
++            void Bend(Plant plant)
++            {
++                plant.Bend = new Vector3(.2f, 0, 0); plant.Target = new Vector3(.1f, 0, 0);
++                plant.Applied = new Transform3D(new Basis(Vector3.Forward, .2f) * plant.Base.Basis, plant.Base.Origin);
++                draw.Multimesh.SetInstanceTransform(plant.Index, plant.Applied);
++            }
++            void RequireFresh(Plant plant, Transform3D expected)
++            {
++                if (!plant.Base.IsEqualApprox(expected) || !plant.Applied.IsEqualApprox(expected) ||
++                    plant.Bend != Vector3.Zero || plant.Target != Vector3.Zero ||
++                    !draw.Multimesh.GetInstanceTransform(plant.Index).IsEqualApprox(expected))
++                    throw new InvalidOperationException("Guardian republished slot retained old contact state or native pose.");
++            }
++            Bend(first); Bend(second);
++            publish(new[] { b, a });
++            contact._Process(0);
++            if (!contact._plants.TryGetValue(key0, out first) || !contact._plants.TryGetValue(key1, out second))
++                throw new InvalidOperationException("Guardian republish audit lost an active source slot.");
++            RequireFresh(first, b); RequireFresh(second, a);
++            Bend(first); Bend(second);
++            publish(new[] { c });
++            contact._Process(0);
++            if (!contact._plants.TryGetValue(key0, out first) || contact._plants.ContainsKey(key1))
++                throw new InvalidOperationException("Guardian republish audit did not remove the shrunken source slot.");
++            RequireFresh(first, c);
++            if (!draw.Multimesh.GetInstanceTransform(1).IsEqualApprox(a))
++                throw new InvalidOperationException("Guardian hidden slot retained a stale bent native pose after shrinking.");
++            return new { passed = true, reordered_slots = 2, removed_slots = 1, native_pose_reads = 4 };
++        }
++        finally
++        {
++            contact._scan?.Dispose();
++            contact.Free();
++        }
++    }
++
+     /// <summary>Native regression fixture covering all128 mask bits, dense sequential
+     /// projections, transformed parents, dictionary slot reuse and wide bounds.</summary>
+     public static (int Cases,int Contacts,int DrawAudits,float Error) RunBroadphaseSelfTest(Node owner)
+@@ -709,14 +782,26 @@ public partial class FloraRenderer
+     /// pooled buffers fall back to a full walk.</summary>
+     internal IEnumerable<(MultiMeshInstance3D, int)> GuardianContactInstancesNear(Vector3 focus, float radius)
+     {
++        // Snapshot actual chunk nodes, not the empty species templates. Keep the selected tier
++        // even when the group is outside the camera frustum: a nearby guardian can still
++        // need contact with it. Climber leaves may extend beyond their owner's chunk, so
++        // their chunks remain eligible regardless of owner distance.
+         var draws = new List<MultiMeshInstance3D>();
+-        foreach (var layer in _layers.Values)
+-            foreach (var variant in layer.Variants)
++        var localFocus = ToLocal(focus);
++        foreach (var (key, chunk) in _floraChunks)
++        {
++            float x = Math.Clamp(localFocus.X, key.X * FloraChunkSize, (key.X + 1) * FloraChunkSize);
++            float z = Math.Clamp(localFocus.Z, key.Z * FloraChunkSize, (key.Z + 1) * FloraChunkSize);
++            float dx = localFocus.X - x, dz = localFocus.Z - z;
++            bool near = dx * dx + dz * dz <= (radius + 1f) * (radius + 1f);
++            foreach (var (nodeKey, draw) in chunk.Nodes)
+             {
+-                if (variant?.Full != null) draws.Add(variant.Full);
+-                if (variant?.Juvenile != null) draws.Add(variant.Juvenile);
+-                if (variant?.Fruit != null) draws.Add(variant.Fruit);
++                if (nodeKey.Part > 2 || !chunk.Groups.TryGetValue(nodeKey.Species, out var group) || group.MaxDiameter <= 0 ||
++                    nodeKey.Variant / _layers[nodeKey.Species].MorphCount != group.SelectedTier) continue;
++                if (!near && _w.Content.FloraOrThrow(nodeKey.Species).Climber == null) continue;
++                draws.Add(draw);
+             }
++        }
+         if (_guardianBins.Count > _pooledBuffers.Count * 2 + 16) _guardianBins.Clear();
+         int cx0 = (int)MathF.Floor((focus.X - radius) / GuardianBinCell), cx1 = (int)MathF.Floor((focus.X + radius) / GuardianBinCell);
+         int cz0 = (int)MathF.Floor((focus.Z - radius) / GuardianBinCell), cz1 = (int)MathF.Floor((focus.Z + radius) / GuardianBinCell);
+@@ -754,17 +839,70 @@ public partial class FloraRenderer
+         }
+     }
+ 
++    internal bool IsGuardianContactSlotCurrent(MultiMeshInstance3D draw, int index)
++    {
++        if (!_guardianChunkOwners.ContainsKey(draw)) return true;
++        var mm = draw.Multimesh;
++        return mm != null && _pooledBuffers.TryGetValue(mm, out var pool) && index >= 0 && index < pool.VisibleCount;
++    }
++
++    internal bool IsGuardianContactTierCurrent(MultiMeshInstance3D draw)
++    {
++        if (!_guardianChunkOwners.TryGetValue(draw, out var owner)) return true;
++        return owner.Chunk.Groups.TryGetValue(owner.Species, out var group) && group.MaxDiameter > 0 &&
++            owner.Variant / _layers[owner.Species].MorphCount == group.SelectedTier;
++    }
++
++    /// <summary>Runs the guardian republish fixture on a disposable chunk-owned native MultiMesh.</summary>
++    public object AuditGuardianRepublish()
++    {
++        var (species, layer) = _layers.First();
++        var chunk = new CachedFloraChunk();
++        chunk.Groups.Add(species, new FloraSizeGroup { MaxDiameter = 1, SelectedTier = 0 });
++        var node = ChunkNode(chunk, species, 0, 0, layer.Variants[0].Full);
++        try
++        {
++            void Publish(Transform3D[] transforms)
++            {
++                var tint = Enumerable.Repeat(Colors.White, transforms.Length).ToList();
++                var custom = Enumerable.Repeat(Colors.White, transforms.Length).ToList();
++                Fill(node.Multimesh, (transforms.ToList(), tint, custom));
++            }
++            return GuardianVegetationContact.RunRepublishAudit(this, node, Publish);
++        }
++        finally { chunk.Nodes.Clear(); RetireChunkNode(node); }
++    }
++
++    /// <summary>Native test oracle: selected cached contact instances near a focus must be discoverable.</summary>
++    public int AuditGuardianContactSources(Vector3 focus, float radius)
++    {
++        var found = new HashSet<(ulong, int)>();
++        foreach (var (draw, index) in GuardianContactInstancesNear(focus, radius))
++            if (GodotObject.IsInstanceValid(draw)) found.Add((draw.GetInstanceId(), index));
++        int expected = 0;
++        foreach (var (draw, index) in GuardianContactInstances())
++        {
++            if (!TryGuardianBaseTransform(draw, index, out var transform)) continue;
++            var position = (draw.GlobalTransform * transform).Origin;
++            float dx = position.X - focus.X, dz = position.Z - focus.Z;
++            if (dx * dx + dz * dz > radius * radius) continue;
++            expected++;
++            if (!found.Contains((draw.GetInstanceId(), index)))
++                throw new InvalidOperationException($"Guardian contact scan omitted {draw.Name} instance {index} near focus.");
++        }
++        if (expected == 0) throw new InvalidOperationException("Guardian contact source audit has no nearby cached instances.");
++        return expected;
++    }
++
+     internal IEnumerable<(MultiMeshInstance3D, int)> GuardianContactInstances()
+     {
+         // Snapshot draw nodes so an incremental scan survives population rebuilds.
+         var draws = new List<MultiMeshInstance3D>();
+-        foreach (var layer in _layers.Values)
+-            foreach (var variant in layer.Variants)
+-            {
+-                if (variant?.Full != null) draws.Add(variant.Full);
+-                if (variant?.Juvenile != null) draws.Add(variant.Juvenile);
+-                if (variant?.Fruit != null) draws.Add(variant.Fruit);
+-            }
++        foreach (var chunk in _floraChunks.Values)
++            foreach (var (key, draw) in chunk.Nodes)
++                if (key.Part <= 2 && chunk.Groups.TryGetValue(key.Species, out var group) &&
++                    group.MaxDiameter > 0 && key.Variant / _layers[key.Species].MorphCount == group.SelectedTier)
++                    draws.Add(draw);
+         foreach (var draw in draws)
+         {
+             if (!GodotObject.IsInstanceValid(draw) || draw.Multimesh == null) continue;
+diff --git a/game/Render/OrganismRenderers.cs b/game/Render/OrganismRenderers.cs
+index c7e80dc3..a4748ce6 100644
+--- a/game/Render/OrganismRenderers.cs
++++ b/game/Render/OrganismRenderers.cs
+@@ -38,6 +38,177 @@ public partial class FloraRenderer : Node3D
+         public Layer(int count, FloraVisualProfile? profile = null)
+         { MorphCount = count; Profile = profile; Variants = new VariantLayer[count * OrganismMeshes.FloraLodTiers]; }
+     }
++    // Chunk nodes own persistent MultiMeshes; camera changes only toggle their visibility.
++    private const float FloraChunkSize = 1f;
++    public static float FloraChunkSizeMetres => FloraChunkSize;
++    private sealed class FloraSizeGroup
++    {
++        public Vector3 Min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
++        public Vector3 Max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
++        public float MaxDiameter;
++        public int ProjectedTier = -1, DistanceTier = -1, SelectedTier;
++        public bool Visible;
++        public void ResetBounds() { Min = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity); Max = new(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity); MaxDiameter = 0; }
++        public void Include(Vector3 position, float height, float radius)
++        {
++            var center = position + Vector3.Up * height * .5f;
++            Min = Min.Min(center); Max = Max.Max(center);
++            MaxDiameter = Math.Max(MaxDiameter, 2f * MathF.Sqrt(radius * radius + height * height * .25f));
++        }
++    }
++    private sealed class CachedFloraChunk
++    {
++        public readonly Dictionary<(string Species, int Variant, int Part), MultiMeshInstance3D> Nodes = new();
++        public readonly Dictionary<string, FloraSizeGroup> Groups = new(StringComparer.Ordinal);
++        public readonly List<FloraSnapshotItem> Living = new();
++        public readonly List<DeadFloraSnapshotItem> Dead = new();
++        public readonly List<(EntityId Id, double Moisture, double Litter)> DeadEnvironment = new();
++        public long BuildCount;
++        public int Generation;
++        public bool Dirty = true;
++        public long LastBuiltTick = long.MinValue;
++        public bool DependencySensitive, WaterSensitive, HadWobble;
++    }
++    private readonly Dictionary<(int X, int Z), CachedFloraChunk> _floraChunks = new();
++    private readonly Dictionary<MultiMeshInstance3D, (CachedFloraChunk Chunk, string Species, int Variant)> _guardianChunkOwners = new();
++    private readonly List<FloraSnapshotItem> _luminousSnapshot = new();
++    private int _floraGeneration, _forcedFloraTier = -1;
++    private bool _chunkSelectionDirty = true;
++    private int _chunkTerrainVersion = -1, _chunkPropsVersion = -1, _chunkLayerCount = -1;
++    private readonly HashSet<string> _chunkKnownSpecies = new(StringComparer.Ordinal);
++    private double _chunkWaterTable = double.NaN;
++    public long FloraPopulationVisits { get; private set; }
++    public long FloraChunksRebuilt { get; private set; }
++    public long FloraCameraSelections { get; private set; }
++    public int FloraChunkCount => _floraChunks.Count;
++    public int FloraCacheNodeCount => _floraChunks.Values.Sum(chunk => chunk.Nodes.Count);
++    // Snapshot on demand for mutation/locality probes; reading it does not touch native buffers.
++    public IReadOnlyDictionary<(int X, int Z), long> FloraChunkBuildCounts =>
++        _floraChunks.ToDictionary(pair => pair.Key, pair => pair.Value.BuildCount);
++    public long FloraLuminousCandidatesVisited { get; private set; }
++    public long FloraUploadBytes { get; private set; }
++    private bool SameFloraVisual(FloraSnapshotItem a, FloraSnapshotItem b)
++    {
++        if (a.Id != b.Id || a.SpeciesId != b.SpeciesId || a.X != b.X || a.Z != b.Z ||
++            a.Biomass != b.Biomass || a.Health != b.Health || a.FruitLoad != b.FruitLoad ||
++            a.ReproductiveStage != b.ReproductiveStage || a.Fruiting != b.Fruiting ||
++            a.ParentId != b.ParentId || a.ColonyRoot != b.ColonyRoot || a.Tint != b.Tint ||
++            a.HeightFactor != b.HeightFactor || a.MergeFactor != b.MergeFactor || a.ClimberAttached != b.ClimberAttached)
++            return false;
++        var species = _w.Content.FloraOrThrow(a.SpeciesId);
++        if (a.Stage(species) != b.Stage(species)) return false;
++        if (a.ClimberSegments == null || b.ClimberSegments == null) return a.ClimberSegments == b.ClimberSegments;
++        return a.ClimberSegments.SequenceEqual(b.ClimberSegments);
++    }
++    private static (int X, int Z) FloraChunkKey(double x, double z) =>
++        ((int)Math.Floor(x / FloraChunkSize), (int)Math.Floor(z / FloraChunkSize));
++    private MultiMeshInstance3D ChunkNode(CachedFloraChunk chunk, string species, int variant, int part, MultiMeshInstance3D source)
++    {
++        var key = (species, variant, part);
++        if (chunk.Nodes.TryGetValue(key, out var node)) return node;
++        node = MakeMmi($"FloraChunk_{species}_{variant}_{part}", (ArrayMesh)source.Multimesh.Mesh, source.CastShadow == GeometryInstance3D.ShadowCastingSetting.On);
++        node.Visible = false;
++        AddChild(node);
++        chunk.Nodes.Add(key, node);
++        _guardianChunkOwners.Add(node, (chunk, species, variant));
++        return node;
++    }
++    private void RetireChunkNode(MultiMeshInstance3D node)
++    {
++        var ownedMultiMesh = node.Multimesh;
++        _guardianChunkOwners.Remove(node);
++        _pooledBuffers.Remove(ownedMultiMesh);
++        _guardianBins.Remove(ownedMultiMesh);
++        node.Visible = false;
++        node.Multimesh = null!;
++        // The source ArrayMesh and materials are shared with the species templates.
++        // Only the chunk-owned MultiMesh and node are retired here.
++        ownedMultiMesh.Dispose();
++        node.QueueFree();
++    }
++    private void PruneEmptyChunkNodes(CachedFloraChunk chunk)
++    {
++        foreach (var key in chunk.Nodes.Where(pair => PublishedCount(pair.Value.Multimesh) == 0).Select(pair => pair.Key).ToArray())
++        {
++            var node = chunk.Nodes[key];
++            chunk.Nodes.Remove(key);
++            RetireChunkNode(node);
++        }
++        foreach (var species in chunk.Groups.Where(pair => pair.Value.MaxDiameter <= 0).Select(pair => pair.Key).ToArray())
++            chunk.Groups.Remove(species);
++    }
++    private void ClearFloraChunks()
++    {
++        foreach (var chunk in _floraChunks.Values)
++            foreach (var node in chunk.Nodes.Values) RetireChunkNode(node);
++        _floraChunks.Clear();
++        _chunkTerrainVersion = _chunkPropsVersion = _chunkLayerCount = -1;
++        _chunkKnownSpecies.Clear();
++        _chunkWaterTable = double.NaN;
++    }
++    private void SelectFloraChunks()
++    {
++        using var selectionProfile = FrameProfiler.Measure("Flora.CameraSelection");
++        CaptureDetailCamera();
++        var planes = Camera?.GetFrustum();
++        Plane[]? frustum = planes == null ? null : new Plane[planes.Count];
++        if (planes != null) planes.CopyTo(frustum!, 0);
++        int selectedInstances = 0;
++        long selectedTriangles = 0;
++        foreach (var (key, chunk) in _floraChunks)
++        {
++            var center = new Vector3((key.X + .5f) * FloraChunkSize, 0, (key.Z + .5f) * FloraChunkSize);
++            // Conservative vertical bound accommodates trees, fallen plants and climbers.
++            bool visible = frustum == null || FloraVisible(frustum, center + Vector3.Down * 16f, FloraChunkSize * 1.5f, 48f);
++            foreach (var group in chunk.Groups.Values)
++            {
++                if (group.MaxDiameter <= 0) continue;
++                var midpoint = (group.Min + group.Max) * .5f;
++                var extent = (group.Max - group.Min) * .5f;
++                var offset = midpoint - _detailCameraPosition;
++                group.Visible = visible && (frustum == null || FloraVisible(frustum, midpoint, extent.Length() + group.MaxDiameter * .5f, 0));
++                // Minimum positive forward depth and maximum plant diameter are conservative:
++                // no member of the species group is represented by a coarser screen-size tier.
++                float depth = Math.Max(.05f, offset.Dot(_detailCameraForward) -
++                    (Math.Abs(_detailCameraForward.X) * extent.X + Math.Abs(_detailCameraForward.Y) * extent.Y + Math.Abs(_detailCameraForward.Z) * extent.Z));
++                float pixels = _detailOrthogonal ? group.MaxDiameter * _detailPixels / Math.Max(_detailOrthoSize, .001f)
++                    : group.MaxDiameter * _detailPixels / depth;
++                group.ProjectedTier = FloraDetail.Select(pixels, group.ProjectedTier);
++                int tier = group.ProjectedTier;
++                if (ReducedDistantPlants && !_detailOrthogonal)
++                {
++                    group.DistanceTier = FloraDetail.SelectDistance(depth, group.DistanceTier, DistanceLodScale);
++                    tier = Math.Max(tier, group.DistanceTier);
++                }
++                if (_w.Guardian != null && _detailCameraPosition.DistanceSquaredTo(_detailGuardianPosition) <= 12.25f)
++                {
++                    float reach = 1.3f + group.MaxDiameter * .5f;
++                    if (_detailGuardianPosition.X >= group.Min.X - reach && _detailGuardianPosition.X <= group.Max.X + reach &&
++                        _detailGuardianPosition.Y >= group.Min.Y - reach && _detailGuardianPosition.Y <= group.Max.Y + reach &&
++                        _detailGuardianPosition.Z >= group.Min.Z - reach && _detailGuardianPosition.Z <= group.Max.Z + reach) tier = 0;
++                }
++                group.SelectedTier = tier;
++            }
++            foreach (var (nodeKey, node) in chunk.Nodes)
++            {
++                if (!chunk.Groups.TryGetValue(nodeKey.Species, out var group) || group.MaxDiameter <= 0)
++                { if (node.Visible) node.Visible = false; continue; }
++                int nodeTier = nodeKey.Part == 4 ? group.SelectedTier : nodeKey.Variant / _layers[nodeKey.Species].MorphCount;
++                bool shouldShow = group.Visible && (nodeKey.Part == 4 || nodeTier == group.SelectedTier);
++                if (node.Visible != shouldShow) node.Visible = shouldShow;
++                if (!shouldShow) continue;
++                int count = PublishedCount(node.Multimesh);
++                selectedInstances += count;
++                var layer = _layers[nodeKey.Species];
++                var v = layer.Variants[nodeKey.Variant];
++                int tris = nodeKey.Part switch { 0 => v.FullTris, 1 => v.FruitTris, 2 => v.JuvenileTris, 3 => v.TendrilTris, _ => layer.VeinTris };
++                selectedTriangles += (long)count * tris;
++            }
++        }
++        Visible_ = selectedInstances; TrianglesDrawn = selectedTriangles;
++        FloraCameraSelections++;
++        _chunkSelectionDirty = false;
++    }
+     private readonly Dictionary<EntityId, int> _visualTiers = new();
+     private readonly Dictionary<EntityId, int> _distanceTiers = new();
+     private bool _reducedDistantPlants = true;
+@@ -51,7 +222,7 @@ public partial class FloraRenderer : Node3D
+             if (!double.IsFinite(value) || value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+             if (_distanceLodScale == value) return;
+             _distanceLodScale = value;
+-            _visualTiers.Clear(); _distanceTiers.Clear(); _accum = 999;
++            _visualTiers.Clear(); _distanceTiers.Clear(); _accum = 999; _chunkSelectionDirty = true;
+         }
+     }
+     public bool ReducedDistantPlants
+@@ -61,12 +232,12 @@ public partial class FloraRenderer : Node3D
+         {
+             if (_reducedDistantPlants == value) return;
+             _reducedDistantPlants = value;
+-            _visualTiers.Clear(); _distanceTiers.Clear(); _accum = 999;
++            _visualTiers.Clear(); _distanceTiers.Clear(); _accum = 999; _chunkSelectionDirty = true;
+         }
+     }
+     private Vector3 _detailCameraPosition, _detailCameraForward;
+     private Vector3 _detailGuardianPosition;
+-    private float _detailPixels, _detailOrthoSize;
++    private float _detailPixels, _detailOrthoSize, _detailFov;
+     private bool _detailOrthogonal;
+     private void CaptureDetailCamera()
+     {
+@@ -75,7 +246,7 @@ public partial class FloraRenderer : Node3D
+         _detailCameraPosition = Camera.GlobalPosition; _detailCameraForward = -Camera.GlobalBasis.Z;
+         float viewport = Camera.GetViewport().GetVisibleRect().Size.Y;
+         _detailOrthogonal = Camera.Projection == Camera3D.ProjectionType.Orthogonal;
+-        _detailOrthoSize = Camera.Size;
++        _detailOrthoSize = Camera.Size; _detailFov = Camera.Fov;
+         _detailPixels = _detailOrthogonal ? viewport : viewport / (2f*MathF.Tan(Mathf.DegToRad(Camera.Fov)*.5f));
+     }
+     private static (string Species, int Variant) MorphKey(string species, int variant) => (species, variant);
+@@ -162,11 +333,19 @@ public partial class FloraRenderer : Node3D
+     public float LuminousNightFactor { get; private set; }
+     /// <summary>All currently present species are built and one complete instance refresh has been uploaded.</summary>
+     public bool PopulationReady { get; private set; }
++    // Readiness can become false again when a new species appears; that must not
++    // restore the cold-start publication budget during an already playable world.
++    public bool EverPresentedPopulation { get; private set; }
+     private readonly HashSet<EntityId> _publishedPlants = new();
+     public bool IsPlantPublished(EntityId id) => _publishedPlants.Contains(id);
+     public Mesh? PlacementGhostMesh(string speciesId) => _layers.TryGetValue(speciesId, out var layer)
+         ? (layer.Variants[0].Juvenile ?? layer.Variants[0].Full).Multimesh.Mesh : null;
+     public int LoadedSpeciesCount => _layers.Count;
++    public int RequestedSpeciesCount => _w == null ? 0 : _w.Flora.Items.Select(f => f.SpeciesId)
++        .Concat(_w.DeadFlora.Items.Select(f => f.SpeciesId)).Distinct(StringComparer.Ordinal).Count();
++    public bool FloraLayerBuildActive => _build != null;
++    private int _recipeWorkersOutstanding;
++    public int FloraRecipeWorkersOutstanding => System.Threading.Volatile.Read(ref _recipeWorkersOutstanding);
+     public bool HasLegacyLayer(string speciesId) => _layers.ContainsKey(speciesId);
+     private readonly List<FloraSnapshotItem> _snapshot = new();
+     private readonly Dictionary<string, List<FloraSnapshotItem>> _veinPlants = new(StringComparer.Ordinal);
+@@ -191,6 +370,14 @@ public partial class FloraRenderer : Node3D
+     }
+     private void ApplyFloraShadows()
+     {
++        foreach (var chunk in _floraChunks.Values)
++            foreach (var (key, node) in chunk.Nodes)
++            {
++                var layer = _layers[key.Species];
++                var variant = layer.Variants[key.Variant];
++                node.CastShadow = key.Part != 4 && _quality >= 1 && variant.CanCastShadow && key.Variant / layer.MorphCount <= _shadowMaxTier
++                    ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
++            }
+         foreach (var layer in _layers.Values)
+             for (int index = 0; index < layer.Variants.Length; index++)
+             {
+@@ -227,6 +414,7 @@ public int Quality
+         foreach (var light in _luminousPool) light.QueueFree();
+         _luminousPool.Clear();
+         _lightCandidates.Clear(); _activeLuminous.Clear(); _selectedLuminous.Clear(); _luminousToPool.Clear();
++        ClearFloraChunks(); _luminousSnapshot.Clear();
+         _snapshot.Clear(); _deadSnapshot.Clear(); _wobbleStart.Clear(); _publishedPlants.Clear();
+         _renderClimberSegments.Clear();
+         _pooledBuffers.Clear(); _placements.Clear(); _stalePlacements.Clear(); DirtyRegions.Clear();
+@@ -236,6 +424,7 @@ public int Quality
+         _distanceTiers.Clear();
+         Visible_ = 0; TrianglesDrawn = 0;
+         PopulationReady = false;
++        EverPresentedPopulation = false;
+         _w = w;
+         _terrainVersion = _w.Terrain.Version;
+         DirtyRegions.MarkAll(DirtyReason.TerrainVersion, _w.Terrain.Version, _clock);
+@@ -393,8 +582,12 @@ public int Quality
+             int? tier = profile == null ? null : lod;
+             ulong seed = Rng.Mix(speciesSeed, (ulong)(morph + 1) * 0x9E3779B97F4A7C15UL);
+             // Calibration and parametric tessellation are pure managed work. Never block input/rendering on them.
++            System.Threading.Interlocked.Increment(ref _recipeWorkersOutstanding);
+             tasks.Add(Task.Run(() =>
+             {
++                using var recipeProfile = FrameProfiler.Measure("Flora.RecipeWorker");
++                try
++                {
+                 var fullMesh = sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: true, lod) : OrganismMeshes.FloraTier(sp, seed, lod, tieredSource: profile != null, farGillStations: DistantGillStations, farEmberMicroSides: DistantEmberMicroSides, farDewbonnetCapRings: DistantDewbonnetCapRings);
+                 MeshData? youngMesh = buildsJuvenile
+                     ? sp.Climber != null ? OrganismMeshes.ClimberNodeTier(sp, seed, attached: false, lod) : OrganismMeshes.FloraTier(sp, seed, lod, juvenile: true, tieredSource: profile != null)
+@@ -410,6 +603,8 @@ public int Quality
+                 if (youngMesh != null) Prepare(youngMesh);
+                 if (fruitMesh != null) Prepare(fruitMesh);
+                 return (Full: fullMesh, Young: youngMesh, Fruit: fruitMesh, Structural: structural);
++                }
++                finally { System.Threading.Interlocked.Decrement(ref _recipeWorkersOutstanding); }
+             }));
+         }
+ 
+@@ -507,8 +702,9 @@ public int Quality
+                 layer.VeinTris = vein.TriangleCount;
+                 AddChild(layer.Veins); build.Nodes.Add(layer.Veins);
+             }
+-            // Refresh can yield while enumerating the dictionary; retire it before publishing a new layer.
+-            _refresh?.Dispose(); _refresh = null;
++            // Refresh walks each chunk's captured species IDs, not the layer dictionary.
++            // Let an in-progress refresh finish; the next reconciliation dirties chunks
++            // containing this newly published species.
+             _layers[sp.Id] = layer;
+             ApplyFloraShadows();
+             GD.Print("FLORA_LAYER_BUILD_END " + sp.Id + " loaded_species=" + _layers.Count);
+@@ -565,11 +761,12 @@ public int Quality
+         if (_build != null)
+         {
+             long buildStarted = Stopwatch.GetTimestamp();
+-            double buildBudget = PopulationReady ? 2.0 : 50.0;
++            double buildBudget = EverPresentedPopulation ? 2.0 : 50.0;
+             for (int step = 0; step < 16 && _build != null; step++)
+             {
+                 long stepStarted = Stopwatch.GetTimestamp();
+-                bool advanced = _build.MoveNext();
++                bool advanced;
++                using (FrameProfiler.Measure("Flora.LayerBuildStep")) advanced = _build.MoveNext();
+                 _peakBuildStepMs = Math.Max(_peakBuildStepMs,
+                     Stopwatch.GetElapsedTime(stepStarted).TotalMilliseconds);
+                 if (!advanced) { _build.Dispose(); _build = null; break; }
+@@ -581,13 +778,18 @@ public int Quality
+         {
+             bool cameraChanged = Camera != null &&
+                 (Camera.GlobalPosition.DistanceSquaredTo(_detailCameraPosition) > .25f ||
+-                 (-Camera.GlobalBasis.Z).Dot(_detailCameraForward) < .995f);
++                 (-Camera.GlobalBasis.Z).Dot(_detailCameraForward) < .995f ||
++                 _detailOrthogonal != (Camera.Projection == Camera3D.ProjectionType.Orthogonal) ||
++                 Camera.Size != _detailOrthoSize || Camera.Fov != _detailFov);
+             bool guardianMoved = _w.Guardian is { } guardian
+                 && Bridge.V(guardian.Position).DistanceSquaredTo(_detailGuardianPosition) > .0225f;
+-            if (_accum < (cameraChanged || guardianMoved ? .2 : 4.0)) return;
++            if (cameraChanged || guardianMoved || _chunkSelectionDirty) { SelectFloraChunks(); UpdateLuminousLights(); }
++            if (_accum < 4.0) return;
+             _accum = 0;
++            if (PopulationReady && CurrentSnapshot != null && CurrentSnapshot.IsCurrentFor(_w) && _wobbleStart.Count == 0) return;
+             _refresh = Refresh().GetEnumerator();
+         }
++        using var refreshProfile = FrameProfiler.Measure("Flora.RefreshSteps");
+         long started = Stopwatch.GetTimestamp();
+         do
+         {
+@@ -719,6 +921,13 @@ public int Quality
+         return best;
+     }
+ 
++    /// <summary>Force a complete baseline before a controlled mutation/locality probe.</summary>
++    public void RebuildAllFloraChunks()
++    {
++        foreach (var chunk in _floraChunks.Values) chunk.Dirty = true;
++        Rebuild();
++    }
++
+     /// <summary>Explicit callers get a complete synchronous refresh; normal frames use the bounded path.</summary>
+     public void Rebuild(bool resetDetailHistory = false)
+     {
+@@ -735,8 +944,12 @@ public int Quality
+         // and presentation iterations do not race mutable simulation state.
+         CaptureDetailCamera();
+         long snapshotStarted=Stopwatch.GetTimestamp();
+-        bool reuseSnapshot = CurrentSnapshot != null && ReferenceEquals(_snapshotWorld, _w) && CurrentSnapshot.IsCurrentFor(_w);
+-        var snapshot = reuseSnapshot ? CurrentSnapshot! : RenderSnapshot.Capture(_w);
++        RenderSnapshot snapshot;
++        using (FrameProfiler.Measure("Flora.SnapshotCapture"))
++        {
++            bool reuseSnapshot = CurrentSnapshot != null && ReferenceEquals(_snapshotWorld, _w) && CurrentSnapshot.IsCurrentFor(_w);
++            snapshot = reuseSnapshot ? CurrentSnapshot! : RenderSnapshot.Capture(_w);
++        }
+         _snapshotWorld = _w;
+         _peakSnapshotMs=Math.Max(_peakSnapshotMs,
+             Stopwatch.GetElapsedTime(snapshotStarted).TotalMilliseconds);
+@@ -778,14 +991,103 @@ public int Quality
+             _stalePlacements.Clear();
+         }
+ 
+-        ClearBuckets(_full); ClearBuckets(_fruit); ClearBuckets(_juvenile); ClearBuckets(_tendrils);
+-        foreach (var veinList in _veinPlants.Values) veinList.Clear();
++        {
++        using var reconcileProfile = FrameProfiler.Measure("Flora.SnapshotReconcile");
++        _floraGeneration++;
++        var previous = _floraChunks.ToDictionary(pair => pair.Key,
++            pair => (Living: pair.Value.Living.ToArray(), Dead: pair.Value.Dead.ToArray(), Environment: pair.Value.DeadEnvironment.ToArray()));
++        foreach (var chunk in _floraChunks.Values) { chunk.Living.Clear(); chunk.Dead.Clear(); chunk.DeadEnvironment.Clear(); }
++        _luminousSnapshot.Clear();
++        foreach (var plant in _snapshot)
++        {
++            FloraPopulationVisits++;
++            var key = FloraChunkKey(plant.X, plant.Z);
++            if (!_floraChunks.TryGetValue(key, out var chunk)) _floraChunks.Add(key, chunk = new CachedFloraChunk());
++            chunk.Living.Add(plant); chunk.Generation = _floraGeneration;
++            if (_w.Content.FloraOrThrow(plant.SpeciesId).BioluminescenceStrength > 0) _luminousSnapshot.Add(plant);
++        }
++        foreach (var plant in _deadSnapshot)
++        {
++            FloraPopulationVisits++;
++            var key = FloraChunkKey(plant.X, plant.Z);
++            if (!_floraChunks.TryGetValue(key, out var chunk)) _floraChunks.Add(key, chunk = new CachedFloraChunk());
++            chunk.Dead.Add(plant); chunk.Generation = _floraGeneration;
++            int cell = _w.Grid.NearestDomainCell(plant.Position);
++            chunk.DeadEnvironment.Add((plant.Id,
++                cell >= 0 ? _w.Fields.Moisture.Values[cell] : 0.5,
++                cell >= 0 ? _w.Litter.FineMass[cell] + _w.Litter.CoarseMass[cell] : 0));
++        }
++        foreach (var key in _floraChunks.Where(pair => pair.Value.Generation != _floraGeneration).Select(pair => pair.Key).ToArray())
++        {
++            foreach (var node in _floraChunks[key].Nodes.Values) RetireChunkNode(node);
++            _floraChunks.Remove(key);
++        }
++        bool globalDependencyChanged = _chunkTerrainVersion != _w.Terrain.Version ||
++            _chunkPropsVersion != _w.Props.Version || _chunkWaterTable != _w.Water.WaterTable;
++        var addedSpecies = _layers.Keys.Where(id => !_chunkKnownSpecies.Contains(id)).ToHashSet(StringComparer.Ordinal);
++        _chunkKnownSpecies.UnionWith(addedSpecies);
++        _chunkTerrainVersion = _w.Terrain.Version; _chunkPropsVersion = _w.Props.Version;
++        _chunkLayerCount = _layers.Count; _chunkWaterTable = _w.Water.WaterTable;
++        // Cross-chunk links depend on specific parents/woody hosts, not all flora changes.
++        var oldById = previous.Values.SelectMany(v => v.Living).ToDictionary(f => f.Id);
++        var newById = _floraChunks.Values.SelectMany(c => c.Living).ToDictionary(f => f.Id);
++        var changedIds = new HashSet<EntityId>();
++        foreach (var (id, oldPlant) in oldById)
++            if (!newById.TryGetValue(id, out var newPlant) || !SameFloraVisual(oldPlant, newPlant)) changedIds.Add(id);
++        foreach (var id in newById.Keys) if (!oldById.ContainsKey(id)) changedIds.Add(id);
++        foreach (var (key, chunk) in _floraChunks)
++        {
++            bool changed = !previous.TryGetValue(key, out var old) || old.Living.Length != chunk.Living.Count || old.Dead.Length != chunk.Dead.Count;
++            if (!changed)
++            {
++                for (int i = 0; i < chunk.Living.Count && !changed; i++) changed = !SameFloraVisual(old.Living[i], chunk.Living[i]);
++                for (int i = 0; i < chunk.Dead.Count && !changed; i++)
++                    changed = !old.Dead[i].Equals(chunk.Dead[i]) || old.Environment[i] != chunk.DeadEnvironment[i];
++            }
++            chunk.DependencySensitive = chunk.Living.Any(f => !f.ParentId.IsNone || _w.Content.FloraOrThrow(f.SpeciesId).Climber != null);
++            chunk.WaterSensitive = chunk.Living.Any(f => _w.Content.FloraOrThrow(f.SpeciesId).Shape is "floatleaf" or "glasslily_pad" or "pondstars" or "bogfringe" or "deepquill" or "mirepocket");
++            bool hasWobble = chunk.Living.Any(f => _wobbleStart.ContainsKey(f.Id));
++            bool layerAdded = addedSpecies.Count > 0 && (chunk.Living.Any(f => addedSpecies.Contains(f.SpeciesId)) ||
++                chunk.Dead.Any(f => addedSpecies.Contains(f.SpeciesId)));
++            chunk.Dirty |= changed || globalDependencyChanged || layerAdded || chunk.WaterSensitive ||
++                chunk.LastBuiltTick == long.MinValue || (chunk.Living.Count > 0 && _w.Clock.Tick - chunk.LastBuiltTick >= PlacementResampleTicks) ||
++                hasWobble || chunk.HadWobble;
++            chunk.HadWobble = hasWobble;
++        }
++        foreach (var chunk in _floraChunks.Values)
++        {
++            if (!chunk.DependencySensitive) continue;
++            foreach (var plant in chunk.Living)
++            {
++                if ((!plant.ParentId.IsNone && changedIds.Contains(plant.ParentId)) ||
++                    (plant.ClimberSegments != null && plant.ClimberSegments.Any(segment => !segment.HostId.IsNone && changedIds.Contains(segment.HostId))))
++                { chunk.Dirty = true; break; }
++            }
++        }
++        }
++        // Snapshot polling is population-wide; only dirty chunk buffers are regenerated.
+         int visible = 0;
+         long triangles = 0;
++        foreach (var chunk in _floraChunks.Values.Where(chunk => chunk.Dirty))
++        for (int tier = 0; tier < OrganismMeshes.FloraLodTiers; tier++)
++        {
++        _forcedFloraTier = tier;
++        if (tier == 0) foreach (var group in chunk.Groups.Values) group.ResetBounds();
++        void IncludeGroup(string species, Vector3 position, float height, float radius)
++        {
++            if (tier != 0) return;
++            if (!chunk.Groups.TryGetValue(species, out var group)) chunk.Groups.Add(species, group = new FloraSizeGroup());
++            group.Include(position, height, radius);
++        }
++        var chunkSpecies = chunk.Living.Select(f => f.SpeciesId).Concat(chunk.Dead.Select(f => f.SpeciesId))
++            .Concat(chunk.Nodes.Keys.Select(k => k.Species)).ToHashSet(StringComparer.Ordinal);
++        ClearBuckets(_full); ClearBuckets(_fruit); ClearBuckets(_juvenile); ClearBuckets(_tendrils);
++        foreach (var veinList in _veinPlants.Values) veinList.Clear();
+         int terrainVersion = _w.Terrain.Version, propsVersion = _w.Props.Version;
+         long tick = _w.Clock.Tick;
+-        foreach (var f in _snapshot)
++        foreach (var f in chunk.Living)
+         {
++            FloraPopulationVisits++;
+             yield return false;
+             if (_w.Flora.Get(f.Id) == null) continue;
+             // A camera move only changes which instances are drawn. Reuse the sampled ground height,
+@@ -857,7 +1159,7 @@ public int Quality
+                 }
+                 cullH = h * 1.7;
+             }
+-            if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)cullH)) continue;
++            // Chunk-level visibility is selected after upload.
+             ulong hash = Rng.Mix(f.Id.Value, 0xF10);
+             float yaw = (hash % 6283) / 1000f;
+             // Mats conform to their substrate. Upright vascular plants respond to the actual local sky-openness
+@@ -894,6 +1196,7 @@ public int Quality
+                 // foliage sits on the nodes. Leaves are spaced along the shoot the way they are on a real one,
+                 // rather than on every internode, and the growing tip of each shoot is a bare tendril.
+                 var cTint = f.Tint;
++                IncludeGroup(sp.Id, pos, (float)Math.Max(h, 0.3), (float)Math.Max(r, 0.3));
+                 int cTier = VisualTier(f.Id, pos, (float)Math.Max(h, 0.3), (float)Math.Max(r, 0.3));
+                 int cVariant = (int)((hash >> 8) % (ulong)_layers[sp.Id].MorphCount) + cTier * _layers[sp.Id].MorphCount;
+                 float leafSpacing = (float)Math.Max(0.11, sp.Climber!.SegmentLength * 3.0);
+@@ -985,6 +1288,7 @@ public int Quality
+             var custom = new Color((hash % 1000) / 1000f, (float)f.Health, wobble, ((hash >> 12) % 1000) / 1000f);
+             var tint = f.Tint;
+             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
++            IncludeGroup(sp.Id, pos, (float)h, (float)r);
+             int lodTier = VisualTier(f.Id, pos, (float)h, (float)r);
+             variant += lodTier * visualLayer.MorphCount;
+             var vl = _layers[sp.Id].Variants[variant];
+@@ -998,8 +1302,9 @@ public int Quality
+         }
+         // Dead vascular plants remain visible after leaving the living population. Reuse the species mesh and
+         // drive pose/tint from authoritative corpse state so no per-corpse mesh or physics body is required.
+-        foreach (var dead in _deadSnapshot)
++        foreach (var dead in chunk.Dead)
+         {
++            FloraPopulationVisits++;
+             yield return false;
+             if (_w.DeadFlora.Get(dead.Id) == null) continue;
+             var sp = _w.Content.FloraOrThrow(dead.SpeciesId);
+@@ -1008,7 +1313,7 @@ public int Quality
+             double r = dead.OriginalRadius * (0.82 + 0.18 * remain);
+             double h = dead.OriginalHeight * (0.78 + 0.22 * remain);
+             var pos = new Vector3((float)dead.X, (float)_w.GroundHeight(dead.Position), (float)dead.Z);
+-            if (frustum != null && !FloraVisible(frustum, pos, (float)r, (float)h)) continue;
++
+ 
+             bool isUpright = IsUpright(sp);
+ 
+@@ -1069,6 +1374,7 @@ public int Quality
+             var custom = new Color((hash % 1000) / 1000f, residualGreen, 0f, ((hash >> 12) % 1000) / 1000f);
+             var visualLayer = _layers[sp.Id];
+             int variant = (int)((hash >> 8) % (ulong)visualLayer.MorphCount);
++            IncludeGroup(sp.Id, pos, (float)h, (float)r);
+             int deadTier = VisualTier(dead.Id, pos, (float)h, (float)r);
+             variant += deadTier * visualLayer.MorphCount;
+             var bd = Get(_full, MorphKey(sp.Id, variant));
+@@ -1079,9 +1385,9 @@ public int Quality
+         // slime-mold veins: thickness follows the biomass flowing through each link. The main pass
+         // grouped plants by species, so a layer walks only its own individuals instead of rescanning
+         // the whole population once per vein layer.
+-        foreach (var (id, layer) in _layers)
++        foreach (var id in chunkSpecies)
+         {
+-            if (layer.Veins == null) continue;
++            if (!_layers.TryGetValue(id, out var layer) || layer.Veins == null) continue;
+             var list = Get(_veins, id); list.T.Clear(); list.Tint.Clear(); list.C.Clear();
+             var vsp = _w.Content.FloraOrThrow(id);
+             var veinPlants = _veinPlants.TryGetValue(id, out var speciesPlants) ? speciesPlants : null;
+@@ -1153,30 +1459,50 @@ public int Quality
+                 list.C.Add(new Color((hash % 1000) / 1000f, (float)Math.Min(f.Health, parent.Health), 0, ((hash >> 12) % 1000) / 1000f));
+             }
+             yield return true;
+-            Fill(layer.Veins.Multimesh, list);
+-            triangles += (long)PublishedCount(layer.Veins.Multimesh) * layer.VeinTris;
++            if (tier == 0 && (list.T.Count > 0 || chunk.Nodes.ContainsKey((id, 0, 4))))
++            {
++                var veinNode = ChunkNode(chunk, id, 0, 4, layer.Veins);
++                Fill(veinNode.Multimesh, list);
++                triangles += (long)PublishedCount(veinNode.Multimesh) * layer.VeinTris;
++            }
+         }
+-        foreach (var (id, layer) in _layers)
+-            for (int v = 0; v < layer.Variants.Length; v++)
++        foreach (var id in chunkSpecies)
++        {
++            if (!_layers.TryGetValue(id, out var layer)) continue;
++            int tierStart = tier * layer.MorphCount;
++            for (int v = tierStart; v < tierStart + layer.MorphCount; v++)
+             {
+                 yield return true;
+                 var vl = layer.Variants[v];
+                 var mk = MorphKey(id, v);
+-                // Full and fruit share one upload step: a phase change never briefly draws both forms.
+-                FillBucket(vl.Full.Multimesh, _full, mk);
+-                if (vl.Fruit != null) FillBucket(vl.Fruit.Multimesh, _fruit, mk);
+-                if (vl.Juvenile != null) FillBucket(vl.Juvenile.Multimesh, _juvenile, mk);
+-                if (vl.Tendril != null) FillBucket(vl.Tendril.Multimesh, _tendrils, mk);
+-                triangles += (long)PublishedCount(vl.Full.Multimesh) * vl.FullTris
+-                    + (vl.Fruit != null ? (long)PublishedCount(vl.Fruit.Multimesh) * vl.FruitTris : 0)
+-                    + (vl.Juvenile != null ? (long)PublishedCount(vl.Juvenile.Multimesh) * vl.JuvenileTris : 0)
+-                    + (vl.Tendril != null ? (long)PublishedCount(vl.Tendril.Multimesh) * vl.TendrilTris : 0);
++                // Allocate only buckets containing instances, while clearing any previously populated bucket.
++                void Upload(int part, MultiMeshInstance3D source, Dictionary<(string, int), (List<Transform3D> T, List<Color> Tint, List<Color> C)> buckets)
++                {
++                    var nodeKey = (id, v, part);
++                    if (!chunk.Nodes.ContainsKey(nodeKey) && (!buckets.TryGetValue(mk, out var values) || values.T.Count == 0)) return;
++                    FillBucket(ChunkNode(chunk, id, v, part, source).Multimesh, buckets, mk);
++                }
++                Upload(0, vl.Full, _full);
++                if (vl.Fruit != null) Upload(1, vl.Fruit, _fruit);
++                if (vl.Juvenile != null) Upload(2, vl.Juvenile, _juvenile);
++                if (vl.Tendril != null) Upload(3, vl.Tendril, _tendrils);
+             }
+-        Visible_ = visible; TrianglesDrawn = triangles;
++        }
++        if (tier == 0) { FloraChunksRebuilt++; chunk.BuildCount++; }
++        if (tier == OrganismMeshes.FloraLodTiers - 1)
++        {
++            PruneEmptyChunkNodes(chunk);
++            chunk.Dirty = false; chunk.LastBuiltTick = _w.Clock.Tick;
++        }
++        }
++        _forcedFloraTier = -1;
++        SelectFloraChunks();
+         _publishedPlants.Clear();
+         foreach (var plant in _snapshot)
+             if (_layers.ContainsKey(plant.SpeciesId)) _publishedPlants.Add(plant.Id);
+-        PopulationReady = _build == null &&
++        if (!EverPresentedPopulation && (_snapshot.Count == 0 && _deadSnapshot.Count == 0 ||
++            _floraChunks.Values.Any(chunk => chunk.Nodes.Count > 0))) EverPresentedPopulation = true;
++        PopulationReady = _build == null && _chunkLayerCount == _layers.Count &&
+             _w.Flora.Items.All(f => _layers.ContainsKey(f.SpeciesId)) &&
+             _w.DeadFlora.Items.All(f => _layers.ContainsKey(f.SpeciesId));
+         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
+@@ -1302,8 +1628,9 @@ public int Quality
+         _lightCandidates.Clear();
+         if(night)
+         {
+-            foreach(var f in _snapshot)
++            foreach(var f in _luminousSnapshot)
+             {
++                FloraLuminousCandidatesVisited++;
+                 var sp=_w.Content.FloraOrThrow(f.SpeciesId);
+                 if(sp.BioluminescenceStrength<=0||sp.BioluminescenceColor is not {Length:>=3}||_w.Flora.Get(f.Id)==null)continue;
+                 var pos=new Vector3((float)f.X,(float)_w.GroundHeight(f.Position),(float)f.Z);
+@@ -1477,6 +1804,7 @@ public int Quality
+     /// Never skips an individual for screen size: the far tier is still the full parametric plant.</summary>
+     private int VisualTier(EntityId id, Vector3 position, float height, float radius)
+     {
++        if (_forcedFloraTier >= 0) return _forcedFloraTier;
+         if (Camera == null) return 0;
+         float bound = 2f * MathF.Sqrt(radius * radius + height * height * .25f);
+         // Keep the physical interaction neighbourhood on the authored mesh, even in a distant view.
+@@ -1723,7 +2051,9 @@ public int Quality
+                 buf[o + 16] = c.R; buf[o + 17] = c.G; buf[o + 18] = c.B; buf[o + 19] = c.A;
+             }
+         }
++        long previousBytes = pb.UploadedBytes;
+         pb.Upload(mm, n, ReuseInstanceBuffers);
++        FloraUploadBytes += pb.UploadedBytes - previousBytes;
+     }
+ }
+ 

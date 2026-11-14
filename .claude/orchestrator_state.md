@@ -1,35 +1,16 @@
-# Orchestrator State — Vivarium
-Updated: 2026-11-13
-Git starting HEAD: 72a6234
-Dependency discovery: rg-based (no graphify graph exists); native Codex workers adapt the pointer protocol.
+# Representation rebuild — paced checkpoint
+Updated 2026-11-14. Canonical spec: docs/representation-rebuild/brief.md; decisions: .claude/ledger.md; execution plan: docs/representation-rebuild/plan.md.
 
-## Project topology
-Repr/Contracts -> Plant, Substrate, Colony, Light, Ecology. PlantGraph/Compiler -> game/Repr/Plant chunk renderer. SubstrateField -> Mesh/SubstrateMesher -> game/Repr/Substrate; Ecology consumes Substrate and updates World fields/Flora. OcclusionVolume -> SkyVisibilityField -> lit shaders; EnvironmentRig owns production lighting. Main dispatches Repr harness demos. Root owns Main/shared harness, selftest Program, docs, Git.
+Owner requested continuation with Luna and Terra under root orchestration, then smaller checkpoints to stay within limits. Use one bounded Terra implementation at a time, Luna review, serial builds/GPU runs and reuse of completed checks. Do not launch multiple new optimizations at the end of a checkpoint. Earlier authority to commit/push scoped verified work continues.
 
-## Task DAG
-| Task | State | Dependencies | Worker | Evidence |
-|---|---|---|---|---|
-| P2g | rejected; preserving evidence/restoring accepted baseline | accepted P1/P3 | Terra plants | baseline48 and candidate6 images inspected; worse appearance and higher geometry |
-| E1/E2 | recovering | S1b | Terra | pending |
-| INT-L | starting | L1b | Terra | pending |
-| S2b | queued | S1b | Terra | pending |
-| C2 | queued | C1/S1b | Terra | pending |
-| INT-F | queued | P2g | Terra | pending |
-| Review | queued | integrated winners | independent Terra | pending |
+Preserve the dirty E:\Vivarium main checkout, unrelated imports/documents, saves and live editors. No worktrees/PR/CI. Root alone commits explicit paths; never git add -A. Current hardware is GTX1080/Ryzen51600; Radeon860M remains unmeasured. Build solution then game serially. One native Godot game at a time. Selftests run explicit DLLs from unique artifact paths.
 
-## Validation
-Fresh pre-takeover dotnet build: exit 0, 9 warnings. Historical task statuses in ledger are stale after quota interruption.
+Verified pushed checkpoints before this final decision commit: fae36746 root invalidation after biomass/movement, af4de8aa immutable async Coverage inputs/stale-result rejection, f35bee5a optional C2 hybrid specimen with partial visual acceptance. Historical E1/E2, INT-L and S2b remain accepted. P2g remains rejected.
 
-## Current evidence / decisions
-- P2g generated family rejected after two rendered iterations: sparse canopy initially, then detached dense foliage balls and crystalline fern with higher cost. Preserve the experiment and use RD12a cached legacy assemblies as production direction. This preserves visual quality rather than treating hypothetical generator wins as implemented.
-- Targeted capture filter exercised: candidate report has exactly six requested shots and exits REPR_REVIEW_COMPLETE.
-- Recovery substrate checks 18/18 and colony 12/12 pass on explicit isolated DLL; weak colony wet-route ratio remains 1.11 and is not accepted as strong ecological proof.
-- dotnet run artifacts-path is stale-output hazard; use build then explicit DLL.
+Final INT-F decision: REJECT the1m chunk backend and restore previous production flora. It passed36 warmed camera revisits with zero visits/builds/uploads,1/2/1/1 mutation locality,498->501->498 node lifetime and native guardian reorder/shrink readback. But the180s/warm120 live pair showed equal pacing/memory/geometry and+7.14% GPU time/+7.98% draws. Exact candidate source/new runners/hashes/report/analyzer are preserved under experiments/representation_rebuild/rejected/INT-F-1m. Live code has no rejected cache APIs; only camera-manifest locking/provenance remains from its harness changes.
 
-## Active wave after 823ee6d
-- flora_chunks (Terra): production INT-F first slice landed, all-world draw records/camera selection; chunk locality still incomplete, GPU probe pending. Own OrganismRenderers/FloraRenderer.*.
-- light_production (Terra): production controller/rig/shaders/Main/GameSession; Stock remains default until matched A/B. Consumes all-world flora source API from flora_chunks.
-- ecology (Terra): fix round1 independent review findings in build/reviews/E1-review.md; no ecology commit yet. Nondefault grids, local terrain state continuity/save side effects, first infiltration delta require corrections. Eight author checks and 90day diagnostic runs passed but did not cover these.
-- Independent lighting infrastructure review fixed FIFO/cancellation/fault replay; approved and committed823ee6d.
-- Root corrected --repr-shots state-order bug: all logical ApplyVariant calls must execute before filtering screenshots; post-fix soil log names now align and requested8 captures complete. Shader cap30 runtime verified.
-- Next queued: E rereview, S2b material/relief/litter look (current top remains camouflage wallpaper, cut face nearblack and outcrop cartoon cracks); C2 moss/lichen appearance; production substrate/colony integration; real paced perf/backlog and final six demos.
+Restored solution/game builds pass; native headless boot exits0 with successful save/load roundtrip and invariants0. Full representation suite earlier passed72/73; the sole substrate.performance failure (401ns vs400ns threshold) is retained and must not be called a passing full suite. Exact receipts/build/native logs are linked from INT-C-snapshot.md, INT-F.md and C2-colonies.md. No build/native process or worker task is intentionally active at checkpoint end.
+
+C2 remains partial:15native captures, all colony checks passed within the full suite, local edit changed one field texture and one micro tile of four. Moss is a low leafy mat; lichen coating/basal halo still needs visual work. Independent LOD contact, whole-island locality and pending-builder shutdown are unproven. Keep persisted Coverage as production authority and Terrain/props as its physical surface; do not duplicate ColonySystem or substitute the specimen surface implicitly.
+
+Next bounded choice: a camera-cache representation that avoids additional draw/node groups in the common live view; OR Coverage render-only invalidation/queue work (about4ms/frame), with age-only changes currently causing geometry work. Choose and measure one. The broad rebuild remains unfinished: production underlay integration, botanical/alternative decisions, six final demos and long-run resource/ecology acceptance. No completion claim.
