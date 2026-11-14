@@ -49,7 +49,8 @@ public sealed record ColonySpecies(
             sum += classes[i];
         }
         double cls = sum > 0 ? w / sum : 0;
-        return MathD.Clamp01(cls * Math.Min(1.0, capacity / 0.5));
+        double capRef = (horizon == Horizon.Litter || horizon == Horizon.Humus) ? 0.14 : 0.50;
+        return MathD.Clamp01(cls * Math.Min(1.0, capacity / capRef));
     }
 
     public static ColonySpecies CushionMoss => new(
@@ -84,6 +85,14 @@ public sealed record ColonySpecies(
         SlopeTolerance: 0.7, CompetitiveHeight: 0.006, WaterHolding: 0.8,
         ColourDry: new Vec3(0.45, 0.50, 0.30), ColourWet: new Vec3(0.30, 0.42, 0.22));
 
+    public static ColonySpecies BranchLichen => new(
+        "branch_lichen", ColonyKind.FruticoseLichen, MaxThickness: 0.014, MaxBiomass: 0.26, GrowthRate: 0.018, SpreadRate: 0.0012,
+        MoistureOptimum: 0.45, MoistureTolerance: 0.30, DesiccationToleranceDays: 45,
+        LightOptimum: 0.68, LightTolerance: 0.32,
+        AffinityRock: 0.85, AffinitySoil: 0.35, AffinityHumus: 0.25, AffinityLitter: 0.15, AffinitySand: 0.25, AffinityWood: 0.90,
+        SlopeTolerance: 0.65, CompetitiveHeight: 0.014, WaterHolding: 1.1,
+        ColourDry: new Vec3(0.48, 0.54, 0.44), ColourWet: new Vec3(0.28, 0.39, 0.27));
+
     /// Not alive: deposited, decomposes. Kind Litter; its growth and spread are unused.
     public static ColonySpecies LeafLitter => new(
         "leaf_litter", ColonyKind.Litter, MaxThickness: 0.02, MaxBiomass: 1.5, GrowthRate: 0, SpreadRate: 0,
@@ -95,7 +104,7 @@ public sealed record ColonySpecies(
 
     public static IReadOnlyList<ColonySpecies> Defaults { get; } = new[]
     {
-        CushionMoss, FeatherMoss, CrustLichen, LeafLichen, LeafLitter,
+        CushionMoss, FeatherMoss, CrustLichen, LeafLichen, LeafLitter, BranchLichen,
     };
 
     public static ColonySpecies? Find(string id)

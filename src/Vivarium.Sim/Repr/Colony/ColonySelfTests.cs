@@ -318,7 +318,7 @@ public sealed class ColonyNicheTest : IReprSelfTest
         if (!(rock > 5 * humus)) return $"lichen on rock {rock:0.0000} m2 not > 5x humus {humus:0.0000} m2";
 
         // Damp rock: rock whose colony-side moisture (seepage, shade, film) is >= 0.5 at the end of the run.
-        double mossDamp = 0, lichDamp = 0, maxRockMoist = 0; int damp = 0, rockCells = 0;
+        double mossDamp = 0, lichDamp = 0, lichDry = 0, maxRockMoist = 0; int damp = 0, dryRock = 0, rockCells = 0;
         for (int ix = 0; ix < 50; ix++)
             for (int iz = 0; iz < 50; iz++)
             {
@@ -328,14 +328,45 @@ public sealed class ColonyNicheTest : IReprSelfTest
                 var smp = c.Sample(p);
                 double m = c.MoistureAt(p);
                 maxRockMoist = Math.Max(maxRockMoist, m);
-                if (m < 0.5) continue;
+                double lCov = ColonyTestKit.MossCover(smp, "crust_lichen") + ColonyTestKit.MossCover(smp, "leaf_lichen");
+                if (m < 0.5) { dryRock++; lichDry += lCov; continue; }
                 damp++;
                 mossDamp += ColonyTestKit.MossCover(smp, "cushion_moss");
-                lichDamp += ColonyTestKit.MossCover(smp, "crust_lichen") + ColonyTestKit.MossCover(smp, "leaf_lichen");
+                lichDamp += lCov;
             }
-        _detail += $" [damp rock {damp}/{rockCells} cells, max rock moisture {maxRockMoist:0.00}]";
+        _detail += $" [damp rock {damp}/{rockCells} cells (moss={mossDamp:0.00} lich={lichDamp:0.00}), dry rock {dryRock} cells (lich={lichDry:0.00}), max rock moisture {maxRockMoist:0.00}]";
         if (damp == 0) return "no damp rock (colony-side moisture >= 0.5) at end of run";
         if (!(mossDamp > lichDamp)) return $"on damp rock moss {mossDamp:0.00} does not dominate lichen {lichDamp:0.00}";
+        if (dryRock == 0 || lichDry < 1.0) return $"crust lichen vanished on upper/dry rock (dryRock={dryRock}, lichDry={lichDry:0.00})";
+        return null;
+    }
+}
+
+public sealed class ColonyInteriorTest : IReprSelfTest
+{
+    private string _detail = "";
+    public string Name => "colony.interior" + _detail;
+    public string? Run()
+    {
+        var r = ColonyTestKit.Niche.Value;
+        if (r.Error != null) return r.Error;
+        var c = r.C;
+        double intSum = 0, rimSum = 0; int intN = 0, rimN = 0;
+        foreach (var t in c.Field.Tiles)
+            for (int cell = 0; cell < ColonyTile.N; cell++)
+            {
+                double m = 0;
+                for (int slot = 0; slot < 2; slot++)
+                    if (t.Species[cell * 2 + slot] == 1) m += t.Cover(cell * 2 + slot);
+                if (m <= 1e-3) continue;
+                if (t.Rim.ContainsKey(cell)) { rimSum += m; rimN++; }
+                else { intSum += m; intN++; }
+            }
+        if (intN == 0 || rimN == 0) return $"missing interior ({intN}) or rim ({rimN}) cells";
+        double intMean = intSum / intN, rimMean = rimSum / rimN;
+        _detail = $" [interior={intMean:0.000} (n={intN}) vs rim={rimMean:0.000} (n={rimN}), ratio={intMean / Math.Max(rimMean, 1e-9):0.00}]";
+        if (!(intMean >= 1.20 * rimMean))
+            return $"fairy-ring defect: interior mean coverage {intMean:0.000} not >= 1.20x rim mean {rimMean:0.000}";
         return null;
     }
 }
@@ -649,7 +680,7 @@ public sealed class ColonySnapshotTest : IReprSelfTest
     {
         var r = ColonyTestKit.Niche.Value;
         if (r.Error != null) return r.Error;
-        string dir = "C:/Misc/Vivarium/build/overhaul/C1";
+        string dir = Path.GetFullPath(Environment.GetEnvironmentVariable("VIVARIUM_REPR_TEST_OUTPUT") ?? "build/repr-selftests/colony");
         Directory.CreateDirectory(dir);
         foreach (var kv in r.Pgm) File.WriteAllText(Path.Combine(dir, kv.Key), kv.Value);
         foreach (var kv in r.Ppm) File.WriteAllBytes(Path.Combine(dir, kv.Key), kv.Value);

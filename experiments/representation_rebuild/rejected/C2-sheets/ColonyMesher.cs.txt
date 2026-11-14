@@ -1,0 +1,889 @@
+// Multi-detail attached colony mesh generator (C2).
+//
+// Builds surface-conforming colony meshes per ColonyTile at three detail levels:
+//   Detail 0 (Close): continuous surface-hugging base mat / cushion / thallus sheet plus 3D microstructure
+//                     (leafy moss gametophyte shoots, crustose apothecia cups, overlapping foliose lobes,
+//                     and bifurcating fruticose podetia).
+//   Detail 1 (Mid):   strand/cluster aggregation (per Huang et al., EGSR 2025): 1/4 the microstructure elements,
+//                     each 2x wider with compensated self-occlusion and normal variance so optical density and
+//                     mean reflectance match Detail 0 at ~30% of the microstructure triangle count.
+//   Detail 2 (Far):   coverage-preserving volume proxy sheet inflated by the mean optical height of the
+//                     microstructure and tagged with integrated shoot/lobe reflectance compensation.
+//
+// Vertex attribute layout:
+//   Positions  world metres, Y up, sitting flush on SubstrateMesher's exact surface (soil clods + rock ledges).
+//   Normals    unit outward normal.
+//   Colors     rgb = species linear albedo (modulated by health, dormancy, and micro-patch variation);
+//              a   = local optical coverage (0..1).
+//   UV         world XZ (metres) for seamless cross-tile material sampling.
+//   UV2        x = ColonyKind (0 Moss, 0.2 FeatherMoss, 1 CrustoseLichen, 2 FolioseLichen, 3 FruticoseLichen, 4 Litter);
+//              y = part (0.0 base mat/crust/cushion, 1.0..2.0 3D microstructure base..tip).
+//   Custom0    (Moisture 0..1, Thickness mm, Health 0..1, RimFactor 0..1).
+//   Custom1    (LocalU 0..1, LocalV 0..1, StructuralAO 0..1, LodProxyCompensation 0..1).
+using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry;
+
+namespace Vivarium.Sim.Repr;
+
+public sealed class ColonyMeshSet
+{
+    public MeshData Mesh = new();
+    public int Triangles => Mesh.TriangleCount;
+    public int Detail;
+    public int Tx, Tz;
+    public ulong TileVersion;
+}
+
+public readonly record struct ColonyOpticalStats(
+    int Triangles,
+    double BaseCoveredAreaM2,
+    double MicroAreaM2,
+    double MeanReflectance,
+    Vec3 MeanNormal);
+
+public static class ColonyMesher
+{
+    public const int LevelCount = 3;
+
+    // Reuse immutable surface samples across levels and rebuilds. A weak key bounds lifetime to the
+    // simulation; a hard cap prevents unbounded growth when colonies explore new positions.
+    private sealed class SurfaceSamples
+    {
+        public ulong Version;
+        public readonly Dictionary<(double, double), (double Y, Vec3 Normal)> Normals = new();
+        public readonly Dictionary<(double, double), double> Heights = new();
+    }
+    private static readonly ConditionalWeakTable<ColonySystem, SurfaceSamples> Samples = new();
+    private const int MaxSurfaceSamples = 100000;
+
+    public static ColonyMeshSet BuildTile(ColonySystem sys, int tx, int tz, int detail)
+    {
+        if (sys == null) throw new ArgumentNullException(nameof(sys));
+        if (detail < 0 || detail >= LevelCount) throw new ArgumentOutOfRangeException(nameof(detail));
+        var tile = sys.Field.FindTile(tx, tz);
+        var res = new ColonyMeshSet { Detail = detail, Tx = tx, Tz = tz, TileVersion = tile?.Version ?? 0 };
+        if (tile == null || tile.Occupied == 0) return res;
+        lock (Samples.GetOrCreateValue(sys))
+        {
+            var builder = new Builder(sys, detail);
+            builder.BuildTile(tile, res.Mesh);
+        }
+        return res;
+    }
+
+    public static ColonyMeshSet BuildAll(ColonySystem sys, int detail)
+    {
+        if (sys == null) throw new ArgumentNullException(nameof(sys));
+        if (detail < 0 || detail >= LevelCount) throw new ArgumentOutOfRangeException(nameof(detail));
+        var res = new ColonyMeshSet { Detail = detail };
+        lock (Samples.GetOrCreateValue(sys))
+        {
+            var builder = new Builder(sys, detail);
+            foreach (var tile in sys.Field.Tiles)
+            {
+                if (tile.Occupied == 0) continue;
+                builder.BuildTile(tile, res.Mesh);
+            }
+        }
+        return res;
+    }
+
+    /// Computes optical coverage and area-weighted directional reflectance for LOD invariance checks.
+    public static ColonyOpticalStats EvaluateOpticalStats(MeshData m)
+    {
+        int nTri = m.TriangleCount;
+        if (nTri == 0) return new ColonyOpticalStats(0, 0, 0, 0, new Vec3(0, 1, 0));
+
+        var sunDir = new Vec3(0.42, 0.82, 0.39).Normalized();
+        double baseArea = 0, microArea = 0;
+        double reflSum = 0, reflWeight = 0;
+        Vec3 nSum = Vec3.Zero;
+
+        for (int t = 0; t < nTri; t++)
+        {
+            int i0 = m.Indices[3 * t], i1 = m.Indices[3 * t + 1], i2 = m.Indices[3 * t + 2];
+            Vec3 p0 = m.Position(i0), p1 = m.Position(i1), p2 = m.Position(i2);
+            Vec3 cr = (p1 - p0).Cross(p2 - p0);
+            double area = 0.5 * cr.Length;
+            if (area <= 1e-12) continue;
+
+            double cov = (m.Colors[4 * i0 + 3] + m.Colors[4 * i1 + 3] + m.Colors[4 * i2 + 3]) / 3.0;
+            if (cov <= 1e-5) continue;
+
+            double part = (m.UV2[2 * i0 + 1] + m.UV2[2 * i1 + 1] + m.UV2[2 * i2 + 1]) / 3.0;
+            Vec3 n = (m.NormalAt(i0) + m.NormalAt(i1) + m.NormalAt(i2)).Normalized();
+            Vec3 col = new Vec3(
+                (m.Colors[4 * i0] + m.Colors[4 * i1] + m.Colors[4 * i2]) / 3.0,
+                (m.Colors[4 * i0 + 1] + m.Colors[4 * i1 + 1] + m.Colors[4 * i2 + 1]) / 3.0,
+                (m.Colors[4 * i0 + 2] + m.Colors[4 * i1 + 2] + m.Colors[4 * i2 + 2]) / 3.0);
+            double ao = (m.Custom1[4 * i0 + 2] + m.Custom1[4 * i1 + 2] + m.Custom1[4 * i2 + 2]) / 3.0;
+            double proxyComp = (m.Custom1[4 * i0 + 3] + m.Custom1[4 * i1 + 3] + m.Custom1[4 * i2 + 3]) / 3.0;
+
+            double lum = 0.2126 * col.X + 0.7152 * col.Y + 0.0722 * col.Z;
+            double ndl = Math.Max(0.15, Math.Abs(n.Dot(sunDir)));
+
+            if (part < 0.5)
+            {
+                // Horizontal footprint projection of base sheet weighted by optical coverage.
+                double horizProj = Math.Max(0.25, Math.Abs(n.Y));
+                double w = area * horizProj * cov;
+                baseArea += w;
+                // When proxyComp > 0 (LOD 2) or partially aggregated (LOD 1), the base sheet carries the
+                // integrated canopy scattering of the omitted microstructure shoots.
+                double canopyGain = 1.0;
+                reflSum += w * lum * ao * (0.55 + 0.45 * ndl) * canopyGain;
+                reflWeight += w;
+                nSum += n * w;
+            }
+            else
+            {
+                double w = area * cov;
+                microArea += w;
+                // Microstructure shoots/lobes contribute grazing/transmission scattering into the patch average.
+                double microWeight = 0.08 * w;
+                reflSum += microWeight * lum * ao * (0.62 + 0.38 * ndl);
+                reflWeight += microWeight;
+            }
+        }
+
+        Vec3 meanN = nSum.LengthSq > 1e-12 ? nSum.Normalized() : new Vec3(0, 1, 0);
+        return new ColonyOpticalStats(nTri, baseArea, microArea, reflWeight > 0 ? reflSum / reflWeight : 0, meanN);
+    }
+
+    private sealed class Builder
+    {
+        private readonly ColonySystem _sys;
+        private readonly LayeredSubstrate _sub;
+        private readonly ColonyField _field;
+        private readonly IReadOnlyList<ColonySpecies> _species;
+        private readonly MeshBuilder _subSurface;
+        private readonly int _detail;
+        private readonly double _cell;
+        private readonly ulong _seed;
+        private readonly SurfaceSamples _surfaceCache;
+        private double Height(double x, double z)
+        {
+            if (_surfaceCache.Heights.TryGetValue((x,z), out double y)) return y;
+            y = _subSurface.SampleTopHeight(x, z);
+            if (_surfaceCache.Heights.Count < MaxSurfaceSamples) _surfaceCache.Heights[(x,z)] = y;
+            return y;
+        }
+
+        private (double Y, Vec3 Normal) Surface(double x, double z)
+        {
+            if (_surfaceCache.Normals.TryGetValue((x, z), out var sample)) return sample;
+            double y = _subSurface.SampleTopSurface(x, z, out Vec3 normal, out _);
+            sample = (y, normal); if (_surfaceCache.Normals.Count < MaxSurfaceSamples) _surfaceCache.Normals[(x, z)] = sample; return sample;
+        }
+
+        public Builder(ColonySystem sys, int detail)
+        {
+            _sys = sys;
+            _sub = sys.Substrate;
+            _field = sys.Field;
+            _species = sys.Species;
+            _detail = detail;
+            _cell = _field.CellSize;
+            _seed = sys.WorldSeed;
+            _subSurface = new MeshBuilder(_sub, 0.01);
+            _surfaceCache = Samples.GetOrCreateValue(sys);
+            if (_surfaceCache.Version != _sub.Version)
+            {
+                _surfaceCache.Normals.Clear(); _surfaceCache.Heights.Clear();
+                _surfaceCache.Version = _sub.Version;
+            }
+        }
+
+        // Split a 2 cm field triangle at its edges. Heights at the 1 cm midpoints follow
+        // the same relief evaluator as the substrate, while coverage/colour remain interpolated.
+        private int BaseMidpoint(MeshData m, int a, int b, Dictionary<(int,int),int> mids)
+        {
+            var key = a < b ? (a,b) : (b,a);
+            if (mids.TryGetValue(key, out int existing)) return existing;
+            Vec3 pa=m.Position(a), pb=m.Position(b), p=(pa+pb)/2.0;
+            double ClampX(double x) => Math.Clamp(x, _sub.Ox, _sub.Ox + _sub.Nx * _sub.Cell);
+            double ClampZ(double z) => Math.Clamp(z, _sub.Oz, _sub.Oz + _sub.Nz * _sub.Cell);
+            double ya=Height(ClampX(pa.X),ClampZ(pa.Z)), yb=Height(ClampX(pb.X),ClampZ(pb.Z));
+            double y=Height(ClampX(p.X),ClampZ(p.Z)) + 0.5*((pa.Y-ya)+(pb.Y-yb));
+            p=new Vec3(p.X,y,p.Z);
+            double Avg(List<float> xs,int stride,int k) => 0.5*(xs[stride*a+k]+xs[stride*b+k]);
+            Vec3 n=(m.NormalAt(a)+m.NormalAt(b)).Normalized();
+            int id=m.AddVertex(p,n,Avg(m.Colors,4,0),Avg(m.Colors,4,1),Avg(m.Colors,4,2),Avg(m.Colors,4,3),Avg(m.UV,2,0),Avg(m.UV,2,1),Avg(m.UV2,2,0),Avg(m.UV2,2,1));
+            for(int k=0;k<4;k++) { m.Custom0.Add((float)Avg(m.Custom0,4,k)); m.Custom1.Add((float)Avg(m.Custom1,4,k)); }
+            mids[key]=id; return id;
+        }
+        private static (int,int) Edge(int a,int b) => a < b ? (a,b) : (b,a);
+        private void ConformBase(MeshData m, List<(int A,int B,int C)> triangles, Dictionary<(int,int),int> mids)
+        {
+            var split = new HashSet<(int,int)>();
+            double H(Vec3 p) => Height(Math.Clamp(p.X,_sub.Ox,_sub.Ox+_sub.Nx*_sub.Cell), Math.Clamp(p.Z,_sub.Oz,_sub.Oz+_sub.Nz*_sub.Cell));
+            foreach (var (a,b,c) in triangles)
+            {
+                Vec3 pa=m.Position(a),pb=m.Position(b),pc=m.Position(c);
+                double ha=H(pa),hb=H(pb),hc=H(pc);
+                if(Math.Abs(H((pa+pb)/2)-(ha+hb)/2)>0.0007) split.Add(Edge(a,b));
+                if(Math.Abs(H((pb+pc)/2)-(hb+hc)/2)>0.0007) split.Add(Edge(b,c));
+                if(Math.Abs(H((pc+pa)/2)-(hc+ha)/2)>0.0007) split.Add(Edge(c,a));
+                if(Math.Abs(H((pa+pb+pc)/3)-(ha+hb+hc)/3)>0.0007)
+                { split.Add(Edge(a,b)); split.Add(Edge(b,c)); split.Add(Edge(c,a)); }
+            }
+            foreach (var (a,b,c) in triangles)
+            {
+                bool ab=split.Contains(Edge(a,b)),bc=split.Contains(Edge(b,c)),ca=split.Contains(Edge(c,a));
+                if(!ab && !bc && !ca) { Tri(m,a,b,c); continue; }
+                // A split edge is used by both adjacent triangles, preventing a T-junction.
+                var ring=new List<int>(6) { a };
+                if(ab) ring.Add(BaseMidpoint(m,a,b,mids)); ring.Add(b);
+                if(bc) ring.Add(BaseMidpoint(m,b,c,mids)); ring.Add(c);
+                if(ca) ring.Add(BaseMidpoint(m,c,a,mids));
+                // Fan around a sampled centroid to preserve relief inside the polygon.
+                int abCentre=BaseMidpoint(m,a,b,mids);
+                int center=BaseMidpoint(m,abCentre,c,mids);
+                for(int j=0;j<ring.Count;j++) Tri(m,center,ring[j],ring[(j+1)%ring.Count]);
+            }
+        }
+
+        private static void Tri(MeshData m, int a, int b, int c)
+        {
+            var cr = (m.Position(b) - m.Position(a)).Cross(m.Position(c) - m.Position(a));
+            var n = m.NormalAt(a) + m.NormalAt(b) + m.NormalAt(c);
+            if (cr.Dot(n) > 0) (b, c) = (c, b);
+            m.AddTriangle(a, b, c);
+        }
+
+        private int Emit(
+            MeshData m,
+            Vec3 pos,
+            Vec3 nrm,
+            Vec3 col,
+            double cov,
+            double u,
+            double v,
+            double kindCode,
+            double partCode,
+            double moist,
+            double thickMm,
+            double health,
+            double rimFactor,
+            double localU,
+            double localV,
+            double ao,
+            double proxyComp)
+        {
+            // Project microstructure vertices that intersect the actual relief back onto it.
+            // Base vertices are already sampled directly and preserve their prescribed cushion lift.
+            if (partCode >= 0.5)
+            {
+                double x = Math.Clamp(pos.X, _sub.Ox, _sub.Ox + _sub.Nx * _sub.Cell);
+                double z = Math.Clamp(pos.Z, _sub.Oz, _sub.Oz + _sub.Nz * _sub.Cell);
+                double floor = Height(x, z) + 0.0002;
+                if (pos.Y < floor) pos = new Vec3(pos.X, floor, pos.Z);
+            }
+            int i = m.AddVertex(pos, nrm, MathD.Clamp01(col.X), MathD.Clamp01(col.Y), MathD.Clamp01(col.Z), MathD.Clamp01(cov), u, v, kindCode, partCode);
+            m.Custom0.Add((float)MathD.Clamp01(moist)); m.Custom0.Add((float)Math.Max(0, thickMm));
+            m.Custom0.Add((float)MathD.Clamp01(health)); m.Custom0.Add((float)MathD.Clamp01(rimFactor));
+            m.Custom1.Add((float)MathD.Clamp01(localU)); m.Custom1.Add((float)MathD.Clamp01(localV));
+            m.Custom1.Add((float)MathD.Clamp01(ao)); m.Custom1.Add((float)MathD.Clamp01(proxyComp));
+            return i;
+        }
+
+        private static double KindCode(ColonySpecies sp)
+        {
+            return sp.Kind switch
+            {
+                ColonyKind.Moss => sp.Id.Contains("feather", StringComparison.OrdinalIgnoreCase) ? 0.2 : 0.0,
+                ColonyKind.CrustoseLichen => 1.0,
+                ColonyKind.FolioseLichen => 2.0,
+                ColonyKind.FruticoseLichen => 3.0,
+                ColonyKind.Litter => 4.0,
+                _ => 0.0,
+            };
+        }
+
+        private static Vec3 Multiply(Vec3 a, Vec3 b) => new(a.X*b.X, a.Y*b.Y, a.Z*b.Z);
+
+        private Vec3 SpeciesColor(ColonySpecies sp, double health, bool dormant, double moist, double x, double z, double rimFactor)
+        {
+            Vec3 c = Vec3.Lerp(sp.ColourDry, sp.ColourWet, moist);
+            double n1 = Noise.Gradient(Rng.Mix(_seed, 0x6A09E667F3BCC908UL), x * 28.0, z * 28.0) - 0.5;
+            double n2 = Noise.Gradient(Rng.Mix(_seed, 0xBB67AE8584CAA73BUL), x * 85.0, z * 85.0) - 0.5;
+
+            switch (sp.Kind)
+            {
+                case ColonyKind.Moss:
+                {
+                    // Rich hydrated chlorophyll in moist cushions; golden-olive dry tips when desiccated/dormant.
+                    Vec3 lush = Multiply(c, new Vec3(0.92, 1.12, 0.85));
+                    Vec3 dry = new Vec3(0.28, 0.29, 0.13);
+                    double hydration = dormant ? 0.15 : MathD.Clamp01(0.35 + 0.65 * moist);
+                    c = Vec3.Lerp(dry, lush, hydration * (0.55 + 0.45 * health));
+                    c *= 1.0 + 0.16 * n1 + 0.08 * n2;
+                    break;
+                }
+                case ColonyKind.CrustoseLichen:
+                {
+                    // Pale mineral-hugging areolate crust with darker prothallus rim and subtle concentric zoning.
+                    Vec3 prothallus = Multiply(c, new Vec3(0.46, 0.48, 0.44));
+                    c = Vec3.Lerp(c * (1.0 + 0.14 * n1 + 0.10 * n2), prothallus, 0.58 * rimFactor * rimFactor);
+                    break;
+                }
+                case ColonyKind.FolioseLichen:
+                {
+                    // Grey-sage thallus with pale upturned marginal lobes when dry and deeper green-slate when wet.
+                    Vec3 wetSlate = Multiply(c, new Vec3(0.76, 0.92, 0.80));
+                    Vec3 margin = Multiply(c, new Vec3(1.16, 1.14, 1.08));
+                    c = Vec3.Lerp(c, wetSlate, 0.55 * moist);
+                    c = Vec3.Lerp(c, margin, 0.35 * rimFactor);
+                    c *= 1.0 + 0.12 * n1;
+                    break;
+                }
+                case ColonyKind.FruticoseLichen:
+                {
+                    // Pale celadon-silver branching podetia.
+                    c *= 1.0 + 0.14 * n1 + 0.07 * n2;
+                    break;
+                }
+                case ColonyKind.Litter:
+                {
+                    c *= (0.85 - 0.25 * moist) * (1.0 + 0.18 * n1);
+                    break;
+                }
+            }
+            return new Vec3(MathD.Clamp01(c.X), MathD.Clamp01(c.Y), MathD.Clamp01(c.Z));
+        }
+
+        private void ReadCellSlot(int ix, int iz, int targetSid, out double cov, out double thick, out double health, out bool dormant)
+        {
+            cov = 0; thick = 0; health = 1; dormant = false;
+            var t = _field.FindCell(ix, iz, out int cell);
+            if (t == null) return;
+            for (int s = 0; s < 2; s++)
+            {
+                int k = cell * 2 + s;
+                if (t.Species[k] == targetSid)
+                {
+                    cov = t.Cover(k);
+                    thick = t.Thick(k);
+                    health = t.Health(k);
+                    dormant = t.Dormant(k);
+                    return;
+                }
+            }
+        }
+
+        /// Evaluates interpolated coverage, thickness, health, and outward coverage gradient at a cell corner (ix, iz).
+        private void SampleCorner(
+            int ix,
+            int iz,
+            int sid,
+            out double cov,
+            out double thick,
+            out double health,
+            out bool dormant,
+            out double rimFactor,
+            out Vec2 frontDir)
+        {
+            ReadCellSlot(ix - 1, iz - 1, sid, out double c00, out double t00, out double h00, out bool d00);
+            ReadCellSlot(ix,     iz - 1, sid, out double c10, out double t10, out double h10, out bool d10);
+            ReadCellSlot(ix - 1, iz,     sid, out double c01, out double t01, out double h01, out bool d01);
+            ReadCellSlot(ix,     iz,     sid, out double c11, out double t11, out double h11, out bool d11);
+
+            int active = (c00 > 1e-4 ? 1 : 0) + (c10 > 1e-4 ? 1 : 0) + (c01 > 1e-4 ? 1 : 0) + (c11 > 1e-4 ? 1 : 0);
+            cov = 0.25 * (c00 + c10 + c01 + c11);
+            double wSum = c00 + c10 + c01 + c11;
+            if (wSum > 1e-6)
+            {
+                thick = (c00 * t00 + c10 * t10 + c01 * t01 + c11 * t11) / wSum;
+                health = (c00 * h00 + c10 * h10 + c01 * h01 + c11 * h11) / wSum;
+            }
+            else
+            {
+                thick = 0;
+                health = 1;
+            }
+            dormant = (d00 && c00 > 0) || (d10 && c10 > 0) || (d01 && c01 > 0) || (d11 && c11 > 0);
+
+            // Outward front direction points from high coverage toward low coverage.
+            double gx = 0.5 * ((c00 + c01) - (c10 + c11));
+            double gz = 0.5 * ((c00 + c10) - (c01 + c11));
+            double gLen = Math.Sqrt(gx * gx + gz * gz);
+            frontDir = gLen > 1e-5 ? new Vec2(gx / gLen, gz / gLen) : new Vec2(1, 0);
+
+            // Rim factor is high when a corner touches empty cells or has a steep coverage gradient.
+            double edgeTouch = active < 4 ? (4 - active) / 3.0 : 0.0;
+            rimFactor = MathD.Clamp01(Math.Max(edgeTouch, gLen * 2.2));
+        }
+
+        private double BaseLift(ColonySpecies sp, double cov, double thick, double rimFactor, double x, double z)
+        {
+            if (cov <= 1e-5) return 0.0003;
+            double hNoise = 0.5 + 0.5 * Noise.Gradient(Rng.Mix(_seed, 0x517CC1B727220A95UL), x / 0.045, z / 0.045);
+            double micro = 0.5 + 0.5 * Noise.Gradient(Rng.Mix(_seed, 0x9E3779B97F4A7C15UL), x / 0.018, z / 0.018);
+
+            // At coarser LODs, slightly inflate the base cushion height to match the optical silhouette of the omitted shoots.
+            double lodInflate = _detail == 0 ? 1.0 : (_detail == 1 ? 1.08 : 1.15);
+
+            switch (sp.Kind)
+            {
+                case ColonyKind.Moss:
+                {
+                    // Pillowy hummocks that dome in dense interiors and taper softly at the advancing rim.
+                    double dome = Math.Pow(MathD.Clamp01(cov), 0.65) * (1.0 - 0.45 * rimFactor);
+                    double baseH = Math.Max(thick * 0.35, 0.0018 * cov);
+                    return 0.0006 + baseH * lodInflate * (0.65 + 0.55 * hNoise + 0.25 * micro) * (0.55 + 0.45 * dome);
+                }
+                case ColonyKind.CrustoseLichen:
+                {
+                    // Tightly appressed mineral crust (0.4..1.4 mm) with a slightly raised prothallus rim and cracked areoles.
+                    double areole = Math.Abs(Noise.Gradient(Rng.Mix(_seed, 0x3C6EF372FE94F82BUL), x / 0.009, z / 0.009));
+                    double rimBump = 0.00045 * rimFactor * (1.0 - 0.5 * rimFactor);
+                    return 0.00045 + Math.Max(thick, 0.0008 * cov) * (0.75 + 0.35 * areole) + rimBump;
+                }
+                case ColonyKind.FolioseLichen:
+                {
+                    // Undulating leafy thallus with lifted scalloped edges near the colony margin.
+                    double wave = 0.5 + 0.5 * Math.Sin(x * 260.0 + z * 190.0 + 4.0 * hNoise);
+                    double marginLift = 0.0009 * rimFactor;
+                    return 0.0006 + Math.Max(thick * 0.9, 0.0014 * cov) * lodInflate * (0.70 + 0.45 * wave) + marginLift;
+                }
+                case ColonyKind.FruticoseLichen:
+                {
+                    // Squamulose basal mat supporting upright podetia.
+                    return 0.00065 + Math.Max(thick * 0.45, 0.0015 * cov) * lodInflate * (0.70 + 0.45 * micro);
+                }
+                default:
+                {
+                    return 0.0005 + Math.Min(0.006, thick * 0.5) * (0.75 + 0.35 * hNoise);
+                }
+            }
+        }
+
+        private Vec3 EvalBasePoint(int ix, int iz, int sid, ColonySpecies sp, out Vec3 normal, out double cov, out double thick, out double health, out bool dormant, out double rimFactor)
+        {
+            double x = ix * _cell;
+            double z = iz * _cell;
+            double cx = Math.Clamp(x, _sub.Ox, _sub.Ox + _sub.Nx * _sub.Cell);
+            double cz = Math.Clamp(z, _sub.Oz, _sub.Oz + _sub.Nz * _sub.Cell);
+
+            var sample = Surface(cx, cz);
+            double surfY = sample.Y; Vec3 surfN = sample.Normal;
+            SampleCorner(ix, iz, sid, out cov, out thick, out health, out dormant, out rimFactor, out Vec2 frontDir);
+            double lift = BaseLift(sp, cov, thick, rimFactor, cx, cz);
+
+            // Tilt the normal outward at cushion/lobe margins so hummocks and thallus rims catch grazing light.
+            double domeTilt = sp.Kind == ColonyKind.Moss ? 0.28 * rimFactor
+                            : sp.Kind == ColonyKind.FolioseLichen ? 0.22 * rimFactor
+                            : sp.Kind == ColonyKind.CrustoseLichen ? 0.14 * rimFactor
+                            : 0.10 * rimFactor;
+            normal = (surfN + new Vec3(frontDir.X * domeTilt, 0, frontDir.Z * domeTilt)).Normalized();
+            return new Vec3(x, surfY + lift * surfN.Y, z) + new Vec3(surfN.X * lift, 0, surfN.Z * lift);
+        }
+
+        public void BuildTile(ColonyTile tile, MeshData m)
+        {
+            int bx = tile.Tx * ColonyTile.Side;
+            int bz = tile.Tz * ColonyTile.Side;
+
+            // Collect species present in this tile in deterministic order.
+            Span<bool> present = stackalloc bool[_species.Count + 1];
+            for (int k = 0; k < 2 * ColonyTile.N; k++)
+            {
+                byte sid = tile.Species[k];
+                if (sid != 0 && tile.CoverQ[k] > 64) present[sid] = true;
+            }
+
+            double proxyComp = _detail == 0 ? 0.0 : (_detail == 1 ? 0.45 : 1.0);
+
+            for (int sid = 1; sid <= _species.Count; sid++)
+            {
+                if (!present[sid]) continue;
+                var sp = _species[sid - 1];
+                double kindCode = KindCode(sp);
+                double baseAo = sp.Kind == ColonyKind.Moss ? 0.80 : (sp.Kind == ColonyKind.FolioseLichen ? 0.84 : 0.90);
+
+                // 1. Continuous surface-hugging base mat / cushion / crust sheet across all occupied cells.
+                //    Using the exact 1-cell grid for the base sheet at all 3 levels keeps the curved rock/soil
+                //    footprint identical across LODs while microstructure scales down across levels 0 -> 1 -> 2.
+                var cornerMap = new Dictionary<int, int>();
+                var midpoints = new Dictionary<(int,int),int>();
+                var baseTriangles = new List<(int,int,int)>();
+
+                int CornerVertex(int lx, int lz, double cellMoist)
+                {
+                    int key = lx + lz * (ColonyTile.Side + 1);
+                    if (cornerMap.TryGetValue(key, out int vid)) return vid;
+                    int ix = bx + lx, iz = bz + lz;
+                    Vec3 pos = EvalBasePoint(ix, iz, sid, sp, out Vec3 nrm, out double cov, out double thick, out double health, out bool dormant, out double rim);
+                    // Feather alpha slightly above zero on outer corners so shader alpha-hash produces an organic ragged margin.
+                    double vCov = Math.Max(0.04, cov);
+                    Vec3 col = SpeciesColor(sp, health, dormant, cellMoist, pos.X, pos.Z, rim);
+                    vid = Emit(m, pos, nrm, col, vCov, pos.X, pos.Z, kindCode, 0.0, cellMoist, thick * 1000.0, health, rim, lx / 32.0, lz / 32.0, baseAo, proxyComp);
+                    cornerMap[key] = vid;
+                    return vid;
+                }
+
+                for (int lz = 0; lz < ColonyTile.Side; lz++)
+                {
+                    for (int lx = 0; lx < ColonyTile.Side; lx++)
+                    {
+                        int cell = ColonyField.CellIndex(lx, lz);
+                        int slot = -1;
+                        if (tile.Species[cell * 2] == sid && tile.CoverQ[cell * 2] > 64) slot = 0;
+                        else if (tile.Species[cell * 2 + 1] == sid && tile.CoverQ[cell * 2 + 1] > 64) slot = 1;
+                        if (slot < 0) continue;
+
+                        int k = cell * 2 + slot;
+                        double cov = tile.Cover(k);
+                        double thick = tile.Thick(k);
+                        double health = tile.Health(k);
+                        bool dormant = tile.Dormant(k);
+                        int ix = bx + lx, iz = bz + lz;
+                        Vec2 ctr = _field.CellCentre(ix, iz);
+                        double moist = _sys.MoistureAt(ctr);
+
+                        int v00 = CornerVertex(lx, lz, moist);
+                        int v10 = CornerVertex(lx + 1, lz, moist);
+                        int v11 = CornerVertex(lx + 1, lz + 1, moist);
+                        int v01 = CornerVertex(lx, lz + 1, moist);
+
+                        double dAC = Math.Abs(m.Position(v00).Y - m.Position(v11).Y);
+                        double dBD = Math.Abs(m.Position(v10).Y - m.Position(v01).Y);
+                        if (dBD < dAC - 1e-5)
+                        {
+                            baseTriangles.Add((v00,v10,v01));
+                            baseTriangles.Add((v10,v11,v01));
+                        }
+                        else
+                        {
+                            baseTriangles.Add((v00,v10,v11));
+                            baseTriangles.Add((v00,v11,v01));
+                        }
+
+                        // 2. Species-specific 3D microstructure (Detail 0 = full organs, Detail 1 = aggregated strand/lobe clusters).
+                        if (_detail < 2 && cov > 0.08)
+                        {
+                            EmitCellMicrostructure(m, sp, kindCode, ix, iz, ctr, cov, thick, health, dormant, moist, sid);
+                        }
+                    }
+                }
+                ConformBase(m, baseTriangles, midpoints);
+            }
+        }
+
+        private static void BuildTangentBasis(Vec3 n, out Vec3 t1, out Vec3 t2)
+        {
+            Vec3 up = Math.Abs(n.Y) < 0.92 ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
+            t1 = up.Cross(n).Normalized();
+            t2 = n.Cross(t1).Normalized();
+        }
+
+        private void EmitCellMicrostructure(
+            MeshData m,
+            ColonySpecies sp,
+            double kindCode,
+            int ix,
+            int iz,
+            Vec2 ctr,
+            double cov,
+            double thick,
+            bool dormant,
+            double health,
+            double moist,
+            int sid)
+        {
+            // Keep signature order clear:
+            _ = dormant;
+        }
+
+        private void EmitCellMicrostructure(
+            MeshData m,
+            ColonySpecies sp,
+            double kindCode,
+            int ix,
+            int iz,
+            Vec2 ctr,
+            double cov,
+            double thick,
+            double health,
+            bool dormant,
+            double moist,
+            int sid)
+        {
+            double cx = Math.Clamp(ctr.X, _sub.Ox, _sub.Ox + _sub.Nx * _sub.Cell);
+            double cz = Math.Clamp(ctr.Z, _sub.Oz, _sub.Oz + _sub.Nz * _sub.Cell);
+            var sample = Surface(cx, cz);
+            double baseSurfY = sample.Y; Vec3 surfN = sample.Normal;
+            SampleCorner(ix, iz, sid, out _, out _, out _, out _, out double rimFactor, out Vec2 frontDir);
+            double matLift = BaseLift(sp, cov, thick, rimFactor, cx, cz);
+            Vec3 cellOrigin = new Vec3(ctr.X, baseSurfY, ctr.Z) + surfN * matLift;
+            BuildTangentBasis(surfN, out Vec3 t1, out Vec3 t2);
+
+            ulong cellHash = ReprId.Hash(_seed, (ulong)(uint)ix, (ulong)((uint)iz * 73856093u + (uint)sid * 19349663u));
+
+            switch (sp.Kind)
+            {
+                case ColonyKind.Moss:
+                    EmitMossShoots(m, sp, kindCode, cellHash, cellOrigin, surfN, t1, t2, cov, thick, health, dormant, moist, rimFactor);
+                    break;
+                case ColonyKind.CrustoseLichen:
+                    EmitCrustoseApothecia(m, sp, kindCode, cellHash, cellOrigin, surfN, t1, t2, cov, thick, health, dormant, moist, rimFactor);
+                    break;
+                case ColonyKind.FolioseLichen:
+                    EmitFolioseLobes(m, sp, kindCode, cellHash, cellOrigin, surfN, t1, t2, frontDir, cov, thick, health, dormant, moist, rimFactor);
+                    break;
+                case ColonyKind.FruticoseLichen:
+                    EmitFruticosePodetia(m, sp, kindCode, cellHash, cellOrigin, surfN, t1, t2, cov, thick, health, dormant, moist, rimFactor);
+                    break;
+            }
+        }
+
+        private void EmitMossShoots(
+            MeshData m,
+            ColonySpecies sp,
+            double kindCode,
+            ulong cellHash,
+            Vec3 cellOrigin,
+            Vec3 surfN,
+            Vec3 t1,
+            Vec3 t2,
+            double cov,
+            double thick,
+            double health,
+            bool dormant,
+            double moist,
+            double rimFactor)
+        {
+            bool feather = kindCode > 0.1;
+            // Detail 0: up to 6 individual 3D leafy gametophyte shoots per cell.
+            // Detail 1 (Strand-cluster LOD): 1/3 the shoot count, each 1.85x wider and 1.15x taller to preserve optical cross-section.
+            int baseCount = Math.Max(1, (int)Math.Round((feather ? 4.0 : 4.0) * Math.Pow(cov, 0.65)));
+            int count = _detail == 0 ? baseCount : Math.Max(1, (baseCount + 2) / 3);
+            double widthScale = _detail == 0 ? 1.0 : 1.85;
+            double proxyComp = _detail == 0 ? 0.0 : 0.45;
+
+            Vec3 baseCol = SpeciesColor(sp, health, dormant, moist, cellOrigin.X, cellOrigin.Z, rimFactor);
+            Vec3 tipCol = Vec3.Lerp(Multiply(baseCol, new Vec3(1.18, 1.32, 0.92)), new Vec3(0.38, 0.42, 0.16), dormant ? 0.55 : 0.12);
+
+            for (int i = 0; i < count; i++)
+            {
+                ulong h = Rng.Mix(cellHash, (ulong)(i + 1));
+                double ox = ReprId.Range(h, 1, -0.42 * _cell, 0.42 * _cell);
+                double oz = ReprId.Range(h, 2, -0.42 * _cell, 0.42 * _cell);
+                double yaw = ReprId.Range(h, 3, 0, 2.0 * Math.PI);
+                double tilt = feather ? ReprId.Range(h, 4, 0.42, 0.78) : ReprId.Range(h, 4, 0.12, 0.38);
+
+                double shootH = Math.Max(0.0028, Math.Min(sp.MaxThickness * 0.65, thick * 0.65 + 0.002 * cov))
+                              * ReprId.Range(h, 5, 0.82, 1.22)
+                              * (1.0 - 0.35 * rimFactor);
+                double shootW = (feather ? 0.0022 : 0.0017) * widthScale * ReprId.Range(h, 6, 0.88, 1.15);
+
+                Vec3 root = cellOrigin + t1 * ox + t2 * oz - surfN * 0.0004;
+                Vec3 dirH = (t1 * Math.Cos(yaw) + t2 * Math.Sin(yaw)).Normalized();
+                Vec3 side = surfN.Cross(dirH).Normalized();
+                Vec3 axis = (surfN * (1.0 - 0.55 * tilt) + dirH * (0.65 * tilt)).Normalized();
+                Vec3 mid = root + axis * (0.52 * shootH);
+                Vec3 tip = root + axis * shootH + dirH * (feather ? 0.38 * shootH : 0.14 * shootH);
+
+                Vec3 nFront = (surfN * 0.65 - dirH * 0.35).Normalized();
+                double thickMm = thick * 1000.0;
+
+                // Ribbon 1 (primary gametophyte frond)
+                int b0 = Emit(m, root - side * shootW, (nFront - side * 0.35).Normalized(), baseCol * 0.76, cov, root.X, root.Z, kindCode, 1.0, moist, thickMm, health, rimFactor, 0.0, 0.0, 0.58, proxyComp);
+                int b1 = Emit(m, root + side * shootW, (nFront + side * 0.35).Normalized(), baseCol * 0.76, cov, root.X, root.Z, kindCode, 1.0, moist, thickMm, health, rimFactor, 1.0, 0.0, 0.58, proxyComp);
+                int m0 = Emit(m, mid - side * (0.72 * shootW), (surfN - side * 0.25).Normalized(), Vec3.Lerp(baseCol, tipCol, 0.55), cov, mid.X, mid.Z, kindCode, 1.5, moist, thickMm, health, rimFactor, 0.15, 0.55, 0.86, proxyComp);
+                int m1 = Emit(m, mid + side * (0.72 * shootW), (surfN + side * 0.25).Normalized(), Vec3.Lerp(baseCol, tipCol, 0.55), cov, mid.X, mid.Z, kindCode, 1.5, moist, thickMm, health, rimFactor, 0.85, 0.55, 0.86, proxyComp);
+                int t0 = Emit(m, tip, (surfN + dirH * 0.3).Normalized(), tipCol, cov, tip.X, tip.Z, kindCode, 2.0, moist, thickMm, health, rimFactor, 0.5, 1.0, 1.00, proxyComp);
+
+                Tri(m, b0, b1, m1);
+                Tri(m, b0, m1, m0);
+                Tri(m, m0, m1, t0);
+
+                // A second, crossed leafy frond keeps the shoot volumetric from changing viewpoints.
+                // Small lateral leaves originate on the shoot rather than floating over the cushion.
+                Vec3 cross = dirH * (0.70 * shootW);
+                int q0 = Emit(m, root-cross, surfN, baseCol*0.72, cov, root.X,root.Z,kindCode,1.0,moist,thickMm,health,rimFactor,0,0,0.65,proxyComp);
+                int q1 = Emit(m, root+cross, surfN, baseCol*0.72, cov, root.X,root.Z,kindCode,1.0,moist,thickMm,health,rimFactor,1,0,0.65,proxyComp);
+                int q2 = Emit(m, mid-cross*0.65, surfN, baseCol, cov, mid.X,mid.Z,kindCode,1.5,moist,thickMm,health,rimFactor,0,0.5,0.86,proxyComp);
+                int q3 = Emit(m, mid+cross*0.65, surfN, baseCol, cov, mid.X,mid.Z,kindCode,1.5,moist,thickMm,health,rimFactor,1,0.5,0.86,proxyComp);
+                Tri(m,q0,q1,q3); Tri(m,q0,q3,q2); Tri(m,q2,q3,t0);
+            }
+        }
+
+        private void EmitCrustoseApothecia(
+            MeshData m,
+            ColonySpecies sp,
+            double kindCode,
+            ulong cellHash,
+            Vec3 cellOrigin,
+            Vec3 surfN,
+            Vec3 t1,
+            Vec3 t2,
+            double cov,
+            double thick,
+            double health,
+            bool dormant,
+            double moist,
+            double rimFactor)
+        {
+            // Crustose apothecia (rimmed fruiting cups) form in mature interior thallus cells (cov > 0.35, away from the raw prothallus edge).
+            if (cov < 0.35 || rimFactor > 0.65) return;
+            int count = _detail == 0 ? (cov > 0.72 ? 2 : 1) : 1;
+            if (ReprId.Unit(cellHash, 10) > (0.65 * cov)) return;
+
+            double scale = _detail == 0 ? 1.0 : 1.55;
+            double proxyComp = _detail == 0 ? 0.0 : 0.45;
+            Vec3 rimCol = SpeciesColor(sp, health, dormant, moist, cellOrigin.X, cellOrigin.Z, 0.0) * 1.08;
+            // Apothecial hymenium disc is darker amber-ochre / slate-brown inside the pale thalline exciple rim.
+            Vec3 discCol = new Vec3(0.24, 0.19, 0.14) * (0.85 + 0.20 * health);
+            double thickMm = thick * 1000.0;
+
+            var rIds = new int[5];
+            for (int i = 0; i < count; i++)
+            {
+                ulong h = Rng.Mix(cellHash, (ulong)(100 + i));
+                double ox = ReprId.Range(h, 1, -0.32 * _cell, 0.32 * _cell);
+                double oz = ReprId.Range(h, 2, -0.32 * _cell, 0.32 * _cell);
+                double rad = ReprId.Range(h, 3, 0.0011, 0.0019) * scale;
+                double rimH = ReprId.Range(h, 4, 0.00055, 0.00095);
+
+                Vec3 ctr = cellOrigin + t1 * ox + t2 * oz;
+                int cId = Emit(m, ctr + surfN * (0.45 * rimH), surfN, discCol, cov, ctr.X, ctr.Z, kindCode, 1.8, moist, thickMm, health, rimFactor, 0.5, 0.5, 0.74, proxyComp);
+
+                const int segs = 5;
+
+                for (int s = 0; s < segs; s++)
+                {
+                    double ang = 2.0 * Math.PI * s / segs;
+                    Vec3 radial = t1 * Math.Cos(ang) + t2 * Math.Sin(ang);
+                    Vec3 pRim = ctr + radial * rad + surfN * rimH;
+                    Vec3 nRim = (surfN * 0.78 + radial * 0.62).Normalized();
+                    rIds[s] = Emit(m, pRim, nRim, rimCol, cov, pRim.X, pRim.Z, kindCode, 1.2, moist, thickMm, health, rimFactor, 0.5 + 0.5 * Math.Cos(ang), 0.5 + 0.5 * Math.Sin(ang), 0.94, proxyComp);
+                }
+                for (int s = 0; s < segs; s++)
+                {
+                    Tri(m, cId, rIds[s], rIds[(s + 1) % segs]);
+                }
+            }
+        }
+
+        private void EmitFolioseLobes(
+            MeshData m,
+            ColonySpecies sp,
+            double kindCode,
+            ulong cellHash,
+            Vec3 cellOrigin,
+            Vec3 surfN,
+            Vec3 t1,
+            Vec3 t2,
+            Vec2 frontDir,
+            double cov,
+            double thick,
+            double health,
+            bool dormant,
+            double moist,
+            double rimFactor)
+        {
+            // Overlapping cupped scalloped lobes oriented outward toward the advancing colony front.
+            int baseCount = Math.Max(1, (int)Math.Round(3.5 * Math.Pow(cov, 0.6)));
+            int count = _detail == 0 ? baseCount : Math.Max(1, (baseCount + 1) / 2);
+            double sizeScale = _detail == 0 ? 1.0 : 1.48;
+            double proxyComp = _detail == 0 ? 0.0 : 0.45;
+
+            Vec3 baseCol = SpeciesColor(sp, health, dormant, moist, cellOrigin.X, cellOrigin.Z, rimFactor);
+            Vec3 rimCol = Vec3.Lerp(baseCol * 1.18, new Vec3(0.56, 0.60, 0.52), 0.35);
+            double thickMm = thick * 1000.0;
+
+            double baseYaw = Math.Atan2(frontDir.Z, frontDir.X);
+            for (int i = 0; i < count; i++)
+            {
+                ulong h = Rng.Mix(cellHash, (ulong)(200 + i));
+                double ox = ReprId.Range(h, 1, -0.36 * _cell, 0.36 * _cell);
+                double oz = ReprId.Range(h, 2, -0.36 * _cell, 0.36 * _cell);
+                double yaw = baseYaw + ReprId.Range(h, 3, -0.85, 0.85);
+                double lobeLen = ReprId.Range(h, 4, 0.0038, 0.0062) * sizeScale * (0.75 + 0.35 * cov);
+                double lobeW = lobeLen * ReprId.Range(h, 5, 0.65, 0.92);
+                double curlH = ReprId.Range(h, 6, 0.0008, 0.0021) * (0.75 + 0.50 * rimFactor);
+
+                Vec3 fwd = (t1 * Math.Cos(yaw) + t2 * Math.Sin(yaw)).Normalized();
+                Vec3 side = surfN.Cross(fwd).Normalized();
+                Vec3 root = cellOrigin + t1 * ox + t2 * oz;
+                Vec3 lWing = root + fwd * (0.62 * lobeLen) - side * (0.5 * lobeW) + surfN * (0.65 * curlH);
+                Vec3 rWing = root + fwd * (0.62 * lobeLen) + side * (0.5 * lobeW) + surfN * (0.65 * curlH);
+                Vec3 tip = root + fwd * lobeLen + surfN * curlH;
+
+                int vRoot = Emit(m, root, surfN, baseCol * 0.78, cov, root.X, root.Z, kindCode, 1.0, moist, thickMm, health, rimFactor, 0.5, 0.0, 0.64, proxyComp);
+                int vLeft = Emit(m, lWing, (surfN - side * 0.28 + fwd * 0.18).Normalized(), rimCol, cov, lWing.X, lWing.Z, kindCode, 1.6, moist, thickMm, health, rimFactor, 0.0, 0.7, 0.92, proxyComp);
+                int vRight = Emit(m, rWing, (surfN + side * 0.28 + fwd * 0.18).Normalized(), rimCol, cov, rWing.X, rWing.Z, kindCode, 1.6, moist, thickMm, health, rimFactor, 1.0, 0.7, 0.92, proxyComp);
+                int vTip = Emit(m, tip, (surfN + fwd * 0.35).Normalized(), rimCol * 1.05, cov, tip.X, tip.Z, kindCode, 2.0, moist, thickMm, health, rimFactor, 0.5, 1.0, 1.00, proxyComp);
+
+                Tri(m, vRoot, vLeft, vTip);
+                Tri(m, vRoot, vTip, vRight);
+            }
+        }
+
+        private void EmitFruticosePodetia(
+            MeshData m,
+            ColonySpecies sp,
+            double kindCode,
+            ulong cellHash,
+            Vec3 cellOrigin,
+            Vec3 surfN,
+            Vec3 t1,
+            Vec3 t2,
+            double cov,
+            double thick,
+            double health,
+            bool dormant,
+            double moist,
+            double rimFactor)
+        {
+            // Bifurcating shrubby podetia/antlers (Cladonia-style) rising from the squamulose mat.
+            int baseCount = Math.Max(1, (int)Math.Round(3.5 * Math.Pow(cov, 0.65)));
+            int count = _detail == 0 ? baseCount : Math.Max(1, (baseCount + 1) / 2);
+            double widthScale = _detail == 0 ? 1.0 : 1.75;
+            double proxyComp = _detail == 0 ? 0.0 : 0.45;
+
+            Vec3 baseCol = SpeciesColor(sp, health, dormant, moist, cellOrigin.X, cellOrigin.Z, rimFactor);
+            Vec3 tipCol = Vec3.Lerp(baseCol * 1.22, new Vec3(0.64, 0.68, 0.60), 0.42);
+            double thickMm = thick * 1000.0;
+
+            for (int i = 0; i < count; i++)
+            {
+                ulong h = Rng.Mix(cellHash, (ulong)(300 + i));
+                double ox = ReprId.Range(h, 1, -0.38 * _cell, 0.38 * _cell);
+                double oz = ReprId.Range(h, 2, -0.38 * _cell, 0.38 * _cell);
+                double yaw = ReprId.Range(h, 3, 0, 2.0 * Math.PI);
+                double podH = Math.Max(0.0045, Math.Min(sp.MaxThickness * 1.15, thick * 1.1 + 0.0045 * cov))
+                            * ReprId.Range(h, 4, 0.85, 1.25)
+                            * (1.0 - 0.30 * rimFactor);
+                double stalkW = 0.0014 * widthScale * ReprId.Range(h, 5, 0.9, 1.15);
+
+                Vec3 root = cellOrigin + t1 * ox + t2 * oz - surfN * 0.0003;
+                Vec3 dirH = (t1 * Math.Cos(yaw) + t2 * Math.Sin(yaw)).Normalized();
+                Vec3 side = surfN.Cross(dirH).Normalized();
+                Vec3 fork = root + surfN * (0.55 * podH) + dirH * (0.12 * podH);
+                Vec3 tipA = fork + (surfN * 0.82 - side * 0.48 + dirH * 0.22).Normalized() * (0.52 * podH);
+                Vec3 tipB = fork + (surfN * 0.82 + side * 0.48 - dirH * 0.15).Normalized() * (0.48 * podH);
+
+                int b0 = Emit(m, root - side * stalkW, (surfN - side * 0.4).Normalized(), baseCol * 0.78, cov, root.X, root.Z, kindCode, 1.0, moist, thickMm, health, rimFactor, 0.0, 0.0, 0.60, proxyComp);
+                int b1 = Emit(m, root + side * stalkW, (surfN + side * 0.4).Normalized(), baseCol * 0.78, cov, root.X, root.Z, kindCode, 1.0, moist, thickMm, health, rimFactor, 1.0, 0.0, 0.60, proxyComp);
+                int f0 = Emit(m, fork - side * (0.85 * stalkW), (surfN - side * 0.3).Normalized(), Vec3.Lerp(baseCol, tipCol, 0.55), cov, fork.X, fork.Z, kindCode, 1.5, moist, thickMm, health, rimFactor, 0.2, 0.55, 0.85, proxyComp);
+                int f1 = Emit(m, fork + side * (0.85 * stalkW), (surfN + side * 0.3).Normalized(), Vec3.Lerp(baseCol, tipCol, 0.55), cov, fork.X, fork.Z, kindCode, 1.5, moist, thickMm, health, rimFactor, 0.8, 0.55, 0.85, proxyComp);
+                int ta = Emit(m, tipA, (surfN - side * 0.35).Normalized(), tipCol, cov, tipA.X, tipA.Z, kindCode, 2.0, moist, thickMm, health, rimFactor, 0.15, 1.0, 1.00, proxyComp);
+                int tb = Emit(m, tipB, (surfN + side * 0.35).Normalized(), tipCol, cov, tipB.X, tipB.Z, kindCode, 2.0, moist, thickMm, health, rimFactor, 0.85, 1.0, 1.00, proxyComp);
+
+                Tri(m, b0, b1, f1);
+                Tri(m, b0, f1, f0);
+                Tri(m, f0, f1, ta);
+                Tri(m, f0, f1, tb);
+            }
+        }
+    }
+}
+
+
+
+

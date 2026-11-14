@@ -1,0 +1,272 @@
+using System;
+using System.Diagnostics;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry;
+
+namespace Vivarium.Sim.Repr;
+
+internal static class ColonyMeshTestFixture
+{
+    public static ColonySystem BuildColonizedCube()
+    {
+        var sub = new LayeredSubstrate(SubstrateSpec.TestCube(7));
+        const double rain = 8e-3 / 3600.0;
+        for (int i = 0; i < 60; i++) sub.Water.Step(60, _ => rain, 0, 0);
+
+        var sys = new ColonySystem(sub, 7, p => p.X < 0.45 ? 0.45 : 0.78);
+        sys.Seed("cushion_moss", new Vec2(0.18, 0.30), 0.10);
+        sys.Seed("feather_moss", new Vec2(0.24, 0.72), 0.10);
+        sys.Seed("crust_lichen", new Vec2(0.55, 0.48), 0.10);
+        sys.Seed("leaf_lichen",  new Vec2(0.54, 0.30), 0.09);
+        sys.Seed("branch_lichen", new Vec2(0.76, 0.62), 0.10);
+        sys.DepositLitter(new Vec2(0.32, 0.50), 0.08, 0.004);
+
+        const double dt = 6 * 3600.0;
+        for (int s = 0; s < 120 * 4; s++) sys.Step(dt);
+        return sys;
+    }
+}
+
+public sealed class ColonyMeshValidityTest : IReprSelfTest
+{
+    public string Name => "colony.mesh.valid";
+
+    private static string? Validate(Vivarium.Sim.Geometry.MeshData m)
+    {
+        int n = m.VertexCount;
+        if (m.Positions.Count != n*3 || m.Normals.Count != n*3 || m.Colors.Count != n*4 || m.UV.Count != n*2 || m.UV2.Count != n*2 || m.Custom0.Count != n*4 || m.Custom1.Count != n*4 || m.Indices.Count % 3 != 0) return "invalid attribute counts";
+        foreach (float f in m.Positions) if (!float.IsFinite(f)) return "nonfinite position";
+        foreach (float f in m.Normals) if (!float.IsFinite(f)) return "nonfinite normal";
+        foreach (int i in m.Indices) if (i < 0 || i >= n) return "index out of bounds";
+        return null;
+    }
+
+    public string? Run()
+    {
+        var sys = ColonyMeshTestFixture.BuildColonizedCube();
+        var sub = sys.Substrate;
+
+        for (int d = 0; d < ColonyMesher.LevelCount; d++)
+        {
+            var ms = ColonyMesher.BuildAll(sys, d);
+            string? err = Validate(ms.Mesh);
+            if (err != null) return $"detail {d} invalid mesh: {err}";
+            if (ms.Triangles < 100) return $"detail {d} too few triangles: {ms.Triangles}";
+
+            // Check that every colony kind (0..4) is emitted and attached above the rendered substrate surface.
+            bool[] seenKind = new bool[5];
+            for (int v = 0; v < ms.Mesh.VertexCount; v++)
+            {
+                int k = Math.Clamp((int)Math.Floor(ms.Mesh.UV2[2 * v] + 0.05f), 0, 4);
+                seenKind[k] = true;
+                Vec3 p = ms.Mesh.Position(v);
+                double cx = Math.Clamp(p.X, sub.Ox, sub.Ox + sub.Nx * sub.Cell);
+                double cz = Math.Clamp(p.Z, sub.Oz, sub.Oz + sub.Nz * sub.Cell);
+                double surfY = SubstrateMesher.SurfaceHeightAt(sub, cx, cz, out _, out _);
+                double dy = p.Y - surfY;
+                if (dy < -0.004 || dy > 0.035)
+                    return $"detail {d} vertex {v} detached from substrate surface: dy={dy:0.0000}m at ({p.X:0.00},{p.Z:0.00})";
+            }
+            for (int k = 0; k < 5; k++)
+                if (!seenKind[k]) return $"detail {d} missing colony kind {k}";
+        }
+        return null;
+    }
+}
+
+public sealed class ColonyMeshDeterminismTest : IReprSelfTest
+{
+    public string Name => "colony.mesh.determinism";
+
+    public string? Run()
+    {
+        var sys = ColonyMeshTestFixture.BuildColonizedCube();
+        for (int d = 0; d < ColonyMesher.LevelCount; d++)
+        {
+            var a = ColonyMesher.BuildAll(sys, d).Mesh;
+            var b = ColonyMesher.BuildAll(sys, d).Mesh;
+            if (a.VertexCount != b.VertexCount || a.TriangleCount != b.TriangleCount)
+                return $"detail {d} count mismatch";
+            for (int i = 0; i < a.Positions.Count; i++)
+                if (a.Positions[i] != b.Positions[i]) return $"detail {d} position mismatch at {i}";
+            for (int i = 0; i < a.Colors.Count; i++)
+                if (a.Colors[i] != b.Colors[i]) return $"detail {d} color mismatch at {i}";
+            for (int i = 0; i < a.Indices.Count; i++)
+                if (a.Indices[i] != b.Indices[i]) return $"detail {d} index mismatch at {i}";
+        }
+        return null;
+    }
+}
+
+public sealed class ColonyMeshOpticalLodTest : IReprSelfTest
+{
+    public string Name => "colony.mesh.optical_lod";
+
+    public string? Run()
+    {
+        var sys = ColonyMeshTestFixture.BuildColonizedCube();
+        var s0 = ColonyMesher.EvaluateOpticalStats(ColonyMesher.BuildAll(sys, 0).Mesh);
+        var s1 = ColonyMesher.EvaluateOpticalStats(ColonyMesher.BuildAll(sys, 1).Mesh);
+        var s2 = ColonyMesher.EvaluateOpticalStats(ColonyMesher.BuildAll(sys, 2).Mesh);
+
+        if (!(s0.Triangles > s1.Triangles && s1.Triangles > s2.Triangles))
+            return $"expected strictly decreasing triangles across LODs, got L0={s0.Triangles}, L1={s1.Triangles}, L2={s2.Triangles}";
+        if (s2.Triangles > 0.45 * s0.Triangles)
+            return $"expected L2 to reduce triangles by >55%, got L0={s0.Triangles}, L2={s2.Triangles}";
+
+        double areaDiff1 = Math.Abs(s1.BaseCoveredAreaM2 - s0.BaseCoveredAreaM2) / Math.Max(1e-9, s0.BaseCoveredAreaM2);
+        double areaDiff2 = Math.Abs(s2.BaseCoveredAreaM2 - s0.BaseCoveredAreaM2) / Math.Max(1e-9, s0.BaseCoveredAreaM2);
+        if (areaDiff1 > 0.01 || areaDiff2 > 0.01)
+            return $"covered footprint area drifted across LODs: L0={s0.BaseCoveredAreaM2:0.0000} L1={s1.BaseCoveredAreaM2:0.0000} L2={s2.BaseCoveredAreaM2:0.0000}";
+
+        double reflDiff1 = Math.Abs(s1.MeanReflectance - s0.MeanReflectance) / Math.Max(1e-9, s0.MeanReflectance);
+        double reflDiff2 = Math.Abs(s2.MeanReflectance - s0.MeanReflectance) / Math.Max(1e-9, s0.MeanReflectance);
+        if (reflDiff1 > 0.035 || reflDiff2 > 0.035)
+            return $"mean reflectance drifted across LODs (>3.5%): L0={s0.MeanReflectance:0.0000} L1={s1.MeanReflectance:0.0000} ({reflDiff1:P1}) L2={s2.MeanReflectance:0.0000} ({reflDiff2:P1})";
+
+        return null;
+    }
+}
+
+public sealed class ColonyMeshCostTest : IReprSelfTest
+{
+    public string Name => "colony.mesh.cost";
+
+    public string? Run()
+    {
+        var sys = ColonyMeshTestFixture.BuildColonizedCube();
+        // Warmup JIT
+        _ = ColonyMesher.BuildAll(sys, 0);
+        var sw = Stopwatch.StartNew();
+        const int runs = 5;
+        int tris = 0;
+        for (int r = 0; r < runs; r++)
+        {
+            tris = ColonyMesher.BuildAll(sys, 0).Triangles
+                 + ColonyMesher.BuildAll(sys, 1).Triangles
+                 + ColonyMesher.BuildAll(sys, 2).Triangles;
+        }
+        double msPerAllLevels = sw.Elapsed.TotalMilliseconds / runs;
+        if (msPerAllLevels > 80.0)
+            return $"colony mesh build too slow: {msPerAllLevels:0.0} ms for {tris} triangles across 3 levels";
+        return null;
+    }
+}
+
+/// Compares base triangle interiors to the actual triangulated substrate, not its analytic sampling function.
+public sealed class ColonyMeshTriangleContactTest : IReprSelfTest
+{
+    public string Name => "colony.mesh.triangle_contact";
+    public string? Run()
+    {
+        var sys = ColonyMeshTestFixture.BuildColonizedCube();
+        var sub = sys.Substrate;
+        var ground = SubstrateMesher.Build(sub, sub.Bounds, 0.01, false);
+        var bins = new System.Collections.Generic.Dictionary<(int,int), System.Collections.Generic.List<(Vec3 A, Vec3 B, Vec3 C)>>();
+        void Add(Vivarium.Sim.Geometry.MeshData m)
+        {
+            for (int i = 0; i < m.Indices.Count; i += 3)
+            {
+                var a = m.Position(m.Indices[i]); var b = m.Position(m.Indices[i+1]); var c = m.Position(m.Indices[i+2]);
+                int x0=(int)Math.Floor(Math.Min(a.X,Math.Min(b.X,c.X))*100), x1=(int)Math.Floor(Math.Max(a.X,Math.Max(b.X,c.X))*100);
+                int z0=(int)Math.Floor(Math.Min(a.Z,Math.Min(b.Z,c.Z))*100), z1=(int)Math.Floor(Math.Max(a.Z,Math.Max(b.Z,c.Z))*100);
+                for(int x=x0;x<=x1;x++) for(int z=z0;z<=z1;z++)
+                { if (!bins.TryGetValue((x,z),out var list)) bins[(x,z)]=list=new(); list.Add((a,b,c)); }
+            }
+        }
+        Add(ground.Ground); Add(ground.Rock);
+        bool Height(Vec3 p, out double y)
+        {
+            y=double.NegativeInfinity;
+            if(!bins.TryGetValue(((int)Math.Floor(p.X*100),(int)Math.Floor(p.Z*100)),out var list)) return false;
+            foreach(var (a,b,c) in list)
+            {
+                double den=(b.Z-c.Z)*(a.X-c.X)+(c.X-b.X)*(a.Z-c.Z);
+                if(Math.Abs(den)<1e-12) continue;
+                double u=((b.Z-c.Z)*(p.X-c.X)+(c.X-b.X)*(p.Z-c.Z))/den;
+                double v=((c.Z-a.Z)*(p.X-c.X)+(a.X-c.X)*(p.Z-c.Z))/den;
+                double w=1-u-v;
+                if(u>=-1e-6 && v>=-1e-6 && w>=-1e-6) y=Math.Max(y,u*a.Y+v*b.Y+w*c.Y);
+            }
+            return double.IsFinite(y);
+        }
+        double min=double.PositiveInfinity, max=double.NegativeInfinity; int checkedCount=0, buried=0;
+        for (int detail=0;detail<ColonyMesher.LevelCount;detail++)
+        {
+        var mesh=ColonyMesher.BuildAll(sys,detail).Mesh;
+        for(int i=0;i<mesh.Indices.Count;i+=3)
+        {
+            int ia=mesh.Indices[i], ib=mesh.Indices[i+1], ic=mesh.Indices[i+2];
+            if(mesh.UV2[2*ia+1]>=0.5 || mesh.UV2[2*ib+1]>=0.5 || mesh.UV2[2*ic+1]>=0.5) continue;
+            var a=mesh.Position(ia); var b=mesh.Position(ib); var c=mesh.Position(ic);
+            foreach(var p in new[]{(a+b+c)/3.0,(a+b)/2.0,(b+c)/2.0,(c+a)/2.0})
+            {
+                if(!Height(p,out double y)) continue;
+                double gap=p.Y-y; min=Math.Min(min,gap); max=Math.Max(max,gap); checkedCount++;
+                if(gap < -0.002) buried++;
+            }
+        }
+        if(checkedCount==0) return $"detail {detail}: no base samples overlapped rendered substrate";
+        if(buried>0) return $"detail {detail}: {buried}/{checkedCount} base triangle samples below rendered surface by >2 mm (min {min:F4} m, max {max:F4} m)";
+        }
+        return null;
+    }
+}
+
+public sealed class ColonyHydrationInvalidationTest : IReprSelfTest
+{
+    public string Name => "colony.mesh.hydration_invalidation";
+    public string? Run()
+    {
+        var sys=ColonyMeshTestFixture.BuildColonizedCube();
+        var sub=sys.Substrate;
+        var before=ColonyMesher.BuildAll(sys,0).Mesh;
+        long cursor=sub.DirtyLog.Head;
+        var coverage=new System.Collections.Generic.List<ushort[]>();
+        foreach(var tile in sys.Field.Tiles) coverage.Add((ushort[])tile.CoverQ.Clone());
+        for(int i=0;i<80;i++) sub.Water.Step(21600, _ => 0, 8e-3/ColonySystem.Day, 0);
+        var records=new System.Collections.Generic.List<DirtyRecord>();
+        sub.DirtyLog.Read(cursor,DirtyDomain.Water,records);
+        if(records.Count==0) return "water change did not publish a Water dirty record";
+        int ti=0;
+        foreach(var tile in sys.Field.Tiles)
+        {
+            for(int k=0;k<tile.CoverQ.Length;k++) if(tile.CoverQ[k]!=coverage[ti][k]) return "coverage changed without colony step";
+            ti++;
+        }
+        var after=ColonyMesher.BuildAll(sys,0).Mesh;
+        if(before.Colors.Count!=after.Colors.Count) return "hydration unexpectedly changed mesh topology";
+        for(int i=0;i<before.Colors.Count;i++) if(Math.Abs(before.Colors[i]-after.Colors[i])>1e-4) return null;
+        return "mesh color did not respond to hydration change with unchanged coverage";
+    }
+}
+
+public sealed class ColonyAppearanceVersionTest : IReprSelfTest
+{
+    public string Name => "colony.mesh.appearance_version";
+    public string? Run()
+    {
+        var sys=ColonyMeshTestFixture.BuildColonizedCube();
+        var sub=sys.Substrate;
+        for(int i=0;i<100;i++) sub.Water.Step(21600,_=>0,8e-3/ColonySystem.Day,0);
+        for(int step=0;step<100;step++)
+        {
+            foreach(var tile in sys.Field.Tiles)
+            {
+                var cover=(ushort[])tile.CoverQ.Clone(); var health=(byte[])tile.HealthQ.Clone();
+                var thickness=(ushort[])tile.ThickUm.Clone(); var flags=(byte[])tile.Flags.Clone();
+                ulong version=tile.Version;
+                sys.Step(21600);
+                for(int k=0;k<tile.Species.Length;k++)
+                {
+                    bool changed=health[k]!=tile.HealthQ[k] || thickness[k]!=tile.ThickUm[k]
+                        || ((flags[k/2]^tile.Flags[k/2]) & ((k&1)==0 ? ColonyTile.FDorm0 : ColonyTile.FDorm1))!=0;
+                    if(changed && cover[k]==tile.CoverQ[k])
+                        return tile.Version>version ? null : "appearance changed without coverage or tile revision";
+                }
+                break; // one simulation advance per outer iteration
+            }
+        }
+        return "fixture produced no appearance-only quantized change";
+    }
+}

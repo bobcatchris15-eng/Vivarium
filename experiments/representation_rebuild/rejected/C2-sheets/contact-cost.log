@@ -1,0 +1,6 @@
+FAIL colony.mesh.cost (2653 ms) :: colony mesh build too slow: 135.6 ms for 28258 triangles across 3 levels
+PASS colony.mesh.determinism (1125 ms)
+PASS colony.mesh.optical_lod (1228 ms)
+FAIL colony.mesh.triangle_contact (1315 ms) :: detail 0: 4/15515 base triangle samples below rendered surface by >2 mm (min -0.0026 m, max 0.0156 m)
+PASS colony.mesh.valid (1542 ms)
+REPR_SELFTEST tests=5 failed=2

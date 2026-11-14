@@ -96,6 +96,14 @@ public static class SubstrateMesher
         h = Rng.Mix(h, (ulong)BitConverter.DoubleToInt64Bits(tile.Max.Z));
         return new CacheKey(h, s.Version, detail);
     }
+
+    /// Evaluates the exact rendered surface height and outward normal (including soil clod relief and rock
+    /// bedding ledges/joint grooves) so attached surface colonies sit flush on the substrate mesh.
+    public static double SurfaceHeightAt(LayeredSubstrate s, double x, double z, out Vec3 normal, out bool isRock, double step = 0.01)
+    {
+        var b = new MeshBuilder(s, step);
+        return b.SampleTopSurface(x, z, out normal, out isRock);
+    }
 }
 
 /// Internal worker. One instance per (substrate state, step). Not thread-safe; build on one thread.
@@ -177,6 +185,21 @@ internal sealed class MeshBuilder
     private int KindAt(long I, long J) => G(X(I), Z(J)) > 0 ? 0 : 1;
 
     internal int KindAtXZ(double x, double z) => G(x, z) > 0 ? 0 : 1;
+
+    // Height-only query for attached geometry; avoids four normal finite differences.
+    internal double SampleTopHeight(double x, double z)
+    {
+        int kind = KindAtXZ(x, z);
+        return TopY(x, z, kind, out _, out _);
+    }
+
+    internal double SampleTopSurface(double x, double z, out Vec3 normal, out bool isRock)
+    {
+        int kind = KindAtXZ(x, z);
+        isRock = kind == 1;
+        normal = SurfaceNormalAt(x, z, kind);
+        return TopY(x, z, kind, out _, out _);
+    }
 
     private double FilmAt(double x, double z)
     {

@@ -86,6 +86,11 @@ public sealed partial class SubstrateRenderer : Node3D
         public int Gen;
         public int WaterStamp;
         public bool RefreshBusy;
+        public ShaderMaterial? ColonyGround, ColonyRock;
+        public Image? ColonyImage;
+        public ImageTexture? ColonyTexture;
+        public Image? ColonyStateImage;
+        public ImageTexture? ColonyStateTexture;
         public double LastRefresh = -1e9;
     }
 
@@ -104,6 +109,7 @@ public sealed partial class SubstrateRenderer : Node3D
     private readonly List<Tile> _tiles = new();
     private readonly ConcurrentQueue<Built> _commits = new();
     private int _inflight;
+    private volatile bool _shuttingDown;
     private long _cursor;
     private readonly List<DirtyRecord> _recs = new();
     private bool _waterDirty;
@@ -112,6 +118,126 @@ public sealed partial class SubstrateRenderer : Node3D
     private int _ncx, _ncz;
     private double _ox, _oz, _cell;
     private readonly ShaderMaterial[] _mats = new ShaderMaterial[Parts];
+    private ColonySystem? _colony;
+    private long _colonyCursor;
+    private readonly List<DirtyRecord> _colonyRecords = new();
+    public long ColonyTextureUploads { get; private set; }
+    public double LastColonyUploadMs { get; private set; }
+    public double TotalColonyUploadMs { get; private set; }
+
+    /// Enables state-driven coverage on top surfaces of this exact substrate. Each substrate tile owns
+    /// a separate field texture; only tiles intersecting coverage or water records are uploaded.
+    public void BindColony(ColonySystem system)
+    {
+        if (!ReferenceEquals(system.Substrate, _s)) throw new ArgumentException("Colony and renderer must share substrate");
+        UnbindColony();
+        _colony = system; _colonyCursor = system.DirtyLog.Head;
+        foreach (var t in _tiles)
+        {
+            t.ColonyGround ??= (ShaderMaterial)_mats[0].Duplicate();
+            t.ColonyRock ??= (ShaderMaterial)_mats[2].Duplicate();
+            foreach (var mat in new[]{t.ColonyGround,t.ColonyRock})
+            {
+                mat!.SetShaderParameter("colony_enabled",1f);
+                mat.SetShaderParameter("colony_moss",GD.Load<Texture2D>("res://Textures/Moss002_1K-JPG_Color.jpg"));
+                mat.SetShaderParameter("colony_moss_normal",GD.Load<Texture2D>("res://Textures/Moss002_1K-JPG_NormalGL.jpg"));
+                mat.SetShaderParameter("colony_moss_roughness",GD.Load<Texture2D>("res://Textures/Moss002_1K-JPG_Roughness.jpg"));
+                mat.SetShaderParameter("colony_lichen",GD.Load<Texture2D>("res://Textures/LichenThallus.png"));
+            }
+            RefreshColonyTile(t);
+            foreach(var lv in t.Lv) if(lv != null)
+            {
+                if(lv.Inst[0] != null) lv.Inst[0]!.MaterialOverride=t.ColonyGround;
+                if(lv.Inst[2] != null) lv.Inst[2]!.MaterialOverride=t.ColonyRock;
+            }
+        }
+    }
+    public void UnbindColony()
+    {
+        _colony = null;
+        foreach(var tile in _tiles)
+        {
+            foreach(var level in tile.Lv) if(level != null)
+            {
+                if(level.Inst[0] != null) level.Inst[0]!.MaterialOverride=_mats[0];
+                if(level.Inst[2] != null) level.Inst[2]!.MaterialOverride=_mats[2];
+            }
+            tile.ColonyGround?.Dispose(); tile.ColonyGround=null;
+            tile.ColonyRock?.Dispose(); tile.ColonyRock=null;
+            tile.ColonyTexture?.Dispose(); tile.ColonyTexture=null;
+            tile.ColonyImage?.Dispose(); tile.ColonyImage=null;
+            tile.ColonyStateTexture?.Dispose(); tile.ColonyStateTexture=null;
+            tile.ColonyStateImage?.Dispose(); tile.ColonyStateImage=null;
+        }
+    }
+    public override void _ExitTree() => ReleaseOwnedResources();
+
+    // Workers produce managed buffers only. Stop new work, let in-flight readers finish, discard their
+    // queued results without committing Godot resources, then release resources created by this node.
+    private void ReleaseOwnedResources()
+    {
+        _shuttingDown = true;
+        while (System.Threading.Volatile.Read(ref _inflight) != 0) System.Threading.Thread.Sleep(1);
+        while (_commits.TryDequeue(out _)) { }
+        UnbindColony();
+        foreach (var tile in _tiles)
+            for (int level=0;level<tile.Lv.Length;level++)
+                if (tile.Lv[level] is { } existing) { DisposeLevel(existing); tile.Lv[level]=null; }
+        _tiles.Clear(); MeshBytes=0;
+        foreach (var material in _mats) material?.Dispose();
+        Array.Clear(_mats,0,_mats.Length);
+        _waterTex?.Dispose(); _waterTex=null!;
+        _waterImg?.Dispose(); _waterImg=null!;
+    }
+    private static void DisposeLevel(Level level)
+    {
+        level.Holder.Visible=false;
+        foreach(var instance in level.Inst) if(instance!=null)
+        {
+            var mesh=instance.Mesh; instance.Mesh=null; instance.MaterialOverride=null;
+            mesh?.Dispose();
+        }
+        level.Holder.QueueFree();
+    }
+
+    private void RefreshColonyTile(Tile tile)
+    {
+        if (_colony == null) return;
+        long started=Stopwatch.GetTimestamp();
+        double cell=_colony.Field.CellSize;
+        int nx=(int)Math.Ceiling((tile.Box.Max.X-tile.Box.Min.X)/cell)+3;
+        int nz=(int)Math.Ceiling((tile.Box.Max.Z-tile.Box.Min.Z)/cell)+3;
+        if(tile.ColonyImage == null) tile.ColonyImage=Image.CreateEmpty(nx,nz,false,Image.Format.Rgba8);
+        var image=tile.ColonyImage;
+        if(tile.ColonyStateImage == null) tile.ColonyStateImage=Image.CreateEmpty(nx,nz,false,Image.Format.Rgba8);
+        var state=tile.ColonyStateImage;
+        for(int x=0;x<nx;x++) for(int z=0;z<nz;z++)
+        {
+            var p=new SVec2(tile.Box.Min.X+(x-1)*cell,tile.Box.Min.Z+(z-1)*cell);
+            var sample=ColonyVisualField.Sample(_colony,p);
+            image.SetPixel(x,z,new Color((float)sample.Moss,(float)sample.Crust,(float)sample.Foliose,(float)sample.Fruticose));
+            state.SetPixel(x,z,new Color((float)sample.Health,(float)sample.Thickness,(float)sample.Moisture,1));
+        }
+        if(tile.ColonyTexture == null) tile.ColonyTexture=ImageTexture.CreateFromImage(image);
+        else tile.ColonyTexture.Update(image);
+        if(tile.ColonyStateTexture == null) tile.ColonyStateTexture=ImageTexture.CreateFromImage(state);
+        else tile.ColonyStateTexture.Update(state);
+        var rect=new Vector4((float)(tile.Box.Min.X-1.5*cell),(float)(tile.Box.Min.Z-1.5*cell),(float)(1/(nx*cell)),(float)(1/(nz*cell)));
+        foreach(var mat in new[]{tile.ColonyGround,tile.ColonyRock}) { mat!.SetShaderParameter("colony_field",tile.ColonyTexture); mat.SetShaderParameter("colony_state",tile.ColonyStateTexture); mat.SetShaderParameter("colony_rect",rect); }
+        ColonyTextureUploads++;
+        LastColonyUploadMs=(Stopwatch.GetTimestamp()-started)*1000.0/Stopwatch.Frequency;
+        TotalColonyUploadMs+=LastColonyUploadMs;
+    }
+    private void PollColony()
+    {
+        if(_colony == null || _colony.DirtyLog.Head==_colonyCursor) return;
+        _colonyRecords.Clear(); _colonyCursor=_colony.DirtyLog.Read(_colonyCursor,DirtyDomain.Coverage,_colonyRecords);
+        double pad=_colony.Field.CellSize*1.5;
+        foreach(var tile in _tiles) foreach(var rec in _colonyRecords)
+            if(rec.Bounds.Min.X <= tile.Box.Max.X+pad && rec.Bounds.Max.X >= tile.Box.Min.X-pad &&
+               rec.Bounds.Min.Z <= tile.Box.Max.Z+pad && rec.Bounds.Max.Z >= tile.Box.Min.Z-pad)
+            { RefreshColonyTile(tile); break; }
+    }
     private float _exaggerate;
     private bool _active = true;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -133,6 +259,9 @@ public sealed partial class SubstrateRenderer : Node3D
 
     public void Init(LayeredSubstrate s, double tileSize = 0.5)
     {
+        if (s == null) throw new ArgumentNullException(nameof(s));
+        if (_s != null) ReleaseOwnedResources();
+        _shuttingDown = false;
         _s = s;
         TileSize = tileSize;
         var b = s.Bounds;
@@ -170,7 +299,7 @@ public sealed partial class SubstrateRenderer : Node3D
         try
         {
             var tex = GD.Load<Texture2D>(path);
-            var img = tex.GetImage();
+            using var img = tex.GetImage();
             if (img.IsCompressed()) img.Decompress();
             img.Resize(8, 8, Image.Interpolation.Bilinear);
             double r = 0, g = 0, b = 0;
@@ -256,6 +385,7 @@ public sealed partial class SubstrateRenderer : Node3D
     {
         if (_s.DirtyLog.Head == _cursor) return;
         _recs.Clear();
+        var colonyWaterTiles = _colony != null ? new HashSet<Tile>() : null;
         _cursor = _s.DirtyLog.Read(_cursor, DirtyDomain.Geometry | DirtyDomain.SoilMaterial | DirtyDomain.Water, _recs);
         foreach (var r in _recs)
         {
@@ -264,7 +394,11 @@ public sealed partial class SubstrateRenderer : Node3D
             if (water) _waterDirty = true;
             foreach (var t in _tiles)
             {
-                if (!OverlapXZ(t, r.Bounds)) continue;
+                bool overlaps=OverlapXZ(t,r.Bounds);
+                double halo=_colony?.Field.CellSize*1.5 ?? 0;
+                bool colonyNear=water && _colony!=null && r.Bounds.Min.X<=t.Box.Max.X+halo && r.Bounds.Max.X>=t.Box.Min.X-halo && r.Bounds.Min.Z<=t.Box.Max.Z+halo && r.Bounds.Max.Z>=t.Box.Min.Z-halo;
+                if (colonyNear) colonyWaterTiles?.Add(t);
+                if (!overlaps) continue;
                 if (water) t.WaterStamp++;
                 if (!geo) continue;
                 t.Gen++;
@@ -278,6 +412,7 @@ public sealed partial class SubstrateRenderer : Node3D
                 }
             }
         }
+        if (colonyWaterTiles != null) foreach (var tile in colonyWaterTiles) RefreshColonyTile(tile);
     }
 
     private void FreeLevel(Tile t, int l)
@@ -285,8 +420,7 @@ public sealed partial class SubstrateRenderer : Node3D
         var lv = t.Lv[l];
         if (lv == null) return;
         for (int p = 0; p < Parts; p++) MeshBytes -= lv.Bytes[p];
-        lv.Holder.Visible = false;
-        lv.Holder.QueueFree();
+        DisposeLevel(lv);
         t.Lv[l] = null;
         if (t.Shown == l) t.Shown = -1;
     }
@@ -344,7 +478,7 @@ public sealed partial class SubstrateRenderer : Node3D
 
     private void Request(Tile t, int lv, bool rebuild)
     {
-        if (t.Building[lv]) return;
+        if (_shuttingDown || t.Building[lv]) return;
         t.Building[lv] = true;
         int gen = t.Gen;
         if (SyncMode)
@@ -365,7 +499,7 @@ public sealed partial class SubstrateRenderer : Node3D
     private void RequestRefresh(Tile t, int lv)
     {
         var lvl = t.Lv[lv];
-        if (lvl?.Cut == null || t.RefreshBusy) return;
+        if (_shuttingDown || lvl?.Cut == null || t.RefreshBusy) return;
         t.RefreshBusy = true;
         t.LastRefresh = _clock.Elapsed.TotalSeconds;
         int gen = t.Gen;
@@ -420,7 +554,9 @@ public sealed partial class SubstrateRenderer : Node3D
             if (inst == null) return;
             MeshBytes += b.P[1]!.Bytes - lvl.Bytes[1];
             lvl.Bytes[1] = b.P[1]!.Bytes;
+            var previousMesh=inst.Mesh;
             inst.Mesh = MakeMesh(b.P[1]!);
+            previousMesh?.Dispose();
             lvl.Stamp = b.Stamp;
             WallRefreshes++;
             MaxCommitMs = Math.Max(MaxCommitMs, sw.Elapsed.TotalMilliseconds);
@@ -443,7 +579,7 @@ public sealed partial class SubstrateRenderer : Node3D
             {
                 Name = k switch { 0 => "Ground", 1 => "Cut", 2 => "Rock", 3 => "Stones", _ => "Litter" },
                 Mesh = MakeMesh(p),
-                MaterialOverride = _mats[k],
+                MaterialOverride = k == 0 && t.ColonyGround != null ? t.ColonyGround : k == 2 && t.ColonyRock != null ? t.ColonyRock : _mats[k],
                 CastShadow = k == 4 ? GeometryInstance3D.ShadowCastingSetting.Off : GeometryInstance3D.ShadowCastingSetting.On,
             };
             nl.Holder.AddChild(mi);
@@ -456,8 +592,7 @@ public sealed partial class SubstrateRenderer : Node3D
         if (old != null)
         {
             for (int k = 0; k < Parts; k++) MeshBytes -= old.Bytes[k];
-            old.Holder.Visible = false;
-            old.Holder.QueueFree();
+            DisposeLevel(old);
             TilesRebuilt++;
         }
         else if (!t.EverBuilt[b.Lv]) { TilesBuilt++; t.EverBuilt[b.Lv] = true; }
@@ -549,8 +684,9 @@ public sealed partial class SubstrateRenderer : Node3D
 
     public override void _Process(double delta)
     {
-        if (_s == null) return;
+        if (_s == null || _shuttingDown) return;
         PollDirty();
+        PollColony();
         if (_waterDirty) UploadWater();
         var cam = CameraProvider?.Invoke() ?? GetViewport().GetCamera3D();
         if (cam != null) Select(cam.GlobalPosition, cam.Fov, GetViewport().GetVisibleRect().Size.Y);
@@ -580,6 +716,7 @@ public sealed partial class SubstrateRenderer : Node3D
         bool prev = SyncMode, prevPre = PrebuildAll;
         SyncMode = true; PrebuildAll = false;
         PollDirty();
+        PollColony();
         Drain();
         if (_waterDirty) UploadWater();
         for (int i = 0; i < 4; i++)

@@ -16,6 +16,16 @@ shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
 uniform float kind = 0.0;
+// Optional per-substrate-tile colony field (moss, crustose, foliose, fruticose).
+// Disabled by default, preserving the accepted substrate material for every unbound renderer.
+uniform float colony_enabled = 0.0;
+uniform sampler2D colony_field : filter_linear, repeat_disable, hint_default_black;
+uniform sampler2D colony_state : filter_linear, repeat_disable, hint_default_black;
+uniform sampler2D colony_moss : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D colony_moss_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D colony_moss_roughness : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D colony_lichen : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec4 colony_rect = vec4(0.0,0.0,1.0,1.0);
 uniform float exaggerate : hint_range(0.0, 1.0) = 0.0;
 uniform float water_enabled = 0.0;
 uniform sampler2D water_tex : filter_linear, repeat_disable, hint_default_black;
@@ -518,6 +528,46 @@ void fragment() {
 		float ao = 1.0 - 0.42 * edge * aggStr * X * (1.0 - 0.65 * poreFill) - 0.42 * crack - 0.22 * fracture - 0.32 * rootMask;
 		ao = clamp(ao, 0.20, 1.0);
 
+		if (colony_enabled > 0.5 && (kind < 0.5 || (kind > 1.5 && kind < 2.5))) {
+			vec2 colonyUV=(P.xz-colony_rect.xy)*colony_rect.zw;
+			vec4 field = texture(colony_field,colonyUV);
+			vec3 colonyState=texture(colony_state,colonyUV).rgb;
+			float mossCov=clamp(field.r,0.0,1.0);
+			float crustCov=clamp(field.g,0.0,1.0);
+			float leafyCov=clamp(field.b+field.a,0.0,1.0);
+			float tiny=vnoise2(P.xz*115.0+5.7);
+			float mossMask=clamp(mossCov+(tiny-0.5)*0.10*mossCov,0.0,1.0);
+			vec3 mossTex=texture(colony_moss,P.xz*4.0).rgb;
+			vec3 mossCol=mossTex*mix(vec3(0.72,0.64,0.48),vec3(0.70,0.82,0.60),colonyState.b);
+			mossCol=mix(mossCol*vec3(0.70,0.67,0.48),mossCol,colonyState.r);
+			mossCol*=mix(0.82,1.0,colonyState.g);
+			alb=mix(alb,mossCol,mossMask*0.93);
+			// Coverage controls occupancy; scanned lobe/areole detail is projected in world space
+			// across all three axes so steep rock does not stretch the surface pattern.
+			float lichMask=clamp(crustCov+(tiny-0.5)*0.16*crustCov,0.0,1.0)*(1.0-mossMask)*step(1.5,kind);
+			float leafyMask=clamp(leafyCov+(tiny-0.5)*0.16*leafyCov,0.0,1.0)*(1.0-mossMask);
+			float lichenAmount=max(lichMask,leafyMask);
+			if (lichenAmount > 0.001) {
+				vec3 tw=pow(abs(N),vec3(4.0));
+				tw/=max(tw.x+tw.y+tw.z,0.0001);
+				vec3 thallus=texture(colony_lichen,P.zy/0.22).rgb*tw.x
+					+texture(colony_lichen,P.xz/0.22).rgb*tw.y
+					+texture(colony_lichen,P.xy/0.22).rgb*tw.z;
+				float thallusLum=luma(thallus);
+				vec3 dryTint=vec3(0.78,0.75,0.60), wetTint=vec3(0.55,0.65,0.43);
+				vec3 scanned=thallus*mix(dryTint,wetTint,colonyState.b);
+				vec3 crustCol=mix(vec3(0.39,0.33,0.23),scanned,0.68);
+				vec3 leafyCol=mix(vec3(0.36,0.40,0.28),scanned,0.78);
+				alb=mix(alb,crustCol,lichMask);
+				alb=mix(alb,leafyCol,leafyMask);
+				ao*=mix(1.0,clamp(0.70+0.40*thallusLum,0.70,1.0),lichenAmount);
+				rough=mix(rough,mix(0.94,0.82,thallusLum),lichenAmount);
+			}
+			vec2 mossN=texture(colony_moss_normal,P.xz*4.0).xy*2.0-1.0;
+			Nb=normalize(mix(Nb,normalize(Nb+vec3(mossN.x,0.0,mossN.y)*0.22),mossMask));
+			float mossRough=texture(colony_moss_roughness,P.xz*4.0).r;
+			rough=mix(rough,mix(0.95,mossRough,0.40),mossMask);
+		}
 		if (debug_mode > 0.5) alb = vec3(sE, clamp(film, 0.0, 1.0), clamp(standing * 10.0, 0.0, 1.0));
 		ALBEDO = clamp(alb, vec3(0.0), vec3(1.0));
 		ROUGHNESS = rough;
