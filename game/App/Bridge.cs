@@ -513,6 +513,8 @@ public sealed class UserSettings
     public bool DistanceBlur { get; set; } = true;
     public double DistanceBlurAmount { get; set; } = .008;
     public bool SimpleFoliageLighting { get; set; }
+    public string LightingMode { get; set; } = "cached";    // "cached" or "stock"
+    public int MaxFps { get; set; } = 30;                   // 0 uncapped, 15/30/60
     public double RenderScale { get; set; } = .85;
     public double AutosaveMinutes { get; set; } = 5;
     public bool AutosaveEnabled { get; set; } = true;
@@ -533,6 +535,8 @@ public sealed class UserSettings
         CameraSpeed = Math.Clamp(double.IsFinite(CameraSpeed) ? CameraSpeed : 1.5, MinCameraSpeed, MaxCameraSpeed);
         MouseSensitivity = Math.Clamp(double.IsFinite(MouseSensitivity) ? MouseSensitivity : 0.25, 0.02, 2.0);
         Quality = Math.Clamp(Quality, 0, 2);
+        LightingMode = string.Equals(LightingMode, "stock", StringComparison.OrdinalIgnoreCase) ? "stock" : "cached";
+        MaxFps = MaxFps <= 0 ? 0 : Math.Clamp(MaxFps, 10, 240);
         RenderScale = Math.Clamp(double.IsFinite(RenderScale) ? RenderScale : 1, 0.5, 1);
         DistanceBlurAmount = Math.Clamp(double.IsFinite(DistanceBlurAmount) ? DistanceBlurAmount : .008, 0, .025);
         AutosaveMinutes = Math.Clamp(double.IsFinite(AutosaveMinutes) ? AutosaveMinutes : 5, 1, 60);

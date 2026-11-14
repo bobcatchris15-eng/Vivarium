@@ -1,6 +1,8 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley, specular_schlick_ggx, depth_prepass_alpha;
 
+#include "res://Shaders/repr_skyvis.gdshaderinc"
+
 uniform sampler2D leaf_col : source_color, filter_linear_mipmap_anisotropic;
 uniform sampler2D leaf_nrm : hint_normal, filter_linear_mipmap_anisotropic;
 uniform sampler2D leaf_rgh : filter_linear_mipmap_anisotropic;
@@ -17,6 +19,7 @@ uniform float decay_strength : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 vertex_tint;
 varying vec2 v_uv2;
+varying vec3 world_pos;
 
 vec3 litter_srgb_to_linear(vec3 c) {
     c = max(c, vec3(0.0));
@@ -26,6 +29,7 @@ vec3 litter_srgb_to_linear(vec3 c) {
 void vertex() {
     vertex_tint = litter_srgb_to_linear(COLOR.rgb);
     v_uv2 = UV2;
+    world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
@@ -95,5 +99,13 @@ void fragment() {
         CLEARCOAT = 0.75 * smoothstep(0.40, 0.92, wet);
         CLEARCOAT_ROUGHNESS = 0.08;
         ALBEDO = mix(ALBEDO, ALBEDO * 0.48, smoothstep(0.35, 0.95, wet));
+    }
+    if (repr_skyvis_strength > 0.0) {
+        vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        bool thin = !(twig_mode || v_uv2.x >= 0.5);
+        float repr_ao = repr_sky_ao(world_pos, wn, thin);
+        AO = repr_ao;
+        AO_LIGHT_AFFECT = REPR_SKYVIS_LIGHT_AFFECT;
+        EMISSION = repr_sky_bounce(ALBEDO, wn, repr_ao, thin);
     }
 }

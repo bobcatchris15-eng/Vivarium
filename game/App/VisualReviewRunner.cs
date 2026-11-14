@@ -18,6 +18,9 @@ public static class VisualReviewRunner
     {
         Directory.CreateDirectory(directory);
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
+        if (!Main.UserArgs.Contains("--max-fps")) Engine.MaxFps = 0;
+        var vpRid = main.GetViewport().GetViewportRid();
+        RenderingServer.ViewportSetMeasureRenderTime(vpRid, true);
         session.EnvRig.BenchmarkLightSeconds = 60;
         world.Clock.Paused = true;
         session.CameraRig.SetProcess(false);
@@ -33,14 +36,14 @@ public static class VisualReviewRunner
         double lastProgressSeconds = 0;
         // The full seeded species roster can publish more slowly than one minute on lower-end GPUs.
         // This bounded wait guarantees captures compare complete flora layers instead of startup progress.
-        while (!session.Flora.PopulationReady && floraSettleFrames < 240000 && floraSettleTimer.Elapsed.TotalSeconds < 180)
+        while ((!session.Flora.PopulationReady || (session.EnvRig.IsCachedLighting && session.LightCache.CompletedUploads == 0)) && floraSettleFrames < 240000 && floraSettleTimer.Elapsed.TotalSeconds < 180)
         {
             await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
             floraSettleFrames++;
             if (floraSettleTimer.Elapsed.TotalSeconds >= lastProgressSeconds + 10)
             {
                 lastProgressSeconds = floraSettleTimer.Elapsed.TotalSeconds;
-                GD.Print($"VISUAL_REVIEW_FLORA_PROGRESS loaded={session.Flora.LoadedSpeciesCount}/{world.Content.Flora.Count} elapsed_s={lastProgressSeconds:0}");
+                GD.Print($"VISUAL_REVIEW_FLORA_PROGRESS loaded={session.Flora.LoadedSpeciesCount}/{world.Content.Flora.Count} light_uploads={session.LightCache.CompletedUploads} elapsed_s={lastProgressSeconds:0}");
             }
         }
         if (!session.Flora.PopulationReady)
@@ -51,6 +54,7 @@ public static class VisualReviewRunner
             session.EnvRig.BenchmarkLightSeconds = shot.Light;
             session.CameraRig.LookAtPoint(shot.Eye, shot.Target);
             var frames = new List<double>(240);
+            var gpuFrames = new List<double>(240);
             var timer = Stopwatch.StartNew();
             long last = timer.ElapsedTicks;
             // Let the camera-local detail stream settle before warmup and measurement.
@@ -70,6 +74,7 @@ public static class VisualReviewRunner
                 await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
                 long now = timer.ElapsedTicks;
                 frames.Add((now - last) * 1000.0 / Stopwatch.Frequency);
+                gpuFrames.Add(RenderingServer.ViewportGetMeasuredRenderTimeGpu(vpRid));
                 last = now;
             }
             await main.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -89,6 +94,7 @@ public static class VisualReviewRunner
             }
             image.SavePng(Path.Combine(directory, shot.Name + ".png"));
             frames.Sort();
+            gpuFrames.Sort();
             output[shot.Name] = new
             {
                 daylight_seconds = shot.Light,
@@ -100,6 +106,8 @@ public static class VisualReviewRunner
                 frame_ms_median = Percentile(frames, .50),
                 frame_ms_p95 = Percentile(frames, .95),
                 frame_ms_p99 = Percentile(frames, .99),
+                gpu_frame_ms_median = Percentile(gpuFrames, .50),
+                gpu_frame_ms_p95 = Percentile(gpuFrames, .95),
                 fps_median = 1000.0 / Math.Max(.001, Percentile(frames, .50)),
                 draw_calls = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame),
                 primitives = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame),
@@ -117,6 +125,10 @@ public static class VisualReviewRunner
         {
             renderer = RenderingServer.GetCurrentRenderingMethod(),
             adapter = RenderingServer.GetVideoAdapterName(),
+            lighting_mode = session.EnvRig.LightingMode,
+            light_cache_uploads = session.LightCache.CompletedUploads,
+            light_cache_sources = session.LightCache.TrackedSourceCount,
+            video_mem_bytes = Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed),
             seed = world.Seed,
             preset = world.Descriptor.Name,
             quality = session.Settings.Quality,
@@ -127,7 +139,7 @@ public static class VisualReviewRunner
             species_counts = world.Flora.Items.GroupBy(p => p.SpeciesId).ToDictionary(g => g.Key, g => g.Count()),
             timing_scope = "end-to-end frame intervals including CPU scheduling and GPU presentation; not isolated CPU or GPU time",
             residual_animation = "Simulation clock paused; shader TIME animation may continue because this Godot build exposes no global shader time freeze.",
-            settings = new { dynamic_shadows = session.Settings.DynamicShadows, global_illumination = session.Settings.GlobalIllumination, ambient_occlusion = session.Settings.AmbientOcclusion, volumetric_mist = session.Settings.VolumetricMist, distance_blur = session.Settings.DistanceBlur, render_scale = session.Settings.RenderScale },
+            settings = new { lighting_mode = session.Settings.LightingMode, dynamic_shadows = session.Settings.DynamicShadows, global_illumination = session.Settings.GlobalIllumination, ambient_occlusion = session.Settings.AmbientOcclusion, volumetric_mist = session.Settings.VolumetricMist, distance_blur = session.Settings.DistanceBlur, render_scale = session.Settings.RenderScale },
             flora = world.Flora.Count,
             fauna = world.Fauna.Count,
             captures = output

@@ -60,6 +60,7 @@ public sealed partial class SkyVisibilityField : Node
     /// <summary>shape = (extra exponent, visibility floor, thin tissue sees both sides 0/1, unused).</summary>
     public void SetShapes(Vector4 foliage, Vector4 ground)
     {
+        RenderingServer.GlobalShaderParameterSet("repr_skyvis_global_shape", foliage);
         foreach (var m in _foliage) m.SetShaderParameter("repr_skyvis_shape", foliage);
         foreach (var m in _ground) m.SetShaderParameter("repr_skyvis_shape", ground);
     }
@@ -69,6 +70,7 @@ public sealed partial class SkyVisibilityField : Node
     {
         if ((c - _bounce).Length() <= 0.01f * Math.Max(0.02f, _bounce.Length())) return;
         _bounce = c;
+        RenderingServer.GlobalShaderParameterSet("repr_skyvis_global_bounce", c);
         foreach (var m in _foliage) m.SetShaderParameter("repr_skyvis_bounce", c);
     }
 
@@ -82,6 +84,12 @@ public sealed partial class SkyVisibilityField : Node
     {
         Strength = s;
         RenderingServer.GlobalShaderParameterSet("repr_skyvis_strength", s);
+        if (s <= 0f)
+        {
+            _bounce = Vector3.Zero;
+            RenderingServer.GlobalShaderParameterSet("repr_skyvis_global_shape", Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet("repr_skyvis_global_bounce", Vector3.Zero);
+        }
     }
 
     /// <summary>Pack the whole volume and (re)upload it. The Godot 3D texture API replaces all layers.</summary>
@@ -127,6 +135,8 @@ public sealed partial class SkyVisibilityField : Node
     {
         // Leave the globals disabled so nothing built later sees a stale volume.
         RenderingServer.GlobalShaderParameterSet("repr_skyvis_strength", 0f);
+        RenderingServer.GlobalShaderParameterSet("repr_skyvis_global_shape", Vector4.Zero);
+        RenderingServer.GlobalShaderParameterSet("repr_skyvis_global_bounce", Vector3.Zero);
     }
 
     // ------------------------------------------------------------------ geometry feeding

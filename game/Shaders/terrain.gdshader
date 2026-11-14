@@ -6,6 +6,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/water_caustics.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform sampler2D field_tex : filter_linear, repeat_disable;
 uniform sampler2D sub_tex : filter_linear, repeat_disable;
@@ -437,6 +438,12 @@ void fragment() {
     // aggregate/micro normal detail from sparkling at grazing angles.
     float n_var = clamp(dot(dFdx(NORMAL), dFdx(NORMAL)) + dot(dFdy(NORMAL), dFdy(NORMAL)), 0.0, 0.25);
     ROUGHNESS = clamp(sqrt(rough * rough + n_var * 0.5), 0.04, 1.0);
+    if (repr_skyvis_strength > 0.0) {
+        float repr_ao = repr_sky_ao(world_pos, detail, false);
+        AO *= repr_ao;
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+        EMISSION = repr_sky_bounce(ALBEDO, detail, repr_ao, false);
+    }
     material_specular = SPECULAR;
 }
 

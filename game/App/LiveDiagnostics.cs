@@ -107,6 +107,9 @@ public partial class LiveDiagnostics : Node
         var summary = new Dictionary<string, object?>
         {
             ["completed"] = true,
+            ["gpu_adapter"] = RenderingServer.GetVideoAdapterName(),
+            ["lighting_mode"] = Session?.EnvRig?.LightingMode ?? "stock",
+            ["max_fps"] = Engine.MaxFps,
             ["render_overrides"] = Vivarium.Game.Render.RenderOverrides.Active,
             ["written_utc"] = DateTime.UtcNow,
             ["soak_seconds"] = _soakSeconds, ["warmup_seconds"] = _soakWarmup,
@@ -118,6 +121,9 @@ public partial class LiveDiagnostics : Node
             ["frame_ms_p99"] = frames > 0 ? SoakPercentile(.99) : null,
             ["frame_ms_worst"] = frames > 0 ? R(_soakWorst) : null,
             ["gpu_frame_ms_mean"] = gpuOk ? R(_soakGpuSum / Math.Max(1, _soakGpuN)) : null,
+            ["gpu_busy_fraction"] = (gpuOk && _soakMs > 0) ? R((_soakGpuSum / Math.Max(1, _soakGpuN)) / (_soakMs / f)) : null,
+            ["light_cache_uploads"] = Session?.LightCache?.CompletedUploads ?? 0,
+            ["light_cache_sources"] = Session?.LightCache?.TrackedSourceCount ?? 0,
             ["gpu_frame_ms_max"] = gpuOk ? R(_soakGpuMax) : null,
             ["draw_calls"] = frames > 0 ? R(_soakDraws / f) : null,
             ["draw_calls_max"] = frames > 0 ? _soakDrawsMax : null,

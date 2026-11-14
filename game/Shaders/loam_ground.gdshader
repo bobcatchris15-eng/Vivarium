@@ -5,6 +5,7 @@ shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform sampler2D field_tex : filter_linear, repeat_disable;
 uniform vec4 field_rect; // origin.x, origin.z, width.x, width.z
@@ -121,4 +122,10 @@ void fragment() {
     vec3 scan_world_normal = cotangent_normal(relief_normal, loam_world_pos, uv_a, scan_n);
     vec3 view_normal = normalize((VIEW_MATRIX * vec4(mix(relief_normal, scan_world_normal, 0.22), 0.0)).xyz);
     NORMAL = view_normal;
+    if (repr_skyvis_strength > 0.0) {
+        float repr_ao = repr_sky_ao(loam_world_pos, relief_normal, false);
+        AO = repr_ao;
+        AO_LIGHT_AFFECT = REPR_SKYVIS_LIGHT_AFFECT;
+        EMISSION = repr_sky_bounce(ALBEDO, relief_normal, repr_ao, false);
+    }
 }

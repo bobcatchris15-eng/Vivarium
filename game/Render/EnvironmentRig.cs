@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Godot;
 using Vivarium.Game.App;
+using Vivarium.Repr;
+using Vivarium.Sim.Repr.Light;
 using Vivarium.Sim.Time;
 using Vivarium.Sim.World;
 
@@ -37,6 +39,13 @@ public partial class EnvironmentRig : Node3D
     private float _underwaterTarget;
     public int Quality { get; private set; } = 2;
     public bool VolumetricMistEnabled { get; set; } = true;
+    public string LightingMode { get; private set; } = "stock";
+    public bool IsCachedLighting => string.Equals(LightingMode, "cached", System.StringComparison.OrdinalIgnoreCase);
+    public WorldLightCache? LightCache { get; set; }
+    private bool _skyInitialised;
+    private Vector3 _lastSkySunCol, _lastSkyTop, _lastSkyHorizon, _lastGroundBottom, _lastGroundHorizon, _lastSkyLightDir;
+    private float _lastSkySunEnergy = -1f, _lastSkyEnergy = -1f;
+    private const float SkyUpdateThreshold = 0.02f;
     /// <summary>Opt-in diagnostic presentation phase; null keeps the normal wall clock. Never serialized.</summary>
     public double? BenchmarkLightSeconds { get; set; }
 
@@ -286,6 +295,16 @@ public partial class EnvironmentRig : Node3D
         if (!Mathf.IsEqualApprox(Env.SdfgiMinCellSize, cellSize)) Env.SdfgiMinCellSize = cellSize;
     }
 
+    public void ApplyLightingMode(string? mode)
+    {
+        string normalized = string.Equals(mode, "cached", System.StringComparison.OrdinalIgnoreCase) ? "cached" : "stock";
+        LightingMode = normalized;
+        LightCache?.SetEnabled(IsCachedLighting);
+        ApplyQuality(Quality);
+        _skyInitialised = false;
+        ApplyDayNight();
+    }
+
     public void ApplyQuality(int tier)
     {
         Quality = Mathf.Clamp(tier, 0, 2);
@@ -341,6 +360,31 @@ public partial class EnvironmentRig : Node3D
                 vp.Scaling3DScale = 1.0f;
                 break;
         }
+
+        var probe = GetNodeOrNull<ReflectionProbe>("HabitatReflectionProbe");
+        if (IsCachedLighting)
+        {
+            Env.SdfgiEnabled = false;
+            Env.SsaoEnabled = false;
+            Env.SsilEnabled = false;
+            Env.SsrEnabled = false;
+            Env.VolumetricFogEnabled = false;
+            Env.ReflectedLightSource = Godot.Environment.ReflectionSource.Disabled;
+            Env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+            Env.AmbientLightSkyContribution = 0.0f;
+            CameraAttributes.AutoExposureEnabled = false;
+            vp.UseTaa = false;
+            vp.ScreenSpaceAA = Quality >= 1 ? Viewport.ScreenSpaceAAEnum.Fxaa : Viewport.ScreenSpaceAAEnum.Disabled;
+            if (probe != null) probe.Visible = false;
+        }
+        else
+        {
+            Env.ReflectedLightSource = Godot.Environment.ReflectionSource.Sky;
+            Env.AmbientLightSource = Godot.Environment.AmbientSource.Sky;
+            CameraAttributes.AutoExposureEnabled = true;
+            CameraAttributes.ExposureMultiplier = 1.0f;
+            if (probe != null) probe.Visible = true;
+        }
     }
 
     public override void _ExitTree()
@@ -391,6 +435,7 @@ public partial class EnvironmentRig : Node3D
         }
         probe.Size = new Vector3(diameter * 1.3f, 8.0f, diameter * 1.3f);
         probe.Position = new Vector3(0, ground + 2.5f, 0);
+        probe.Visible = !IsCachedLighting;
     }
 
     /// <summary>
@@ -420,7 +465,6 @@ public partial class EnvironmentRig : Node3D
         float sunE = Mathf.Lerp(a.SunEnergy, b.SunEnergy, w);
         Sun.LightEnergy = sunE * GrowSunGain;
         float daylight = Mathf.SmoothStep(.07f, .50f, sunE);
-        Env.TonemapExposure = Mathf.Lerp(NightExposure, DayExposure, daylight);
 
         // Fill directional light: soft area-like top fill at low energy, matching color family
         _fill.RotationDegrees = new Vector3(-76f, az + 140f, 0f);
@@ -436,22 +480,82 @@ public partial class EnvironmentRig : Node3D
         Color interpGroundBottom = a.GroundBottom.Lerp(b.GroundBottom, w);
         Color interpGroundHorizon = a.GroundHorizon.Lerp(b.GroundHorizon, w);
 
-        _sky.SetShaderParameter("sun_color", new Vector3(interpSunCol.R, interpSunCol.G, interpSunCol.B));
-        _sky.SetShaderParameter("sky_top_color", new Vector3(interpSkyTop.R, interpSkyTop.G, interpSkyTop.B));
-        _sky.SetShaderParameter("sky_horizon_color", new Vector3(interpSkyHorizon.R, interpSkyHorizon.G, interpSkyHorizon.B));
-        _sky.SetShaderParameter("ground_bottom_color", new Vector3(interpGroundBottom.R, interpGroundBottom.G, interpGroundBottom.B));
-        _sky.SetShaderParameter("ground_horizon_color", new Vector3(interpGroundHorizon.R, interpGroundHorizon.G, interpGroundHorizon.B));
-        _sky.SetShaderParameter("sun_energy", sunE);
-        _sky.SetShaderParameter("light_direction", CanopyLightDirection);
-        _sky.SetShaderParameter("sky_energy", CanopyEnergy);
+        var skySunVec = new Vector3(interpSunCol.R, interpSunCol.G, interpSunCol.B);
+        var skyTopVec = new Vector3(interpSkyTop.R, interpSkyTop.G, interpSkyTop.B);
+        var skyHorVec = new Vector3(interpSkyHorizon.R, interpSkyHorizon.G, interpSkyHorizon.B);
+        var gndBotVec = new Vector3(interpGroundBottom.R, interpGroundBottom.G, interpGroundBottom.B);
+        var gndHorVec = new Vector3(interpGroundHorizon.R, interpGroundHorizon.G, interpGroundHorizon.B);
 
+        if (!IsCachedLighting || !_skyInitialised || SkyMoved(skySunVec, skyTopVec, skyHorVec, gndBotVec, gndHorVec, sunE, CanopyLightDirection, CanopyEnergy))
+        {
+            _sky.SetShaderParameter("sun_color", skySunVec);
+            _sky.SetShaderParameter("sky_top_color", skyTopVec);
+            _sky.SetShaderParameter("sky_horizon_color", skyHorVec);
+            _sky.SetShaderParameter("ground_bottom_color", gndBotVec);
+            _sky.SetShaderParameter("ground_horizon_color", gndHorVec);
+            _sky.SetShaderParameter("sun_energy", sunE);
+            _sky.SetShaderParameter("light_direction", CanopyLightDirection);
+            _sky.SetShaderParameter("sky_energy", CanopyEnergy);
+            _lastSkySunCol = skySunVec;
+            _lastSkyTop = skyTopVec;
+            _lastSkyHorizon = skyHorVec;
+            _lastGroundBottom = gndBotVec;
+            _lastGroundHorizon = gndHorVec;
+            _lastSkySunEnergy = sunE;
+            _lastSkyLightDir = CanopyLightDirection;
+            _lastSkyEnergy = CanopyEnergy;
+            _skyInitialised = true;
+        }
+
+        Env.TonemapExposure = Mathf.Lerp(NightExposure, DayExposure, daylight);
         // Ambient bounce light: green/warm-tinted ambient bounce so shaded understory/strata/trunks
         // do not crush to pitch black.
         Color ambientTint = AmbientBounceColor.Lerp(a.SunColor.Lerp(b.SunColor, w), 0.20f);
         Env.AmbientLightColor = ambientTint;
-        Env.AmbientLightEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w) * GrowAmbientGain * Mathf.Lerp(1f, DayAmbientGain, daylight);
-        Env.AmbientLightSkyContribution = Mathf.Lerp(NightSkyContribution, DaySkyContribution, daylight);
+        float baseAmbientEnergy = Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, w) * GrowAmbientGain * Mathf.Lerp(1f, DayAmbientGain, daylight);
+        if (IsCachedLighting)
+        {
+            double frac = t / DayNightClock.CycleSeconds;
+            Env.AmbientLightEnergy = baseAmbientEnergy * LightCycle.Ambient(frac);
+            Env.AmbientLightSkyContribution = 0.0f;
+            CameraAttributes.AutoExposureEnabled = false;
+            CameraAttributes.ExposureMultiplier = LightCycle.Exposure(frac);
+            var bounceCol = new Vector3(0.40f, 0.19f, 0.08f) * (Env.AmbientLightEnergy * LightCycle.Bounce(frac));
+            LightCache?.Field?.PushBounce(bounceCol);
+        }
+        else
+        {
+            Env.AmbientLightEnergy = baseAmbientEnergy;
+            Env.AmbientLightSkyContribution = Mathf.Lerp(NightSkyContribution, DaySkyContribution, daylight);
+            CameraAttributes.AutoExposureEnabled = true;
+            CameraAttributes.ExposureMultiplier = 1.0f;
+        }
         Env.FogLightEnergy = Mathf.Lerp(a.FogEnergy, b.FogEnergy, w);
+    }
+
+    private bool SkyMoved(
+        Vector3 sunCol,
+        Vector3 skyTop,
+        Vector3 skyHor,
+        Vector3 gndBot,
+        Vector3 gndHor,
+        float sunE,
+        Vector3 lightDir,
+        float skyE)
+    {
+        static bool VecMoved(Vector3 cur, Vector3 prev) =>
+            (cur - prev).Length() > SkyUpdateThreshold * Mathf.Max(0.05f, prev.Length());
+        static bool FloatMoved(float cur, float prev) =>
+            Mathf.Abs(cur - prev) > SkyUpdateThreshold * Mathf.Max(0.05f, Mathf.Abs(prev));
+
+        return VecMoved(sunCol, _lastSkySunCol)
+            || VecMoved(skyTop, _lastSkyTop)
+            || VecMoved(skyHor, _lastSkyHorizon)
+            || VecMoved(gndBot, _lastGroundBottom)
+            || VecMoved(gndHor, _lastGroundHorizon)
+            || FloatMoved(sunE, _lastSkySunEnergy)
+            || VecMoved(lightDir, _lastSkyLightDir)
+            || FloatMoved(skyE, _lastSkyEnergy);
     }
 
     /// <summary>Sun heading sweeps a full turn per cycle, starting at the calibrated daytime heading.</summary>
@@ -480,7 +584,7 @@ public partial class EnvironmentRig : Node3D
         Env.FogDensity = Mathf.Lerp(0.0f, UnderwaterFogDensity, _underwater);
         Env.FogAerialPerspective = 0.0f;
         Env.FogSunScatter = Mathf.Lerp(0.45f, 0.15f, _underwater);
-        Env.VolumetricFogEnabled = Quality >= 1 && VolumetricMistEnabled && !RenderOverrides.FogOff;
+        Env.VolumetricFogEnabled = Quality >= 1 && VolumetricMistEnabled && !IsCachedLighting && !RenderOverrides.FogOff;
         Env.VolumetricFogDensity = Mathf.Lerp(0.0f, 0.045f, _underwater);
         Env.VolumetricFogAlbedo = new Color(0.82f, 0.88f, 0.78f).Lerp(UnderwaterFogColor, _underwater);
         Env.VolumetricFogAnisotropy = Mathf.Lerp(0.72f, 0.55f, _underwater);

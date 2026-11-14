@@ -61,6 +61,8 @@ public partial class Main : Node3D
         }
         if (UserArgs.Contains("--soak")) { settings.Transient = true; settings.AutosaveEnabled = true; settings.AutosaveMinutes = 5; settings.ShowHelpOnStart = false; }
         if (UserArgs.Contains("--diagnostics-check")) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
+        if (ArgAfter("--lighting-mode") is { } lm) { settings.Transient = true; settings.LightingMode = lm; }
+        if (ArgAfter("--max-fps") is { } mfps && int.TryParse(mfps, out int parsedFps)) { settings.Transient = true; settings.MaxFps = parsedFps; }
 
         Session = new GameSession { Name = "Session" };
         AddChild(Session);

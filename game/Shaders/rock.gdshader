@@ -5,6 +5,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/water_caustics.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform sampler2D rock_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -191,6 +192,12 @@ void fragment() {
 
     AO = cavity_ao * ao_tex * pom_shadow;
     AO_LIGHT_AFFECT = 0.65;
+    if (repr_skyvis_strength > 0.0) {
+        float repr_ao = repr_sky_ao(world_pos, perturbed, false);
+        AO *= repr_ao;
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+        EMISSION = repr_sky_bounce(ALBEDO, perturbed, repr_ao, false);
+    }
 
     if (wet > 0.0) {
         CLEARCOAT = 0.85 * wet;

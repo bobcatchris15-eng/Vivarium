@@ -6,6 +6,7 @@ shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx, ambient_light_disabled;
 
 #include "res://Shaders/surface.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform sampler2D soil_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D soil_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -264,6 +265,12 @@ void fragment() {
     CLEARCOAT_ROUGHNESS = mix(0.28, 0.05, seep);
     AO = clamp(matAo * mix(0.55, 1.0, pomShadow) * mix(0.78, 1.0, rim_shadow), 0.0, 1.0);
     AO_LIGHT_AFFECT = 0.30;
+    if (repr_skyvis_strength > 0.0) {
+        float repr_ao = repr_sky_ao(world_pos, n, false);
+        AO *= repr_ao;
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+        EMISSION = EMISSION * mix(0.65, 1.0, repr_ao) + repr_sky_bounce(ALBEDO, n, repr_ao, false);
+    }
     NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 
     // Specular anti-aliasing: horizon detail is high-frequency, so widen the

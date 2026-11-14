@@ -7,6 +7,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/bark_fissure.gdshaderinc"
 #include "res://Shaders/water_caustics.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform sampler2D bark_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -216,6 +217,13 @@ void fragment() {
         SPECULAR = mix(SPECULAR, 0.22, underside * 0.5);   // damp soil-contact sheen
     }
     AO_LIGHT_AFFECT = 0.85;
+    if (repr_skyvis_strength > 0.0) {
+        vec3 wn_sky = finite_surface_normal((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz, wn);
+        float repr_ao = repr_sky_ao(wld_pos, wn_sky, false);
+        AO *= repr_ao;
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+        EMISSION = repr_sky_bounce(ALBEDO, wn_sky, repr_ao, false);
+    }
     material_specular = SPECULAR;
 }
 

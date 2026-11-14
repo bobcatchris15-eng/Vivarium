@@ -3,6 +3,7 @@ render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/living_leaf_optics.gdshaderinc"
 #include "res://Shaders/leaf_direct_light.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform float leaf_detail = 1.0;
 uniform float sway_strength = 0.0;
@@ -141,4 +142,10 @@ void fragment() {
     ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * variance, .25)), .90, 1.0);
     AO = crown_ao;
     AO_LIGHT_AFFECT = .10;
+    if (repr_skyvis_strength > 0.0) {
+        float repr_ao = repr_sky_ao(blade_world, rounded, blade > 0.5);
+        AO *= repr_ao;
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+        EMISSION = repr_sky_bounce(ALBEDO, rounded, repr_ao, blade > 0.5);
+    }
 }

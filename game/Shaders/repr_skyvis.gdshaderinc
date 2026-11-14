@@ -6,9 +6,20 @@ global uniform vec3 repr_skyvis_origin;
 global uniform vec3 repr_skyvis_inv_size;   // 1 / extent per axis
 global uniform float repr_skyvis_strength;  // 0 disabled, 1 as baked, >1 exaggerated (visibility ^ strength)
 global uniform float repr_skyvis_voxel;     // voxel edge in metres
+global uniform vec4 repr_skyvis_global_shape;
+global uniform vec3 repr_skyvis_global_bounce;
 // L1b shaping (per-material uniforms, pushed by game/Repr/Light; defaults = L1 behaviour, bounce off).
 uniform vec4 repr_skyvis_shape = vec4(1.0, 0.0, 0.0, 1.0); // x extra exponent on visibility, y visibility floor, z thin tissue sees both sides (1), w bounce scale on non-thin (woody) surfaces
 uniform vec3 repr_skyvis_bounce = vec3(0.0);                // linear colour*energy of the ground/foliage bounce (0 = off)
+
+vec4 repr_effective_shape() {
+    bool is_default = abs(repr_skyvis_shape.x - 1.0) < 1e-4 && repr_skyvis_shape.y < 1e-4 && repr_skyvis_shape.z < 1e-4;
+    return (is_default && repr_skyvis_global_shape.x > 0.0) ? repr_skyvis_global_shape : repr_skyvis_shape;
+}
+
+vec3 repr_effective_bounce() {
+    return dot(repr_skyvis_bounce, repr_skyvis_bounce) > 1e-8 ? repr_skyvis_bounce : repr_skyvis_global_bounce;
+}
 
 // Direct-light share of the shader's AO that stays when the field is on: the field is an ambient/indirect term.
 const float REPR_SKYVIS_LIGHT_AFFECT = 0.15;
@@ -37,21 +48,24 @@ float repr_sky_ao(vec3 world_pos, vec3 world_normal, bool thin) {
     if (repr_skyvis_strength <= 0.0) return 1.0;
     vec4 s;
     if (!repr_skyvis_lookup(world_pos, world_normal, s)) return 1.0;
+    vec4 shape = repr_effective_shape();
     float v = clamp(s.a, 0.0, 1.0);
-    if (thin && repr_skyvis_shape.z > 0.5) {
+    if (thin && shape.z > 0.5) {
         vec4 b;
         if (repr_skyvis_lookup(world_pos, -world_normal, b)) v = max(v, clamp(b.a, 0.0, 1.0));
     }
-    v = pow(v, repr_skyvis_strength * repr_skyvis_shape.x);
-    return mix(repr_skyvis_shape.y, 1.0, v);
+    v = pow(v, repr_skyvis_strength * shape.x);
+    return mix(shape.y, 1.0, v);
 }
 
 // One-bounce approximation, added as emission (after AO): light that arrives from the ground / neighbouring foliage
 // instead of the open sky. Strongest on down-facing surfaces and where the sky is hidden.
 vec3 repr_sky_bounce(vec3 albedo, vec3 world_normal, float ao, bool thin) {
     if (repr_skyvis_strength <= 0.0) return vec3(0.0);
+    vec4 shape = repr_effective_shape();
+    vec3 bounce = repr_effective_bounce();
     float down = clamp(0.5 - 0.5 * world_normal.y, 0.0, 1.0);
-    return albedo * repr_skyvis_bounce * mix(down, 1.0, 0.35) * (1.0 - 0.5 * ao) * (thin ? 1.0 : repr_skyvis_shape.w);
+    return albedo * bounce * mix(down, 1.0, 0.35) * (1.0 - 0.5 * ao) * (thin ? 1.0 : shape.w);
 }
 
 // Bent-normal directional factor: how much of the normal's hemisphere points toward the open sky, relative to an

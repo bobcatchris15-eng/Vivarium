@@ -9,6 +9,7 @@ render_mode diffuse_burley, cull_disabled;
 
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/moss_aggregate.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 
 uniform float u_pattern = 0.0;
 uniform float u_moss_colony_nuclei = 0.0;
@@ -438,4 +439,10 @@ void fragment() {
     ROUGHNESS = sundew_surface > 0.5 || u_pattern < 0.5 ? rough : rough * 0.88;
     SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : (u_pattern < 0.5 ? 0.22 : 0.28);
     NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(n, 0.0)).xyz, NORMAL);
+    if (repr_skyvis_strength > 0.0) {
+        float repr_ao = repr_sky_ao(world_pos, n, isShoot > 0.5);
+        AO *= repr_ao;
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+        EMISSION = repr_sky_bounce(ALBEDO, n, repr_ao, isShoot > 0.5);
+    }
 }

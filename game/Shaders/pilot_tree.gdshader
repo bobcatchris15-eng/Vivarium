@@ -3,6 +3,7 @@ render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 
 #include "res://Shaders/surface.gdshaderinc"
 #include "res://Shaders/bark_fissure.gdshaderinc"
+#include "res://Shaders/repr_skyvis.gdshaderinc"
 uniform sampler2D bark_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D bark_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -295,6 +296,14 @@ void fragment() {
 
     AO = clamp(AO, 0.10, 1.0);
     AO_LIGHT_AFFECT = 0.72;
+    if (repr_skyvis_strength > 0.0) {
+        vec3 wn_sky = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+        bool thin_organ = COLOR.a < 0.2;
+        float repr_ao = repr_sky_ao(world_position, wn_sky, thin_organ);
+        AO *= repr_ao;
+        AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
+        EMISSION = repr_sky_bounce(ALBEDO, wn_sky, repr_ao, thin_organ);
+    }
 
     // Specular AA: unresolved normal variance widens the specular lobe instead
     // of letting bark relief or vein relief alias into glints at distance.

@@ -73,6 +73,8 @@ public static class ReprReviewRunner
         foreach (Node3D n in new Node3D[] { session.Flora, session.PilotTree, session.Props, session.AmbientGround, session.SoilDetail,
                      session.Guardian, session.Fauna, session.Coverage, session.Island, session.Water, session.WaterFluid })
             n.Visible = false;
+        session.LightCache.SetProcess(false);
+        session.EnvRig.ApplyLightingMode("stock");
 
         ulong seed = ulong.TryParse(seedArg, out var sd) ? sd : DefaultSeed;
         var all = Discover();

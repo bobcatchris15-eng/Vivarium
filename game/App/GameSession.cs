@@ -6,6 +6,7 @@ using Godot;
 using Vivarium.Game.Camera;
 using Vivarium.Game.Render;
 using Vivarium.Game.UI;
+using Vivarium.Repr;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Ecology;
@@ -27,6 +28,7 @@ public partial class GameSession : Node3D
     public VivariumWorld? World => Host?.World;
 
     public EnvironmentRig EnvRig { get; private set; } = null!;
+    public WorldLightCache LightCache { get; private set; } = null!;
     public CameraRig CameraRig { get; private set; } = null!;
     public IslandRenderer Island { get; private set; } = null!;
     public WaterRenderer Water { get; private set; } = null!;
@@ -60,6 +62,8 @@ public FaunaRenderer Fauna { get; private set; } = null!;
         Content = content;
         Settings = settings;
         EnvRig = new EnvironmentRig { Name = "Environment" }; AddChild(EnvRig);
+        LightCache = new WorldLightCache { Name = "WorldLightCache" }; AddChild(LightCache);
+        EnvRig.LightCache = LightCache;
         CameraRig = new CameraRig { Name = "CameraRig", Speed = settings.CameraSpeed, Sensitivity = settings.MouseSensitivity, InvertY = settings.InvertY };
         AddChild(CameraRig);
         CameraRig.SpeedChanged += s => { Settings.CameraSpeed = s; Settings.Save(); };
@@ -94,12 +98,17 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         if (!Main.UserArgs.Contains("--perf-test")) Settings.Quality = 1;
         EnvRig.ApplyQuality(Settings.Quality);
         EnvRig.ApplyIndirectLightingDetail(Settings.FineIndirectLighting);
+        EnvRig.ApplyLightingMode(Settings.LightingMode);
         EnvRig.Sun.ShadowEnabled &= Settings.DynamicShadows;
-        EnvRig.Env.SdfgiEnabled &= Settings.GlobalIllumination;
-        EnvRig.Env.SsilEnabled &= Settings.GlobalIllumination;
-        EnvRig.Env.SsaoEnabled &= Settings.AmbientOcclusion;
-        EnvRig.VolumetricMistEnabled = Settings.VolumetricMist;
-        EnvRig.Env.VolumetricFogEnabled &= Settings.VolumetricMist;
+        if (!EnvRig.IsCachedLighting)
+        {
+            EnvRig.Env.SdfgiEnabled &= Settings.GlobalIllumination;
+            EnvRig.Env.SsilEnabled &= Settings.GlobalIllumination;
+            EnvRig.Env.SsaoEnabled &= Settings.AmbientOcclusion;
+            EnvRig.VolumetricMistEnabled = Settings.VolumetricMist;
+            EnvRig.Env.VolumetricFogEnabled &= Settings.VolumetricMist;
+        }
+        Engine.MaxFps = Math.Max(0, Settings.MaxFps);
         GetViewport().Scaling3DScale = (float)Settings.RenderScale;
         RenderOverrides.Apply(this, EnvRig);
         Flora.ReducedDistantPlants = Settings.ReducedDistantPlants;
@@ -166,6 +175,7 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
             AmbientGround.Invalidate(centre, radius);
             SoilDetail.LoamDetails.Invalidate(centre, radius);
             SoilDetail.Invalidate();
+            LightCache.NotifyLocalEdit();
         };
         // Leave room for camera and rendering after every fixed simulation tick.
         world.Scheduler.WallBudgetMs = 6;
@@ -205,7 +215,7 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
         Stage("Coverage", () => Coverage.Build(world));
         Flora.Camera = Fauna.Camera = Guardian.Camera = CameraRig.Cam;
         yield return "Flora";
-        Stage("Flora", () => Flora.Build(world));
+        Stage("Flora", () => { Flora.Build(world); LightCache.BindWorld(world); });
         yield return "Fauna";
         Stage("Fauna", () => Fauna.Build(world));
         yield return "Guardian";
