@@ -1,9 +1,9 @@
 # Rebuild validation and comparison protocol
 
-Hardware measurements belong to this Radeon 860M machine; no GTX1080 performance claim. Historical baseline: pc5 real-scene GPU ~30.5 ms, ~7.05M primitives, 693 draws, ~4.1GB VRAM and ~7MB managed allocation/frame. This is historical evidence, not an identical-current-build control.
+The current desktop reports NVIDIA GeForce GTX 1080 and AMD Ryzen 5 1600. Record the actual adapter in every native report; these measurements do not verify the Radeon 860M target. Historical pc5 baseline on the earlier machine: real-scene GPU ~30.5 ms, ~7.05M primitives, 693 draws, ~4.1GB VRAM and ~7MB managed allocation/frame. This is historical evidence, not an identical-current-build control. The accepted INT-L comparison has its own matched GTX 1080 control.
 
 ## Commands
-Run from repository root. Use cmd.exe or direct process API; default PowerShell startup can stall. Never feed Python via stdin/heredoc.
+Run from repository root using PowerShell or a direct process API. Never feed Python via stdin/heredoc. Compile the solution and game sequentially; agents obtain the build lease before compiling shared outputs.
 
 Build: dotnet build Vivarium.sln --nologo -v minimal
 Boot: tools/godot/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe --headless --path game -- --boot-test

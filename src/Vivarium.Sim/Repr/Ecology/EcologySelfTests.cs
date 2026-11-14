@@ -297,6 +297,66 @@ public sealed class EcoUptakeTest : IReprSelfTest
     }
 }
 
+public sealed class EcoRootInvalidationTest : IReprSelfTest
+{
+    public string Name => "eco.rootInvalidation";
+    public string? Run()
+    {
+        var low = EcoTestKit.SmallWorld(seed: 515UL, diameter: 12.0, cellSize: 0.40, populate: false);
+        var grown = EcoTestKit.SmallWorld(seed: 515UL, diameter: 12.0, cellSize: 0.40, populate: false);
+        var species = EcoTestKit.Content.Flora.First(s => !s.Decomposer && !s.UnlimitedWaterDepth && s.Woody != null);
+        FloraIndividual Plant(VivariumWorld world) => new()
+        {
+            Id = world.Ids.Next(EntityKind.Flora),
+            SpeciesId = species.Id,
+            X = 0.0,
+            Z = 0.0,
+            Biomass = species.MaxBiomass * 0.15,
+            Health = 1.0,
+            LifespanFactor = 1.0,
+        };
+        var lowPlant = Plant(low);
+        var grownPlant = Plant(grown);
+        low.Flora.Add(lowPlant);
+        grown.Flora.Add(grownPlant);
+        low.Water.Springs.Clear();
+        grown.Water.Springs.Clear();
+        low.WorldSubstrate.MistWeatherEnabled = false;
+        grown.WorldSubstrate.MistWeatherEnabled = false;
+        low.WorldSubstrate.SyncRoots();
+        grown.WorldSubstrate.SyncRoots();
+
+        long initialRevision = grown.WorldSubstrate.RootRevision;
+        float[] initialRoots = (float[])grown.WorldSubstrate.Substrate.NRoot.Clone();
+        grown.WorldSubstrate.SyncRoots();
+        if (grown.WorldSubstrate.RootRevision != initialRevision)
+            return "unchanged root inputs caused an unnecessary root-field rebuild";
+
+        grownPlant.Biomass = species.MaxBiomass * 0.90; // Ordinary growth mutates the existing individual.
+        grown.WorldSubstrate.Step(3600); // Production step must observe it without force=true or membership change.
+        low.WorldSubstrate.Step(3600);
+        if (grown.WorldSubstrate.RootRevision != initialRevision + 1)
+            return "in-place biomass growth did not trigger exactly one root-field rebuild";
+        if (initialRoots.AsSpan().SequenceEqual(grown.WorldSubstrate.Substrate.NRoot))
+            return "in-place biomass growth rebuilt without changing fine-root density";
+        if (!(grown.WorldSubstrate.CumulativeFluxes.Transpiration > low.WorldSubstrate.CumulativeFluxes.Transpiration + 1e-9))
+            return $"grown roots did not increase actual water uptake ({grown.WorldSubstrate.CumulativeFluxes.Transpiration:E4} vs {low.WorldSubstrate.CumulativeFluxes.Transpiration:E4} m3)";
+
+        float[] beforeMove = (float[])grown.WorldSubstrate.Substrate.NRoot.Clone();
+        long beforeMoveRevision = grown.WorldSubstrate.RootRevision;
+        grown.Flora.Move(grownPlant, new Vec2(1.35, 0.65));
+        grown.WorldSubstrate.SyncRoots();
+        if (grown.WorldSubstrate.RootRevision != beforeMoveRevision + 1)
+            return "flora movement did not trigger a root-field rebuild";
+        if (beforeMove.AsSpan().SequenceEqual(grown.WorldSubstrate.Substrate.NRoot))
+            return "flora movement did not relocate fine-root density";
+        grown.WorldSubstrate.SyncRoots();
+        if (grown.WorldSubstrate.RootRevision != beforeMoveRevision + 1)
+            return "unchanged moved-plant inputs caused an unnecessary root-field rebuild";
+        return null;
+    }
+}
+
 public sealed class EcoLedgerTest : IReprSelfTest
 {
     public string Name => "eco.ledger";

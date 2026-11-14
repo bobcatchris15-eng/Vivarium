@@ -17,7 +17,8 @@ public sealed class WorldSubstrate
 {
     private readonly VivariumWorld _w;
     private int _terrainVersion;
-    private int _floraVersion = -1;
+    private ulong _rootInputFingerprint;
+    private bool _hasRootInputFingerprint;
     private double _simSeconds;
     private double _lastObservedWaterBudgetInfiltration;
 
@@ -44,6 +45,9 @@ public sealed class WorldSubstrate
 
     public double EvaporationDemand { get; set; } = DefaultEvapDemand;
     public double TranspirationDemandPerRootMetre { get; set; } = DefaultTranspDemand;
+
+    /// <summary>Increments whenever the derived fine-root field is rebuilt.</summary>
+    public long RootRevision { get; private set; }
 
     /// <summary>Closed budget of the most recent <see cref="Step"/> call.</summary>
     public Budget LastStepBudget { get; private set; }
@@ -161,7 +165,9 @@ public sealed class WorldSubstrate
     /// <summary>Rebuilds the substrate fine-root density field from authoritative living flora and pilot tree.</summary>
     public void SyncRoots(bool force = false)
     {
-        if (!force && _floraVersion == _w.Flora.Version) return;
+        EnsureTerrainSynced();
+        ulong fingerprint = RootInputFingerprint();
+        if (!force && _hasRootInputFingerprint && _rootInputFingerprint == fingerprint) return;
         Substrate.ClearRoots();
         if (_w.PilotTree is { } pt)
         {
@@ -183,7 +189,59 @@ public sealed class WorldSubstrate
             double gy = _w.Terrain.Height(f.Position);
             Substrate.AddRootDensity(new Vec3(f.Position.X, gy, f.Position.Z), radius, depth, rootMetres);
         }
-        _floraVersion = _w.Flora.Version;
+        _rootInputFingerprint = fingerprint;
+        _hasRootInputFingerprint = true;
+        RootRevision++;
+    }
+
+    /// <summary>
+    /// Detects changes to the actual inputs used to build root density. Flora.Version tracks membership only;
+    /// biomass and position can change in place, so they must be sampled at the ecology sync cadence.
+    /// </summary>
+    private ulong RootInputFingerprint()
+    {
+        const ulong offset = 14695981039346656037UL;
+        ulong hash = offset;
+        static void Add(ref ulong h, ulong value)
+        {
+            h = unchecked((h ^ value) * 1099511628211UL);
+        }
+        static ulong Bits(double value) => unchecked((ulong)BitConverter.DoubleToInt64Bits(value));
+
+        Add(ref hash, (ulong)(uint)_w.Flora.Version);
+        Add(ref hash, (ulong)(uint)_terrainVersion);
+        if (_w.PilotTree is { } pt)
+        {
+            Add(ref hash, 1);
+            Add(ref hash, Bits(pt.Anchor.X));
+            Add(ref hash, Bits(pt.Anchor.Z));
+            Add(ref hash, Bits(_w.Terrain.Height(pt.Anchor)));
+            Add(ref hash, Bits(pt.CanopyRadius));
+        }
+        else Add(ref hash, 0);
+
+        foreach (var f in _w.Flora.Items)
+        {
+            var sp = _w.Content.FloraOrThrow(f.SpeciesId);
+            if (sp.Decomposer || sp.UnlimitedWaterDepth) continue;
+            double frac = Math.Clamp(f.BiomassFraction(sp), 0.05, 1.0);
+            double radius = sp.Woody != null
+                ? Math.Max(0.18, sp.Woody.CanopyRadius * (0.40 + 0.60 * Math.Sqrt(frac)))
+                : Math.Max(0.10, Math.Max(f.Radius(sp) * 1.5, sp.CompetitionRadius * 0.55));
+            double depth = sp.Woody != null
+                ? (sp.Woody.Layer == WoodyLayer.Tree ? 0.55 : 0.35)
+                : 0.20;
+            double rootMetres = Math.Max(0.15, f.Biomass * (sp.Woody != null ? 45.0 : 85.0));
+            Add(ref hash, f.Id.Value);
+            Add(ref hash, Hash.Fnv1a64(sp.Id));
+            Add(ref hash, Bits(f.X));
+            Add(ref hash, Bits(f.Z));
+            Add(ref hash, Bits(_w.Terrain.Height(f.Position)));
+            Add(ref hash, Bits(radius));
+            Add(ref hash, Bits(depth));
+            Add(ref hash, Bits(rootMetres));
+        }
+        return hash;
     }
 
     /// <summary>Spatial mist condensation factor (0.75..1.25) from terrain shelter and deterministic position.</summary>
