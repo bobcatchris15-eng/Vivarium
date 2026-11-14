@@ -1,0 +1,12 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "F8FBEDEF424F79EE674C6E7B90C06B5D6E907537F11F93FB2DABB8623F179B0C",
+    "Path": "E:\\Vivarium\\build\\coverage_cost\\baseline\\assemblies\\Vivarium.dll"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "CCA057999AD897985B7DFE8D338AC1768BB8B86A470C13A4A1B0704BE12230BF",
+    "Path": "E:\\Vivarium\\build\\coverage_cost\\baseline\\assemblies\\Vivarium.Sim.dll"
+  }
+]

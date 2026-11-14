@@ -48,7 +48,13 @@ public static class Bridge
     /// </summary>
     public static Basis Yaw(double simAngle) => new(Vector3.Up, (float)-simAngle);
 
-    public sealed record PackedMesh(Vector3[] Vertices, Vector3[] Normals, Color[] Colors, Vector2[] UV, Vector2[] UV2);
+    public sealed record PackedMesh(Vector3[] Vertices, Vector3[] Normals, Color[] Colors, Vector2[] UV, Vector2[] UV2)
+    {
+        // Optional: populated only by callers explicitly preparing tangents off-thread.
+        internal float[]? Tangents;
+    }
+    private static long _preparedTangentUploads;
+    public static long PreparedTangentUploads => System.Threading.Interlocked.Read(ref _preparedTangentUploads);
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MeshData, PackedMesh> PreparedMeshes = new();
     public static PackedMesh PackMesh(MeshData m)
     {
@@ -79,8 +85,18 @@ public static class Bridge
         }
         complete(new(verts,norms,cols,uv,uv2));
     }
-    /// <summary>Copies immutable completed geometry into upload arrays; no Godot API or objects, safe on workers.</summary>
-    public static void PrepareMeshUpload(MeshData m) => PreparedMeshes.GetValue(m, PackMesh);
+    /// <summary>Copies immutable completed geometry into upload arrays; optionally computes identical tangents on the caller thread.</summary>
+    public static void PrepareMeshUpload(MeshData m, bool prepareTangents = false)
+    {
+        var packed=PreparedMeshes.GetValue(m, PackMesh);
+        if (!prepareTangents || System.Threading.Volatile.Read(ref packed.Tangents) != null || m.VertexCount == 0 || m.Indices.Count == 0) return;
+        // Also supports a mesh first prepared by an existing caller without the opt-in.
+        lock (packed)
+        {
+            if (packed.Tangents == null)
+                System.Threading.Volatile.Write(ref packed.Tangents, GenerateTangents(packed.Vertices,packed.Normals,packed.UV,m.Indices,m.VertexCount));
+        }
+    }
 
     public static ArrayMesh ToArrayMesh(MeshData m, Material? material = null, ArrayMesh? reuse = null, bool signedVertexData = false, bool generateLods = false)
     {
@@ -108,7 +124,9 @@ public static class Bridge
         arrays[(int)Mesh.ArrayType.Index] = m.Indices.ToArray();
         if (norms.Length == n && uv.Length == n && n > 0)
         {
-            arrays[(int)Mesh.ArrayType.Tangent] = GenerateTangents(verts, norms, uv, m.Indices, n);
+            var tangents=System.Threading.Volatile.Read(ref packed.Tangents);
+            if (tangents != null) System.Threading.Interlocked.Increment(ref _preparedTangentUploads);
+            arrays[(int)Mesh.ArrayType.Tangent] = tangents ?? GenerateTangents(verts, norms, uv, m.Indices, n);
         }
         var flags = signedVertexData
             ? (Mesh.ArrayFormat)((int)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift)

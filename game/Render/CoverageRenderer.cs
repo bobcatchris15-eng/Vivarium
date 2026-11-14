@@ -31,6 +31,8 @@ public partial class CoverageRenderer : Node3D
     public Camera3D? Camera { get; set; }
     public int Quality { get; set; } = 1;
     public float RebuildBudgetMs { get; set; } = 0.5f;
+    /// <summary>Benchmark control; normal rendering prepares immutable tangent data on its geometry worker.</summary>
+    public bool PrepareTangentsOnWorker { get; set; } = true;
 
     /// <summary>Diagnostics for reference/perf capture (updated every SyncTiles).</summary>
     public int TileCount => _tiles.Count;
@@ -496,6 +498,7 @@ public partial class CoverageRenderer : Node3D
 
     private bool DiscoverTileChanges(bool immediate, bool worldChanged)
     {
+        using var profile = FrameProfiler.Measure("Coverage.Discovery");
         // Only inspect live occupancy while both terrestrial layers are stable. If biology
         // is active, keep the existing presentation and still poll outstanding builds below.
         var mat = _w.Coverage.Mat;
@@ -568,6 +571,7 @@ public partial class CoverageRenderer : Node3D
 
     private void ProcessPendingTiles(bool immediate)
     {
+        using var profile = FrameProfiler.Measure("Coverage.Pending");
         if (immediate)
         {
             // Startup build: no budget slicing, no async offload — process everything now,
@@ -619,9 +623,14 @@ public partial class CoverageRenderer : Node3D
                 continue;
             var buildTerrain = _buildTerrain!;
             var buildProps = _buildProps!;
+            bool prepareTangents = PrepareTangentsOnWorker;
             _inFlight[key] = Task.Run<TileBuildResult?>(() => {
                 var mesh = BuildTileMesh(buildSnapshot!.Layer, buildSnapshot.Tile, buildTerrain, buildProps);
-                if (mesh != null) Bridge.PrepareMeshUpload(mesh);
+                if (mesh != null)
+                {
+                    using var prepareProfile = FrameProfiler.Measure("Coverage.PrepareUpload");
+                    Bridge.PrepareMeshUpload(mesh, prepareTangents: prepareTangents);
+                }
                 return new TileBuildResult(mesh, buildSnapshot, buildTerrainVersion, buildPropsVersion);
             });
             slots--;
@@ -679,6 +688,7 @@ public partial class CoverageRenderer : Node3D
     private bool TryCaptureBuild(CoverageLayer layer, CoverageTile tile, out CoverageRenderSnapshot? snapshot,
         out int terrainVersion, out int propsVersion)
     {
+        using var profile = FrameProfiler.Measure("Coverage.Capture");
         snapshot = null;
         terrainVersion = _w.Terrain.Version;
         propsVersion = _w.Props.Version;
@@ -690,12 +700,15 @@ public partial class CoverageRenderer : Node3D
     private bool TryCommitBuildResult(CoverageLayer layer, CoverageTile? tile,
         (CoverageLayerId layer, int ti, int tj) key, TileBuildResult result)
     {
+        using var profile = FrameProfiler.Measure("Coverage.Commit");
         if (!layer.TryBeginRenderCommit()) return false;
         try
         {
-            if (!result.Snapshot.IsCurrent(_w.Terrain.Version, result.TerrainVersion,
-                _w.Props.Version, result.PropsVersion)) return false;
-            CommitTile(layer, tile, key, result);
+            using (FrameProfiler.Measure("Coverage.Validate"))
+                if (!result.Snapshot.IsCurrent(_w.Terrain.Version, result.TerrainVersion,
+                    _w.Props.Version, result.PropsVersion)) return false;
+            using (FrameProfiler.Measure("Coverage.Upload"))
+                CommitTile(layer, tile, key, result);
             return true;
         }
         finally { layer.EndRenderCommit(); }
@@ -703,6 +716,7 @@ public partial class CoverageRenderer : Node3D
 
     private void OrderPendingByCameraDistance()
     {
+        using var profile = FrameProfiler.Measure("Coverage.Order");
         const int edge = CoverageSpec.TileEdge;
         const double cs = CoverageSpec.CellSize;
         var camPos = Camera!.GlobalPosition;

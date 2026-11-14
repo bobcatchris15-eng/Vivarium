@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "notes": [
+    "One observation per variant, 180 seconds total and 120 seconds warmup, cap 30.",
+    "Warm/render-ready young ecosystem, about three biological days; no mature-world claim.",
+    "CPU scopes overlap; worker wall time is not main-thread or GPU time.",
+    "Initial control camera drifted; initial runs are observational, not strict view/GPU controls.",
+    "The fixed pair uses the same Game/Sim binaries, camera/input lock and a soak-only tangent switch."
+  ],
+  "fixed_camera_matches": true,
+  "fixed_pair_has_expected_tangent_paths": true,
+  "control": {
+    "fps_mean": 29.2665,
+    "frame_ms_p50": 33.3,
+    "frame_ms_p95": 50.1,
+    "frame_ms_p99": 111.7,
+    "frame_ms_worst": 122.061,
+    "gpu_frame_ms_mean": 8.7176,
+    "allocated_bytes_per_frame": 7078977.5162,
+    "draw_calls": 765.7547,
+    "primitives": 7123906.749,
+    "video_mem_bytes": 2127058301,
+    "node_count": 2680,
+    "window_seconds": 60.034496,
+    "frames": 1757,
+    "coverage_start": {
+      "tiles": 67,
+      "pending": 0,
+      "triangles_built": 38823663,
+      "prepared_tangent_uploads": 0,
+      "worker_tangents": false,
+      "fixed_camera": true,
+      "camera_position": [
+        0,
+        5,
+        9
+      ],
+      "camera_rotation": [
+        -0.5,
+        0,
+        0
+      ],
+      "camera_fov": 62,
+      "tick": 2016,
+      "flora": 178,
+      "fauna": 77,
+      "flora_ready": true,
+      "loaded_flora_species": 62,
+      "backlog_sim_seconds": 0.9659999999999656
+    },
+    "coverage_end": {
+      "tiles": 67,
+      "pending": 20,
+      "triangles_built": 60997560,
+      "prepared_tangent_uploads": 0,
+      "worker_tangents": false,
+      "fixed_camera": true,
+      "camera_position": [
+        0,
+        5,
+        9
+      ],
+      "camera_rotation": [
+        -0.5,
+        0,
+        0
+      ],
+      "camera_fov": 62,
+      "tick": 3024,
+      "flora": 199,
+      "fauna": 77,
+      "flora_ready": true,
+      "loaded_flora_species": 63,
+      "backlog_sim_seconds": 1.6924319999999096
+    },
+    "triangles_committed": 22173897,
+    "coverage_scopes": {
+      "Coverage": {
+        "mean_ms": 4.2221,
+        "max_ms": 94.2694,
+        "calls": 1757,
+        "total_ms": 7418.2582,
+        "mean_per_frame_ms": 4.2221
+      },
+      "Coverage.Capture": {
+        "mean_ms": 0.2586,
+        "max_ms": 7.9534,
+        "calls": 895,
+        "total_ms": 231.4472,
+        "mean_per_frame_ms": 0.1317
+      },
+      "Coverage.Commit": {
+        "mean_ms": 8.2458,
+        "max_ms": 89.531,
+        "calls": 852,
+        "total_ms": 7025.3911,
+        "mean_per_frame_ms": 3.9985
+      },
+      "Coverage.Discovery": {
+        "mean_ms": 0.1569,
+        "max_ms": 0.5198,
+        "calls": 888,
+        "total_ms": 139.3002,
+        "mean_per_frame_ms": 0.0793
+      },
+      "Coverage.Order": {
+        "mean_ms": 0.0026,
+        "max_ms": 0.0077,
+        "calls": 653,
+        "total_ms": 1.6778,
+        "mean_per_frame_ms": 0.001
+      },
+      "Coverage.Pending": {
+        "mean_ms": 8.1905,
+        "max_ms": 94.0849,
+        "calls": 888,
+        "total_ms": 7273.1976,
+        "mean_per_frame_ms": 4.1396
+      },
+      "Coverage.PrepareUpload": {
+        "mean_ms": 1.5762,
+        "max_ms": 28.8542,
+        "calls": 855,
+        "total_ms": 1347.6813,
+        "mean_per_frame_ms": 0.767
+      },
+      "Coverage.Upload": {
+        "mean_ms": 8.6495,
+        "max_ms": 89.4779,
+        "calls": 806,
+        "total_ms": 6971.5293,
+        "mean_per_frame_ms": 3.9679
+      },
+      "Coverage.Validate": {
+        "mean_ms": 0.0474,
+        "max_ms": 0.1887,
+        "calls": 836,
+        "total_ms": 39.6243,
+        "mean_per_frame_ms": 0.0226
+      }
+    },
+    "prepared_tangent_uploads": 0
+  },
+  "worker_tangents": {
+    "fps_mean": 30.0011,
+    "frame_ms_p50": 33.4,
+    "frame_ms_p95": 43.7,
+    "frame_ms_p99": 55.2,
+    "frame_ms_worst": 60.497,
+    "gpu_frame_ms_mean": 8.6885,
+    "allocated_bytes_per_frame": 7096937.8656,
+    "draw_calls": 765.6785,
+    "primitives": 7123955.3787,
+    "video_mem_bytes": 2126934825,
+    "node_count": 2680,
+    "window_seconds": 60.031053,
+    "frames": 1801,
+    "coverage_start": {
+      "tiles": 67,
+      "pending": 0,
+      "triangles_built": 43521641,
+      "prepared_tangent_uploads": 1564,
+      "worker_tangents": true,
+      "fixed_camera": true,
+      "camera_position": [
+        0,
+        5,
+        9
+      ],
+      "camera_rotation": [
+        -0.5,
+        0,
+        0
+      ],
+      "camera_fov": 62,
+      "tick": 2015,
+      "flora": 178,
+      "fauna": 77,
+      "flora_ready": true,
+      "loaded_flora_species": 62,
+      "backlog_sim_seconds": 8.267415999999976
+    },
+    "coverage_end": {
+      "tiles": 67,
+      "pending": 22,
+      "triangles_built": 66124617,
+      "prepared_tangent_uploads": 2408,
+      "worker_tangents": true,
+      "fixed_camera": true,
+      "camera_position": [
+        0,
+        5,
+        9
+      ],
+      "camera_rotation": [
+        -0.5,
+        0,
+        0
+      ],
+      "camera_fov": 62,
+      "tick": 3024,
+      "flora": 199,
+      "fauna": 77,
+      "flora_ready": true,
+      "loaded_flora_species": 63,
+      "backlog_sim_seconds": 3.7694159999998718
+    },
+    "triangles_committed": 22602976,
+    "coverage_scopes": {
+      "Coverage": {
+        "mean_ms": 1.4046,
+        "max_ms": 28.4575,
+        "calls": 1801,
+        "total_ms": 2529.6926,
+        "mean_per_frame_ms": 1.4046
+      },
+      "Coverage.Capture": {
+        "mean_ms": 0.25,
+        "max_ms": 7.5345,
+        "calls": 897,
+        "total_ms": 224.2887,
+        "mean_per_frame_ms": 0.1245
+      },
+      "Coverage.Commit": {
+        "mean_ms": 2.4088,
+        "max_ms": 28.1364,
+        "calls": 888,
+        "total_ms": 2139.0383,
+        "mean_per_frame_ms": 1.1877
+      },
+      "Coverage.Discovery": {
+        "mean_ms": 0.1654,
+        "max_ms": 1.7154,
+        "calls": 877,
+        "total_ms": 145.0591,
+        "mean_per_frame_ms": 0.0805
+      },
+      "Coverage.Order": {
+        "mean_ms": 0.0027,
+        "max_ms": 0.0264,
+        "calls": 633,
+        "total_ms": 1.7075,
+        "mean_per_frame_ms": 0.0009
+      },
+      "Coverage.Pending": {
+        "mean_ms": 2.7126,
+        "max_ms": 28.2936,
+        "calls": 877,
+        "total_ms": 2378.9882,
+        "mean_per_frame_ms": 1.3209
+      },
+      "Coverage.PrepareUpload": {
+        "mean_ms": 7.5596,
+        "max_ms": 88.2211,
+        "calls": 890,
+        "total_ms": 6728.0087,
+        "mean_per_frame_ms": 3.7357
+      },
+      "Coverage.Upload": {
+        "mean_ms": 2.4695,
+        "max_ms": 28.0834,
+        "calls": 844,
+        "total_ms": 2084.294,
+        "mean_per_frame_ms": 1.1573
+      },
+      "Coverage.Validate": {
+        "mean_ms": 0.0546,
+        "max_ms": 6.85,
+        "calls": 878,
+        "total_ms": 47.9272,
+        "mean_per_frame_ms": 0.0266
+      }
+    },
+    "prepared_tangent_uploads": 844,
+    "percent_change_from_control": {
+      "fps_mean": 2.5100370731040655,
+      "frame_ms_p50": 0.30030030030030463,
+      "frame_ms_p95": -12.774451097804384,
+      "frame_ms_p99": -50.58191584601611,
+      "frame_ms_worst": -50.43707654369537,
+      "gpu_frame_ms_mean": -0.3338074699458571,
+      "allocated_bytes_per_frame": 0.25371389242159204,
+      "draw_calls": -0.009950967326743942,
+      "primitives": 0.000682626846670864,
+      "video_mem_bytes": -0.00580501248799159,
+      "node_count": 0.0
+    }
+  }
+}

@@ -1,0 +1,728 @@
+{
+  "completed": true,
+  "gpu_adapter": "NVIDIA GeForce GTX 1080",
+  "lighting_mode": "cached",
+  "max_fps": 30,
+  "render_overrides": {},
+  "written_utc": "2026-11-14T18:40:14.3715207Z",
+  "soak_seconds": 180,
+  "warmup_seconds": 120,
+  "window_seconds": 60.032171,
+  "frames": 1748,
+  "fps_mean": 29.1177,
+  "frame_ms_p50": 33.2,
+  "frame_ms_p95": 51.3,
+  "frame_ms_p99": 109.6,
+  "frame_ms_worst": 130.45,
+  "gpu_frame_ms_mean": 9.5591,
+  "gpu_busy_fraction": 0.2783,
+  "light_cache_uploads": 56,
+  "light_cache_sources": 221,
+  "gpu_frame_ms_max": 33.907,
+  "draw_calls": 788.3312,
+  "draw_calls_max": 806,
+  "primitives": 7368327.5955,
+  "node_count": 2680,
+  "video_mem_bytes": 2126997487,
+  "texture_mem_bytes": 702715392,
+  "buffer_mem_bytes": 1241644849,
+  "managed_bytes": 222595202,
+  "gc_gen0": 345,
+  "gc_gen1": 282,
+  "gc_gen2": 77,
+  "allocated_bytes_per_frame": 6962343.3272,
+  "hidden": [],
+  "coverage_cache_start": {
+    "tiles": 67,
+    "pending": 0,
+    "triangles_built": 39411940,
+    "tick": 2016,
+    "flora": 178,
+    "fauna": 77,
+    "flora_ready": true,
+    "loaded_flora_species": 62,
+    "backlog_sim_seconds": 0.8719199999999994
+  },
+  "coverage_cache_end": {
+    "tiles": 67,
+    "pending": 30,
+    "triangles_built": 60853255,
+    "tick": 3023,
+    "flora": 199,
+    "fauna": 77,
+    "flora_ready": true,
+    "loaded_flora_species": 63,
+    "backlog_sim_seconds": 4.630887999999932
+  },
+  "alloc_bytes_per_frame_by_scope": {
+    "Session": 1792759.5881,
+    "Session.Advance": 1792314.2929,
+    "Coverage": 666800.9016,
+    "Coverage.Pending": 666143.1579,
+    "Coverage.Commit": 602527.1304,
+    "Coverage.Capture": 63400.4577,
+    "LiquidSurface": 38207.286,
+    "LiquidSurface.TextureTransfer": 38151.9497,
+    "Guardian.Legs": 6800.2151,
+    "LightCache": 3566.4897,
+    "Guardian.Vegetation": 3226.9977,
+    "Guardian.Vegetation.Scan": 3187.2403,
+    "Flora": 2932.9519,
+    "Guardian.SkinContact": 2812.3021,
+    "Guardian": 2166.1007,
+    "AmbientGround": 1541.5789,
+    "Coverage.Discovery": 657.7437,
+    "AmbientGround.BladeUpload": 622.9153,
+    "AmbientGround.LeafUpload": 519.7666,
+    "Tools": 496
+  },
+  "alloc_bytes_per_frame_unscoped": 4443183.7162,
+  "multimesh_instance_count": null,
+  "scopes_cpu_ms": {
+    "AmbientGround": {
+      "mean_ms": 0.1377,
+      "max_ms": 11.7563,
+      "calls": 1748,
+      "total_ms": 240.6634,
+      "mean_per_frame_ms": 0.1377
+    },
+    "AmbientGround.BladeUpload": {
+      "mean_ms": 0.1649,
+      "max_ms": 0.3336,
+      "calls": 45,
+      "total_ms": 7.4193,
+      "mean_per_frame_ms": 0.0042
+    },
+    "AmbientGround.ChunkStart": {
+      "mean_ms": 0.0024,
+      "max_ms": 0.0768,
+      "calls": 4077,
+      "total_ms": 9.7504,
+      "mean_per_frame_ms": 0.0056
+    },
+    "AmbientGround.ChunkStep": {
+      "mean_ms": 0.0822,
+      "max_ms": 3.2162,
+      "calls": 2418,
+      "total_ms": 198.6708,
+      "mean_per_frame_ms": 0.1137
+    },
+    "AmbientGround.ChunkStepWithGC": {
+      "mean_ms": 0.1471,
+      "max_ms": 0.304,
+      "calls": 3,
+      "total_ms": 0.4412,
+      "mean_per_frame_ms": 0.0003
+    },
+    "AmbientGround.FloraScan": {
+      "mean_ms": 0.0267,
+      "max_ms": 0.2155,
+      "calls": 114,
+      "total_ms": 3.04,
+      "mean_per_frame_ms": 0.0017
+    },
+    "AmbientGround.LeafUpload": {
+      "mean_ms": 0.1651,
+      "max_ms": 2.9116,
+      "calls": 45,
+      "total_ms": 7.4287,
+      "mean_per_frame_ms": 0.0042
+    },
+    "AmbientGround.Lod": {
+      "mean_ms": 0.0028,
+      "max_ms": 0.0212,
+      "calls": 1748,
+      "total_ms": 4.8941,
+      "mean_per_frame_ms": 0.0028
+    },
+    "AmbientGround.Swap": {
+      "mean_ms": 0.3355,
+      "max_ms": 3.1056,
+      "calls": 45,
+      "total_ms": 15.0983,
+      "mean_per_frame_ms": 0.0086
+    },
+    "Aquatic.Algae.AdvectionBatch": {
+      "mean_ms": 0.0188,
+      "max_ms": 2.3312,
+      "calls": 5814,
+      "total_ms": 109.2612,
+      "mean_per_frame_ms": 0.0625
+    },
+    "Aquatic.Duckweed.AdvectionBatch": {
+      "mean_ms": 0.0189,
+      "max_ms": 2.692,
+      "calls": 5814,
+      "total_ms": 109.9916,
+      "mean_per_frame_ms": 0.0629
+    },
+    "Aquatic.Recruit.Batch": {
+      "mean_ms": 0.0028,
+      "max_ms": 0.0414,
+      "calls": 8383,
+      "total_ms": 23.5345,
+      "mean_per_frame_ms": 0.0135
+    },
+    "Aquatic.Step.AlgaeBed": {
+      "mean_ms": 0.6312,
+      "max_ms": 0.7143,
+      "calls": 17,
+      "total_ms": 10.7306,
+      "mean_per_frame_ms": 0.0061
+    },
+    "Aquatic.Step.AlgaeFloatGrow": {
+      "mean_ms": 0.3945,
+      "max_ms": 0.4269,
+      "calls": 17,
+      "total_ms": 6.7066,
+      "mean_per_frame_ms": 0.0038
+    },
+    "Aquatic.Step.Biofilm": {
+      "mean_ms": 0.6496,
+      "max_ms": 0.854,
+      "calls": 17,
+      "total_ms": 11.0431,
+      "mean_per_frame_ms": 0.0063
+    },
+    "Aquatic.Step.DuckweedGrow": {
+      "mean_ms": 0.6408,
+      "max_ms": 0.8623,
+      "calls": 17,
+      "total_ms": 10.893,
+      "mean_per_frame_ms": 0.0062
+    },
+    "Aquatic.Step.Recruit": {
+      "mean_ms": 1.3844,
+      "max_ms": 1.5425,
+      "calls": 17,
+      "total_ms": 23.5345,
+      "mean_per_frame_ms": 0.0135
+    },
+    "Camera": {
+      "mean_ms": 0.0257,
+      "max_ms": 0.145,
+      "calls": 1748,
+      "total_ms": 45.0056,
+      "mean_per_frame_ms": 0.0257
+    },
+    "Coverage": {
+      "mean_ms": 4.0467,
+      "max_ms": 113.4703,
+      "calls": 1748,
+      "total_ms": 7073.6697,
+      "mean_per_frame_ms": 4.0467
+    },
+    "Coverage.Capture": {
+      "mean_ms": 0.3202,
+      "max_ms": 8.5703,
+      "calls": 837,
+      "total_ms": 268.0012,
+      "mean_per_frame_ms": 0.1533
+    },
+    "Coverage.Commit": {
+      "mean_ms": 8.005,
+      "max_ms": 113.2181,
+      "calls": 827,
+      "total_ms": 6620.1034,
+      "mean_per_frame_ms": 3.7872
+    },
+    "Coverage.Discovery": {
+      "mean_ms": 0.1772,
+      "max_ms": 7.1839,
+      "calls": 863,
+      "total_ms": 152.8838,
+      "mean_per_frame_ms": 0.0875
+    },
+    "Coverage.Order": {
+      "mean_ms": 0.0024,
+      "max_ms": 0.0085,
+      "calls": 634,
+      "total_ms": 1.5341,
+      "mean_per_frame_ms": 0.0009
+    },
+    "Coverage.Pending": {
+      "mean_ms": 8.0124,
+      "max_ms": 113.3137,
+      "calls": 863,
+      "total_ms": 6914.6624,
+      "mean_per_frame_ms": 3.9558
+    },
+    "Environment": {
+      "mean_ms": 0.0807,
+      "max_ms": 7.3786,
+      "calls": 1748,
+      "total_ms": 141.1127,
+      "mean_per_frame_ms": 0.0807
+    },
+    "Fauna": {
+      "mean_ms": 0.5628,
+      "max_ms": 8.7579,
+      "calls": 1748,
+      "total_ms": 983.7968,
+      "mean_per_frame_ms": 0.5628
+    },
+    "Flora": {
+      "mean_ms": 0.1035,
+      "max_ms": 19.3638,
+      "calls": 1748,
+      "total_ms": 180.9656,
+      "mean_per_frame_ms": 0.1035
+    },
+    "Flora.BufferUpload": {
+      "mean_ms": 0.0017,
+      "max_ms": 0.0651,
+      "calls": 5705,
+      "total_ms": 9.5504,
+      "mean_per_frame_ms": 0.0055
+    },
+    "Flora.Fill": {
+      "mean_ms": 0.0038,
+      "max_ms": 0.1975,
+      "calls": 5914,
+      "total_ms": 22.7101,
+      "mean_per_frame_ms": 0.013
+    },
+    "Flora.Lights": {
+      "mean_ms": 0.0293,
+      "max_ms": 0.044,
+      "calls": 28,
+      "total_ms": 0.8204,
+      "mean_per_frame_ms": 0.0005
+    },
+    "Guardian": {
+      "mean_ms": 0.466,
+      "max_ms": 9.6872,
+      "calls": 1748,
+      "total_ms": 814.5061,
+      "mean_per_frame_ms": 0.466
+    },
+    "Guardian.Appendage": {
+      "mean_ms": 0.0071,
+      "max_ms": 1.2763,
+      "calls": 1748,
+      "total_ms": 12.3878,
+      "mean_per_frame_ms": 0.0071
+    },
+    "Guardian.Appendage.Constraints": {
+      "mean_ms": 0.4489,
+      "max_ms": 0.8897,
+      "calls": 14,
+      "total_ms": 6.285,
+      "mean_per_frame_ms": 0.0036
+    },
+    "Guardian.Appendage.Diagnostics": {
+      "mean_ms": 0.1427,
+      "max_ms": 0.2121,
+      "calls": 14,
+      "total_ms": 1.9975,
+      "mean_per_frame_ms": 0.0011
+    },
+    "Guardian.Appendage.Setup": {
+      "mean_ms": 0.0156,
+      "max_ms": 0.0252,
+      "calls": 14,
+      "total_ms": 0.2178,
+      "mean_per_frame_ms": 0.0001
+    },
+    "Guardian.Appendage.SkinFit": {
+      "mean_ms": 0.086,
+      "max_ms": 0.134,
+      "calls": 14,
+      "total_ms": 1.2042,
+      "mean_per_frame_ms": 0.0007
+    },
+    "Guardian.Breathing": {
+      "mean_ms": 0.0039,
+      "max_ms": 0.0819,
+      "calls": 1748,
+      "total_ms": 6.8945,
+      "mean_per_frame_ms": 0.0039
+    },
+    "Guardian.HeadTracker": {
+      "mean_ms": 0.006,
+      "max_ms": 0.0484,
+      "calls": 1748,
+      "total_ms": 10.5602,
+      "mean_per_frame_ms": 0.006
+    },
+    "Guardian.Legs": {
+      "mean_ms": 0.751,
+      "max_ms": 8.5094,
+      "calls": 1748,
+      "total_ms": 1312.693,
+      "mean_per_frame_ms": 0.751
+    },
+    "Guardian.SecondaryMotion": {
+      "mean_ms": 0.017,
+      "max_ms": 0.1482,
+      "calls": 1748,
+      "total_ms": 29.7666,
+      "mean_per_frame_ms": 0.017
+    },
+    "Guardian.SkinContact": {
+      "mean_ms": 0.0376,
+      "max_ms": 8.6243,
+      "calls": 30002,
+      "total_ms": 1126.5872,
+      "mean_per_frame_ms": 0.6445
+    },
+    "Guardian.Vegetation": {
+      "mean_ms": 0.7577,
+      "max_ms": 9.1174,
+      "calls": 1748,
+      "total_ms": 1324.5279,
+      "mean_per_frame_ms": 0.7577
+    },
+    "Guardian.Vegetation.Apply": {
+      "mean_ms": 0.3352,
+      "max_ms": 6.5403,
+      "calls": 1748,
+      "total_ms": 586.0071,
+      "mean_per_frame_ms": 0.3352
+    },
+    "Guardian.Vegetation.Scan": {
+      "mean_ms": 0.4141,
+      "max_ms": 8.4782,
+      "calls": 1748,
+      "total_ms": 723.8239,
+      "mean_per_frame_ms": 0.4141
+    },
+    "Guardian.WaterContact": {
+      "mean_ms": 0.0068,
+      "max_ms": 0.0885,
+      "calls": 1748,
+      "total_ms": 11.9565,
+      "mean_per_frame_ms": 0.0068
+    },
+    "Host.Advance.Liquid": {
+      "mean_ms": 0.7841,
+      "max_ms": 8.8212,
+      "calls": 1748,
+      "total_ms": 1370.6135,
+      "mean_per_frame_ms": 0.7841
+    },
+    "Host.Advance.Scheduler": {
+      "mean_ms": 0.6257,
+      "max_ms": 25.1653,
+      "calls": 1748,
+      "total_ms": 1093.6541,
+      "mean_per_frame_ms": 0.6257
+    },
+    "Island": {
+      "mean_ms": 0.4069,
+      "max_ms": 27.3983,
+      "calls": 1748,
+      "total_ms": 711.3088,
+      "mean_per_frame_ms": 0.4069
+    },
+    "Island.CoverMask": {
+      "mean_ms": 0.2154,
+      "max_ms": 0.3662,
+      "calls": 30,
+      "total_ms": 6.4618,
+      "mean_per_frame_ms": 0.0037
+    },
+    "Island.FieldTexture": {
+      "mean_ms": 0.8941,
+      "max_ms": 1.3553,
+      "calls": 30,
+      "total_ms": 26.8231,
+      "mean_per_frame_ms": 0.0153
+    },
+    "Island.ShaderParams": {
+      "mean_ms": 0.0001,
+      "max_ms": 0.0005,
+      "calls": 1748,
+      "total_ms": 0.2161,
+      "mean_per_frame_ms": 0.0001
+    },
+    "Island.SubWater": {
+      "mean_ms": 6.0241,
+      "max_ms": 27.3809,
+      "calls": 113,
+      "total_ms": 680.726,
+      "mean_per_frame_ms": 0.3894
+    },
+    "LightCache": {
+      "mean_ms": 0.0292,
+      "max_ms": 7.8202,
+      "calls": 1748,
+      "total_ms": 51.0935,
+      "mean_per_frame_ms": 0.0292
+    },
+    "Liquid.CoarseProjection": {
+      "mean_ms": 0.1511,
+      "max_ms": 2.2506,
+      "calls": 1716,
+      "total_ms": 259.3432,
+      "mean_per_frame_ms": 0.1484
+    },
+    "Liquid.Erosion": {
+      "mean_ms": 0.0002,
+      "max_ms": 0.0007,
+      "calls": 1716,
+      "total_ms": 0.4287,
+      "mean_per_frame_ms": 0.0002
+    },
+    "Liquid.QueryIndex": {
+      "mean_ms": 0.5789,
+      "max_ms": 7.7496,
+      "calls": 1716,
+      "total_ms": 993.3402,
+      "mean_per_frame_ms": 0.5683
+    },
+    "Liquid.SnapshotCapture": {
+      "mean_ms": 0.0007,
+      "max_ms": 0.0038,
+      "calls": 1716,
+      "total_ms": 1.1164,
+      "mean_per_frame_ms": 0.0006
+    },
+    "LiquidSurface": {
+      "mean_ms": 3.731,
+      "max_ms": 13.99,
+      "calls": 1748,
+      "total_ms": 6521.8721,
+      "mean_per_frame_ms": 3.731
+    },
+    "LiquidSurface.LookupPreparation": {
+      "mean_ms": 0.8378,
+      "max_ms": 9.2698,
+      "calls": 1716,
+      "total_ms": 1437.75,
+      "mean_per_frame_ms": 0.8225
+    },
+    "LiquidSurface.TextureTransfer": {
+      "mean_ms": 0.0141,
+      "max_ms": 8.8455,
+      "calls": 160298,
+      "total_ms": 2264.2657,
+      "mean_per_frame_ms": 1.2953
+    },
+    "LiquidSurface.TileCreation": {
+      "mean_ms": 0.0075,
+      "max_ms": 6.8436,
+      "calls": 1716,
+      "total_ms": 12.851,
+      "mean_per_frame_ms": 0.0074
+    },
+    "LiquidSurface.TileFilling": {
+      "mean_ms": 0.0123,
+      "max_ms": 7.0685,
+      "calls": 160298,
+      "total_ms": 1973.5355,
+      "mean_per_frame_ms": 1.129
+    },
+    "LiquidSurface.Upload": {
+      "mean_ms": 3.582,
+      "max_ms": 13.7821,
+      "calls": 1716,
+      "total_ms": 6146.7176,
+      "mean_per_frame_ms": 3.5164
+    },
+    "LoamDetail": {
+      "mean_ms": 0.0005,
+      "max_ms": 0.0038,
+      "calls": 1748,
+      "total_ms": 0.8757,
+      "mean_per_frame_ms": 0.0005
+    },
+    "Overlay": {
+      "mean_ms": 0.0021,
+      "max_ms": 0.0303,
+      "calls": 1748,
+      "total_ms": 3.7492,
+      "mean_per_frame_ms": 0.0021
+    },
+    "PilotTree": {
+      "mean_ms": 0,
+      "max_ms": 0.0004,
+      "calls": 1748,
+      "total_ms": 0.0794,
+      "mean_per_frame_ms": 0
+    },
+    "Props": {
+      "mean_ms": 0.0002,
+      "max_ms": 0.0019,
+      "calls": 1748,
+      "total_ms": 0.3695,
+      "mean_per_frame_ms": 0.0002
+    },
+    "Session": {
+      "mean_ms": 1.4307,
+      "max_ms": 25.9272,
+      "calls": 1748,
+      "total_ms": 2500.9299,
+      "mean_per_frame_ms": 1.4307
+    },
+    "Session.Advance": {
+      "mean_ms": 1.4185,
+      "max_ms": 25.9224,
+      "calls": 1748,
+      "total_ms": 2479.5583,
+      "mean_per_frame_ms": 1.4185
+    },
+    "Session.Autosave": {
+      "mean_ms": 0.0003,
+      "max_ms": 0.0011,
+      "calls": 1748,
+      "total_ms": 0.5323,
+      "mean_per_frame_ms": 0.0003
+    },
+    "Session.Stats": {
+      "mean_ms": 0.4352,
+      "max_ms": 0.7619,
+      "calls": 24,
+      "total_ms": 10.4438,
+      "mean_per_frame_ms": 0.006
+    },
+    "SoilDetail": {
+      "mean_ms": 0.0057,
+      "max_ms": 0.0396,
+      "calls": 1748,
+      "total_ms": 9.8882,
+      "mean_per_frame_ms": 0.0057
+    },
+    "Sys.aquatic": {
+      "mean_ms": 0.0151,
+      "max_ms": 2.7042,
+      "calls": 20130,
+      "total_ms": 303.2256,
+      "mean_per_frame_ms": 0.1735
+    },
+    "Sys.coverage": {
+      "mean_ms": 0.3803,
+      "max_ms": 0.405,
+      "calls": 16,
+      "total_ms": 6.0854,
+      "mean_per_frame_ms": 0.0035
+    },
+    "Sys.coverage.lichen": {
+      "mean_ms": 0.3292,
+      "max_ms": 0.4256,
+      "calls": 16,
+      "total_ms": 5.2671,
+      "mean_per_frame_ms": 0.003
+    },
+    "Sys.ecology.litter": {
+      "mean_ms": 0.0388,
+      "max_ms": 0.138,
+      "calls": 132,
+      "total_ms": 5.1254,
+      "mean_per_frame_ms": 0.0029
+    },
+    "Sys.ecology.resources": {
+      "mean_ms": 0.3364,
+      "max_ms": 0.5146,
+      "calls": 34,
+      "total_ms": 11.4375,
+      "mean_per_frame_ms": 0.0065
+    },
+    "Sys.environment": {
+      "mean_ms": 10.5021,
+      "max_ms": 22.0909,
+      "calls": 34,
+      "total_ms": 357.0706,
+      "mean_per_frame_ms": 0.2043
+    },
+    "Sys.fauna.behaviour": {
+      "mean_ms": 0.5577,
+      "max_ms": 1.0168,
+      "calls": 251,
+      "total_ms": 139.9872,
+      "mean_per_frame_ms": 0.0801
+    },
+    "Sys.fauna.lifecycle": {
+      "mean_ms": 0.1691,
+      "max_ms": 1.1987,
+      "calls": 9,
+      "total_ms": 1.5217,
+      "mean_per_frame_ms": 0.0009
+    },
+    "Sys.fauna.metabolism": {
+      "mean_ms": 0.298,
+      "max_ms": 1.6857,
+      "calls": 168,
+      "total_ms": 50.0644,
+      "mean_per_frame_ms": 0.0286
+    },
+    "Sys.flora": {
+      "mean_ms": 0.006,
+      "max_ms": 0.4476,
+      "calls": 5993,
+      "total_ms": 35.961,
+      "mean_per_frame_ms": 0.0206
+    },
+    "Sys.flora.ambient": {
+      "mean_ms": 0.1958,
+      "max_ms": 0.6485,
+      "calls": 688,
+      "total_ms": 134.704,
+      "mean_per_frame_ms": 0.0771
+    },
+    "Sys.flora.dead": {
+      "mean_ms": 0.0204,
+      "max_ms": 0.0347,
+      "calls": 16,
+      "total_ms": 0.326,
+      "mean_per_frame_ms": 0.0002
+    },
+    "Sys.flora.reproduction": {
+      "mean_ms": 0.0116,
+      "max_ms": 0.0188,
+      "calls": 16,
+      "total_ms": 0.1862,
+      "mean_per_frame_ms": 0.0001
+    },
+    "Sys.flora.seedbank": {
+      "mean_ms": 0.0006,
+      "max_ms": 0.0009,
+      "calls": 16,
+      "total_ms": 0.0089,
+      "mean_per_frame_ms": 0
+    },
+    "Sys.guardian.behaviour": {
+      "mean_ms": 0.0166,
+      "max_ms": 0.4833,
+      "calls": 252,
+      "total_ms": 4.1756,
+      "mean_per_frame_ms": 0.0024
+    },
+    "Sys.guardian.metabolism": {
+      "mean_ms": 0.0093,
+      "max_ms": 0.032,
+      "calls": 168,
+      "total_ms": 1.5549,
+      "mean_per_frame_ms": 0.0009
+    },
+    "Sys.hydrology": {
+      "mean_ms": 0.0001,
+      "max_ms": 0.0005,
+      "calls": 503,
+      "total_ms": 0.0586,
+      "mean_per_frame_ms": 0
+    },
+    "Tools": {
+      "mean_ms": 0.1459,
+      "max_ms": 7.8035,
+      "calls": 1748,
+      "total_ms": 255.0181,
+      "mean_per_frame_ms": 0.1459
+    },
+    "Ui": {
+      "mean_ms": 0.018,
+      "max_ms": 6.9951,
+      "calls": 1748,
+      "total_ms": 31.5187,
+      "mean_per_frame_ms": 0.018
+    },
+    "Windows": {
+      "mean_ms": 0.0045,
+      "max_ms": 0.0525,
+      "calls": 1748,
+      "total_ms": 7.8291,
+      "mean_per_frame_ms": 0.0045
+    }
+  },
+  "notes": "Steady state excludes samples before warmup. Draw calls/primitives/GPU are per-frame means; node/memory fields are means of 1 Hz samples. Frame percentiles use 0.1 ms bins. Scope times are CPU wall time and overlap; GeometryWorker is off-thread."
+}

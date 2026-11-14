@@ -40,6 +40,12 @@ public partial class Main : Node3D
         }
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (UserArgs.Contains("--coverage-tangent-proof"))
+        {
+            try { GD.Print(CoverageTangentProof.Run()); GetTree().Quit(0); }
+            catch (Exception ex) { GD.PrintErr(ex); GetTree().Quit(4); }
+            return;
+        }
         if (ArgAfter("--licenses") is { } licenseFile) { WriteLicenses(licenseFile); GetTree().Quit(0); return; }
         if (UserArgs.Contains("--flora-bake")) { AddChild(new LeafMaterialBaker { Name = "LeafBaker" }); return; }
         bool visualReview = UserArgs.Contains("--visual-review");
@@ -134,6 +140,14 @@ public partial class Main : Node3D
                 GetViewport().GetTexture().GetImage().SavePng(Path.Combine(completedDirectory,"preparing.png"));
             if (ArgAfter("--soak") is { } soakDirectory)
             {
+                Session.Coverage.PrepareTangentsOnWorker = !UserArgs.Contains("--soak-sync-coverage-tangents");
+                if (UserArgs.Contains("--soak-fixed-camera"))
+                {
+                    Session.CameraRig.ResetView();
+                    Session.CameraRig.SetProcess(false);
+                    Session.CameraRig.SetProcessUnhandledInput(false);
+                    GetViewport().GuiDisableInput = true;
+                }
                 Directory.CreateDirectory(soakDirectory);
                 if (world.Flora.Count == 0 || world.Fauna.Count == 0 || world.Water.Springs.Count == 0)
                     throw new InvalidOperationException("Soak requires seeded flora, fauna and a spring.");

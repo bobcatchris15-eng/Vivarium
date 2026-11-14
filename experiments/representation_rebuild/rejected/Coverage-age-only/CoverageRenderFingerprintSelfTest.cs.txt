@@ -1,0 +1,151 @@
+using System;
+using System.Diagnostics;
+using System.Linq;
+using Vivarium.Sim.Coverage;
+using Vivarium.Sim.Coverage.Rules;
+using Vivarium.Sim.Persistence;
+
+namespace Vivarium.Sim.Repr.Coverage;
+
+/// <summary>Actual lichen rule updates whose only render-irrelevant change is cell age.</summary>
+public sealed class CoverageRenderAgeOnlySelfTest : IReprSelfTest
+{
+    private sealed class Environment : ILichenEnvSource
+    {
+        private readonly double _moisture, _humidity;
+        public Environment(double moisture=0.5,double humidity=0.5) { _moisture=moisture; _humidity=humidity; }
+        public MicroEnv Sample(int gx,int gz) => new() { Moisture=_moisture, Humidity=_humidity, Light=0.5, Nutrients=1, Substrate=CoverageSubstrate.Rock };
+    }
+    private static readonly LichenParams[] Species = { new() { OccSlot=1, Form=LichenForm.Crustose, Lateral=0, KWet=0, KDry=0 } };
+    private static CoverageLayer Make()
+    {
+        var layer=new CoverageLayer(CoverageLayerId.Crust,12345);
+        layer.SetCell(31,0,1,1.0f,255,0,0,0,0);
+        layer.SetCell(32,0,1,1.0f,255,0,0,0,0);
+        return layer;
+    }
+    private static void Step(CoverageLayer layer,int step)
+    {
+        layer.BeginWriter();
+        try { LichenRules.Step(layer,new Environment(),Species,0.25,step,layer.WorldSeed); }
+        finally { layer.EndWriter(); }
+    }
+    public string Name => "coverage.render_age_only";
+    public string? Run()
+    {
+        var observed=Make(); var reference=Make();
+        Step(observed,0); Step(reference,0); // settle distance-to-edge flags
+        if(!CoverageRenderSnapshot.TryCapture(observed,0,0,out var a) || a==null ||
+           !CoverageRenderSnapshot.TryCapture(observed,1,0,out var b) || b==null) return "initial snapshots failed";
+        observed.TryGetTile(0,0,out var left); observed.TryGetTile(1,0,out var right);
+        long leftVersion=left!.Version, rightVersion=right!.Version;
+        ushort leftAge=left.Age[31];
+        long scansBefore=CoverageRenderRevisionStamp.FingerprintComputations;
+        long hitsBefore=CoverageRenderRevisionStamp.FingerprintCacheHits;
+        Step(observed,1); Step(reference,1);
+        if(left.Version<=leftVersion || right.Version<=rightVersion || left.Age[31]<=leftAge) return "real lichen rule did not advance age and canonical versions";
+        if(!a.RevisionStamp.IsCurrent() || !b.RevisionStamp.IsCurrent() || !a.IsCurrent(1,1,2,2)) return "age-only rule update invalidated render state";
+        long scans=CoverageRenderRevisionStamp.FingerprintComputations-scansBefore;
+        long hits=CoverageRenderRevisionStamp.FingerprintCacheHits-hitsBefore;
+        if(scans!=2 || hits<2) return $"overlapping halos did not reuse per-tile fingerprints: scans={scans}, hits={hits}";
+        long stableScans=CoverageRenderRevisionStamp.FingerprintComputations;
+        for(int i=0;i<20;i++) if(!a.RevisionStamp.IsCurrent()) return "unchanged stamp became stale";
+        if(CoverageRenderRevisionStamp.FingerprintComputations!=stableScans) return "unchanged versions caused repeated fingerprint scans";
+
+        // Matching fingerprints must not mutate or change the deterministic biology/save state.
+        for(int step=2;step<10;step++) { Step(observed,step); Step(reference,step); if(!a.RevisionStamp.IsCurrent()) return "later age-only step dirtied mesh"; }
+        var x=observed.ExportTiles().ToArray(); var y=reference.ExportTiles().ToArray();
+        if(observed.Step!=reference.Step || x.Length!=y.Length) return "rule state diverged after renderer checks";
+        for(int i=0;i<x.Length;i++)
+            if(x[i].Version!=y[i].Version || !x[i].Occ.SequenceEqual(y[i].Occ) || !x[i].B.SequenceEqual(y[i].B) ||
+               !x[i].W.SequenceEqual(y[i].W) || !x[i].Age.SequenceEqual(y[i].Age) || !x[i].Dorm.SequenceEqual(y[i].Dorm) ||
+               !x[i].Flags.SequenceEqual(y[i].Flags) || !x[i].D2E.SequenceEqual(y[i].D2E)) return "authoritative state or Version changed during renderer checks";
+        // Real physiology turns dry after the saturated age-only phase; water is a rendered input.
+        observed.BeginWriter();
+        try { LichenRules.Step(observed,new Environment(0,0),new[] { new LichenParams { OccSlot=1, Form=LichenForm.Crustose, Lateral=0, KWet=0, KDry=1 } },3.0,10,observed.WorldSeed); }
+        finally { observed.EndWriter(); }
+        if(left.W[31]>=40) return $"dry fixture did not cross the renderer stress threshold: W={left.W[31]}";
+        if(a.RevisionStamp.IsCurrent() || a.IsCurrent(1,1,2,2)) return "actual dry physiology did not invalidate the rendered water input";
+        return null;
+    }
+}
+
+public sealed class CoverageRenderInputInvalidationSelfTest : IReprSelfTest
+{
+    public string Name => "coverage.render_inputs";
+    public string? Run()
+    {
+        for(int field=0;field<6;field++)
+        {
+            var layer=new CoverageLayer(CoverageLayerId.Mat,1);
+            layer.SetCell(0,0,1,0.4f,100,7,1,0,2);
+            layer.SetCell(32,0,1,0.4f,100,7,1,0,2);
+            if(!CoverageRenderSnapshot.TryCapture(layer,0,0,out var snapshot) || snapshot==null) return "capture failed";
+            layer.TryGetTile(1,0,out var halo); int i=0;
+            switch(field) { case 0: halo!.Occ[i]=2; break; case 1: halo!.B[i]=0.401f; break; case 2: halo!.W[i]++; break; case 3: halo!.Dorm[i]++; break; case 4: halo!.Flags[i]^=1; break; case 5: halo!.D2E[i]++; break; }
+            halo!.Touch();
+            if(snapshot.RevisionStamp.IsCurrent() || snapshot.IsCurrent(1,1,1,1)) return $"changed halo render input {field} remained current";
+        }
+        var noTouch=new CoverageLayer(CoverageLayerId.Mat,2);
+        noTouch.SetCell(0,0,1,0.4f,100,1,0,0,1);
+        if(!CoverageRenderSnapshot.TryCapture(noTouch,0,0,out var pending) || pending==null) return "pending snapshot failed";
+        noTouch.TryGetTile(0,0,out var tile);
+        tile!.Age[0]++; tile.Touch(); // first warm the changed-Version fingerprint cache
+        if(!pending.RevisionStamp.IsCurrent()) return "age-only Touch invalidated stamp";
+        tile.B[0]+=0.001f; // direct unannounced write: old polling threshold contract still applies
+        if(!pending.RevisionStamp.IsCurrent()) return "unversioned write unexpectedly broadened polling";
+        if(pending.IsCurrent(1,1,1,1)) return "unversioned biomass write accepted at pending-result commit";
+        foreach(byte bit in new[] { (byte)CoverageFlags.Dead, (byte)CoverageFlags.Boundary })
+        {
+            if(!CoverageRenderSnapshot.TryCapture(noTouch,0,0,out var flagsSnapshot) || flagsSnapshot==null) return "flag snapshot failed";
+            tile.Flags[0]^=bit;
+            if(flagsSnapshot.IsCurrent(1,1,1,1)) return $"unversioned flag bit {bit} accepted at commit";
+        }
+        if(!CoverageRenderSnapshot.TryCapture(noTouch,0,0,out var d2eSnapshot) || d2eSnapshot==null) return "D2E snapshot failed";
+        tile.D2E[0]++;
+        if(d2eSnapshot.IsCurrent(1,1,1,1)) return "unversioned D2E write accepted at commit";
+        return null;
+    }
+}
+
+public sealed class CoverageRenderAgeOnlyCostSelfTest : IReprSelfTest
+{
+    private string _name="coverage.render_age_cost";
+    public string Name => _name;
+    public string? Run()
+    {
+        var layer=new CoverageLayer(CoverageLayerId.Crust,4);
+        for(int x=0;x<8;x++) for(int z=0;z<8;z++) layer.SetCell(x*32,z*32,1,0.5f,128,0,0,0,0);
+        var stamps=layer.Tiles.Select(t => { CoverageRenderSnapshot.TryCapture(layer,t.Ti,t.Tj,out var snap); return snap!.RevisionStamp; }).ToArray();
+        foreach(var t in layer.Tiles) { t.Age[0]++; t.Touch(); }
+        long start=CoverageRenderRevisionStamp.FingerprintComputations, hits=CoverageRenderRevisionStamp.FingerprintCacheHits;
+        var sw=Stopwatch.StartNew(); foreach(var stamp in stamps) if(!stamp.IsCurrent()) return "age-only cost fixture became dirty";
+        double first=sw.Elapsed.TotalMilliseconds; sw.Restart(); foreach(var stamp in stamps) if(!stamp.IsCurrent()) return "stable cost fixture became dirty";
+        _name=$"coverage.render_age_cost tiles=64 first_ms={first:0.000} stable_ms={sw.Elapsed.TotalMilliseconds:0.000} scans={CoverageRenderRevisionStamp.FingerprintComputations-start} hits={CoverageRenderRevisionStamp.FingerprintCacheHits-hits}";
+        if(CoverageRenderRevisionStamp.FingerprintComputations-start!=64) return "shared halo scan count exceeded one per changed tile";
+        return null;
+    }
+}
+
+public sealed class CoverageRenderPersistenceSelfTest : IReprSelfTest
+{
+    public string Name => "coverage.render_persistence";
+    public string? Run()
+    {
+        var world=EcoTestKit.SmallWorld(seed:987,diameter:12,cellSize:0.4,populate:false);
+        var layer=world.Coverage.Crust;
+        layer.SetCell(0,0,1,0.6f,170,42,4,(byte)CoverageFlags.Boundary,2);
+        if(!CoverageRenderSnapshot.TryCapture(layer,0,0,out var snapshot) || snapshot==null) return "world coverage snapshot failed";
+        var original=WorldSerializer.Serialize(world);
+        layer.TryGetTile(0,0,out var tile); tile!.Age[0]++; tile.Touch();
+        var afterAge=WorldSerializer.Serialize(world);
+        if(!snapshot.RevisionStamp.IsCurrent()) return "age-only state incorrectly invalidated render stamp";
+        var afterCheck=WorldSerializer.Serialize(world);
+        if(!afterAge["coverage"].SequenceEqual(afterCheck["coverage"])) return "render stamp changed canonical coverage serialization";
+        if(original["coverage"].SequenceEqual(afterAge["coverage"])) return "fixture did not serialize age change";
+        var loaded=WorldSerializer.Deserialize(EcoTestKit.Content,afterCheck);
+        var roundTrip=WorldSerializer.Serialize(loaded);
+        if(!afterCheck["coverage"].SequenceEqual(roundTrip["coverage"])) return "coverage save/load round trip changed authoritative payload";
+        return null;
+    }
+}

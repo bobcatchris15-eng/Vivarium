@@ -41,6 +41,26 @@ public partial class LiveDiagnostics : Node
     public string[] SoakHidden { get; set; } = Array.Empty<string>();
     private int _soakGc0, _soakGc1, _soakGc2;
     private ulong _soakSampleAt;
+    private object? _soakCoverageStart;
+
+    private object CoverageCacheState() => new
+    {
+        tiles = Session.Coverage.TileCount,
+        pending = Session.Coverage.PendingRebuildCount,
+        triangles_built = Session.Coverage.TrianglesBuilt,
+        prepared_tangent_uploads = Bridge.PreparedTangentUploads,
+        worker_tangents = Session.Coverage.PrepareTangentsOnWorker,
+        fixed_camera = Main.UserArgs.Contains("--soak-fixed-camera"),
+        camera_position = new[] { Session.CameraRig.GlobalPosition.X, Session.CameraRig.GlobalPosition.Y, Session.CameraRig.GlobalPosition.Z },
+        camera_rotation = new[] { Session.CameraRig.Rotation.X, Session.CameraRig.Rotation.Y, Session.CameraRig.Rotation.Z },
+        camera_fov = Session.CameraRig.Cam.Fov,
+        tick = Session.World!.Clock.Tick,
+        flora = Session.World.Flora.Count,
+        fauna = Session.World.Fauna.Count,
+        flora_ready = Session.Flora.PopulationReady,
+        loaded_flora_species = Session.Flora.LoadedSpeciesCount,
+        backlog_sim_seconds = Session.World.Scheduler.Backlog
+    };
 
     /// <summary>Starts the soak clock (call when the world is ready). Quits the app with exit code 0 after seconds.</summary>
     public void BeginSoak(double seconds, double warmup)
@@ -62,6 +82,7 @@ public partial class LiveDiagnostics : Node
             _soakAlloc0 = GC.GetTotalAllocatedBytes(false);
             _soakGc0 = GC.CollectionCount(0); _soakGc1 = GC.CollectionCount(1); _soakGc2 = GC.CollectionCount(2);
             _soakSampleAt = now;
+            _soakCoverageStart = CoverageCacheState();
             FrameProfiler.StartWindow();
             return;
         }
@@ -138,6 +159,8 @@ public partial class LiveDiagnostics : Node
             ["gc_gen2"] = GC.CollectionCount(2) - _soakGc2,
             ["allocated_bytes_per_frame"] = frames > 0 ? R((GC.GetTotalAllocatedBytes(false) - _soakAlloc0) / f) : null,
             ["hidden"] = SoakHidden,
+            ["coverage_cache_start"] = _soakCoverageStart,
+            ["coverage_cache_end"] = CoverageCacheState(),
             ["alloc_bytes_per_frame_by_scope"] = allocOut,
             ["alloc_bytes_per_frame_unscoped"] = frames > 0 ? R(totalAllocPerFrame - allocTop / f) : null,
             ["multimesh_instance_count"] = null,
@@ -212,6 +235,8 @@ public partial class LiveDiagnostics : Node
             simulation_pending_tick = w.Scheduler.HasPendingTick, ticks_per_second = (w.Clock.Tick-_lastTick)/interval, tick = w.Clock.Tick, bio_days = w.Clock.BioDays,
             paused = w.Clock.Paused, speed = w.Clock.SpeedMultiplier, world_name = w.Descriptor.Name, seed = w.Seed,
             flora = w.Flora.Count, fauna = w.Fauna.Count, flora_visible = Session.Flora.Visible_, fauna_drawn = Session.Fauna.Drawn,
+            coverage_tiles = Session.Coverage.TileCount, coverage_pending = Session.Coverage.PendingRebuildCount,
+            coverage_triangles_built = Session.Coverage.TrianglesBuilt,
             spring_particles = w.Liquid.Particles.Count, water_triangles = Session.WaterFluid.TrianglesBuilt,
             engine_memory_bytes = OS.GetStaticMemoryUsage(), managed_memory_bytes = GC.GetTotalMemory(false),
             working_set_bytes = System.Environment.WorkingSet, video_memory_bytes = Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed),

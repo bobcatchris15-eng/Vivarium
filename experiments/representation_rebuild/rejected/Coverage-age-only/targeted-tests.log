@@ -1,0 +1,6 @@
+PASS coverage.render_age_cost tiles=64 first_ms=3.280 stable_ms=2.626 scans=64 hits=420 (44 ms)
+PASS coverage.render_age_only (26 ms)
+PASS coverage.render_inputs (1 ms)
+PASS coverage.render_persistence (894 ms)
+PASS coverage.renderSnapshot (2 ms)
+REPR_SELFTEST tests=5 failed=0

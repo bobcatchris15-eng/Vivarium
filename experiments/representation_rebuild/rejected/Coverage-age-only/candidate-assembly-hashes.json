@@ -1,0 +1,12 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "D80900A917481C155BDCC6CE2FAE5AD399373619D05217343D3556DED5444363",
+    "Path": "E:\\Vivarium\\game\\.godot\\mono\\temp\\bin\\Debug\\Vivarium.dll"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "4879E2F8806585B39CDF515092DBB5A58ABA6F71363FE9A6F9ED6471C8B00E4D",
+    "Path": "E:\\Vivarium\\game\\.godot\\mono\\temp\\bin\\Debug\\Vivarium.Sim.dll"
+  }
+]

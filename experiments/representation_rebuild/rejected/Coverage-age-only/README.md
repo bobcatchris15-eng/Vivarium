@@ -1,0 +1,7 @@
+# Deferred age-only invalidation experiment
+
+The exact three-file diff is against f5210382; the new test source is stored separately with a .cs.txt extension. Reconstruct only in an isolated source copy of that revision: apply candidate.patch and copy the test into src/Vivarium.Sim/Repr/Coverage using its .cs name. The patch includes the common profiler/diagnostic additions as well as the candidate; later revisions already contain some of those changes.
+
+Five focused tests passed and the strengthened real drying test passed separately. The candidate suppressed actual age-only lichen invalidations in the pure fixture, without changing biology, canonical versions, save arrays or pending-result coherence. It did not reduce the dominant live cost in the tested young ecosystem: Coverage CPU 4.0467 to 4.2023 ms/frame, commit-stage calls 827 to 824 and effectively equal frame tails. One pair does not establish a causal slowdown. No mature-ecosystem result is claimed.
+
+The implementation is deferred from production. A later audit found that the control camera had moved while the candidate camera had not, so those native numbers are observational and cannot establish a causal cost change. Exact native summary files, binary hashes and targeted logs are retained here; raw diagnostics and assemblies remain under build/coverage_cost. See ../../INT-C-cost.md for the decision and qualifications.

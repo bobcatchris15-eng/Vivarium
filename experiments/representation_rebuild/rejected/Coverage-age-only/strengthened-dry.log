@@ -1,0 +1,2 @@
+PASS coverage.render_age_only (41 ms)
+REPR_SELFTEST tests=1 failed=0
