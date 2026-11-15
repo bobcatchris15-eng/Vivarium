@@ -58,7 +58,7 @@ public static class PlantMeshStats
 /// </summary>
 public sealed partial class PlantAssemblyRenderer : Node3D
 {
-    public const float CellSize = 2f;
+    public float CellSize { get; init; } = 2f;
 
     /// <summary>(speciesId, leafMaterial) -> game material. Leaf shapes use leaf:true, wood/flower/fruit leaf:false.</summary>
     public Func<string, bool, Material?>? MaterialProvider;
@@ -221,7 +221,11 @@ public sealed partial class PlantAssemblyRenderer : Node3D
         LeafArea = p.LeafArea, WoodVolume = p.WoodVolume, Height = p.Height, CrownRadius = p.CrownRadius,
     };
 
-    private static (int, int) CellOf(Vec3 p) => ((int)Math.Floor(p.X / CellSize), (int)Math.Floor(p.Z / CellSize));
+    private (int, int) CellOf(Vec3 p)
+    {
+        if (!float.IsFinite(CellSize) || CellSize <= 0) throw new InvalidOperationException("Plant chunk size must be positive and finite");
+        return ((int)Math.Floor(p.X / CellSize), (int)Math.Floor(p.Z / CellSize));
+    }
 
     private void AddPlant(PlantDescriptor snap)
     {

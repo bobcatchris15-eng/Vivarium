@@ -1,5 +1,8 @@
 using System;
+using System.IO;
+using System.Text.Json;
 using Godot;
+using Vivarium.Game.App;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Repr;
 using Vivarium.Sim.Repr.Plant;
@@ -11,11 +14,33 @@ internal static class PlantDemoKit
 {
     public static readonly string[] Species = { "glowbriar", "moonfern", "shadebell" };
 
+    private sealed record Tuning
+    {
+        public GlowbriarGenerator.FormSettings Glowbriar { get; init; } = new();
+        public MoonfernGenerator.FormSettings Moonfern { get; init; } = new();
+        public ShadebellGenerator.FormSettings Shadebell { get; init; } = new();
+        public RendererTuning Renderer { get; init; } = new();
+    }
+    private sealed record RendererTuning
+    {
+        public float ChunkMetres { get; init; } = 2;
+        public float Detail0Pixels { get; init; } = 700;
+        public float Detail1Pixels { get; init; } = 250;
+    }
+    private static readonly Lazy<Tuning> Configuration = new(() =>
+        Main.ArgAfter("--plant-config") is { } path
+            ? JsonSerializer.Deserialize<Tuning>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive=true })
+                ?? throw new InvalidDataException("Empty plant configuration") : new Tuning());
+
+    private static readonly Lazy<GlowbriarGenerator> Briar = new(() => new(Configuration.Value.Glowbriar));
+    private static readonly Lazy<MoonfernGenerator> Fern = new(() => new(Configuration.Value.Moonfern));
+    private static readonly Lazy<ShadebellGenerator> Shrub = new(() => new(Configuration.Value.Shadebell));
+
     public static PlanGenerator Generator(string species) => species switch
     {
-        "glowbriar" => new GlowbriarGenerator(),
-        "moonfern" => new MoonfernGenerator(),
-        _ => new ShadebellGenerator(),
+        "glowbriar" => Briar.Value,
+        "moonfern" => Fern.Value,
+        _ => Shrub.Value,
     };
 
     public static PlantDescriptor Make(ulong worldSeed, string species, ulong plantId, double age, double vigour, Vector3 pos, double yaw = 0, double scale = 1)
@@ -31,7 +56,9 @@ internal static class PlantDemoKit
 
     public static PlantAssemblyRenderer NewRenderer(ReprDemoContext ctx, string name)
     {
-        return new PlantAssemblyRenderer { Name = name, MaterialProvider = ctx.LegacyFloraMaterial };
+        var tune = Configuration.Value.Renderer;
+        return new PlantAssemblyRenderer { Name = name, MaterialProvider = ctx.LegacyFloraMaterial,
+            CellSize = tune.ChunkMetres, Detail0Px = tune.Detail0Pixels, Detail1Px = tune.Detail1Pixels };
     }
 
     public static MeshInstance3D Ground(Vector3 centre, float size)

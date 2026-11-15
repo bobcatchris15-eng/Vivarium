@@ -6,6 +6,7 @@ Tech stack: Godot 4.7.1 .NET Forward+, .NET 8 simulation. The current desktop ha
 Spec: brief.md, refined by .claude/ledger.md. The owner resumed work with Luna and Terra agents under root orchestration on 2026-11-13. Accepted historical work and current verification are distinguished below.
 
 ## Recovery and implementation milestones
+- [ ] P1/P2 graph-plant iteration: reopened on 2026-11-15. Tune the implementation and configurations rather than abandon the graph architecture after a weak candidate. Four native form iterations, configurable growth/shape/batching controls and compiler corrections are recorded in experiments/representation_rebuild/plant-tuning/README.md. Existing plant identity and save compatibility have no value; lifelikeness and believability are the acceptance criteria. Production integration remains open.
 - [x] P2g recovery decision: test and render recovered Forms/catalog. REJECTED for worse quality/higher geometry; source and paired evidence archived, accepted Plant baseline restored (10 tests pass). Production uses existing meshes under INT-F; no new-form rollout claimed.
 - [x] E1/E2: accepted in `68f11193`; WorldSubstrate production coupling, weather, uptake and closed water ledger, eight ecology checks and 90-day diagnostics. Independent review and final integrated long-run evidence remain in REVIEW.
 - [x] INT-L: accepted in `1ba12681`; production Stock/Cached modes, world-fed occlusion, continuous time tables and frame cap, with matched GTX 1080 real-island measurements. See `experiments/representation_rebuild/INT-L.md`.

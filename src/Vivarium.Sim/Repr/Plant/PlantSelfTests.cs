@@ -38,6 +38,52 @@ internal static class PlantTestKit
     public static bool Finite(Vec3 v) => v.IsFinite;
 }
 
+public sealed class PlantMatureCrownSelfTest : IReprSelfTest
+{
+    public string Name => "plant.matureCrown";
+    public string? Run()
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            var generator = PlantTestKit.NewGenerator(i);
+            var plant = generator.Create(804584441, 1);
+            generator.Grow(plant, 1, 1, null);
+            int flowers = plant.Organs.Count(o => o.Type == OrganType.Flower);
+            Console.WriteLine($"CROWN {plant.SpeciesId} organs={plant.Organs.Length} flowers={flowers} leaves={PlantTestKit.FlatCount(plant)} immature={plant.Organs.Count(o=>o.Maturity<.999f)} area={plant.LeafArea} height={plant.Height} radius={plant.CrownRadius}");
+            if (plant.Organs.Any(o => o.Maturity < .999f)) return plant.SpeciesId + ": age-one crown still has unfinished organs";
+            if (i != 1 && flowers == 0) return plant.SpeciesId + ": mature flowering form has no flowers";
+        }
+        return null;
+    }
+}
+
+public sealed class PlantShapeFacingSelfTest : IReprSelfTest
+{
+    public string Name => "plant.shapeFacing";
+    public string? Run()
+    {
+        foreach (int detail in new[] { 0, 1, 2 })
+        {
+            var leaf = PlantCompiler.BuildShapeMesh(new OrganShape { Type = OrganType.Leaf,
+                WidthProfile = PlantShapes.Profile(t => .3*Math.Sin(Math.PI*t)) }, detail);
+            for (int k = 0; k < leaf.Indices.Count; k += 3)
+            {
+                var a=leaf.Position(leaf.Indices[k]); var b=leaf.Position(leaf.Indices[k+1]); var c=leaf.Position(leaf.Indices[k+2]);
+                var cross=(b-a).Cross(c-a);
+                if(cross.LengthSq>1e-18 && cross.Y>=0) return "leaf adaxial side is back-facing at detail " + detail;
+            }
+            var bell = PlantCompiler.BuildShapeMesh(new OrganShape { Type = OrganType.Flower }, detail);
+            for (int i = 0; i < bell.VertexCount; i++)
+            {
+                var p=bell.Position(i); var n=bell.NormalAt(i);
+                if(p.Z>.2 && p.Z<.9 && new Vec3(p.X,p.Y,0).Dot(n)<=0)
+                    return "bell exterior normal points inward at detail " + detail;
+            }
+        }
+        return null;
+    }
+}
+
 public sealed class PlantDeterminismSelfTest : IReprSelfTest
 {
     public string Name => "plant.determinism";

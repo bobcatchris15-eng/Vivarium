@@ -225,7 +225,7 @@ public sealed class PlanBuilder
     }
 
     /// <summary>
-    /// Freezes the design: canonical ordering, growth-window cut (emergence &gt; 1 is never reached), and
+    /// Freezes the design: canonical ordering, maturation normalized to age one, and
     /// growth-time accommodation of blades (yaw search, wood > petioles > blades priority).
     /// </summary>
     public PlantPlan Finish(string speciesId)
@@ -235,11 +235,13 @@ public sealed class PlanBuilder
         var newIndex = new int[n];
         for (int k = 0; k < n; k++) newIndex[order[k]] = k;
         var items = new List<PotOrgan>(n);
+        double growthWindow = n == 0 ? 1 : Math.Max(1, _organs.Max(o => o.Emerge + o.Dur));
         foreach (int i in order)
         {
             var p = _organs[i];
-            if (p.Emerge > 1.0) break; // sorted: everything after this is beyond the life cycle
             var c = p.Clone();
+            c.Emerge /= growthWindow;
+            c.Dur /= growthWindow;
             c.Parent = p.Parent < 0 ? -1 : newIndex[p.Parent];
             c.Gen = items.Count;
             items.Add(c);

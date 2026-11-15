@@ -89,14 +89,17 @@ public sealed class PlantSpecimensDemo : IReprDemo
         for (int i = 0; i < p.Organs.Length; i++)
             if (p.Organs[i].Parent >= 0 && p.Organs[i].Type is OrganType.Leaf or OrganType.Leaflet or OrganType.Petiole or OrganType.Flower)
                 kids[p.Organs[i].Parent]++;
-        int best = -1;
+        int best = -1; double bestScore = double.NegativeInfinity;
         for (int i = 0; i < p.Organs.Length; i++)
         {
             var o = p.Organs[i];
             if (o.Type != OrganType.Axis || o.Order < 1) continue;
             if (o.Start.Y < 0.3 * H || o.Start.Y > 0.85 * H) continue;
-            if (kids[i] >= 3) { best = i; break; }
-            if (best < 0 || kids[i] > kids[best]) best = i;
+            // A front-side joint is inspectable; the old first interior joint
+            // often placed the camera behind several opaque blades.
+            if (kids[i] == 0) continue;
+            double score = o.Start.Z - .1*Math.Abs(o.Start.Y/Math.Max(H,.01)-.5);
+            if (score > bestScore) { best = i; bestScore = score; }
         }
         if (best < 0) return (new Vector3(0, 0.5f * H, 0), false);
         var a = p.Organs[best];

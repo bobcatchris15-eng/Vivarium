@@ -34,7 +34,7 @@ public sealed class PlantAssembly
 ///   * Flower / fruit: UV2 = (1.45, 0.92) for bells and chalices (legacy glowbriar convention),
 ///     (1.75, 0.98) for fruit.
 ///   * COLOR: sRGB-encoded. The shader linearises COLOR, so linear descriptor colours are encoded here.
-///   * Normals: smooth normals; tubes have analytic radial normals, laminae use RecomputeNormals.
+///   * Normals: tubes have analytic radial normals; laminae shade their actual cup/twist with endpoint fallbacks.
 /// Instance transform: columns are X (= Up x Z, scaled by real half width / profile max), Y (= Up, orthogonal
 /// to Z), Z (= dir * real length), translation = Start. Unit shape: base at origin, length 1 along +Z.
 /// </summary>
@@ -232,6 +232,16 @@ public static class PlantCompiler
         // Sample list: optional sink sample, then s = 0..1 (plus one flare sample near a thick parent junction).
         var sList = new List<double>();
         for (int k = 0; k <= nSeg; k++) sList.Add(k / (double)nSeg);
+        // A child attaches to the exact curve, not the chord between arbitrary
+        // tessellation rings. Put a parent ring at each emerged attachment so
+        // stronger authored arches cannot leave branch bases floating.
+        foreach (var child in p.Organs)
+            if (child.Parent == idx && o.Maturity > 1e-6f)
+            {
+                double attachment = child.AttachT / o.Maturity;
+                if (attachment > 0 && attachment < 1 && !sList.Any(s => Math.Abs(s-attachment) < 1e-7)) sList.Add(attachment);
+            }
+        sList.Sort();
         if (dExt > 0 && detail < 2 && rs >= 0.002 && len > 5 * rs)
         {
             double sf = Math.Min(0.5, 2.5 * rs / len);
@@ -383,8 +393,10 @@ public static class PlantCompiler
     private static MeshData BuildLamina(OrganShape s, int detail)
     {
         var m = new MeshData();
-        int L = detail == 0 ? 10 : detail == 1 ? 5 : 2;
-        int W = detail == 0 ? 4 : detail == 1 ? 2 : 1;
+        // Keep a midrib and cupped cross-section at every level. The former
+        // two-span far blade flattened curved fern pinnae into angular plates.
+        int L = detail == 0 ? 14 : detail == 1 ? 8 : 4;
+        int W = detail == 2 ? 2 : 4;
         double pmax = ProfileMax(s);
         var cA = EncRgb(s.ColorAdaxial);
         var cB = EncRgb(s.ColorAbaxial);
@@ -411,7 +423,7 @@ public static class PlantCompiler
                     + s.EdgeWave * 0.1 * Math.Sin(s.EdgeWaveFreq * Math.Tau * t) * frac * frac;
                 if (detail == 0 && (j == 0 || j == W) && s.Serration > 0)
                     xr *= 1 - s.Serration * 0.5 * (1 + Math.Cos(s.SerrationFreq * Math.Tau * t));
-                if (detail == 0 && j == W / 2) off += 0.06 * pmax;   // raised midrib ridge
+                if (j == W / 2) off += 0.012 * pw;   // shallow vein, tapering into the base and tip
                 var pos = new Vec3(xr, yc + cy * off, zc + sy * off);
                 var col = Mix(cA, cB, 0.25 + 0.5 * frac);
                 // Analytic adaxial normal from the midrib frame (RecomputeNormals leaves base/tip rows at zero,
@@ -424,9 +436,21 @@ public static class PlantCompiler
             for (int j = 0; j < W; j++)
             {
                 int a = idx[i, j], b = idx[i, j + 1], c = idx[i + 1, j], d = idx[i + 1, j + 1];
-                m.AddTriangle(a, c, b);
-                m.AddTriangle(b, c, d);
+                // Godot front faces are clockwise from the adaxial side.
+                m.AddTriangle(a, b, c);
+                m.AddTriangle(b, d, c);
             }
+        }
+        // Shade the actual cup/twist instead of assigning one normal across
+        // each row. Collapsed endpoint rows retain their analytic fallback.
+        for (int i = 0; i <= L; i++) for (int j = 0; j <= W; j++)
+        {
+            var along = m.Position(idx[Math.Min(L,i+1),j])-m.Position(idx[Math.Max(0,i-1),j]);
+            var across = m.Position(idx[i,Math.Min(W,j+1)])-m.Position(idx[i,Math.Max(0,j-1)]);
+            var n = along.Cross(across);
+            if (n.LengthSq <= 1e-18) continue;
+            n = n.Normalized(); int v = idx[i,j]*3;
+            m.Normals[v]=(float)n.X; m.Normals[v+1]=(float)n.Y; m.Normals[v+2]=(float)n.Z;
         }
         return m;
     }
@@ -472,9 +496,12 @@ public static class PlantCompiler
         if (!ellipsoid)
         {
             int centre = m.AddVertex(Vec3.Zero, -Vec3.Forward, cA[0], cA[1], cA[2], 1, 0, 0, u2x, u2y);
-            for (int j = 0; j < R; j++) m.AddTriangle(centre, ids[0, (j + 1) % R], ids[0, j]);
+            for (int j = 0; j < R; j++) m.AddTriangle(centre, ids[0, j], ids[0, (j + 1) % R]);
         }
         m.RecomputeNormals();
+        // RecomputeNormals uses a right-handed cross; these indices are Godot
+        // clockwise, so the exterior shading normal is its negative.
+        for (int i = 0; i < m.Normals.Count; i++) m.Normals[i] = -m.Normals[i];
         return m;
     }
 

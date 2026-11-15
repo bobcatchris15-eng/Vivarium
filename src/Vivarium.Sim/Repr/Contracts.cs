@@ -182,7 +182,7 @@ public sealed class OrganShape
     public string Name = "";
     public OrganType Type;
     public float[] WidthProfile = Array.Empty<float>();
-    public float LengthToWidth = 2.5f;
+    public float LengthToWidth = 2.5f; // authoring hint; organ RadiusStart is the rendered peak half-width
     public float MidribCurl;          // radians of downward arc along the midrib
     public float CrossCurl;           // radians of fold/cupping across the blade (+ = V up)
     public float Twist;               // radians along the midrib

@@ -1,0 +1,49 @@
+{
+  "Glowbriar": {
+    "CaneCount": 6,
+    "CaneDroop": 0.55,
+    "CaneElevationMin": 0.7,
+    "CaneElevationMax": 1.15,
+    "CaneLengthMin": 0.65,
+    "CaneLengthMax": 1.1,
+    "BranchLength": 0.34,
+    "TwigLength": 0.2,
+    "LeafWidthRatio": 0.29,
+    "LeafLengthMin": 0.12,
+    "LeafLengthMax": 0.17,
+    "FlowerLength": 0.035,
+    "FlowerHalfWidth": 0.016,
+    "BranchCount": 4,
+    "LeafNodes": 5
+  },
+  "Moonfern": {
+    "MinFronds": 6,
+    "FrondDroop": 0.7,
+    "ElevationMin": 0.82,
+    "ElevationMax": 1.35,
+    "FrondLengthMin": 0.3,
+    "FrondLengthMax": 0.51,
+    "PinnaLengthRatio": 0.24,
+    "PinnaPairs": 14,
+    "PinnaWidthRatio": 0.18,
+    "FrondGrowthDuration": 0.65,
+    "PinnaGrowthDuration": 0.1
+  },
+  "Shadebell": {
+    "ForkDroop": 0.45,
+    "FirstTier": 0.16,
+    "TierSpacing": 0.12,
+    "TrunkLength": 1.35,
+    "LowerForkLength": 0.92,
+    "BranchLength": 0.48,
+    "LeafLengthMin": 0.22,
+    "LeafLengthMax": 0.27,
+    "FlowerLength": 0.038,
+    "FlowerHalfWidth": 0.018
+  },
+  "Renderer": {
+    "ChunkMetres": 2,
+    "Detail0Pixels": 1000000000,
+    "Detail1Pixels": 0
+  }
+}

@@ -152,8 +152,23 @@ public static class ReprReviewRunner
             if (selectedShots.Count == 0) throw new InvalidOperationException($"No shots selected for {demo.Name}: {shotArg}");
             var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var shotsOut = new List<object>();
-            foreach (var shot in demo.Shots)
+            // Reuse explicit cameras across geometry/configuration iterations.
+            var referenceCameras = new Dictionary<string, (Vector3 Eye, Vector3 Target, float Fov)>();
+            if (Main.ArgAfter("--repr-camera-reference") is { } cameraPath)
             {
+                using var reference = JsonDocument.Parse(File.ReadAllText(cameraPath));
+                foreach (var item in reference.RootElement.GetProperty("shots").EnumerateArray())
+                {
+                    var e = item.GetProperty("eye"); var t = item.GetProperty("target");
+                    referenceCameras[item.GetProperty("name").GetString()!] = (
+                        new Vector3(e[0].GetSingle(), e[1].GetSingle(), e[2].GetSingle()),
+                        new Vector3(t[0].GetSingle(), t[1].GetSingle(), t[2].GetSingle()), item.GetProperty("fov_deg").GetSingle());
+                }
+            }
+            foreach (var authoredShot in demo.Shots)
+            {
+                var shot = referenceCameras.TryGetValue(authoredShot.Name, out var framing)
+                    ? authoredShot with { Eye = framing.Eye, Target = framing.Target, FovDeg = framing.Fov } : authoredShot;
                 // Preserve every logical state/LOD transition even when capturing a subset.
                 demo.ApplyVariant(shot.Variant);
                 if (requestedShots != null && !requestedShots.Contains(shot.Name)) continue;
@@ -215,6 +230,10 @@ public static class ReprReviewRunner
             var demoReport = new
             {
                 demo = demo.Name, seed, machine, env_overrides = envResult, build_ms = R(buildMs, 1), settle_frames = settle,
+                game_module = typeof(ReprReviewRunner).Module.ModuleVersionId,
+                sim_module = typeof(Vivarium.Sim.Repr.Plant.PlantPlan).Module.ModuleVersionId,
+                plant_config = Main.ArgAfter("--plant-config") is { } configPath ? File.ReadAllText(configPath) : null,
+                camera_reference = Main.ArgAfter("--repr-camera-reference"),
                 managed_bytes_per_frame_baseline = R(baseline, 0), shots = shotsOut,
             };
             File.WriteAllText(Path.Combine(demoDir, "report.json"), JsonSerializer.Serialize(demoReport, new JsonSerializerOptions { WriteIndented = true }));

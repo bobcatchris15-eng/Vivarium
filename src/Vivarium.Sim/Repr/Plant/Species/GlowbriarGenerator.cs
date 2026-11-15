@@ -4,7 +4,7 @@ using Vivarium.Sim.Core;
 namespace Vivarium.Sim.Repr.Plant;
 
 /// <summary>
-/// Glowbriar: low woody shrub with arching canes from a short stool. Architecture: 5 canes (order 1), 3 side
+/// Glowbriar: low woody shrub with arching canes from a short stool. Architecture: 6 canes (order 1), 4 side
 /// branches per cane (order 2), 2 green twigs per branch (order 3). Phyllotaxy is OPPOSITE DECUSSATE (pairs
 /// rotated 90 degrees per node, as in the legacy cane builder) with leaves on petioles at nodes of the twigs.
 /// Recurved thorns on canes; one pendant emissive chalice per branch (legacy: 16-22 chalices).
@@ -12,10 +12,34 @@ namespace Vivarium.Sim.Repr.Plant;
 /// </summary>
 public sealed class GlowbriarGenerator : PlanGenerator
 {
+    public sealed record FormSettings
+    {
+        public int CaneCount { get; init; } = 6;
+        public int BranchCount { get; init; } = 4;
+        public int LeafNodes { get; init; } = 5;
+        public double CaneDroop { get; init; } = 0.55;
+        public double CaneElevationMin { get; init; } = 0.7;
+        public double CaneElevationMax { get; init; } = 1.15;
+        public double CaneLengthMin { get; init; } = 0.65;
+        public double CaneLengthMax { get; init; } = 1.10;
+        public double BranchLength { get; init; } = 0.34;
+        public double TwigLength { get; init; } = 0.20;
+        public double LeafWidthRatio { get; init; } = 0.29;
+        public double LeafLengthMin { get; init; } = 0.12;
+        public double LeafLengthMax { get; init; } = 0.17;
+        public double FlowerLength { get; init; } = 0.035;
+        public double FlowerHalfWidth { get; init; } = 0.016;
+    }
+
+    private readonly FormSettings _form;
+    public GlowbriarGenerator() : this(new FormSettings()) { }
+    public GlowbriarGenerator(FormSettings form) => _form = form ?? throw new ArgumentNullException(nameof(form));
     public override string SpeciesId => "glowbriar";
 
     protected override void Design(PlanBuilder b)
     {
+        // Mature form controls: cane count, arch, branch reach and blade size.
+        var form = _form;
         var up = Vec3.Up;
         ushort leafShape = b.AddShape(new OrganShape
         {
@@ -38,12 +62,12 @@ public sealed class GlowbriarGenerator : PlanGenerator
         int stool = b.AddAxis(-1, 0, up + new Vec3(0.05, 0, 0.03), 0.12, Vec3.Zero, 0.020, 0.017, 0, Tissue.Wood,
             0, 0.25);
 
-        for (int c = 0; c < 5; c++)
+        for (int c = 0; c < form.CaneCount; c++)
         {
-            double az = c * Math.Tau / 5 + b.Range(-0.3, 0.3);
-            var caneDir = PlantMath.Horizontal(az) * 0.62 + up * 0.78;
-            int cane = b.AddAxis(stool, b.Range(0.35, 0.6), caneDir, b.Range(0.9, 1.05), up * -0.3,
-                0.0165, 0.0055, 1, Tissue.Wood, 0.03 * b.Draw(), 0.2);
+            double az = c * Math.Tau / form.CaneCount + b.Range(-0.3, 0.3);
+            var caneDir = PlantMath.Horizontal(az) * 0.62 + up * b.Range(form.CaneElevationMin, form.CaneElevationMax);
+            int cane = b.AddAxis(stool, b.Range(0.35, 0.6), caneDir, b.Range(form.CaneLengthMin, form.CaneLengthMax), up * -form.CaneDroop * b.Range(0.75, 1.25) + PlantMath.Horizontal(az) * 0.15,
+                0.013, 0.0025, 1, Tissue.Wood, 0.03 * b.Draw(), 0.2);
 
             // Recurved thorns along the cane internodes.
             for (int th = 0; th < 8; th++)
@@ -55,34 +79,36 @@ public sealed class GlowbriarGenerator : PlanGenerator
                 b.AddAxis(cane, tt, tdir, 0.016, Vec3.Zero, 0.0035, 0.0003, 2, Tissue.Bark, 0.03 * b.Draw(), 0.12);
             }
 
-            for (int k = 0; k < 3; k++)
+            for (int k = 0; k < form.BranchCount; k++)
             {
-                double baz = b.Range(0, Math.Tau);
+                double baz = az + ((k & 1) == 0 ? 0.8 : -0.8) + b.Range(-0.25, 0.25);
                 var bo = PlantMath.Horizontal(baz);
-                var brDir = bo * 0.55 + up * 0.8;
-                int br = b.AddAxis(cane, 0.3 + 0.25 * k + b.Range(-0.04, 0.04), brDir,
-                    0.24 * (1 - 0.15 * k) * b.Range(0.9, 1.1), up * 0.08, 0.0095, 0.0035, 2, Tissue.Wood,
+                var brDir = bo * b.Range(0.55, 0.9) + up * b.Range(0.35, 0.9);
+                double branchPos = 0.13 + 0.78 * (k / (double)Math.Max(1, form.BranchCount - 1));
+                int br = b.AddAxis(cane, Math.Clamp(branchPos + b.Range(-0.05, 0.05), 0.08, 0.98), brDir,
+                    form.BranchLength * (1 - 0.25 * k / Math.Max(1, form.BranchCount - 1.0)) * b.Range(0.72, 1.25), up * b.Range(-0.3, 0.15), 0.0065, 0.0018, 2, Tissue.Wood,
                     0.03 * b.Draw(), 0.18);
 
                 for (int tw = 0; tw < 2; tw++)
                 {
-                    double twigT = tw == 0 ? 0.45 : 0.85;
-                    var twigDir = PlantMath.Horizontal(baz + (tw == 0 ? 0.9 : -0.9)) * 0.7 + up * 0.7;
-                    int twig = b.AddAxis(br, twigT, twigDir, 0.13, up * 0.05, 0.0045, 0.0016, 3, Tissue.Green,
+                    double twigT = tw == 0 ? b.Range(0.38, 0.58) : 0.97;
+                    var twigDir = PlantMath.Horizontal(baz + (tw == 0 ? 0.9 : -0.9)) * 0.8 + up * b.Range(0.25, 0.9);
+                    int twig = b.AddAxis(br, twigT, twigDir, form.TwigLength, up * b.Range(-0.25, 0.1), 0.0045, 0.0016, 3, Tissue.Green,
                         0.03 * b.Draw(), 0.14);
 
                     // Internodes shorten toward the tip: nodes sit closer together near the end of the twig.
-                    for (int nd = 0; nd < 4; nd++)
+                    for (int nd = 0; nd < form.LeafNodes; nd++)
                     {
-                        double nt = 0.25 + 0.2 * nd;
+                        double nodeProgress = nd / (double)Math.Max(1, form.LeafNodes - 1);
+                        double nt = Math.Clamp(0.16 + 0.79 * nodeProgress + b.Range(-0.025, 0.025), 0.1, 0.98);
                         for (int sd = 0; sd < 2; sd++)
                         {
                             double la = nd * (Math.PI / 2) + sd * Math.PI + baz;
                             var h = PlantMath.Horizontal(la);
                             int pet = b.AddAxis(twig, nt, h * 0.6 + up * 0.8, 0.02, Vec3.Zero, 0.0016, 0.0010, 4,
                                 Tissue.Green, 0.03 * b.Draw(), 0.1, OrganFlags.None, OrganType.Petiole);
-                            double ll = b.Range(0.09, 0.12);
-                            b.AddFlat(pet, 1.0, h * 0.9 + up * 0.4, ll, ll * 0.2, 0.0004, OrganType.Leaf, leafShape,
+                            double ll = b.Range(form.LeafLengthMin, form.LeafLengthMax) * (1.0 - 0.20 * nodeProgress);
+                            b.AddFlat(pet, 1.0, h * 0.9 + up * 0.4, ll, ll * form.LeafWidthRatio, 0.0004, OrganType.Leaf, leafShape,
                                 5, 0.03 * b.Draw(), 0.14);
                         }
                     }
@@ -91,7 +117,7 @@ public sealed class GlowbriarGenerator : PlanGenerator
                 // One pendant luminous chalice per branch, hanging from a pedicel on the branch.
                 int ped = b.AddAxis(br, 0.7, Vec3.Down * 0.95 + bo * 0.3, 0.035, Vec3.Zero, 0.0011, 0.0008, 5,
                     Tissue.Green, 0.03 * b.Draw(), 0.12);
-                b.AddFlat(ped, 1.0, Vec3.Down * 0.9 + bo * 0.3, 0.02, 0.009, 0.008, OrganType.Flower, chalice, 6,
+                b.AddFlat(ped, 1.0, Vec3.Down * 0.9 + bo * 0.3, form.FlowerLength, form.FlowerHalfWidth, 0.008, OrganType.Flower, chalice, 6,
                     0.03 * b.Draw(), 0.15, OrganFlags.Emissive);
             }
         }
