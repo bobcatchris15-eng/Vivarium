@@ -7,19 +7,19 @@ namespace Vivarium.Sim.Water;
 public readonly record struct SurfaceFluidCell(int X, int Z, double Volume, double EastFlux, double NorthFlux, double SlopeX = 0, double SlopeZ = 0, double EastSection = 0, double NorthSection = 0, double QuietSeconds = 0, double? CachedHead = null, double? HeadVolume = null, bool Dirty = false, bool Established = false, bool EstablishPending = false, bool Sleeping = false);
 public sealed record FluidInputBatch(double Seconds, Spring[] Springs, double Evaporation, double Infiltration, double WaterTable);
 public sealed record SurfaceFluidState(SurfaceFluidCell[] Cells, FluidParticle[] Airborne,
-    double Time, double Remainder, double Spacing, Dictionary<ulong, double> SourceRemainders, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FluidInputBatch[]? PendingInputs = null, long WorkStamp = 0, long NextRegionStamp = 0);
+    double Time, double Remainder, double Spacing, Dictionary<ulong, double> SourceRemainders, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FluidInputBatch[]? PendingInputs = null, long WorkStamp = 0, long NextRegionStamp = 0, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int PoolModelVersion = 0, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SurfacePoolState[]? Pools = null);
 public readonly record struct SurfaceFluidSample(Vec2 Position, double Head, double Depth, Vec2 Velocity, double Volume, double SlopeX = 0, double SlopeZ = 0, double? SupportHeight = null);
 public sealed record SurfaceFluidSnapshot(long Version, double Time, double Spacing,
     SurfaceFluidSample[] Cells, FluidParticle[] Airborne, int EstablishedCells = 0, int SleepingCells = 0, int Tiles = 0);
 
 /// <summary>
 /// Sparse tiled fronts use conservative damped virtual pipes on triangulated support.
-/// Established surfaces retain a local current (including still pools); new discharge
-/// is conveyed to active edges, while filling and disturbances wake affected cells.
+/// Fully submerged settled pools use one conserved volume and common hydrostatic head.
+/// Their explicit boundary faces exchange water with active channels and wet/dry fronts.
 /// Legacy airborne parcels settle into supported storage without emitting new particles.
 /// A cell's free surface is the inverse of its geometric capacity, never an ecological depth field.
 /// </summary>
-public sealed class SurfaceFluidDynamics
+public sealed partial class SurfaceFluidDynamics
 {
     public const double StepSeconds = 1.0 / 60, DefaultSpacing = .0125;
     public const double ParcelVolume = .000005;
@@ -50,11 +50,6 @@ public sealed class SurfaceFluidDynamics
         public double NextSlopeX, NextSlopeZ, Evaporated, Infiltrated, Recharged, Escaped;
         public double Pressure, Diagonal, Rhs, CoefficientEast, CoefficientNorth;
     }
-    private sealed class Region
-    {
-        public readonly List<Cell> Cells = new();
-        public readonly PriorityQueue<(Cell Cell,double Sill),double> Outlets = new();
-    }
     private readonly Dictionary<(double X,double Z), (Cell Cell,double Weight)[]> _apertures = new();
     private void EmitSpring(Vec2 position,double volume)
     {
@@ -70,93 +65,11 @@ public sealed class SurfaceFluidDynamics
             targets=list.ToArray();_apertures.Add(key,targets);
         }
         foreach(var (c,weight) in targets)
-        {if(c.Established)Wake(c);c.QuietSeconds=0;c.Sleeping=false;c.Volume+=volume*weight;c.Head=Head(c,c.Volume);_dirty.Add((c.X,c.Z));}
-    }
-    private bool _regionsDirty=true;
-    private long _nextRegionStamp;
-    private readonly List<Cell> _regionStack = new();
-    public int EstablishedCells => _cells.Values.Count(c=>c.Established);
-    public void OnSourcesChanged()
-    {
-        foreach(var c in _cells.Values)
-        {c.Established=false;c.EstablishPending=false;c.Sleeping=false;c.QuietSeconds=0;c.Region=null;}
-        _regionsDirty=true;_nextRegionStamp=0;Version++;
-    }
-    private void Wake(Cell c)
-    {
-        c.EstablishPending=false;c.Established=false;c.Sleeping=false;c.QuietSeconds=0;c.Region=null;_regionsDirty=true;
-    }
-    private void RebuildRegions(bool restoring=false)
-    {
-        if(!_regionsDirty || (!restoring && _stamp<_nextRegionStamp))return;
-        if(!restoring)
         {
-            _nextRegionStamp=_stamp+8;
-            foreach(var c in _cells.Values)if(c.EstablishPending)
-            {if(c.QuietSeconds>=1&&c.Volume>.00005*Spacing*Spacing){c.Established=true;c.Sleeping=true;}c.EstablishPending=false;}
+            double amount=volume*weight;
+            if(c.Region is {} region){region.Volume+=amount;region.Moment-=(c.Position-region.Centre)*amount;}
+            else{c.QuietSeconds=0;c.Sleeping=false;c.Volume+=amount;c.Head=Head(c,c.Volume);_dirty.Add((c.X,c.Z));}
         }
-        // Canonical one-cell halo makes region topology independent of cold cache history.
-        var established=_cells.Values.Where(c=>c.Established).ToArray();
-        foreach(var c in established){Get((c.X-1,c.Z));Get((c.X+1,c.Z));Get((c.X,c.Z-1));Get((c.X,c.Z+1));}
-        foreach(var c in _cells.Values)c.Region=null;
-        foreach(var tile in _tileOrder)foreach(var start in tile.Cells)
-        {
-            if(start==null||!start.Established||start.Region!=null)continue;
-            var region=new Region();start.Region=region;_regionStack.Clear();_regionStack.Add(start);
-            while(_regionStack.Count>0)
-            {
-                var c=_regionStack[^1];_regionStack.RemoveAt(_regionStack.Count-1);region.Cells.Add(c);
-                void Visit(Cell? n,bool east,bool positive)
-                {
-                    if(n==null)return;
-                    if(n.Established && Math.Floor(n.Head/.005)==Math.Floor(start.Head/.005))
-                    {if(n.Region==null){n.Region=region;_regionStack.Add(n);}return;}
-                    var owner=positive?c:n;int i=east?2:6,j=east?5:7;
-                    double sill=Math.Min(owner.Ground[i],Math.Min(owner.Ground[j],owner.Ground[8]));
-                    double level=Math.Max(sill,n.Head);
-                    region.Outlets.Enqueue((n,sill),level);
-                }
-                Visit(c.EastCell,true,true);Visit(c.NorthCell,false,true);Visit(c.West,true,false);Visit(c.South,false,false);
-            }
-        }
-        _regionsDirty=restoring && _cells.Values.Any(c=>c.EstablishPending);
-    }
-    private void Receive(Cell c,double amount,WaterBudget budget)
-    {
-        int hops=0;
-        while(c.Established && hops++<4096)
-        {
-            double entryHead=c.Head;
-            var region=c.Region;
-            Cell? outlet=null;double sill=0;
-            if(region!=null)
-            {
-                while(region.Outlets.TryPeek(out var candidate,out double cached))
-                {
-                    var target=candidate.Cell;
-                    if(target.Established && (target.Region==region || target.Head>=c.Head-1e-9))
-                    {region.Outlets.Dequeue();continue;}
-                    double level=Math.Max(candidate.Sill,target.Head+(target.Volume-target.HeadVolume)/(Spacing*Spacing));
-                    if(Math.Abs(level-cached)>1e-9)
-                    {region.Outlets.Dequeue();region.Outlets.Enqueue(candidate,level);continue;}
-                    if(level<=entryHead+EstablishedHeadTolerance){outlet=target;sill=candidate.Sill;}
-                    break;
-                }
-            }
-            // An established body conveys input to its lowest available active edge;
-            // a closed/higher edge wakes the body so the pool fills and rises.
-            if(outlet!=null)
-            {
-                region!.Outlets.Dequeue();
-                region.Outlets.Enqueue((outlet,sill),Math.Max(sill,outlet.Head+(outlet.Volume+(outlet.Established?0:amount)-outlet.HeadVolume)/(Spacing*Spacing)));
-                c=outlet;
-            }
-            else Wake(c);
-        }
-        if(c.Established)Wake(c);
-        if(!c.InDomain){budget.BoundaryOutflow+=amount;return;}
-        if(c.Ground[4]<WaterTable){budget.GroundwaterRecharge+=amount;return;}
-        c.Volume+=amount;Mark(c);
     }
     private sealed class Tile
     {
@@ -198,7 +111,7 @@ public sealed class SurfaceFluidDynamics
     { if (c.DirtyStamp != _stamp) { c.DirtyStamp = _stamp; c.FrameVolume = c.Volume; _changed.Add(c); } }
     private void Each(int count, Action<int> body)
     {
-        int workers = count < 4096 ? 1 : Math.Clamp(WorkerCount, 1, 16);
+        int workers = count < 16384 ? 1 : Math.Clamp(WorkerCount, 1, 16);
         if (workers == 1) { for (int i = 0; i < count; i++) body(i); return; }
         Parallel.For(0, workers, worker =>
         { int lo = (int)((long)count * worker / workers), hi = (int)((long)count * (worker + 1) / workers);
@@ -206,6 +119,7 @@ public sealed class SurfaceFluidDynamics
     }
     private void AddFace(Cell a, Cell b, bool east)
     {
+        if (a.Region != null && a.Region == b.Region) return;
         if (east ? a.EastStamp == _stamp : a.NorthStamp == _stamp) return;
         if (east) a.EastStamp = _stamp; else a.NorthStamp = _stamp;
         if (_workCount == _work.Length) Array.Resize(ref _work, _work.Length * 2);
@@ -220,7 +134,18 @@ public sealed class SurfaceFluidDynamics
         get => _infiltrationFactor;
         set { _infiltrationFactor = value; _infiltrationVersion++; }
     }
-    public double WaterTable { get; set; } = double.NegativeInfinity;
+    private double _waterTable = double.NegativeInfinity;
+    public double WaterTable
+    {
+        get => _waterTable;
+        set
+        {
+            if (_waterTable == value) return;
+            EnsurePoolModel();
+            foreach (var region in _regions.ToArray()) Wake(region.Cells[0]);
+            _waterTable = value; _nextRegionStamp = 0;
+        }
+    }
     public double Time { get; private set; }
     public double Remainder { get; private set; }
     public long Version { get; private set; }
@@ -265,7 +190,9 @@ public sealed class SurfaceFluidDynamics
     /// <summary>Invalidate only cached support. Stored volume/momentum remain untouched.</summary>
     public void OnGeometryChanged(Vec2? minimum = null, Vec2? maximum = null)
     {
-        _infiltrationVersion++; _regionsDirty=true;_nextRegionStamp=0;
+        EnsurePoolModel();
+        foreach (var region in _regions.ToArray()) Wake(region.Cells[0]);
+        _infiltrationVersion++; _nextRegionStamp=0;
         foreach (var (key, c) in _cells)
         { var p = Center(key); if (minimum is { } lo && maximum is { } hi && (p.X < lo.X - Spacing || p.X > hi.X + Spacing || p.Z < lo.Z - Spacing || p.Z > hi.Z + Spacing)) continue; ReadGround(key, c); if (c.Volume > 0) _dirty.Add(key); }
         Version++;
@@ -335,6 +262,7 @@ public sealed class SurfaceFluidDynamics
     }
     public void Add(Vec3 p, Vec3 velocity, double volume, ulong source = 0)
     {
+        EnsurePoolModel();
         if (!p.IsFinite || !velocity.IsFinite || !double.IsFinite(volume) || volume < 0) throw new ArgumentException("Invalid liquid input");
         if (volume == 0) return;
         // New inputs enter the terrain-confined solver. Only archived parcels use the
@@ -344,6 +272,7 @@ public sealed class SurfaceFluidDynamics
     }
     public double AddWater(Vec2 p, double radius, double volume)
     {
+        EnsurePoolModel();
         if (!p.IsFinite || !double.IsFinite(radius) || radius < 0 || !double.IsFinite(volume) || volume < 0) throw new ArgumentException("Invalid water tool input");
         if (!_domain.Contains(p) || volume == 0) return 0;
         if (radius < Spacing) { Deposit(p, volume, Vec2.Zero); Version++; return volume; }
@@ -357,6 +286,7 @@ public sealed class SurfaceFluidDynamics
     }
     public void ImportLegacySquare(Vec2 minimum, double size, double volume, Vec2 velocity)
     {
+        EnsurePoolModel();
         if (volume <= 0) return; var lo = Key(minimum); var hi = Key(minimum + new Vec2(size, size));
         var targets = new List<((int, int) Key, double Fraction)>(); double bottom = double.PositiveInfinity, top = double.NegativeInfinity;
         for (int z = lo.Z; z <= hi.Z; z++) for (int x = lo.X; x <= hi.X; x++)
@@ -383,6 +313,7 @@ public sealed class SurfaceFluidDynamics
     }
     public void ResolveLegacyFractions(IReadOnlyList<Spring> springs, IReadOnlyList<FluidParticle> historical)
     {
+        EnsurePoolModel();
         foreach (var (id, volume) in _pending)
         {
             if (volume == 0) continue; var source = springs.FirstOrDefault(s => s.Id.Value == id);
@@ -402,6 +333,7 @@ public sealed class SurfaceFluidDynamics
     }
     public double Remove(Vec2 p, double radius, double volume)
     {
+        EnsurePoolModel();
         if (!p.IsFinite || !double.IsFinite(radius) || radius < 0 || !double.IsFinite(volume) || volume < 0) throw new ArgumentException("Invalid liquid removal");
         double removed = 0;
         foreach (var (key, c) in _cells.OrderBy(k => k.Key.Item2).ThenBy(k => k.Key.Item1))
@@ -410,10 +342,11 @@ public sealed class SurfaceFluidDynamics
         { var f = _air[i]; if ((f.Position.XZ - p).Length > radius) continue; double take = Math.Min(f.Volume, volume - removed); removed += take; if (take >= f.Volume) _air.RemoveAt(i); else _air[i] = f with { Volume = f.Volume - take }; }
         Version++; return removed;
     }
-    public void QueueTime(double seconds) { if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentException("Invalid queued fluid time"); Remainder += seconds; }
+    public void QueueTime(double seconds) { EnsurePoolModel(); if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentException("Invalid queued fluid time"); Remainder += seconds; }
     public void Advance(double seconds, IReadOnlyList<Spring> springs, WaterBudget budget, double evaporation = 0, double infiltration = 0, int maximumSteps = int.MaxValue)
     {
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentException("Invalid fluid time");
+        EnsurePoolModel();
         long allocationStart = GC.GetAllocatedBytesForCurrentThread(); Remainder += seconds; int steps = 0; var timer = System.Diagnostics.Stopwatch.StartNew();
         while (Remainder + 1e-12 >= StepSeconds && steps++ < maximumSteps)
         {
@@ -469,6 +402,8 @@ public sealed class SurfaceFluidDynamics
     {
         long stamp = System.Diagnostics.Stopwatch.GetTimestamp();
         void Stage(string name) { if (StageTimed == null) return; long now = System.Diagnostics.Stopwatch.GetTimestamp(); StageTimed(name, System.Diagnostics.Stopwatch.GetElapsedTime(stamp, now).TotalMilliseconds); stamp = now; }
+        _stamp++; _wet.Clear(); _changed.Clear(); _workCount = 0; RebuildRegions();
+        foreach (var region in _regions) { region.Moment = Vec2.Zero; region.Outgoing = 0; }
         foreach (var s in springs)
         {
             if (!double.IsFinite(s.Discharge) || s.Discharge < 0) throw new InvalidOperationException("Invalid spring discharge");
@@ -500,9 +435,9 @@ public sealed class SurfaceFluidDynamics
             }
             if (landed) _air.RemoveAt(i); else _air[i] = f with { Position = end, Velocity = v };
         }
+        foreach (var region in _regions.ToArray()) Materialize(region);
         // Sparse 16x16 tiles own stable slots; direct neighbours and reused face buffers
         // keep hash tables and sorting out of the physical substep.
-        _stamp++; _wet.Clear(); _changed.Clear(); _workCount = 0;RebuildRegions();
         foreach (var key in _dirty) if (_cells.TryGetValue(key, out var edited)) Mark(edited);
         _dirty.Clear();
         foreach (var tile in _tileOrder) foreach (var c in tile.Cells)
@@ -538,6 +473,8 @@ public sealed class SurfaceFluidDynamics
             AddFace(c.West ?? Get((c.X-1,c.Z)),c,true);
             AddFace(c.South ?? Get((c.X,c.Z-1)),c,false);
         }
+        foreach (var region in _regions)
+            foreach (var face in region.Boundaries) AddFace(face.A, face.B, face.East);
         Stage("faces");
         double damping = Math.Pow(PipeDamping, dt * 60);
         double area=Spacing*Spacing;
@@ -553,16 +490,15 @@ public sealed class SurfaceFluidDynamics
             double faceB=b.Head-(east?b.SlopeX:b.SlopeZ)*Spacing*.5;
             double depth=FaceDepth(a,b,east,Math.Max(faceA,faceB));
             double q=east?a.East:a.North;
-            if(depth<=1e-9 || q*(a.Head-b.Head)<0 || (q>0?a:b).Established)q=0;
+            if(depth<=1e-9 || q*(a.Head-b.Head)<0)q=0;
             double section=Spacing*depth,k=Gravity*dt*dt*section*damping/Spacing;
             _work[i].Section=section;_work[i].Coefficient=k;_work[i].Momentum=q*damping;
             if(east)a.CoefficientEast=k;else a.CoefficientNorth=k;
             a.Diagonal+=k;b.Diagonal+=k;a.Rhs-=dt*q*damping;b.Rhs+=dt*q*damping;
         }
-        // Red/black Gauss-Seidel uses the grid's bipartite adjacency: six paired
-        // sweeps have the convergence factor of twelve Jacobi iterations, without
-        // a second full-buffer copy on every iteration.
-        for(int iteration=0;iteration<6;iteration++)for(int colour=0;colour<2;colour++)
+        // Deep pools have an exact common pressure. The remaining active faces use
+        // three red/black relaxation pairs, followed by conservative limited fluxes.
+        for(int iteration=0;iteration<3;iteration++)for(int colour=0;colour<2;colour++)
         {
             int passColour=colour;
             Each(_changed.Count,i=>
@@ -584,22 +520,35 @@ public sealed class SurfaceFluidDynamics
             double maximum=f.Section*Spacing/(dt*2);q=Math.Clamp(q,-maximum,maximum);
             if(f.East){a.East=q;a.EastSection=f.Section;}else{a.North=q;a.NorthSection=f.Section;}
             var donor=q>0?a:b;
-            _work[i].Amount=q!=0&&!donor.Established&&donor.Volume>0?q*dt:0;
+            _work[i].Amount=q!=0&&(donor.Region != null || donor.Volume>0)?q*dt:0;
         });
         foreach (var c in _changed) c.Outgoing = 0;
+        foreach (var region in _regions) region.Outgoing = 0;
         for (int i=0;i<_workCount;i++)
-        { var f=_work[i]; if(f.Amount!=0) (f.Amount>0?f.A:f.B).Outgoing+=Math.Abs(f.Amount); }
-        foreach(var c in _changed) c.OutflowScale=c.Outgoing>0?Math.Min(1,c.Volume/c.Outgoing):1;
+        {
+            var f=_work[i]; if(f.Amount==0)continue;
+            var donor=f.Amount>0?f.A:f.B;
+            if(donor.Region is {} region)region.Outgoing+=Math.Abs(f.Amount);
+            else donor.Outgoing+=Math.Abs(f.Amount);
+        }
+        foreach(var c in _changed)c.OutflowScale=c.Outgoing>0?Math.Min(1,c.Volume/c.Outgoing):1;
+        foreach(var region in _regions)region.Scale=region.Outgoing>0?Math.Min(1,region.Volume/region.Outgoing):1;
         Stage("flux");
         for(int i=0;i<_workCount;i++)
         {
-            var f=_work[i]; if(f.Amount==0)continue;
-            var a=f.Amount>0?f.A:f.B;var b=f.Amount>0?f.B:f.A;
-            double amount=Math.Abs(f.Amount)*a.OutflowScale;a.Volume-=amount;
-            if(f.East)f.A.East*=a.OutflowScale;else f.A.North*=a.OutflowScale;
+            var f=_work[i]; var a=f.Amount>0?f.A:f.B;var b=f.Amount>0?f.B:f.A;
+            double scale=a.Region?.Scale??a.OutflowScale;
+            double amount=Math.Abs(f.Amount)*scale;
+            double accepted=f.Amount==0?0:Math.Sign(f.Amount)*amount/dt;
+            if(f.East)f.A.East=accepted;else f.A.North=accepted;
             if(amount<=0)continue;
-            Receive(b,amount,budget);
+            var position=(f.A.Position+f.B.Position)*.5;
+            if(a.Region is {} outgoing){outgoing.Volume-=amount;outgoing.Moment+=(position-outgoing.Centre)*amount;}
+            else a.Volume-=amount;
+            if(b.Region is {} incoming){incoming.Volume+=amount;incoming.Moment-=(position-incoming.Centre)*amount;}
+            else Receive(b,amount,budget);
         }
+        foreach(var region in _regions.ToArray())Materialize(region);
         Stage("transfer");
         if(evaporation>0||infiltration>0)
             foreach(var tile in _tileOrder)foreach(var c in tile.Cells)if(c!=null&&c.Volume>0)Mark(c);
@@ -622,23 +571,30 @@ public sealed class SurfaceFluidDynamics
                     c.Infiltrated=Math.Min(c.Volume,Math.Max(0,infiltration)*c.InfiltrationFactor*Spacing*Spacing*dt);c.Volume-=c.Infiltrated;
                 }
             }
-            if(c.Established)
-            {c.WakeRequested=c.Volume<=MinimumResolvedVolume||Math.Abs(c.Volume-c.HeadVolume)/(Spacing*Spacing)>SurfaceTolerance(c);return;}
+            if(c.Region != null)return;
             double depthChange=Math.Abs(c.Volume-c.FrameVolume)/(Spacing*Spacing);
-            if(c.Volume<=MinimumResolvedVolume)c.QuietSeconds=0;
+            if(c.Volume<=MinimumResolvedVolume || depthChange>Math.Max(SurfaceTolerance(c),.0005))c.QuietSeconds=0;
             else c.QuietSeconds+=dt;
             if(c.Sleeping && (c.QuietSeconds==0 || Math.Abs(c.Volume-c.HeadVolume)/(Spacing*Spacing)>SurfaceTolerance(c)))c.Sleeping=false;
             if(c.Volume==0){c.SlopeX=c.SlopeZ=0;ReconstructSupport(c);c.Sleeping=false;}
             if(!c.Sleeping)c.Head=Head(c,c.Volume);
         });
-        bool liveSource=springs.Any(s=>s.Discharge>0);
         foreach(var c in _changed)
-        {if(c.WakeRequested)Wake(c);else if(c.QuietSeconds>=1&&c.Volume>.00005*Spacing*Spacing&&!c.Established&&(liveSource||Current((c.X,c.Z),c).Length<.001)){c.EstablishPending=true;_regionsDirty=true;}budget.Evaporation+=c.Evaporated;budget.Infiltration+=c.Infiltrated;budget.BoundaryOutflow+=c.Escaped;budget.GroundwaterRecharge+=c.Recharged;}
+        {
+            if(c.Region is {} region)region.Volume-=c.Evaporated+c.Infiltrated+c.Escaped+c.Recharged;
+            budget.Evaporation+=c.Evaporated;budget.Infiltration+=c.Infiltrated;budget.BoundaryOutflow+=c.Escaped;budget.GroundwaterRecharge+=c.Recharged;
+        }
+        foreach(var region in _regions.ToArray())
+        {
+            Materialize(region);
+            region.Velocity=region.Moment/(dt*Math.Max(region.Volume,MinimumResolvedVolume));
+        }
         Stage("heads");
         Version++;
     }
     private Vec2 Current((int X, int Z) key, Cell c)
     {
+        if(c.Region is {} region)return region.Velocity;
         var west=c.West;var south=c.South;
         // Area-weighted interpolation from the staggered faces. Using the remaining
         // cell volume here creates arbitrarily large apparent currents at wet/dry fronts.
@@ -659,19 +615,19 @@ public sealed class SurfaceFluidDynamics
     }
     public SurfaceFluidState Export()
     {
-        // Region queues are derived caches. Canonicalize them at the snapshot boundary
-        // so continuing this world and loading its snapshot start from the same routes.
-        _regionsDirty=true;RebuildRegions(restoring:true);
+        if(_legacyState is {} legacy)return legacy;
         return new(_cells.Where(k => k.Value.Volume > 0 || k.Value.East != 0 || k.Value.North != 0 || k.Value.EastSection > 0 || k.Value.NorthSection > 0).OrderBy(k => k.Key.Z).ThenBy(k => k.Key.X)
-        .Select(k => new SurfaceFluidCell(k.Key.X, k.Key.Z, k.Value.Volume, k.Value.East, k.Value.North, k.Value.SlopeX, k.Value.SlopeZ, k.Value.EastSection, k.Value.NorthSection, k.Value.QuietSeconds, k.Value.Head, k.Value.HeadVolume, _dirty.Contains(k.Key), k.Value.Established, k.Value.EstablishPending, k.Value.Sleeping)).ToArray(), _air.ToArray(), Time, Remainder, Spacing, new(_pending), WorkStamp:_stamp, NextRegionStamp:_nextRegionStamp);
+        .Select(k => new SurfaceFluidCell(k.Key.X, k.Key.Z, k.Value.Volume, k.Value.East, k.Value.North, k.Value.SlopeX, k.Value.SlopeZ, k.Value.EastSection, k.Value.NorthSection, k.Value.QuietSeconds, k.Value.Head, k.Value.HeadVolume, _dirty.Contains(k.Key), k.Value.Established, k.Value.EstablishPending, k.Value.Sleeping)).ToArray(), _air.ToArray(), Time, Remainder, Spacing, new(_pending), WorkStamp:_stamp, NextRegionStamp:_nextRegionStamp, PoolModelVersion:1, Pools:ExportPools());
     }
     /// <summary>Refine after loading has validated the original save digest.</summary>
     public void RefineResolution()
     {
         if (Spacing <= DefaultSpacing) return;
+        EnsurePoolModel();
         var samples = CaptureRenderState().Cells;
         double oldSpacing = Spacing;
-        _regionsDirty=true;_apertures.Clear();_cells.Clear(); _tiles.Clear(); _tileOrder.Clear(); _dirty.Clear(); Spacing = DefaultSpacing;
+        _regions.Clear();
+        _apertures.Clear();_cells.Clear(); _tiles.Clear(); _tileOrder.Clear(); _dirty.Clear(); Spacing = DefaultSpacing;
         foreach (var cell in samples)
             ImportLegacySquare(cell.Position - new Vec2(oldSpacing * .5, oldSpacing * .5),
                 oldSpacing, cell.Volume, cell.Velocity);
@@ -682,7 +638,8 @@ public sealed class SurfaceFluidDynamics
     {
         if (!double.IsFinite(state.Time) || state.Time < 0 || !double.IsFinite(state.Remainder) || state.Remainder < 0 ||
             !double.IsFinite(state.Spacing) || state.Spacing < .005 || state.Spacing > .25) throw new InvalidDataException("Invalid surface-fluid clock/resolution");
-        _regionsDirty=true;_apertures.Clear();_cells.Clear(); _tiles.Clear(); _tileOrder.Clear(); _air.Clear(); _pending.Clear(); _dirty.Clear(); Spacing = state.Spacing;
+        _regions.Clear();_legacyState=null;
+        _apertures.Clear();_cells.Clear(); _tiles.Clear(); _tileOrder.Clear(); _air.Clear(); _pending.Clear(); _dirty.Clear(); Spacing = state.Spacing;
         foreach (var saved in state.Cells)
         {
             if (!double.IsFinite(saved.QuietSeconds) || saved.QuietSeconds < 0 || (saved.CachedHead is double sh && !double.IsFinite(sh)) || (saved.HeadVolume is double sv && (!double.IsFinite(sv) || sv < 0)) || !double.IsFinite(saved.Volume) || saved.Volume < 0 || !double.IsFinite(saved.EastFlux) || !double.IsFinite(saved.NorthFlux) || !double.IsFinite(saved.SlopeX) || !double.IsFinite(saved.SlopeZ) || !double.IsFinite(saved.EastSection) || saved.EastSection < 0 || !double.IsFinite(saved.NorthSection) || saved.NorthSection < 0 ||
@@ -692,7 +649,11 @@ public sealed class SurfaceFluidDynamics
         }
         foreach (var p in state.Airborne) { if (!p.Position.IsFinite || !p.Velocity.IsFinite || !double.IsFinite(p.Volume) || p.Volume <= 0 || !double.IsFinite(p.Width) || p.Width < 0 || !p.WidthAxis.IsFinite) throw new InvalidDataException("Invalid airborne liquid"); _air.Add(p); }
         foreach (var (key, v) in state.SourceRemainders) { if (!double.IsFinite(v) || v < 0) throw new InvalidDataException("Invalid source remainder"); _pending.Add(key, v); }
-        Time = state.Time; Remainder = state.Remainder;_stamp=state.WorkStamp;_nextRegionStamp=state.NextRegionStamp;RebuildRegions(restoring:true); Version++;
+        Time = state.Time; Remainder = state.Remainder;_stamp=state.WorkStamp;_nextRegionStamp=state.NextRegionStamp;
+        if(state.PoolModelVersion==0)_legacyState=state with { PendingInputs=null };
+        else if(state.PoolModelVersion==1)RestorePools(state.Pools);
+        else throw new InvalidDataException("Unsupported surface pool model");
+        Version++;
     }
     public void RestoreLegacy(FluidState state)
     {

@@ -1,0 +1,332 @@
+{
+  "scope": "Accepted bounded mobile-water stability checkpoint; full-world performance remains open",
+  "forcing": {
+    "spring_litres_per_hour": 2000,
+    "physical_warmup_seconds": 60,
+    "seed": 804584441,
+    "shared_query_points": 213,
+    "points_sha256": "743d5943980310a378a86471bdbf178b9496cb9634aa9d4cffc2440886eef2bf"
+  },
+  "native_comparison": [
+    {
+      "directory": "build\\water-redesign-20261114\\baseline-v2",
+      "points": 213,
+      "shots": [
+        {
+          "name": "frozen_pool",
+          "physical_time": 59.999999999997875,
+          "versions": 1,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.0,
+          "temporal_p95_minus_p05_mm_p95": 0.0,
+          "spatial_p95_minus_p05_mm_median": 32.49993870330945,
+          "spatial_p95_minus_p05_mm_max": 32.49993870330945,
+          "pool_speed_mean": 0.052504185383187456,
+          "pool_speed_max": 0.3648953560198311,
+          "frame_p95_ms": 33.5065,
+          "gpu_mean_ms": 6.589866659376356
+        },
+        {
+          "name": "frozen_normals",
+          "physical_time": 59.999999999997875,
+          "versions": 1,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.0,
+          "temporal_p95_minus_p05_mm_p95": 0.0,
+          "spatial_p95_minus_p05_mm_median": 32.49993870330945,
+          "spatial_p95_minus_p05_mm_max": 32.49993870330945,
+          "pool_speed_mean": 0.052504185383187456,
+          "pool_speed_max": 0.3648953560198311,
+          "frame_p95_ms": 120.173,
+          "gpu_mean_ms": 6.437066660987006
+        },
+        {
+          "name": "frozen_macro",
+          "physical_time": 59.999999999997875,
+          "versions": 1,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.0,
+          "temporal_p95_minus_p05_mm_p95": 0.0,
+          "spatial_p95_minus_p05_mm_median": 32.49993870330945,
+          "spatial_p95_minus_p05_mm_max": 32.49993870330945,
+          "pool_speed_mean": 0.052504185383187456,
+          "pool_speed_max": 0.3648953560198311,
+          "frame_p95_ms": 75.5757,
+          "gpu_mean_ms": 6.687399991353353
+        },
+        {
+          "name": "live_pool",
+          "physical_time": 65.16666666666426,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.12393001888863497,
+          "temporal_p95_minus_p05_mm_p95": 25.29148953132132,
+          "spatial_p95_minus_p05_mm_median": 25.155831709107108,
+          "spatial_p95_minus_p05_mm_max": 36.194233516302354,
+          "pool_speed_mean": 0.05585025769148935,
+          "pool_speed_max": 0.4156965856514684,
+          "frame_p95_ms": 57.8082,
+          "gpu_mean_ms": 6.528722227944268
+        },
+        {
+          "name": "live_normals",
+          "physical_time": 70.94999999999726,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.425780742232873,
+          "temporal_p95_minus_p05_mm_p95": 23.046518945207467,
+          "spatial_p95_minus_p05_mm_median": 27.32573937178709,
+          "spatial_p95_minus_p05_mm_max": 36.96906567785457,
+          "pool_speed_mean": 0.0554467449288627,
+          "pool_speed_max": 0.3734080849497853,
+          "frame_p95_ms": 110.8627,
+          "gpu_mean_ms": 6.494766659206814
+        },
+        {
+          "name": "live_spring",
+          "physical_time": 77.61666666666355,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.2752272397111566,
+          "temporal_p95_minus_p05_mm_p95": 24.62606318915739,
+          "spatial_p95_minus_p05_mm_median": 29.486143656264606,
+          "spatial_p95_minus_p05_mm_max": 38.22208862674936,
+          "pool_speed_mean": 0.05432453849166239,
+          "pool_speed_max": 0.35779262281357616,
+          "frame_p95_ms": 141.142,
+          "gpu_mean_ms": 6.100155549579196
+        },
+        {
+          "name": "live_spill",
+          "physical_time": 83.98333333332985,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.19365828257170148,
+          "temporal_p95_minus_p05_mm_p95": 25.51562792590824,
+          "spatial_p95_minus_p05_mm_median": 30.56939195255241,
+          "spatial_p95_minus_p05_mm_max": 35.92799765717022,
+          "pool_speed_mean": 0.05482656115314465,
+          "pool_speed_max": 0.4161749570285353,
+          "frame_p95_ms": 162.2902,
+          "gpu_mean_ms": 6.145199998219808
+        }
+      ]
+    },
+    {
+      "directory": "build\\water-redesign-20261114\\final-native",
+      "points": 213,
+      "shots": [
+        {
+          "name": "frozen_pool",
+          "physical_time": 59.999999999997875,
+          "versions": 1,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.0,
+          "temporal_p95_minus_p05_mm_p95": 0.0,
+          "spatial_p95_minus_p05_mm_median": 0.0,
+          "spatial_p95_minus_p05_mm_max": 0.0,
+          "pool_speed_mean": 0.028600598695018,
+          "pool_speed_max": 0.028600598695018162,
+          "frame_p95_ms": 34.9721,
+          "gpu_mean_ms": 7.028544431262546
+        },
+        {
+          "name": "frozen_normals",
+          "physical_time": 59.999999999997875,
+          "versions": 1,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.0,
+          "temporal_p95_minus_p05_mm_p95": 0.0,
+          "spatial_p95_minus_p05_mm_median": 0.0,
+          "spatial_p95_minus_p05_mm_max": 0.0,
+          "pool_speed_mean": 0.028600598695018,
+          "pool_speed_max": 0.028600598695018162,
+          "frame_p95_ms": 35.2935,
+          "gpu_mean_ms": 6.319866694344414
+        },
+        {
+          "name": "frozen_macro",
+          "physical_time": 59.999999999997875,
+          "versions": 1,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.0,
+          "temporal_p95_minus_p05_mm_p95": 0.0,
+          "spatial_p95_minus_p05_mm_median": 0.0,
+          "spatial_p95_minus_p05_mm_max": 0.0,
+          "pool_speed_mean": 0.028600598695018,
+          "pool_speed_max": 0.028600598695018162,
+          "frame_p95_ms": 35.1023,
+          "gpu_mean_ms": 6.347022204928928
+        },
+        {
+          "name": "live_pool",
+          "physical_time": 64.71666666666428,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.33527854055626083,
+          "temporal_p95_minus_p05_mm_p95": 0.33527854055626083,
+          "spatial_p95_minus_p05_mm_median": 2.7755575615628914e-14,
+          "spatial_p95_minus_p05_mm_max": 2.7755575615628914e-14,
+          "pool_speed_mean": 0.04625044517808382,
+          "pool_speed_max": 0.0462504451780835,
+          "frame_p95_ms": 36.709,
+          "gpu_mean_ms": 6.281522221035427
+        },
+        {
+          "name": "live_normals",
+          "physical_time": 69.36666666666402,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.22348687305850934,
+          "temporal_p95_minus_p05_mm_p95": 0.2234868730585371,
+          "spatial_p95_minus_p05_mm_median": 2.7755575615628914e-14,
+          "spatial_p95_minus_p05_mm_max": 5.551115123125783e-14,
+          "pool_speed_mean": 0.025166998892389842,
+          "pool_speed_max": 0.025166998892390016,
+          "frame_p95_ms": 34.0335,
+          "gpu_mean_ms": 6.773899963166978
+        },
+        {
+          "name": "live_spring",
+          "physical_time": 74.08333333333042,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.2862787382218457,
+          "temporal_p95_minus_p05_mm_p95": 0.2862787382218457,
+          "spatial_p95_minus_p05_mm_median": 2.7755575615628914e-14,
+          "spatial_p95_minus_p05_mm_max": 5.551115123125783e-14,
+          "pool_speed_mean": 0.028512333457490678,
+          "pool_speed_max": 0.028512333457490845,
+          "frame_p95_ms": 35.2019,
+          "gpu_mean_ms": 6.660033331976996
+        },
+        {
+          "name": "live_spill",
+          "physical_time": 78.79999999999681,
+          "versions": 18,
+          "missing_queries": 0,
+          "temporal_p95_minus_p05_mm_median": 0.42182768674128845,
+          "temporal_p95_minus_p05_mm_p95": 0.4218276867413162,
+          "spatial_p95_minus_p05_mm_median": 2.7755575615628914e-14,
+          "spatial_p95_minus_p05_mm_max": 5.551115123125783e-14,
+          "pool_speed_mean": 0.03655420440802498,
+          "pool_speed_max": 0.03655420440802481,
+          "frame_p95_ms": 35.1827,
+          "gpu_mean_ms": 6.3342888673146565
+        }
+      ]
+    }
+  ],
+  "native_final": {
+    "game_mvid": "6861369b-3320-43aa-9a56-84371c86c1db",
+    "sim_mvid": "9c5ffb8b-5882-43bc-af1c-5459e603403e",
+    "audit": {
+      "Item1": 42,
+      "Item2": 0
+    },
+    "transport_maturity": true,
+    "shots": [
+      {
+        "name": "live_pool",
+        "physical_time_start": 61.46666666666446,
+        "physical_time": 64.71666666666428,
+        "spring_inflow": 0.0018055555555557962,
+        "boundary_outflow": 0.0016489752073201355,
+        "storage_change": 0.00015658034823542305
+      },
+      {
+        "name": "live_normals",
+        "physical_time_start": 66.2166666666642,
+        "physical_time": 69.36666666666402,
+        "spring_inflow": 0.0017500000000002583,
+        "boundary_outflow": 0.0015784184447804744,
+        "storage_change": 0.00017158155521950283
+      },
+      {
+        "name": "live_spring",
+        "physical_time_start": 70.86666666666393,
+        "physical_time": 74.08333333333042,
+        "spring_inflow": 0.0017870370370372812,
+        "boundary_outflow": 0.0017267047595791694,
+        "storage_change": 6.03322774579626e-05
+      },
+      {
+        "name": "live_spill",
+        "physical_time_start": 75.58333333333033,
+        "physical_time": 78.79999999999681,
+        "spring_inflow": 0.0017870370370372882,
+        "boundary_outflow": 0.0018151701854739327,
+        "storage_change": -2.8133148436859656e-05
+      }
+    ]
+  },
+  "solver_80s": {
+    "original": {
+      "assembly": "8c27d1f3-4017-4f0c-953d-c39170995503",
+      "workers": "6",
+      "wall_s": "67.852",
+      "cpu_s": "22.062",
+      "allocated": "309143256",
+      "mass_error": "-3.747003E-016"
+    },
+    "candidate": {
+      "assembly": "9c5ffb8b-5882-43bc-af1c-5459e603403e",
+      "workers": "6",
+      "wall_s": "46.908",
+      "cpu_s": "29.797",
+      "allocated": "34279800",
+      "mass_error": "-1.526557E-016"
+    },
+    "cpu_change_percent": 35.060284652343384,
+    "allocation_change_percent": -88.91135441751315,
+    "timing_limits": "Existing user-owned live game retained. Wall timings and frame/GPU observations are not a matched speedup claim. CPU is process total; candidate remains a measured CPU tradeoff."
+  },
+  "validation": {
+    "water_selftests": "6/6",
+    "substrate_water": "2/2",
+    "mesh_refreshwater": "1/1",
+    "long_acceptance_failures": 0,
+    "long_acceptance_log": "PASS conservation error=-1.526557E-016\nPASS replay maxHeadOrVelocityDifference=0.000000E+000\nPASS throughflow last20sOut=1.060575E-002 source=1.111111E-002\nPASS wet-core-spatial maxP95P05=0.000000m\nPASS wet-core-temporal p95CellRange=0.000663m persistentTracks=448 maxSpeed=0.051112m/s\nPASS closed-source-off-budget error=-2.081668E-017 out=0.000000E+000\nPASS closed-source-off-rest spread=0.000000m speedMax=0.000026m/s\nPASS pool-add added=1.000000E-003\nPASS pool-removal removed=1.000000E-003\nPASS geometry-invalidation-budget delta=0.000000E+000\nPASS flood-drain removed=1.666667E-002 remaining=0.000000E+000\nACCEPTANCE failures=0 wall=57.475s allocated=78952752\n",
+    "headless_boot": "Godot Engine v4.7.1.stable.mono.official.a13da4feb - https://godotengine.org\n\nVIVARIUM_BOOT version=0.1.4 schema=5 ticks=33 flora=152 fauna=77 save=True load=True roundtrip=True invariants=0\nVIVARIUM_BOOT_OK\n",
+    "solution_and_game_builds": "pass",
+    "independent_review": "Luna: no remaining blocker after boundary-before-restore correction"
+  },
+  "final_hashes": [
+    {
+      "Algorithm": "SHA256",
+      "Hash": "3101CAF4F4299C2B4CEA1B4973F2C0DD9CC811E53E8D80844098DC0B0F7E97D7",
+      "Path": "E:\\Vivarium\\game\\.godot\\mono\\temp\\bin\\Debug\\Vivarium.dll"
+    },
+    {
+      "Algorithm": "SHA256",
+      "Hash": "8D9E7FE79211BD682F2DE7B5A6809C7535BAA19D4891998FD988A608546B0509",
+      "Path": "E:\\Vivarium\\game\\.godot\\mono\\temp\\bin\\Debug\\Vivarium.Sim.dll"
+    },
+    {
+      "Algorithm": "SHA256",
+      "Hash": "91C8FD2987149627048B66D5D0149515E720EE94D5BDCF87E75403EE5AE75345",
+      "Path": "E:\\Vivarium\\src\\Vivarium.Sim\\Water\\SurfaceFluidDynamics.cs"
+    },
+    {
+      "Algorithm": "SHA256",
+      "Hash": "E28B1C7D05743C95EEB572407876309FD19378611F61BA0CA48E075DB976228D",
+      "Path": "E:\\Vivarium\\src\\Vivarium.Sim\\Water\\SurfaceFluidPools.cs"
+    },
+    {
+      "Algorithm": "SHA256",
+      "Hash": "E9CEBE71E45990BF117EC6062E5D02674F0A4ECD736D56960B12779E31BCB7D0",
+      "Path": "E:\\Vivarium\\src\\Vivarium.Sim\\Water\\SurfaceLiquid.cs"
+    },
+    {
+      "Algorithm": "SHA256",
+      "Hash": "29ACD230115526AEFE8DA9F900C2158C23D054AC8BB1B86EE78BAD29FA1E9D1C",
+      "Path": "E:\\Vivarium\\game\\App\\WaterReviewRunner.cs"
+    }
+  ],
+  "limits": [
+    "Synthetic mobile water only; no static-table triangles",
+    "No user saves read or modified",
+    "No mature ecology, broad GPU/power, 17m reach or long-run resource acceptance",
+    "Historical full representation suite 72/73 substrate timing failure remains separate; full suite not repeated"
+  ]
+}

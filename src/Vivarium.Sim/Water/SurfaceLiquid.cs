@@ -86,7 +86,11 @@ public sealed class SurfaceLiquid
     }
     public void Restore(SurfaceFluidState saved)
     {
-        CompletePending(); CaptureGeometry(); Dynamics.Restore(saved); Enabled = true; _w.Water.Liquid = this; Dynamics.WaterTable = _w.Water.WaterTable; _erosionTime = saved.Time;
+        CompletePending(); CaptureGeometry();
+        // Establish the boundary before restoring pools. Changing it afterwards is
+        // a physical edit and correctly wakes bodies, which would dissolve saved pools.
+        Dynamics.WaterTable = _w.Water.WaterTable; Dynamics.Restore(saved);
+        Enabled = true; _w.Water.Liquid = this; _erosionTime = saved.Time;
         _inputs.Clear(); _queuedSeconds = 0; foreach (var input in saved.PendingInputs ?? []) { if (!double.IsFinite(input.Seconds) || input.Seconds < 0) throw new InvalidDataException("Invalid pending liquid input"); _inputs.AddLast(input); _queuedSeconds += input.Seconds; }
         Publish();
     }

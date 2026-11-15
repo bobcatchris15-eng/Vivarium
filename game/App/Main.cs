@@ -40,6 +40,12 @@ public partial class Main : Node3D
         }
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (ArgAfter("--water-review") is { } waterReviewDirectory)
+        {
+            try { await WaterReviewRunner.Capture(this, content, waterReviewDirectory); }
+            catch (Exception ex) { GD.PrintErr(ex); GetTree().Quit(4); }
+            return;
+        }
         if (UserArgs.Contains("--coverage-tangent-proof"))
         {
             try { GD.Print(CoverageTangentProof.Run()); GetTree().Quit(0); }
