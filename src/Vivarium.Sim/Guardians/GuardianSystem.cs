@@ -837,7 +837,7 @@ public sealed class GuardianSystem
 
             double alignFactor = Math.Clamp(1.0 - (headingError / (Math.PI * 0.75)), 0.12, 1.0);
 
-            var normal = _world.Terrain.Normal(currentXZ);
+            var normal = _world.Terrain.MacroNormal(currentXZ);
             double slopeFactor = Math.Clamp(normal.Y, 0.35, 1.0);
             double slopeAngleDegrees = Math.Acos(Math.Clamp(normal.Y, 0.0, 1.0)) * (180.0 / Math.PI);
             if (slopeAngleDegrees > profile.MaxSlopeDegrees) slopeFactor *= 0.5;

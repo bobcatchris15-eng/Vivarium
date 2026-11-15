@@ -114,6 +114,7 @@ public partial class LoamSurfaceDetailRenderer : Node3D
             foreach (bool step in LoamLitterBuilder.BuildBatched(world, seed, node => patch.AddChild(node),
                 Quality >= 2 ? 1.45f : .85f, detailStage: 2, patchCenter: center, halfExtent: PatchSize * .5f, respectLitterMass: true))
                 yield return step;
+            if (world.Terrain.SoilSurfaceVersion == 0)
             foreach (bool step in LoamAggregateBuilder.BuildBatched(world, seed, node => patch.AddChild(node), center, PatchSize * .5f))
                 yield return step;
             ConfigureVisualsRecursive(patch);
@@ -156,7 +157,8 @@ public partial class LoamSurfaceDetailRenderer : Node3D
         var patch = new Node3D { Name = $"LoamPatch_{key.X}_{key.Z}" };
         var litterNode = LoamLitterBuilder.Build(world, seed, Quality >= 2 ? 1.45f : .85f,
             detailStage: 2, patchCenter: center, halfExtent: PatchSize * .5f, respectLitterMass: true);
-        var aggregateNode = LoamAggregateBuilder.Build(world, seed, center, PatchSize * .5f);
+        var aggregateNode = world.Terrain.SoilSurfaceVersion == 0
+            ? LoamAggregateBuilder.Build(world, seed, center, PatchSize * .5f) : new Node3D { Name = "IntegratedSoilSurface" };
         ConfigureVisualsRecursive(litterNode);
         ConfigureVisualsRecursive(aggregateNode);
         patch.AddChild(litterNode);

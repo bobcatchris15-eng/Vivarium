@@ -40,15 +40,26 @@ public static class GroundReviewRunner
         for (int i = 0; i < 10; i++) await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
 
         bool bareOnly = Main.UserArgs.Contains("--ground-bare");
+        bool hideLitter = Main.UserArgs.Contains("--ground-no-litter");
+        if (hideLitter) { session.SoilDetail.LoamDetails.SetProcess(false); session.SoilDetail.LoamDetails.Visible = false; }
+        bool hideShadows = Main.UserArgs.Contains("--ground-no-shadows");
+        if (hideShadows) session.EnvRig.Sun.ShadowEnabled = false;
+        bool hideWater = Main.UserArgs.Contains("--ground-no-water");
+        if (hideWater) { session.Water.SetProcess(false); session.Water.Visible = false; session.WaterFluid.SetProcess(false); session.WaterFluid.Visible = false; }
+        bool hideProps = Main.UserArgs.Contains("--ground-no-props");
+        if (hideProps) { session.Props.SetProcess(false); session.Props.Visible = false; }
+        bool exposed = Main.UserArgs.Contains("--ground-exposed");
+        if (exposed) session.PilotTree.Visible = false; // Diagnostic direct-light material inspection.
         var sw = Stopwatch.StartNew();
 
         var timer = Stopwatch.StartNew();
-        while (!session.Flora.PopulationReady && timer.Elapsed.TotalSeconds < 180)
+        if (bareOnly) session.Flora.SetProcess(false);
+        while (!bareOnly && !session.Flora.PopulationReady && timer.Elapsed.TotalSeconds < 180)
             await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
-        if (!session.Flora.PopulationReady)
+        if (!bareOnly && !session.Flora.PopulationReady)
             throw new InvalidOperationException("Flora population did not become ready within 180 s.");
 
-        var shots = Plan(world);
+        var shots = Main.UserArgs.Contains("--ground-quick") ? Plan(world).Take(2).ToList() : Plan(world);
 
         void SetVegetation(bool on)
         {
@@ -99,6 +110,12 @@ public static class GroundReviewRunner
             preset = world.Descriptor.Name,
             daylight_seconds = DayLight,
             bare_only = bareOnly,
+            litter_hidden = hideLitter,
+            shadows_disabled = hideShadows,
+            water_hidden = hideWater,
+            props_hidden = hideProps,
+            albedo_only = Main.UserArgs.Contains("--ground-unlit"),
+            canopy_hidden = exposed,
             adapter = RenderingServer.GetVideoAdapterName(),
             capture_seconds = Math.Round(sw.Elapsed.TotalSeconds, 1),
             shots = results,

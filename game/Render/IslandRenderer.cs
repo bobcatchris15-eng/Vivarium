@@ -112,7 +112,9 @@ public partial class IslandRenderer : Node3D
         }
         _materialTerrainVersion = _w.Terrain.Version; _materialPropsVersion = _w.Props.Version;
     }
-    public int TriangleCount { get; private set; }
+    private int _baseTriangleCount;
+    public IntegratedSoilRenderer? SoilSurfaceRenderer { get; private set; }
+    public int TriangleCount => _baseTriangleCount + (SoilSurfaceRenderer?.TriangleCount ?? 0);
 
     /// <summary>Depth (m) of standing water above which a cell is a waterway bed rather than merely damp soil.
     /// The same 4 mm cut AmbientGroundCoverRenderer already uses to keep plants out of a channel: below it the
@@ -126,12 +128,15 @@ public partial class IslandRenderer : Node3D
         _propCacheVersion = int.MinValue; _propCacheLen = -1;
         _pendingFieldRefresh = false;
         foreach (var c in GetChildren()) c.QueueFree();
+        SoilSurfaceRenderer = null;
 
         _terrainMat = Bridge.Shader("res://Shaders/terrain.gdshader");
+        _terrainMat.SetShaderParameter("review_albedo_only", System.Array.IndexOf(Main.UserArgs, "--ground-unlit") >= 0);
+        _terrainMat.SetShaderParameter("integrated_soil", w.Terrain.SoilSurfaceVersion != 0);
+        if (w.Terrain.SoilSurfaceVersion != 0) _terrainMat.SetShaderParameter("tile_metres", .28f);
         Bridge.BindSurface(_terrainMat, "soil", Bridge.Surfaces.Soil);
         Bridge.BindSurface(_terrainMat, "damp", "Ground037");
         Bridge.BindSurface(_terrainMat, "moss", Bridge.Surfaces.Moss);
-        Bridge.BindSurface(_terrainMat, "leaf", "ScatteredLeaves007");
         Bridge.BindSurface(_terrainMat, "gravel", Bridge.Surfaces.Gravel);
         var g = w.Grid;
         int subNx = g.Nx * 4, subNz = g.Nz * 4;
@@ -211,12 +216,23 @@ public partial class IslandRenderer : Node3D
     {
         _terrainVersion = _w.Terrain.Version;
         _sinceMeshBuild = 0;
-        var top = TerrainMesh.BuildTop(_w);
         var walls = TerrainMesh.BuildWalls(_w);
-        TriangleCount = top.Mesh.TriangleCount + walls.TriangleCount;
-        // reuse the same meshes: a fresh ArrayMesh per sculpt step (up to 12/s) left the old GPU buffers to the
-        // GC finalizer, and over a long session the churn exhausted memory and crashed inside AddSurfaceFromArrays
-        _top.Mesh = Bridge.ToArrayMesh(top.Mesh, _terrainMat, _top.Mesh as ArrayMesh);
+        if (_w.Terrain.SoilSurfaceVersion != 0)
+        {
+            _top.Visible = false; _baseTriangleCount = walls.TriangleCount;
+            if (SoilSurfaceRenderer == null)
+            {
+                SoilSurfaceRenderer = new IntegratedSoilRenderer { Name = "IntegratedSoil" };
+                AddChild(SoilSurfaceRenderer); SoilSurfaceRenderer.Build(_w, _terrainMat);
+            }
+            else SoilSurfaceRenderer.Rebuild();
+        }
+        else
+        {
+            var top = TerrainMesh.BuildTop(_w); _top.Visible = true;
+            _baseTriangleCount = top.Mesh.TriangleCount + walls.TriangleCount;
+            _top.Mesh = Bridge.ToArrayMesh(top.Mesh, _terrainMat, _top.Mesh as ArrayMesh);
+        }
         _walls.Mesh = Bridge.ToArrayMesh(walls, _strataMat, _walls.Mesh as ArrayMesh);
     }
 

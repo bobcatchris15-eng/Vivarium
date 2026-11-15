@@ -136,6 +136,7 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
     public void StartWorld(VivariumWorld world, string? saveName = null)
     {
         foreach (var _ in StartWorldStages(world, saveName)) { }
+        Island.SoilSurfaceRenderer?.FinishInitialBuild();
     }
     public async System.Threading.Tasks.Task StartWorldAsync(VivariumWorld world, string? saveName, Action<string> progress)
     {
@@ -147,6 +148,14 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
             foreach (var stage in StartWorldStages(world, saveName))
             {
                 progress(stage);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+            var soilWait = System.Diagnostics.Stopwatch.StartNew();
+            while (Island.SoilSurfaceRenderer is { SurfaceReady: false } soil)
+            {
+                if (soil.LastBuildError != null || soilWait.Elapsed.TotalSeconds > 120)
+                    throw new InvalidOperationException(soil.LastBuildError ?? "Soil surface preparation timed out");
+                progress("Soil surface");
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             }
         }
@@ -164,6 +173,12 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
             double stageMs = startup.ElapsedMilliseconds - begin;
             StageTimings.Add((name, stageMs));
             GD.Print($"WORLD_RENDER_STAGE_END {name} stage_ms={startup.ElapsedMilliseconds - begin} elapsed_ms={startup.ElapsedMilliseconds}");
+        }
+        bool legacyReview = Main.UserArgs.Any(a => a.EndsWith("-review", StringComparison.Ordinal));
+        if (!Main.UserArgs.Contains("--legacy-soil") && (!legacyReview || Main.UserArgs.Contains("--integrated-soil")))
+        {
+            yield return "Soil surface";
+            Stage("Soil surface", () => SoilSurfaceUpgrade.Apply(world));
         }
         if (Host == null) Host = new SimHost(world); else Host.Swap(world);
         SimHost.StageTimed = FrameProfiler.Record;
@@ -245,7 +260,9 @@ Fauna = new FaunaRenderer { Name = "FaunaRenderer" }; AddChild(Fauna);
     public VivariumWorld CreateWorld(WorldDescriptor d)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var w = VivariumWorld.Create(Content, d, warmupSurfaceWater:false);
+        var configured = d.Clone();
+        SoilSurfaceUpgrade.ConfigureNew(configured);
+        var w = VivariumWorld.Create(Content, configured, warmupSurfaceWater:false);
         Log.Info(LogCategory.World, $"World generated in {sw.ElapsedMilliseconds} ms.");
         return w;
     }

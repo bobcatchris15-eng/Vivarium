@@ -501,7 +501,7 @@ public static class Bridge
     {
         // Scripted captures use their own logs and player data.
         int reviewIndex = System.Array.FindIndex(Main.UserArgs,
-            arg => arg is "--visual-review" or "--specimen-review" or "--guardian-review");
+            arg => arg is "--visual-review" or "--specimen-review" or "--guardian-review" or "--ground-review" or "--soil-review");
         if (reviewIndex >= 0)
         {
             string root = reviewIndex + 1 < Main.UserArgs.Length && !Main.UserArgs[reviewIndex + 1].StartsWith("--", StringComparison.Ordinal)

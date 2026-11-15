@@ -1504,7 +1504,7 @@ public sealed class FloraSystem
     }
 
     private double GroundHeightAt(Vec2 p) => _w.GroundHeight(p);
-    private Vec3 GroundNormalAt(Vec2 p) => _w.Terrain.Normal(p);
+    private Vec3 GroundNormalAt(Vec2 p) => _w.Terrain.MacroNormal(p);
 
     /// <summary>Resolves the host a node is bound to, and reports whether that support still exists.</summary>
     private bool TryBind(ClimberSegment tip, ClimberDef cd, out ClimberHost host)

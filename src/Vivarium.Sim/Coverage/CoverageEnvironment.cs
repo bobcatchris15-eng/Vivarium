@@ -141,7 +141,7 @@ public static class CoverageEnvironment
         }
         else
         {
-            var n = w.Terrain.Normal(p);
+            var n = w.Terrain.MacroNormal(p);
             slope = Math.Acos(MathD.Clamp(n.Y, -1, 1));
             downslope = new Vec2(n.X, n.Z).Normalized();
         }

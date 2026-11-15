@@ -9,7 +9,7 @@ namespace Vivarium.Sim.World;
 /// <see cref="Height"/> interpolates on those same triangles, so queries, collision and the rendered mesh
 /// agree exactly.
 /// </summary>
-public sealed class Heightfield
+public sealed partial class Heightfield
 {
     public double Step { get; }
     public double OriginX { get; }
@@ -47,6 +47,7 @@ public sealed class Heightfield
                 double x = ox + i * step, z = oz + j * step;
                 hf.H[j * nx + i] = RawHeight(seed, t, x, z, domain);
             }
+        hf.ConfigureSoil(d.Terrain.SoilSurfaceVersion, Rng.Mix(d.Seed, Hash.Fnv1a64("terrain.soil.surface")), d.Terrain.SoilSurfaceAmplitude);
         return hf;
     }
 
@@ -135,13 +136,22 @@ public sealed class Heightfield
 
     /// <summary>Call before changing <see cref="H"/>; remembers the generated baseline for delta saves.</summary>
     public void BeginEdit() => _baseline ??= (double[])H.Clone();
-    public void Touch() => Version++;
+    public void Touch() { Version++; _previousSoilSurface = _soilSurface ?? _previousSoilSurface; _soilSurface = null; }
     /// <summary>Stable height data for read-only geometry jobs running off the render thread.</summary>
     public Heightfield Snapshot()
     {
+        // Materialize once before dispatch so physics and geometry snapshots share
+        // the same immutable fine surface and its memoized vertex tiles.
+        if (_soilVersion != 0) _ = SoilSurface;
+        var copy = MacroSnapshot();
+        copy._soilVersion = _soilVersion; copy._soilSeed = _soilSeed; copy._soilAmplitude = _soilAmplitude;
+        copy._soilSurface = _soilSurface;
+        return copy;
+    }
+    internal Heightfield MacroSnapshot()
+    {
         var copy = new Heightfield(Step, OriginX, OriginZ, Nx, Nz, MinHeight, MaxHeight, Bottom);
-        Array.Copy(H, copy.H, H.Length);
-        copy.Version = Version;
+        Array.Copy(H, copy.H, H.Length); copy.Version = Version;
         return copy;
     }
 
@@ -175,7 +185,9 @@ public sealed class Heightfield
     public Vec2 VertexPos(int i, int j) => new(OriginX + i * Step, OriginZ + j * Step);
 
     /// <summary>Surface elevation at (x,z) interpolated on the render triangulation.</summary>
-    public double Height(Vec2 p)
+    public double Height(Vec2 p) => _soilVersion == 0 ? MacroHeight(p) : SoilSurface.Height(p.X, p.Z);
+
+    public double MacroHeight(Vec2 p)
     {
         double fx = (p.X - OriginX) / Step, fz = (p.Z - OriginZ) / Step;
         int i = Math.Clamp((int)Math.Floor(fx), 0, Nx - 2), j = Math.Clamp((int)Math.Floor(fz), 0, Nz - 2);
@@ -186,7 +198,9 @@ public sealed class Heightfield
     }
 
     /// <summary>Unit surface normal of the triangle under (x,z).</summary>
-    public Vec3 Normal(Vec2 p)
+    public Vec3 Normal(Vec2 p) => _soilVersion == 0 ? MacroNormal(p) : SoilSurface.Sample(p.X, p.Z).Normal;
+
+    public Vec3 MacroNormal(Vec2 p)
     {
         double fx = (p.X - OriginX) / Step, fz = (p.Z - OriginZ) / Step;
         int i = Math.Clamp((int)Math.Floor(fx), 0, Nx - 2), j = Math.Clamp((int)Math.Floor(fz), 0, Nz - 2);
@@ -198,7 +212,7 @@ public sealed class Heightfield
         return new Vec3(-dhdx, 1, -dhdz).Normalized();
     }
 
-    public double Slope(Vec2 p) { var n = Normal(p); return Math.Acos(MathD.Clamp(n.Y, -1, 1)); }
+    public double Slope(Vec2 p) { var n = MacroNormal(p); return Math.Acos(MathD.Clamp(n.Y, -1, 1)); }
 
     public string DigestHex() { using var d = new DigestBuilder(); d.Add(Step).Add(Nx).Add(Nz); d.Add(H); return d.Hex(); }
 }

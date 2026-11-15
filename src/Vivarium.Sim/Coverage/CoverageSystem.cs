@@ -113,7 +113,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
             }
             if (!_terrainGeoCache.TryGetValue(key, out var geo) || !geo.complete)
             {
-                var n = _w.Terrain.Normal(p);
+                var n = _w.Terrain.MacroNormal(p);
                 double slope = Math.Acos(MathD.Clamp(n.Y, -1, 1));
                 var downslope = new Vec2(n.X, n.Z).Normalized();
                 double laplacian = CoverageEnvironment.TerrainLaplacian(_w, p);
@@ -201,7 +201,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         }
         else
         {
-            var n = _w.Terrain.Normal(p);
+            var n = _w.Terrain.MacroNormal(p);
             double slope = Math.Acos(MathD.Clamp(n.Y, -1, 1));
             downslope = new Vec2(n.X, n.Z).Normalized();
             double laplacian = geo.laplacian != 0 ? geo.laplacian : CoverageEnvironment.TerrainLaplacian(_w, p);

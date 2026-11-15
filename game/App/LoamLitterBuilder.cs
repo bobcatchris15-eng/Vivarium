@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
+using Vivarium.Sim.Geometry;
 using Vivarium.Sim.World;
 using SimVec2 = Vivarium.Sim.Core.Vec2;
 
@@ -372,7 +373,7 @@ public static class LoamLitterBuilder
             double wz = center.Z + Math.Sin(angle) * lx + Math.Cos(angle) * side;
             float centerLift = (1f - Mathf.Abs(s)) * fold;
             float burial = rng.Range(-0.00115f, 0.00045f);
-            float y = (float)world.Terrain.Height(new SimVec2(wx, wz)) + centerLift + burial + stackLift;
+            float y = (float)TerrainMesh.RenderHeight(world.Terrain, new SimVec2(wx, wz)) + centerLift + burial + stackLift;
             int index = i * across + j;
             points[index] = new Vector3((float)wx, y, (float)wz);
             uvs[index] = AtlasUv(cellIndex, t, s);
@@ -425,6 +426,12 @@ public static class LoamLitterBuilder
         var normals = new Vector3[points.Length];
         var uvs = new Vector2[points.Length];
         var terrain = world.Terrain;
+        // Construct one coherent blade on the local tangent plane; only lift a
+        // vertex where that plane would penetrate the actual rendered terrain.
+        var anchorNormal = TerrainMesh.RenderNormal(terrain, center);
+        double anchorHeight = TerrainMesh.RenderHeight(terrain, center);
+        double slopeX = -anchorNormal.X / Math.Max(anchorNormal.Y, .1);
+        double slopeZ = -anchorNormal.Z / Math.Max(anchorNormal.Y, .1);
 
         for (int i = 0; i < stations; i++)
         {
@@ -447,8 +454,15 @@ public static class LoamLitterBuilder
                 var p = new SimVec2(wx, wz);
                 float midrib = (1f - Mathf.Abs(s)) * (intact ? 0.0017f : 0.0008f);
                 float cup = (1f - Mathf.Abs(s)) * fold;
-                float edgeCurl = Mathf.Pow(Mathf.Abs(s), 3.2f) * curl * (0.65f + 0.35f * Mathf.Sin(t * 17f + phase));
-                float surfaceY = (float)terrain.Height(p) + 0.0009f + overlapLift + centerBend + midrib + cup + edgeCurl;
+                // The visible opacity silhouette is inside the atlas rectangle;
+                // start curling inside that rectangle instead of its transparent rim.
+                float edge = Mathf.SmoothStep(0.35f, 0.85f, Mathf.Abs(s));
+                float edgeCurl = edge * curl * (0.65f + 0.35f * Mathf.Sin(t * 17f + phase));
+                float rise = Mathf.SmoothStep(0f, 0.32f, t);
+                double ground = TerrainMesh.RenderHeight(terrain, p);
+                double plane = anchorHeight + slopeX * (wx-center.X) + slopeZ * (wz-center.Z);
+                double attachedPlane = ground + (plane-ground) * rise;
+                float surfaceY = (float)Math.Max(ground + .0001, attachedPlane + .0001 + rise * (overlapLift + centerBend + midrib + cup + edgeCurl));
                 int index = i * across + j;
                 points[index] = new Vector3((float)wx, surfaceY, (float)wz);
                 uvs[index] = AtlasUv(cellIndex, t, s);
@@ -491,8 +505,8 @@ public static class LoamLitterBuilder
             float across = bend * Mathf.Sin(t * Mathf.Pi);
             double cx = center.X + Math.Cos(angle) * along - Math.Sin(angle) * across;
             double cz = center.Z + Math.Sin(angle) * along + Math.Cos(angle) * across;
-            float groundY = (float)world.Terrain.Height(new SimVec2(cx, cz));
-            ringCenters[i] = new Vector3((float)cx, groundY + startLift + radius * 0.9f, (float)cz);
+            float groundY = (float)TerrainMesh.RenderHeight(world.Terrain, new SimVec2(cx, cz));
+            ringCenters[i] = new Vector3((float)cx, groundY + startLift * Mathf.Sin(t * Mathf.Pi) + radius * 0.9f, (float)cz);
         }
 
         var dir = (ringCenters[^1] - ringCenters[0]).Normalized();

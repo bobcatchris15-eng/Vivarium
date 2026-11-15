@@ -433,6 +433,11 @@ public static class PropMeshes
             int jb = mesh.AddVertex(bb, Vec3.Up * -1, pigment, 1);
             Primitives.TriangleFacing(mesh, bottomCenter, jb, ja, Vec3.Up * -1);
         }
+        // TriangleFacing emits a right-handed outward cross product, whereas
+        // Godot culls counter-clockwise faces. Without this reversal the crowns
+        // vanish and only the inside of each grain survives as a dark ring.
+        for (int i = 0; i < mesh.Indices.Count; i += 3)
+            (mesh.Indices[i + 1], mesh.Indices[i + 2]) = (mesh.Indices[i + 2], mesh.Indices[i + 1]);
         return mesh;
     }
 

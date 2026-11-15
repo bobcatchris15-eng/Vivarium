@@ -40,6 +40,12 @@ public partial class Main : Node3D
         }
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (ArgAfter("--soil-review") is { } soilDirectory)
+        {
+            try { await SoilSurfaceReviewRunner.Capture(this, content, soilDirectory); }
+            catch (Exception ex) { GD.PrintErr(ex); GetTree().Quit(4); }
+            return;
+        }
         if (ArgAfter("--water-review") is { } waterReviewDirectory)
         {
             try { await WaterReviewRunner.Capture(this, content, waterReviewDirectory); }
@@ -120,6 +126,8 @@ public partial class Main : Node3D
                 if (restored != null) Log.Warn(LogCategory.Persistence, "Autosave could not be loaded: " + restored.Message);
                 loadingText.Text = "Growing a new island...";
                 var descriptor = content.PresetOrThrow(ArgAfter("--preset") ?? "default").Clone();
+                if (!UserArgs.Contains("--legacy-soil") && (!isReview || UserArgs.Contains("--integrated-soil")))
+                    SoilSurfaceUpgrade.ConfigureNew(descriptor);
                 if (visualReview || groundReview)
                     descriptor.Seed = ulong.TryParse(ArgAfter("--seed"), out var reviewSeed) ? reviewSeed : 804584441UL;
                 if (specimenReview)

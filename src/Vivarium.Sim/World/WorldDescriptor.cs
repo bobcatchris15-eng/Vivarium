@@ -26,6 +26,9 @@ public sealed class WorldDescriptor
     public string PilotTreeId { get; set; } = "random";
     /// <summary>-1 selects a seeded corner; 0..5 selects an exact hexagon vertex. Edge anchors are not allowed.</summary>
     public int PilotTreeCorner { get; set; } = -1;
+    /// <summary>Preserves the existing trunk anchor when upgrading a saved ground surface.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? PilotTreeBaseHeight { get; set; }
     /// <summary>random | none | a GuardianCatalog id, independently of the Pilot Tree.
     /// Legacy auto is accepted as an alias for random.</summary>
     public string GuardianId { get; set; } = "random";
@@ -92,6 +95,9 @@ public sealed class WorldDescriptor
         if (!(Terrain.MaxHeight > Terrain.MinHeight)) e.Add("terrain.maxHeight must exceed terrain.minHeight");
         if (!(Terrain.Bottom < Terrain.MinHeight - 0.5)) e.Add("terrain.bottom must be at least 0.5 m below terrain.minHeight");
         if (Terrain.Octaves is < 1 or > 8) e.Add("terrain.octaves must be within [1, 8]");
+        if (!double.IsFinite(Terrain.SoilSurfaceAmplitude) || Terrain.SoilSurfaceAmplitude < 0 || Terrain.SoilSurfaceAmplitude > .05) e.Add("soil surface amplitude must be within [0,.05] m");
+        if (PilotTreeBaseHeight is double treeBase && !double.IsFinite(treeBase)) e.Add("pilot tree base height must be finite");
+        if (Terrain.SoilSurfaceVersion is < 0 or > 1) e.Add("unsupported soil surface version");
         if (!double.IsFinite(Terrain.MicroRelief) || Terrain.MicroRelief < 0 || Terrain.MicroRelief > .1) e.Add("terrain.microRelief must be within [0, 0.1] m");
         if (!(Terrain.SlopeX >= -2 && Terrain.SlopeX <= 2)) e.Add($"terrain.slopeX {Terrain.SlopeX} must be within [-2, 2]");
         if (!(Terrain.SlopeZ >= -2 && Terrain.SlopeZ <= 2)) e.Add($"terrain.slopeZ {Terrain.SlopeZ} must be within [-2, 2]");
@@ -130,6 +136,13 @@ public sealed class WorldDescriptor
 
 public sealed class TerrainProfile
 {
+    /// <summary>0 preserves legacy terrain; 1 opts into the shared granular physical surface.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int SoilSurfaceVersion { get; set; }
+    /// <summary>Zero selects the immutable model-version default; nonzero is persisted tuning.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double SoilSurfaceAmplitude { get; set; }
+
     public double BaseHeight { get; set; } = 0.6;
     public double Relief { get; set; } = 0.5;
     /// <summary>Fine ground relief in metres. Legacy descriptors retain the original 4 cm amplitude.</summary>

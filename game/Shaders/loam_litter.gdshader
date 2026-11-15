@@ -27,7 +27,9 @@ vec3 litter_srgb_to_linear(vec3 c) {
 }
 
 void vertex() {
-    vertex_tint = litter_srgb_to_linear(COLOR.rgb);
+    // Builder colors are multiplicative age factors, not an albedo image.
+    // The scanned source_color texture already performs its sRGB conversion.
+    vertex_tint = COLOR.rgb;
     v_uv2 = UV2;
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }

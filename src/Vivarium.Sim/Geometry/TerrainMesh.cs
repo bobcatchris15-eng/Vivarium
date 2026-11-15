@@ -24,7 +24,7 @@ public static class TerrainMesh
         var xz = new List<Vec2>();
         var shared = new Dictionary<int, int>();
 
-        const int sub = 3;
+        int sub = hf.SoilSurfaceVersion == 0 ? 3 : hf.SoilSurface.Subdivisions;
         double step = hf.Step / sub;
         int nx = (hf.Nx - 1) * sub + 1;
         int nz = (hf.Nz - 1) * sub + 1;
@@ -69,7 +69,7 @@ public static class TerrainMesh
     /// <summary>The visible bed evaluates C1-continuous bicubic height with subtle micro-relief hummocks.</summary>
     public static double RenderHeight(Heightfield hf, Vec2 p, bool smooth = true)
     {
-        if (!smooth) return hf.Height(p);
+        if (!smooth || hf.SoilSurfaceVersion != 0) return hf.Height(p);
         // Water and collision use the triangulated heightfield. Unbounded cubic
         // overshoot can bury a shallow creek or cut holes through its banks.
         // Keep cosmetic relief sub-millimetre; normal smoothing remains available.
@@ -107,6 +107,7 @@ public static class TerrainMesh
     // to the flat facet normal wherever the clamp saturates (faceted bands, creases at clamp release).
     public static Vec3 RenderNormal(Heightfield hf, Vec2 p)
     {
+        if (hf.SoilSurfaceVersion != 0) return hf.SoilSurface.ShadingNormal(p.X, p.Z);
         double e = Math.Min(hf.Step * 0.25, 0.03);
         double dx = (CosmeticHeight(hf, p + new Vec2(e, 0)) - CosmeticHeight(hf, p - new Vec2(e, 0))) / (2 * e);
         double dz = (CosmeticHeight(hf, p + new Vec2(0, e)) - CosmeticHeight(hf, p - new Vec2(0, e))) / (2 * e);
@@ -152,6 +153,27 @@ public static class TerrainMesh
     /// UV = (distance along perimeter, depth below surface); UV2 = (layer index, normalized depth within
     /// that layer). Colours come from content data. Woody flora near the rim also grow real 3D rootlets.
     /// </summary>
+    private static double[] SoilBoundaryParameters(Heightfield hf, Vec2 a, Vec2 b)
+    {
+        var soil = hf.SoilSurface;
+        var cuts = new List<double> { 0, 1 };
+        double ax = (a.X-soil.OriginX)/soil.Spacing, az = (a.Z-soil.OriginZ)/soil.Spacing;
+        double bx = (b.X-soil.OriginX)/soil.Spacing, bz = (b.Z-soil.OriginZ)/soil.Spacing;
+        void Cross(double start, double end)
+        {
+            if (Math.Abs(end-start) < 1e-12) return;
+            for (long k=(long)Math.Ceiling(Math.Min(start,end)); k<=Math.Floor(Math.Max(start,end)); k++)
+            {
+                double t=(k-start)/(end-start);
+                if(t>1e-10 && t<1-1e-10) cuts.Add(t);
+            }
+        }
+        Cross(ax,bx); Cross(az,bz); Cross(ax-az,bx-bz);
+        cuts.Sort(); var unique = new List<double>();
+        foreach(double t in cuts) if(unique.Count==0 || t-unique[^1]>1e-10)unique.Add(t);
+        return unique.ToArray();
+    }
+
     public static MeshData BuildWalls(VivariumWorld w, double sampleStep = 0)
     {
         var hf = w.Terrain; var dom = w.Domain; var strata = w.Strata;
@@ -248,7 +270,8 @@ public static class TerrainMesh
             var outward2 = dom.EdgeNormals[k];
             var outward = new Vec3(outward2.X, 0, outward2.Z);
             double len = Vec2.Distance(a, b);
-            int segs = Math.Max(1, (int)Math.Ceiling(len / step));
+            double[]? soilCuts = hf.SoilSurfaceVersion == 0 ? null : SoilBoundaryParameters(hf, a, b);
+            int segs = soilCuts == null ? Math.Max(1, (int)Math.Ceiling(len / step)) : soilCuts.Length - 1;
 
             var ids = new int[layers][][];
             for (int l = 0; l < layers; l++)
@@ -260,7 +283,7 @@ public static class TerrainMesh
             var colNormals = new Vec2[segs + 1];
             for (int s = 0; s <= segs; s++)
             {
-                double t = (double)s / segs;
+                double t = soilCuts == null ? (double)s / segs : soilCuts[s];
                 var p = Vec2.Lerp(a, b, t);
                 double surf = RenderHeight(hf, p);
                 FillBounds(p, surf, bounds);

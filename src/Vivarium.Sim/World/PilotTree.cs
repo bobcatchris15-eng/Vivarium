@@ -95,13 +95,13 @@ public sealed class PilotTreeState
         }
     }
 
-    private PilotTreeState(PilotTreeDef def, int corner, ulong seed, HexDomain domain, Heightfield terrain)
+    private PilotTreeState(PilotTreeDef def, int corner, ulong seed, HexDomain domain, Heightfield terrain, double? baseHeight = null)
     {
         Def = def; Corner = corner; Seed = seed; _domain = domain; _terrain = terrain;
         CornerPoint = domain.Vertices[corner];
         var outward = CornerPoint.Normalized();
         Anchor = CornerPoint;
-        BaseHeight = terrain.Height(CornerPoint);
+        BaseHeight = baseHeight ?? terrain.Height(CornerPoint);
         SideDirections = new[] { (domain.Vertices[(corner + 5) % 6] - CornerPoint).Normalized(), (domain.Vertices[(corner + 1) % 6] - CornerPoint).Normalized() };
         CutNormals = new[] { domain.EdgeNormals[(corner + 5) % 6], domain.EdgeNormals[corner] };
         var paths = new List<PilotRootPath>();
@@ -179,7 +179,7 @@ public sealed class PilotTreeState
             : PilotTreeCatalog.Find(descriptor.PilotTreeId) ?? throw new ArgumentException("Unknown Pilot Tree: " + descriptor.PilotTreeId);
         int corner = descriptor.PilotTreeCorner < 0 ? seededCorner : descriptor.PilotTreeCorner;
         ulong rootSeed = rng.NextULong();
-        var state = new PilotTreeState(def, corner, rootSeed, domain, terrain);
+        var state = new PilotTreeState(def, corner, rootSeed, domain, terrain, descriptor.PilotTreeBaseHeight);
         // Keep seeded selection when possible; only automatic placement moves away from
         // an authored drainage route. Explicit player/save corners remain authoritative.
         var channels = descriptor.Terrain.Features.Where(f => f.Type == "channel" && (f.BedHeight.HasValue || f.CutDepth.HasValue)).ToArray();
@@ -208,7 +208,7 @@ public sealed class PilotTreeState
             double best = ClearanceCost(state);
             for (int i = 1; i < 6 && best > 1e-10; i++)
             {
-                var candidate = new PilotTreeState(def, (corner + i) % 6, rootSeed, domain, terrain);
+                var candidate = new PilotTreeState(def, (corner + i) % 6, rootSeed, domain, terrain, descriptor.PilotTreeBaseHeight);
                 double cost = ClearanceCost(candidate);
                 if (cost < best) { best = cost; state = candidate; }
             }
@@ -412,6 +412,9 @@ public sealed class PilotTreeState
                 double ridge = q < 1 ? root.Height * 0.24 * Math.Pow(1 - q * q, 2) : 0;
                 _terrain.H[j * _terrain.Nx + i] = MathD.Clamp(_terrain.H[j * _terrain.Nx + i] + ridge, _terrain.MinHeight, _terrain.MaxHeight);
             }
+        // The granular sampler may already have been captured while generating roots.
+        // Publish the changed macro bed before refreshing their contact samples.
+        if (_terrain.SoilSurfaceVersion != 0) _terrain.Touch();
         // Root mesh samples sit on the resulting authoritative bed, which also becomes the sculpt-save baseline.
         Roots = Array.AsReadOnly(Roots.Select(path => new PilotRootPath(path.Samples.Select(s => s with { GroundY = _terrain.Height(s.Position) }), path.AlongSide)).ToArray());
     }

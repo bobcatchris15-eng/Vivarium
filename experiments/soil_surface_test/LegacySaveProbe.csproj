@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup><Compile Include="LegacySaveProbe.cs"/></ItemGroup>
+  <ItemGroup Condition="'$(FrozenSimAssembly)' == ''"><ProjectReference Include="../../src/Vivarium.Sim/Vivarium.Sim.csproj"/></ItemGroup>
+  <ItemGroup Condition="'$(FrozenSimAssembly)' != ''"><Reference Include="Vivarium.Sim"><HintPath>$(FrozenSimAssembly)</HintPath></Reference></ItemGroup>
+</Project>

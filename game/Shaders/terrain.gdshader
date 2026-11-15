@@ -16,6 +16,7 @@ uniform sampler2D cover_tex : filter_linear, repeat_disable;   // moss/lichen co
 uniform vec4 field_rect;            // origin.x, origin.z, size.x, size.z
 uniform float water_table = 0.0;
 uniform float review_time = -1.0;
+uniform bool review_albedo_only = false;
 uniform int overlay_mode = 0;       // 0 none, 1 moisture, 2 nutrients, 3 light, 4 substrate
 uniform float overlay_strength = 0.85;
 
@@ -36,12 +37,6 @@ uniform sampler2D moss_nrm : hint_normal, filter_linear_mipmap_anisotropic, repe
 uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_hgt : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_ao : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
-
-uniform sampler2D leaf_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D leaf_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D leaf_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D leaf_hgt : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform sampler2D leaf_ao : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 
 uniform sampler2D gravel_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -66,6 +61,7 @@ float terrain_noise(vec2 p) {
         mix(terrain_hash(i + vec2(0, 1)), terrain_hash(i + vec2(1, 1)), u.x), u.y);
 }
 uniform float tile_metres = 0.82;    // physical scale of Ground048 in the integrated loam
+uniform bool integrated_soil = false; // geometric relief supplies depth; scans supply fine grain only
 uniform float soil_relief_amp = 0.012;   // retained control; aggregate detail remains shading-only
 uniform float soil_relief_freq = 26.0;   // joined organic aggregate frequency in world metres
 uniform float soil_clumps = 1.0;        // 0 skips aggregate normals on low quality tiers
@@ -167,6 +163,7 @@ void fragment() {
     // Litter collects preferentially in sheltered contact zones (root collars, logs, rocks)
     float wLeaf = (stored_litter * (1.0 + contact_mask * 0.45)) * smoothstep(0.31, 0.64, fbm(world_pos.xz * 0.83 + 7.2));
     float wMoss = smoothstep(0.04, 0.45, colony) * mix(0.82, 1.0, smoothstep(0.18, 0.78, moisture)) * (1.0 - wSilt);
+    if (integrated_soil) wMoss = 0.0; // Attached colony geometry carries vegetation color and thickness.
     float gravel_edge = (vnoise(world_pos.xz * 5.3 + vec2(8.7, 13.2)) - 0.5) * 0.16;
     float wGrav = smoothstep(0.16, 0.84, sub.r + gravel_edge);
 
@@ -179,7 +176,7 @@ void fragment() {
     // Preserve close inspection detail while avoiding a heightfield march when its
     // projected relief is too small to read. Fade both displacement and shadow.
     float pom_fade = 1.0 - smoothstep(3.0, 5.0, cam_dist);
-    if (wGrav < 0.95 && pom_fade > 0.001 && tri_blend.y > 0.25) {
+    if (!integrated_soil && wGrav < 0.95 && pom_fade > 0.001 && tri_blend.y > 0.25) {
         float soil_shadow = 1.0;
         // Spend the march budget where the relief reads: full steps close up,
         // six taps once the projected offset is sub-pixel.
@@ -204,39 +201,17 @@ void fragment() {
         soil_ao_val = mix(soil_ao_val, damp_ao_val, damp_blend);
     }
 
-    // Blend leaf (ScatteredLeaves007) based on stored litter / organic horizon
-    // Litter is a flat layer lying on the soil: undisplaced UV (no POM smear), faded out on slopes,
-    // anti-tiled by blending two differently offset/rotated lookups with a low-frequency noise mask.
+    // Stored litter enriches the decomposed organic horizon. Recognizable leaf
+    // silhouettes belong to the attached litter meshes, not a second printed
+    // photograph blended onto the mineral surface beneath them.
     float leaf_slope = smoothstep(0.62, 0.90, wn.y);
-    float w_leaf_in = wLeaf * leaf_slope;
-    if (w_leaf_in > 0.01) {
-        vec2 lu = uv * 1.5;
-        const float lc = 0.8387, ls = 0.5446;   // 33 degree rotation
-        vec2 lu_b = vec2(lc * lu.x - ls * lu.y, ls * lu.x + lc * lu.y) * 0.83 + vec2(0.37, 0.71);
-        float lm = smoothstep(0.30, 0.70, terrain_noise(world_pos.xz * 0.9 + vec2(3.3, 8.1)));
-        vec4 la = vec4(0.0), lb = vec4(0.0);
-        vec3 na = vec3(0.0, 0.0, 1.0), nb = vec3(0.0, 0.0, 1.0);
-        if (lm < 0.999) {
-            la = vec4(texture(leaf_col, lu).rgb, texture(leaf_rgh, lu).r);
-            na = unpack_normal(texture(leaf_nrm, lu).rgb);
-        }
-        if (lm > 0.001) {
-            lb = vec4(texture(leaf_col, lu_b).rgb, texture(leaf_rgh, lu_b).r);
-            nb = unpack_normal(texture(leaf_nrm, lu_b).rgb);
-            // map the rotated-frame normal back into the shared frame (inverse rotation)
-            nb.xy = vec2(lc * nb.x + ls * nb.y, -ls * nb.x + lc * nb.y);
-        }
-        vec4 leaf_samp = mix(la, lb, lm);
-        vec3 leaf_n = normalize(mix(na, nb, lm));
-        float leaf_ao_val = (lm < 0.5) ? texture(leaf_ao, lu).r : texture(leaf_ao, lu_b).r;
-        float leaf_h = dot(leaf_samp.rgb, vec3(0.333)) * 1.2;
-        float w_leaf_h = hblend(w_leaf_in, leaf_h);
-        soil = mix(soil, leaf_samp, w_leaf_h * 0.82);
-        tn = normalize(mix(tn, leaf_n, w_leaf_h * 0.82));
-        soil_ao_val = mix(soil_ao_val, leaf_ao_val, w_leaf_h * 0.82);
-    }
+    float humus = clamp(wLeaf * leaf_slope, 0.0, 1.0);
+    soil.rgb *= mix(vec3(1.0), vec3(0.67, 0.64, 0.60), humus * 0.65);
+    soil.a = mix(soil.a, 0.96, humus * 0.55);
+    soil_ao_val *= 1.0 - humus * 0.10;
 
     vec3 world_pert = vec3(tn.x, 0.0, -tn.y);
+    if (integrated_soil) world_pert *= .28;
 
     if (tri_blend.y < 0.95) {
         vec3 tn_x, tn_z;
@@ -277,7 +252,7 @@ void fragment() {
             + (shoulder - 0.5) * 0.15 - smoothstep(0.70, 0.91, pore) * 0.14);
     vec3 aggregate_normal = wn;
     float agg_fade = 1.0 - smoothstep(1.8, 4.5, cam_dist);
-    if (soil_clumps > 0.5 && agg_fade > 0.01) {
+    if (!integrated_soil && soil_clumps > 0.5 && agg_fade > 0.01) {
         vec3 px = dFdx(world_pos), py = dFdy(world_pos);
         float hx = dFdx(aggregate_height), hy = dFdy(aggregate_height);
         float det = px.x * py.z - px.z * py.x;
@@ -309,19 +284,23 @@ void fragment() {
         vec3 gw = pow(max(abs(wn) - vec3(0.2), vec3(0.0)), vec3(4.0));
         gw /= max(gw.x + gw.y + gw.z, 0.0001);
         vec4 g = vec4(0.0);
+        float gravel_height = 0.0;
         vec3 gravel_normal = vec3(0.0);
         if (gw.x > 0.0) {
             g += vec4(texture(gravel_col, gp.zy).rgb, texture(gravel_rgh, gp.zy).r) * gw.x;
+            if (integrated_soil) gravel_height += texture(gravel_hgt, gp.zy).r * gw.x;
             gravel_normal += cotangent_normal(wn, world_pos, gp.zy,
                 unpack_normal(texture(gravel_nrm, gp.zy).rgb)) * gw.x;
         }
         if (gw.y > 0.0) {
             g += vec4(texture(gravel_col, gp.xz).rgb, texture(gravel_rgh, gp.xz).r) * gw.y;
+            if (integrated_soil) gravel_height += texture(gravel_hgt, gp.xz).r * gw.y;
             gravel_normal += cotangent_normal(wn, world_pos, gp.xz,
                 unpack_normal(texture(gravel_nrm, gp.xz).rgb)) * gw.y;
         }
         if (gw.z > 0.0) {
             g += vec4(texture(gravel_col, gp.xy).rgb, texture(gravel_rgh, gp.xy).r) * gw.z;
+            if (integrated_soil) gravel_height += texture(gravel_hgt, gp.xy).r * gw.z;
             gravel_normal += cotangent_normal(wn, world_pos, gp.xy,
                 unpack_normal(texture(gravel_nrm, gp.xy).rgb)) * gw.z;
         }
@@ -339,6 +318,15 @@ void fragment() {
             * mix(vec3(1.08, 1.01, 0.91), vec3(0.93, 0.99, 1.08), aggregate);
         float soil_h = dot(soil.rgb, vec3(0.33));
         float w = clamp(((wGrav * 1.4 + stone_h * 0.35 - soil_h * 0.25) - 0.15) / 0.70, 0.0, 1.0);
+        if (integrated_soil) {
+            // Expose mineral crowns through the soil matrix. The photographed
+            // dark pores belong to the scan's original bed, not this soil.
+            float mineral_crown = smoothstep(0.25, 0.75, gravel_height)
+                * smoothstep(0.015, 0.10, gravel_grey.r);
+            w = wGrav * mineral_crown * 0.65;
+            g.rgb = mix(col, g.rgb * 0.70, 0.60);
+            gravel_pert *= 0.45;
+        }
         col = mix(col, g.rgb, w); rough = mix(rough, g.a, w);
         world_pert = mix(world_pert, gravel_pert, w);
     }
@@ -370,6 +358,7 @@ void fragment() {
     float ambient_micro = 0.76 + 0.24 * fbm(world_pos.xz * 7.5 + vec2(19.1, 4.7));
     float ambient_weight = smoothstep(0.035, 0.72, ambient_cover) * 0.72 * ambient_micro
         * (1.0 - wGrav) * (1.0 - wLeaf * 0.55) * (1.0 - wSilt);
+    if (integrated_soil) ambient_weight = 0.0;
     vec3 ambient_dry = srgb_to_linear(vec3(0.22, 0.35, 0.09));
     vec3 ambient_mesic = srgb_to_linear(vec3(0.075, 0.29, 0.065));
     vec3 ambient_shade = srgb_to_linear(vec3(0.045, 0.205, 0.105));
@@ -445,6 +434,10 @@ void fragment() {
         EMISSION = repr_sky_bounce(ALBEDO, detail, repr_ao, false);
     }
     material_specular = SPECULAR;
+    if (review_albedo_only) {
+        EMISSION = ALBEDO; ALBEDO = vec3(0.0); SPECULAR = 0.0;
+        AO = 1.0; CLEARCOAT = 0.0;
+    }
 }
 
 void light() {

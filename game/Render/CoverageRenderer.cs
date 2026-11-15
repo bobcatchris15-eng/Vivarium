@@ -1292,10 +1292,11 @@ public partial class CoverageRenderer : Node3D
         void AddSurfaceTriangle(int a, int b, int c, int depth = 0, bool refineHagshairLog = false)
         {
             if ((layer.Id == CoverageLayerId.Mat || layer.Id == CoverageLayerId.Crust) &&
-                (localRocks != null || (refineHagshairLog && localLogs != null)))
+                (terrain.SoilSurfaceVersion != 0 || localRocks != null || (refineHagshairLog && localLogs != null)))
             {
                 double error = SupportPlaneError(a, b, c);
-                if (error > .0015 && depth < 4)
+                double tolerance = terrain.SoilSurfaceVersion != 0 ? .0004 : .0015;
+                if (error > tolerance && depth < 4)
                 {
                     int ab = SurfaceMidpoint(a,b), bc = SurfaceMidpoint(b,c), ca = SurfaceMidpoint(c,a);
                     AddSurfaceTriangle(a,ab,ca,depth+1,refineHagshairLog); AddSurfaceTriangle(ab,b,bc,depth+1,refineHagshairLog);
