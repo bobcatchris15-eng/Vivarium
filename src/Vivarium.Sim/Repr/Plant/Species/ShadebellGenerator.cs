@@ -35,7 +35,7 @@ public sealed class ShadebellGenerator : PlanGenerator
         ushort leaf = b.AddShape(new OrganShape
         {
             Name = "shadebell_leaf", Type = OrganType.Leaf,
-            WidthProfile = PlantShapes.Profile(t => 0.5 * Math.Pow(Math.Sin(Math.PI * Math.Pow(t, 0.55)), 0.6)),
+            WidthProfile = PlantShapes.Profile(t => 0.5 * Math.Pow(Math.Max(0, Math.Sin(Math.PI * Math.Pow(t, 0.68))), 0.62) * (1 - 0.12 * t)),
             LengthToWidth = 1.15f, MidribCurl = 0.10f, CrossCurl = 0.12f, Twist = 0.05f,
             EdgeWave = 0.03f, EdgeWaveFreq = 2.5f, Serration = 0f,
             Thickness = 0.0006f,
@@ -67,14 +67,14 @@ public sealed class ShadebellGenerator : PlanGenerator
             for (int tier = 0; tier < 3; tier++)
             {
                 int host = tier == 0 ? lower : upper;
-                double t = tier == 0 ? 0.55 : tier == 1 ? 0.28 : 0.72;
+                double t = (tier == 0 ? 0.55 : tier == 1 ? 0.28 : 0.72) + b.Range(-0.055, 0.055);
                 double branchAz = az + (tier % 2 == 0 ? 0.95 : -0.95) + b.Range(-0.18, 0.18);
                 var outward = PlantMath.Horizontal(branchAz);
                 var lateral = PlantMath.Horizontal(branchAz + Math.PI / 2);
                 int fork = b.AddAxis(host, t, outward + up * 0.3, form.LowerForkLength * b.Range(0.62, 0.76),
                     lateral * b.Range(-0.2, 0.2) + up * -0.12, 0.016, 0.006, 2, Tissue.Wood, 0.03 * b.Draw(), 0.18);
                 for (int wh = 0; wh < 3; wh++)
-                    AddWhorl(b, leaf, fork, 0.48 + wh * 0.23, branchAz + wh * 1.3, 5, 0.95,
+                    AddWhorl(b, leaf, fork, 0.48 + wh * 0.23 + b.Range(-0.035, 0.035), branchAz + wh * 1.3, 5, 0.95,
                         form.LeafLengthMin, form.LeafLengthMax);
                 // A hanging raceme with several pendant bells beneath each leaf deck.
                 int raceme = b.AddAxis(fork, 0.83, Vec3.Down + outward * 0.15, 0.15,
@@ -99,7 +99,7 @@ public sealed class ShadebellGenerator : PlanGenerator
         {
             double az = az0 + i * Math.Tau / count + b.Range(-0.35, 0.35);
             var h = PlantMath.Horizontal(az);
-            int pet = b.AddAxis(axis, t, h * 0.82 + Vec3.Up * b.Range(0.28, 0.55), b.Range(0.042, 0.058) * scale,
+            int pet = b.AddAxis(axis, Math.Clamp(t + b.Range(-0.025, 0.025), 0.05, 0.99), h * 0.82 + Vec3.Up * b.Range(0.28, 0.55), b.Range(0.042, 0.058) * scale,
                 Vec3.Down * 0.25, 0.0035, 0.002, 3, Tissue.Green, 0.03 * b.Draw(), 0.1, OrganFlags.None, OrganType.Petiole);
             double lLen = b.Range(leafLengthMin, leafLengthMax) * scale * b.Range(0.85, 1.15);
             b.AddFlat(pet, 1.0, h * 0.99 + Vec3.Up * b.Range(-0.08, 0.10), lLen, lLen * 0.52, 0.0006, OrganType.Leaf, leaf, 4,

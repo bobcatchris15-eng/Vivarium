@@ -569,7 +569,11 @@ public static partial class PlantCompiler
                     xr *= 1 - s.Serration * 0.5 * (1 + Math.Cos(s.SerrationFreq * Math.Tau * t));
                 // A broad, shallow crown avoids a hard ridge running down the blade.
                 off += 0.004 * pw * (1 - frac * frac);
-                var pos = new Vec3(xr, yc + cy * off, zc + sy * off);
+                // A sagittate blade attaches at the central notch. Its two basal
+                // shoulders extend behind that notch as connected, pointed lobes.
+                double basalLobe = Math.Clamp(s.BasalLobeLength,0,.7f)
+                    * Math.Pow(Math.Max(0,1-t/.32),2) * frac * frac;
+                var pos = new Vec3(xr, yc + cy * off, zc + sy * off - basalLobe);
                 var col = Mix(cA, cB, 0.25 + 0.5 * frac);
                 // Analytic adaxial normal from the midrib frame (RecomputeNormals leaves base/tip rows at zero,
                 // where the profile collapses to a point).

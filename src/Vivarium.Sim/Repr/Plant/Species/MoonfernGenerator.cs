@@ -32,7 +32,7 @@ public sealed class MoonfernGenerator : PlanGenerator
         ushort sheet = b.AddShape(new OrganShape
         {
             Name = "moonfern_connected_frond", Type = OrganType.Leaf,
-            WidthProfile = PlantShapes.Profile(t => 0.5 * Math.Pow(Math.Max(0, Math.Sin(Math.PI * t)), 0.72)),
+            WidthProfile = PlantShapes.Profile(t => 0.5 * Math.Pow(Math.Max(0, Math.Sin(Math.PI * Math.Pow(t, 0.80))), 0.68) * (1 - 0.24 * t)),
             LobeCount = 20, LobeDepth = 0.78f, PairedLaminaApertures = true,
             LengthToWidth = 3.0f, MidribCurl = (float)form.FrondCurl, CrossCurl = 0.05f,
             Thickness = 0.0005f, ColorAdaxial = PlantShapes.Srgb(0.19, 0.34, 0.25),
@@ -43,11 +43,11 @@ public sealed class MoonfernGenerator : PlanGenerator
         double rot = b.Range(0, Math.Tau);
         for (int f = 0; f < count; f++)
         {
-            double az = rot + f * Math.Tau / count + b.Range(-0.2, 0.2);
+            double az = rot + f * Math.Tau / count + b.Range(-0.38, 0.38);
             var outward = PlantMath.Horizontal(az);
             double length = b.Range(form.FrondLengthMin, form.FrondLengthMax);
-            var direction = PlantMath.SafeNormal(outward * 0.48 + up, up);
-            int rachis = b.AddAxis(crown, 1, direction, length * 0.045, outward * 0.15,
+            var direction = PlantMath.SafeNormal(outward * b.Range(0.35, 0.68) + up, up);
+            int rachis = b.AddAxis(crown, 1, direction, length * 0.045, outward * b.Range(0.08, 0.24),
                 0.0045, 0.0035, 1, Tissue.Green, 0.02 * b.Draw(), form.PetioleGrowthDuration);
             b.AddFlat(rachis, 1, direction, length * 0.955, length * form.FrondHalfWidthRatio * b.Range(0.9, 1.1), 0.0005,
                 OrganType.Leaf, sheet, 2, 0.02 * b.Draw(), form.FrondGrowthDuration);

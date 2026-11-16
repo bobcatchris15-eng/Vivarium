@@ -185,12 +185,15 @@ public sealed class OrganShape
     public float LobeDepth;
     public bool PairedLaminaApertures; // real openings with a central web and outer bridges
     public float RadialPitDepth; // opt-in cellular relief as a fraction of local radius
+    public float RadialAsymmetry; // broad unequal shoulders on caps/cups; fraction of local radius
+    public float BasalLobeLength; // sagittate blades: backward basal lobes, in units of blade length
+    public bool RadialLattice; // open mesh cells for a fungal lace veil
     public float RimCurl;
     public float ShellThickness = .015f; // unit-radius fraction for radial surfaces
     public string Name = "";
     public OrganType Type;
     public float[] WidthProfile = Array.Empty<float>();
-    public float LengthToWidth = 2.5f; // authoring hint; organ RadiusStart is the rendered peak half-width
+    public float LengthToWidth = 2.5f; // curved radial length/full-width ratio; lamina uses organ half-width
     public float MidribCurl;          // radians of downward arc along the midrib
     public float CrossCurl;           // radians of fold/cupping across the blade (+ = V up)
     public float Twist;               // radians along the midrib

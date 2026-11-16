@@ -5,10 +5,15 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / 'build/plant-graph-tuning-20261115'
 OUT = BASE / 'identity-reviewed'
-notes_path = next(p for p in (BASE/'identity-release-validation.json', BASE/'identity-verified-validation.json') if p.exists())
+notes_path = next(p for p in (BASE/'organic-final-validation.json', BASE/'organic-refined-validation.json', BASE/'organic-roster-validation.json', BASE/'identity-release-validation.json') if p.exists())
 notes = json.loads(notes_path.read_text(encoding='utf-8'))
 scales = json.loads((BASE/'identity-scales.json').read_text(encoding='utf-8'))
-overrides = {'greywatch':'identity-cavity', 'veilfern':'identity-cavity', 'fencomb':'identity-cavity', 'hollowcrown':'identity-taper', 'fenforge':'four-species-reviewed', 'embercrown':'four-species-reviewed', 'banksorrow':'four-species-reviewed', 'kinkcane':'four-species-reviewed'}
+overrides = {p.name.removesuffix('_growth.png'):'organic-refined'
+             for p in (BASE/'organic-refined/plant_catalog').glob('*_growth.png')
+             if not p.name.endswith(('_foliage_growth.png','_cavity_growth.png'))}
+overrides['pitcher_plant']='organic-pitcher'
+if (BASE/'organic-tidebell/plant_catalog/tidebell_growth.png').exists(): overrides['tidebell']='organic-tidebell'
+
 reports = {}
 def provenance(path):
     report = path.parent / 'report.json'
@@ -28,7 +33,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 records, cards = [], []
 for item in sorted(notes['species'], key=lambda x:x['id']):
     name = item['id']
-    graph = BASE / overrides.get(name, 'identity-final') / 'plant_catalog' / (name+'_growth.png')
+    graph = BASE / overrides.get(name, 'organic-roster') / 'plant_catalog' / (name+'_growth.png')
     legacy = BASE / 'identity-legacy/plant_catalog' / (name+'_legacy.png')
     if name not in scales: raise ValueError(f'Missing shared scale: {name}')
     for p in (graph, legacy):
@@ -36,14 +41,14 @@ for item in sorted(notes['species'], key=lambda x:x['id']):
     macros = []
     # Select the newest actual report-backed macro capture per kind.
     for kind in ('foliage', 'cavity'):
-        choices = list(BASE.glob(f'identity-*/plant_catalog/{name}_{kind}_growth.png')) + list(BASE.glob(f'four-species-reviewed/plant_catalog/{name}_{kind}_growth.png'))
+        choices = list(BASE.glob(f'*/plant_catalog/{name}_{kind}_growth.png'))
         if choices:
             p = max(choices, key=lambda x:x.stat().st_mtime_ns)
             macros.append((kind,p))
     records.append({'species':name, 'shared_scale':scales[name], 'legacy':provenance(legacy), 'graph':provenance(graph),
                     'macros':[dict(kind=k, **provenance(p)) for k,p in macros]})
     links = ' · '.join(f'<a href="{url(p)}">{esc(k)} macro</a> <small>({esc(p.parent.parent.name)})</small>' for k,p in macros)
-    cards.append(f'''<article data-family="{esc(item['family'])}"><h2>{esc(name)}</h2><p>{esc(item['family'])} · {esc(item['silhouette'])}</p><p>{esc(item['growthHabit'])}</p><div class="pair"><figure><figcaption>Legacy · identity-legacy</figcaption><a href="{url(legacy)}"><img loading="lazy" src="{url(legacy)}" alt="{esc(name)} legacy"></a></figure><figure><figcaption>Graph · {esc(graph.parent.parent.name)}</figcaption><a href="{url(graph)}"><img loading="lazy" src="{url(graph)}" alt="{esc(name)} graph"></a></figure></div><p>{links}</p></article>''')
+    cards.append(f'''<article id="{esc(name)}" data-family="{esc(item['family'])}"><h2>{esc(name)}</h2><p>{esc(item['family'])} · {esc(item['silhouette'])}</p><p>{esc(item['growthHabit'])}</p><div class="pair"><figure><figcaption>Legacy · identity-legacy</figcaption><a href="{url(legacy)}"><img loading="lazy" src="{url(legacy)}" alt="{esc(name)} legacy"></a></figure><figure><figcaption>Graph · {esc(graph.parent.parent.name)}</figcaption><a href="{url(graph)}"><img loading="lazy" src="{url(graph)}" alt="{esc(name)} graph"></a></figure></div><p>{links}</p></article>''')
 if len(records) != 125: raise ValueError(f'Expected 125 species, got {len(records)}')
 manifest = {'notes':str(notes_path.relative_to(BASE)), 'shared_scale_file':'identity-scales.json',
             'description':'Original capture files; each image references its own capture report and module IDs.', 'species':records}

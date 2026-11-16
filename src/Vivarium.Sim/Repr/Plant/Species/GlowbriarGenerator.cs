@@ -44,7 +44,7 @@ public sealed class GlowbriarGenerator : PlanGenerator
         ushort leafShape = b.AddShape(new OrganShape
         {
             Name = "glowbriar_leaf", Type = OrganType.Leaf,
-            WidthProfile = PlantShapes.Profile(t => 0.2 * Math.Pow(Math.Sin(Math.PI * Math.Pow(t, 0.7)), 0.9)),
+            WidthProfile = PlantShapes.Profile(t => 0.2 * Math.Pow(Math.Max(0, Math.Sin(Math.PI * Math.Pow(t, 0.82))), 0.72) * (1 - 0.20 * t)),
             LengthToWidth = 2.5f, MidribCurl = 0.22f, CrossCurl = 0.25f, Twist = 0.12f,
             EdgeWave = 0.012f, EdgeWaveFreq = 5f, Serration = 0.012f, SerrationFreq = 9f,
             Thickness = 0.0004f,
@@ -120,7 +120,7 @@ public sealed class GlowbriarGenerator : PlanGenerator
                     for (int nd = 0; nd < form.LeafNodes; nd++)
                     {
                         double nodeProgress = nd / (double)Math.Max(1, form.LeafNodes - 1);
-                        double nt = Math.Clamp(0.14 + 0.81 * nodeProgress + b.Range(-0.03, 0.03), 0.1, 0.98);
+                        double nt = Math.Clamp(0.14 + 0.81 * (1 - Math.Pow(1 - nodeProgress, 1.22)) + b.Range(-0.025, 0.025), 0.1, 0.98);
                         for (int sd = 0; sd < 2; sd++)
                         {
                             double la = nd * (Math.PI / 2) + sd * Math.PI + twAz + b.Range(-0.22, 0.22);
