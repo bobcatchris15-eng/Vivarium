@@ -40,6 +40,12 @@ public partial class Main : Node3D
         }
 
         if (UserArgs.Contains("--boot-test")) { BootTest.Run(this, content); return; }
+        if (ArgAfter("--graph-plant-review") is { } graphPlantDirectory)
+        {
+            try { await GraphPlantReviewRunner.Capture(this,content,graphPlantDirectory); }
+            catch(Exception ex) { GD.PrintErr(ex);GetTree().Quit(4); }
+            return;
+        }
         if (ArgAfter("--soil-review") is { } soilDirectory)
         {
             try { await SoilSurfaceReviewRunner.Capture(this, content, soilDirectory); }

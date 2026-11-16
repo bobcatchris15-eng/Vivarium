@@ -258,6 +258,7 @@ public int Quality
             }
             if (layer.Veins != null) { layer.Veins.Multimesh.VisibleInstanceCount = 0; layer.Veins.Multimesh.InstanceCount = 0; }
         }
+        GraphBuild();
         RequestMissingLayers();
         _accum = 999;
     }
@@ -268,7 +269,7 @@ public int Quality
         // Build layers for living plants and corpses that lack one.
         var deadSpecies = _w.DeadFlora.Items.Select(p => p.SpeciesId)
             .ToHashSet(StringComparer.Ordinal);
-        var needed = _w.Flora.Items.Select(p => p.SpeciesId)
+        var needed = _w.Flora.Items.Where(p => !GraphOwns(p.SpeciesId)).Select(p => p.SpeciesId)
             .Concat(deadSpecies)
             .Where(id => !_layers.ContainsKey(id))
             .ToHashSet(StringComparer.Ordinal);
@@ -549,6 +550,7 @@ public int Quality
         using var prof = FrameProfiler.Measure("Flora");
         _clock += delta;
         if (_w == null) return;
+        GraphProcess();
         if (_w.Terrain.Version != _terrainVersion)
         {
             _terrainVersion = _w.Terrain.Version;
@@ -641,6 +643,7 @@ public int Quality
 
     public override void _ExitTree()
     {
+        _graphEpoch++; _graphTask = null; _graphQueue.Clear();
         _build?.Dispose(); _build = null;
         _refresh?.Dispose(); _refresh = null;
         _pooledBuffers.Clear(); _placements.Clear(); _stalePlacements.Clear(); DirtyRegions.Clear();
@@ -787,7 +790,7 @@ public int Quality
         foreach (var f in _snapshot)
         {
             yield return false;
-            if (_w.Flora.Get(f.Id) == null) continue;
+            if (_w.Flora.Get(f.Id) == null || GraphOwns(f.SpeciesId)) continue;
             // A camera move only changes which instances are drawn. Reuse the sampled ground height,
             // surface normal, light/moisture and species definition instead of rescanning every rock
             // and log for every plant on every 0.2 s refresh.
@@ -1175,9 +1178,9 @@ public int Quality
         Visible_ = visible; TrianglesDrawn = triangles;
         _publishedPlants.Clear();
         foreach (var plant in _snapshot)
-            if (_layers.ContainsKey(plant.SpeciesId)) _publishedPlants.Add(plant.Id);
+            if (GraphOwns(plant.SpeciesId) ? _graphPublished.Contains(plant.Id.Value) : _layers.ContainsKey(plant.SpeciesId)) _publishedPlants.Add(plant.Id);
         PopulationReady = _build == null &&
-            _w.Flora.Items.All(f => _layers.ContainsKey(f.SpeciesId)) &&
+            GraphStartupReady && _w.Flora.Items.All(f => GraphOwns(f.SpeciesId) || _layers.ContainsKey(f.SpeciesId)) &&
             _w.DeadFlora.Items.All(f => _layers.ContainsKey(f.SpeciesId));
         foreach (var id in _visualTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _visualTiers.Remove(id);
         foreach (var id in _distanceTiers.Keys.Where(id => _w.Flora.Get(id) == null && _w.DeadFlora.Get(id) == null).ToArray()) _distanceTiers.Remove(id);

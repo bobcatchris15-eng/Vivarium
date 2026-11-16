@@ -192,7 +192,9 @@ public sealed class PlanBuilder
             outward = a.Outward;
             rParent = a.R;
             tAttach = t;
-            rb = Math.Min(r0, 0.85 * rParent);
+            // Rhizomes/mycelia can feed a much thicker new basal shoot. Lateral
+            // woody branches retain their ordinary parent-radius constraint.
+            rb = (flags & OrganFlags.Basal) != 0 ? r0 : Math.Min(r0, 0.85 * rParent);
         }
         dir = PlantMath.SafeNormal(dir, Vec3.Up);
         var t0 = dir * len;
@@ -263,7 +265,69 @@ public sealed class PlanBuilder
     /// </summary>
     private static void Accommodate(List<PotOrgan> items)
     {
-        var segs = new List<(Vec3 A, Vec3 B, double R, int Owner)>();
+        int segmentCapacity = 0;
+        foreach (var item in items)
+            segmentCapacity += item.IsAxis ? 4 : item.IsBlade ? 2 : 0;
+        var segs = new List<(Vec3 A, Vec3 B, double R, int Owner, Vec3 Min, Vec3 Max)>(segmentCapacity);
+        const double cellSize = 0.15;
+        var grid = new Dictionary<(int X, int Y, int Z), List<int>>();
+        var largeSegments = new List<int>();
+        var candidates = new List<int>();
+        var visited = new int[segmentCapacity];
+        int stamp = 0;
+        static int Cell(double x) => (int)Math.Floor(x / cellSize);
+        void AddSegment(Vec3 a, Vec3 b, double r, int owner)
+        {
+            segs.Add((a, b, r, owner,
+                new Vec3(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z)),
+                new Vec3(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z))));
+            int index = segs.Count - 1;
+            // Inflate by the segment radius; the query adds the blade clearance.
+            // A small pad protects boundary rounding. Oversized ranges fall back to
+            // a global list instead of filling an unbounded number of cells.
+            double pad = Math.Max(0, r) + 1e-12;
+            int x0 = Cell(Math.Min(a.X, b.X) - pad), x1 = Cell(Math.Max(a.X, b.X) + pad);
+            int y0 = Cell(Math.Min(a.Y, b.Y) - pad), y1 = Cell(Math.Max(a.Y, b.Y) + pad);
+            int z0 = Cell(Math.Min(a.Z, b.Z) - pad), z1 = Cell(Math.Max(a.Z, b.Z) + pad);
+            long cells = ((long)x1 - x0 + 1) * ((long)y1 - y0 + 1) * ((long)z1 - z0 + 1);
+            if (cells <= 0 || cells > 4096) { largeSegments.Add(index); return; }
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    for (int z = z0; z <= z1; z++)
+                    {
+                        var key = (x, y, z);
+                        if (!grid.TryGetValue(key, out var bucket)) grid[key] = bucket = new List<int>();
+                        bucket.Add(index);
+                    }
+        }
+        void Query(Vec3 pt, double clearance)
+        {
+            candidates.Clear();
+            if (++stamp == int.MaxValue) { Array.Clear(visited); stamp = 1; }
+            void Include(int index)
+            {
+                if (visited[index] == stamp) return;
+                visited[index] = stamp;
+                candidates.Add(index);
+            }
+            double pad = Math.Max(0, clearance) + 1e-12;
+            int x0 = Cell(pt.X - pad), x1 = Cell(pt.X + pad);
+            int y0 = Cell(pt.Y - pad), y1 = Cell(pt.Y + pad);
+            int z0 = Cell(pt.Z - pad), z1 = Cell(pt.Z + pad);
+            long cells = ((long)x1 - x0 + 1) * ((long)y1 - y0 + 1) * ((long)z1 - z0 + 1);
+            if (cells <= 0 || cells > 4096)
+            {
+                for (int j = 0; j < segs.Count; j++) candidates.Add(j);
+                return;
+            }
+            foreach (int index in largeSegments) Include(index);
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    for (int z = z0; z <= z1; z++)
+                        if (grid.TryGetValue((x, y, z), out var bucket))
+                            foreach (int index in bucket) Include(index);
+            candidates.Sort(); // Preserve the original floating-point penalty accumulation order.
+        }
         for (int i = 0; i < items.Count; i++)
         {
             var o = items[i];
@@ -273,7 +337,7 @@ public sealed class PlanBuilder
                 double s0 = k / 4.0, s1 = (k + 1) / 4.0;
                 var a = PlantMath.Hermite(o.P0, o.T0, o.P1, o.T1, s0);
                 var b = PlantMath.Hermite(o.P0, o.T0, o.P1, o.T1, s1);
-                segs.Add((a, b, o.R0 + (o.R1 - o.R0) * (s0 + s1) * 0.5, i));
+                AddSegment(a, b, o.R0 + (o.R1 - o.R0) * (s0 + s1) * 0.5, i);
             }
         }
 
@@ -295,10 +359,18 @@ public sealed class PlanBuilder
                 for (int q = 0; q < 5; q++)
                 {
                     var pt = o.P0 + d * (len * (0.3 + 0.15 * q));
-                    foreach (var sg in segs)
+                    Query(pt, clearance);
+                    foreach (int segmentIndex in candidates)
                     {
+                        var sg = segs[segmentIndex];
                         if (sg.Owner == o.Parent) continue;
                         double thr = sg.R + clearance;
+                        // A conservative box rejection avoids the projection and square root for distant
+                        // segments. Keep the original order and exact distance calculation for hits.
+                        double margin = Math.Max(0, thr) + 1e-12;
+                        if (pt.X < sg.Min.X - margin || pt.X > sg.Max.X + margin ||
+                            pt.Y < sg.Min.Y - margin || pt.Y > sg.Max.Y + margin ||
+                            pt.Z < sg.Min.Z - margin || pt.Z > sg.Max.Z + margin) continue;
                         double dist = PlantMath.SegmentDistance(pt, sg.A, sg.B);
                         if (dist < thr) pen += thr - dist;
                     }
@@ -312,8 +384,8 @@ public sealed class PlanBuilder
             o.T1 = dn;
             o.Up = PlantMath.Rotate(o.Up, Vec3.Up, bestYaw);
             var mid = o.P0 + dn * (len * 0.5);
-            segs.Add((o.P0, mid, 0.5 * o.R0, i));
-            segs.Add((mid, o.P1, 0.5 * o.R0, i));
+            AddSegment(o.P0, mid, 0.5 * o.R0, i);
+            AddSegment(mid, o.P1, 0.5 * o.R0, i);
         }
     }
 }

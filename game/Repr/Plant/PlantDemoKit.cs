@@ -55,9 +55,12 @@ internal static class PlantDemoKit
     }
 
     public static PlantAssemblyRenderer NewRenderer(ReprDemoContext ctx, string name)
+        => NewRenderer(name, ctx.LegacyFloraMaterial);
+
+    public static PlantAssemblyRenderer NewRenderer(string name, Func<string, bool, Material?> materialProvider)
     {
         var tune = Configuration.Value.Renderer;
-        return new PlantAssemblyRenderer { Name = name, MaterialProvider = ctx.LegacyFloraMaterial,
+        return new PlantAssemblyRenderer { Name = name, MaterialProvider = materialProvider,
             CellSize = tune.ChunkMetres, Detail0Px = tune.Detail0Pixels, Detail1Px = tune.Detail1Pixels };
     }
 

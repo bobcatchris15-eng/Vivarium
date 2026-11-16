@@ -38,7 +38,7 @@ public sealed class PlantAssembly
 /// Instance transform: columns are X (= Up x Z, scaled by real half width / profile max), Y (= Up, orthogonal
 /// to Z), Z (= dir * real length), translation = Start. Unit shape: base at origin, length 1 along +Z.
 /// </summary>
-public static class PlantCompiler
+public static partial class PlantCompiler
 {
     public const double FlatLeafAreaFactor = 0.7;
 
@@ -70,6 +70,7 @@ public static class PlantCompiler
         for (int i = 0; i < p.Organs.Length; i++)
         {
             var o = p.Organs[i];
+            if ((o.Flags & OrganFlags.Hidden) != 0) continue;
             if (o.Type is OrganType.Axis or OrganType.Petiole)
             {
                 // Detail 2: drop childless hair-thin twigs (< 1.5 mm); anything carrying an organ is kept.
@@ -92,6 +93,8 @@ public static class PlantCompiler
     public static MeshData BuildShapeMesh(OrganShape s, int detail)
     {
         detail = Math.Clamp(detail, 0, 2);
+        if(s.SurfaceForm == OrganSurfaceForm.Lamina) return BuildLamina(s,detail);
+        if(s.SurfaceForm != OrganSurfaceForm.Auto) return BuildRadialSurface(s,detail);
         return s.Type switch
         {
             OrganType.Flower => BuildBell(s, detail, false),
@@ -148,7 +151,9 @@ public static class PlantCompiler
         var x = y.Cross(z);
         double rs = Math.Max(o.RadiusStart, 1e-6);
         double sx, sy;
-        if (o.Type is OrganType.Flower or OrganType.Fruit)
+        bool lamina = s.SurfaceForm == OrganSurfaceForm.Lamina || s.SurfaceForm == OrganSurfaceForm.Auto
+            && o.Type is not (OrganType.Flower or OrganType.Fruit);
+        if (!lamina)
         {
             sx = sy = rs / 0.5;   // bell unit mouth radius is 0.5
         }
@@ -187,6 +192,7 @@ public static class PlantCompiler
 
     private static double[] WoodRgb(Tissue tissue, ushort order) => tissue switch
     {
+        Tissue.Fungal => new[] { 0.64, 0.55, 0.41 },
         Tissue.Green => new[] { 0.22, 0.36, 0.22 },
         Tissue.Bark => new[] { 0.28, 0.24, 0.20 },
         _ => order == 0 ? new[] { 0.30, 0.26, 0.20 } : new[] { 0.34, 0.29, 0.22 },
@@ -213,7 +219,7 @@ public static class PlantCompiler
             var q = p.Organs[o.Parent];
             double u = q.Maturity > 1e-4f ? Math.Clamp(o.AttachT / q.Maturity, 0, 1) : 0;
             rParent = q.RadiusStart + (q.RadiusEnd - q.RadiusStart) * u;
-            flare = Math.Min(rParent, 1.6 * rs);
+            flare = (o.Flags & OrganFlags.Basal) != 0 ? rs : Math.Min(rParent, 1.6 * rs);
             dExt = rParent;
         }
 
@@ -395,7 +401,7 @@ public static class PlantCompiler
         var m = new MeshData();
         // Keep a midrib and cupped cross-section at every level. The former
         // two-span far blade flattened curved fern pinnae into angular plates.
-        int L = detail == 0 ? 14 : detail == 1 ? 8 : 4;
+        int L = detail == 0 ? 18 : detail == 1 ? 8 : 4;
         int W = detail == 2 ? 2 : 4;
         double pmax = ProfileMax(s);
         var cA = EncRgb(s.ColorAdaxial);
@@ -410,7 +416,23 @@ public static class PlantCompiler
             if (Math.Abs(k) < 1e-4) { zc = t; yc = 0; }
             else { zc = Math.Sin(th) / k; yc = -(1 - Math.Cos(th)) / k; }
             double cy = Math.Cos(th), sy = Math.Sin(th);     // midrib normal (0, cy, sy)
+            // Monotone cubic interpolation rounds the authored outline without
+            // overshooting its widths at a shoulder or a pointed tip.
+            var widths = s.WidthProfile;
             double pw = ProfileAt(s, t);
+            if (widths.Length >= 3)
+            {
+                double q = t * (widths.Length - 1);
+                int a = Math.Min((int)q, widths.Length - 2);
+                double f = q - a;
+                double d = widths[a + 1] - widths[a];
+                double left = a == 0 ? d : widths[a] - widths[a - 1];
+                double right = a + 2 >= widths.Length ? d : widths[a + 2] - widths[a + 1];
+                double m0 = left * d <= 0 ? 0 : 2 * left * d / (left + d);
+                double m1 = right * d <= 0 ? 0 : 2 * right * d / (right + d);
+                pw = (2*f*f*f - 3*f*f + 1)*widths[a] + (f*f*f - 2*f*f + f)*m0
+                    + (-2*f*f*f + 3*f*f)*widths[a + 1] + (f*f*f - f*f)*m1;
+            }
             for (int j = 0; j <= W; j++)
             {
                 double u = j / (double)W;
@@ -423,7 +445,8 @@ public static class PlantCompiler
                     + s.EdgeWave * 0.1 * Math.Sin(s.EdgeWaveFreq * Math.Tau * t) * frac * frac;
                 if (detail == 0 && (j == 0 || j == W) && s.Serration > 0)
                     xr *= 1 - s.Serration * 0.5 * (1 + Math.Cos(s.SerrationFreq * Math.Tau * t));
-                if (j == W / 2) off += 0.012 * pw;   // shallow vein, tapering into the base and tip
+                // A broad, shallow crown avoids a hard ridge running down the blade.
+                off += 0.004 * pw * (1 - frac * frac);
                 var pos = new Vec3(xr, yc + cy * off, zc + sy * off);
                 var col = Mix(cA, cB, 0.25 + 0.5 * frac);
                 // Analytic adaxial normal from the midrib frame (RecomputeNormals leaves base/tip rows at zero,
@@ -462,8 +485,8 @@ public static class PlantCompiler
     private static MeshData BuildBell(OrganShape s, int detail, bool ellipsoid)
     {
         var m = new MeshData();
-        int R = detail == 0 ? 8 : detail == 1 ? 6 : 4;
-        int G = detail == 0 ? 5 : detail == 1 ? 3 : 2;
+        int R = detail == 0 && !ellipsoid ? 10 : detail == 0 ? 8 : detail == 1 ? 6 : 4;
+        int G = detail == 0 && !ellipsoid ? 7 : detail == 0 ? 5 : detail == 1 ? 3 : 2;
         var cA = EncRgb(s.ColorAdaxial);
         double u2x = ellipsoid ? 1.75 : 1.45, u2y = ellipsoid ? 0.98 : 0.92;
         var ids = new int[G + 1, R];
@@ -472,12 +495,13 @@ public static class PlantCompiler
             double z = k / (double)G;
             double r = ellipsoid
                 ? Math.Max(0.02, 0.5 * Math.Sin(Math.PI * z))
-                : 0.5 * (0.25 + 0.75 * Math.Pow(z, 0.8));
+                : 0.5 * (0.25 + 0.55 * Math.Pow(z, 0.8) + 0.20 * Math.Pow(z, 6));
             for (int j = 0; j < R; j++)
             {
                 double th = Math.Tau * j / R;
-                double scallop = (!ellipsoid && detail == 0 && k == G) ? 1 + 0.06 * Math.Cos(5 * th) : 1;
-                var pos = new Vec3(r * scallop * Math.Cos(th), r * scallop * Math.Sin(th), z);
+                double lobe = !ellipsoid && detail == 0 ? Math.Pow(z, 5) * Math.Cos(5 * th) : 0;
+                double scallop = 1 + 0.06 * lobe;
+                var pos = new Vec3(r * scallop * Math.Cos(th), r * scallop * Math.Sin(th), z + 0.025 * lobe);
                 var col = Mix(cA, EncRgb(s.ColorAbaxial), 0.15 * z);
                 ids[k, j] = m.AddVertex(pos, Vec3.Forward, col[0], col[1], col[2], 1, j / (double)R, z, u2x, u2y);
             }

@@ -80,6 +80,13 @@ public sealed partial class PlantAssemblyRenderer : Node3D
     public double MaxSelectMicroseconds { get; private set; }
     public long SelectCount { get; private set; }
     public int PendingBuilds => _inflight + _requests.Count + _done.Count;
+    public Dictionary<(int X,int Z),int> InspectChunkGenerations() => _chunks.ToDictionary(p => p.Key, p => p.Value.Gen);
+    public PlantDescriptor? InspectPlant(ulong id)
+    {
+        if (!_plantCell.TryGetValue(id, out var cell)) return null;
+        var plant = _chunks[cell].Plants.FirstOrDefault(p => p.PlantId == id);
+        return plant == null ? null : Snapshot(plant);
+    }
     public int[] ShownDetailCounts()
     {
         var r = new int[3];

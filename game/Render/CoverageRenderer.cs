@@ -204,6 +204,7 @@ public partial class CoverageRenderer : Node3D
 
     public void Build(VivariumWorld w)
     {
+        _coverageGraphPrototypes.Clear();
         _w = w;
         foreach (var c in GetChildren()) c.QueueFree();
         _tiles.Clear();
@@ -1366,9 +1367,13 @@ public partial class CoverageRenderer : Node3D
         }
 
         // Append procedural 3D flora structures (setae, capsules, fronds, podetia, ruffles, apothecia)
-        for (int lz = 0; lz < edge; lz++)
-        for (int lx = 0; lx < edge; lx++)
+        int graphSites = 0, graphTriangles = 0;
+        // An odd-stride permutation visits every cell once, distributing a limited
+        // graph budget over the tile instead of exhausting it along the first rows.
+        for (int visit = 0; visit < edge * edge; visit++)
         {
+            int cell = (visit * 613 + (int)(ReliefHash(t.Ti, t.Tj) % (edge * edge))) % (edge * edge);
+            int lx = cell % edge, lz = cell / edge;
             if (!s.CellOccupied[lx, lz]) continue;
             if ((t.Flags[lz * edge + lx] & (byte)CoverageFlags.Dead) != 0) continue;
             var sp = GetSpecies(layer.Id, t.Occ[lz * edge + lx]);
@@ -1388,10 +1393,15 @@ public partial class CoverageRenderer : Node3D
             float vigour = Math.Clamp(t.B[lz * edge + lx] * 3f, 0.72f, 1f);
             Color shootColor = sp.Color1.Lerp(s.CellColor[lx, lz], 0.35f);
 
+            // Hagshair uses the log shoulder branch below to preserve actual bark contact.
+            if (sp.SpeciesId != "hagshair_lichen" &&
+                AppendCoverageGraph(md, sp, foot, normal, hash, t.B[lz * edge + lx], ref graphSites, ref graphTriangles))
+                continue;
+
             // An occupied coverage cell is a potential moss establishment point.
             // As living biomass fills in, its seed-stable leaflets reach neighboring
             // nuclei and merge into a canopy; dead cells leave visible openings.
-            if (mossGrowthStrength > 0)
+            if (mossGrowthStrength > 0 && sp.SpeciesId != "hagshair_lichen")
             {
                 float biomass = t.B[lz * edge + lx];
                 int strength = mossGrowthStrength;
@@ -1517,13 +1527,21 @@ public partial class CoverageRenderer : Node3D
                                     double shoulderCos = Math.Sqrt(1.0 - shoulderSin * shoulderSin);
                                     var barkNormal = new Vec3(side2.X * sideSign * shoulderSin, shoulderCos, side2.Z * sideSign * shoulderSin).Normalized();
                                     var barkRoot = new Vec3(shoulder2.X, shoulderY, shoulder2.Z) + barkNormal * 0.001;
-                                    AppendHagshairLogCurls(md, barkRoot, new Vec3(axis2.X, 0, axis2.Z), barkNormal,
-                                        shootColor, hash ^ 0x9E3779B9, vigour, host.Radius);
+                                    if (!AppendCoverageGraph(md, sp, barkRoot, barkNormal, hash ^ 0x9E3779B9,
+                                        t.B[lz * edge + lx], ref graphSites, ref graphTriangles))
+                                        AppendHagshairLogCurls(md, barkRoot, new Vec3(axis2.X, 0, axis2.Z), barkNormal,
+                                            shootColor, hash ^ 0x9E3779B9, vigour, host.Radius);
                                     break;
                                 }
                             }
                         }
-                        else AppendBeardCurls(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                        else if (!AppendCoverageGraph(md, sp, foot, normal, hash, t.B[lz * edge + lx], ref graphSites, ref graphTriangles))
+                            AppendBeardCurls(md, foot, normal, shootColor, sp.Color2, hash, vigour);
+                    }
+                    else if (sp.SpeciesId == "hagshair_lichen")
+                    {
+                        if (!AppendCoverageGraph(md, sp, foot, normal, hash, t.B[lz * edge + lx], ref graphSites, ref graphTriangles))
+                            AppendBeardCurls(md, foot, normal, shootColor, sp.Color2, hash, vigour);
                     }
                     else AppendBeardCurls(md, foot, normal, shootColor, sp.Color2, hash, vigour);
                     break;
