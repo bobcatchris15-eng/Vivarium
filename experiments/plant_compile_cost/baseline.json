@@ -1,0 +1,3752 @@
+[
+  {
+    "id": "antlerlace_lichen",
+    "lod": 0,
+    "organs": 188,
+    "vertices": 2339,
+    "triangles": 2676,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "FD12E0ACF23271DD59FBDBDDCEF75F2D86C71DC5FB73E1B1B4B64374F6833DC6"
+  },
+  {
+    "id": "antlerlace_lichen",
+    "lod": 1,
+    "organs": 188,
+    "vertices": 2172,
+    "triangles": 2412,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "78FA6D30A5594CA6977273DE2A69D9AD7F30D9D5319B197C9A336112AC58DB0A"
+  },
+  {
+    "id": "antlerlace_lichen",
+    "lod": 2,
+    "organs": 188,
+    "vertices": 1254,
+    "triangles": 1494,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "ECD018C69C912C3DA7B26F14FD7FF2CD38936A5BEE7F969E0030B10C24181D29"
+  },
+  {
+    "id": "ashcomb",
+    "lod": 0,
+    "organs": 13,
+    "vertices": 228,
+    "triangles": 360,
+    "instances": 4,
+    "shapes": 4,
+    "hash": "9D632023E14152702483850175E1C8E52F9855EFCAF7A6B35E9B0B514A1C24B8"
+  },
+  {
+    "id": "ashcomb",
+    "lod": 1,
+    "organs": 13,
+    "vertices": 124,
+    "triangles": 176,
+    "instances": 4,
+    "shapes": 4,
+    "hash": "C231E7844465051E75D46F693D541903D8A3F562E93038049696AE5622904AEC"
+  },
+  {
+    "id": "ashcomb",
+    "lod": 2,
+    "organs": 13,
+    "vertices": 52,
+    "triangles": 60,
+    "instances": 4,
+    "shapes": 4,
+    "hash": "F3A8462EA8E6A60A2DE023A023BBF9465D130113516EC3F8C81ED069E32B2F63"
+  },
+  {
+    "id": "ashfingers_lichen",
+    "lod": 0,
+    "organs": 243,
+    "vertices": 2876,
+    "triangles": 3232,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "432E87BC9860CEC6E569174CBC8201BBAFB35DFBFC3A2A2E23490246C5D18E4D"
+  },
+  {
+    "id": "ashfingers_lichen",
+    "lod": 1,
+    "organs": 243,
+    "vertices": 2807,
+    "triangles": 3117,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "C846C26CAF61A7F15123E9DEF6A862D3B00DB11E7462FBEC55AE192B6EDDD6B7"
+  },
+  {
+    "id": "ashfingers_lichen",
+    "lod": 2,
+    "organs": 243,
+    "vertices": 1619,
+    "triangles": 1929,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "8D86F3233E82AEE31E2A8BEA2960B25DAB5F8343BEF5D9F50C3B0205895775D5"
+  },
+  {
+    "id": "ashwire",
+    "lod": 0,
+    "organs": 91,
+    "vertices": 854,
+    "triangles": 1194,
+    "instances": 60,
+    "shapes": 13,
+    "hash": "8A75A686723C2084B7B3AD69B38B2E78F97F7E60890BF8C5BF3A84C59A6A1B44"
+  },
+  {
+    "id": "ashwire",
+    "lod": 1,
+    "organs": 91,
+    "vertices": 641,
+    "triangles": 822,
+    "instances": 60,
+    "shapes": 13,
+    "hash": "E03FDAE4BDA4907F61D96C4F03229FA7538794FE8F4104C14B071687442633DA"
+  },
+  {
+    "id": "ashwire",
+    "lod": 2,
+    "organs": 91,
+    "vertices": 519,
+    "triangles": 639,
+    "instances": 60,
+    "shapes": 13,
+    "hash": "F77775CFF51B8865D505A84E6BC5B15B2A540724D93FB84A2F01C95BA18F6A3A"
+  },
+  {
+    "id": "banksorrow",
+    "lod": 0,
+    "organs": 674,
+    "vertices": 14884,
+    "triangles": 23090,
+    "instances": 289,
+    "shapes": 2,
+    "hash": "D7F08F4E87011636E61DEFFF578BBC441202DE9452BA7F62362D60869B32025F"
+  },
+  {
+    "id": "banksorrow",
+    "lod": 1,
+    "organs": 674,
+    "vertices": 9176,
+    "triangles": 13083,
+    "instances": 289,
+    "shapes": 2,
+    "hash": "B7D1C0A90339E40B8E90012079FBFB651D311C54E47826BBC4CD93A42AFE3D9B"
+  },
+  {
+    "id": "banksorrow",
+    "lod": 2,
+    "organs": 674,
+    "vertices": 5577,
+    "triangles": 6806,
+    "instances": 289,
+    "shapes": 2,
+    "hash": "C120F9625DC4BC2821F2C038B82CD1236BF52DD03C87105412C573EE8D29D771"
+  },
+  {
+    "id": "bannerreed",
+    "lod": 0,
+    "organs": 52,
+    "vertices": 790,
+    "triangles": 1262,
+    "instances": 40,
+    "shapes": 13,
+    "hash": "74BE28CA4828EBBFEFC7A1AA5395D8533F6376C635587F6244AA2A334197CE08"
+  },
+  {
+    "id": "bannerreed",
+    "lod": 1,
+    "organs": 52,
+    "vertices": 453,
+    "triangles": 658,
+    "instances": 40,
+    "shapes": 13,
+    "hash": "4801B68B0B9AC7A43D69D19631FA78BD7720D1711F534446AF7E697A7BDFE3F7"
+  },
+  {
+    "id": "bannerreed",
+    "lod": 2,
+    "organs": 52,
+    "vertices": 270,
+    "triangles": 351,
+    "instances": 40,
+    "shapes": 13,
+    "hash": "CD6299F5B01F313AA4262FD7A9BE58884D3711090596E2D58AFE6C86D4E6319F"
+  },
+  {
+    "id": "barbarrow",
+    "lod": 0,
+    "organs": 92,
+    "vertices": 953,
+    "triangles": 1415,
+    "instances": 63,
+    "shapes": 13,
+    "hash": "FC12A15843EBD23C77954C59C375F96DEB484EA8C026F1BC6ECCAEFA6809A983"
+  },
+  {
+    "id": "barbarrow",
+    "lod": 1,
+    "organs": 92,
+    "vertices": 613,
+    "triangles": 819,
+    "instances": 63,
+    "shapes": 13,
+    "hash": "F84447B231D9862D2E2465B352C83A3A5D815BFAA3A46EA95180EE5DEE0FB132"
+  },
+  {
+    "id": "barbarrow",
+    "lod": 2,
+    "organs": 92,
+    "vertices": 431,
+    "triangles": 516,
+    "instances": 63,
+    "shapes": 13,
+    "hash": "3CBB2AEC9EB911A0B85C91E582E1C45E99D52807DA1D7EC5C4A950908E0AAC81"
+  },
+  {
+    "id": "barrowbole",
+    "lod": 0,
+    "organs": 10,
+    "vertices": 210,
+    "triangles": 344,
+    "instances": 3,
+    "shapes": 4,
+    "hash": "D9C0FE2A09C73A12389F9529278F6B7C2F9E73D078C5963E03F0FC95DF5761E5"
+  },
+  {
+    "id": "barrowbole",
+    "lod": 1,
+    "organs": 10,
+    "vertices": 143,
+    "triangles": 222,
+    "instances": 3,
+    "shapes": 4,
+    "hash": "8D28803C469F56984599A9AB1E1A1200D269CA773E1B7C454E001E16F6109DD0"
+  },
+  {
+    "id": "barrowbole",
+    "lod": 2,
+    "organs": 10,
+    "vertices": 48,
+    "triangles": 60,
+    "instances": 3,
+    "shapes": 4,
+    "hash": "4F04CC2722DF22C4FB8AD48A0E14AD2FEC969DE894C5728CAEACCCC6AD3B2E84"
+  },
+  {
+    "id": "bitterbine",
+    "lod": 0,
+    "organs": 780,
+    "vertices": 6905,
+    "triangles": 8756,
+    "instances": 372,
+    "shapes": 2,
+    "hash": "50B83384AE1ACB7D5FD35874BCDDDF9E1C57C933666DE0BC6E208365D2CEF2F2"
+  },
+  {
+    "id": "bitterbine",
+    "lod": 1,
+    "organs": 780,
+    "vertices": 4878,
+    "triangles": 5490,
+    "instances": 372,
+    "shapes": 2,
+    "hash": "ACF9A8C5D89B334A52B651F7CA2CEA46B17FEC472033313F4200124B479868FC"
+  },
+  {
+    "id": "bitterbine",
+    "lod": 2,
+    "organs": 780,
+    "vertices": 4648,
+    "triangles": 5136,
+    "instances": 372,
+    "shapes": 2,
+    "hash": "2EB689C38162DBCBF04930A34A0E43A760B3635F408916CCB64D7CE8CC7253DD"
+  },
+  {
+    "id": "blackneedle",
+    "lod": 0,
+    "organs": 33,
+    "vertices": 893,
+    "triangles": 1400,
+    "instances": 16,
+    "shapes": 13,
+    "hash": "A840478E4F360A37A4992805AB43E35EF3EA84E15DD9270AB00F2F28B67EA1B6"
+  },
+  {
+    "id": "blackneedle",
+    "lod": 1,
+    "organs": 33,
+    "vertices": 478,
+    "triangles": 670,
+    "instances": 16,
+    "shapes": 13,
+    "hash": "52E4C9327E4807D4888AA93B4BFC1555B8FD27C08C5F7D3D8C0F9424E7231C27"
+  },
+  {
+    "id": "blackneedle",
+    "lod": 2,
+    "organs": 33,
+    "vertices": 203,
+    "triangles": 228,
+    "instances": 16,
+    "shapes": 13,
+    "hash": "824AD1F828A93EE8D618DE5FC8B6CC1046AA50821328944DE8D4229FAF0D0420"
+  },
+  {
+    "id": "blue_sundew",
+    "lod": 0,
+    "organs": 151,
+    "vertices": 554,
+    "triangles": 717,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "78AF0491821076A8F48CDC4702D49FDCCA5CB2E0660FBEA4AF9F28F4A2EF088F"
+  },
+  {
+    "id": "blue_sundew",
+    "lod": 1,
+    "organs": 151,
+    "vertices": 445,
+    "triangles": 528,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "9BE3E6B0D7D07BC377EBA78D077C2F7F04CCDF30631816FCF9E3DC7B8D91D8DD"
+  },
+  {
+    "id": "blue_sundew",
+    "lod": 2,
+    "organs": 151,
+    "vertices": 339,
+    "triangles": 369,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "EA19467F1F77135FC283929CFCA1D9E3583CCB289F49C123ED27DC11E1AFB319"
+  },
+  {
+    "id": "bogfringe",
+    "lod": 0,
+    "organs": 52,
+    "vertices": 709,
+    "triangles": 1055,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "14C4B3D252515437E90F8A53FB3E2D15D8F6DF54F58EBB4CF906E08AA3803CA5"
+  },
+  {
+    "id": "bogfringe",
+    "lod": 1,
+    "organs": 52,
+    "vertices": 445,
+    "triangles": 588,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "CE495504F7BB9B69109F5A87B40637689E4B856DA3B58C0928CBAAABD937F564"
+  },
+  {
+    "id": "bogfringe",
+    "lod": 2,
+    "organs": 52,
+    "vertices": 236,
+    "triangles": 255,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "622C0A08C1FBEBA9BFB3999F2DDEB5A92075B31A12FE0D78AF53F6FDF791F730"
+  },
+  {
+    "id": "bogglass_moss",
+    "lod": 0,
+    "organs": 769,
+    "vertices": 2322,
+    "triangles": 3174,
+    "instances": 672,
+    "shapes": 4,
+    "hash": "1B33ACD87719487CD1F14903024792CC994E00A17A14F7E773FD2A891AC464F7"
+  },
+  {
+    "id": "bogglass_moss",
+    "lod": 1,
+    "organs": 769,
+    "vertices": 1792,
+    "triangles": 2252,
+    "instances": 672,
+    "shapes": 4,
+    "hash": "501150ADEEE6D8230D16E078CD861C3523E1790F7D9D68BEAAAB50EE5B0FC9F7"
+  },
+  {
+    "id": "bogglass_moss",
+    "lod": 2,
+    "organs": 769,
+    "vertices": 1453,
+    "triangles": 1743,
+    "instances": 672,
+    "shapes": 4,
+    "hash": "02212E53387628121743D6CB32524BD1DC57FACFD4CBD34ACFB89CEF762C2A82"
+  },
+  {
+    "id": "bonecup",
+    "lod": 0,
+    "organs": 37,
+    "vertices": 516,
+    "triangles": 792,
+    "instances": 12,
+    "shapes": 4,
+    "hash": "DF3F0137C8F5FD3B53B26ECABD84116AF3AC4886AFE61139575640A57A2C88D7"
+  },
+  {
+    "id": "bonecup",
+    "lod": 1,
+    "organs": 37,
+    "vertices": 252,
+    "triangles": 336,
+    "instances": 12,
+    "shapes": 4,
+    "hash": "163EB342750942FF71874F1CDE2B37A52C640F8DF66C5E6BD1AFE9B3923EAA43"
+  },
+  {
+    "id": "bonecup",
+    "lod": 2,
+    "organs": 37,
+    "vertices": 156,
+    "triangles": 180,
+    "instances": 12,
+    "shapes": 4,
+    "hash": "3A826EB6012515C82718B7CB3CA98785B5409768F6674000EE9F3300E5B8E9BA"
+  },
+  {
+    "id": "brightknot",
+    "lod": 0,
+    "organs": 63,
+    "vertices": 755,
+    "triangles": 1030,
+    "instances": 31,
+    "shapes": 13,
+    "hash": "5CE6D7FEE3FA9F073FEED83F1709F850C1245F050EFB55B8FC768C9B3D2BF396"
+  },
+  {
+    "id": "brightknot",
+    "lod": 1,
+    "organs": 63,
+    "vertices": 490,
+    "triangles": 591,
+    "instances": 31,
+    "shapes": 13,
+    "hash": "839F644D8D96CE5634DB2B3754387FA787A1F2397D720E900906705E8D4BA71E"
+  },
+  {
+    "id": "brightknot",
+    "lod": 2,
+    "organs": 63,
+    "vertices": 380,
+    "triangles": 426,
+    "instances": 31,
+    "shapes": 13,
+    "hash": "953495E463AE70ACC3D2E0A1E66D4CF23241FBF5A0889A8FE05C44FB241DA6C6"
+  },
+  {
+    "id": "brooklace",
+    "lod": 0,
+    "organs": 64,
+    "vertices": 421,
+    "triangles": 630,
+    "instances": 56,
+    "shapes": 13,
+    "hash": "2478E134EFD911D65677A63F7C927A65AF70608B4119BDC66E801F48696E49C7"
+  },
+  {
+    "id": "brooklace",
+    "lod": 1,
+    "organs": 64,
+    "vertices": 326,
+    "triangles": 453,
+    "instances": 56,
+    "shapes": 13,
+    "hash": "8B46A51D322BC187A96304EE1EDCD1A72929CC6D463C5079A2C894B1492E1297"
+  },
+  {
+    "id": "brooklace",
+    "lod": 2,
+    "organs": 64,
+    "vertices": 296,
+    "triangles": 408,
+    "instances": 56,
+    "shapes": 13,
+    "hash": "3CA393C00E1A1E1DEE3B98A266A476886EBFB0DD682FC3DB80DEBF35FD3064C5"
+  },
+  {
+    "id": "burlmantle",
+    "lod": 0,
+    "organs": 25,
+    "vertices": 679,
+    "triangles": 1064,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "B62E7CCAB3D0F4ABC756B82C1D1E9867876B6BD83B33C4FCCF20C03041C4FE48"
+  },
+  {
+    "id": "burlmantle",
+    "lod": 1,
+    "organs": 25,
+    "vertices": 364,
+    "triangles": 510,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "6BB5AA1ED7E6676AA781EA3A252519BA5A02748E9249EF54964F1BA18F22488B"
+  },
+  {
+    "id": "burlmantle",
+    "lod": 2,
+    "organs": 25,
+    "vertices": 155,
+    "triangles": 174,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "7F4BF960C2D5E53DCCEDBCEBA77B51AB934271DAB9B3E4C722BA39E633849F9A"
+  },
+  {
+    "id": "burrflag",
+    "lod": 0,
+    "organs": 214,
+    "vertices": 346,
+    "triangles": 500,
+    "instances": 204,
+    "shapes": 13,
+    "hash": "B0FB59CB7B9AA6EA5C2E7907F5AF1127B1DE4DC0761C0A948D6E4F80627D4269"
+  },
+  {
+    "id": "burrflag",
+    "lod": 1,
+    "organs": 214,
+    "vertices": 271,
+    "triangles": 363,
+    "instances": 204,
+    "shapes": 13,
+    "hash": "BCDCA9A80A0554D7B5B6D5D3A04B5FB753D0D0CC6E6B84AC52C3E72925950024"
+  },
+  {
+    "id": "burrflag",
+    "lod": 2,
+    "organs": 214,
+    "vertices": 188,
+    "triangles": 237,
+    "instances": 204,
+    "shapes": 13,
+    "hash": "1FB8BD262911478B2ADC36302E32CC95A41EC6A1CB574C8EDA4ECC9CD0AAD579"
+  },
+  {
+    "id": "butterglint",
+    "lod": 0,
+    "organs": 103,
+    "vertices": 863,
+    "triangles": 1164,
+    "instances": 66,
+    "shapes": 13,
+    "hash": "DB0DE64812F437C9853CDFF60160B59F31E7CB9578A8A42D8B3C6DDDBE2A396B"
+  },
+  {
+    "id": "butterglint",
+    "lod": 1,
+    "organs": 103,
+    "vertices": 647,
+    "triangles": 804,
+    "instances": 66,
+    "shapes": 13,
+    "hash": "E0F9EC415826F6D1FF7F3C172957C2C3E27BAB51832F916E0598D32AA1D88C61"
+  },
+  {
+    "id": "butterglint",
+    "lod": 2,
+    "organs": 103,
+    "vertices": 525,
+    "triangles": 621,
+    "instances": 66,
+    "shapes": 13,
+    "hash": "BA9FF725599CF90619037F64DB86DBB59C11824B5357D1080AE6BADFA6662A0E"
+  },
+  {
+    "id": "candlecoral",
+    "lod": 0,
+    "organs": 111,
+    "vertices": 2150,
+    "triangles": 2940,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "2A1872B1E8E6738F0D4892F995CF89CC5C38A567AEDF74A2C6814FF99CA55C7B"
+  },
+  {
+    "id": "candlecoral",
+    "lod": 1,
+    "organs": 111,
+    "vertices": 1565,
+    "triangles": 1926,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "DED6D2256B823D5FD3D506939C27115314CFE7BE9579BE2BCA00D67784A78A69"
+  },
+  {
+    "id": "candlecoral",
+    "lod": 2,
+    "organs": 111,
+    "vertices": 600,
+    "triangles": 720,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "27C01A34792433A94EB78E7198BC4F8ED112D2A2EB7F4325F3A137D509D4D287"
+  },
+  {
+    "id": "capstar_moss",
+    "lod": 0,
+    "organs": 663,
+    "vertices": 2132,
+    "triangles": 2876,
+    "instances": 578,
+    "shapes": 4,
+    "hash": "B85D8A4F25413DBE150184F40543EB24C5BAA8FE657ABDD82C7209655FC11F5F"
+  },
+  {
+    "id": "capstar_moss",
+    "lod": 1,
+    "organs": 663,
+    "vertices": 1904,
+    "triangles": 2474,
+    "instances": 578,
+    "shapes": 4,
+    "hash": "0ADA8B46A499F12212E2052BD9FCA96CB0F434543E43A565B2E6830C12145C46"
+  },
+  {
+    "id": "capstar_moss",
+    "lod": 2,
+    "organs": 663,
+    "vertices": 1441,
+    "triangles": 1779,
+    "instances": 578,
+    "shapes": 4,
+    "hash": "A065BF88000924078FF03639B643B409A7C8E90DF022061FE81AD7F5BAD00B12"
+  },
+  {
+    "id": "carrion_bell",
+    "lod": 0,
+    "organs": 31,
+    "vertices": 219,
+    "triangles": 360,
+    "instances": 24,
+    "shapes": 4,
+    "hash": "F00A7E2C6E9F3F204800BAAA0C659CEC4174FC7DF7DC3F728DEDD02BDF38CC6F"
+  },
+  {
+    "id": "carrion_bell",
+    "lod": 1,
+    "organs": 31,
+    "vertices": 150,
+    "triangles": 234,
+    "instances": 24,
+    "shapes": 4,
+    "hash": "43CD6AB9ED8558B7C554FFAC9DAC8B3855D84E4DE0CEEBAF89EE4CBFC4443000"
+  },
+  {
+    "id": "carrion_bell",
+    "lod": 2,
+    "organs": 31,
+    "vertices": 48,
+    "triangles": 60,
+    "instances": 24,
+    "shapes": 4,
+    "hash": "81A6FF9702C2324013D749DFA5772421619B6E5867B466966CE190CE0E2285FE"
+  },
+  {
+    "id": "cinderberry",
+    "lod": 0,
+    "organs": 116,
+    "vertices": 892,
+    "triangles": 1271,
+    "instances": 80,
+    "shapes": 13,
+    "hash": "D682B7EF9DC6272628BE436A23C867176CEAEA3D991891596983EC22AA2B5DF7"
+  },
+  {
+    "id": "cinderberry",
+    "lod": 1,
+    "organs": 116,
+    "vertices": 632,
+    "triangles": 810,
+    "instances": 80,
+    "shapes": 13,
+    "hash": "7ACE7928BC88279B57BDA2545E7868C77163A2977AD5FF68EA6C9D86A13CA7B5"
+  },
+  {
+    "id": "cinderberry",
+    "lod": 2,
+    "organs": 116,
+    "vertices": 446,
+    "triangles": 507,
+    "instances": 80,
+    "shapes": 13,
+    "hash": "46F34EFDC92DB438862B5C827C0373B5C064C65F73292B69F0A5097D2B668D53"
+  },
+  {
+    "id": "clinglace",
+    "lod": 0,
+    "organs": 137,
+    "vertices": 1492,
+    "triangles": 1959,
+    "instances": 60,
+    "shapes": 2,
+    "hash": "AE9FD956084D744C377DEDB4D41AB9AC01C7EC5871C6FC2A305FAD2C43F07333"
+  },
+  {
+    "id": "clinglace",
+    "lod": 1,
+    "organs": 137,
+    "vertices": 1065,
+    "triangles": 1254,
+    "instances": 60,
+    "shapes": 2,
+    "hash": "C5B48D17D9785AF2823859679CF6DCF21FC5A38E93DDB41391A42BB5A4EA7A4F"
+  },
+  {
+    "id": "clinglace",
+    "lod": 2,
+    "organs": 137,
+    "vertices": 997,
+    "triangles": 1149,
+    "instances": 60,
+    "shapes": 2,
+    "hash": "EE5F6F2741ADC5C2B23ADC94FE11D796732362F1A271FAA5C77C938D1292A025"
+  },
+  {
+    "id": "cloudtuft",
+    "lod": 0,
+    "organs": 44,
+    "vertices": 471,
+    "triangles": 654,
+    "instances": 26,
+    "shapes": 13,
+    "hash": "C4EF7D42A47F40F530219C151062235289830A502C9EFE33853869657E311B32"
+  },
+  {
+    "id": "cloudtuft",
+    "lod": 1,
+    "organs": 44,
+    "vertices": 368,
+    "triangles": 471,
+    "instances": 26,
+    "shapes": 13,
+    "hash": "A10893BC8CB021C8794ADC03803FAED8B0BBE1469E24C954D2BDE1E2BECC4C41"
+  },
+  {
+    "id": "cloudtuft",
+    "lod": 2,
+    "organs": 44,
+    "vertices": 230,
+    "triangles": 264,
+    "instances": 26,
+    "shapes": 13,
+    "hash": "1FDAB30B9340A5C90A02E5DA87E4E7514DA7F471ABD93F205B94D5BF532CC4A6"
+  },
+  {
+    "id": "coalspike",
+    "lod": 0,
+    "organs": 54,
+    "vertices": 957,
+    "triangles": 1518,
+    "instances": 38,
+    "shapes": 13,
+    "hash": "202EE1BF9397E39EF52DEDFEDCCED18BD37669F601E51DDA99FA0596B1287E00"
+  },
+  {
+    "id": "coalspike",
+    "lod": 1,
+    "organs": 54,
+    "vertices": 527,
+    "triangles": 754,
+    "instances": 38,
+    "shapes": 13,
+    "hash": "424ECFBD096C6FC0A4FB01F5193E6084B835C706D93104CCF4B71756659800D9"
+  },
+  {
+    "id": "coalspike",
+    "lod": 2,
+    "organs": 54,
+    "vertices": 298,
+    "triangles": 375,
+    "instances": 38,
+    "shapes": 13,
+    "hash": "F96789F6F82886C4416ABC50EBDF81B219C3D979DDB2CC20C9633D949BCEB143"
+  },
+  {
+    "id": "coinrunner",
+    "lod": 0,
+    "organs": 49,
+    "vertices": 631,
+    "triangles": 1028,
+    "instances": 42,
+    "shapes": 13,
+    "hash": "9A6002439B6EB8453C330D60A83FB3CB073303C9F7EB5E5443E7C4999C6E4E1A"
+  },
+  {
+    "id": "coinrunner",
+    "lod": 1,
+    "organs": 49,
+    "vertices": 388,
+    "triangles": 582,
+    "instances": 42,
+    "shapes": 13,
+    "hash": "7D78EB7316B0069B26A87CA67EB1111FF19F50E41213FD18D527B279815C5A24"
+  },
+  {
+    "id": "coinrunner",
+    "lod": 2,
+    "organs": 49,
+    "vertices": 233,
+    "triangles": 318,
+    "instances": 42,
+    "shapes": 13,
+    "hash": "54DF591E4058734DEBF264DAE4042475A7172286B7AD070255FA5FF666FE3ECC"
+  },
+  {
+    "id": "cradlecup",
+    "lod": 0,
+    "organs": 55,
+    "vertices": 234,
+    "triangles": 324,
+    "instances": 36,
+    "shapes": 4,
+    "hash": "24005A3AB5BA8114D8CF123D729CC128176E332C148C1D7275B1504553A38C1A"
+  },
+  {
+    "id": "cradlecup",
+    "lod": 1,
+    "organs": 55,
+    "vertices": 189,
+    "triangles": 243,
+    "instances": 36,
+    "shapes": 4,
+    "hash": "CB45F0A5FABA21BA1B20043CE235DD4022C73B0495828DBC40427C44B4937D7A"
+  },
+  {
+    "id": "cradlecup",
+    "lod": 2,
+    "organs": 55,
+    "vertices": 153,
+    "triangles": 189,
+    "instances": 36,
+    "shapes": 4,
+    "hash": "CB993A6D576B877CD64EE9D37B300D1F9A5645679A4423FDE883EDD9993E3053"
+  },
+  {
+    "id": "cragparasol",
+    "lod": 0,
+    "organs": 744,
+    "vertices": 8855,
+    "triangles": 12338,
+    "instances": 351,
+    "shapes": 2,
+    "hash": "37905D36A1C8DD36DE95E8ADEA81BB0F4C942FBEBCDF94BE9AC8A1E22142F80D"
+  },
+  {
+    "id": "cragparasol",
+    "lod": 1,
+    "organs": 744,
+    "vertices": 5412,
+    "triangles": 6597,
+    "instances": 351,
+    "shapes": 2,
+    "hash": "A29D85889286BAE9A9F775385A781874F7F7E5D061CF913C53249C0448E55996"
+  },
+  {
+    "id": "cragparasol",
+    "lod": 2,
+    "organs": 744,
+    "vertices": 4302,
+    "triangles": 4704,
+    "instances": 351,
+    "shapes": 2,
+    "hash": "806D5BB9409EC093FE3C235745296ED05CEB31F4746D1B47FD10974FA8A2B469"
+  },
+  {
+    "id": "cragset",
+    "lod": 0,
+    "organs": 41,
+    "vertices": 409,
+    "triangles": 537,
+    "instances": 20,
+    "shapes": 13,
+    "hash": "74847CF524710B4E14D28B17FB715621AD3E8EFB8B0135CFE701F45146FBCA12"
+  },
+  {
+    "id": "cragset",
+    "lod": 1,
+    "organs": 41,
+    "vertices": 271,
+    "triangles": 312,
+    "instances": 20,
+    "shapes": 13,
+    "hash": "648E8DCB9D841718FC59AA13350775C4235F6F2AEC197DA2D5E1A4458091A843"
+  },
+  {
+    "id": "cragset",
+    "lod": 2,
+    "organs": 41,
+    "vertices": 249,
+    "triangles": 279,
+    "instances": 20,
+    "shapes": 13,
+    "hash": "024D2499991E23B9FE282F65BB2FD07D30B60571A3AF2A14F21083A38F35434F"
+  },
+  {
+    "id": "deepquill",
+    "lod": 0,
+    "organs": 1380,
+    "vertices": 4537,
+    "triangles": 5922,
+    "instances": 1176,
+    "shapes": 13,
+    "hash": "D4EDF941E47299F343F7477F4355C17B2491FD50D91618DB76F6CA111A4E36B3"
+  },
+  {
+    "id": "deepquill",
+    "lod": 1,
+    "organs": 1380,
+    "vertices": 4442,
+    "triangles": 5745,
+    "instances": 1176,
+    "shapes": 13,
+    "hash": "6DB610A1FF328517EC034C819A33273C54F1A0F4F0236DB145555AF05898CB2A"
+  },
+  {
+    "id": "deepquill",
+    "lod": 2,
+    "organs": 1380,
+    "vertices": 4384,
+    "triangles": 5658,
+    "instances": 1176,
+    "shapes": 13,
+    "hash": "8FC5039736ADFC6AB0065A5D5250C29CE0EE0AC635530308019C44F2B5F18045"
+  },
+  {
+    "id": "dewbonnet",
+    "lod": 0,
+    "organs": 31,
+    "vertices": 310,
+    "triangles": 440,
+    "instances": 10,
+    "shapes": 4,
+    "hash": "1A0CADD0B911ED7587F657A7E9AB4EA4128734BC9AE98093856EB18C005E27EB"
+  },
+  {
+    "id": "dewbonnet",
+    "lod": 1,
+    "organs": 31,
+    "vertices": 210,
+    "triangles": 270,
+    "instances": 10,
+    "shapes": 4,
+    "hash": "4F8BFFE801FC01BFBC40CBA949BFAC17C1B0C87323378883283E45089ADEB76D"
+  },
+  {
+    "id": "dewbonnet",
+    "lod": 2,
+    "organs": 31,
+    "vertices": 130,
+    "triangles": 150,
+    "instances": 10,
+    "shapes": 4,
+    "hash": "C52D79FDA8D89F3C87DD81709F1B07A0FC1458EE84EE2C65E502C2EE82F82B49"
+  },
+  {
+    "id": "duskbristle",
+    "lod": 0,
+    "organs": 61,
+    "vertices": 753,
+    "triangles": 1066,
+    "instances": 36,
+    "shapes": 13,
+    "hash": "6AF24C6F1DC525CCB7814B9F818FB982278B6013C4BA77C0BD9E5256F99060AC"
+  },
+  {
+    "id": "duskbristle",
+    "lod": 1,
+    "organs": 61,
+    "vertices": 563,
+    "triangles": 732,
+    "instances": 36,
+    "shapes": 13,
+    "hash": "E448FAA498A39DBE1B3F067D7E5C14AD051D2CDB9B73D0FA6BDE8FB8EB57F11B"
+  },
+  {
+    "id": "duskbristle",
+    "lod": 2,
+    "organs": 61,
+    "vertices": 369,
+    "triangles": 441,
+    "instances": 36,
+    "shapes": 13,
+    "hash": "AF53F5B7A92C32DCAD4AD79A954A268AEAFB2033B68850E8C1B94FF9D1A57175"
+  },
+  {
+    "id": "duskpuff",
+    "lod": 0,
+    "organs": 16,
+    "vertices": 215,
+    "triangles": 330,
+    "instances": 5,
+    "shapes": 4,
+    "hash": "4D200D65DD4F96CD7BBFBBC3E84E8F5ED8F5AD7F3D2FBC82DF1D3B2CE916F267"
+  },
+  {
+    "id": "duskpuff",
+    "lod": 1,
+    "organs": 16,
+    "vertices": 105,
+    "triangles": 140,
+    "instances": 5,
+    "shapes": 4,
+    "hash": "EF0F73311FA75966A6D043F49AE41F25E3088518A5AAE97D7C0FD41A209E1C17"
+  },
+  {
+    "id": "duskpuff",
+    "lod": 2,
+    "organs": 16,
+    "vertices": 65,
+    "triangles": 75,
+    "instances": 5,
+    "shapes": 4,
+    "hash": "3CC3F6CBF708D7A58FE24B404A7889761CCC4891D398A6502D2CBD1454C820EF"
+  },
+  {
+    "id": "emberbracken",
+    "lod": 0,
+    "organs": 127,
+    "vertices": 799,
+    "triangles": 1316,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "1E5529F25925435341691B3511A872257D88CB06AF94D78CD6C4F4924357289E"
+  },
+  {
+    "id": "emberbracken",
+    "lod": 1,
+    "organs": 127,
+    "vertices": 478,
+    "triangles": 726,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "4BA885E24ED72177F48269C58707B0EA7F500BDCC8CF53E13EAA2B3AD8307313"
+  },
+  {
+    "id": "emberbracken",
+    "lod": 2,
+    "organs": 127,
+    "vertices": 305,
+    "triangles": 426,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "1DF8D22B820D2D8F2504DCD1532F9E14B8981E75B4BE8B4C66B40841F076CCB3"
+  },
+  {
+    "id": "embercrown",
+    "lod": 0,
+    "organs": 1939,
+    "vertices": 11193,
+    "triangles": 17276,
+    "instances": 1764,
+    "shapes": 2,
+    "hash": "F71CFA235409F57AE3EDB97A23344E5362AB27A57AF33155343E9777FBD75EED"
+  },
+  {
+    "id": "embercrown",
+    "lod": 1,
+    "organs": 1939,
+    "vertices": 7868,
+    "triangles": 11249,
+    "instances": 1764,
+    "shapes": 2,
+    "hash": "DA0C7A1A578F7A78988BF797933D8D94A58A494C2B4165DF96D68CBC1ECDEDA0"
+  },
+  {
+    "id": "embercrown",
+    "lod": 2,
+    "organs": 1939,
+    "vertices": 5488,
+    "triangles": 7469,
+    "instances": 1764,
+    "shapes": 2,
+    "hash": "7FC1BF8CF22342E97629ED466C0910FDCC604EC0C840FBF26C06882BC6D5A3FF"
+  },
+  {
+    "id": "embercrust_lichen",
+    "lod": 0,
+    "organs": 247,
+    "vertices": 1589,
+    "triangles": 2006,
+    "instances": 154,
+    "shapes": 4,
+    "hash": "561679B65E8230F7437967C6486D8488F867A627A42CE0B4B4E0B8F56C607AA3"
+  },
+  {
+    "id": "embercrust_lichen",
+    "lod": 1,
+    "organs": 247,
+    "vertices": 1273,
+    "triangles": 1491,
+    "instances": 154,
+    "shapes": 4,
+    "hash": "5CB0C282541A64E060039ECA2BA02FD1C23C21758619F795B7D551864114DA57"
+  },
+  {
+    "id": "embercrust_lichen",
+    "lod": 2,
+    "organs": 247,
+    "vertices": 1273,
+    "triangles": 1491,
+    "instances": 154,
+    "shapes": 4,
+    "hash": "C4E54D2D6861A643B5F12F7E50C4FF6D4D82E580E9886FD4CF7A7ECA18285D24"
+  },
+  {
+    "id": "embercup",
+    "lod": 0,
+    "organs": 958,
+    "vertices": 3047,
+    "triangles": 4106,
+    "instances": 836,
+    "shapes": 4,
+    "hash": "34544C29E3550F5876CAEADFA65CE6DECF8C05499C5502A914E8A368D1D978BF"
+  },
+  {
+    "id": "embercup",
+    "lod": 1,
+    "organs": 958,
+    "vertices": 2641,
+    "triangles": 3413,
+    "instances": 836,
+    "shapes": 4,
+    "hash": "1DCA90B4A9EE17C63F40B9F76F69F301B1BF50E411C787D6F29A2FA7A7FFE9C8"
+  },
+  {
+    "id": "embercup",
+    "lod": 2,
+    "organs": 958,
+    "vertices": 2070,
+    "triangles": 2556,
+    "instances": 836,
+    "shapes": 4,
+    "hash": "AF04559557A3FAAB0DE4E7787D354B5D645608DA3D2132605E3A18F7F39DB802"
+  },
+  {
+    "id": "emberfan_fungus",
+    "lod": 0,
+    "organs": 22,
+    "vertices": 301,
+    "triangles": 462,
+    "instances": 7,
+    "shapes": 4,
+    "hash": "FF78ED48B69B5AB3FD81205CDEA6C4C1DCEF631736837EF01AF9D751D27F0655"
+  },
+  {
+    "id": "emberfan_fungus",
+    "lod": 1,
+    "organs": 22,
+    "vertices": 147,
+    "triangles": 196,
+    "instances": 7,
+    "shapes": 4,
+    "hash": "B111C8532CA837B10790B0C1D8A576769C55431CC5982E8CAA742EA8269AFAB3"
+  },
+  {
+    "id": "emberfan_fungus",
+    "lod": 2,
+    "organs": 22,
+    "vertices": 91,
+    "triangles": 105,
+    "instances": 7,
+    "shapes": 4,
+    "hash": "F2EF3805BE93E84382DF4F59D643E862D0B146932F5DEA3A883B2E24ACD09792"
+  },
+  {
+    "id": "fenbead",
+    "lod": 0,
+    "organs": 211,
+    "vertices": 539,
+    "triangles": 802,
+    "instances": 200,
+    "shapes": 13,
+    "hash": "34A2866A6844380347B394B1FD7CC060145D161C09750A39AE67EA8E5E5CCF91"
+  },
+  {
+    "id": "fenbead",
+    "lod": 1,
+    "organs": 211,
+    "vertices": 421,
+    "triangles": 582,
+    "instances": 200,
+    "shapes": 13,
+    "hash": "67C09756CEAAA5C7B2861BE24C6D748008EB0C6545C0DAB6A3FA5D2103C22AA2"
+  },
+  {
+    "id": "fenbead",
+    "lod": 2,
+    "organs": 211,
+    "vertices": 299,
+    "triangles": 399,
+    "instances": 200,
+    "shapes": 13,
+    "hash": "994CF9C062B6D7EB4C164B789BCBFCC11717ACA2751BB54BAC6710CCDD79FA32"
+  },
+  {
+    "id": "fencomb",
+    "lod": 0,
+    "organs": 3881,
+    "vertices": 11741,
+    "triangles": 16042,
+    "instances": 3520,
+    "shapes": 13,
+    "hash": "49FE2D1502697F64A1C3E32A16A73F60D2024E8399193155B0CF6C6C2BFB370D"
+  },
+  {
+    "id": "fencomb",
+    "lod": 1,
+    "organs": 3881,
+    "vertices": 10707,
+    "triangles": 14436,
+    "instances": 3520,
+    "shapes": 13,
+    "hash": "D860B6D28DD9CC5E4D41AF76B214E1D17C3188B7FD0F28BCD74F1B2388B70B22"
+  },
+  {
+    "id": "fencomb",
+    "lod": 2,
+    "organs": 3881,
+    "vertices": 10641,
+    "triangles": 14337,
+    "instances": 3520,
+    "shapes": 13,
+    "hash": "DDB2FE9C42D7790535B688F87CCFA114CB30BABBCAB5F211A44BFAE37B11B546"
+  },
+  {
+    "id": "fenfoam",
+    "lod": 0,
+    "organs": 737,
+    "vertices": 4301,
+    "triangles": 5088,
+    "instances": 392,
+    "shapes": 13,
+    "hash": "F6FDEBD41C8F88642D1D9BE7B039B034C29E47F2A0C00A2947DD74564834D158"
+  },
+  {
+    "id": "fenfoam",
+    "lod": 1,
+    "organs": 737,
+    "vertices": 3798,
+    "triangles": 4190,
+    "instances": 392,
+    "shapes": 13,
+    "hash": "E863242A9992D763F42F682D327AD0F3B2964D99B4599CE56CF6FD9E215F074A"
+  },
+  {
+    "id": "fenfoam",
+    "lod": 2,
+    "organs": 737,
+    "vertices": 3363,
+    "triangles": 3492,
+    "instances": 392,
+    "shapes": 13,
+    "hash": "164079049B79A51414C55790ECA506D803062FECC22180B2F3903960D1523F4F"
+  },
+  {
+    "id": "fenforge",
+    "lod": 0,
+    "organs": 6334,
+    "vertices": 77333,
+    "triangles": 109504,
+    "instances": 3046,
+    "shapes": 2,
+    "hash": "DFD2090758BA6A3620AF9948E85062A5ACED129859BB2300245CEEEC1DC60B61"
+  },
+  {
+    "id": "fenforge",
+    "lod": 1,
+    "organs": 6334,
+    "vertices": 49630,
+    "triangles": 63004,
+    "instances": 3046,
+    "shapes": 2,
+    "hash": "75FD71EDBE258F30D866C39665FB58D28EAC7F4654F36429881BA3344B2E6B56"
+  },
+  {
+    "id": "fenforge",
+    "lod": 2,
+    "organs": 6334,
+    "vertices": 38556,
+    "triangles": 43604,
+    "instances": 3046,
+    "shapes": 2,
+    "hash": "AAFD098FB1A2DAC2E59927D394F51C03DB97A5EAA31E3BCB46267BD28D594A95"
+  },
+  {
+    "id": "fenhook",
+    "lod": 0,
+    "organs": 339,
+    "vertices": 4237,
+    "triangles": 5692,
+    "instances": 144,
+    "shapes": 2,
+    "hash": "1FC796799C9058A2FA74FF9EDBAB90F172BFFA5D1831687ADCB388484D356C10"
+  },
+  {
+    "id": "fenhook",
+    "lod": 1,
+    "organs": 339,
+    "vertices": 2864,
+    "triangles": 3428,
+    "instances": 144,
+    "shapes": 2,
+    "hash": "92F54201D274383E2B000A1B015A3E7E68A3459300B0B1F657D0A446DE3538CA"
+  },
+  {
+    "id": "fenhook",
+    "lod": 2,
+    "organs": 339,
+    "vertices": 2587,
+    "triangles": 3003,
+    "instances": 144,
+    "shapes": 2,
+    "hash": "848E0ADC966E73F1C2883A5EF2D30E1A1DE8B0983CC9EB3BA651B43C860FA17E"
+  },
+  {
+    "id": "floodlace_moss",
+    "lod": 0,
+    "organs": 289,
+    "vertices": 1639,
+    "triangles": 2350,
+    "instances": 240,
+    "shapes": 4,
+    "hash": "9BF9411086B2F68DC502D19D27A46A0E31EF38DB207CC7E81DD338203FDEE746"
+  },
+  {
+    "id": "floodlace_moss",
+    "lod": 1,
+    "organs": 289,
+    "vertices": 1300,
+    "triangles": 1730,
+    "instances": 240,
+    "shapes": 4,
+    "hash": "0ABDEAB4FB949F2C6F26970A63029DBDC19141B6F61A39AC5864861E5F767B6A"
+  },
+  {
+    "id": "floodlace_moss",
+    "lod": 2,
+    "organs": 289,
+    "vertices": 1021,
+    "triangles": 1311,
+    "instances": 240,
+    "shapes": 4,
+    "hash": "ACCF69DFA0601C116103967CF2C25F90FC736183FE8BC1C3780143EFF7C3EB86"
+  },
+  {
+    "id": "frosttussock",
+    "lod": 0,
+    "organs": 76,
+    "vertices": 754,
+    "triangles": 1034,
+    "instances": 45,
+    "shapes": 13,
+    "hash": "3444C9CC59E54B9942FE8817A05BFA567E7100FED8F3A7551EEDAFAEC7CE7C6F"
+  },
+  {
+    "id": "frosttussock",
+    "lod": 1,
+    "organs": 76,
+    "vertices": 581,
+    "triangles": 732,
+    "instances": 45,
+    "shapes": 13,
+    "hash": "56411108585D2D8382EB3BB88A10AFD403B8BEAD87704711927B9FB946CDC19B"
+  },
+  {
+    "id": "frosttussock",
+    "lod": 2,
+    "organs": 76,
+    "vertices": 459,
+    "triangles": 549,
+    "instances": 45,
+    "shapes": 13,
+    "hash": "36C97907A4629505F70F5B8E62A86043C5A38DD41CFB3C7417B51173039105C5"
+  },
+  {
+    "id": "ghostbonnet",
+    "lod": 0,
+    "organs": 25,
+    "vertices": 248,
+    "triangles": 352,
+    "instances": 8,
+    "shapes": 4,
+    "hash": "21A43DA4D7AD2421B84DF6D88EB0BB30D4E3C316558B5C1BE98997223B105998"
+  },
+  {
+    "id": "ghostbonnet",
+    "lod": 1,
+    "organs": 25,
+    "vertices": 196,
+    "triangles": 258,
+    "instances": 8,
+    "shapes": 4,
+    "hash": "37820FEDA61E2CB65751C4D73F0C0545B7523F07DBE0643E4645D409050D0B4E"
+  },
+  {
+    "id": "ghostbonnet",
+    "lod": 2,
+    "organs": 25,
+    "vertices": 104,
+    "triangles": 120,
+    "instances": 8,
+    "shapes": 4,
+    "hash": "EABBDFB8810C9D85D4FEC5A724E18D146F0CB59C39AE92DE181D42B6CD873720"
+  },
+  {
+    "id": "glass_antlers",
+    "lod": 0,
+    "organs": 78,
+    "vertices": 2618,
+    "triangles": 3962,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "BF2800F06D08CA81B926E94318428BD300EDDBA8F537D3A271DDA845479E8FFD"
+  },
+  {
+    "id": "glass_antlers",
+    "lod": 1,
+    "organs": 78,
+    "vertices": 1708,
+    "triangles": 2352,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "2EED4E0E17EEC9932E00A576CFCFDA6A6EF74D5AF143AE62A5AA65564C6B0E5F"
+  },
+  {
+    "id": "glass_antlers",
+    "lod": 2,
+    "organs": 78,
+    "vertices": 833,
+    "triangles": 945,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "083908CE27048C18D623307829E7A469288E41587707C755C2520E304AF26035"
+  },
+  {
+    "id": "glassfinger",
+    "lod": 0,
+    "organs": 43,
+    "vertices": 351,
+    "triangles": 518,
+    "instances": 35,
+    "shapes": 13,
+    "hash": "E3611BC8FD09C81D35DC89D7B79D0077367D40A17DE70E8988E280315EC3AE95"
+  },
+  {
+    "id": "glassfinger",
+    "lod": 1,
+    "organs": 43,
+    "vertices": 270,
+    "triangles": 369,
+    "instances": 35,
+    "shapes": 13,
+    "hash": "CB7E344CEDD06951C36AFE4B9EAB970E452699A89BB3CBD9B9225E938BD43A44"
+  },
+  {
+    "id": "glassfinger",
+    "lod": 2,
+    "organs": 43,
+    "vertices": 212,
+    "triangles": 282,
+    "instances": 35,
+    "shapes": 13,
+    "hash": "BBEFF69631F48DD2E0FAE2B769B283FDD48E2DC1CDFEFEAFA23A04BB0746421B"
+  },
+  {
+    "id": "glasslily",
+    "lod": 0,
+    "organs": 27,
+    "vertices": 711,
+    "triangles": 1078,
+    "instances": 9,
+    "shapes": 13,
+    "hash": "F76EA70FFEE8B91380C82D1D4CBB6A7EF49C61ECE932B8B776997AF85E86FE7E"
+  },
+  {
+    "id": "glasslily",
+    "lod": 1,
+    "organs": 27,
+    "vertices": 400,
+    "triangles": 538,
+    "instances": 9,
+    "shapes": 13,
+    "hash": "8B66E61F43E3F36D1B4FCDE7130CC019055B7ECF5030B614C05DA952C1891B07"
+  },
+  {
+    "id": "glasslily",
+    "lod": 2,
+    "organs": 27,
+    "vertices": 196,
+    "triangles": 213,
+    "instances": 9,
+    "shapes": 13,
+    "hash": "8F6D4D2B12A447C8C4A2DDACD03BF3296D44CD532574A344FA3122725E1B3D11"
+  },
+  {
+    "id": "glassrush",
+    "lod": 0,
+    "organs": 39,
+    "vertices": 523,
+    "triangles": 726,
+    "instances": 19,
+    "shapes": 13,
+    "hash": "E22D0B51409AF01FAB6ED463FA8D8B0FA89D70010C8F1360D5FC92451B9EEA63"
+  },
+  {
+    "id": "glassrush",
+    "lod": 1,
+    "organs": 39,
+    "vertices": 410,
+    "triangles": 525,
+    "instances": 19,
+    "shapes": 13,
+    "hash": "B960DA4D5F401A0F30BF735F427D525799DCA999C6500F73FBFA3F8998C1A8AF"
+  },
+  {
+    "id": "glassrush",
+    "lod": 2,
+    "organs": 39,
+    "vertices": 256,
+    "triangles": 294,
+    "instances": 19,
+    "shapes": 13,
+    "hash": "0D841FB905B56069FC3A7DE9DB85F676E24B62A1A1D5489D96D32A946EC779D4"
+  },
+  {
+    "id": "glowbriar",
+    "lod": 0,
+    "organs": 1139,
+    "vertices": 15428,
+    "triangles": 21722,
+    "instances": 504,
+    "shapes": 2,
+    "hash": "917F49FF1EE35579F7E82B0A55F0289B5D9B20192040CE10DC28B3CE168E2EBD"
+  },
+  {
+    "id": "glowbriar",
+    "lod": 1,
+    "organs": 1139,
+    "vertices": 10104,
+    "triangles": 12625,
+    "instances": 504,
+    "shapes": 2,
+    "hash": "D69449B95FF99C03EE4533C4AC6E6D61A225FA35239F6B04B10901D4B9EFB333"
+  },
+  {
+    "id": "glowbriar",
+    "lod": 2,
+    "organs": 1139,
+    "vertices": 7395,
+    "triangles": 8276,
+    "instances": 504,
+    "shapes": 2,
+    "hash": "51BE4D397427F652AED7E4E3B2B2F5675D722CE32FE3F1436B28D296D9A69F4E"
+  },
+  {
+    "id": "greywatch",
+    "lod": 0,
+    "organs": 1506,
+    "vertices": 5796,
+    "triangles": 9242,
+    "instances": 1435,
+    "shapes": 2,
+    "hash": "F9DDDB55EB0E962155ABF9C892E76A2A19E94BBB7F2564E2B22027589AD065D3"
+  },
+  {
+    "id": "greywatch",
+    "lod": 1,
+    "organs": 1506,
+    "vertices": 4089,
+    "triangles": 6042,
+    "instances": 1435,
+    "shapes": 2,
+    "hash": "37465E6790CE5F3EA4A3172D825240F1E82BECD24DF9C68000732F6DF842EF30"
+  },
+  {
+    "id": "greywatch",
+    "lod": 2,
+    "organs": 1506,
+    "vertices": 2891,
+    "triangles": 4027,
+    "instances": 1435,
+    "shapes": 2,
+    "hash": "FC1F6D3C5FA1DB6A0CCCE71A1AD18B2F455F95EE6D8CE7164B8C410C49C1DC2C"
+  },
+  {
+    "id": "hagshair_lichen",
+    "lod": 0,
+    "organs": 166,
+    "vertices": 2086,
+    "triangles": 2396,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "6ED716A785DC683D13CFC3F57FEB888D3964469BFBEF73F9A9709E183471C479"
+  },
+  {
+    "id": "hagshair_lichen",
+    "lod": 1,
+    "organs": 166,
+    "vertices": 1934,
+    "triangles": 2154,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "F0AEA93757A72E76FFA51316A06D227537B233D79AD1B21CAF74C59EDF36E621"
+  },
+  {
+    "id": "hagshair_lichen",
+    "lod": 2,
+    "organs": 166,
+    "vertices": 1108,
+    "triangles": 1320,
+    "instances": 0,
+    "shapes": 4,
+    "hash": "12D69A88917D6596889B4026A0F23869AE9CEE9EC2C2A476A8A38DFF59C4099B"
+  },
+  {
+    "id": "hallowsting",
+    "lod": 0,
+    "organs": 153,
+    "vertices": 1526,
+    "triangles": 2344,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "DCD3F3D2E72C5D6A7658942A099597B0E24850369B003FC9ED88E02AB91C54C8"
+  },
+  {
+    "id": "hallowsting",
+    "lod": 1,
+    "organs": 153,
+    "vertices": 1016,
+    "triangles": 1424,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "2D16715118B3256094309E4CFAF44FE79885D436C66B5DE46A3F28EA56C9EF17"
+  },
+  {
+    "id": "hallowsting",
+    "lod": 2,
+    "organs": 153,
+    "vertices": 587,
+    "triangles": 732,
+    "instances": 120,
+    "shapes": 13,
+    "hash": "6F77B348D386AD847E45EBC129656D9E6C87BB36DC8B726C1735DCC55306B0C0"
+  },
+  {
+    "id": "heddlelace",
+    "lod": 0,
+    "organs": 739,
+    "vertices": 4263,
+    "triangles": 4880,
+    "instances": 372,
+    "shapes": 13,
+    "hash": "7EABF183665A1B9799AF98E5353290322660F0BF14CF2E3188175247A60132F7"
+  },
+  {
+    "id": "heddlelace",
+    "lod": 1,
+    "organs": 739,
+    "vertices": 3848,
+    "triangles": 4150,
+    "instances": 372,
+    "shapes": 13,
+    "hash": "B01D3AC44F5F2F7625608777B357D40EAC9869A2C61661C1BDF32DE14F943E18"
+  },
+  {
+    "id": "heddlelace",
+    "lod": 2,
+    "organs": 739,
+    "vertices": 3473,
+    "triangles": 3558,
+    "instances": 372,
+    "shapes": 13,
+    "hash": "6D2EE9DD293AB1C4EBF096FF3F5AB262E1A3557B33BDCD055E53A9267AE721AA"
+  },
+  {
+    "id": "hollowcrown",
+    "lod": 0,
+    "organs": 560,
+    "vertices": 10162,
+    "triangles": 15152,
+    "instances": 240,
+    "shapes": 2,
+    "hash": "952741933110FA8AB506A4EB9DE1D86007539FF1364786B3058AD070C78DA409"
+  },
+  {
+    "id": "hollowcrown",
+    "lod": 1,
+    "organs": 560,
+    "vertices": 6376,
+    "triangles": 8592,
+    "instances": 240,
+    "shapes": 2,
+    "hash": "790DBD1ABB295CA2BB8B855F3494AD09CECDA253BBBAB3CB8CDE73FDA09D4DEF"
+  },
+  {
+    "id": "hollowcrown",
+    "lod": 2,
+    "organs": 560,
+    "vertices": 4264,
+    "triangles": 4992,
+    "instances": 240,
+    "shapes": 2,
+    "hash": "02C6ED63C01090289DA73FCDA972BECFDD6888A790DB7AF7B24874648A1086C3"
+  },
+  {
+    "id": "hookthicket",
+    "lod": 0,
+    "organs": 1072,
+    "vertices": 12160,
+    "triangles": 18256,
+    "instances": 768,
+    "shapes": 2,
+    "hash": "FCDA5608B6BBE76714BF3D4D006639E29A79AD1249AAEDBE38AE091EC71A96DD"
+  },
+  {
+    "id": "hookthicket",
+    "lod": 1,
+    "organs": 1072,
+    "vertices": 7871,
+    "triangles": 10718,
+    "instances": 768,
+    "shapes": 2,
+    "hash": "295379FBC30C6F1139F186C4EF6CE994D9A21B6CEBA7937A5484968E17C601DE"
+  },
+  {
+    "id": "hookthicket",
+    "lod": 2,
+    "organs": 1072,
+    "vertices": 5158,
+    "triangles": 6398,
+    "instances": 768,
+    "shapes": 2,
+    "hash": "803068D3C9AC3F5B11BE2D94E2AF84A1A9FD8D53803D1325A1FA4D7A9EEB9905"
+  },
+  {
+    "id": "hushclover",
+    "lod": 0,
+    "organs": 47,
+    "vertices": 317,
+    "triangles": 398,
+    "instances": 27,
+    "shapes": 13,
+    "hash": "077F350FB5D92E95520B1D827A6DA453E936E6C0DF22C6C6C0EDBE1C0A4B23A8"
+  },
+  {
+    "id": "hushclover",
+    "lod": 1,
+    "organs": 47,
+    "vertices": 226,
+    "triangles": 249,
+    "instances": 27,
+    "shapes": 13,
+    "hash": "5CF64BF258B4E057E4C51F74016FF00DF95145003BC217B9756756B86AD7BCD8"
+  },
+  {
+    "id": "hushclover",
+    "lod": 2,
+    "organs": 47,
+    "vertices": 212,
+    "triangles": 228,
+    "instances": 27,
+    "shapes": 13,
+    "hash": "F9F6D2E0D56B4A09749C1E5AD1AA3DE8034767B207A5F3C48CE5D7C0EEF39582"
+  },
+  {
+    "id": "kinkcane",
+    "lod": 0,
+    "organs": 1458,
+    "vertices": 14754,
+    "triangles": 19666,
+    "instances": 724,
+    "shapes": 2,
+    "hash": "7893E5D6119042D04DF77043D6BC88F7F8692C0DFCA1267DF133499041FEE038"
+  },
+  {
+    "id": "kinkcane",
+    "lod": 1,
+    "organs": 1458,
+    "vertices": 9840,
+    "triangles": 11574,
+    "instances": 724,
+    "shapes": 2,
+    "hash": "258B64FE1CA153F77C94BD26A6CC52EEB7A90BC1A8418583E8D9CD6DD69E269C"
+  },
+  {
+    "id": "kinkcane",
+    "lod": 2,
+    "organs": 1458,
+    "vertices": 8376,
+    "triangles": 9266,
+    "instances": 724,
+    "shapes": 2,
+    "hash": "3E464CFB667A8ACD5C3B6D9B37DFA8C712028D903C996AA830CDAE018633E2AC"
+  },
+  {
+    "id": "lacemantle",
+    "lod": 0,
+    "organs": 1310,
+    "vertices": 5153,
+    "triangles": 8030,
+    "instances": 1215,
+    "shapes": 2,
+    "hash": "DFBA1F8B042B61DF6D08474816801BC6FDF843CACA3071F832FCBAE66F480DE7"
+  },
+  {
+    "id": "lacemantle",
+    "lod": 1,
+    "organs": 1310,
+    "vertices": 3906,
+    "triangles": 5706,
+    "instances": 1215,
+    "shapes": 2,
+    "hash": "014BB522E80EAA1FC4DD33DA6C3248F38CFC708468481A0E4E157D120FE905D0"
+  },
+  {
+    "id": "lacemantle",
+    "lod": 2,
+    "organs": 1310,
+    "vertices": 2290,
+    "triangles": 3057,
+    "instances": 1215,
+    "shapes": 2,
+    "hash": "143B57B950642417840821F327A3EA2E81BA092CD46AA55744FDF6F7C7AD7348"
+  },
+  {
+    "id": "lanternbrush",
+    "lod": 0,
+    "organs": 1284,
+    "vertices": 14822,
+    "triangles": 22364,
+    "instances": 906,
+    "shapes": 2,
+    "hash": "856989CC6F700E326338E6A6F45431DCC27273E64C9314E0E9F83310F5BCEF26"
+  },
+  {
+    "id": "lanternbrush",
+    "lod": 1,
+    "organs": 1284,
+    "vertices": 9588,
+    "triangles": 13242,
+    "instances": 906,
+    "shapes": 2,
+    "hash": "3266711B854C62FB6DAFCCEEA2388E5B0A81C07041B0CFAE4144C1A635B6090B"
+  },
+  {
+    "id": "lanternbrush",
+    "lod": 2,
+    "organs": 1284,
+    "vertices": 5682,
+    "triangles": 6906,
+    "instances": 906,
+    "shapes": 2,
+    "hash": "980FBAEC5346F6B956737147FB143C9E1771A523868AAD063E047F773621F434"
+  },
+  {
+    "id": "lanternsedge",
+    "lod": 0,
+    "organs": 120,
+    "vertices": 952,
+    "triangles": 1214,
+    "instances": 66,
+    "shapes": 13,
+    "hash": "FE51A1CBD57A81528456F53316150E3CD62979DE726277E15D4FB039234851FB"
+  },
+  {
+    "id": "lanternsedge",
+    "lod": 1,
+    "organs": 120,
+    "vertices": 696,
+    "triangles": 801,
+    "instances": 66,
+    "shapes": 13,
+    "hash": "ED50DC8CB091BDE50CE27DDDBB8C838B48ED07A9CC24FA0108B9C99F561B00A8"
+  },
+  {
+    "id": "lanternsedge",
+    "lod": 2,
+    "organs": 120,
+    "vertices": 590,
+    "triangles": 642,
+    "instances": 66,
+    "shapes": 13,
+    "hash": "6B4232F6A393362D2ED361A52588606E4D56B3CFE55BA4D4575CC3986483F98B"
+  },
+  {
+    "id": "marrowbloom",
+    "lod": 0,
+    "organs": 43,
+    "vertices": 713,
+    "triangles": 1110,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "856A500BFB79F981474CBD4709E68E88492AF2DC0CFB71211B52D74085FE70DE"
+  },
+  {
+    "id": "marrowbloom",
+    "lod": 1,
+    "organs": 43,
+    "vertices": 413,
+    "triangles": 582,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "34F3A8B13B49DDD067B13A27D05337EBE9A83888356D617674AF36F19620B2E0"
+  },
+  {
+    "id": "marrowbloom",
+    "lod": 2,
+    "organs": 43,
+    "vertices": 213,
+    "triangles": 261,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "124876267FCCFC7524685AFF28BC282FD55FB162C3277FA2D010782A93215E07"
+  },
+  {
+    "id": "marshkettle",
+    "lod": 0,
+    "organs": 34,
+    "vertices": 460,
+    "triangles": 617,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "BE3B8E658504EFF9AE95E6DB7F0FF5AD9C12E4263EB2165FC81AF18565B0329C"
+  },
+  {
+    "id": "marshkettle",
+    "lod": 1,
+    "organs": 34,
+    "vertices": 379,
+    "triangles": 471,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "214495D1DF2C91AEAE12E9F2F9234C381393CEFA013057921590F68518C25C9E"
+  },
+  {
+    "id": "marshkettle",
+    "lod": 2,
+    "organs": 34,
+    "vertices": 236,
+    "triangles": 255,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "26054D109F1281FDD6052E05EE47F2BE5744E21FB19FD5C4210697ABF9320D3D"
+  },
+  {
+    "id": "miremyrtle",
+    "lod": 0,
+    "organs": 1280,
+    "vertices": 7384,
+    "triangles": 11552,
+    "instances": 1168,
+    "shapes": 2,
+    "hash": "BC86BCCE800E7B8139442C54E2B63E779A4357FA523910E1C5EAC56DE23BBB36"
+  },
+  {
+    "id": "miremyrtle",
+    "lod": 1,
+    "organs": 1280,
+    "vertices": 5272,
+    "triangles": 7624,
+    "instances": 1168,
+    "shapes": 2,
+    "hash": "CDE03488E66413AD8ED17D93668185ACA19B6EEAB0F7DA3319628630E2428F7C"
+  },
+  {
+    "id": "miremyrtle",
+    "lod": 2,
+    "organs": 1280,
+    "vertices": 3832,
+    "triangles": 5256,
+    "instances": 1168,
+    "shapes": 2,
+    "hash": "E99F06C99D89040783F5A8C1D76BA4630000DC54CCAF4265EDC9562BD735AEA3"
+  },
+  {
+    "id": "mirepocket",
+    "lod": 0,
+    "organs": 2921,
+    "vertices": 9377,
+    "triangles": 12922,
+    "instances": 2656,
+    "shapes": 13,
+    "hash": "0D90B32E8AD815306F3C4AFA9DA43C8A0FD5E6F8BF3DF1DAF8AF67EE60A64B8C"
+  },
+  {
+    "id": "mirepocket",
+    "lod": 1,
+    "organs": 2921,
+    "vertices": 8611,
+    "triangles": 11724,
+    "instances": 2656,
+    "shapes": 13,
+    "hash": "8021810CDC4227794770F69444278BFEBDD441B50BE123DB62B7D1F4814A2E47"
+  },
+  {
+    "id": "mirepocket",
+    "lod": 2,
+    "organs": 2921,
+    "vertices": 8145,
+    "triangles": 11025,
+    "instances": 2656,
+    "shapes": 13,
+    "hash": "188FD763C307DBF8F84D862BAD6A832EF665877010F16E0FFA45F3D11842180A"
+  },
+  {
+    "id": "mirespire",
+    "lod": 0,
+    "organs": 1506,
+    "vertices": 15859,
+    "triangles": 26606,
+    "instances": 1359,
+    "shapes": 2,
+    "hash": "00B81CC82DA96DFF45A53102D9ED94904B46881370AA825F1F380F6CA565F5DC"
+  },
+  {
+    "id": "mirespire",
+    "lod": 1,
+    "organs": 1506,
+    "vertices": 10888,
+    "triangles": 17368,
+    "instances": 1359,
+    "shapes": 2,
+    "hash": "67A543E0CC3FFB3B6ECFD0B0B038A21E8CA38BC0D5461855FB44DEDCBAF71DCF"
+  },
+  {
+    "id": "mirespire",
+    "lod": 2,
+    "organs": 1506,
+    "vertices": 5490,
+    "triangles": 7873,
+    "instances": 1359,
+    "shapes": 2,
+    "hash": "759F095FCB94D94AFA25F036CBA9123881A73F54D3FC7D653A60F1474FC590D8"
+  },
+  {
+    "id": "mirrorleaf",
+    "lod": 0,
+    "organs": 36,
+    "vertices": 811,
+    "triangles": 1214,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "56A4FF9E3343BB7F276C84D8169768CDF62DA96CB659612DA3AA321FA528DB4F"
+  },
+  {
+    "id": "mirrorleaf",
+    "lod": 1,
+    "organs": 36,
+    "vertices": 479,
+    "triangles": 634,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "C53319038681B67EB740D01B8863C75A3E6E03D633A7C2ACB30271D042ECBDF7"
+  },
+  {
+    "id": "mirrorleaf",
+    "lod": 2,
+    "organs": 36,
+    "vertices": 262,
+    "triangles": 285,
+    "instances": 12,
+    "shapes": 13,
+    "hash": "80727725323C1B5B4E5B3EA95A1804152714BDB54B4606DCE640C3F2E1299B10"
+  },
+  {
+    "id": "mirrorstrap_fern",
+    "lod": 0,
+    "organs": 23,
+    "vertices": 664,
+    "triangles": 1046,
+    "instances": 11,
+    "shapes": 13,
+    "hash": "996A8AD459330E40CEAFC5140A62C9A43917DE0586EE8F3246865B9DA98A1F04"
+  },
+  {
+    "id": "mirrorstrap_fern",
+    "lod": 1,
+    "organs": 23,
+    "vertices": 363,
+    "triangles": 514,
+    "instances": 11,
+    "shapes": 13,
+    "hash": "DF10281D5299C1A3E8D56106B42695FB30C97A0BA35AC179FF571533CE173C78"
+  },
+  {
+    "id": "mirrorstrap_fern",
+    "lod": 2,
+    "organs": 23,
+    "vertices": 154,
+    "triangles": 177,
+    "instances": 11,
+    "shapes": 13,
+    "hash": "6FFDBACEB2DD23801276F186F2D70FC934FD32652FACD43ECD7C62F3F187DE58"
+  },
+  {
+    "id": "mistviolet",
+    "lod": 0,
+    "organs": 28,
+    "vertices": 278,
+    "triangles": 346,
+    "instances": 10,
+    "shapes": 13,
+    "hash": "D7BFAF209897DCBC1211F6776BF5063E4CD978E3BF7926BDA501504B0EC31097"
+  },
+  {
+    "id": "mistviolet",
+    "lod": 1,
+    "organs": 28,
+    "vertices": 204,
+    "triangles": 225,
+    "instances": 10,
+    "shapes": 13,
+    "hash": "E1F1937A0E0BE85C99BA1E23C1A61A21D5B50940A45EA6AB8B13248E04167223"
+  },
+  {
+    "id": "mistviolet",
+    "lod": 2,
+    "organs": 28,
+    "vertices": 190,
+    "triangles": 204,
+    "instances": 10,
+    "shapes": 13,
+    "hash": "311A7B8D1BEBE99B45F44DDEDA22BF648C8A19EC9EDD08856D77D5A240D0CDA2"
+  },
+  {
+    "id": "moonbark",
+    "lod": 0,
+    "organs": 4221,
+    "vertices": 51446,
+    "triangles": 72478,
+    "instances": 2009,
+    "shapes": 2,
+    "hash": "FF2992005403969B7BF3400447A2524F45007F74C9450240BE82B4A66B583DCA"
+  },
+  {
+    "id": "moonbark",
+    "lod": 1,
+    "organs": 4221,
+    "vertices": 31764,
+    "triangles": 39446,
+    "instances": 2009,
+    "shapes": 2,
+    "hash": "B85788A144640E1492FE907EF89EAAFBD38832924574B47F9669852D9093D240"
+  },
+  {
+    "id": "moonbark",
+    "lod": 2,
+    "organs": 4221,
+    "vertices": 25622,
+    "triangles": 28756,
+    "instances": 2009,
+    "shapes": 2,
+    "hash": "00E3A4CB47736E390F5D5C15BFFE9BFB7988D2B41F80BBFAD4D8BF74002EB77B"
+  },
+  {
+    "id": "mooncoin",
+    "lod": 0,
+    "organs": 57,
+    "vertices": 477,
+    "triangles": 714,
+    "instances": 48,
+    "shapes": 13,
+    "hash": "DA5AF1DCC7D458A32F5ABB69B267C82930D73DA630B6917DF618609234E0E6BA"
+  },
+  {
+    "id": "mooncoin",
+    "lod": 1,
+    "organs": 57,
+    "vertices": 371,
+    "triangles": 516,
+    "instances": 48,
+    "shapes": 13,
+    "hash": "ED51961DD13A7EE23B81F13487C48731F90C343769C740E770FEFB4123C6A67A"
+  },
+  {
+    "id": "mooncoin",
+    "lod": 2,
+    "organs": 57,
+    "vertices": 273,
+    "triangles": 369,
+    "instances": 48,
+    "shapes": 13,
+    "hash": "406EEB8DCA1FDB871FD13F5B0070626E01C0F1A6E98C1EEF9195459BAF5E55C1"
+  },
+  {
+    "id": "moonfern",
+    "lod": 0,
+    "organs": 5,
+    "vertices": 137,
+    "triangles": 212,
+    "instances": 2,
+    "shapes": 1,
+    "hash": "91873E70A70E32BEF0C3F3D60051A8A20BA776275FA938B4BFE42B43F5F46A69"
+  },
+  {
+    "id": "moonfern",
+    "lod": 1,
+    "organs": 5,
+    "vertices": 74,
+    "triangles": 102,
+    "instances": 2,
+    "shapes": 1,
+    "hash": "1D8A25EF2AF220A64D41F99C5C3ACBE93B41CF3809B8B812DACDD14569CC1EDB"
+  },
+  {
+    "id": "moonfern",
+    "lod": 2,
+    "organs": 5,
+    "vertices": 29,
+    "triangles": 30,
+    "instances": 2,
+    "shapes": 1,
+    "hash": "337C5892187C535C2A8F2C58966DD97BA519526CC286570BFEB6CCD52DC8C97B"
+  },
+  {
+    "id": "moonshell_lichen",
+    "lod": 0,
+    "organs": 127,
+    "vertices": 608,
+    "triangles": 762,
+    "instances": 90,
+    "shapes": 4,
+    "hash": "3288AA90D6FD14084282E11AC4D49AD9ECDA7BD7A1096CC286EF1BB87CADEAA6"
+  },
+  {
+    "id": "moonshell_lichen",
+    "lod": 1,
+    "organs": 127,
+    "vertices": 489,
+    "triangles": 567,
+    "instances": 90,
+    "shapes": 4,
+    "hash": "B34E15FE1E8C0004E8E4273792A5D26551E656CB5C558A0864700640DEEFDECC"
+  },
+  {
+    "id": "moonshell_lichen",
+    "lod": 2,
+    "organs": 127,
+    "vertices": 481,
+    "triangles": 555,
+    "instances": 90,
+    "shapes": 4,
+    "hash": "54C20B87020EE7496EC4C08D043A88CD7B786253317D3F0DEDC9C19F384FD176"
+  },
+  {
+    "id": "nutglade",
+    "lod": 0,
+    "organs": 1904,
+    "vertices": 20153,
+    "triangles": 27000,
+    "instances": 896,
+    "shapes": 2,
+    "hash": "A7FE4B20C6C3065CCB9E3DD5AD9CCB3C60A823319CBFC61EB27A75F1275FF2EE"
+  },
+  {
+    "id": "nutglade",
+    "lod": 1,
+    "organs": 1904,
+    "vertices": 13444,
+    "triangles": 15910,
+    "instances": 896,
+    "shapes": 2,
+    "hash": "8FF34B2A88B2EED925D812E4495C0C45F805FDDB96E740B9B63BE06380BD423A"
+  },
+  {
+    "id": "nutglade",
+    "lod": 2,
+    "organs": 1904,
+    "vertices": 11452,
+    "triangles": 12670,
+    "instances": 896,
+    "shapes": 2,
+    "hash": "E8A1FA7CCD6EBDE7AE1C625EDE54DE1A2744DB79F05258FBCD3AE0CBCF5915D5"
+  },
+  {
+    "id": "paddlerib",
+    "lod": 0,
+    "organs": 134,
+    "vertices": 1544,
+    "triangles": 2262,
+    "instances": 84,
+    "shapes": 13,
+    "hash": "C563AA7F68D6B6651FF9F7906D3C7829E79FE8A52B112DD9FA6BF4D603417A3A"
+  },
+  {
+    "id": "paddlerib",
+    "lod": 1,
+    "organs": 134,
+    "vertices": 992,
+    "triangles": 1306,
+    "instances": 84,
+    "shapes": 13,
+    "hash": "5880D04F284B94014E31DEDE6D2FAFBC5EA914A3CFEF945686CFC0594853034A"
+  },
+  {
+    "id": "paddlerib",
+    "lod": 2,
+    "organs": 134,
+    "vertices": 704,
+    "triangles": 831,
+    "instances": 84,
+    "shapes": 13,
+    "hash": "D5A2CF473C82961E64A05E662EBDE4EE95483262D8891E8C9A235CF52632FA1A"
+  },
+  {
+    "id": "pearl_cushion_moss",
+    "lod": 0,
+    "organs": 1089,
+    "vertices": 2828,
+    "triangles": 3720,
+    "instances": 960,
+    "shapes": 4,
+    "hash": "CE05272D1E11163BBF87E2220823FDFCD8EDA064CE2C3AA7C3B6878AE6BEA23E"
+  },
+  {
+    "id": "pearl_cushion_moss",
+    "lod": 1,
+    "organs": 1089,
+    "vertices": 2249,
+    "triangles": 2793,
+    "instances": 960,
+    "shapes": 4,
+    "hash": "FC41AE896866021C894955B3349CBB6FBFC2161B7E55D6B20D17E654DE9D41F4"
+  },
+  {
+    "id": "pearl_cushion_moss",
+    "lod": 2,
+    "organs": 1089,
+    "vertices": 2189,
+    "triangles": 2703,
+    "instances": 960,
+    "shapes": 4,
+    "hash": "6EB18063F27688F8C04128057016AC388CAD8EB6AF713870AD18A62BDDE73EF9"
+  },
+  {
+    "id": "pinequilt_moss",
+    "lod": 0,
+    "organs": 409,
+    "vertices": 3354,
+    "triangles": 5130,
+    "instances": 340,
+    "shapes": 4,
+    "hash": "2FCF6C9CF90AEAC4E55CD30B695C3E04F9D0E4368DE8D18C353BA22474524B04"
+  },
+  {
+    "id": "pinequilt_moss",
+    "lod": 1,
+    "organs": 409,
+    "vertices": 2147,
+    "triangles": 2974,
+    "instances": 340,
+    "shapes": 4,
+    "hash": "1A39FEAF637D932396D38FF1803728D0CF5E69427E4318B73E4E6D02ED483580"
+  },
+  {
+    "id": "pinequilt_moss",
+    "lod": 2,
+    "organs": 409,
+    "vertices": 1441,
+    "triangles": 1851,
+    "instances": 340,
+    "shapes": 4,
+    "hash": "1D808C96BDB16344DD0463CCB931AEE3B9CA2E8ED30A2896F058D0C297C27EDF"
+  },
+  {
+    "id": "pitcher_plant",
+    "lod": 0,
+    "organs": 24,
+    "vertices": 457,
+    "triangles": 714,
+    "instances": 15,
+    "shapes": 13,
+    "hash": "DE1BCBCCC4B2ABEBBFC80A6A4C0364E2806535CB8347A8426CB9F3C78BA60CBA"
+  },
+  {
+    "id": "pitcher_plant",
+    "lod": 1,
+    "organs": 24,
+    "vertices": 256,
+    "triangles": 359,
+    "instances": 15,
+    "shapes": 13,
+    "hash": "332CB5B75F872211970EDB405003A469F2769E4218D9946664EC86577D16170F"
+  },
+  {
+    "id": "pitcher_plant",
+    "lod": 2,
+    "organs": 24,
+    "vertices": 111,
+    "triangles": 126,
+    "instances": 15,
+    "shapes": 13,
+    "hash": "730C332E3D4F9BC8ACA95AFD466622D9981E0F1300B46290FB30B766E45A4450"
+  },
+  {
+    "id": "plumegrass",
+    "lod": 0,
+    "organs": 721,
+    "vertices": 4089,
+    "triangles": 5327,
+    "instances": 535,
+    "shapes": 13,
+    "hash": "8842A5F54D3CB757A63A8F685570E530015435E2353B98BFE5CFFCF16B3AD8A2"
+  },
+  {
+    "id": "plumegrass",
+    "lod": 1,
+    "organs": 721,
+    "vertices": 3996,
+    "triangles": 5157,
+    "instances": 535,
+    "shapes": 13,
+    "hash": "ABABA4AAC9E841ED6D1275F77803E11DD1AE9B226591350CB1DCC73F6B8562FC"
+  },
+  {
+    "id": "plumegrass",
+    "lod": 2,
+    "organs": 721,
+    "vertices": 3954,
+    "triangles": 5094,
+    "instances": 535,
+    "shapes": 13,
+    "hash": "79C6C08960CC3D9B8CDC47492A9DB93EF2B7CE287784A77EC294BF5FF2214533"
+  },
+  {
+    "id": "pondstars",
+    "lod": 0,
+    "organs": 37,
+    "vertices": 407,
+    "triangles": 546,
+    "instances": 18,
+    "shapes": 13,
+    "hash": "077F445BB15F8EEBC7D536F674D34C3AB21FDDD75536FBB3F63FF69F25ED99CD"
+  },
+  {
+    "id": "pondstars",
+    "lod": 1,
+    "organs": 37,
+    "vertices": 245,
+    "triangles": 282,
+    "instances": 18,
+    "shapes": 13,
+    "hash": "017413A34831281DB19F192309D14252875CBEF483D25CDEDF3E5B07F90A1C18"
+  },
+  {
+    "id": "pondstars",
+    "lod": 2,
+    "organs": 37,
+    "vertices": 243,
+    "triangles": 279,
+    "instances": 18,
+    "shapes": 13,
+    "hash": "ABF3EC5F9F57860A597FFD3A3F33132C4DB65D1A0D0ED48E8CE7DE7457CDC387"
+  },
+  {
+    "id": "prismstar",
+    "lod": 0,
+    "organs": 29,
+    "vertices": 291,
+    "triangles": 382,
+    "instances": 14,
+    "shapes": 13,
+    "hash": "EA44E3FF38DBFD696497D09219BCF269AE212C21CF47AE729E22A1D1382AF370"
+  },
+  {
+    "id": "prismstar",
+    "lod": 1,
+    "organs": 29,
+    "vertices": 193,
+    "triangles": 222,
+    "instances": 14,
+    "shapes": 13,
+    "hash": "6486CD36939D75F8300A718AA705875095F52C0A588C65CD2DAE854EC0C13697"
+  },
+  {
+    "id": "prismstar",
+    "lod": 2,
+    "organs": 29,
+    "vertices": 175,
+    "triangles": 195,
+    "instances": 14,
+    "shapes": 13,
+    "hash": "591DD292BC8BE63A0996776A22EADC61F91A67A8B402684B0B15AE1F4FB465CB"
+  },
+  {
+    "id": "quillfeather_moss",
+    "lod": 0,
+    "organs": 265,
+    "vertices": 2192,
+    "triangles": 3354,
+    "instances": 220,
+    "shapes": 4,
+    "hash": "C54D9E6D2E6019E514AF3D52A25D3F74956C3EF62299FB1659B3D693E1A7C2BC"
+  },
+  {
+    "id": "quillfeather_moss",
+    "lod": 1,
+    "organs": 265,
+    "vertices": 1419,
+    "triangles": 1970,
+    "instances": 220,
+    "shapes": 4,
+    "hash": "A4B5102629D674EFEB6DC954EFBF9F1AC5719DCFBAE107AE84857BA29D5F77C2"
+  },
+  {
+    "id": "quillfeather_moss",
+    "lod": 2,
+    "organs": 265,
+    "vertices": 937,
+    "triangles": 1203,
+    "instances": 220,
+    "shapes": 4,
+    "hash": "D7A9ED60EF2D94859FAF826323B9021ECF49BEA08C26CF732157B0653CBD69A7"
+  },
+  {
+    "id": "quillsedge",
+    "lod": 0,
+    "organs": 77,
+    "vertices": 1560,
+    "triangles": 2474,
+    "instances": 51,
+    "shapes": 13,
+    "hash": "F27C9D07AC81B82548E63C2F6671AEDBEAC6A67408E79059FF29C5FAA9B642D7"
+  },
+  {
+    "id": "quillsedge",
+    "lod": 1,
+    "organs": 77,
+    "vertices": 822,
+    "triangles": 1170,
+    "instances": 51,
+    "shapes": 13,
+    "hash": "3B952E7782E0C3617684D648EC31A51A9D36D939AE1855131FBCF5049F30705D"
+  },
+  {
+    "id": "quillsedge",
+    "lod": 2,
+    "organs": 77,
+    "vertices": 440,
+    "triangles": 543,
+    "instances": 51,
+    "shapes": 13,
+    "hash": "3498F38FF61748233191159ABD5F557A7C1B3C935B02A361F61E35ACA244B748"
+  },
+  {
+    "id": "rain_jelly",
+    "lod": 0,
+    "organs": 105,
+    "vertices": 832,
+    "triangles": 1352,
+    "instances": 78,
+    "shapes": 4,
+    "hash": "2F30056BC0AF1A393F665DDB96D79836FD3888DC130BF342902A1F5D694909FD"
+  },
+  {
+    "id": "rain_jelly",
+    "lod": 1,
+    "organs": 105,
+    "vertices": 559,
+    "triangles": 858,
+    "instances": 78,
+    "shapes": 4,
+    "hash": "34A88677932BC689BAC09DC78D646464FF022377E7A77172FABB080687B56868"
+  },
+  {
+    "id": "rain_jelly",
+    "lod": 2,
+    "organs": 105,
+    "vertices": 273,
+    "triangles": 364,
+    "instances": 78,
+    "shapes": 4,
+    "hash": "50A70FE993C6F7B48F9DE4A4B8E262787CCB107FAA55B9DF98A4D522AA342EA0"
+  },
+  {
+    "id": "rainshield",
+    "lod": 0,
+    "organs": 79,
+    "vertices": 1664,
+    "triangles": 2704,
+    "instances": 26,
+    "shapes": 2,
+    "hash": "6587FAA4150C9F2CC4C7508FF26DFF26A969BAC569E8C7840DD02C99DCE27AE2"
+  },
+  {
+    "id": "rainshield",
+    "lod": 1,
+    "organs": 79,
+    "vertices": 1118,
+    "triangles": 1716,
+    "instances": 26,
+    "shapes": 2,
+    "hash": "917AD52F322799C363B94AA3F84BEBE82E832F5F6BAFD9EEB19887C401891874"
+  },
+  {
+    "id": "rainshield",
+    "lod": 2,
+    "organs": 79,
+    "vertices": 286,
+    "triangles": 312,
+    "instances": 26,
+    "shapes": 2,
+    "hash": "D32FBD6BC4CE6944C2CA599FCC1BD0A7E88507A876E722ABC2CAEC0E3994E4C1"
+  },
+  {
+    "id": "reekhorn",
+    "lod": 0,
+    "organs": 41,
+    "vertices": 228,
+    "triangles": 360,
+    "instances": 32,
+    "shapes": 4,
+    "hash": "32A27A83302CD07068D88998925499CFCE9AEE0F50D6C74B6EE8B73FB328D372"
+  },
+  {
+    "id": "reekhorn",
+    "lod": 1,
+    "organs": 41,
+    "vertices": 124,
+    "triangles": 176,
+    "instances": 32,
+    "shapes": 4,
+    "hash": "B7A527A980DC5CC438B512563BF66E4471CC1E68BF327BB4FDD91FF0D48703E2"
+  },
+  {
+    "id": "reekhorn",
+    "lod": 2,
+    "organs": 41,
+    "vertices": 52,
+    "triangles": 60,
+    "instances": 32,
+    "shapes": 4,
+    "hash": "2BC8EB564CA1FD7083ADCAE0960B54322CB864BF3F7D8F93CF2DAC3CE8AE0024"
+  },
+  {
+    "id": "ringreed",
+    "lod": 0,
+    "organs": 893,
+    "vertices": 873,
+    "triangles": 1284,
+    "instances": 872,
+    "shapes": 13,
+    "hash": "7522ED3A9018EDFA6588FE43358EF7847CA7AA6C87A827B4D0419BBB63B1418D"
+  },
+  {
+    "id": "ringreed",
+    "lod": 1,
+    "organs": 893,
+    "vertices": 648,
+    "triangles": 879,
+    "instances": 872,
+    "shapes": 13,
+    "hash": "D5AC88973D51FE1DD71078F18C86F6687673DFA02CD6B7C42901981A1A194C33"
+  },
+  {
+    "id": "ringreed",
+    "lod": 2,
+    "organs": 893,
+    "vertices": 477,
+    "triangles": 621,
+    "instances": 872,
+    "shapes": 13,
+    "hash": "5011E203000248039F16FA5F4C1C787AE96630F97418FCB6F95CA103773EF952"
+  },
+  {
+    "id": "ruffle_lichen",
+    "lod": 0,
+    "organs": 176,
+    "vertices": 851,
+    "triangles": 1071,
+    "instances": 125,
+    "shapes": 4,
+    "hash": "52E28E81A182C8BB476F464F30DBDD0C92269F0030EBB4178E699B69412A2409"
+  },
+  {
+    "id": "ruffle_lichen",
+    "lod": 1,
+    "organs": 176,
+    "vertices": 711,
+    "triangles": 837,
+    "instances": 125,
+    "shapes": 4,
+    "hash": "CB2D333930C036C4D28BE2C2B3AF381F079F9B7C862585FEF4E8ABF44C41E560"
+  },
+  {
+    "id": "ruffle_lichen",
+    "lod": 2,
+    "organs": 176,
+    "vertices": 663,
+    "triangles": 765,
+    "instances": 125,
+    "shapes": 4,
+    "hash": "DCB9EC875271879A5E4E436AD2078E35C4D45B525FA483A34F915292DC59BC0F"
+  },
+  {
+    "id": "rustbellow_moss",
+    "lod": 0,
+    "organs": 769,
+    "vertices": 2457,
+    "triangles": 3390,
+    "instances": 672,
+    "shapes": 4,
+    "hash": "41D9D5D74B9123EE2E363574BFCBA24EA447E23144C436234F79397CC4A1CA99"
+  },
+  {
+    "id": "rustbellow_moss",
+    "lod": 1,
+    "organs": 769,
+    "vertices": 1804,
+    "triangles": 2270,
+    "instances": 672,
+    "shapes": 4,
+    "hash": "F8C82254E82758CAB1E8B3DA37F1FBF6CC58071CC2342D7A7607A2486778251C"
+  },
+  {
+    "id": "rustbellow_moss",
+    "lod": 2,
+    "organs": 769,
+    "vertices": 1453,
+    "triangles": 1743,
+    "instances": 672,
+    "shapes": 4,
+    "hash": "57B54ED68C56EC38244E1E32B7F79461A63062A8483A598DC538A904AF926061"
+  },
+  {
+    "id": "sceptrefern",
+    "lod": 0,
+    "organs": 120,
+    "vertices": 793,
+    "triangles": 1298,
+    "instances": 112,
+    "shapes": 13,
+    "hash": "B597F4E7233D60862DEB152CFCC26C87D979E443AA6E2D47BE73CE7D113B9F24"
+  },
+  {
+    "id": "sceptrefern",
+    "lod": 1,
+    "organs": 120,
+    "vertices": 459,
+    "triangles": 690,
+    "instances": 112,
+    "shapes": 13,
+    "hash": "7FA0D2052F5C2612DC985F8EC9240D8EAB4B9FA96D9856F8650EEC4595635FA7"
+  },
+  {
+    "id": "sceptrefern",
+    "lod": 2,
+    "organs": 120,
+    "vertices": 298,
+    "triangles": 411,
+    "instances": 112,
+    "shapes": 13,
+    "hash": "825A74432FFAEC343860ECAD9A1663A480322C78234AA8D0A756D061D11C6A06"
+  },
+  {
+    "id": "shadebell",
+    "lod": 0,
+    "organs": 402,
+    "vertices": 9780,
+    "triangles": 15183,
+    "instances": 189,
+    "shapes": 2,
+    "hash": "A3830DC6716AFB85C46B715981815E62D99ACEB7D2B13681124CB2897F08EAC8"
+  },
+  {
+    "id": "shadebell",
+    "lod": 1,
+    "organs": 402,
+    "vertices": 4809,
+    "triangles": 6561,
+    "instances": 189,
+    "shapes": 2,
+    "hash": "178C9072260897761EA954CF737E1CF401A62B8D8CAC550CEDB50B77264FAC6E"
+  },
+  {
+    "id": "shadebell",
+    "lod": 2,
+    "organs": 402,
+    "vertices": 2331,
+    "triangles": 2562,
+    "instances": 189,
+    "shapes": 2,
+    "hash": "51CF17E0564253914931C3813C0ED353C06603ED61F9C3829ED4B1A97A07B88D"
+  },
+  {
+    "id": "shadewrap",
+    "lod": 0,
+    "organs": 137,
+    "vertices": 1492,
+    "triangles": 1959,
+    "instances": 60,
+    "shapes": 2,
+    "hash": "FF64DCCF7797A0B0BA93A49611FB44B0AA7A9A3559A13723884BFB2088A02197"
+  },
+  {
+    "id": "shadewrap",
+    "lod": 1,
+    "organs": 137,
+    "vertices": 1065,
+    "triangles": 1254,
+    "instances": 60,
+    "shapes": 2,
+    "hash": "84A779D248A0005BC8F2E7A1A3A25220C996F334A9DD98A3D55EC50B57474DE5"
+  },
+  {
+    "id": "shadewrap",
+    "lod": 2,
+    "organs": 137,
+    "vertices": 997,
+    "triangles": 1149,
+    "instances": 60,
+    "shapes": 2,
+    "hash": "934BFC364B050F9863342093E9916E17DB8B833C0D034611A6ABF3F0F4F27F6C"
+  },
+  {
+    "id": "shiverleaf",
+    "lod": 0,
+    "organs": 2016,
+    "vertices": 38109,
+    "triangles": 57275,
+    "instances": 864,
+    "shapes": 2,
+    "hash": "C7C319DCD1FA832B08C327F51D1EE9A00854395D6512D1D53647839D57B445BF"
+  },
+  {
+    "id": "shiverleaf",
+    "lod": 1,
+    "organs": 2016,
+    "vertices": 23169,
+    "triangles": 31347,
+    "instances": 864,
+    "shapes": 2,
+    "hash": "84F9073C1948782202D0C86185BADE4CCE3BCA3FCDDCD470D459C1B6A41F2F4F"
+  },
+  {
+    "id": "shiverleaf",
+    "lod": 2,
+    "organs": 2016,
+    "vertices": 15799,
+    "triangles": 18772,
+    "instances": 864,
+    "shapes": 2,
+    "hash": "A6E1DE98ADAB9D24C6444C651B268B2701C4BF95FB7E2A97DA889758DD87298B"
+  },
+  {
+    "id": "silkgleam_moss",
+    "lod": 0,
+    "organs": 361,
+    "vertices": 2041,
+    "triangles": 2926,
+    "instances": 300,
+    "shapes": 4,
+    "hash": "98A65C378DF51E2D5DB47384D281BA67F15C0B4F78BB885E2C3D0D16B7F4E52E"
+  },
+  {
+    "id": "silkgleam_moss",
+    "lod": 1,
+    "organs": 361,
+    "vertices": 1612,
+    "triangles": 2144,
+    "instances": 300,
+    "shapes": 4,
+    "hash": "EB3C9101066950A95F624DE50EB82FB140D79B057F65A264A06D6658B9BDC0FE"
+  },
+  {
+    "id": "silkgleam_moss",
+    "lod": 2,
+    "organs": 361,
+    "vertices": 1273,
+    "triangles": 1635,
+    "instances": 300,
+    "shapes": 4,
+    "hash": "7B49AA45A8EC8AF7FD0971AB310EF4665FEBE413199A94CDB6326280C294BE4A"
+  },
+  {
+    "id": "siltstars",
+    "lod": 0,
+    "organs": 45,
+    "vertices": 711,
+    "triangles": 1010,
+    "instances": 22,
+    "shapes": 13,
+    "hash": "164184AB30C835A1D9EA66B2EBF53BEF00FBE45755F689C981DBEEA62C36AD14"
+  },
+  {
+    "id": "siltstars",
+    "lod": 1,
+    "organs": 45,
+    "vertices": 561,
+    "triangles": 738,
+    "instances": 22,
+    "shapes": 13,
+    "hash": "2E01B3685951A9F9D17E842FECC4C4579D3EE2B8C3228FF1FC1C65E9CD329022"
+  },
+  {
+    "id": "siltstars",
+    "lod": 2,
+    "organs": 45,
+    "vertices": 295,
+    "triangles": 339,
+    "instances": 22,
+    "shapes": 13,
+    "hash": "A8A6F09FA0D4F02FB1706A26945F96388C21E3E67A88196012F348C2C5177F97"
+  },
+  {
+    "id": "silverfelt",
+    "lod": 0,
+    "organs": 918,
+    "vertices": 8706,
+    "triangles": 11384,
+    "instances": 441,
+    "shapes": 2,
+    "hash": "CD7F37B0399385DAFB1F68A556A2C9251854EFFB05FAD868EBA80302AC5FDE99"
+  },
+  {
+    "id": "silverfelt",
+    "lod": 1,
+    "organs": 918,
+    "vertices": 5859,
+    "triangles": 6705,
+    "instances": 441,
+    "shapes": 2,
+    "hash": "40E969F2DD39DE6E98357E69BBC90523E03AD74F328929F71EF60ED006261F09"
+  },
+  {
+    "id": "silverfelt",
+    "lod": 2,
+    "organs": 918,
+    "vertices": 5337,
+    "triangles": 5859,
+    "instances": 441,
+    "shapes": 2,
+    "hash": "4B346268D7280A8AA7AF80D9DF4759EC3507BD30081B2D81116980ABC2DEB58D"
+  },
+  {
+    "id": "silverweed",
+    "lod": 0,
+    "organs": 233,
+    "vertices": 829,
+    "triangles": 1352,
+    "instances": 224,
+    "shapes": 13,
+    "hash": "995249FD59D9F8DCEDDE4E78082A76E56C416EA4244A15A481DA06DB957E275A"
+  },
+  {
+    "id": "silverweed",
+    "lod": 1,
+    "organs": 233,
+    "vertices": 510,
+    "triangles": 766,
+    "instances": 224,
+    "shapes": 13,
+    "hash": "39BC5B9E155F7E58788F64B4302AB95B37ACAFDD35E0B0B7BFBC8BC38CDD142B"
+  },
+  {
+    "id": "silverweed",
+    "lod": 2,
+    "organs": 233,
+    "vertices": 307,
+    "triangles": 420,
+    "instances": 224,
+    "shapes": 13,
+    "hash": "1932D022E03C558BA563E8808F28719F55DB28AEFA60A405C30E556B14B727C8"
+  },
+  {
+    "id": "slickmantle",
+    "lod": 0,
+    "organs": 225,
+    "vertices": 1535,
+    "triangles": 2094,
+    "instances": 160,
+    "shapes": 4,
+    "hash": "16F615BF48ADDD777D2977DC48F540C769AD44D64C39D201228DD410413BF81E"
+  },
+  {
+    "id": "slickmantle",
+    "lod": 1,
+    "organs": 225,
+    "vertices": 1212,
+    "triangles": 1526,
+    "instances": 160,
+    "shapes": 4,
+    "hash": "3713F0066A4641FA8B18BBC95637C6A17188EED11204FFC161812ECE8FA8B108"
+  },
+  {
+    "id": "slickmantle",
+    "lod": 2,
+    "organs": 225,
+    "vertices": 845,
+    "triangles": 975,
+    "instances": 160,
+    "shapes": 4,
+    "hash": "2366EA6A75345FC4E5AD301630F5A4D37ABD4B01CD37E82040724D3228878C77"
+  },
+  {
+    "id": "snaptrap",
+    "lod": 0,
+    "organs": 33,
+    "vertices": 657,
+    "triangles": 1034,
+    "instances": 21,
+    "shapes": 13,
+    "hash": "A3F79AB05CA60726AB027BFB54B702ADC1108C20AA6ABFF80AF35BDFA03AA4E3"
+  },
+  {
+    "id": "snaptrap",
+    "lod": 1,
+    "organs": 33,
+    "vertices": 358,
+    "triangles": 506,
+    "instances": 21,
+    "shapes": 13,
+    "hash": "69440127FD70E1A5313CF483EB11228826D835888EDF42093B319C008B2B7B0E"
+  },
+  {
+    "id": "snaptrap",
+    "lod": 2,
+    "organs": 33,
+    "vertices": 150,
+    "triangles": 171,
+    "instances": 21,
+    "shapes": 13,
+    "hash": "AF20377E4E64C093D3134CA705B60420FFF39EEA4EB0D5CC2659F182D98BD59D"
+  },
+  {
+    "id": "sootband",
+    "lod": 0,
+    "organs": 828,
+    "vertices": 949,
+    "triangles": 1402,
+    "instances": 807,
+    "shapes": 13,
+    "hash": "16C794411496281FBD95A5CBA9922F9417E5856222E16641FBBCDA5DE9A58290"
+  },
+  {
+    "id": "sootband",
+    "lod": 1,
+    "organs": 828,
+    "vertices": 751,
+    "triangles": 1032,
+    "instances": 807,
+    "shapes": 13,
+    "hash": "E56C0DEC1D9446D043FEDCA26E45561D1E13D7C05F1E5B5926959953DC847875"
+  },
+  {
+    "id": "sootband",
+    "lod": 2,
+    "organs": 828,
+    "vertices": 589,
+    "triangles": 789,
+    "instances": 807,
+    "shapes": 13,
+    "hash": "B80C00D2240D316AAC55444AC532279197CDB5781E2DA59B8F411049CAA56DA6"
+  },
+  {
+    "id": "spiralvine",
+    "lod": 0,
+    "organs": 197,
+    "vertices": 2216,
+    "triangles": 2913,
+    "instances": 84,
+    "shapes": 2,
+    "hash": "68C3E749B68F392892A1BDF305911281F9227624135A12CB04894B0D7C807B45"
+  },
+  {
+    "id": "spiralvine",
+    "lod": 1,
+    "organs": 197,
+    "vertices": 1603,
+    "triangles": 1900,
+    "instances": 84,
+    "shapes": 2,
+    "hash": "D65E9FA15C7A120DF5BB91D2CDAD0F5A96A31E4E9964D0F2A34DE1AE3F8878DA"
+  },
+  {
+    "id": "spiralvine",
+    "lod": 2,
+    "organs": 197,
+    "vertices": 1465,
+    "triangles": 1689,
+    "instances": 84,
+    "shapes": 2,
+    "hash": "8878DD145431AEADC375D1FF7DE5DD7EEBDBB7F2B0F862D350E32BE55601F8AF"
+  },
+  {
+    "id": "splitcrown",
+    "lod": 0,
+    "organs": 1734,
+    "vertices": 7932,
+    "triangles": 11760,
+    "instances": 1560,
+    "shapes": 2,
+    "hash": "F0127B93228B6611CDE4B38E6AC7889E6ECC1D3B15FFA6ECC36831CFA7E7699D"
+  },
+  {
+    "id": "splitcrown",
+    "lod": 1,
+    "organs": 1734,
+    "vertices": 6390,
+    "triangles": 8892,
+    "instances": 1560,
+    "shapes": 2,
+    "hash": "71396EE84889CEB5D5B7EEF5A5375200850E6C2D10F284C1F06B72F70B6190E4"
+  },
+  {
+    "id": "splitcrown",
+    "lod": 2,
+    "organs": 1734,
+    "vertices": 5157,
+    "triangles": 6960,
+    "instances": 1560,
+    "shapes": 2,
+    "hash": "7A0B4F643DFE1813F79F6E5736FC2EFB99147B5FA37C8081506E7F1B5AE395C0"
+  },
+  {
+    "id": "starbulb",
+    "lod": 0,
+    "organs": 64,
+    "vertices": 967,
+    "triangles": 1412,
+    "instances": 31,
+    "shapes": 13,
+    "hash": "6815DB4E2FD78605107A1CD9B56E970CE2477317343372B72DBC6FCA8FF148A9"
+  },
+  {
+    "id": "starbulb",
+    "lod": 1,
+    "organs": 64,
+    "vertices": 564,
+    "triangles": 722,
+    "instances": 31,
+    "shapes": 13,
+    "hash": "B50838B070699C10A8C43F0EC70C83967A92012685CFDB7BA2AE784B5658CA48"
+  },
+  {
+    "id": "starbulb",
+    "lod": 2,
+    "organs": 64,
+    "vertices": 343,
+    "triangles": 366,
+    "instances": 31,
+    "shapes": 13,
+    "hash": "67F437B7F2614D050ACE069C563886F389206A7461C63E650DD47E3929D7EAE3"
+  },
+  {
+    "id": "starmoss",
+    "lod": 0,
+    "organs": 1055,
+    "vertices": 2623,
+    "triangles": 3430,
+    "instances": 930,
+    "shapes": 4,
+    "hash": "E3902536831BCF72CF55CF59C51A1635E1F26E636C0C800EBF7B720A44C6F20F"
+  },
+  {
+    "id": "starmoss",
+    "lod": 1,
+    "organs": 1055,
+    "vertices": 2221,
+    "triangles": 2769,
+    "instances": 930,
+    "shapes": 4,
+    "hash": "9A368E026F35C57A17B930A6A94B3FE768201C99BA6CFC81DEFDEB886C419E12"
+  },
+  {
+    "id": "starmoss",
+    "lod": 2,
+    "organs": 1055,
+    "vertices": 2121,
+    "triangles": 2619,
+    "instances": 930,
+    "shapes": 4,
+    "hash": "A0FD672426BE23FEC13E9EC25FD8DB7EA138BAC66901AA38915CB3FBA502445D"
+  },
+  {
+    "id": "starsplit",
+    "lod": 0,
+    "organs": 41,
+    "vertices": 256,
+    "triangles": 416,
+    "instances": 32,
+    "shapes": 4,
+    "hash": "1E3CC1E3F1059921E31D3CCC618FDFE76F09A07BDF28D431348FF947FBB1245D"
+  },
+  {
+    "id": "starsplit",
+    "lod": 1,
+    "organs": 41,
+    "vertices": 172,
+    "triangles": 264,
+    "instances": 32,
+    "shapes": 4,
+    "hash": "C5E17B527806AA8E741DB1D36171E9C7DBFAEB3878D417C7A0B3E0A1202A5423"
+  },
+  {
+    "id": "starsplit",
+    "lod": 2,
+    "organs": 41,
+    "vertices": 84,
+    "triangles": 112,
+    "instances": 32,
+    "shapes": 4,
+    "hash": "86EDF17ECE331646354A8EC5C8AC840BC00903137919EB513A2113480B51B847"
+  },
+  {
+    "id": "starveil",
+    "lod": 0,
+    "organs": 52,
+    "vertices": 392,
+    "triangles": 507,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "584AAE7AC15A05840DEA316B15E06D62C10163DAE055189023CD68CB5B583070"
+  },
+  {
+    "id": "starveil",
+    "lod": 1,
+    "organs": 52,
+    "vertices": 292,
+    "triangles": 339,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "C4DE13EE76E7F554F3B3C81E0B0DE7CFC21EA072FCCFA9B06F5A95436FB8AA2B"
+  },
+  {
+    "id": "starveil",
+    "lod": 2,
+    "organs": 52,
+    "vertices": 234,
+    "triangles": 252,
+    "instances": 30,
+    "shapes": 13,
+    "hash": "D39017424CF5F1F7EA2E3A278FC7BB3A7778ACD2672F12D36FE5D51346B11B49"
+  },
+  {
+    "id": "stoneknot_moss",
+    "lod": 0,
+    "organs": 987,
+    "vertices": 2361,
+    "triangles": 3064,
+    "instances": 870,
+    "shapes": 4,
+    "hash": "FF2B4CA4AF24A1B85EC3BB1BD97A0292C1463C78CF94A9F2B190042852A4B4FC"
+  },
+  {
+    "id": "stoneknot_moss",
+    "lod": 1,
+    "organs": 987,
+    "vertices": 1985,
+    "triangles": 2451,
+    "instances": 870,
+    "shapes": 4,
+    "hash": "7C98FD2DA605AD5CCF1E49736BFFFBDC0B10A1460A142F27341E36474646CD01"
+  },
+  {
+    "id": "stoneknot_moss",
+    "lod": 2,
+    "organs": 987,
+    "vertices": 1985,
+    "triangles": 2451,
+    "instances": 870,
+    "shapes": 4,
+    "hash": "4E40A9D4356BFC2333AC1E01AC0C9E4432EFC21B9CCE43353576D5CAEE6760B4"
+  },
+  {
+    "id": "streamribbon",
+    "lod": 0,
+    "organs": 31,
+    "vertices": 419,
+    "triangles": 582,
+    "instances": 15,
+    "shapes": 13,
+    "hash": "F01FEAB00EF5B1D0FAD3759DFA5BE745720A67447160176B6878ABC86763D14C"
+  },
+  {
+    "id": "streamribbon",
+    "lod": 1,
+    "organs": 31,
+    "vertices": 326,
+    "triangles": 417,
+    "instances": 15,
+    "shapes": 13,
+    "hash": "8A6CC09319ED9CA245884490B1B6DA2E08EEB3C6B6854B2A27D72931204D3E87"
+  },
+  {
+    "id": "streamribbon",
+    "lod": 2,
+    "organs": 31,
+    "vertices": 204,
+    "triangles": 234,
+    "instances": 15,
+    "shapes": 13,
+    "hash": "58573E4719D2D3E7D57DE930637029DA7B857EA4CCA1839976BBF0B99FBE4533"
+  },
+  {
+    "id": "sunscald_lichen",
+    "lod": 0,
+    "organs": 188,
+    "vertices": 1239,
+    "triangles": 1573,
+    "instances": 117,
+    "shapes": 4,
+    "hash": "FED145BA109C6CF3383C8F3A4CEC6078AF57CFE164830EDB2917AEE7FB806C26"
+  },
+  {
+    "id": "sunscald_lichen",
+    "lod": 1,
+    "organs": 188,
+    "vertices": 1055,
+    "triangles": 1263,
+    "instances": 117,
+    "shapes": 4,
+    "hash": "E64D9347F0441D9EF84970FE2371D2E72C2819695A21DC88424103875B9A5317"
+  },
+  {
+    "id": "sunscald_lichen",
+    "lod": 2,
+    "organs": 188,
+    "vertices": 971,
+    "triangles": 1137,
+    "instances": 117,
+    "shapes": 4,
+    "hash": "3D0F3980ADD48B0A2F32BC18F133E563E85BDD1086F66212BC48439AF578F433"
+  },
+  {
+    "id": "sunstone_rosette",
+    "lod": 0,
+    "organs": 37,
+    "vertices": 497,
+    "triangles": 690,
+    "instances": 18,
+    "shapes": 13,
+    "hash": "7280DBA265DB0545E4395CFC4F4528453BED0CB2B23CAF2D957BF613711479E9"
+  },
+  {
+    "id": "sunstone_rosette",
+    "lod": 1,
+    "organs": 37,
+    "vertices": 369,
+    "triangles": 468,
+    "instances": 18,
+    "shapes": 13,
+    "hash": "B6130D7598BAED16A603E1A89598A233BAEBFF99070C7E7FC0A2531EAAF2109C"
+  },
+  {
+    "id": "sunstone_rosette",
+    "lod": 2,
+    "organs": 37,
+    "vertices": 243,
+    "triangles": 279,
+    "instances": 18,
+    "shapes": 13,
+    "hash": "243D41509AA03C6470A25E734B9D7AE55C732317D2D2679F428F3A2D4C31A747"
+  },
+  {
+    "id": "swanfrond",
+    "lod": 0,
+    "organs": 280,
+    "vertices": 1495,
+    "triangles": 2486,
+    "instances": 270,
+    "shapes": 13,
+    "hash": "D0D62364C68FC5359580E25EDAD663F53E63667C6865A320B96ED45F29E5A149"
+  },
+  {
+    "id": "swanfrond",
+    "lod": 1,
+    "organs": 280,
+    "vertices": 931,
+    "triangles": 1434,
+    "instances": 270,
+    "shapes": 13,
+    "hash": "4A95301E78EB92A840E709811DC6B7CE0A504BBB2F5897C6F93820A31831FC2E"
+  },
+  {
+    "id": "swanfrond",
+    "lod": 2,
+    "organs": 280,
+    "vertices": 632,
+    "triangles": 903,
+    "instances": 270,
+    "shapes": 13,
+    "hash": "A9AF0A6CA2357ED9CEB5D96D1916E0C035BF703311E9CA3C23437D3789BCE089"
+  },
+  {
+    "id": "tankbloom",
+    "lod": 0,
+    "organs": 66,
+    "vertices": 998,
+    "triangles": 1582,
+    "instances": 49,
+    "shapes": 13,
+    "hash": "47CA700F8F6C692BF99064F2AD378433B5E262C2B2114792C0843E4FA2A87E21"
+  },
+  {
+    "id": "tankbloom",
+    "lod": 1,
+    "organs": 66,
+    "vertices": 560,
+    "triangles": 804,
+    "instances": 49,
+    "shapes": 13,
+    "hash": "1F6C2FDA1C8842283C548167F1420842A45035104236B92EFD10B5F4A9E6F9CA"
+  },
+  {
+    "id": "tankbloom",
+    "lod": 2,
+    "organs": 66,
+    "vertices": 241,
+    "triangles": 285,
+    "instances": 49,
+    "shapes": 13,
+    "hash": "2F941D123C93D5F6490CC217027D18193C767E4AF7B6D90FAB4658137C88C15C"
+  },
+  {
+    "id": "thornmantle",
+    "lod": 0,
+    "organs": 2094,
+    "vertices": 22236,
+    "triangles": 29958,
+    "instances": 978,
+    "shapes": 2,
+    "hash": "9BDF45C84278172DD163347D79353F6891EAE6C82F92A115A2C0BB93C9764615"
+  },
+  {
+    "id": "thornmantle",
+    "lod": 1,
+    "organs": 2094,
+    "vertices": 15518,
+    "triangles": 18798,
+    "instances": 978,
+    "shapes": 2,
+    "hash": "B591C141F8D4759A370A7E0B7FFC773DFFE6D37F22ECB89A5F0E0C5CCEBFA71A"
+  },
+  {
+    "id": "thornmantle",
+    "lod": 2,
+    "organs": 2094,
+    "vertices": 12924,
+    "triangles": 14478,
+    "instances": 978,
+    "shapes": 2,
+    "hash": "8C0528B5289FCCCFD712D091723AAC9E4553D3DFC726B3BC95BD307D7D569615"
+  },
+  {
+    "id": "tidebell",
+    "lod": 0,
+    "organs": 92,
+    "vertices": 585,
+    "triangles": 810,
+    "instances": 70,
+    "shapes": 13,
+    "hash": "FBBE0600D6C895537992D1EDA2B421C5E98D2CDD82355E4913677EFAF0FA57A0"
+  },
+  {
+    "id": "tidebell",
+    "lod": 1,
+    "organs": 92,
+    "vertices": 440,
+    "triangles": 561,
+    "instances": 70,
+    "shapes": 13,
+    "hash": "23FF1FF9A19BEB4FAAC1950609E6E1AB312FB53EA83992854F35C1F71549CEA6"
+  },
+  {
+    "id": "tidebell",
+    "lod": 2,
+    "organs": 92,
+    "vertices": 366,
+    "triangles": 450,
+    "instances": 70,
+    "shapes": 13,
+    "hash": "98D92C2192ADE66ACC5D5F17C9C8947C579CAA2971232E32C11EC16D952204A6"
+  },
+  {
+    "id": "trifold",
+    "lod": 0,
+    "organs": 120,
+    "vertices": 645,
+    "triangles": 833,
+    "instances": 84,
+    "shapes": 13,
+    "hash": "22715E49C370DB8817ACB77CDF789B80C283BEB8D13999600D15D9D9E4E460D2"
+  },
+  {
+    "id": "trifold",
+    "lod": 1,
+    "organs": 120,
+    "vertices": 522,
+    "triangles": 621,
+    "instances": 84,
+    "shapes": 13,
+    "hash": "CECD4490C6A07C7EACB27F3AFF84565193E914F982A1851EEAD3AE93A9391985"
+  },
+  {
+    "id": "trifold",
+    "lod": 2,
+    "organs": 120,
+    "vertices": 436,
+    "triangles": 492,
+    "instances": 84,
+    "shapes": 13,
+    "hash": "AAA6EAA42AC1CAFBEC5273E71A248DAE74AFEB4BA393ACE6AF1EDFC250614D2C"
+  },
+  {
+    "id": "trumpetbind",
+    "lod": 0,
+    "organs": 557,
+    "vertices": 5032,
+    "triangles": 6428,
+    "instances": 267,
+    "shapes": 2,
+    "hash": "1E87690B8AA937B2DB240A2C0361B67286CE3445179D73DFD4509EE72A7213D1"
+  },
+  {
+    "id": "trumpetbind",
+    "lod": 1,
+    "organs": 557,
+    "vertices": 3531,
+    "triangles": 4000,
+    "instances": 267,
+    "shapes": 2,
+    "hash": "465EB893282D17D351C45A1B954FF9915875FE06DE81D2DF262AFE99A9DEC493"
+  },
+  {
+    "id": "trumpetbind",
+    "lod": 2,
+    "organs": 557,
+    "vertices": 3318,
+    "triangles": 3672,
+    "instances": 267,
+    "shapes": 2,
+    "hash": "E33111E3A5239C6E2CAC56AA5B714AFEAEB5E6288A61B5EBB5D56814C154A165"
+  },
+  {
+    "id": "vaultfern",
+    "lod": 0,
+    "organs": 756,
+    "vertices": 5706,
+    "triangles": 9762,
+    "instances": 720,
+    "shapes": 2,
+    "hash": "297F6104402FA4406DA111E0BCE95AC7E0B6597E0858B1ABF2C6C10579C87086"
+  },
+  {
+    "id": "vaultfern",
+    "lod": 1,
+    "organs": 756,
+    "vertices": 3935,
+    "triangles": 6448,
+    "instances": 720,
+    "shapes": 2,
+    "hash": "DE6EB54DC7081AD5FB6865D606C12B7D19BD7EF5B13D0E68546194B65593327C"
+  },
+  {
+    "id": "vaultfern",
+    "lod": 2,
+    "organs": 756,
+    "vertices": 2346,
+    "triangles": 3576,
+    "instances": 720,
+    "shapes": 2,
+    "hash": "27E862C75FA8CCC4E815397A3954CF93727D20145B25DD4C7967808E7D7FCA38"
+  },
+  {
+    "id": "veilblade",
+    "lod": 0,
+    "organs": 85,
+    "vertices": 1698,
+    "triangles": 2688,
+    "instances": 56,
+    "shapes": 13,
+    "hash": "516F250ADA4A39B8A8D62EDD4B3BFF584AB9D34113F603C24DECAD9818D2AD2C"
+  },
+  {
+    "id": "veilblade",
+    "lod": 1,
+    "organs": 85,
+    "vertices": 890,
+    "triangles": 1262,
+    "instances": 56,
+    "shapes": 13,
+    "hash": "52D2B7434EC4727036D97DF868DBFA8620DC8B149EC40B94E6587F22EA533C85"
+  },
+  {
+    "id": "veilblade",
+    "lod": 2,
+    "organs": 85,
+    "vertices": 487,
+    "triangles": 600,
+    "instances": 56,
+    "shapes": 13,
+    "hash": "CBACC001FD357A96C41FD015EEC3A41DB684D1BCC010A0C47140D14075B92506"
+  },
+  {
+    "id": "veilfern",
+    "lod": 0,
+    "organs": 201,
+    "vertices": 1165,
+    "triangles": 1928,
+    "instances": 192,
+    "shapes": 13,
+    "hash": "E784F5C6E583E17E242C00BCEFFDB1763D65FBAAE5A7E87F99F9A67DD89B2AF8"
+  },
+  {
+    "id": "veilfern",
+    "lod": 1,
+    "organs": 201,
+    "vertices": 710,
+    "triangles": 1086,
+    "instances": 192,
+    "shapes": 13,
+    "hash": "05EBD9E5AE6615E24090481711D8AC76632876C693C0828A01C7A0C61B9A52D8"
+  },
+  {
+    "id": "veilfern",
+    "lod": 2,
+    "organs": 201,
+    "vertices": 467,
+    "triangles": 660,
+    "instances": 192,
+    "shapes": 13,
+    "hash": "CABF982366DEC9AAACADEFCD7AA4ACCA966E53EA3ECCDFB7CD9BE93664D51D71"
+  },
+  {
+    "id": "velvetweave_moss",
+    "lod": 0,
+    "organs": 409,
+    "vertices": 3354,
+    "triangles": 5130,
+    "instances": 340,
+    "shapes": 4,
+    "hash": "1E82C4C5803B1898A4F9C0CAE9E25784DA205DDB934DCC0D3CBE0D2E37962062"
+  },
+  {
+    "id": "velvetweave_moss",
+    "lod": 1,
+    "organs": 409,
+    "vertices": 2157,
+    "triangles": 2990,
+    "instances": 340,
+    "shapes": 4,
+    "hash": "8B5B7B6FC16B109C1CAB51B7D58E6E4F718A3B8244D0AB12DA39DFBBDE5C98BF"
+  },
+  {
+    "id": "velvetweave_moss",
+    "lod": 2,
+    "organs": 409,
+    "vertices": 1441,
+    "triangles": 1851,
+    "instances": 340,
+    "shapes": 4,
+    "hash": "09DE0CDA037965C9AC504C5A36199E04E6709A0F45302F5C77BF9C0DE7321DC7"
+  },
+  {
+    "id": "widowspire",
+    "lod": 0,
+    "organs": 523,
+    "vertices": 1369,
+    "triangles": 2270,
+    "instances": 513,
+    "shapes": 13,
+    "hash": "92BAE780953A2FCF2E441878DC6EF114CAFCF59C579BCBF56F969FC3B1ADF49F"
+  },
+  {
+    "id": "widowspire",
+    "lod": 1,
+    "organs": 523,
+    "vertices": 886,
+    "triangles": 1362,
+    "instances": 513,
+    "shapes": 13,
+    "hash": "0AFA65CE107118A0B193B4105DFF6A68961E68691830ACEC91B20EDBCD595EBE"
+  },
+  {
+    "id": "widowspire",
+    "lod": 2,
+    "organs": 523,
+    "vertices": 632,
+    "triangles": 903,
+    "instances": 513,
+    "shapes": 13,
+    "hash": "A69639BFD7038196870876C285F016878961A0BADBEFB43DD3536606CA3BE63D"
+  },
+  {
+    "id": "wispthread_moss",
+    "lod": 0,
+    "organs": 241,
+    "vertices": 1982,
+    "triangles": 3030,
+    "instances": 200,
+    "shapes": 4,
+    "hash": "7799AAAA5E09C24084E2C6033074F65C50E9B39D4A149578B76B752B4296654A"
+  },
+  {
+    "id": "wispthread_moss",
+    "lod": 1,
+    "organs": 241,
+    "vertices": 1261,
+    "triangles": 1744,
+    "instances": 200,
+    "shapes": 4,
+    "hash": "A0E852BA7CBADDD511146814C80CFF99396573E929EBC083698252C65C484FD6"
+  },
+  {
+    "id": "wispthread_moss",
+    "lod": 2,
+    "organs": 241,
+    "vertices": 853,
+    "triangles": 1095,
+    "instances": 200,
+    "shapes": 4,
+    "hash": "3070EA3396BE50C0CE0D8F0E8F62097989D938615750D4FB968256D9B09FD95A"
+  },
+  {
+    "id": "witchberry",
+    "lod": 0,
+    "organs": 2647,
+    "vertices": 20900,
+    "triangles": 32383,
+    "instances": 2243,
+    "shapes": 2,
+    "hash": "1DA3217554DC618F5027DD183121C364D255680E06DFFA9E09D52A0743D87869"
+  },
+  {
+    "id": "witchberry",
+    "lod": 1,
+    "organs": 2647,
+    "vertices": 15450,
+    "triangles": 22357,
+    "instances": 2243,
+    "shapes": 2,
+    "hash": "2F5B7D26DE4126791972381D74486A8E142762C474072C627ADB196400C67FF0"
+  },
+  {
+    "id": "witchberry",
+    "lod": 2,
+    "organs": 2647,
+    "vertices": 9628,
+    "triangles": 12782,
+    "instances": 2243,
+    "shapes": 2,
+    "hash": "1BD9A2437CE7509B93DCF3B2302EAA18EE52FFE32D2F18B146066984C1B6CEC8"
+  }
+]

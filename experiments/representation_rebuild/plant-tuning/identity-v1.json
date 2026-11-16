@@ -1,0 +1,23 @@
+{
+  "Moonfern": {
+    "MinFronds": 2,
+    "FrondGrowthDuration": 0.5,
+    "PetioleGrowthDuration": 0.12,
+    "FrondLengthMin": 0.45,
+    "FrondLengthMax": 0.55,
+    "FrondHalfWidthRatio": 0.19,
+    "FrondCurl": 1.1
+  },
+  "Shadebell": {
+    "LowerForkLength": 0.92,
+    "LeafLengthMin": 0.22,
+    "LeafLengthMax": 0.27,
+    "FlowerLength": 0.05,
+    "FlowerHalfWidth": 0.023
+  },
+  "Renderer": {
+    "ChunkMetres": 2,
+    "Detail0Pixels": 700,
+    "Detail1Pixels": 250
+  }
+}

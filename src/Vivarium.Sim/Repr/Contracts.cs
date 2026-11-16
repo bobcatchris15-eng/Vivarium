@@ -138,11 +138,11 @@ public interface ISubstrate
 // ---------------------------------------------------------------- plants
 
 public enum OrganType : byte { Axis = 0, Leaf = 1, Leaflet = 2, Petiole = 3, Flower = 4, Fruit = 5, Bud = 6, Root = 7, Tendril = 8 }
-public enum Tissue : byte { Green = 0, Wood = 1, Bark = 2, Lamina = 3, Petal = 4, FruitSkin = 5, RootBark = 6, Fungal = 7 }
+public enum Tissue : byte { Green = 0, Wood = 1, Bark = 2, Lamina = 3, Petal = 4, FruitSkin = 5, RootBark = 6, Fungal = 7, PaleFungal = 8 }
 public enum OrganSurfaceForm : byte { Auto, Lamina, Needle, Revolved, Cup, MushroomCap, Shelf, Disc, Star, Trumpet }
 
 [Flags]
-public enum OrganFlags : ushort { None = 0, Dormant = 1, Dead = 2, Emissive = 4, Fertile = 8, Hidden = 16, Terminal = 32, Basal = 64 }
+public enum OrganFlags : ushort { None = 0, Dormant = 1, Dead = 2, Emissive = 4, Fertile = 8, Hidden = 16, Terminal = 32, Basal = 64, Hollow = 128, HollowWindow = 256 }
 
 /// One organ in a plant's structural graph. Organs are stored parent-before-child. All positions are in
 /// PLANT-LOCAL metres (origin at the stem base on the ground, Y up); the plant's world transform is on
@@ -183,6 +183,8 @@ public sealed class OrganShape
     public OrganSurfaceForm SurfaceForm;
     public int LobeCount;
     public float LobeDepth;
+    public bool PairedLaminaApertures; // real openings with a central web and outer bridges
+    public float RadialPitDepth; // opt-in cellular relief as a fraction of local radius
     public float RimCurl;
     public float ShellThickness = .015f; // unit-radius fraction for radial surfaces
     public string Name = "";

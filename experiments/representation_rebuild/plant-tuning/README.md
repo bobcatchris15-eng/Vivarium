@@ -67,3 +67,7 @@ Final source verification: `final-tests.log` reports 12 plant checks passed, inc
 ## Full catalog continuation
 
 The three-form bridge described above is now superseded by the full125-species authored catalog and initial production routing. All106individual species use the graph bridge;19coverage species use bounded attached graph microstructure. The all-species validation, native gallery, live publication proof and remaining acceptance boundaries are documented in `experiments/plant_catalog_test/README.md`. The construction bottleneck was measured and improved as recorded above; remaining performance work concerns real mature-world behavior, not that original cold-plan bottleneck.
+
+## Identity restoration supersedes the identity-free trials
+
+On 2026-11-16 the owner requested recognizable previous forms with richer readable foliage, distinctiveness and anatomical whimsy, no new bioluminescence, and no richness loss for performance. Use the default restored forms or `identity-v1.json`; the older organic configurations are historical tuning snapshots. Current evidence and commands are in `docs/representation-rebuild/plant-identity-restoration-2026-11-16.md`.

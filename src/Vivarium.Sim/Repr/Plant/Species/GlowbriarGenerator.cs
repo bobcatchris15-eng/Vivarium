@@ -59,63 +59,83 @@ public sealed class GlowbriarGenerator : PlanGenerator
             Transmission = 0.5f, Roughness = 0.35f, Wax = 0.3f,
         });
 
-        int stool = b.AddAxis(-1, 0, up + new Vec3(0.05, 0, 0.03), 0.12, Vec3.Zero, 0.020, 0.017, 0, Tissue.Wood,
-            0, 0.25);
+        int stool = b.AddAxis(-1, 0, up + new Vec3(b.Range(-0.08, 0.08), 0, b.Range(-0.08, 0.08)), 0.12,
+            new Vec3(b.Range(-0.12, 0.12), 0, b.Range(-0.12, 0.12)), 0.020, 0.017, 0, Tissue.Wood, 0, 0.25);
 
+        double baseRot = b.Range(0, Math.Tau);
+        // Low woody runners expose the spreading root stool between the arching canes.
+        for (int r = 0; r < 4; r++)
+        {
+            double rootAz = baseRot + r * Math.Tau / 4 + b.Range(-0.24, 0.24);
+            var rootOut = PlantMath.Horizontal(rootAz);
+            var rootSide = PlantMath.Horizontal(rootAz + Math.PI / 2);
+            b.AddAxis(stool, 0.08, rootOut + up * 0.04, b.Range(0.24, 0.42),
+                rootSide * b.Range(-0.25, 0.25) + Vec3.Down * 0.06,
+                0.014, 0.003, 1, Tissue.Wood, 0.02 * b.Draw(), 0.2);
+        }
         for (int c = 0; c < form.CaneCount; c++)
         {
-            double az = c * Math.Tau / form.CaneCount + b.Range(-0.3, 0.3);
-            var caneDir = PlantMath.Horizontal(az) * 0.62 + up * b.Range(form.CaneElevationMin, form.CaneElevationMax);
-            int cane = b.AddAxis(stool, b.Range(0.35, 0.6), caneDir, b.Range(form.CaneLengthMin, form.CaneLengthMax), up * -form.CaneDroop * b.Range(0.75, 1.25) + PlantMath.Horizontal(az) * 0.15,
-                0.013, 0.0025, 1, Tissue.Wood, 0.03 * b.Draw(), 0.2);
+            double az = baseRot + c * Math.Tau / form.CaneCount + b.Range(-0.42, 0.42);
+            var hCane = PlantMath.Horizontal(az);
+            var sCane = PlantMath.Horizontal(az + Math.PI / 2);
+            double cSpread = b.Range(0.45, 0.85);
+            var caneDir = hCane * cSpread + up * b.Range(form.CaneElevationMin * 0.85, form.CaneElevationMax * 1.15);
+            var caneBend = up * (-form.CaneDroop * b.Range(0.85, 1.45)) + hCane * b.Range(0.10, 0.35) + sCane * b.Range(-0.32, 0.32);
+            int cane = b.AddAxis(stool, b.Range(0.30, 0.72), caneDir, b.Range(form.CaneLengthMin * 0.9, form.CaneLengthMax * 1.08),
+                caneBend, 0.013, 0.0025, 1, Tissue.Wood, 0.03 * b.Draw(), 0.2);
 
             // Recurved thorns along the cane internodes.
             for (int th = 0; th < 8; th++)
             {
                 double tt = 0.15 + 0.8 * (th + 0.6 * b.Draw()) / 8.0;
                 double side = (th & 1) == 0 ? 1 : -1;
-                var tdir = (PlantMath.Horizontal(az) * 0.5 + PlantMath.Horizontal(az + Math.PI / 2) * (0.7 * side)
-                    + up * 0.3).Normalized();
-                b.AddAxis(cane, tt, tdir, 0.016, Vec3.Zero, 0.0035, 0.0003, 2, Tissue.Bark, 0.03 * b.Draw(), 0.12);
+                var tdir = (hCane * 0.5 + sCane * (0.7 * side) + up * 0.3).Normalized();
+                b.AddAxis(cane, tt, tdir, 0.016, Vec3.Down * 0.35, 0.0035, 0.0003, 2, Tissue.Bark, 0.03 * b.Draw(), 0.12);
             }
 
             for (int k = 0; k < form.BranchCount; k++)
             {
-                double baz = az + ((k & 1) == 0 ? 0.8 : -0.8) + b.Range(-0.25, 0.25);
+                double baz = az + ((k & 1) == 0 ? 0.75 : -0.75) + b.Range(-0.40, 0.40);
                 var bo = PlantMath.Horizontal(baz);
-                var brDir = bo * b.Range(0.55, 0.9) + up * b.Range(0.35, 0.9);
+                var bs = PlantMath.Horizontal(baz + Math.PI / 2);
+                var brDir = bo * b.Range(0.55, 0.95) + up * b.Range(0.30, 0.95) + bs * b.Range(-0.2, 0.2);
                 double branchPos = 0.13 + 0.78 * (k / (double)Math.Max(1, form.BranchCount - 1));
-                int br = b.AddAxis(cane, Math.Clamp(branchPos + b.Range(-0.05, 0.05), 0.08, 0.98), brDir,
-                    form.BranchLength * (1 - 0.25 * k / Math.Max(1, form.BranchCount - 1.0)) * b.Range(0.72, 1.25), up * b.Range(-0.3, 0.15), 0.0065, 0.0018, 2, Tissue.Wood,
+                var brBend = up * b.Range(-0.48, -0.05) + bs * b.Range(-0.35, 0.35) + bo * b.Range(0.05, 0.25);
+                int br = b.AddAxis(cane, Math.Clamp(branchPos + b.Range(-0.06, 0.06), 0.08, 0.98), brDir,
+                    form.BranchLength * (1 - 0.25 * k / Math.Max(1, form.BranchCount - 1.0)) * b.Range(0.70, 1.30), brBend, 0.0065, 0.0018, 2, Tissue.Wood,
                     0.03 * b.Draw(), 0.18);
 
                 for (int tw = 0; tw < 2; tw++)
                 {
-                    double twigT = tw == 0 ? b.Range(0.38, 0.58) : 0.97;
-                    var twigDir = PlantMath.Horizontal(baz + (tw == 0 ? 0.9 : -0.9)) * 0.8 + up * b.Range(0.25, 0.9);
-                    int twig = b.AddAxis(br, twigT, twigDir, form.TwigLength, up * b.Range(-0.25, 0.1), 0.0045, 0.0016, 3, Tissue.Green,
+                    double twigT = tw == 0 ? b.Range(0.35, 0.62) : b.Range(0.88, 0.98);
+                    double twAz = baz + (tw == 0 ? 0.85 : -0.85) + b.Range(-0.35, 0.35);
+                    var twOut = PlantMath.Horizontal(twAz);
+                    var twSide = PlantMath.Horizontal(twAz + Math.PI / 2);
+                    var twigDir = twOut * b.Range(0.7, 0.95) + up * b.Range(0.20, 0.85);
+                    var twigBend = up * b.Range(-0.45, -0.05) + twSide * b.Range(-0.35, 0.35);
+                    int twig = b.AddAxis(br, twigT, twigDir, form.TwigLength * b.Range(0.82, 1.22), twigBend, 0.0045, 0.0016, 3, Tissue.Green,
                         0.03 * b.Draw(), 0.14);
 
                     // Internodes shorten toward the tip: nodes sit closer together near the end of the twig.
                     for (int nd = 0; nd < form.LeafNodes; nd++)
                     {
                         double nodeProgress = nd / (double)Math.Max(1, form.LeafNodes - 1);
-                        double nt = Math.Clamp(0.16 + 0.79 * nodeProgress + b.Range(-0.025, 0.025), 0.1, 0.98);
+                        double nt = Math.Clamp(0.14 + 0.81 * nodeProgress + b.Range(-0.03, 0.03), 0.1, 0.98);
                         for (int sd = 0; sd < 2; sd++)
                         {
-                            double la = nd * (Math.PI / 2) + sd * Math.PI + baz;
+                            double la = nd * (Math.PI / 2) + sd * Math.PI + twAz + b.Range(-0.22, 0.22);
                             var h = PlantMath.Horizontal(la);
-                            int pet = b.AddAxis(twig, nt, h * 0.6 + up * 0.8, 0.02, Vec3.Zero, 0.0016, 0.0010, 4,
-                                Tissue.Green, 0.03 * b.Draw(), 0.1, OrganFlags.None, OrganType.Petiole);
-                            double ll = b.Range(form.LeafLengthMin, form.LeafLengthMax) * (1.0 - 0.20 * nodeProgress);
-                            b.AddFlat(pet, 1.0, h * 0.9 + up * 0.4, ll, ll * form.LeafWidthRatio, 0.0004, OrganType.Leaf, leafShape,
+                            int pet = b.AddAxis(twig, nt, h * 0.65 + up * b.Range(0.55, 0.90), b.Range(0.016, 0.026),
+                                Vec3.Down * 0.25, 0.0016, 0.0010, 4, Tissue.Green, 0.03 * b.Draw(), 0.1, OrganFlags.None, OrganType.Petiole);
+                            double ll = b.Range(form.LeafLengthMin, form.LeafLengthMax) * (1.05 - 0.22 * nodeProgress);
+                            b.AddFlat(pet, 1.0, h * 0.92 + up * b.Range(0.15, 0.45), ll, ll * form.LeafWidthRatio, 0.0004, OrganType.Leaf, leafShape,
                                 5, 0.03 * b.Draw(), 0.14);
                         }
                     }
                 }
 
                 // One pendant luminous chalice per branch, hanging from a pedicel on the branch.
-                int ped = b.AddAxis(br, 0.7, Vec3.Down * 0.95 + bo * 0.3, 0.035, Vec3.Zero, 0.0011, 0.0008, 5,
+                int ped = b.AddAxis(br, 0.7, Vec3.Down * 0.95 + bo * 0.3, 0.035, bs * b.Range(-0.2, 0.2), 0.0011, 0.0008, 5,
                     Tissue.Green, 0.03 * b.Draw(), 0.12);
                 b.AddFlat(ped, 1.0, Vec3.Down * 0.9 + bo * 0.3, form.FlowerLength, form.FlowerHalfWidth, 0.008, OrganType.Flower, chalice, 6,
                     0.03 * b.Draw(), 0.15, OrganFlags.Emissive);

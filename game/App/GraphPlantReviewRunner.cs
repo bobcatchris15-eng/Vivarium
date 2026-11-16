@@ -44,8 +44,34 @@ public static class GraphPlantReviewRunner
                 var f=Plant(sp.Id,(slot%10-4.5)*.55,(slot/10-5)*.5,.8);slot++;
                 plants.Add(f);
             }
-            foreach(var f in plants.Where(f=>content.FloraOrThrow(f.SpeciesId).Climber!=null))
+            foreach(var f in plants.Where(f=>content.FloraOrThrow(f.SpeciesId).Climber!=null).ToArray())
+            {
+                // Give each vine an actual nearby woody host; an unsupported founder
+                // legitimately has only one node and cannot exercise the long-path test.
+                plants.Add(Plant("moonbark",f.X+.18,f.Z,.9));
                 world.FloraSystem.AdvanceClimberSpecimen(f,content.FloraOrThrow(f.SpeciesId),12);
+                // Refine the simulation-authored paths without changing their course.
+                // This exercises valid support well beyond the former 96-edge display cap.
+                if(f.ClimberSegments is {Count:>0} original)
+                {
+                    var refined=new List<ClimberSegment>();var map=new int[original.Count];
+                    for(int n=0;n<original.Count;n++)
+                    {
+                        var node=original[n];int parent=node.ParentIndex;
+                        int previous=parent>=0&&parent<n?map[parent]:-1;
+                        int pieces=previous>=0?4:1;
+                        for(int part=1;part<=pieces;part++)
+                        {
+                            var start=previous<0?node.Position:original[parent].Position;
+                            var position=pieces==1?node.Position:start+(node.Position-start)*(part/(double)pieces);
+                            refined.Add(new ClimberSegment {Position=position,Normal=node.Normal,ParentIndex=previous,Attached=node.Attached});
+                            previous=refined.Count-1;
+                        }
+                        map[n]=previous;
+                    }
+                    f.ClimberSegments=refined;
+                }
+            }
             int patch=0;
             foreach(var sp in content.Flora.Where(s=>s.IsCoverageSpecies))
             {
@@ -92,6 +118,30 @@ public static class GraphPlantReviewRunner
         await Shot("initial",eye,target);await Settle(population);
         if(plants.Any(p=>!flora.IsPlantPublished(p.Id)))throw new InvalidOperationException("A live graph plant was not published");
         var graph=flora.GraphPlants!;
+        var climberEdges=new Dictionary<string,int>();
+        if(catalogProof)
+        {
+            foreach(var f in plants.Where(f=>content.FloraOrThrow(f.SpeciesId).Climber!=null))
+            {
+                var nodes=f.ClimberSegments!;
+                int edges=nodes.Where((n,index)=>n.ParentIndex>=0&&n.ParentIndex<index).Count();
+                var climberDescriptor=graph.InspectPlant(f.Id.Value)!;
+                bool complete=nodes.Where((n,index)=>n.ParentIndex>=0&&n.ParentIndex<index).All(n=>
+                    climberDescriptor.Organs.Any(o=>o.Type==Vivarium.Sim.Repr.OrganType.Axis&&
+                        (o.Start+climberDescriptor.Position-nodes[n.ParentIndex].Position).Length<1e-6&&
+                        (o.End+climberDescriptor.Position-n.Position).Length<1e-6));
+                if(edges<=96||!complete)
+                    throw new InvalidOperationException($"Incomplete climber support: {f.SpeciesId} nodes={nodes.Count} edges={edges} axes={climberDescriptor.Organs.Count(o=>o.Type==Vivarium.Sim.Repr.OrganType.Axis)}");
+                // Mutating a late edge must invalidate its immutable presentation snapshot.
+                var node=nodes[150];node.Position+=new Vec3(.013,0,0);
+                flora.InvalidateGraphInputs();await Settle(population);
+                climberDescriptor=graph.InspectPlant(f.Id.Value)!;
+                if(!climberDescriptor.Organs.Any(o=>o.Type==Vivarium.Sim.Repr.OrganType.Axis&&
+                    (o.End+climberDescriptor.Position-node.Position).Length<1e-6))
+                    throw new InvalidOperationException("Late climber node update missing: "+f.SpeciesId);
+                climberEdges[f.SpeciesId]=edges;
+            }
+        }
         await Shot("initial_ready",eye,target);
         var generations=graph.InspectChunkGenerations();
         var growing=plants[0];var before=graph.InspectPlant(growing.Id.Value)!;
@@ -129,7 +179,7 @@ public static class GraphPlantReviewRunner
             session.Flora.Visible=true;
         }
         File.WriteAllText(Path.Combine(directory,"report.json"),JsonSerializer.Serialize(new {
-            seed=world.Seed,live_plants=flora.GraphPlantCount,individual_species=plants.Select(f=>f.SpeciesId).Distinct().Count(),coverage_prototypes=prototypes,growth_changed_chunks=changed,
+            seed=world.Seed,live_plants=flora.GraphPlantCount,individual_species=plants.Select(f=>f.SpeciesId).Distinct().Count(),coverage_prototypes=prototypes,climber_support_edges=climberEdges,late_climber_node_updates=catalogProof,growth_changed_chunks=changed,
             initial_organs=before.Organs.Length,grown_organs=grown.Organs.Length,
             movement=true,birth=true,removal=true,warm_camera_descriptor_builds=0,warm_camera_uploads=0,
             graph_chunks=graph.ChunkCount,graph_mesh_bytes=graph.MeshBytes,coverage_tiles=session.Coverage.TileCount,coverage_triangles_built=session.Coverage.TrianglesBuilt,

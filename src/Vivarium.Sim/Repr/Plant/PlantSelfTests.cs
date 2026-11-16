@@ -194,7 +194,9 @@ public sealed class PlantSanitySelfTest : IReprSelfTest
 
     public string? Run()
     {
-        var (lo, hi) = (new[] { 150, 50, 120 }, new[] { 1200, 260, 800 });
+        // Moonfern's defining organs are whole connected fronds, not hundreds
+        // of separate pinnae. Bound that anatomy explicitly below.
+        var (lo, hi) = (new[] { 150, 5, 120 }, new[] { 1200, 7, 800 });
         for (int i = 0; i < 3; i++)
         {
             string sp = PlantTestKit.SpeciesNames[i];
@@ -203,6 +205,8 @@ public sealed class PlantSanitySelfTest : IReprSelfTest
             g.Grow(d, 1.0, 0.5, null);
             if (d.Organs.Length < lo[i] || d.Organs.Length > hi[i])
                 return $"{sp}: organ count {d.Organs.Length} outside [{lo[i]}, {hi[i]}]";
+            if(i==1 && (PlantTestKit.FlatCount(d) is <2 or >3 || !d.Shapes.Any(s=>s.PairedLaminaApertures)))
+                return "moonfern: expected two or three connected pierced fronds";
             foreach (var o in d.Organs)
             {
                 if (!PlantTestKit.Finite(o.Start) || !PlantTestKit.Finite(o.End) || !PlantTestKit.Finite(o.Up)

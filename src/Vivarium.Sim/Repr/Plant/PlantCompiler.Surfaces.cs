@@ -13,6 +13,7 @@ public static partial class PlantCompiler
         bool open=shape.SurfaceForm is OrganSurfaceForm.Cup or OrganSurfaceForm.Trumpet or OrganSurfaceForm.MushroomCap or OrganSurfaceForm.Shelf;
         int radial=needle?(detail==0?6:detail==1?4:3):(detail==0?20:detail==1?12:8);
         int rows=needle?(detail==0?7:detail==1?4:2):(detail==0?10:detail==1?6:3);
+        if(shape.RadialPitDepth>0) { radial=detail==0?48:detail==1?24:12; rows=detail==0?32:detail==1?16:8; }
         var color=EncRgb(shape.ColorAdaxial);var innerColor=EncRgb(shape.ColorAbaxial);
         double peak=ProfileMax(shape);
         double Radius(double t)
@@ -31,6 +32,16 @@ public static partial class PlantCompiler
                 shape.SurfaceForm is OrganSurfaceForm.Star or OrganSurfaceForm.Disc?1:Math.Pow(t,4);
             double wave=shape.LobeCount>0?Math.Cos(shape.LobeCount*theta):0;
             double radius=Math.Max(.00001,Radius(t)*(1+shape.LobeDepth*rim*wave));
+            if(shape.RadialPitDepth>0)
+            {
+                // Staggered cells with raised dividing ridges; angular seam remains periodic.
+                double cellY=t*6, row=Math.Floor(cellY), fy=cellY-row-.5;
+                double cellX=j*8.0/radial + ((int)row%2)*.5;
+                double fx=cellX-Math.Floor(cellX)-.5;
+                double edge=Math.Max(Math.Abs(fx)*2, Math.Abs(fy)*2);
+                double pit=1-Math.Clamp((edge-.62)/.26,0,1);
+                radius*=1-Math.Clamp(shape.RadialPitDepth,0,.5f)*pit*Math.Sin(Math.PI*t);
+            }
             double yScale=shape.SurfaceForm==OrganSurfaceForm.Shelf?.55:1;
             double z=t+shape.RimCurl*rim*(1-wave)*.08;
             var p=new Vec3(radius*Math.Cos(theta),radius*Math.Sin(theta)*yScale,z);

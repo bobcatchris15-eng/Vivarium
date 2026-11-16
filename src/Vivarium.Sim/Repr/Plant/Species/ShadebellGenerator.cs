@@ -4,11 +4,7 @@ using Vivarium.Sim.Core;
 namespace Vivarium.Sim.Repr.Plant;
 
 /// <summary>
-/// Shadebell: broad-leaved understory shrub. One trunk (order 0), six staggered forks (order 1), two side
-/// canes per fork (order 2). Leaves are broad near-orbicular blades on petioles in horizontal whorls (3 per node,
-/// 137.5 degree divergence between nodes, as in the legacy builder). Pale pendant bells hang from pedicels
-/// attached to the order-2 canes.
-/// Sizes from game/content/flora/shadebell.json: height 2.35 m, canopy radius 1.0 m.
+/// Three crooked, staggered trunks carry broad leaf decks and pendant bell racemes.
 /// </summary>
 public sealed class ShadebellGenerator : PlanGenerator
 {
@@ -22,8 +18,8 @@ public sealed class ShadebellGenerator : PlanGenerator
         public double BranchLength { get; init; } = 0.48;
         public double LeafLengthMin { get; init; } = 0.22;
         public double LeafLengthMax { get; init; } = 0.27;
-        public double FlowerLength { get; init; } = 0.038;
-        public double FlowerHalfWidth { get; init; } = 0.018;
+        public double FlowerLength { get; init; } = 0.050;
+        public double FlowerHalfWidth { get; init; } = 0.023;
     }
 
     private readonly FormSettings _form;
@@ -54,46 +50,43 @@ public sealed class ShadebellGenerator : PlanGenerator
             Transmission = 0.45f, Roughness = 0.5f,
         });
 
-        int trunk = b.AddAxis(-1, 0, up + new Vec3(0.08, 0, 0.04), form.TrunkLength, new Vec3(0.12, 0, 0.06), 0.024, 0.014, 0,
-            Tissue.Wood, 0, 0.5);
-
-        for (int tier = 0; tier < 6; tier++)
+        double rotation = b.Range(0, Math.Tau);
+        for (int k = 0; k < 3; k++)
         {
+            double az = rotation + k * Math.Tau / 3 + b.Range(-0.22, 0.22);
+            var radial = PlantMath.Horizontal(az);
+            var side = PlantMath.Horizontal(az + Math.PI / 2);
+            double height = (2.18 - k * 0.25) * b.Range(0.96, 1.04);
+            int lower = b.AddAxis(-1, 0, up + radial * 0.25, height * 0.48,
+                side * (k % 2 == 0 ? 0.35 : -0.35) + radial * 0.12,
+                0.038, 0.020, 0, Tissue.Wood, 0, 0.24);
+            int upper = b.AddAxis(lower, 1, up + radial * 0.22, height * 0.52,
+                side * (k % 2 == 0 ? -0.35 : 0.35) + radial * 0.15,
+                0.020, 0.008, 1, Tissue.Wood, 0.04, 0.22);
+            AddWhorl(b, leaf, upper, 0.98, az, 6, 1.0, form.LeafLengthMin, form.LeafLengthMax);
+            for (int tier = 0; tier < 3; tier++)
             {
-                double tierT = Math.Clamp(form.FirstTier + form.TierSpacing * tier + b.Range(-0.035, 0.035), 0.05, 0.9);
-                double az = tier * 2.399963 + b.Range(-0.35, 0.35);
-                var forkDir = PlantMath.Horizontal(az) * b.Range(0.65, 0.85) + up * b.Range(0.65, 1.0);
-                double forkLen = (form.LowerForkLength - 0.05 * tier) * b.Range(0.78, 1.2);
-                int fork = b.AddAxis(trunk, tierT, forkDir, forkLen, up * -form.ForkDroop * b.Range(0.65, 1.3), 0.013, 0.004, 1, Tissue.Wood,
-                    0.03 * b.Draw(), 0.3);
-
-                // Whorl on the fork itself.
-                AddWhorl(b, leaf, fork, b.Range(0.35, 0.62), az, 3, 0.8, form.LeafLengthMin, form.LeafLengthMax);
-
-                for (int s2 = 0; s2 < 2; s2++)
+                int host = tier == 0 ? lower : upper;
+                double t = tier == 0 ? 0.55 : tier == 1 ? 0.28 : 0.72;
+                double branchAz = az + (tier % 2 == 0 ? 0.95 : -0.95) + b.Range(-0.18, 0.18);
+                var outward = PlantMath.Horizontal(branchAz);
+                var lateral = PlantMath.Horizontal(branchAz + Math.PI / 2);
+                int fork = b.AddAxis(host, t, outward + up * 0.3, form.LowerForkLength * b.Range(0.62, 0.76),
+                    lateral * b.Range(-0.2, 0.2) + up * -0.12, 0.016, 0.006, 2, Tissue.Wood, 0.03 * b.Draw(), 0.18);
+                for (int wh = 0; wh < 3; wh++)
+                    AddWhorl(b, leaf, fork, 0.48 + wh * 0.23, branchAz + wh * 1.3, 5, 0.95,
+                        form.LeafLengthMin, form.LeafLengthMax);
+                // A hanging raceme with several pendant bells beneath each leaf deck.
+                int raceme = b.AddAxis(fork, 0.83, Vec3.Down + outward * 0.15, 0.15,
+                    outward * 0.1, 0.002, 0.001, 3, Tissue.Green, 0.03 * b.Draw(), 0.18);
+                for (int flower = 0; flower < 4; flower++)
                 {
-                    double t2 = 0.38 + 0.43 * s2 + b.Range(-0.04, 0.04);
-                    double baz = az + (s2 == 0 ? 1.0 : -1.0) + b.Range(-0.35, 0.35);
-                    var brDir = PlantMath.Horizontal(baz) * b.Range(0.5, 0.85) + up * b.Range(0.55, 0.95);
-                    int br = b.AddAxis(fork, t2, brDir, form.BranchLength * b.Range(0.75, 1.25), up * b.Range(-0.25, 0.15), 0.008, 0.004, 2,
-                        Tissue.Wood, 0.03 * b.Draw(), 0.2);
-
-                    for (int wh = 0; wh < 3; wh++)
-                    {
-                        AddWhorl(b, leaf, br, 0.25 + 0.3 * wh + b.Range(-0.04, 0.04), baz + wh * 2.399963, 3, 1.0, form.LeafLengthMin, form.LeafLengthMax);
-                    }
-
-                    // Two pendant bells per side cane.
-                    for (int pd = 0; pd < 2; pd++)
-                    {
-                        double pt = 0.45 + 0.4 * pd;
-                        double pa = baz + pd * 2.1;
-                        var pedDir = Vec3.Down * 0.9 + PlantMath.Horizontal(pa) * 0.35;
-                        int ped = b.AddAxis(br, pt, pedDir, 0.045, Vec3.Zero, 0.0014, 0.0010, 3, Tissue.Green,
-                            0.03 * b.Draw(), 0.15);
-                        b.AddFlat(ped, 1.0, Vec3.Down * 0.95 + PlantMath.Horizontal(pa) * 0.2, form.FlowerLength, form.FlowerHalfWidth, 0.009,
-                            OrganType.Flower, bell, 4, 0.03 * b.Draw(), 0.2);
-                    }
+                    double fa = branchAz + flower * 2.399963;
+                    var fh = PlantMath.Horizontal(fa);
+                    int ped = b.AddAxis(raceme, 0.2 + flower * 0.23, Vec3.Down + fh * 0.4, 0.035,
+                        Vec3.Zero, 0.001, 0.0007, 4, Tissue.Green, 0.03 * b.Draw(), 0.12);
+                    b.AddFlat(ped, 1, Vec3.Down + fh * 0.15, form.FlowerLength, form.FlowerHalfWidth, 0.009,
+                        OrganType.Flower, bell, 5, 0.03 * b.Draw(), 0.2);
                 }
             }
         }
@@ -104,12 +97,12 @@ public sealed class ShadebellGenerator : PlanGenerator
     {
         for (int i = 0; i < count; i++)
         {
-            double az = az0 + i * Math.Tau / count + b.Range(-0.3, 0.3);
+            double az = az0 + i * Math.Tau / count + b.Range(-0.35, 0.35);
             var h = PlantMath.Horizontal(az);
-            int pet = b.AddAxis(axis, t, h * 0.8 + Vec3.Up * 0.45, 0.05 * scale, Vec3.Zero, 0.0035, 0.002, 3,
-                Tissue.Green, 0.03 * b.Draw(), 0.1, OrganFlags.None, OrganType.Petiole);
-            double lLen = b.Range(leafLengthMin, leafLengthMax) * scale * b.Range(0.85, 1.1);
-            b.AddFlat(pet, 1.0, h * 0.95 + Vec3.Up * b.Range(-0.22, 0.55), lLen, lLen * 0.5, 0.0006, OrganType.Leaf, leaf, 4,
+            int pet = b.AddAxis(axis, t, h * 0.82 + Vec3.Up * b.Range(0.28, 0.55), b.Range(0.042, 0.058) * scale,
+                Vec3.Down * 0.25, 0.0035, 0.002, 3, Tissue.Green, 0.03 * b.Draw(), 0.1, OrganFlags.None, OrganType.Petiole);
+            double lLen = b.Range(leafLengthMin, leafLengthMax) * scale * b.Range(0.85, 1.15);
+            b.AddFlat(pet, 1.0, h * 0.99 + Vec3.Up * b.Range(-0.08, 0.10), lLen, lLen * 0.52, 0.0006, OrganType.Leaf, leaf, 4,
                 0.03 * b.Draw(), 0.14);
         }
     }

@@ -61,6 +61,17 @@ public static partial class PlantCompiler
         detail = Math.Clamp(detail, 0, 2);
         var a = new PlantAssembly();
         var inst = new List<OrganInstance>();
+        // Reverse insertion preserves the original organ order for each parent.
+        var firstChild = new int[p.Organs.Length];
+        var nextChild = new int[p.Organs.Length];
+        Array.Fill(firstChild, -1);
+        for (int i = p.Organs.Length - 1; i >= 0; i--)
+        {
+            int parent = p.Organs[i].Parent;
+            if (parent < 0) continue;
+            nextChild[i] = firstChild[parent];
+            firstChild[parent] = i;
+        }
         bool[]? hasChild = null;
         if (detail == 2)
         {
@@ -75,7 +86,7 @@ public static partial class PlantCompiler
             {
                 // Detail 2: drop childless hair-thin twigs (< 1.5 mm); anything carrying an organ is kept.
                 if (hasChild != null && o.Type == OrganType.Axis && o.RadiusStart < 0.0015f && !hasChild[i]) continue;
-                SweepAxis(a.Wood, p, i, detail);
+                SweepAxis(a.Wood, p, i, detail, firstChild, nextChild);
             }
             else if (IsFlat(o.Type) && o.RadiusStart > 1e-6f && (o.End - o.Start).LengthSq > 1e-12)
             {
@@ -193,6 +204,7 @@ public static partial class PlantCompiler
     private static double[] WoodRgb(Tissue tissue, ushort order) => tissue switch
     {
         Tissue.Fungal => new[] { 0.64, 0.55, 0.41 },
+        Tissue.PaleFungal => new[] { 0.72, 0.82, 0.86 },
         Tissue.Green => new[] { 0.22, 0.36, 0.22 },
         Tissue.Bark => new[] { 0.28, 0.24, 0.20 },
         _ => order == 0 ? new[] { 0.30, 0.26, 0.20 } : new[] { 0.34, 0.29, 0.22 },
@@ -203,7 +215,7 @@ public static partial class PlantCompiler
     /// parent and flares to min(parentRadius, 1.6 * RadiusStart), blending back over about two radii. The tip is
     /// closed with a rounded cap.
     /// </summary>
-    private static void SweepAxis(MeshData m, PlantDescriptor p, int idx, int detail)
+    private static void SweepAxis(MeshData m, PlantDescriptor p, int idx, int detail, int[] firstChild, int[] nextChild)
     {
         var o = p.Organs[idx];
         var p0 = o.Start;
@@ -220,7 +232,7 @@ public static partial class PlantCompiler
             double u = q.Maturity > 1e-4f ? Math.Clamp(o.AttachT / q.Maturity, 0, 1) : 0;
             rParent = q.RadiusStart + (q.RadiusEnd - q.RadiusStart) * u;
             flare = (o.Flags & OrganFlags.Basal) != 0 ? rs : Math.Min(rParent, 1.6 * rs);
-            dExt = rParent;
+            dExt = (q.Flags & OrganFlags.Hollow) != 0 ? 0 : rParent;
         }
 
         var t0 = o.StartTangent;
@@ -241,12 +253,19 @@ public static partial class PlantCompiler
         // A child attaches to the exact curve, not the chord between arbitrary
         // tessellation rings. Put a parent ring at each emerged attachment so
         // stronger authored arches cannot leave branch bases floating.
-        foreach (var child in p.Organs)
-            if (child.Parent == idx && o.Maturity > 1e-6f)
+        for (int childIndex = firstChild[idx]; childIndex >= 0; childIndex = nextChild[childIndex])
+            if (o.Maturity > 1e-6f)
             {
+                var child = p.Organs[childIndex];
                 double attachment = child.AttachT / o.Maturity;
                 if (attachment > 0 && attachment < 1 && !sList.Any(s => Math.Abs(s-attachment) < 1e-7)) sList.Add(attachment);
             }
+        bool window = (o.Flags & (OrganFlags.Hollow | OrganFlags.HollowWindow)) == (OrganFlags.Hollow | OrganFlags.HollowWindow);
+        if (window)
+        {
+            foreach (double edge in new[] { .20, .30, .40, .50, .60, .70, .78 })
+                if (!sList.Any(s => Math.Abs(s - edge) < 1e-7)) sList.Add(edge);
+        }
         sList.Sort();
         if (dExt > 0 && detail < 2 && rs >= 0.002 && len > 5 * rs)
         {
@@ -261,7 +280,9 @@ public static partial class PlantCompiler
         bool woody = o.Tissue is Tissue.Wood or Tissue.Bark;
         double u2x = woody ? 2.0 : 0.0;
         var rings = new int[samples.Count][];
-        Vec3 nPrev = PlantMath.Perpendicular(samples[0].T);
+        bool hollow = (o.Flags & OrganFlags.Hollow) != 0;
+        var innerRings = hollow ? new int[samples.Count][] : null;
+        Vec3 nPrev = window ? PlantMath.SafeNormal(o.Up - samples[0].T * o.Up.Dot(samples[0].T), PlantMath.Perpendicular(samples[0].T)) : PlantMath.Perpendicular(samples[0].T);
         for (int k = 0; k < samples.Count; k++)
         {
             var sm = samples[k];
@@ -272,12 +293,69 @@ public static partial class PlantCompiler
             rings[k] = new int[nRad + 1];   // seam vertex duplicated so UV.y runs 0..1 without a smeared quad
             for (int j = 0; j <= nRad; j++)
             {
-                double th = Math.Tau * j / nRad;
+                double th = WindowAngle(j, nRad, sm.D / len, window);
                 var dv = nk * Math.Cos(th) + bk * Math.Sin(th);
                 rings[k][j] = m.AddVertex(sm.P + dv * sm.R, dv, rgb[0], rgb[1], rgb[2], 1,
                     sm.D, j / (double)nRad, u2x, 0);
             }
-            if (k > 0) Strip(m, rings[k - 1], rings[k]);
+            bool windowSpan = window && k > 0 && samples[k-1].D / len >= .20 - 1e-7 && sm.D / len <= .78 + 1e-7;
+            if (k > 0)
+            {
+                if (windowSpan) StripWindow(m, rings[k - 1], rings[k]);
+                else Strip(m, rings[k - 1], rings[k]);
+            }
+            if (hollow)
+            {
+                innerRings![k] = new int[nRad + 1];
+                for (int j = 0; j <= nRad; j++)
+                {
+                    double th = WindowAngle(j, nRad, sm.D / len, window);
+                    var dv = nk * Math.Cos(th) + bk * Math.Sin(th);
+                    innerRings[k][j] = m.AddVertex(sm.P + dv * (sm.R * .6), -dv,
+                        rgb[0] * .55, rgb[1] * .55, rgb[2] * .55, 1,
+                        sm.D, j / (double)nRad, u2x, 0);
+                }
+                if (k > 0)
+                {
+                    if (windowSpan)
+                    {
+                        StripWindow(m, innerRings[k], innerRings[k - 1]);
+                        // Close the two vertical cuts through the bark thickness.
+                        foreach (int j in new[] { 1, nRad - 1 })
+                        {
+                            var radial = (m.Position(rings[k][j]) - sm.P).Normalized();
+                            var towardMouth = PlantMath.SafeNormal(nk - radial * nk.Dot(radial), nk);
+                            HollowEdge(m, rings[k-1][j], innerRings[k-1][j], rings[k][j], innerRings[k][j], towardMouth, rgb, u2x);
+                        }
+                    }
+                    else Strip(m, innerRings[k], innerRings[k - 1]);
+                }
+                if (window && (Math.Abs(sm.D / len - .20) < 1e-7 || Math.Abs(sm.D / len - .78) < 1e-7))
+                {
+                    var desired = sm.D / len < .5 ? sm.T : -sm.T;
+                    foreach (int j in new[] { 0, nRad - 1 })
+                        HollowEdge(m, rings[k][j], rings[k][j+1], innerRings[k][j], innerRings[k][j+1], desired, rgb, u2x);
+                }
+            }
+        }
+
+        if (hollow)
+        {
+            // A flat annular rim joins the bark walls; the center remains open.
+            var end = samples[^1];
+            var endN = nPrev;
+            var endB = end.T.Cross(endN);
+            var outer = new int[nRad + 1];
+            var inner = new int[nRad + 1];
+            for (int j = 0; j <= nRad; j++)
+            {
+                double th = Math.Tau * j / nRad;
+                var dv = endN * Math.Cos(th) + endB * Math.Sin(th);
+                outer[j] = m.AddVertex(end.P + dv * end.R, end.T, rgb[0], rgb[1], rgb[2], 1, end.D, j / (double)nRad, u2x, 0);
+                inner[j] = m.AddVertex(end.P + dv * (end.R * .6), end.T, rgb[0] * .55, rgb[1] * .55, rgb[2] * .55, 1, end.D, j / (double)nRad, u2x, 0);
+            }
+            Strip(m, outer, inner);
+            return;
         }
 
         // Rounded tip: two arc rings then an apex.
@@ -368,6 +446,44 @@ public static partial class PlantCompiler
         }
     }
 
+    // Pull the two edges toward the seam at either end to form a tapered wound.
+    private static double WindowAngle(int j, int nRad, double s, bool window)
+    {
+        double th = Math.Tau * j / nRad;
+        if (!window || (j != 1 && j != nRad - 1) || s < .20 - 1e-7 || s > .78 + 1e-7) return th;
+        double t = Math.Clamp((s - .20) / .58, 0, 1);
+        double width = .20 + .80 * Math.Sin(Math.PI * t);
+        // Slight asymmetry keeps the scar from reading as a machined oval.
+        if (j == 1) width *= .92 + .08 * t;
+        double edge = Math.Tau / nRad * width;
+        return j == 1 ? edge : Math.Tau - edge;
+    }
+
+    // Omit the two sectors straddling the forward seam.
+    private static void StripWindow(MeshData m, int[] a, int[] b)
+    {
+        for (int j = 1; j < a.Length - 2; j++)
+        {
+            m.AddTriangle(a[j], b[j], a[j + 1]);
+            m.AddTriangle(a[j + 1], b[j], b[j + 1]);
+        }
+    }
+
+    private static void HollowEdge(MeshData m, int ia, int ib, int ic, int id, Vec3 desired, double[] rgb, double u2x)
+    {
+        var a = m.Position(ia); var b = m.Position(ib); var c = m.Position(ic); var d = m.Position(id);
+        var normal = PlantMath.SafeNormal((b - a).Cross(c - a), desired);
+        if (normal.Dot(desired) < 0) normal = -normal;
+        int va = m.AddVertex(a, normal, rgb[0], rgb[1], rgb[2], 1, 0, 0, u2x, 0);
+        int vb = m.AddVertex(b, normal, rgb[0], rgb[1], rgb[2], 1, 0, 1, u2x, 0);
+        int vc = m.AddVertex(c, normal, rgb[0], rgb[1], rgb[2], 1, 1, 0, u2x, 0);
+        int vd = m.AddVertex(d, normal, rgb[0], rgb[1], rgb[2], 1, 1, 1, u2x, 0);
+        if ((b - a).Cross(c - a).Dot(normal) > 0)
+        { m.AddTriangle(va, vc, vb); m.AddTriangle(vb, vc, vd); }
+        else
+        { m.AddTriangle(va, vb, vc); m.AddTriangle(vb, vd, vc); }
+    }
+
     // ------------------------------------------------------------------ shape meshes
 
     private static double ProfileMax(OrganShape s)
@@ -401,8 +517,8 @@ public static partial class PlantCompiler
         var m = new MeshData();
         // Keep a midrib and cupped cross-section at every level. The former
         // two-span far blade flattened curved fern pinnae into angular plates.
-        int L = detail == 0 ? 18 : detail == 1 ? 8 : 4;
-        int W = detail == 2 ? 2 : 4;
+        int L = s.PairedLaminaApertures ? Math.Max(2, s.LobeCount) * (detail == 0 ? 6 : detail == 1 ? 4 : 2) : detail == 0 ? 18 : detail == 1 ? 8 : 4;
+        int W = s.PairedLaminaApertures ? 8 : detail == 2 ? 2 : 4;
         double pmax = ProfileMax(s);
         var cA = EncRgb(s.ColorAdaxial);
         var cB = EncRgb(s.ColorAbaxial);
@@ -433,6 +549,11 @@ public static partial class PlantCompiler
                 pw = (2*f*f*f - 3*f*f + 1)*widths[a] + (f*f*f - 2*f*f + f)*m0
                     + (-2*f*f*f + 3*f*f)*widths[a + 1] + (f*f*f - f*f)*m1;
             }
+            if (s.PairedLaminaApertures)
+            {
+                double wave = 0.5 - 0.5 * Math.Cos(Math.Tau * s.LobeCount * t);
+                pw *= 1 - s.LobeDepth + s.LobeDepth * Math.Pow(wave, 0.65);
+            }
             for (int j = 0; j <= W; j++)
             {
                 double u = j / (double)W;
@@ -458,6 +579,9 @@ public static partial class PlantCompiler
         {
             for (int j = 0; j < W; j++)
             {
+                int samples = s.PairedLaminaApertures ? L / Math.Max(2, s.LobeCount) : 0;
+                if (s.PairedLaminaApertures && i >= samples && i < L - samples
+                    && i % samples < Math.Max(1, samples / 3) && (j == 1 || j == 6)) continue;
                 int a = idx[i, j], b = idx[i, j + 1], c = idx[i + 1, j], d = idx[i + 1, j + 1];
                 // Godot front faces are clockwise from the adaxial side.
                 m.AddTriangle(a, b, c);

@@ -153,14 +153,13 @@ public partial class FloraRenderer
             GraphAxisSegment[]? segments = null;
             if (sp.Climber != null && f.ClimberSegments is { Count: > 0 } nodes)
             {
-                // Bounded prefix retains parent-before-child order. Nodes carry world positions;
-                // each actual edge is copied into the plant-local coordinate frame.
-                const int maxSegments = 96;
-                var copied = new List<GraphAxisSegment>();
+                // The simulation owns the node limit. Copy every recorded edge in
+                // parent-before-child order into the plant-local coordinate frame.
+                var copied = new List<GraphAxisSegment>(nodes.Count - 1);
                 var incoming = new int[nodes.Count];
                 Array.Fill(incoming, -1);
                 var origin = new Vec3(f.X, y, f.Z);
-                for (int n = 0; n < nodes.Count && copied.Count < maxSegments; n++)
+                for (int n = 0; n < nodes.Count; n++)
                 {
                     var node = nodes[n]; int parent = node.ParentIndex;
                     if (parent < 0 || parent >= n) continue;
