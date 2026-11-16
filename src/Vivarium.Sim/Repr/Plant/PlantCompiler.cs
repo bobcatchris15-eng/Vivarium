@@ -207,6 +207,7 @@ public static partial class PlantCompiler
         Tissue.PaleFungal => new[] { 0.72, 0.82, 0.86 },
         Tissue.Green => new[] { 0.22, 0.36, 0.22 },
         Tissue.Bark => new[] { 0.28, 0.24, 0.20 },
+        Tissue.RootBark => new[] { 0.30, 0.26, 0.20 },
         _ => order == 0 ? new[] { 0.30, 0.26, 0.20 } : new[] { 0.34, 0.29, 0.22 },
     };
 
@@ -277,7 +278,7 @@ public static partial class PlantCompiler
         if (sMin < 0) AddSample(samples, p0, t0, p1, t1, sMin, rs, re, flare, len, true);
         foreach (double sv in sList) AddSample(samples, p0, t0, p1, t1, sv, rs, re, flare, len, false);
         var rgb = WoodRgb(o.Tissue, o.Order);
-        bool woody = o.Tissue is Tissue.Wood or Tissue.Bark;
+        bool woody = o.Tissue is Tissue.Wood or Tissue.Bark or Tissue.RootBark;
         double u2x = woody ? 2.0 : 0.0;
         var rings = new int[samples.Count][];
         bool hollow = (o.Flags & OrganFlags.Hollow) != 0;

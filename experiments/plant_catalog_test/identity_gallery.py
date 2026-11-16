@@ -8,7 +8,7 @@ OUT = BASE / 'identity-reviewed'
 notes_path = next(p for p in (BASE/'identity-release-validation.json', BASE/'identity-verified-validation.json') if p.exists())
 notes = json.loads(notes_path.read_text(encoding='utf-8'))
 scales = json.loads((BASE/'identity-scales.json').read_text(encoding='utf-8'))
-overrides = {'greywatch':'identity-cavity', 'veilfern':'identity-cavity', 'fencomb':'identity-cavity', 'hollowcrown':'identity-taper'}
+overrides = {'greywatch':'identity-cavity', 'veilfern':'identity-cavity', 'fencomb':'identity-cavity', 'hollowcrown':'identity-taper', 'fenforge':'four-species-reviewed', 'embercrown':'four-species-reviewed', 'banksorrow':'four-species-reviewed', 'kinkcane':'four-species-reviewed'}
 reports = {}
 def provenance(path):
     report = path.parent / 'report.json'
@@ -36,7 +36,7 @@ for item in sorted(notes['species'], key=lambda x:x['id']):
     macros = []
     # Select the newest actual report-backed macro capture per kind.
     for kind in ('foliage', 'cavity'):
-        choices = list(BASE.glob(f'identity-*/plant_catalog/{name}_{kind}_growth.png'))
+        choices = list(BASE.glob(f'identity-*/plant_catalog/{name}_{kind}_growth.png')) + list(BASE.glob(f'four-species-reviewed/plant_catalog/{name}_{kind}_growth.png'))
         if choices:
             p = max(choices, key=lambda x:x.stat().st_mtime_ns)
             macros.append((kind,p))

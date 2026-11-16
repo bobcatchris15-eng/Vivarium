@@ -237,6 +237,14 @@ public sealed class PlantCompilerSelfTest : IReprSelfTest
 
     public string? Run()
     {
+        // Bark-covered roots must follow the same shader/material path as the bole.
+        var root = new PlantDescriptor { Organs = new[] { new Organ {
+            Parent=-1, Type=OrganType.Axis, Tissue=Tissue.RootBark, Start=Vec3.Zero, End=Vec3.Up,
+            StartTangent=Vec3.Up, EndTangent=Vec3.Up, Up=Vec3.Right,
+            RadiusStart=.03f, RadiusEnd=.01f, Maturity=1, Health=1 } } };
+        var rootMesh = PlantCompiler.Compile(root, 0).Wood;
+        for(int v=0;v<rootMesh.VertexCount;v++)
+            if(rootMesh.UV2[v*2]!=2) return "root bark lost woody shader tag";
         for (int i = 0; i < 3; i++)
         {
             string sp = PlantTestKit.SpeciesNames[i];

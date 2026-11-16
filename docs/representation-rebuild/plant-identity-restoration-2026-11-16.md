@@ -53,3 +53,16 @@ The latest autosave was copied into `user-save-fixture/`, with its original SHA-
 The copied-save run completed nine native views with all 766 flora and 68 fauna published (`identity-user-save/review.json`). Root inspected overview, foliage/terrain and understory views: recognizable substantial foliage is present in the actual save. This does not establish every species/age is resolved. The run was paused and capped at 30 FPS; per-view GPU medians ranged 8.3–26.7 ms on the GTX 1080, and capped frame intervals cannot establish an uncapped performance gain. `capture-receipt.json` records local binary hashes and save receipt references.
 
 Final native headless boot passed: `identity-release-boot.log` records save/load roundtrip true, invariants=0 and `VIVARIUM_BOOT_OK`. The original autosave SHA-256 was rechecked after all runs and still matches the copy receipt.
+
+## Owner corrections: Fenforge, Embercrown, Banksorrow and Kinkcane
+
+The next owner review identified four specific silhouette/material regressions. The correction uses fresh Terra workers for Embercrown/Banksorrow and Kinkcane, root for Fenforge and compiler integration, and a fresh Luna read-only source review.
+
+- Fenforge's eight roots now attach at .10–.14 of the bole rather than .34–.40, and their main endpoints enter the soil. Its foliage construction/count was retained. RootBark was missing from the compiler's woody shader tag: it now receives UV2.x=2 and the bole's basal wood tint, so bark-covered roots use the same material path. The plant.compiler test checks that tag.
+- Embercrown retains seven stems and its compound foliage/fruit. Three upward, laterally alternating Hermite sections produce visible sinuous stems; their lengths are staggered .52–.97 of authored height. Crown branches curve over two connected sections. The first revision was too restrained; a stronger tangent-only version collapsed the silhouette and was rejected. Explicit endpoints restore positive height advancement without losing the curves.
+- Banksorrow has a leaning low fork and seven arching boughs carrying 56 long leafy hanging shoots, returning to the old curtain-like form. The mature native capture shows the hanging foliage reaching toward the ground.
+- Kinkcane uses six straight, angular internodes per cane, with pronounced alternating elbows on lower canes and gentler joints on the taller sentinels. Explicit continuation radii retain a bamboo-like thickness rather than compounding the lateral-branch radius clamp. Foliage is retained.
+
+Current native evidence is `four-species-reviewed/plant_catalog/`, with the same shared identity scales and report/module provenance. `mature-detail.png` is a labeled crop/rescale of those actual captures. `identity-reviewed/index.html` now uses these four captures and their latest macros; older rejected captures remain for diagnostic history. The earlier copied-save review predates these four corrections.
+
+Sequential solution/game builds passed without warnings. The focused 13 plant tests passed after the root-bark fix. The latest numerical catalog passed 125/125 with zero errors/duplicate fingerprints (`four-species-reviewed-validation.log`); boot passed save/load roundtrip and invariants=0 (`four-species-reviewed-boot.log`). This bounded art correction adds no bioluminescence and makes no new performance acceptance claim.
