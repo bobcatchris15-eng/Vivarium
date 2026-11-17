@@ -369,3 +369,13 @@ Changes:
 - Lighting: DayExposure 1.18→1.00, AutoExposureScale .22→.15 (sensitivity 90–105), SDFGI energy 1.15→1.0. Catalog review floor darkened to sRGB (.36,.33,.29).
 
 Evidence: [materials-a](../post-review-2026-11-17/materials-a.jpg), [materials-b](../post-review-2026-11-17/materials-b.jpg) (catalog before/after; "before" frames predate round-2 shape changes for some species), [materials-scene](../post-review-2026-11-17/materials-scene.jpg) (game scene, baseline left). Game-scene mean luminance down ~10–25%. Validation: build, 28/28 plant self-tests, headless boot OK, windowed renders with no shader errors. Not done: per-species colour audit (some legacy species colours such as saturated cyan fronds remain), perf re-measure.
+
+## Colour softening and Starmoss glow (2026-11-17)
+
+Owner: tone down oversaturated species colours; Starmoss should glow only on its vertical structures, not the ground mat.
+
+- Saturation: `experiments/plant_catalog_test/tone_down_saturation.py` applies a soft knee in HSV (saturation ≤ .60 unchanged; excess above it halved; hue and value kept) to `game/content/flora/*.json` visual colours and catalog/generator `Srgb()` literals. 101 colours changed (38 content files + catalog). Bioluminescence colours untouched. Rerunnable with different `KNEE, SLOPE` for a stronger pass.
+- Glow mask: plant-compiled `*_colony_understory` mat vertices now carry UV2.x = −1; new `emission_mask_mode` 10 (flora.gdshader, leaf.gdshader) lights everything except that mat. Starmoss and the default for glowing mosses/lichens use mode 10. The game's separate coverage sheet (coverage_mat) never emitted.
+- Review: `--plant-catalog-night` adds a deep-night (day fraction .80) shot per catalog species.
+
+Evidence: [starmoss-night.jpg](../post-review-2026-11-17/starmoss-night.jpg), [colour-pass.jpg](../post-review-2026-11-17/colour-pass.jpg). Validation: build, 28/28 plant self-tests, headless boot OK, windowed catalog/night renders.

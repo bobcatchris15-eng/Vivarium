@@ -55,7 +55,7 @@ public sealed class GlowbriarGenerator : PlanGenerator
         {
             Name = "glowbriar_chalice", Type = OrganType.Flower,
             LengthToWidth = 1.5f, Thickness = 0.0006f,
-            ColorAdaxial = PlantShapes.Srgb(0.36, 0.9, 0.66), ColorAbaxial = PlantShapes.Srgb(0.2, 0.6, 0.5),
+            ColorAdaxial = PlantShapes.Srgb(0.36, 0.9, 0.66), ColorAbaxial = PlantShapes.Srgb(0.22,0.6,0.505),
             Transmission = 0.5f, Roughness = 0.35f, Wax = 0.3f,
         });
 

@@ -17,7 +17,7 @@ public static partial class HerbGraphSpecies
                     SurfaceForm=OrganSurfaceForm.Lamina,
                     WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.65)),
                     Serration=.28f, SerrationFreq=12, CrossCurl=.035f,
-                    ColorAdaxial=PlantShapes.Srgb(.52,.18,.17), ColorAbaxial=PlantShapes.Srgb(.25,.43,.18), Thickness=.001f, Roughness=.50f });
+                    ColorAdaxial=PlantShapes.Srgb(0.52,0.198,0.189), ColorAbaxial=PlantShapes.Srgb(.25,.43,.18), Thickness=.001f, Roughness=.50f });
                 ushort trumpet=b.AddShape(new OrganShape { Name="snaptrap_trumpet", Type=OrganType.Flower,
                     SurfaceForm=OrganSurfaceForm.Trumpet, LobeCount=5, LobeDepth=.18f, RimCurl=.25f, ShellThickness=.025f,
                     WidthProfile=PlantShapes.Profile(t => .10+.40*Math.Pow(t,1.5)),
@@ -185,7 +185,7 @@ public static partial class HerbGraphSpecies
                     // The ribbed internode name routes the compiler's longitudinal striation.
                     ushort ribbed=b.AddShape(new OrganShape { Name="ringreed_ribbed_shaft", Type=OrganType.Flower,
                         SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*(.97-.03*t)),
-                        ColorAdaxial=PlantShapes.Srgb(.24,.44,.19), ColorAbaxial=PlantShapes.Srgb(.13,.28,.10), Roughness=.45f });
+                        ColorAdaxial=PlantShapes.Srgb(.24,.44,.19), ColorAbaxial=PlantShapes.Srgb(0.135,0.28,0.106), Roughness=.45f });
                     ushort ash=b.AddShape(new OrganShape { Name="ringreed_ash_sheath", Type=OrganType.Flower,
                         SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*(1.0+.04*t)),
                         ColorAdaxial=PlantShapes.Srgb(.66,.66,.58), ColorAbaxial=PlantShapes.Srgb(.50,.50,.43), Roughness=.7f });
@@ -292,7 +292,7 @@ public static partial class HerbGraphSpecies
                     ushort redRunner = b.AddShape(new OrganShape {
                         Name="emberbracken_runner", Type=OrganType.Flower, SurfaceForm=OrganSurfaceForm.Revolved,
                         WidthProfile=PlantShapes.Profile(t => .5 * (.86 + .14 * Math.Sin(Math.PI*t))),
-                        ColorAdaxial=PlantShapes.Srgb(.93,.10,.065), ColorAbaxial=PlantShapes.Srgb(.56,.035,.025),
+                        ColorAdaxial=PlantShapes.Srgb(0.93,0.247,0.219), ColorAbaxial=PlantShapes.Srgb(0.56,0.133,0.124),
                         Roughness=.74f, Transmission=.03f
                     });
                     b[crown].Flags |= OrganFlags.Hidden;
@@ -361,7 +361,7 @@ public static partial class HerbGraphSpecies
                         SurfaceForm=OrganSurfaceForm.Lamina,
                         WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.48)*(1-.38*t)),
                         MidribCurl=.62f, Twist=5.2f, TwistDepth=.04f, CrossCurl=.001f,
-                        ColorAdaxial=PlantShapes.Srgb(.31,.51,.20), ColorAbaxial=PlantShapes.Srgb(.43,.57,.27), Roughness=.57f });
+                        ColorAdaxial=PlantShapes.Srgb(0.311,0.51,0.202), ColorAbaxial=PlantShapes.Srgb(.43,.57,.27), Roughness=.57f });
                     int runner=b.AddAxis(crown,1,run,r*.60,Vec3.Zero,r*.012,r*.005,1,Tissue.Green,0,.16);
                     for(int g=0;g<4;g++) for(int k=0;k<3;k++)
                     {

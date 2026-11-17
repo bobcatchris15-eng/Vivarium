@@ -60,7 +60,7 @@ public static partial class HerbGraphSpecies
                         WidthProfile=PlantShapes.Profile(t => .07+.30*Math.Pow(t,.8)+.17*Math.Pow(Math.Max(0,(t-.62)/.38),1.6)),
                         ShellThickness=.012f, RimCurl=.50f, LobeCount=5, LobeDepth=.16f,
                         RadialAsymmetry=.20f, EdgeWave=.07f, EdgeWaveFreq=5, ColorAdaxial=PlantShapes.Srgb(.92,.76,.46),
-                        ColorAbaxial=PlantShapes.Srgb(.68,.46,.24), Roughness=.42f });
+                        ColorAbaxial=PlantShapes.Srgb(0.68,0.468,0.256), Roughness=.42f });
                 ushort blackSpine=0, thistleBract=0, thistleFloret=0;
                 if(s.Id=="blackneedle")
                 {
@@ -69,11 +69,11 @@ public static partial class HerbGraphSpecies
                         ColorAdaxial=PlantShapes.Srgb(.018,.021,.018), ColorAbaxial=PlantShapes.Srgb(.018,.021,.018), Thickness=.0004f, Roughness=.30f });
                     thistleBract=b.AddShape(new OrganShape { Name="blackneedle_head_bract", Type=OrganType.Leaf,
                         SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.65)),
-                        MidribCurl=.12f, CrossCurl=.015f, ColorAdaxial=PlantShapes.Srgb(.42,.38,.16),
+                        MidribCurl=.12f, CrossCurl=.015f, ColorAdaxial=PlantShapes.Srgb(0.42,0.381,0.164),
                         ColorAbaxial=PlantShapes.Srgb(.25,.34,.14), Thickness=.0006f, Roughness=.72f });
                     thistleFloret=b.AddShape(new OrganShape { Name="blackneedle_violet_floret", Type=OrganType.Flower,
                         SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => .35+.65*t),
-                        ColorAdaxial=PlantShapes.Srgb(.52,.22,.51), ColorAbaxial=PlantShapes.Srgb(.36,.14,.37), Thickness=.0004f, Roughness=.62f });
+                        ColorAdaxial=PlantShapes.Srgb(.52,.22,.51), ColorAbaxial=PlantShapes.Srgb(0.36,0.144,0.37), Thickness=.0004f, Roughness=.62f });
                 }
                 int network=crown;
                 for(int n=0;n<nodes;n++)

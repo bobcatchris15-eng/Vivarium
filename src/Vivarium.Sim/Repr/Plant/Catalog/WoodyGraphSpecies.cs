@@ -111,7 +111,7 @@ public static class WoodyGraphSpecies
             EdgeWave = edgeWave, EdgeWaveFreq = shield ? 6f : 4f,
             Serration = serrated ? (f.Id is "thornmantle" or "nutglade" ? .20f : .12f) : 0f,
             SerrationFreq = f.Id is "thornmantle" or "hollowcrown" ? 5f : 9f,
-            ColorAdaxial = f.Id switch { "mirespire" => PlantShapes.Srgb(.22,.56,.53), "greywatch" => PlantShapes.Srgb(.56,.68,.57), "cragparasol" => PlantShapes.Srgb(.91,.86,.60), _ => PlantShapes.Srgb(.13,.32,.14) },
+            ColorAdaxial = f.Id switch { "mirespire" => PlantShapes.Srgb(0.222,0.56,0.53), "greywatch" => PlantShapes.Srgb(.56,.68,.57), "cragparasol" => PlantShapes.Srgb(.91,.86,.60), _ => PlantShapes.Srgb(.13,.32,.14) },
             ColorAbaxial = f.Id switch { "mirespire" => PlantShapes.Srgb(.40,.70,.66), "greywatch" => PlantShapes.Srgb(.70,.76,.65), "cragparasol" => PlantShapes.Srgb(.98,.93,.72), _ => PlantShapes.Srgb(.28,.46,.24) },
             Roughness = LeafRough(f.Id), Transmission = .32f
         });
@@ -161,7 +161,7 @@ public static class WoodyGraphSpecies
         SurfaceForm = f.Ornament == 1 ? OrganSurfaceForm.Trumpet : OrganSurfaceForm.Revolved,
         WidthProfile = PlantShapes.Profile(t => f.Ornament == 1 ? .12 + .38 * Math.Pow(t, .7) : .5 * Math.Sin(Math.PI * t)),
         LobeCount = f.Ornament == 1 ? 5 : 0, LobeDepth = .18f,
-        ColorAdaxial = PlantShapes.Srgb(.83,.52,.24), ColorAbaxial = PlantShapes.Srgb(.65,.25,.17), Roughness=OrnamentRough(f.Id)
+        ColorAdaxial = PlantShapes.Srgb(0.83,0.544,0.286), ColorAbaxial = PlantShapes.Srgb(0.65,0.287,0.215), Roughness=OrnamentRough(f.Id)
     });
     private sealed class WoodyGenerator : PlanGenerator
     {
@@ -530,7 +530,7 @@ public static class WoodyGraphSpecies
                 ColorAbaxial=PlantShapes.Srgb(.98,.93,.72), Roughness=.45f, Transmission=.32f });
             ushort flower=b.AddShape(new OrganShape { Name="cragparasol_blue_fuzz", Type=OrganType.Flower,
                 SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(1-t,.7)),
-                ColorAdaxial=PlantShapes.Srgb(.08,.16,.55), ColorAbaxial=PlantShapes.Srgb(.12,.23,.68), Thickness=.0003f, Roughness=.78f });
+                ColorAdaxial=PlantShapes.Srgb(0.15,0.218,0.55), ColorAbaxial=PlantShapes.Srgb(0.196,0.291,0.68), Thickness=.0003f, Roughness=.78f });
             for(int j=0;j<7;j++)
             {
                 double a=az+j*Math.Tau/7+b.Range(-.12,.12); var outwards=PlantMath.Horizontal(a);
@@ -926,8 +926,8 @@ public static class WoodyGraphSpecies
                 Name = "witchberry_red_berry", Type = OrganType.Fruit,
                 SurfaceForm = OrganSurfaceForm.Revolved,
                 WidthProfile = PlantShapes.Profile(t => .5 * Math.Sqrt(Math.Max(0, 1 - (2 * t - 1) * (2 * t - 1)))),
-                ColorAdaxial = PlantShapes.Srgb(.34, .008, .018),
-                ColorAbaxial = PlantShapes.Srgb(.26, .005, .012), Roughness = .18f
+                ColorAdaxial = PlantShapes.Srgb(0.34,0.072,0.08),
+                ColorAbaxial = PlantShapes.Srgb(0.26,0.055,0.06), Roughness = .18f
             });
             ushort fanLeaf = b.AddShape(new OrganShape {
                 Name = "witchberry_ginkgo_fan", Type = OrganType.Leaf,

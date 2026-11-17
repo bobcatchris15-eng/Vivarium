@@ -132,7 +132,10 @@ public sealed class PlantCatalogDemo : IReprDemo
             }
             var target=origin+new Vector3(0,matureOnly?.52f:.42f,0);
             var eye=origin+(matureOnly?new Vector3(.65f,.95f,2.75f):new Vector3(.6f,1.45f,5.5f));
+            // --plant-catalog-night adds a deep-night (960 s of the 1200 s cycle) shot to judge bioluminescence.
             _shots.Add(new ReprShot(entry.Id,eye,target,matureOnly?40:44,2,legacy?"legacy":"growth"));
+            if(Main.UserArgs.Contains("--plant-catalog-night"))
+                _shots.Add(new ReprShot(entry.Id+"_night",eye,target,matureOnly?40:44,2,legacy?"legacy":"growth",.80f));
             ctx.Log($"catalog {entry.Id}: {entry.Family}; {entry.Silhouette}; {entry.GrowthHabit}; mature organs={mature.Organs.Length}, H={h}, R={r}");
             var label=new Label3D { Text=(matureOnly?sp.Name:entry.Id)+(legacy?"  |  previous form":matureOnly?"  |  current mature form":"  |  20% / 55% / mature"), Position=origin+new Vector3(0,-.13f,.7f),
                 FontSize=40, PixelSize=.0013f, Billboard=BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest=true };

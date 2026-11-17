@@ -65,14 +65,16 @@ public static class NightFloraMaterials
             "hookthicket" => 2,
             // The latchjaw's flower throat is the only lit part of the plant.
             "snaptrap" => 2,
-            "starmoss" => 1,
+            // Starmoss: the upright shoots glow; the ground mat beneath them does not.
+            "starmoss" => 10,
             // The coalspike's violet ember is the one lit organ; the coal around it stays dead.
             "coalspike" => 2,
             // The embercup's spore capsules glow; the cushion they stand on does not.
             "embercup" => 2,
             // The hollowcrown's cavity moss is the only light inside the tree.
             "hollowcrown" => 2,
-            _ => species.Archetype is "moss" or "lichen" || (species.Shape == "carpet" && species.Id != "siltstars") ? 1 : 0
+            // Glowing mosses and lichens light their structures, never their ground colony mat.
+            _ => species.Archetype is "moss" or "lichen" || (species.Shape == "carpet" && species.Id != "siltstars") ? 10 : 0
         };
         material.SetShaderParameter("emission_mask_mode", maskMode);
         material.SetShaderParameter("night_factor", CurrentNightFactor);

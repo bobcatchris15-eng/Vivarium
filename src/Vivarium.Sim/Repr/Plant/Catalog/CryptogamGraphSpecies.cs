@@ -128,7 +128,7 @@ public static class CryptogamGraphSpecies
                 RadialAsymmetry = name == "_cap" ? e.Form switch {
                     Form.Cup => .12f, Form.Shelf => .14f, Form.Cap => .08f, Form.Bell => .07f,
                     Form.Puff or Form.Jelly => .10f, _ => 0f } : 0f,
-                ColorAdaxial = e.Id == "reekhorn" && name == "_cap" ? PlantShapes.Srgb(.32,.13,.085) : green, ColorAbaxial = e.Id == "reekhorn" && name == "_cap" ? PlantShapes.Srgb(.22,.095,.06) : accent, Roughness = CryptoRough(e.Id, name), Transmission = e.Id == "rain_jelly" ? .65f : .3f
+                ColorAdaxial = e.Id == "reekhorn" && name == "_cap" ? PlantShapes.Srgb(0.32,0.147,0.107) : green, ColorAbaxial = e.Id == "reekhorn" && name == "_cap" ? PlantShapes.Srgb(0.22,0.106,0.074) : accent, Roughness = CryptoRough(e.Id, name), Transmission = e.Id == "rain_jelly" ? .65f : .3f
             });
             // The reekhorn's veil is an open net, suspended from the cap and
             // widening toward its lower edge rather than separate pointed blades.
@@ -215,7 +215,7 @@ public static class CryptogamGraphSpecies
                     Name = "starsplit_open_body", Type = OrganType.Flower, SurfaceForm = OrganSurfaceForm.Cup,
                     WidthProfile = PlantShapes.Profile(t => .5 * Math.Sqrt(Math.Max(0, 1 - Math.Pow(2*t-1, 2))) * (1-.40*Math.Pow(t, 6)) + .16*Math.Pow(t,8) + .002, 33),
                     LobeCount = 5, LobeDepth = .50f, ShellThickness = .035f,
-                    ColorAdaxial = PlantShapes.Srgb(.98,.98,.94), ColorAbaxial = PlantShapes.Srgb(.57,.19,.035),
+                    ColorAdaxial = PlantShapes.Srgb(.98,.98,.94), ColorAbaxial = PlantShapes.Srgb(0.57,0.259,0.132),
                     Roughness = .72f, Transmission = .03f
                 });
                 b.AddFlat(root, 0, Vec3.Up, h*1.15, r*1.38, .0003, OrganType.Flower, body, 1, .03, .30);

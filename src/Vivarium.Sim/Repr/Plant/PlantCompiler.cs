@@ -675,7 +675,7 @@ public static partial class PlantCompiler
                 var col = s.Name == "quillsedge_curled_blade" ? Mix(cA, cB, Math.Clamp((t-.08)/.78,0,1)) : Mix(cA, cB, 0.25 + 0.5 * frac);
                 // Analytic adaxial normal from the midrib frame (RecomputeNormals leaves base/tip rows at zero,
                 // where the profile collapses to a point).
-                idx[i, j] = m.AddVertex(pos, new Vec3(0, cy, sy), col[0], col[1], col[2], ShapeRoughAlpha(s), t, u, s.Name == "quillsedge_curled_blade" ? -4 : s.Name == "tankbloom_bract" ? 1.35 : 0, 1);
+                idx[i, j] = m.AddVertex(pos, new Vec3(0, cy, sy), col[0], col[1], col[2], ShapeRoughAlpha(s), t, u, s.Name == "quillsedge_curled_blade" ? -4 : s.Name == "tankbloom_bract" ? 1.35 : s.Name.EndsWith("_colony_understory", StringComparison.Ordinal) ? -1 : 0, 1);
             }
         }
         for (int i = 0; i < L; i++)

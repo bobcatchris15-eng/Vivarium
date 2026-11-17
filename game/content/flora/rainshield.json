@@ -75,9 +75,9 @@
     "visual":  {
                    "shape":  "microcanopy_rainshield",
                    "color":  [
-                                 0.15,
+                                 0.153,
                                  0.39,
-                                 0.31
+                                 0.311
                              ],
                    "color2":  [
                                   0.41,

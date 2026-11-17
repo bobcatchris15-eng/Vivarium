@@ -672,6 +672,8 @@ void fragment() {
     else if (emission_mask_mode == 5) night_mask = center_stripe;
     else if (emission_mask_mode == 6) night_mask = edge_strip;
     else if (emission_mask_mode == 9) night_mask = step(1.40, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
+    // 10: everything except the ground colony mat (UV2.x = -1), so only upright structures glow.
+    else if (emission_mask_mode == 10) night_mask = 1.0 - step(UV2.x, -0.5) * step(-1.5, UV2.x);
     else if (emission_mask_mode == 7) {
         // Clover chevron: the same band the leaf shader paints, so the nocturnal glow follows the
         // marking instead of lighting the whole blade.

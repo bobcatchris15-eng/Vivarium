@@ -362,6 +362,8 @@ void fragment() {
     else if (emission_mask_mode == 4) night_mask = seed_head_mask;
     else if (emission_mask_mode == 5) night_mask = center_stripe;
     else if (emission_mask_mode == 6) night_mask = edge_strip;
+    // 10: everything except the ground colony mat (UV2.x = -1), so only upright structures glow.
+    else if (emission_mask_mode == 10) night_mask = 1.0 - step(UV2.x, -0.5) * step(-1.5, UV2.x);
     else night_mask = smoothstep(0.45, 0.60, UV2.y);
     EMISSION = bioluminescence_color * bioluminescence_strength * night_factor * night_mask;
     // Emission-only instrument readouts; never used in the production mode.

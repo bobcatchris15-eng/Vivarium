@@ -60,14 +60,14 @@
   "visual": {
     "shape": "trifoliate",
     "color": [
-      0.3,
+      0.303,
       0.62,
-      0.24
+      0.244
     ],
     "color2": [
-      0.5,
+      0.501,
       0.76,
-      0.3
+      0.302
     ],
     "colorVariance": 0.06,
     "height": 0.08
