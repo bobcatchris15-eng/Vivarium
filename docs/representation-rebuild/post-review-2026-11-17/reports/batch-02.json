@@ -1,0 +1,430 @@
+{
+  "demo": "plant_catalog",
+  "seed": 804584441,
+  "machine": {
+    "adapter": "AMD Radeon(TM) 860M Graphics",
+    "resolution": [
+      1600,
+      900
+    ],
+    "window": [
+      1600,
+      900
+    ],
+    "render_scale": 1,
+    "max_fps": 30,
+    "vsync": "Disabled",
+    "quality": 1,
+    "godot": "4.7.1-stable (official)"
+  },
+  "env_overrides": {
+    "Requested": {},
+    "Applied": [],
+    "Skipped": []
+  },
+  "build_ms": 341.4,
+  "settle_frames": 30,
+  "game_module": "51441d6b-9dff-49e0-bc2e-eabee7a57eec",
+  "sim_module": "5cca5e03-0bc0-43c6-9ab4-e7d133bb5ec3",
+  "plant_config": null,
+  "camera_reference": null,
+  "managed_bytes_per_frame_baseline": 1362,
+  "shots": [
+    {
+      "shot": "burrflag_growth",
+      "name": "burrflag",
+      "variant": "growth",
+      "png": "burrflag_growth.png",
+      "eye": [
+        136.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        136,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 774.44,
+      "gpu_busy_fraction": 8.7868,
+      "frame_ms_p50": 0.175,
+      "frame_ms_p95": 2.408,
+      "frame_ms_max": 2.408,
+      "gpu_frame_ms_mean": 11.346,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 17,
+      "primitives": 180934,
+      "objects": 17,
+      "video_mem_mb": 2677.5,
+      "managed_bytes_per_frame_raw": 2112,
+      "managed_bytes_per_frame_net": 750
+    },
+    {
+      "shot": "butterglint_growth",
+      "name": "butterglint",
+      "variant": "growth",
+      "png": "butterglint_growth.png",
+      "eye": [
+        144.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        144,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1128.86,
+      "gpu_busy_fraction": 12.6613,
+      "frame_ms_p50": 0.16,
+      "frame_ms_p95": 1.612,
+      "frame_ms_max": 1.612,
+      "gpu_frame_ms_mean": 11.216,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 18,
+      "primitives": 40876,
+      "objects": 18,
+      "video_mem_mb": 2677.7,
+      "managed_bytes_per_frame_raw": 1184,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "capstar_moss_growth",
+      "name": "capstar_moss",
+      "variant": "growth",
+      "png": "capstar_moss_growth.png",
+      "eye": [
+        160.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        160,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1093.14,
+      "gpu_busy_fraction": 13.6226,
+      "frame_ms_p50": 0.181,
+      "frame_ms_p95": 1.649,
+      "frame_ms_max": 1.649,
+      "gpu_frame_ms_mean": 12.462,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 17,
+      "primitives": 205340,
+      "objects": 17,
+      "video_mem_mb": 2677.8,
+      "managed_bytes_per_frame_raw": 1160,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "carrion_bell_growth",
+      "name": "carrion_bell",
+      "variant": "growth",
+      "png": "carrion_bell_growth.png",
+      "eye": [
+        168.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        168,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1134.49,
+      "gpu_busy_fraction": 12.5952,
+      "frame_ms_p50": 0.168,
+      "frame_ms_p95": 1.594,
+      "frame_ms_max": 1.594,
+      "gpu_frame_ms_mean": 11.102,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 17044,
+      "objects": 15,
+      "video_mem_mb": 2677.8,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "cloudtuft_growth",
+      "name": "cloudtuft",
+      "variant": "growth",
+      "png": "cloudtuft_growth.png",
+      "eye": [
+        192.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        192,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1121.96,
+      "gpu_busy_fraction": 12.677,
+      "frame_ms_p50": 0.155,
+      "frame_ms_p95": 1.628,
+      "frame_ms_max": 1.628,
+      "gpu_frame_ms_mean": 11.299,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 17,
+      "primitives": 153732,
+      "objects": 17,
+      "video_mem_mb": 2691.9,
+      "managed_bytes_per_frame_raw": 1148,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "coinrunner_growth",
+      "name": "coinrunner",
+      "variant": "growth",
+      "png": "coinrunner_growth.png",
+      "eye": [
+        208.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        208,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1201.06,
+      "gpu_busy_fraction": 13.8086,
+      "frame_ms_p50": 0.177,
+      "frame_ms_p95": 1.488,
+      "frame_ms_max": 1.488,
+      "gpu_frame_ms_mean": 11.497,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 11,
+      "primitives": 23518,
+      "objects": 11,
+      "video_mem_mb": 2706.5,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "cradlecup_growth",
+      "name": "cradlecup",
+      "variant": "growth",
+      "png": "cradlecup_growth.png",
+      "eye": [
+        216.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        216,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1120.07,
+      "gpu_busy_fraction": 12.239,
+      "frame_ms_p50": 0.174,
+      "frame_ms_p95": 1.612,
+      "frame_ms_max": 1.612,
+      "gpu_frame_ms_mean": 10.927,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 61730,
+      "objects": 15,
+      "video_mem_mb": 2706.5,
+      "managed_bytes_per_frame_raw": 1148,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "cragparasol_growth",
+      "name": "cragparasol",
+      "variant": "growth",
+      "png": "cragparasol_growth.png",
+      "eye": [
+        224.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        224,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 768.96,
+      "gpu_busy_fraction": 9.6551,
+      "frame_ms_p50": 0.189,
+      "frame_ms_p95": 2.412,
+      "frame_ms_max": 2.412,
+      "gpu_frame_ms_mean": 12.556,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 536686,
+      "objects": 15,
+      "video_mem_mb": 2706.5,
+      "managed_bytes_per_frame_raw": 1544,
+      "managed_bytes_per_frame_net": 182
+    },
+    {
+      "shot": "duskbristle_growth",
+      "name": "duskbristle",
+      "variant": "growth",
+      "png": "duskbristle_growth.png",
+      "eye": [
+        256.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        256,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 970.97,
+      "gpu_busy_fraction": 11.205,
+      "frame_ms_p50": 0.162,
+      "frame_ms_p95": 1.898,
+      "frame_ms_max": 1.898,
+      "gpu_frame_ms_mean": 11.54,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 14,
+      "primitives": 269423,
+      "objects": 14,
+      "video_mem_mb": 2709.7,
+      "managed_bytes_per_frame_raw": 1148,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "duskpuff_growth",
+      "name": "duskpuff",
+      "variant": "growth",
+      "png": "duskpuff_growth.png",
+      "eye": [
+        264.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        264,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1022.02,
+      "gpu_busy_fraction": 11.5111,
+      "frame_ms_p50": 0.176,
+      "frame_ms_p95": 1.781,
+      "frame_ms_max": 1.781,
+      "gpu_frame_ms_mean": 11.263,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 27,
+      "primitives": 9348,
+      "objects": 27,
+      "video_mem_mb": 2741.9,
+      "managed_bytes_per_frame_raw": 1136,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "emberbracken_growth",
+      "name": "emberbracken",
+      "variant": "growth",
+      "png": "emberbracken_growth.png",
+      "eye": [
+        272.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        272,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1272.83,
+      "gpu_busy_fraction": 15.0512,
+      "frame_ms_p50": 0.154,
+      "frame_ms_p95": 1.418,
+      "frame_ms_max": 1.418,
+      "gpu_frame_ms_mean": 11.825,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 827282,
+      "objects": 15,
+      "video_mem_mb": 2741.9,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "embercrown_growth",
+      "name": "embercrown",
+      "variant": "growth",
+      "png": "embercrown_growth.png",
+      "eye": [
+        280.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        280,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1209.77,
+      "gpu_busy_fraction": 14.5282,
+      "frame_ms_p50": 0.143,
+      "frame_ms_p95": 1.51,
+      "frame_ms_max": 1.51,
+      "gpu_frame_ms_mean": 12.009,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 878196,
+      "objects": 15,
+      "video_mem_mb": 2741.9,
+      "managed_bytes_per_frame_raw": 1136,
+      "managed_bytes_per_frame_net": 0
+    }
+  ]
+}

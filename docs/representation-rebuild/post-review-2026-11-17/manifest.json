@@ -1,0 +1,637 @@
+{
+  "species_count": 79,
+  "species": [
+    {
+      "number": 1,
+      "id": "plumegrass",
+      "name": "Plumestep grass",
+      "original_sheet": 1,
+      "sheet": 1,
+      "position": 1
+    },
+    {
+      "number": 2,
+      "id": "bannerreed",
+      "name": "Bannerreed",
+      "original_sheet": 1,
+      "sheet": 1,
+      "position": 2
+    },
+    {
+      "number": 3,
+      "id": "coalspike",
+      "name": "Coalspike",
+      "original_sheet": 1,
+      "sheet": 1,
+      "position": 3
+    },
+    {
+      "number": 4,
+      "id": "banksorrow",
+      "name": "Banksorrow",
+      "original_sheet": 1,
+      "sheet": 1,
+      "position": 4
+    },
+    {
+      "number": 5,
+      "id": "hollowcrown",
+      "name": "Hollowcrown",
+      "original_sheet": 1,
+      "sheet": 1,
+      "position": 5
+    },
+    {
+      "number": 6,
+      "id": "witchberry",
+      "name": "Witchberry",
+      "original_sheet": 1,
+      "sheet": 1,
+      "position": 6
+    },
+    {
+      "number": 7,
+      "id": "antlerlace_lichen",
+      "name": "Antlerlace lichen",
+      "original_sheet": 2,
+      "sheet": 2,
+      "position": 1
+    },
+    {
+      "number": 8,
+      "id": "ashfingers_lichen",
+      "name": "Ashfingers lichen",
+      "original_sheet": 2,
+      "sheet": 2,
+      "position": 2
+    },
+    {
+      "number": 9,
+      "id": "blackneedle",
+      "name": "Blackneedle",
+      "original_sheet": 3,
+      "sheet": 2,
+      "position": 3
+    },
+    {
+      "number": 10,
+      "id": "bogfringe",
+      "name": "Bogfringe",
+      "original_sheet": 3,
+      "sheet": 2,
+      "position": 4
+    },
+    {
+      "number": 11,
+      "id": "bogglass_moss",
+      "name": "Bogglass moss",
+      "original_sheet": 3,
+      "sheet": 2,
+      "position": 5
+    },
+    {
+      "number": 12,
+      "id": "burlmantle",
+      "name": "Burlmantle",
+      "original_sheet": 4,
+      "sheet": 2,
+      "position": 6
+    },
+    {
+      "number": 13,
+      "id": "burrflag",
+      "name": "Burrflag",
+      "original_sheet": 4,
+      "sheet": 3,
+      "position": 1
+    },
+    {
+      "number": 14,
+      "id": "butterglint",
+      "name": "Butterglint",
+      "original_sheet": 4,
+      "sheet": 3,
+      "position": 2
+    },
+    {
+      "number": 15,
+      "id": "capstar_moss",
+      "name": "Capstar moss",
+      "original_sheet": 5,
+      "sheet": 3,
+      "position": 3
+    },
+    {
+      "number": 16,
+      "id": "carrion_bell",
+      "name": "Carrion Bell",
+      "original_sheet": 5,
+      "sheet": 3,
+      "position": 4
+    },
+    {
+      "number": 17,
+      "id": "cloudtuft",
+      "name": "Cloudtuft",
+      "original_sheet": 5,
+      "sheet": 3,
+      "position": 5
+    },
+    {
+      "number": 18,
+      "id": "coinrunner",
+      "name": "Coinrunner",
+      "original_sheet": 5,
+      "sheet": 3,
+      "position": 6
+    },
+    {
+      "number": 19,
+      "id": "cradlecup",
+      "name": "Cradlecup",
+      "original_sheet": 6,
+      "sheet": 4,
+      "position": 1
+    },
+    {
+      "number": 20,
+      "id": "cragparasol",
+      "name": "Cragparasol",
+      "original_sheet": 6,
+      "sheet": 4,
+      "position": 2
+    },
+    {
+      "number": 21,
+      "id": "duskbristle",
+      "name": "Duskbristle",
+      "original_sheet": 6,
+      "sheet": 4,
+      "position": 3
+    },
+    {
+      "number": 22,
+      "id": "duskpuff",
+      "name": "Duskpuff",
+      "original_sheet": 7,
+      "sheet": 4,
+      "position": 4
+    },
+    {
+      "number": 23,
+      "id": "emberbracken",
+      "name": "Emberbracken",
+      "original_sheet": 7,
+      "sheet": 4,
+      "position": 5
+    },
+    {
+      "number": 24,
+      "id": "embercrown",
+      "name": "Embercrown",
+      "original_sheet": 7,
+      "sheet": 4,
+      "position": 6
+    },
+    {
+      "number": 25,
+      "id": "embercrust_lichen",
+      "name": "Embercrust lichen",
+      "original_sheet": 7,
+      "sheet": 5,
+      "position": 1
+    },
+    {
+      "number": 26,
+      "id": "embercup",
+      "name": "Embercup",
+      "original_sheet": 7,
+      "sheet": 5,
+      "position": 2
+    },
+    {
+      "number": 27,
+      "id": "emberfan_fungus",
+      "name": "Emberfan fungus",
+      "original_sheet": 7,
+      "sheet": 5,
+      "position": 3
+    },
+    {
+      "number": 28,
+      "id": "fencomb",
+      "name": "Fencomb",
+      "original_sheet": 8,
+      "sheet": 5,
+      "position": 4
+    },
+    {
+      "number": 29,
+      "id": "fenfoam",
+      "name": "Fenfoam",
+      "original_sheet": 8,
+      "sheet": 5,
+      "position": 5
+    },
+    {
+      "number": 30,
+      "id": "fenforge",
+      "name": "Fenforge",
+      "original_sheet": 8,
+      "sheet": 5,
+      "position": 6
+    },
+    {
+      "number": 31,
+      "id": "floodlace_moss",
+      "name": "Floodlace moss",
+      "original_sheet": 8,
+      "sheet": 6,
+      "position": 1
+    },
+    {
+      "number": 32,
+      "id": "frosttussock",
+      "name": "Frosttussock",
+      "original_sheet": 9,
+      "sheet": 6,
+      "position": 2
+    },
+    {
+      "number": 33,
+      "id": "ghostbonnet",
+      "name": "Ghostbonnet",
+      "original_sheet": 9,
+      "sheet": 6,
+      "position": 3
+    },
+    {
+      "number": 34,
+      "id": "glassfinger",
+      "name": "Glassfinger",
+      "original_sheet": 9,
+      "sheet": 6,
+      "position": 4
+    },
+    {
+      "number": 35,
+      "id": "glasslily",
+      "name": "Glasslily",
+      "original_sheet": 9,
+      "sheet": 6,
+      "position": 5
+    },
+    {
+      "number": 36,
+      "id": "glassrush",
+      "name": "Glassrush",
+      "original_sheet": 9,
+      "sheet": 6,
+      "position": 6
+    },
+    {
+      "number": 37,
+      "id": "glowbriar",
+      "name": "Glowbriar",
+      "original_sheet": 10,
+      "sheet": 7,
+      "position": 1
+    },
+    {
+      "number": 38,
+      "id": "greywatch",
+      "name": "Greywatch",
+      "original_sheet": 10,
+      "sheet": 7,
+      "position": 2
+    },
+    {
+      "number": 39,
+      "id": "hallowsting",
+      "name": "Hallowsting",
+      "original_sheet": 10,
+      "sheet": 7,
+      "position": 3
+    },
+    {
+      "number": 40,
+      "id": "heddlelace",
+      "name": "Heddlelace",
+      "original_sheet": 10,
+      "sheet": 7,
+      "position": 4
+    },
+    {
+      "number": 41,
+      "id": "hookthicket",
+      "name": "Hookthicket",
+      "original_sheet": 10,
+      "sheet": 7,
+      "position": 5
+    },
+    {
+      "number": 42,
+      "id": "lacemantle",
+      "name": "Lacemantle",
+      "original_sheet": 11,
+      "sheet": 7,
+      "position": 6
+    },
+    {
+      "number": 43,
+      "id": "lanternbrush",
+      "name": "Lanternbrush",
+      "original_sheet": 11,
+      "sheet": 8,
+      "position": 1
+    },
+    {
+      "number": 44,
+      "id": "mirepocket",
+      "name": "Mirepocket",
+      "original_sheet": 12,
+      "sheet": 8,
+      "position": 2
+    },
+    {
+      "number": 45,
+      "id": "mirespire",
+      "name": "Mirespire",
+      "original_sheet": 12,
+      "sheet": 8,
+      "position": 3
+    },
+    {
+      "number": 46,
+      "id": "moonbark",
+      "name": "Moonbark",
+      "original_sheet": 13,
+      "sheet": 8,
+      "position": 4
+    },
+    {
+      "number": 47,
+      "id": "moonshell_lichen",
+      "name": "Moonshell lichen",
+      "original_sheet": 13,
+      "sheet": 8,
+      "position": 5
+    },
+    {
+      "number": 48,
+      "id": "nutglade",
+      "name": "Nutglade",
+      "original_sheet": 13,
+      "sheet": 8,
+      "position": 6
+    },
+    {
+      "number": 49,
+      "id": "pearl_cushion_moss",
+      "name": "Pearl-cushion moss",
+      "original_sheet": 14,
+      "sheet": 9,
+      "position": 1
+    },
+    {
+      "number": 50,
+      "id": "pinequilt_moss",
+      "name": "Pinequilt moss",
+      "original_sheet": 14,
+      "sheet": 9,
+      "position": 2
+    },
+    {
+      "number": 51,
+      "id": "pitcher_plant",
+      "name": "Raincup Pitcher",
+      "original_sheet": 14,
+      "sheet": 9,
+      "position": 3
+    },
+    {
+      "number": 52,
+      "id": "pondstars",
+      "name": "Pondstars",
+      "original_sheet": 14,
+      "sheet": 9,
+      "position": 4
+    },
+    {
+      "number": 53,
+      "id": "quillfeather_moss",
+      "name": "Quillfeather moss",
+      "original_sheet": 15,
+      "sheet": 9,
+      "position": 5
+    },
+    {
+      "number": 54,
+      "id": "quillsedge",
+      "name": "Quillsedge",
+      "original_sheet": 15,
+      "sheet": 9,
+      "position": 6
+    },
+    {
+      "number": 55,
+      "id": "rainshield",
+      "name": "Rainshield",
+      "original_sheet": 15,
+      "sheet": 10,
+      "position": 1
+    },
+    {
+      "number": 56,
+      "id": "reekhorn",
+      "name": "Reekhorn",
+      "original_sheet": 15,
+      "sheet": 10,
+      "position": 2
+    },
+    {
+      "number": 57,
+      "id": "ringreed",
+      "name": "Ringreed",
+      "original_sheet": 15,
+      "sheet": 10,
+      "position": 3
+    },
+    {
+      "number": 58,
+      "id": "ruffle_lichen",
+      "name": "Ruffle lichen",
+      "original_sheet": 16,
+      "sheet": 10,
+      "position": 4
+    },
+    {
+      "number": 59,
+      "id": "rustbellow_moss",
+      "name": "Rustbellow moss",
+      "original_sheet": 16,
+      "sheet": 10,
+      "position": 5
+    },
+    {
+      "number": 60,
+      "id": "shadebell",
+      "name": "Shadebell",
+      "original_sheet": 16,
+      "sheet": 10,
+      "position": 6
+    },
+    {
+      "number": 61,
+      "id": "silverfelt",
+      "name": "Silverfelt",
+      "original_sheet": 17,
+      "sheet": 11,
+      "position": 1
+    },
+    {
+      "number": 62,
+      "id": "snaptrap",
+      "name": "Latchjaw",
+      "original_sheet": 17,
+      "sheet": 11,
+      "position": 2
+    },
+    {
+      "number": 63,
+      "id": "sootband",
+      "name": "Sootband",
+      "original_sheet": 18,
+      "sheet": 11,
+      "position": 3
+    },
+    {
+      "number": 64,
+      "id": "splitcrown",
+      "name": "Splitcrown",
+      "original_sheet": 18,
+      "sheet": 11,
+      "position": 4
+    },
+    {
+      "number": 65,
+      "id": "starbulb",
+      "name": "Starbulb",
+      "original_sheet": 18,
+      "sheet": 11,
+      "position": 5
+    },
+    {
+      "number": 66,
+      "id": "starmoss",
+      "name": "Starmoss",
+      "original_sheet": 18,
+      "sheet": 11,
+      "position": 6
+    },
+    {
+      "number": 67,
+      "id": "starsplit",
+      "name": "Starsplit",
+      "original_sheet": 18,
+      "sheet": 12,
+      "position": 1
+    },
+    {
+      "number": 68,
+      "id": "stoneknot_moss",
+      "name": "Stoneknot moss",
+      "original_sheet": 19,
+      "sheet": 12,
+      "position": 2
+    },
+    {
+      "number": 69,
+      "id": "streamribbon",
+      "name": "Streamribbon",
+      "original_sheet": 19,
+      "sheet": 12,
+      "position": 3
+    },
+    {
+      "number": 70,
+      "id": "swanfrond",
+      "name": "Swanfrond",
+      "original_sheet": 19,
+      "sheet": 12,
+      "position": 4
+    },
+    {
+      "number": 71,
+      "id": "tankbloom",
+      "name": "Tankbloom",
+      "original_sheet": 20,
+      "sheet": 12,
+      "position": 5
+    },
+    {
+      "number": 72,
+      "id": "thornmantle",
+      "name": "Thornmantle",
+      "original_sheet": 20,
+      "sheet": 12,
+      "position": 6
+    },
+    {
+      "number": 73,
+      "id": "tidebell",
+      "name": "Tidebell",
+      "original_sheet": 20,
+      "sheet": 13,
+      "position": 1
+    },
+    {
+      "number": 74,
+      "id": "trifold",
+      "name": "Trifold",
+      "original_sheet": 20,
+      "sheet": 13,
+      "position": 2
+    },
+    {
+      "number": 75,
+      "id": "veilblade",
+      "name": "Veilblade",
+      "original_sheet": 21,
+      "sheet": 13,
+      "position": 3
+    },
+    {
+      "number": 76,
+      "id": "veilfern",
+      "name": "Veilfern",
+      "original_sheet": 21,
+      "sheet": 13,
+      "position": 4
+    },
+    {
+      "number": 77,
+      "id": "velvetweave_moss",
+      "name": "Velvetweave moss",
+      "original_sheet": 21,
+      "sheet": 13,
+      "position": 5
+    },
+    {
+      "number": 78,
+      "id": "widowspire",
+      "name": "Widowspire",
+      "original_sheet": 21,
+      "sheet": 13,
+      "position": 6
+    },
+    {
+      "number": 79,
+      "id": "wispthread_moss",
+      "name": "Wispthread moss",
+      "original_sheet": 21,
+      "sheet": 14,
+      "position": 1
+    }
+  ]
+}

@@ -1,0 +1,232 @@
+{
+  "demo": "plant_catalog",
+  "seed": 804584441,
+  "machine": {
+    "adapter": "AMD Radeon(TM) 860M Graphics",
+    "resolution": [
+      1600,
+      900
+    ],
+    "window": [
+      1600,
+      900
+    ],
+    "render_scale": 1,
+    "max_fps": 30,
+    "vsync": "Disabled",
+    "quality": 1,
+    "godot": "4.7.1-stable (official)"
+  },
+  "env_overrides": {
+    "Requested": {},
+    "Applied": [],
+    "Skipped": []
+  },
+  "build_ms": 249.8,
+  "settle_frames": 30,
+  "game_module": "9e2da15c-1e86-4eb3-aa35-bf95799e73a7",
+  "sim_module": "a8f01910-f994-41cf-9beb-97e7be50ef38",
+  "plant_config": null,
+  "camera_reference": null,
+  "managed_bytes_per_frame_baseline": 1366,
+  "shots": [
+    {
+      "shot": "duskpuff_growth",
+      "name": "duskpuff",
+      "variant": "growth",
+      "png": "duskpuff_growth.png",
+      "eye": [
+        264.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        264,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 394.57,
+      "gpu_busy_fraction": 4.534,
+      "frame_ms_p50": 0.266,
+      "frame_ms_p95": 4.803,
+      "frame_ms_max": 4.803,
+      "gpu_frame_ms_mean": 11.491,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 26,
+      "primitives": 9346,
+      "objects": 26,
+      "video_mem_mb": 2703.7,
+      "managed_bytes_per_frame_raw": 2232,
+      "managed_bytes_per_frame_net": 866
+    },
+    {
+      "shot": "emberbracken_growth",
+      "name": "emberbracken",
+      "variant": "growth",
+      "png": "emberbracken_growth.png",
+      "eye": [
+        272.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        272,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1013.63,
+      "gpu_busy_fraction": 11.8767,
+      "frame_ms_p50": 0.293,
+      "frame_ms_p95": 1.68,
+      "frame_ms_max": 1.68,
+      "gpu_frame_ms_mean": 11.717,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 827282,
+      "objects": 15,
+      "video_mem_mb": 2703.7,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "embercrown_growth",
+      "name": "embercrown",
+      "variant": "growth",
+      "png": "embercrown_growth.png",
+      "eye": [
+        280.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        280,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 859.51,
+      "gpu_busy_fraction": 10.5789,
+      "frame_ms_p50": 0.247,
+      "frame_ms_p95": 2.08,
+      "frame_ms_max": 2.08,
+      "gpu_frame_ms_mean": 12.308,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 878196,
+      "objects": 15,
+      "video_mem_mb": 2704.2,
+      "managed_bytes_per_frame_raw": 1968,
+      "managed_bytes_per_frame_net": 602
+    },
+    {
+      "shot": "embercrust_lichen_growth",
+      "name": "embercrust_lichen",
+      "variant": "growth",
+      "png": "embercrust_lichen_growth.png",
+      "eye": [
+        288.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        288,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1179.04,
+      "gpu_busy_fraction": 13.9126,
+      "frame_ms_p50": 0.24,
+      "frame_ms_p95": 1.456,
+      "frame_ms_max": 1.456,
+      "gpu_frame_ms_mean": 11.8,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 18,
+      "primitives": 124554,
+      "objects": 18,
+      "video_mem_mb": 2704.4,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "embercup_growth",
+      "name": "embercup",
+      "variant": "growth",
+      "png": "embercup_growth.png",
+      "eye": [
+        296.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        296,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1023.91,
+      "gpu_busy_fraction": 13.1183,
+      "frame_ms_p50": 0.283,
+      "frame_ms_p95": 1.67,
+      "frame_ms_max": 1.67,
+      "gpu_frame_ms_mean": 12.812,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 18,
+      "primitives": 292927,
+      "objects": 18,
+      "video_mem_mb": 2704.4,
+      "managed_bytes_per_frame_raw": 1148,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "emberfan_fungus_growth",
+      "name": "emberfan_fungus",
+      "variant": "growth",
+      "png": "emberfan_fungus_growth.png",
+      "eye": [
+        304.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        304,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 996.81,
+      "gpu_busy_fraction": 10.9749,
+      "frame_ms_p50": 0.252,
+      "frame_ms_p95": 1.755,
+      "frame_ms_max": 1.755,
+      "gpu_frame_ms_mean": 11.01,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 30,
+      "primitives": 31192,
+      "objects": 30,
+      "video_mem_mb": 2704.4,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    }
+  ]
+}

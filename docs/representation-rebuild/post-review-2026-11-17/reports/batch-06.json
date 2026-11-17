@@ -1,0 +1,430 @@
+{
+  "demo": "plant_catalog",
+  "seed": 804584441,
+  "machine": {
+    "adapter": "AMD Radeon(TM) 860M Graphics",
+    "resolution": [
+      1600,
+      900
+    ],
+    "window": [
+      1600,
+      900
+    ],
+    "render_scale": 1,
+    "max_fps": 30,
+    "vsync": "Disabled",
+    "quality": 1,
+    "godot": "4.7.1-stable (official)"
+  },
+  "env_overrides": {
+    "Requested": {},
+    "Applied": [],
+    "Skipped": []
+  },
+  "build_ms": 296,
+  "settle_frames": 30,
+  "game_module": "51441d6b-9dff-49e0-bc2e-eabee7a57eec",
+  "sim_module": "5cca5e03-0bc0-43c6-9ab4-e7d133bb5ec3",
+  "plant_config": null,
+  "camera_reference": null,
+  "managed_bytes_per_frame_baseline": 1362,
+  "shots": [
+    {
+      "shot": "silverfelt_growth",
+      "name": "silverfelt",
+      "variant": "growth",
+      "png": "silverfelt_growth.png",
+      "eye": [
+        776.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        776,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 657.64,
+      "gpu_busy_fraction": 8.1908,
+      "frame_ms_p50": 0.23,
+      "frame_ms_p95": 2.811,
+      "frame_ms_max": 2.811,
+      "gpu_frame_ms_mean": 12.455,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 14,
+      "primitives": 239566,
+      "objects": 14,
+      "video_mem_mb": 2674.7,
+      "managed_bytes_per_frame_raw": 2232,
+      "managed_bytes_per_frame_net": 870
+    },
+    {
+      "shot": "snaptrap_growth",
+      "name": "snaptrap",
+      "variant": "growth",
+      "png": "snaptrap_growth.png",
+      "eye": [
+        800.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        800,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1010.31,
+      "gpu_busy_fraction": 11.0861,
+      "frame_ms_p50": 0.165,
+      "frame_ms_p95": 1.814,
+      "frame_ms_max": 1.814,
+      "gpu_frame_ms_mean": 10.973,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 14,
+      "primitives": 13922,
+      "objects": 14,
+      "video_mem_mb": 2681,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "sootband_growth",
+      "name": "sootband",
+      "variant": "growth",
+      "png": "sootband_growth.png",
+      "eye": [
+        808.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        808,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1069.35,
+      "gpu_busy_fraction": 13.1658,
+      "frame_ms_p50": 0.174,
+      "frame_ms_p95": 1.696,
+      "frame_ms_max": 1.696,
+      "gpu_frame_ms_mean": 12.312,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 18,
+      "primitives": 272416,
+      "objects": 18,
+      "video_mem_mb": 2694.9,
+      "managed_bytes_per_frame_raw": 1160,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "splitcrown_growth",
+      "name": "splitcrown",
+      "variant": "growth",
+      "png": "splitcrown_growth.png",
+      "eye": [
+        824.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        824,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 974.61,
+      "gpu_busy_fraction": 12.7733,
+      "frame_ms_p50": 0.204,
+      "frame_ms_p95": 1.848,
+      "frame_ms_max": 1.848,
+      "gpu_frame_ms_mean": 13.106,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 11,
+      "primitives": 1134754,
+      "objects": 11,
+      "video_mem_mb": 2733.4,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "starbulb_growth",
+      "name": "starbulb",
+      "variant": "growth",
+      "png": "starbulb_growth.png",
+      "eye": [
+        832.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        832,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1135.59,
+      "gpu_busy_fraction": 12.8935,
+      "frame_ms_p50": 0.167,
+      "frame_ms_p95": 1.595,
+      "frame_ms_max": 1.595,
+      "gpu_frame_ms_mean": 11.354,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 27,
+      "primitives": 157672,
+      "objects": 27,
+      "video_mem_mb": 2733.4,
+      "managed_bytes_per_frame_raw": 1148,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "starmoss_growth",
+      "name": "starmoss",
+      "variant": "growth",
+      "png": "starmoss_growth.png",
+      "eye": [
+        840.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        840,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1040.91,
+      "gpu_busy_fraction": 12.5138,
+      "frame_ms_p50": 0.18,
+      "frame_ms_p95": 1.741,
+      "frame_ms_max": 1.741,
+      "gpu_frame_ms_mean": 12.022,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 316450,
+      "objects": 15,
+      "video_mem_mb": 2733.4,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "starsplit_growth",
+      "name": "starsplit",
+      "variant": "growth",
+      "png": "starsplit_growth.png",
+      "eye": [
+        848.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        848,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1100.72,
+      "gpu_busy_fraction": 12.1244,
+      "frame_ms_p50": 0.159,
+      "frame_ms_p95": 1.658,
+      "frame_ms_max": 1.658,
+      "gpu_frame_ms_mean": 11.015,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 9,
+      "primitives": 2756,
+      "objects": 9,
+      "video_mem_mb": 2733.4,
+      "managed_bytes_per_frame_raw": 1464,
+      "managed_bytes_per_frame_net": 102
+    },
+    {
+      "shot": "stoneknot_moss_growth",
+      "name": "stoneknot_moss",
+      "variant": "growth",
+      "png": "stoneknot_moss_growth.png",
+      "eye": [
+        864.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        864,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 832.5,
+      "gpu_busy_fraction": 10.015,
+      "frame_ms_p50": 0.154,
+      "frame_ms_p95": 2.249,
+      "frame_ms_max": 2.249,
+      "gpu_frame_ms_mean": 12.03,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 14,
+      "primitives": 296806,
+      "objects": 14,
+      "video_mem_mb": 2735.2,
+      "managed_bytes_per_frame_raw": 1148,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "streamribbon_growth",
+      "name": "streamribbon",
+      "variant": "growth",
+      "png": "streamribbon_growth.png",
+      "eye": [
+        872.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        872,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1161.37,
+      "gpu_busy_fraction": 14.1757,
+      "frame_ms_p50": 0.162,
+      "frame_ms_p95": 1.56,
+      "frame_ms_max": 1.56,
+      "gpu_frame_ms_mean": 12.206,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 12,
+      "primitives": 5966,
+      "objects": 12,
+      "video_mem_mb": 2735.2,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "swanfrond_growth",
+      "name": "swanfrond",
+      "variant": "growth",
+      "png": "swanfrond_growth.png",
+      "eye": [
+        896.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        896,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1172.95,
+      "gpu_busy_fraction": 12.7734,
+      "frame_ms_p50": 0.173,
+      "frame_ms_p95": 1.532,
+      "frame_ms_max": 1.532,
+      "gpu_frame_ms_mean": 10.89,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 14,
+      "primitives": 58962,
+      "objects": 14,
+      "video_mem_mb": 2760.5,
+      "managed_bytes_per_frame_raw": 1136,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "tankbloom_growth",
+      "name": "tankbloom",
+      "variant": "growth",
+      "png": "tankbloom_growth.png",
+      "eye": [
+        904.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        904,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1269.76,
+      "gpu_busy_fraction": 13.5636,
+      "frame_ms_p50": 0.154,
+      "frame_ms_p95": 1.421,
+      "frame_ms_max": 1.421,
+      "gpu_frame_ms_mean": 10.682,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 18,
+      "primitives": 40610,
+      "objects": 18,
+      "video_mem_mb": 2760.5,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "thornmantle_growth",
+      "name": "thornmantle",
+      "variant": "growth",
+      "png": "thornmantle_growth.png",
+      "eye": [
+        912.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        912,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1024.64,
+      "gpu_busy_fraction": 12.0447,
+      "frame_ms_p50": 0.15,
+      "frame_ms_p95": 1.802,
+      "frame_ms_max": 1.802,
+      "gpu_frame_ms_mean": 11.755,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 570046,
+      "objects": 15,
+      "video_mem_mb": 2760.5,
+      "managed_bytes_per_frame_raw": 1136,
+      "managed_bytes_per_frame_net": 0
+    }
+  ]
+}

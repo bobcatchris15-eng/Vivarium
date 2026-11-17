@@ -325,7 +325,7 @@ public sealed class FloraVisualProfile
             Veins = veinStyle,
             Top = new[] { top.X, top.Y, top.Z },
             Back = new[] { back.X, back.Y, back.Z },
-            Roughness = Mathf.Clamp(0.70f - sheen * 0.18f, 0.20f, 0.85f),
+            Roughness = Mathf.Clamp(0.72f - sheen * 0.22f, 0.42f, 0.85f),
             BackRoughness = backRoughness,
             Transmission = transmission,
             Relief = relief,
@@ -374,7 +374,7 @@ public sealed class FloraVisualProfile
         mat.SetShaderParameter("back_pigment", back);
         mat.SetShaderParameter("leaf_roughness", Roughness);
         mat.SetShaderParameter("back_roughness", BackRoughness);
-        mat.SetShaderParameter("cuticle_sheen", Mathf.Clamp((0.70f - Roughness) / 0.18f, 0.05f, 0.85f));
+        mat.SetShaderParameter("cuticle_sheen", Mathf.Clamp((0.72f - Roughness) / 0.22f, 0.05f, 0.85f));
         mat.SetShaderParameter("transmission", Transmission);
         mat.SetShaderParameter("normal_strength", Relief);
         mat.SetShaderParameter("vein_strength", VeinStrength);

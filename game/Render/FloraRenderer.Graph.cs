@@ -32,7 +32,7 @@ public partial class FloraRenderer
         ["shadebell"] = PlantDemoKit.Generator("shadebell")
     };
     private readonly record struct GraphInput(ulong Seed, ulong Id, string Species, double X, double Y, double Z,
-        int Age, int Biomass, int Health, double Yaw, Vec3 SupportNormal, GraphAxisSegment[]? Segments);
+        int Age, int Biomass, int Health, double Yaw, Vec3 SupportNormal, GraphAxisSegment[]? Segments, double WaterDepth);
 
     // Arrays belong to a scan snapshot; compare their values, not their identities.
     private static bool SameGraphInput(GraphInput a, GraphInput b) =>
@@ -74,6 +74,7 @@ public partial class FloraRenderer
             var sp = _w.Content.FloraOrThrow(id);
             var profile = FloraVisualProfile.Load(id, sp: sp);
             var stem = Bridge.Shader("res://Shaders/flora.gdshader");
+            if (sp.Shape == "duskpuff") stem.SetShaderParameter("dry_fungal_cuticle", true);
             NightFloraMaterials.Bind(stem, sp);
             stem.SetShaderParameter("stiffness", sp.Woody != null ? 7f : sp.Shape is "reed" or "herb" ? 1f : 3f);
             stem.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
@@ -140,8 +141,16 @@ public partial class FloraRenderer
             // Floating species are placed on the live water surface only when water exists.
             double surface = sp.Tags.Contains("floating") ? _w.Water.SurfaceAt(f.Position) : double.NaN;
             double y = double.IsFinite(surface) ? surface : ground;
+            double x = f.X, z = f.Z;
             Vec3 supportNormal = Vec3.Up;
-            if (sp.Climber == null && PlantGraphCatalog.Info(f.SpeciesId).AttachedSurface)
+            if (f.SpeciesId == "emberfan_fungus")
+            {
+                // An unsupported fruiting body is hidden until bark is available;
+                // it must never remain suspended where a removed host once stood.
+                if (!_w.FloraSystem.TryEmberfanSupport(f.Position,f.Id.Value,out var contact,out supportNormal)) continue;
+                x=contact.X;y=contact.Y;z=contact.Z;
+            }
+            else if (sp.Climber == null && PlantGraphCatalog.Info(f.SpeciesId).AttachedSurface)
             {
                 // GroundHeight samples the upper rendered rock/log surface as well as terrain.
                 // Small symmetric differences estimate its local normal at the actual placement.
@@ -171,11 +180,12 @@ public partial class FloraRenderer
                 }
                 segments = copied.ToArray();
             }
-            var input = new GraphInput(_w.Seed, f.Id.Value, f.SpeciesId, f.X, y, f.Z,
+            var input = new GraphInput(_w.Seed, f.Id.Value, f.SpeciesId, x, y, z,
                 (int)Math.Round(Math.Clamp(f.Age / Math.Max(1, sp.MaturityAge), 0, 1) * 100),
                 (int)Math.Round(Math.Clamp(f.Biomass / Math.Max(1e-9, sp.MaxBiomass), 0, 1) * 100),
                 (int)Math.Round(Math.Clamp(f.Health, 0, 1) * 100),
-                segments != null ? 0 : Rng.HashUnit(_w.Seed, Hash.Fnv1a64("graph.flora.yaw"), f.Id.Value) * Math.Tau, supportNormal, segments);
+                segments != null ? 0 : Rng.HashUnit(_w.Seed, Hash.Fnv1a64("graph.flora.yaw"), f.Id.Value) * Math.Tau, supportNormal, segments,
+                f.SpeciesId == "tidebell" ? Math.Max(0, double.IsFinite(_w.Water.SurfaceAt(f.Position)) ? _w.Water.SurfaceAt(f.Position) - ground : 0) : 0);
             _graphSeen.Add(input.Id);
             if (!_graphInputs.TryGetValue(input.Id, out var old) || !SameGraphInput(old, input))
             { _graphInputs[input.Id] = input; _graphQueue.Enqueue(input); }
@@ -203,26 +213,32 @@ public partial class FloraRenderer
                 }
                 // Bake the captured support frame into organ geometry. Renderer yaw is then zero;
                 // no mutable world state is read by the worker.
-                bool oriented = input.SupportNormal != Vec3.Up && input.Segments == null;
+                bool bracket = input.Species == "emberfan_fungus";
+                bool oriented = (bracket || input.SupportNormal != Vec3.Up) && input.Segments == null;
                 if (oriented)
                 {
-                    var up = input.SupportNormal;
-                    var heading = PlantMath.Horizontal(input.Yaw);
-                    var right = PlantMath.SafeNormal(heading - up * heading.Dot(up), PlantMath.Perpendicular(up));
-                    var forward = right.Cross(up);
-                    Vec3 Rotate(Vec3 v) => right * v.X + up * v.Y + forward * v.Z;
-                    for (int i = 0; i < plant.Organs.Length; i++)
+                    if (bracket) EmberfanSupportPose.Apply(plant,input.SupportNormal);
+                    else
                     {
-                        var o = plant.Organs[i];
-                        o.Start = Rotate(o.Start); o.End = Rotate(o.End);
-                        o.StartTangent = Rotate(o.StartTangent); o.EndTangent = Rotate(o.EndTangent);
-                        o.Up = Rotate(o.Up); plant.Organs[i] = o;
+                        var up = input.SupportNormal;
+                        var heading = PlantMath.Horizontal(input.Yaw);
+                        var right = PlantMath.SafeNormal(heading - up * heading.Dot(up), PlantMath.Perpendicular(up));
+                        var forward = right.Cross(up);
+                        Vec3 Rotate(Vec3 v) => right * v.X + up * v.Y + forward * v.Z;
+                        for (int i = 0; i < plant.Organs.Length; i++)
+                        {
+                            var o = plant.Organs[i];
+                            o.Start = Rotate(o.Start); o.End = Rotate(o.End);
+                            o.StartTangent = Rotate(o.StartTangent); o.EndTangent = Rotate(o.EndTangent);
+                            o.Up = Rotate(o.Up); plant.Organs[i] = o;
+                        }
+                        PlanGenerator.Summarize(plant);
                     }
-                    PlanGenerator.Summarize(plant);
                 }
                 for (int i = 0; i < plant.Organs.Length; i++) plant.Organs[i].Health = input.Health / 100f;
                 plant.Position = new Vec3(input.X, input.Y, input.Z); plant.Yaw = oriented ? 0 : input.Yaw;
                 plant.Scale = input.Segments != null ? 1 : 0.45 + 0.55 * Math.Sqrt(input.Biomass / 100.0);
+                if (input.Species == "tidebell") TidebellWaterPose.Apply(plant, input.WaterDepth, plant.Scale);
                 return (input, plant);
             });
         }

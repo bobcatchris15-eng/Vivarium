@@ -88,6 +88,26 @@ public static partial class HerbGraphSpecies
         public Generator(Spec spec, FloraSpeciesDef def) { s = spec; h = Math.Max(.025, def.Height); r = Math.Max(.035, def.RadiusAtMax); }
         public override string SpeciesId => s.Id;
 
+        // Perceptual roughness per species leaf: felted/hairy high, waxy/succulent/pad low, ordinary herbaceous mid.
+        private static float LeafRough(string id) => id switch
+        {
+            "burlmantle" => .84f, "mooncoin" => .82f, "hallowsting" => .76f, "duskbristle" => .76f, "ashwire" => .74f, "quillsedge" => .72f,
+            "blackneedle" => .70f, "frosttussock" => .70f, "cloudtuft" => .70f, "plumegrass" => .70f, "emberbracken" => .68f,
+            "bannerreed" => .68f, "veilblade" => .68f, "veilfern" => .68f, "cinderberry" => .66f, "fenfoam" => .66f, "marrowbloom" => .66f,
+            "starveil" => .66f, "swanfrond" => .66f, "glassrush" => .66f, "sceptrefern" => .64f, "heddlelace" => .64f, "coalspike" => .64f,
+            "lanternsedge" => .64f, "barbarrow" => .62f, "trifold" => .62f, "hushclover" => .62f, "prismstar" => .62f, "starbulb" => .62f,
+            "widowspire" => .62f, "butterglint" => .60f, "paddlerib" => .60f, "mistviolet" => .60f, "ringreed" => .58f, "streamribbon" => .57f,
+            "brooklace" => .56f, "sootband" => .56f, "mirepocket" => .55f, "fencomb" => .54f, "coinrunner" => .54f, "deepquill" => .52f,
+            "silverweed" => .52f, "siltstars" => .52f, "snaptrap" => .52f, "burrflag" => .57f, "bogfringe" => .50f, "pondstars" => .50f,
+            "blue_sundew" => .45f, "pitcher_plant" => .45f, "fenbead" => .44f, "mirrorstrap_fern" => .40f, "tankbloom" => .40f,
+            "cragset" => .40f, "tidebell" => .38f, "mirrorleaf" => .36f, "marshkettle" => .36f, "sunstone_rosette" => .36f,
+            "glassfinger" => .36f, "glasslily" => .34f, "brightknot" => .34f, _ => .62f
+        };
+        private static float PetalRough(string id) => id switch
+        {
+            "butterglint" => .42f, "marshkettle" => .46f, "mirrorleaf" => .48f, "glasslily" => .58f, "starveil" => .64f,
+            "hushclover" => .66f, "mistviolet" => .68f, "bogfringe" => .70f, _ => .60f
+        };
         // Width is sampled along the midrib, from the petiole to the tip. Keeping
         // these outlines in species groups makes their silhouettes legible even
         // when the same lamina compiler is used for several growth habits.
@@ -126,7 +146,7 @@ public static partial class HerbGraphSpecies
                 Serration=s.Id is "hallowsting" or "blackneedle" or "cinderberry" ? .16f : 0f,
                 SerrationFreq=s.Id=="blackneedle" ? 5f : 9f,
                 EdgeWave=s.Id=="bogfringe" ? .18f : s.Id is "burlmantle" or "tankbloom" ? .025f : .008f, EdgeWaveFreq=s.Id=="bogfringe" ? 7f : 3f,
-                ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f, Roughness=.57f });
+                ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f, Roughness=LeafRough(s.Id)});
             bool starBloom = s.Bloom >= 4;
             ushort petal = b.AddShape(new OrganShape { Name=s.Id+"_flower", Type=OrganType.Flower,
                 SurfaceForm=starBloom ? OrganSurfaceForm.Star : OrganSurfaceForm.Cup,
@@ -135,42 +155,42 @@ public static partial class HerbGraphSpecies
                 ColorAdaxial=s.Id is "glasslily" or "starveil" or "hushclover" or "bogfringe" ? PlantShapes.Srgb(.95,.95,.91)
                     : s.Id is "marshkettle" or "butterglint" or "mirrorleaf" ? PlantShapes.Srgb(.98,.76,.12)
                     : s.Id=="mistviolet" ? PlantShapes.Srgb(.57,.42,.77) : PlantShapes.Srgb(.84,.76,.48),
-                ColorAbaxial=PlantShapes.Srgb(.53,.58,.30) });
+                ColorAbaxial=PlantShapes.Srgb(.53,.58,.30), Roughness=PetalRough(s.Id) });
             ushort pad = b.AddShape(new OrganShape { Name=s.Id+"_floating_pad", Type=OrganType.Leaf,
                 SurfaceForm=OrganSurfaceForm.Disc, WidthProfile=PlantShapes.Profile(t => .5*Math.Sin(Math.PI*t)),
-                ColorAdaxial=PlantShapes.Srgb(.19,.38,.20), ColorAbaxial=PlantShapes.Srgb(.31,.31,.17), Wax=.65f });
+                ColorAdaxial=PlantShapes.Srgb(.19,.38,.20), ColorAbaxial=PlantShapes.Srgb(.31,.31,.17), Wax=.65f, Roughness=s.Id=="glasslily" ? .32f : s.Id=="mirrorleaf" ? .38f : .35f });
             ushort pitcher = b.AddShape(new OrganShape { Name=s.Id+"_pitcher", Type=OrganType.Flower,
                 SurfaceForm=OrganSurfaceForm.Cup, WidthProfile=PlantShapes.Profile(t => .12+.38*Math.Pow(t,.7)),
                 RimCurl=.25f, ShellThickness=.025f, ColorAdaxial=PlantShapes.Srgb(.38,.48,.19),
-                ColorAbaxial=PlantShapes.Srgb(.45,.18,.16) });
+                ColorAbaxial=PlantShapes.Srgb(.45,.18,.16), Roughness=.38f });
             ushort trap = b.AddShape(new OrganShape { Name=s.Id+"_trap_lobe", Type=OrganType.Leaf,
                 SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.65)),
                 Serration=.28f, SerrationFreq=12, CrossCurl=.035f, ColorAdaxial=PlantShapes.Srgb(.52,.18,.17),
-                ColorAbaxial=PlantShapes.Srgb(.25,.43,.18), Thickness=.001f });
+                ColorAbaxial=PlantShapes.Srgb(.25,.43,.18), Thickness=.001f, Roughness=s.Id=="snaptrap" ? .50f : .42f });
             ushort club = b.AddShape(new OrganShape { Name=s.Id+"_dew_club", Type=OrganType.Flower,
                 SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.65)),
-                ColorAdaxial=PlantShapes.Srgb(.14,.48,.72), ColorAbaxial=PlantShapes.Srgb(.12,.30,.46) });
+                ColorAdaxial=PlantShapes.Srgb(.14,.48,.72), ColorAbaxial=PlantShapes.Srgb(.12,.30,.46), Roughness=.28f });
             ushort cotton = b.AddShape(new OrganShape { Name=s.Id+"_cotton", Type=OrganType.Flower,
                 SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.55)),
-                ColorAdaxial=PlantShapes.Srgb(.92,.91,.77), ColorAbaxial=PlantShapes.Srgb(.78,.79,.67) });
+                ColorAdaxial=PlantShapes.Srgb(.92,.91,.77), ColorAbaxial=PlantShapes.Srgb(.78,.79,.67), Roughness=.82f });
             ushort spike = b.AddShape(new OrganShape { Name=s.Id+"_spike", Type=OrganType.Flower,
                 SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .43*Math.Pow(Math.Sin(Math.PI*t),.15)),
-                ColorAdaxial=PlantShapes.Srgb(.16,.09,.06), ColorAbaxial=PlantShapes.Srgb(.25,.15,.08) });
+                ColorAdaxial=PlantShapes.Srgb(.16,.09,.06), ColorAbaxial=PlantShapes.Srgb(.25,.15,.08), Roughness=.78f });
             ushort pale = b.AddShape(new OrganShape { Name=s.Id+"_pale", Type=OrganType.Flower, SurfaceForm=OrganSurfaceForm.Cup,
                 WidthProfile=PlantShapes.Profile(t => .18+.32*Math.Sin(Math.PI*t*.5)), ShellThickness=.015f,
-                ColorAdaxial=PlantShapes.Srgb(.95,.94,.89), ColorAbaxial=PlantShapes.Srgb(.82,.82,.77) });
-            ushort scarlet = b.AddShape(new OrganShape { Name=s.Id+"_bract", Type=OrganType.Leaf, SurfaceForm=OrganSurfaceForm.Lamina,
+                ColorAdaxial=PlantShapes.Srgb(.95,.94,.89), ColorAbaxial=PlantShapes.Srgb(.82,.82,.77), Roughness=.56f });
+            ushort scarlet = b.AddShape(new OrganShape { Name=s.Id+"_bract", Type=s.Id=="tankbloom" ? OrganType.Flower : OrganType.Leaf, SurfaceForm=OrganSurfaceForm.Lamina,
                 WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.8)), CrossCurl=.025f,
-                ColorAdaxial=PlantShapes.Srgb(.78,.08,.14), ColorAbaxial=PlantShapes.Srgb(.53,.05,.09) });
+                ColorAdaxial=PlantShapes.Srgb(s.Id=="tankbloom" ? 1.0 : .78,s.Id=="tankbloom" ? .012 : .08,s.Id=="tankbloom" ? .025 : .14), ColorAbaxial=PlantShapes.Srgb(s.Id=="tankbloom" ? .82 : .53,.01,.025), Roughness=s.Id=="tankbloom" ? .55f : .66f });
             ushort berry = b.AddShape(new OrganShape { Name=s.Id+"_fruit", Type=OrganType.Fruit, SurfaceForm=OrganSurfaceForm.Revolved,
                 WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.7)),
-                ColorAdaxial=PlantShapes.Srgb(.88,.12,.055), ColorAbaxial=PlantShapes.Srgb(.65,.06,.03) });
+                ColorAdaxial=PlantShapes.Srgb(.88,.12,.055), ColorAbaxial=PlantShapes.Srgb(.65,.06,.03), Roughness=s.Id=="cinderberry" ? .22f : .26f });
             ushort lantern = b.AddShape(new OrganShape { Name=s.Id+"_lantern", Type=OrganType.Flower, SurfaceForm=OrganSurfaceForm.Revolved,
                 WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.8)),
-                ColorAdaxial=PlantShapes.Srgb(.75,.98,.76), ColorAbaxial=PlantShapes.Srgb(.48,.76,.51) });
+                ColorAdaxial=PlantShapes.Srgb(.75,.98,.76), ColorAbaxial=PlantShapes.Srgb(.48,.76,.51), Roughness=.72f });
             ushort burr = b.AddShape(new OrganShape { Name=s.Id+"_burr", Type=OrganType.Fruit, SurfaceForm=OrganSurfaceForm.Revolved,
                 WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.5)),
-                ColorAdaxial=PlantShapes.Srgb(.59,.53,.26), ColorAbaxial=PlantShapes.Srgb(.39,.37,.18) });
+                ColorAdaxial=PlantShapes.Srgb(.59,.53,.26), ColorAbaxial=PlantShapes.Srgb(.39,.37,.18), Roughness=.72f });
             int crown=b.AddAxis(-1,0,Vec3.Up,Math.Max(.004,h*.035),Vec3.Zero,Math.Max(.001,r*.035),Math.Max(.0007,r*.025),0,Tissue.Green,0,.12);
             double rotation=b.Range(0,Math.Tau);
             var palette=new HabitPalette(leaf,petal,pad,pitcher,trap,club,cotton,spike,pale,scarlet,berry,lantern,burr);
@@ -197,10 +217,10 @@ public static partial class HerbGraphSpecies
                     SurfaceForm=OrganSurfaceForm.Lamina,
                     WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.65),17),
                     MidribCurl=.08f, CrossCurl=.025f,
-                    ColorAdaxial=PlantShapes.Srgb(.97,.97,.93), ColorAbaxial=PlantShapes.Srgb(.86,.88,.80), Thickness=.0004f });
+                    ColorAdaxial=PlantShapes.Srgb(.97,.97,.93), ColorAbaxial=PlantShapes.Srgb(.86,.88,.80), Thickness=.0004f, Roughness=.62f });
                 ushort flowerCenter=b.AddShape(new OrganShape { Name=s.Id+"_flower_center", Type=OrganType.Flower,
                     SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*Math.Sin(Math.PI*t)),
-                    ColorAdaxial=PlantShapes.Srgb(.88,.70,.18), ColorAbaxial=PlantShapes.Srgb(.72,.57,.12) });
+                    ColorAdaxial=PlantShapes.Srgb(.88,.70,.18), ColorAbaxial=PlantShapes.Srgb(.72,.57,.12), Roughness=.70f });
                 int scape=b.AddAxis(crown,1,Vec3.Up,h*.86,Vec3.Up*.02,r*.008,r*.002,1,Tissue.Green,.25,.35);
                 for(int tier=0;tier<3;tier++) for(int k=0;k<3;k++)
                 {
@@ -223,7 +243,7 @@ public static partial class HerbGraphSpecies
                 ushort fine=b.AddShape(new OrganShape { Name=s.Id+"_pale_blade", Type=OrganType.Leaf,
                     SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(1-t,.8)),
                     MidribCurl=.16f, CrossCurl=.0003f,
-                    ColorAdaxial=PlantShapes.Srgb(.66,.73,.67), ColorAbaxial=PlantShapes.Srgb(.49,.61,.58), Thickness=.0003f });
+                    ColorAdaxial=PlantShapes.Srgb(.66,.73,.67), ColorAbaxial=PlantShapes.Srgb(.49,.61,.58), Thickness=.0003f, Roughness=s.Id=="ashwire" ? .78f : .70f });
                 for(int i=0;i<36;i++)
                 {
                     double a=rotation+i*Math.Tau/36+b.Range(-.14,.14);
@@ -239,7 +259,7 @@ public static partial class HerbGraphSpecies
             {
                 ushort small=b.AddShape(new OrganShape { Name=s.Id+"_small_leaf", Type=OrganType.Leaf,
                     SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.8)),
-                    ColorAdaxial=PlantShapes.Srgb(.40,.66,.42), ColorAbaxial=PlantShapes.Srgb(.31,.53,.37), Thickness=.0003f });
+                    ColorAdaxial=PlantShapes.Srgb(.40,.66,.42), ColorAbaxial=PlantShapes.Srgb(.31,.53,.37), Thickness=.0003f, Roughness=LeafRough(s.Id) });
                 for(int i=0;i<7;i++)
                 {
                     double a=rotation+i*Math.Tau/7+b.Range(-.2,.2); var d=PlantMath.Horizontal(a);
@@ -262,7 +282,7 @@ public static partial class HerbGraphSpecies
                 ushort tube=b.AddShape(new OrganShape { Name=s.Id+"_cool_tube", Type=OrganType.Flower,
                     SurfaceForm=OrganSurfaceForm.Cup, WidthProfile=PlantShapes.Profile(t => .18+.22*t),
                     ShellThickness=.018f, RimCurl=.1f, ColorAdaxial=PlantShapes.Srgb(.49,.73,.76),
-                    ColorAbaxial=PlantShapes.Srgb(.32,.58,.62) });
+                    ColorAbaxial=PlantShapes.Srgb(.32,.58,.62), Roughness=.48f });
                 for(int i=0;i<15;i++)
                 {
                     double a=rotation+i*Math.Tau/15+b.Range(-.2,.2); var d=PlantMath.Horizontal(a);
@@ -276,7 +296,7 @@ public static partial class HerbGraphSpecies
                 ushort pink=b.AddShape(new OrganShape { Name=s.Id+"_pink_flower", Type=OrganType.Flower,
                     SurfaceForm=OrganSurfaceForm.Star, LobeCount=5, LobeDepth=.4f,
                     WidthProfile=PlantShapes.Profile(t => .5*Math.Sin(Math.PI*t)),
-                    ColorAdaxial=PlantShapes.Srgb(.82,.48,.64), ColorAbaxial=PlantShapes.Srgb(.62,.35,.49) });
+                    ColorAdaxial=PlantShapes.Srgb(.82,.48,.64), ColorAbaxial=PlantShapes.Srgb(.62,.35,.49), Roughness=.66f });
                 for(int i=0;i<6;i++)
                 {
                     double a=rotation+i*Math.Tau/6+b.Range(-.15,.15); var d=PlantMath.Horizontal(a);
@@ -299,10 +319,10 @@ public static partial class HerbGraphSpecies
                 ushort hood=b.AddShape(new OrganShape { Name=s.Id+"_hood", Type=OrganType.Leaf,
                     SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.6)),
                     MidribCurl=.18f, CrossCurl=.025f, ColorAdaxial=PlantShapes.Srgb(.67,.25,.23),
-                    ColorAbaxial=PlantShapes.Srgb(.85,.72,.57), Thickness=.0006f });
+                    ColorAbaxial=PlantShapes.Srgb(.85,.72,.57), Thickness=.0006f, Roughness=.45f });
                 ushort redFlower=b.AddShape(new OrganShape { Name=s.Id+"_red_flower", Type=OrganType.Flower,
                     SurfaceForm=OrganSurfaceForm.Cup, WidthProfile=PlantShapes.Profile(t => .16+.34*t), RimCurl=.18f,
-                    ColorAdaxial=PlantShapes.Srgb(.72,.12,.18), ColorAbaxial=PlantShapes.Srgb(.48,.08,.13) });
+                    ColorAdaxial=PlantShapes.Srgb(.72,.12,.18), ColorAbaxial=PlantShapes.Srgb(.48,.08,.13), Roughness=.60f });
                 for(int i=0;i<7;i++)
                 {
                     double a=rotation+i*Math.Tau/7+b.Range(-.16,.16); var d=PlantMath.Horizontal(a);
@@ -311,9 +331,9 @@ public static partial class HerbGraphSpecies
                     // stays stable across individuals; stalk lean and placement vary.
                     double length=h*(.43+.19*((i*3)%7)/6.0),width=r*(.11+.05*((i*5)%7)/6.0);
                     ushort vessel=b.AddShape(new OrganShape {Name=s.Id+"_curved_vessel_"+i,Type=OrganType.Flower,
-                        SurfaceForm=OrganSurfaceForm.Cup,WidthProfile=PlantShapes.Profile(t=>.10+.40*Math.Pow(t,.65)),
+                        SurfaceForm=OrganSurfaceForm.Cup,WidthProfile=PlantShapes.Profile(t=>.10+.40*Math.Exp(-Math.Pow((t-.22)/.18,2))+.18*Math.Pow(t,3)),
                         MidribCurl=.48f,LengthToWidth=(float)(length/(2*width)),RimCurl=.32f,ShellThickness=.025f,
-                        ColorAdaxial=PlantShapes.Srgb(.84,.78,.62),ColorAbaxial=PlantShapes.Srgb(.57,.19,.20)});
+                        ColorAdaxial=PlantShapes.Srgb(.84,.78,.62),ColorAbaxial=PlantShapes.Srgb(.57,.19,.20), Roughness=.40f});
                     int body=b.AddFlat(stalk,1,Vec3.Up+d*b.Range(.25,.5),length,width,.001,OrganType.Flower,vessel,2,.2,.4);
                     var organ=b[body];var forward=PlantMath.SafeNormal(organ.P1-organ.P0,Vec3.Up);
                     var up=PlantMath.SafeNormal(organ.Up-forward*organ.Up.Dot(forward),PlantMath.Perpendicular(forward));
@@ -322,14 +342,74 @@ public static partial class HerbGraphSpecies
                     var rimSide=up*Math.Cos(angle)+forward*Math.Sin(angle);
                     var mouthAxis=forward*Math.Cos(angle)-up*Math.Sin(angle);
                     int hoodStem=b.AddAxis(stalk,1,mouthAxis,h*.025,Vec3.Zero,r*.002,r*.001,2,Tissue.Green,.48,.15);
-                    b[hoodStem].P0=mouth+rimSide*width;
+                    // Belled base: the mouth is ~.56 of the widest (basal) radius.
+                    b[hoodStem].P0=mouth+rimSide*(width*.56);
                     b[hoodStem].P1=b[hoodStem].P0+mouthAxis*(h*.025);
                     b[hoodStem].T0=b[hoodStem].T1=mouthAxis*(h*.025);
-                    int lid=b.AddFlat(hoodStem,1,-rimSide+mouthAxis*.15,width*2.1,width*.8,.0006,OrganType.Leaf,hood,3,.55,.16);
+                    int lid=b.AddFlat(hoodStem,1,-rimSide+mouthAxis*.15,width*1.4,width*.55,.0006,OrganType.Leaf,hood,3,.55,.16);
                     b[lid].Up=mouthAxis;
                 }
-                int scape=b.AddAxis(crown,1,Vec3.Up,h*.95,Vec3.Down*.12,r*.006,r*.0015,1,Tissue.Green,.4,.3);
-                b.AddFlat(scape,1,Vec3.Down+PlantMath.Horizontal(rotation)*.3,h*.12,r*.11,.001,OrganType.Flower,redFlower,2,.7,.2);
+                // Thick, gently curved flower stem: two welded segments with bark
+                // nodes and alternating scale bracts, ending in a nodding layered bloom.
+                ushort bract=b.AddShape(new OrganShape { Name=s.Id+"_bract", Type=OrganType.Leaf,
+                    SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*Math.Pow(t,.8)),.7)),
+                    MidribCurl=.22f, CrossCurl=.03f, ColorAdaxial=PlantShapes.Srgb(.52,.30,.20),
+                    ColorAbaxial=PlantShapes.Srgb(.62,.38,.26), Thickness=.0005f, Roughness=s.Id=="tankbloom" ? .55f : .66f });
+                ushort sepal=b.AddShape(new OrganShape { Name=s.Id+"_sepal", Type=OrganType.Flower,
+                    SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*Math.Pow(t,.75)),.6)),
+                    MidribCurl=.30f, CrossCurl=.05f, ColorAdaxial=PlantShapes.Srgb(.45,.07,.11),
+                    ColorAbaxial=PlantShapes.Srgb(.62,.30,.22), Thickness=.0006f, Roughness=.70f });
+                ushort bloomPetal=b.AddShape(new OrganShape { Name=s.Id+"_petal", Type=OrganType.Flower,
+                    SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*Math.Pow(t,.7)),.55)),
+                    MidribCurl=.40f, CrossCurl=.07f, EdgeWave=.04f, ColorAdaxial=PlantShapes.Srgb(.82,.14,.20),
+                    ColorAbaxial=PlantShapes.Srgb(.60,.10,.16), Thickness=.0005f, Roughness=.60f });
+                ushort innerPetal=b.AddShape(new OrganShape { Name=s.Id+"_inner_petal", Type=OrganType.Flower,
+                    SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*Math.Pow(t,.6)),.7)),
+                    MidribCurl=.55f, CrossCurl=.09f, ColorAdaxial=PlantShapes.Srgb(.93,.55,.46),
+                    ColorAbaxial=PlantShapes.Srgb(.86,.34,.33), Thickness=.0004f, Roughness=.58f });
+                ushort anther=b.AddShape(new OrganShape { Name=s.Id+"_anther", Type=OrganType.Flower,
+                    SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.6)),
+                    ColorAdaxial=PlantShapes.Srgb(.95,.78,.22), ColorAbaxial=PlantShapes.Srgb(.80,.58,.12), Roughness=.78f });
+                ushort ovary=b.AddShape(new OrganShape { Name=s.Id+"_ovary_disc", Type=OrganType.Flower,
+                    SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*Math.Pow(t,.7)),.5)),
+                    ColorAdaxial=PlantShapes.Srgb(.78,.80,.38), ColorAbaxial=PlantShapes.Srgb(.55,.62,.25), Roughness=.62f });
+                var lean=PlantMath.Horizontal(rotation);
+                var lateralLean=PlantMath.Horizontal(rotation+Math.PI/2);
+                int scape=b.AddAxis(crown,1,Vec3.Up+lean*.05,h*.52,lean*.22+lateralLean*.10,r*.016,r*.012,1,Tissue.Green,.4,.3);
+                int scapeTop=b.AddAxis(scape,1,b.TangentAt(scape,1),h*.40,lean*.95-Vec3.Up*.55,r*.012,r*.0075,1,Tissue.Green,.45,.3,OrganFlags.Continuous);
+                for(int j=0;j<4;j++)
+                {
+                    double nodeT=.18+j*.22; double az=rotation+j*2.39996+.6;
+                    b.AddAxis(scape,nodeT,b.TangentAt(scape,nodeT),h*.012,Vec3.Zero,r*.019,r*.019,2,Tissue.Bark,.42,.2,OrganFlags.Basal);
+                    b.AddFlat(scape,nodeT,PlantMath.Horizontal(az)*.8+Vec3.Up*.7,h*(.085-j*.012),r*(.045-j*.006),.0005,OrganType.Leaf,bract,2,.45+j*.02,.2);
+                }
+                for(int j=0;j<2;j++)
+                {
+                    double nodeT=.30+j*.40; double az=rotation+2.2+j*2.39996;
+                    b.AddAxis(scapeTop,nodeT,b.TangentAt(scapeTop,nodeT),h*.010,Vec3.Zero,r*.0135,r*.0135,2,Tissue.Bark,.5,.2,OrganFlags.Basal);
+                    b.AddFlat(scapeTop,nodeT,PlantMath.Horizontal(az)*.8+Vec3.Up*.5,h*.05,r*.03,.0005,OrganType.Leaf,bract,2,.5,.2);
+                }
+                // Nodding head: short receptacle, sepals, two petal whorls, stamens, ovary disc.
+                int head=b.AddAxis(scapeTop,1,Vec3.Down+lean*.25,h*.03,lean*.10,r*.0075,r*.012,2,Tissue.Green,.6,.2);
+                // Bloom sized to read as the plant's focal point at whole-plant distance.
+                b.AddFlat(head,.45,Vec3.Down,h*.06,r*.11,.001,OrganType.Flower,redFlower,3,.68,.2);
+                for(int k=0;k<5;k++)
+                {
+                    double az=rotation+k*Math.Tau/5;
+                    var rad=PlantMath.Horizontal(az);
+                    b.AddFlat(head,.25,rad*1.0+Vec3.Up*.25,h*.12,r*.10,.0006,OrganType.Flower,sepal,3,.62,.2);
+                    b.AddFlat(head,.55,rad*.9+Vec3.Down*.55,h*.165,r*.13,.0006,OrganType.Flower,bloomPetal,3,.7,.2);
+                    var rad2=PlantMath.Horizontal(az+Math.PI/5);
+                    b.AddFlat(head,.8,rad2*.55+Vec3.Down*.95,h*.13,r*.10,.0005,OrganType.Flower,innerPetal,3,.74,.2);
+                }
+                for(int k=0;k<8;k++)
+                {
+                    double az=rotation+k*Math.Tau/8+.2;
+                    var rad=PlantMath.Horizontal(az);
+                    int fil=b.AddAxis(head,.9,Vec3.Down+rad*.22,h*.09*b.Range(.85,1.1),rad*.15,r*.0018,r*.0010,3,Tissue.Green,.78,.2);
+                    b.AddFlat(fil,1,b.TangentAt(fil,1),h*.018,r*.014,.0004,OrganType.Flower,anther,4,.82,.2);
+                }
+                b.AddFlat(head,1,Vec3.Down,h*.055,r*.055,.001,OrganType.Flower,ovary,3,.78,.2);
                 return;
             }
             // These species have distinctive legacy silhouettes that do not fit the
@@ -341,7 +421,7 @@ public static partial class HerbGraphSpecies
                     SurfaceForm=OrganSurfaceForm.Lamina,
                     WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.55)),
                     MidribCurl=.05f, CrossCurl=.015f, Wax=violet ? .15f : .55f,
-                    ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f });
+                    ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f, Roughness=LeafRough(s.Id) });
                 int leaves=violet ? 16 : 12;
                 for(int i=0;i<leaves;i++)
                 {
@@ -369,7 +449,7 @@ public static partial class HerbGraphSpecies
                     SurfaceForm=OrganSurfaceForm.Lamina,
                     WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.38)),
                     MidribCurl=.35f, CrossCurl=.012f, Wax=.45f,
-                    ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f });
+                    ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f, Roughness=.40f });
                 for(int i=0;i<9;i++)
                 {
                     double a=rotation+i*Math.Tau/9+b.Range(-.2,.2);
@@ -385,7 +465,7 @@ public static partial class HerbGraphSpecies
                 ushort bead=b.AddShape(new OrganShape { Name="fenbead_fleshy_leaf", Type=OrganType.Leaf,
                     SurfaceForm=OrganSurfaceForm.Revolved,
                     WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.65)),
-                    ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.35,.62,.25) });
+                    ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.35,.62,.25), Roughness=.44f });
                 for(int i=0;i<12;i++)
                 {
                     double a=rotation+Math.Tau*(i+b.Range(-.3,.3))/12;
@@ -434,7 +514,7 @@ public static partial class HerbGraphSpecies
                 ushort filament=b.AddShape(new OrganShape { Name=s.Id+"_filament", Type=OrganType.Leaf,
                     SurfaceForm=OrganSurfaceForm.Lamina,
                     WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.6)),
-                    ColorAdaxial=green, ColorAbaxial=green, Thickness=.0005f });
+                    ColorAdaxial=green, ColorAbaxial=green, Thickness=.0005f, Roughness=LeafRough(s.Id) });
                 int shoots=quill ? 8 : 7;
                 for(int i=0;i<shoots;i++)
                 {
@@ -521,7 +601,7 @@ public static partial class HerbGraphSpecies
                     SurfaceForm=OrganSurfaceForm.Lamina,
                     WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.8)),
                     MidribCurl=.12f, CrossCurl=.001f,
-                    ColorAdaxial=PlantShapes.Srgb(.84,.76,.48), ColorAbaxial=PlantShapes.Srgb(.65,.64,.37) });
+                    ColorAdaxial=PlantShapes.Srgb(.84,.76,.48), ColorAbaxial=PlantShapes.Srgb(.65,.64,.37), Roughness=.78f });
                 for(int i=0;i<s.Shoots;i++)
                 {
                     double az=rotation+Math.Tau*(i+b.Range(-.30,.30))/s.Shoots;

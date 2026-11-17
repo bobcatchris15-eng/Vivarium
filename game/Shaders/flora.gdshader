@@ -15,6 +15,27 @@ render_mode diffuse_burley, cull_disabled;
 #include "res://Shaders/leaf_direct_light.gdshaderinc"
 #include "res://Shaders/repr_skyvis.gdshaderinc"
 
+// ---- Material tuning (linear). Retune here; Godot SPECULAR 0.5 == F0 0.04. ----
+const float FOLIAGE_ALBEDO_MAX = 0.55;   // vascular foliage / flowers ceiling (chlorophyll leaves are ~0.05-0.20 green)
+const float BARK_ALBEDO_MAX = 0.45;      // bark / wood / lichen / moss ceiling
+const float FUNGUS_ALBEDO_MAX = 0.75;    // pale fungi can be bright; keep below the old 0.98
+const float BARK_GAIN = 1.0;             // was 1.38
+const float HEARTWOOD_GAIN = 1.0;        // was 1.65
+const float LEAF_SPEC_BACK = 0.18;
+const float LEAF_SPEC_TOP_MIN = 0.25;
+const float LEAF_SPEC_TOP_MAX = 0.32;
+const float LEAF_SPEC_WAXY_ADD = 0.13;   // added for waxy species (smoothstep(.40,.80,cuticle_sheen))
+const float LEAF_ROUGH_FLOOR = 0.50;     // non-waxy foliage roughness floor
+const float LEAF_ROUGH_FLOOR_WAXY = 0.26;
+const float STEM_SPEC = 0.22;
+const float FLOWER_SPEC = 0.28;
+const float FRUIT_SPEC = 0.50;
+const float BARK_SPEC_MAX = 0.22;        // smooth bark; rougher bark fades to BARK_SPEC_MIN
+const float BARK_SPEC_MIN = 0.12;
+const float MOSS_LICHEN_SPEC = 0.10;
+const float SHAPE_ROUGH_NEUTRAL = 0.55;  // OrganShape.Roughness default; at this value the shape changes nothing
+const float SHAPE_ROUGH_WEIGHT = 0.6;
+
 uniform float sway = 0.0;
 uniform float stiffness = 1.0;
 uniform bool dry_fungal_cuticle = false;
@@ -131,10 +152,21 @@ void fragment() {
     // Resolvable detail distance: high-frequency epidermal noise is faded out beyond ~5 m.
     float cam_dist = length(CAMERA_POSITION_WORLD - world_pos);
     float micro_fade = leaf_micro_fade(CAMERA_POSITION_WORLD, world_pos);
-    vec3 c = srgb_to_linear(COLOR.rgb) * (1.0 + (inst.x - 0.5) * 0.3);
+    vec3 c = srgb_to_linear(COLOR.rgb) * (1.0 + (inst.x - 0.5) * 0.14);
     vec3 wn = finite_surface_normal((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz, vec3(0.0, 1.0, 0.0));
     vec3 n = wn;
     float rough = 0.75;
+    // Shape roughness rides in COLOR.a (PlantCompiler.ShapeRoughAlpha): a = .55 + .44*r; a>=.995 means unset.
+    float shape_set = (surface_mode == 2 && UV2.y > 0.5 && COLOR.a >= 0.55 && COLOR.a < 0.995) ? 1.0 : 0.0;
+    float fruit_shape_set = (surface_mode == 2 && UV2.y <= 0.5 && UV2.x > 0.5 && UV2.x < 1.2 && COLOR.a >= 0.55 && COLOR.a < 0.995) ? 1.0 : 0.0;
+    float shape_rough = clamp((COLOR.a - 0.55) / 0.44, 0.0, 1.0);
+    float shape_gloss = (shape_set + fruit_shape_set) * smoothstep(0.35, 0.20, shape_rough);
+    float waxiness = smoothstep(0.40, 0.80, cuticle_sheen);
+    if (leaf_pattern == 3) waxiness = max(waxiness, 0.7);
+    else if (leaf_pattern == 4) waxiness = max(waxiness, 0.5);
+    else if (leaf_pattern == 7) waxiness = 0.0;
+    waxiness = max(waxiness, shape_gloss);
+    float leaf_floor = LEAF_ROUGH_FLOOR;
     if (surface_mode == 0) {
         // moss: scanned moss detail projected from above, recoloured to the species
         vec3 tn;
@@ -207,7 +239,7 @@ void fragment() {
             c *= mix(1.0, 0.90 + 0.14 * striate_vis, (0.35 + 0.65 * rim) * pileus);
             // The wet umbo holds deeper, richer pigment; the margin is thin and lit through.
             c = mix(c, c * vec3(0.84, 0.90, 0.82), pileus * umbo * 0.35);
-            c = mix(c, c * vec3(1.08, 1.14, 1.00) + vec3(0.010, 0.012, 0.006), pileus * rim * 0.42);
+            c = mix(c, c * vec3(0.98, 1.0, 0.94) + vec3(0.008, 0.010, 0.005), pileus * rim * 0.42);
             rough = clamp(rough - pileus * (0.06 + 0.10 * rim), 0.55, 0.95);
             // Viscid cuticular micro-relief: only resolved close to the camera.
             if (micro_fade > 0.01) {
@@ -241,7 +273,7 @@ void fragment() {
         float fuzz = vnoise(obj_pos.xy * 140.0 + obj_pos.zy * 97.0 + inst.w * 5.0);
         c *= 0.9 + 0.14 * fuzz;
         float ndv = clamp(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos)), 0.0, 1.0);
-        c *= 1.0 + 0.22 * pow(1.0 - ndv, 2.0);
+        c *= 0.94 + 0.06 * pow(1.0 - ndv, 2.0);
         if (ghost_membrane > 0.5) {
             // Unlike Dewbonnet's damp flesh, spectral tissue is a very thin
             // light-scattering membrane. Edge emphasis is driven by real cap
@@ -257,13 +289,17 @@ void fragment() {
     } else {
         // vascular plants normally use leaf veins; woody meshes mark trunk/branch vertices with UV2.x=2 so
         // bark stays matte, opaque-looking and longitudinally rough instead of acquiring leaf venation.
-        if (UV2.x > 1.5) {
+        if (UV2.x > 3.5) {
+            // Smooth dark cuticle on recurved thorns.
+            c = vec3(0.012, 0.014, 0.016);
+            rough = 0.18;
+        } else if (UV2.x > 1.5) {
             // Isotropic physical mapping: UV.x is distance along trunk in metres; UV.y is 0..1 around circumference.
             vec2 buv = vec2(UV.y, UV.x * bark_repeats_per_metre + inst.w * 3.0);
             vec3 bark = texture(bark_col, buv).rgb;
             // Scanned species bark stays recognisable; exposure, old cracks and moss add restrained history.
             float exposure = fbm(obj_pos.xz * 1.4 + UV.x * 0.12 + inst.w * 9.0);
-            c = bark * bark_tint * 1.38;
+            c = bark * bark_tint * BARK_GAIN;
             c *= mix(1.0 - bark_weathering * 0.26, 1.0 + bark_weathering * 0.09, exposure);
             vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
             float raw_rgh = texture(bark_rgh, buv).r;
@@ -276,15 +312,19 @@ void fragment() {
                 // Decayed Heartwood / Callus / Hollow Log Interior:
                 // Modulate texture luminance/detail with vertex color (srgb_to_linear(COLOR.rgb) * 1.65),
                 // preserving dark rot gradients, warm amber callus tones, and deep cavity AO.
-                c = c * srgb_to_linear(COLOR.rgb) * 1.65;
+                c = c * srgb_to_linear(COLOR.rgb) * HEARTWOOD_GAIN;
                 rough = clamp(rough, 0.84, 0.98);
             }
             n = stem_surface_normal(wn, world_pos, buv, cork_normal);
         } else if (pitcher_tissue && UV2.y < -1.5 && UV2.y > -3.5) {
             // Trap walls and hoods carry ochre/green/brown living tissue, distinct from the flower.
             // Original procedural pigment follows organ UVs; it is stable while the plant sways.
-            vec2 p = vec2(UV.x * 8.0, UV.y * 17.0) + vec2(inst.w * 19.0, inst.w * 7.0);
-            float patch = fbm(p + vec2(vnoise(p * 0.7), vnoise(p * 0.9 + 8.0)) * 1.3);
+            float around = UV.y * 6.2831853;
+            vec2 p = vec2(cos(around), sin(around)) * 2.6 + vec2(UV.x * 2.4, inst.w * 3.0);
+            float warp = fbm(p * 1.3 + vec2(UV.x * 3.0, 2.1));
+            float swirl = sin(around * 3.0 + UV.x * 18.0 + warp * 5.0
+                + 1.6 * sin(around * 2.0 - UV.x * 9.0));
+            float patch = clamp(0.45 + 0.24 * swirl + 0.30 * (fbm(p * 3.0) - 0.5), 0.0, 1.0);
             vec3 yellow = srgb_to_linear(vec3(0.72, 0.69, 0.30));
             vec3 green = srgb_to_linear(vec3(0.34, 0.48, 0.17));
             vec3 brown = srgb_to_linear(vec3(0.42, 0.27, 0.12));
@@ -293,7 +333,7 @@ void fragment() {
             c = mix(c, mottled, 0.65);
             if (UV2.y < -2.5) c *= 0.40 + UV.x * 0.25;
             c *= 0.94 + 0.08 * vnoise(p * 5.0);
-            rough = 0.49;
+            rough = mix(0.60, 0.78, vnoise(p * 7.0));
         } else if (pitcher_tissue && UV2.y < -3.5) {
             rough = 0.19;
         } else if (UV2.y > 0.5 && UV2.x > 1.20 && UV2.x < 1.50) {
@@ -312,7 +352,7 @@ void fragment() {
                 c = srgb_to_linear(COLOR.rgb);
                 float ndv = clamp(dot(wn, normalize(CAMERA_POSITION_WORLD - world_pos)), 0.0, 1.0);
                 float shift = pow(1.0 - ndv, 2.2);
-                c = mix(c, c.gbr * 1.18, shift * 0.62);
+                c = mix(c, c.gbr, shift * 0.62);
                 rough = 0.66;
             } else if (UV2.x > 1.30 && UV2.x < 1.50) {
                 vec3 raw_organ = srgb_to_linear(COLOR.rgb);
@@ -321,7 +361,7 @@ void fragment() {
                 float floret_cell = vnoise(obj_pos.xz * 26.0 + obj_pos.y * 19.0 + inst.w * 7.0);
                 float floret_ao = (0.70 + 0.30 * smoothstep(-0.45, 0.75, wn.y)) * (0.85 + 0.22 * floret_cell);
                 c *= mix(vec3(0.74, 0.72, 0.64), vec3(1.04, 1.02, 0.98), floret_ao);
-                rough = 0.74;
+                rough = 0.62; // satin, never glossy
             }
         } else if (UV2.y > 0.5) {
             float along = UV.x, across = UV.y - 0.5;
@@ -373,22 +413,22 @@ void fragment() {
                     c * vec3(1.06,.98,.88),smoothstep(.25,.95,leaf_age));
             c *= leaf_mesophyll_pattern(vec2(along,across+.5),inst.w*13.7);
             c *= (0.94 + 0.09 * cells + 0.023 * micro + 0.04 * venation) * (1.0 - edge * .07);
-            c = mix(c, c * vec3(1.11, 1.04, 0.78), age * (leaf_type == 5 ? 0.05 : 0.08));
+            c = mix(c, c * vec3(1.0, 0.96, 0.76), age * (leaf_type == 5 ? 0.05 : 0.08));
             // Distal blade pigment shift, not a baked-in directional light highlight.
             if (leaf_type == 5) c *= mix(.97,1.04,smoothstep(.15,.85,along));
             float stripe = 0.5;
-            if (leaf_pattern == 0) c = mix(c, c * vec3(1.06, 1.08, 0.98), clamp(mid * 0.7 + sec * 0.3, 0.0, 1.0) * (1.0 - face) * 0.20);
+            if (leaf_pattern == 0) c = mix(c, c * vec3(1.0, 1.0, 0.95), clamp(mid * 0.7 + sec * 0.3, 0.0, 1.0) * (1.0 - face) * 0.20);
             // Each tissue family carries a different visible pigment pattern. Keep
             // the markings broad enough to survive the game's normal camera distance.
             if (leaf_pattern == 3) {
                 // Ivy-like leaves: lustrous cuticle and conspicuous pale vein fans.
                 float pale_vein = clamp(mid * 0.58 + sec * 0.42, 0.0, 1.0);
-                c = mix(c, c * vec3(1.08, 1.11, 1.02), pale_vein * (1.0 - face) * 0.22);
+                c = mix(c, c * vec3(1.0, 1.0, 0.95), pale_vein * (1.0 - face) * 0.22);
                 c *= 0.94 + 0.12 * cells;
             } else if (leaf_pattern == 4) {
                 // Succulents: wax bloom with sparse, irregular light flecks.
                 float fleck = smoothstep(0.76, 0.91, micro) * smoothstep(0.11, 0.38, along);
-                c = mix(c, c * vec3(1.20, 1.18, 1.12), fleck * 0.28 + face * 0.12);
+                c = mix(c, c * vec3(1.08, 1.07, 1.04), fleck * 0.28 + face * 0.12);
                 c *= 0.93 + 0.11 * cells;
             } else if (leaf_pattern == 5) {
                 // Needles and reeds carry fine parallel longitudinal striations.
@@ -397,27 +437,27 @@ void fragment() {
             } else if (leaf_pattern == 6) {
                 // Fern pinnules: fine branching veins and light transmitted edges.
                 c *= 0.90 + 0.14 * cells + 0.10 * sec;
-                c = mix(c, c * vec3(1.06, 1.13, 0.95), edge * 0.22);
+                c = mix(c, c * vec3(0.97, 1.0, 0.92), edge * 0.22);
             } else if (leaf_pattern == 7) {
                 // Glaucous farina (mooncoin): the blade wears a dry, dusty silver bloom rather
                 // than a wet cuticle. It reads matte, and the bloom lifts the tissue towards a
                 // cool dust instead of towards a specular highlight.
                 float dust = smoothstep(0.30, 0.78, cells * 0.6 + micro * 0.4);
-                c = mix(c, c * vec3(1.10, 1.12, 1.13), dust * 0.42);
+                c = mix(c, c * vec3(1.04, 1.05, 1.06), dust * 0.42);
                 c *= 0.95 + 0.07 * micro;
             }
             // Every broad/strap blade: pale raised midrib and secondary veins on the upper face, fresher
             // saturated young leaves, and a lift so shaded foliage still reads as leaf rather than silhouette.
             float midrib = 1.0 - smoothstep(0.010, 0.034 + fwidth(across), abs(across));
             float top_face = 1.0 - face;
-            c = mix(c, c * vec3(1.06, 1.08, 0.98) + vec3(.001, .0015, .0005), midrib * top_face * (vein_strength * 0.25));
-            c = mix(c, c * vec3(1.03, 1.05, 1.00), sec * top_face * (leaf_pattern == 5 ? .04 : (vein_strength * 0.18)));
+            c = mix(c, c * vec3(0.98, 1.0, 0.94) + vec3(.002, .003, .001), midrib * top_face * (vein_strength * 0.25));
+            c = mix(c, c * vec3(0.99, 1.0, 0.97), sec * top_face * (leaf_pattern == 5 ? .04 : (vein_strength * 0.18)));
             float young = smoothstep(0.6, 0.95, leaf_age);
-            c = mix(c, c * vec3(.99,1.08,.96),young * .3);
-            c *= mix(1.07, 1.0, smoothstep(0.015, 0.07, lum(c)));
+            c = mix(c, c * vec3(.97,1.0,.95),young * .3);
+            c *= mix(1.02, 1.0, smoothstep(0.015, 0.07, lum(c)));
             if (leaf_variegation == 1) {
                 float pv = clamp(midrib * 0.9 + sec * 0.75, 0.0, 1.0);
-                c = mix(c, vec3(lum(c)) * vec3(2.5, 2.8, 2.2) + vec3(0.03, 0.04, 0.03), pv * top_face * 0.65);
+                c = mix(c, vec3(lum(c)) * vec3(1.45, 1.60, 1.30) + vec3(0.015, 0.02, 0.015), pv * top_face * 0.65);
             } else if (leaf_variegation == 2) {
                 float sv = smoothstep(0.42, 0.62, vnoise(vec2(along * 6.0, across * 8.0) + inst.w * 5.0));
                 sv *= smoothstep(0.44, 0.22, abs(across)) * (1.0 - midrib) * (1.0 - sec * 0.7);
@@ -433,7 +473,7 @@ void fragment() {
                 float chevron_axis = 0.34 + 0.30 * abs(across);
                 float chevron = 1.0 - smoothstep(0.025, 0.100, abs(along - chevron_axis));
                 chevron *= 1.0 - midrib * 0.30;
-                vec3 pale = mix(c, vec3(lum(c)) * vec3(1.62, 1.70, 1.40) + vec3(0.018, 0.024, 0.014), 0.8);
+                vec3 pale = mix(c, vec3(lum(c)) * vec3(1.30, 1.36, 1.15) + vec3(0.010, 0.014, 0.008), 0.8);
                 c = mix(c, pale, chevron * top_face * 0.72);
             } else if (leaf_variegation == 5) {
                 // Azure crystal frost (glassfinger): the distal blade grows a saturated blue
@@ -497,10 +537,14 @@ void fragment() {
                 rough = clamp(mix(rough, texture(leaf_scan_rgh, scan_uv).r,
                     leaf_scan_blend * 0.8) + face * 0.12, 0.28, 0.98);
             }
+            // Only waxy adaxial faces (and authored glossy shapes) may drop below the matte floor.
+            leaf_floor = mix(LEAF_ROUGH_FLOOR, LEAF_ROUGH_FLOOR_WAXY, waxiness * top_face);
+            rough = max(rough, leaf_floor);
 
         } else if (UV2.x > 0.5) {
-            // Glossy fruit / berries
-            rough = 0.22;
+            // Glossy fruit / berries: the only non-leaf organ that is glossy by default.
+            // Authored shape roughness (berries .18, jelly .28) shifts it; the .55 default leaves it at .22.
+            rough = clamp(0.22 + fruit_shape_set * (shape_rough - SHAPE_ROUGH_NEUTRAL) * 0.3, 0.14, 0.50);
         } else {
             // Living epidermis, not mature cork. Longitudinal ridges follow the
             // shaft, narrow transverse node scars mark growth interruptions.
@@ -523,9 +567,9 @@ void fragment() {
                     ((rib - .5) * .32 + fiber * fiber_strength * 1.4) * living_strength, 1.0)));
             n = normalize(mix(n, shaft_normal, living_strength * .68));
             rough = stem_family == 2 ? .56 : stem_family == 1 ? .72 : stem_family == 3 ? .78 : .70;
-            rough = clamp(rough + .10 * node * living_strength, .30, .92);
+            rough = clamp(rough + .10 * node * living_strength, .45, .92);
             if (stem_family == 3) {
-                c = max(c, vec3(0.026, 0.021, 0.017)) * 1.24;
+                c = max(c, vec3(0.026, 0.021, 0.017));
                 vec2 buv = vec2(UV.y, UV.x * bark_repeats_per_metre + inst.w * 3.0);
                 vec3 bn = unpack_normal(texture(bark_nrm, buv).rgb);
                 n = normalize(mix(n, stem_surface_normal(wn, world_pos, buv, bn), 0.58));
@@ -539,8 +583,19 @@ void fragment() {
     float health = smoothstep(0.0, 0.28, clamp(inst.y, 0.0, 1.0));
     vec3 faded = vec3(dot(c, vec3(0.33))) * vec3(1.25, 1.05, 0.55);
     ALBEDO = mix(faded, c, 0.30 + 0.70 * health);
-    ROUGHNESS = dry_fungal_cuticle ? max(rough, 0.93) : rough;
     bool woody_surface = surface_mode == 2 && UV2.x > 1.5;
+    bool lamina_surface = surface_mode == 2 && !woody_surface && UV2.y > 0.5 && UV2.x < 1.2;
+    bool flower_surface = surface_mode == 2 && UV2.y > 0.5 && UV2.x >= 1.2 && UV2.x < 1.5;
+    bool fruit_surface = surface_mode == 2 && UV2.y <= 0.5 && UV2.y >= 0.0 && UV2.x > 0.5 && UV2.x < 1.2;
+    bool stem_surface = surface_mode == 2 && UV2.y <= 0.5 && UV2.y >= 0.0 && UV2.x <= 0.5;
+    // Authored shape roughness (default .55 is neutral): shifts leaf and flower roughness, never below the matte floor.
+    rough += shape_set * (shape_rough - SHAPE_ROUGH_NEUTRAL) * SHAPE_ROUGH_WEIGHT;
+    if (lamina_surface) rough = max(rough, leaf_floor);
+    // Per-organ albedo ceilings: foliage 0.55, bark/moss/lichen 0.45, fungi 0.75, slime unchanged.
+    float albedo_max = surface_mode == 2 ? (woody_surface ? BARK_ALBEDO_MAX : FOLIAGE_ALBEDO_MAX)
+        : surface_mode == 3 ? FUNGUS_ALBEDO_MAX : surface_mode == 4 ? 0.98 : BARK_ALBEDO_MAX;
+    ALBEDO = min(ALBEDO, vec3(albedo_max));
+    ROUGHNESS = dry_fungal_cuticle ? max(rough, 0.93) : rough;
     float is_bark = woody_surface ? 1.0 : 0.0;
     float depth_shade = clamp(1.0 - canopy_occlusion * (1.0 - clamp(obj_pos.y * 1.5, 0.0, 1.0)) * 0.75, 0.35, 1.0);
     float ao = depth_shade * mix(0.48, 1.0, basal_contact);
@@ -556,12 +611,20 @@ void fragment() {
         AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
     }
     float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
-    float leaf_spec = mix(0.20, mix(0.38, 0.50, cuticle_sheen), top_side);
+    float leaf_spec_top = mix(LEAF_SPEC_TOP_MIN, LEAF_SPEC_TOP_MAX, cuticle_sheen) + LEAF_SPEC_WAXY_ADD * waxiness;
+    float leaf_spec = mix(LEAF_SPEC_BACK, leaf_spec_top, top_side);
     // A farina-coated blade is dust, not varnish: it keeps almost no specular lobe.
     if (leaf_pattern == 7) leaf_spec = mix(leaf_spec, 0.07, 0.86);
-    float bark_spec = mix(0.42, 0.12, smoothstep(0.55, 0.92, rough));
-    if (UV2.x > 2.5) bark_spec = 0.12;
-    SPECULAR = surface_mode == 2 ? (woody_surface ? bark_spec : leaf_spec) : surface_mode == 3 ? (dry_fungal_cuticle ? 0.0 : 0.12) : 0.24;
+    float bark_spec = mix(BARK_SPEC_MAX, BARK_SPEC_MIN, smoothstep(0.55, 0.92, rough));
+    if (UV2.x > 2.5) bark_spec = BARK_SPEC_MIN;
+    if (UV2.x > 3.5) bark_spec = 0.50; // glossy black thorn cuticle
+    float organ_spec = fruit_surface ? FRUIT_SPEC : stem_surface ? STEM_SPEC : flower_surface ? FLOWER_SPEC : leaf_spec;
+    organ_spec = mix(organ_spec, 0.45, shape_gloss * (flower_surface || lamina_surface ? top_side : 0.0));
+    SPECULAR = surface_mode == 2 ? (woody_surface ? bark_spec : organ_spec) : surface_mode == 3 ? (dry_fungal_cuticle ? 0.0 : 0.12) : MOSS_LICHEN_SPEC;
+    // Custom light(): the near-mirror wax lobe is only for fruit, waxy adaxial leaf faces, glossy shapes and slime.
+    tissue_wax_off = 1.0;
+    if (fruit_surface || surface_mode == 4) tissue_wax_off = 0.0;
+    else if (lamina_surface || flower_surface) tissue_wax_off = 1.0 - waxiness * top_side;
     float actual_leaf_trans = transmission >= 0.0 ? transmission : leaf_transmission;
     // Foliage (surface_mode 2) transmission is owned by light() in
     // leaf_direct_light.gdshaderinc; no built-in BACKLIGHT/SSS transmittance
@@ -580,7 +643,7 @@ void fragment() {
         BACKLIGHT = vec3(0.65, 0.48, 0.05);
         CLEARCOAT = 1.0;
         CLEARCOAT_ROUGHNESS = 0.03;
-        SPECULAR = 0.58;
+        SPECULAR = 0.50;
         SSS_TRANSMITTANCE_COLOR = vec4(0.90, 0.61, 0.06, 1.0);
         SSS_TRANSMITTANCE_DEPTH = 0.015;
     }
@@ -608,6 +671,7 @@ void fragment() {
     else if (emission_mask_mode == 4) night_mask = seed_head_mask;
     else if (emission_mask_mode == 5) night_mask = center_stripe;
     else if (emission_mask_mode == 6) night_mask = edge_strip;
+    else if (emission_mask_mode == 9) night_mask = step(1.40, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
     else if (emission_mask_mode == 7) {
         // Clover chevron: the same band the leaf shader paints, so the nocturnal glow follows the
         // marking instead of lighting the whole blade.
@@ -645,12 +709,12 @@ void fragment() {
         }
     }
     if (surface_mode == 2 && !woody_surface && UV2.y > .5 && UV2.x < 1.2) {
-        ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), .35, 1.0);
+        ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .25)), leaf_floor, 1.0);
     }
     if (!(ROUGHNESS >= 0.0 && ROUGHNESS <= 1.0)) ROUGHNESS = 0.75;
     // Photographic/color modulation changes reflectance, never emission.
     // Bright plume/scan ratios must remain inside the diffuse energy budget.
-    ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(0.98));
+    ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(albedo_max));
     if (repr_skyvis_strength > 0.0) EMISSION += repr_sky_bounce(ALBEDO, wn, repr_ao, surface_mode == 2 && !woody_surface); // L1b bounce (default off)
     if (tissue_light_diagnostic == 5) {
         SSS_STRENGTH = 0.0;

@@ -83,7 +83,7 @@ void fragment() {
             NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(wood_normal, 0.0)).xyz, NORMAL);
             ALBEDO = col;
             ROUGHNESS = clamp(rot_r * 1.05, 0.75, 0.98);
-            SPECULAR = 0.2;
+            SPECULAR = 0.10;
             AO = COLOR.r * rot_ao;
         } else if (splinter > 0.5) {
             // Decayed splintered ends / fractured interior shards
@@ -99,7 +99,7 @@ void fragment() {
             NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(wood_normal, 0.0)).xyz, NORMAL);
             ALBEDO = col;
             ROUGHNESS = clamp(rot_r, 0.8, 0.96);
-            SPECULAR = 0.25;
+            SPECULAR = 0.12;
             AO = COLOR.r * rot_ao;
         } else {
             // Cut / broken end caps: blend rotten wood into decaying ends (decay >= 2)
@@ -113,7 +113,7 @@ void fragment() {
             NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(wood_normal, 0.0)).xyz, NORMAL);
             ALBEDO = col;
             ROUGHNESS = 0.8;
-            SPECULAR = 0.3;
+            SPECULAR = 0.15;
             AO = 1.0;
         }
     } else {
@@ -199,7 +199,7 @@ void fragment() {
         tn = finite_surface_normal(mix(tn, mn, mossy), vec3(0.0, 0.0, 1.0));
         ALBEDO = col;
         ROUGHNESS = rough;
-        SPECULAR = 0.3;
+        SPECULAR = 0.15;
         // bark mesh has no tangents: build them from the log axis (+X in object space)
         vec3 n = finite_surface_normal(wn * tn.z + around_world * tn.x + along_world * tn.y, wn);
         NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(n, 0.0)).xyz, NORMAL);
@@ -212,9 +212,9 @@ void fragment() {
         vec3 dy = dFdy(NORMAL);
         float variance = dot(dx, dx) + dot(dy, dy);
         ROUGHNESS = clamp(sqrt(rough * rough + min(variance * 2.0, 0.25)), 0.35, 1.0);
-        float log_bark_spec = mix(0.42, 0.14, smoothstep(0.55, 0.90, bark_rgh_mapped));
-        SPECULAR = mix(log_bark_spec, 0.16, mossy);
-        SPECULAR = mix(SPECULAR, 0.22, underside * 0.5);   // damp soil-contact sheen
+        float log_bark_spec = mix(0.18, 0.10, smoothstep(0.55, 0.90, bark_rgh_mapped));
+        SPECULAR = mix(log_bark_spec, 0.10, mossy);
+        SPECULAR = mix(SPECULAR, 0.25, underside * 0.5);   // damp soil-contact sheen
     }
     AO_LIGHT_AFFECT = 0.85;
     if (repr_skyvis_strength > 0.0) {

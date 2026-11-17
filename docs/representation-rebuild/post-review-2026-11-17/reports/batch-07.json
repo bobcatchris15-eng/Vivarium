@@ -1,0 +1,265 @@
+{
+  "demo": "plant_catalog",
+  "seed": 804584441,
+  "machine": {
+    "adapter": "AMD Radeon(TM) 860M Graphics",
+    "resolution": [
+      1600,
+      900
+    ],
+    "window": [
+      1600,
+      900
+    ],
+    "render_scale": 1,
+    "max_fps": 30,
+    "vsync": "Disabled",
+    "quality": 1,
+    "godot": "4.7.1-stable (official)"
+  },
+  "env_overrides": {
+    "Requested": {},
+    "Applied": [],
+    "Skipped": []
+  },
+  "build_ms": 232.4,
+  "settle_frames": 30,
+  "game_module": "51441d6b-9dff-49e0-bc2e-eabee7a57eec",
+  "sim_module": "5cca5e03-0bc0-43c6-9ab4-e7d133bb5ec3",
+  "plant_config": null,
+  "camera_reference": null,
+  "managed_bytes_per_frame_baseline": 1366,
+  "shots": [
+    {
+      "shot": "tidebell_growth",
+      "name": "tidebell",
+      "variant": "growth",
+      "png": "tidebell_growth.png",
+      "eye": [
+        920.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        920,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 734.11,
+      "gpu_busy_fraction": 8.3372,
+      "frame_ms_p50": 0.161,
+      "frame_ms_p95": 2.563,
+      "frame_ms_max": 2.563,
+      "gpu_frame_ms_mean": 11.357,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 14,
+      "primitives": 107186,
+      "objects": 14,
+      "video_mem_mb": 2697.8,
+      "managed_bytes_per_frame_raw": 2232,
+      "managed_bytes_per_frame_net": 866
+    },
+    {
+      "shot": "trifold_growth",
+      "name": "trifold",
+      "variant": "growth",
+      "png": "trifold_growth.png",
+      "eye": [
+        928.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        928,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1143.38,
+      "gpu_busy_fraction": 13.1957,
+      "frame_ms_p50": 0.172,
+      "frame_ms_p95": 1.577,
+      "frame_ms_max": 1.577,
+      "gpu_frame_ms_mean": 11.541,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 12,
+      "primitives": 11862,
+      "objects": 12,
+      "video_mem_mb": 2697.8,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "veilblade_growth",
+      "name": "veilblade",
+      "variant": "growth",
+      "png": "veilblade_growth.png",
+      "eye": [
+        952.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        952,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1086.43,
+      "gpu_busy_fraction": 12.1549,
+      "frame_ms_p50": 0.188,
+      "frame_ms_p95": 1.653,
+      "frame_ms_max": 1.653,
+      "gpu_frame_ms_mean": 11.188,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 14,
+      "primitives": 35376,
+      "objects": 14,
+      "video_mem_mb": 2715,
+      "managed_bytes_per_frame_raw": 1160,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "veilfern_growth",
+      "name": "veilfern",
+      "variant": "growth",
+      "png": "veilfern_growth.png",
+      "eye": [
+        960.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        960,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1127.65,
+      "gpu_busy_fraction": 13.9626,
+      "frame_ms_p50": 0.179,
+      "frame_ms_p95": 1.594,
+      "frame_ms_max": 1.594,
+      "gpu_frame_ms_mean": 12.382,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 12,
+      "primitives": 230482,
+      "objects": 12,
+      "video_mem_mb": 2715.2,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "velvetweave_moss_growth",
+      "name": "velvetweave_moss",
+      "variant": "growth",
+      "png": "velvetweave_moss_growth.png",
+      "eye": [
+        968.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        968,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1262.47,
+      "gpu_busy_fraction": 14.7671,
+      "frame_ms_p50": 0.157,
+      "frame_ms_p95": 1.427,
+      "frame_ms_max": 1.427,
+      "gpu_frame_ms_mean": 11.697,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 150086,
+      "objects": 15,
+      "video_mem_mb": 2718.5,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "widowspire_growth",
+      "name": "widowspire",
+      "variant": "growth",
+      "png": "widowspire_growth.png",
+      "eye": [
+        976.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        976,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1128.73,
+      "gpu_busy_fraction": 13.2728,
+      "frame_ms_p50": 0.163,
+      "frame_ms_p95": 1.608,
+      "frame_ms_max": 1.608,
+      "gpu_frame_ms_mean": 11.759,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 120456,
+      "objects": 15,
+      "video_mem_mb": 2718.7,
+      "managed_bytes_per_frame_raw": 1148,
+      "managed_bytes_per_frame_net": 0
+    },
+    {
+      "shot": "wispthread_moss_growth",
+      "name": "wispthread_moss",
+      "variant": "growth",
+      "png": "wispthread_moss_growth.png",
+      "eye": [
+        984.65,
+        0.95,
+        2.75
+      ],
+      "target": [
+        984,
+        0.52,
+        0
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1188.92,
+      "gpu_busy_fraction": 12.8689,
+      "frame_ms_p50": 0.16,
+      "frame_ms_p95": 1.522,
+      "frame_ms_max": 1.522,
+      "gpu_frame_ms_mean": 10.824,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 15,
+      "primitives": 103354,
+      "objects": 15,
+      "video_mem_mb": 2718.7,
+      "managed_bytes_per_frame_raw": 1368,
+      "managed_bytes_per_frame_net": 2
+    }
+  ]
+}

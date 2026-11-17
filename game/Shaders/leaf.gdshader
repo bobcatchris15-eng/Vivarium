@@ -10,6 +10,16 @@ uniform sampler2DArray tissue_normal : hint_normal, filter_linear_mipmap_anisotr
 uniform sampler2DArray tissue_physical : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D vein_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler2D vein_mask : filter_linear_mipmap_anisotropic, repeat_disable;
+// ---- Material tuning (linear). Retune here; Godot SPECULAR 0.5 == F0 0.04. ----
+const float FOLIAGE_ALBEDO_MAX = 0.55;   // per-channel ceiling for foliage albedo (chlorophyll leaves are ~0.05-0.20 green)
+const float LEAF_SPEC_TOP_MIN = 0.25;    // ordinary adaxial specular at cuticle_sheen 0
+const float LEAF_SPEC_TOP_MAX = 0.32;    // ordinary adaxial specular at cuticle_sheen 1
+const float LEAF_SPEC_WAXY_ADD = 0.13;   // extra specular for waxy species (smoothstep(.40,.80,cuticle_sheen))
+const float LEAF_SPEC_BACK = 0.18;       // abaxial specular
+const float LEAF_ROUGH_FLOOR = 0.50;     // non-waxy roughness floor
+const float LEAF_ROUGH_FLOOR_WAXY = 0.26;// roughness floor for waxy adaxial faces / glossy shapes
+const float SHAPE_ROUGH_NEUTRAL = 0.55;  // OrganShape.Roughness default; at this value the shape changes nothing
+const float SHAPE_ROUGH_WEIGHT = 0.6;
 uniform vec3 leaf_top = vec3(.045,.14,.045);
 uniform vec3 leaf_back = vec3(.14,.20,.09);
 uniform vec3 top_pigment = vec3(-1.0);
@@ -124,7 +134,7 @@ void fragment() {
         own = max(mix(vec3(dot(own, vec3(.2126,.7152,.0722))), own, tissue_saturation), vec3(0.0));
         vec3 ratio = clamp(actual_back / max(actual_top, vec3(.004)), vec3(.6), vec3(1.8));
         vec3 under = own * mix(vec3(1.), ratio, .6);
-        under = mix(under, vec3(dot(under, vec3(.2126,.7152,.0722))), .25) * 1.08;
+        under = mix(under, vec3(dot(under, vec3(.2126,.7152,.0722))), .25);
         color = mix(own, under, side);
     }
     // High-frequency epidermal variation is only resolved close to camera; fade
@@ -142,7 +152,7 @@ void fragment() {
     color *= vec3(1.0 + pigment_shift, 1.0 - pigment_shift * .22,
                   1.0 - pigment_shift * .65);
     float tip_age = smoothstep(.72, 1.0, UV.x) * pigment_age * .10;
-    color *= mix(vec3(1.0), vec3(1.20, 1.02, .72), tip_age);
+    color *= mix(vec3(1.0), vec3(1.0, .95, .70), tip_age); // tips pale/dry by losing blue+green, never gaining
     // Two spectral bands covary spatially, as they do under varying chlorophyll
     // density. Coherent over the blade, seed-stable, no screen-space flicker.
     if (leaf_pigment_mottle > 0.001 && micro_fade > 0.01) {
@@ -183,24 +193,24 @@ void fragment() {
     // centimetres sit in the petiole's shadow.
     color *= mix(0.74, 1.0, smoothstep(0.0, 0.09, along));
     // The thinner margin dries and reddens slightly ahead of the lamina.
-    color = mix(color, color * vec3(1.12, 0.94, 0.76), smoothstep(0.78, 0.98, abs_across) * 0.28);
+    color = mix(color, color * vec3(1.0, 0.92, 0.74), smoothstep(0.78, 0.98, abs_across) * 0.28);
     // Inter-vein mesophyll is richer and slightly deeper green than the raised vascular bundles,
     // making the primary midrib and arched pinnate secondaries read clearly at close range.
     color *= mix(1.0, 0.92 + 0.10 * bullate, (1.0 - struct_vein) * 0.55);
     // Pale yellow-green/amber vascular bundle tone; the abaxial rib is paler still.
-    color = mix(color, color * vec3(1.10, 1.12, 0.98) + vec3(0.005, 0.007, 0.002), struct_vein * (0.35 + 0.15 * side));
-    color = mix(color, color * vec3(1.06, 1.08, 1.00), anatomy.r * vein_strength * 0.40);
+    color = mix(color, color * vec3(0.96, 0.97, 0.90) + vec3(0.010, 0.012, 0.006), struct_vein * (0.35 + 0.15 * side));
+    color = mix(color, color * vec3(0.98, 1.0, 0.95) + vec3(0.004, 0.005, 0.002), anatomy.r * vein_strength * 0.40);
     float topf = 1. - side;
     // actual_back already supplies the species' abaxial pigment; apply only a restrained
     // underside matte shift instead of double-brightening the back face.
     color *= mix(vec3(1.0), vec3(0.94, 0.96, 0.92), side);
     // Pale midrib/veins and young-leaf freshness; lift only genuinely crushed blacks.
-    color = mix(color, color*vec3(1.12,1.15,1.04)+vec3(.002,.003,.001), anatomy.r*topf*.05);
-    color *= mix(1.15, 1., smoothstep(.010,.045,dot(color,vec3(.2126,.7152,.0722))));
+    color = mix(color, color*vec3(.98,1.0,.93)+vec3(.003,.004,.001), anatomy.r*topf*.05);
+    color *= mix(1.04, 1., smoothstep(.010,.045,dot(color,vec3(.2126,.7152,.0722))));
     // Top-surface variegation (1, 2) was painted over shared pools; an own-pool texture already carries
     // its markings. Underside (3) and crystal (5) recipes are not in the texture, so they stay.
     if (own_tissue > .5 && leaf_variegation <= 2) {}
-    else if (leaf_variegation == 1) color = mix(color, vec3(dot(color,vec3(.33)))*vec3(2.5,2.8,2.2)+.03, anatomy.r*topf*.6);
+    else if (leaf_variegation == 1) color = mix(color, vec3(dot(color,vec3(.33)))*vec3(1.45,1.60,1.30)+.015, anatomy.r*topf*.6);
     else if (leaf_variegation == 2) color = mix(color, vec3(.30,.34,.32), smoothstep(.45,.65,texture(tissue_physical,vec3(tissue_uv*.5,layer)).b)*(1.-anatomy.r)*topf*.55);
     else if (leaf_variegation == 3) color = mix(color, vec3(.20,.025,.07)*(.8+.4*photograph.g), side*.85);
     if (volumetric) color = mix(color,srgb_to_linear(COLOR.rgb),smoothstep(.64,.99,UV.x)*.72);
@@ -273,16 +283,29 @@ void fragment() {
     color *= mix(vec3(0.55, 0.50, 0.42), vec3(1.0), ground_contact);
     color *= mix(.93,1.07,fract(seed*5.3+plant.x*2.1))*vec3(1.,1.,mix(.95,1.03,fract(seed*3.7)));
     ALBEDO=mix(vec3(dot(color,vec3(.333)))*vec3(1.25,1.05,.55),color,mix(.3, .78, own_tissue)+mix(.7, .22, own_tissue)*smoothstep(0.,.45,plant.y));
+    ALBEDO=min(ALBEDO, vec3(FOLIAGE_ALBEDO_MAX));
+    // Shape roughness rides in COLOR.a (PlantCompiler.ShapeRoughAlpha): a = .55 + .44*r; a>=.995 means unset.
+    float shape_set = (UV2.y > 0.5 && COLOR.a >= 0.55 && COLOR.a < 0.995) ? 1.0 : 0.0;
+    float shape_rough = clamp((COLOR.a - 0.55) / 0.44, 0.0, 1.0);
+    float shape_gloss = shape_set * smoothstep(0.35, 0.20, shape_rough);
+    float waxiness = max(smoothstep(0.40, 0.80, cuticle_sheen), shape_gloss);
+    float wax_top = waxiness * topf;
+    tissue_wax_off = 1.0 - wax_top;
     // Species-specific cuticular gloss on adaxial face; rougher, paler abaxial face
     float wax = cuticle_sheen * topf;
-    ROUGHNESS=clamp(mix(leaf_roughness - wax * 0.08, back_roughness + 0.08, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02, 0.20, 0.96);
+    ROUGHNESS=mix(leaf_roughness - wax * 0.08, back_roughness + 0.08, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02;
+    ROUGHNESS += shape_set * (shape_rough - SHAPE_ROUGH_NEUTRAL) * SHAPE_ROUGH_WEIGHT;
+    float rough_floor = mix(LEAF_ROUGH_FLOOR, LEAF_ROUGH_FLOOR_WAXY, wax_top);
+    ROUGHNESS=clamp(ROUGHNESS, rough_floor, 0.96);
     // Filter unresolved normal detail into the specular lobe instead of allowing
     // subpixel veins/folds to flash white as the camera or blade moves.
     vec3 normal_dx = dFdx(NORMAL), normal_dy = dFdy(NORMAL);
     float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
     if (!(normal_variance >= 0.0 && normal_variance < 1e12)) normal_variance = 0.0;
-    ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .22)), .24, 1.0);
-    SPECULAR=volumetric ? .45 : mix(0.22, mix(0.40, 0.54, cuticle_sheen), topf);
+    ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .22)), rough_floor, 1.0);
+    float spec_top = mix(LEAF_SPEC_TOP_MIN, LEAF_SPEC_TOP_MAX, cuticle_sheen) + LEAF_SPEC_WAXY_ADD * smoothstep(0.40, 0.80, cuticle_sheen);
+    spec_top = mix(spec_top, 0.45, shape_gloss);
+    SPECULAR=volumetric ? .30 : mix(LEAF_SPEC_BACK, spec_top, topf);
     // Structural veins are optically thick too, so the rib and laterals read
     // dark in silhouette while the thin mesophyll between them glows.
     float vein_thickness = clamp(max(anatomy.g * 0.75 + anatomy.r * 0.25, struct_vein * 0.88), 0.0, 1.0);
@@ -321,9 +344,10 @@ void fragment() {
         ALBEDO=srgb_to_linear(COLOR.rgb);
         NORMAL=finite_surface_normal((VIEW_MATRIX*vec4(wn,0.)).xyz, vec3(0.0,0.0,1.0));
         ROUGHNESS=.72;
-        SPECULAR=.35;
+        SPECULAR=.20;
         tissue_rim=0.0;
     }
+    if (UV2.x < -3.5) ALBEDO = srgb_to_linear(COLOR.rgb); // Quillsedge longitudinal pigment gradient.
     ALBEDO *= mix(1.0, mix(0.52, 1.06, canopy_depth), is_pilot_crown);
     float marked_nodule = step(1.30, UV2.x) * (1.0 - step(1.50, UV2.x)) * step(0.5, UV2.y);
     float gill_mask = step(0.5, UV2.x) * (1.0 - step(1.5, UV2.x));
@@ -353,7 +377,7 @@ void fragment() {
         SPECULAR = 0.0;
         EMISSION = display;
     }
-    ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(0.98));
+    ALBEDO = clamp(ALBEDO, vec3(0.0), vec3(FOLIAGE_ALBEDO_MAX));
     if (repr_skyvis_strength > 0.0) EMISSION += repr_sky_bounce(ALBEDO, wn, repr_ao, UV2.y >= .5); // L1b bounce (default off)
     if (tissue_light_diagnostic == 5) {
         SSS_STRENGTH = 0.0;

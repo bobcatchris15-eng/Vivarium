@@ -66,7 +66,7 @@ internal static class PlantDemoKit
 
     public static MeshInstance3D Ground(Vector3 centre, float size)
     {
-        var matte = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.52f, 0.46f), Roughness = 1f, Metallic = 0f };
+        var matte = new StandardMaterial3D { AlbedoColor = new Color(0.36f, 0.33f, 0.29f), Roughness = 1f, Metallic = 0f };
         return new MeshInstance3D { Name = "Ground", Position = centre, Mesh = new PlaneMesh { Size = new Vector2(size, size) }, MaterialOverride = matte };
     }
 

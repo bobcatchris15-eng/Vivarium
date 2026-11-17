@@ -33,7 +33,8 @@ void fragment() {
     } else {
         color *= mix(0.50,0.78,n);
     }
-    ALBEDO=color * mix(0.88,1.08,fine);
+    ALBEDO=color * mix(0.88,1.0,fine);
+    SPECULAR=0.10;
     ROUGHNESS=moss && base ? mix(0.92,texture(moss_roughness,colony_world.xz*4.0).r,0.45) : mix(0.98,0.82,clamp(colony_state.x,0.0,1.0));
     AO=clamp(colony_shape.z,0.5,1.0);
     // Coverage is a field, not uniform transparency: break sparse rims and lichen crust into

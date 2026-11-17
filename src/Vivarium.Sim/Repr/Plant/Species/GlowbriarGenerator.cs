@@ -60,19 +60,11 @@ public sealed class GlowbriarGenerator : PlanGenerator
         });
 
         int stool = b.AddAxis(-1, 0, up + new Vec3(b.Range(-0.08, 0.08), 0, b.Range(-0.08, 0.08)), 0.12,
-            new Vec3(b.Range(-0.12, 0.12), 0, b.Range(-0.12, 0.12)), 0.020, 0.017, 0, Tissue.Wood, 0, 0.25);
+            new Vec3(b.Range(-0.12, 0.12), 0, b.Range(-0.12, 0.12)), 0.050, 0.030, 0, Tissue.Wood, 0, 0.25);
 
         double baseRot = b.Range(0, Math.Tau);
-        // Low woody runners expose the spreading root stool between the arching canes.
-        for (int r = 0; r < 4; r++)
-        {
-            double rootAz = baseRot + r * Math.Tau / 4 + b.Range(-0.24, 0.24);
-            var rootOut = PlantMath.Horizontal(rootAz);
-            var rootSide = PlantMath.Horizontal(rootAz + Math.PI / 2);
-            b.AddAxis(stool, 0.08, rootOut + up * 0.04, b.Range(0.24, 0.42),
-                rootSide * b.Range(-0.25, 0.25) + Vec3.Down * 0.06,
-                0.014, 0.003, 1, Tissue.Wood, 0.02 * b.Draw(), 0.2);
-        }
+        // Each low runner turns upward into a cane. Their inner ends begin inside
+        // the stool; the runner/cane transition itself is a welded continuous skin.
         for (int c = 0; c < form.CaneCount; c++)
         {
             double az = baseRot + c * Math.Tau / form.CaneCount + b.Range(-0.42, 0.42);
@@ -81,8 +73,22 @@ public sealed class GlowbriarGenerator : PlanGenerator
             double cSpread = b.Range(0.45, 0.85);
             var caneDir = hCane * cSpread + up * b.Range(form.CaneElevationMin * 0.85, form.CaneElevationMax * 1.15);
             var caneBend = up * (-form.CaneDroop * b.Range(0.85, 1.45)) + hCane * b.Range(0.10, 0.35) + sCane * b.Range(-0.32, 0.32);
-            int cane = b.AddAxis(stool, b.Range(0.30, 0.72), caneDir, b.Range(form.CaneLengthMin * 0.9, form.CaneLengthMax * 1.08),
-                caneBend, 0.013, 0.0025, 1, Tissue.Wood, 0.03 * b.Draw(), 0.2);
+            double rootLength = b.Range(0.24, 0.34);
+            int root = b.AddAxis(stool, 0.08, hCane, rootLength, Vec3.Zero,
+                0.016, 0.013, 1, Tissue.Wood, 0.02 * b.Draw(), 0.2, OrganFlags.Continuous);
+            var runner = b[root];
+            runner.P0 = PlantMath.Hermite(b[stool].P0, b[stool].T0, b[stool].P1, b[stool].T1, 0.08);
+            runner.T0 = hCane * rootLength;
+            runner.T1 = caneDir.Normalized() * rootLength;
+            runner.P1 = runner.P0 + (runner.T0 + runner.T1) * 0.5;
+            int cane = b.AddAxis(root, 1, caneDir, b.Range(form.CaneLengthMin * 0.9, form.CaneLengthMax * 1.08),
+                caneBend, 0.013, 0.0025, 1, Tissue.Wood, 0.03 * b.Draw(), 0.2, OrganFlags.Continuous);
+            var shoot = b[cane];
+            // AddAxis normally attaches at the parent's side; this is a continuation.
+            var displacement = runner.P1 - shoot.P0;
+            shoot.P0 += displacement;
+            shoot.P1 += displacement;
+            shoot.R0 = runner.R1;
 
             // Recurved thorns along the cane internodes.
             for (int th = 0; th < 8; th++)

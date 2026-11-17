@@ -2,7 +2,7 @@
   "species_count": 125,
   "columns": 2,
   "rows": 3,
-  "next_review_sheet": 7,
+  "next_review_sheet": null,
   "description": "Frozen initial review images, before corrections from sheets 1 through 6. See README.md for acceptance and pending work.",
   "species": [
     {
@@ -298,42 +298,48 @@
       "row": 1,
       "column": 1,
       "id": "duskpuff",
-      "name": "Duskpuff"
+      "name": "Duskpuff",
+      "draft_capture_run": "sheet7-revisions"
     },
     {
       "sheet": 7,
       "row": 1,
       "column": 2,
       "id": "emberbracken",
-      "name": "Emberbracken"
+      "name": "Emberbracken",
+      "draft_capture_run": "sheet7-revisions"
     },
     {
       "sheet": 7,
       "row": 2,
       "column": 1,
       "id": "embercrown",
-      "name": "Embercrown"
+      "name": "Embercrown",
+      "draft_capture_run": "sheet7-revisions"
     },
     {
       "sheet": 7,
       "row": 2,
       "column": 2,
       "id": "embercrust_lichen",
-      "name": "Embercrust lichen"
+      "name": "Embercrust lichen",
+      "draft_capture_run": "sheet7-revisions"
     },
     {
       "sheet": 7,
       "row": 3,
       "column": 1,
       "id": "embercup",
-      "name": "Embercup"
+      "name": "Embercup",
+      "draft_capture_run": "sheet7-revisions"
     },
     {
       "sheet": 7,
       "row": 3,
       "column": 2,
       "id": "emberfan_fungus",
-      "name": "Emberfan fungus"
+      "name": "Emberfan fungus",
+      "draft_capture_run": "sheet7-revisions"
     },
     {
       "sheet": 8,

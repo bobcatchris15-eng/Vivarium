@@ -11,7 +11,7 @@ uniform float tissue_specular_stress = 1.0;
 // M02: retain established directional-light reflectance independently of light
 // intensity. The legacy switch remains available for controlled comparisons.
 uniform bool tissue_use_explicit_material_f0 = true;
-uniform float tissue_material_f0 = 0.055;
+uniform float tissue_material_f0 = 0.045;
 // Experimental controlled scattering modes. Defaults preserve last accepted rendering.
 uniform float tissue_diffuse_wrap = 0.0;
 uniform float tissue_phase_scatter = 1.6;
@@ -26,6 +26,8 @@ varying float tissue_nonleaf_mask;
 // Optical thickness tau and trichome rim fuzz
 varying float tissue_rim;
 varying float tissue_tau;
+// 0 (default) keeps the wax lobe at full weight for other consumers; foliage shaders set 1 - waxiness so only waxy species get the near-mirror lobe.
+varying float tissue_wax_off;
 uniform int tissue_material_diagnostic = 0;
 uniform int tissue_light_diagnostic = 0; // 0 composite, 1 reflected, 2 transmitted, 3 specular, 4 Lambert probe
 
@@ -201,11 +203,11 @@ void process_leaf_direct_light(
                       (nl_clamped / (nl_clamped * (1.0 - k_epi) + k_epi));
         float f0_epi = tissue_use_explicit_material_f0
             ? clamp(tissue_material_f0, 0.0, 0.16)
-            : mix(0.018, 0.055, clamp(specular_amount, 0.0, 1.0));
+            : 0.04; // specular_amount scales the lobe once, below; never also feed it into F0
         float F_epi = f0_epi + (1.0 - f0_epi) * pow(1.0 - vh, 5.0);
         float spec_epi = D_epi * G_epi * F_epi / max(4.0 * nv, 0.01);
 
-        float combined_spec = spec_wax * 0.75 + spec_epi * 0.65;
+        float combined_spec = spec_wax * 0.75 * (1.0 - clamp(tissue_wax_off, 0.0, 1.0)) + spec_epi * 0.65;
         if (tissue_light_diagnostic == 1) combined_spec = 0.0;
         vec3 specular_sample=light_color * attenuation * combined_spec * specular_amount * tissue_specular_stress;
         if(finite_leaf_light_vector(specular_sample)) specular_light += max(specular_sample,vec3(0.0));

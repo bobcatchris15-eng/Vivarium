@@ -306,20 +306,20 @@ void fragment() {
 			alb *= gTex * (1.0 + 0.10 * midrib + mottle - 0.20 * spot);
 			alb *= mix(1.0, 0.72, smoothstep(0.55, 1.0, edgeDist));
 			nxyL.x += -sign(luv.x) * midrib * 0.22;
-			roughL = mix(0.82, 0.22, clamp(sE * 0.65 + fl * 0.85, 0.0, 1.0));
+			roughL = mix(0.80, 0.45, clamp(sE * 0.65 + fl * 0.85, 0.0, 1.0));
 			aoL = mix(0.64, 1.0, smoothstep(0.0, 0.50, edgeDist));
 		} else {
 			// 3D woody twig / bark sliver: longitudinal bark grain
 			alb *= gTex;
-			roughL = mix(0.88, 0.28, clamp(sE * 0.60 + fl * 0.80, 0.0, 1.0));
+			roughL = mix(0.88, 0.50, clamp(sE * 0.60 + fl * 0.80, 0.0, 1.0));
 			aoL = mix(0.58, 1.0, 1.0 - edgeDist * 0.45);
 		}
 
 		alb *= 1.0 - 0.56 * sE;
 		vec3 NbL = normalize(N + vec3(nxyL.x, 0.0, nxyL.y) * (1.0 - 0.5 * fl));
-		ALBEDO = clamp(alb, vec3(0.0), vec3(1.0));
-		ROUGHNESS = clamp(roughL, 0.08, 1.0);
-		SPECULAR = mix(0.26, 0.52, max(sE * 0.6, fl));
+		ALBEDO = clamp(alb, vec3(0.0), vec3(0.35));
+		ROUGHNESS = clamp(roughL, 0.40, 1.0);
+		SPECULAR = mix(0.15, 0.30, max(sE * 0.6, fl));
 		METALLIC = 0.0;
 		AO = aoL;
 		AO_LIGHT_AFFECT = 0.68;
@@ -492,7 +492,7 @@ void fragment() {
 		float thr = 1.0 - fl * 1.25;
 		float cov = smoothstep(thr - 0.08, thr + 0.18, hollow) * smoothstep(0.0002, 0.0025, fl);
 		alb *= 1.0 - 0.15 * cov;
-		rough = mix(rough, 0.09, cov);
+		rough = mix(rough, 0.45, cov);
 
 		// ---- roots on cut faces (with 3D cylindrical normal relief and contact AO)
 		float rootMask = 0.0;
@@ -569,9 +569,9 @@ void fragment() {
 			rough=mix(rough,mix(0.95,mossRough,0.40),mossMask);
 		}
 		if (debug_mode > 0.5) alb = vec3(sE, clamp(film, 0.0, 1.0), clamp(standing * 10.0, 0.0, 1.0));
-		ALBEDO = clamp(alb, vec3(0.0), vec3(1.0));
+		ALBEDO = clamp(alb, vec3(0.0), vec3(0.35));
 		ROUGHNESS = rough;
-		SPECULAR = mix(0.28, 0.52, max(max(sE * 0.65, cov), pud));
+		SPECULAR = mix(mix(0.15, 0.30, max(sE * 0.65, cov)), 0.50, pud);
 		METALLIC = 0.0;
 		AO = ao;
 		AO_LIGHT_AFFECT = 0.6;

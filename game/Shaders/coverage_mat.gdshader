@@ -437,7 +437,7 @@ void fragment() {
     }
     ALBEDO = c;
     ROUGHNESS = sundew_surface > 0.5 || u_pattern < 0.5 ? rough : rough * 0.88;
-    SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : (u_pattern < 0.5 ? 0.22 : 0.28);
+    SPECULAR = sundew_surface > 0.5 ? mix(0.35, 0.85, sundew_dew) : 0.12;
     NORMAL = finite_surface_normal((VIEW_MATRIX * vec4(n, 0.0)).xyz, NORMAL);
     if (repr_skyvis_strength > 0.0) {
         float repr_ao = repr_sky_ao(world_pos, n, isShoot > 0.5);

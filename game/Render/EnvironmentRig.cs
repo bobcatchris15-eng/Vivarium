@@ -62,7 +62,8 @@ public partial class EnvironmentRig : Node3D
     // The gain follows solar energy, fading out before deep night.
     private const float DayAmbientGain = 0.68f, DayFillGain = 1.38f;
     private const float DaySkyContribution = 0.85f, NightSkyContribution = .85f;
-    private const float DayExposure = 1.18f, NightExposure = .92f;
+    private const float DayExposure = 1.00f, NightExposure = .92f;
+    private const float AutoExposureScaleValue = 0.15f, AutoExposureMinSens = 90.0f, AutoExposureMaxSens = 105.0f, SdfgiEnergyValue = 1.0f;
     private const float GrowPitchGain = 1.35f, GrowPitchMax = -80f, KeyDaySunEnergy = 1.30f;
     private static readonly Color UnderwaterFogColor = new(0.12f, 0.20f, 0.14f);
     private const float UnderwaterFogDensity = 0.18f;
@@ -140,10 +141,10 @@ public partial class EnvironmentRig : Node3D
         CameraAttributes = new CameraAttributesPractical
         {
             AutoExposureEnabled = true,
-            AutoExposureMinSensitivity = 85.0f,
-            AutoExposureMaxSensitivity = 115.0f,
+            AutoExposureMinSensitivity = AutoExposureMinSens,
+            AutoExposureMaxSensitivity = AutoExposureMaxSens,
             AutoExposureSpeed = 0.8f,
-            AutoExposureScale = 0.22f,
+            AutoExposureScale = AutoExposureScaleValue,
             ExposureMultiplier = 1.0f,
             ExposureSensitivity = 100.0f,
             DofBlurFarEnabled = !dofDisabled,
@@ -195,7 +196,7 @@ public partial class EnvironmentRig : Node3D
             SdfgiCascade0Distance = 3.2f,
             SdfgiMaxDistance = 25.6f,
             SdfgiYScale = Environment.SdfgiyScale.Scale100Percent,
-            SdfgiEnergy = 1.15f,
+            SdfgiEnergy = SdfgiEnergyValue,
             // Screen-Space Reflections (SSR)
             SsrEnabled = true,
             SsrMaxSteps = 64,

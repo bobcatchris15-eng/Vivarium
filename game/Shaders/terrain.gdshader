@@ -268,7 +268,9 @@ void fragment() {
         vec2 mu = displaced_uv * 2.4 + 7.3;
         vec3 mn = unpack_normal(texture(moss_nrm, mu).rgb);
         vec4 m = vec4(texture(moss_col, mu).rgb, texture(moss_rgh, mu).r);
-        vec3 natural_moss = mix(m.rgb, m.rgb * vec3(0.74, 0.88, 0.58), 0.5);
+        // Olive rather than lime: the scan has almost no blue, real moss sits near
+        // linear (.05, .08, .03) (docs/representation-rebuild/material-reference-2026-11-17.md).
+        vec3 natural_moss = m.rgb * vec3(0.80, 0.68, 1.0) + vec3(0.004, 0.006, 0.014);
         float h = dot(m.rgb, vec3(0.333)) * 1.2;
         float w = hblend(wMoss, h);
         vec3 rhizoid_col = mix(col * 0.78, natural_moss, smoothstep(0.08, 0.45, w));
@@ -359,9 +361,11 @@ void fragment() {
     float ambient_weight = smoothstep(0.035, 0.72, ambient_cover) * 0.72 * ambient_micro
         * (1.0 - wGrav) * (1.0 - wLeaf * 0.55) * (1.0 - wSilt);
     if (integrated_soil) ambient_weight = 0.0;
-    vec3 ambient_dry = srgb_to_linear(vec3(0.22, 0.35, 0.09));
-    vec3 ambient_mesic = srgb_to_linear(vec3(0.075, 0.29, 0.065));
-    vec3 ambient_shade = srgb_to_linear(vec3(0.045, 0.205, 0.105));
+    // Natural low-cover tones: straw-olive when dry, muted moss-green when moist,
+    // cool dark green in shade. Previous values were saturated chartreuse.
+    vec3 ambient_dry = srgb_to_linear(vec3(0.31, 0.32, 0.17));
+    vec3 ambient_mesic = srgb_to_linear(vec3(0.19, 0.27, 0.12));
+    vec3 ambient_shade = srgb_to_linear(vec3(0.12, 0.19, 0.12));
     vec3 ambient_col = mix(ambient_dry, ambient_mesic, smoothstep(0.12, 0.58, moisture));
     ambient_col = mix(ambient_col, ambient_shade, smoothstep(0.62, 0.18, light));
     ambient_col = mix(soil.rgb * vec3(0.72, 0.69, 0.55), ambient_col, 0.32);
@@ -390,7 +394,7 @@ void fragment() {
     // Capillary micro-sheen fades smoothly into the saturated water film instead
     // of snapping from matte soil straight to a full clearcoat.
     float capillary = smoothstep(0.30, 0.95, dampness) * (1.0 - wMoss * 0.5) * silt_clear;
-    CLEARCOAT = clamp(capillary * 0.20 + smoothstep(0.45, 0.92, total_wet) * 0.78, 0.0, 1.0);
+    CLEARCOAT = clamp(capillary * 0.04 + smoothstep(0.70, 0.95, total_wet) * 0.78, 0.0, 1.0);
     CLEARCOAT_ROUGHNESS = mix(0.34, 0.05, smoothstep(0.5, 0.95, total_wet));
 
     float wet_pores = vnoise(world_pos.xz * 36.0 + vec2(11.7, 3.1));
@@ -418,15 +422,18 @@ void fragment() {
     AO_LIGHT_AFFECT = 0.35;
     col *= mix(0.75, 1.0, pom_shadow);
 
+    col *= 0.80;
+    col = min(col, vec3(mix(0.30, 0.18, total_wet)));
     ALBEDO = col;
-    SPECULAR = mix(0.35, 0.32, total_wet);
+    SPECULAR = mix(0.18, 0.30, smoothstep(0.5, 0.95, total_wet));
     SPECULAR = mix(SPECULAR, 0.12, smoothstep(0.006, 0.025, water_depth));
     NORMAL = normalize((VIEW_MATRIX * vec4(detail, 0.0)).xyz);
 
     // Normal-variance roughness filtering (specular anti-aliasing): keeps the
     // aggregate/micro normal detail from sparkling at grazing angles.
     float n_var = clamp(dot(dFdx(NORMAL), dFdx(NORMAL)) + dot(dFdy(NORMAL), dFdy(NORMAL)), 0.0, 0.25);
-    ROUGHNESS = clamp(sqrt(rough * rough + n_var * 0.5), 0.04, 1.0);
+    float rough_floor = mix(0.45, 0.04, smoothstep(0.006, 0.025, water_depth));
+    ROUGHNESS = clamp(sqrt(rough * rough + n_var * 0.5), rough_floor, 1.0);
     if (repr_skyvis_strength > 0.0) {
         float repr_ao = repr_sky_ao(world_pos, detail, false);
         AO *= repr_ao;

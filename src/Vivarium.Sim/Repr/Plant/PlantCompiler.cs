@@ -34,6 +34,8 @@ public sealed class PlantAssembly
 ///   * Flower / fruit: UV2 = (1.45, 0.92) for bells and chalices (legacy glowbriar convention),
 ///     (0.75, 0) for glossy fruit, outside both leaf and bark shader bands.
 ///   * COLOR: sRGB-encoded. The shader linearises COLOR, so linear descriptor colours are encoded here.
+///   * COLOR.a: shape-mesh vertices (lamina, bell, ellipsoid) carry OrganShape.Roughness as a = 0.55 + 0.44*roughness
+///     (0.55..0.99); a >= 0.995 (wood tubes, legacy meshes) means "unset". Shaders decode (a-0.55)/0.44.
 ///   * Normals: tubes have analytic radial normals; laminae shade their actual cup/twist with endpoint fallbacks.
 /// Instance transform: columns are X (= Up x Z, scaled by real half width / profile max), Y (= Up, orthogonal
 /// to Z), Z (= dir * real length), translation = Start. Unit shape: base at origin, length 1 along +Z.
@@ -304,7 +306,7 @@ public static partial class PlantCompiler
         }
         var rgb = WoodRgb(o.Tissue, o.Order);
         bool woody = o.Tissue is Tissue.Wood or Tissue.Bark or Tissue.RootBark;
-        double u2x = woody ? 2.0 : 0.0;
+        double u2x = (o.Flags & OrganFlags.GlossyBlack) != 0 ? 4.0 : woody ? 2.0 : 0.0;
         var rings = new int[samples.Count][];
         bool hollow = (o.Flags & OrganFlags.Hollow) != 0;
         var innerRings = hollow ? new int[samples.Count][] : null;
@@ -540,7 +542,8 @@ public static partial class PlantCompiler
         double th = Math.Tau * j / nRad;
         if (!window || (j != 1 && j != nRad - 1) || s < .20 - 1e-7 || s > .78 + 1e-7) return th;
         double t = Math.Clamp((s - .20) / .58, 0, 1);
-        double width = .20 + .80 * Math.Sin(Math.PI * t);
+        // Peak width stays below the next ring vertex (2 sectors) so the lip never folds.
+        double width = .25 + 1.45 * Math.Pow(Math.Sin(Math.PI * t), .8);
         // Slight asymmetry keeps the scar from reading as a machined oval.
         if (j == 1) width *= .92 + .08 * t;
         double edge = Math.Tau / nRad * width;
@@ -600,12 +603,18 @@ public static partial class PlantCompiler
 
     private static double[] EncRgb(Vec3 lin) => new[] { Enc(lin.X), Enc(lin.Y), Enc(lin.Z) };
 
+    /// <summary>COLOR.a carries OrganShape.Roughness: a = 0.55 + 0.44 * roughness (0.55..0.99); 1.0 means "unset".
+    /// Always above 0.5 so leaf.gdshader's nonleaf test (COLOR.a > 0.5) is unaffected.</summary>
+    private static double ShapeRoughAlpha(OrganShape s) => 0.55 + 0.44 * Math.Clamp((double)s.Roughness, 0.0, 1.0);
+
     private static MeshData BuildLamina(OrganShape s, int detail)
     {
         var m = new MeshData();
         // Keep a midrib and cupped cross-section at every level. The former
         // two-span far blade flattened curved fern pinnae into angular plates.
         int L = s.PairedLaminaApertures ? Math.Max(2, s.LobeCount) * (detail == 0 ? 6 : detail == 1 ? 4 : 2) : detail == 0 ? 18 : detail == 1 ? 8 : 4;
+        if (s.Name is "quillsedge_curled_blade" or "streamribbon_twining_leaf" && detail == 2) L = 8;
+        if (s.Name == "rainshield_leaf") L = detail == 0 ? 32 : detail == 1 ? 24 : 16;
         int W = s.PairedLaminaApertures ? 8 : detail == 2 ? 2 : 4;
         double pmax = ProfileMax(s);
         var cA = EncRgb(s.ColorAdaxial);
@@ -637,6 +646,7 @@ public static partial class PlantCompiler
                 pw = (2*f*f*f - 3*f*f + 1)*widths[a] + (f*f*f - 2*f*f + f)*m0
                     + (-2*f*f*f + 3*f*f)*widths[a + 1] + (f*f*f - f*f)*m1;
             }
+            if (s.Name == "rainshield_leaf") pw *= 1 - .16 * (.5 + .5 * Math.Cos(4 * Math.Tau * t));
             if (s.PairedLaminaApertures)
             {
                 double wave = 0.5 - 0.5 * Math.Cos(Math.Tau * s.LobeCount * t);
@@ -650,7 +660,7 @@ public static partial class PlantCompiler
                 double cup = s.CrossCurl * x * x * 3.0;
                 double phi = s.Twist * t;
                 double xr = x * Math.Cos(phi);
-                double off = x * Math.Sin(phi) + cup
+                double off = x * Math.Sin(phi) * s.TwistDepth + cup
                     + s.EdgeWave * 0.1 * Math.Sin(s.EdgeWaveFreq * Math.Tau * t) * frac * frac;
                 if (detail == 0 && (j == 0 || j == W) && s.Serration > 0)
                     xr *= 1 - s.Serration * 0.5 * (1 + Math.Cos(s.SerrationFreq * Math.Tau * t));
@@ -660,11 +670,12 @@ public static partial class PlantCompiler
                 // shoulders extend behind that notch as connected, pointed lobes.
                 double basalLobe = Math.Clamp(s.BasalLobeLength,0,.7f)
                     * Math.Pow(Math.Max(0,1-t/.32),2) * frac * frac;
-                var pos = new Vec3(xr, yc + cy * off, zc + sy * off - basalLobe);
-                var col = Mix(cA, cB, 0.25 + 0.5 * frac);
+                double weave = s.Name == "streamribbon_twining_leaf" ? .65 * Math.Sin(Math.Tau * t) * Math.Sin(Math.PI*t) : 0;
+                var pos = new Vec3(xr + weave, yc + cy * off, zc + sy * off - basalLobe);
+                var col = s.Name == "quillsedge_curled_blade" ? Mix(cA, cB, Math.Clamp((t-.08)/.78,0,1)) : Mix(cA, cB, 0.25 + 0.5 * frac);
                 // Analytic adaxial normal from the midrib frame (RecomputeNormals leaves base/tip rows at zero,
                 // where the profile collapses to a point).
-                idx[i, j] = m.AddVertex(pos, new Vec3(0, cy, sy), col[0], col[1], col[2], 1, t, u, 0, 1);
+                idx[i, j] = m.AddVertex(pos, new Vec3(0, cy, sy), col[0], col[1], col[2], ShapeRoughAlpha(s), t, u, s.Name == "quillsedge_curled_blade" ? -4 : s.Name == "tankbloom_bract" ? 1.35 : 0, 1);
             }
         }
         for (int i = 0; i < L; i++)
@@ -719,7 +730,7 @@ public static partial class PlantCompiler
                 double scallop = 1 + 0.06 * lobe;
                 var pos = new Vec3(r * scallop * Math.Cos(th), r * scallop * Math.Sin(th), z + 0.025 * lobe);
                 var col = Mix(cA, EncRgb(s.ColorAbaxial), 0.15 * z);
-                ids[k, j] = m.AddVertex(pos, Vec3.Forward, col[0], col[1], col[2], 1, j / (double)R, z, u2x, u2y);
+                ids[k, j] = m.AddVertex(pos, Vec3.Forward, col[0], col[1], col[2], ShapeRoughAlpha(s), j / (double)R, z, u2x, u2y);
             }
         }
         for (int k = 0; k < G; k++)
@@ -735,7 +746,7 @@ public static partial class PlantCompiler
         // Base cap (bell only): closes the flower at the pedicel end.
         if (!ellipsoid)
         {
-            int centre = m.AddVertex(Vec3.Zero, -Vec3.Forward, cA[0], cA[1], cA[2], 1, 0, 0, u2x, u2y);
+            int centre = m.AddVertex(Vec3.Zero, -Vec3.Forward, cA[0], cA[1], cA[2], ShapeRoughAlpha(s), 0, 0, u2x, u2y);
             for (int j = 0; j < R; j++) m.AddTriangle(centre, ids[0, j], ids[0, (j + 1) % R]);
         }
         m.RecomputeNormals();

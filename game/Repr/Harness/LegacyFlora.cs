@@ -28,7 +28,7 @@ internal static class LegacyFlora
         int morphs = FloraGeometryPlacement.MorphCount(sp.Shape);
         var mat = Bridge.Shader("res://Shaders/flora.gdshader");
         NightFloraMaterials.Bind(mat, sp);
-        if (sp.Shape == "ashcomb") mat.SetShaderParameter("dry_fungal_cuticle", true);
+        if (sp.Shape is "ashcomb" or "duskpuff") mat.SetShaderParameter("dry_fungal_cuticle", true);
         mat.SetShaderParameter("stiffness", sp.Woody != null ? 7.0f : sp.Shape is "reed" or "herb" ? 1.0f : 3.0f);
         mat.SetShaderParameter("surface_mode", sp.Archetype switch { "moss" => 0, "lichen" => 1, "fungus" => 3, _ => 2 });
         mat.SetShaderParameter("deform_leaf_tips", morphs == 12);

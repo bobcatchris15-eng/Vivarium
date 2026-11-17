@@ -1,0 +1,100 @@
+{
+  "demo": "plant_catalog",
+  "seed": 804584441,
+  "machine": {
+    "adapter": "AMD Radeon(TM) 860M Graphics",
+    "resolution": [
+      1600,
+      900
+    ],
+    "window": [
+      1600,
+      900
+    ],
+    "render_scale": 1,
+    "max_fps": 30,
+    "vsync": "Disabled",
+    "quality": 1,
+    "godot": "4.7.1-stable (official)"
+  },
+  "env_overrides": {
+    "Requested": {},
+    "Applied": [],
+    "Skipped": []
+  },
+  "build_ms": 442,
+  "settle_frames": 30,
+  "game_module": "9e2da15c-1e86-4eb3-aa35-bf95799e73a7",
+  "sim_module": "a8f01910-f994-41cf-9beb-97e7be50ef38",
+  "plant_config": null,
+  "camera_reference": null,
+  "managed_bytes_per_frame_baseline": 1362,
+  "shots": [
+    {
+      "shot": "emberfan_log_contact_support",
+      "name": "emberfan_log_contact",
+      "variant": "support",
+      "png": "emberfan_log_contact_support.png",
+      "eye": [
+        0.88039404,
+        0.62573427,
+        0.83171237
+      ],
+      "target": [
+        1.0012817,
+        0.39573425,
+        0.17796457
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 398.68,
+      "gpu_busy_fraction": 8.8985,
+      "frame_ms_p50": 0.311,
+      "frame_ms_p95": 4.706,
+      "frame_ms_max": 4.706,
+      "gpu_frame_ms_mean": 22.32,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 32,
+      "primitives": 604872,
+      "objects": 32,
+      "video_mem_mb": 2698.5,
+      "managed_bytes_per_frame_raw": 671576,
+      "managed_bytes_per_frame_net": 670214
+    },
+    {
+      "shot": "emberfan_trunk_contact_support",
+      "name": "emberfan_trunk_contact",
+      "variant": "support",
+      "png": "emberfan_trunk_contact_support.png",
+      "eye": [
+        -0.39420962,
+        0.6493894,
+        0.47381753
+      ],
+      "target": [
+        -0.9247241,
+        0.41938937,
+        0.0731252
+      ],
+      "fov_deg": 40,
+      "day_fraction": null,
+      "cycle_seconds": 60,
+      "frames": 2,
+      "fps_actual": 1087.49,
+      "gpu_busy_fraction": 24.724,
+      "frame_ms_p50": 0.242,
+      "frame_ms_p95": 1.598,
+      "frame_ms_max": 1.598,
+      "gpu_frame_ms_mean": 22.735,
+      "gpu_samples_nonzero": 2,
+      "draw_calls": 29,
+      "primitives": 540174,
+      "objects": 29,
+      "video_mem_mb": 2699.1,
+      "managed_bytes_per_frame_raw": 1052,
+      "managed_bytes_per_frame_net": 0
+    }
+  ]
+}

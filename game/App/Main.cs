@@ -238,7 +238,8 @@ public partial class Main : Node3D
             {
                 var groundWorld = Session.World ?? throw new InvalidOperationException("World missing after startup.");
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                if (!UserArgs.Contains("--ground-filler-proof"))
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 await GroundReviewRunner.Capture(this, Session, groundWorld, ArgAfter("--ground-review")!);
             }
             catch (Exception ex)

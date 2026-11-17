@@ -67,6 +67,25 @@ public static class WoodyGraphSpecies
         if (f.Id == "shadebell") return new ShadebellGenerator();
         return new WoodyGenerator(f, species);
     }
+    // Perceptual roughness per woody species leaf: felted/hairy high, leathery/glossy low, ordinary broadleaf mid.
+    private static float LeafRough(string id) => id switch
+    {
+        "silverfelt" => .86f, "bitterbine" => .78f, "embercrown" => .74f, "nutglade" => .72f, "hookthicket" => .70f,
+        "miremyrtle" => .66f, "splitcrown" => .66f, "vaultfern" => .66f, "lacemantle" => .64f, "banksorrow" => .60f,
+        "hollowcrown" => .62f, "lanternbrush" => .62f, "fenhook" => .62f, "witchberry" => .62f, "greywatch" => .60f,
+        "trumpetbind" => .60f, "mirespire" => .58f, "moonbark" => .58f, "kinkcane" => .56f, "shiverleaf" => .56f,
+        "spiralvine" => .54f, "thornmantle" => .54f, "clinglace" => .52f, "fenforge" => .52f, "cragparasol" => .45f,
+        "rainshield" => .45f, "shadewrap" => .44f, _ => .62f
+    };
+    // Flowers/fruit: berries and drupes glossy, cones/catkins/felted heads dry.
+    private static float OrnamentRough(string id) => id switch
+    {
+        "fenhook" => .22f, "thornmantle" => .24f, "lacemantle" => .26f, "hookthicket" => .26f, "shadewrap" => .28f, "spiralvine" => .30f,
+        "greywatch" => .40f, "cragparasol" => .60f, "trumpetbind" => .60f, "hollowcrown" => .60f, "lanternbrush" => .68f,
+        "kinkcane" => .70f, "nutglade" => .70f, "rainshield" => .70f, "splitcrown" => .72f, "bitterbine" => .74f, "miremyrtle" => .76f,
+        "fenforge" => .76f, "embercrown" => .78f, "vaultfern" => .78f, "moonbark" => .78f, "shiverleaf" => .78f, "banksorrow" => .78f,
+        "mirespire" => .80f, "silverfelt" => .80f, _ => .62f
+    };
     private static ushort Leaf(PlanBuilder b, Form f)
     {
         bool wide = f.LeafWidth >= .35;
@@ -94,7 +113,7 @@ public static class WoodyGraphSpecies
             SerrationFreq = f.Id is "thornmantle" or "hollowcrown" ? 5f : 9f,
             ColorAdaxial = f.Id switch { "mirespire" => PlantShapes.Srgb(.22,.56,.53), "greywatch" => PlantShapes.Srgb(.56,.68,.57), "cragparasol" => PlantShapes.Srgb(.91,.86,.60), _ => PlantShapes.Srgb(.13,.32,.14) },
             ColorAbaxial = f.Id switch { "mirespire" => PlantShapes.Srgb(.40,.70,.66), "greywatch" => PlantShapes.Srgb(.70,.76,.65), "cragparasol" => PlantShapes.Srgb(.98,.93,.72), _ => PlantShapes.Srgb(.28,.46,.24) },
-            Roughness = f.Id is "cragparasol" or "rainshield" ? .45f : .65f, Transmission = .32f
+            Roughness = LeafRough(f.Id), Transmission = .32f
         });
     }
     private static double LeafOutline(string id, double t)
@@ -118,7 +137,8 @@ public static class WoodyGraphSpecies
             "lacemantle" => Math.Pow(sine, .83) * (1.13 - .26 * t),
             "lanternbrush" => Math.Pow(sine, .82) * (1.22 - .44 * t),
             "miremyrtle" => Math.Pow(sine, .75) * (.66 + .68 * t),
-            "mirespire" => Math.Pow(1 - t, .85),
+            // Near-constant width needle with a short blunt base ramp and a rounded tip.
+            "mirespire" => Math.Min(1, .55 + t * 6) * (t > .80 ? Math.Sqrt(Math.Max(0, 1 - Math.Pow((t - .80) / .20, 2))) : 1),
             "moonbark" => Math.Pow(sine, .90) * (1.40 - .80 * t),
             "nutglade" => Math.Pow(sine, .60) * (1.24 - .48 * t),
             "rainshield" => Math.Pow(sine, .38) * (1.12 - .24 * t),
@@ -141,7 +161,7 @@ public static class WoodyGraphSpecies
         SurfaceForm = f.Ornament == 1 ? OrganSurfaceForm.Trumpet : OrganSurfaceForm.Revolved,
         WidthProfile = PlantShapes.Profile(t => f.Ornament == 1 ? .12 + .38 * Math.Pow(t, .7) : .5 * Math.Sin(Math.PI * t)),
         LobeCount = f.Ornament == 1 ? 5 : 0, LobeDepth = .18f,
-        ColorAdaxial = PlantShapes.Srgb(.83,.52,.24), ColorAbaxial = PlantShapes.Srgb(.65,.25,.17)
+        ColorAdaxial = PlantShapes.Srgb(.83,.52,.24), ColorAbaxial = PlantShapes.Srgb(.65,.25,.17), Roughness=OrnamentRough(f.Id)
     });
     private sealed class WoodyGenerator : PlanGenerator
     {
@@ -217,12 +237,12 @@ public static class WoodyGraphSpecies
 
         /// <summary>Builds a smooth 2-segment curved stem/trunk so no axis reads as a straight stick.</summary>
         private static (int Base, int Upper) CurvedStem(PlanBuilder b, Vec3 baseDir, double totalLen, Vec3 bend1, Vec3 bend2,
-            double rBase, double rTip, double splitFrac = 0.54, double emerge = 0.0, double dur = 0.28)
+            double rBase, double rTip, double splitFrac = 0.54, double emerge = 0.0, double dur = 0.28, Vec3? rootOrigin = null)
         {
             double l1 = totalLen * splitFrac;
             double l2 = totalLen * (1 - splitFrac);
             double rMid = rBase + (rTip - rBase) * splitFrac;
-            int s0 = b.AddAxis(-1, 0, baseDir, l1, bend1, rBase, rMid, 0, Tissue.Wood, emerge, dur * .6);
+            int s0 = b.AddAxis(-1, 0, baseDir, l1, bend1, rBase, rMid, 0, Tissue.Wood, emerge, dur * .6, rootOrigin: rootOrigin);
             var stem0 = b[s0];
             var axis = PlantMath.SafeNormal(baseDir, Vec3.Up);
             var side = SideOf(axis);
@@ -285,11 +305,18 @@ public static class WoodyGraphSpecies
 
         private void DesignFenforge(PlanBuilder b, ushort leaf, ushort ornament, ref double phyl)
         {
-            // Low spreading buttress roots carry one crooked leader and staggered foliage shelves.
+            // The bole changes direction as it rises, with substantial asymmetric
+            // leaders instead of a single straight pole under repeated shelves.
             double rot = b.Range(0, Math.Tau);
             double tr = Math.Max(.012, height * .032);
-            int trunk = b.AddAxis(-1, 0, Vec3.Up + PlantMath.Horizontal(rot) * .10, height * .88,
-                PlantMath.Horizontal(rot + 1.5) * .16, tr, tr * .26, 0, Tissue.Wood, 0, .30);
+            var lean = PlantMath.Horizontal(rot);
+            var cross = PlantMath.Horizontal(rot + Math.PI / 2);
+            int trunk = b.AddAxis(-1, 0, Vec3.Up + lean * .12, height * .31,
+                cross * .38 + lean * .15, tr, tr * .78, 0, Tissue.Wood, 0, .30, OrganFlags.Continuous);
+            int middle = b.AddAxis(trunk, 1, b.TangentAt(trunk, 1), height * .30,
+                -cross * .75 + lean * .28, tr * .78, tr * .48, 1, Tissue.Wood, .02, .25, OrganFlags.Continuous | OrganFlags.Basal);
+            int upper = b.AddAxis(middle, 1, b.TangentAt(middle, 1), height * .30,
+                cross * .60 - lean * .25, tr * .48, tr * .15, 2, Tissue.Wood, .04, .24, OrganFlags.Continuous | OrganFlags.Basal);
             for (int r = 0; r < 8; r++)
             {
                 double a = rot + r * Math.Tau / 8;
@@ -298,12 +325,36 @@ public static class WoodyGraphSpecies
                 // Roots leave the lowest part of the bole, rather than hoisting the crown
                 // onto stilts. Their tips enter the soil even on the shorter variants.
                 int root = b.AddAxis(trunk, .10 + .04 * (r % 2), outward * .90 + Vec3.Down,
-                    height * .19, side * (r % 2 == 0 ? .35 : -.35) + Vec3.Down * .24,
-                    tr * .42, tr * .19, 1, Tissue.RootBark, .01, .22);
+                    height * b.Range(.26, .38), side * b.Range(-.45, .45) + Vec3.Down * .24,
+                    tr * b.Range(.48, .67), tr * .19, 1, Tissue.RootBark, .01, .22);
                 var rootPlan = b[root];
                 rootPlan.P1 = new Vec3(rootPlan.P1.X, -.012, rootPlan.P1.Z);
                 b.AddAxis(root, .94, outward + Vec3.Down * .40, height * .08,
                     side * (r % 2 == 0 ? -.35 : .35), tr * .18, .002, 2, Tissue.RootBark, .04, .16);
+                // Irregular knobby knees: clustered, uneven in count and height, rising from the roots.
+                int knees = r % 3 == 0 ? 1 : r % 3 == 1 ? 3 : 2;
+                for (int kn = 0; kn < knees; kn++)
+                {
+                    double kt = Math.Clamp(.42 + .50 * (kn + b.Draw()) / knees, .40, .97);
+                    int knee = b.AddAxis(root, kt, Vec3.Up + outward * b.Range(-.10, .22) + side * b.Range(-.18, .18),
+                        height * b.Range(.10, .21), side * b.Range(-.25, .25) + outward * b.Range(-.10, .12),
+                        tr * b.Range(.26, .40), tr * b.Range(.16, .24), 2, Tissue.RootBark, .03, .18);
+                    b[knee].AxisGnarling = b.Range(.35, .75);
+                    b[knee].AxisWaist = b.Range(.15, .40);
+                }
+            }
+            // A few arched prop roots swing out from the lower bole and re-enter the soil.
+            for (int p = 0; p < 4; p++)
+            {
+                double a = rot + p * 1.7 + b.Range(-.5, .5);
+                var outward = PlantMath.Horizontal(a);
+                var side = PlantMath.Horizontal(a + Math.PI / 2);
+                int prop = b.AddAxis(trunk, b.Range(.14, .26), outward * .9 + Vec3.Up * .75,
+                    height * b.Range(.10, .17), Vec3.Down * 1.1 + side * b.Range(-.3, .3),
+                    tr * b.Range(.30, .42), tr * .15, 2, Tissue.RootBark, .02, .22);
+                var pr = b[prop];
+                pr.P1 = new Vec3(pr.P1.X, -.012, pr.P1.Z);
+                pr.AxisGnarling = b.Range(.25, .5);
             }
             for (int k = 0; k < 11; k++)
             {
@@ -311,9 +362,11 @@ public static class WoodyGraphSpecies
                 var outward = PlantMath.Horizontal(a);
                 var side = PlantMath.Horizontal(a + Math.PI / 2);
                 double reach = radius * (1.0 - .20 * u) * b.Range(.68, 1.20);
-                int branch = b.AddAxis(trunk, Math.Clamp(.37 + .58 * u + b.Range(-.045, .045), .34, .97),
+                int parent = k < 3 ? trunk : k < 7 ? middle : upper;
+                double attachment = k < 3 ? .62 + k * .14 : k < 7 ? .12 + (k-3) * .25 : .12 + (k-7) * .24;
+                int branch = b.AddAxis(parent, Math.Clamp(attachment + b.Range(-.06, .06), .10, .95),
                     outward + Vec3.Up * b.Range(.16, .58), reach,
-                    Vec3.Up * b.Range(-.12, .30) + side * b.Range(-.20, .20), tr * .28, .002, 1, Tissue.Wood, .06, .20);
+                    Vec3.Up * b.Range(-.12, .30) + side * b.Range(-.35, .35), tr * (k < 5 ? .48 : .30), .002, 3, Tissue.Wood, .06, .20);
                 Sweep(b, branch, side, b.Range(-.65, .65));
                 for (int j = 0; j < 7; j++)
                 {
@@ -356,9 +409,9 @@ public static class WoodyGraphSpecies
                         outward + Vec3.Up * b.Range(.04, .25), reach * b.Range(.82, 1.12),
                         Vec3.Down * b.Range(.04, .24), tr * .22 * (1 - .5 * u), .001, 1, Tissue.Wood, .05, .20);
                     Sweep(b, branch, branchSide, b.Range(-.45, .45));
-                    for (int q = 0; q < 6; q++)
+                    for (int q = 0; q < 3; q++)
                     {
-                        double t = Math.Clamp(.18 + q * .14 + b.Range(-.035, .035), .12, .94);
+                        double t = Math.Clamp(.22 + q * .28 + b.Range(-.04, .04), .12, .94);
                         var tan = b.TangentAt(branch, t);
                         var side = SideOf(tan);
                         for (int sign = -1; sign <= 1; sign += 2)
@@ -367,17 +420,32 @@ public static class WoodyGraphSpecies
                             double lift = (q + j + tier) % 2 == 0 ? .85 : -.65;
                             int spray = b.AddAxis(branch, t, tan * .55 + side * sign * .65 + Vec3.Up * lift,
                                 sprayLen, Vec3.Up * (lift > 0 ? .22 : -.24), .0015, .0005, 2, Tissue.Green, .09, .16);
-                            for (int n = 0; n < 6; n++)
+                            // Long, thin main needles (thin green rods of near-constant width)
+                            // each carry a pinnate fringe of short sub-needles on both sides.
+                            for (int n = 0; n < 4; n++)
                             {
-                                double nt = .13 + n * .14;
+                                double nt = .12 + n * .24;
                                 var st = b.TangentAt(spray, nt);
                                 var lateral = SideOf(st);
                                 for (int pair = -1; pair <= 1; pair += 2)
                                 {
-                                    double len = Math.Min(.13, height * .065) * (1 - .25 * nt);
+                                    double len = Math.Min(.30, height * .15) * (1 - .22 * nt) * b.Range(.85, 1.15);
                                     double incline = ((n + q + j) % 3 - 1) * .85;
-                                    b.AddFlat(spray, nt, lateral * pair + st * .35 + Vec3.Up * incline,
-                                        len, len * .10, .0004, OrganType.Leaf, leaf, 3, .12, .15);
+                                    var ndir = lateral * pair + st * .35 + Vec3.Up * incline;
+                                    int needle = b.AddAxis(spray, nt, ndir, len, Vec3.Down * .06,
+                                        .0009, .0007, 3, Tissue.Green, .11, .15);
+                                    for (int sn = 0; sn < 2; sn++)
+                                    {
+                                        double snt = .30 + sn * .34;
+                                        var nTan = b.TangentAt(needle, snt);
+                                        var nSide = SideOf(nTan);
+                                        double subLen = len * (.30 - .06 * snt);
+                                        for (int fs = -1; fs <= 1; fs += 2)
+                                            b.AddFlat(needle, snt, nSide * fs + nTan * .55,
+                                                subLen, subLen * .09, .0003, OrganType.Leaf, leaf, 4, .13, .15);
+                                    }
+                                    b.AddFlat(needle, 1.0, b.TangentAt(needle, 1.0), len * .22, len * .02,
+                                        .0003, OrganType.Leaf, leaf, 4, .13, .15);
                                 }
                             }
                         }
@@ -400,13 +468,43 @@ public static class WoodyGraphSpecies
                 var (lower, upper) = CurvedStem(b, Vec3.Up + outwards * b.Range(.28, .44), height * b.Range(.72, 1.02),
                     side * .35 + outwards * .18, -side * .50 + outwards * .30,
                     tr, tr * .35, .47, .01 * c, .28);
+                // The upper trunk continues through the same ring, rather than starting
+                // on the outside of the lower trunk with a visible offset and collar.
+                var lowerStem = b[lower];
+                var upperStem = b[upper];
+                var correction = lowerStem.P1 - upperStem.P0;
+                upperStem.P0 += correction;
+                upperStem.P1 += correction;
+                upperStem.R0 = lowerStem.R1;
+                lowerStem.Flags |= OrganFlags.Continuous;
+                upperStem.Flags |= OrganFlags.Continuous;
                 for (int k = 0; k < 4; k++)
                 {
                     double az = a + (k - 1.5) * .65;
                     var dir = PlantMath.Horizontal(az);
-                    int limb = b.AddAxis(upper, .25 + .22 * k, dir * .9 + Vec3.Up * b.Range(.45, .72),
-                        radius * b.Range(.72, 1.0), Vec3.Down * 1.45 + side * b.Range(-.2, .2),
-                        tr * .32, .0018, 2, Tissue.Wood, .07, .20);
+                    var limbDir = dir * .9 + Vec3.Up * b.Range(.45, .72);
+                    double atT = .25 + .22 * k;
+                    // A short collar leaves the trunk exactly along its tangent, sunk into
+                    // the trunk axis, and the limb continues from the collar's end ring.
+                    int collar = b.AddAxis(upper, atT, b.TangentAt(upper, atT) * .9 + limbDir.Normalized() * .55, tr * 5.5, Vec3.Zero,
+                        tr * .5, tr * .30, 2, Tissue.Wood, .06, .12, OrganFlags.Continuous);
+                    var col = b[collar];
+                    double at = col.AttachT;
+                    var center = PlantMath.Hermite(upperStem.P0, upperStem.T0, upperStem.P1, upperStem.T1, at);
+                    var axis = b.TangentAt(upper, at);
+                    double chord = tr * 5.5;
+                    var exit = PlantMath.SafeNormal(axis * .35 + limbDir.Normalized(), axis);
+                    col.P0 = center;
+                    col.P1 = center + PlantMath.SafeNormal(axis * .9 + limbDir.Normalized() * .55, axis) * chord;
+                    col.T0 = axis * chord;
+                    col.T1 = exit * chord;
+                    int limb = b.AddAxis(collar, 1, limbDir, radius * b.Range(.72, 1.0),
+                        Vec3.Down * 1.45 + side * b.Range(-.2, .2), tr * .30, .0018, 2, Tissue.Wood, .07, .20,
+                        OrganFlags.Continuous);
+                    var branch = b[limb];
+                    branch.P0 = col.P1;
+                    branch.R0 = col.R1;
+                    branch.T0 = exit * branch.T0.Length;
                     for (int j = 0; j < 8; j++)
                     {
                         double t = .18 + .105 * j;
@@ -432,7 +530,7 @@ public static class WoodyGraphSpecies
                 ColorAbaxial=PlantShapes.Srgb(.98,.93,.72), Roughness=.45f, Transmission=.32f });
             ushort flower=b.AddShape(new OrganShape { Name="cragparasol_blue_fuzz", Type=OrganType.Flower,
                 SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(1-t,.7)),
-                ColorAdaxial=PlantShapes.Srgb(.08,.16,.55), ColorAbaxial=PlantShapes.Srgb(.12,.23,.68), Thickness=.0003f });
+                ColorAdaxial=PlantShapes.Srgb(.08,.16,.55), ColorAbaxial=PlantShapes.Srgb(.12,.23,.68), Thickness=.0003f, Roughness=.78f });
             for(int j=0;j<7;j++)
             {
                 double a=az+j*Math.Tau/7+b.Range(-.12,.12); var outwards=PlantMath.Horizontal(a);
@@ -494,11 +592,11 @@ public static class WoodyGraphSpecies
                             branchR, branchR * .42, 2, Tissue.Wood, .08, .10);
                         // Fine twigs branch from each lateral before continuing into
                         // their own drooping leafy tips, never directly from a bough.
-                        for (int k = 0; k < 2; k++)
+                        for (int k = 0; k < 3; k++)
                         {
-                            double tt = .48 + k * .42 + b.Range(-.035, .035);
+                            double tt = .34 + k * .30 + b.Range(-.035, .035);
                             var twigDir = b.TangentAt(lateral, tt) * .8
-                                + side * ((k == 0 ? -1 : 1) * b.Range(.25, .48)) + outward * .15;
+                                + side * ((k % 2 == 0 ? -1 : 1) * b.Range(.25, .48)) + outward * .15;
                             double twigR = branchR * (.40 - .18 * tt);
                             int twig = b.AddAxis(lateral, tt, twigDir, reach * b.Range(.14, .23),
                                 Vec3.Down * b.Range(.20, .40), twigR, twigR * .48, 3, Tissue.Wood, .09, .12);
@@ -517,7 +615,7 @@ public static class WoodyGraphSpecies
                             shoot.P1 = new Vec3(shoot.P1.X, Math.Max(height * b.Range(.015, .065), shoot.P1.Y), shoot.P1.Z);
                             shoot.R0 = branch.R1;
                             shoot.R1 = branch.R1 * .12;
-                            Foliage(b, leaf, withe, 19, .06, .98, .12, ref phyl, leafScale: .80, perOverride: 1);
+                            Foliage(b, leaf, withe, 24, .04, .98, .12, ref phyl, leafScale: .90, perOverride: 1);
                         }
                     }
                 }
@@ -526,7 +624,7 @@ public static class WoodyGraphSpecies
 
         private void DesignEmbercrown(PlanBuilder b, ushort leaf, ushort ornament, ref double phyl)
         {
-            // Staghorn sumac clonal thicket: sinuous ascending stems, curved limbs, arching pinnate compound leaves, upright fruit panicles.
+            // Clonal lantern thicket: sinuous ascending stems, curved limbs, arching pinnate compound leaves, upright fruit panicles.
             int stems = 7;
             double stemR = Math.Max(.008, height * .022 / Math.Sqrt(stems));
             double baseRot = b.Range(0, Math.Tau);
@@ -537,22 +635,22 @@ public static class WoodyGraphSpecies
                 var s = PlantMath.Horizontal(az + Math.PI / 2);
                 double len = height * (.52 + .075 * c) * b.Range(.95, 1.05);
                 double turn = c % 2 == 0 ? 1 : -1;
-                var d0 = Vec3.Up + h * .24 + s * (.9 * turn);
+                var d0 = Vec3.Up + h * .24 + s * (1.15 * turn);
                 int s0 = b.AddAxis(-1, 0, d0, len * .34, Vec3.Zero,
                     stemR, stemR * .78, 0, Tissue.Wood, .01 * c, .16);
-                b[s0].P1 = b[s0].P0 + Vec3.Up * (len * .33) + h * (len * .06) + s * (len * .16 * turn);
-                b[s0].T0 = (Vec3.Up + s * (.9 * turn)) * (len * .34);
-                b[s0].T1 = (Vec3.Up - s * (.9 * turn)) * (len * .34);
+                b[s0].P1 = b[s0].P0 + Vec3.Up * (len * .33) + h * (len * .09) + s * (len * .21 * turn);
+                b[s0].T0 = (Vec3.Up + s * (1.15 * turn)) * (len * .34);
+                b[s0].T1 = (Vec3.Up - s * (1.15 * turn)) * (len * .34);
                 int mid = b.AddAxis(s0, .98, b.TangentAt(s0, 1), len * .33,
                     Vec3.Zero, stemR * .75, stemR * .55, 1, Tissue.Wood, .04, .14);
-                b[mid].P1 = b[mid].P0 + Vec3.Up * (len * .33) + h * (len * .06) - s * (len * .16 * turn);
+                b[mid].P1 = b[mid].P0 + Vec3.Up * (len * .33) + h * (len * .09) - s * (len * .21 * turn);
                 b[mid].T0 = b[s0].T1;
-                b[mid].T1 = (Vec3.Up + s * (.9 * turn)) * (len * .34);
+                b[mid].T1 = (Vec3.Up + s * (1.15 * turn)) * (len * .34);
                 int s1 = b.AddAxis(mid, .98, b.TangentAt(mid, 1), len * .33,
                     Vec3.Zero, stemR * .52, stemR * .35, 1, Tissue.Wood, .07, .14);
-                b[s1].P1 = b[s1].P0 + Vec3.Up * (len * .33) + h * (len * .06) + s * (len * .16 * turn);
+                b[s1].P1 = b[s1].P0 + Vec3.Up * (len * .33) + h * (len * .09) + s * (len * .21 * turn);
                 b[s1].T0 = b[mid].T1;
-                b[s1].T1 = (Vec3.Up - s * (.9 * turn)) * (len * .34);
+                b[s1].T1 = (Vec3.Up - s * (1.15 * turn)) * (len * .34);
 
                 // Curved limbs on upper stem + crown tip.
                 for (int k = 0; k < 4; k++)
@@ -562,18 +660,18 @@ public static class WoodyGraphSpecies
                     double baz = az + (k % 2 == 0 ? 1 : -1) * b.Range(.55, 1.15) + b.Range(-.3, .3);
                     var bo = PlantMath.Horizontal(baz);
                     var bs = PlantMath.Horizontal(baz + Math.PI / 2);
-                    double reach = radius * b.Range(.45, .75);
+                    double reach = radius * b.Range(.58, .94);
                     double sweep = (k % 2 == 0 ? 1 : -1) * turn;
-                    int br0 = b.AddAxis(host, bt, bo * .75 + Vec3.Up * .65 + bs * (.85 * sweep), reach * .55,
+                    int br0 = b.AddAxis(host, bt, bo * .75 + Vec3.Up * .65 + bs * (1.10 * sweep), reach * .55,
                         Vec3.Zero, stemR * .32, stemR * .19, 2, Tissue.Wood, .07, .12);
-                    b[br0].P1 = b[br0].P0 + bo * (reach * .42) + Vec3.Up * (reach * .22) + bs * (reach * .16 * sweep);
-                    b[br0].T0 = (bo * .8 + Vec3.Up * .5 + bs * (.9 * sweep)) * (reach * .55);
-                    b[br0].T1 = (bo * .8 + Vec3.Up * .5 - bs * (.9 * sweep)) * (reach * .55);
+                    b[br0].P1 = b[br0].P0 + bo * (reach * .42) + Vec3.Up * (reach * .22) + bs * (reach * .22 * sweep);
+                    b[br0].T0 = (bo * .8 + Vec3.Up * .5 + bs * (1.16 * sweep)) * (reach * .55);
+                    b[br0].T1 = (bo * .8 + Vec3.Up * .5 - bs * (1.16 * sweep)) * (reach * .55);
                     int br = b.AddAxis(br0, .98, b.TangentAt(br0, 1), reach * .45,
                         Vec3.Zero, stemR * .18, .0025, 3, Tissue.Wood, .10, .12);
-                    b[br].P1 = b[br].P0 + bo * (reach * .34) + Vec3.Up * (reach * .18) - bs * (reach * .14 * sweep);
+                    b[br].P1 = b[br].P0 + bo * (reach * .34) + Vec3.Up * (reach * .18) - bs * (reach * .20 * sweep);
                     b[br].T0 = b[br0].T1;
-                    b[br].T1 = (bo * .8 + Vec3.Up * .5 + bs * (.9 * sweep)) * (reach * .45);
+                    b[br].T1 = (bo * .8 + Vec3.Up * .5 + bs * (1.16 * sweep)) * (reach * .45);
                     // Arching pinnate compound leaf sprays radiating from the branch.
                     for (int lf = 0; lf < 4; lf++)
                     {
@@ -600,25 +698,31 @@ public static class WoodyGraphSpecies
 
         private void DesignGreywatch(PlanBuilder b, ushort leaf, ushort ornament, ref double phyl)
         {
-            // Short leaning bole and low, outward-reaching limbs carry pale, airy pads.
+            // Uneven limbs rise from a leaning bole, then sweep sharply down at their tips.
             double rot = b.Range(0, Math.Tau), tr = Math.Max(.012, height * .045);
             int bole = b.AddAxis(-1, 0, Vec3.Up + PlantMath.Horizontal(rot) * .18, height * .25,
                 PlantMath.Horizontal(rot + 1) * .12, tr, tr * .65, 0, Tissue.Wood, 0, .2);
             for (int i = 0; i < 6; i++)
             {
-                double a = rot + i * Math.Tau / 6 + b.Range(-.2, .2);
-                var outwards = PlantMath.Horizontal(a);
-                int limb = b.AddAxis(bole, .45 + .09 * (i % 5), outwards + Vec3.Up * .27,
-                    radius * b.Range(.70, 1.0), Vec3.Up * .16, tr * .42, .002, 1, Tissue.Wood, .04, .2);
-                for (int j = 0; j < 4; j++)
+                double a = rot + i * Math.Tau / 6 + b.Range(-.35, .35);
+                var outward = PlantMath.Horizontal(a);
+                var side = PlantMath.Horizontal(a + Math.PI / 2);
+                int limb = b.AddAxis(bole, b.Range(.30,.92), outward*.55 + Vec3.Up*b.Range(.8,1.3),
+                    radius*b.Range(.55,.85), outward*.65 + Vec3.Down*.55 + side*b.Range(-.3,.3), tr*.42, tr*.18, 1, Tissue.Wood, .04, .2);
+                var tangent = b.TangentAt(limb,1);
+                int droop = b.AddAxis(limb, 1, tangent, radius*b.Range(.35,.65),
+                    Vec3.Down*b.Range(2.5,4.0) + side*b.Range(-.35,.35), tr*.18, .0015, 2, Tissue.Wood, .06, .2, OrganFlags.Basal);
+                for (int j = 0; j < 7; j++)
                 {
-                    double t = .30 + j * .21;
-                    var d = PlantMath.Horizontal(a + (j % 2 == 0 ? .65 : -.65));
-                    int shoot = b.AddAxis(limb, t, d + Vec3.Up * .22, radius * .30,
-                        Vec3.Up * .08, .003, .001, 2, Tissue.Green, .09, .16);
-                    Foliage(b, leaf, shoot, 9, .12, .98, .13, ref phyl, leafScale: 1.25, perOverride: 3);
+                    int host = j < 3 ? limb : droop;
+                    double t = j < 3 ? b.Range(.3,.92) : b.Range(.12,.95);
+                    double sa = a + b.Range(-1.2,1.2);
+                    var d = PlantMath.Horizontal(sa);
+                    int shoot = b.AddAxis(host,t,d+Vec3.Up*b.Range(.05,.55),radius*b.Range(.16,.32),
+                        Vec3.Down*b.Range(.15,.65)+side*b.Range(-.3,.3),.003,.0008,3,Tissue.Green,.09,.16);
+                    Foliage(b,leaf,shoot,9,.10,.99,.13,ref phyl,leafScale:1.25,perOverride:3);
                 }
-                Foliage(b, leaf, limb, 8, .3, .99, .13, ref phyl, leafScale: 1.25, perOverride: 3);
+                Foliage(b,leaf,droop,8,.15,.99,.13,ref phyl,leafScale:1.25,perOverride:3);
             }
         }
 
@@ -643,19 +747,19 @@ public static class WoodyGraphSpecies
                     Vec3.Down * b.Range(.85, 1.25) + s * b.Range(-.4, .4), caneR * .52, .0020, 1, Tissue.Wood, .05, .22);
 
                 // Recurved thorns along ascending & bowing cane.
-                for (int th = 0; th < 6; th++)
+                for (int th = 0; th < 14; th++)
                 {
-                    int host = th < 3 ? asc : bow;
-                    double tt = .20 + .72 * (th % 3) / 2.0;
+                    int host = th < 7 ? asc : bow;
+                    double tt = .08 + .84 * (th % 7) / 6.0;
                     var td = s * (th % 2 == 0 ? .8 : -.8) + h * .4 + Vec3.Up * .2;
-                    b.AddAxis(host, tt, td, .014, Vec3.Down * .45, .0025, .0003, 2, Tissue.Bark, .08, .10);
+                    b.AddAxis(host, tt, td, .038, Vec3.Down * 2.4 - h*.6, .0032, .00025, 2, Tissue.Bark, .08, .10, OrganFlags.GlossyBlack);
                 }
 
                 // Curved leafy lateral shoots along both ascending and bowing segments.
-                for (int k = 0; k < 6; k++)
+                for (int k = 0; k < 10; k++)
                 {
-                    int host = k < 3 ? asc : bow;
-                    double bt = k < 3 ? .32 + .28 * k : .16 + .32 * (k - 3);
+                    int host = k < 5 ? asc : bow;
+                    double bt = k < 5 ? .16 + .19 * k : .10 + .20 * (k - 5);
                     double baz = az + (k % 2 == 0 ? 1 : -1) * b.Range(.55, 1.05);
                     var bo = PlantMath.Horizontal(baz);
                     var bs = PlantMath.Horizontal(baz + Math.PI / 2);
@@ -674,55 +778,92 @@ public static class WoodyGraphSpecies
 
         private void DesignHollowcrown(PlanBuilder b, ushort leaf, ref double phyl)
         {
-            // Flared ends and a pinched waist give the hollow veteran its sculptural bole.
-            double boleHeight = height * .49, r = Math.Max(.10, height * .105);
-            double opening = b.Range(0, Math.Tau);
+            // Veteran pollard after the previous form: a tall, broad, gently leaning
+            // hollow bole with a flared base, buttress roots that sink down out of the
+            // trunk flare before running along the soil, and a swollen bolling head
+            // from which a ring of heavy elbowed scaffold limbs spreads into a wide crown.
+            double boleHeight = height * .56, r = Math.Max(.11, Math.Max(height * .11, radius * .30));
+            double opening = Math.Atan2(Vec3.Forward.Z, Vec3.Forward.X);
             int bole = b.AddAxis(-1, 0, Vec3.Up, boleHeight,
-                Vec3.Up * .03, r, r * .94, 0, Tissue.Bark, 0, .25, OrganFlags.Hollow | OrganFlags.HollowWindow);
-            b[bole].AxisWaist = .42f;
+                PlantMath.Horizontal(opening + 2.2) * .05, r * 1.06, r * .92, 0, Tissue.Bark, 0, .25,
+                OrganFlags.Hollow | OrganFlags.HollowWindow);
+            b[bole].AxisWaist = .14f;
             b[bole].Up = Vec3.Forward;
-            for (int i = 0; i < 9; i++)
+
+            // Six irregular buttresses, none directly under the opening.
+            double[] rootOffsets = { .78, Math.PI * .52, Math.PI * .94, Math.PI * 1.36, Math.PI * 1.66, Math.Tau - .78 };
+            foreach (double off in rootOffsets)
             {
-                double az = opening + i * Math.Tau / 9 + b.Range(-.25, .25);
+                double az = opening + off + b.Range(-.12, .12);
                 var radial = PlantMath.Horizontal(az);
-                double length=r*b.Range(.55,1.05);
-                int root=b.AddAxis(bole,b.Range(.025,.055),radial+Vec3.Down*.35,length,
-                    Vec3.Down*.35,r*b.Range(.18,.25),r*.045,1,Tissue.RootBark,0,.16);
-                b[root].P1=new Vec3(b[root].P1.X,-r*.10,b[root].P1.Z);
-                b[root].T1=PlantMath.SafeNormal(radial*.7+Vec3.Down*.8,Vec3.Down)*length;
+                var ortho = PlantMath.Horizontal(az + Math.PI / 2);
+                double length = r * b.Range(1.8, 2.4);
+                int root = b.AddAxis(bole, b.Range(.16, .24), radial * .5 + Vec3.Down, length,
+                    Vec3.Zero, r * b.Range(.26, .32), r * .045, 1, Tissue.RootBark, 0, .16);
+                var o = b[root];
+                // Emerge as a buttress ridge high on the flare, sink, then snake along the soil.
+                o.P1 = radial * (r * b.Range(2.4, 3.0)) + ortho * (r * b.Range(-.35, .35)) + Vec3.Down * (r * .04);
+                o.T0 = (Vec3.Down * .85 + radial * .30) * length;
+                o.T1 = (radial * .95 + Vec3.Down * .05 + ortho * b.Range(-.30, .30)) * length;
             }
 
-            // A few uneven scaffold arms fork into the crown, rather than
-            // plugging every leafy branch directly into the bole in tiers.
-            int[] scaffold=new int[6];
-            double[] levels={.82,.94,.88,.985,.91,.84};
-            for(int i=0;i<scaffold.Length;i++)
+            const int limbs = 6;
+            double baseAz = opening + Math.PI * .20;
+            for (int k = 0; k < limbs; k++)
             {
-                double az=opening+i*2.3999632297+b.Range(-.28,.28);
-                double level=Math.Clamp(levels[i]+b.Range(-.018,.018),.80,.99);
-                if(PlantMath.Horizontal(az).Dot(Vec3.Forward)>.7&&level<.9)az+=.8;
-                var radial=PlantMath.Horizontal(az);
-                int arm=b.AddAxis(bole,level,radial+Vec3.Up*b.Range(.3,1.05),radius*b.Range(.35,.62),
-                    Vec3.Up*b.Range(-.1,.4),r*b.Range(.19,.25),r*.07,1,Tissue.Wood,.05,.17);
-                Sweep(b,arm,PlantMath.Horizontal(az+Math.PI/2),b.Range(-.55,.55));
-                scaffold[i]=arm;
-            }
-            for (int i = 0; i < 22; i++)
-            {
-                int host=scaffold[(i*5)%scaffold.Length];
-                double at=Math.Clamp(.35+.6*((i*7)%22)/21.0+b.Range(-.04,.04),.28,.98);
-                var tangent=b.TangentAt(host,at);var side=SideOf(tangent);
-                var direction=tangent*.6+side*(i%2==0?.8:-.8)+Vec3.Up*b.Range(.2,.8);
-                double a=Math.Atan2(direction.Z,direction.X);
-                int limb=b.AddAxis(host,at,direction,radius*b.Range(.28,.52),
-                    Vec3.Up*b.Range(-.1,.35),r*.07,.006,2,Tissue.Wood,.08,.16);
-                Sweep(b,limb,side,b.Range(-.55,.55));
-                for (int j = 0; j < 3; j++)
+                double az = baseAz + k * Math.Tau / limbs + b.Range(-.16, .16);
+                var outward = PlantMath.Horizontal(az);
+                var ortho = PlantMath.Horizontal(az + Math.PI / 2);
+                double limbR = r * b.Range(.30, .36);
+                double reach = radius * b.Range(.30, .40), rise = height * b.Range(.10, .15);
+
+                // Heavy knurled primary limb rising out of the bolling head to an elbow.
+                int limb = b.AddAxis(bole, b.Range(.93, .99), outward * .55 + Vec3.Up * .8, reach,
+                    Vec3.Zero, limbR, limbR * .66, 1, Tissue.Wood, .04, .17);
+                var l = b[limb];
+                l.P1 = l.P0 + outward * reach + ortho * (reach * b.Range(-.12, .12)) + Vec3.Up * rise;
+                l.T0 = (outward * .50 + Vec3.Up * .86) * (reach + rise);
+                l.T1 = (outward * .80 + Vec3.Up * .50 + ortho * b.Range(-.15, .15)) * (reach + rise);
+                l.AxisWaist = b.Range(.10, .22);
+
+                // Outer spreading bough continues from the elbow ring.
+                double outAz = az + b.Range(-.25, .25);
+                var outDir = PlantMath.Horizontal(outAz);
+                double outReach = radius * b.Range(.40, .52);
+                int outer = b.AddAxis(limb, 1, l.T1, outReach, Vec3.Zero, limbR * .66, limbR * .16,
+                    2, Tissue.Wood, .07, .16, OrganFlags.Continuous);
+                var ob = b[outer];
+                ob.P0 = l.P1; ob.R0 = l.R1; ob.T0 = l.T1;
+                ob.P1 = ob.P0 + outDir * outReach + Vec3.Up * (height * b.Range(.05, .10))
+                    + PlantMath.Horizontal(outAz + Math.PI / 2) * (outReach * b.Range(-.12, .12));
+                ob.T1 = (outDir * .85 + Vec3.Up * .22) * outReach;
+
+                // Ascending inner bough curving up over the bowl.
+                double inRise = height * b.Range(.20, .27);
+                int inner = b.AddAxis(limb, .92, Vec3.Up * .8 + outward * .35, inRise,
+                    -outward * .3, limbR * .52, limbR * .14, 2, Tissue.Wood, .08, .16);
+                Sweep(b, inner, ortho, b.Range(-.35, .35));
+
+                // Low skirt bough spreading over the knuckles.
+                double lowReach = radius * b.Range(.38, .50);
+                var lowDir = PlantMath.Horizontal(az + b.Range(-.45, .45));
+                int low = b.AddAxis(limb, .26, lowDir * .85 + Vec3.Up * .22, lowReach,
+                    Vec3.Down * .12, limbR * .44, limbR * .12, 2, Tissue.Wood, .06, .16);
+                Sweep(b, low, PlantMath.Horizontal(az + Math.PI / 2), b.Range(-.40, .40));
+
+                // Crooked side branchlets carry the lobed oak sprays.
+                foreach (var (host, n, t0) in new[] { (outer, 4, .30), (inner, 3, .35), (low, 2, .45) })
                 {
-                    var d = PlantMath.Horizontal(a + (j - 1) * .5 + b.Range(-.18, .18)) + Vec3.Up * b.Range(.42, .78);
-                    int twig = b.AddAxis(limb, Math.Clamp(.35 + .29 * j + b.Range(-.08, .08), .22, .98), d, radius * b.Range(.24, .36),
-                        Vec3.Up * .15, .006, .001, 2, Tissue.Wood, .12, .16);
-                    Foliage(b, leaf, twig, 7, .12, .98, .15, ref phyl, petioleLen: .012, perOverride: 2);
+                    for (int j = 0; j < n; j++)
+                    {
+                        double t = Math.Clamp(t0 + (1 - t0) * (j + .5) / n + b.Range(-.05, .05), .2, .97);
+                        var tan = b.TangentAt(host, t); var side = SideOf(tan);
+                        var d = tan * .55 + side * ((j % 2 == 0 ? 1 : -1) * b.Range(.55, .95)) + Vec3.Up * b.Range(.25, .7);
+                        int twig = b.AddAxis(host, t, d, radius * b.Range(.18, .28),
+                            side * b.Range(-.3, .3) + Vec3.Up * b.Range(-.1, .25), b[host].R1 * 1.4, .0012, 3, Tissue.Wood, .12, .16);
+                        Foliage(b, leaf, twig, 7, .10, .99, .15, ref phyl, petioleLen: .012, perOverride: 2);
+                    }
+                    Foliage(b, leaf, host, 5, .72, .99, .15, ref phyl, petioleLen: .012, perOverride: 2);
                 }
             }
         }
@@ -828,17 +969,17 @@ public static class WoodyGraphSpecies
                 b[limb].P0 = b[burl].P1;
                 b[limb].R0 = b[burl].R1;
                 b[limb].T0 = b[burl].T1;
-                for (int j = 0; j < 4; j++)
+                for (int j = 0; j < 6; j++)
                 {
-                    double t = Math.Clamp(.25 + j * .17 + b.Range(-.055, .055), .18, .96);
+                    double t = Math.Clamp(.20 + j * .14 + b.Range(-.045, .045), .16, .97);
                     var outward = PlantMath.Horizontal(a + (j % 2 == 0 ? .65 : -.65));
                     var cross = PlantMath.Horizontal(a + (j % 2 == 0 ? 2.1 : -2.1));
                     int twig = b.AddAxis(limb, t, outward + Vec3.Up * b.Range(.15, .55), radius * b.Range(.15, .26),
                         Vec3.Up * b.Range(-.20, .35) + cross * b.Range(-.65, .65), .005, .001, 2, Tissue.Wood, .09, .17);
                     Sweep(b, twig, cross, b.Range(-.65, .65));
-                    for (int q = 0; q < 3; q++)
+                    for (int q = 0; q < 4; q++)
                     {
-                        double qt = .28 + q * .30;
+                        double qt = .22 + q * .25;
                         var tan = b.TangentAt(twig, qt);
                         var direction = tan + SideOf(tan) * (q % 2 == 0 ? .8 : -.8) + Vec3.Up * .2;
                         for (int k = -1; k <= 1; k++)
@@ -846,13 +987,13 @@ public static class WoodyGraphSpecies
                             var fanDir = direction + SideOf(tan) * (k * .55) + tan * (k == 0 ? .4 : 0);
                             int petiole = b.AddAxis(twig, qt, fanDir, .022, Vec3.Down * .15,
                                 .0012, .0006, 3, Tissue.Green, .14, .12, OrganFlags.None, OrganType.Petiole);
-                            double size = b.Range(.055, .075);
+                            double size = b.Range(.072, .098);
                             b.AddFlat(petiole, 1, fanDir, size, size * 1.15, .0004,
                                 OrganType.Leaf, fanLeaf, 4, .15, .14);
                         }
                     }
                     // One branched stalk per limb carries a distinct cluster of round fruit.
-                    if (j != 3 || i % 2 != 0) continue;
+                    if (j != 4 || i % 2 != 0) continue;
                     int stem = b.AddAxis(twig, .86, Vec3.Down + outward * .3, .035,
                         outward * .15, .0015, .0008, 3, Tissue.Wood, .1, .12);
                     int count = 5 + i % 3;
@@ -961,9 +1102,18 @@ public static class WoodyGraphSpecies
             double leanAz = b.Range(0, Math.Tau);
             var hL = PlantMath.Horizontal(leanAz);
             var sL = PlantMath.Horizontal(leanAz + Math.PI / 2);
-            int s0 = b.AddAxis(-1, 0, Vec3.Up + hL * .14, height * .46, hL * -.18 + sL * .22, trunkR, trunkR * .65, 0, Tissue.Wood, 0, .20);
-            int s1 = b.AddAxis(s0, .96, b.TangentAt(s0, 1.0) + sL * -.25, height * .42, hL * .18 + sL * -.18,
+            int s0 = b.AddAxis(-1, 0, Vec3.Up + hL * .25, height * .46, hL * -.55 + sL * .45, trunkR, trunkR * .65, 0, Tissue.Wood, 0, .20);
+            b[s0].AxisGnarling = .38;
+            int s1 = b.AddAxis(s0, .96, b.TangentAt(s0, 1.0) + sL * -.42, height * .42, hL * .48 + sL * -.35,
                 trunkR * .54, trunkR * .24, 1, Tissue.Wood, .04, .20);
+            b[s1].AxisGnarling = .28;
+            ushort pollen = b.AddShape(new OrganShape {
+                Name = "lacemantle_pollen", Type = OrganType.Flower,
+                SurfaceForm = OrganSurfaceForm.Revolved,
+                WidthProfile = PlantShapes.Profile(t => .5 * Math.Sin(Math.PI * t)),
+                ColorAdaxial = PlantShapes.Srgb(.57, .34, .66), ColorAbaxial = PlantShapes.Srgb(.39, .22, .51),
+                Roughness = .8f
+            });
 
             // Upright lush apex spray.
             for (int a = 0; a < 3; a++)
@@ -988,18 +1138,34 @@ public static class WoodyGraphSpecies
                     var bo = PlantMath.Horizontal(az);
                     var bs = PlantMath.Horizontal(az + Math.PI / 2);
                     // Horizontal sweeping limb that gently upturns toward the tip like Cornus alternifolia.
-                    int limb = b.AddAxis(host, tt, bo * 1.0 + Vec3.Up * b.Range(.06, .18), tierRadius * b.Range(.80, 1.08),
-                        Vec3.Up * .32 + bs * b.Range(-.25, .25), Math.Max(.003, trunkR * .38 * (1 - .35 * u)), .0018, 2, Tissue.Wood, .07, .18);
+                    int limb = b.AddAxis(host, tt, bo * 1.0 + Vec3.Up * b.Range(.06, .22) + bs * b.Range(-.22, .22), tierRadius * b.Range(.76, 1.12),
+                        Vec3.Up * b.Range(.12, .48) + bs * b.Range(-.65, .65), Math.Max(.003, trunkR * .38 * (1 - .35 * u)), .0018, 2, Tissue.Wood, .07, .18);
+                    b[limb].AxisGnarling = b.Range(.12, .30);
 
                     // Horizontal flat fan of secondary twigs carrying dense lacy terminal foliage.
-                    for (int tw = 0; tw < 4; tw++)
+                    for (int tw = 0; tw < 5; tw++)
                     {
-                        double twT = .30 + .64 * tw / 3.0;
+                        double twT = .22 + .72 * tw / 4.0;
                         double twAz = az + (tw % 2 == 0 ? 1 : -1) * b.Range(.65, 1.05);
                         var twO = PlantMath.Horizontal(twAz);
                         int twig = b.AddAxis(limb, twT, twO * .95 + Vec3.Up * .12, tierRadius * b.Range(.28, .42) * (1 - .3 * twT),
                             Vec3.Up * .20 + PlantMath.Horizontal(twAz + 1.5) * b.Range(-.2, .2), .0025, .0010, 3, Tissue.Green, .11, .14);
-                        for (int n = 0; n < 3; n++) LaceFan(b, leaf, twig, .35 + n * .30);
+                        for (int n = 0; n < 4; n++) LaceFan(b, leaf, twig, .22 + n * .25);
+                        // A subset of twig tips bears a hanging, branching pollen raceme.
+                        if ((tier + bIdx + tw) % 3 == 0)
+                        {
+                            int stalk = b.AddAxis(twig, .97, Vec3.Down + twO * .15, height * b.Range(.09, .13),
+                                Vec3.Down * .4, .0012, .00065, 4, Tissue.Green, .16, .14);
+                            for (int n = 0; n < 5; n++)
+                            {
+                                double pt = .22 + n * .18;
+                                var side = PlantMath.Horizontal(twAz + (n % 2 == 0 ? 1 : -1) * 1.2);
+                                int ped = b.AddAxis(stalk, pt, Vec3.Down + side * .55, height * .018,
+                                    Vec3.Down * .3, .0006, .00035, 5, Tissue.Green, .18, .10);
+                                b.AddFlat(ped, 1, Vec3.Down, height * .025, height * .009, .0004,
+                                    OrganType.Flower, pollen, 6, .20, .12);
+                            }
+                        }
                     }
                     LaceFan(b, leaf, limb, .96);
                 }
@@ -1018,9 +1184,13 @@ public static class WoodyGraphSpecies
                 var h = PlantMath.Horizontal(az);
                 var s = PlantMath.Horizontal(az + Math.PI / 2);
                 double len = height * b.Range(.78, 1.04);
-                int s0 = b.AddAxis(-1, 0, Vec3.Up + h * b.Range(.18, .36), len * .55,
-                    h * b.Range(.22, .42) + s * b.Range(-.25, .25), stemR, stemR * .65, 0, Tissue.Wood, .01 * c, .20);
-                int s1 = b.AddAxis(s0, .96, b.TangentAt(s0, 1.0) + h * .25, len * .45,
+                int s0 = b.AddAxis(-1, 0, Vec3.Up + h * b.Range(.03, .12), len * .55,
+                    h * b.Range(.05, .16) + s * b.Range(-.16, .16), stemR, stemR * .65, 0, Tissue.Wood, .01 * c, .20);
+                // Independent shoots emerge across a broad stool rather than one shared point.
+                var baseOffset = h * (radius * b.Range(.16, .30));
+                b[s0].P0 += baseOffset;
+                b[s0].P1 += baseOffset;
+                int s1 = b.AddAxis(s0, .96, b.TangentAt(s0, 1.0) + h * .12, len * .45,
                     Vec3.Down * b.Range(.75, 1.15) + h * .3 + s * b.Range(-.3, .3), stemR * .54, .0025, 1, Tissue.Wood, .05, .20);
 
                 // Opposite curved lateral branches along the arching stem.
@@ -1111,9 +1281,14 @@ public static class WoodyGraphSpecies
                 var h = PlantMath.Horizontal(az);
                 var s = PlantMath.Horizontal(az + Math.PI / 2);
                 double len = height * b.Range(.76, 1.05);
-                var (s0, s1) = CurvedStem(b, Vec3.Up + h * b.Range(.24, .44), len,
+                var (s0, s1) = CurvedStem(b, Vec3.Up + h * b.Range(.03, .12), len,
                     s * b.Range(-.32, .32) + h * b.Range(-.15, .20),
                     h * b.Range(-.28, .15) + s * b.Range(-.32, .32), stemR, stemR * .35, 0.50, .01 * c, .24);
+                // Move both sections together; their attached branches follow the
+                // translated upper section when they are subsequently authored.
+                var baseOffset = h * (radius * b.Range(.16, .30));
+                b[s0].P0 += baseOffset; b[s0].P1 += baseOffset;
+                b[s1].P0 += baseOffset; b[s1].P1 += baseOffset;
 
                 for (int k = 0; k < 4; k++)
                 {
@@ -1144,6 +1319,9 @@ public static class WoodyGraphSpecies
         private void DesignRainshield(PlanBuilder b, ushort leaf)
         {
             // Darmera peltata: rhizomatous colony of 26 gracefully curving fleshy petioles rising to staggered heights, each crowned with a broad cupped horizontal umbrella leaf.
+            ushort ridge=b.AddShape(new OrganShape { Name="rainshield_ribbed_stem", Type=OrganType.Flower,
+                SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5),
+                ColorAdaxial=PlantShapes.Srgb(.22,.38,.18), ColorAbaxial=PlantShapes.Srgb(.14,.27,.11), Roughness=.52f });
             int count = 26;
             double petR = Math.Max(.006, height * .014);
             double baseRot = b.Range(0, Math.Tau);
@@ -1162,28 +1340,33 @@ public static class WoodyGraphSpecies
                 var sBend = h * b.Range(-.35, .45) + s * b.Range(-.55, .55);
                 int petiole = b.AddAxis(runner, .95, sDir, stalkH, sBend, petR * .62, petR * .42, 2, Tissue.Green, .02 + .004 * i, .24);
                 Sweep(b, petiole, s, b.Range(-.65, .65));
+                b.AddFlat(petiole,0,b.TangentAt(petiole,0),stalkH*.92,petR*.69,.0004,OrganType.Flower,ridge,3,.03,.24);
+                // A narrow extension carries the blade into the petiole tip.
+                int joint=b.AddAxis(petiole,1,b.TangentAt(petiole,1),petR*.7,Vec3.Zero,petR*.38,petR*.08,3,Tissue.Green,.03,.08,OrganFlags.Basal);
                 // Broad overlapping shields form a cohesive, staggered canopy.
-                double bladeLen = b.Range(.48, .66);
+                double bladeLen = b.Range(.68, .88);
                 var tilt = h * b.Range(.75, 1.0) + s * b.Range(-.3, .3) + Vec3.Up * b.Range(-.06, .16);
-                b.AddFlat(petiole, 1.0, tilt, bladeLen, bladeLen * .50, .0007, OrganType.Leaf, leaf, 3, .14 + .004 * i, .20);
+                b.AddFlat(joint, 1.0, tilt, bladeLen, bladeLen * .58, .0007, OrganType.Leaf, leaf, 3, .14 + .004 * i, .20);
             }
         }
 
         private void DesignSilverfelt(PlanBuilder b, ushort leaf, ushort ornament, ref double phyl)
         {
-            // Salix lanata: low wind-hugged gnarled cushion of 9 procumbent-ascending multi-segment stems & twisted twigs packed with broad ovate leaves + erect furry catkins.
+            // Separate ascending shoots occupy a broad cushion instead of fanning
+            // out from one central point.
             int stems = 9;
             double stemR = Math.Max(.005, height * .030 / Math.Sqrt(stems));
             double baseRot = b.Range(0, Math.Tau);
             for (int c = 0; c < stems; c++)
             {
-                double az = baseRot + c * Math.Tau / stems + b.Range(-.38, .38);
+                double az = baseRot + c * Math.Tau / stems + b.Range(-.18, .18);
                 var h = PlantMath.Horizontal(az);
                 var s = PlantMath.Horizontal(az + Math.PI / 2);
-                double len = radius * b.Range(.86, 1.20);
-                // Hugs low outward first, then curves upward.
-                int s0 = b.AddAxis(-1, 0, h * 1.1 + Vec3.Up * b.Range(.35, .65), len * .52,
-                    Vec3.Up * .55 + s * b.Range(-.35, .35), stemR, stemR * .65, 0, Tissue.Wood, .01 * c, .20);
+                double len = height * b.Range(.65, .90);
+                var origin = h * (radius * b.Range(.25, .55));
+                int s0 = b.AddAxis(-1, 0, Vec3.Up + h * b.Range(.08, .25), len * .52,
+                    h * .08 + s * b.Range(-.15, .15), stemR, stemR * .65, 0, Tissue.Wood, .01 * c, .20,
+                    rootOrigin: origin);
                 int s1 = b.AddAxis(s0, .95, b.TangentAt(s0, 1.0) + Vec3.Up * .45 + s * b.Range(-.3, .3),
                     len * .46, s * b.Range(-.35, .35) + h * -.25, stemR * .54, .0016, 1, Tissue.Wood, .05, .18);
 
@@ -1208,7 +1391,7 @@ public static class WoodyGraphSpecies
         {
             // Albizia julibrissin: 3 slender sinuous trunks keeping lower space open, forking into asymmetric flat-topped umbrella crowns of feathery compound-leaf sprays.
             int trunks = 3;
-            double trunkR = Math.Max(.009, height * .026 / Math.Sqrt(trunks));
+            double trunkR = Math.Max(.009, height * .047 / Math.Sqrt(trunks));
             double baseRot = b.Range(0, Math.Tau);
             for (int c = 0; c < trunks; c++)
             {
@@ -1229,22 +1412,23 @@ public static class WoodyGraphSpecies
                     double bt = .38 + .58 * k / 3.0;
                     int limb = b.AddAxis(s1, bt, bo * .95 + Vec3.Up * b.Range(.28, .55), radius * b.Range(.46, .74),
                         Vec3.Up * .15 + bs * b.Range(-.32, .32) + Vec3.Down * .22, trunkR * .30, .0020, 2, Tissue.Wood, .08, .18);
-                    for (int tw = 0; tw < 3; tw++)
+                    for (int tw = 0; tw < 5; tw++)
                     {
-                        double twT = .35 + .58 * tw / 2.0;
-                        double twAz = baz + (tw - 1) * .85;
+                        double twT = .25 + .70 * tw / 4.0;
+                        double twAz = baz + (tw - 2) * .48;
                         var twO = PlantMath.Horizontal(twAz);
                         int twig = b.AddAxis(limb, twT, twO * .95 + Vec3.Up * .18, radius * b.Range(.22, .34),
                             Vec3.Down * .15 + PlantMath.Horizontal(twAz + 1.5) * b.Range(-.25, .25), .0018, .0009, 3, Tissue.Green, .12, .14);
                         // Pair of feathery pinnate compound leaves at each twig fan.
-                        for (int fIdx = 0; fIdx < 3; fIdx++)
+                        // Broad, overlapping leaflets and an extra leaf per fan fill the canopy.
+                        for (int fIdx = 0; fIdx < 4; fIdx++)
                         {
-                            double ft = .35 + .60 * fIdx / 2.0;
-                            var fdir = PlantMath.Horizontal(twAz + (fIdx - 1) * .9) * .95 + Vec3.Up * .12;
-                            AddCompoundLeaf(b, leaf, twig, ft, fdir, b.Range(.16, .24), Vec3.Down * .32, 6, b.Range(.038, .052), .26, 4, .15);
+                            double ft = .30 + .65 * fIdx / 3.0;
+                            var fdir = PlantMath.Horizontal(twAz + (fIdx - 1.5) * .7) * .95 + Vec3.Up * .12;
+                            AddCompoundLeaf(b, leaf, twig, ft, fdir, b.Range(.17, .25), Vec3.Down * .32, 5, b.Range(.058, .076), .62, 4, .15);
                         }
                     }
-                    AddCompoundLeaf(b, leaf, limb, .96, bo * .95 + Vec3.Up * .1, .20, Vec3.Down * .30, 6, .048, .26, 3, .14);
+                    AddCompoundLeaf(b, leaf, limb, .96, bo * .95 + Vec3.Up * .1, .22, Vec3.Down * .30, 5, .070, .62, 3, .14);
                 }
             }
         }
@@ -1261,9 +1445,10 @@ public static class WoodyGraphSpecies
                 var h = PlantMath.Horizontal(az);
                 var s = PlantMath.Horizontal(az + Math.PI / 2);
                 double len = height * b.Range(.78, 1.05);
-                var (s0, s1) = CurvedStem(b, Vec3.Up + h * b.Range(.20, .42), len,
-                    s * b.Range(-.36, .36) + h * .18,
-                    s * b.Range(-.36, .36) + h * -.24, stemR, stemR * .34, 0.48, .01 * c, .24);
+                var (s0, s1) = CurvedStem(b, Vec3.Up + h * b.Range(.03, .12), len,
+                    s * b.Range(-.18, .18) + h * .08,
+                    s * b.Range(-.22, .22) - h * .08, stemR, stemR * .34, 0.48, .01 * c, .24,
+                    h * radius * b.Range(.16, .42));
 
                 for (int k = 0; k < 4; k++)
                 {
@@ -1289,10 +1474,17 @@ public static class WoodyGraphSpecies
                         Foliage(b, leaf, twig, 5, .20, 1.0, .13, ref phyl, petioleLen: .012, leafScale: 1.10, perOverride: 2);
                     }
                     Foliage(b, leaf, br, 4, .40, 1.0, .12, ref phyl, petioleLen: .012, leafScale: 1.15, perOverride: 2);
+                    // Spreading wide compound leaves crown the end of each limb.
+                    for (int cl = 0; cl < 3; cl++)
+                        AddCompoundLeaf(b, leaf, br, 1.0, bo * .95 + bs * ((cl - 1) * .8) + Vec3.Up * .22,
+                            b.Range(.22, .30), Vec3.Down * .18, 4, b.Range(.085, .105), .58, 3, .14);
                     if (k >= 1)
                         b.AddFlat(br, .82, Vec3.Up * .5 + bo * .6, .048, .022, .001, OrganType.Flower, ornament, 3, .17, .15);
                 }
                 Foliage(b, leaf, s1, 4, .55, 1.0, .12, ref phyl, petioleLen: .012, leafScale: 1.10, perOverride: 2);
+                for (int cl = 0; cl < 3; cl++)
+                    AddCompoundLeaf(b, leaf, s1, 1.0, PlantMath.Horizontal(az + (cl - 1) * 1.1) * .95 + Vec3.Up * .25,
+                        b.Range(.24, .32), Vec3.Down * .18, 4, b.Range(.09, .11), .58, 3, .14);
             }
         }
 

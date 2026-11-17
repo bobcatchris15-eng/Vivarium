@@ -68,6 +68,9 @@ void vertex() {
 }
 
 void fragment() {
+    // Ground cover has no fuzz lobe. Initialize the fragment-to-light varying explicitly:
+    // undefined positive values otherwise produce frame-varying direct-light brightness.
+    tissue_rim = 0.0;
     tissue_fiber_view = vec3(1.0, 0.0, 0.0);
     tissue_fiber_mask = 0.0;
     tissue_phase_mask = 1.0 - clamp(old_stem, 0.0, 1.0);

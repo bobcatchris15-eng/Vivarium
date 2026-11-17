@@ -7,6 +7,10 @@ using Godot;
 using Vivarium.Game.App;
 using Vivarium.Sim.Repr;
 using Vivarium.Sim.Repr.Plant;
+using Vivarium.Sim.Core;
+using Vivarium.Sim.Flora;
+using Vivarium.Sim.World;
+using Vivarium.Sim.Geometry;
 
 namespace Vivarium.Repr;
 
@@ -19,6 +23,11 @@ public sealed class PlantCatalogDemo : IReprDemo
     private PlantAssemblyRenderer _renderer = null!;
     public void Build(Node3D root, ReprDemoContext ctx)
     {
+        if (Main.UserArgs.Contains("--plant-catalog-support-proof"))
+        {
+            BuildBarkProof(root,ctx);
+            return;
+        }
         string batch = Main.ArgAfter("--plant-catalog-batch") ?? "all";
         bool legacy=Main.UserArgs.Contains("--plant-catalog-legacy");
         bool macro=Main.UserArgs.Contains("--plant-catalog-macro");
@@ -50,6 +59,14 @@ public sealed class PlantCatalogDemo : IReprDemo
                 var p=generator.Create(ctx.WorldSeed,(ulong)(index*10+j));
                 generator.Grow(p,new[]{.2,.55,1.0}[j],1,null);
                 p.Position=new(origin.X+(matureOnly?0:(j-1)*1.45),0,0); p.Scale=scale;
+                if (!legacy && entry.Id=="emberfan_fungus")
+                {
+                    // Display the authored +Z bark-facing frame on an explicit support,
+                    // matching the live renderer's world-up shelf orientation.
+                    var wood=new StandardMaterial3D { AlbedoColor=new Color(.24f,.14f,.085f),Roughness=1 };
+                    root.AddChild(new MeshInstance3D { Name="EmberfanBarkScaffold", Position=new Vector3((float)p.Position.X,.43f,-.20f),
+                        Mesh=new CylinderMesh { TopRadius=.16f,BottomRadius=.22f,Height=.86f,RadialSegments=18 },MaterialOverride=wood });
+                }
                 if(legacy)
                 {
                     var previous=ctx.BuildLegacyFlora(entry.Id,0,0,j<2);
@@ -126,4 +143,69 @@ public sealed class PlantCatalogDemo : IReprDemo
         root.AddChild(_renderer); _renderer.SetPlants(plants);
     }
     public void Tick(double dt) { if(_renderer.PendingBuilds>0)_renderer.Drain(); }
+
+    private void BuildBarkProof(Node3D root, ReprDemoContext ctx)
+    {
+        var world=VivariumWorld.CreateBaseline(ctx.World.Content,new WorldDescriptor {
+            Diameter=9,CellSize=.1,Seed=804584441,PilotTreeId="none",GuardianId="none",
+            Terrain=new TerrainProfile { BaseHeight=.3,Relief=0,MicroRelief=0 },
+            Water=new WaterConfig { WaterTable=0,Infiltration=0,Evaporation=0 } });
+        var plants=new List<PlantDescriptor>();
+        root.AddChild(PlantDemoKit.Ground(new Vector3(0,.295f,0),8));
+        var log=new LogProp { Id=world.Ids.Next(EntityKind.Log),X=1,Z=0,Y=.46,Length=1.15,Radius=.16,
+            VariantSeed=357,DecayClass=2 };
+        world.Props.Logs.Add(log);
+        var logMaterial=new StandardMaterial3D { VertexColorUseAsAlbedo=true,Roughness=.96f };
+        root.AddChild(new MeshInstance3D { Name="ProductionLogMesh",Mesh=ctx.ToArrayMesh(PropMeshes.Log(log)),
+            Position=new Vector3((float)log.X,(float)log.Y,(float)log.Z),MaterialOverride=logMaterial });
+        var treeSpecies=world.Content.FloraOrThrow("moonbark");
+        var tree=new FloraIndividual { Id=world.Ids.Next(EntityKind.Flora),SpeciesId=treeSpecies.Id,
+            X=-1,Z=0,Biomass=treeSpecies.MaxBiomass,Age=treeSpecies.MaturityAge,Health=1 };
+        world.Flora.Add(tree);
+        var treeGenerator=PlantGraphCatalog.Create(treeSpecies);
+        var trunk=treeGenerator.Create(world.Seed,tree.Id.Value);treeGenerator.Grow(trunk,1,1,null);
+        trunk.Position=new Vec3(tree.X,world.GroundHeight(tree.Position),tree.Z);
+        trunk.Yaw=Rng.HashUnit(world.Seed,Hash.Fnv1a64("graph.flora.yaw"),tree.Id.Value)*Math.Tau;
+        plants.Add(trunk);
+        var fungusSpecies=world.Content.FloraOrThrow("emberfan_fungus");
+        foreach(var host in new[] { "log", "trunk" })
+        {
+            var query=host=="log" ? new Vec2(1,.18) : new Vec2(-.92,.10);
+            ulong id=world.Ids.Next(EntityKind.Flora).Value;
+            if (!world.FloraSystem.TryEmberfanSupport(query,id,out var contact,out var normal))
+                throw new InvalidOperationException("Emberfan support proof missing "+host);
+            var generator=PlantGraphCatalog.Create(fungusSpecies);
+            var fungus=generator.Create(world.Seed,id);generator.Grow(fungus,1,1,null);
+            EmberfanSupportPose.Apply(fungus,normal);fungus.Position=contact;plants.Add(fungus);
+            var focus=new Vector3((float)contact.X,(float)(contact.Y+.035),(float)contact.Z);
+            var outward=new Vector3((float)normal.X,0,(float)normal.Z);
+            var side=Vector3.Up.Cross(outward);
+            _shots.Add(new ReprShot("emberfan_"+host+"_contact",focus+outward*.62f+Vector3.Up*.23f+side*.24f,focus,40,2,"support"));
+            ctx.Log($"EMBERFAN_SUPPORT_PROOF host={host} query={query} contact={contact} normal={normal} organs={fungus.Organs.Length}");
+        }
+        _renderer=PlantDemoKit.NewRenderer(ctx,"EmberfanProductionSupportProof");
+        _renderer.Detail0Px=0;_renderer.Detail1Px=0;_renderer.CommitsPerFrame=64;
+        root.AddChild(_renderer);_renderer.SetPlants(plants);
+    }
+}
+
+/// <summary>Shared live/catalog attachment pose; the fans stay world-horizontal.</summary>
+internal static class EmberfanSupportPose
+{
+    public static void Apply(PlantDescriptor plant,Vec3 normal)
+    {
+        var forward=PlantMath.SafeNormal(new Vec3(normal.X,0,normal.Z),Vec3.Forward);
+        var right=Vec3.Up.Cross(forward);
+        Vec3 Rotate(Vec3 v)=>right*v.X+Vec3.Up*v.Y+forward*v.Z;
+        // Sessile flesh grows a little into the bark instead of balancing on its relief peaks.
+        var embed=forward*.008;
+        for(int i=0;i<plant.Organs.Length;i++)
+        {
+            var organ=plant.Organs[i];
+            organ.Start=Rotate(organ.Start)-embed;organ.End=Rotate(organ.End)-embed;
+            organ.StartTangent=Rotate(organ.StartTangent);organ.EndTangent=Rotate(organ.EndTangent);
+            organ.Up=Rotate(organ.Up);plant.Organs[i]=organ;
+        }
+        PlanGenerator.Summarize(plant);
+    }
 }

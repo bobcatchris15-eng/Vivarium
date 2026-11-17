@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -27,8 +28,18 @@ public static class GroundReviewRunner
     public static async Task Capture(Main main, GameSession session, VivariumWorld world, string directory)
     {
         Directory.CreateDirectory(directory);
+        if (Main.UserArgs.Contains("--ground-filler-proof"))
+        {
+            int blades = DuplicateTriangles(session.SoilDetail.GetNode<MultiMeshInstance3D>("AmbientGroundBlades").Multimesh.Mesh);
+            int stalks = DuplicateTriangles(session.SoilDetail.GetNode<MultiMeshInstance3D>("AmbientGroundStalks").Multimesh.Mesh);
+            GD.Print($"GROUND_FILLER_DUPLICATES blades={blades} stalks={stalks}");
+            if (blades != 0 || stalks != 0) throw new InvalidOperationException("Coincident filler triangles detected.");
+            main.GetTree().Quit(0);
+            return;
+        }
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
         var win = main.GetWindow();
+        bool temporal = Main.UserArgs.Contains("--ground-temporal");
         win.Size = new Vector2I(Width, Height);
         session.EnvRig.BenchmarkLightSeconds = DayLight;
         world.Clock.Paused = true;
@@ -60,6 +71,7 @@ public static class GroundReviewRunner
             throw new InvalidOperationException("Flora population did not become ready within 180 s.");
 
         var shots = Main.UserArgs.Contains("--ground-quick") ? Plan(world).Take(2).ToList() : Plan(world);
+        if (temporal) shots = shots.Where(s => s.Name == "meadow_close").ToList();
 
         void SetVegetation(bool on)
         {
@@ -72,7 +84,7 @@ public static class GroundReviewRunner
         }
 
         var results = new List<object>();
-        var variants = bareOnly ? new[] { true } : new[] { false, true };
+        var variants = temporal ? new[] { false } : bareOnly ? new[] { true } : new[] { false, true };
         foreach (bool bare in variants)
         {
             SetVegetation(!bare);
@@ -80,8 +92,27 @@ public static class GroundReviewRunner
             foreach (var s in shots)
             {
                 session.EnvRig.BenchmarkLightSeconds = DayLight;
-                session.CameraRig.LookAtPoint(s.Eye, s.Target);
+                var eye = s.Eye;
+                if (temporal)
+                {
+                    float x = s.Target.X + .38f, z = s.Target.Z;
+                    eye = new Vector3(x, (float)world.GroundHeight(new Vec2(x, z)) + .22f, z);
+                }
+                session.CameraRig.LookAtPoint(eye, s.Target);
                 for (int i = 0; i < 120; i++) await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (temporal)
+                {
+                    var groundWait = Stopwatch.StartNew();
+                    while (session.AmbientGround.RefreshPending && groundWait.Elapsed.TotalSeconds < 90)
+                        await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
+                    GD.Print($"GROUND_TEMPORAL_READY pending={session.AmbientGround.RefreshPending} chunks={session.AmbientGround.ChunkCount} instances={session.AmbientGround.LastGroundcoverInstances} wait_s={groundWait.Elapsed.TotalSeconds:0.0} eye={eye} target={s.Target}");
+                    if (session.AmbientGround.RefreshPending)
+                        throw new InvalidOperationException("Groundcover did not finish preparing for temporal capture.");
+                    await CaptureTemporal(main, directory);
+                    GD.Print("GROUND_TEMPORAL_OK " + directory);
+                    main.GetTree().Quit(0);
+                    return;
+                }
                 await main.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 var image = main.GetViewport().GetTexture().GetImage();
                 string file = s.Name + (bare ? "_bare" : "") + ".png";
@@ -125,6 +156,174 @@ public static class GroundReviewRunner
     }
 
     private static double R(double v) => Math.Round(v, 4);
+
+    private static int DuplicateTriangles(Mesh mesh)
+    {
+        using var arrays = mesh.SurfaceGetArrays(0);
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        var indexValue = arrays[(int)Mesh.ArrayType.Index];
+        var indices = indexValue.VariantType == Variant.Type.Nil ? Enumerable.Range(0, vertices.Length).ToArray() : indexValue.AsInt32Array();
+        var seen = new HashSet<(Vector3, Vector3, Vector3)>();
+        int duplicates = 0;
+        for (int i = 0; i + 2 < indices.Length; i += 3)
+        {
+            var tri = new[] { vertices[indices[i]], vertices[indices[i + 1]], vertices[indices[i + 2]] };
+            Array.Sort(tri, (a, b) => { int c = a.X.CompareTo(b.X); if (c != 0) return c; c = a.Y.CompareTo(b.Y); return c != 0 ? c : a.Z.CompareTo(b.Z); });
+            if (!seen.Add((tri[0], tri[1], tri[2]))) duplicates++;
+        }
+        return duplicates;
+    }
+
+    // Opt-in diagnostic: fixed camera and fixed daylight, with simulation paused above.
+    // Keep a small set of frames for visual inspection and per-frame samples for a
+    // temporal comparison; no image sequence accumulates in memory.
+    private static async Task CaptureTemporal(Main main, string directory)
+    {
+        const int frames = 48, stride = 4;
+        bool assertStable = Main.UserArgs.Contains("--ground-assert-stable");
+        if (assertStable && (!Main.UserArgs.Contains("--ground-freeze-animation") || !Main.UserArgs.Contains("--ground-no-shadows")))
+            throw new InvalidOperationException("Stable turf probe requires frozen ground animation and disabled sun shadows.");
+        var probePoints = new[] { new Vector2I(1048, 424), new Vector2I(104, 492), new Vector2I(1288, 684) };
+        var probeMin = new[] { 255, 255, 255 }; var probeMax = new int[probePoints.Length];
+        var session = main.Session ?? throw new InvalidOperationException("Missing session");
+        var camera = session.CameraRig.Cam;
+        var cameraTransform = camera.GlobalTransform;
+        float cameraFov = camera.Fov;
+        var sunTransform = session.EnvRig.Sun.GlobalTransform;
+        float sunEnergy = session.EnvRig.Sun.LightEnergy;
+        var turf = session.AmbientGround.GetNode<Node3D>("AmbientChunks");
+        var bank = session.AmbientGround.GetNode<Node3D>("TerrainCreepingBankLeaves");
+        var fillerBlade = session.SoilDetail.GetNode<MultiMeshInstance3D>("AmbientGroundBlades");
+        var fillerStalk = session.SoilDetail.GetNode<MultiMeshInstance3D>("AmbientGroundStalks");
+        var groundMaterials = new HashSet<string>();
+        var ownerCounts = new Dictionary<string, int>();
+        int visibleMeshes = 0, visibleInstances = 0;
+        int captureFrame = -1;
+        ulong stateHash = 14695981039346656037UL, firstStateHash = 0;
+        HashSet<string>? firstMaterials = null;
+        void Inspect(Node node, string owner)
+        {
+            if (node is GeometryInstance3D geometry && geometry.IsVisibleInTree())
+            {
+                Mesh? mesh = node switch { MultiMeshInstance3D mm => mm.Multimesh?.Mesh, MeshInstance3D mi => mi.Mesh, _ => null };
+                int count = node is MultiMeshInstance3D mmi ? Math.Max(0, mmi.Multimesh?.VisibleInstanceCount is int n && n >= 0 ? n : mmi.Multimesh?.InstanceCount ?? 0) : 1;
+                if (mesh != null && count > 0)
+                {
+                    visibleMeshes++; visibleInstances += count;
+                    ownerCounts[owner] = ownerCounts.GetValueOrDefault(owner) + count;
+                    if ((captureFrame == 0 || captureFrame == frames - 1) && node is MultiMeshInstance3D multi)
+                    {
+                        stateHash = (stateHash ^ mesh.GetInstanceId()) * 1099511628211UL;
+                        stateHash = (stateHash ^ (uint)count) * 1099511628211UL;
+                        foreach (float v in multi.Multimesh.Buffer)
+                            stateHash = (stateHash ^ BitConverter.SingleToUInt32Bits(v)) * 1099511628211UL;
+                    }
+                    for (int surface = 0; surface < mesh.GetSurfaceCount(); surface++)
+                    {
+                        var mat = geometry.MaterialOverride ?? mesh.SurfaceGetMaterial(surface);
+                        if (mat is ShaderMaterial shader && shader.Shader?.ResourcePath == "res://Shaders/ground_cover.gdshader")
+                        {
+                            var value = shader.GetShaderParameter("review_time");
+                            double reviewTime = value.VariantType == Variant.Type.Nil ? -1 : value.AsDouble();
+                            if (Main.UserArgs.Contains("--ground-freeze-animation") && (owner is "turf" or "bank") && reviewTime != 0)
+                                throw new InvalidOperationException("Ambient ground review_time was not frozen.");
+                            var diagnostic = shader.GetShaderParameter("tissue_light_diagnostic");
+                            int diagnosticMode = diagnostic.VariantType == Variant.Type.Nil ? 0 : diagnostic.AsInt32();
+                            if ((owner is "turf" or "bank") && diagnosticMode != 0)
+                                throw new InvalidOperationException("Temporal probe requires the normal turf light path.");
+                            groundMaterials.Add($"{owner} material={shader.GetInstanceId()} review_time={reviewTime} light_probe={diagnosticMode}");
+                        }
+                    }
+                }
+            }
+            foreach (Node child in node.GetChildren()) Inspect(child, owner);
+        }
+        void ValidateControls()
+        {
+            if (!session.World!.Clock.Paused || camera.GlobalTransform != cameraTransform || camera.Fov != cameraFov ||
+                session.EnvRig.Sun.GlobalTransform != sunTransform || session.EnvRig.Sun.LightEnergy != sunEnergy)
+                throw new InvalidOperationException("Temporal probe camera, sun or paused clock changed.");
+            if (Main.UserArgs.Contains("--ground-no-shadows") && session.EnvRig.Sun.ShadowEnabled ||
+                !turf.IsVisibleInTree() || !bank.IsVisibleInTree() || !session.Coverage.IsVisibleInTree() ||
+                !fillerBlade.IsVisibleInTree() || !fillerStalk.IsVisibleInTree())
+                throw new InvalidOperationException("Temporal probe visibility or rendering control did not remain active.");
+        }
+        var samples = new List<object>(frames);
+        float[]? previous = null;
+        var timer = Stopwatch.StartNew();
+        using var pixelFile = File.Create(Path.Combine(directory, "ground_temporal_luma.bin.gz"));
+        using var pixelStream = new GZipStream(pixelFile, CompressionLevel.Fastest);
+        for (int frame = 0; frame < frames; frame++)
+        {
+            await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await main.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            ValidateControls();
+            captureFrame = frame;
+            stateHash = 14695981039346656037UL;
+            visibleMeshes = 0; visibleInstances = 0; ownerCounts.Clear(); groundMaterials.Clear();
+            Inspect(turf, "turf"); Inspect(bank, "bank"); Inspect(session.SoilDetail, "soil_detail");
+            if (frame == 0 || frame == frames - 1)
+            {
+                GD.Print($"GROUND_TEMPORAL_MESHES frame={frame} visible_meshes={visibleMeshes} visible_instances={visibleInstances} state_hash={stateHash:X16} owners={string.Join(",", ownerCounts.Select(p => p.Key + ":" + p.Value))} " + string.Join("; ", groundMaterials));
+                if (frame == 0) { firstStateHash = stateHash; firstMaterials = new HashSet<string>(groundMaterials); }
+                else if (stateHash != firstStateHash || firstMaterials == null || !firstMaterials.SetEquals(groundMaterials))
+                    throw new InvalidOperationException("Ground multimesh data or materials changed during temporal capture.");
+            }
+            if (visibleMeshes == 0) throw new InvalidOperationException("Temporal probe found no visible ground meshes.");
+            using var image = main.GetViewport().GetTexture().GetImage();
+            int w = image.GetWidth(), h = image.GetHeight();
+            int cols = (w + stride - 1) / stride, rows = (h + stride - 1) / stride;
+            var current = new float[cols * rows];
+            double luminance = 0, greenLuminance = 0, greenDelta = 0, allDelta = 0;
+            int greenCount = 0, k = 0;
+            for (int y = 0; y < h; y += stride)
+                for (int x = 0; x < w; x += stride)
+                {
+                    var c = image.GetPixel(x, y);
+                    float l = .2126f * c.R + .7152f * c.G + .0722f * c.B;
+                    int quantized = Math.Clamp((int)Math.Round(l * 255), 0, 255);
+                    pixelStream.WriteByte((byte)quantized);
+                    if (assertStable)
+                        for (int i = 0; i < probePoints.Length; i++)
+                            if (probePoints[i].X == x && probePoints[i].Y == y)
+                            {
+                                if (!(c.G > c.R && c.G > c.B))
+                                    throw new InvalidOperationException($"Expected turf at probe point {probePoints[i]}.");
+                                probeMin[i] = Math.Min(probeMin[i], quantized); probeMax[i] = Math.Max(probeMax[i], quantized);
+                            }
+                    current[k] = l;
+                    luminance += l;
+                    float change = previous == null ? 0 : Math.Abs(l - previous[k]);
+                    allDelta += change;
+                    if (c.G > c.R * 1.08f && c.G > c.B * 1.08f)
+                    {
+                        greenCount++;
+                        greenLuminance += l;
+                        greenDelta += change;
+                    }
+                    k++;
+                }
+            if (frame % 8 == 0 || frame == frames - 1)
+                image.SavePng(Path.Combine(directory, $"temporal_{frame:D2}.png"));
+            samples.Add(new { frame, seconds = timer.Elapsed.TotalSeconds, mean_luminance = luminance / k,
+                mean_absolute_change = allDelta / k, green_samples = greenCount,
+                green_mean_luminance = greenCount > 0 ? greenLuminance / greenCount : 0,
+                green_mean_absolute_change = greenCount > 0 ? greenDelta / greenCount : 0 });
+            previous = current;
+        }
+        if (assertStable)
+        {
+            GD.Print("GROUND_TEMPORAL_POINT_RANGES " + string.Join(", ", probePoints.Select((p, i) => $"{p}={probeMin[i]}..{probeMax[i]}")));
+            if (probePoints.Where((_, i) => probeMax[i] - probeMin[i] > 2).Any())
+                throw new InvalidOperationException("Turf interior brightness changed under fixed conditions.");
+        }
+        File.WriteAllText(Path.Combine(directory, "ground_temporal.json"), JsonSerializer.Serialize(new {
+            seed = main.Session?.World?.Seed, daylight_seconds = DayLight, frame_count = frames, sample_stride = stride,
+            ambient_ground_animation_frozen = Main.UserArgs.Contains("--ground-freeze-animation"), visibleMeshes, visibleInstances, groundMaterials,
+            shadows_disabled = Main.UserArgs.Contains("--ground-no-shadows"),
+            adapter = RenderingServer.GetVideoAdapterName(), samples
+        }, new JsonSerializerOptions { WriteIndented = true }));
+    }
 
     private static double BlackFraction(Image img)
     {

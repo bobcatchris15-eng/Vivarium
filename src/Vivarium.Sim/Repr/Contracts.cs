@@ -142,7 +142,7 @@ public enum Tissue : byte { Green = 0, Wood = 1, Bark = 2, Lamina = 3, Petal = 4
 public enum OrganSurfaceForm : byte { Auto, Lamina, Needle, Revolved, Cup, MushroomCap, Shelf, Disc, Star, Trumpet }
 
 [Flags]
-public enum OrganFlags : ushort { None = 0, Dormant = 1, Dead = 2, Emissive = 4, Fertile = 8, Hidden = 16, Terminal = 32, Basal = 64, Hollow = 128, HollowWindow = 256, Continuous = 512 }
+public enum OrganFlags : ushort { None = 0, Dormant = 1, Dead = 2, Emissive = 4, Fertile = 8, Hidden = 16, Terminal = 32, Basal = 64, Hollow = 128, HollowWindow = 256, Continuous = 512, GlossyBlack = 1024 }
 
 /// One organ in a plant's structural graph. Organs are stored parent-before-child. All positions are in
 /// PLANT-LOCAL metres (origin at the stem base on the ground, Y up); the plant's world transform is on
@@ -199,11 +199,17 @@ public sealed class OrganShape
     public float MidribCurl;          // radians of downward arc along the midrib
     public float CrossCurl;           // radians of fold/cupping across the blade (+ = V up)
     public float Twist;               // radians along the midrib
+    // Scale on the out-of-plane twist offset. Unit-shape Y scales with organ length, so a
+    // strongly twisted narrow ribbon balloons to ~half its length; set ≈ width/length to keep
+    // a ribbon's twist within its real width. 1 keeps the legacy behaviour.
+    public float TwistDepth = 1f;
     public float EdgeWave, EdgeWaveFreq;
     public float Serration, SerrationFreq;
     public float Thickness = 0.0004f; // m at real size
     public int VenationClass;         // 0 pinnate, 1 palmate, 2 parallel, 3 dichotomous
     public Vec3 ColorAdaxial, ColorAbaxial; // linear rgb
+    // Roughness reaches the shaders in COLOR.a (a = 0.55 + 0.44*Roughness). 0.55 is the neutral default (no change);
+    // below ~0.35 the shader also raises specular toward the glossy fruit/wax level. Wax is not yet uploaded.
     public float Transmission = 0.35f, Roughness = 0.55f, Wax;
 }
 

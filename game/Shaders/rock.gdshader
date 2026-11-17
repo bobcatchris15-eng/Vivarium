@@ -181,7 +181,7 @@ void fragment() {
     }
 
     ALBEDO = col;
-    SPECULAR = 0.3;
+    SPECULAR = 0.20;
     METALLIC = 0.0;
     NORMAL = normalize((VIEW_MATRIX * vec4(perturbed, 0.0)).xyz);
 
@@ -231,7 +231,7 @@ void light() {
                  (ndotl / max(ndotl * (1.0 - k) + k, 1e-4));
         float spec = D * G * F / max(4.0 * ndotv * ndotl, 1e-4);
         // Quartz-mica micro-glints gated by actual shadowed light rather than baked into unlit albedo.
-        float glint = pow(ndoth, 96.0) * 0.18;
+        float glint = pow(ndoth, 96.0) * 0.10;
         float coat = 0.0;
         if (surface_wet > 0.01) {
             float ca2 = 0.01 * 0.01;

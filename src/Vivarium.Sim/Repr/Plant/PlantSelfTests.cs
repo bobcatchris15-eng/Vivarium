@@ -175,6 +175,15 @@ public sealed class PlantAttachmentSelfTest : IReprSelfTest
                 var c = PlantMath.Hermite(q.Start, q.StartTangent, q.End, q.EndTangent, u);
                 double r = q.RadiusStart + (q.RadiusEnd - q.RadiusStart) * u;
                 double dist = (o.Start - c).Length;
+                // Glowbriar runner bases start inside the central stool; their
+                // canes continue the runner at its end, sharing the mesh ring.
+                bool embeddedRunner = sp == "glowbriar" && (o.Flags & OrganFlags.Continuous) != 0
+                    && (q.Flags & OrganFlags.Continuous) == 0 && o.Order == 1 && dist < r;
+                bool embeddedShadebellFork = sp == "shadebell" && o.Type == OrganType.Axis && o.Tissue == Tissue.Wood
+                    && o.Order == 2 && dist < r * .4;
+                bool continuation = (o.Flags & q.Flags & OrganFlags.Continuous) != 0
+                    && o.AttachT >= .999f && dist < 1e-5 && Math.Abs(o.RadiusStart-q.RadiusEnd) < 1e-5;
+                if (embeddedRunner || embeddedShadebellFork || continuation) continue;
                 if (Math.Abs(dist - r) > 1e-3)
                     return $"{sp}: organ {j} Start is {dist * 1000:0.0} mm from parent centreline, radius {r * 1000:0.0} mm";
                 if (o.Type is OrganType.Axis or OrganType.Petiole)

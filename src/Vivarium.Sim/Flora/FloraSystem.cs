@@ -2,6 +2,9 @@ using Vivarium.Sim.Content;
 using Vivarium.Sim.Core;
 using Vivarium.Sim.Fields;
 using Vivarium.Sim.World;
+using Vivarium.Sim.Geometry;
+using Vivarium.Sim.Repr;
+using Vivarium.Sim.Repr.Plant;
 
 namespace Vivarium.Sim.Flora;
 
@@ -60,6 +63,122 @@ public sealed class FloraSystem
     }
 
     private ContentLibrary C => _w.Content;
+    private readonly object _emberfanBarkLock = new();
+    private readonly Dictionary<ulong, (int Age, int Biomass, double X, double Z, double Ground, MeshData Mesh)> _emberfanBark = new();
+    private readonly Dictionary<(ulong Seed, double Length, double Radius, int Decay),MeshData> _emberfanLogs = new();
+
+    /// <summary>Derived bark attachment for sessile Emberfan fruiting bodies; no saved host state.</summary>
+    public bool TryEmberfanSupport(Vec2 p, ulong identity, out Vec3 surface, out Vec3 normal)
+    {
+        surface = default;
+        normal = Vec3.Up;
+        double reach = C.FloraOrThrow("emberfan_fungus").RequiresFeatureRadius;
+        double best = double.PositiveInfinity;
+        Vec3 chosen = default, chosenNormal = Vec3.Up;
+        double heightChoice = Rng.HashUnit(_w.Seed, Hash.Fnv1a64("emberfan.bark.height"), identity);
+        void Candidate(Vec3 point, Vec3 outward, double preferredY)
+        {
+            double distance = (point.XZ - p).Length;
+            if (distance > reach || !double.IsFinite(point.Y)) return;
+            double score = distance + .025 * Math.Abs(point.Y - preferredY);
+            if (score >= best) return;
+            best = score;
+            chosen = point + outward * .0015;
+            chosenNormal = PlantMath.SafeNormal(new Vec3(outward.X, 0, outward.Z), Vec3.Forward);
+        }
+        void ScanBark(MeshData bark, Func<Vec3,Vec3> position, Func<Vec3,Vec3> direction, double minimumY, double preferredY)
+        {
+            void Edge(Vec3 a,Vec3 b,Vec3 outward)
+            {
+                var d=b.XZ-a.XZ;
+                double t=d.LengthSq>1e-16?Math.Clamp((p-a.XZ).Dot(d)/d.LengthSq,0,1):.5;
+                var q=a+(b-a)*t;
+                if(q.Y>minimumY) Candidate(q,outward,preferredY);
+            }
+            for(int i=0;i<bark.Indices.Count;i+=3)
+            {
+                int ia=bark.Indices[i],ib=bark.Indices[i+1],ic=bark.Indices[i+2];
+                var outward=PlantMath.SafeNormal(direction(bark.NormalAt(ia)+bark.NormalAt(ib)+bark.NormalAt(ic)),Vec3.Up);
+                if(Math.Abs(outward.Y)>.8)continue;
+                var a=position(bark.Position(ia));var b=position(bark.Position(ib));var c=position(bark.Position(ic));
+                if (p.X < Math.Min(a.X,Math.Min(b.X,c.X))-reach || p.X > Math.Max(a.X,Math.Max(b.X,c.X))+reach
+                    || p.Z < Math.Min(a.Z,Math.Min(b.Z,c.Z))-reach || p.Z > Math.Max(a.Z,Math.Max(b.Z,c.Z))+reach) continue;
+                Edge(a,b,outward);Edge(b,c,outward);Edge(c,a,outward);
+            }
+        }
+        foreach (var log in _w.Props.Logs)
+        {
+            if (log.Radius < .045 || log.AxisDistance(p)>log.Radius+reach) continue;
+            var axis = log.Axis;
+            double along = (p-log.Position).Dot(axis);
+            if (Math.Abs(along) > log.Length * .5) continue;
+            MeshData bark;
+            lock (_emberfanBarkLock)
+            {
+                var key=(log.VariantSeed,log.Length,log.Radius,log.DecayClass);
+                if (!_emberfanLogs.TryGetValue(key,out bark!))
+                {
+                    bark=PropMeshes.Log(log);
+                    if (_emberfanLogs.Count>256) _emberfanLogs.Clear();
+                    _emberfanLogs[key]=bark;
+                }
+            }
+            // PropRenderer's +X log mesh rotates by -RotationY in Godot.
+            Vec3 Rotate(Vec3 v)=>new(axis.X*v.X-axis.Z*v.Z,v.Y,axis.Z*v.X+axis.X*v.Z);
+            Vec3 Position(Vec3 v)=>Rotate(v)+new Vec3(log.X,log.Y,log.Z);
+            ScanBark(bark,Position,Rotate,log.Y-log.Radius*.85,log.Y-log.Radius*(.12+.30*heightChoice));
+        }
+        if (_w.PilotTree is { } pilot)
+        {
+            double y = pilot.BaseHeight + .12 + heightChoice * Math.Min(1.5, pilot.Def.TrunkHeight*.45);
+            if (pilot.TryLogSurface(Vec3.FromXZ(p,y),reach,out var point,out var outward,out _))
+                Candidate(point, outward, y);
+        }
+        // Use the same quantized graph, world yaw and biomass scale as live rendering.
+        // Cached low-order wood meshes include the actual curved/gnarled surface;
+        // the legacy straight-cylinder trunk approximation is deliberately avoided.
+        _w.Flora.Neighbours(p, reach+1.5, _nb);
+        foreach (var host in _nb)
+        {
+            var species = C.FloraOrThrow(host.SpeciesId);
+            if (species.Woody == null || host.Health <= 0 || !PlantGraphCatalog.Supports(species.Id)) continue;
+            int age=(int)Math.Round(Math.Clamp(host.Age/Math.Max(1,species.MaturityAge),0,1)*100);
+            int biomass=(int)Math.Round(Math.Clamp(host.Biomass/Math.Max(1e-9,species.MaxBiomass),0,1)*100);
+            double ground=_w.GroundHeight(host.Position);
+            MeshData bark;
+            lock (_emberfanBarkLock)
+            {
+                if (!_emberfanBark.TryGetValue(host.Id.Value,out var cached)
+                    || cached.Age!=age || cached.Biomass!=biomass || cached.X!=host.X || cached.Z!=host.Z || cached.Ground!=ground)
+                {
+                    var generator=PlantGraphCatalog.Create(species);
+                    var plant=generator.Create(_w.Seed,host.Id.Value);
+                    generator.Grow(plant,age/100.0,1,null);
+                    for(int i=0;i<plant.Organs.Length;i++)
+                        if (plant.Organs[i].Type!=OrganType.Axis || plant.Organs[i].Tissue!=Tissue.Wood || plant.Organs[i].Order>1)
+                            plant.Organs[i].Flags|=OrganFlags.Hidden;
+                    bark=PlantCompiler.Compile(plant,0).Wood;
+                    double yaw=Rng.HashUnit(_w.Seed,Hash.Fnv1a64("graph.flora.yaw"),host.Id.Value)*Math.Tau;
+                    double cs=Math.Cos(yaw),sn=Math.Sin(yaw),scale=.45+.55*Math.Sqrt(biomass/100.0);
+                    for(int i=0;i<bark.VertexCount;i++)
+                    {
+                        var v=bark.Position(i);var n=bark.NormalAt(i);
+                        bark.Positions[i*3]=(float)(host.X+(cs*v.X+sn*v.Z)*scale);
+                        bark.Positions[i*3+1]=(float)(ground+v.Y*scale);
+                        bark.Positions[i*3+2]=(float)(host.Z+(-sn*v.X+cs*v.Z)*scale);
+                        bark.Normals[i*3]=(float)(cs*n.X+sn*n.Z);bark.Normals[i*3+2]=(float)(-sn*n.X+cs*n.Z);
+                    }
+                    if (_emberfanBark.Count>2048) _emberfanBark.Clear();
+                    _emberfanBark[host.Id.Value]=(age,biomass,host.X,host.Z,ground,bark);
+                }
+                else bark=cached.Mesh;
+            }
+            double preferred=ground+.08+heightChoice*Math.Min(1.5,species.Height*.45);
+            ScanBark(bark,v=>v,v=>v,ground+.02,preferred);
+        }
+        surface=chosen;normal=chosenNormal;
+        return double.IsFinite(best);
+    }
 
     /// <summary>Plan-view area of the regular hexagonal island.</summary>
     public double IslandAreaM2 => 3 * Math.Sqrt(3) / 2 * _w.Domain.Radius * _w.Domain.Radius;
@@ -182,20 +301,23 @@ public sealed class FloraSystem
     public FloraSuitability Suitability(FloraSpeciesDef sp, Vec2 p, EntityId self = default, bool potential = false, bool established = false)
     {
         if (!_w.Domain.ContainsDisc(p, 0.02)) return FloraSuitability.Refused("outside the island", Substrate.Soil);
-        if (_w.PilotTree?.BlocksTrunk(p, 0.02) == true) return FloraSuitability.Refused("inside Pilot Tree trunk", Substrate.Wood);
+        bool bracket = sp.Id == "emberfan_fungus";
+        bool onBark = bracket && TryEmberfanSupport(p, self.Value, out _, out _);
+        if (bracket && !onBark) return FloraSuitability.Refused("Emberfan needs exposed log or tree bark", Substrate.Wood);
+        if (!onBark && _w.PilotTree?.BlocksTrunk(p, 0.02) == true) return FloraSuitability.Refused("inside Pilot Tree trunk", Substrate.Wood);
         if (sp.Woody != null && _w.PilotTree?.BlocksDisc(p, 0.08) == true) return FloraSuitability.Refused("Pilot Tree root volume reserved", Substrate.Wood);
-        var sub = _w.SubstrateAt(p);
+        var sub = onBark ? Substrate.Wood : _w.SubstrateAt(p);
         if (sp.RefuseSubstrates.Contains(sub)) return FloraSuitability.Refused($"{sp.Name} refuses {SubstrateIds.Id(sub)} substrate", sub);
         foreach (var tag in _w.Props.HabitatTagsAt(p))
             if (sp.RefuseTags.Contains(tag)) return FloraSuitability.Refused($"{sp.Name} refuses '{tag}' habitat", sub);
         double depth = _w.Water.OpenWaterDepth(p);
-        bool onProp = sub is Substrate.Rock or Substrate.Wood && (!double.IsNaN(_w.Props.PropTopAt(p)) || _w.PilotTree?.BlocksDisc(p) == true);
+        bool onProp = onBark || sub is Substrate.Rock or Substrate.Wood && (!double.IsNaN(_w.Props.PropTopAt(p)) || _w.PilotTree?.BlocksDisc(p) == true);
         if (!sp.UnlimitedWaterDepth && !onProp && depth > sp.MaxWaterDepth + 1e-9) return FloraSuitability.Refused($"submerged ({depth * 100:0.#} cm, tolerates {sp.MaxWaterDepth * 100:0.#} cm)", sub);
         if (sp.MinWaterDepth > 0 && depth < sp.MinWaterDepth - 1e-9) return FloraSuitability.Refused($"needs standing water ({depth * 100:0.#} cm < {sp.MinWaterDepth * 100:0.#} cm)", sub);
         double moisture = _w.Fields.Moisture.Sample(p);
         if (!established && moisture < sp.HardMinMoisture) return FloraSuitability.Refused($"too dry (moisture {moisture:0.00} < {sp.HardMinMoisture:0.00})", sub);
         if (!established && !onProp && moisture > sp.HardMaxMoisture + 1e-9) return FloraSuitability.Refused($"too wet (moisture {moisture:0.00} > {sp.HardMaxMoisture:0.00})", sub);
-        if (sp.RequiresFeature.Length > 0 && DistanceToFeature(p, sp.RequiresFeature, sp.RequiresFeatureRadius) > sp.RequiresFeatureRadius)
+        if (!onBark && sp.RequiresFeature.Length > 0 && DistanceToFeature(p, sp.RequiresFeature, sp.RequiresFeatureRadius) > sp.RequiresFeatureRadius)
             return FloraSuitability.Refused($"{sp.Name} needs a {sp.RequiresFeature} within {sp.RequiresFeatureRadius * 100:0} cm to climb", sub);
 
         // Direct neighbour exclusions are occupancy/competition constraints, not

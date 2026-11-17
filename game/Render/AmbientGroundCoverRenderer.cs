@@ -83,6 +83,8 @@ public partial class AmbientGroundCoverRenderer : Node3D
         // Same optical rules for ephemeral ground vegetation and persistent organisms.
         var mat = Bridge.Shader("res://Shaders/ground_cover.gdshader");
         mat.SetShaderParameter("sway_strength", 0f);
+        if (Array.IndexOf(Main.UserArgs, "--ground-freeze-animation") >= 0)
+            mat.SetShaderParameter("review_time", 0f);
         mat.SetShaderParameter("instance_shape_variation", true);
         // The custom direct-light path has its own cuticle lobes; SPECULAR alone
         // only controls the engine's environment response.

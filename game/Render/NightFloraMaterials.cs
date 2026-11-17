@@ -58,7 +58,7 @@ public static class NightFloraMaterials
             "ghostbonnet" => 3,
             "lanternsedge" => 4,
             "siltstars" => 5,
-            "tidebell" => 6,
+            "tidebell" => 9,
             "trifold" => 7,
             "veilfern" => 2,
             // The brake's berries carry a lit heart; nothing else in the thicket glows.

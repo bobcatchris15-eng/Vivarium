@@ -63,6 +63,14 @@ public sealed class ShadebellGenerator : PlanGenerator
             int upper = b.AddAxis(lower, 1, up + radial * 0.22, height * 0.52,
                 side * (k % 2 == 0 ? -0.35 : 0.35) + radial * 0.15,
                 0.020, 0.008, 1, Tissue.Wood, 0.04, 0.22);
+            // Continue the trunk through one shared ring, preserving the authored upper tip.
+            var lowerStem = b[lower];
+            var upperStem = b[upper];
+            upperStem.P0 = lowerStem.P1;
+            upperStem.T0 = lowerStem.T1.Normalized() * upperStem.T0.Length;
+            upperStem.R0 = lowerStem.R1;
+            lowerStem.Flags |= OrganFlags.Continuous;
+            upperStem.Flags |= OrganFlags.Continuous;
             AddWhorl(b, leaf, upper, 0.98, az, 6, 1.0, form.LeafLengthMin, form.LeafLengthMax);
             for (int tier = 0; tier < 3; tier++)
             {
@@ -73,6 +81,14 @@ public sealed class ShadebellGenerator : PlanGenerator
                 var lateral = PlantMath.Horizontal(branchAz + Math.PI / 2);
                 int fork = b.AddAxis(host, t, outward + up * 0.3, form.LowerForkLength * b.Range(0.62, 0.76),
                     lateral * b.Range(-0.2, 0.2) + up * -0.12, 0.016, 0.006, 2, Tissue.Wood, 0.03 * b.Draw(), 0.18);
+                // Embed the fork into its parent and ease it along the local tangent.
+                // Its tip remains in place; the overlapping surfaces are not a mesh union.
+                var branch = b[fork];
+                var parent = b[host];
+                var center = PlantMath.Hermite(parent.P0, parent.T0, parent.P1, parent.T1, t);
+                branch.P0 = center + (branch.P0 - center) * .35;
+                var axis = b.TangentAt(host, t);
+                branch.T0 = PlantMath.SafeNormal(axis * .65 + branch.T0.Normalized() * .75, axis) * branch.T0.Length;
                 for (int wh = 0; wh < 3; wh++)
                     AddWhorl(b, leaf, fork, 0.48 + wh * 0.23 + b.Range(-0.035, 0.035), branchAz + wh * 1.3, 5, 0.95,
                         form.LeafLengthMin, form.LeafLengthMax);

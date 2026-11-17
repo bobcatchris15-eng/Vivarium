@@ -29,7 +29,7 @@ internal static class FloraSurfaceProfiles
         material.SetShaderParameter("stem_family", stemFamily);
         material.SetShaderParameter("vein_strength", leaf.Veins);
         material.SetShaderParameter("cuticle_sheen", leaf.Sheen);
-        material.SetShaderParameter("leaf_roughness", Mathf.Clamp(0.70f - leaf.Sheen * 0.18f, 0.20f, 0.85f));
+        material.SetShaderParameter("leaf_roughness", Mathf.Clamp(0.72f - leaf.Sheen * 0.22f, 0.42f, 0.85f));
         material.SetShaderParameter("back_roughness", 0.82f);
         material.SetShaderParameter("leaf_transmission", leaf.Transmission);
         material.SetShaderParameter("transmission", leaf.Transmission);

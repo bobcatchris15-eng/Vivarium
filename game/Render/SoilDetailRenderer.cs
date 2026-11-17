@@ -583,9 +583,6 @@ public partial class SoilDetailRenderer : Node3D
             st.SetNormal(n); st.SetColor(Colors.White); st.SetUV(uva); st.AddVertex(a);
             st.SetNormal(n); st.SetColor(Colors.White); st.SetUV(uvb); st.AddVertex(b);
             st.SetNormal(n); st.SetColor(Colors.White); st.SetUV(uvc); st.AddVertex(c);
-            st.SetNormal(-n); st.SetColor(Colors.White); st.SetUV(uva); st.AddVertex(a);
-            st.SetNormal(-n); st.SetColor(Colors.White); st.SetUV(uvc); st.AddVertex(c);
-            st.SetNormal(-n); st.SetColor(Colors.White); st.SetUV(uvb); st.AddVertex(b);
         }
         void Blade(float yaw, float height, float width, float bend)
         {
@@ -622,9 +619,6 @@ public partial class SoilDetailRenderer : Node3D
             st.SetNormal(n); st.SetColor(Colors.White); st.SetUV(uva); st.AddVertex(a);
             st.SetNormal(n); st.SetColor(Colors.White); st.SetUV(uvb); st.AddVertex(b);
             st.SetNormal(n); st.SetColor(Colors.White); st.SetUV(uvc); st.AddVertex(c);
-            st.SetNormal(-n); st.SetColor(Colors.White); st.SetUV(uva); st.AddVertex(a);
-            st.SetNormal(-n); st.SetColor(Colors.White); st.SetUV(uvc); st.AddVertex(c);
-            st.SetNormal(-n); st.SetColor(Colors.White); st.SetUV(uvb); st.AddVertex(b);
         }
         // crossed tapered stem cards
         for (int q = 0; q < 2; q++)

@@ -185,9 +185,9 @@ public sealed class PlanBuilder
     /// Child radii are clamped to 0.85 of the parent radius at the attachment.
     /// </summary>
     public int AddAxis(int parent, double t, Vec3 dir, double len, Vec3 bend, double r0, double r1, ushort order,
-        Tissue tissue, double emergeBase, double dur, OrganFlags flags = OrganFlags.None, OrganType type = OrganType.Axis)
+        Tissue tissue, double emergeBase, double dur, OrganFlags flags = OrganFlags.None, OrganType type = OrganType.Axis, Vec3? rootOrigin = null)
     {
-        Vec3 p0 = Vec3.Zero, outward = PlantMath.Perpendicular(dir);
+        Vec3 p0 = parent < 0 ? rootOrigin ?? Vec3.Zero : Vec3.Zero, outward = PlantMath.Perpendicular(dir);
         double rb = r0, rParent = r0;
         double tAttach = 0;
         if (parent >= 0)
