@@ -32,7 +32,7 @@ public sealed class PlantAssembly
 ///   * Lamina (leaf, leaflet): UV.x = 0 base .. 1 tip along the midrib, UV.y = 0..1 across the blade,
 ///     UV2.y = 1 (foliage), UV2.x = 0 (adaxial/abaxial faces handled by the shader).
 ///   * Flower / fruit: UV2 = (1.45, 0.92) for bells and chalices (legacy glowbriar convention),
-///     (1.75, 0.98) for fruit.
+///     (0.75, 0) for glossy fruit, outside both leaf and bark shader bands.
 ///   * COLOR: sRGB-encoded. The shader linearises COLOR, so linear descriptor colours are encoded here.
 ///   * Normals: tubes have analytic radial normals; laminae shade their actual cup/twist with endpoint fallbacks.
 /// Instance transform: columns are X (= Up x Z, scaled by real half width / profile max), Y (= Up, orthogonal
@@ -78,6 +78,7 @@ public static partial class PlantCompiler
             hasChild = new bool[p.Organs.Length];
             for (int i = 0; i < p.Organs.Length; i++) if (p.Organs[i].Parent >= 0) hasChild[p.Organs[i].Parent] = true;
         }
+        Dictionary<int,AxisJoint>? joints=null;
         for (int i = 0; i < p.Organs.Length; i++)
         {
             var o = p.Organs[i];
@@ -86,7 +87,8 @@ public static partial class PlantCompiler
             {
                 // Detail 2: drop childless hair-thin twigs (< 1.5 mm); anything carrying an organ is kept.
                 if (hasChild != null && o.Type == OrganType.Axis && o.RadiusStart < 0.0015f && !hasChild[i]) continue;
-                SweepAxis(a.Wood, p, i, detail, firstChild, nextChild);
+                if((o.Flags&OrganFlags.Continuous)!=0)joints??=new();
+                SweepAxis(a.Wood, p, i, detail, firstChild, nextChild,joints);
             }
             else if (IsFlat(o.Type) && o.RadiusStart > 1e-6f && (o.End - o.Start).LengthSq > 1e-12)
             {
@@ -216,7 +218,8 @@ public static partial class PlantCompiler
     /// parent and flares to min(parentRadius, 1.6 * RadiusStart), blending back over about two radii. The tip is
     /// closed with a rounded cap.
     /// </summary>
-    private static void SweepAxis(MeshData m, PlantDescriptor p, int idx, int detail, int[] firstChild, int[] nextChild)
+    private sealed record AxisJoint(int[] Ring,Vec3 Frame,double Distance);
+    private static void SweepAxis(MeshData m, PlantDescriptor p, int idx, int detail, int[] firstChild, int[] nextChild,Dictionary<int,AxisJoint>? joints)
     {
         var o = p.Organs[idx];
         var p0 = o.Start;
@@ -225,16 +228,21 @@ public static partial class PlantCompiler
         if (len < 1e-5 || o.RadiusStart <= 1e-6f) return;
 
         double rs = o.RadiusStart;
+        bool continuous=(o.Flags&OrganFlags.Continuous)!=0;
+        bool gnarled = o.AxisGnarling > 0 && (o.Flags & OrganFlags.Hollow) == 0;
+        double gnarl = gnarled ? Math.Clamp(o.AxisGnarling, 0, 1) : 0;
+        bool shapedRadius=continuous||o.AxisWaist>0;
         double re = Math.Max(o.RadiusEnd, 0.00025);
         double rParent = rs, flare = rs, dExt = 0;
         if (o.Parent >= 0)
         {
             var q = p.Organs[o.Parent];
             double u = q.Maturity > 1e-4f ? Math.Clamp(o.AttachT / q.Maturity, 0, 1) : 0;
-            rParent = q.RadiusStart + (q.RadiusEnd - q.RadiusStart) * u;
+            rParent = PlantMath.AxisRadius(q.RadiusStart,q.RadiusEnd,q.AxisWaist,u,q.Maturity);
             flare = (o.Flags & OrganFlags.Basal) != 0 ? rs : Math.Min(rParent, 1.6 * rs);
             dExt = (q.Flags & OrganFlags.Hollow) != 0 ? 0 : rParent;
         }
+        if(continuous){dExt=0;flare=rs;}
 
         var t0 = o.StartTangent;
         var t1 = o.EndTangent;
@@ -242,11 +250,15 @@ public static partial class PlantCompiler
         double sMin = dExt > 0 && t0len > 1e-9 && rs >= 0.0015 && detail < 2 ? -Math.Min(0.5, dExt / t0len) : 0;
         // Radial sides from the axis radius in metres; length segments from curvature (not from length).
         int nRad = WoodSides(rs, detail);
+        if(continuous)nRad=detail==0?20:detail==1?12:8;
+        else if(gnarled)nRad=Math.Max(nRad, detail==0?20:detail==1?12:8);
         double maxBend = detail == 0 ? 12.0 : detail == 1 ? 24.0 : 45.0;
         double bend = TotalBendDeg(p0, t0, p1, t1);
         // Minimum 2 length segments for axes longer than 4 cm (8 cm at detail 1); short straight stubs and petioles use 1.
         int minSeg = detail == 2 ? 1 : len > (detail == 0 ? 0.04 : 0.08) ? 2 : 1;
         int nSeg = Math.Clamp((int)Math.Ceiling(bend / maxBend), minSeg, detail == 0 ? 24 : 12);
+        if(continuous)nSeg=Math.Max(nSeg,6);
+        if(gnarled)nSeg=Math.Max(nSeg, detail==0?24:detail==1?16:12);
 
         // Sample list: optional sink sample, then s = 0..1 (plus one flare sample near a thick parent junction).
         var sList = new List<double>();
@@ -267,6 +279,12 @@ public static partial class PlantCompiler
             foreach (double edge in new[] { .20, .30, .40, .50, .60, .70, .78 })
                 if (!sList.Any(s => Math.Abs(s - edge) < 1e-7)) sList.Add(edge);
         }
+        if(o.AxisWaist>0)
+            for(int k=1;k<12;k++)
+            {
+                double s=k/12.0;
+                if(!sList.Any(v=>Math.Abs(v-s)<1e-7))sList.Add(s);
+            }
         sList.Sort();
         if (dExt > 0 && detail < 2 && rs >= 0.002 && len > 5 * rs)
         {
@@ -275,8 +293,15 @@ public static partial class PlantCompiler
             sList.Sort();
         }
         var samples = new List<(Vec3 P, Vec3 T, double R, double D)>();
-        if (sMin < 0) AddSample(samples, p0, t0, p1, t1, sMin, rs, re, flare, len, true);
-        foreach (double sv in sList) AddSample(samples, p0, t0, p1, t1, sv, rs, re, flare, len, false);
+        if (sMin < 0) AddSample(samples, p0, t0, p1, t1, sMin, rs, re, flare, len, true,o.AxisWaist,o.Maturity,continuous);
+        foreach (double sv in sList) AddSample(samples, p0, t0, p1, t1, sv, rs, re, flare, len, false,o.AxisWaist,o.Maturity,continuous);
+        // The submerged extension still has a real surface length. Giving both
+        // rings D=0 collapses the bark UV and leaves a striped collar if exposed.
+        if (gnarled && sMin < 0)
+        {
+            var sink = samples[0];
+            samples[0] = (sink.P, sink.T, sink.R, -(samples[1].P-sink.P).Length);
+        }
         var rgb = WoodRgb(o.Tissue, o.Order);
         bool woody = o.Tissue is Tissue.Wood or Tissue.Bark or Tissue.RootBark;
         double u2x = woody ? 2.0 : 0.0;
@@ -284,6 +309,12 @@ public static partial class PlantCompiler
         bool hollow = (o.Flags & OrganFlags.Hollow) != 0;
         var innerRings = hollow ? new int[samples.Count][] : null;
         Vec3 nPrev = window ? PlantMath.SafeNormal(o.Up - samples[0].T * o.Up.Dot(samples[0].T), PlantMath.Perpendicular(samples[0].T)) : PlantMath.Perpendicular(samples[0].T);
+        AxisJoint? previous=null;
+        if(continuous&&o.Parent>=0&&joints!=null&&joints.TryGetValue(o.Parent,out var joint)
+            &&joint.Ring.Length==nRad+1&&(p.Organs[o.Parent].End-o.Start).Length<1e-6
+            &&Math.Abs(p.Organs[o.Parent].RadiusEnd-rs)<1e-6)
+        { previous=joint;nPrev=joint.Frame; }
+        double uvOffset=previous?.Distance??0;
         for (int k = 0; k < samples.Count; k++)
         {
             var sm = samples[k];
@@ -291,13 +322,36 @@ public static partial class PlantCompiler
             var nk = PlantMath.SafeNormal(nPrev - tN * nPrev.Dot(tN), PlantMath.Perpendicular(tN));
             nPrev = nk;
             var bk = tN.Cross(nk);
-            rings[k] = new int[nRad + 1];   // seam vertex duplicated so UV.y runs 0..1 without a smeared quad
+            double slope=0;
+            if(shapedRadius)
+            {
+                var before=samples[Math.Max(0,k-1)];var after=samples[Math.Min(samples.Count-1,k+1)];
+                slope=(after.R-before.R)/Math.Max(1e-8,(after.P-before.P).Length);
+            }
+            bool welded=k==0&&previous!=null;
+            rings[k] = welded?previous!.Ring:new int[nRad + 1];
             for (int j = 0; j <= nRad; j++)
             {
                 double th = WindowAngle(j, nRad, sm.D / len, window);
                 var dv = nk * Math.Cos(th) + bk * Math.Sin(th);
-                rings[k][j] = m.AddVertex(sm.P + dv * sm.R, dv, rgb[0], rgb[1], rgb[2], 1,
-                    sm.D, j / (double)nRad, u2x, 0);
+                double designS=Math.Clamp(sm.D/len*o.Maturity,0,1);
+                double factor=gnarled ? GnarlRadius(designS,th,o.Seed,gnarl) : 1;
+                var normal=shapedRadius?PlantMath.SafeNormal(dv-tN*slope,dv):dv;
+                if(gnarled)
+                {
+                    const double eps=1e-4;
+                    double dTheta=(GnarlRadius(designS,th+eps,o.Seed,gnarl)-GnarlRadius(designS,th-eps,o.Seed,gnarl))/(2*eps);
+                    double dAxis=(GnarlRadius(designS+eps,th,o.Seed,gnarl)-GnarlRadius(designS-eps,th,o.Seed,gnarl))/(2*eps)*o.Maturity/len;
+                    var circum=-nk*Math.Sin(th)+bk*Math.Cos(th);
+                    normal=PlantMath.SafeNormal(dv-circum*(dTheta/factor)-tN*(slope*factor+sm.R*dAxis),dv);
+                }
+                if(welded)
+                {
+                    int v=rings[k][j];normal=PlantMath.SafeNormal(m.NormalAt(v)+normal,normal);
+                    m.Normals[v*3]=(float)normal.X;m.Normals[v*3+1]=(float)normal.Y;m.Normals[v*3+2]=(float)normal.Z;
+                }
+                else rings[k][j] = m.AddVertex(sm.P + dv * (sm.R * factor), normal, rgb[0], rgb[1], rgb[2], 1,
+                    sm.D+uvOffset+(gnarled?GnarlUv(designS,th,o.Seed,gnarl)*len:0), j / (double)nRad, u2x, 0);
             }
             bool windowSpan = window && k > 0 && samples[k-1].D / len >= .20 - 1e-7 && sm.D / len <= .78 + 1e-7;
             if (k > 0)
@@ -312,7 +366,8 @@ public static partial class PlantCompiler
                 {
                     double th = WindowAngle(j, nRad, sm.D / len, window);
                     var dv = nk * Math.Cos(th) + bk * Math.Sin(th);
-                    innerRings[k][j] = m.AddVertex(sm.P + dv * (sm.R * .6), -dv,
+                    var normal=shapedRadius?PlantMath.SafeNormal(-dv+tN*(slope*.6),-dv):-dv;
+                    innerRings[k][j] = m.AddVertex(sm.P + dv * (sm.R * .6), normal,
                         rgb[0] * .55, rgb[1] * .55, rgb[2] * .55, 1,
                         sm.D, j / (double)nRad, u2x, 0);
                 }
@@ -359,6 +414,15 @@ public static partial class PlantCompiler
             return;
         }
 
+        if(continuous&&joints!=null)
+        {
+            joints[idx]=new AxisJoint(rings[^1],nPrev,samples[^1].D+uvOffset);
+            for(int child=firstChild[idx];child>=0;child=nextChild[child])
+                if((p.Organs[child].Flags&OrganFlags.Continuous)!=0
+                    &&(p.Organs[child].Start-o.End).Length<1e-6
+                    &&(p.Organs[child].End-p.Organs[child].Start).Length>1e-5)
+                    return;
+        }
         // Rounded tip: two arc rings then an apex.
         var last = samples[^1];
         var tip = last.T;
@@ -375,18 +439,40 @@ public static partial class PlantCompiler
             {
                 double th = Math.Tau * j / nRad;
                 var dv = nL * Math.Cos(th) + bL * Math.Sin(th);
-                var pos = last.P + dv * (rEnd * Math.Cos(phi)) + tip * (rEnd * Math.Sin(phi));
+                double capRadius = rEnd * (gnarled ? GnarlRadius(Math.Clamp(o.Maturity,0,1),th,o.Seed,gnarl) : 1);
+                var pos = last.P + dv * (capRadius * Math.Cos(phi)) + tip * (rEnd * Math.Sin(phi));
                 var nrm = (dv * Math.Cos(phi) + tip * Math.Sin(phi)).Normalized();
-                cur[j] = m.AddVertex(pos, nrm, rgb[0], rgb[1], rgb[2], 1, last.D, j / (double)nRad, u2x, 0);
+                cur[j] = m.AddVertex(pos, nrm, rgb[0], rgb[1], rgb[2], 1, last.D+uvOffset+rEnd*phi, j / (double)nRad, u2x, 0);
             }
             Strip(m, prev, cur);
             prev = cur;
         }
-        int apex = m.AddVertex(last.P + tip * rEnd, tip, rgb[0], rgb[1], rgb[2], 1, last.D, 0, u2x, 0);
+        int apex = m.AddVertex(last.P + tip * rEnd, tip, rgb[0], rgb[1], rgb[2], 1, last.D+uvOffset+rEnd*Math.PI*.5, 0, u2x, 0);
         for (int j = 0; j < nRad; j++)
         {
             m.AddTriangle(prev[j], prev[j + 1], apex);
         }
+    }
+
+    // Broad, seed-oriented lobes and a narrow winding furrow, confined to the
+    // full design interval. Prefix growth samples the same interval in place.
+    private static double GnarlRadius(double s,double angle,uint seed,double strength)
+    {
+        s=Math.Clamp(s,0,1);
+        double phase=(seed & 65535)/65535.0*Math.Tau;
+        double envelope=Math.Pow(Math.Sin(Math.PI*s),2);
+        double turn=angle-phase-1.7*Math.Sin(Math.Tau*s);
+        double lobe=.42*Math.Cos(turn)+.24*Math.Cos(2*turn+3.5*s);
+        double groove=Math.Pow((1+Math.Cos(turn*2-4*s))*.5,8);
+        double swell=.20*Math.Sin(Math.Tau*s+phase);
+        return Math.Max(.35,1+strength*envelope*(lobe+swell-.28*groove));
+    }
+
+    private static double GnarlUv(double s,double angle,uint seed,double strength)
+    {
+        double phase=(seed & 65535)/65535.0*Math.Tau;
+        double envelope=Math.Pow(Math.Sin(Math.PI*Math.Clamp(s,0,1)),2);
+        return strength*.035*envelope*Math.Sin(angle-phase-1.7*Math.Sin(Math.Tau*s));
     }
 
     /// <summary>Radial side count from axis radius (m) and detail.</summary>
@@ -418,7 +504,7 @@ public static partial class PlantCompiler
     }
 
     private static void AddSample(List<(Vec3 P, Vec3 T, double R, double D)> list, Vec3 p0, Vec3 t0, Vec3 p1, Vec3 t1,
-        double s, double rs, double re, double flare, double len, bool sink)
+        double s, double rs, double re, double flare, double len, bool sink,double waist=0,double maturity=1,bool exactRadius=false)
     {
         var pos = PlantMath.Hermite(p0, t0, p1, t1, s);
         var tan = PlantMath.HermiteD(p0, t0, p1, t1, s);
@@ -431,7 +517,8 @@ public static partial class PlantCompiler
         {
             double rLin = rs + (re - rs) * s;
             double w = Math.Exp(-d / (2 * Math.Max(rs, 1e-4)));
-            r = rLin + (flare - rLin) * w;
+            r = PlantMath.AxisRadius(rs,re,waist,s,maturity)
+                + (exactRadius||waist>0&&Math.Abs(flare-rs)<1e-9?0:(flare-rLin)*w);
         }
         list.Add((pos, tan, r, d));
     }
@@ -617,7 +704,7 @@ public static partial class PlantCompiler
         int R = detail == 0 && !ellipsoid ? 10 : detail == 0 ? 8 : detail == 1 ? 6 : 4;
         int G = detail == 0 && !ellipsoid ? 7 : detail == 0 ? 5 : detail == 1 ? 3 : 2;
         var cA = EncRgb(s.ColorAdaxial);
-        double u2x = ellipsoid ? 1.75 : 1.45, u2y = ellipsoid ? 0.98 : 0.92;
+        double u2x = ellipsoid ? .75 : 1.45, u2y = ellipsoid ? 0 : 0.92;
         var ids = new int[G + 1, R];
         for (int k = 0; k <= G; k++)
         {

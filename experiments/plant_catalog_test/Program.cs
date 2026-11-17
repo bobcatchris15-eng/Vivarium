@@ -79,6 +79,21 @@ foreach(var def in library.Flora)
             // foliage. Keep a finite bound without thinning them to fit an old template.
             int organBudget=def.Id is "fenforge" or "moonbark" or "mirespire" or "fencomb" or "deepquill" ? 10000 : 4000;
             Check(d.Organs.Length<organBudget,$"{def.Id}/{id} organ budget {d.Organs.Length} >= {organBudget}");
+            if(def.Id=="banksorrow")
+            {
+                var tips=d.Organs.Where(o=>o.Type==OrganType.Axis&&(o.Flags&OrganFlags.Terminal)!=0).ToArray();
+                Check(tips.Length>=7,$"{def.Id}/{id} missing terminal branch continuations");
+                foreach(var tip in tips)
+                {
+                    Check(tip.Parent>=0,$"{def.Id}/{id} orphan terminal continuation");
+                    if(tip.Parent<0)continue;
+                    var parent=d.Organs[tip.Parent];
+                    Check((tip.Start-parent.End).Length<1e-6,$"{def.Id}/{id} gap at terminal branch join");
+                    Check(Math.Abs(tip.RadiusStart-parent.RadiusEnd)<1e-6,$"{def.Id}/{id} abrupt radius at terminal branch join");
+                    Check(PlantMath.SafeNormal(tip.StartTangent,Vec3.Up).Dot(PlantMath.SafeNormal(parent.EndTangent,Vec3.Up))>.9999,
+                        $"{def.Id}/{id} kink at terminal branch join");
+                }
+            }
             var lods=new List<object>();
             for(int lod=0;lod<3;lod++)
             {

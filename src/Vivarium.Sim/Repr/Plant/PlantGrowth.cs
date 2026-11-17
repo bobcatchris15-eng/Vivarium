@@ -47,7 +47,7 @@ public static class PlantGrowth
             {
                 Parent = it.Parent, Type = it.Type, Tissue = it.Tissue, Flags = it.Flags, ShapeId = it.ShapeId,
                 Order = it.Order, AttachT = (float)it.AttachT, Up = it.Up, Maturity = (float)f, Health = health,
-                Seed = it.Seed,
+                Seed = it.Seed, AxisWaist=(float)it.AxisWaist, AxisGnarling=(float)it.AxisGnarling,
             };
             if (it.IsFlat)
             {

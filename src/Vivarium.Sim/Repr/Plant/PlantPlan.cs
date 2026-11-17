@@ -17,6 +17,9 @@ public static class PlantMath
         return m * m * (3 - 2 * m);
     }
 
+    public static double AxisRadius(double start,double end,double waist,double t,double maturity=1)
+        => (start+(end-start)*t)*(1-Math.Clamp(waist,0,.75)*Math.Sin(Math.PI*Math.Clamp(t*maturity,0,1)));
+
     /// <summary>Inverse of <see cref="Smooth"/>: the m in [0,1] with Smooth(m) = x.</summary>
     public static double InvSmooth(double x)
     {
@@ -92,6 +95,8 @@ public sealed class PotOrgan
     public double AttachT;            // design parameter on the parent axis
     public Vec3 P0, T0, P1, T1, Up;
     public double R0, R1;
+    public double AxisGnarling; // opt-in asymmetric wood swelling and bark whorls
+    public double AxisWaist;
     public double Emerge, Dur;        // ages at which the organ starts / reaches Maturity 1 (Dur = ramp length)
     public uint Seed;
 
@@ -153,7 +158,7 @@ public sealed class PlanBuilder
         var o = _organs[parent];
         var c = PlantMath.Hermite(o.P0, o.T0, o.P1, o.T1, t);
         var tan = TangentAt(parent, t);
-        double r = o.R0 + (o.R1 - o.R0) * t;
+        double r = PlantMath.AxisRadius(o.R0,o.R1,o.AxisWaist,t);
         var outward = PlantMath.SafeNormal(want - tan * want.Dot(tan), PlantMath.Perpendicular(tan));
         return (c + outward * r, outward, r);
     }
@@ -337,7 +342,7 @@ public sealed class PlanBuilder
                 double s0 = k / 4.0, s1 = (k + 1) / 4.0;
                 var a = PlantMath.Hermite(o.P0, o.T0, o.P1, o.T1, s0);
                 var b = PlantMath.Hermite(o.P0, o.T0, o.P1, o.T1, s1);
-                AddSegment(a, b, o.R0 + (o.R1 - o.R0) * (s0 + s1) * 0.5, i);
+                AddSegment(a, b, PlantMath.AxisRadius(o.R0,o.R1,o.AxisWaist,(s0+s1)*.5), i);
             }
         }
 

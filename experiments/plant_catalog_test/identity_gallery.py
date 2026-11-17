@@ -12,6 +12,7 @@ overrides = {p.name.removesuffix('_growth.png'):'organic-refined'
              for p in (BASE/'organic-refined/plant_catalog').glob('*_growth.png')
              if not p.name.endswith(('_foliage_growth.png','_cavity_growth.png'))}
 overrides['pitcher_plant']='organic-pitcher'
+overrides.update({'banksorrow':'banks-banner','bannerreed':'banks-banner'})
 if (BASE/'organic-tidebell/plant_catalog/tidebell_growth.png').exists(): overrides['tidebell']='organic-tidebell'
 
 reports = {}
@@ -40,7 +41,7 @@ for item in sorted(notes['species'], key=lambda x:x['id']):
         if not p.is_file(): raise FileNotFoundError(p)
     macros = []
     # Select the newest actual report-backed macro capture per kind.
-    for kind in ('foliage', 'cavity'):
+    for kind in ('foliage', 'cavity', 'branch_join', 'seedhead'):
         choices = list(BASE.glob(f'*/plant_catalog/{name}_{kind}_growth.png'))
         if choices:
             p = max(choices, key=lambda x:x.stat().st_mtime_ns)

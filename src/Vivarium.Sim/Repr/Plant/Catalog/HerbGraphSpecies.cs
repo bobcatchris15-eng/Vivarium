@@ -7,7 +7,7 @@ using Vivarium.Sim.Core;
 namespace Vivarium.Sim.Repr.Plant;
 
 /// <summary>Individually authored herbaceous architecture. Dimensions scale with content ecology.</summary>
-public static class HerbGraphSpecies
+public static partial class HerbGraphSpecies
 {
     // form, number of primary shoots, leaves/pairs per shoot, spread, leaf width, inflorescence character
     private sealed record Spec(string Id, string Counterpart, string Form, int Shoots, int Leaves, double Spread, double Width, int Bloom, string Habit);
@@ -81,7 +81,7 @@ public static class HerbGraphSpecies
         return s == null ? null : s.Id == "moonfern" ? new MoonfernGenerator() : new Generator(s, species);
     }
 
-    private sealed class Generator : PlanGenerator
+    private sealed partial class Generator : PlanGenerator
     {
         private readonly Spec s;
         private readonly double h, r;
@@ -125,7 +125,7 @@ public static class HerbGraphSpecies
                 BasalLobeLength=s.Id=="barbarrow" ? .42f : 0f,
                 Serration=s.Id is "hallowsting" or "blackneedle" or "cinderberry" ? .16f : 0f,
                 SerrationFreq=s.Id=="blackneedle" ? 5f : 9f,
-                EdgeWave=s.Id is "burlmantle" or "tankbloom" ? .025f : .008f, EdgeWaveFreq=3f,
+                EdgeWave=s.Id=="bogfringe" ? .18f : s.Id is "burlmantle" or "tankbloom" ? .025f : .008f, EdgeWaveFreq=s.Id=="bogfringe" ? 7f : 3f,
                 ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f, Roughness=.57f });
             bool starBloom = s.Bloom >= 4;
             ushort petal = b.AddShape(new OrganShape { Name=s.Id+"_flower", Type=OrganType.Flower,
@@ -173,6 +173,9 @@ public static class HerbGraphSpecies
                 ColorAdaxial=PlantShapes.Srgb(.59,.53,.26), ColorAbaxial=PlantShapes.Srgb(.39,.37,.18) });
             int crown=b.AddAxis(-1,0,Vec3.Up,Math.Max(.004,h*.035),Vec3.Zero,Math.Max(.001,r*.035),Math.Max(.0007,r*.025),0,Tissue.Green,0,.12);
             double rotation=b.Range(0,Math.Tau);
+            var palette=new HabitPalette(leaf,petal,pad,pitcher,trap,club,cotton,spike,pale,scarlet,berry,lantern,burr);
+            if(TryLowHabit(b,crown,rotation,palette)||TryUprightHabit(b,crown,rotation,palette)||TryAquaticFernHabit(b,crown,rotation,palette))
+                return;
             if(s.Id=="barbarrow")
             {
                 // A small open crown of individual long-petioled sagittate leaves.
@@ -509,6 +512,46 @@ public static class HerbGraphSpecies
                 }
                 int hoodStem=b.AddAxis(crown,1,Vec3.Up,h*.38,Vec3.Zero,r*.02,r*.008,1,Tissue.Green,.2,.3);
                 b.AddFlat(hoodStem,1,Vec3.Up,h*.24,r*.16,.001,OrganType.Flower,pitcher,2,.4,.2);
+            }
+            if(s.Id=="bannerreed")
+            {
+                // Reed culms remain upright; the nodding silhouette belongs to the
+                // terminal panicle, whose fine one-sided branches carry the glumes.
+                ushort glume=b.AddShape(new OrganShape { Name="bannerreed_glume", Type=OrganType.Flower,
+                    SurfaceForm=OrganSurfaceForm.Lamina,
+                    WidthProfile=PlantShapes.Profile(t => .5*Math.Pow(Math.Sin(Math.PI*t),.8)),
+                    MidribCurl=.12f, CrossCurl=.001f,
+                    ColorAdaxial=PlantShapes.Srgb(.84,.76,.48), ColorAbaxial=PlantShapes.Srgb(.65,.64,.37) });
+                for(int i=0;i<s.Shoots;i++)
+                {
+                    double az=rotation+Math.Tau*(i+b.Range(-.30,.30))/s.Shoots;
+                    var outward=PlantMath.Horizontal(az);
+                    var side=PlantMath.Horizontal(az+Math.PI/2);
+                    double height=h*b.Range(.78,.96);
+                    int culm=b.AddAxis(crown,1,Vec3.Up+outward*b.Range(.04,.13),height,
+                        outward*b.Range(.02,.08),r*.009,r*.004,1,Tissue.Green,.015*i/s.Shoots,.45);
+                    for(int j=0;j<4;j++)
+                    {
+                        double t=.12+j*.19;
+                        var bladeDir=PlantMath.Horizontal(az+(j%2==0 ? .75 : -.75))+Vec3.Up*.85;
+                        b.AddFlat(culm,t,bladeDir,h*b.Range(.24,.38)*(1-.10*j),r*s.Width*.65,
+                            .0004,OrganType.Leaf,leaf,2,.08+t*.15,.32);
+                    }
+                    double panLen=h*b.Range(.18,.26);
+                    int rachis=b.AddAxis(culm,1,Vec3.Up+outward*.65,panLen,
+                        outward*.85+Vec3.Down*1.25,r*.004,r*.001,2,Tissue.Green,.5,.25);
+                    for(int j=0;j<16;j++)
+                    {
+                        double t=.06+j*.058;
+                        var branchDir=outward+side*b.Range(-.35,.35)+Vec3.Down*b.Range(.12,.35);
+                        int branch=b.AddAxis(rachis,t,branchDir,panLen*(.40-.20*t)*b.Range(.8,1.15),
+                            Vec3.Down*.55,r*.0018,r*.0005,3,Tissue.Green,.52,.2);
+                        for(int k=0;k<3;k++)
+                            b.AddFlat(branch,.45+k*.25,branchDir+Vec3.Down*.6+side*b.Range(-.18,.18),
+                                h*b.Range(.018,.032),r*.012,.0003,OrganType.Flower,glume,3,.6,.15);
+                    }
+                }
+                return;
             }
             for(int i=0;i<s.Shoots;i++)
             {

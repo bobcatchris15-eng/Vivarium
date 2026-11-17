@@ -245,6 +245,14 @@ public sealed class PlantCompilerSelfTest : IReprSelfTest
         var rootMesh = PlantCompiler.Compile(root, 0).Wood;
         for(int v=0;v<rootMesh.VertexCount;v++)
             if(rootMesh.UV2[v*2]!=2) return "root bark lost woody shader tag";
+        foreach(var form in new[]{OrganSurfaceForm.Auto,OrganSurfaceForm.Revolved})
+        {
+            var fruit=PlantCompiler.BuildShapeMesh(new OrganShape {Type=OrganType.Fruit,SurfaceForm=form,
+                WidthProfile=new float[]{0,.5f,0},ColorAdaxial=Vec3.Up,ColorAbaxial=Vec3.Up},0);
+            for(int v=0;v<fruit.VertexCount;v++)
+                if(fruit.UV2[v*2] is <.5f or >=1.2f || fruit.UV2[v*2+1]>.5f)
+                    return "fruit entered leaf or bark shader band";
+        }
         for (int i = 0; i < 3; i++)
         {
             string sp = PlantTestKit.SpeciesNames[i];

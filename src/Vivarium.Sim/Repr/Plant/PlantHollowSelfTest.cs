@@ -11,6 +11,17 @@ public sealed class PlantHollowSelfTest : IReprSelfTest
     public string Name=>"plant.hollowOpening";
     public string? Run()
     {
+        // A growing axis exposes a prefix of its design, rather than shrinking
+        // a complete waist shape onto the currently visible length.
+        foreach(double maturity in new[]{.15,.4,.7,1.0})
+        foreach(double local in new[]{.1,.5,.9})
+        {
+            double design=local*maturity;
+            double expected=(.2+(.18-.2)*design)*(1-.45*Math.Sin(Math.PI*design));
+            double grownEnd=.2+(.18-.2)*maturity;
+            if(Math.Abs(PlantMath.AxisRadius(.2,grownEnd,.45,local,maturity)-expected)>1e-10)
+                return "waist moved during prefix growth";
+        }
         foreach(int detail in new[]{0,1,2})
         {
             var organ=new Organ {Parent=-1,Type=OrganType.Axis,Tissue=Tissue.Bark,Start=Vec3.Zero,End=Vec3.Up,
@@ -35,6 +46,22 @@ public sealed class PlantHollowSelfTest : IReprSelfTest
             var eye=Vec3.Up*.5+Vec3.Forward*.5;
             if(HitsRay(window,eye,-Vec3.Forward,.45)||!HitsRay(window,eye,-Vec3.Forward,.9))
                 return "side mouth or its interior wall lost at detail "+detail;
+            plant.Organs[0].AxisWaist=.45f;
+            var waisted=PlantCompiler.Compile(plant,detail).Wood;
+            double middle=0,bottom=0,top=0;
+            for(int v=0;v<waisted.VertexCount;v++)
+            {
+                var p=waisted.Position(v);double radius=Math.Sqrt(p.X*p.X+p.Z*p.Z);
+                if(Math.Abs(p.Y-.5)<.001)middle=Math.Max(middle,radius);
+                if(p.Y<.001)bottom=Math.Max(bottom,radius);
+                if(p.Y>.999)top=Math.Max(top,radius);
+                if(!waisted.NormalAt(v).IsFinite||waisted.NormalAt(v).LengthSq<.25)
+                    return "invalid waisted normal at detail "+detail;
+            }
+            if(middle<=0||middle>=Math.Min(bottom,top)*.72)return "waisted silhouette lost at detail "+detail;
+            if(HitsUpperCenter(waisted))return "waisted rim sealed at detail "+detail;
+            if(HitsRay(waisted,eye,-Vec3.Forward,.45)||!HitsRay(waisted,eye,-Vec3.Forward,.9))
+                return "waisted side mouth lost at detail "+detail;
         }
         return null;
     }

@@ -98,8 +98,8 @@ public static class CryptogamGraphSpecies
                 }),
                 RadialPitDepth = e.Id == "ashcomb" && name == "_cap" ? .30f : 0,
                 // Gentle uneven outlines replace the identical five-point rim across fungi.
-                LobeCount = name == "_cap" && e.Form is Form.Cap or Form.Bell or Form.Cup or Form.Shelf ? 0 : lobes,
-                LobeDepth = .10f, RimCurl = e.Form == Form.Cup ? .22f : .10f,
+                LobeCount = e.Id == "carrion_bell" && name == "_cap" ? 10 : name == "_cap" && e.Form is Form.Cap or Form.Bell or Form.Cup or Form.Shelf ? 0 : lobes,
+                LobeDepth = e.Id == "carrion_bell" && name == "_cap" ? .14f : .10f, RimCurl = e.Form == Form.Cup ? .22f : .10f,
                 EdgeWave = e.Form == Form.Foliose ? .18f : .08f, EdgeWaveFreq = 7,
                 RadialAsymmetry = name == "_cap" ? e.Form switch {
                     Form.Cup => .12f, Form.Shelf => .14f, Form.Cap => .08f, Form.Bell => .07f,
@@ -112,6 +112,12 @@ public static class CryptogamGraphSpecies
                 Name = e.Id + "_veil", Type = OrganType.Flower, SurfaceForm = OrganSurfaceForm.Cup,
                 WidthProfile = PlantShapes.Profile(t => .18 + .32 * Math.Pow(t, .7)),
                 RadialLattice = true, ColorAdaxial = accent, ColorAbaxial = accent,
+                Roughness = .8f, Transmission = .3f
+            }) : (ushort)0;
+            ushort skirt = e.Id == "carrion_bell" ? b.AddShape(new OrganShape {
+                Name = "carrion_bell_skirt", Type = OrganType.Flower, SurfaceForm = OrganSurfaceForm.Cup,
+                WidthProfile = PlantShapes.Profile(t => .18 + .32 * Math.Pow(t, .7)),
+                LobeCount = 10, LobeDepth = .12f, ColorAdaxial = accent, ColorAbaxial = accent,
                 Roughness = .8f, Transmission = .3f
             }) : (ushort)0;
             ushort blade = Shape("_blade", OrganSurfaceForm.Lamina);
@@ -146,14 +152,14 @@ public static class CryptogamGraphSpecies
                 double shootRadius = e.Family == "fungus" ? r * (e.Form switch {
                     Form.Cap => e.Id == "barrowbole" ? .23 : e.Id == "ashcomb" ? .065 : .024,
                     Form.Bell => e.Id == "reekhorn" ? .12 : .14,
-                    Form.Cup => .028, Form.Shelf => .05, Form.Puff => .085,
+                    Form.Cup => e.Id == "cradlecup" ? .095 : .028, Form.Shelf => .05, Form.Puff => .085,
                     Form.Coral => .036, Form.Jelly => .045, _ => .02
                 }) : Math.Max(.00012, r*.006);
                 int shoot = b.AddAxis(runner, .96, dir, Math.Max(.001,shootHeight),
                     e.Form == Form.Pendant ? Vec3.Up * -.7 + tangent * lean :
                     e.Form == Form.Feather ? tangent * b.Range(-.32, .32) + Vec3.Up * .13 :
                     radial * .15 + tangent * lean,
-                    shootRadius, shootRadius*.62, 2, colonyTissue, .1, e.Family == "fungus" ? .12 : .3,
+                    shootRadius, shootRadius*(e.Id == "cradlecup" ? .90 : .62), 2, colonyTissue, .1, e.Family == "fungus" ? .12 : .3,
                     e.Family == "fungus" ? OrganFlags.Basal : OrganFlags.None);
                 double delay = .15 + .1 * i/e.Count;
                 if (e.Form is Form.Star or Form.Feather)
@@ -214,8 +220,11 @@ public static class CryptogamGraphSpecies
                         Form.Shelf => .12, Form.Puff => e.Id == "duskpuff" ? .36 : .48, Form.Jelly => .45, _ => .3 });
                     var d = e.Form == Form.Shelf ? radial + Vec3.Up*b.Range(.18,.42) :
                         e.Form == Form.Cup ? Vec3.Up :
+                        e.Id == "carrion_bell" ? b.TangentAt(shoot,.94) :
                         Vec3.Up + radial*b.Range(-.16,.16) + tangent*b.Range(-.12,.12);
                     b.AddFlat(shoot,.94,d,Math.Max(.001,axial),width*variation,.0003,OrganType.Flower,cap,3,delay,.28);
+                    if (e.Id == "carrion_bell")
+                        b.AddFlat(shoot,.94,-b.TangentAt(shoot,.94),h*.20,r*.26*variation,.00015,OrganType.Flower,skirt,3,delay,.28);
                     if (e.Id == "reekhorn")
                         b.AddFlat(shoot,.94,-Vec3.Up,h*.28,r*.32*variation,.00015,OrganType.Flower,veil,3,delay,.28);
                     if (e.Id == "rain_jelly")
@@ -229,6 +238,43 @@ public static class CryptogamGraphSpecies
                     if (e.Id == "cradlecup")
                         for(int q=0;q<3;q++) b.AddFlat(shoot,.98,PlantMath.Horizontal(az+q*Math.Tau/3)*.12+Vec3.Up,r*.045,r*.035,.0002,OrganType.Flower,egg,4,.4,.15);
                 }
+            }
+            if (moss || lichen)
+                AddCryptogamColonyUnderstory(b, root, colonyTissue, phase, green, accent);
+        }
+
+        // Catalog specimens need the low colony around their shoots. In the world,
+        // CoverageRenderer builds the continuous terrain-following sheet separately and
+        // extracts only an order-2 shoot subtree, so these root siblings are not doubled.
+        private void AddCryptogamColonyUnderstory(PlanBuilder b, int root, Tissue tissue, double phase, Vec3 green, Vec3 accent)
+        {
+            bool moss = e.Family == "moss";
+            // Hanging beard lichen has a small attachment colony, rather than a ground carpet.
+            double extent = r * e.Spread * (e.Form == Form.Pendant ? .30 : .9);
+            ushort mat = b.AddShape(new OrganShape {
+                Name = e.Id + "_colony_understory", Type = OrganType.Flower,
+                SurfaceForm = OrganSurfaceForm.Lamina,
+                WidthProfile = PlantShapes.Profile(t => .5 * Math.Pow(Math.Max(0, Math.Sin(Math.PI*t)), .55)),
+                EdgeWave = .16f, EdgeWaveFreq = 7, RimCurl = .10f,
+                ColorAdaxial = green, ColorAbaxial = accent, Roughness = .86f, Transmission = .12f
+            });
+            // Broad interleaved radial blades share a common ground-level origin and
+            // overlap across their length. Irregular shorter fringe lobes break up the
+            // perimeter; neither layer uses suspended stems or isolated coins.
+            int count = e.Form == Form.Pendant ? 20 : 32;
+            for (int i = 0; i < count; i++)
+            {
+                double a = phase + i * Math.Tau / count;
+                var radial = PlantMath.Horizontal(a);
+                double length = extent * (1.04 + .12 * Math.Sin(i * 2.17));
+                b.AddFlat(root, 0, radial + Vec3.Up * .012, Math.Max(.001, length), extent * .43,
+                    .00008, OrganType.Flower, mat, 3, .76, .12);
+                int fringeAnchor = b.AddAxis(root, 0, radial, Math.Max(.001, extent * .68), Vec3.Zero,
+                    .00008, .00008, 1, tissue, .65, .05, OrganFlags.Hidden);
+                double fringeAngle = a + (i % 2 == 0 ? .19 : -.19);
+                b.AddFlat(fringeAnchor, .95, PlantMath.Horizontal(fringeAngle) + Vec3.Up * .035,
+                    Math.Max(.001, extent * .40), extent * (moss ? .14 : .18), .00008,
+                    OrganType.Flower, mat, 3, .78, .12);
             }
         }
     }

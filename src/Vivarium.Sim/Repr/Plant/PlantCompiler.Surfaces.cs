@@ -40,6 +40,7 @@ public static partial class PlantCompiler
             double t=i/(double)rows,theta=j*Math.Tau/radial;
             double rim=shape.SurfaceForm is OrganSurfaceForm.MushroomCap or OrganSurfaceForm.Shelf?Math.Pow(1-t,4):
                 shape.SurfaceForm is OrganSurfaceForm.Star or OrganSurfaceForm.Disc?1:Math.Pow(t,4);
+            if(shape.Name=="carrion_bell_cap") rim=1; // longitudinal relief follows the complete head
             double wave=shape.LobeCount>0?Math.Cos(shape.LobeCount*theta):0;
             double radius=Math.Max(.00001,Radius(t)*(1+shape.LobeDepth*rim*wave));
             if(shape.RadialPitDepth>0)
@@ -62,14 +63,14 @@ public static partial class PlantCompiler
             if(j==0)axialZ[i]=z;
             var p=Bend(radius*Math.Cos(theta),radius*Math.Sin(theta)*yScale,z);
             outer[i,j]=mesh.AddVertex(p,new Vec3(Math.Cos(theta),Math.Sin(theta),0),color[0],color[1],color[2],1,t,j/(double)radial,
-                shape.Type==OrganType.Fruit?1.75:shape.Type==OrganType.Flower?1.45:0,1);
+                shape.Type==OrganType.Fruit?.75:shape.Type==OrganType.Flower?1.45:0,shape.Type==OrganType.Fruit?0:1);
             if(inner!=null)
             {
                 double thickness=Math.Clamp(shape.ShellThickness,.002,.08);
                 double rr=Math.Max(.000005,radius-thickness);
                 var q=Bend(rr*Math.Cos(theta),rr*Math.Sin(theta)*yScale,z);
                 inner[i,j]=mesh.AddVertex(q,new Vec3(-Math.Cos(theta),-Math.Sin(theta),0),innerColor[0],innerColor[1],innerColor[2],1,t,j/(double)radial,
-                    shape.Type==OrganType.Fruit?1.75:shape.Type==OrganType.Flower?1.45:0,1);
+                    shape.Type==OrganType.Fruit?.75:shape.Type==OrganType.Flower?1.45:0,shape.Type==OrganType.Fruit?0:1);
             }
         }
         bool Hole(int row,int col)=>shape.RadialLattice&&row>=1&&row<rows-1
@@ -108,7 +109,8 @@ public static partial class PlantCompiler
             foreach(int row in new[]{0,rows})
             {
                 var centerPoint=Bend(0,0,axialZ[row]);
-                int center=mesh.AddVertex(centerPoint,row==0?-Vec3.Forward:Vec3.Forward,color[0],color[1],color[2],1);
+                int center=mesh.AddVertex(centerPoint,row==0?-Vec3.Forward:Vec3.Forward,color[0],color[1],color[2],1,
+                    0,0,shape.Type==OrganType.Fruit?.75:0,0);
                 for(int j=0;j<radial;j++)
                     if(row==0)mesh.AddTriangle(center,outer[row,j],outer[row,(j+1)%radial]);
                     else mesh.AddTriangle(center,outer[row,(j+1)%radial],outer[row,j]);
