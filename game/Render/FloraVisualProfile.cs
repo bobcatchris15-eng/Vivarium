@@ -66,6 +66,16 @@ public sealed class FloraVisualProfile
     public bool RotateTissue { get; set; }
     public float[] BarkTint { get; set; } = { .7f, .67f, .61f };
     public string Bark { get; set; } = "Bark014";
+    public int LeafClass { get; set; }
+    public float[] ThicknessMm { get; set; } = { .20f, .80f, .10f };
+    public float[] RoughnessParams { get; set; } = { .35f, .65f, .55f, .25f };
+    public float[] TransmissionColor { get; set; } = { .45f, .65f, .15f };
+    public float[] CurlParams { get; set; } = { 16f, .25f, .20f };
+    public float Farina { get; set; }
+    public float Turgor { get; set; } = 1f;
+    public float SpecularF0 { get; set; } = .035f;
+    public float CuticleSheen { get; set; } = -1f;
+    public float DiffuseWrap { get; set; }
 
 
     private static bool IsNonVascularId(string id) =>
@@ -190,6 +200,7 @@ public sealed class FloraVisualProfile
                 p.PoolSpecies = id;
             if (string.IsNullOrEmpty(p.MorphologicalFamily))
                 p.MorphologicalFamily = DetermineMorphologicalFamily(id, sp);
+            p.ApplyContentLeaf(sp);
             return p;
         }
 
@@ -205,6 +216,25 @@ public sealed class FloraVisualProfile
         }
 
         return Synthesize(id, sp);
+    }
+
+    private void ApplyContentLeaf(FloraSpeciesDef? sp)
+    {
+        if (sp?.Leaf is not { } lm) return;
+        LeafClass = (int)lm.Class;
+        Volumetric = lm.Class == LeafOpticsClass.Thick;
+        ThicknessMm = new[] { (float)lm.LaminaThicknessMm, (float)lm.MidribThicknessMm, (float)lm.EdgeThicknessMm };
+        RoughnessParams = new[] { (float)lm.FrontRoughness, (float)lm.BackRoughness, (float)lm.VeinRoughness, (float)lm.WaxRoughness };
+        TransmissionColor = new[] { (float)lm.TransmissionColor[0], (float)lm.TransmissionColor[1], (float)lm.TransmissionColor[2] };
+        CurlParams = new[] { (float)lm.CurlEdgeDeg, (float)lm.CurlCup, (float)lm.CurlDroop };
+        Farina = (float)lm.Farina;
+        Turgor = (float)lm.Turgor;
+        SpecularF0 = (float)lm.SpecularF0;
+        CuticleSheen = (float)lm.CuticleSheen;
+        DiffuseWrap = lm.Class == LeafOpticsClass.Thin ? 0.55f : 0.20f;
+        Roughness = (float)lm.FrontRoughness;
+        BackRoughness = (float)lm.BackRoughness;
+        Transmission = (float)lm.TransmissionStrength;
     }
 
     public static FloraVisualProfile Synthesize(string id, FloraSpeciesDef? sp = null)
@@ -315,7 +345,7 @@ public sealed class FloraVisualProfile
             _ => 0.030f
         };
 
-        return new FloraVisualProfile
+        var profile = new FloraVisualProfile
         {
             Species = id,
             PoolSpecies = pool,
@@ -340,6 +370,8 @@ public sealed class FloraVisualProfile
             BarkTint = new[] { barkTint.X, barkTint.Y, barkTint.Z },
             Bark = barkAsset
         };
+        profile.ApplyContentLeaf(sp);
+        return profile;
     }
 
     public ShaderMaterial LeafMaterial(bool animated = false)
@@ -374,7 +406,7 @@ public sealed class FloraVisualProfile
         mat.SetShaderParameter("back_pigment", back);
         mat.SetShaderParameter("leaf_roughness", Roughness);
         mat.SetShaderParameter("back_roughness", BackRoughness);
-        mat.SetShaderParameter("cuticle_sheen", Mathf.Clamp((0.72f - Roughness) / 0.22f, 0.05f, 0.85f));
+        mat.SetShaderParameter("cuticle_sheen", CuticleSheen >= 0f ? CuticleSheen : Mathf.Clamp((0.72f - Roughness) / 0.22f, 0.05f, 0.85f));
         mat.SetShaderParameter("transmission", Transmission);
         mat.SetShaderParameter("normal_strength", Relief);
         mat.SetShaderParameter("vein_strength", VeinStrength);
@@ -383,6 +415,15 @@ public sealed class FloraVisualProfile
         mat.SetShaderParameter("canopy_occlusion", CanopyOcclusion);
         mat.SetShaderParameter("volumetric", Volumetric);
         mat.SetShaderParameter("leaf_variegation", FloraSurfaceProfiles.Variegation(Species));
+        mat.SetShaderParameter("leaf_class", LeafClass);
+        mat.SetShaderParameter("leaf_thickness_mm", new Vector3(ThicknessMm[0], ThicknessMm[1], ThicknessMm[2]));
+        mat.SetShaderParameter("leaf_roughness_params", new Vector4(RoughnessParams[0], RoughnessParams[1], RoughnessParams[2], RoughnessParams[3]));
+        mat.SetShaderParameter("leaf_transmission_color", new Vector3(TransmissionColor[0], TransmissionColor[1], TransmissionColor[2]));
+        mat.SetShaderParameter("leaf_curl_params", new Vector3(CurlParams[0], CurlParams[1], CurlParams[2]));
+        mat.SetShaderParameter("farina_strength", Farina);
+        mat.SetShaderParameter("leaf_turgor", Turgor);
+        mat.SetShaderParameter("tissue_material_f0", SpecularF0);
+        if (DiffuseWrap > 0f) mat.SetShaderParameter("tissue_diffuse_wrap", DiffuseWrap);
         return mat;
     }
 

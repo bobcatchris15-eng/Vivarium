@@ -7,6 +7,8 @@ namespace Vivarium.Sim.Coverage.Rules;
 /// so the growth lab can drive it with synthetic fields (docs/overhaul/growth_models.md §2).</summary>
 public interface IMicroEnvSource
 {
+    /// <summary>True when fine cell (gx, gz) is within the allowed simulation domain (including any slice margin).</summary>
+    bool InDomain(int gx, int gz) => true;
     MicroEnv Sample(int gx, int gz);
     (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz)
     {
@@ -265,6 +267,13 @@ public static class MatRules
                 if (p is null) continue;
 
                 int gx = t.Ti * TileEdge + lx, gz = t.Tj * TileEdge + lz;
+                if (!env.InDomain(gx, gz))
+                {
+                    t.Occ[li] = 0; t.B[li] = 0f; t.W[li] = 0; t.Age[li] = 0; t.Dorm[li] = 0; t.Flags[li] = 0; t.D2E[li] = 0;
+                    tileDirty = true;
+                    (localChanged ??= new()).Add((lx, lz));
+                    continue;
+                }
                 var e = env.SamplePhysiology(gx, gz, tileLaplacian, tileCasters);
                 double w01 = t.W[li] / 255.0;
                 double newW01 = WaterBalance.StepWater(w01, e.Moisture, e.Humidity, p, dt);
@@ -438,6 +447,7 @@ public static class MatRules
 
                     if (occB == 0)
                     {
+                        if (!env.InDomain(gx + dx, gz + dz)) continue;
                         double w = wdir[k];
                         if (w <= 0) continue;
                         var key = (gx + dx, gz + dz);

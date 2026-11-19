@@ -10,6 +10,8 @@ namespace Vivarium.Sim.Coverage.Rules;
 /// </summary>
 public interface ILichenEnvSource
 {
+    /// <summary>True when fine cell (gx, gz) is within the allowed simulation domain (including any slice margin).</summary>
+    bool InDomain(int gx, int gz) => true;
     MicroEnv Sample(int gx, int gz);
     (double Moisture, double Humidity, double Light, double Nutrients) SamplePhysiology(int gx, int gz)
     {
@@ -68,6 +70,11 @@ public static class LichenRules
             if (!layer.TryGetTile(ti, tj, out var tile) || tile == null) return;
             byte occ = tile.Occ[li];
             if (occ == 0) return;
+            if (!env.InDomain(gx, gz))
+            {
+                clearFlags[index] = true;
+                return;
+            }
             var sp = SpeciesOf(species, occ);
             if (sp == null) return;
 
@@ -133,10 +140,11 @@ public static class LichenRules
         var candidates = new HashSet<(int, int)>();
         foreach (var (gx, gz, _, _, _) in occupied)
         {
-            if (boundary.Contains((gx, gz))) continue;
+            if (!env.InDomain(gx, gz) || boundary.Contains((gx, gz))) continue;
             foreach (var (dx, dz) in N8)
             {
                 int nx = gx + dx, nz = gz + dz;
+                if (!env.InDomain(nx, nz)) continue;
                 if (layer.SnapshotOcc(nx, nz) == 0) candidates.Add((nx, nz));
             }
         }
@@ -342,6 +350,7 @@ public static class LichenRules
                 int idx = (z - minZ) * w + (x - minX);
                 if (visited[idx]) continue;         // reached from outside: not a hole
                 if (layer.GetOcc(x, z) != 0) continue; // occupied (by this or another species): nothing to fill
+                if (!env.InDomain(x, z)) continue;
                 if (!sp.AllowsSubstrate(env.Substrate(x, z))) continue;
                 layer.SetCell(x, z, sp.OccSlot, (float)sp.SeedBiomass, 0, 0, 0, 0, 0);
             }

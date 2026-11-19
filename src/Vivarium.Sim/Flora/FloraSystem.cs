@@ -536,6 +536,12 @@ public sealed class FloraSystem
             var suit = Suitability(sp, p, f.Id, established: true);
             f.LastSuitability = suit.Score;
             f.LastReproductionSuitability = suit.ReproductionScore;
+            if (sp.Leaf?.Class == LeafOpticsClass.Thick || sp.Tags.Contains("succulent"))
+            {
+                double targetStore = Math.Clamp(suit.Moisture / Math.Max(0.08, sp.Moisture.Optimum), 0.15, 1.0);
+                double rate = targetStore > f.WaterStore ? 4.0 : 0.6;
+                f.WaterStore = Math.Clamp(f.WaterStore + (targetStore - f.WaterStore) * Math.Min(1.0, dt * rate / SimUnits.Day), 0.15, 1.0);
+            }
             double crowd = Crowding(sp, p, f.Id);
             double comp = 1 / (1 + sp.CompetitionSensitivity * crowd);
 

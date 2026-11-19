@@ -131,7 +131,7 @@ public static class ContentLoader
         var tools = Open(fTools) is { } nt ? ParseTools(nt) : new ToolConfig();
 
         var flora = new List<FloraSpeciesDef>();
-        foreach (var f in floraFiles) if (Open(f) is { } n) flora.Add(ParseFlora(n));
+        foreach (var f in floraFiles) if (Open(f) is { } n) flora.Add(ParseFlora(n, warnings));
         var fauna = new List<FaunaSpeciesDef>();
         foreach (var f in faunaFiles) if (Open(f) is { } n) fauna.Add(ParseFauna(n));
         flora.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
@@ -306,7 +306,7 @@ public static class ContentLoader
         return new Pref(p.Num("optimum", min: 0, max: 1.5), p.Num("tolerance", min: 0.01, max: 1.5));
     }
 
-    private static FloraSpeciesDef ParseFlora(JNode n)
+    private static FloraSpeciesDef ParseFlora(JNode n, List<string> warnings)
     {
         n.RejectUnknown("id", "name", "archetype", "placementGroup", "role", "description", "habitat", "growth", "spread", "competition", "proximity", "litterFraction", "sheddingPerDay", "grazingValue", "visual", "tags", "creep", "colony", "mat", "lichen", "woody", "climber", "reproduction", "postLife", "decomposition");
         const double D = SimUnits.Day;
@@ -340,7 +340,121 @@ public static class ContentLoader
         var c = n.Req("competition");
         c.RejectUnknown("radius", "crowdingLimit", "sensitivity");
         var v = n.Req("visual");
-        v.RejectUnknown("shape", "color", "color2", "colorVariance", "height", "bioluminescenceColor", "bioluminescenceStrength");
+        v.RejectUnknown("shape", "color", "color2", "colorVariance", "height", "bioluminescenceColor", "bioluminescenceStrength", "leaf", "form");
+        LeafMaterialDef? leafDef = null;
+        if (v.Has("leaf"))
+        {
+            var lf = v["leaf"];
+            lf.RejectUnknown("class", "cab", "car", "n", "thickness_mm", "roughness", "specular", "transmission", "curl", "farina", "turgor");
+            string clsRaw = lf.Str("class", "thin");
+            LeafOpticsClass cls = LeafOpticsClass.Thin;
+            if (clsRaw == "thick") cls = LeafOpticsClass.Thick;
+            else if (clsRaw != "thin") warnings.Add($"{n.File} $.visual.leaf.class: unknown class '{clsRaw}', defaulting to 'thin'");
+
+            double laminaMm = 0.20, midribMm = 0.80, edgeMm = 0.10;
+            if (lf.Has("thickness_mm"))
+            {
+                var tm = lf["thickness_mm"];
+                tm.RejectUnknown("lamina", "midrib", "edge");
+                laminaMm = tm.Num("lamina", 0.20, 0.05, 12.0);
+                midribMm = tm.Num("midrib", 0.80, 0.05, 15.0);
+                edgeMm = tm.Num("edge", 0.10, 0.02, 10.0);
+            }
+
+            double frontR = 0.35, backR = 0.65, veinR = 0.55, waxR = 0.25;
+            if (lf.Has("roughness"))
+            {
+                var rg = lf["roughness"];
+                rg.RejectUnknown("front", "back", "vein", "wax");
+                frontR = rg.Num("front", 0.35, 0.0, 1.0);
+                backR = rg.Num("back", 0.65, 0.0, 1.0);
+                veinR = rg.Num("vein", 0.55, 0.0, 1.0);
+                waxR = rg.Num("wax", 0.25, 0.0, 1.0);
+            }
+
+            double f0 = 0.035, sheen = 0.35;
+            if (lf.Has("specular"))
+            {
+                var spc = lf["specular"];
+                spc.RejectUnknown("f0", "cuticle_sheen");
+                f0 = spc.Num("f0", 0.035, 0.01, 0.16);
+                sheen = spc.Num("cuticle_sheen", 0.35, 0.0, 1.0);
+            }
+
+            double[] transCol = { 0.45, 0.65, 0.15 };
+            double transStr = 0.35;
+            if (lf.Has("transmission"))
+            {
+                var tr = lf["transmission"];
+                tr.RejectUnknown("color", "strength");
+                transCol = tr.Color("color", transCol);
+                transStr = tr.Num("strength", 0.35, 0.0, 1.0);
+            }
+
+            double edgeDeg = 16.0, cup = 0.25, droop = 0.20;
+            if (lf.Has("curl"))
+            {
+                var cu = lf["curl"];
+                cu.RejectUnknown("edge_deg", "cup", "droop");
+                edgeDeg = cu.Num("edge_deg", 16.0, 0.0, 90.0);
+                cup = cu.Num("cup", 0.25, 0.0, 1.0);
+                droop = cu.Num("droop", 0.20, 0.0, 1.0);
+            }
+
+            leafDef = new LeafMaterialDef
+            {
+                Class = cls,
+                Cab = lf.Num("cab", 40.0, 0.0, 80.0),
+                Car = lf.Num("car", 8.0, 0.0, 20.0),
+                N = lf.Num("n", 1.5, 1.0, 3.0),
+                LaminaThicknessMm = laminaMm,
+                MidribThicknessMm = midribMm,
+                EdgeThicknessMm = edgeMm,
+                FrontRoughness = frontR,
+                BackRoughness = backR,
+                VeinRoughness = veinR,
+                WaxRoughness = waxR,
+                SpecularF0 = f0,
+                CuticleSheen = sheen,
+                TransmissionColor = transCol,
+                TransmissionStrength = transStr,
+                CurlEdgeDeg = edgeDeg,
+                CurlCup = cup,
+                CurlDroop = droop,
+                Farina = lf.Num("farina", 0.0, 0.0, 1.0),
+                Turgor = lf.Num("turgor", 1.0, 0.0, 1.0),
+            };
+        }
+
+        ForbFormDef? formDef = null;
+        if (v.Has("form"))
+        {
+            var fm = v["form"];
+            fm.RejectUnknown("archetype", "phyllotaxis_deg", "leaf_count", "leaf_length", "leaf_width", "internode_length", "curl", "cup", "droop");
+            string archRaw = fm.Str("archetype", "alternate_stem");
+            ForbArchetype forbArch = archRaw switch
+            {
+                "rosette" => ForbArchetype.Rosette,
+                "alternate_stem" => ForbArchetype.AlternateStem,
+                "clump" => ForbArchetype.Clump,
+                "mat" => ForbArchetype.Mat,
+                _ => ForbArchetype.AlternateStem,
+            };
+            if (archRaw is not ("rosette" or "alternate_stem" or "clump" or "mat"))
+                warnings.Add($"{n.File} $.visual.form.archetype: unknown archetype '{archRaw}', defaulting to 'alternate_stem'");
+            formDef = new ForbFormDef
+            {
+                Archetype = forbArch,
+                PhyllotaxisDeg = fm.Num("phyllotaxis_deg", 137.5078, 30.0, 180.0),
+                LeafCount = fm.Int("leaf_count", 12, 1, 250),
+                LeafLength = fm.Num("leaf_length", 0.08, 0.002, 2.0),
+                LeafWidth = fm.Num("leaf_width", 0.03, 0.001, 1.5),
+                InternodeLength = fm.Num("internode_length", 0.03, 0.0005, 1.0),
+                Curl = fm.Num("curl", 0.25, 0.0, 2.0),
+                Cup = fm.Num("cup", 0.25, 0.0, 1.0),
+                Droop = fm.Num("droop", 0.20, 0.0, 1.0),
+            };
+        }
         var prox = new List<ProximityRule>();
         foreach (var p in n.Items("proximity", required: false))
         {
@@ -618,6 +732,8 @@ public static class ContentLoader
             Shape = v.Str("shape"), Color = col, Color2 = v.Color("color2", col), ColorVariance = v.Num("colorVariance", 0.05, 0, 0.5), Height = v.Num("height", min: 0.001, max: 8),
             BioluminescenceColor = v.Color("bioluminescenceColor", new[] { 0.0, 0.0, 0.0 }),
             BioluminescenceStrength = v.Num("bioluminescenceStrength", 0, 0, 8),
+            Leaf = leafDef,
+            Form = formDef,
             Tags = n.StrList("tags"),
             Feeds = feeds, RequiresFeature = reqFeature, RequiresFeatureRadius = reqRadius,
             CreepSpeed = creepSpeed, StarvedToFruit = starved, FoodThreshold = foodThreshold,

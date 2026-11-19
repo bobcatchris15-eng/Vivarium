@@ -568,11 +568,14 @@ public sealed partial class PlantAssemblyRenderer : Node3D
         var holder = new Node3D { Name = "D" + r.Detail, Visible = false };
         c.Root.AddChild(holder);
         long bytes = 0;
-        var shadow = CastShadows ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
+        var woodShadow = CastShadows && r.Detail <= 1;
         foreach (var (species, md) in r.Wood.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             var mesh = Bridge.ToArrayMesh(md);
-            holder.AddChild(new MeshInstance3D { Name = "Wood_" + species, Mesh = mesh, MaterialOverride = Mat(species, false), CastShadow = shadow });
+            var cast = (woodShadow && md.TriangleCount >= 24)
+                ? GeometryInstance3D.ShadowCastingSetting.On
+                : GeometryInstance3D.ShadowCastingSetting.Off;
+            holder.AddChild(new MeshInstance3D { Name = "Wood_" + species, Mesh = mesh, MaterialOverride = Mat(species, false), CastShadow = cast });
             bytes += PlantMeshStats.MeshBytes(mesh);
         }
         foreach (var g in r.Groups)
@@ -593,10 +596,13 @@ public sealed partial class PlantAssemblyRenderer : Node3D
             mm.Buffer = g.Buffer;
             InstanceBytesUploaded += (long)g.Buffer.Length * sizeof(float);
             bool leaf = g.ShapeType is OrganType.Leaf or OrganType.Leaflet;
+            var organCast = (CastShadows && r.Detail == 0 && (g.Max.Y - g.Min.Y) >= 0.16f)
+                ? GeometryInstance3D.ShadowCastingSetting.On
+                : GeometryInstance3D.ShadowCastingSetting.Off;
             holder.AddChild(new MultiMeshInstance3D
             {
                 Name = $"Organs_{g.Species}_{g.ShapeId}", Multimesh = mm, MaterialOverride = Mat(g.Species, leaf),
-                CustomAabb = new GAabb(g.Min, g.Max - g.Min), CastShadow = shadow,
+                CustomAabb = new GAabb(g.Min, g.Max - g.Min), CastShadow = organCast,
             });
         }
         lvl.Holder = holder;

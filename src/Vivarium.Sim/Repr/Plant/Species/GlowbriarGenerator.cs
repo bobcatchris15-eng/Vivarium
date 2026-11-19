@@ -59,8 +59,8 @@ public sealed class GlowbriarGenerator : PlanGenerator
             Transmission = 0.5f, Roughness = 0.35f, Wax = 0.3f,
         });
 
-        int stool = b.AddAxis(-1, 0, up + new Vec3(b.Range(-0.08, 0.08), 0, b.Range(-0.08, 0.08)), 0.12,
-            new Vec3(b.Range(-0.12, 0.12), 0, b.Range(-0.12, 0.12)), 0.050, 0.030, 0, Tissue.Wood, 0, 0.25);
+        int stool = b.AddAxis(-1, 0, up + new Vec3(b.Range(-0.08, 0.08), 0, b.Range(-0.08, 0.08)), 0.022,
+            new Vec3(b.Range(-0.12, 0.12), 0, b.Range(-0.12, 0.12)), 0.024, 0.017, 0, Tissue.Wood, 0, 0.25);
 
         double baseRot = b.Range(0, Math.Tau);
         // Each low runner turns upward into a cane. Their inner ends begin inside
@@ -71,7 +71,16 @@ public sealed class GlowbriarGenerator : PlanGenerator
             var hCane = PlantMath.Horizontal(az);
             var sCane = PlantMath.Horizontal(az + Math.PI / 2);
             double cSpread = b.Range(0.45, 0.85);
-            var caneDir = hCane * cSpread + up * b.Range(form.CaneElevationMin * 0.85, form.CaneElevationMax * 1.15);
+            // Uneven cane cohorts: a few shorter, steeper young canes end inside the
+            // crown so the canopy has depth instead of one flat plate of foliage.
+            bool youngCane = c % 3 == 2;
+            double caneLen = youngCane
+                ? b.Range(form.CaneLengthMin * 0.55, form.CaneLengthMin * 0.88)
+                : b.Range(form.CaneLengthMin * 0.95, form.CaneLengthMax * 1.12);
+            double caneElevation = youngCane
+                ? b.Range(1.05, 1.38)
+                : b.Range(form.CaneElevationMin * 0.55, form.CaneElevationMax * 1.10);
+            var caneDir = hCane * (youngCane ? cSpread * 0.70 : cSpread) + up * caneElevation;
             var caneBend = up * (-form.CaneDroop * b.Range(0.85, 1.45)) + hCane * b.Range(0.10, 0.35) + sCane * b.Range(-0.32, 0.32);
             double rootLength = b.Range(0.24, 0.34);
             int root = b.AddAxis(stool, 0.08, hCane, rootLength, Vec3.Zero,
@@ -81,7 +90,7 @@ public sealed class GlowbriarGenerator : PlanGenerator
             runner.T0 = hCane * rootLength;
             runner.T1 = caneDir.Normalized() * rootLength;
             runner.P1 = runner.P0 + (runner.T0 + runner.T1) * 0.5;
-            int cane = b.AddAxis(root, 1, caneDir, b.Range(form.CaneLengthMin * 0.9, form.CaneLengthMax * 1.08),
+            int cane = b.AddAxis(root, 1, caneDir, caneLen,
                 caneBend, 0.013, 0.0025, 1, Tissue.Wood, 0.03 * b.Draw(), 0.2, OrganFlags.Continuous);
             var shoot = b[cane];
             // AddAxis normally attaches at the parent's side; this is a continuation.
@@ -117,9 +126,9 @@ public sealed class GlowbriarGenerator : PlanGenerator
                     double twAz = baz + (tw == 0 ? 0.85 : -0.85) + b.Range(-0.35, 0.35);
                     var twOut = PlantMath.Horizontal(twAz);
                     var twSide = PlantMath.Horizontal(twAz + Math.PI / 2);
-                    var twigDir = twOut * b.Range(0.7, 0.95) + up * b.Range(0.20, 0.85);
+                    var twigDir = twOut * b.Range(0.7, 0.95) + up * b.Range(-.02,1.02);
                     var twigBend = up * b.Range(-0.45, -0.05) + twSide * b.Range(-0.35, 0.35);
-                    int twig = b.AddAxis(br, twigT, twigDir, form.TwigLength * b.Range(0.82, 1.22), twigBend, 0.0045, 0.0016, 3, Tissue.Green,
+                    int twig = b.AddAxis(br, twigT, twigDir, form.TwigLength * b.Range(0.65,1.38), twigBend, 0.0045, 0.0016, 3, Tissue.Green,
                         0.03 * b.Draw(), 0.14);
 
                     // Internodes shorten toward the tip: nodes sit closer together near the end of the twig.
@@ -140,8 +149,9 @@ public sealed class GlowbriarGenerator : PlanGenerator
                     }
                 }
 
-                // One pendant luminous chalice per branch, hanging from a pedicel on the branch.
-                int ped = b.AddAxis(br, 0.7, Vec3.Down * 0.95 + bo * 0.3, 0.035, bs * b.Range(-0.2, 0.2), 0.0011, 0.0008, 5,
+                // One pendant luminous chalice per branch, hanging from a pedicel at a
+                // different depth on each branch so flowers are spread through the crown.
+                int ped = b.AddAxis(br, b.Range(0.52, 0.86), Vec3.Down * 0.95 + bo * 0.3, 0.035, bs * b.Range(-0.2, 0.2), 0.0011, 0.0008, 5,
                     Tissue.Green, 0.03 * b.Draw(), 0.12);
                 b.AddFlat(ped, 1.0, Vec3.Down * 0.9 + bo * 0.3, form.FlowerLength, form.FlowerHalfWidth, 0.008, OrganType.Flower, chalice, 6,
                     0.03 * b.Draw(), 0.15, OrganFlags.Emissive);

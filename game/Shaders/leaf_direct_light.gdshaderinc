@@ -28,6 +28,9 @@ varying float tissue_rim;
 varying float tissue_tau;
 // 0 (default) keeps the wax lobe at full weight for other consumers; foliage shaders set 1 - waxiness so only waxy species get the near-mirror lobe.
 varying float tissue_wax_off;
+varying float tissue_is_thick;
+varying float tissue_trans_tint_set;
+varying vec3 tissue_trans_tint;
 uniform int tissue_material_diagnostic = 0;
 uniform int tissue_light_diagnostic = 0; // 0 composite, 1 reflected, 2 transmitted, 3 specular, 4 Lambert probe
 
@@ -119,15 +122,18 @@ void process_leaf_direct_light(
 
     // Spectrally Selective Beer-Lambert Subsurface Transmittance using baked vein thickness tau(u,v) in tissue_physical.b
     float tau = tissue_tau > 0.001 && tissue_tau < 1e6 ? tissue_tau : 0.65;
-    float hg = henyey_greenstein(-dot(v, l), 0.68);
+    float g_phase = tissue_is_thick > 0.5 ? 0.38 : 0.68;
+    float hg = henyey_greenstein(-dot(v, l), g_phase);
+    vec3 t_tint = tissue_trans_tint_set > 0.5 ? clamp(tissue_trans_tint, vec3(0.05), vec3(1.6)) : vec3(1.0);
     // Material transport is dimensionless. Irradiance is applied once below.
-    vec3 T_leaf = exp(-tau * max(tissue_transmission_absorption, vec3(0.0))) * hg;
+    vec3 T_leaf = exp(-tau * max(tissue_transmission_absorption, vec3(0.0))) * hg * t_tint;
 
     // Decouple thin-leaf back-transmittance from front-face NdotL self-shadowing while retaining cast-shadow ATTENUATION
-    float back_cosine = max(-nl + 0.15, 0.0) / 1.15;
+    float wrap_back = tissue_is_thick > 0.5 ? 0.35 : 0.15;
+    float back_cosine = max(-nl + wrap_back, 0.0) / (1.0 + wrap_back);
     float phase = pow(max(-dot(l, v), 0.0), 8.0) * (1.0 - abs(nl));
     float phase_mask=tissue_phase_mask>=0.0 && tissue_phase_mask<=1.0 ? tissue_phase_mask : 0.0;
-    float transmission_factor = (back_cosine + phase * 0.35) * tissue_direct_transmission * phase_mask;
+    float transmission_factor = (back_cosine + phase * 0.35) * tissue_direct_transmission * phase_mask * (tissue_is_thick > 0.5 ? 0.55 : 1.0);
 
     // Backlight transport blends harmoniously with leaf albedo so species pigment identity
     // (such as red veilblade or silver mooncoin) is preserved, avoiding division blow-out.

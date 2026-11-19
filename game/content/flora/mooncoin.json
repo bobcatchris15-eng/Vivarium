@@ -40,7 +40,7 @@
     "maturityDays": 7,
     "lifespanDays": 180,
     "nutrientPerBiomass": 0.16,
-    "radiusAtMax": 0.20,
+    "radiusAtMax": 0.2,
     "minRadius": 0.03
   },
   "spread": {
@@ -70,7 +70,54 @@
       0.54
     ],
     "colorVariance": 0.06,
-    "height": 0.06
+    "height": 0.06,
+    "leaf": {
+      "class": "thin",
+      "cab": 24.0,
+      "car": 6.5,
+      "n": 1.85,
+      "thickness_mm": {
+        "lamina": 0.28,
+        "midrib": 1.18,
+        "edge": 0.13
+      },
+      "roughness": {
+        "front": 0.684,
+        "back": 0.92,
+        "vein": 0.864,
+        "wax": 0.55
+      },
+      "specular": {
+        "f0": 0.03,
+        "cuticle_sheen": 0.18
+      },
+      "transmission": {
+        "color": [
+          0.522,
+          0.788,
+          0.29
+        ],
+        "strength": 0.239
+      },
+      "curl": {
+        "edge_deg": 20.0,
+        "cup": 0.3,
+        "droop": 0.16
+      },
+      "farina": 0.72,
+      "turgor": 1.0
+    },
+    "form": {
+      "archetype": "mat",
+      "phyllotaxis_deg": 137.5078,
+      "leaf_count": 48,
+      "leaf_length": 0.048,
+      "leaf_width": 0.0272,
+      "internode_length": 0.032,
+      "curl": 0.444,
+      "cup": 0.3,
+      "droop": 0.16
+    }
   },
   "tags": [
     "plant",

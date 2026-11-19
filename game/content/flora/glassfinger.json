@@ -28,8 +28,14 @@
       "optimum": 0.12,
       "tolerance": 0.25
     },
-    "oxygen": { "optimum": 0.68, "tolerance": 0.29 },
-    "topsoilDepth": { "optimum": 0.13, "tolerance": 0.18 },
+    "oxygen": {
+      "optimum": 0.68,
+      "tolerance": 0.29
+    },
+    "topsoilDepth": {
+      "optimum": 0.13,
+      "tolerance": 0.18
+    },
     "maxWaterDepth": 0,
     "hardMaxMoisture": 0.55,
     "minSuitability": 0.18
@@ -73,7 +79,54 @@
       0.236
     ],
     "colorVariance": 0.07,
-    "height": 0.1
+    "height": 0.1,
+    "leaf": {
+      "class": "thick",
+      "cab": 26.0,
+      "car": 8.0,
+      "n": 2.2,
+      "thickness_mm": {
+        "lamina": 5.5,
+        "midrib": 7.5,
+        "edge": 2.2
+      },
+      "roughness": {
+        "front": 0.22,
+        "back": 0.46,
+        "vein": 0.39,
+        "wax": 0.14
+      },
+      "specular": {
+        "f0": 0.044,
+        "cuticle_sheen": 0.8
+      },
+      "transmission": {
+        "color": [
+          0.372,
+          0.62,
+          0.293
+        ],
+        "strength": 0.231
+      },
+      "curl": {
+        "edge_deg": 12.0,
+        "cup": 0.45,
+        "droop": 0.1
+      },
+      "farina": 0.25,
+      "turgor": 1.0
+    },
+    "form": {
+      "archetype": "mat",
+      "phyllotaxis_deg": 137.5078,
+      "leaf_count": 35,
+      "leaf_length": 0.03,
+      "leaf_width": 0.0117,
+      "internode_length": 0.02,
+      "curl": 0.267,
+      "cup": 0.45,
+      "droop": 0.1
+    }
   },
   "tags": [
     "plant",

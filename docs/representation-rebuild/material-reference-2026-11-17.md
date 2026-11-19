@@ -47,3 +47,29 @@ Values are linear albedo (visible, approx. RGB) and perceptual roughness (0–1)
 - USGS splib07: https://www.usgs.gov/labs/spectroscopy-lab/science/spectral-library — ECOSTRESS: https://speclib.jpl.nasa.gov/
 - CC0 scans: https://polyhaven.com/textures (Nature)
 - Photos: Wikimedia Commons categories Terrariums, Paludariums, Moss, Tree bark, Leaf litter
+
+## Forb & Succulent Optical Split (2026-11-18)
+
+All 61 herbaceous, forb, succulent, rosette, fern, runner, and graminoid species in `game/content/flora/*.json` now author per-species `visual.leaf` and `visual.form` blocks generated from PROSPECT parameters (`tools/prospect_forb_author.py`) across two unified shader paths in `leaf.gdshader` / `flora.gdshader` / `living_leaf_optics.gdshaderinc`:
+
+| Optical Class | Lamina Thickness | Midrib / Edge | Cuticle Roughness & Specular | Transmission Model |
+|---|---|---|---|---|
+| **Path A: Thin herbaceous** (`class: "thin"`) | 0.14–0.28 mm | 0.40–1.18 mm / 0.07–0.13 mm | Front 0.34–0.65, Vein 0.52–0.83, Back 0.62–0.92; `F0 = 0.030–0.038`; optional epicuticular farina mask (`mooncoin`, `frosttussock`, `ashwire`) | High thin-slab Beer-Lambert transmission modulated by local optical thickness `tau(lamina, midrib, edge)` and species `transmission.color` + Lambert diffuse wrap (`0.55`) |
+| **Path B: Thick succulent** (`class: "thick"`) | 2.2–5.5 mm | 3.2–8.0 mm / 0.8–2.2 mm | Waxy front 0.22–0.42 (`F0 = 0.036–0.044`, `cuticle_sheen = 0.42–0.80`), attenuated locally by `leaf_farina()` mask (`farina = 0.10–0.60`) | Volumetric water-parenchyma scattering (`leaf_through_thick`), low central core transmittance rising smoothly toward thinner tips/margins, turgor-driven thickness/curl (`WaterStore`) |
+
+### PROSPECT & Cuticle Reference Ranges
+
+| Parameter | Thin Herbaceous Healthy Default | Succulent / Thick Water Leaf | Glaucous / Farina-Dusted |
+|---|---|---|---|
+| `Cab` (chlorophyll a+b, ug/cm^2) | 30–55 | 14–38 | 22–28 |
+| `Car` (carotenoids, ug/cm^2) | 6–12 | 6.5–12 | 6–7.5 |
+| `N` (mesophyll structure index) | 1.35–1.65 | 1.8–2.3 | 1.75–1.85 |
+| Cuticle `F0` (Bousquet visible white) | 0.030–0.038 | 0.040–0.044 | 0.030 (suppressed under farina mask to matte bloom) |
+
+### CC0 Reference Mapping (Form & Optics Only — Identities Remain Fictional)
+
+Vivarium species retain their unique fictional identities, niches, and morphology; real-plant studies supply optical slab ranges, packing ratios, and petal specular rules only:
+- **Poly Haven `dandelion_01` / `celandine_01`**: golden-angle basal rosette packing (`137.5078 deg`, `r = c * sqrt(n)`), cupped petal sky-specular varnish (`butterglint`, `marshkettle`), thin-margin backlit glow.
+- **Poly Haven `calathea_orbifolia_01` / `fern_02` / `nettle_plant`**: inter-vein transmittance vs. opaque vascular ribs, serrated/bullate laminar relief, felted leaf roughness (`burlmantle`, `hallowsting`).
+- **Poly Haven `periwinkle_plant` / `grass_medium_01`**: ground-skirting mat/stolon contact (`hushclover`, `mooncoin`, `cinderberry`) and wind-flexible tuft blades (`plumegrass`, `frosttussock`, `quillsedge`).
+- **Thick glossy & succulent references (`anthurium_botany_01`, Innerscene Zamioculcas/Ficus)**: low-roughness epicuticular wax over dark parenchyma contrasted with chalky farina bloom (`sunstone_rosette`, `cragset`, `glassfinger`).

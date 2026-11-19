@@ -85,7 +85,54 @@
       0.78,
       1.0
     ],
-    "bioluminescenceStrength": 1.65
+    "bioluminescenceStrength": 1.65,
+    "leaf": {
+      "class": "thin",
+      "cab": 56.9,
+      "car": 7.1,
+      "n": 1.55,
+      "thickness_mm": {
+        "lamina": 0.2,
+        "midrib": 0.84,
+        "edge": 0.1
+      },
+      "roughness": {
+        "front": 0.494,
+        "back": 0.774,
+        "vein": 0.674,
+        "wax": 0.374
+      },
+      "specular": {
+        "f0": 0.034,
+        "cuticle_sheen": 0.3
+      },
+      "transmission": {
+        "color": [
+          0.312,
+          0.74,
+          0.213
+        ],
+        "strength": 0.405
+      },
+      "curl": {
+        "edge_deg": 20.0,
+        "cup": 0.3,
+        "droop": 0.16
+      },
+      "farina": 0.0,
+      "turgor": 1.0
+    },
+    "form": {
+      "archetype": "rosette",
+      "phyllotaxis_deg": 137.5078,
+      "leaf_count": 22,
+      "leaf_length": 0.11,
+      "leaf_width": 0.023,
+      "internode_length": 0.001,
+      "curl": 0.444,
+      "cup": 0.3,
+      "droop": 0.16
+    }
   },
   "tags": [
     "plant",

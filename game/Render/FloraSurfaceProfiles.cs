@@ -33,6 +33,22 @@ internal static class FloraSurfaceProfiles
         material.SetShaderParameter("back_roughness", 0.82f);
         material.SetShaderParameter("leaf_transmission", leaf.Transmission);
         material.SetShaderParameter("transmission", leaf.Transmission);
+        if (species.Leaf is { } lm)
+        {
+            material.SetShaderParameter("leaf_class", (int)lm.Class);
+            material.SetShaderParameter("leaf_thickness_mm", new Vector3((float)lm.LaminaThicknessMm, (float)lm.MidribThicknessMm, (float)lm.EdgeThicknessMm));
+            material.SetShaderParameter("leaf_roughness_params", new Vector4((float)lm.FrontRoughness, (float)lm.BackRoughness, (float)lm.VeinRoughness, (float)lm.WaxRoughness));
+            material.SetShaderParameter("leaf_transmission_color", new Vector3((float)lm.TransmissionColor[0], (float)lm.TransmissionColor[1], (float)lm.TransmissionColor[2]));
+            material.SetShaderParameter("farina_strength", (float)lm.Farina);
+            material.SetShaderParameter("leaf_turgor", (float)lm.Turgor);
+            material.SetShaderParameter("cuticle_sheen", (float)lm.CuticleSheen);
+            material.SetShaderParameter("leaf_roughness", (float)lm.FrontRoughness);
+            material.SetShaderParameter("back_roughness", (float)lm.BackRoughness);
+            material.SetShaderParameter("leaf_transmission", (float)lm.TransmissionStrength);
+            material.SetShaderParameter("transmission", (float)lm.TransmissionStrength);
+            material.SetShaderParameter("tissue_material_f0", (float)lm.SpecularF0);
+            material.SetShaderParameter("tissue_diffuse_wrap", lm.Class == LeafOpticsClass.Thin ? 0.55f : 0.20f);
+        }
         material.SetShaderParameter("leaf_pattern", LeafPattern(species.Id));
         material.SetShaderParameter("leaf_variegation", Variegation(species.Id));
         material.SetShaderParameter("pitcher_tissue", species.Id == "pitcher_plant");

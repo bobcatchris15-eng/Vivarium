@@ -88,8 +88,10 @@ public partial class FloraRenderer
             {
                 Bridge.BindSurface(stem, "bark", profile.Bark);
                 stem.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0], profile.BarkTint[1], profile.BarkTint[2]));
-                leaves.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
-                leaves.SetShaderParameter("wind_strength", 0f);
+                float stiff = sp.Woody != null ? 7f : sp.Leaf?.Class == Vivarium.Sim.Content.LeafOpticsClass.Thick ? 6.5f : 2.0f;
+                float wind = sp.Woody != null ? 0.25f : sp.Leaf?.Class == Vivarium.Sim.Content.LeafOpticsClass.Thick ? 0.10f : 0.75f;
+                leaves.SetShaderParameter("plant_stiffness", stiff);
+                leaves.SetShaderParameter("wind_strength", wind);
             }
             pair = (stem, leaves ?? stem); _graphMaterials[id] = pair;
         }
@@ -141,6 +143,16 @@ public partial class FloraRenderer
             // Floating species are placed on the live water surface only when water exists.
             double surface = sp.Tags.Contains("floating") ? _w.Water.SurfaceAt(f.Position) : double.NaN;
             double y = double.IsFinite(surface) ? surface : ground;
+            // Multi-sample ground seat for low herbaceous rosettes and mats so basal skirts contact slopes cleanly.
+            if (!double.IsFinite(surface) && sp.Woody == null && sp.Climber == null && sp.Height <= 0.35)
+            {
+                double rFoot = Math.Min(0.06, Math.Max(0.015, sp.RadiusAtMax * 0.35));
+                double minRing = Math.Min(
+                    Math.Min(_w.GroundHeight(new Vec2(f.X + rFoot, f.Z)), _w.GroundHeight(new Vec2(f.X - rFoot, f.Z))),
+                    Math.Min(_w.GroundHeight(new Vec2(f.X, f.Z + rFoot)), _w.GroundHeight(new Vec2(f.X, f.Z - rFoot))));
+                if (double.IsFinite(minRing))
+                    y = Math.Min(ground, minRing + 0.004) - 0.002;
+            }
             double x = f.X, z = f.Z;
             Vec3 supportNormal = Vec3.Up;
             if (f.SpeciesId == "emberfan_fungus")
@@ -180,10 +192,11 @@ public partial class FloraRenderer
                 }
                 segments = copied.ToArray();
             }
+            double turgorFactor = (0.35 + 0.65 * f.WaterStore) * (f.Stage(sp) == Vivarium.Sim.Flora.FloraStage.Senescent ? 0.55 : 1.0);
             var input = new GraphInput(_w.Seed, f.Id.Value, f.SpeciesId, x, y, z,
                 (int)Math.Round(Math.Clamp(f.Age / Math.Max(1, sp.MaturityAge), 0, 1) * 100),
                 (int)Math.Round(Math.Clamp(f.Biomass / Math.Max(1e-9, sp.MaxBiomass), 0, 1) * 100),
-                (int)Math.Round(Math.Clamp(f.Health, 0, 1) * 100),
+                (int)Math.Round(Math.Clamp(f.Health * turgorFactor, 0, 1) * 100),
                 segments != null ? 0 : Rng.HashUnit(_w.Seed, Hash.Fnv1a64("graph.flora.yaw"), f.Id.Value) * Math.Tau, supportNormal, segments,
                 f.SpeciesId == "tidebell" ? Math.Max(0, double.IsFinite(_w.Water.SurfaceAt(f.Position)) ? _w.Water.SurfaceAt(f.Position) - ground : 0) : 0);
             _graphSeen.Add(input.Id);

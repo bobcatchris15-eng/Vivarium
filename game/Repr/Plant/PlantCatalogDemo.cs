@@ -50,6 +50,7 @@ public sealed class PlantCatalogDemo : IReprDemo
             float h=PlantDemoKit.HeightOf(mature), r=PlantDemoKit.CrownOf(mature);
             double scale=1/Math.Max(.01, Math.Max(h,2*r));
             if(matureOnly)scale=1/Math.Max(.01,Math.Max(sp.Height,2*sp.RadiusAtMax));
+            if(Main.UserArgs.Contains("--plant-catalog-review-angles"))scale=1/Math.Max(.01,Math.Max(h,2*r));
             if(scaleReference?.TryGetValue(entry.Id,out var referenceScale)==true)scale=referenceScale;
             var origin = new Vector3(stage*8,0,0);
             root.AddChild(PlantDemoKit.Ground(origin,5));
@@ -80,6 +81,16 @@ public sealed class PlantCatalogDemo : IReprDemo
                 else plants.Add(p);
                 if(macro&&!legacy&&j==2)
                 {
+                    if (entry.Id is "moonbark" or "shiverleaf")
+                    {
+                        var trunk=p.Organs.First(o=>o.Parent<0 && o.Type==OrganType.Axis);
+                        var foot=origin+new Vector3((float)(trunk.Start.X*scale),(float)(trunk.Start.Y*scale),(float)(trunk.Start.Z*scale));
+                        var join=origin+new Vector3((float)(trunk.End.X*scale),(float)(trunk.End.Y*scale),(float)(trunk.End.Z*scale));
+                        float distance=(float)Math.Max(.15,trunk.RadiusStart*scale*12);
+                        var offset=new Vector3(.6f,.25f,1).Normalized()*distance;
+                        _shots.Add(new ReprShot(entry.Id+"_base",foot+offset,foot,40,2,"growth"));
+                        _shots.Add(new ReprShot(entry.Id+"_junction",join+offset,join,40,2,"growth"));
+                    }
                     if(entry.Id=="banksorrow")
                     {
                         var continuation=p.Organs.First(o=>o.Type==OrganType.Axis&&(o.Flags&OrganFlags.Terminal)!=0);
@@ -116,7 +127,7 @@ public sealed class PlantCatalogDemo : IReprDemo
                         var centre=bole.Start+(bole.End-bole.Start)*.5;
                         var focus=new Vector3((float)(p.Position.X+centre.X*scale),(float)(centre.Y*scale),(float)(centre.Z*scale));
                         float distance=(float)Math.Max(.15,bole.RadiusStart*scale*5);
-                        _shots.Add(new ReprShot(entry.Id+"_cavity",focus+new Vector3(0,.25f,1)*distance,focus,40,2,"growth"));
+                        _shots.Add(new ReprShot(entry.Id+"_cavity",focus+new Vector3((float)bole.Up.X,.18f,(float)bole.Up.Z).Normalized()*distance,focus,40,2,"growth"));
                     }
                     var leaves=p.Organs.Where(o=>o.Type is OrganType.Leaf or OrganType.Leaflet).ToArray();
                     if(leaves.Length>0)
@@ -132,6 +143,13 @@ public sealed class PlantCatalogDemo : IReprDemo
             }
             var target=origin+new Vector3(0,matureOnly?.52f:.42f,0);
             var eye=origin+(matureOnly?new Vector3(.65f,.95f,2.75f):new Vector3(.6f,1.45f,5.5f));
+            if (Main.UserArgs.Contains("--plant-catalog-review-angles"))
+            {
+                target=origin+new Vector3(0,(float)(h*scale*.5),0);
+                eye=target+new Vector3(.5f,.35f,2.6f);
+                _shots.Add(new ReprShot(entry.Id+"_side",target+new Vector3(2.6f,.35f,-.5f),target,40,2,"growth"));
+                _shots.Add(new ReprShot(entry.Id+"_high",target+new Vector3(.5f,2.4f,1.4f),target,40,2,"growth"));
+            }
             // --plant-catalog-night adds a deep-night (960 s of the 1200 s cycle) shot to judge bioluminescence.
             _shots.Add(new ReprShot(entry.Id,eye,target,matureOnly?40:44,2,legacy?"legacy":"growth"));
             if(Main.UserArgs.Contains("--plant-catalog-night"))

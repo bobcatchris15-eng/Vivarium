@@ -18,6 +18,8 @@ uniform sampler2D moss_col : source_color, filter_linear_mipmap_anisotropic, rep
 uniform sampler2D moss_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D moss_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D lichen_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool clip_to_hex = false;
+uniform float hex_apothem = 6.92820323;
 
 varying vec3 world_pos;
 varying float sundew_surface;
@@ -72,6 +74,12 @@ void vertex() {
 }
 
 void fragment() {
+    if (clip_to_hex) {
+        float d = max(abs(world_pos.z), 0.8660254037844386 * abs(world_pos.x) + 0.5 * abs(world_pos.z)) - hex_apothem;
+        if (d > 0.001) {
+            discard;
+        }
+    }
     vec3 base = srgb_to_linear(clamp(COLOR.rgb, vec3(0.0), vec3(1.0)));
     vec2 wp = world_pos.xz;
     float cam_dist = length(CAMERA_POSITION_WORLD - world_pos);

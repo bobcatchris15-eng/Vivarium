@@ -4,7 +4,7 @@
   "archetype": "plant",
   "placementGroup": "waterside_aquatic",
   "role": "Jointed rhizomatous wet-margin herb filling the horsetail-like structural niche.",
-  "description": "Dark ringed joints divide upright hollow stems into stacked segments, with fine radial branchlets forming sparse collars along saturated banks.",
+  "description": "Unbranched scouring-rush rods rise in loose clumps, their hollow ribbed internodes divided by pale ash sheaths crowned with black rings and fine dark teeth; alternate rods end in a rounded spore cone or a smooth dark tip.",
   "habitat": {
     "substrates": {
       "soil": 1,
@@ -77,7 +77,54 @@
       0.34
     ],
     "colorVariance": 0.06,
-    "height": 0.48
+    "height": 0.48,
+    "leaf": {
+      "class": "thin",
+      "cab": 53.4,
+      "car": 7.5,
+      "n": 1.55,
+      "thickness_mm": {
+        "lamina": 0.2,
+        "midrib": 0.84,
+        "edge": 0.1
+      },
+      "roughness": {
+        "front": 0.507,
+        "back": 0.787,
+        "vein": 0.687,
+        "wax": 0.387
+      },
+      "specular": {
+        "f0": 0.034,
+        "cuticle_sheen": 0.27
+      },
+      "transmission": {
+        "color": [
+          0.335,
+          0.763,
+          0.177
+        ],
+        "strength": 0.359
+      },
+      "curl": {
+        "edge_deg": 20.0,
+        "cup": 0.3,
+        "droop": 0.16
+      },
+      "farina": 0.0,
+      "turgor": 1.0
+    },
+    "form": {
+      "archetype": "clump",
+      "phyllotaxis_deg": 137.5078,
+      "leaf_count": 72,
+      "leaf_length": 0.312,
+      "leaf_width": 0.004,
+      "internode_length": 0.04,
+      "curl": 0.444,
+      "cup": 0.3,
+      "droop": 0.16
+    }
   },
   "tags": [
     "plant",

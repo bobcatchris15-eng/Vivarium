@@ -244,6 +244,9 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
         CoverageEnvironment.MoistureBonusOf(_w).Add(p, amount);
     }
 
+    public bool InDomain(int gx, int gz) =>
+        _w.Domain.SignedDistance(CellCentre(gx, gz)) <= CoverageSpec.CellSize * 1.5;
+
     private static Vec2 CellCentre(int gx, int gz) => new((gx + 0.5) * CoverageSpec.CellSize, (gz + 0.5) * CoverageSpec.CellSize);
 
     // ------------------------------------------------------------------ step (scheduler, flora cadence)
@@ -405,6 +408,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
 
     private bool IsMatSuitable(MatParams mp, Vec2 p)
     {
+        if (_w.Domain.SignedDistance(p) > CoverageSpec.CellSize * 1.5) return false;
         var e = CoverageEnvironment.Sample(_w, p);
         if (e.Substrate == CoverageSubstrate.Water) return false;
         if (e.Moisture < mp.HardMinMoisture) return false;
@@ -415,6 +419,7 @@ public sealed class CoverageSystem : IMicroEnvSource, ILichenEnvSource, IDetritu
 
     private bool IsLichenSuitable(LichenParams lp, Vec2 p)
     {
+        if (_w.Domain.SignedDistance(p) > CoverageSpec.CellSize * 1.5) return false;
         var e = CoverageEnvironment.Sample(_w, p);
         if (!lp.AllowsSubstrate(e.Substrate)) return false;
         double gW = LichenWater.GrowthWaterFactor(e.Moisture, lp.WMin, lp.WOpt);

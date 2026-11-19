@@ -77,7 +77,54 @@
       0.2
     ],
     "colorVariance": 0.06,
-    "height": 0.42
+    "height": 0.42,
+    "leaf": {
+      "class": "thin",
+      "cab": 52.9,
+      "car": 7.8,
+      "n": 1.55,
+      "thickness_mm": {
+        "lamina": 0.2,
+        "midrib": 0.84,
+        "edge": 0.1
+      },
+      "roughness": {
+        "front": 0.486,
+        "back": 0.766,
+        "vein": 0.666,
+        "wax": 0.366
+      },
+      "specular": {
+        "f0": 0.034,
+        "cuticle_sheen": 0.32
+      },
+      "transmission": {
+        "color": [
+          0.346,
+          0.766,
+          0.177
+        ],
+        "strength": 0.5
+      },
+      "curl": {
+        "edge_deg": 20.0,
+        "cup": 0.3,
+        "droop": 0.16
+      },
+      "farina": 0.0,
+      "turgor": 1.0
+    },
+    "form": {
+      "archetype": "clump",
+      "phyllotaxis_deg": 137.5078,
+      "leaf_count": 88,
+      "leaf_length": 0.273,
+      "leaf_width": 0.004,
+      "internode_length": 0.0191,
+      "curl": 0.444,
+      "cup": 0.3,
+      "droop": 0.16
+    }
   },
   "tags": [
     "plant",

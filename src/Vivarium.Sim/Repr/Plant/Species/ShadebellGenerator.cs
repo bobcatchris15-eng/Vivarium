@@ -18,8 +18,8 @@ public sealed class ShadebellGenerator : PlanGenerator
         public double BranchLength { get; init; } = 0.48;
         public double LeafLengthMin { get; init; } = 0.22;
         public double LeafLengthMax { get; init; } = 0.27;
-        public double FlowerLength { get; init; } = 0.050;
-        public double FlowerHalfWidth { get; init; } = 0.023;
+        public double FlowerLength { get; init; } = 0.065;
+        public double FlowerHalfWidth { get; init; } = 0.030;
     }
 
     private readonly FormSettings _form;
@@ -56,7 +56,7 @@ public sealed class ShadebellGenerator : PlanGenerator
             double az = rotation + k * Math.Tau / 3 + b.Range(-0.22, 0.22);
             var radial = PlantMath.Horizontal(az);
             var side = PlantMath.Horizontal(az + Math.PI / 2);
-            double height = (2.18 - k * 0.25) * b.Range(0.96, 1.04);
+            double height = (2.18 - k * 0.25) * b.Range(.88,1.10);
             int lower = b.AddAxis(-1, 0, up + radial * 0.25, height * 0.48,
                 side * (k % 2 == 0 ? 0.35 : -0.35) + radial * 0.12,
                 0.038, 0.020, 0, Tissue.Wood, 0, 0.24);
@@ -71,6 +71,23 @@ public sealed class ShadebellGenerator : PlanGenerator
             upperStem.R0 = lowerStem.R1;
             lowerStem.Flags |= OrganFlags.Continuous;
             upperStem.Flags |= OrganFlags.Continuous;
+            // Short exposed buttresses flare the foot of each trunk into the soil.
+            for (int r = 0; r < 3; r++)
+            {
+                double ra = az + r * Math.Tau / 3 + b.Range(-0.45, 0.45);
+                var ro = PlantMath.Horizontal(ra);
+                var rs = PlantMath.Horizontal(ra + Math.PI / 2);
+                int root = b.AddAxis(lower, b.Range(0.02, 0.10), ro * 0.60 + Vec3.Down,
+                    height * b.Range(0.045, 0.085), rs * b.Range(-0.25, 0.25) + Vec3.Down * 0.2,
+                    0.011, 0.004, 1, Tissue.RootBark, 0, 0.18);
+                var foot = b[root];
+                double reachOut = height * b.Range(0.036, 0.062);
+                foot.P1 = ro * (reachOut * b.Range(0.85, 1.05)) + rs * (reachOut * b.Range(-0.22, 0.22))
+                    + Vec3.Down * (height * b.Range(0.006, 0.013));
+                foot.T0 = PlantMath.SafeNormal(foot.T0, Vec3.Down) * (foot.P1 - foot.P0).Length;
+                foot.T1 = PlantMath.SafeNormal(foot.T1, Vec3.Down) * (foot.P1 - foot.P0).Length;
+                foot.AxisGnarling = b.Range(0.12, 0.26);
+            }
             AddWhorl(b, leaf, upper, 0.98, az, 6, 1.0, form.LeafLengthMin, form.LeafLengthMax);
             for (int tier = 0; tier < 3; tier++)
             {
@@ -90,7 +107,7 @@ public sealed class ShadebellGenerator : PlanGenerator
                 var axis = b.TangentAt(host, t);
                 branch.T0 = PlantMath.SafeNormal(axis * .65 + branch.T0.Normalized() * .75, axis) * branch.T0.Length;
                 for (int wh = 0; wh < 3; wh++)
-                    AddWhorl(b, leaf, fork, 0.48 + wh * 0.23 + b.Range(-0.035, 0.035), branchAz + wh * 1.3, 5, 0.95,
+                    AddWhorl(b, leaf, fork, 0.48 + wh * 0.23 + b.Range(-.09,.09), branchAz + wh * 1.3, 5, 0.95,
                         form.LeafLengthMin, form.LeafLengthMax);
                 // A hanging raceme with several pendant bells beneath each leaf deck.
                 int raceme = b.AddAxis(fork, 0.83, Vec3.Down + outward * 0.15, 0.15,
@@ -118,7 +135,7 @@ public sealed class ShadebellGenerator : PlanGenerator
             int pet = b.AddAxis(axis, Math.Clamp(t + b.Range(-0.025, 0.025), 0.05, 0.99), h * 0.82 + Vec3.Up * b.Range(0.28, 0.55), b.Range(0.042, 0.058) * scale,
                 Vec3.Down * 0.25, 0.0035, 0.002, 3, Tissue.Green, 0.03 * b.Draw(), 0.1, OrganFlags.None, OrganType.Petiole);
             double lLen = b.Range(leafLengthMin, leafLengthMax) * scale * b.Range(0.85, 1.15);
-            b.AddFlat(pet, 1.0, h * 0.99 + Vec3.Up * b.Range(-0.08, 0.10), lLen, lLen * 0.52, 0.0006, OrganType.Leaf, leaf, 4,
+            b.AddFlat(pet, 1.0, h * 0.99 + Vec3.Up * b.Range(-.22,.28), lLen, lLen * 0.52, 0.0006, OrganType.Leaf, leaf, 4,
                 0.03 * b.Draw(), 0.14);
         }
     }

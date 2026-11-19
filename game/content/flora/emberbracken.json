@@ -4,7 +4,7 @@
   "archetype": "plant",
   "placementGroup": "terrestrial",
   "role": "Stiff triangular pioneer of dry open slopes.",
-  "description": "Tough triangular fronds bronze early and stand through winter; a creeping black rhizome marches them uphill a little further each year.",
+  "description": "A vivid scarlet, striated rhizome creeps in slow curves across open ground, throwing up uneven clusters of arching, finely divided fronds whose leaflets bronze as they age.",
   "habitat": {
     "substrates": {
       "soil": 1,
@@ -69,7 +69,54 @@
       0.239
     ],
     "colorVariance": 0.07,
-    "height": 0.7
+    "height": 0.7,
+    "leaf": {
+      "class": "thin",
+      "cab": 53.0,
+      "car": 9.8,
+      "n": 1.35,
+      "thickness_mm": {
+        "lamina": 0.14,
+        "midrib": 0.59,
+        "edge": 0.07
+      },
+      "roughness": {
+        "front": 0.544,
+        "back": 0.824,
+        "vein": 0.724,
+        "wax": 0.424
+      },
+      "specular": {
+        "f0": 0.034,
+        "cuticle_sheen": 0.18
+      },
+      "transmission": {
+        "color": [
+          0.442,
+          0.766,
+          0.176
+        ],
+        "strength": 0.483
+      },
+      "curl": {
+        "edge_deg": 22.0,
+        "cup": 0.3,
+        "droop": 0.35
+      },
+      "farina": 0.0,
+      "turgor": 1.0
+    },
+    "form": {
+      "archetype": "alternate_stem",
+      "phyllotaxis_deg": 137.5078,
+      "leaf_count": 60,
+      "leaf_length": 0.273,
+      "leaf_width": 0.0761,
+      "internode_length": 0.0636,
+      "curl": 0.489,
+      "cup": 0.3,
+      "droop": 0.35
+    }
   },
   "tags": [
     "plant",

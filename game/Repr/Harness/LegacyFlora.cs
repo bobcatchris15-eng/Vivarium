@@ -41,8 +41,10 @@ internal static class LegacyFlora
         {
             Bridge.BindSurface(mat, "bark", profile.Bark);
             mat.SetShaderParameter("bark_tint", new Vector3(profile.BarkTint[0], profile.BarkTint[1], profile.BarkTint[2]));
-            leafMat!.SetShaderParameter("plant_stiffness", sp.Woody != null ? 7f : 3f);
-            leafMat.SetShaderParameter("wind_strength", 0.0f);
+            float stiff = sp.Woody != null ? 7f : sp.Leaf?.Class == LeafOpticsClass.Thick ? 6.5f : 2.0f;
+            float wind = sp.Woody != null ? 0.25f : sp.Leaf?.Class == LeafOpticsClass.Thick ? 0.10f : 0.75f;
+            leafMat!.SetShaderParameter("plant_stiffness", stiff);
+            leafMat.SetShaderParameter("wind_strength", wind);
         }
         return Cache[id] = new Species(sp, profile, mat, leafMat, morphs);
     }

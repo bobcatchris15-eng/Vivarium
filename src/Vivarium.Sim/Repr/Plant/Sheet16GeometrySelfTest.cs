@@ -23,7 +23,7 @@ public sealed class Sheet16GeometrySelfTest : IReprSelfTest
             var planShade = generator.PlanFor(seed,1);
             foreach (var lower in planShade.Items.Where(o => o.Parent < 0 && o.Type == OrganType.Axis))
             {
-                var upper = planShade.Items.Single(o => o.Parent == lower.Gen && o.Order == 1);
+                var upper = planShade.Items.Single(o => o.Parent == lower.Gen && o.Order == 1 && o.Tissue != Tissue.RootBark);
                 if ((upper.P0-lower.P1).Length > 1e-7 || Math.Abs(upper.R0-lower.R1)>1e-7 ||
                     (upper.Flags & lower.Flags & OrganFlags.Continuous) == 0 || upper.T0.Normalized().Dot(lower.T1.Normalized()) < .999)
                     return "shadebell trunk sections must share position, tangent, radius and skin";

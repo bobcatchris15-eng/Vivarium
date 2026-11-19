@@ -111,6 +111,47 @@ public sealed class ProximityRule
 }
 
 public enum WoodyLayer : byte { Shrub = 0, Tree = 1 }
+public enum LeafOpticsClass : byte { Thin = 0, Thick = 1 }
+public enum ForbArchetype : byte { None = 0, Rosette = 1, AlternateStem = 2, Clump = 3, Mat = 4 }
+
+/// <summary>Per-species physical/optical leaf tissue parameters (PROSPECT + Bousquet cuticle + thick/thin slab split).</summary>
+public sealed class LeafMaterialDef
+{
+    public LeafOpticsClass Class { get; init; } = LeafOpticsClass.Thin;
+    public double Cab { get; init; } = 40.0;
+    public double Car { get; init; } = 8.0;
+    public double N { get; init; } = 1.5;
+    public double LaminaThicknessMm { get; init; } = 0.20;
+    public double MidribThicknessMm { get; init; } = 0.80;
+    public double EdgeThicknessMm { get; init; } = 0.10;
+    public double FrontRoughness { get; init; } = 0.35;
+    public double BackRoughness { get; init; } = 0.65;
+    public double VeinRoughness { get; init; } = 0.55;
+    public double WaxRoughness { get; init; } = 0.25;
+    public double SpecularF0 { get; init; } = 0.035;
+    public double CuticleSheen { get; init; } = 0.35;
+    public double[] TransmissionColor { get; init; } = { 0.45, 0.65, 0.15 };
+    public double TransmissionStrength { get; init; } = 0.35;
+    public double CurlEdgeDeg { get; init; } = 16.0;
+    public double CurlCup { get; init; } = 0.25;
+    public double CurlDroop { get; init; } = 0.20;
+    public double Farina { get; init; } = 0.0;
+    public double Turgor { get; init; } = 1.0;
+}
+
+/// <summary>Per-species herbaceous/forb architectural form parameters (phyllotaxis, leaf sizing, curl/droop).</summary>
+public sealed class ForbFormDef
+{
+    public ForbArchetype Archetype { get; init; } = ForbArchetype.AlternateStem;
+    public double PhyllotaxisDeg { get; init; } = 137.5078;
+    public int LeafCount { get; init; } = 12;
+    public double LeafLength { get; init; } = 0.08;
+    public double LeafWidth { get; init; } = 0.03;
+    public double InternodeLength { get; init; } = 0.03;
+    public double Curl { get; init; } = 0.25;
+    public double Cup { get; init; } = 0.25;
+    public double Droop { get; init; } = 0.20;
+}
 
 /// <summary>Structural-plant metadata. Population budgets are shared by layer across species.</summary>
 public sealed class WoodyDef
@@ -330,6 +371,10 @@ public sealed class FloraSpeciesDef
     public double[] BioluminescenceColor { get; init; } = { 0, 0, 0 };
     /// <summary>Emission intensity in the content scale [0, 8]; zero disables bioluminescence.</summary>
     public double BioluminescenceStrength { get; init; }
+    /// <summary>Optional physical leaf optics/thickness/farina parameters; null = defaults.</summary>
+    public LeafMaterialDef? Leaf { get; init; }
+    /// <summary>Optional forb architectural form parameters; null = defaults.</summary>
+    public ForbFormDef? Form { get; init; }
     public List<string> Tags { get; init; } = new();
 
     /// <summary>Tree/shrub structural metadata; null for ordinary flora.</summary>

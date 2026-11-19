@@ -105,7 +105,7 @@ public static partial class HerbGraphSpecies
         };
         private static float PetalRough(string id) => id switch
         {
-            "butterglint" => .42f, "marshkettle" => .46f, "mirrorleaf" => .48f, "glasslily" => .58f, "starveil" => .64f,
+            "butterglint" => .22f, "marshkettle" => .24f, "mirrorleaf" => .26f, "glasslily" => .52f, "starveil" => .64f,
             "hushclover" => .66f, "mistviolet" => .68f, "bogfringe" => .70f, _ => .60f
         };
         // Width is sampled along the midrib, from the petiole to the tip. Keeping
@@ -133,20 +133,30 @@ public static partial class HerbGraphSpecies
         }
         protected override void Design(PlanBuilder b)
         {
-            var green = s.Id == "fencomb" ? PlantShapes.Srgb(.78,.67,.32) : s.Id == "deepquill" ? PlantShapes.Srgb(.29,.67,.56) : s.Id == "fenbead" ? PlantShapes.Srgb(.43,.72,.32) : PlantShapes.Srgb(.22,.43,.20);
+            bool succulentRosette = s.Id is "sunstone_rosette" or "cragset";
+            var green = s.Id == "fencomb" ? PlantShapes.Srgb(.78,.67,.32)
+                : s.Id == "deepquill" ? PlantShapes.Srgb(.29,.67,.56)
+                : s.Id == "fenbead" ? PlantShapes.Srgb(.43,.72,.32)
+                : s.Id == "sunstone_rosette" ? PlantShapes.Srgb(.36,.48,.38)
+                : s.Id == "cragset" ? PlantShapes.Srgb(.42,.56,.48)
+                : PlantShapes.Srgb(.22,.43,.20);
+            var backCol = s.Id == "sunstone_rosette" ? PlantShapes.Srgb(.74,.30,.24)
+                : s.Id == "cragset" ? PlantShapes.Srgb(.52,.58,.44)
+                : PlantShapes.Srgb(.32,.46,.25);
             bool blade = s.Form == "grass" || (s.Form == "whorl" && s.Width < .05);
             // Cross curl is expressed in leaf lengths, so slender blades need a much
             // smaller value than broad leaves to avoid huge transverse folds.
-            float crossCurl = blade ? .0005f : s.Form == "fern" ? .008f : .025f;
+            float crossCurl = succulentRosette ? .04f : blade ? .0005f : s.Form == "fern" ? .008f : .025f;
             float midribCurl = s.Id is "duskbristle" or "frosttussock" or "quillsedge" or "veilblade" ? .36f
-                : blade ? .18f : s.Form == "rosette" ? .12f : .08f;
-            ushort leaf = b.AddShape(new OrganShape { Name=s.Id+"_leaf", Type=OrganType.Leaf, SurfaceForm=OrganSurfaceForm.Lamina,
+                : succulentRosette ? .14f : blade ? .18f : s.Form == "rosette" ? .12f : .08f;
+            ushort leaf = b.AddShape(new OrganShape { Name=s.Id+"_leaf", Type=OrganType.Leaf,
+                SurfaceForm=succulentRosette ? OrganSurfaceForm.SucculentBlade : OrganSurfaceForm.Lamina,
                 WidthProfile=PlantShapes.Profile(t => LeafWidth(s.Id, t, blade), 17), MidribCurl=midribCurl, CrossCurl=crossCurl,
                 BasalLobeLength=s.Id=="barbarrow" ? .42f : 0f,
                 Serration=s.Id is "hallowsting" or "blackneedle" or "cinderberry" ? .16f : 0f,
                 SerrationFreq=s.Id=="blackneedle" ? 5f : 9f,
                 EdgeWave=s.Id=="bogfringe" ? .18f : s.Id is "burlmantle" or "tankbloom" ? .025f : .008f, EdgeWaveFreq=s.Id=="bogfringe" ? 7f : 3f,
-                ColorAdaxial=green, ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0006f, Roughness=LeafRough(s.Id)});
+                ColorAdaxial=green, ColorAbaxial=backCol, Thickness=succulentRosette ? .005f : .0006f, Roughness=LeafRough(s.Id)});
             bool starBloom = s.Bloom >= 4;
             ushort petal = b.AddShape(new OrganShape { Name=s.Id+"_flower", Type=OrganType.Flower,
                 SurfaceForm=starBloom ? OrganSurfaceForm.Star : OrganSurfaceForm.Cup,
@@ -158,6 +168,7 @@ public static partial class HerbGraphSpecies
                 ColorAbaxial=PlantShapes.Srgb(.53,.58,.30), Roughness=PetalRough(s.Id) });
             ushort pad = b.AddShape(new OrganShape { Name=s.Id+"_floating_pad", Type=OrganType.Leaf,
                 SurfaceForm=OrganSurfaceForm.Disc, WidthProfile=PlantShapes.Profile(t => .5*Math.Sin(Math.PI*t)),
+                RadialAsymmetry=s.Id=="glasslily" ? .14f : s.Id=="mirrorleaf" ? .085f : 0f,
                 ColorAdaxial=PlantShapes.Srgb(.19,.38,.20), ColorAbaxial=PlantShapes.Srgb(.31,.31,.17), Wax=.65f, Roughness=s.Id=="glasslily" ? .32f : s.Id=="mirrorleaf" ? .38f : .35f });
             ushort pitcher = b.AddShape(new OrganShape { Name=s.Id+"_pitcher", Type=OrganType.Flower,
                 SurfaceForm=OrganSurfaceForm.Cup, WidthProfile=PlantShapes.Profile(t => .12+.38*Math.Pow(t,.7)),
@@ -195,7 +206,18 @@ public static partial class HerbGraphSpecies
             double rotation=b.Range(0,Math.Tau);
             var palette=new HabitPalette(leaf,petal,pad,pitcher,trap,club,cotton,spike,pale,scarlet,berry,lantern,burr);
             if(TryLowHabit(b,crown,rotation,palette)||TryUprightHabit(b,crown,rotation,palette)||TryAquaticFernHabit(b,crown,rotation,palette))
+            {
+                // Rhizomatous habits own their grounded runner; the shared crown stub
+                // would otherwise read as a dark peg beside it.
+                if(s.Id is "fenbead" or "fencomb" or "deepquill" or "mirepocket" or "silverweed" or "ringreed" or "sootband"
+                    or "streamribbon" or "sceptrefern" or "mirrorstrap_fern" or "veilfern" or "emberbracken" or "mooncoin"
+                    or "glasslily" or "mirrorleaf" or "bogfringe" or "brooklace" or "cinderberry" or "coinrunner"
+                    or "glassfinger" or "siltstars" or "trifold"
+                    or "hushclover" or "starveil" or "marshkettle" or "mistviolet" or "prismstar" or "tidebell"
+                    or "marrowbloom" or "blue_sundew" or "brightknot" or "cragset" or "sunstone_rosette")
+                    b[crown].Flags |= OrganFlags.Hidden;
                 return;
+            }
             if(s.Id=="barbarrow")
             {
                 // A small open crown of individual long-petioled sagittate leaves.
@@ -206,8 +228,8 @@ public static partial class HerbGraphSpecies
                     double a=rotation+i*Math.Tau/leaves+b.Range(-.14,.14);
                     var radial=PlantMath.Horizontal(a);
                     var lateral=PlantMath.Horizontal(a+Math.PI/2);
-                    int stalk=b.AddAxis(crown,1,Vec3.Up+radial*b.Range(.22,.48),
-                        h*b.Range(.35,.62),radial*b.Range(.08,.18)+lateral*b.Range(-.06,.06),
+                    int stalk=b.AddAxis(crown,1,Vec3.Up+radial*b.Range(.16,.58),
+                        h*b.Range(.28,.68),radial*b.Range(-.16,.30)+lateral*b.Range(-.22,.22),
                         r*.007,r*.0025,1,Tissue.Green,.02,.26);
                     b.AddFlat(stalk,1,Vec3.Up*b.Range(.7,1.0)+radial*b.Range(.5,.85),
                         h*b.Range(.25,.34),r*b.Range(.22,.29),.0005,OrganType.Leaf,leaf,2,.07,.22);
@@ -224,9 +246,9 @@ public static partial class HerbGraphSpecies
                 int scape=b.AddAxis(crown,1,Vec3.Up,h*.86,Vec3.Up*.02,r*.008,r*.002,1,Tissue.Green,.25,.35);
                 for(int tier=0;tier<3;tier++) for(int k=0;k<3;k++)
                 {
-                    double a=rotation+k*Math.Tau/3+tier*.45;
+                    double a=rotation+k*Math.Tau/3+tier*.45+b.Range(-.32,.32);
                     var radial=PlantMath.Horizontal(a);
-                    int ped=b.AddAxis(scape,.68+tier*.14,radial+Vec3.Up*.4,r*.13,Vec3.Up*.08,
+                    int ped=b.AddAxis(scape,Math.Clamp(.66+tier*.15+b.Range(-.075,.075),.58,.98),radial+Vec3.Up*b.Range(.25,.6),r*b.Range(.09,.17),radial*b.Range(-.18,.24),
                         r*.002,r*.0007,2,Tissue.Green,.55,.2);
                     b.AddFlat(ped,1,Vec3.Up,h*.016,r*.013,.0004,OrganType.Flower,flowerCenter,3,.65,.16);
                     for(int q=0;q<3;q++)
@@ -323,30 +345,41 @@ public static partial class HerbGraphSpecies
                 ushort redFlower=b.AddShape(new OrganShape { Name=s.Id+"_red_flower", Type=OrganType.Flower,
                     SurfaceForm=OrganSurfaceForm.Cup, WidthProfile=PlantShapes.Profile(t => .16+.34*t), RimCurl=.18f,
                     ColorAdaxial=PlantShapes.Srgb(0.72,0.204,0.256), ColorAbaxial=PlantShapes.Srgb(0.48,0.136,0.179), Roughness=.60f });
+                // Asymmetric shared stool: pitchers leave at staggered heights along a
+                // short leaning basal axis instead of fanning from a single point.
+                var stoolDir=PlantMath.Horizontal(rotation+.7);
+                int stool=b.AddAxis(crown,1,Vec3.Up+stoolDir*.5,h*.07,stoolDir*.18,r*.012,r*.007,1,Tissue.Green,0,.25);
                 for(int i=0;i<7;i++)
                 {
-                    double a=rotation+i*Math.Tau/7+b.Range(-.16,.16); var d=PlantMath.Horizontal(a);
-                    int stalk=b.AddAxis(crown,1,Vec3.Up+d*b.Range(.28,.5),h*b.Range(.10,.2),d*.12,r*.009,r*.004,1,Tissue.Green,0,.3);
+                    double a=rotation+i*Math.Tau/7+b.Range(-.35,.35); var d=PlantMath.Horizontal(a);
+                    int stalk=b.AddAxis(stool,Math.Clamp(.12+.82*((i*3)%7)/6.0+b.Range(-.05,.05),.05,.99),Vec3.Up+d*b.Range(.28,.55),h*b.Range(.07,.24),d*b.Range(-.24,.30),r*.009,r*.004,1,Tissue.Green,0,.3);
                     // Shape meshes are cached by species/shape slot, so their aspect
-                    // stays stable across individuals; stalk lean and placement vary.
+                    // stays stable across individuals; age, curvature and flare vary per pitcher.
                     double length=h*(.43+.19*((i*3)%7)/6.0),width=r*(.11+.05*((i*5)%7)/6.0);
+                    double curl=.40+.16*((i*2)%7)/6.0,rim=.24+.16*((i*4)%7)/6.0;
+                    double bell=.34+.12*((i*5)%7)/6.0,bellT=.18+.08*((i*3)%7)/6.0,tip=.14+.08*((i*2)%7)/6.0;
                     ushort vessel=b.AddShape(new OrganShape {Name=s.Id+"_curved_vessel_"+i,Type=OrganType.Flower,
-                        SurfaceForm=OrganSurfaceForm.Cup,WidthProfile=PlantShapes.Profile(t=>.10+.40*Math.Exp(-Math.Pow((t-.22)/.18,2))+.18*Math.Pow(t,3)),
-                        MidribCurl=.48f,LengthToWidth=(float)(length/(2*width)),RimCurl=.32f,ShellThickness=.025f,
+                        SurfaceForm=OrganSurfaceForm.Cup,WidthProfile=PlantShapes.Profile(t=>.10+bell*Math.Exp(-Math.Pow((t-bellT)/.18,2))+tip*Math.Pow(t,3)),
+                        MidribCurl=(float)curl,LengthToWidth=(float)(length/(2*width)),RimCurl=(float)rim,ShellThickness=.025f,
                         ColorAdaxial=PlantShapes.Srgb(.84,.78,.62),ColorAbaxial=PlantShapes.Srgb(0.57,0.209,0.218), Roughness=.40f});
                     int body=b.AddFlat(stalk,1,Vec3.Up+d*b.Range(.25,.5),length,width,.001,OrganType.Flower,vessel,2,.2,.4);
                     var organ=b[body];var forward=PlantMath.SafeNormal(organ.P1-organ.P0,Vec3.Up);
                     var up=PlantMath.SafeNormal(organ.Up-forward*organ.Up.Dot(forward),PlantMath.Perpendicular(forward));
-                    double rimT=1+.32*.08,angle=.48*rimT;
-                    var mouth=organ.P0+forward*(length*Math.Sin(angle)/.48)-up*(length*(1-Math.Cos(angle))/.48);
+                    double rimT=1+rim*.08,angle=curl*rimT;
+                    var mouth=organ.P0+forward*(length*Math.Sin(angle)/curl)-up*(length*(1-Math.Cos(angle))/curl);
                     var rimSide=up*Math.Cos(angle)+forward*Math.Sin(angle);
                     var mouthAxis=forward*Math.Cos(angle)-up*Math.Sin(angle);
-                    int hoodStem=b.AddAxis(stalk,1,mouthAxis,h*.025,Vec3.Zero,r*.002,r*.001,2,Tissue.Green,.48,.15);
-                    // Belled base: the mouth is ~.56 of the widest (basal) radius.
-                    b[hoodStem].P0=mouth+rimSide*(width*.56);
-                    b[hoodStem].P1=b[hoodStem].P0+mouthAxis*(h*.025);
-                    b[hoodStem].T0=b[hoodStem].T1=mouthAxis*(h*.025);
-                    int lid=b.AddFlat(hoodStem,1,-rimSide+mouthAxis*.15,width*1.4,width*.55,.0006,OrganType.Leaf,hood,3,.55,.16);
+                    int hoodStem=b.AddAxis(stalk,1,mouthAxis,h*.006,-rimSide*.25,r*.008,r*.005,2,Tissue.Green,.48,.15,OrganFlags.Basal);
+                    // Anchor the hood hinge inside the dorsal rim wall of the bell-profiled pitcher.
+                    double rimRadius=width*((.10+tip)/(.10+bell))*.88;
+                    double neckLen=h*.006;
+                    b[hoodStem].P0=mouth+rimSide*rimRadius-mouthAxis*(h*.003);
+                    b[hoodStem].T0=mouthAxis*neckLen;
+                    b[hoodStem].T1=PlantMath.SafeNormal(mouthAxis*.75-rimSide*.65,mouthAxis)*neckLen;
+                    b[hoodStem].P1=b[hoodStem].P0+(b[hoodStem].T0+b[hoodStem].T1)*.5;
+                    int lid=b.AddFlat(hoodStem,1,-rimSide*.88+mouthAxis*.22,width*1.45,width*.58,.0006,OrganType.Leaf,hood,3,.55,.16);
+                    b[lid].P0=b[hoodStem].P1;
+                    b[lid].P1=b[lid].P0+b[lid].T0*(width*1.45);
                     b[lid].Up=mouthAxis;
                 }
                 // Thick, gently curved flower stem: two welded segments with bark

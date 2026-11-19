@@ -97,6 +97,7 @@ public sealed class PotOrgan
     public double R0, R1;
     public double AxisGnarling; // opt-in asymmetric wood swelling and bark whorls
     public double AxisWaist;
+    public double HollowRimRoll; // opt-in rolled, grown-over lip on hollow boles
     public double Emerge, Dur;        // ages at which the organ starts / reaches Maturity 1 (Dur = ramp length)
     public uint Seed;
 
@@ -253,7 +254,7 @@ public sealed class PlanBuilder
             c.Gen = items.Count;
             items.Add(c);
         }
-        Accommodate(items);
+        if (speciesId is not ("blackneedle" or "blue_sundew")) Accommodate(items);
         return new PlantPlan
         {
             SpeciesId = speciesId, WorldSeed = WorldSeed, PlantId = PlantId,
@@ -336,7 +337,7 @@ public sealed class PlanBuilder
         for (int i = 0; i < items.Count; i++)
         {
             var o = items[i];
-            if (!o.IsAxis) continue;
+            if (!o.IsAxis || (o.Flags & OrganFlags.Hidden) != 0) continue;
             for (int k = 0; k < 4; k++)
             {
                 double s0 = k / 4.0, s1 = (k + 1) / 4.0;

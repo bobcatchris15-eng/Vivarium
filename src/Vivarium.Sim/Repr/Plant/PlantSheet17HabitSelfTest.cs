@@ -23,11 +23,17 @@ public sealed class PlantSheet17HabitSelfTest : IReprSelfTest
             var jaws = plan.Items.Where(o => o.IsBlade && plan.Shapes[o.ShapeId].Name == "snaptrap_jaw").ToArray();
             if (jaws.Length < 12 || jaws.GroupBy(o => o.Parent).Any(g => g.Count() != 2)) return "latchjaw jaws are not paired";
             var bloom = plan.Items.Single(o => o.Type == OrganType.Flower && plan.Shapes[o.ShapeId].Name == "snaptrap_trumpet");
-            var column = plan.Items[bloom.Parent];
+            // The trumpet may sit on a short Continuous neck chain welded to the column
+            // top (gradual funnel join); the column itself must still be thick and the
+            // trap arms direct children of it.
+            int colIdx = bloom.Parent;
+            while (colIdx >= 0 && (plan.Items[colIdx].Flags & OrganFlags.Continuous) != 0 && plan.Items[colIdx].Parent >= 0)
+                colIdx = plan.Items[colIdx].Parent;
+            var column = plan.Items[colIdx];
             if (column.R0 < .08 || column.R1 < .05 || bloom.AttachT < .99)
                 return "latchjaw flower is not terminal on a thick column";
             var arms = jaws.Select(o => plan.Items[o.Parent]).ToArray();
-            if (arms.Any(o => o.Parent != bloom.Parent) || arms.Min(o => o.AttachT) > .15 || arms.Max(o => o.AttachT) < .8)
+            if (arms.Any(o => o.Parent != colIdx) || arms.Min(o => o.AttachT) > .15 || arms.Max(o => o.AttachT) < .8)
                 return "latchjaw traps do not span the column";
             var trumpetMesh = PlantCompiler.BuildShapeMesh(flower, 0);
             if (trumpetMesh.Positions.Any(v => !float.IsFinite(v)) || trumpetMesh.Normals.Any(v => !float.IsFinite(v)))

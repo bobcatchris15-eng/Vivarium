@@ -38,10 +38,18 @@ public static class GraphPlantReviewRunner
         bool catalogProof=Main.UserArgs.Contains("--graph-catalog-proof");
         if(catalogProof)
         {
-            int slot=0;
+            int slot=0, waterSlot=0;
             foreach(var sp in content.Flora.Where(s=>!s.IsCoverageSpecies && !species.Contains(s.Id)))
             {
-                var f=Plant(sp.Id,(slot%10-4.5)*.55,(slot/10-5)*.5,.8);slot++;
+                bool waterReview=Main.UserArgs.Contains("--graph-aquatic-review") &&
+                    sp.Id is ("pondstars" or "mirrorleaf" or "glasslily" or "streamribbon" or "tidebell");
+                var f=waterReview ? Plant(sp.Id,(waterSlot++-2)*1.25,3.2,1) : Plant(sp.Id,(slot%10-4.5)*.55,(slot/10-5)*.5,.8);
+                slot++;
+                if (waterReview) world.Water.AddWater(f.Position,.45,sp.Id=="streamribbon" ? .16 : .045);
+                // A sessile bracket needs real bark even in a sparse synthetic population.
+                if (sp.Id=="emberfan_fungus")
+                    world.Props.Logs.Add(new LogProp { Id=world.Ids.Next(EntityKind.Log),X=f.X,Z=f.Z-.14,
+                        Y=world.GroundHeight(f.Position)+.16,Length=.8,Radius=.16,VariantSeed=357,DecayClass=2 });
                 plants.Add(f);
             }
             foreach(var f in plants.Where(f=>content.FloraOrThrow(f.SpeciesId).Climber!=null).ToArray())
@@ -103,7 +111,7 @@ public static class GraphPlantReviewRunner
             await Frames(5);var timer=Stopwatch.StartNew();
             while(!flora.GraphStartupReadyForDiagnostics||flora.GraphPlantCount!=count||flora.GraphPlants is not {PendingBuilds:0,ChunkRebuilds:>0})
             {
-                if(timer.Elapsed.TotalSeconds>90)throw new InvalidOperationException("Graph startup: "+flora.GraphPlantsDiagnostics);
+                if(timer.Elapsed.TotalSeconds>90)throw new InvalidOperationException("Graph startup: "+flora.GraphPlantsDiagnostics+" missing="+string.Join(",",plants.Where(p=>!flora.IsPlantPublished(p.Id)).Select(p=>p.SpeciesId)));
                 await Frames(1);
             }
             await Frames(5);
@@ -118,6 +126,21 @@ public static class GraphPlantReviewRunner
         await Shot("initial",eye,target);await Settle(population);
         if(plants.Any(p=>!flora.IsPlantPublished(p.Id)))throw new InvalidOperationException("A live graph plant was not published");
         var graph=flora.GraphPlants!;
+        if (Main.UserArgs.Contains("--graph-aquatic-review"))
+        {
+            foreach (var f in plants.Where(f=>f.SpeciesId is "pondstars" or "mirrorleaf" or "glasslily" or "streamribbon" or "tidebell"))
+            {
+                double surface=world.Water.SurfaceAt(f.Position);
+                if (!double.IsFinite(surface)) throw new InvalidOperationException("Missing water for "+f.SpeciesId);
+                var plant=graph.InspectPlant(f.Id.Value)!;
+                if (content.FloraOrThrow(f.SpeciesId).Tags.Contains("floating") && Math.Abs(plant.Position.Y-surface)>.001)
+                    throw new InvalidOperationException("Waterline mismatch for "+f.SpeciesId);
+                var focus=new Vector3((float)f.X,(float)surface,(float)f.Z);
+                float distance=f.SpeciesId=="pondstars" ? .32f : .90f;
+                await Shot(f.SpeciesId+"_water",focus+new Vector3(.15f,.70f,1)*distance,focus);
+                GD.Print($"GRAPH_AQUATIC_REVIEW species={f.SpeciesId} surface={surface} base={plant.Position.Y}");
+            }
+        }
         var climberEdges=new Dictionary<string,int>();
         if(catalogProof)
         {

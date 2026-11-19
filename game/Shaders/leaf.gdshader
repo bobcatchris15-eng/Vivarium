@@ -53,6 +53,13 @@ uniform float night_factor = 0.0;
 uniform int emission_mask_mode = 0;
 uniform bool clip_to_hex = false;
 uniform float hex_apothem = 6.92820323;
+uniform int leaf_class = 0; // 0 = thin herbaceous, 1 = thick succulent
+uniform vec3 leaf_thickness_mm = vec3(0.20, 0.80, 0.10); // lamina, midrib, edge
+uniform vec4 leaf_roughness_params = vec4(0.35, 0.65, 0.55, 0.25); // front, back, vein, wax
+uniform vec3 leaf_transmission_color = vec3(0.45, 0.65, 0.15);
+uniform vec3 leaf_curl_params = vec3(16.0, 0.25, 0.20); // edge_deg, cup, droop
+uniform float farina_strength = 0.0;
+uniform float leaf_turgor = 1.0;
 varying vec4 plant;
 varying vec4 blade;
 varying vec3 position_world;
@@ -70,12 +77,22 @@ void vertex() {
     position_local = VERTEX;
     // Review captures freeze review_time; live play uses the real clock.
     float clock = review_time >= 0.0 ? review_time : TIME;
+    float inst_maturity = (has_custom && plant.z > 0.005) ? clamp(plant.z, 0.0, 1.0) : 1.0;
+    float inst_turgor = has_custom ? clamp(plant.y, 0.0, 1.0) * leaf_turgor : leaf_turgor;
+    float blade_len = max(length(MODEL_MATRIX[2].xyz), 0.01);
+    float basis_y_scale = max(length(MODEL_MATRIX[1].xyz), 0.002);
+    if (UV2.y > 0.5 && !volumetric && leaf_class == 0) {
+        vec2 unfurl_yz = leaf_unfurl_and_turgor_offset(UV, blade_len, inst_maturity, inst_turgor, leaf_curl_params);
+        VERTEX.y += (unfurl_yz.x * blade_len) / basis_y_scale;
+        VERTEX.z += unfurl_yz.y;
+    }
     // Blade UV.x runs root→tip, so it is the natural bend/tip weight.
     float tip = clamp(UV.x, 0.0, 1.0);
     tip = tip * tip * (3.0 - 2.0 * tip);
     float leaf_len = clamp(CUSTOM1.w, 0.01, 0.5);
     float amp = clamp(leaf_len * 0.045, 0.0006, 0.0026);
-    float wind_gain = mix(0.50, 1.20, clamp(wind_strength, 0.0, 1.0));
+    float flex_gain = mix(1.35, 0.85, inst_turgor) * clamp(3.5 / max(plant_stiffness, 0.5), 0.35, 2.2);
+    float wind_gain = mix(0.50, 1.20, clamp(wind_strength, 0.0, 1.0)) * flex_gain;
     vec3 wp0 = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float phase = plant.w * 6.2831853 + blade.x * 2.4 + wp0.x * 0.9 + wp0.z * 0.7;
     // Slow primary air current (1.5–3 mm at the tip) plus a tiny normal flutter.
@@ -290,12 +307,17 @@ void fragment() {
     float shape_gloss = shape_set * smoothstep(0.35, 0.20, shape_rough);
     float waxiness = max(smoothstep(0.40, 0.80, cuticle_sheen), shape_gloss);
     float wax_top = waxiness * topf;
-    tissue_wax_off = 1.0 - wax_top;
-    // Species-specific cuticular gloss on adaxial face; rougher, paler abaxial face
+    // Species-specific cuticular gloss on adaxial face; rougher, paler abaxial face; raised rough vascular ribs.
     float wax = cuticle_sheen * topf;
-    ROUGHNESS=mix(leaf_roughness - wax * 0.08, back_roughness + 0.08, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02;
+    float base_front_r = mix(leaf_roughness, leaf_roughness_params.x, 0.5);
+    ROUGHNESS=mix(base_front_r - wax * 0.08, back_roughness + 0.08, side) + (physical.r - 0.5) * 0.12 - anatomy.r * 0.02;
+    ROUGHNESS = mix(ROUGHNESS, leaf_roughness_params.z, struct_vein * 0.55);
     ROUGHNESS += shape_set * (shape_rough - SHAPE_ROUGH_NEUTRAL) * SHAPE_ROUGH_WEIGHT;
-    float rough_floor = mix(LEAF_ROUGH_FLOOR, LEAF_ROUGH_FLOOR_WAXY, wax_top);
+    if (farina_strength > 0.001) {
+        leaf_farina(UV, along, abs_across, farina_strength, seed, micro_fade, ALBEDO, ROUGHNESS, wax_top);
+    }
+    tissue_wax_off = 1.0 - wax_top;
+    float rough_floor = mix(LEAF_ROUGH_FLOOR, mix(LEAF_ROUGH_FLOOR_WAXY, leaf_roughness_params.w, 0.45), wax_top);
     ROUGHNESS=clamp(ROUGHNESS, rough_floor, 0.96);
     // Filter unresolved normal detail into the specular lobe instead of allowing
     // subpixel veins/folds to flash white as the camera or blade moves.
@@ -303,19 +325,28 @@ void fragment() {
     float normal_variance = dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy);
     if (!(normal_variance >= 0.0 && normal_variance < 1e12)) normal_variance = 0.0;
     ROUGHNESS = clamp(sqrt(ROUGHNESS * ROUGHNESS + min(2.0 * normal_variance, .22)), rough_floor, 1.0);
-    float spec_top = mix(LEAF_SPEC_TOP_MIN, LEAF_SPEC_TOP_MAX, cuticle_sheen) + LEAF_SPEC_WAXY_ADD * smoothstep(0.40, 0.80, cuticle_sheen);
-    spec_top = mix(spec_top, 0.45, shape_gloss);
-    SPECULAR=volumetric ? .30 : mix(LEAF_SPEC_BACK, spec_top, topf);
-    // Structural veins are optically thick too, so the rib and laterals read
-    // dark in silhouette while the thin mesophyll between them glows.
+    float spec_top = mix(LEAF_SPEC_TOP_MIN, LEAF_SPEC_TOP_MAX, cuticle_sheen) + LEAF_SPEC_WAXY_ADD * wax_top;
+    spec_top = mix(spec_top, 0.45, shape_gloss * (1.0 - farina_strength * 0.8));
+    SPECULAR=volumetric ? .30 : mix(LEAF_SPEC_BACK, spec_top, topf * (1.0 - farina_strength * 0.5));
+    // Structural veins and midrib are physically thicker than the thin laminar margin.
+    float edge_band = max(smoothstep(0.72, 0.98, abs_across), smoothstep(0.80, 0.99, along));
+    float local_mm = mix(mix(leaf_thickness_mm.x, leaf_thickness_mm.y, struct_vein), leaf_thickness_mm.z, edge_band * (1.0 - midrib * 0.7));
     float vein_thickness = clamp(max(anatomy.g * 0.75 + anatomy.r * 0.25, struct_vein * 0.88), 0.0, 1.0);
-    RIM = mix(0.18, 0.48, cuticle_sheen);
+    RIM = mix(0.18, 0.48, cuticle_sheen) * (1.0 - farina_strength * 0.45);
     tissue_rim = RIM;
-    float base_tau = clamp(mix(0.35, 2.2, physical.b) + anatomy.r * 0.85, 0.15, 3.0);
+    tissue_is_thick = float(leaf_class == 1);
+    tissue_trans_tint_set = 1.0;
+    tissue_trans_tint = clamp(leaf_transmission_color * 1.85, vec3(0.08), vec3(1.6));
+    float base_tau = leaf_class == 1
+        ? clamp(local_mm * 0.28 * mix(1.0, 0.35, edge_band) + anatomy.r * 0.35, 0.25, 3.2)
+        : clamp(local_mm * 1.85 + mix(0.25, 0.95, physical.b) + anatomy.r * 0.85, 0.15, 3.0);
     float tau = leaf_vein_tau(base_tau, vein_thickness, side);
     tissue_tau = tau;
-    vec3 through=leaf_through(color, actual_trans, vein_thickness,
-        mix(.62, 1.35, physical.b), side) * mix(.65, 1., physical.g);
+    float frag_turgor = clamp(plant.y * leaf_turgor, 0.0, 1.0);
+    vec3 through = leaf_class == 1
+        ? leaf_through_thick(ALBEDO, actual_trans, local_mm, edge_band, frag_turgor, leaf_transmission_color)
+        : leaf_through(ALBEDO, actual_trans, vein_thickness,
+            clamp(local_mm * 3.5 + mix(0.35, 0.85, physical.b), 0.35, 1.6), side) * mix(.65, 1., physical.g);
     // Direct transmission is owned by light() (leaf_direct_light.gdshaderinc);
     // built-in BACKLIGHT/SSS_TRANSMITTANCE_* would duplicate it, so none are written.
     float basal_ao = mix(0.76, 1.0, smoothstep(0.0, 0.22, along));

@@ -139,7 +139,7 @@ public interface ISubstrate
 
 public enum OrganType : byte { Axis = 0, Leaf = 1, Leaflet = 2, Petiole = 3, Flower = 4, Fruit = 5, Bud = 6, Root = 7, Tendril = 8 }
 public enum Tissue : byte { Green = 0, Wood = 1, Bark = 2, Lamina = 3, Petal = 4, FruitSkin = 5, RootBark = 6, Fungal = 7, PaleFungal = 8 }
-public enum OrganSurfaceForm : byte { Auto, Lamina, Needle, Revolved, Cup, MushroomCap, Shelf, Disc, Star, Trumpet }
+public enum OrganSurfaceForm : byte { Auto, Lamina, Needle, Revolved, Cup, MushroomCap, Shelf, Disc, Star, Trumpet, SucculentBlade }
 
 [Flags]
 public enum OrganFlags : ushort { None = 0, Dormant = 1, Dead = 2, Emissive = 4, Fertile = 8, Hidden = 16, Terminal = 32, Basal = 64, Hollow = 128, HollowWindow = 256, Continuous = 512, GlossyBlack = 1024 }
@@ -172,6 +172,7 @@ public struct Organ
     public float RadiusStart, RadiusEnd; // m; for flat organs RadiusStart = half width, RadiusEnd = thickness
     public float AxisGnarling;        // opt-in asymmetric wood swelling and bark whorls, 0..1
     public float AxisWaist;           // fractional mid-bole narrowing, measured along the full design curve
+    public float HollowRimRoll;       // opt-in rolled, grown-over lip on hollow boles, 0..1 (0 = flat cut rim)
     public float Maturity;            // 0 just initiated .. 1 full size (drives smooth growth, no popping)
     public float Health;              // 0 dead .. 1 healthy
     public uint Seed;                 // per-organ variation seed, from ReprId.Hash(world, plant, organIndex)
@@ -189,6 +190,9 @@ public sealed class OrganShape
     public float RadialPitDepth; // opt-in cellular relief as a fraction of local radius
     public float RadialAsymmetry; // broad unequal shoulders on caps/cups; fraction of local radius
     public float BasalLobeLength; // sagittate blades: backward basal lobes, in units of blade length
+    public float TipNotchDepth;   // opt-in recessed centre-tip notch (ginkgo fans), fraction of blade length, 0..0.35
+    public float TipNotchWidth;   // outward bow of the two apical lobes beside the notch, fraction of half-width
+    public float LobePhaseWarp;   // opt-in irregular lobe intervals on paired-aperture fronds, radians of phase wobble
     public bool RadialLattice; // open mesh cells for a fungal lace veil
     public float RimCurl;
     public float ShellThickness = .015f; // unit-radius fraction for radial surfaces

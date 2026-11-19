@@ -15,23 +15,48 @@ public static partial class HerbGraphSpecies
             {
                 ushort jaw=b.AddShape(new OrganShape { Name="snaptrap_jaw", Type=OrganType.Leaf,
                     SurfaceForm=OrganSurfaceForm.Lamina,
-                    WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.65)),
+                    WidthProfile=PlantShapes.Profile(t => .22*Math.Pow(1-t,2)+Math.Pow(Math.Sin(Math.PI*t),.60)),
                     Serration=.28f, SerrationFreq=12, CrossCurl=.035f,
                     ColorAdaxial=PlantShapes.Srgb(0.52,0.198,0.189), ColorAbaxial=PlantShapes.Srgb(.25,.43,.18), Thickness=.001f, Roughness=.50f });
                 ushort trumpet=b.AddShape(new OrganShape { Name="snaptrap_trumpet", Type=OrganType.Flower,
                     SurfaceForm=OrganSurfaceForm.Trumpet, LobeCount=5, LobeDepth=.18f, RimCurl=.25f, ShellThickness=.025f,
                     WidthProfile=PlantShapes.Profile(t => .10+.40*Math.Pow(t,1.5)),
                     ColorAdaxial=PlantShapes.Srgb(.68,.31,.36), ColorAbaxial=PlantShapes.Srgb(.76,.39,.43), Roughness=.42f });
-                int column=b.AddAxis(crown,1,Vec3.Up,h*.78,Vec3.Zero,r*.105,r*.065,1,Tissue.Green,0,.65,OrganFlags.Basal);
+                // Column, trap origins and the terminal trumpet architecture are
+                // locked by plant.sheet17Habit: jaws must pair under one arm that is
+                // a direct child of the column, and the trumpet must be terminal on
+                // the column itself. Seat arms inside the column and taper into a shared jaw hinge.
+                int column=b.AddAxis(crown,1,Vec3.Up+PlantMath.Horizontal(rotation)*.06,h*.78,PlantMath.Horizontal(rotation+1.2)*.18,r*.112,r*.052,1,Tissue.Green,0,.65,OrganFlags.Basal);
+                var colPlan=b[column];
                 for(int i=0;i<s.Shoots;i++)
                 {
-                    double a=rotation+i*2.39996,t=.08+.80*i/Math.Max(1,s.Shoots-1);
+                    double a=rotation+i*2.39996+b.Range(-.25,.25);
+                    // Internodes crowd toward the growing tip instead of posting
+                    // traps at a constant vertical pitch.
+                    double t=Math.Clamp(.10+.78*Math.Sin(i/Math.Max(1.0,s.Shoots-1.0)*Math.PI/2)+b.Range(-.03,.03),.04,.94);
                     var d=PlantMath.Horizontal(a); var side=PlantMath.Horizontal(a+Math.PI/2);
-                    int arm=b.AddAxis(column,t,d+Vec3.Up*.20,r*.045,Vec3.Zero,r*.025,r*.018,2,Tissue.Green,.12,.15);
+                    int arm=b.AddAxis(column,t,d+Vec3.Up*.20,r*b.Range(.05,.08),d*.15,r*.028,r*.0055,2,Tissue.Green,.12,.15);
+                    var armPlan=b[arm];
+                    armPlan.P0=PlantMath.Hermite(colPlan.P0,colPlan.T0,colPlan.P1,colPlan.T1,t)+d*(r*.035);
+                    armPlan.P1=armPlan.P0+(armPlan.T0+armPlan.T1)*.5;
+                    var armTipTan=b.TangentAt(arm,1);
                     for(int sign=-1;sign<=1;sign+=2)
-                        b.AddFlat(arm,1,d+side*sign*.36+Vec3.Up*.65,r*.22,r*.095,.001,OrganType.Leaf,jaw,3,.25,.25);
+                    {
+                        int jawFlat=b.AddFlat(arm,1,d+side*sign*.34+Vec3.Up*.58,r*.20,r*.095,.001,OrganType.Leaf,jaw,3,.25,.25);
+                        b[jawFlat].P0=armPlan.P1-armTipTan*(r*.010);
+                        b[jawFlat].P1=b[jawFlat].P0+b[jawFlat].T0*(r*.20);
+                    }
                 }
-                b.AddFlat(column,1,Vec3.Up,h*.24,r*.24,.001,OrganType.Flower,trumpet,2,.65,.25);
+                // A short continuous neck centers the funnel gradually on the column top.
+                int neck=b.AddAxis(column,1,b.TangentAt(column,1),h*.06,Vec3.Zero,r*.052,r*.026,2,Tissue.Green,.65,.2,OrganFlags.Continuous);
+                b[neck].P0=colPlan.P1;
+                b[neck].R0=colPlan.R1;
+                b[neck].R1=r*.026;
+                b[neck].T0=b.TangentAt(column,1)*(h*.06);
+                b[neck].P1=b[neck].P0+(b[neck].T0+b[neck].T1)*.5;
+                int bloom=b.AddFlat(neck,1,Vec3.Up,h*.24,r*.24,.001,OrganType.Flower,trumpet,2,.65,.25);
+                b[bloom].P0=b[neck].P1-Vec3.Up*(h*.006);
+                b[bloom].P1=b[bloom].P0+b[bloom].T0*(h*.24);
                 return true;
             }
             if(id=="fencomb")
@@ -39,7 +64,7 @@ public static partial class HerbGraphSpecies
                 // Flexible submerged shoots weave through space; whorled, finely
                 // divided leaves follow each internode rather than forming shelves.
                 var run=PlantMath.Horizontal(rotation);
-                int runner=b.AddAxis(crown,1,run,r*.42,Vec3.Zero,r*.012,r*.006,1,Tissue.Green,0,.2);
+                int runner=b.AddAxis(crown,0,run,r*.42,Vec3.Zero,r*.012,r*.006,1,Tissue.Green,0,.2);
                 for(int i=0;i<5;i++)
                 {
                     double a=rotation+i*2.39996;
@@ -57,15 +82,15 @@ public static partial class HerbGraphSpecies
                             OrganFlags.Basal | (section>0 ? OrganFlags.Continuous : OrganFlags.None));
                         for(int j=0;j<4;j++) for(int k=0;k<4;k++)
                         {
-                            double u=.12+j*.25, az=a+k*Math.Tau/4+(section*4+j)*.38;
+                            double u=.12+j*.25+b.Range(-.050,.050), az=a+k*Math.Tau/4+(section*4+j)*.38;
                             var radial=PlantMath.Horizontal(az);
-                            double len=r*.25*(1-.40*(section+u)/4);
-                            int leaf=b.AddAxis(stem,u,radial+Vec3.Up*.16,len,side*.10,r*.0018,r*.0003,3,Tissue.Green,.12,.18);
+                            double len=r*b.Range(.20,.34)*(1-.40*(section+u)/4);
+                            int leaf=b.AddAxis(stem,u,radial+Vec3.Up*.16,len,side*.10,r*.0022,r*.0003,3,Tissue.Green,.12,.18);
                             for(int n=0;n<6;n++) for(int sign=-1;sign<=1;sign+=2)
                             {
-                                double v=.12+n*.15;
+                                double v=.12+n*.155;
                                 var filament=PlantMath.Horizontal(az+sign*1.16)+radial*.35+Vec3.Up*.10;
-                                b.AddFlat(leaf,v,filament,len*.55*(1-v*.55),r*.007,.0002,OrganType.Leaflet,p.Leaf,4,.17,.14);
+                                b.AddFlat(leaf,v,filament,len*.55*(1-v*.55),r*.010,.0002,OrganType.Leaflet,p.Leaf,4,.17,.14);
                             }
                         }
                         previous=stem;
@@ -80,23 +105,23 @@ public static partial class HerbGraphSpecies
                 // straight spokes at angular junctions.
                 var run=PlantMath.Horizontal(rotation);
                 var across=PlantMath.Horizontal(rotation+Math.PI/2);
-                int runner=b.AddAxis(crown,1,run,r*.95,across*.20,r*.014,r*.008,1,Tissue.Green,0,.25);
+                int runner=b.AddAxis(crown,0,run,r*.95,across*1.12,r*.014,r*.008,1,Tissue.Green,0,.25,OrganFlags.Hidden);
                 for(int i=0;i<8;i++)
                 {
                     double t=.05+.90*i/7.0, sign=i%2==0?1:-1;
                     var side=across*sign;
-                    int offset=b.AddAxis(runner,t,side+run*.10,r*b.Range(.12,.30),run*b.Range(-.20,.20),
-                        r*.008,r*.005,2,Tissue.Green,0,.18,OrganFlags.Basal);
+                    int offset=b.AddAxis(runner,t,side+run*.10,r*b.Range(.12,.42),run*b.Range(-.20,.20),
+                        r*.008,r*.005,2,Tissue.Green,0,.18,OrganFlags.Basal|OrganFlags.Hidden);
                     double a=rotation+i*2.39996;
                     var drift=PlantMath.Horizontal(a);
-                    int stem=b.AddAxis(offset,1,Vec3.Up+drift*.08,h*b.Range(.72,1.02),
-                        drift*b.Range(.22,.42)+side*.12,r*.014,r*.003,2,Tissue.Green,.03,.45,OrganFlags.Basal);
+                    int stem=b.AddAxis(offset,1,Vec3.Up+drift*b.Range(.08,.52),h*(.42+.60*((i*5)%8)/7.0+b.Range(-.04,.04)),
+                        drift*b.Range(.22,.52)+side*.12,r*.011,r*.003,2,Tissue.Green,.03,.45,OrganFlags.Basal);
                     for(int j=0;j<8;j++) for(int k=0;k<4;k++)
                     {
-                        double u=.08+j*.86/7, az=a+k*Math.Tau/4+j*.52;
+                        double u=Math.Clamp(.06+j*.88/7+((i%3)-1)*.026,.03,.98), az=a+k*Math.Tau/4+j*.52;
                         var radial=PlantMath.Horizontal(az);
                         var lateral=PlantMath.Horizontal(az+Math.PI/2);
-                        double len=r*.30*b.Range(.84,1.12);
+                        double len=r*.34*(1-.55*u)*b.Range(.70,1.24);
                         int ray=b.AddAxis(stem,u,radial+Vec3.Up*.25,len,
                             lateral*b.Range(-.48,.48)+Vec3.Up*b.Range(.16,.42),r*.003,r*.0008,3,Tissue.Green,.1,.2);
                         for(int n=0;n<5;n++) for(int leafSide=-1;leafSide<=1;leafSide+=2)
@@ -116,20 +141,28 @@ public static partial class HerbGraphSpecies
             {
                 bool quill=id=="deepquill", comb=id=="fencomb", pocket=id=="mirepocket", bead=id=="fenbead";
                 // A trailing parent axis distributes the erect and ascending shoots.
+                // It leaves the crown at ground level; the visible silverweed stolon
+                // arcs clear of the soil while the aquatic runners stay buried.
                 var run=PlantMath.Horizontal(rotation); var across=PlantMath.Horizontal(rotation+Math.PI/2);
-                int runner=b.AddAxis(crown,1,run+Vec3.Up*.06,r*.78,Vec3.Up*.04,r*.012,r*.004,1,Tissue.Green,0,.25);
+                int runner=b.AddAxis(crown,0,run,r*(quill?1.25:1.0),
+                    across*b.Range(.75,1.15)+Vec3.Up*(quill||bead ? .02 : b.Range(.15,.40)),
+                    quill||bead?r*.008:r*.010,r*.004,1,Tissue.Green,0,.25,quill||bead?OrganFlags.Hidden:OrganFlags.None);
                 int shoots=quill?8:comb?7:pocket?6:bead?5:7;
                 for(int i=0;i<shoots;i++)
                 {
-                    double t=.08+.86*i/Math.Max(1,shoots-1), a=rotation+(i%2==0?1:-1)*.8;
+                    double t=.08+.84*i/Math.Max(1,shoots-1)+b.Range(-.045,.045), a=rotation+i*2.40+b.Range(-.42,.42);
                     var d=PlantMath.Horizontal(a);
-                    int stem=b.AddAxis(runner,t,Vec3.Up+d*(bead?.48:pocket?.5:.12),h*b.Range(.70,1.02),d*.12,r*.014,r*.003,2,Tissue.Green,.03,.45,OrganFlags.Basal);
+                    // Index-stepped ramps guarantee unequal posture at catalog distance
+                    // rather than relying on a single draw landing wide.
+                    double reach=bead ? .24+.50*((i*3)%5)/4.0 : .16+.34*((i*5)%4)/3.0;
+                    double height=h*((bead ? .40 : .48)+.54*((i*3)%5)/4.0+b.Range(-.05,.05));
+                    int stem=b.AddAxis(runner,t,Vec3.Up+d*reach,height,d*b.Range(.18,.58),r*.014,r*.003,2,Tissue.Green,.03,.45,OrganFlags.Basal);
                     if(bead)
                     {
                         for(int j=0;j<5;j++)
                         {
-                            var branchDir=across*(j%2==0?1:-1)+run*.28+Vec3.Up*.32;
-                            int branch=b.AddAxis(stem,.20+j*.15,branchDir,r*.25,Vec3.Up*.12,r*.003,r*.0007,3,Tissue.Green,.15,.25);
+                            var branchDir=PlantMath.Horizontal(a+(j%2==0 ? .55 : -.75))+Vec3.Up*.32;
+                            int branch=b.AddAxis(stem,.20+j*.15,branchDir,r*b.Range(.16,.33),Vec3.Up*.12,r*.003,r*.0007,3,Tissue.Green,.15,.25);
                             for(int k=0;k<4;k++) for(int sign=-1;sign<=1;sign+=2)
                                 b.AddFlat(branch,.2+k*.23,run*sign+branchDir*.3+Vec3.Up*.2,r*.075,r*.035,.0003,OrganType.Leaf,p.Leaf,4,.25,.2);
                         }
@@ -138,8 +171,8 @@ public static partial class HerbGraphSpecies
                     {
                         for(int j=0;j<9;j++) for(int k=0;k<3;k++)
                         {
-                            double a2=rotation+k*Math.Tau/3+j*.32;
-                            b.AddFlat(stem,.10+j*.095,PlantMath.Horizontal(a2)+Vec3.Up*.3,r*.22,r*.035,.0004,OrganType.Leaf,p.Leaf,3,.15,.2);
+                            double a2=rotation+i*.7+k*Math.Tau/3+j*.32;
+                            b.AddFlat(stem,.10+j*.095+b.Range(-.025,.025),PlantMath.Horizontal(a2)+Vec3.Up*b.Range(.08,.62),r*.22,r*.035,.0004,OrganType.Leaf,p.Leaf,3,.15,.2);
                         }
                     }
                     else
@@ -147,9 +180,11 @@ public static partial class HerbGraphSpecies
                         int tiers=quill||comb?15:8, rays=quill||comb?8:4;
                         for(int j=0;j<tiers;j++) for(int k=0;k<rays;k++)
                         {
-                            double u=.08+j*.86/Math.Max(1,tiers-1), az=rotation+k*Math.Tau/rays+j*.52;
+                            // Uneven tier spacing plus a tapered crown keep each shoot
+                            // from drawing as a hard-edged ladder of equal shelves.
+                            double u=Math.Clamp(.05+j*.90/Math.Max(1,tiers-1)+((j%3)-1)*.020+b.Range(-.008,.008),.03,.97), az=rotation+k*Math.Tau/rays+j*.52;
                             var radial=PlantMath.Horizontal(az);
-                            double len=r*(quill?.25:comb?.38:.30)*(comb?1-.70*Math.Clamp((u-.20)/.71,0,1):1);
+                            double len=r*(quill?.30:comb?.38:.30)*(1-.48*u)*(quill?1-.42*Math.Pow(u,4):1)*b.Range(.72,1.18);
                             int ray=b.AddAxis(stem,u,radial+Vec3.Up*.25,len,Vec3.Zero,r*.003,r*.0008,3,Tissue.Green,.1,.2);
                             int pairs=pocket?5:4;
                             for(int n=0;n<pairs;n++) for(int sign=-1;sign<=1;sign+=2)
@@ -188,7 +223,7 @@ public static partial class HerbGraphSpecies
                         ColorAdaxial=PlantShapes.Srgb(.24,.44,.19), ColorAbaxial=PlantShapes.Srgb(0.135,0.28,0.106), Roughness=.45f });
                     ushort ash=b.AddShape(new OrganShape { Name="ringreed_ash_sheath", Type=OrganType.Flower,
                         SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*(1.0+.04*t)),
-                        ColorAdaxial=PlantShapes.Srgb(.66,.66,.58), ColorAbaxial=PlantShapes.Srgb(.50,.50,.43), Roughness=.7f });
+                        ColorAdaxial=PlantShapes.Srgb(.60,.60,.51), ColorAbaxial=PlantShapes.Srgb(.54,.54,.46), Roughness=.7f });
                     ushort black=b.AddShape(new OrganShape { Name="ringreed_black_ring", Type=OrganType.Flower,
                         SurfaceForm=OrganSurfaceForm.Revolved, WidthProfile=PlantShapes.Profile(t => .5*(1.04-.06*Math.Abs(2*t-1))),
                         ColorAdaxial=PlantShapes.Srgb(.025,.028,.02), ColorAbaxial=PlantShapes.Srgb(.025,.028,.02), Roughness=.35f });
@@ -199,9 +234,12 @@ public static partial class HerbGraphSpecies
                     const int stems=11;
                     for(int i=0;i<stems;i++)
                     {
-                        int foot=UprightOffset(b,crown,rotation,i,stems,.42);
-                        var lean=PlantMath.Horizontal(rotation+i*2.39996+b.Range(-.4,.4))*b.Range(0,.035);
-                        double len=h*b.Range(.62,1.0), rad=r*b.Range(.016,.022);
+                        // Feet spread on an uneven ring and rods lean away from the
+                        // clump centre, so the lower cluster no longer reads as one
+                        // block of parallel shafts.
+                        int foot=UprightOffset(b,crown,rotation,i,stems,.55*(.72+.40*((i*3)%5)/4.0));
+                        var lean=PlantMath.Horizontal(rotation+i*2.39996+b.Range(-.22,.22))*b.Range(.03,.22);
+                        double len=h*(.58+.42*((i*7)%11)/10.0+b.Range(-.05,.05)), rad=r*b.Range(.015,.021);
                         // A hidden straight core carries the visible ribbed internodes and sheaths.
                         int stem=b.AddAxis(foot,1,Vec3.Up+lean,len,Vec3.Zero,rad*.8,rad*.7,2,Tissue.Green,.02,.5,OrganFlags.Hidden|OrganFlags.Basal);
                         var dir=b.TangentAt(stem,0);
@@ -214,13 +252,13 @@ public static partial class HerbGraphSpecies
                             double rr=rad*(1-.18*prev);
                             b.AddFlat(stem,prev,dir,len*(tn-prev),rr,.0006,OrganType.Flower,ribbed,3,.05,.4);
                             // Sheath: pale ash band, crowned by a black ring with fine dark teeth.
-                            b.AddFlat(stem,tn-.016,dir,len*.016,rr*1.10,.0004,OrganType.Flower,ash,3,.1,.3);
+                            b.AddFlat(stem,tn-.018,dir,len*.018,rr*1.10,.0004,OrganType.Flower,ash,3,.1,.3);
                             b.AddFlat(stem,tn,dir,len*.007,rr*1.12,.0004,OrganType.Flower,black,3,.1,.3);
                             if(n<nodes && n%2==1)
                                 for(int k=0;k<6;k++)
                                 {
                                     var rd=PlantMath.Horizontal(rotation+k*Math.Tau/6+n*.5);
-                                    b.AddFlat(stem,tn+.007,Vec3.Up*1.8+rd*.25,len*.012,rr*.32,.0002,OrganType.Leaf,tooth,4,.1,.2);
+                                    b.AddFlat(stem,tn+.007,Vec3.Up*1.8+rd*.25,len*.014,rr*.38,.0002,OrganType.Leaf,tooth,4,.1,.2);
                                 }
                             prev=tn;
                         }
@@ -241,26 +279,29 @@ public static partial class HerbGraphSpecies
                 const int sterile=7;
                 for(int i=0;i<sterile;i++)
                 {
-                    int foot=UprightOffset(b,crown,rotation,i,sterile+3,.40);
+                    int foot=UprightOffset(b,crown,rotation,i,sterile+3,.44);
                     var lean=PlantMath.Horizontal(rotation+i*2.39996+b.Range(-.5,.5));
                     var sway=PlantMath.Horizontal(rotation+i*2.39996+Math.PI/2);
-                    double len=h*b.Range(.70,1.0), rad=r*b.Range(.016,.020);
-                    int stem=b.AddAxis(foot,1,Vec3.Up+lean*b.Range(.05,.16),len,lean*b.Range(.08,.22)+sway*b.Range(-.10,.10),
+                    double len=h*(.72+.28*((i*3)%4)/3.0+b.Range(-.03,.03)), rad=r*b.Range(.016,.020);
+                    int stem=b.AddAxis(foot,1,Vec3.Up+lean*b.Range(.06,.33),len,lean*b.Range(.08,.22)+sway*b.Range(-.10,.10),
                         rad,rad*.35,2,Tissue.Green,.02,.5,OrganFlags.Basal);
-                    const int whorls=9;
+                    int whorls=8+(i%3);
                     for(int n=0;n<whorls;n++)
                     {
-                        double t=.16+n*.088, u=n/(double)(whorls-1);
+                        // Each stem runs its own whorl phase so the colony does not
+                        // show level bands of branchlets aligned across every stem.
+                        double t=Math.Clamp(.12+.84*n/(whorls-1)+((i%3)-1)*.035+b.Range(-.012,.012),.06,.94), u=n/(double)(whorls-1);
                         var tan=b.TangentAt(stem,t);
                         double rr=rad*(1-.62*t);
                         b.AddFlat(stem,t-.012,tan,len*.014,rr*1.18,.0004,OrganType.Flower,soot,3,.1,.3);
-                        int count=n<whorls-2 ? 9 : 6;
-                        double reach=r*(.62-.42*u)*b.Range(.85,1.12);
+                        int count=7+((n+i)%3);
+                        double reach=r*(.58-.40*u)*(.84+.18*((i*5)%4)/3.0)*b.Range(.9,1.08);
                         for(int k=0;k<count;k++)
                         {
                             var rd=PlantMath.Horizontal(rotation+k*Math.Tau/count+n*.37+b.Range(-.12,.12));
                             // Each branchlet rises, then relaxes outward and slightly down.
-                            int lower=b.AddAxis(stem,t,rd+Vec3.Up*.55,reach*.5,rd*.25,r*.0042,r*.0034,3,Tissue.Green,.2+.4*t,.3);
+                            // Elevation cycles within the whorl instead of sharing one angle.
+                            int lower=b.AddAxis(stem,t,rd+Vec3.Up*(.26+.56*((k+n)%3)/2.0),reach*.5,rd*.25,r*.0042,r*.0034,3,Tissue.Green,.2+.4*t,.3);
                             int upper=b.AddAxis(lower,1,b.TangentAt(lower,1),reach*.55,rd*.45-Vec3.Up*.35,r*.0034,r*.0012,3,Tissue.Green,.25+.4*t,.35,OrganFlags.Continuous);
                             b[upper].P0=b[lower].P1; b[upper].R0=b[lower].R1; b[upper].T0=b[lower].T1;
                         }
@@ -298,12 +339,15 @@ public static partial class HerbGraphSpecies
                     b[crown].Flags |= OrganFlags.Hidden;
                     var runners=new int[5];
                     int previous=crown;
+                    double heading=.15;
                     for(int joint=0;joint<runners.Length;joint++)
                     {
-                        double bearing=.38*Math.Sin(joint*1.65+.4);
-                        var direction=run*Math.Cos(bearing)+side*Math.Sin(bearing)+Vec3.Up*.012;
+                        // Integrate a slowly turning heading so the scarlet rhizome
+                        // sweeps through an arc instead of kinking joint to joint.
+                        heading=Math.Clamp(heading+.40*Math.Sin(joint*1.31+.6)+b.Range(-.10,.10),-.85,.85);
+                        var direction=run*Math.Cos(heading)+side*Math.Sin(heading)+Vec3.Up*(.006+.014*Math.Sin(joint*1.9+.3));
                         double length=r*.27*b.Range(.87,1.12);
-                        int segment=b.AddAxis(previous,1,direction,length,Vec3.Zero,
+                        int segment=b.AddAxis(previous,joint==0?0:1,direction,length,Vec3.Zero,
                             r*.022,r*.020,1,Tissue.Green,0,.08,OrganFlags.Hidden|OrganFlags.Basal);
                         int cover=b.AddFlat(segment,0,direction,length*1.025,r*.022,.0005,
                             OrganType.Flower,redRunner,2,.02,.12);
@@ -312,11 +356,15 @@ public static partial class HerbGraphSpecies
                         b[cover].P1=b[segment].P0+PlantMath.SafeNormal(direction,run)*(length*1.025);
                         runners[joint]=segment;previous=segment;
                     }
+                    // Three uneven clusters (mature trio, young pair, two late fronds)
+                    // instead of seven arches posted at a constant pitch.
+                    double[] cluster={.04,.09,.155,.44,.51,.81,.885};
                     for(int i=0;i<7;i++)
                     {
                         double a=rotation+(i%2==0?1:-1)*b.Range(.72,1.18)+b.Range(-.16,.16);
                         var d=PlantMath.Horizontal(a); var lateral=PlantMath.Horizontal(a+Math.PI/2);
-                        double size=b.Range(.68,1.12), position=Math.Clamp((i+.35+b.Range(-.23,.23))/7.0,.02,.98);
+                        double size=(i==0||i==3||i==5) ? b.Range(.88,1.18) : b.Range(.48,.78);
+                        double position=Math.Clamp(cluster[i]+b.Range(-.018,.018),.02,.98);
                         int joint=Math.Min(runners.Length-1,(int)(position*runners.Length));
                         double t=position*runners.Length-joint;
                         int inner=b.AddAxis(runners[joint],t,Vec3.Up+d*.27,h*.35*size,d*.35,
@@ -362,12 +410,12 @@ public static partial class HerbGraphSpecies
                         WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.48)*(1-.38*t)),
                         MidribCurl=.62f, Twist=5.2f, TwistDepth=.04f, CrossCurl=.001f,
                         ColorAdaxial=PlantShapes.Srgb(0.311,0.51,0.202), ColorAbaxial=PlantShapes.Srgb(.43,.57,.27), Roughness=.57f });
-                    int runner=b.AddAxis(crown,1,run,r*.60,Vec3.Zero,r*.012,r*.005,1,Tissue.Green,0,.16);
+                    int runner=b.AddAxis(crown,0,run,r*.72,side*.80,r*.012,r*.005,1,Tissue.Green,0,.16);
                     for(int g=0;g<4;g++) for(int k=0;k<3;k++)
                     {
-                        double a=rotation+(k-1)*.92+b.Range(-.24,.24)+(g%2)*.35;
+                        double a=rotation+(k-1)*1.20+b.Range(-.38,.38)+g*.67;
                         var d=PlantMath.Horizontal(a);
-                        int baseStem=b.AddAxis(runner,.08+.84*g/3.0,Vec3.Up+d*.15,h*.035,Vec3.Zero,r*.005,r*.003,2,Tissue.Green,0,.12);
+                        int baseStem=b.AddAxis(runner,.08+.84*g/3.0,Vec3.Up+d*.20,h*.015,Vec3.Zero,r*.005,r*.003,2,Tissue.Green,0,.12);
                         b.AddFlat(baseStem,1,Vec3.Up+d*b.Range(.3,.85),h*b.Range(.95,1.45),r*b.Range(.040,.062),.0005,OrganType.Leaf,ribbon,3,.06,.35);
                     }
                     return true;
@@ -403,23 +451,32 @@ public static partial class HerbGraphSpecies
                     int[] rachis={inner,middle,outer};
                     for(int section=0;section<3;section++) for(int j=0;j<8;j++)
                     {
-                        double t=.18+j*.105, u=(section+t)/3;
+                        // Uneven leaflet intervals and a slight near/far length
+                        // asymmetry keep the arch from reading as a stamped comb.
+                        double t=Math.Clamp(.15+j*.098+(j%2)*.024+((j%3)-1)*.012+b.Range(-.012,.012),.10,.96), u=(section+t)/3;
                         double envelope=Math.Pow(Math.Sin(Math.PI*u),.65)*(1-.25*u);
                         for(int sign=-1;sign<=1;sign+=2)
                             b.AddFlat(rachis[section],t,side*sign+run*.28+Vec3.Down*(.08+.2*u),
-                                r*.42*envelope,r*.065*envelope,.0003,OrganType.Leaflet,pinna,4,.12+u*.12,.16);
+                                r*(sign>0 ? .44 : .40)*envelope*(1-.10*((j%3)-1)),r*.065*envelope,.0003,OrganType.Leaflet,pinna,4,.12+u*.12,.16);
                     }
                     return true;
                 }
-                int rhizome=b.AddAxis(crown,1,run,r*.72,Vec3.Zero,r*.014,r*.006,1,Tissue.Green,0,.2);
+                // The rhizome is buried and gently curved; fronds are posted at
+                // uneven stations so their bases never line up as an exposed rail.
+                int rhizome=b.AddAxis(crown,0,run,r*.85,side*.85,r*.014,r*.006,1,Tissue.Green,0,.2,OrganFlags.Hidden);
                 if(id=="streamribbon" || id=="mirrorstrap_fern")
                 {
-                    int groups=id=="streamribbon"?5:3, count=id=="streamribbon"?4:3;
+                    bool ribbon=id=="streamribbon";
+                    int groups=ribbon?5:3, count=ribbon?4:3;
+                    // Uneven stations along the buried rhizome plus per-blade lean and
+                    // age break the regularly posted row of a wire rack.
+                    double[] stations=ribbon?new[]{.06,.24,.55,.72,.93}:new[]{.08,.42,.88};
                     for(int g=0;g<groups;g++) for(int k=0;k<count;k++)
                     {
-                        double a=rotation+(k-(count-1)*.5)*.65+(g%2)*.3; var d=PlantMath.Horizontal(a);
-                        int stalk=b.AddAxis(rhizome,.08+.84*g/Math.Max(1,groups-1),d*.18+Vec3.Up,h*.08,Vec3.Zero,r*.005,r*.002,2,Tissue.Green,0,.15);
-                        b.AddFlat(stalk,1,Vec3.Up+d*(id=="streamribbon"?.28:.6),h*b.Range(.8,1.25),r*(id=="streamribbon"?.065:.20),.0005,OrganType.Leaf,p.Leaf,3,.1,.4);
+                        double a=rotation+(k-(count-1)*.5)*(ribbon?.65:.55)+(g%2)*.3+b.Range(-.30,.30); var d=PlantMath.Horizontal(a);
+                        int stalk=b.AddAxis(rhizome,Math.Clamp(stations[g]+b.Range(-.03,.03),.04,.96),d*.18+Vec3.Up,h*.08,Vec3.Zero,r*.005,r*.002,2,Tissue.Green,0,.15);
+                        b.AddFlat(stalk,1,Vec3.Up+d*(ribbon?.28:.48+.30*((g+k)%3)/2.0),
+                            h*(.78+.52*((g*2+k)%3)/2.0),r*(ribbon?.065:.18+.05*((g+k)%2)),.0005,OrganType.Leaf,p.Leaf,3,.1,.4);
                     }
                     return true;
                 }
@@ -428,16 +485,20 @@ public static partial class HerbGraphSpecies
                     ushort pinna=b.AddShape(new OrganShape { Name="veilfern_pinna", Type=OrganType.Leaflet,
                         SurfaceForm=OrganSurfaceForm.Lamina, WidthProfile=PlantShapes.Profile(t => Math.Pow(Math.Sin(Math.PI*t),.8)),
                         MidribCurl=.08f, ColorAdaxial=PlantShapes.Srgb(.22,.43,.20), ColorAbaxial=PlantShapes.Srgb(.32,.46,.25), Thickness=.0004f, Roughness=.66f });
-                    // Three joined rachis sections retain an ascending base, outward
+                    // Twelve joined rachis sections retain an ascending base, outward
                     // shoulder and descending tip instead of averaging away the arch.
                     for(int i=0;i<12;i++)
                     {
-                        double a=rotation+i*Math.Tau/12;
+                        double a=rotation+i*Math.Tau/12+b.Range(-.34,.34);
                         var d=PlantMath.Horizontal(a); var lateral=PlantMath.Horizontal(a+Math.PI/2);
-                        double scale=b.Range(.88,1.12);
-                        int inner=b.AddAxis(rhizome,.2+.6*(i%3)/2.0,Vec3.Up+d*.35,h*.36*scale,d*.25,r*.012,r*.009,2,Tissue.Green,0,.35,OrganFlags.Basal);
-                        int middle=b.AddAxis(inner,1,d+Vec3.Up*.28,h*.37*scale,d*.2-Vec3.Up*.55,r*.009,r*.006,3,Tissue.Green,.1,.35,OrganFlags.Basal);
-                        int outer=b.AddAxis(middle,1,d*.75+Vec3.Down*.65,h*.38*scale,Vec3.Down*.35,r*.006,r*.002,4,Tissue.Green,.2,.35,OrganFlags.Basal);
+                        // Age varies by station: young fronds stand higher and shorter,
+                        // old ones reach farther and droop; the spread opens gaps.
+                        double scale=.60+.58*((i*5)%12)/11.0+b.Range(-.05,.05);
+                        double lift=.30+.26*((i*2)%3)/2.0;
+                        int inner=b.AddAxis(rhizome,Math.Clamp(.06+.88*i/11.0+b.Range(-.02,.02),.03,.97),
+                            Vec3.Up+d*(.35+.35*lift),h*.36*scale,d*.25,r*.012,r*.009,2,Tissue.Green,0,.35,OrganFlags.Basal);
+                        int middle=b.AddAxis(inner,1,d+Vec3.Up*(.28-.24*lift),h*.37*scale,d*.2-Vec3.Up*.55,r*.009,r*.006,3,Tissue.Green,.1,.35,OrganFlags.Basal);
+                        int outer=b.AddAxis(middle,1,d*.75+Vec3.Down*(.55+.45*(1-lift)),h*.38*scale,Vec3.Down*.35,r*.006,r*.002,4,Tissue.Green,.2,.35,OrganFlags.Basal);
                         for(int section=0;section<3;section++)
                         {
                             int axis=section==0?inner:section==1?middle:outer;
@@ -458,21 +519,29 @@ public static partial class HerbGraphSpecies
                     return true;
                 }
                 int fronds=id=="emberbracken"?8:id=="sceptrefern"?8:id=="swanfrond"?12:12;
+                // Uneven station pitch along the buried rhizome: fronds cluster in
+                // twos and threes with open gaps between the groups.
+                double[] sceptreStations={.06,.13,.31,.47,.54,.72,.87,.93};
                 for(int i=0;i<fronds;i++)
                 {
                     bool bracken=id=="emberbracken", sceptre=id=="sceptrefern", swan=id=="swanfrond";
-                    double a=rotation+(i%2==0?1:-1)*(bracken?1.0:swan?.9:1.25)+.18*(i%3-1);
+                    double a=bracken ? rotation+(i%2==0?1:-1)*1.0+.18*(i%3-1)
+                        : sceptre ? rotation+i*Math.Tau/fronds+(i%3-1)*.18+b.Range(-.22,.22)
+                        : rotation+(i%2==0?1:-1)*(swan?.9:1.25)+.18*(i%3-1);
                     var d=PlantMath.Horizontal(a); var lateral=PlantMath.Horizontal(a+Math.PI/2);
-                    double pos=bracken?.08+.84*i/(fronds-1):.18+.64*(i%4)/3.0;
-                    int stalk=b.AddAxis(rhizome,pos,Vec3.Up+d*(bracken?.35:sceptre?.12:.25),h*b.Range(.65,1.0),d*(swan?.6:.35)-Vec3.Up*(sceptre?.05:.25),r*.012,r*.002,2,Tissue.Green,0,.45);
+                    double pos=Math.Clamp((bracken?.08+.84*i/(fronds-1):sceptre?sceptreStations[i%8]:.18+.64*(i%4)/3.0)+b.Range(-.05,.05),.04,.96);
+                    double tilt=sceptre ? .10+.40*((i*3)%5)/4.0 : (swan ? .25 : .35);
+                    int stalk=b.AddAxis(rhizome,pos,Vec3.Up+d*tilt,
+                        h*(sceptre ? .62+.38*((i*5)%7)/6.0+b.Range(-.03,.03) : b.Range(.65,1.0)),
+                        d*(swan?.6:.35)-Vec3.Up*(sceptre?(.06+.12*((i%3)/2)):.25),r*.012,r*.002,2,Tissue.Green,0,.45);
                     int pairs=bracken?10:sceptre?8:swan?15:16;
                     for(int j=0;j<pairs;j++)
                     {
-                        double t=.15+.80*j/Math.Max(1,pairs-1);
+                        double t=Math.Clamp(.15+.80*j/Math.Max(1,pairs-1)+b.Range(-.025,.025),.08,.97);
                         double env=bracken?1-.78*t:Math.Pow(Math.Sin(Math.PI*t),.75);
                         for(int sign=-1;sign<=1;sign+=2)
                         {
-                            var dir=lateral*sign+d*.25+Vec3.Up*(sceptre?.16:-.08);
+                            var dir=lateral*sign+d*.25+Vec3.Up*(sceptre?(.10+.14*((i%3)/2)):-.08);
                             if(bracken)
                             {
                                 int pinna=b.AddAxis(stalk,t,dir,r*.48*env,Vec3.Zero,r*.003,r*.0007,3,Tissue.Green,.12,.2);

@@ -91,6 +91,12 @@ uniform sampler2D bark_rgh : hint_roughness_r, filter_linear_mipmap_anisotropic,
 uniform vec3 top_pigment = vec3(-1.0);
 uniform vec3 back_pigment = vec3(-1.0);
 uniform float transmission = -1.0;
+uniform int leaf_class = 0; // 0 = thin herbaceous, 1 = thick succulent
+uniform vec3 leaf_thickness_mm = vec3(0.20, 0.80, 0.10);
+uniform vec4 leaf_roughness_params = vec4(0.35, 0.65, 0.55, 0.25);
+uniform vec3 leaf_transmission_color = vec3(0.45, 0.65, 0.15);
+uniform float farina_strength = 0.0;
+uniform float leaf_turgor = 1.0;
 
 // Derivative frame follows each branch/leaf's authored UVs, including curved attachments.
 vec3 surface_normal(vec3 base, vec3 p, vec2 uv, vec3 detail) {
@@ -145,6 +151,9 @@ void fragment() {
     // Shared light() uses optical thickness directly; slime is thin living plasmodium.
     tissue_tau = surface_mode == 4 ? 0.4 : 0.0;
     tissue_rim = 0.0;
+    tissue_is_thick = float(surface_mode == 2 && leaf_class == 1);
+    tissue_trans_tint_set = surface_mode == 2 ? 1.0 : 0.0;
+    tissue_trans_tint = clamp(leaf_transmission_color * 1.85, vec3(0.08), vec3(1.6));
     // Double-sided normal handling: invert backface normal so undersides do not render dark or inverted.
     if (!FRONT_FACING) {
         NORMAL = -NORMAL;
@@ -361,7 +370,11 @@ void fragment() {
                 float floret_cell = vnoise(obj_pos.xz * 26.0 + obj_pos.y * 19.0 + inst.w * 7.0);
                 float floret_ao = (0.70 + 0.30 * smoothstep(-0.45, 0.75, wn.y)) * (0.85 + 0.22 * floret_cell);
                 c *= mix(vec3(0.74, 0.72, 0.64), vec3(1.04, 1.02, 0.98), floret_ao);
-                rough = 0.62; // satin, never glossy
+                tissue_phase_mask = 0.85;
+                tissue_tau = 0.42;
+                tissue_trans_tint_set = 1.0;
+                tissue_trans_tint = clamp(c * 2.2 + vec3(0.08), vec3(0.08), vec3(1.2));
+                rough = 0.62;
             }
         } else if (UV2.y > 0.5) {
             float along = UV.x, across = UV.y - 0.5;
@@ -399,9 +412,14 @@ void fragment() {
             }
             float venation = (mid * 0.62 + sec * 0.30 + tert) * vein_strength;
             float vein_mask = clamp(mid * 0.90 + sec * 0.55 + tert * 0.40, 0.0, 1.0) * basal;
+            float edge_band = max(smoothstep(0.72, 0.98, abs(across) * 2.0), smoothstep(0.80, 0.99, along));
+            float local_mm = mix(mix(leaf_thickness_mm.x, leaf_thickness_mm.y, vein_mask), leaf_thickness_mm.z, edge_band * (1.0 - mid * 0.7));
+            float base_tau = leaf_class == 1
+                ? clamp(local_mm * 0.28 * mix(1.0, 0.35, edge_band), 0.25, 3.2)
+                : clamp(local_mm * 2.1, 0.20, 3.0);
             // Vascular tissue is optically thicker: veins attenuate transmission and read
             // dark in silhouette while the thin mesophyll between them glows.
-            tissue_tau = leaf_vein_tau(0.62, vein_mask, face);
+            tissue_tau = leaf_vein_tau(base_tau, vein_mask, face);
             float edge = smoothstep(0.36, 0.50, abs(across));
             float age = smoothstep(0.73, 1.0, along) * (0.25 + 0.75 * vnoise(vec2(inst.w * 9.0, along * 5.0)));
             c = leaf_pigment(c, pigment,
@@ -537,8 +555,17 @@ void fragment() {
                 rough = clamp(mix(rough, texture(leaf_scan_rgh, scan_uv).r,
                     leaf_scan_blend * 0.8) + face * 0.12, 0.28, 0.98);
             }
+            // Blend per-species PROSPECT/cuticle roughness targets with procedural vein roughness
+            float target_r = mix(leaf_roughness_params.x, leaf_roughness_params.y, face);
+            rough = mix(rough, target_r, 0.45);
+            rough = mix(rough, leaf_roughness_params.z, vein_mask * 0.45);
+            if (farina_strength > 0.001) {
+                float lamina_wax_top = waxiness * top_face;
+                leaf_farina(UV, along, abs(across) * 2.0, farina_strength, inst.w, micro_fade, c, rough, lamina_wax_top);
+                waxiness = top_face > 0.5 ? lamina_wax_top : waxiness;
+            }
             // Only waxy adaxial faces (and authored glossy shapes) may drop below the matte floor.
-            leaf_floor = mix(LEAF_ROUGH_FLOOR, LEAF_ROUGH_FLOOR_WAXY, waxiness * top_face);
+            leaf_floor = mix(LEAF_ROUGH_FLOOR, mix(LEAF_ROUGH_FLOOR_WAXY, leaf_roughness_params.w, 0.45), waxiness * top_face);
             rough = max(rough, leaf_floor);
 
         } else if (UV2.x > 0.5) {
@@ -589,7 +616,8 @@ void fragment() {
     bool fruit_surface = surface_mode == 2 && UV2.y <= 0.5 && UV2.y >= 0.0 && UV2.x > 0.5 && UV2.x < 1.2;
     bool stem_surface = surface_mode == 2 && UV2.y <= 0.5 && UV2.y >= 0.0 && UV2.x <= 0.5;
     // Authored shape roughness (default .55 is neutral): shifts leaf and flower roughness, never below the matte floor.
-    rough += shape_set * (shape_rough - SHAPE_ROUGH_NEUTRAL) * SHAPE_ROUGH_WEIGHT;
+    rough += shape_set * (shape_rough - SHAPE_ROUGH_NEUTRAL) * (flower_surface ? 0.95 : SHAPE_ROUGH_WEIGHT);
+    if (flower_surface) rough = clamp(rough, 0.22, 0.88);
     if (lamina_surface) rough = max(rough, leaf_floor);
     // Per-organ albedo ceilings: foliage 0.55, bark/moss/lichen 0.45, fungi 0.75, slime unchanged.
     float albedo_max = surface_mode == 2 ? (woody_surface ? BARK_ALBEDO_MAX : FOLIAGE_ALBEDO_MAX)
@@ -610,7 +638,7 @@ void fragment() {
         AO *= repr_ao;
         AO_LIGHT_AFFECT = min(AO_LIGHT_AFFECT, REPR_SKYVIS_LIGHT_AFFECT);
     }
-    float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.5));
+    float top_side = 1.0 - float(!FRONT_FACING || (UV2.y > 0.5 && UV2.x > 0.5 && UV2.x < 1.2));
     float leaf_spec_top = mix(LEAF_SPEC_TOP_MIN, LEAF_SPEC_TOP_MAX, cuticle_sheen) + LEAF_SPEC_WAXY_ADD * waxiness;
     float leaf_spec = mix(LEAF_SPEC_BACK, leaf_spec_top, top_side);
     // A farina-coated blade is dust, not varnish: it keeps almost no specular lobe.

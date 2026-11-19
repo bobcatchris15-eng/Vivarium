@@ -22,6 +22,8 @@ public sealed class FloraIndividual
     public double Biomass { get; set; }
     /// <summary>0..1; reaching 0 kills the individual.</summary>
     public double Health { get; set; } = 1;
+    /// <summary>0..1 succulent water parenchyma turgor store (1.0 default for non-succulents).</summary>
+    public double WaterStore { get; set; } = 1.0;
     public int SpreadCount { get; set; }
     public double LastSpreadAge { get; set; }
     public PlantReproductiveStage ReproductiveStage { get; set; }

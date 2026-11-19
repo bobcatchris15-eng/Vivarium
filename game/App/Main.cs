@@ -85,6 +85,22 @@ public partial class Main : Node3D
         }
         if (UserArgs.Contains("--soak")) { settings.Transient = true; settings.AutosaveEnabled = true; settings.AutosaveMinutes = 5; settings.ShowHelpOnStart = false; }
         if (UserArgs.Contains("--diagnostics-check")) { settings.Transient = true; settings.AutosaveEnabled = false; settings.ShowHelpOnStart = false; }
+        if (UserArgs.Contains("--ambient-forb") || UserArgs.Contains("--ambient"))
+        {
+            settings.Transient = true;
+            settings.ShowHelpOnStart = false;
+            settings.Quality = 1;
+            settings.DynamicShadows = true;
+            settings.GlobalIllumination = false;
+            settings.AmbientOcclusion = false;
+            settings.VolumetricMist = false;
+            settings.LightingMode = "cached";
+            settings.RenderScale = 0.75;
+            settings.MaxFps = 15;
+            if (!DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase))
+                DisplayServer.WindowSetSize(new Vector2I(1280, 720));
+            GetViewport().Scaling3DMode = Viewport.Scaling3DModeEnum.Fsr;
+        }
         if (ArgAfter("--lighting-mode") is { } lm) { settings.Transient = true; settings.LightingMode = lm; }
         if (ArgAfter("--max-fps") is { } mfps && int.TryParse(mfps, out int parsedFps)) { settings.Transient = true; settings.MaxFps = parsedFps; }
 

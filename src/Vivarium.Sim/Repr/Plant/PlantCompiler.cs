@@ -233,6 +233,9 @@ public static partial class PlantCompiler
         bool continuous=(o.Flags&OrganFlags.Continuous)!=0;
         bool gnarled = o.AxisGnarling > 0 && (o.Flags & OrganFlags.Hollow) == 0;
         double gnarl = gnarled ? Math.Clamp(o.AxisGnarling, 0, 1) : 0;
+        bool rootFlare = o.Parent < 0 && o.Tissue == Tissue.Wood && p.SpeciesId is
+            ("banksorrow" or "cragparasol" or "greywatch" or "lacemantle" or "moonbark" or "shadebell" or "shiverleaf" or "vaultfern" or "witchberry" or "nutglade" or "lanternbrush" or "silverfelt");
+        double flareLength = Math.Min(len*.32,rs*3.5);
         bool shapedRadius=continuous||o.AxisWaist>0;
         double re = Math.Max(o.RadiusEnd, 0.00025);
         double rParent = rs, flare = rs, dExt = 0;
@@ -242,7 +245,7 @@ public static partial class PlantCompiler
             double u = q.Maturity > 1e-4f ? Math.Clamp(o.AttachT / q.Maturity, 0, 1) : 0;
             rParent = PlantMath.AxisRadius(q.RadiusStart,q.RadiusEnd,q.AxisWaist,u,q.Maturity);
             flare = (o.Flags & OrganFlags.Basal) != 0 ? rs : Math.Min(rParent, 1.6 * rs);
-            dExt = (q.Flags & OrganFlags.Hollow) != 0 ? 0 : rParent;
+            dExt = (q.Flags & OrganFlags.Hollow) != 0 ? rParent * 0.32 : rParent;
         }
         if(continuous){dExt=0;flare=rs;}
 
@@ -281,6 +284,12 @@ public static partial class PlantCompiler
             foreach (double edge in new[] { .20, .30, .40, .50, .60, .70, .78 })
                 if (!sList.Any(s => Math.Abs(s - edge) < 1e-7)) sList.Add(edge);
         }
+        if (rootFlare)
+            foreach (double fraction in new[] { .30, .65, 1.0 })
+            {
+                double sample = fraction * flareLength / len;
+                if (!sList.Any(v => Math.Abs(v-sample)<1e-7)) sList.Add(sample);
+            }
         if(o.AxisWaist>0)
             for(int k=1;k<12;k++)
             {
@@ -347,6 +356,16 @@ public static partial class PlantCompiler
                     var circum=-nk*Math.Sin(th)+bk*Math.Cos(th);
                     normal=PlantMath.SafeNormal(dv-circum*(dTheta/factor)-tN*(slope*factor+sm.R*dAxis),dv);
                 }
+                if (rootFlare && sm.D < flareLength)
+                {
+                    double v = Math.Clamp(1-sm.D/flareLength,0,1);
+                    double phase = th*3 + (o.Seed%127)*.05;
+                    double shoulder = .60 + .25*Math.Cos(phase) + .12*Math.Sin(2*th);
+                    factor += shoulder*v*v;
+                    var around = -nk*Math.Sin(th)+bk*Math.Cos(th);
+                    double radialSlope = (-.75*Math.Sin(phase)+.24*Math.Cos(2*th))*v*v;
+                    normal = PlantMath.SafeNormal(normal-around*(radialSlope/factor)+tN*(2*sm.R*shoulder*v/flareLength),dv);
+                }
                 if(welded)
                 {
                     int v=rings[k][j];normal=PlantMath.SafeNormal(m.NormalAt(v)+normal,normal);
@@ -392,27 +411,83 @@ public static partial class PlantCompiler
                 {
                     var desired = sm.D / len < .5 ? sm.T : -sm.T;
                     foreach (int j in new[] { 0, nRad - 1 })
-                        HollowEdge(m, rings[k][j], rings[k][j+1], innerRings[k][j], innerRings[k][j+1], desired, rgb, u2x);
+                        HollowEdge(m, rings[k][j], innerRings[k][j], rings[k][j+1], innerRings[k][j+1], desired, rgb, u2x);
                 }
             }
         }
 
         if (hollow)
         {
-            // A flat annular rim joins the bark walls; the center remains open.
             var end = samples[^1];
             var endN = nPrev;
             var endB = end.T.Cross(endN);
-            var outer = new int[nRad + 1];
-            var inner = new int[nRad + 1];
+            double roll = Math.Clamp(o.HollowRimRoll, 0, 1);
+            if (roll <= 0)
+            {
+                // A flat annular rim joins the bark walls; the center remains open.
+                var outer = new int[nRad + 1];
+                var inner = new int[nRad + 1];
+                for (int j = 0; j <= nRad; j++)
+                {
+                    double th = Math.Tau * j / nRad;
+                    var dv = endN * Math.Cos(th) + endB * Math.Sin(th);
+                    outer[j] = m.AddVertex(end.P + dv * end.R, end.T, rgb[0], rgb[1], rgb[2], 1, end.D, j / (double)nRad, u2x, 0);
+                    inner[j] = m.AddVertex(end.P + dv * (end.R * .6), end.T, rgb[0] * .55, rgb[1] * .55, rgb[2] * .55, 1, end.D, j / (double)nRad, u2x, 0);
+                }
+                Strip(m, outer, inner);
+                return;
+            }
+            // Rolled, grown-over lip: the bark crests over the mouth with seeded
+            // bolling knuckles and curls back into the cavity, like a veteran pollard.
+            double Knuckle(double th)
+            {
+                double kw = .5 + .5 * Math.Sin(th * 5 + (o.Seed % 97) * .13);
+                return Math.Pow(kw, 1.5);
+            }
+            var crest = new int[nRad + 1];
+            var ret = new int[nRad + 1];
             for (int j = 0; j <= nRad; j++)
             {
                 double th = Math.Tau * j / nRad;
                 var dv = endN * Math.Cos(th) + endB * Math.Sin(th);
-                outer[j] = m.AddVertex(end.P + dv * end.R, end.T, rgb[0], rgb[1], rgb[2], 1, end.D, j / (double)nRad, u2x, 0);
-                inner[j] = m.AddVertex(end.P + dv * (end.R * .6), end.T, rgb[0] * .55, rgb[1] * .55, rgb[2] * .55, 1, end.D, j / (double)nRad, u2x, 0);
+                double kw = Knuckle(th);
+                var crestN = PlantMath.SafeNormal(dv * .55 + end.T * .85, end.T);
+                crest[j] = m.AddVertex(end.P + dv * (end.R * (1 + .34 * roll * kw)) + end.T * (end.R * roll * .11 * (.6 + .4 * kw)),
+                    crestN, rgb[0], rgb[1], rgb[2], 1, end.D + uvOffset, j / (double)nRad, u2x, 0);
+                var retN = PlantMath.SafeNormal(end.T * .6 - dv * .4, end.T);
+                ret[j] = m.AddVertex(end.P + dv * (end.R * .6 * (1 + .18 * roll * kw)) + end.T * (end.R * roll * .04 * (.6 + .4 * kw)),
+                    retN, rgb[0] * .7, rgb[1] * .7, rgb[2] * .7, 1, end.D + uvOffset, j / (double)nRad, u2x, 0);
             }
-            Strip(m, outer, inner);
+            Strip(m, rings[^1], crest);
+            Strip(m, crest, ret);
+            Strip(m, ret, innerRings![^1]);
+            // Register the crest at child weld resolution so authored Continuous limbs
+            // share the lip ring (merged junctions) instead of collaring on as laterals.
+            if (joints != null)
+            {
+                bool any = false;
+                for (int child = firstChild[idx]; child >= 0; child = nextChild[child])
+                {
+                    var c = p.Organs[child];
+                    if ((c.Flags & OrganFlags.Continuous) != 0 && (c.Start - o.End).Length < 1e-6
+                        && Math.Abs(c.RadiusStart - o.RadiusEnd) < 1e-6) { any = true; break; }
+                }
+                if (any)
+                {
+                    int cn = detail == 0 ? 20 : detail == 1 ? 12 : 8;
+                    var jr = new int[cn + 1];
+                    for (int j = 0; j <= cn; j++)
+                    {
+                        double th = Math.Tau * j / cn;
+                        var dv = endN * Math.Cos(th) + endB * Math.Sin(th);
+                        double kw = Knuckle(th);
+                        var nrm = PlantMath.SafeNormal(dv * .55 + end.T * .85, end.T);
+                        jr[j] = m.AddVertex(end.P + dv * (end.R * (1 + .34 * roll * kw)) + end.T * (end.R * roll * .11 * (.6 + .4 * kw)),
+                            nrm, rgb[0], rgb[1], rgb[2], 1, end.D + uvOffset, j / (double)cn, u2x, 0);
+                    }
+                    joints[idx] = new AxisJoint(jr, nPrev, end.D + uvOffset);
+                }
+            }
             return;
         }
 
@@ -563,16 +638,25 @@ public static partial class PlantCompiler
     private static void HollowEdge(MeshData m, int ia, int ib, int ic, int id, Vec3 desired, double[] rgb, double u2x)
     {
         var a = m.Position(ia); var b = m.Position(ib); var c = m.Position(ic); var d = m.Position(id);
-        var normal = PlantMath.SafeNormal((b - a).Cross(c - a), desired);
-        if (normal.Dot(desired) < 0) normal = -normal;
-        int va = m.AddVertex(a, normal, rgb[0], rgb[1], rgb[2], 1, 0, 0, u2x, 0);
-        int vb = m.AddVertex(b, normal, rgb[0], rgb[1], rgb[2], 1, 0, 1, u2x, 0);
-        int vc = m.AddVertex(c, normal, rgb[0], rgb[1], rgb[2], 1, 1, 0, u2x, 0);
-        int vd = m.AddVertex(d, normal, rgb[0], rgb[1], rgb[2], 1, 1, 1, u2x, 0);
-        if ((b - a).Cross(c - a).Dot(normal) > 0)
-        { m.AddTriangle(va, vc, vb); m.AddTriangle(vb, vc, vd); }
-        else
-        { m.AddTriangle(va, vb, vc); m.AddTriangle(vb, vd, vc); }
+        // Bark rolls into the opening, joining the outer bole to the inner wall.
+        int previousA=ia, previousC=ic;
+        for (int step=1;step<=4;step++)
+        {
+            double t=step*.25, wave=Math.Sin(Math.PI*t);
+            int LipVertex(Vec3 outer,Vec3 inner,int outerIndex,int innerIndex)
+            {
+                var position=outer*(1-t)+inner*t+desired*(.24*(outer-inner).Length*wave);
+                var normal=PlantMath.SafeNormal(m.NormalAt(outerIndex)*(1-t)+m.NormalAt(innerIndex)*t+desired*wave,desired);
+                return m.AddVertex(position,normal,rgb[0],rgb[1],rgb[2],1,position.Y,t,u2x,0);
+            }
+            int nextA=step==4 ? ib : LipVertex(a,b,ia,ib);
+            int nextC=step==4 ? id : LipVertex(c,d,ic,id);
+            if ((m.Position(nextA)-m.Position(previousA)).Cross(m.Position(previousC)-m.Position(previousA)).Dot(desired)>0)
+            { m.AddTriangle(previousA,previousC,nextA); m.AddTriangle(nextA,previousC,nextC); }
+            else
+            { m.AddTriangle(previousA,nextA,previousC); m.AddTriangle(nextA,nextC,previousC); }
+            previousA=nextA; previousC=nextC;
+        }
     }
 
     // ------------------------------------------------------------------ shape meshes
@@ -649,14 +733,21 @@ public static partial class PlantCompiler
             if (s.Name == "rainshield_leaf") pw *= 1 - .16 * (.5 + .5 * Math.Cos(4 * Math.Tau * t));
             if (s.PairedLaminaApertures)
             {
-                double wave = 0.5 - 0.5 * Math.Cos(Math.Tau * s.LobeCount * t);
+                double wave = 0.5 - 0.5 * Math.Cos(LobePhase(s, t));
                 pw *= 1 - s.LobeDepth + s.LobeDepth * Math.Pow(wave, 0.65);
+            }
+            double nd = Math.Clamp(s.TipNotchDepth, 0, .35f);
+            if (nd > 0 && t > 1 - nd)
+            {
+                double v = (t - (1 - nd)) / nd;
+                double shoulderW = ProfileAt(s, 1 - nd) * (1 - .14 * v * v);
+                pw = Math.Max(pw, shoulderW);
             }
             for (int j = 0; j <= W; j++)
             {
                 double u = j / (double)W;
                 double x = (2 * u - 1) * pw;
-                double frac = pw > 1e-6 ? Math.Abs(x) / pw : 0;
+                double frac = Math.Abs(2 * u - 1);
                 double cup = s.CrossCurl * x * x * 3.0;
                 double phi = s.Twist * t;
                 double xr = x * Math.Cos(phi);
@@ -671,11 +762,28 @@ public static partial class PlantCompiler
                 double basalLobe = Math.Clamp(s.BasalLobeLength,0,.7f)
                     * Math.Pow(Math.Max(0,1-t/.32),2) * frac * frac;
                 double weave = s.Name == "streamribbon_twining_leaf" ? .65 * Math.Sin(Math.Tau * t) * Math.Sin(Math.PI*t) : 0;
-                var pos = new Vec3(xr + weave, yc + cy * off, zc + sy * off - basalLobe);
+                // A recessed centre-tip notch splits the apex into two apical lobes
+                // (ginkgo fans): the midrib region recedes over the last TipNotchDepth
+                // while the shoulders stay wide and rounded without folding tip triangles.
+                double recess = 0;
+                if (nd > 0 && t > 1 - nd)
+                {
+                    double v = (t - (1 - nd)) / nd;
+                    double notch = Math.Pow(1 - frac * frac, 1.6);
+                    double corner = Math.Pow(Math.Max(0, (frac - .68) / .32), 2);
+                    recess = nd * v * (.72 * notch + .22 * corner);
+                    xr *= 1 + Math.Clamp(s.TipNotchWidth, 0, .4f) * v * 4 * frac * (1 - frac);
+                }
+                var pos = new Vec3(xr + weave, yc + cy * off - sy * recess, zc + sy * off - cy * recess - basalLobe);
                 var col = s.Name == "quillsedge_curled_blade" ? Mix(cA, cB, Math.Clamp((t-.08)/.78,0,1)) : Mix(cA, cB, 0.25 + 0.5 * frac);
+                double u2x = s.Name == "quillsedge_curled_blade" ? -4
+                    : s.Name.EndsWith("_colony_understory", StringComparison.Ordinal) ? -1
+                    : s.Name.StartsWith("plumegrass_rainbow_frond_", StringComparison.Ordinal) ? 1.28
+                    : s.Type == OrganType.Flower && !s.Name.EndsWith("_needle", StringComparison.Ordinal) && !s.Name.EndsWith("_blade", StringComparison.Ordinal) ? 1.35
+                    : 0;
                 // Analytic adaxial normal from the midrib frame (RecomputeNormals leaves base/tip rows at zero,
                 // where the profile collapses to a point).
-                idx[i, j] = m.AddVertex(pos, new Vec3(0, cy, sy), col[0], col[1], col[2], ShapeRoughAlpha(s), t, u, s.Name == "quillsedge_curled_blade" ? -4 : s.Name == "tankbloom_bract" ? 1.35 : s.Name.EndsWith("_colony_understory", StringComparison.Ordinal) ? -1 : 0, 1);
+                idx[i, j] = m.AddVertex(pos, new Vec3(0, cy, sy), col[0], col[1], col[2], ShapeRoughAlpha(s), t, u, u2x, 1);
             }
         }
         for (int i = 0; i < L; i++)
@@ -684,7 +792,7 @@ public static partial class PlantCompiler
             {
                 int samples = s.PairedLaminaApertures ? L / Math.Max(2, s.LobeCount) : 0;
                 if (s.PairedLaminaApertures && i >= samples && i < L - samples
-                    && i % samples < Math.Max(1, samples / 3) && (j == 1 || j == 6)) continue;
+                    && (LobePhase(s, i / (double)L) / Math.Tau) % 1 < 1.0 / 3 && (j == 1 || j == 6)) continue;
                 int a = idx[i, j], b = idx[i, j + 1], c = idx[i + 1, j], d = idx[i + 1, j + 1];
                 // Godot front faces are clockwise from the adaxial side.
                 m.AddTriangle(a, b, c);
@@ -707,6 +815,10 @@ public static partial class PlantCompiler
 
     private static double[] Mix(double[] a, double[] b, double t) =>
         new[] { a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t };
+
+    /// <summary>Lobe boundary phase; LobePhaseWarp bends intervals without breaking periodicity at the ends.</summary>
+    private static double LobePhase(OrganShape s, double t)
+        => Math.Tau * s.LobeCount * t + s.LobePhaseWarp * Math.Sin(Math.Tau * t);
 
     /// <summary>Revolved bell (flower) or ellipsoid (fruit), base at origin, length 1 along +Z, mouth radius 0.5.</summary>
     private static MeshData BuildBell(OrganShape s, int detail, bool ellipsoid)

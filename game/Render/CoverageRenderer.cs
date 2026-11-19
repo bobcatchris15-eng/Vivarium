@@ -219,9 +219,13 @@ public partial class CoverageRenderer : Node3D
             System.Globalization.CultureInfo.InvariantCulture, out var mossGain))
             _matMaterial.SetShaderParameter("u_moss_aggregate", Math.Clamp(mossGain, 0f, 4f));
         _matMaterial.SetShaderParameter("u_moss_colony_nuclei", (float)MossMicroGrowthStrength);
+        _matMaterial.SetShaderParameter("clip_to_hex", true);
+        _matMaterial.SetShaderParameter("hex_apothem", (float)w.Domain.Apothem);
         Bridge.BindSurface(_matMaterial, "moss", Bridge.Surfaces.Moss);
         _crustMaterial = Bridge.Shader("res://Shaders/coverage_mat.gdshader");
         _crustMaterial.SetShaderParameter("u_pattern", 1.0f); // cracked/areolate lichen micro-detail
+        _crustMaterial.SetShaderParameter("clip_to_hex", true);
+        _crustMaterial.SetShaderParameter("hex_apothem", (float)w.Domain.Apothem);
         Bridge.BindSurface(_crustMaterial, "moss", Bridge.Surfaces.Moss);
         _crustMaterial.SetShaderParameter("lichen_col", GD.Load<Texture2D>("res://Textures/LichenThallus.png"));
         if (DebugMode)
@@ -988,7 +992,8 @@ public partial class CoverageRenderer : Node3D
         {
             int li = lz * edge + lx;
             byte occ = t.Occ[li];
-            if (occ == 0)
+            int gxCell = t.Ti * edge + lx, gzCell = t.Tj * edge + lz;
+            if (occ == 0 || (_w != null && _w.Domain.SignedDistance(new Vec2((gxCell + 0.5) * cs, (gzCell + 0.5) * cs)) > cs * 1.5))
             {
                 s.CellOccupied[lx, lz] = false;
                 s.CellThickness[lx, lz] = 0f;
@@ -1092,7 +1097,7 @@ public partial class CoverageRenderer : Node3D
                     int gx = t.Ti * edge + nlx;
                     int gz = t.Tj * edge + nlz;
                     byte nOcc = layer.GetOcc(gx, gz);
-                    if (nOcc != 0)
+                    if (nOcc != 0 && (_w == null || _w.Domain.SignedDistance(new Vec2((gx + 0.5) * cs, (gz + 0.5) * cs)) <= cs * 1.5))
                     {
                         occCount++;
                         var nsp = GetSpecies(layer.Id, nOcc);
@@ -1383,6 +1388,7 @@ public partial class CoverageRenderer : Node3D
             uint hash = ReliefHash(gx, gz);
             double wx = (gx + 0.5) * cs + ((hash & 255) / 255.0 - 0.5) * 0.017;
             double wz = (gz + 0.5) * cs + (((hash >> 8) & 255) / 255.0 - 0.5) * 0.017;
+            if (_w != null && _w.Domain.SignedDistance(new Vec2(wx, wz)) > 0.001) continue;
             double gy = TileGroundHeight(new Vec2(wx, wz));
             Vec3 normal = TileGroundNormal(wx, wz, gy);
             if (normal.Y < 0.45) continue;

@@ -15,7 +15,9 @@ public sealed class Sheet20GeometrySelfTest : IReprSelfTest
             var plan = tide.PlanFor(seed, 1);
             var foliage = plan.Items.Where(o => o.Type == OrganType.Leaflet).ToArray();
             if (foliage.Length < 80 || foliage.Select(o => o.Parent).Distinct().Count() < 15) return "tidebell needs dense compound foliage";
-            var bell = plan.Shapes.Single(s => s.Name == "tidebell_luminous_bell");
+            var bells = plan.Shapes.Where(s => s.Name.StartsWith("tidebell_luminous_bell", StringComparison.Ordinal)).ToArray();
+            if (bells.Length == 0) return "tidebell lost its luminous bell";
+            foreach (var bell in bells)
             foreach (int lod in new[] { 0, 1, 2 })
             {
                 var bellMesh = PlantCompiler.BuildShapeMesh(bell, lod);
@@ -43,11 +45,11 @@ public sealed class Sheet20GeometrySelfTest : IReprSelfTest
                     var o = plant.Organs[i];
                     if (o.Type == OrganType.Leaflet && (o.Start != before[i].Start || o.End != before[i].End))
                         return "water pose moved foliage";
-                    if (o.Type == OrganType.Flower && plant.Shapes[o.ShapeId].Name == "tidebell_luminous_bell")
+                    if (o.Type == OrganType.Flower && plant.Shapes[o.ShapeId].Name.StartsWith("tidebell_luminous_bell", StringComparison.Ordinal))
                     {
                         if (Math.Min(o.Start.Y,o.End.Y)*.65 < .8) return "bell remains underwater";
                         if (((o.Start - plant.Organs[o.Parent].End) - (before[i].Start - before[o.Parent].End)).Length > .00001) return "bell detached from scape";
-                        if (plant.Organs[o.Parent].Start != before[o.Parent].Start) return "scape lost rooted base";
+                        if (plant.Organs[RootedBase(plant, o.Parent)].Start != before[RootedBase(plant, o.Parent)].Start) return "scape chain lost rooted base";
                     }
                 }
                 var mesh = PlantCompiler.Compile(plant, lod);
@@ -55,5 +57,19 @@ public sealed class Sheet20GeometrySelfTest : IReprSelfTest
             }
         }
         return null;
+    }
+
+    /// <summary>Lowest visible petiole segment of a bell chain — the organ the water pose must keep planted.</summary>
+    private static int RootedBase(PlantDescriptor plant, int start)
+    {
+        int last = start, cur = start;
+        while (cur >= 0)
+        {
+            var a = plant.Organs[cur];
+            if (a.Parent < 0 || a.Order < 1 || a.Tissue != Tissue.Green || (a.Flags & OrganFlags.Hidden) != 0) break;
+            last = cur;
+            cur = a.Parent;
+        }
+        return last;
     }
 }
