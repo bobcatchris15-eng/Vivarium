@@ -24,7 +24,7 @@ namespace Vivarium.Sim.Geometry;
 /// </summary>
 public static partial class OrganismMeshes
 {
-    private static void NewShrubsFinish(MeshData m, MeshData part, double radius, double height)
+    internal static void NewShrubsFinish(MeshData m, MeshData part, double radius, double height)
     {
         int baseVertex = m.VertexCount;
         int spansBefore = m.EssentialSpans.Count;
@@ -212,8 +212,78 @@ public static partial class OrganismMeshes
         return Vec3.Lerp(path[i], path[i + 1], f - i);
     }
 
+    private static void BuildTaperedWood(MeshData part, IReadOnlyList<Vec3> path, double rStart, double rEnd,
+        int sides, double[] barkCol, bool collarAtStart = true, double taperPow = 1.0)
+    {
+        if (path.Count < 2) return;
+        if (collarAtStart)
+            BranchCollar(part, path[0], rStart * 1.12, barkCol);
+        var radii = new double[path.Count];
+        for (int i = 0; i < path.Count; i++)
+        {
+            double t = i / (double)(path.Count - 1);
+            radii[i] = MathD.Lerp(rStart, rEnd, Math.Pow(t, taperPow));
+        }
+        WoodTube(part, path, radii, sides, barkCol);
+    }
+
+    private static (Vec3[] Path, Vec3[] NodePos, Vec3[] NodeOutDir) BuildZigzagWood(
+        MeshData part, Vec3 start, Vec3 initialDir, double totalLen, int segments,
+        double rStart, double rEnd, double yawKinkRad, double pitchSpread, double archBow,
+        int sides, double[] barkCol, Rng rng, double handSign = 1.0)
+    {
+        var dir = initialDir.Normalized();
+        if (dir.LengthSq < 1e-6) dir = Vec3.Up;
+        var pts = new List<Vec3>(segments * 2 + 1) { start };
+        var nodePos = new Vec3[segments];
+        var nodeOut = new Vec3[segments];
+        double segLen = totalLen / Math.Max(1, segments);
+        var cur = start;
+
+        for (int s = 0; s < segments; s++)
+        {
+            double frac = (s + 1) / (double)segments;
+            double sign = ((s % 2 == 0) ? 1.0 : -1.0) * handSign;
+            double az = Math.Atan2(dir.Z, dir.X) + sign * yawKinkRad * rng.Range(0.75, 1.25);
+            double dy = dir.Y + rng.Range(-pitchSpread, pitchSpread) - archBow * frac;
+            var horiz = new Vec3(Math.Cos(az), 0, Math.Sin(az));
+            var horizLen = Math.Sqrt(Math.Max(0.08, 1.0 - Math.Clamp(dy, -0.75, 0.88) * Math.Clamp(dy, -0.75, 0.88)));
+            dir = (horiz * horizLen + Vec3.Up * Math.Clamp(dy, -0.75, 0.88)).Normalized();
+
+            double thisLen = segLen * rng.Range(0.84, 1.18);
+            var mid = cur + dir * (thisLen * 0.5) + new Vec3(-dir.Z, 0, dir.X) * (sign * thisLen * 0.08);
+            var next = cur + dir * thisLen;
+            pts.Add(mid);
+            pts.Add(next);
+            nodePos[s] = next;
+            nodeOut[s] = (dir + horiz * (sign * 0.45)).Normalized();
+            cur = next;
+        }
+
+        var path = pts.ToArray();
+        BuildTaperedWood(part, path, rStart, rEnd, sides, barkCol, collarAtStart: true, taperPow: 0.92);
+        return (path, nodePos, nodeOut);
+    }
+
+    private static void EmitLeafRosette(MeshData part, Vec3 origin, int count, double leafLen, double halfWidth,
+        double radialFrac, double pitchMin, double pitchMax, double[] leafBase, double[] leafTip,
+        Rng rng, double phase, int longitudinal = 4, double camberFrac = 0.09)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            double az = phase + i * 2.399963 + rng.Range(-0.18, 0.18);
+            double pitch = rng.Range(pitchMin, pitchMax);
+            var dir = new Vec3(Math.Cos(az) * radialFrac, pitch, Math.Sin(az) * radialFrac).Normalized();
+            double len = leafLen * rng.Range(0.84, 1.14);
+            var tip = origin + dir * len + Vec3.Up * (len * 0.08);
+            var sideHint = Vec3.Up.Cross(dir);
+            LeafUpward(part, origin, tip, sideHint, halfWidth * (len / Math.Max(1e-5, leafLen)),
+                leafBase, leafTip, camber: len * camberFrac, longitudinal: longitudinal, asymmetry: rng.Range(-0.08, 0.08));
+        }
+    }
+
     // =================================================================================================
-    // 1. ShrubMiremyrtle: Bog Myrtle / Sweet Gale (Myrica gale) with Luminous Amber Candle-Spikes
+    // 1. ShrubMiremyrtle: Intricately Forked Copper-Twig Bog Myrtle Cloud with Amber Candle Catkins
     // =================================================================================================
     private static void ShrubMiremyrtle(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, double radius, double height, bool juvenile)
     {
@@ -224,43 +294,36 @@ public static partial class OrganismMeshes
 
         // Botanical palette: warm coppery-plum / red-bronze bark, sunlit olive-emerald foliage with pale resin midrib
         var barkCol = Primitives.Mix(new[] { 0.36, 0.22, 0.18 }, c1, 0.18);
-        var leafBase = Primitives.Mix(c1, new[] { 0.44, 0.60, 0.38 }, 0.75);
-        var leafTip = Primitives.Mix(c2, new[] { 0.58, 0.76, 0.48 }, 0.75);
+        var twigCol = Primitives.Mix(new[] { 0.44, 0.25, 0.19 }, c1, 0.16);
+        var leafBase = Primitives.Mix(c1, new[] { 0.42, 0.58, 0.36 }, 0.72);
+        var leafTip = Primitives.Mix(c2, new[] { 0.56, 0.74, 0.46 }, 0.72);
         var resinCol = new[] { 0.98, 0.78, 0.24 };
 
-        // Whimsical signature: Luminous Golden-Amber Candle Catkins on curved axillary pedicels
         void MiremyrtleCandleCatkin(Vec3 at, Vec3 outDir)
         {
             int v0 = part.VertexCount;
-            double catLen = (juvenile ? 0.038 : 0.054) * rng.Range(0.92, 1.10) * heightScale;
-
-            // Slender curved pedicel emerging naturally from leaf axil / terminal shoot
+            double catLen = (juvenile ? 0.036 : 0.050) * rng.Range(0.92, 1.10) * heightScale;
             var ped0 = at;
-            var ped1 = at + outDir * 0.008 + Vec3.Up * (catLen * 0.15);
-            var ped2 = at + outDir * 0.012 + Vec3.Up * (catLen * 0.45);
-            var ped3 = at + outDir * 0.008 + Vec3.Up * (catLen * 0.75);
+            var ped1 = at + outDir * 0.008 + Vec3.Up * (catLen * 0.16);
+            var ped2 = at + outDir * 0.011 + Vec3.Up * (catLen * 0.48);
+            var ped3 = at + outDir * 0.006 + Vec3.Up * (catLen * 0.78);
             var pedPath = SampleBezier(ped0, ped1, ped2, ped3, 4);
-            WoodTube(part, pedPath, new[] { 0.0034, 0.0026, 0.0020, 0.0014 }, NewShrubsSides(part, 5), barkCol);
+            WoodTube(part, pedPath, new[] { 0.0030, 0.0022, 0.0017, 0.0012 }, NewShrubsSides(part, 5), twigCol);
 
-            // Sculpted overlapping catkin scales with warm bronze-to-saffron gradient
-            int tiers = cull ? 4 : 7;
+            int tiers = cull ? 4 : 6;
             for (int t = 0; t < tiers; t++)
             {
                 double frac = (double)t / Math.Max(1, tiers - 1);
-                var cPos = BezierCubic(ped1, ped2, ped3, ped3 + Vec3.Up * (catLen * 0.35), frac);
-                double r = 0.0125 * (1.0 - 0.42 * frac);
-                if (r < 0.0032) r = 0.0032;
-
+                var cPos = BezierCubic(ped1, ped2, ped3, ped3 + Vec3.Up * (catLen * 0.32), frac);
+                double r = Math.Max(0.0032, 0.0115 * (1.0 - 0.42 * frac));
                 double[] scaleCol = frac < 0.35
                     ? Primitives.Mix(new[] { 0.65, 0.40, 0.16 }, new[] { 0.90, 0.64, 0.18 }, frac / 0.35)
                     : Primitives.Mix(new[] { 0.90, 0.64, 0.18 }, new[] { 0.98, 0.88, 0.32 }, (frac - 0.35) / 0.65);
-
-                Primitives.Ellipsoid(part, cPos, new Vec3(r, 0.0052, r), 2, 5, (u, v) => (scaleCol, 1.0, u, v, 0.0, 0.0));
+                Primitives.Ellipsoid(part, cPos, new Vec3(r, 0.0048, r), 2, 5, (u, v) => (scaleCol, 1.0, u, v, 0.0, 0.0));
             }
             MarkOrgan(part, v0, part.VertexCount - v0, 1.28f, 0.85f);
         }
 
-        // Glistening amber resin droplets in leaf axils
         void MiremyrtleResinDroplets(Vec3 at)
         {
             if (cull) return;
@@ -268,200 +331,144 @@ public static partial class OrganismMeshes
             for (int d = 0; d < 2; d++)
             {
                 var off = new Vec3(rng.Range(-0.004, 0.004), rng.Range(0.001, 0.005), rng.Range(-0.004, 0.004));
-                Primitives.Ellipsoid(part, at + off, new Vec3(0.0032, 0.0038, 0.0032), 2, 4,
+                Primitives.Ellipsoid(part, at + off, new Vec3(0.0030, 0.0035, 0.0030), 2, 4,
                     (u, v) => (resinCol, 1.0, u, v, 0.0, 0.0));
             }
             MarkOrgan(part, v0, part.VertexCount - v0, 1.28f, 0.85f);
         }
 
-        // Central mossy peat hummock
-        WoodEllipsoid(part, new Vec3(0, height * 0.022, 0),
-            new Vec3(radius * 0.22, height * 0.036, radius * 0.22), 3, 8, barkCol);
-
-        // Multi-stemmed tangled thicket: 3-4 distinct rhizomatous clump centers across the peat
-        int clumpCount = juvenile ? 2 : 4;
-        var clumpCenters = new Vec3[clumpCount];
-        for (int c = 0; c < clumpCount; c++)
-        {
-            double cAng = c * (Math.PI * 2.0 / clumpCount) + rng.Range(-0.25, 0.25);
-            double cDist = radius * rng.Range(0.05, 0.14) * heightScale;
-            clumpCenters[c] = new Vec3(Math.Cos(cAng) * cDist, height * 0.020, Math.Sin(cAng) * cDist);
-            WoodEllipsoid(part, clumpCenters[c], new Vec3(radius * 0.08, height * 0.024, radius * 0.08), 2, 6, barkCol);
-        }
+        // Subtle low peat collar anchored cleanly into ground (no oversized knobby lump)
+        WoodEllipsoid(part, new Vec3(0, height * 0.012, 0),
+            new Vec3(radius * 0.14, height * 0.022, radius * 0.14), 2, 7, barkCol);
 
         var catkinAxils = new List<(Vec3 Pos, Vec3 Dir)>();
 
-        // Total stems: adult 18-21, juvenile 8
-        int totalStems = juvenile ? 8 : 19 + rng.NextInt(3);
-        for (int s = 0; s < totalStems; s++)
+        // 4-5 asymmetrical crooked basal trunks dissolving repeatedly through 3 orders of fine Y-forking
+        int trunkCount = juvenile ? 3 : 4 + rng.NextInt(2);
+        double azOffset = rng.Range(0, Math.PI * 2.0);
+        for (int t = 0; t < trunkCount; t++)
         {
-            var clump = clumpCenters[s % clumpCount];
-            // Varied heights and roles:
-            // 0: tall emergent cane (full height 0.95h - 1.15h)
-            // 1: mid-tier arching wand (~0.72h - 0.88h)
-            // 2: low tangled skirt/sucker (~0.50h - 0.65h)
-            int role = s % 3;
-            double hMult = role switch
-            {
-                0 => rng.Range(0.95, 1.15),
-                1 => rng.Range(0.72, 0.88),
-                _ => rng.Range(0.50, 0.65)
-            };
-            double rMult = role switch
-            {
-                0 => rng.Range(0.68, 0.85),
-                1 => rng.Range(0.78, 0.95),
-                _ => rng.Range(0.85, 1.10)
-            };
-
-            double h = height * hMult * heightScale;
-            double reach = radius * rMult * heightScale;
-
-            // Clustered irregular azimuth with natural crossing
-            double baseAz = s * (Math.PI * 2.0 / totalStems) + rng.Range(-0.35, 0.35);
+            double baseAz = azOffset + t * (Math.PI * 2.0 / trunkCount) + rng.Range(-0.34, 0.34);
             var radial = new Vec3(Math.Cos(baseAz), 0, Math.Sin(baseAz));
             var tangent = new Vec3(-Math.Sin(baseAz), 0, Math.Cos(baseAz));
+            var root = radial * (radius * rng.Range(0.04, 0.12) * heightScale);
 
-            // Stems emerge from clump with slight jitter
-            var rootSpot = clump + new Vec3(rng.Range(-0.02, 0.02), 0, rng.Range(-0.02, 0.02)) * radius;
-            BranchCollar(part, rootSpot, 0.024 * (hMult > 0.8 ? 1.1 : 0.85), barkCol);
+            double leanOut = radius * rng.Range(0.32, 0.56) * heightScale;
+            double trunkTopH = height * rng.Range(0.30, 0.46) * heightScale;
+            double swerve = rng.Range(-0.14, 0.14) * radius * heightScale;
 
-            // Sinuous tangled path crossing neighboring canes
-            double bow1 = rng.Range(-0.16, 0.16) * radius;
-            double bow2 = rng.Range(-0.14, 0.14) * radius;
+            var p0 = root;
+            var p1 = root + radial * (leanOut * 0.30) + tangent * swerve + Vec3.Up * (trunkTopH * 0.42);
+            var p2 = radial * (leanOut * 0.80) - tangent * (swerve * 0.6) + Vec3.Up * (trunkTopH * 0.85);
+            var p3 = radial * leanOut + tangent * (swerve * 0.35) + Vec3.Up * trunkTopH;
+            var trunkPath = SampleBezier(p0, p1, p2, p3, NewShrubsStations(part, 6));
+            double trunkR0 = (juvenile ? 0.012 : 0.017) * rng.Range(0.88, 1.14);
+            double trunkR1 = trunkR0 * 0.56;
+            BuildTaperedWood(part, trunkPath, trunkR0, trunkR1, NewShrubsSides(part, 6), barkCol);
 
-            var p0 = rootSpot;
-            var p1 = rootSpot + radial * (reach * 0.22) + tangent * bow1 + Vec3.Up * (h * 0.32);
-            var p2 = radial * (reach * 0.74) + tangent * bow2 + Vec3.Up * (h * 0.76);
-            var p3 = radial * reach + tangent * (bow1 * 0.4) + Vec3.Up * h;
-
-            int stations = NewShrubsStations(part, 8);
-            var path = SampleBezier(p0, p1, p2, p3, stations);
-            var radii = new double[stations];
-            double baseStemR = MathD.Lerp(0.018, 0.028, (hMult - 0.5) / 0.65);
-            double tipStemR = MathD.Lerp(0.0045, 0.0065, (hMult - 0.5) / 0.65);
-            for (int i = 0; i < stations; i++)
+            // Order 2: 2-3 forked secondary crooked limbs per trunk flaring out to build a broad irregular cloud
+            int secCount = juvenile ? 2 : (t % 2 == 0 ? 3 : 2);
+            for (int b = 0; b < secCount; b++)
             {
-                double t = i / (double)(stations - 1);
-                radii[i] = MathD.Lerp(baseStemR, tipStemR, t);
-            }
-            WoodTube(part, path, radii, NewShrubsSides(part, 6), barkCol);
+                double attachT = 0.52 + 0.46 * (b / (double)Math.Max(1, secCount - 1));
+                var bBase = NewShrubsAlong(trunkPath, attachT);
+                var bParentTan = PathTangent(trunkPath, attachT);
+                double fanSpread = (b - (secCount - 1) * 0.5) * rng.Range(0.75, 1.05) + rng.Range(-0.22, 0.22);
+                double secAz = baseAz + fanSpread;
+                var secRad = new Vec3(Math.Cos(secAz), 0, Math.Sin(secAz));
+                var secTan = new Vec3(-Math.Sin(secAz), 0, Math.Cos(secAz));
 
-            // Occasional swollen dormant node on the lower/mid wood
-            if (!juvenile && s % 2 == 0)
-            {
-                WoodEllipsoid(part, NewShrubsAlong(path, 0.40), new Vec3(0.011, 0.008, 0.011), 2, 5, barkCol);
-            }
+                bool outerArch = b == 0;
+                double secReach = radius * (outerArch ? rng.Range(0.55, 0.78) : rng.Range(0.34, 0.52)) * heightScale;
+                double secRise = height * (outerArch ? rng.Range(0.22, 0.38) : rng.Range(0.34, 0.48)) * heightScale;
+                double secSide = rng.Range(-0.14, 0.14) * radius * heightScale;
 
-            var stemTip = path[^1];
-            catkinAxils.Add((stemTip, radial * 0.5 + Vec3.Up * 0.5));
+                var bDir = (secRad * secReach + secTan * secSide + Vec3.Up * secRise).Normalized();
+                double bLen = Math.Sqrt(secReach * secReach + secRise * secRise);
+                var bp0 = bBase - bParentTan * (trunkR1 * 0.35);
+                var bp1 = bBase + (bParentTan * 0.48 + bDir * 0.52).Normalized() * (bLen * 0.34);
+                var bp2 = bBase + secRad * (secReach * 0.74) - secTan * (secSide * 0.7) + Vec3.Up * (secRise * 0.78);
+                var bp3 = bBase + secRad * secReach + secTan * (secSide * 0.4) + Vec3.Up * secRise;
+                var secPath = SampleBezier(bp0, bp1, bp2, bp3, NewShrubsStations(part, 6));
+                double secR0 = trunkR1 * (secCount == 3 ? 0.64 : 0.74);
+                double secR1 = secR0 * 0.44;
+                BuildTaperedWood(part, secPath, secR0, secR1, NewShrubsSides(part, 5), barkCol);
 
-            // Branchlets begin in the lower third and continue into the upper cane; keep the root collar itself open.
-            int twigs = (role == 2) ? (juvenile ? 1 : 2) : (juvenile ? 2 : 3 + rng.NextInt(2));
-            for (int tw = 0; tw < twigs; tw++)
-            {
-                double tTw = 0.27 + 0.63 * ((tw + 0.5) / twigs) + rng.Range(-0.04, 0.04);
-                var twigBase = NewShrubsAlong(path, Math.Clamp(tTw, 0.0, 1.0));
-                var caneTangent = PathTangent(path, tTw);
-
-                double twAz = baseAz + (tw % 2 == 0 ? 0.65 : -0.65) + rng.Range(-0.20, 0.20);
-                var twDir = new Vec3(Math.Cos(twAz), 0.36, Math.Sin(twAz)).Normalized();
-                double twLen = radius * rng.Range(0.20, 0.32) * heightScale * (hMult > 0.8 ? 1.0 : 0.8);
-
-                // Flared branch collar at junction
-                BranchCollar(part, twigBase, 0.009, barkCol);
-
-                // Smooth cubic Bezier path flowing naturally from cane tangent
-                var tp0 = twigBase;
-                var tp1 = twigBase + (caneTangent * 0.50 + twDir * 0.50).Normalized() * (twLen * 0.32);
-                var tp2 = twigBase + twDir * (twLen * 0.72) + Vec3.Up * (twLen * 0.12);
-                var tp3 = twigBase + twDir * twLen + Vec3.Up * (twLen * 0.18);
-                var twigPath = SampleBezier(tp0, tp1, tp2, tp3, 6);
-                var twigRadii = new[] { 0.0080, 0.0062, 0.0046, 0.0034, 0.0024, 0.0016 };
-
-                WoodTube(part, twigPath, twigRadii, NewShrubsSides(part, 5), barkCol);
-                var twigTip = twigPath[^1];
-                catkinAxils.Add((twigTip, twDir * 0.5 + Vec3.Up * 0.5));
-
-                MiremyrtleResinDroplets(twigBase + twDir * (twLen * 0.20));
-
-                // Dense 3D spiral leaf clusters along the distal branchlet
-                int twigLeaves = juvenile ? 6 : 11;
-                for (int j = 0; j < twigLeaves; j++)
+                // Order 3: dichotomous forked fine copper twigs forming the fine rounded shrub silhouette
+                int twigForks = cull ? 2 : (juvenile ? 2 : 3);
+                for (int tw = 0; tw < twigForks; tw++)
                 {
-                    double t = 0.22 + 0.75 * ((j + 0.5) / twigLeaves) + rng.Range(-0.02, 0.02);
-                    var at = NewShrubsAlong(twigPath, Math.Clamp(t, 0.0, 1.0));
-                    double leafAz = twAz + j * 2.399963 + rng.Range(-0.16, 0.16);
-                    double pitch = rng.Range(0.28, 0.46);
-                    var dir = new Vec3(Math.Cos(leafAz) * 0.82, pitch, Math.Sin(leafAz) * 0.82).Normalized();
-                    double len = height * rng.Range(0.052, 0.074) * heightScale;
-                    var tip = at + dir * len + Vec3.Up * (len * 0.12);
-                    var sideHint = Vec3.Up.Cross(dir);
-                    LeafUpward(part, at, tip, sideHint, len * 0.20, leafBase, leafTip,
-                        camber: len * 0.08, longitudinal: 4, asymmetry: rng.Range(-0.05, 0.05));
+                    double twT = 0.42 + 0.56 * (tw / (double)Math.Max(1, twigForks - 1));
+                    var twBase = NewShrubsAlong(secPath, twT);
+                    var twParentTan = PathTangent(secPath, twT);
+                    double twAz = secAz + (tw % 2 == 0 ? 0.58 : -0.62) + rng.Range(-0.22, 0.22);
+                    var twH = new Vec3(Math.Cos(twAz), 0, Math.Sin(twAz));
+                    double twLen = radius * rng.Range(0.36, 0.56) * heightScale;
+                    double twLift = twLen * rng.Range(0.38, 0.78);
+                    var twDir = (twH * twLen + Vec3.Up * twLift).Normalized();
+
+                    var tp0 = twBase;
+                    var tp1 = twBase + (twParentTan * 0.45 + twDir * 0.55).Normalized() * (twLen * 0.36);
+                    var tp2 = twBase + twH * (twLen * 0.76) + Vec3.Up * (twLift * 0.82);
+                    var tp3 = twBase + twH * twLen + Vec3.Up * twLift;
+                    var twPath = SampleBezier(tp0, tp1, tp2, tp3, NewShrubsStations(part, 5));
+                    double twR0 = secR1 * 0.85;
+                    double twR1 = 0.0014;
+                    BuildTaperedWood(part, twPath, twR0, twR1, NewShrubsSides(part, 4), twigCol);
+                    var twTip = twPath[^1];
+
+                    if (tw % 2 == 1)
+                        MiremyrtleResinDroplets(NewShrubsAlong(twPath, 0.25));
+                    catkinAxils.Add((twTip, (twDir * 0.5 + Vec3.Up * 0.5).Normalized()));
+
+                    // Spiralled aromatic elliptic leaves clustered on fine distal twig + terminal tip
+                    int twLeaves = juvenile ? 6 : (cull ? 6 : 12);
+                    for (int j = 0; j < twLeaves; j++)
+                    {
+                        double lt = 0.22 + 0.74 * ((j + 0.5) / twLeaves) + rng.Range(-0.02, 0.02);
+                        var at = NewShrubsAlong(twPath, Math.Clamp(lt, 0.0, 1.0));
+                        double lAz = twAz + j * 2.399963 + rng.Range(-0.18, 0.18);
+                        var lDir = new Vec3(Math.Cos(lAz) * 0.84, rng.Range(0.24, 0.52), Math.Sin(lAz) * 0.84).Normalized();
+                        double len = height * rng.Range(0.064, 0.088) * heightScale;
+                        var lTip = at + lDir * len + Vec3.Up * (len * 0.10);
+                        LeafUpward(part, at, lTip, Vec3.Up.Cross(lDir), len * 0.22, leafBase, leafTip,
+                            camber: len * 0.08, longitudinal: 4, asymmetry: rng.Range(-0.05, 0.05));
+                    }
+                    EmitLeafRosette(part, twTip, juvenile ? 3 : 4, height * 0.058 * heightScale,
+                        height * 0.0125 * heightScale, 0.68, 0.42, 0.74, leafBase, leafTip, rng, twAz + 0.6);
+
+                    // Order 4 terminal fork shoot on mature outer twigs
+                    if (!juvenile && !cull && tw != 1)
+                    {
+                        double f4T = 0.62;
+                        var f4Base = NewShrubsAlong(twPath, f4T);
+                        var f4Tan = PathTangent(twPath, f4T);
+                        double f4Az = twAz + (tw == 0 ? -0.78 : 0.74) + rng.Range(-0.15, 0.15);
+                        var f4Dir = new Vec3(Math.Cos(f4Az), rng.Range(0.32, 0.58), Math.Sin(f4Az)).Normalized();
+                        double f4Len = radius * rng.Range(0.22, 0.34) * heightScale;
+                        double f4Leaf = height * 0.055 * heightScale;
+                        NewShrubsBranchlet(part, f4Base, f4Tan, f4Dir, f4Len, f4Leaf, f4Leaf * 0.21, 5, 3,
+                            leafBase, leafTip, twigCol, rng, f4Az);
+                    }
                 }
 
-                // Terminal leaf tuft on twig tip
-                for (int k = 0; k < (juvenile ? 2 : 4); k++)
+                // Mid-shoot foliage cluster on upper secondary branch
+                int secLeaves = juvenile ? 5 : 8;
+                for (int j = 0; j < secLeaves; j++)
                 {
-                    double leafAz = twAz + k * 2.399963 + 0.8 + rng.Range(-0.12, 0.12);
-                    var dir = new Vec3(Math.Cos(leafAz) * 0.60, 0.62, Math.Sin(leafAz) * 0.60).Normalized();
-                    double len = height * rng.Range(0.046, 0.068) * heightScale;
-                    var tip = twigTip + dir * len + Vec3.Up * (len * 0.10);
-                    var sideHint = Vec3.Up.Cross(dir);
-                    LeafUpward(part, twigTip, tip, sideHint, len * 0.20, leafBase, leafTip,
-                        camber: len * 0.08, longitudinal: 4, asymmetry: rng.Range(-0.05, 0.05));
+                    double lt = 0.36 + 0.58 * ((j + 0.5) / secLeaves);
+                    var at = NewShrubsAlong(secPath, lt);
+                    double lAz = secAz + j * 2.399963 + rng.Range(-0.2, 0.2);
+                    var lDir = new Vec3(Math.Cos(lAz) * 0.85, rng.Range(0.26, 0.50), Math.Sin(lAz) * 0.85).Normalized();
+                    double len = height * rng.Range(0.064, 0.088) * heightScale;
+                    LeafUpward(part, at, at + lDir * len + Vec3.Up * (len * 0.09), Vec3.Up.Cross(lDir),
+                        len * 0.22, leafBase, leafTip, camber: len * 0.08, longitudinal: 4);
                 }
-
-                // Minor tertiary branchlet
-                if (!juvenile && !cull && tw == 0)
-                {
-                    double bt = 0.45;
-                    var brBase = NewShrubsAlong(twigPath, bt);
-                    var twTangent = PathTangent(twigPath, bt);
-                    double brAz = twAz + 0.85 + rng.Range(-0.14, 0.14);
-                    var brDir = new Vec3(Math.Cos(brAz), 0.42, Math.Sin(brAz)).Normalized();
-                    double brLen = 0.034 * heightScale;
-                    double brLeafLen = height * 0.056 * heightScale;
-                    NewShrubsBranchlet(part, brBase, twTangent, brDir, brLen, brLeafLen, brLeafLen * 0.20, 3, 3,
-                        leafBase, leafTip, barkCol, rng, brAz);
-                }
-            }
-
-            // Distal spiral leaves on upper 35% of cane
-            int caneLeaves = juvenile ? 6 : 13;
-            for (int j = 0; j < caneLeaves; j++)
-            {
-                double t = 0.60 + 0.38 * ((j + 0.5) / caneLeaves) + rng.Range(-0.02, 0.02);
-                var at = NewShrubsAlong(path, Math.Clamp(t, 0.0, 1.0));
-                double leafAz = baseAz + j * 2.399963 + 0.4 + rng.Range(-0.16, 0.16);
-                double pitch = rng.Range(0.30, 0.50);
-                var dir = new Vec3(Math.Cos(leafAz) * 0.80, pitch, Math.Sin(leafAz) * 0.80).Normalized();
-                double len = height * rng.Range(0.054, 0.076) * heightScale;
-                var tip = at + dir * len + Vec3.Up * (len * 0.12);
-                var sideHint = Vec3.Up.Cross(dir);
-                LeafUpward(part, at, tip, sideHint, len * 0.20, leafBase, leafTip,
-                    camber: len * 0.08, longitudinal: 4, asymmetry: rng.Range(-0.05, 0.05));
-
-                if (j % 4 == 1)
-                    catkinAxils.Add((at, dir * 0.6 + Vec3.Up * 0.4));
-            }
-
-            // Cane terminal leaf cap
-            for (int k = 0; k < (juvenile ? 2 : 4); k++)
-            {
-                double leafAz = baseAz + k * 2.399963 + 0.5 + rng.Range(-0.12, 0.12);
-                var dir = new Vec3(Math.Cos(leafAz) * 0.52, 0.70, Math.Sin(leafAz) * 0.52).Normalized();
-                double len = height * rng.Range(0.048, 0.070) * heightScale;
-                var tip = stemTip + dir * len + Vec3.Up * (len * 0.10);
-                var sideHint = Vec3.Up.Cross(dir);
-                LeafUpward(part, stemTip, tip, sideHint, len * 0.20, leafBase, leafTip,
-                    camber: len * 0.08, longitudinal: 4, asymmetry: rng.Range(-0.05, 0.05));
             }
         }
 
-        // Luminous candle catkins emerging naturally from axils and terminal buds
-        int catkinCount = juvenile ? 4 : 22 + rng.NextInt(5);
+        // Luminous candle catkins emerging cleanly from upper forked twig tips
+        int catkinCount = juvenile ? 4 : 18 + rng.NextInt(5);
         for (int k = 0; k < catkinCount && catkinAxils.Count > 0; k++)
         {
             var (spot, outDir) = catkinAxils[(k * 3 + 1) % catkinAxils.Count];
@@ -557,166 +564,144 @@ public static partial class OrganismMeshes
             MarkOrgan(part, v0, part.VertexCount - v0, 1.25f, 0.85f);
         }
 
-        // Mossy burred coppice stool with root buttresses
-        WoodEllipsoid(part, new Vec3(0, height * 0.032, 0),
-            new Vec3(radius * 0.24, height * 0.046, radius * 0.24), 3, 9, barkCol);
-        for (int fb = 0; fb < 4; fb++)
-        {
-            double faz = fb * (Math.PI * 0.5) + 0.3;
-            var fPos = new Vec3(Math.Cos(faz), 0, Math.Sin(faz)) * (radius * 0.16) + Vec3.Up * (height * 0.015);
-            WoodEllipsoid(part, fPos, new Vec3(radius * 0.09, height * 0.022, radius * 0.09), 2, 6, barkCol);
-        }
+        // Low asymmetric rootstock with exposed creeping coppice stolons feeding distant sucker poles
+        WoodEllipsoid(part, new Vec3(0, height * 0.016, 0),
+            new Vec3(radius * 0.16, height * 0.028, radius * 0.16), 2, 8, barkCol);
 
-        // 12-15 gracefully arching, bowed hazel wand poles
-        int wands = juvenile ? 6 : 13 + rng.NextInt(3);
+        int poleCount = juvenile ? 4 : 6 + rng.NextInt(2);
         var boughTips = new List<Vec3>();
         var nutForks = new List<(Vec3 Pos, Vec3 Dir)>();
+        double phaseAz = rng.Range(0, Math.PI * 2.0);
 
-        for (int p = 0; p < wands; p++)
+        for (int p = 0; p < poleCount; p++)
         {
-            // Multi-tiered wand roles:
-            // 0: Tall dominant arching canopy wand (0.95h - 1.15h)
-            // 1: Mid-height bowed wand (0.75h - 0.90h)
-            // 2: Supple outer bowed wand (0.55h - 0.70h)
+            // Role 0: sinuous primary scaffold (0.76-0.94h), Role 1: mid crooked arch (0.54-0.74h), Role 2: wide low skirt sucker (0.38-0.54h)
             int role = p % 3;
             double hMult = role switch
             {
-                0 => rng.Range(0.95, 1.15),
-                1 => rng.Range(0.75, 0.90),
-                _ => rng.Range(0.55, 0.70)
+                0 => rng.Range(0.76, 0.94),
+                1 => rng.Range(0.54, 0.74),
+                _ => rng.Range(0.38, 0.54)
             };
             double rMult = role switch
             {
-                0 => rng.Range(0.70, 0.88),
-                1 => rng.Range(0.82, 1.00),
-                _ => rng.Range(0.90, 1.15)
+                0 => rng.Range(0.68, 0.96),
+                1 => rng.Range(0.78, 1.06),
+                _ => rng.Range(0.86, 1.16)
             };
 
-            double az = p * (Math.PI * 2.0 / wands) + rng.Range(-0.25, 0.25);
+            double az = phaseAz + p * (Math.PI * 2.0 / poleCount) + rng.Range(-0.34, 0.34);
             var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
             var tangent = new Vec3(-Math.Sin(az), 0, Math.Cos(az));
             double reach = radius * rMult * heightScale;
             double h = height * hMult * heightScale;
-            double bow = rng.Range(-0.12, 0.12) * radius;
 
-            // Flared basal collar at coppice stool
-            var stoolSpot = radial * (radius * 0.10);
-            BranchCollar(part, stoolSpot, 0.032 * (hMult > 0.8 ? 1.1 : 0.85), barkCol);
+            // Sucker offsets: spread poles loosely across 0.10-0.40r, linked visibly by ground stolons
+            double suckerDist = radius * (role == 2 ? rng.Range(0.24, 0.40) : rng.Range(0.10, 0.30)) * heightScale;
+            var stoolSpot = radial * suckerDist + tangent * rng.Range(-0.08, 0.08) * radius;
+            if (suckerDist > radius * 0.14)
+            {
+                var stMid = stoolSpot * 0.5 + Vec3.Up * (height * 0.014) + tangent * rng.Range(-0.04, 0.04) * radius;
+                BuildTaperedWood(part, new[] { Vec3.Zero, stMid, stoolSpot + Vec3.Up * 0.008 },
+                    0.022, 0.014, NewShrubsSides(part, 5), barkCol, collarAtStart: false);
+            }
 
-            // True bowed wand curve: shoots steeply from stool, arches out, tip nods slightly under gravity
+            double bowSign = (p % 2 == 0) ? 1.0 : -1.0;
+            double bow1 = bowSign * rng.Range(0.20, 0.32) * radius;
+            double bow2 = -bow1 * 0.92 + rng.Range(-0.10, 0.10) * radius;
             var p0 = stoolSpot;
-            var p1 = stoolSpot + radial * (reach * 0.16) + Vec3.Up * (h * 0.46);
-            var p2 = radial * (reach * 0.74) + tangent * bow + Vec3.Up * (h * 0.92);
-            var p3 = radial * reach + tangent * (bow * 1.4) + Vec3.Up * (h * 0.80);
+            var p1 = stoolSpot + radial * (reach * (role == 2 ? 0.36 : 0.20)) + tangent * bow1 + Vec3.Up * (h * (role == 2 ? 0.42 : 0.36));
+            var p2 = stoolSpot + radial * (reach * 0.72) + tangent * bow2 + Vec3.Up * (h * 0.88);
+            var p3 = radial * reach + tangent * (bow1 * 0.5) + Vec3.Up * h;
 
             int stations = NewShrubsStations(part, 8);
             var wandPath = SampleBezier(p0, p1, p2, p3, stations);
-            var radii = new double[stations];
-            double baseWandR = MathD.Lerp(0.022, 0.034, (hMult - 0.55) / 0.60);
-            double tipWandR = MathD.Lerp(0.005, 0.0075, (hMult - 0.55) / 0.60);
-            for (int i = 0; i < stations; i++)
-            {
-                double t = i / (double)(stations - 1);
-                radii[i] = MathD.Lerp(baseWandR, tipWandR, t);
-            }
-            WoodTube(part, wandPath, radii, NewShrubsSides(part, 6), barkCol);
+            double baseWandR = (role == 0 ? 0.026 : role == 1 ? 0.020 : 0.015) * heightScale;
+            double tipWandR = baseWandR * 0.24;
+            BuildTaperedWood(part, wandPath, baseWandR, tipWandR, NewShrubsSides(part, 6), barkCol);
             var wandTip = wandPath[^1];
             boughTips.Add(wandTip);
 
-            // Spreading lateral boughs forming layered canopy tiers on upper 60% of wands
+            // True Y-forking & wide horizontal canopy shelves on upper three-quarters of each pole
             int boughs = (role == 2) ? (juvenile ? 2 : 3) : (juvenile ? 2 : 4 + rng.NextInt(2));
             for (int b = 0; b < boughs; b++)
             {
-                double tBough = 0.34 + 0.58 * ((b + 0.5) / boughs) + rng.Range(-0.065, 0.065) + (role - 1) * 0.025;
+                double tBough = 0.24 + 0.68 * ((b + 0.5) / boughs) + rng.Range(-0.04, 0.04);
                 var boughBase = NewShrubsAlong(wandPath, Math.Clamp(tBough, 0.0, 1.0));
                 var wandTangent = PathTangent(wandPath, tBough);
 
-                double bAz = az + (b % 2 == 0 ? 0.72 : -0.72) + rng.Range(-0.18, 0.18);
-                var bDir = new Vec3(Math.Cos(bAz), rng.Range(-0.10, 0.40), Math.Sin(bAz)).Normalized();
-                double bLen = radius * rng.Range(0.24, 0.46) * heightScale;
+                double sideSign = (b % 2 == 0) ? 1.0 : -1.0;
+                double bAz = az + sideSign * rng.Range(0.65, 1.05) + rng.Range(-0.18, 0.18);
+                var bDir = new Vec3(Math.Cos(bAz), rng.Range(-0.06, 0.24), Math.Sin(bAz)).Normalized();
+                double bLen = radius * rng.Range(0.38, 0.62) * heightScale * (role == 0 ? 1.05 : 0.85);
 
-                // Organic flared branch collar at junction
-                BranchCollar(part, boughBase, 0.013, twigCol);
                 nutForks.Add((boughBase, bDir));
+                var bp0 = boughBase - wandTangent * 0.006;
+                var bp1 = boughBase + (wandTangent * 0.38 + bDir * 0.62).Normalized() * (bLen * 0.34);
+                var bp2 = boughBase + bDir * (bLen * 0.74) + Vec3.Up * (bLen * 0.04);
+                var bp3 = boughBase + bDir * bLen - Vec3.Up * (bLen * 0.04);
+                var bPath = SampleBezier(bp0, bp1, bp2, bp3, NewShrubsStations(part, 6));
+                double bR0 = MathD.Lerp(baseWandR, tipWandR, tBough) * 0.68;
+                BuildTaperedWood(part, bPath, bR0, 0.0020, NewShrubsSides(part, 5), twigCol);
+                boughTips.Add(bPath[^1]);
 
-                // Smooth cubic Bezier path for lateral bough
-                var bp0 = boughBase;
-                var bp1 = boughBase + (wandTangent * 0.45 + bDir * 0.55).Normalized() * (bLen * 0.32);
-                var bp2 = boughBase + bDir * (bLen * 0.72) + Vec3.Up * (bLen * 0.06);
-                var bp3 = boughBase + bDir * bLen + Vec3.Up * (bLen * 0.10);
-                var bPath = SampleBezier(bp0, bp1, bp2, bp3, 6);
-                var bRadii = new[] { 0.012, 0.0088, 0.0064, 0.0046, 0.0032, 0.0022 };
-
-                WoodTube(part, bPath, bRadii, NewShrubsSides(part, 5), twigCol);
-                var bTip = bPath[^1];
-                boughTips.Add(bTip);
-
-                // Short horizontal twiglets off boughs creating multi-leaf canopy fans
-                int twiglets = cull ? 1 : 2;
+                // Forked horizontal sub-twigs fanning out on either side of the shelf bough
+                int twiglets = cull ? 2 : 3;
                 for (int tw = 0; tw < twiglets; tw++)
                 {
-                    double twT = 0.45 + 0.38 * tw;
+                    double twT = 0.34 + 0.54 * (tw / (double)Math.Max(1, twiglets - 1));
                     var twBase = NewShrubsAlong(bPath, twT);
-                    var bTangent = PathTangent(bPath, twT);
                     double twSign = (tw % 2 == 0) ? 1.0 : -1.0;
-                    double twAz = bAz + twSign * 0.85 + rng.Range(-0.15, 0.15);
-                    var twDir = new Vec3(Math.Cos(twAz), 0.12, Math.Sin(twAz)).Normalized();
-                    double twLen = bLen * 0.45;
+                    double twAz = bAz + twSign * rng.Range(0.68, 0.95) + rng.Range(-0.14, 0.14);
+                    var twDir = new Vec3(Math.Cos(twAz), rng.Range(-0.04, 0.16), Math.Sin(twAz)).Normalized();
+                    double twLen = bLen * rng.Range(0.38, 0.52);
 
-                    BranchCollar(part, twBase, 0.006, twigCol);
-                    var twEnd = twBase + twDir * twLen;
-                    WoodTube(part, new[] { twBase, twEnd }, new[] { 0.0042, 0.0018 }, NewShrubsSides(part, 4), twigCol);
-                    boughTips.Add(twEnd);
+                    var twPath = SampleBezier(twBase, twBase + twDir * (twLen * 0.45),
+                        twBase + twDir * (twLen * 0.82) + Vec3.Up * (twLen * 0.04), twBase + twDir * twLen, 4);
+                    BuildTaperedWood(part, twPath, 0.0046, 0.0016, NewShrubsSides(part, 4), twigCol);
+                    boughTips.Add(twPath[^1]);
 
-                    // Leaves on twiglet forming layered horizontal fan
-                    int twLeaves = juvenile ? 3 : 5;
+                    int twLeaves = juvenile ? 3 : (cull ? 3 : 5);
                     for (int lj = 0; lj < twLeaves; lj++)
                     {
-                        double lt = (lj + 0.5) / twLeaves;
-                        var lat = Vec3.Lerp(twBase, twEnd, lt);
+                        double lt = (lj + 0.4) / twLeaves;
+                        var lat = NewShrubsAlong(twPath, Math.Clamp(lt, 0.0, 1.0));
                         double lSign = (lj % 2 == 0) ? 1.0 : -1.0;
-                        double lAz = twAz + lSign * 0.68 + rng.Range(-0.12, 0.12);
-                        var lDir = new Vec3(Math.Cos(lAz) * 0.88, rng.Range(-0.30, 0.52), Math.Sin(lAz) * 0.88).Normalized();
-                        double len = rng.Range(0.095, 0.14) * heightScale;
-                        var tip = lat + lDir * len + Vec3.Up * (len * rng.Range(-0.10, 0.12));
-                        var sideHint = Vec3.Up.Cross(lDir);
-                        LeafUpward(part, lat, tip, sideHint, len * 0.45, leafC1, leafC2,
+                        double lAz = twAz + lSign * 0.72 + rng.Range(-0.14, 0.14);
+                        var lDir = new Vec3(Math.Cos(lAz) * 0.92, rng.Range(-0.18, 0.36), Math.Sin(lAz) * 0.92).Normalized();
+                        double len = rng.Range(0.095, 0.140) * heightScale;
+                        var tip = lat + lDir * len + Vec3.Up * (len * rng.Range(-0.06, 0.10));
+                        LeafUpward(part, lat, tip, Vec3.Up.Cross(lDir), len * 0.46, leafC1, leafC2,
                             camber: len * 0.15, longitudinal: 4, asymmetry: rng.Range(-0.10, 0.10));
                     }
                 }
 
-                // Broad cordate/ovate leaves along the lateral bough forming soft layered canopies
-                int leavesOnBough = juvenile ? 5 : 9;
+                // Broad distichous leaves along the arched bough
+                int leavesOnBough = juvenile ? 5 : (cull ? 5 : 8);
                 for (int j = 0; j < leavesOnBough; j++)
                 {
-                    double t = 0.22 + 0.74 * ((j + 0.5) / leavesOnBough) + rng.Range(-0.02, 0.02);
+                    double t = 0.20 + 0.78 * ((j + 0.5) / leavesOnBough);
                     var at = NewShrubsAlong(bPath, Math.Clamp(t, 0.0, 1.0));
-                    double sideSign = (j % 2 == 0) ? 1.0 : -1.0;
-                    double leafAz = bAz + sideSign * 0.70 + rng.Range(-0.16, 0.16);
-                    var dir = new Vec3(Math.Cos(leafAz) * 0.86, rng.Range(-0.32, 0.52), Math.Sin(leafAz) * 0.86).Normalized();
-
-                    double len = rng.Range(0.10, 0.145) * heightScale;
-                    var tip = at + dir * len + Vec3.Up * rng.Range(-len * 0.08, len * 0.14);
-                    var sideHint = Vec3.Up.Cross(dir);
-
-                    LeafUpward(part, at, tip, sideHint, len * 0.46, leafC1, leafC2,
-                        camber: len * 0.15, longitudinal: 4, asymmetry: rng.Range(-0.11, 0.11));
+                    double side = (j % 2 == 0) ? 1.0 : -1.0;
+                    double leafAz = bAz + side * 0.76 + rng.Range(-0.16, 0.16);
+                    var dir = new Vec3(Math.Cos(leafAz) * 0.90, rng.Range(-0.20, 0.42), Math.Sin(leafAz) * 0.90).Normalized();
+                    double len = rng.Range(0.105, 0.148) * heightScale;
+                    LeafUpward(part, at, at + dir * len + Vec3.Up * (len * 0.08), Vec3.Up.Cross(dir),
+                        len * 0.46, leafC1, leafC2, camber: len * 0.15, longitudinal: 4, asymmetry: rng.Range(-0.11, 0.11));
                 }
             }
 
-            // Broad leaves along distal section of wands
-            int wandLeaves = juvenile ? 4 : 8;
+            // Crown terminal forked sprays at tip of main pole
+            int wandLeaves = juvenile ? 4 : 6;
             for (int j = 0; j < wandLeaves; j++)
             {
-                double t = 0.65 + 0.32 * ((j + 0.5) / wandLeaves) + rng.Range(-0.02, 0.02);
+                double t = 0.72 + 0.27 * ((j + 0.5) / wandLeaves);
                 var at = NewShrubsAlong(wandPath, Math.Clamp(t, 0.0, 1.0));
-                double leafAz = az + ((j % 2 == 0) ? 0.68 : -0.68) + rng.Range(-0.15, 0.15);
-                var dir = new Vec3(Math.Cos(leafAz) * 0.85, rng.Range(-0.32, 0.52), Math.Sin(leafAz) * 0.85).Normalized();
+                double leafAz = az + ((j % 2 == 0) ? 0.70 : -0.70) + rng.Range(-0.15, 0.15);
+                var dir = new Vec3(Math.Cos(leafAz) * 0.88, rng.Range(-0.20, 0.42), Math.Sin(leafAz) * 0.88).Normalized();
                 double len = rng.Range(0.105, 0.15) * heightScale;
-                var tip = at + dir * len + Vec3.Up * rng.Range(-len * 0.08, len * 0.14);
-                var sideHint = Vec3.Up.Cross(dir);
-                LeafUpward(part, at, tip, sideHint, len * 0.46, leafC1, leafC2,
-                    camber: len * 0.15, longitudinal: 4, asymmetry: rng.Range(-0.10, 0.10));
+                LeafUpward(part, at, at + dir * len + Vec3.Up * (len * 0.08), Vec3.Up.Cross(dir),
+                    len * 0.46, leafC1, leafC2, camber: len * 0.15, longitudinal: 4, asymmetry: rng.Range(-0.10, 0.10));
             }
         }
 
@@ -836,17 +821,17 @@ public static partial class OrganismMeshes
             var tDir = (spurDir * 0.6 + Vec3.Up * 0.4 + new Vec3(rng.Range(-0.2, 0.2), 0, rng.Range(-0.2, 0.2))).Normalized();
             ThornmantleThorn(spurEnd, tDir, rng.Range(0.026, 0.036) * heightScale);
 
-            // Rosette spray of 4-5 lobed hawthorn leaves with guaranteed upward normals
-            int leafCount = juvenile ? 4 : 5;
+            // Rosette spray of 5-6 lobed hawthorn leaves with guaranteed upward normals
+            int leafCount = juvenile ? 4 : 6;
             for (int j = 0; j < leafCount; j++)
             {
                 double leafAz = clusterIdx * 2.399963 + j * (Math.PI * 2.0 / leafCount) + rng.Range(-0.20, 0.20);
                 var dir = new Vec3(Math.Cos(leafAz), rng.Range(0.25, 0.48), Math.Sin(leafAz)).Normalized();
-                double len = rng.Range(0.068, 0.102) * heightScale;
+                double len = rng.Range(0.082, 0.122) * heightScale;
                 var tip = spurEnd + dir * len + Vec3.Up * (len * 0.10);
                 var sideHint = Vec3.Up.Cross(dir);
                 LeafUpward(part, spurEnd, tip, sideHint, len * 0.34, leafBase, leafTip,
-                    camber: len * 0.08, longitudinal: 4, asymmetry: rng.Range(-0.05, 0.05));
+                    camber: len * 0.08, longitudinal: 3, asymmetry: rng.Range(-0.05, 0.05));
             }
         }
 
@@ -892,143 +877,111 @@ public static partial class OrganismMeshes
             MarkOrgan(part, v0, part.VertexCount - v0, 1.22f, 0.85f);
         }
 
-        // Gnarled multi-lobed root boss with mossy crevices
-        WoodEllipsoid(part, new Vec3(0, height * 0.028, 0),
-            new Vec3(radius * 0.22, height * 0.038, radius * 0.22), 3, 8, barkCol);
-        for (int rb = 0; rb < 4; rb++)
-        {
-            double rbAz = rb * (Math.PI * 0.5) + 0.4;
-            var rbPos = new Vec3(Math.Cos(rbAz), 0, Math.Sin(rbAz)) * (radius * 0.14) + Vec3.Up * (height * 0.014);
-            WoodEllipsoid(part, rbPos, new Vec3(radius * 0.08, height * 0.022, radius * 0.08), 2, 6, barkCol);
-        }
+        // Gnarled asymmetric root crown
+        WoodEllipsoid(part, new Vec3(0, height * 0.020, 0),
+            new Vec3(radius * 0.16, height * 0.028, radius * 0.16), 2, 7, barkCol);
 
-        // 7-8 gnarled, twisting, interwoven trunks (fairytale thicket)
-        int trunks = juvenile ? 4 : 7 + rng.NextInt(2);
+        // 3 (adult) or 2 (juvenile) chunky crooked primary trunks leaning asymmetrically before dividing wide
+        int trunks = juvenile ? 2 : 3;
+        double startAz = rng.Range(0, Math.PI * 2.0);
+        var branchTipHazards = new List<(Vec3 Pos, Vec3 Dir)>();
+
         for (int s = 0; s < trunks; s++)
         {
-            double az = s * (Math.PI * 2.0 / trunks) + rng.Range(-0.30, 0.30);
+            double az = startAz + s * (Math.PI * 2.0 / trunks) + rng.Range(-0.42, 0.42);
             var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
             var tangent = new Vec3(-Math.Sin(az), 0, Math.Cos(az));
-            double reach = radius * rng.Range(0.62, 0.85) * heightScale;
-            double h = height * rng.Range(0.65, 0.85) * heightScale;
+            var rootPos = radial * (radius * rng.Range(0.06, 0.14) * heightScale);
+            double hand = (s % 2 == 0) ? 1.0 : -1.0;
 
-            // Flanged root base
-            var rootPos = radial * (radius * 0.08);
-            BranchCollar(part, rootPos, 0.036, barkCol);
+            double trunkLen = height * rng.Range(0.50, 0.66) * heightScale;
+            var initDir = (radial * rng.Range(0.45, 0.72) + tangent * (hand * 0.22) + Vec3.Up * rng.Range(0.75, 0.95)).Normalized();
+            var (_, trunkNodes, trunkOuts) = BuildZigzagWood(
+                part, rootPos, initDir, trunkLen, juvenile ? 3 : 4,
+                0.036 * heightScale, 0.015 * heightScale,
+                yawKinkRad: 0.56, pitchSpread: 0.14, archBow: 0.10,
+                sides: NewShrubsSides(part, 6), barkCol: barkCol, rng: rng, handSign: hand);
 
-            // Gnarled twisting cubic Bezier curve for main trunk with serpentine excursions
-            var p0 = rootPos;
-            var p1 = rootPos + radial * (reach * 0.24) + tangent * (0.12 * Math.Sin(s * 1.7) * radius) + Vec3.Up * (h * 0.32);
-            var p2 = radial * (reach * 0.70) - tangent * (0.10 * Math.Cos(s * 1.5) * radius) + Vec3.Up * (h * 0.74);
-            var p3 = radial * reach + tangent * (0.06 * Math.Sin(s * 2.3) * radius) + Vec3.Up * h;
-
-            int stations = NewShrubsStations(part, 8);
-            var trunkPath = SampleBezier(p0, p1, p2, p3, stations);
-            var radii = new double[stations];
-            for (int i = 0; i < stations; i++)
+            // Divaricate, crisscrossing secondary zigzag boughs branching at wide angles from each trunk bend
+            for (int n = 0; n < trunkNodes.Length; n++)
             {
-                double t = i / (double)(stations - 1);
-                radii[i] = MathD.Lerp(0.034, 0.009, t);
-                if (!juvenile)
-                    radii[i] *= 1 - 0.52 * MathD.SmoothStep(0.72, 1.0, t);
-            }
-            WoodTube(part, trunkPath, radii, NewShrubsSides(part, 6), barkCol);
+                var nodePos = trunkNodes[n];
+                double nodeFrac = (n + 1.0) / trunkNodes.Length;
+                int boughCount = (!juvenile && n >= 1) ? 2 : 1;
 
-            // Arm just a few upper leader axils; these hash-derived placements do
-            // not shift the existing RNG-driven twig, blossom, or haw arrangement.
-            if (!juvenile && !cull && (s % 3 == 1 || Rng.HashUnit(seed, 0x54484158, (ulong)s) < 0.12))
-            {
-                ulong leaderIndex = (ulong)s;
-                double axilT = 0.76 + 0.08 * Rng.HashUnit(seed, 0x54484159, leaderIndex);
-                var axil = NewShrubsAlong(trunkPath, axilT);
-                double hand = Rng.HashUnit(seed, 0x5448415A, leaderIndex) < 0.5 ? -1.0 : 1.0;
-                var thornDir = (radial * 0.46 + tangent * hand * 0.20 + Vec3.Up * 0.66).Normalized();
-                BranchCollar(part, axil, 0.0085, barkCol);
-                ThornmantleBranchingThorn(axil, thornDir, radius * 0.105, hand);
-            }
+                // Crisp mahogany-ivory spine arming outer knee bend of trunk
+                ThornmantleThorn(nodePos, (trunkOuts[n] + Vec3.Up * 0.28).Normalized(), rng.Range(0.036, 0.050) * heightScale);
 
-            // Short lower cross-shoots weave between leaders without thickening the upper crown.
-            int basalCrossShoots = juvenile ? 1 : 2;
-            for (int bs = 0; bs < basalCrossShoots; bs++)
-            {
-                double attachT = 0.14 + bs * 0.12 + rng.Range(-0.025, 0.025);
-                var attach = NewShrubsAlong(trunkPath, attachT);
-                var parentTan = PathTangent(trunkPath, attachT);
-                double crossSign = bs % 2 == 0 ? 1.0 : -1.0;
-                var crossDir = (tangent * crossSign * 0.70 + radial * 0.35 + Vec3.Up * 0.06).Normalized();
-                double crossLen = radius * rng.Range(0.16, 0.24) * heightScale;
-                var q0 = attach;
-                var q1 = attach + (parentTan * 0.40 + crossDir * 0.60).Normalized() * (crossLen * 0.38);
-                var q2 = attach + crossDir * (crossLen * 0.72) - Vec3.Up * (crossLen * 0.06);
-                var q3 = attach + crossDir * crossLen + Vec3.Up * (crossLen * 0.04);
-                var crossPath = SampleBezier(q0, q1, q2, q3, 4);
-                WoodTube(part, crossPath, new[] { 0.0080, 0.0058, 0.0038, 0.0018 }, NewShrubsSides(part, 5), barkCol);
-                ThornmantleThorn(NewShrubsAlong(crossPath, 0.42), crossDir + Vec3.Up * 0.45, 0.026 * heightScale);
-                ThornmantleThorn(NewShrubsAlong(crossPath, 0.82), -crossDir * 0.25 + Vec3.Up * 0.75, 0.022 * heightScale);
-            }
-
-            // Gnarled branching boughs
-            int twigs = juvenile ? 3 : 4;
-            for (int tw = 0; tw < twigs; tw++)
-            {
-                double tTw = 0.22 + 0.60 * ((tw + 0.5) / twigs) + rng.Range(-0.05, 0.05);
-                var twigBase = NewShrubsAlong(trunkPath, Math.Clamp(tTw, 0.0, 1.0));
-                var trunkTangent = PathTangent(trunkPath, tTw);
-
-                double twAz = az + (tw % 2 == 0 ? 0.75 : -0.75) + rng.Range(-0.18, 0.18);
-                var twDir = new Vec3(Math.Cos(twAz), 0.28, Math.Sin(twAz)).Normalized();
-                double twLen = radius * rng.Range(0.28, 0.42) * heightScale;
-
-                // Branch collar at fork
-                BranchCollar(part, twigBase, 0.014, barkCol);
-
-                // Smooth cubic Bezier path for tortuous gnarled bough
-                var tp0 = twigBase;
-                var tp1 = twigBase + (trunkTangent * 0.45 + twDir * 0.55).Normalized() * (twLen * 0.32);
-                var tp2 = twigBase + twDir * (twLen * 0.72) + Vec3.Up * (twLen * 0.10);
-                var tp3 = twigBase + twDir * twLen + Vec3.Up * (twLen * 0.14);
-                var twigPath = SampleBezier(tp0, tp1, tp2, tp3, 6);
-                var twigRadii = new[] { 0.012, 0.0085, 0.0060, 0.0042, 0.0030, 0.0022 };
-
-                WoodTube(part, twigPath, twigRadii, NewShrubsSides(part, 5), barkCol);
-
-                // Thorns at knot stations
-                ThornmantleThorn(NewShrubsAlong(twigPath, 0.35), twDir + Vec3.Up * 0.5, 0.030 * heightScale);
-                ThornmantleThorn(NewShrubsAlong(twigPath, 0.70), -twDir * 0.3 + Vec3.Up * 0.7, 0.028 * heightScale);
-
-                // Spur rosettes distributed naturally along the bough
-                int spurs = juvenile ? 3 : 6;
-                for (int qi = 0; qi < spurs; qi++)
+                if (!juvenile && !cull && n == trunkNodes.Length - 2)
                 {
-                    double qt = 0.20 + 0.75 * qi / Math.Max(1, spurs - 1);
-                    var qb = NewShrubsAlong(twigPath, qt);
-                    double spPitch = (qi % 2 == 0) ? 0.45 : 0.20;
-                    double spAz = twAz + ((qi % 2 == 0) ? 0.60 : -0.60);
-                    var sDir = new Vec3(Math.Cos(spAz), spPitch, Math.Sin(spAz)).Normalized();
-                    ThornmantleSpur(qb, sDir, s * 100 + tw * 10 + qi);
+                    ThornmantleBranchingThorn(nodePos, (trunkOuts[n] * 0.7 + Vec3.Up * 0.6).Normalized(),
+                        radius * 0.125, hand);
                 }
-            }
 
-            // Spurs directly along main trunk
-            for (int sq = 0; sq < (juvenile ? 2 : 3); sq++)
-            {
-                bool terminal = !juvenile && sq == 2;
-                double st = terminal ? 1.0 : 0.42 + 0.48 * sq / 2.0;
-                var sb = NewShrubsAlong(trunkPath, st);
-                var sDir = (radial + Vec3.Up * (terminal ? 0.55 : 0.30)).Normalized();
-                if (terminal) terminalSpurs.Add(spurNodes.Count);
-                ThornmantleSpur(sb, sDir, s * 50 + sq);
+                for (int b = 0; b < boughCount; b++)
+                {
+                    double sideSign = (b == 0 ? 1.0 : -1.0) * hand;
+                    // Divaricate horizontal/interlocking azimuth: swings tangentially across adjacent trunk zones!
+                    double bAz = az + sideSign * rng.Range(0.82, 1.52) + (n == trunkNodes.Length - 1 ? 0.35 * -hand : 0.0);
+                    var bHoriz = new Vec3(Math.Cos(bAz), 0, Math.Sin(bAz));
+                    double pitch = rng.Range(0.02, 0.38) + (n == trunkNodes.Length - 1 ? 0.22 : -0.06);
+                    var bDir = (bHoriz + Vec3.Up * pitch).Normalized();
+
+                    double bLen = radius * rng.Range(0.46, 0.76) * heightScale * (1.0 - 0.18 * nodeFrac);
+                    double bR0 = MathD.Lerp(0.022, 0.011, nodeFrac) * heightScale;
+                    int bSegs = cull ? 2 : (juvenile ? 2 : 3);
+
+                    var (_, bNodes, bOuts) = BuildZigzagWood(
+                        part, nodePos, bDir, bLen, bSegs,
+                        bR0, 0.0042 * heightScale,
+                        yawKinkRad: 0.72, pitchSpread: 0.18, archBow: 0.12,
+                        sides: NewShrubsSides(part, 5), barkCol: barkCol, rng: rng, handSign: sideSign);
+
+                    // Tertiary cross-twigs & jagged thorny spur shoots at each bough bend
+                    for (int bn = 0; bn < bNodes.Length; bn++)
+                    {
+                        var bJoint = bNodes[bn];
+                        bool isEnd = bn == bNodes.Length - 1;
+                        ThornmantleThorn(bJoint, (bOuts[bn] + Vec3.Up * 0.32).Normalized(), rng.Range(0.030, 0.044) * heightScale);
+
+                        // Short jagged cross-twig shooting sideways from bend
+                        if (!cull && bn < bNodes.Length - 1)
+                        {
+                            double tAz = bAz + (bn % 2 == 0 ? -1.05 : 1.08) + rng.Range(-0.22, 0.22);
+                            var tDir = new Vec3(Math.Cos(tAz), rng.Range(-0.08, 0.36), Math.Sin(tAz)).Normalized();
+                            double tLen = radius * rng.Range(0.24, 0.40) * heightScale;
+                            var (_, tNodes, tOuts) = BuildZigzagWood(
+                                part, bJoint, tDir, tLen, 2,
+                                0.0068 * heightScale, 0.0022 * heightScale,
+                                yawKinkRad: 0.65, pitchSpread: 0.15, archBow: 0.08,
+                                sides: NewShrubsSides(part, 4), barkCol: barkCol, rng: rng, handSign: -sideSign);
+
+                            for (int tn = 0; tn < tNodes.Length; tn++)
+                            {
+                                var spDir = (tOuts[tn] * 0.6 + Vec3.Up * 0.5).Normalized();
+                                if (tn == tNodes.Length - 1) terminalSpurs.Add(spurNodes.Count);
+                                ThornmantleSpur(tNodes[tn], spDir, s * 100 + n * 20 + bn * 7 + tn);
+                                branchTipHazards.Add((tNodes[tn], spDir));
+                            }
+                        }
+
+                        var spurDir = (bOuts[bn] * 0.55 + Vec3.Up * (isEnd ? 0.55 : 0.35)).Normalized();
+                        if (isEnd) terminalSpurs.Add(spurNodes.Count);
+                        ThornmantleSpur(bJoint, spurDir, s * 200 + n * 31 + b * 11 + bn);
+                        branchTipHazards.Add((bJoint, spurDir));
+                    }
+                }
             }
         }
 
-        // Each adult leader finishes in a flowering spur. Spread the remaining blossoms across the thicket.
-        int blossomCount = juvenile ? 6 : 32 + rng.NextInt(8);
+        // Each upper/terminal spur finishes in a blossom tuft; spread remaining May-blossoms across thorny boughs
+        int blossomCount = juvenile ? 6 : 28 + rng.NextInt(8);
         var lateralSpurs = new List<Vec3>();
         int blossomsPlaced = 0;
         for (int i = 0; i < spurNodes.Count; i++)
         {
             var (at, _) = spurNodes[i];
-            if (terminalSpurs.Contains(i)) AddSpurBlossom(at);
+            if (terminalSpurs.Contains(i) && blossomsPlaced < blossomCount) AddSpurBlossom(at);
             else lateralSpurs.Add(at);
         }
         int lateralBlooms = Math.Min(blossomCount - blossomsPlaced, lateralSpurs.Count);
@@ -1044,11 +997,11 @@ public static partial class OrganismMeshes
             blossomsPlaced++;
         }
 
-        // Hanging ruby-garnet haws interspersed across canopy spurs
-        int hawClusters = juvenile ? 4 : 14 + rng.NextInt(4);
+        // Ruby-garnet haws hanging below thorny bough knots
+        int hawClusters = juvenile ? 4 : 15 + rng.NextInt(4);
         for (int hi = 0; hi < hawClusters && spurNodes.Count > 0; hi++)
         {
-            var (anchor, _) = spurNodes[(hi * 4 + 2) % spurNodes.Count];
+            var (anchor, _) = spurNodes[(hi * 3 + 1) % spurNodes.Count];
             ThornmantleHawCluster(anchor);
         }
 
@@ -1075,45 +1028,20 @@ public static partial class OrganismMeshes
 
         // Directional wind sculpting (alpine krummholz habit)
         double windAz = Rng.HashUnit(seed, 0x57, 1) * Math.PI * 2.0;
+        var windHoriz = new Vec3(Math.Cos(windAz), 0, Math.Sin(windAz));
+        var windCross = new Vec3(-windHoriz.Z, 0, windHoriz.X);
 
-        // Fluted basal trunk with weathered shari ridges
-        double trunkH = height * rng.Range(0.12, 0.16) * heightScale;
-        double baseR = radius * rng.Range(0.14, 0.18) * heightScale;
-        double topR = baseR * 0.65;
-        int trunkStations = NewShrubsStations(part, 5);
-        int trunkSides = NewShrubsSides(part, 10);
-        {
-            int start = part.VertexCount;
-            for (int i = 0; i < trunkStations; i++)
-            {
-                double t = i / (double)(trunkStations - 1);
-                double flare = 1.0 + 0.55 * Math.Exp(-t * 8.0);
-                double rr = MathD.Lerp(baseR, topR, t) * flare;
-                var centre = new Vec3(0, trunkH * t, 0);
-                for (int sgi = 0; sgi <= trunkSides; sgi++)
-                {
-                    double th = 2.0 * Math.PI * sgi / trunkSides;
-                    double flute = 1.0 + 0.25 * Math.Cos(th * 6.0) * (1.0 - 0.40 * t);
-                    var radial = new Vec3(Math.Cos(th), 0, Math.Sin(th));
-                    part.AddVertex(centre + radial * (rr * flute), radial.Normalized(), barkCol, 1.0,
-                        t * trunkH, (double)sgi / trunkSides, 2.0, 0.0);
-                }
-            }
-            for (int i = 0; i < trunkStations - 1; i++)
-                for (int sgi = 0; sgi < trunkSides; sgi++)
-                {
-                    int a = start + i * (trunkSides + 1) + sgi;
-                    int b = a + trunkSides + 1;
-                    part.AddTriangle(a, a + 1, b);
-                    part.AddTriangle(a + 1, b + 1, b);
-                }
-            part.Structural.Add((start, part.VertexCount - start, trunkSides, baseR));
-        }
-        var crownBase = new Vec3(0, trunkH * 0.92, 0);
+        // Exposed gnarled procumbent krummholz trunk rising crookedly leeward along wind vector
+        var rootAnchor = -windHoriz * (radius * 0.16 * heightScale);
+        var trunkMid = rootAnchor * 0.25 + windHoriz * (radius * 0.08 * heightScale) + Vec3.Up * (height * 0.16 * heightScale);
+        var crownBase = windHoriz * (radius * 0.20 * heightScale) + windCross * rng.Range(-0.06, 0.06) * radius + Vec3.Up * (height * 0.30 * heightScale);
+        var trunkPath = SampleBezier(rootAnchor, rootAnchor + Vec3.Up * (height * 0.10), trunkMid, crownBase, NewShrubsStations(part, 7));
+        BuildTaperedWood(part, trunkPath, radius * 0.12 * heightScale, radius * 0.056 * heightScale,
+            NewShrubsSides(part, 7), barkCol, collarAtStart: false);
 
-        // Volumetric tiered cloud-pad builder (3D branched armature + multi-layered overlapping scale sprays)
+        // Volumetric tiered cloud-pad builder (dense wind-planed bonsai dome cushions on crooked twigs)
         var cloudBerrySpots = new List<Vec3>();
-        void VolumetricCloudPad(Vec3 start, Vec3 end, Vec3 boughTangent, bool terminal = false)
+        void VolumetricCloudPad(Vec3 start, Vec3 end, Vec3 boughTangent, double padScale = 1.0, bool terminal = false)
         {
             var axis = end - start;
             double len = axis.Length;
@@ -1123,73 +1051,56 @@ public static partial class OrganismMeshes
             if (side.LengthSq < 1e-6) side = new Vec3(1, 0, 0).Cross(fwd);
             side = side.Normalized();
 
-            // Main support twig of cloud pad
-            BranchCollar(part, start, 0.0075, barkCol);
             var cp0 = start;
-            var cp1 = start + (boughTangent * 0.40 + fwd * 0.60).Normalized() * (len * 0.35);
-            var cp2 = start + fwd * (len * 0.72) + Vec3.Up * (len * 0.04);
-            var cp3 = end;
+            var cp1 = start + (boughTangent * 0.42 + fwd * 0.58).Normalized() * (len * 0.35);
+            var cp2 = start + fwd * (len * 0.72) + Vec3.Up * (len * 0.10);
+            var cp3 = end + windHoriz * (len * 0.06);
             var mainPath = SampleBezier(cp0, cp1, cp2, cp3, 5);
-            WoodTube(part, mainPath, new[] { 0.0065, 0.0048, 0.0035, 0.0024, 0.0016 },
-                NewShrubsSides(part, 5), barkCol);
+            BuildTaperedWood(part, mainPath, 0.0072 * padScale, 0.0018, NewShrubsSides(part, 5), barkCol);
 
-            // Spreading lateral sub-twigs creating 3D cloud cushion
             int subTwigs = cull ? 3 : 5;
             for (int st = 0; st < subTwigs; st++)
             {
-                double q = 0.28 + 0.58 * ((st + 0.5) / subTwigs);
+                double q = 0.20 + 0.72 * ((st + 0.5) / subTwigs);
                 var subBase = NewShrubsAlong(mainPath, q);
                 double sign = (st % 2 == 0) ? 1.0 : -1.0;
-                double fanOut = 0.35 + 0.15 * (st / 2);
-                double upTilt = (st % 2 == 0) ? 0.18 : 0.06;
-                var subDir = (fwd * 0.70 + side * (sign * fanOut) + Vec3.Up * upTilt).Normalized();
-                double subLen = len * 0.42;
+                var subDir = (fwd * 0.42 + side * (sign * 0.74) + windHoriz * 0.22 + Vec3.Up * 0.14).Normalized();
+                double subLen = len * rng.Range(0.46, 0.64);
                 var subEnd = subBase + subDir * subLen;
 
-                WoodTube(part, new[] { subBase, subEnd }, new[] { 0.0030, 0.0014 }, NewShrubsSides(part, 4), barkCol);
+                WoodTube(part, new[] { subBase, subEnd }, new[] { 0.0034, 0.0014 }, NewShrubsSides(part, 4), barkCol);
                 cloudBerrySpots.Add(subEnd);
 
-                // Overlapping scale sprays on sub-twig at multiple 3D angles
                 int subScales = cull ? 3 : 5;
                 for (int sc = 0; sc < subScales; sc++)
                 {
-                    double sq = (sc + 0.5) / subScales;
+                    double sq = (sc + 0.35) / subScales;
                     var at = Vec3.Lerp(subBase, subEnd, sq);
-                    double size = rng.Range(0.065, 0.095) * heightScale;
-
-                    // Lateral fan scale
-                    double along = terminal ? 0.34 : 0.12;
-                    var lTip = at + side * (sign * size * 0.42) + fwd * (size * along) + Vec3.Up * (size * (terminal ? 0.30 : 0.38));
-                    LeafUpward(part, at, lTip, (side * sign + Vec3.Up * 0.45).Normalized(), size * 0.075, needleBase, needleTip,
-                        camber: 0.002, longitudinal: 3);
-
-                    // Dorsal arched scale
-                    var dTip = at + fwd * (size * (terminal ? 0.44 : 0.24)) - side * (sign * size * 0.28) + Vec3.Up * (size * 0.38);
-                    LeafUpward(part, at, dTip, (side * 0.15 + Vec3.Up).Normalized(), size * 0.072, needleBase, needleTip,
-                        camber: 0.002, longitudinal: 3);
+                    double size = rng.Range(0.078, 0.115) * heightScale * padScale;
+                    var lTip = at + side * (sign * size * 0.58) + fwd * (size * 0.24) + Vec3.Up * (size * 0.28);
+                    LeafUpward(part, at, lTip, Vec3.Up.Cross(lTip - at), size * 0.14, needleBase, needleTip,
+                        camber: 0.004, longitudinal: 3);
+                    var dTip = at + fwd * (size * (terminal ? 0.38 : 0.28)) + windHoriz * (size * 0.14) + Vec3.Up * (size * 0.38);
+                    LeafUpward(part, at, dTip, Vec3.Up.Cross(dTip - at), size * 0.13, needleBase, needleTip,
+                        camber: 0.004, longitudinal: 3);
                 }
             }
 
-            // Dense layered scales along main pad axis forming convex cushion
-            int stations = cull ? 7 : 11;
+            int stations = cull ? 5 : 8;
             for (int i = 0; i < stations; i++)
             {
                 double q = (i + 0.5) / stations;
                 var at = NewShrubsAlong(mainPath, q);
-                double size = rng.Range(0.075, 0.110) * heightScale;
-
-                // Bilateral flank scales with upward normals
+                double size = rng.Range(0.088, 0.125) * heightScale * padScale;
                 for (int sign = -1; sign <= 1; sign += 2)
                 {
-                    var tip = at + side * (sign * size * 0.42) + fwd * (size * 0.10) + Vec3.Up * (size * 0.38);
-                    LeafUpward(part, at, tip, (side * sign + Vec3.Up * 0.50).Normalized(), size * 0.072, needleBase, needleTip,
-                        camber: 0.002, longitudinal: 3);
+                    var tip = at + side * (sign * size * 0.62) + fwd * (size * 0.20) + Vec3.Up * (size * 0.28);
+                    LeafUpward(part, at, tip, Vec3.Up.Cross(tip - at), size * 0.14, needleBase, needleTip,
+                        camber: 0.004, longitudinal: 3);
                 }
-
-                // Dorsal scale
-                var dTip = at + fwd * (size * 0.22) + side * (rng.Range(-0.10, 0.10) * size) + Vec3.Up * (size * 0.42);
-                LeafUpward(part, at, dTip, (side * 0.15 + Vec3.Up).Normalized(), size * 0.072, needleBase, needleTip,
-                    camber: 0.002, longitudinal: 3);
+                var dTip = at + fwd * (size * 0.28) + windHoriz * (size * 0.14) + Vec3.Up * (size * 0.40);
+                LeafUpward(part, at, dTip, Vec3.Up.Cross(dTip - at), size * 0.13, needleBase, needleTip,
+                    camber: 0.004, longitudinal: 3);
             }
         }
 
@@ -1198,16 +1109,13 @@ public static partial class OrganismMeshes
         {
             int v0 = part.VertexCount;
             double r = rng.Range(0.0085, 0.0125) * heightScale;
-            // Sapphire berry body
             Primitives.Ellipsoid(part, at, new Vec3(r, r, r), 3, 6,
                 (u, v) => (berrySapphire, 1.0, u, v, 0.0, 0.0));
-            // Epicuticular frost bloom cap
             Primitives.Ellipsoid(part, at + Vec3.Up * (r * 0.85), new Vec3(r * 0.48, r * 0.25, r * 0.48), 2, 5,
                 (u, v) => (bloomIce, 1.0, u, v, 0.0, 0.0));
             MarkOrgan(part, v0, part.VertexCount - v0, 1.22f, 0.82f);
         }
 
-        // Golden-ochre pollen cones at tips
         void GreywatchPollenCone(Vec3 at, Vec3 fwd)
         {
             if (cull) return;
@@ -1217,97 +1125,76 @@ public static partial class OrganismMeshes
             MarkOrgan(part, v0, part.VertexCount - v0, 1.25f, 0.85f);
         }
 
-        // 6-7 sinewy krummholz limbs sweeping in wind-sculpted asymmetric S-curves
-        int limbs = juvenile ? 3 : 6 + rng.NextInt(2);
+        // Multi-tiered wind-sculpted krummholz boughs climbing from low windward skirt up to ~1.1 m crest pads
+        int limbs = juvenile ? 3 : 5;
         for (int l = 0; l < limbs; l++)
         {
-            // Windward vs Leeward asymmetry:
-            // Limbs on windward side stay low & hugging the terrain; limbs on leeward side sweep out & up
-            bool isWindward = l < 2;
-            double az = isWindward
-                ? windAz + Math.PI + rng.Range(-0.55, 0.55)
-                : windAz + ((l - 2) * (Math.PI * 1.5 / Math.Max(1, limbs - 2))) + rng.Range(-0.25, 0.25);
-
+            bool isWindward = l == 0;
+            bool isMid = l == 1 || l == 2;
+            bool isCrest = !isWindward && !isMid;
+            double relAz = isWindward
+                ? Math.PI + rng.Range(-0.45, 0.45)
+                : isMid
+                    ? (l == 1 ? -1.05 : 1.05) + rng.Range(-0.28, 0.28)
+                    : (l == 3 ? -0.32 : 0.42) + rng.Range(-0.20, 0.20);
+            double az = windAz + relAz;
             var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
-            var tangent = new Vec3(-Math.Sin(az), 0, Math.Cos(az));
 
             double outReach = isWindward
-                ? (radius * 0.75) * rng.Range(0.85, 1.10)
-                : (radius * 0.85) * rng.Range(0.95, 1.22);
-
+                ? radius * rng.Range(0.45, 0.62) * heightScale
+                : isMid
+                    ? radius * rng.Range(0.68, 0.94) * heightScale
+                    : radius * rng.Range(0.55, 0.82) * heightScale;
             double riseTop = isWindward
-                ? height * rng.Range(0.28, 0.42) * heightScale
-                : height * rng.Range(0.55, 0.78) * heightScale;
+                ? height * rng.Range(0.08, 0.16) * heightScale
+                : isMid
+                    ? height * rng.Range(0.30, 0.46) * heightScale
+                    : height * rng.Range(0.56, 0.78) * heightScale;
 
-            double sCurvature = isWindward ? rng.Range(-0.15, 0.15) : rng.Range(-0.25, 0.25);
+            var bStart = isWindward ? trunkMid : crownBase;
+            var initDir = (radial * (outReach * 0.65) + windHoriz * (isWindward ? 0.02 : radius * 0.34) + Vec3.Up * (riseTop * 0.85)).Normalized();
+            double bLen = Math.Sqrt(outReach * outReach + riseTop * riseTop);
+            var (limbPath, limbNodes, limbOuts) = BuildZigzagWood(
+                part, bStart, initDir, bLen, juvenile ? 2 : 3,
+                radius * (isCrest ? 0.050 : 0.040) * heightScale, 0.0085 * heightScale,
+                yawKinkRad: 0.46, pitchSpread: 0.14, archBow: isCrest ? 0.16 : 0.10,
+                sides: NewShrubsSides(part, 6), barkCol: barkCol, rng: rng, handSign: l % 2 == 0 ? 1.0 : -1.0);
 
-            // Flared branch crotch at trunk attachment
-            BranchCollar(part, crownBase, 0.032, barkCol);
-
-            // Smooth cubic Bezier path for windswept krummholz limb
-            var p0 = crownBase;
-            var p1 = crownBase + radial * (outReach * 0.28) + tangent * (sCurvature * radius) + Vec3.Up * (riseTop * 0.25);
-            var p2 = crownBase + radial * (outReach * 0.72) - tangent * (sCurvature * 0.6 * radius) + Vec3.Up * (riseTop * 0.72);
-            var p3 = crownBase + radial * outReach + tangent * (sCurvature * 0.4 * radius) + Vec3.Up * riseTop;
-
-            int stations = NewShrubsStations(part, 7);
-            var path = SampleBezier(p0, p1, p2, p3, stations);
-            var radii = new double[stations];
-            for (int i = 0; i < stations; i++)
+            // Stacked horizontal cloud-pads fanning cleanly out along crooked bonsai tiers
+            for (int n = 0; n < limbNodes.Length; n++)
             {
-                double t = i / (double)(stations - 1);
-                radii[i] = MathD.Lerp(0.032, 0.0075, t) * heightScale;
-            }
-            WoodTube(part, path, radii, NewShrubsSides(part, 6), barkCol);
-            var limbTip = path[^1];
-
-            // Small sprays along exposed upper limbs soften long bare spans before the terminal pad.
-            int smallSprays = cull ? 1 : 3;
-            for (int si = 0; si < smallSprays; si++)
-            {
-                double q = 0.34 + 0.17 * si + rng.Range(-0.035, 0.035);
-                var sprayAt = NewShrubsAlong(path, q);
-                var tangentDir = PathTangent(path, q);
-                for (int ni = 0; ni < 2; ni++)
+                var attach = limbNodes[n];
+                var boughTan = limbOuts[n];
+                int forkPads = (n == limbNodes.Length - 1) ? 2 : (isWindward ? 0 : 1);
+                for (int fp = 0; fp < forkPads; fp++)
                 {
-                    double sideSign = ni == 0 ? -1.0 : 1.0;
-                    var needleDir = (tangentDir * 0.58 + tangent * (sideSign * 0.48) + Vec3.Up * 0.18).Normalized();
-                    double needleLen = rng.Range(0.075, 0.105) * heightScale;
-                    var needlePos = sprayAt + needleDir * needleLen;
-                    LeafUpward(part, sprayAt, needlePos, tangent * sideSign + Vec3.Up * 0.20, needleLen * 0.055, needleBase, needleTip,
-                        camber: needleLen * 0.05, longitudinal: 3);
+                    double padAz = az + (fp == 0 ? 0.48 : -0.52) * (n % 2 == 0 ? 1.0 : -1.0) + rng.Range(-0.18, 0.18);
+                    var rawDir = (new Vec3(Math.Cos(padAz), rng.Range(0.06, 0.22), Math.Sin(padAz)) * 0.72 + windHoriz * 0.28).Normalized();
+                    double padLen = radius * rng.Range(0.28, 0.44) * heightScale;
+                    var padEnd = attach + rawDir * padLen;
+
+                    VolumetricCloudPad(attach, padEnd, boughTan, padScale: isWindward ? 0.90 : 1.15,
+                        terminal: n == limbNodes.Length - 1);
+                    cloudBerrySpots.Add(padEnd);
+                    GreywatchPollenCone(padEnd, rawDir);
+
+                    if (!cull && n == limbNodes.Length - 1)
+                    {
+                        var crestDir = (windHoriz * 0.64 + rawDir * 0.34 + Vec3.Up * 0.18).Normalized();
+                        var crestEnd = padEnd + crestDir * (radius * 0.22 * heightScale);
+                        VolumetricCloudPad(padEnd, crestEnd, rawDir, padScale: 0.96, terminal: true);
+                        cloudBerrySpots.Add(crestEnd);
+                    }
                 }
             }
-
-            // Tiered horizontal cloud-pads per bough
-            int pads = juvenile ? 2 : 4 + rng.NextInt(2);
-            for (int sp = 0; sp < pads; sp++)
-            {
-                double q = 0.28 + 0.66 * ((sp + 0.5) / pads) + rng.Range(-0.03, 0.03);
-                var attach = NewShrubsAlong(path, Math.Clamp(q, 0.0, 1.0));
-                var boughTangent = PathTangent(path, q);
-
-                double padAz = az + (sp % 2 == 0 ? 0.48 : -0.48) + rng.Range(-0.12, 0.12);
-                var padDir = (new Vec3(Math.Cos(padAz), 0.18, Math.Sin(padAz)) + tangent * (sp % 2 == 0 ? 0.15 : -0.15)).Normalized();
-                double padLen = rng.Range(0.16, 0.24) * heightScale;
-                var padEnd = attach + padDir * padLen;
-
-                VolumetricCloudPad(attach, padEnd, boughTangent);
-                cloudBerrySpots.Add(padEnd);
-                GreywatchPollenCone(padEnd, padDir);
-            }
-
-            var termEnd = limbTip + radial * 0.05 + Vec3.Up * 0.02;
-            VolumetricCloudPad(limbTip, termEnd, PathTangent(path, 1.0), terminal: true);
-            cloudBerrySpots.Add(termEnd);
         }
 
-        // Frosted sapphire berry-cones nestled in and around the volumetric cloud pads
-        int berryCount = juvenile ? 8 : 34 + rng.NextInt(8);
+        // Frosted sapphire berry-cones nestled inside sculpted bonsai cloud pads
+        int berryCount = juvenile ? 8 : 30 + rng.NextInt(8);
         for (int b = 0; b < berryCount && cloudBerrySpots.Count > 0; b++)
         {
             var spot = cloudBerrySpots[b % cloudBerrySpots.Count] +
-                new Vec3(rng.Range(-0.015, 0.015), rng.Range(-0.01, 0.015), rng.Range(-0.015, 0.015));
+                new Vec3(rng.Range(-0.015, 0.015), rng.Range(-0.008, 0.014), rng.Range(-0.015, 0.015));
             GreywatchBerry(spot);
         }
 
@@ -1367,145 +1254,100 @@ public static partial class OrganismMeshes
             MarkOrgan(part, v0, part.VertexCount - v0, 1.25f, 0.88f);
         }
 
-        // Central knobby rootstock
-        WoodEllipsoid(part, new Vec3(0, height * 0.024, 0),
-            new Vec3(radius * 0.20, height * 0.036, radius * 0.20), 3, 8, barkCol);
+        // Low central gnarled woody root-plate flush with ground
+        WoodEllipsoid(part, new Vec3(0, height * 0.014, 0),
+            new Vec3(radius * 0.15, height * 0.022, radius * 0.15), 2, 7, barkCol);
 
-        // Low spreading undulating cushion: 16-19 decumbent crooked stems crawling over ground
-        int stems = juvenile ? 7 : 16 + rng.NextInt(3);
+        // Asymmetric multi-hummock prostrate cushion mat:
+        // 5 gnarled ground-hugging creeping runners crawl unevenly across terrain, forking into overlapping silver pillow lobes
+        int runnerCount = juvenile ? 3 : 5;
+        double startAz = rng.Range(0, Math.PI * 2.0);
         var catkinNodes = new List<(Vec3 Pos, Vec3 Dir)>();
 
-        for (int s = 0; s < stems; s++)
+        void AddSilverPillowCluster(Vec3 basePt, Vec3 dirOut, double hFrac, int twigCount, double padScale)
         {
-            // Varied reach and height for natural undulating cushion:
-            // Interior stems fill center, outer stems sprawl across ground
-            int role = s % 3;
-            double rMult = role switch
+            double domeH = height * hFrac * heightScale;
+            for (int tw = 0; tw < twigCount; tw++)
             {
-                0 => rng.Range(0.50, 0.70),
-                1 => rng.Range(0.75, 0.95),
-                _ => rng.Range(0.95, 1.18)
-            };
-            double hMult = role switch
-            {
-                0 => rng.Range(0.48, 0.62),
-                1 => rng.Range(0.38, 0.52),
-                _ => rng.Range(0.28, 0.40)
-            };
+                double tAz = Math.Atan2(dirOut.Z, dirOut.X) + (tw - (twigCount - 1) * 0.5) * rng.Range(0.75, 1.05) + rng.Range(-0.22, 0.22);
+                var twH = new Vec3(Math.Cos(tAz), 0, Math.Sin(tAz));
+                double twOut = radius * rng.Range(0.16, 0.30) * padScale * heightScale;
+                double twRise = domeH * rng.Range(0.70, 1.00);
+                var p0 = basePt;
+                var p1 = basePt + twH * (twOut * 0.45) + Vec3.Up * (twRise * 0.32);
+                var p2 = basePt + twH * (twOut * 0.85) + Vec3.Up * (twRise * 0.86);
+                var p3 = basePt + twH * twOut + Vec3.Up * twRise;
+                var twPath = SampleBezier(p0, p1, p2, p3, 5);
+                BuildTaperedWood(part, twPath, 0.0082 * padScale, 0.0020, NewShrubsSides(part, 5), barkCol);
 
-            double az = s * (Math.PI * 2.0 / stems) + rng.Range(-0.25, 0.25);
-            var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
-            var tangent = new Vec3(-Math.Sin(az), 0, Math.Cos(az));
-            double reach = radius * rMult * heightScale;
-            double h = height * hMult * heightScale;
-            double undulate = rng.Range(-0.06, 0.06);
-
-            // Flared root collar at rootstock
-            var rootSpot = radial * (radius * 0.08);
-            BranchCollar(part, rootSpot, 0.022, barkCol);
-
-            // Decumbent crooked path: stays low to ground then curls gently up at tip
-            var p0 = rootSpot;
-            var p1 = rootSpot + radial * (reach * 0.32) + tangent * undulate + Vec3.Up * (h * 0.15);
-            var p2 = radial * (reach * 0.78) - tangent * (undulate * 0.6) + Vec3.Up * (h * 0.42);
-            var p3 = radial * reach + Vec3.Up * h;
-
-            int stations = NewShrubsStations(part, 7);
-            var path = SampleBezier(p0, p1, p2, p3, stations);
-            var radii = new double[stations];
-            for (int i = 0; i < stations; i++)
-            {
-                double t = i / (double)(stations - 1);
-                radii[i] = MathD.Lerp(0.022, 0.0058, t);
-            }
-            WoodTube(part, path, radii, NewShrubsSides(part, 6), barkCol);
-            var stemTip = path[^1];
-            catkinNodes.Add((stemTip, radial * 0.4 + Vec3.Up * 0.6));
-
-            // Spreading lateral twigs branching with swollen collars
-            int twigs = juvenile ? 2 : 4;
-            for (int tw = 0; tw < twigs; tw++)
-            {
-                double tTw = 0.35 + 0.16 * tw + rng.Range(-0.03, 0.03);
-                var twigBase = NewShrubsAlong(path, Math.Clamp(tTw, 0.0, 1.0));
-                var stemTangent = PathTangent(path, tTw);
-
-                double twAz = az + (tw % 2 == 0 ? 0.74 : -0.74) + rng.Range(-0.15, 0.15);
-                var twDir = new Vec3(Math.Cos(twAz), 0.22, Math.Sin(twAz)).Normalized();
-                double twLen = radius * rng.Range(0.20, 0.30) * heightScale;
-
-                // Branch collar at fork
-                BranchCollar(part, twigBase, 0.009, barkCol);
-
-                // Smooth cubic Bezier path for decumbent twig
-                var tp0 = twigBase;
-                var tp1 = twigBase + (stemTangent * 0.48 + twDir * 0.52).Normalized() * (twLen * 0.32);
-                var tp2 = twigBase + twDir * (twLen * 0.70) + Vec3.Up * (twLen * 0.06);
-                var tp3 = twigBase + twDir * twLen + Vec3.Up * (twLen * 0.10);
-                var twigPath = SampleBezier(tp0, tp1, tp2, tp3, 5);
-                var twigRadii = new[] { 0.0085, 0.0060, 0.0042, 0.0028, 0.0018 };
-
-                WoodTube(part, twigPath, twigRadii, NewShrubsSides(part, 5), barkCol);
-                var twigTip = twigPath[^1];
-                catkinNodes.Add((twigTip, twDir * 0.4 + Vec3.Up * 0.6));
-
-                // Felted silvery obovate leaves along twig with upward normals
-                int twigLeaves = juvenile ? 6 : 12;
-                for (int j = 0; j < twigLeaves; j++)
+                // Dense tufted cushions of cupped pearl-silver felted leaves wrapping each short crooked shoot into a low pillow mound
+                int ringsOnTwig = juvenile ? 3 : (cull ? 3 : 5);
+                for (int r = 0; r < ringsOnTwig; r++)
                 {
-                    double t = 0.14 + 0.78 * ((j + 0.5) / twigLeaves) + rng.Range(-0.02, 0.02);
-                    var at = NewShrubsAlong(twigPath, Math.Clamp(t, 0.0, 1.0));
-                    double leafAz = twAz + j * 2.399963 + rng.Range(-0.32, 0.32);
-                    var dir = new Vec3(Math.Cos(leafAz) * 0.78, rng.Range(0.28, 0.62), Math.Sin(leafAz) * 0.78).Normalized();
-                    double len = rng.Range(0.050, 0.072) * heightScale;
-                    var tip = at + dir * len + Vec3.Up * rng.Range(-len * 0.08, len * 0.14);
-                    var sideHint = Vec3.Up.Cross(dir);
-                    LeafUpward(part, at, tip, sideHint, len * 0.34, leafBase, leafTip, camber: len * 0.16, longitudinal: 5, asymmetry: rng.Range(-0.13, 0.13));
+                    double rt = 0.28 + 0.72 * (r / (double)Math.Max(1, ringsOnTwig - 1));
+                    var pt = NewShrubsAlong(twPath, rt);
+                    int perRing = (r == ringsOnTwig - 1) ? (juvenile ? 4 : 6) : (juvenile ? 3 : 4);
+                    for (int k = 0; k < perRing; k++)
+                    {
+                        double lAz = tAz + r * 1.1 + k * (Math.PI * 2.0 / perRing) + rng.Range(-0.20, 0.20);
+                        double pitch = r == ringsOnTwig - 1 ? rng.Range(0.28, 0.62) : rng.Range(0.08, 0.44);
+                        var lDir = new Vec3(Math.Cos(lAz) * 0.88, pitch, Math.Sin(lAz) * 0.88).Normalized();
+                        double len = rng.Range(0.052, 0.074) * padScale * heightScale;
+                        var lTip = pt + lDir * len + Vec3.Up * (len * 0.05);
+                        LeafUpward(part, pt, lTip, Vec3.Up.Cross(lDir), len * 0.38, leafBase, leafTip,
+                            camber: len * 0.16, longitudinal: 4, asymmetry: rng.Range(-0.10, 0.10));
+                    }
                 }
+                if (tw % 2 == 0)
+                    catkinNodes.Add((twPath[^1], (twH * 0.35 + Vec3.Up * 0.65).Normalized()));
 
-                // Terminal whorl on twig
-                for (int k = 0; k < (juvenile ? 2 : 3); k++)
+                // Low short prostrate skirt fork around cushion edge
+                if (!cull && tw == 0)
                 {
-                    double leafAz = twAz + k * 2.399963 + 0.9 + rng.Range(-0.12, 0.12);
-                    var dir = new Vec3(Math.Cos(leafAz) * 0.50, 0.62, Math.Sin(leafAz) * 0.50).Normalized();
-                    double len = rng.Range(0.046, 0.068) * heightScale;
-                    var tip = twigTip + dir * len + Vec3.Up * (len * 0.06);
-                    var sideHint = Vec3.Up.Cross(dir);
-                    LeafUpward(part, twigTip, tip, sideHint, len * 0.34, leafBase, leafTip, camber: len * 0.16, longitudinal: 5, asymmetry: rng.Range(-0.13, 0.13));
+                    double skAz = tAz + (dirOut.X > 0 ? 0.85 : -0.85);
+                    var skDir = new Vec3(Math.Cos(skAz), 0.16, Math.Sin(skAz)).Normalized();
+                    double skLen = radius * rng.Range(0.18, 0.26) * padScale * heightScale;
+                    var skMid = basePt + skDir * (skLen * 0.55) + Vec3.Up * 0.015;
+                    var skEnd = basePt + skDir * skLen + Vec3.Up * 0.025;
+                    BuildTaperedWood(part, new[] { basePt, skMid, skEnd }, 0.0052, 0.0018, NewShrubsSides(part, 4), barkCol);
+                    EmitLeafRosette(part, skEnd, juvenile ? 3 : 5, 0.056 * padScale * heightScale, 0.021 * padScale * heightScale,
+                        0.92, 0.12, 0.42, leafBase, leafTip, rng, skAz, longitudinal: 4, camberFrac: 0.15);
                 }
-            }
-
-            // Distribute felted leaves along decumbent stem
-            int stemLeaves = juvenile ? 7 : 15;
-            for (int j = 0; j < stemLeaves; j++)
-            {
-                double t = 0.24 + 0.68 * ((j + 0.5) / stemLeaves);
-                var at = NewShrubsAlong(path, Math.Clamp(t, 0.0, 1.0));
-                double leafAz = az + j * 2.399963 + rng.Range(-0.15, 0.15);
-                var dir = new Vec3(Math.Cos(leafAz) * 0.78, rng.Range(0.28, 0.62), Math.Sin(leafAz) * 0.78).Normalized();
-                double len = rng.Range(0.050, 0.072) * heightScale;
-                var tip = at + dir * len + Vec3.Up * rng.Range(-len * 0.08, len * 0.14);
-                var sideHint = Vec3.Up.Cross(dir);
-                LeafUpward(part, at, tip, sideHint, len * 0.34, leafBase, leafTip, camber: len * 0.16, longitudinal: 5, asymmetry: rng.Range(-0.13, 0.13));
-
-                if (j % 4 == 1)
-                    catkinNodes.Add((at, dir * 0.5 + Vec3.Up * 0.5));
-            }
-
-            // Stem terminal cap
-            for (int k = 0; k < (juvenile ? 2 : 3); k++)
-            {
-                double leafAz = az + k * 2.399963 + 0.5 + rng.Range(-0.12, 0.12);
-                var dir = new Vec3(Math.Cos(leafAz) * 0.50, 0.62, Math.Sin(leafAz) * 0.50).Normalized();
-                double len = rng.Range(0.046, 0.068) * heightScale;
-                var tip = stemTip + dir * len + Vec3.Up * (len * 0.06);
-                var sideHint = Vec3.Up.Cross(dir);
-                LeafUpward(part, stemTip, tip, sideHint, len * 0.34, leafBase, leafTip, camber: len * 0.16, longitudinal: 5, asymmetry: rng.Range(-0.13, 0.13));
             }
         }
 
-        // Delicate pearl-silk catkins standing proudly above undulating cushion
-        int catkinCount = juvenile ? 3 : 16 + rng.NextInt(5);
+        // Core central cushion dome built from gnarled short central forks
+        AddSilverPillowCluster(new Vec3(0, height * 0.02, 0), new Vec3(Math.Cos(startAz), 0, Math.Sin(startAz)),
+            hFrac: 0.44, twigCount: juvenile ? 3 : 5, padScale: 1.08);
+
+        // Creeping surface runners crawling out irregularly along terrain into uneven perimeter cushion pillows
+        for (int s = 0; s < runnerCount; s++)
+        {
+            double az = startAz + s * (Math.PI * 2.0 / runnerCount) + rng.Range(-0.42, 0.42);
+            var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
+            double runnerLen = radius * rng.Range(0.68, 1.18) * heightScale;
+            var initDir = (radial + new Vec3(-radial.Z, 0, radial.X) * rng.Range(-0.28, 0.28) + Vec3.Up * 0.06).Normalized();
+
+            var (_, rNodes, rOuts) = BuildZigzagWood(
+                part, radial * (radius * 0.06), initDir, runnerLen, juvenile ? 2 : 3,
+                0.016 * heightScale, 0.0045 * heightScale,
+                yawKinkRad: 0.48, pitchSpread: 0.04, archBow: 0.03,
+                sides: NewShrubsSides(part, 5), barkCol: barkCol, rng: rng, handSign: s % 2 == 0 ? 1.0 : -1.0);
+
+            for (int n = 0; n < rNodes.Length; n++)
+            {
+                // Clamp creeping woody stolon nodes snugly near the soil surface
+                var groundAnchor = new Vec3(rNodes[n].X, Math.Min(rNodes[n].Y, height * (0.04 + 0.03 * n)), rNodes[n].Z);
+                bool outer = n == rNodes.Length - 1;
+                double lobeH = outer ? rng.Range(0.18, 0.28) : rng.Range(0.28, 0.40);
+                double lobeScale = outer ? rng.Range(0.74, 0.90) : rng.Range(0.88, 1.04);
+                int twCount = juvenile ? 2 : (outer ? 3 : 2);
+                AddSilverPillowCluster(groundAnchor, rOuts[n], hFrac: lobeH, twigCount: twCount, padScale: lobeScale);
+            }
+        }
+
+        // Delicate pearl-silk pussy-willow catkins perched across top of undulating cushion pillows
+        int catkinCount = juvenile ? 3 : 15 + rng.NextInt(5);
         for (int k = 0; k < catkinCount && catkinNodes.Count > 0; k++)
         {
             var (spot, outDir) = catkinNodes[(k * 2) % catkinNodes.Count];

@@ -7,206 +7,193 @@ using Vivarium.Sim.Geometry.Form;
 namespace Vivarium.Sim.Geometry;
 
 /// <summary>
-/// Kinkcane: Lush, architectural Black-Amber Jointed Bamboo / Horsetail Cane-Brake
-/// (Phyllostachys nigra meets whimsical alien joint-cane).
-/// - Basal rhizome stool with 4-6 pointed bamboo shoots with overlapping sheaths.
-/// - 16-22 culms of varied heights: juvenile, medium erect, and tall outer canes that arch naturally outward.
-/// - Prominent double-ridged amber nodal rings (UV2 = 1.22, 0.80) and papery sheaths at lower nodes.
-/// - Sub-branches spreading horizontally at nodes in the upper 65%, bearing feathery palmate-lanceolate leaf sprays
-///   spreading in layered horizontal tiers (+Up normals).
-/// - Clusters of amber-jade beaded spore-berries (UV2 = 1.30, 0.88).
+/// Kinkcane: Architectural Black-Amber Jointed Zigzag Cane-Brake with Contrastingly Erect Palmate Sentinel Canes.
+/// - Widely spaced rhizomatous foot pattern linked by creeping surface runners & emerging bamboo shoots.
+/// - ~75-80% kink-jointed canes: slender jet-black segmented culms with crisp 28-40 deg alternating elbow joints
+///   in world space, double-ridged amber nodal collars, bare lower shafts, and sparse upper leafy fan twigs.
+/// - Every 4th cane (~20-25%): arrow-straight taller sentinel culm bare below and crowned by a broad,
+///   sculpted radiating alien palmate leaf rosette + amber spore-berry cluster.
 /// </summary>
 internal static class KinkcaneAlienGeometry
 {
     public static void Build(MeshData m, Rng rng, double[] c1, double[] c2, double aspect)
     {
         int detail = m.FloraDetailLevel ?? 0;
-        var wood = Primitives.Mix(Primitives.Scale(c1, 0.22), new[] { 0.065, 0.055, 0.050 }, 0.65);
-        var tipWood = Primitives.Mix(wood, new[] { 0.16, 0.14, 0.12 }, 0.35);
-        var ringCol = new[] { 0.72, 0.46, 0.18 }; // Amber-copper nodal ring
-        var sheathCol = new[] { 0.54, 0.40, 0.22 }; // Papery ochre-russet culm sheath
-        var leafBase = Primitives.Mix(c1, new[] { 0.08, 0.24, 0.14 }, 0.40); // Jade-emerald
-        var leafTip = Primitives.Mix(c2, new[] { 0.26, 0.48, 0.16 }, 0.42); // Chartreuse-olive
-        var strobiliCol = new[] { 0.75, 0.62, 0.22 }; // Amber-jade strobili beads
+        // Work in metric coordinates matching radius=1.0, height=aspect, then scale back to unit space at the end
+        // so internode kink angles, circular culm cross-sections, and flat palmate fans never shear vertically.
+        double hWorld = Math.Max(0.2, aspect);
+        var part = new MeshData { Lod = m.Lod, FloraDetailLevel = m.FloraDetailLevel, FloraVisualSeed = m.FloraVisualSeed, PreserveUpperCanopyOnLod = m.PreserveUpperCanopyOnLod };
 
-        // 1. Basal Rhizome Stool & Emerging Shoots
+        var wood = Primitives.Mix(Primitives.Scale(c1, 0.16), new[] { 0.045, 0.038, 0.036 }, 0.72);
+        var tipWood = Primitives.Mix(wood, new[] { 0.14, 0.12, 0.10 }, 0.35);
+        var ringCol = new[] { 0.78, 0.50, 0.18 };    // Crisp amber-copper nodal ring
+        var sheathCol = new[] { 0.48, 0.35, 0.19 };  // Papery ochre-russet culm sheath
+        var leafBase = Primitives.Mix(c1, new[] { 0.05, 0.22, 0.10 }, 0.55); // Saturated jade-emerald
+        var leafTip = Primitives.Mix(c2, new[] { 0.22, 0.44, 0.15 }, 0.45);  // Vibrant chartreuse-green
+        var strobiliCol = new[] { 0.78, 0.64, 0.20 };
+
+        // 1. Widely spaced surface rhizome runners & emerging bamboo shoots across brake footprint
         int runnerCount = detail == 2 ? 4 : 6;
+        double runPhase = rng.Range(0, Math.Tau);
         for (int r = 0; r < runnerCount; r++)
         {
-            double a = rng.Range(0, Math.Tau);
+            double a = runPhase + r * Math.Tau / runnerCount + rng.Range(-0.28, 0.28);
             var dir = new Vec3(Math.Cos(a), 0, Math.Sin(a));
+            var perp = new Vec3(-dir.Z, 0, dir.X);
             var rPath = new[]
             {
-                dir * 0.06 + Vec3.Up * 0.012,
-                dir * 0.28 + Vec3.Up * 0.018,
-                dir * 0.52 + Vec3.Up * 0.008
+                dir * 0.08 + Vec3.Up * 0.015,
+                dir * 0.36 + perp * rng.Range(-0.08, 0.08) + Vec3.Up * 0.025,
+                dir * rng.Range(0.68, 0.88) + perp * rng.Range(-0.10, 0.10) + Vec3.Up * 0.012
             };
-            Primitives.Tube(m, rPath, new[] { 0.014, 0.010, 0.005 }, 5,
+            Primitives.Tube(part, rPath, new[] { 0.022, 0.016, 0.008 }, 5,
                 (i, v) => (wood, 1.0, i * 0.2, v, 2, 0));
         }
 
-        // 4-6 Pointed emerging bamboo shoots around clump perimeter
         int shootCount = detail == 2 ? 4 : 5;
         for (int s = 0; s < shootCount; s++)
         {
-            double sAng = s * Math.Tau / shootCount + rng.Range(-0.25, 0.25);
-            double sDist = rng.Range(0.20, 0.42);
+            double sAng = runPhase + s * Math.Tau / shootCount + rng.Range(-0.25, 0.25);
+            double sDist = rng.Range(0.28, 0.68);
             var sPos = new Vec3(Math.Cos(sAng) * sDist, 0, Math.Sin(sAng) * sDist);
-            double sH = rng.Range(0.12, 0.22);
-            double sR = rng.Range(0.022, 0.032);
-            BuildBambooShoot(m, sPos, sH, sR, wood, sheathCol, ringCol, detail);
+            BuildBambooShoot(part, sPos, rng.Range(0.16, 0.32), rng.Range(0.024, 0.036), wood, sheathCol, ringCol, detail);
         }
 
-        // 2. 16-22 Culms of Varied Heights (juvenile, medium erect, and tall outer canes arching naturally outward)
-        int count = detail == 2 ? 10 : detail == 1 ? 12 : 13;
+        // 2. Culms scattered loosely across the brake footprint (~80% strongly zigzag-kinked, every 4th erect sentinel)
+        int count = detail == 2 ? 10 : detail == 1 ? 12 : 14;
         for (int k = 0; k < count; k++)
         {
-            // Varied cane heights & roles:
-            // k < 3: juvenile canes (0.48x-0.62x)
-            // 3 <= k < 10: medium central canes (0.72x-0.86x, mostly erect with joint kinks)
-            // 10 <= k: tall outer canes (0.92x-1.06x, arching gracefully outward)
-            bool isJuvenile = k < 3;
-            bool isOuter = k >= 10;
+            bool isSentinel = k % 4 == 0; // Tall arrow-straight sentinel culm crowned with broad palmate rosette
+            bool isJuvenile = !isSentinel && k < 3;
 
-            double heightTier;
-            if (isJuvenile) heightTier = rng.Range(0.48, 0.62);
-            else if (!isOuter) heightTier = rng.Range(0.72, 0.86);
-            else heightTier = rng.Range(0.92, 1.06);
+            double heightMeters = isSentinel
+                ? hWorld * rng.Range(0.92, 1.04)
+                : isJuvenile
+                    ? hWorld * rng.Range(0.46, 0.62)
+                    : hWorld * rng.Range(0.66, 0.88);
 
-            double az = rng.Range(0, Math.Tau);
-            // Outer canes spring from farther out on the rhizome base
-            double spreadDist = isOuter ? rng.Range(0.26, 0.44) : rng.Range(0.04, 0.24);
+            double az = runPhase + k * 2.399963 + rng.Range(-0.28, 0.28);
+            double spreadDist = isSentinel ? rng.Range(0.14, 0.48) : rng.Range(0.24, 0.80);
             var outward = new Vec3(Math.Cos(az), 0, Math.Sin(az));
+            var perp = new Vec3(-outward.Z, 0, outward.X);
             var foot = outward * spreadDist;
 
-            int nodeCount = heightTier < 0.65 ? 6 : (heightTier < 0.88 ? 7 : 8);
+            int nodeCount = isSentinel ? 8 : (isJuvenile ? 6 : 7);
             var nodes = new Vec3[nodeCount];
             nodes[0] = foot;
 
-            // Base direction: outer canes start with graceful outward splay
-            double baseTilt = isOuter ? rng.Range(0.32, 0.46) : rng.Range(0.06, 0.16);
-            var currentDir = (Vec3.Up + outward * baseTilt).Normalized();
-            double nodeDist = (heightTier * 0.95) / (nodeCount - 1);
-
-            // Jointed bamboo kinks along culm internodes
-            for (int j = 1; j < nodeCount; j++)
+            if (isSentinel)
             {
-                double tj = (double)j / (nodeCount - 1);
-                if (j > 1)
+                // Perfectly straight erect sentinel cane with slight dignified basal stance
+                var tipTop = foot + outward * rng.Range(0.04, 0.14) + Vec3.Up * heightMeters;
+                for (int j = 1; j < nodeCount; j++)
                 {
-                    // Alternate kink angle (12-20 degrees)
-                    double turn = rng.Range(0.18, 0.28) * (j % 2 == 0 ? 1.0 : -1.0);
-                    var kinkSide = currentDir.Cross(Vec3.Up).Normalized();
-                    if (kinkSide.LengthSq < 1e-6) kinkSide = new Vec3(-currentDir.Z, 0, currentDir.X).Normalized();
-
-                    // Outer canes: progressive outward bow (natural weeping fountain arch under canopy weight)
-                    double archBias = isOuter ? 0.20 * (tj * tj) : (tj > 0.6 ? 0.05 * tj : 0.0);
-                    double droopBias = isOuter && tj > 0.7 ? 0.08 * (tj - 0.7) : 0.0;
-                    currentDir = (currentDir * Math.Cos(turn) + kinkSide * Math.Sin(turn) * (1.0 - 0.3 * tj)
-                        + outward * archBias + Vec3.Up * (0.05 - droopBias)).Normalized();
+                    double tj = (double)j / (nodeCount - 1);
+                    nodes[j] = Vec3.Lerp(foot, tipTop, tj);
                 }
-                nodes[j] = nodes[j - 1] + currentDir * (nodeDist * rng.Range(0.95, 1.05));
+            }
+            else
+            {
+                // Dramatic kink-jointed cane: each straight internode elbows sharply 28-40 degrees at amber joint!
+                double stepH = heightMeters / (nodeCount - 1);
+                var walkDir = (outward * rng.Range(0.18, 0.34) + Vec3.Up * 0.96).Normalized();
+                for (int j = 1; j < nodeCount; j++)
+                {
+                    double tj = (double)j / (nodeCount - 1);
+                    double sign = (j % 2 == 0) ? 1.0 : -1.0;
+                    // Alternate primary radial kink + perpendicular twist so zigzag silhouettes read from every angle!
+                    var kinkVec = (outward * rng.Range(0.46, 0.68) + perp * (rng.Range(0.25, 0.45) * (j % 3 == 0 ? 1.0 : -1.0))).Normalized();
+                    double lateralMag = rng.Range(0.46, 0.68) * (tj > 0.72 ? 1.15 : 1.0);
+                    walkDir = (Vec3.Up * rng.Range(0.76, 0.90) + kinkVec * (sign * lateralMag) + outward * (0.20 * tj)).Normalized();
+                    double segLen = stepH / Math.Max(0.55, walkDir.Y);
+                    nodes[j] = nodes[j - 1] + walkDir * segLen;
+                }
             }
 
-            // Tube along culm internodes
+            // Tube along crisp segmented culm internodes (distinct angular chords rather than soft noodle curves!)
             var radii = new double[nodeCount];
+            double baseR = (isSentinel ? 0.024 : 0.017 * (heightMeters / hWorld)) * 1.15;
             for (int j = 0; j < nodeCount; j++)
             {
                 double tj = (double)j / (nodeCount - 1);
-                radii[j] = MathD.Lerp(0.020 * heightTier, 0.0055, tj);
+                radii[j] = MathD.Lerp(baseR, 0.0060, Math.Pow(tj, 0.85));
             }
-            Primitives.Tube(m, nodes, radii, detail == 2 ? 4 : 5,
+            Primitives.Tube(part, nodes, radii, detail == 2 ? 4 : 6,
                 (i, v) => (Primitives.Mix(wood, tipWood, (double)i / (nodeCount - 1)), 1.0, (double)i / (nodeCount - 1), v, 2, 0));
 
-            // Double-ridged amber-copper nodal rings & peeling sheaths
+            // Swollen double-ridged amber nodal collars + lower sheaths
             for (int j = 1; j < nodeCount - 1; j++)
             {
-                var tangent = (nodes[j + 1] - nodes[j - 1]).Normalized();
+                var segA = (nodes[j] - nodes[j - 1]).Normalized();
+                var segB = (nodes[j + 1] - nodes[j]).Normalized();
+                var tangent = (segA + segB).Normalized();
+                if (tangent.LengthSq < 1e-6) tangent = Vec3.Up;
                 var nPos = nodes[j];
                 double rNode = radii[j];
 
-                // Lower ring (sheath scar ring)
-                var pRing1 = nPos - tangent * 0.005;
-                Primitives.Tube(m, new[] { pRing1 - tangent * 0.003, pRing1, pRing1 + tangent * 0.003 },
-                    new[] { rNode * 1.02, rNode * 1.16, rNode * 1.02 }, 5,
+                // Lower amber collar + upper ridge accentuating every elbow kink
+                var pRing1 = nPos - tangent * 0.010;
+                Primitives.Tube(part, new[] { pRing1 - tangent * 0.006, pRing1, pRing1 + tangent * 0.006 },
+                    new[] { rNode * 1.02, rNode * 1.32, rNode * 1.02 }, 6,
                     (st, v) => (ringCol, 1.0, st, v, 1.22, 0.80));
 
-                // Upper ring (supranodal ridge)
-                var pRing2 = nPos + tangent * 0.006;
-                Primitives.Tube(m, new[] { pRing2 - tangent * 0.003, pRing2, pRing2 + tangent * 0.003 },
-                    new[] { rNode * 1.02, rNode * 1.22, rNode * 1.02 }, 5,
+                var pRing2 = nPos + tangent * 0.012;
+                Primitives.Tube(part, new[] { pRing2 - tangent * 0.006, pRing2, pRing2 + tangent * 0.006 },
+                    new[] { rNode * 1.02, rNode * 1.38, rNode * 1.02 }, 6,
                     (st, v) => (ringCol, 1.0, st, v, 1.22, 0.80));
 
-                // Papery culm-sheaths peeling from lower nodes (nodes 1-3)
-                if (j <= 3)
+                if (!isSentinel && j <= 2)
                 {
-                    double sheathLen = nodeDist * 0.45;
-                    var peelDir = (outward * 0.70 + Vec3.Up * 0.30).Normalized();
-                    var sheathTip = nPos + peelDir * (rNode * 1.45 + sheathLen * 0.5) + tangent * sheathLen;
+                    double sheathLen = 0.14;
+                    var peelDir = (segA.Cross(Vec3.Up).LengthSq > 1e-4 ? outward * 0.72 + Vec3.Up * 0.45 : outward).Normalized();
+                    var sheathTip = nPos + peelDir * (rNode * 1.6 + sheathLen * 0.45) + tangent * sheathLen;
                     var sheathSide = tangent.Cross(peelDir).Normalized();
-                    Primitives.CurvedLeaf(m, nPos, sheathTip, sheathSide, rNode * 0.85,
-                        sheathCol, sheathCol, camber: 0.004, longitudinal: 2);
+                    Primitives.CurvedLeaf(part, nPos, sheathTip, sheathSide, rNode * 0.95,
+                        sheathCol, sheathCol, camber: 0.006, longitudinal: 2);
                 }
 
-                // 3. Multi-Tiered Feathery Palmate Leaf Sprays in Upper 60% of Culm
+                // Kinked canes keep lower ~70% bare and burst into crisp horizontal twig fans only near upper nodes!
                 double heightFraction = (double)j / (nodeCount - 1);
-                if (!isJuvenile && heightFraction >= 0.48)
+                if (!isSentinel && !isJuvenile && heightFraction >= 0.62)
                 {
-                    int branchlets = heightFraction > 0.72 ? (detail == 2 ? 1 : 2) : 1;
+                    int branchlets = heightFraction > 0.78 ? (detail == 2 ? 1 : 2) : 1;
                     for (int b = 0; b < branchlets; b++)
                     {
-                        // Sub-branches spread HORIZONTALLY outward like airy bamboo shelves
-                        double bTheta = az + (b - (branchlets - 1) * 0.5) * 0.85 + rng.Range(-0.12, 0.12);
+                        double bTheta = az + (b == 0 ? 0.55 : -0.65) + rng.Range(-0.25, 0.25);
                         var bHoriz = new Vec3(Math.Cos(bTheta), 0, Math.Sin(bTheta));
-                        var bDir = (bHoriz * 0.94 + Vec3.Up * rng.Range(0.04, 0.16)).Normalized();
-                        double bLen = rng.Range(0.12, 0.19) * heightTier;
+                        var bDir = (bHoriz * 0.92 + Vec3.Up * rng.Range(0.08, 0.24)).Normalized();
+                        double bLen = rng.Range(0.18, 0.28);
 
-                        // Flared nodal branch collar pad at junction
-                        Primitives.Ellipsoid(m, nPos + bDir * (rNode * 0.75),
-                            new Vec3(rNode * 0.40, rNode * 0.45, rNode * 0.40), 4, 5,
-                            (u, v) => (ringCol, 1.0, u, v, 1.22, 0.80));
-
-                        // Slender curved branchlet tube with flared collar base
-                        var bMid = nPos + bDir * (bLen * 0.5) + Vec3.Up * (bLen * 0.06);
+                        var bMid = nPos + bDir * (bLen * 0.55) + Vec3.Up * (bLen * 0.04);
                         var bTip = nPos + bDir * bLen;
-                        Primitives.Tube(m, new[] { nPos, bMid, bTip },
-                            new[] { rNode * 0.30, 0.0024, 0.0014 }, 4,
+                        Primitives.Tube(part, new[] { nPos, bMid, bTip },
+                            new[] { rNode * 0.45, 0.0040, 0.0020 }, 4,
                             (st, v) => (tipWood, 1.0, st, v, 2, 0));
 
-                        // Lush feathery lanceolate leaf spray: 3 leaves (central leader + flanking pair)
-                        // forming a layered horizontal bamboo shelf
                         int leavesInSpray = detail == 2 ? 2 : 3;
                         for (int lf = 0; lf < leavesInSpray; lf++)
                         {
-                            double lfSpread = (lf - (leavesInSpray - 1) * 0.5) * 0.42;
+                            double lfSpread = (lf - (leavesInSpray - 1) * 0.5) * 0.48;
                             var lfHoriz = (bHoriz * Math.Cos(lfSpread) + bHoriz.Cross(Vec3.Up) * Math.Sin(lfSpread)).Normalized();
-                            // Flat / gentle droop: elevation ~78°-88° from vertical
-                            var leafDir = (lfHoriz * 0.96 + Vec3.Up * rng.Range(0.04, 0.14) - Vec3.Up * (0.04 * Math.Abs(lfSpread))).Normalized();
-                            double leafLen = (lf == 1 && leavesInSpray == 3 ? rng.Range(0.22, 0.27) : rng.Range(0.18, 0.23)) * heightTier;
-                            var bladeRoot = bTip + leafDir * 0.008;
-                            var bladeTip = bladeRoot + leafDir * leafLen;
-
-                            // Explicit sky-facing normals for FoliageBlade
+                            var leafDir = (lfHoriz * 0.94 + Vec3.Up * rng.Range(0.08, 0.22)).Normalized();
+                            double leafLen = rng.Range(0.24, 0.34);
+                            var bladeRoot = bTip + leafDir * 0.010;
                             var leafSide = Vec3.Up.Cross(leafDir).Normalized();
-                            double halfWidth = leafLen * rng.Range(0.11, 0.14); // Feathery bamboo profile
-
-                            FoliageBlade.Build(m, bladeRoot, bladeTip, leafSide, halfWidth,
-                                leafBase, leafTip, camber: 0.10, curl: 0.04, shoulder: 0.82,
-                                segments: detail == 2 ? 2 : 3);
+                            FoliageBlade.Build(part, bladeRoot, bladeRoot + leafDir * leafLen, leafSide, leafLen * 0.14,
+                                leafBase, leafTip, camber: 0.09, curl: 0.03, shoulder: 0.80, segments: detail == 2 ? 2 : 3);
                         }
                     }
 
-                    // 4. Glossy amber-jade beaded spore-berries (UV2 = 1.30, 0.88)
-                    if (heightFraction >= 0.65 && (k + j) % 2 == 0)
+                    if (heightFraction >= 0.72 && (k + j) % 2 == 0)
                     {
-                        var beadOrigin = nPos + (tangent * 0.4 + outward * 0.6).Normalized() * (rNode * 1.15);
+                        var beadOrigin = nPos + outward * (rNode * 1.4);
                         int beadCount = detail == 2 ? 2 : 3;
                         for (int bd = 0; bd < beadCount; bd++)
                         {
                             double bAng = bd * Math.Tau / beadCount;
-                            var bOffset = new Vec3(Math.Cos(bAng) * 0.007, (bd - 1) * 0.006, Math.Sin(bAng) * 0.007);
-                            double beadR = rng.Range(0.007, 0.010);
-                            Primitives.Ellipsoid(m, beadOrigin + bOffset, new Vec3(beadR, beadR * 1.1, beadR),
+                            var bOffset = new Vec3(Math.Cos(bAng) * 0.014, (bd - 1) * 0.012, Math.Sin(bAng) * 0.014);
+                            double beadR = rng.Range(0.012, 0.017);
+                            Primitives.Ellipsoid(part, beadOrigin + bOffset, new Vec3(beadR, beadR * 1.15, beadR),
                                 detail == 2 ? 3 : 4, detail == 2 ? 4 : 6,
                                 (u, v) => (strobiliCol, 1.0, u, v, 1.30, 0.88));
                         }
@@ -214,21 +201,68 @@ internal static class KinkcaneAlienGeometry
                 }
             }
 
-            // Cane apex crown fan: lush feathery leaves cascading outward horizontally
-            var apexDir = (nodes[^1] - nodes[^2]).Normalized();
-            var apexSide = Vec3.Up.Cross(apexDir).Normalized();
-            if (apexSide.LengthSq < 1e-4) apexSide = new Vec3(-apexDir.Z, 0, apexDir.X).Normalized();
-
-            int apexLeaves = detail == 2 ? 3 : 4;
-            for (int af = 0; af < apexLeaves; af++)
+            // Summit foliage: Sentinel canes carry unmistakable broad 360-deg alien PALMATE leaf rosettes!
+            // Kinked canes end in crisp compact terminal 3-blade fans.
+            var apex = nodes[^1];
+            if (isSentinel)
             {
-                double afSpread = (af - (apexLeaves - 1) * 0.5) * 0.38;
-                var termHoriz = (outward * Math.Cos(afSpread) + apexSide * Math.Sin(afSpread)).Normalized();
-                var fDir = (termHoriz * 0.90 + Vec3.Up * rng.Range(0.06, 0.16) - Vec3.Up * (0.05 * Math.Abs(afSpread))).Normalized();
-                double fLen = rng.Range(0.16, 0.22) * heightTier;
-                var fSide = Vec3.Up.Cross(fDir).Normalized();
-                FoliageBlade.Build(m, nodes[^1], nodes[^1] + fDir * fLen, fSide, fLen * 0.12,
-                    leafBase, leafTip, camber: 0.10, curl: 0.04, shoulder: 0.82, segments: detail == 2 ? 2 : 3);
+                // Swollen copper rosette hub
+                Primitives.Ellipsoid(part, apex, new Vec3(0.026, 0.018, 0.026), 3, 6,
+                    (u, v) => (ringCol, 1.0, u, v, 1.22, 0.80));
+
+                int palmateRays = detail == 2 ? 6 : 8;
+                double roPhase = rng.Range(0, Math.Tau);
+                for (int r = 0; r < palmateRays; r++)
+                {
+                    double rAz = roPhase + r * Math.Tau / palmateRays + rng.Range(-0.08, 0.08);
+                    var rHoriz = new Vec3(Math.Cos(rAz), 0, Math.Sin(rAz));
+                    double tilt = r % 2 == 0 ? 0.14 : 0.28;
+                    var rayDir = (rHoriz + Vec3.Up * tilt).Normalized();
+                    double rayLen = rng.Range(0.36, 0.48); // Broad sculptural alien palmate umbrella!
+                    var raySide = Vec3.Up.Cross(rayDir).Normalized();
+                    var pRoot = apex + rHoriz * 0.018;
+                    Primitives.Tube(part, new[] { apex, pRoot + rayDir * 0.06 }, new[] { 0.007, 0.0035 }, 4,
+                        (st, v) => (tipWood, 1.0, st, v, 2, 0));
+                    FoliageBlade.Build(part, pRoot, pRoot + rayDir * rayLen, raySide, rayLen * 0.19,
+                        leafBase, leafTip, camber: 0.10, curl: 0.05, shoulder: 0.76, segments: detail == 2 ? 2 : 4);
+                }
+                // Central jewel berry bud atop the palmate sentinel crown
+                Primitives.Ellipsoid(part, apex + Vec3.Up * 0.026, new Vec3(0.018, 0.020, 0.018), 3, 5,
+                    (u, v) => (strobiliCol, 1.0, u, v, 1.30, 0.88));
+            }
+            else
+            {
+                var apexDir = (nodes[^1] - nodes[^2]).Normalized();
+                var apexSide = Vec3.Up.Cross(apexDir).Normalized();
+                if (apexSide.LengthSq < 1e-4) apexSide = perp;
+                int apexLeaves = detail == 2 ? 3 : 4;
+                for (int af = 0; af < apexLeaves; af++)
+                {
+                    double afSpread = (af - (apexLeaves - 1) * 0.5) * 0.45;
+                    var termHoriz = (outward * Math.Cos(afSpread) + apexSide * Math.Sin(afSpread)).Normalized();
+                    var fDir = (termHoriz * 0.92 + Vec3.Up * rng.Range(0.08, 0.22)).Normalized();
+                    double fLen = rng.Range(0.22, 0.30);
+                    var fSide = Vec3.Up.Cross(fDir).Normalized();
+                    FoliageBlade.Build(part, apex, apex + fDir * fLen, fSide, fLen * 0.14,
+                        leafBase, leafTip, camber: 0.09, curl: 0.03, shoulder: 0.80, segments: detail == 2 ? 2 : 3);
+                }
+            }
+        }
+
+        // Convert from (radius=1.0, height=hWorld) back into engine unit frame [XZ/1, Y/hWorld, Z/1]
+        double invH = 1.0 / hWorld;
+        m.Append(part, p => new Vec3(p.X, p.Y * invH, p.Z));
+        for (int v = 0; v < m.VertexCount; v++)
+        {
+            var n = m.NormalAt(v);
+            var scaled = new Vec3(n.X, n.Y * hWorld, n.Z);
+            double len = scaled.Length;
+            if (len > 1e-9)
+            {
+                scaled = scaled / len;
+                m.Normals[v * 3] = (float)scaled.X;
+                m.Normals[v * 3 + 1] = (float)scaled.Y;
+                m.Normals[v * 3 + 2] = (float)scaled.Z;
             }
         }
     }

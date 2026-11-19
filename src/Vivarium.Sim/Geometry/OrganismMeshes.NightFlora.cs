@@ -98,10 +98,13 @@ public static partial class OrganismMeshes
         }
     }
 
-    /// <summary>Spiral-caned honeysuckle-like woody shrub with three orders of shoots and lanceolate leaves.</summary>
-    private static void ShrubGlowbriar(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile)
+    /// <summary>Low-mounding multi-order forked wetland briar shrub with arching canes, decussate leaves, and pendant chalices.</summary>
+    private static void ShrubGlowbriar(MeshData m, Rng rng, ulong seed, double[] c1, double[] c2, bool juvenile,
+        double radius = 0.72, double height = 1.12)
     {
-        GlowbriarGeometry.Build(m, rng, c1, c2, juvenile);
+        GlowbriarGeometry.Build(m, rng, c1, c2, juvenile,
+            radius > 0.001 ? radius : 0.72,
+            height > 0.001 ? height : 1.12);
     }
 
 }

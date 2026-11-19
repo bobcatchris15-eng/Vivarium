@@ -6,199 +6,269 @@ using Vivarium.Sim.Geometry.Form;
 namespace Vivarium.Sim.Geometry;
 
 /// <summary>
-/// Glowbriar: Sculpted sinuous spiral-cane thorny briar shrub.
-/// - Gnarled mossy root-crown stool at center with recurved jade-amber thorns along cane internodes.
-/// - Sinuous spiral-arching briar canes with organic secondary lateral shoots (no abrupt angular forks).
-/// - Opposite decussate blue-emerald cambered leaves spreading naturally (+Up normals).
-/// - 16-22 pendant bioluminescent chalices (UV2 = 1.45, 0.92) with glowing cyan nectar pearls (UV2 = 1.75, 0.98)
-///   dangling on slender curved pedicels beneath the cane arches.
+/// Glowbriar: Low-mounding multi-order forked thorny wetland briar shrub (~1.5 m broad × ~1.1 m tall).
+/// Authored in world metres and converted back into unit space via OrganismMeshes.NewShrubsFinish so branching
+/// arches, thorn hooks, leaves, and hanging chalices stay un-squashed and true to proportion.
+/// - Gnarled mossy root crown with sprawling stolon runners and curved basal briar canes.
+/// - Primary wide-spreading arches forking cleanly into curved Order 2 & Order 3 weeping sub-twigs.
+/// - Opposite decussate blue-emerald cambered ovate-lanceolate leaves forming a rich mounding dome.
+/// - Dainty clustered pendant bioluminescent chalices (UV2 = 1.45, 0.92 / 1.75, 0.98) suspended below arches.
 /// </summary>
 internal static class GlowbriarGeometry
 {
-    public static void Build(MeshData mesh, Rng rng, double[] c1, double[] c2, bool juvenile)
+    public static void Build(MeshData mesh, Rng rng, double[] c1, double[] c2, bool juvenile,
+        double radius = 0.72, double height = 1.12)
     {
         int detail = mesh.FloraDetailLevel ?? 0;
+        var part = new MeshData
+        {
+            Lod = mesh.Lod,
+            FloraDetailLevel = mesh.FloraDetailLevel,
+            FloraVisualSeed = mesh.FloraVisualSeed,
+            PreserveUpperCanopyOnLod = mesh.PreserveUpperCanopyOnLod
+        };
+
         int canes = juvenile ? 4 : detail == 2 ? 4 : detail == 1 ? 5 : 6;
-        int sideShoots = juvenile ? 1 : (detail == 2 ? 1 : 2); // gracefully arching secondary shoots per cane
-        double scale = juvenile ? 0.72 : 1.0;
+        int sideShoots = juvenile ? 2 : detail == 2 ? 2 : 3;
+        int subTwigs = juvenile ? 1 : detail == 2 ? 1 : 2;
+        double scale = juvenile ? 0.68 : 1.0;
 
         var oldWood = Primitives.Mix(c1, new[] { 0.28, 0.26, 0.22 }, 0.53);
         var newWood = Primitives.Mix(c1, new[] { 0.34, 0.30, 0.24 }, 0.31);
         var darkLeaf = Primitives.Mix(c1, new[] { 0.08, 0.26, 0.20 }, 0.45);
         var litLeaf = Primitives.Mix(c2, new[] { 0.28, 0.56, 0.42 }, 0.45);
 
-        // 1. Root Stool & Buttress Flares (UV2 = 2, 0)
+        // 1. Gnarled Root Stool, Creeping Runners & Low Spreading Basal Briar Arches (UV2 = 2, 0)
         var stoolCol = Primitives.Mix(oldWood, new[] { 0.14, 0.22, 0.16 }, 0.45);
-        Primitives.Ellipsoid(mesh, new Vec3(0, 0.020 * scale, 0),
-            new Vec3(0.068 * scale, 0.034 * scale, 0.068 * scale),
+        Primitives.Ellipsoid(part, new Vec3(0, 0.025 * scale, 0),
+            new Vec3(0.082 * scale, 0.036 * scale, 0.082 * scale),
             detail == 2 ? 4 : 5, detail == 2 ? 6 : 8, (u, v) => (stoolCol, 1.0, u, v, 2, 0));
 
         int buttressCount = detail == 2 ? 3 : 5;
         for (int b = 0; b < buttressCount; b++)
         {
-            double bAng = b * Math.Tau / buttressCount + rng.Range(-0.15, 0.15);
+            double bAng = b * Math.Tau / buttressCount + rng.Range(-0.22, 0.22);
             var bDir = new Vec3(Math.Cos(bAng), 0, Math.Sin(bAng));
+            var bSide = new Vec3(-bDir.Z, 0, bDir.X);
             var bPath = new[]
             {
-                new Vec3(0, 0.022 * scale, 0) + bDir * (0.030 * scale),
-                bDir * (0.080 * scale) + new Vec3(0, 0.010 * scale, 0),
-                bDir * (0.145 * scale) - new Vec3(0, 0.008 * scale, 0)
+                new Vec3(0, 0.026 * scale, 0) + bDir * (0.042 * scale),
+                bDir * (0.125 * scale) + bSide * rng.Range(-0.025, 0.025) + new Vec3(0, 0.015 * scale, 0),
+                bDir * (0.240 * scale) + bSide * rng.Range(-0.040, 0.040) - new Vec3(0, 0.008 * scale, 0)
             };
-            Primitives.Tube(mesh, bPath, new[] { 0.018 * scale, 0.011 * scale, 0.004 * scale }, 5,
+            Primitives.Tube(part, bPath, new[] { 0.020 * scale, 0.012 * scale, 0.0045 * scale }, 5,
                 (i, v) => (stoolCol, 1.0, i * 0.1, v, 2, 0));
         }
 
-        // Emerging juvenile basal briar shoots
+        // Low-arching juvenile basal canes fanning sideways out of offset stolon hubs (not upright center pins)
         int basalShoots = juvenile ? 2 : (detail == 2 ? 2 : 3);
+        double baseAzOffset = rng.Range(0, Math.Tau);
         for (int bs = 0; bs < basalShoots; bs++)
         {
-            double bsAng = rng.Range(0, Math.Tau);
+            double bsAng = baseAzOffset + bs * Math.Tau / basalShoots + rng.Range(-0.30, 0.30);
             var bsDir = new Vec3(Math.Cos(bsAng), 0, Math.Sin(bsAng));
-            double bsLen = scale * rng.Range(0.12, 0.20);
+            var bsSide = new Vec3(-bsDir.Z, 0, bsDir.X);
+            double bsReach = scale * rng.Range(0.24, 0.36);
+            double bsHeight = scale * rng.Range(0.18, 0.29);
+            var bsOrigin = bsDir * (0.065 * scale);
             var bsPath = new[]
             {
-                bsDir * 0.035,
-                bsDir * 0.05 + Vec3.Up * (bsLen * 0.5) + new Vec3(rng.Range(-0.01, 0.01), 0, rng.Range(-0.01, 0.01)),
-                bsDir * 0.07 + Vec3.Up * bsLen
+                bsOrigin + Vec3.Up * (0.015 * scale),
+                bsOrigin + bsDir * (bsReach * 0.35) + bsSide * rng.Range(-0.03, 0.03) + Vec3.Up * (bsHeight * 0.72),
+                bsOrigin + bsDir * (bsReach * 0.74) + bsSide * rng.Range(-0.04, 0.04) + Vec3.Up * bsHeight,
+                bsOrigin + bsDir * bsReach + Vec3.Up * (bsHeight * 0.76)
             };
-            Primitives.Tube(mesh, bsPath, new[] { 0.008 * scale, 0.005 * scale, 0.0025 * scale }, 5,
-                (i, v) => (newWood, 1.0, i * 0.2, v, 2, 0));
+            Wood(part, bsPath, new[] { 0.0085 * scale, 0.0062 * scale, 0.0040 * scale, 0.0022 * scale },
+                oldWood, newWood, detail == 2 ? 4 : 5);
 
-            // Juvenile leaf pair at shoot tip
-            Pair(mesh, rng, bsPath[^1], (bsPath[^1] - bsPath[^2]).Normalized(), bsDir,
-                new Vec3(-bsDir.Z, 0, bsDir.X), scale * 0.70, darkLeaf, litLeaf, detail, bs * 1.3, nodeIndex: 0);
+            for (int bn = 0; bn < 2; bn++)
+            {
+                double bt = 0.45 + bn * 0.38;
+                Pair(part, rng, Sample(bsPath, bt), Direction(bsPath, bt), bsDir, bsSide,
+                    scale * 0.72, darkLeaf, litLeaf, detail, bs * 1.3 + bn * 0.7, nodeIndex: bn);
+            }
         }
 
-        // 2. Primary Sinuous Spiral Arching Canes
+        // 2. Primary Offset Wide-Arching Briar Mound Canes (Order 1 -> Order 2 -> Order 3)
+        double canePhase = rng.Range(0, Math.Tau);
         for (int cane = 0; cane < canes; cane++)
         {
-            double az = Math.PI * 2 * (cane + 0.31 * rng.Range(-0.5, 0.5)) / canes;
+            bool crownCane = cane % 3 == 0;
+            double az = canePhase + Math.Tau * cane / canes + rng.Range(-0.22, 0.22);
             var radial = new Vec3(Math.Cos(az), 0, Math.Sin(az));
             var sideways = new Vec3(-radial.Z, 0, radial.X);
-            double phase = rng.Range(-0.45, 0.45);
-            double reach = scale * rng.Range(0.70, 0.88);
-            double height = scale * rng.Range(0.85, 0.98);
+            double phase = rng.Range(-0.55, 0.55);
 
-            const int stations = 14;
+            // Outer briar canes arch strongly sideways from near ground (~0.56..0.82 m high, 0.65..0.90 m wide);
+            // Crown canes billow higher (~0.88..1.08 m high) to bridge the dome cleanly.
+            double offsetDist = scale * rng.Range(0.045, 0.110);
+            double reach = scale * (crownCane ? rng.Range(0.48, 0.68) : rng.Range(0.64, 0.88));
+            double archHeight = scale * (crownCane ? rng.Range(0.88, 1.08) : rng.Range(0.56, 0.82));
+
+            const int stations = 13;
             var primary = new Vec3[stations];
             var thickness = new double[stations];
+            var origin = radial * offsetDist + Vec3.Up * (0.018 * scale);
 
             for (int i = 0; i < stations; i++)
             {
                 double t = i / (double)(stations - 1);
-                // Smooth sinuous briar arch: rising steeply, cresting at t~0.65, drooping at distal tip
-                double rArch = reach * (0.58 * t + 0.42 * t * t);
-                double yArch = height * Math.Sin(t * Math.PI * 0.68) * (1.0 - 0.16 * t);
-                double spiral = scale * (0.015 + 0.055 * t) * Math.Sin(Math.PI * 1.6 * t + phase);
-                double lift = scale * 0.025 * t * Math.Cos(Math.PI * 1.6 * t + phase);
+                // Smooth crooked bramble arch: broad early flare (0.72*t + 0.28*t^2), cresting around t~0.58 and weeping toward tip
+                double rArch = reach * (0.72 * t + 0.28 * t * t);
+                double crestProfile = crownCane
+                    ? Math.Sin(t * Math.PI * 0.64) * (1.0 - 0.14 * t)
+                    : Math.Sin(t * Math.PI * 0.68) * (1.0 - 0.14 * t);
+                double yArch = archHeight * crestProfile;
+                double wander = scale * (0.025 + 0.085 * t) * Math.Sin(Math.PI * 1.85 * t + phase);
+                double verticalWave = scale * 0.042 * t * Math.Cos(Math.PI * 2.1 * t + phase);
 
-                primary[i] = radial * (0.030 * scale + rArch)
-                    + sideways * spiral
-                    + Vec3.Up * Math.Max(0.018 * scale, yArch + lift);
+                primary[i] = origin + radial * rArch + sideways * wander
+                    + Vec3.Up * Math.Max((0.018 + 0.122 * t * t) * scale, yArch + verticalWave);
 
-                double collars = 0.08 * (Math.Exp(-Math.Pow((t - 0.32) / 0.08, 2)) +
-                    Math.Exp(-Math.Pow((t - 0.56) / 0.08, 2)) +
-                    Math.Exp(-Math.Pow((t - 0.78) / 0.08, 2)));
-                thickness[i] = scale * (0.017 - 0.0125 * Math.Pow(t, 0.85)) * (1 + collars);
+                double collars = 0.09 * (Math.Exp(-Math.Pow((t - 0.28) / 0.07, 2)) +
+                    Math.Exp(-Math.Pow((t - 0.52) / 0.07, 2)) +
+                    Math.Exp(-Math.Pow((t - 0.76) / 0.07, 2)));
+                thickness[i] = scale * (0.016 - 0.0125 * Math.Pow(t, 0.82)) * (1 + collars);
             }
-            Wood(mesh, primary, thickness, oldWood, newWood, detail == 2 ? 5 : 6);
+            Wood(part, primary, thickness, oldWood, newWood, detail == 2 ? 5 : 6);
 
             // Sculpted recurved briar prickles/thorns along cane internodes
-            int thornCount = detail == 2 ? 6 : 9;
+            int thornCount = detail == 2 ? 5 : 8;
             for (int th = 0; th < thornCount; th++)
             {
-                double tt = 0.12 + 0.76 * th / thornCount + rng.Range(-0.02, 0.02);
+                double tt = 0.14 + 0.74 * th / thornCount + rng.Range(-0.02, 0.02);
                 var tp = Sample(primary, tt);
                 var tDir = Direction(primary, tt);
                 var tSide = (sideways * (th % 2 == 0 ? 1 : -1) + radial * 0.35).Normalized();
-                AddBriarThorn(mesh, tp, tDir, tSide, scale * rng.Range(0.014, 0.019), scale * 0.0038);
+                AddBriarThorn(part, tp, tDir, tSide, scale * rng.Range(0.011, 0.016), scale * 0.0032);
             }
 
-            // Opposite decussate leaf pairs along primary cane (lush foliage coverage)
+            // Opposite decussate leaf pairs along mid-to-distal primary cane
             int leafNodes = juvenile ? 4 : (detail == 2 ? 4 : detail == 1 ? 5 : 6);
             for (int node = 0; node < leafNodes; node++)
             {
-                double t = 0.22 + (0.70 / leafNodes) * (node + 0.25);
+                double t = 0.24 + (0.68 / leafNodes) * (node + 0.25);
                 var p = Sample(primary, t);
                 var ahead = Direction(primary, t);
-                Pair(mesh, rng, p, ahead, radial, sideways, scale * (0.95 + 0.08 * rng.Range(-1, 1)),
+                Pair(part, rng, p, ahead, radial, sideways, scale * (0.95 + 0.10 * rng.Range(-1, 1)),
                     darkLeaf, litLeaf, detail, cane * 0.43 + node * 0.69, nodeIndex: node);
             }
 
-            // Terminal leaves capping the arching cane tip
+            // Terminal leaf cluster capping the weeping cane tip
             var tipPoint = primary[^1];
-            var tipDir = Direction(primary, 0.95);
+            var tipDir = Direction(primary, 0.94);
             var tipSide = tipDir.Cross(Vec3.Up).Normalized();
             if (tipSide.LengthSq < 1e-4) tipSide = sideways;
+            int termSegs = detail == 2 ? 2 : 4;
             for (int ti = -1; ti <= 1; ti++)
             {
-                var tHoriz = (tipSide * (ti * 0.65) + tipDir.Cross(tipSide).Normalized() * 0.60).Normalized();
-                double tElev = rng.Range(45.0, 60.0) * Math.PI / 180.0;
+                var tHoriz = (tipSide * (ti * 0.72) + tipDir.Cross(tipSide).Normalized() * 0.50).Normalized();
+                double tElev = rng.Range(56.0, 74.0) * Math.PI / 180.0;
                 var tLeafDir = (tHoriz * Math.Sin(tElev) + Vec3.Up * Math.Cos(tElev)).Normalized();
                 var tLeafSide = Vec3.Up.Cross(tLeafDir).Normalized();
-                double tLen = scale * rng.Range(0.12, 0.16);
-                FoliageBlade.Build(mesh, tipPoint, tipPoint + tLeafDir * tLen, tLeafSide, tLen * 0.22,
-                    darkLeaf, litLeaf, camber: 0.08, curl: 0.02, shoulder: 0.76, segments: detail == 2 ? 2 : 3);
+                double tLen = scale * rng.Range(0.072, 0.102);
+                Primitives.CurvedLeaf(part, tipPoint, tipPoint + tLeafDir * tLen, tLeafSide, tLen * 0.17,
+                    darkLeaf, litLeaf, longitudinal: termSegs, camber: tLen * 0.08);
             }
 
-            // Secondary side shoots: branching at an organic acute angle with flared branch collar
+            // Order 2 & Order 3 branching shoots: sweeping laterally out of primary arch with flared collars
             for (int b = 0; b < sideShoots; b++)
             {
-                double t = 0.36 + b * 0.24 + (0.015 * rng.Range(-1, 1));
+                double t = 0.22 + b * (0.50 / Math.Max(1, sideShoots - 1)) + rng.Range(-0.025, 0.025);
                 var basePoint = Sample(primary, t);
                 var parentDir = Direction(primary, t);
-                double handed = (b % 2 == 0 ? 1 : -1);
-                double span = scale * rng.Range(0.24, 0.34) * (1.0 - b * 0.12);
+                double handed = ((b + cane) % 2 == 0 ? 1 : -1);
+                double span = scale * rng.Range(0.25, 0.42) * (1.0 - b * 0.10);
 
-                // Flared nodal branch collar at junction
-                Primitives.Ellipsoid(mesh, basePoint,
-                    new Vec3(scale * 0.013, scale * 0.010, scale * 0.013),
+                Primitives.Ellipsoid(part, basePoint,
+                    new Vec3(scale * 0.012, scale * 0.010, scale * 0.012),
                     4, 6, (u, v) => (oldWood, 1.0, u, v, 2, 0));
 
-                // Organic acute branching angle (35°-45° from cane tangent)
-                var bDir = (parentDir * 0.60 + sideways * (handed * 0.52) + radial * 0.36 + Vec3.Up * 0.18).Normalized();
-                const int bStations = 7;
+                // Wide organic branching angle (38°-62° from parent stem, curving horizontally out & drooping gently)
+                var bDir = (parentDir * 0.48 + sideways * (handed * 0.70) + radial * 0.42 + Vec3.Up * 0.16).Normalized();
+                const int bStations = 8;
                 var branch = new Vec3[bStations];
                 var branchRadii = new double[bStations];
+                var bOrigin = basePoint - bDir * (0.008 * scale);
 
                 for (int k = 0; k < bStations; k++)
                 {
                     double u = k / (double)(bStations - 1);
-                    branch[k] = basePoint + bDir * (span * u)
-                        + sideways * (handed * span * 0.08 * Math.Sin(Math.PI * u))
-                        + Vec3.Up * (span * 0.08 * Math.Sin(Math.PI * u))
-                        - Vec3.Up * (span * 0.10 * u * u);
-                    branchRadii[k] = scale * MathD.Lerp(0.0075, 0.0020, u);
+                    branch[k] = bOrigin + bDir * (span * u)
+                        + sideways * (handed * span * 0.12 * Math.Sin(Math.PI * 1.15 * u))
+                        + Vec3.Up * (span * (0.14 * Math.Sin(Math.PI * u) - 0.18 * u * u));
+                    branchRadii[k] = scale * MathD.Lerp(0.0078, 0.0022, Math.Pow(u, 0.85));
                 }
-                Wood(mesh, branch, branchRadii, newWood, oldWood, detail == 2 ? 4 : 5);
+                Wood(part, branch, branchRadii, oldWood, newWood, detail == 2 ? 4 : 5);
 
-                // Leaf pairs on secondary shoots
-                int bNodes = detail == 2 ? 1 : 2;
+                // Opposite leaves along Order 2 shoot
+                int bNodes = detail == 2 ? 2 : 3;
                 for (int n = 0; n < bNodes; n++)
                 {
-                    double u = 0.35 + (0.50 * n / Math.Max(1, bNodes - 1));
+                    double u = 0.26 + 0.60 * n / Math.Max(1, bNodes - 1);
                     var p = Sample(branch, u);
-                    Pair(mesh, rng, p, Direction(branch, u), radial, sideways,
-                        scale * (0.86 + 0.10 * rng.Range(-1, 1)), darkLeaf, litLeaf,
+                    Pair(part, rng, p, Direction(branch, u), radial, sideways,
+                        scale * (0.85 + 0.10 * rng.Range(-1, 1)), darkLeaf, litLeaf,
                         detail, b * 0.91 + n * 0.48 + cane * 0.17, nodeIndex: n + 1);
                 }
 
-                // Pendant chalice beneath secondary branch arch (1 per cane on primary lateral shoot)
-                if (!juvenile && b == 0)
+                // Order 3 fine weeping flowering/leafy sub-twigs branching sideways off Order 2 arch
+                for (int st = 0; st < subTwigs; st++)
                 {
-                    var bMid = Sample(branch, 0.70);
-                    AddChalicedDewdrop(mesh, rng, bMid - Vec3.Up * 0.008, bDir, scale * rng.Range(0.88, 0.98), detail);
+                    double u3 = 0.38 + st * 0.36;
+                    var p3 = Sample(branch, u3);
+                    var d3 = Direction(branch, u3);
+                    double sign3 = ((st + b) % 2 == 0) ? 1.0 : -1.0;
+                    var subSide = d3.Cross(Vec3.Up);
+                    if (subSide.LengthSq < 1e-6) subSide = sideways;
+                    subSide = subSide.Normalized();
+
+                    var subDir = (d3 * 0.50 + subSide * (sign3 * 0.72) + Vec3.Up * 0.08).Normalized();
+                    double subSpan = scale * rng.Range(0.12, 0.20);
+                    var subPath = new Vec3[5];
+                    var subRadii = new double[5];
+                    for (int si = 0; si < 5; si++)
+                    {
+                        double su = si / 4.0;
+                        subPath[si] = p3 + subDir * (subSpan * su) + Vec3.Up * (subSpan * (0.10 * Math.Sin(Math.PI * su) - 0.16 * su * su));
+                        subRadii[si] = scale * MathD.Lerp(0.0036, 0.0012, su);
+                    }
+                    Wood(part, subPath, subRadii, newWood, oldWood, detail == 2 ? 4 : 4);
+
+                    // Terminal leaf pair + dangling dainty chalice cluster under Order 3 twig
+                    var subTip = subPath[^1];
+                    var subTipDir = Direction(subPath, 0.9);
+                    Pair(part, rng, Sample(subPath, 0.62), subTipDir, subDir, subSide,
+                        scale * 0.74, darkLeaf, litLeaf, detail, st * 0.8 + b * 0.4, nodeIndex: st);
+
+                    if (!juvenile && st == subTwigs - 1)
+                    {
+                        AddChalicedDewdrop(part, rng, subTip - Vec3.Up * (0.004 * scale), subDir,
+                            scale * rng.Range(0.84, 1.02), detail);
+                    }
+                }
+
+                // Nodding chalice beneath Order 2 midpoint arch
+                if (!juvenile && b < 2)
+                {
+                    var bMid = Sample(branch, rng.Range(0.58, 0.74));
+                    AddChalicedDewdrop(part, rng, bMid - Vec3.Up * (0.006 * scale), bDir,
+                        scale * rng.Range(0.88, 1.04), detail);
                 }
             }
 
-            // 3. Pendant Bioluminescent Briar-Lantern Chalices
-            // Chalice 1: dangling beneath the primary cane arch
-            var archPoint = Sample(primary, rng.Range(0.58, 0.68));
-            AddChalicedDewdrop(mesh, rng, archPoint - Vec3.Up * 0.012, radial, scale * rng.Range(0.94, 1.06), detail);
+            // 3. Pendant Bioluminescent Briar-Lantern Chalices nestled beneath outer primary arches
+            var archPoint = Sample(primary, rng.Range(0.56, 0.70));
+            AddChalicedDewdrop(part, rng, archPoint - Vec3.Up * (0.010 * scale), radial,
+                scale * rng.Range(0.92, 1.08), detail);
 
-            // Chalice 2: nodding terminal chalice at cane tip
-            AddChalicedDewdrop(mesh, rng, tipPoint, tipDir, scale * rng.Range(0.90, 1.02), detail);
+            if (!juvenile || cane % 2 == 0)
+            {
+                AddChalicedDewdrop(part, rng, tipPoint, tipDir, scale * rng.Range(0.82, 0.98), detail);
+            }
         }
+
+        OrganismMeshes.NewShrubsFinish(mesh, part, radius, height);
     }
 
     /// <summary>
@@ -245,20 +315,21 @@ internal static class GlowbriarGeometry
     /// </summary>
     private static void AddChalicedDewdrop(MeshData mesh, Rng rng, Vec3 origin, Vec3 hangDir, double scale, int detail)
     {
-        double chaliceLen = scale * rng.Range(0.072, 0.098);
-        double chaliceRadius = scale * rng.Range(0.028, 0.040);
+        int chaliceStart = mesh.VertexCount;
+        double chaliceLen = scale * rng.Range(0.044, 0.062);
+        double chaliceRadius = scale * rng.Range(0.016, 0.024);
         var pedicelWood = new[] { 0.32, 0.28, 0.22 };
 
         // 1. Gracefully curved gooseneck pedicel curving outward and hanging down
-        var hangOut = (hangDir * 0.70 + Vec3.Up * 0.12).Normalized();
+        var hangOut = (hangDir * 0.72 + Vec3.Up * 0.14).Normalized();
         var p0 = origin;
-        var p1 = origin + hangOut * (chaliceLen * 0.30) - Vec3.Up * (chaliceLen * 0.14);
-        var p2 = origin + hangOut * (chaliceLen * 0.38) - Vec3.Up * (chaliceLen * 0.42);
-        var p3 = origin + hangOut * (chaliceLen * 0.20) - Vec3.Up * (chaliceLen * 0.75);
-        var apex = origin + hangOut * (chaliceLen * 0.06) - Vec3.Up * (chaliceLen * 0.92);
+        var p1 = origin + hangOut * (chaliceLen * 0.34) - Vec3.Up * (chaliceLen * 0.14);
+        var p2 = origin + hangOut * (chaliceLen * 0.42) - Vec3.Up * (chaliceLen * 0.44);
+        var p3 = origin + hangOut * (chaliceLen * 0.22) - Vec3.Up * (chaliceLen * 0.78);
+        var apex = origin + hangOut * (chaliceLen * 0.08) - Vec3.Up * (chaliceLen * 0.96);
 
         Primitives.Tube(mesh, new[] { p0, p1, p2, p3, apex },
-            new[] { scale * 0.0022, scale * 0.0018, scale * 0.0015, scale * 0.0013, scale * 0.0011 }, 4,
+            new[] { scale * 0.0020, scale * 0.0016, scale * 0.0014, scale * 0.0012, scale * 0.0010 }, 4,
             (i, v) => (pedicelWood, 1.0, i / 4.0, v, 2, 0));
 
         // 2. 4-pointed starry jade leafy calyx cap (UV2 = 0.6, 0.5)
@@ -334,6 +405,8 @@ internal static class GlowbriarGeometry
         Primitives.Ellipsoid(mesh, pearlPos, new Vec3(pearlR, pearlR * 1.15, pearlR),
             detail == 2 ? 4 : 5, detail == 2 ? 6 : 8,
             (u, v) => (pearlCol, 1.0, u, v, 1.75, 0.98));
+
+        mesh.EssentialSpans.Add((chaliceStart, mesh.VertexCount - chaliceStart));
     }
 
     private static void Pair(MeshData mesh, Rng rng, Vec3 node, Vec3 stem,
@@ -353,41 +426,38 @@ internal static class GlowbriarGeometry
         for (int sign = -1; sign <= 1; sign += 2)
         {
             // Outward horizontal spread away from cane
-            var horizDir = (nodeSide * sign * 0.82 + radial * 0.42).Normalized();
+            var horizDir = (nodeSide * sign * 0.84 + radial * 0.42).Normalized();
 
-            // Elevation angle: 45° to 62° from vertical (28° to 45° above horizontal, lush layered sun-catching sprays)
-            double elevAngle = rng.Range(46.0, 60.0) * Math.PI / 180.0;
-            var dir = (horizDir * Math.Sin(elevAngle) + Vec3.Up * Math.Cos(elevAngle) + stemNorm * 0.08).Normalized();
+            // Elevation angle: 56° to 74° from vertical (16° to 34° above horizontal for wide lush mound dome)
+            double elevAngle = rng.Range(56.0, 74.0) * Math.PI / 180.0;
+            var dir = (horizDir * Math.Sin(elevAngle) + Vec3.Up * Math.Cos(elevAngle) + stemNorm * 0.06).Normalized();
 
             double size = scale * rng.Range(0.88, 1.15);
             double petioleLength = 0.012 * size;
-            var join = node + (horizDir * 0.85 + Vec3.Up * 0.30).Normalized() * petioleLength;
+            var join = node + (horizDir * 0.85 + Vec3.Up * 0.24).Normalized() * petioleLength;
 
             Primitives.Tube(mesh, new[] { node, join },
-                new[] { 0.0020 * scale, 0.0013 * scale }, 4,
+                new[] { 0.0020 * scale, 0.0012 * scale }, 4,
                 (i, v) => (baseColor, 1.0, i * 0.012, v, 2, 0));
 
             // Stipule leaflets flaring at petiole base
-            var stipuleTip = node + (nodeSide * sign * 0.65 + Vec3.Up * 0.35).Normalized() * (0.018 * scale);
+            var stipuleTip = node + (nodeSide * sign * 0.65 + Vec3.Up * 0.30).Normalized() * (0.016 * scale);
             var stipuleSide = Vec3.Up.Cross(stipuleTip - node).Normalized();
-            Primitives.CurvedLeaf(mesh, node, stipuleTip, stipuleSide, 0.0040 * scale,
+            Primitives.CurvedLeaf(mesh, node, stipuleTip, stipuleSide, 0.0038 * scale,
                 baseColor, endColor, camber: 0.002, longitudinal: 2);
 
-            // Decussate cambered blue-emerald blade with guaranteed sky-facing normals
-            double length = rng.Range(0.12, 0.17) * size;
+            // Decussate cambered blue-emerald ovate-lanceolate blade with sky-facing normals
+            double length = rng.Range(0.072, 0.108) * size;
             var tip = join + dir * length;
 
             var leafSide = Vec3.Up.Cross(dir).Normalized();
-            if (leafSide.Dot(nodeSide * sign) < 0) leafSide = -leafSide;
 
-            double width = length * rng.Range(0.20, 0.24);
+            double halfWidth = length * rng.Range(0.16, 0.20);
             var baseTint = Primitives.Mix(baseColor, endColor, rng.Range(0.02, 0.18));
             var tipTint = Primitives.Mix(baseColor, endColor, rng.Range(0.40, 0.68));
 
-            FoliageBlade.Build(mesh, join, tip, leafSide, width,
-                baseTint, tipTint, camber: 0.08, curl: rng.Range(0.02, 0.04),
-                roll: 0, asymmetry: 0,
-                shoulder: rng.Range(0.72, 0.80), segments: detail == 2 ? 2 : 3);
+            Primitives.CurvedLeaf(mesh, join, tip, leafSide, halfWidth,
+                baseTint, tipTint, longitudinal: detail == 2 ? 2 : 4, camber: length * 0.08);
         }
     }
 
